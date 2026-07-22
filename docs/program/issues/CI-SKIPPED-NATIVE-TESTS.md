@@ -1,6 +1,6 @@
 ---
 id: CI-SKIPPED-NATIVE-TESTS
-title: "Restore rt_parity_native — one test at 221s is the blocker"
+title: "Restore rt_parity_native — dedicated CI job, outlier not fixed"
 status: active
 owner: verify
 size: S
@@ -17,7 +17,7 @@ origin: docs/program/11-test-suite-and-ci-remediation.md §3 (Track C, C2)
 |---|---:|---:|---|
 | `ken-cli/tests/rt_parity_native.rs` | 7 | ~266.7s wall (250.5s outlier test) | ✅ restored, `native-rt-parity` job |
 | `ken-cli/tests/px8f_buffer_native.rs` | 1 | 5m10s | ✅ restored, `native-buffer` job |
-| `ken-verify/tests/px8f_write_partition.rs` | 1 | 5m09s | ✅ restored, `native-slow` job |
+| `ken-verify/tests/px8f_write_partition.rs` | 1 | 5m09s | ✅ restored, `native-write-partition` job |
 
 Each runs in its own parallel job, where it costs no wall clock: the worst
 shard is ~471s and each of these jobs is ~250-374s, so they finish first and
@@ -50,10 +50,9 @@ not shrink these three — they are slow on their own merits (native
 Cranelift-JIT-backed parity/buffer/partition exercises), not slow because of
 serial scheduling.
 
-**This is a speed trade, not a defect finding.** The three binaries
-are not believed broken or flaky; they were cut for gate run time
-under explicit operator direction. Skipping them means CI no longer
-verifies:
+**This was a speed trade, not a defect finding.** The three binaries were
+not believed broken or flaky; they were cut for gate run time under
+explicit operator direction. While skipped, CI no longer verified:
 
 - interpreter/native execution parity for the checked-buffer-IO
   narrowing cases (`rt_parity_native.rs`) — the differential oracle
@@ -63,11 +62,12 @@ verifies:
 - the PX8F write-partition native fast-path (`px8f_write_partition.rs`)
   in `ken-verify`
 
-on every PR and every push to `main`. A regression in any of these three
-areas will not be caught until someone runs them by hand or locally
-(`scripts/ken-cargo -p ken-cli --test rt_parity_native`, etc.) or
-until C4 (rework the slow tests using nextest's per-test timing)
-lands and the skip is lifted.
+on any PR or push to `main`. A regression in any of these three areas would
+not have been caught except by running them by hand or locally
+(`scripts/ken-cargo -p ken-cli --test rt_parity_native`, etc.). **All three
+are now restored to CI** — see "Closed" below; this section describes the
+gap that existed before this WP (and its two predecessor WPs), not the
+current state.
 
 ## How to close
 
@@ -83,27 +83,34 @@ Either of:
 
 ## Undo
 
-Each of the three binaries is named in exactly two places, which must stay
-complementary (`.github/workflows/ci.yml`, both noted in-file): the `-E`
-exclusion in the sharded lane's `Test` step, and its own dedicated job
-(`native-rt-parity` / `native-buffer` / `native-write-partition`) wired into
-`build-test`'s `needs:` list and pass/fail check. To fully undo the
-restoration for one binary, remove it from both places together — removing
-from only one either duplicates the test (if dropped from the exclusion
-only) or silently drops it from the gate (if the job is removed but the
-exclusion stays), and either way `build-test` still reports green.
+Each of the three binaries is named in exactly four places, all in
+`.github/workflows/ci.yml`: the `-E` exclusion in the sharded lane's `Test`
+step, its own dedicated job (`native-rt-parity` / `native-buffer` /
+`native-write-partition`), `build-test`'s `needs:` list, and the pass/fail
+check loop. All four must stay complementary. To fully undo the restoration
+for one binary, remove it from all four together — removing from only the
+exclusion duplicates the test; removing the job but leaving `needs:`/the
+check loop breaks the workflow at parse time; removing from `needs:`/the
+check loop but leaving the job silently drops the test from the gate (the
+job runs but nothing gates on its result) — and in every partial-removal
+case `build-test` can still report green.
 
 ## Closed 2026-07-22
 
 All three binaries now run in CI on every PR/push, each in its own
 dedicated job (`native-rt-parity`, `native-buffer`, `native-write-partition`),
-none on the sharded lane's critical path. `rt_parity_native`'s 221s-outlier
-concern is grounded but not fixed — see the finding above; it is native
-Cranelift codegen cost scaling with nested-resource-bracket depth, out of
-Verify's lane and not necessary to close this WP, since the dedicated-job
+none on the sharded lane's critical path. `rt_parity_native`'s outlier test
+is grounded but not fixed — see the finding above. **What's measured:** the
+outlier test is the only one of the seven with a unique two-nested-resource-
+bracket topology among the comparable FS cases, and it is a ~7x timing
+outlier against its structurally nearest sibling. **What's not established:**
+neither fact isolates bracket-nesting depth as the *cause* of the timing, or
+shows the scaling is superlinear in it — that remains an unisolated
+hypothesis, not a finding. Chasing the cause is out of Verify's lane in
+either case, and not necessary to close this WP, since the dedicated-job
 approach doesn't need the outlier gone. Recorded for the runtime team /
-Architect as a follow-on, not filed as its own tracker issue (not currently
-blocking anything).
+Architect as a follow-on hypothesis, not filed as its own tracker issue (not
+currently blocking anything).
 
 ## ⇒ REASSIGNED to Verify, 2026-07-22 — and BUDGET-EFF is why
 

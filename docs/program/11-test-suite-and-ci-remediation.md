@@ -240,12 +240,12 @@ shard's critical path and pushes the whole gate out.
 > is the cleanest read we will get on what C6 actually bought, and it is
 > free: the number falls out of the next run.
 
-> ⚠ **The filter is stated in two places and they must stay complementary.**
-> The binary is *excluded* from the shard lane and *included* in its own job.
-> Change one without the other and the test is silently duplicated, or
-> silently dropped — **and a dropped test still shows a green gate.** Likewise
-> every test-running job must appear in the aggregator's `needs` *and* be
-> checked in its script; a job missing there reports green however it failed.
+> ⚠ **Each binary is named in four places and they must all stay
+> complementary.** It is *excluded* from the shard lane, *included* in its
+> own job, listed in the aggregator's `needs`, and checked in its pass/fail
+> script. Change one without the other three and the test is silently
+> duplicated or silently dropped — **and a dropped test still shows a green
+> gate.**
 
 ### 1d. Experiment: does `rt_parity_native` parallelize? (PR #808, closed)
 
@@ -282,10 +282,11 @@ names and nominally the same shape of work:
 - `fs_write_at_malformed_offset_narrows_to_invalid_offset` — **221s**
 
 **5x**, where the three read-side counterparts are all ~53s. That asymmetry
-looks pathological rather than inherent, and **§1f traces the actual cause**
-(nested resource-bracket depth, load-bearing to the property under test —
-not a bug). It no longer needs fixing to close `CI-SKIPPED-NATIVE-TESTS`,
-since the dedicated-job approach doesn't require the outlier gone.
+looks pathological rather than inherent, and **§1f documents a correlate**
+(a unique nested-resource-bracket topology, load-bearing to the property
+under test — not a bug) **without isolating it as the cause** of the timing.
+It no longer needs fixing to close `CI-SKIPPED-NATIVE-TESTS`, since the
+dedicated-job approach doesn't require the outlier gone.
 
 ### 1e. ✅ TAKEN and CONFIRMED: the dedicated jobs no longer over-compile
 
@@ -337,7 +338,8 @@ the fix. Re-measured fresh against current `main` before acting (recent PX8
 native-lowering commits landed since §1d): the 221s-class outlier is **still
 present at ~250.5s**, unimproved.
 
-**Traced the outlier rather than accepting it as pathological noise.**
+**Traced the topology rather than accepting the timing as pathological
+noise, but stopped short of a causal claim.**
 `fs_write_at_malformed_offset_narrows_to_invalid_offset` (250.5s) is the
 *only* one of the 7 tests that opens **two nested resource brackets**
 (`withResource "source" ResourceRead` wrapping `withResource "sink"
@@ -348,9 +350,14 @@ dispatch-skip property from a coincident rights fault — its near-identical
 sibling (`..._without_write_right_...`, 35.5s) instead reuses the same
 read-only file specifically to construct the rights-fault-overlap case. The
 two-bracket topology looks load-bearing to the property under test, not a
-simplification target — this smells like native Cranelift codegen cost
-scaling super-linearly with resource-bracket nesting depth, squarely
-runtime team's native-lowering domain, not Verify's to chase.
+simplification target — and it is a unique topology among the comparable FS
+cases, coincident with a ~7x timing outlier. **That is a correlation, not an
+isolated cause**: nothing here rules out other explanations, and no
+experiment varied bracket-nesting depth alone while holding everything else
+fixed. Whether it is native Cranelift codegen cost scaling super-linearly
+with resource-bracket nesting depth is an unisolated hypothesis — squarely
+runtime team's native-lowering domain to investigate if it's worth chasing,
+not Verify's, and not asserted here as established.
 
 **Closed via Option 2 (§1c), not Option 1**: the binary doesn't need to get
 faster to close this — its own ~266.7s total already fits the same headroom
@@ -360,9 +367,9 @@ All 7 previously-skipped assertions — the `assert_narrowed_alike`
 interp/native differential oracle (6 tests) plus the pure elaborator-scope
 probe (1 test) — now run in CI on every PR/push. See
 `docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md` for the closure record and
-this section for the nested-bracket cost finding, recorded here as a
-follow-on for the runtime team/Architect rather than filed as its own
-tracker issue.
+this section for the nested-bracket topology/timing correlation, recorded
+here as a follow-on hypothesis for the runtime team/Architect (not an
+established cause) rather than filed as its own tracker issue.
 
 ### ⛔ Stop here
 

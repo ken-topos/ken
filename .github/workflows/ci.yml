@@ -124,12 +124,18 @@ jobs:
 
   # ── Slow native binaries, each restored to the gate in its own job ───────
   #
-  # WHY A JOB EACH rather than letting them back into the shards: each is a
-  # SINGLE #[test] running ~4 minutes, so no scheduler can subdivide one. In
-  # a shard it would simply become that shard's critical path and push the
-  # whole gate out. Alone and in parallel each costs NOTHING: the worst shard
-  # is ~471s and each of these is ~250-300s, so they finish first and never
-  # set the pace. That headroom is the budget for restoring coverage.
+  # WHY A JOB EACH rather than letting them back into the shards: two of the
+  # three (native-write-partition, native-buffer) are a SINGLE #[test] each,
+  # running ~4 minutes, so no scheduler can subdivide either one. The third
+  # (native-rt-parity) is 7 tests in one binary, dominated by one outlier
+  # test — see the exclusion comment below — so it would still become
+  # whichever shard drew it, the same problem the single-test binaries have.
+  # In a shard any of the three would simply become that shard's critical
+  # path and push the whole gate out. Alone and in parallel each costs
+  # NOTHING: the worst shard is ~471s and each of these jobs is ~240-332s
+  # (native-rt-parity's Build+Test total is the largest of the three), so
+  # they finish first and never set the pace. That headroom is the budget
+  # for restoring coverage.
   #
   # ⚠ SCOPED ON PURPOSE — `-p <crate> --test <name>`, NOT `--workspace`.
   # With `--workspace`, nextest compiles all 200 test binaries in order to
@@ -140,9 +146,11 @@ jobs:
   # it is what proves the whole workspace still compiles under `--locked`.
   #
   # ⚠ THESE FILTERS MUST STAY COMPLEMENTARY TO THE SHARD EXCLUSION ABOVE.
-  # Each binary is named in two places: excluded there, included here. Change
-  # one without the other and the test is silently duplicated or silently
-  # dropped — and a dropped test still shows a green gate.
+  # Each binary is named in FOUR places: excluded from the shard filter
+  # above, included in its own dedicated job below, listed in build-test's
+  # `needs:`, and checked in the pass/fail loop below that. Change one
+  # without updating the other three and the test is silently duplicated or
+  # silently dropped — and a dropped test still shows a green gate.
   native-write-partition:
     name: native-slow (px8f_write_partition)
     runs-on: ubuntu-latest
