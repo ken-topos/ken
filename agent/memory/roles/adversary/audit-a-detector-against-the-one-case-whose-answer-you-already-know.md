@@ -35,6 +35,30 @@ running the command that produced its output.**
   reaching into history reproduces the same window defect one level up)
   separated 28/28 panes.
 
+## ⛔ Correction — my own pattern carried the same defect I filed
+
+The Steward reproduced the finding and then found two flaws **in my instrument**,
+both measured:
+
+1. **The glyph is not stable.** `^[✻✽✳]` is an enumeration, and the same message
+   type renders under different leading glyphs — counted live: `6 × "✻ Worked
+   for"`, `4 × "─ Worked for"`. My class covered every busy pane *on my sample*
+   (3 vs 3 against the shape anchor, zero divergence), but that is a sample
+   result, not a property. **Anchor on the shape, not the glyph:**
+   `^.{1,3} [A-Z][a-z]+… \([0-9]+(m [0-9]+)?s`.
+2. **Present participle vs past tense.** `✻ Catapulting… (12m 40s` is an active
+   turn; `✻ Worked for 13m 42s` is a *completed* summary. A bare elapsed-time
+   pattern conflates them and reports finished seats as busy — a **false BUSY**,
+   which makes a watchdog skip a genuinely stalled seat. The `… \(` is the
+   separator. I excluded the completed form only because I required a `\(` to
+   capture the elapsed time — **immune by accident, not by design**, and one
+   small edit from the bug.
+
+⇒ **I filed against enumeration-dependence while shipping an enumeration.** The
+lesson below is right and I did not apply it to my own instrument in the same
+hour I wrote it. Having the oracle does not make the *rest* of the detector
+principled — the self-test proves it can see the known case, and nothing more.
+
 ## ★ The transferable move
 
 **The watchdog runs inside a pane, and that pane is BUSY by definition whenever
