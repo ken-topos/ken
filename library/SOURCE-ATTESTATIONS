@@ -32,7 +32,7 @@ b30b91ea4ea30703a12264b70bbe9807107db2dd	crates/ken-elaborator/tests/n2_in_repo_
 a188061aa4440c0e6e1a0500e15ab4816a736c88	docs/program/12-documentation-program.md
 fe4962a1f008b08a1d4ba2c049bc84e665e1eaed	docs/program/issues/CAT-CAPEX.md
 286e23e0c7c362227ff555528b759722d9798930	docs/program/issues/DOC-W1.md
-8ef0af0eca4dc04aa9f2c5e07301c5a4e1b14e8e	library/learn/reading-ken/fragments.md
+041f3d9ff0d7a52df042953ed0674263aa58978a	library/learn/reading-ken/fragments.md
 44e3a9cbe2aa5c1a135cf5b920b65ccbdcb8fede	spec/00-overview.md
 28f25ae1bff01aaa438777e5085adb2a7ac9a53e	spec/20-verification/21-spec-syntax.md
 27749b69d61441820884fb95a58f1f7d533e7517	spec/30-surface/30-taxonomy.md
