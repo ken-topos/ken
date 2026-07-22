@@ -1035,37 +1035,154 @@ fn assert_packaging_helper_is_not_reachable_from_outside_ken_runtime() {
 /// also asserts the declaration is FOUND -- a negative text check passes
 /// happily when its subject has been renamed out from under it.
 fn assert_packaging_helper_is_declared_module_private() {
-    const DECLARATION: &str = "fn build_process_starter_executable_artifact(";
+    const NAME: &str = "build_process_starter_executable_artifact";
+    // The complete set of keywords Rust permits between a visibility keyword
+    // and `fn`. `extern` is followed by an optional ABI string literal.
+    const FN_MODIFIERS: [&str; 4] = ["const", "async", "unsafe", "extern"];
+
+    /// Strip one trailing balanced `(...)` group, so `pub(crate)`,
+    /// `pub (crate)` and `pub(in crate::x)` all reduce to `pub`.
+    fn strip_trailing_group(head: &str) -> &str {
+        if !head.ends_with(')') {
+            return head;
+        }
+        let mut depth = 0usize;
+        for (at, character) in head.char_indices().rev() {
+            match character {
+                ')' => depth += 1,
+                '(' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return head[..at].trim_end();
+                    }
+                }
+                _ => {}
+            }
+        }
+        head
+    }
 
     let mut declarations = Vec::new();
     for file in ken_runtime_source_files() {
         let text = std::fs::read_to_string(&file)
             .unwrap_or_else(|error| panic!("reading {}: {error}", file.display()));
-        for (index, line) in text.lines().enumerate() {
-            // `DECLARATION` starts with `fn `, so call sites do not match.
-            let Some(at) = line.find(DECLARATION) else {
+        for (at, _) in text.match_indices(NAME) {
+            // Require the name to be followed by `(` or a generic list, and
+            // preceded by the `fn` keyword -- so a call site never matches.
+            let after = &text[at + NAME.len()..];
+            if !(after.starts_with('(') || after.starts_with('<')) {
+                continue;
+            }
+            // ⛔ WHITESPACE-INSENSITIVE ON PURPOSE, and this is the whole
+            // reason the check is written this way rather than as a line scan.
+            // Matching the visibility keyword against the same LINE's prefix is
+            // defeated by
+            //
+            //     pub
+            //     fn build_process_starter_executable_artifact(
+            //
+            // which is legal Rust, compiles clean, and is a genuine widening.
+            // The previous revision of this assertion did exactly that and
+            // passed green over that mutation -- the vacuous-pass shape this
+            // whole check exists to eliminate, reproduced inside its own
+            // replacement. Walking backwards over arbitrary whitespace makes
+            // every line arrangement of one declaration identical here.
+            let Some(before) = text[..at].trim_end().strip_suffix("fn") else {
                 continue;
             };
-            declarations.push((file.clone(), index + 1, line[..at].trim().to_string()));
+            if before.ends_with(|character: char| character.is_alphanumeric() || character == '_') {
+                continue; // `myfn name(` is not a declaration of `name`.
+            }
+            // Walk back over anything Rust allows to sit between the
+            // visibility keyword and `fn` -- modifiers and comments alike --
+            // until the token carrying visibility is exposed. Each of these is
+            // a form that would otherwise read as "no visibility keyword", so
+            // each is a way the check could pass over a real widening.
+            let mut head = before.trim_end();
+            loop {
+                let stripped = FN_MODIFIERS.iter().find_map(|modifier| {
+                    let rest = head.strip_suffix(modifier)?;
+                    let bounded = rest.is_empty()
+                        || rest.ends_with(|character: char| {
+                            !character.is_alphanumeric() && character != '_'
+                        });
+                    // An `extern "C"` ABI string sits between the two.
+                    bounded.then(|| strip_trailing_quoted(rest.trim_end()))
+                });
+                if let Some(rest) = stripped {
+                    head = rest;
+                    continue;
+                }
+                let uncommented = strip_trailing_comment(head);
+                if uncommented.len() < head.len() {
+                    head = uncommented;
+                    continue;
+                }
+                break;
+            }
+            // `pub(crate)` reduces to `pub` for the test, but the failure
+            // message reports the spelling as written -- which of the two
+            // widenings happened is the useful part of the diagnostic.
+            let spelled = head;
+            let visibility = strip_trailing_group(head)
+                .rsplit(|character: char| character.is_whitespace())
+                .next()
+                .filter(|token| *token == "pub")
+                .and_then(|_| spelled.rfind("pub"))
+                .map(|at| spelled[at..].trim().to_string());
+            let line = text[..at].matches('\n').count() + 1;
+            declarations.push((file.clone(), line, visibility));
         }
     }
 
+    // A negative text check passes happily once its subject is renamed out
+    // from under it, so the declaration being FOUND is the control that makes
+    // the absence assertions below mean anything.
     assert!(
         !declarations.is_empty(),
-        "no declaration of `{DECLARATION}` found anywhere under {KEN_RUNTIME_SRC}. \
+        "no declaration of `fn {NAME}(` found anywhere under {KEN_RUNTIME_SRC}. \
          The helper was renamed or removed, and this assertion has been passing \
          vacuously rather than checking anything."
     );
     for (file, line, visibility) in &declarations {
         assert!(
-            !visibility.contains("pub"),
-            "{}:{line} declares the test-only packaging helper as `{visibility} \
-             {DECLARATION}`. It must stay private to its own module: `pub` makes it \
-             public production API, and `pub(crate)` widens it to the whole crate. \
+            visibility.is_none(),
+            "{}:{line} declares the test-only packaging helper as `{} fn {NAME}(`. \
+             It must stay private to its own module: `pub` makes it public \
+             production API, and `pub(crate)` widens it to the whole crate. \
              Neither is observable from outside `ken-runtime`, which is why this \
              check reads the declaration instead of asking the compiler.",
-            file.display()
+            file.display(),
+            visibility.as_deref().unwrap_or_default()
         );
+    }
+}
+
+/// Strip one trailing comment, block or line, so `pub /* note */ fn` and
+/// `pub // note` + newline + `fn` both still expose the `pub`.
+fn strip_trailing_comment(head: &str) -> &str {
+    if let Some(rest) = head.strip_suffix("*/") {
+        if let Some(at) = rest.rfind("/*") {
+            return head[..at].trim_end();
+        }
+    }
+    // A line comment runs to end of line, so it can only be the tail of the
+    // last line -- and only if that line does not also close a block comment.
+    let last_line_at = head.rfind('\n').map_or(0, |at| at + 1);
+    if let Some(at) = head[last_line_at..].find("//") {
+        return head[..last_line_at + at].trim_end();
+    }
+    head
+}
+
+/// Strip one trailing string literal, for the ABI in `extern "C" fn`.
+fn strip_trailing_quoted(head: &str) -> &str {
+    let Some(rest) = head.strip_suffix('"') else {
+        return head;
+    };
+    match rest.rfind('"') {
+        Some(at) => rest[..at].trim_end(),
+        None => head,
     }
 }
 
