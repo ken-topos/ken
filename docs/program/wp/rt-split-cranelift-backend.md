@@ -860,10 +860,11 @@ Classify first:
    > front door, one slice at a time, while each individual hoist looks
    > locally justified.
    >
-   > **The inversion is the tell.** Slice 4 hoisted **eleven** declarations on
-   > transient splits while correctly leaving `test_only_distinguished_root_join_plan`
-   > — *the one grounded facade-LCA case* — in the parent. Two counterexamples
-   > settle it: `Px8dsEdgeMutation` has **every** use in
+   > **The inversion is the tell.** Slice 4 hoisted **eleven** declarations
+   > on transient splits while correctly leaving
+   > `test_only_distinguished_root_join_plan` — *the one grounded facade-LCA
+   > case* — in the parent. Two counterexamples settle it:
+   > `Px8dsEdgeMutation` has **every** use in
    > `lowering/core/tests/control.rs`, so its LCA is `control.rs`;
    > `root_authority_test_lowering` is **named by rule 4 above** as a
    > `control.rs` helper, and its remaining parent caller is a source-install
