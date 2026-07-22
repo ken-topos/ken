@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 00:28:01Z — from 20 issue file(s) in `docs/program/issues/`.
+2026-07-22 00:29:55Z — from 20 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -56,7 +56,7 @@ the committed file matches the generator's output.
 | `RT-SPLIT` | decompose cranelift_backend.rs | draft | runtime | L | none | — |
 | `SEAL-2` | carrier producer closure, over a derived enumeration | draft | foundation | M | none | — |
 | `SPAN-SEAL` | seal the BufferSpan producer surface | merged | foundation | M | none | — |
-| `SPEC-38-ERRATUM` | spec 38-ffi-io self-contradicts on the transfer bound — rule and reconcile | merged | spec | S | none | 827 |
+| `SPEC-38-ERRATUM` | spec 38-ffi-io self-contradicts on the transfer bound — rule and reconcile | closed | spec | S | none | 827 |
 | `STR-BIJ` | the String/List Char 'bijection' over-claim (adversary A1 + A2) | ready | spec-enclave | S | none | — |
 
 ## Releasable frontier

@@ -1,7 +1,7 @@
 ---
 id: SPEC-38-ERRATUM
 title: "spec 38-ffi-io self-contradicts on the transfer bound — rule and reconcile"
-status: merged
+status: closed
 owner: spec
 size: S
 gate: none
@@ -20,7 +20,11 @@ origin: adversary R1 via docs/program/wp/BUDGET-EFF-remaining-bounded-by-effecti
 > Approvals on the exact SHA from conformance-validator (Spec) and Architect;
 > Decision `dec_4mkztzh3f9rxy` resolved.
 >
-> **Not closed — awaiting the enclave retro** (COORDINATION §10).
+> **CLOSED 2026-07-22 — retros in.** Author `evt_6wmrgtrrm5h1t`, validator
+> `evt_7a59bn6r6yrhp`, coordination `evt_4qevmd7mhdnnm`. Carry: define shared
+> normative quantities per operation; keep semantic target / conformance
+> oracle / implementation mechanism as **separate scopes**; re-anchor with
+> both current-base *and* reviewed-subtree byte-identity checks.
 >
 > **Unblocks `BUDGET-EFF`**, which is parked pending operator go. The
 > closure-mechanism call (reply-carries-effective vs. host-caps-the-request-
