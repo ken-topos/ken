@@ -25,11 +25,10 @@ pub(in crate::cranelift_backend) use super::super::super::{
     oriented_test_frame, oriented_test_interface, px8n_exact_nat, px8n_failure,
     px8n_write_arm_fixture_with_start, recursive_computational_result_depth,
     run_example_with_seed_observation, run_px8n_arm_fixture, run_px8n_write_arm_fixture,
-    self_consistent_join_site, self_consistent_root_join_site,
-    test_only_distinguished_root_join_plan, total_primitive, BorrowedFixtureValue,
-    NativeInvocationFixture, Px8nHostReplyFixture, PX8I_BIG_READ_START, PX8I_BIG_U64,
-    PX8I_METADATA_BIG, PX8I_WRAPPING_WRITE_START, PX8N_OVER_BOUND_READ, PX8N_OVER_BOUND_WRITE,
-    PX8N_READ_EOF, PX8N_SHORT_READ, PX8N_SHORT_WROTE, PX8N_ZERO_WRITE,
+    self_consistent_join_site, self_consistent_root_join_site, total_primitive,
+    BorrowedFixtureValue, NativeInvocationFixture, Px8nHostReplyFixture, PX8I_BIG_READ_START,
+    PX8I_BIG_U64, PX8I_METADATA_BIG, PX8I_WRAPPING_WRITE_START, PX8N_OVER_BOUND_READ,
+    PX8N_OVER_BOUND_WRITE, PX8N_READ_EOF, PX8N_SHORT_READ, PX8N_SHORT_WROTE, PX8N_ZERO_WRITE,
 };
 
 // Crate-root items the subject tests assert against.
@@ -37,6 +36,9 @@ pub(in crate::cranelift_backend) use crate::{
     CraneliftObjectArtifact, NativeFidelity, RuntimeExample, RuntimeLowerabilityStatus,
     RuntimeObservation, UnsupportedLowering,
 };
+
+// Ruled test module: a `use` is permitted here (AC-8 class 2).
+pub(in crate::cranelift_backend) use crate::cranelift_backend::test_support::test_only_distinguished_root_join_plan;
 
 mod constructors;
 mod control;
