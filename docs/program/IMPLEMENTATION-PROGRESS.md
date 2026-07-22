@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 17:10:06Z — from 34 issue file(s) in `docs/program/issues/`.
+2026-07-22 17:23:52Z — from 34 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -58,7 +58,7 @@ the committed file matches the generator's output.
 | `LOADER-STALE-PREMISE` | \"no disk loader yet\" is stale in 9 places — including already-landed library/ content | ready | doc | S | none | — |
 | `MODELS-TIER` | agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception | ready | steward | S | none | — |
 | `ORACLE-VIS-CHECK` | replace the text-pin oracle in px4b_native_production.rs with a real visibility check | active | runtime | S | none | — |
-| `ORACLE-VIS-PACKAGING` | replace the text-pin visibility oracle on build_process_starter_executable_artifact | ready | runtime | XS | none | — |
+| `ORACLE-VIS-PACKAGING` | replace the text-pin visibility oracle on build_process_starter_executable_artifact | active | runtime | XS | none | — |
 | `PUB-VERIFY` | scripted-pr-automerge.sh exits 0 on a failed push | ready | steward | S | none | — |
 | `PX8-F-CAP-41` | PX8-F-CAP (#41) — backlog, deferred to spec-first | draft | TBD | TBD | none | 41 |
 | `PX8` | partial/positioned IO — the completion program's root; closure condition | active | runtime | L | none | — |

@@ -73,13 +73,32 @@
 # 6. Background work has NO spinner and NO timer of its own ("2 shells still
 #    running"). Busy, and the most dangerous state to interrupt.
 # 7. Do not echo these patterns into a pane you are scanning: a naive alternation
-#    matches its own source text and reports a false BUSY. The shape anchor is
-#    immune (a raw pattern string has no `… (`).
+#    matches its own source text and reports a false BUSY.
+#    ⚠ This immunity is ARM-SCOPED, and an earlier version of this note claimed
+#    it script-wide — a claim wider than the instrument backing it. SPINNER is
+#    immune because a raw pattern string has no `… (`. BACKGROUND had NO shape to
+#    anchor on, so it matched plain PROSE: "the pane showed 2 shells still
+#    running when I checked" read BUSY — and it fired on real panes discussing
+#    this very script. Both arms are now line-anchored on a leading non-ASCII
+#    glyph (optionally indented), which is glyph-AGNOSTIC and so does not
+#    reintroduce a glyph enumeration.
+#    ⛔ The anchor deliberately allows leading whitespace. Anchoring hard at
+#    column 0 would reject an indented continuation line (`  ⎿ 2 shells still
+#    running`) — trading a rare false BUSY for a false IDLE, which by point 5 is
+#    the dangerous direction. Measured: every live genuine occurrence is
+#    glyph-led; the indented form is kept as insurance, not observed necessity.
+#
+# 8. ⚠ THE ARM CONTROLS ARE A REGRESSION GUARD, NOT A CURRENCY GUARD. They test
+#    each arm against RECORDED strings, so if the live UI text drifts, the
+#    fixtures stay green AND the self-test still passes via SPINNER — and
+#    BACKGROUND can rot silently exactly as before. They prove the patterns are
+#    self-consistent, not that they still describe reality. The only currency
+#    check is re-measuring against live panes.
 
 set -uo pipefail
 
 SPINNER='^.{1,3} [A-Z][a-z]+… \([0-9]+(m [0-9]+)?s'
-BACKGROUND='[0-9]+ shells? still running|Waiting for [0-9]+ background'
+BACKGROUND='^[[:space:]]*[^ -~[:space:]].*([0-9]+ shells? still running|Waiting for [0-9]+ background)'
 
 # ── Arm checks: positive AND negative control per arm ────────────────────────
 # A negative check passes for any reason, so an arm matching nothing would sail
@@ -102,11 +121,15 @@ arm_checks() {
   done
   # BACKGROUND must ACCEPT work with no spinner and no timer of its own
   for d in '✻ Cogitated for 36s · 2 shells still running' \
+           '✻ Baked for 37s · 1 shell still running' \
+           '  ⎿ 2 shells still running' \
            '✻ Waiting for 1 background agent to finish'; do
     grep -qE "$BACKGROUND" <<<"$d" || { echo "ARM BACKGROUND failed to ACCEPT: $d" >&2; fail=1; }
   done
   # BACKGROUND must REJECT a completed turn
-  for d in '✻ Worked for 13m 42s' '  ctx 15% · Sonnet 5'; do
+  for d in '✻ Worked for 13m 42s' '  ctx 15% · Sonnet 5' \
+           'the pane showed 2 shells still running when I checked' \
+           'I wrote: Waiting for 1 background agent to finish'; do
     grep -qE "$BACKGROUND" <<<"$d" && { echo "ARM BACKGROUND wrongly ACCEPTED: $d" >&2; fail=1; }
   done
   return $fail

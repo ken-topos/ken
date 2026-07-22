@@ -193,6 +193,57 @@ merge_pr() {
 }
 
 if [ "$doc_only" -eq 1 ]; then
+  # ── THE DOC-ONLY BLIND SPOT ────────────────────────────────────────────────
+  # `--doc-only` merges with NO CI. That is the point of the flag, and it is
+  # also a hole: a doc-only merge can redden `main`, and this path is
+  # structurally incapable of noticing that it did.
+  #
+  # Measured, 2026-07-22: `a5d3a13b` ("tracker: DOC-W1 closed") touched
+  # `docs/program/issues/DOC-W1.md`, which three `library/` chapters cite as a
+  # currency source. It merged clean because it never ran the gate it broke.
+  # `main` sat red for ~25 minutes and surfaced on the next `crates/` PR, where
+  # it read as that PR's own failure — a shell-script change appearing to break
+  # a Rust test shard.
+  #
+  # ★ The coupling is CITATION-DIRECTED, not path-directed. The doc track and
+  #   the build track are concurrent on the premise that one touches `library/`
+  #   and the other `crates/`. That is true of file paths and false of
+  #   evidence: `library/manifest.toml` cites `crates/` and `docs/program/`
+  #   files, so either side can invalidate the other's claim without sharing a
+  #   single path.
+  #
+  # So run the one gate a doc-only merge can break, against the CANDIDATE, in a
+  # throwaway worktree. ~4s, no cargo, no network. Narrowly scoped on purpose:
+  # it asks only "is the doc currency claim still backed?", so a `main` that is
+  # red for an unrelated reason does not block a doc-only publish — and the
+  # Librarian's re-validation commit is precisely the publish that PASSES it,
+  # so the gate unblocks itself rather than deadlocking.
+  doc_gate_wt="$(mktemp -d -t ken-docgate-XXXXXX)"
+  cleanup_doc_gate() {
+    git worktree remove --force "$doc_gate_wt" >/dev/null 2>&1 || true
+    rm -rf "$doc_gate_wt" >/dev/null 2>&1 || true
+  }
+  trap cleanup_doc_gate EXIT
+  if ! git worktree add --detach "$doc_gate_wt" "$head_sha" >/dev/null 2>&1; then
+    die "doc-only gate: could not create a worktree at $head_sha to check it"
+  fi
+  if ! ( cd "$doc_gate_wt" && ./scripts/gen-doc-status.sh --check ); then
+    cleanup_doc_gate
+    trap - EXIT
+    die "doc-only gate: the library currency gate FAILS at $head_sha.
+
+Merging this with --doc-only would land it on main WITHOUT CI and leave main
+red for the next PR that runs the full suite -- which will look like that PR's
+failure, not this one's.
+
+Re-validate the cited sources and bump library/REVISION (the Librarian's
+mandate), then publish. Do not bypass: gen-doc-status.sh refuses to auto-bump
+because the bump IS the claim that someone re-validated."
+  fi
+  cleanup_doc_gate
+  trap - EXIT
+  printf 'Doc-only gate: library currency check passed at %s.\n' "$head_sha"
+
   merge_pr
   printf 'Doc-only PR #%s merge command succeeded.\n' "$pr_number"
   exit 0
