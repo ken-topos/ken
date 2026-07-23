@@ -1357,6 +1357,15 @@ extern "C" fn px8n_scripted_host_dispatch(
         fixture.malformed_request = 4;
         return -1;
     }
+    // PX8-SPAN-PROV native ABI discriminator: FsWriteAt carries a 6th request
+    // field (span_origin) beyond FsReadAt's five. It must marshal the distinct
+    // origin operand (Var(1) = identity 11), not the target buffer (22). This
+    // reddens if the lowering drops span_origin or target-substitutes it —
+    // closing the seam a same-token own-write fixture leaves open.
+    if expected == ken_host::HostOpV1::FsWriteAt && load(wire.request_offsets[5]) != 11 {
+        fixture.malformed_request = 6;
+        return -1;
+    }
     // SAFETY: the reply pointer names the target-C-sized stack record
     // supplied by the compiled caller for this exact operation.
     unsafe { std::ptr::write_bytes(reply.cast::<u8>(), 0, wire.reply_size as usize) };
@@ -1449,8 +1458,15 @@ fn px8n_write_arm_fixture_with_start(
             RuntimeExpr::Var(0),
             start,
             RuntimeExpr::Value(RuntimeValue::Int((4).into())),
-            // PX8-SPAN-PROV: span origin = the target buffer (own-buffer write).
-            RuntimeExpr::Var(0),
+            // PX8-SPAN-PROV native ABI discriminator: span_origin is a *distinct*
+            // resource operand (Var(1), erased identity 11) from the target
+            // buffer (Var(0), identity 22), so the scripted host below verifies
+            // the 6th FsWriteAt request field carries the distinct origin token,
+            // not the target. A native lowering/ABI bug that dropped or
+            // target-substituted span_origin sends 22 to request_offsets[5] and
+            // is caught. (The scripted host returns Wrote regardless of
+            // provenance — it validates the marshalled request, not the check.)
+            RuntimeExpr::Var(1),
         ],
     };
     let transfer_observation = px8n_exact_nat(
