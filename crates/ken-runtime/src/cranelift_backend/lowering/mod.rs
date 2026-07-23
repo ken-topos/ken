@@ -270,6 +270,9 @@ struct Lowering<'a> {
     partition_metrics: PartitionCompilationMetrics,
     partition_next_site: u64,
     partition_branch_returns: PartitionBranchReturnLedger,
+    partition_producer_sites: BTreeMap<usize, PartitionProducerKontSitePlan>,
+    partition_next_producer_site: usize,
+    active_partition_producer_kont: Option<PartitionProducerKontCursor>,
     active_partition_return_kind: Option<ScalarMergeKind>,
     active_partition_return_contract: Option<PartitionStateReturnContract>,
     partition_output_tag_pointer: Option<cranelift_codegen::ir::Value>,
@@ -1981,6 +1984,7 @@ fn source_active_cursor<'a: 'b, 'b>(
 struct SourceControl<'a> {
     continuation: SourceContinuation<'a>,
     partition_cursor: Option<PartitionSourceCursor>,
+    producer_kont: Option<PartitionProducerKontCursor>,
     selected: SourceSelectedContinuation<'a>,
     selected_lineage: Vec<SourceSelectedContinuation<'a>>,
     terminal_outer: ContinuationCursorId,

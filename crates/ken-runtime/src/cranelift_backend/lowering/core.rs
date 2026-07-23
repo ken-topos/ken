@@ -187,6 +187,9 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         partition_metrics: PartitionCompilationMetrics::default(),
         partition_next_site: 0,
         partition_branch_returns: PartitionBranchReturnLedger::default(),
+        partition_producer_sites: BTreeMap::new(),
+        partition_next_producer_site: 0,
+        active_partition_producer_kont: None,
         active_partition_return_kind: None,
         active_partition_return_contract: None,
         partition_output_tag_pointer: None,
@@ -292,7 +295,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
                     .begin_emitting(item.state_id)?;
                 Some(item.state_id)
             }
-            PartitionWorkItem::Resume(item) => {
+            PartitionWorkItem::ProducerKont(item) => {
                 compiler
                     .partition_continuations
                     .begin_emitting(item.state_id)?;
@@ -326,7 +329,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         let helper_id = match &item {
             PartitionWorkItem::SourceArm(item) => item.function,
             PartitionWorkItem::SourceKont(item) => item.function,
-            PartitionWorkItem::Resume(item) => item.function,
+            PartitionWorkItem::ProducerKont(item) => item.function,
             PartitionWorkItem::Arm(item) => item.function,
             PartitionWorkItem::CleanupStep(item) => item.function,
         };
@@ -337,7 +340,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
             PartitionWorkItem::SourceKont(item) => {
                 compiler.restore_partition_ledger_baseline(&item.ledger_baseline);
             }
-            PartitionWorkItem::Resume(item) => {
+            PartitionWorkItem::ProducerKont(item) => {
                 compiler.restore_partition_ledger_baseline(&item.ledger_baseline);
             }
             PartitionWorkItem::Arm(item) => {
@@ -369,6 +372,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         compiler.native_int_tags.clear();
         compiler.partition_cut_armed = false;
         compiler.partition_output_tag_pointer = None;
+        compiler.active_partition_producer_kont = None;
         compiler.active_partition_return_contract = None;
         compiler.partition_live_growth_ticks = 0;
         compiler.declaration_stack.clear();
@@ -399,8 +403,12 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
                     .lower_source_arm_partition_work_item(&mut builder, item, frame_pointer)?,
                 PartitionWorkItem::SourceKont(item) => compiler
                     .lower_source_kont_partition_work_item(&mut builder, item, frame_pointer)?,
-                PartitionWorkItem::Resume(item) => {
-                    compiler.lower_resume_partition_work_item(&mut builder, item, frame_pointer)?
+                PartitionWorkItem::ProducerKont(item) => {
+                    compiler.lower_producer_kont_partition_work_item(
+                        &mut builder,
+                        item,
+                        frame_pointer,
+                    )?
                 }
                 PartitionWorkItem::Arm(item) => {
                     compiler.lower_arm_partition_work_item(&mut builder, item, frame_pointer)?
@@ -569,6 +577,35 @@ impl<'a> Lowering<'a> {
     ) -> Result<(), CraneliftBackendError> {
         let current =
             partition_source_head_template(&control.continuation, control.terminal_outer)?;
+        self.push_partition_source_template(builder, control, current)
+    }
+
+    fn push_partition_source_prefix(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        control: &mut SourceControl<'_>,
+    ) -> Result<(), CraneliftBackendError> {
+        let mut current = &control.continuation;
+        let mut prefix = Vec::new();
+        while let Some(next) = partition_source_continuation_next(current) {
+            prefix.push(partition_source_head_template(
+                current,
+                control.terminal_outer,
+            )?);
+            current = next;
+        }
+        for template in prefix.into_iter().rev() {
+            self.push_partition_source_template(builder, control, template)?;
+        }
+        Ok(())
+    }
+
+    fn push_partition_source_template(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        control: &mut SourceControl<'_>,
+        current: SourcePrefixTemplate,
+    ) -> Result<(), CraneliftBackendError> {
         let mut capture_values = Vec::new();
         append_partition_prefix_values(self, builder, &current, &mut capture_values)?;
         let capture_field_types = capture_values
@@ -1051,6 +1088,9 @@ impl<'a> Lowering<'a> {
                 append_partition_lowered_values(self, builder, value, &mut fields)?;
             }
             append_partition_eliminator_values(self, builder, &eliminators, &mut fields)?;
+            if let Some(producer_kont) = self.active_partition_producer_kont {
+                fields.push(producer_kont.capture_pointer);
+            }
             let (frame_values, field_types, field_map) = partition_frame_layout(builder, &fields);
             self.partition_metrics.record_call_frame(frame_values.len());
             let frame_size = partition_frame_size(frame_values.len())?;
@@ -1100,6 +1140,7 @@ impl<'a> Lowering<'a> {
                     body,
                     env: std::mem::take(&mut arm_env),
                     eliminators: eliminators.clone(),
+                    producer_kont: self.active_partition_producer_kont,
                     ledger_baseline: ledger_baseline.clone(),
                     return_authority,
                 }));
@@ -1259,6 +1300,15 @@ impl<'a> Lowering<'a> {
                                     ));
                                     composed.extend(frames);
                                     composed.push(EliminatorFrame::InvocationReturn);
+                                    let producer_kont = self.push_oriented_producer_kont(
+                                        builder,
+                                        installed.checked,
+                                        eliminators,
+                                    )?;
+                                    let outer_producer_kont = producer_kont.map(|producer_kont| {
+                                        self.active_partition_producer_kont
+                                            .replace(producer_kont)
+                                    });
                                     self.enter_oriented_semantic_region(installed.checked);
                                     let returned = self.lower_computational_producer_expr(
                                         builder,
@@ -1267,7 +1317,14 @@ impl<'a> Lowering<'a> {
                                         &composed,
                                     );
                                     self.leave_oriented_semantic_region(installed.checked);
+                                    if let Some(outer_producer_kont) = outer_producer_kont {
+                                        self.active_partition_producer_kont =
+                                            outer_producer_kont;
+                                    }
                                     let returned = returned?;
+                                    if matches!(returned, Lowered::ProcessExitStatus { .. }) {
+                                        return Ok(returned);
+                                    }
                                     return self.lower_computational_match_value_composed(
                                         builder,
                                         returned,
@@ -1395,6 +1452,14 @@ impl<'a> Lowering<'a> {
                                     "structural Nat recursive hypothesis takes no arguments",
                                 ));
                             }
+                            let producer_kont = self.push_oriented_producer_kont(
+                                builder,
+                                installed.checked,
+                                eliminators,
+                            )?;
+                            let outer_producer_kont = producer_kont.map(|producer_kont| {
+                                self.active_partition_producer_kont.replace(producer_kont)
+                            });
                             self.enter_oriented_semantic_region(installed.checked);
                             let returned = self.lower_bounded_nat_computational(
                                 builder,
@@ -1403,7 +1468,13 @@ impl<'a> Lowering<'a> {
                                 &composed,
                             );
                             self.leave_oriented_semantic_region(installed.checked);
+                            if let Some(outer_producer_kont) = outer_producer_kont {
+                                self.active_partition_producer_kont = outer_producer_kont;
+                            }
                             let returned = returned?;
+                            if matches!(returned, Lowered::ProcessExitStatus { .. }) {
+                                return Ok(returned);
+                            }
                             return self.lower_computational_match_value_composed(
                                 builder,
                                 returned,
@@ -1437,12 +1508,26 @@ impl<'a> Lowering<'a> {
                             .collect::<Result<Vec<_>, _>>()?;
                         call_env.extend(captures);
                         call_env.extend_from_slice(producer_env);
+                        let producer_kont = self.push_oriented_producer_kont(
+                            builder,
+                            installed.checked,
+                            eliminators,
+                        )?;
+                        let outer_producer_kont = producer_kont.map(|producer_kont| {
+                            self.active_partition_producer_kont.replace(producer_kont)
+                        });
                         self.enter_oriented_semantic_region(installed.checked);
                         let returned = self.lower_computational_producer_expr(
                             builder, &body, &call_env, &composed,
                         );
                         self.leave_oriented_semantic_region(installed.checked);
+                        if let Some(outer_producer_kont) = outer_producer_kont {
+                            self.active_partition_producer_kont = outer_producer_kont;
+                        }
                         let returned = returned?;
+                        if matches!(returned, Lowered::ProcessExitStatus { .. }) {
+                            return Ok(returned);
+                        }
                         self.lower_computational_match_value_composed(
                             builder,
                             returned,
@@ -1957,6 +2042,602 @@ impl<'a> Lowering<'a> {
                 self.lower_computational_match_value_composed(builder, value, eliminators)
             }
         }
+    }
+
+    fn push_oriented_producer_kont(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        checked: bool,
+        eliminators: &[EliminatorFrame<'_>],
+    ) -> Result<Option<PartitionProducerKontCursor>, CraneliftBackendError> {
+        let owned = own_partition_eliminators(eliminators).ok_or_else(|| {
+            unsupported(
+                "NativeProducerContinuationStepV1",
+                "oriented producer return has no exact eliminator schema",
+            )
+        })?;
+        if !partition_eliminators_are_admissible(&owned) {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "oriented producer return carries an inadmissible eliminator",
+            ));
+        }
+        let (checked_join, return_kind) =
+            if let Some(return_contract) = self.active_partition_return_contract.clone() {
+                (
+                    return_contract.checked_join,
+                    return_contract.required_kind,
+                )
+            } else {
+                let checked_join = self
+                    .native_join_plan
+                    .as_ref()
+                    .and_then(|plan| {
+                        plan.sites.iter().find(|site| {
+                            site.runtime_frame_fingerprint
+                                == crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1
+                                && site.checked_occurrence_path == [0]
+                                && site.answer_kind
+                                    == crate::NativeJoinAnswerKindV1::ExitCode
+                        })
+                    })
+                    .map(PartitionCheckedJoinIdentity::from);
+                let Some(checked_join) = checked_join else {
+                    return Ok(None);
+                };
+                (checked_join, ScalarMergeKind::ExitCode)
+            };
+        let outer = self.active_partition_producer_kont;
+        let successor = if owned.is_empty() {
+            outer
+        } else {
+            Some(self.push_owned_producer_kont(
+                builder,
+                owned,
+                outer,
+                checked_join.clone(),
+                return_kind,
+            )?)
+        };
+        self.push_oriented_return_producer_kont(
+            builder,
+            checked,
+            successor,
+            checked_join,
+            return_kind,
+        )
+        .map(Some)
+    }
+
+    fn push_owned_producer_kont(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        owned: Vec<OwnedPartitionEliminator>,
+        mut successor: Option<PartitionProducerKontCursor>,
+        checked_join: PartitionCheckedJoinIdentity,
+        return_kind: ScalarMergeKind,
+    ) -> Result<PartitionProducerKontCursor, CraneliftBackendError> {
+        if owned.is_empty() {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "empty eliminator sequence has no producer step",
+            ));
+        }
+        for eliminator in owned.into_iter().rev() {
+            successor = Some(self.push_one_owned_producer_kont(
+                builder,
+                eliminator,
+                successor,
+                checked_join.clone(),
+                return_kind,
+            )?);
+        }
+        Ok(successor.expect("non-empty eliminator sequence builds one producer step"))
+    }
+
+    fn push_one_owned_producer_kont(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        eliminator: OwnedPartitionEliminator,
+        successor: Option<PartitionProducerKontCursor>,
+        checked_join: PartitionCheckedJoinIdentity,
+        return_kind: ScalarMergeKind,
+    ) -> Result<PartitionProducerKontCursor, CraneliftBackendError> {
+        let owned = vec![eliminator];
+        let mut capture_fields = Vec::new();
+        append_partition_eliminator_values(self, builder, &owned, &mut capture_fields)?;
+        if let Some(successor) = successor {
+            capture_fields.push(successor.capture_pointer);
+        }
+        let capture_field_types = capture_fields
+            .iter()
+            .map(|value| builder.func.dfg.value_type(*value))
+            .collect::<Vec<_>>();
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            partition_frame_size(capture_fields.len())?,
+            3,
+        ));
+        self.partition_metrics
+            .record_call_frame(capture_fields.len());
+        for (index, value) in capture_fields.iter().copied().enumerate() {
+            let offset = index
+                .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                .and_then(|offset| i32::try_from(offset).ok())
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "producer continuation capture-cell offset overflowed",
+                    )
+                })?;
+            builder.ins().stack_store(value, frame, offset);
+        }
+        let invocation = self
+            .invocation_pointer
+            .expect("producer continuation planning owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let capture_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+        let site_id = self.partition_next_producer_site;
+        self.partition_next_producer_site = self
+            .partition_next_producer_site
+            .checked_add(1)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "producer continuation site identity exhausted",
+                )
+            })?;
+        let action = ProducerKontAction::ApplyEliminators {
+            eliminators: owned,
+            capture_field_types,
+        };
+        let plan = PartitionProducerKontSitePlan {
+            action,
+            successor,
+            checked_join,
+            return_kind,
+        };
+        if self.partition_producer_sites.insert(site_id, plan).is_some() {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer continuation site was planned twice",
+            ));
+        }
+        Ok(PartitionProducerKontCursor {
+            site_id,
+            capture_pointer,
+        })
+    }
+
+    fn push_oriented_return_producer_kont(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        checked: bool,
+        successor: Option<PartitionProducerKontCursor>,
+        checked_join: PartitionCheckedJoinIdentity,
+        return_kind: ScalarMergeKind,
+    ) -> Result<PartitionProducerKontCursor, CraneliftBackendError> {
+        let capture_fields = successor
+            .map(|successor| vec![successor.capture_pointer])
+            .unwrap_or_default();
+        let capture_field_types = capture_fields
+            .iter()
+            .map(|value| builder.func.dfg.value_type(*value))
+            .collect::<Vec<_>>();
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            partition_frame_size(capture_fields.len())?,
+            3,
+        ));
+        self.partition_metrics
+            .record_call_frame(capture_fields.len());
+        for (index, value) in capture_fields.iter().copied().enumerate() {
+            let offset = index
+                .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                .and_then(|offset| i32::try_from(offset).ok())
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "oriented-return capture-cell offset overflowed",
+                    )
+                })?;
+            builder.ins().stack_store(value, frame, offset);
+        }
+        let invocation = self
+            .invocation_pointer
+            .expect("producer continuation planning owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let capture_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+        let site_id = self.partition_next_producer_site;
+        self.partition_next_producer_site = self
+            .partition_next_producer_site
+            .checked_add(1)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "producer continuation site identity exhausted",
+                )
+            })?;
+        let plan = PartitionProducerKontSitePlan {
+            action: ProducerKontAction::OrientedInvocationReturn {
+                checked,
+                capture_field_types,
+            },
+            successor,
+            checked_join,
+            return_kind,
+        };
+        if self.partition_producer_sites.insert(site_id, plan).is_some() {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer continuation site was planned twice",
+            ));
+        }
+        Ok(PartitionProducerKontCursor {
+            site_id,
+            capture_pointer,
+        })
+    }
+
+    fn push_selected_head_producer_kont(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        active: ActiveContinuationFrame<'_>,
+    ) -> Result<Option<PartitionProducerKontCursor>, CraneliftBackendError> {
+        let Some(return_contract) = self.active_partition_return_contract.clone() else {
+            return Ok(None);
+        };
+        if active.parent.is_some() {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "entry selected head still carries a borrowed parent frame",
+            ));
+        }
+        let pending = own_partition_eliminators(active.pending).ok_or_else(|| {
+            unsupported(
+                "NativeProducerContinuationStepV1",
+                "entry selected head pending frames have no exact schema",
+            )
+        })?;
+        let selected_lineage =
+            own_partition_selected_lineage(active.source_lineage).ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "entry selected head lineage has no exact schema",
+                )
+            })?;
+        let selected_scope = active.selected_scope.cloned();
+        if !partition_scope_is_admissible(&selected_scope)
+            || !partition_eliminators_are_admissible(&pending)
+        {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "entry selected head has no exact admissible capture schema",
+            ));
+        }
+        let successor = self.active_partition_producer_kont;
+        let mut capture_fields = Vec::new();
+        append_partition_eliminator_values(self, builder, &pending, &mut capture_fields)?;
+        append_partition_scope_values(self, builder, &selected_scope, &mut capture_fields)?;
+        append_partition_selected_lineage_values(
+            self,
+            builder,
+            &selected_lineage,
+            &mut capture_fields,
+        )?;
+        if let Some(successor) = successor {
+            capture_fields.push(successor.capture_pointer);
+        }
+        let capture_field_types = capture_fields
+            .iter()
+            .map(|value| builder.func.dfg.value_type(*value))
+            .collect::<Vec<_>>();
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            partition_frame_size(capture_fields.len())?,
+            3,
+        ));
+        self.partition_metrics
+            .record_call_frame(capture_fields.len());
+        for (index, value) in capture_fields.iter().copied().enumerate() {
+            let offset = index
+                .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                .and_then(|offset| i32::try_from(offset).ok())
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "selected-head capture-cell offset overflowed",
+                    )
+                })?;
+            builder.ins().stack_store(value, frame, offset);
+        }
+        let invocation = self
+            .invocation_pointer
+            .expect("producer continuation planning owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let capture_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+        let site_id = self.partition_next_producer_site;
+        self.partition_next_producer_site = self
+            .partition_next_producer_site
+            .checked_add(1)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "producer continuation site identity exhausted",
+                )
+            })?;
+        let plan = PartitionProducerKontSitePlan {
+            action: ProducerKontAction::ApplyActiveEliminators {
+                activation: active.activation,
+                cursor: active.cursor,
+                pending,
+                selected_ancestry: active.selected_ancestry.to_vec(),
+                selected_scope,
+                selected_lineage,
+                capture_field_types,
+            },
+            successor,
+            checked_join: return_contract.checked_join,
+            return_kind: return_contract.required_kind,
+        };
+        if self.partition_producer_sites.insert(site_id, plan).is_some() {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer continuation site was planned twice",
+            ));
+        }
+        Ok(Some(PartitionProducerKontCursor {
+            site_id,
+            capture_pointer,
+        }))
+    }
+
+    fn push_checked_computational_ih_producer_kont(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        call_template_id: u64,
+    ) -> Result<Option<PartitionProducerKontCursor>, CraneliftBackendError> {
+        let Some(return_contract) = self.active_partition_return_contract.clone() else {
+            return Ok(None);
+        };
+        let successor = self.active_partition_producer_kont;
+        let mut capture_fields = Vec::new();
+        if let Some(successor) = successor {
+            capture_fields.push(successor.capture_pointer);
+        }
+        let capture_field_types = capture_fields
+            .iter()
+            .map(|value| builder.func.dfg.value_type(*value))
+            .collect::<Vec<_>>();
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            partition_frame_size(capture_fields.len())?,
+            3,
+        ));
+        self.partition_metrics
+            .record_call_frame(capture_fields.len());
+        for (index, value) in capture_fields.iter().copied().enumerate() {
+            let offset = index
+                .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                .and_then(|offset| i32::try_from(offset).ok())
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "checked-marker capture-cell offset overflowed",
+                    )
+                })?;
+            builder.ins().stack_store(value, frame, offset);
+        }
+        let invocation = self
+            .invocation_pointer
+            .expect("producer continuation planning owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let capture_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+        let site_id = self.partition_next_producer_site;
+        self.partition_next_producer_site = self
+            .partition_next_producer_site
+            .checked_add(1)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "producer continuation site identity exhausted",
+                )
+            })?;
+        let plan = PartitionProducerKontSitePlan {
+            action: ProducerKontAction::CheckedComputationalIHReturn {
+                call_template_id,
+                capture_field_types,
+            },
+            successor,
+            checked_join: return_contract.checked_join,
+            return_kind: return_contract.required_kind,
+        };
+        if self.partition_producer_sites.insert(site_id, plan).is_some() {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "checked-marker producer site was planned twice",
+            ));
+        }
+        Ok(Some(PartitionProducerKontCursor {
+            site_id,
+            capture_pointer,
+        }))
+    }
+
+    fn call_partition_producer_kont(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        cursor: PartitionProducerKontCursor,
+        input: Lowered,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        if !partition_lowered_is_admissible(&input) {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer continuation input has no exact closed schema",
+            ));
+        }
+        let plan = self
+            .partition_producer_sites
+            .get(&cursor.site_id)
+            .cloned()
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "producer continuation head has no planned site",
+                )
+        })?;
+        let mut fields = Vec::new();
+        append_partition_lowered_values(self, builder, &input, &mut fields)?;
+        fields.push(cursor.capture_pointer);
+        let (frame_values, field_types, field_map) = partition_frame_layout(builder, &fields);
+        let key = PartitionSemanticStateKey::ProducerKont(match &plan.action {
+            ProducerKontAction::OrientedInvocationReturn {
+                checked,
+                ..
+            } => PartitionContinuationKey::oriented_invocation_return(
+                plan.checked_join.clone(),
+                plan.return_kind,
+                &input,
+                *checked,
+                plan.successor.map(|successor| successor.site_id),
+                field_types.clone(),
+                field_map.clone(),
+            ),
+            ProducerKontAction::ApplyEliminators { eliminators, .. } => {
+                PartitionContinuationKey::apply_eliminators(
+                    plan.checked_join.clone(),
+                    plan.return_kind,
+                    &input,
+                    eliminators,
+                    plan.successor.map(|successor| successor.site_id),
+                    field_types.clone(),
+                    field_map.clone(),
+                )
+            }
+            ProducerKontAction::CheckedComputationalIHReturn {
+                call_template_id, ..
+            } => PartitionContinuationKey::checked_computational_ih_return(
+                plan.checked_join.clone(),
+                plan.return_kind,
+                &input,
+                *call_template_id,
+                plan.successor.map(|successor| successor.site_id),
+                field_types.clone(),
+                field_map.clone(),
+            ),
+            ProducerKontAction::ApplyActiveEliminators {
+                activation,
+                cursor,
+                pending,
+                selected_ancestry,
+                selected_scope,
+                selected_lineage,
+                ..
+            } => PartitionContinuationKey::new(
+                plan.checked_join.clone(),
+                plan.return_kind,
+                plan.return_kind,
+                &input,
+                *activation,
+                *cursor,
+                pending,
+                selected_ancestry,
+                selected_scope,
+                selected_lineage,
+                plan.successor.map(|successor| successor.site_id),
+                field_types.clone(),
+                field_map.clone(),
+            ),
+        });
+        let expected_contract = key.return_contract();
+        let existing = self
+            .partition_continuations
+            .lookup(&key, PartitionAggregateBudget::PRODUCTION)?;
+        let (state_id, state, newly_reserved) = if let Some((state_id, state)) = existing {
+            (state_id, state, false)
+        } else {
+            let helper_index = self.partition_next_helper;
+            let function = *self.partition_helper_ids.get(helper_index).ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "producer continuation exhausted its predeclared helper pool",
+                )
+            })?;
+            self.partition_next_helper += 1;
+            let (state_id, state) = self.partition_continuations.reserve(
+                key,
+                function,
+                helper_index,
+                PartitionAggregateBudget::PRODUCTION,
+            )?;
+            (state_id, state, true)
+        };
+        self.partition_continuations
+            .validate_call_contract(state_id, &expected_contract)?;
+        let (_, function_ref) = self.partition_helper_ref(
+            builder,
+            state.helper_index,
+            "interned producer continuation lost its helper identity",
+        )?;
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            partition_frame_size(frame_values.len())?,
+            3,
+        ));
+        self.partition_metrics
+            .record_call_frame(frame_values.len());
+        for (index, value) in frame_values.iter().copied().enumerate() {
+            let offset = index
+                .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                .and_then(|offset| i32::try_from(offset).ok())
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "producer continuation input-cell offset overflowed",
+                    )
+                })?;
+            builder.ins().stack_store(value, frame, offset);
+        }
+        let invocation = self
+            .invocation_pointer
+            .expect("producer continuation call owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let frame_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+        let tag_output = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            PARTITION_FRAME_FIELD_BYTES,
+            3,
+        ));
+        let zero = builder.ins().iconst(types::I64, 0);
+        builder.ins().stack_store(zero, tag_output, 0);
+        let tag_pointer = builder.ins().stack_addr(pointer_type, tag_output, 0);
+        let call = builder
+            .ins()
+            .call(function_ref, &[invocation, frame_pointer, tag_pointer]);
+        let tag = builder.ins().stack_load(types::I64, tag_output, 0);
+        let payload = builder.inst_results(call)[0];
+        if newly_reserved {
+            self.partition_queue
+                .push_back(PartitionWorkItem::ProducerKont(
+                    ProducerKontPartitionWorkItem {
+                        state_id,
+                        site_id: cursor.site_id,
+                        function: state.function,
+                        field_types,
+                        field_map,
+                        value: input,
+                        action: plan.action,
+                        capture_pointer: Some(cursor.capture_pointer),
+                        successor: plan.successor,
+                        ledger_baseline: self.partition_ledger_baseline(),
+                        return_kind: plan.return_kind,
+                    },
+                ));
+        }
+        Ok(self.lowered_from_scalar_pair(
+            plan.return_kind,
+            NativeScalarPairV1 { tag, payload },
+        ))
     }
 
     fn lower_computational_match_value_composed(
@@ -2659,18 +3340,62 @@ impl<'a> Lowering<'a> {
             &mut loaded,
             &mut self.native_int_tags,
         )?;
+        if let Some(producer_kont) = &mut item.producer_kont {
+            producer_kont.capture_pointer = loaded.next().ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "outlined scalar arm lost its producer-continuation cell pointer",
+                )
+            })?;
+        }
         if loaded.next().is_some() {
             return Err(unsupported(
                 "NativeFunctionPartition",
                 "private producer frame has trailing fields",
             ));
         }
-        let eliminators = borrow_partition_eliminators(&item.eliminators);
+        let checked_join = self
+            .native_join_plan
+            .as_ref()
+            .and_then(|plan| {
+                plan.sites.iter().find(|site| {
+                    site.runtime_frame_fingerprint
+                        == crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1
+                        && site.checked_occurrence_path == [0]
+                        && site.answer_kind == crate::NativeJoinAnswerKindV1::ExitCode
+                })
+            })
+            .map(PartitionCheckedJoinIdentity::from)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "outlined scalar arm has no distinguished checked terminal",
+                )
+            })?;
+        self.active_partition_producer_kont = item.producer_kont;
+        let producer_kont = self.push_owned_producer_kont(
+            builder,
+            item.eliminators.clone(),
+            item.producer_kont,
+            checked_join,
+            item.return_authority.descriptor.required_kind,
+        )?;
+        self.active_partition_producer_kont = Some(producer_kont);
+        let invocation_return = [EliminatorFrame::InvocationReturn];
         self.active_partition_return_kind = Some(item.return_authority.descriptor.required_kind);
-        let lowered =
-            self.lower_computational_producer_expr(builder, &item.body, &item.env, &eliminators);
+        let lowered = self.lower_computational_producer_expr(
+            builder,
+            &item.body,
+            &item.env,
+            &invocation_return,
+        );
         self.active_partition_return_kind = None;
+        self.active_partition_producer_kont = None;
         let lowered = lowered?;
+        let lowered = match lowered {
+            Lowered::Trap(_) | Lowered::ProcessExitStatus { .. } => lowered,
+            value => self.call_partition_producer_kont(builder, producer_kont, value)?,
+        };
         match lowered {
             Lowered::Trap(trap) => {
                 self.consume_partition_branch_return(
@@ -2741,6 +3466,14 @@ impl<'a> Lowering<'a> {
                 )
             })?);
         }
+        if let Some(producer_kont) = &mut item.producer_kont {
+            producer_kont.capture_pointer = loaded.next().ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "source Eval state lost its producer-continuation cell pointer",
+                )
+            })?;
+        }
         rebuild_partition_scope(
             &mut item.selected_scope,
             &mut loaded,
@@ -2778,14 +3511,7 @@ impl<'a> Lowering<'a> {
             expected_outer: item.terminal_outer,
         };
         let continuation = match (item.source_head, item.source_capture_pointer) {
-            (Some(node), Some(capture_pointer)) => SourceContinuation::Partitioned {
-                head: PartitionSourceCursor {
-                    node,
-                    capture_pointer,
-                },
-                terminal,
-            },
-            (None, None) => SourceContinuation::Terminal(terminal),
+            (Some(_), Some(_)) | (None, None) => SourceContinuation::Terminal(terminal),
             _ => {
                 return Err(unsupported(
                     "NativeSourceContinuationStepV1",
@@ -2813,6 +3539,7 @@ impl<'a> Lowering<'a> {
                     capture_pointer,
                 },
             ),
+            producer_kont: item.producer_kont,
             selected: SourceSelectedContinuation {
                 activation: item.selected_activation,
                 cursor: item.selected_cursor,
@@ -2864,11 +3591,13 @@ impl<'a> Lowering<'a> {
             }
         }
         let required_kind = item.return_contract.required_kind;
+        self.active_partition_producer_kont = item.producer_kont;
         self.active_partition_return_kind = Some(required_kind);
         self.active_partition_return_contract = Some(item.return_contract.clone());
         let lowered = self.lower_source_machine_with_continuation(builder, body, item.env, control);
         self.active_partition_return_contract = None;
         self.active_partition_return_kind = None;
+        self.active_partition_producer_kont = None;
         let mut lowered = lowered?;
         if !matches!(lowered, Lowered::Trap(_)) {
             if let Some(cleanup_head) = item.cleanup_head {
@@ -2945,6 +3674,14 @@ impl<'a> Lowering<'a> {
                 "Kont input cell lost its immediate-capture pointer",
             )
         })?;
+        if let Some(producer_kont) = &mut item.producer_kont {
+            producer_kont.capture_pointer = loaded.next().ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "source Kont state lost its producer-continuation cell pointer",
+                )
+            })?;
+        }
         rebuild_partition_eliminators(
             &mut item.selected_pending,
             &mut loaded,
@@ -2968,11 +3705,6 @@ impl<'a> Lowering<'a> {
         }
 
         let mut definition = self.partition_source_nodes.definition(item.node)?;
-        let pointer_type = builder.func.dfg.value_type(item.capture_pointer);
-        let parent_pointer =
-            builder
-                .ins()
-                .load(pointer_type, MemFlags::trusted(), item.capture_pointer, 0);
         let mut captures = definition
             .capture_field_types
             .iter()
@@ -3011,16 +3743,7 @@ impl<'a> Lowering<'a> {
         let terminal = SourceContinuationTerminal::ReturnFromPartition {
             expected_outer: item.terminal_outer,
         };
-        let successor = match definition.successor {
-            Some(node) => SourceContinuation::Partitioned {
-                head: PartitionSourceCursor {
-                    node,
-                    capture_pointer: parent_pointer,
-                },
-                terminal,
-            },
-            None => SourceContinuation::Terminal(terminal),
-        };
+        let successor = SourceContinuation::Terminal(terminal);
         let continuation = instantiate_partition_source_node(definition.current, successor)?;
         let selected_lineage = item
             .selected_lineage
@@ -3040,6 +3763,7 @@ impl<'a> Lowering<'a> {
                 node: item.node,
                 capture_pointer: item.capture_pointer,
             }),
+            producer_kont: item.producer_kont,
             selected: SourceSelectedContinuation {
                 activation: item.selected_activation,
                 cursor: item.selected_cursor,
@@ -3053,6 +3777,7 @@ impl<'a> Lowering<'a> {
         };
         self.declaration_stack = item.declaration_stack;
         self.active_recursive_invocations = item.active_recursive_invocations;
+        self.active_partition_producer_kont = item.producer_kont;
         self.active_partition_return_kind = Some(item.return_contract.required_kind);
         self.active_partition_return_contract = Some(item.return_contract.clone());
         let lowered = self.lower_source_machine_state_inner(
@@ -3064,6 +3789,7 @@ impl<'a> Lowering<'a> {
         );
         self.active_partition_return_contract = None;
         self.active_partition_return_kind = None;
+        self.active_partition_producer_kont = None;
         match lowered? {
             Lowered::Trap(trap) => {
                 let payload = builder.ins().iconst(types::I64, -4);
@@ -3129,6 +3855,9 @@ impl<'a> Lowering<'a> {
         if let Some(cursor) = control.partition_cursor {
             fields.push(cursor.capture_pointer);
         }
+        if let Some(producer_kont) = control.producer_kont {
+            fields.push(producer_kont.capture_pointer);
+        }
         append_partition_scope_values(
             self,
             builder,
@@ -3153,6 +3882,7 @@ impl<'a> Lowering<'a> {
             &self.declaration_stack,
             &self.active_recursive_invocations,
             control.partition_cursor.map(|cursor| cursor.node),
+            control.producer_kont.map(|cursor| cursor.site_id),
             control.selected.activation,
             control.selected.cursor,
             &control.selected.selected_ancestry,
@@ -3248,6 +3978,7 @@ impl<'a> Lowering<'a> {
                     source_capture_pointer: control
                         .partition_cursor
                         .map(|cursor| cursor.capture_pointer),
+                    producer_kont: control.producer_kont,
                     selected_activation: control.selected.activation,
                     selected_cursor: control.selected.cursor,
                     selected_ancestry: control.selected.selected_ancestry,
@@ -3307,6 +4038,9 @@ impl<'a> Lowering<'a> {
         let mut fields = Vec::new();
         append_partition_lowered_values(self, builder, &input, &mut fields)?;
         fields.push(head.capture_pointer);
+        if let Some(producer_kont) = control.producer_kont {
+            fields.push(producer_kont.capture_pointer);
+        }
         append_partition_eliminator_values(self, builder, &selected_pending, &mut fields)?;
         append_partition_scope_values(
             self,
@@ -3326,6 +4060,7 @@ impl<'a> Lowering<'a> {
             return_contract.checked_join.clone(),
             return_contract.required_kind,
             head.node,
+            control.producer_kont.map(|cursor| cursor.site_id),
             &input,
             &self.declaration_stack,
             &self.active_recursive_invocations,
@@ -3415,6 +4150,7 @@ impl<'a> Lowering<'a> {
                     input,
                     node: head.node,
                     capture_pointer: head.capture_pointer,
+                    producer_kont: control.producer_kont,
                     declaration_stack: self.declaration_stack.clone(),
                     active_recursive_invocations: self.active_recursive_invocations.clone(),
                     selected_activation: control.selected.activation,
@@ -3698,10 +4434,10 @@ impl<'a> Lowering<'a> {
         Ok((None, ResultDecoder::ProcessStatus))
     }
 
-    fn lower_resume_partition_work_item(
+    fn lower_producer_kont_partition_work_item(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        mut item: ResumePartitionWorkItem,
+        mut item: ProducerKontPartitionWorkItem,
         frame_pointer: cranelift_codegen::ir::Value,
     ) -> Result<(Option<RuntimeTrap>, ResultDecoder), CraneliftBackendError> {
         self.partition_metrics
@@ -3728,52 +4464,280 @@ impl<'a> Lowering<'a> {
         let loaded = expand_partition_frame_values(&loaded, &item.field_map)?;
         let mut loaded = loaded.into_iter();
         rebuild_partition_lowered(&mut item.value, &mut loaded, &mut self.native_int_tags)?;
-        rebuild_partition_eliminators(&mut item.pending, &mut loaded, &mut self.native_int_tags)?;
-        rebuild_partition_scope(
-            &mut item.selected_scope,
-            &mut loaded,
-            &mut self.native_int_tags,
-        )?;
-        rebuild_partition_selected_lineage(
-            &mut item.selected_lineage,
-            &mut loaded,
-            &mut self.native_int_tags,
-        )?;
-        if loaded.next().is_some() {
-            return Err(unsupported(
-                "NativeFunctionPartition",
-                "private resume frame has trailing fields",
-            ));
-        }
-
-        let pending = borrow_partition_eliminators(&item.pending);
-        let selected_lineage = item
-            .selected_lineage
-            .iter()
-            .map(|selected| SourceSelectedContinuation {
-                activation: selected.activation,
-                cursor: selected.cursor,
-                parent: None,
-                pending: borrow_partition_eliminators(&selected.pending),
-                selected_ancestry: selected.selected_ancestry.clone(),
-                selected_scope: selected.selected_scope.clone(),
-            })
-            .collect::<Vec<_>>();
-        let active = ActiveContinuationFrame {
-            activation: item.activation,
-            cursor: item.cursor,
-            parent: None,
-            pending: &pending,
-            selected_ancestry: &item.selected_ancestry,
-            source_lineage: &selected_lineage,
-            source_selected_cursor: Some(item.cursor),
-            selected_scope: item.selected_scope.as_ref(),
-        };
         let required_kind = item.return_kind;
         self.active_partition_return_kind = Some(required_kind);
-        let lowered = self.resume_active_continuation(builder, item.value, active);
+        let action_has_capture_cell = match &item.action {
+            ProducerKontAction::ApplyActiveEliminators {
+                capture_field_types,
+                ..
+            } => !capture_field_types.is_empty() || item.site_id != usize::MAX,
+            ProducerKontAction::OrientedInvocationReturn { .. }
+            | ProducerKontAction::ApplyEliminators { .. }
+            | ProducerKontAction::CheckedComputationalIHReturn { .. } => true,
+        };
+        if action_has_capture_cell {
+            item.capture_pointer = Some(loaded.next().ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "producer continuation input lost its capture-cell pointer",
+                )
+            })?);
+            self.active_partition_producer_kont = item.successor;
+        }
+        let lowered = match &mut item.action {
+            ProducerKontAction::ApplyActiveEliminators {
+                activation,
+                cursor,
+                pending,
+                selected_ancestry,
+                selected_scope,
+                selected_lineage,
+                capture_field_types,
+            } => {
+                let captured = if action_has_capture_cell {
+                    let capture_pointer = item.capture_pointer.expect("producer capture pointer");
+                    capture_field_types
+                        .iter()
+                        .enumerate()
+                        .map(|(index, field_type)| {
+                            let offset = index
+                                .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                                .and_then(|offset| i32::try_from(offset).ok())
+                                .ok_or_else(|| {
+                                    unsupported(
+                                        "NativeProducerContinuationStepV1",
+                                        "selected-head capture-cell load offset overflowed",
+                                    )
+                                })?;
+                            Ok(builder.ins().load(
+                                *field_type,
+                                MemFlags::trusted(),
+                                capture_pointer,
+                                offset,
+                            ))
+                        })
+                        .collect::<Result<Vec<_>, CraneliftBackendError>>()?
+                } else {
+                    Vec::new()
+                };
+                let mut captured = captured.into_iter();
+                let values = if action_has_capture_cell {
+                    &mut captured
+                } else {
+                    &mut loaded
+                };
+                rebuild_partition_eliminators(
+                    pending,
+                    values,
+                    &mut self.native_int_tags,
+                )?;
+                rebuild_partition_scope(
+                    selected_scope,
+                    values,
+                    &mut self.native_int_tags,
+                )?;
+                rebuild_partition_selected_lineage(
+                    selected_lineage,
+                    values,
+                    &mut self.native_int_tags,
+                )?;
+                if action_has_capture_cell {
+                    if let Some(successor) = &mut item.successor {
+                        successor.capture_pointer = captured.next().ok_or_else(|| {
+                            unsupported(
+                                "NativeProducerContinuationStepV1",
+                                "selected head lost its successor-cell pointer",
+                            )
+                        })?;
+                    }
+                    if captured.next().is_some() {
+                        return Err(unsupported(
+                            "NativeProducerContinuationStepV1",
+                            "selected-head capture cell has trailing fields",
+                        ));
+                    }
+                }
+                let pending = borrow_partition_eliminators(pending);
+                let selected_lineage = selected_lineage
+                    .iter()
+                    .map(|selected| SourceSelectedContinuation {
+                        activation: selected.activation,
+                        cursor: selected.cursor,
+                        parent: None,
+                        pending: borrow_partition_eliminators(&selected.pending),
+                        selected_ancestry: selected.selected_ancestry.clone(),
+                        selected_scope: selected.selected_scope.clone(),
+                    })
+                    .collect::<Vec<_>>();
+                let active = ActiveContinuationFrame {
+                    activation: *activation,
+                    cursor: *cursor,
+                    parent: None,
+                    pending: &pending,
+                    selected_ancestry,
+                    source_lineage: &selected_lineage,
+                    source_selected_cursor: Some(*cursor),
+                    selected_scope: selected_scope.as_ref(),
+                };
+                self.resume_active_continuation(builder, item.value, active)
+            }
+            ProducerKontAction::ApplyEliminators {
+                eliminators,
+                capture_field_types,
+            } => {
+                let capture_pointer = item.capture_pointer.expect("producer capture pointer");
+                let mut captures = capture_field_types
+                    .iter()
+                    .enumerate()
+                    .map(|(index, field_type)| {
+                        let offset = index
+                            .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                            .and_then(|offset| i32::try_from(offset).ok())
+                            .ok_or_else(|| {
+                                unsupported(
+                                    "NativeProducerContinuationStepV1",
+                                    "producer capture-cell load offset overflowed",
+                                )
+                            })?;
+                        Ok(builder.ins().load(
+                            *field_type,
+                            MemFlags::trusted(),
+                            capture_pointer,
+                            offset,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, CraneliftBackendError>>()?
+                    .into_iter();
+                rebuild_partition_eliminators(
+                    eliminators,
+                    &mut captures,
+                    &mut self.native_int_tags,
+                )?;
+                if let Some(successor) = &mut item.successor {
+                    successor.capture_pointer = captures.next().ok_or_else(|| {
+                        unsupported(
+                            "NativeProducerContinuationStepV1",
+                            "producer continuation lost its successor-cell pointer",
+                        )
+                    })?;
+                }
+                if captures.next().is_some() {
+                    return Err(unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "producer continuation capture cell has trailing fields",
+                    ));
+                }
+                let eliminators = borrow_partition_eliminators(eliminators);
+                self.lower_computational_match_value_composed(
+                    builder,
+                    item.value,
+                    &eliminators,
+                )
+            }
+            ProducerKontAction::OrientedInvocationReturn {
+                checked,
+                capture_field_types,
+            } => {
+                let capture_pointer = item.capture_pointer.expect("producer capture pointer");
+                let mut captures = capture_field_types
+                    .iter()
+                    .enumerate()
+                    .map(|(index, field_type)| {
+                        let offset = index
+                            .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                            .and_then(|offset| i32::try_from(offset).ok())
+                            .ok_or_else(|| {
+                                unsupported(
+                                    "NativeProducerContinuationStepV1",
+                                    "oriented-return capture-cell load offset overflowed",
+                                )
+                            })?;
+                        Ok(builder.ins().load(
+                            *field_type,
+                            MemFlags::trusted(),
+                            capture_pointer,
+                            offset,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, CraneliftBackendError>>()?
+                    .into_iter();
+                if let Some(successor) = &mut item.successor {
+                    successor.capture_pointer = captures.next().ok_or_else(|| {
+                        unsupported(
+                            "NativeProducerContinuationStepV1",
+                            "oriented return lost its successor-cell pointer",
+                        )
+                    })?;
+                }
+                if captures.next().is_some() {
+                    return Err(unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "oriented-return capture cell has trailing fields",
+                    ));
+                }
+                self.enter_oriented_semantic_region(*checked);
+                self.leave_oriented_semantic_region(*checked);
+                Ok(item.value)
+            }
+            ProducerKontAction::CheckedComputationalIHReturn {
+                call_template_id: _,
+                capture_field_types,
+            } => {
+                let capture_pointer = item.capture_pointer.expect("producer capture pointer");
+                let mut captures = capture_field_types
+                    .iter()
+                    .enumerate()
+                    .map(|(index, field_type)| {
+                        let offset = index
+                            .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                            .and_then(|offset| i32::try_from(offset).ok())
+                            .ok_or_else(|| {
+                                unsupported(
+                                    "NativeProducerContinuationStepV1",
+                                    "checked-marker capture-cell load offset overflowed",
+                                )
+                            })?;
+                        Ok(builder.ins().load(
+                            *field_type,
+                            MemFlags::trusted(),
+                            capture_pointer,
+                            offset,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, CraneliftBackendError>>()?
+                    .into_iter();
+                if let Some(successor) = &mut item.successor {
+                    successor.capture_pointer = captures.next().ok_or_else(|| {
+                        unsupported(
+                            "NativeProducerContinuationStepV1",
+                            "checked-marker return lost its successor-cell pointer",
+                        )
+                    })?;
+                }
+                if captures.next().is_some() {
+                    return Err(unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "checked-marker capture cell has trailing fields",
+                    ));
+                }
+                self.finish_checked_computational_ih_marker(item.value)
+            }
+        };
+        self.active_partition_producer_kont = None;
         self.active_partition_return_kind = None;
-        match lowered? {
+        if loaded.next().is_some() {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer continuation input cell has trailing fields",
+            ));
+        }
+        let lowered = lowered?;
+        let lowered = if let Some(successor) = item.successor {
+            self.call_partition_producer_kont(builder, successor, lowered)?
+        } else {
+            lowered
+        };
+        match lowered {
             Lowered::Trap(trap) => {
                 let payload = builder.ins().iconst(types::I64, -4);
                 builder.ins().return_(&[payload]);
@@ -3813,6 +4777,11 @@ impl<'a> Lowering<'a> {
                 }
             }
         }
+        let producer_kont = if self.active_partition_producer_kont.is_some() {
+            self.push_selected_head_producer_kont(builder, *active)?
+        } else {
+            None
+        };
         let control = SourceControl {
             continuation: SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                 expected: active.cursor,
@@ -3820,6 +4789,7 @@ impl<'a> Lowering<'a> {
                 root_authority,
             }),
             partition_cursor: None,
+            producer_kont,
             selected: SourceSelectedContinuation {
                 activation: active.activation,
                 cursor: active.cursor,
@@ -4143,11 +5113,29 @@ impl<'a> Lowering<'a> {
                                     "source continuation terminal cursor mismatch",
                                 ));
                             }
+                            if control.producer_kont.is_some()
+                                && (control.selected.cursor != expected
+                                    || !control.selected_lineage.is_empty())
+                            {
+                                return Err(unsupported(
+                                    "NativeProducerContinuationStepV1",
+                                    "source terminal reached producer transfer before restoring \
+                                     its entry selected head",
+                                ));
+                            }
                             self.restore_root_terminal_authority(root_authority, expected)?;
                             if matches!(value, Lowered::Trap(_)) {
                                 return Ok(value);
                             }
-                            return self.resume_active_continuation(builder, value, *active);
+                            return if let Some(producer_kont) = control.producer_kont {
+                                self.call_partition_producer_kont(
+                                    builder,
+                                    producer_kont,
+                                    value,
+                                )
+                            } else {
+                                self.resume_active_continuation(builder, value, *active)
+                            };
                         }
                         SourceContinuation::Terminal(
                             SourceContinuationTerminal::ReturnFromPartition { expected_outer },
@@ -4158,7 +5146,15 @@ impl<'a> Lowering<'a> {
                                     "source arm returned through the wrong outer cursor",
                                 ));
                             }
-                            return Ok(value);
+                            return if let Some(producer_kont) = control.producer_kont {
+                                self.call_partition_producer_kont(
+                                    builder,
+                                    producer_kont,
+                                    value,
+                                )
+                            } else {
+                                Ok(value)
+                            };
                         }
                         SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(
                             edge,
@@ -5081,6 +6077,7 @@ impl<'a> Lowering<'a> {
             let branch_control = SourceControl {
                 continuation,
                 partition_cursor: suffix_control.partition_cursor,
+                producer_kont: suffix_control.producer_kont,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
@@ -5310,6 +6307,7 @@ impl<'a> Lowering<'a> {
             let branch_control = SourceControl {
                 continuation,
                 partition_cursor: suffix_control.partition_cursor,
+                producer_kont: suffix_control.producer_kont,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
@@ -5468,6 +6466,9 @@ impl<'a> Lowering<'a> {
         if let Some(cursor) = source_cursor {
             fields.push(cursor.capture_pointer);
         }
+        if let Some(producer_kont) = self.active_partition_producer_kont {
+            fields.push(producer_kont.capture_pointer);
+        }
         let prefix_fields = fields.len().saturating_sub(env_fields);
         append_partition_scope_values(self, builder, &selected.selected_scope, &mut fields)?;
         let selected_pending = own_partition_eliminators(&selected.pending).ok_or_else(|| {
@@ -5522,6 +6523,8 @@ impl<'a> Lowering<'a> {
             &self.declaration_stack,
             &self.active_recursive_invocations,
             source_cursor.map(|cursor| cursor.node),
+            self.active_partition_producer_kont
+                .map(|cursor| cursor.site_id),
             selected.activation,
             selected.cursor,
             &selected.selected_ancestry,
@@ -5637,6 +6640,7 @@ impl<'a> Lowering<'a> {
                     active_recursive_invocations: self.active_recursive_invocations.clone(),
                     source_head: source_cursor.map(|cursor| cursor.node),
                     source_capture_pointer: source_cursor.map(|cursor| cursor.capture_pointer),
+                    producer_kont: self.active_partition_producer_kont,
                     selected_activation: selected.activation,
                     selected_cursor: selected.cursor,
                     selected_ancestry: selected.selected_ancestry.clone(),
@@ -6079,15 +7083,19 @@ impl<'a> Lowering<'a> {
                                 "resume continuation has no exact checked join identity",
                             )
                         })?;
-                    let key = PartitionSemanticStateKey::Resume(PartitionContinuationKey::new(
+                    let key =
+                        PartitionSemanticStateKey::ProducerKont(PartitionContinuationKey::new(
                         checked_join,
                         required_kind,
                         ScalarMergeKind::ExitCode,
                         &merged,
+                        suffix_control.selected.activation,
+                        suffix_control.selected.cursor,
                         &pending,
                         &suffix_control.selected.selected_ancestry,
                         &suffix_control.selected.selected_scope,
                         &selected_lineage,
+                        None,
                         field_types.clone(),
                         field_map.clone(),
                     ));
@@ -6164,22 +7172,32 @@ impl<'a> Lowering<'a> {
                     let result_tag = builder.ins().stack_load(types::I64, tag_output, 0);
                     let result_payload = builder.inst_results(call)[0];
                     if newly_reserved {
-                        self.partition_queue.push_back(PartitionWorkItem::Resume(
-                            ResumePartitionWorkItem {
+                        self.partition_queue
+                            .push_back(PartitionWorkItem::ProducerKont(
+                            ProducerKontPartitionWorkItem {
                                 state_id,
+                                site_id: usize::MAX,
                                 function: state.function,
                                 field_types,
                                 field_map,
                                 value: merged,
-                                activation: suffix_control.selected.activation,
-                                cursor: suffix_control.selected.cursor,
-                                pending,
-                                selected_ancestry: suffix_control
-                                    .selected
-                                    .selected_ancestry
-                                    .clone(),
-                                selected_scope: suffix_control.selected.selected_scope.clone(),
-                                selected_lineage,
+                                action: ProducerKontAction::ApplyActiveEliminators {
+                                    activation: suffix_control.selected.activation,
+                                    cursor: suffix_control.selected.cursor,
+                                    pending,
+                                    selected_ancestry: suffix_control
+                                        .selected
+                                        .selected_ancestry
+                                        .clone(),
+                                    selected_scope: suffix_control
+                                        .selected
+                                        .selected_scope
+                                        .clone(),
+                                    selected_lineage,
+                                    capture_field_types: Vec::new(),
+                                },
+                                capture_pointer: None,
+                                successor: None,
                                 ledger_baseline,
                                 return_kind: ScalarMergeKind::ExitCode,
                             },
@@ -6228,6 +7246,7 @@ impl<'a> Lowering<'a> {
             let branch_control = SourceControl {
                 continuation,
                 partition_cursor: suffix_control.partition_cursor,
+                producer_kont: suffix_control.producer_kont,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
@@ -6386,6 +7405,7 @@ impl<'a> Lowering<'a> {
             let control = SourceControl {
                 continuation,
                 partition_cursor: suffix_control.partition_cursor,
+                producer_kont: suffix_control.producer_kont,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
@@ -6551,6 +7571,7 @@ impl<'a> Lowering<'a> {
             let control = SourceControl {
                 continuation,
                 partition_cursor: suffix_control.partition_cursor,
+                producer_kont: suffix_control.producer_kont,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
@@ -6747,6 +7768,9 @@ impl<'a> Lowering<'a> {
                         invocation,
                         checked_ih_invocation,
                     )?;
+                    if self.active_partition_return_contract.is_some() {
+                        self.push_partition_source_prefix(builder, &mut suspended)?;
+                    }
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                         value: Lowered::BoundedNat(predecessor),
                         control: suspended,
@@ -6783,6 +7807,9 @@ impl<'a> Lowering<'a> {
                         invocation,
                         checked_ih_invocation,
                     )?;
+                    if self.active_partition_return_contract.is_some() {
+                        self.push_partition_source_prefix(builder, &mut suspended)?;
+                    }
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
                         expr: body,
                         env: call_env,
