@@ -332,11 +332,11 @@ effect-tracking cases route a **real** I/O signature through the **actual** `36
 
 PX8 adds a bounded mutable-buffer floor without making ordinary Ken values
 mutable or affine. `Buffer` is a second runtime resource kind beside
-`FsHandle`; its opaque, copyable handle is acquired only through the public
-`withBuffer` bracket. Capacity is fixed, strictly positive, and non-growing for
-the handle's lifetime. The runtime invalidates escaped copies when the bracket
-settles, exactly as for file resources. Allocation consumes no ambient
-capability right. It is admitted against one deterministic policy:
+`FsHandle`; its opaque, copyable `BufferHandle` is acquired only through the
+public `withBuffer` bracket. Capacity is fixed, strictly positive, and
+non-growing for the handle's lifetime. The runtime invalidates escaped copies
+when the bracket settles, exactly as for file resources. Allocation consumes
+no ambient capability right. It is admitted against one deterministic policy:
 
 ```text
 BufferLimitsV1 {
@@ -374,11 +374,60 @@ non-degenerate conformance unit.
 There is no hidden file cursor and no mutable buffer cursor. The runtime tracks
 one initialized live window per buffer, while Ken observes only:
 
-- the opaque buffer handle;
+- the opaque `BufferHandle`;
 - an immutable `BufferWindow` request descriptor;
 - a constructor-private immutable `BufferSpan` for the exact current live
   subrange; and
 - scalar projections, including span length.
+
+The checked handle binds capacity to the exact acquisition, not to a caller's
+request:
+
+```ken
+data BufferHandle = PrivateBufferHandle (Resource Buffer) Int
+```
+
+`withBuffer capacity` is the sole producer of `BufferHandle`. It constructs the
+handle only after successfully allocating a buffer of that capacity, then
+passes the handle to the bracket body. `PrivateBufferHandle` and both field
+projections are absent from the public name map. Checked user code can
+therefore neither forge a resource/capacity pairing, replace the stored
+capacity, project the raw `Resource Buffer`, nor construct a handle outside
+`withBuffer`. The handle may be copied as an ordinary checked value, but every
+copy denotes that same acquisition and becomes invalid when the bracket
+settles.
+
+The public prelude API has these argument and result shapes:
+
+```ken
+proc withBuffer (a : Auth) (e : Type) (r : Type) (capacity : Int)
+  (body : BufferHandle -> HostIO a (ResourceBodyResult e r))
+  : HostIO a (Result ResourceError (ResourceBracketResult e r)) visits [FS]
+
+proc readAt (a : Auth) (file : Resource FsHandle) (fileOffset : Int)
+  (buffer : BufferHandle) (window : BufferWindow)
+  : HostIO a (Result ResourceError ReadProgress) visits [FS]
+
+proc writeAt (a : Auth) (file : Resource FsHandle) (fileOffset : Int)
+  (buffer : BufferHandle) (span : BufferSpan)
+  : HostIO a (Result ResourceError WriteProgress) visits [FS]
+
+proc spanBytes (a : Auth) (buffer : BufferHandle) (span : BufferSpan)
+  : HostIO a (Result ResourceError Bytes) visits [FS]
+
+proc freeze (a : Auth) (buffer : BufferHandle) (span : BufferSpan)
+  : HostIO a (Result ResourceError Bytes) visits [FS]
+
+proc writeAll (a : Auth) (file : Resource FsHandle) (fileOffset : Int)
+  (buffer : BufferHandle) (span : BufferSpan)
+  : HostIO a (Result ResourceError Unit) visits [FS]
+```
+
+`BufferWindow = MkBufferWindow Int Int` remains the public raw request
+descriptor: its fields are caller-chosen and carry no authority. The capacity
+used to admit that request is always the constructor-private capacity stored in
+the supplied `BufferHandle`, never a caller-supplied capacity or a value derived
+from `BufferWindow`.
 
 No pointer, borrowed slice, file descriptor, mutable reference, or backing
 region crosses the boundary. `spanBytes` (also called `freeze`) validates a
@@ -407,13 +456,21 @@ those two same-identity failures is public. If the acquisition matches, the
 existing resource errors retain their identities; in particular, using the
 span with that exact acquisition after it closes returns `Closed`.
 
-The primitive floor consists of exactly one explicitly positioned transfer per
-direction:
+At the public prelude boundary the two explicitly positioned transfers are:
 
 ```text
-readAt file fileOffset buffer window
-writeAt file fileOffset buffer span
+readAt file fileOffset bufferHandle window
+writeAt file fileOffset bufferHandle span
 ```
+
+For a positive admitted request, each wrapper projects the exact
+`Resource Buffer` from `bufferHandle` and invokes exactly one
+constructor-private host operation. `spanBytes`/`freeze`, `writeAll`, and
+bracket settlement use that same private projection; settlement releases the
+exact acquisition stored in the handle. The host resource token, private host
+operations, and wire ABI are unchanged. The host repeats its existing
+resource-kind, liveness, rights, and range validation as defense in depth; the
+checked handle does not replace those checks.
 
 `fileOffset` is nonnegative, and target offset-plus-length arithmetic is checked
 for overflow before host I/O. Neither operation mutates a file-description
@@ -421,11 +478,31 @@ cursor. Sequential reads, writes, copies, and seek-like state are derived code
 that explicitly threads `fileOffset + transferred`; PX8 adds neither a seek
 primitive nor vectored I/O.
 
-A window start in the closed range `0 ≤ start ≤ capacity` with a length beyond
-the available tail is capped to that tail, producing ordinary short progress.
-A negative start or one greater than capacity is an invalid-bounds error. A
-zero-length effective public request is handled by a derived wrapper without
-invoking either positive-length primitive.
+Derived `readAt` admits a raw `BufferWindow` in this exact order:
+
+1. Validate that `fileOffset` is nonnegative and representable at the host
+   width. Failure returns `InvalidOffset` before inspecting the window, so this
+   identity has precedence over a simultaneous window fault or closed-endpoint
+   request.
+2. Project the acquisition capacity from `BufferHandle`. Reject a negative
+   `start`, a negative `length`, or `start > capacity` as `InvalidBounds`.
+3. Compute `effective = min(length, capacity - start)`. This subtraction is
+   nonnegative because step 2 has established `start ≤ capacity`.
+4. If and only if `effective = 0`, return `ReadEof` from checked code without
+   emitting a private read operation or visiting the host. Thus
+   `start = capacity` is an admitted closed endpoint: at capacity `8`, the raw
+   request `(start = 8, length = 4)` returns `ReadEof` without a host visit,
+   while `start = 9` returns `InvalidBounds`.
+5. Otherwise invoke the positive-length private read operation with the exact
+   resource stored in the handle and the range `(start, effective)`.
+   Offset-plus-effective overflow returns `InvalidOffset` before host I/O.
+
+Consequently a start in the closed range `0 ≤ start ≤ capacity` with a length
+beyond the available tail is capped to that tail, producing ordinary short
+progress when the effective range is positive. A zero raw length and an
+in-range closed endpoint are the two ways to derive a zero-effective
+`ReadEof`; neither may invoke a positive-length primitive. A caller-supplied
+capacity is never consulted.
 
 A mutating read invalidates the prior live window before the host operation.
 Positive success installs exactly the bytes actually read. EOF or error leaves
@@ -484,7 +561,8 @@ consumes it internally. `WouldBlock` belongs to PX12 and is not a PX8 progress
 status. PX9 may refine error payloads but must not change this progress partition
 or collapse the `Revoked` identity.
 
-The primitive contracts exposed to checked Ken code include these propositions:
+The private positive-transfer contracts re-exposed by the checked wrappers
+include these propositions:
 
 - **write positivity/bounds:** successful `writeAt` on positive remaining bytes
   yields `Wrote n` with `0 < n ≤ remaining`;
@@ -505,9 +583,10 @@ write positivity; it does not assume progress from a runtime hope.
 #### 1.7.3 Derived `writeAll` and its theorem
 
 `writeAll` is transparent checked Ken code, not a host primitive. It takes a
-positioned file handle and `BufferSpan`, derives structural `Nat` fuel from the
-span's constructor-private attempt budget, and calls `writeAt` until the span is
-empty or the first transfer error occurs. The fuel is never caller-supplied.
+positioned file handle, `BufferHandle`, and `BufferSpan`, derives structural
+`Nat` fuel from the span's constructor-private attempt budget, and calls
+`writeAt` until the span is empty or the first transfer error occurs. The fuel
+is never caller-supplied.
 
 Let `B` be the initial span's bytes, `L` its byte length, and
 `n₁, …, nₖ` the counts returned by successful primitive calls in source order.
