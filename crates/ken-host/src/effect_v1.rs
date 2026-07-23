@@ -4102,4 +4102,174 @@ mod tests {
         });
         std::fs::remove_dir_all(root).unwrap();
     }
+
+    #[test]
+    fn released_acquisition_span_is_not_revived_by_slot_reuse() {
+        // PX8-SPAN-PROV / SP-C: acquire buffer A (`token_a`), release it, then
+        // allocate B which reuses A's vacated resource-table slot with a newer
+        // acquisition generation. A span minted from A (`span_origin = token_a`)
+        // applied to the reused B is rejected with InvalidBounds: slot identity
+        // alone aliases the two acquisitions, but the full acquisition token
+        // (slot+generation) does not, so release/reallocation is a permanent
+        // verdict flip. A fresh span from B (`span_origin = token_b`) succeeds.
+        let root = std::env::temp_dir()
+            .join(format!("ken-spanprov-reuse-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("source.bin"), b"AAAABBBB").unwrap();
+        let rooted = crate::open_root(&crate::RootPath::new(&root).unwrap()).unwrap();
+        let metadata = crate::metadata(&rooted).unwrap();
+        let cap = crate::Cap::mint_scoped(
+            crate::AUTH_FULL,
+            "FS",
+            crate::FsScope::root(
+                crate::RightSet::ALL,
+                crate::FsHandle::Posix(rooted.clone()),
+                crate::FsIdentity::Posix {
+                    device: metadata.identity.device,
+                    inode: metadata.identity.inode,
+                },
+                crate::SymlinkPolicy::NoFollow,
+            ),
+        );
+        let mut capabilities = CapabilityTableV1::default();
+        let capability = capabilities.insert(CapabilityGrantV1 {
+            identity: crate::program_caps_fs_trace_identity_v1(),
+            capability: cap,
+        });
+        let mut resources =
+            ResourceTableV1::with_buffer_limits(BufferLimitsV1::new(8, 16).unwrap());
+        let mut backend = PositionedBackend {
+            root: rooted,
+            write_limit: None,
+        };
+        let source = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsOpen,
+            Some(capability),
+            ResourceInputsV1::None,
+            &CanonicalRequestV1::FsOpen {
+                path: b"source.bin".to_vec(),
+                mode: FsOpenModeV1::Read,
+            },
+        )
+        .unwrap();
+        let source_token = source.resource_token.unwrap();
+
+        let token_a = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::BufferAllocate,
+            None,
+            ResourceInputsV1::None,
+            &CanonicalRequestV1::BufferAllocate { capacity: 8 },
+        )
+        .unwrap()
+        .resource_token
+        .unwrap();
+        dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::ResourceRelease,
+            None,
+            ResourceInputsV1::Target(token_a),
+            &CanonicalRequestV1::ResourceRelease,
+        )
+        .unwrap();
+        let token_b = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::BufferAllocate,
+            None,
+            ResourceInputsV1::None,
+            &CanonicalRequestV1::BufferAllocate { capacity: 8 },
+        )
+        .unwrap()
+        .resource_token
+        .unwrap();
+        // The reused acquisition inhabits A's vacated slot with a newer
+        // generation, so it is a distinct opaque token.
+        assert_ne!(
+            token_b, token_a,
+            "reallocation mints a distinct acquisition token"
+        );
+        assert_eq!(
+            token_b.erased_identity() & 0xffff_ffff,
+            token_a.erased_identity() & 0xffff_ffff,
+            "the vacated resource-table slot is reused"
+        );
+        assert_ne!(
+            token_b.erased_identity(),
+            token_a.erased_identity(),
+            "the reused acquisition has a newer generation"
+        );
+
+        // Install B's live window [2,6) = BBBB so the own-span control has bytes.
+        let read = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsReadAt,
+            None,
+            ResourceInputsV1::FileBuffer {
+                file: source_token,
+                buffer: token_b,
+            },
+            &CanonicalRequestV1::FsReadAt {
+                file_offset: 4,
+                buffer_start: 2,
+                length: 4,
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            read.outcome,
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadProgress(
+                ReadProgressV1::ReadSome { .. }
+            ))
+        ));
+
+        let freeze = |resources: &mut ResourceTableV1,
+                      backend: &mut PositionedBackend,
+                      span_origin: ResourceTokenV1| {
+            dispatch_host_op_v1(
+                backend,
+                &capabilities,
+                resources,
+                HostOpV1::BufferFreeze,
+                None,
+                ResourceInputsV1::BufferSpanTarget {
+                    target: token_b,
+                    span_origin,
+                },
+                &CanonicalRequestV1::BufferFreeze {
+                    start: 2,
+                    length: 4,
+                },
+            )
+            .unwrap()
+            .outcome
+        };
+        // The old acquisition's span does not survive release/reallocation.
+        assert_eq!(
+            freeze(&mut resources, &mut backend, token_a),
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::InvalidBounds))
+        );
+        // A fresh span from the reused acquisition succeeds.
+        assert_eq!(
+            freeze(&mut resources, &mut backend, token_b),
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::Bytes(b"BBBB".to_vec()))
+        );
+
+        resources.finalize_all_with(|owner| {
+            crate::close_resource_v1(owner)
+                .map_err(|error| io_error_identity_v1(&error.into_io_error()))
+        });
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
