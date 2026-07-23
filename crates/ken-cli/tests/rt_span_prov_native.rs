@@ -82,6 +82,30 @@ fn differential(case: &str, source: &str) -> Differential {
     }
 }
 
+/// Run `source` through the reference interpreter only (no native lowering).
+/// Used where the end-to-end program requires four nested resource brackets
+/// (readable source + writable dest + two buffers) — which currently exceeds the
+/// Cranelift backend's per-function code-size limit ("Code for function is too
+/// large"), so the native executor cannot lower it. Three-bracket programs
+/// (e.g. SP-A freeze) lower and run on both executors.
+#[cfg(target_os = "linux")]
+fn interpret_only(case: &str, source: &str) -> ken_runtime::EffectObservation {
+    let root = output_dir(case);
+    std::fs::write(root.join("spanseed.bin"), b"AAAABBBB").unwrap();
+    let mut host = ken_interp::PosixHost::new_at(&root);
+    let interpreted = ken_cli::run_program_effect_observation(
+        source,
+        ken_cli::SourceFormat::Ken,
+        &[],
+        &[],
+        root.as_os_str().as_encoded_bytes(),
+        &mut host,
+    )
+    .unwrap_or_else(|error| panic!("{case}: interpreter run: {error:?}"));
+    std::fs::remove_dir_all(&root).unwrap();
+    interpreted
+}
+
 /// The ordered canonical outcomes of every `BufferFreeze` in an observation.
 #[cfg(target_os = "linux")]
 fn buffer_freeze_outcomes(
@@ -91,6 +115,19 @@ fn buffer_freeze_outcomes(
         .effect_trace
         .iter()
         .filter(|event| event.operation == ken_runtime::HostOpV1::BufferFreeze)
+        .map(|event| event.outcome.clone())
+        .collect()
+}
+
+/// The ordered canonical outcomes of every `FsWriteAt` in an observation.
+#[cfg(target_os = "linux")]
+fn write_outcomes(
+    observation: &ken_runtime::EffectObservation,
+) -> Vec<ken_runtime::CanonicalOutcomeV1> {
+    observation
+        .effect_trace
+        .iter()
+        .filter(|event| event.operation == ken_runtime::HostOpV1::FsWriteAt)
         .map(|event| event.outcome.clone())
         .collect()
 }
@@ -271,5 +308,144 @@ fn sp_a_foreign_span_freeze_rejects_own_span_succeeds_on_both_engines() {
         );
         assert_freeze_sequence("sp-a-freeze", "native", &native);
         assert_freeze_sequence("sp-a-freeze", "interpreter", &interp);
+    });
+}
+
+// SP-A write consumer (foreign arm). A minimal 4-bracket program: read span_a
+// from buffer A, then `writeAt dest B span_a` — a foreign-acquisition span on
+// target B. B is never read: a foreign write is rejected on the shared-host
+// provenance check (after host-width admission) BEFORE `initialized_slice` or any
+// backend write, so B needs no live window. The trace must show exactly one
+// FsWriteAt = InvalidBounds on both executors.
+#[cfg(target_os = "linux")]
+const SP_A_WRITE_FOREIGN: &str = r#"program capabilities FS AFull
+fn ok_body (unit : Unit) : ResourceBodyResult Unit Unit = ResourceBodyOk Unit Unit MkUnit
+
+fn from_buffer_alloc (outcome : Result ResourceError (ResourceBracketResult Unit Unit))
+  : ResourceBodyResult Unit Unit =
+  match outcome {
+    Err error |-> ResourceBodyErr Unit Unit MkUnit;
+    Ok bracket |-> match bracket {
+      ResourceBracketOk value |-> ResourceBodyOk Unit Unit MkUnit;
+      ResourceBracketBodyError error |-> ResourceBodyErr Unit Unit MkUnit;
+      ResourceBracketReleaseError error |-> ResourceBodyErr Unit Unit MkUnit;
+      ResourceBracketBodyAndReleaseError be re |-> ResourceBodyErr Unit Unit MkUnit
+    }
+  }
+
+fn from_file_alloc (outcome : Result FileError (ResourceBracketResult Unit Unit))
+  : ResourceBodyResult Unit Unit =
+  match outcome {
+    Err error |-> ResourceBodyErr Unit Unit MkUnit;
+    Ok bracket |-> match bracket {
+      ResourceBracketOk value |-> ResourceBodyOk Unit Unit MkUnit;
+      ResourceBracketBodyError error |-> ResourceBodyErr Unit Unit MkUnit;
+      ResourceBracketReleaseError error |-> ResourceBodyErr Unit Unit MkUnit;
+      ResourceBracketBodyAndReleaseError be re |-> ResourceBodyErr Unit Unit MkUnit
+    }
+  }
+
+proc b_body (dest : Resource FsHandle) (span_a : BufferSpan) (buffer_b : Resource Buffer)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError WriteProgress) (ResourceBodyResult Unit Unit)
+    (writeAt AFull dest (0 : Int) buffer_b span_a)
+    (\w. Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult Unit Unit) (ok_body MkUnit))
+
+proc a_after_read (dest : Resource FsHandle) (span_a : BufferSpan)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError (ResourceBracketResult Unit Unit)) (ResourceBodyResult Unit Unit)
+    (withBuffer AFull Unit Unit (8 : Int) (b_body dest span_a))
+    (\outcome. Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult Unit Unit) (from_buffer_alloc outcome))
+
+proc a_body (dest : Resource FsHandle) (source : Resource FsHandle) (buffer_a : Resource Buffer)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError ReadProgress) (ResourceBodyResult Unit Unit)
+    (readAt AFull source (0 : Int) buffer_a (MkBufferWindow (2 : Int) (4 : Int)))
+    (\outcome. match outcome {
+      Err error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+        (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
+      Ok progress |-> match progress {
+        ReadEof |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+          (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+          (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
+        ReadSome span_a count |-> a_after_read dest span_a
+      }
+    })
+
+proc source_body (dest : Resource FsHandle) (source : Resource FsHandle)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError (ResourceBracketResult Unit Unit)) (ResourceBodyResult Unit Unit)
+    (withBuffer AFull Unit Unit (8 : Int) (a_body dest source))
+    (\outcome. Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult Unit Unit) (from_buffer_alloc outcome))
+
+proc dest_body (cap : Cap AFull) (dest : Resource FsHandle)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result FileError (ResourceBracketResult Unit Unit)) (ResourceBodyResult Unit Unit)
+    (withResource AFull Unit Unit cap (bytes_encode "spanseed.bin") ResourceRead
+      (source_body dest))
+    (\outcome. Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult Unit Unit) (from_file_alloc outcome))
+
+fn finish (outcome : Result FileError (ResourceBracketResult Unit Unit)) : HostIO AFull ExitCode =
+  match outcome {
+    Err error |-> host_exit AFull (Failure 81);
+    Ok bracket |-> match bracket {
+      ResourceBracketOk value |-> host_exit AFull Success;
+      ResourceBracketBodyError error |-> host_exit AFull (Failure 82);
+      ResourceBracketReleaseError error |-> host_exit AFull (Failure 83);
+      ResourceBracketBodyAndReleaseError body_error release_error |-> host_exit AFull (Failure 84)
+    }
+  }
+
+proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
+  : HostIO AFull ExitCode visits [FS] =
+  match caps {
+    MkProgramCaps cap |->
+      bind (Coproduct (FSOp AFull) AmbientOp)
+        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+        (Result FileError (ResourceBracketResult Unit Unit)) ExitCode
+        (withResource AFull Unit Unit cap (bytes_encode "dest.bin")
+          (ResourceWriteCreate CreateOrTruncate) (dest_body cap))
+        (\outcome. finish outcome)
+  }
+"#;
+
+// Interpreter end-to-end for the write consumer's foreign arm. The equivalent
+// native discriminator is blocked by the four-bracket code-size limit (see
+// `interpret_only`); the write consumer's native span-origin ABI is exercised by
+// the own-buffer `px8f_buffer_native`/`px8f_write_partition` writeAll tests, and
+// the shared-host foreign-write rejection (+ zero backend) is proven in
+// `ken_host::effect_v1::tests::foreign_acquisition_span_rejects_on_both_consumers_before_bytes_or_backend`.
+#[cfg(target_os = "linux")]
+#[test]
+fn sp_a_foreign_span_write_rejects_before_backend_interp() {
+    in_large_stack_thread("sp-a-write-foreign-interp", || {
+        let obs = interpret_only("sp-a-write-foreign", SP_A_WRITE_FOREIGN);
+        let writes = write_outcomes(&obs);
+        assert_eq!(
+            writes,
+            vec![ken_runtime::CanonicalOutcomeV1::Error(
+                ken_runtime::SemanticErrorV1::Resource(ken_runtime::ResourceErrorV1::InvalidBounds),
+            )],
+            "interp: foreign-acquisition write must be exactly one InvalidBounds, zero backend write"
+        );
     });
 }
