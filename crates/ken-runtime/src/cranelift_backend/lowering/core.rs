@@ -24,11 +24,30 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     native_join_plan: Option<crate::NativeJoinPlanV1>,
     oriented_subcontinuation_plan: Option<crate::OrientedSubcontinuationPlanV1>,
 ) -> Result<CompiledModule<M>, CraneliftBackendError> {
+    reset_partition_static_descriptors();
     validate_oriented_subcontinuation_transport(
         expr,
         &declarations,
         oriented_subcontinuation_plan.as_ref(),
     )?;
+    let partition_source_bytes =
+        partition_source_static_bytes(expr, declarations.values().copied());
+    let partition_entry_cut_armed =
+        process_mode && partition_entry_cut_should_arm(partition_source_bytes);
+    let checked_join_count = native_join_plan.as_ref().map_or(0, |plan| plan.sites.len());
+    let checked_plan_bytes = native_join_plan
+        .as_ref()
+        .map_or(0, |plan| plan.canonical_bytes().len())
+        .saturating_add(
+            oriented_subcontinuation_plan
+                .as_ref()
+                .map_or(0, |plan| plan.canonical_bytes().len()),
+        );
+    let checked_predecessor_count = oriented_subcontinuation_plan.as_ref().map_or(0, |plan| {
+        plan.recursive_calls
+            .len()
+            .saturating_add(plan.computational_ih_calls.len())
+    });
     let mut sig = module.make_signature();
     sig.params
         .push(AbiParam::new(module.target_config().pointer_type()));
@@ -37,6 +56,34 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     let func_id = module
         .declare_function(function_name, linkage, &sig)
         .map_err(|err| backend_module(err.to_string()))?;
+    let mut partition_sig = module.make_signature();
+    partition_sig
+        .params
+        .push(AbiParam::new(module.target_config().pointer_type()));
+    partition_sig
+        .params
+        .push(AbiParam::new(module.target_config().pointer_type()));
+    partition_sig
+        .params
+        .push(AbiParam::new(module.target_config().pointer_type()));
+    partition_sig.returns.push(AbiParam::new(types::I64));
+    // A function can encounter several sequential binary fanouts before it
+    // returns to the coordinator. Imports are created lazily, while function
+    // IDs are replenished between work items.
+    let initial_partition_helpers = if process_mode {
+        PARTITION_HELPER_ID_RESERVE
+    } else {
+        0
+    };
+    let mut partition_helper_ids = Vec::with_capacity(initial_partition_helpers);
+    for index in 0..initial_partition_helpers {
+        let name = format!("{function_name}.__ken_partition_{index}");
+        partition_helper_ids.push(
+            module
+                .declare_function(&name, Linkage::Local, &partition_sig)
+                .map_err(|err| backend_module(err.to_string()))?,
+        );
+    }
     let native_int_wrapping_mutation = {
         #[cfg(test)]
         {
@@ -52,7 +99,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         &mut module,
         native_int_wrapping_mutation,
     )?;
-    let host_dispatch = if process_mode {
+    let host_dispatch_id = if process_mode {
         let mut host_sig = module.make_signature();
         host_sig
             .params
@@ -74,13 +121,12 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     };
     let mut ctx = module.make_context();
     ctx.func = Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), sig);
-    let host_dispatch = host_dispatch.map(|id| module.declare_func_in_func(id, &mut ctx.func));
+    let host_dispatch = host_dispatch_id.map(|id| module.declare_func_in_func(id, &mut ctx.func));
     let int_binop = module.declare_func_in_func(native_int.binop, &mut ctx.func);
     let int_compare = module.declare_func_in_func(native_int.compare, &mut ctx.func);
     let int_intern = module.declare_func_in_func(native_int.intern, &mut ctx.func);
     let int_narrow = module.declare_func_in_func(native_int.narrow, &mut ctx.func);
     let int_export = module.declare_func_in_func(native_int.export, &mut ctx.func);
-
     let mut func_ctx = FunctionBuilderContext::new();
     let mut compiler = Lowering {
         seed_env,
@@ -127,12 +173,31 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         native_int_narrow: Some(int_narrow),
         native_int_export: Some(int_export),
         native_int_tags: BTreeMap::new(),
+        partition_helper_ids,
+        partition_signature: partition_sig.clone(),
+        partition_next_helper: 0,
+        partition_queue: VecDeque::new(),
+        partition_continuations: PartitionContinuationInterner::default(),
+        partition_cleanup_suffixes: PartitionCleanupSuffixInterner::default(),
+        partition_cleanup_transitions: PartitionCleanupTransitionLedger::default(),
+        partition_cut_armed: partition_entry_cut_armed,
+        partition_budget: active_partition_budget(),
+        partition_measures: Vec::new(),
+        partition_metrics: PartitionCompilationMetrics::default(),
+        partition_next_site: 0,
+        partition_branch_returns: PartitionBranchReturnLedger::default(),
+        active_partition_return_kind: None,
+        partition_output_tag_pointer: None,
+        partition_live_growth_ticks: 0,
+        partition_join_site_union: BTreeSet::new(),
+        partition_subcontinuation_frame_union: BTreeSet::new(),
+        partition_recursive_call_template_union: BTreeSet::new(),
         #[cfg(test)]
         native_int_mutation: NATIVE_INT_LOWERING_MUTATION.with(std::cell::Cell::get),
         #[cfg(test)]
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
     };
-    let (maybe_trap, decoder) = {
+    let (mut maybe_trap, mut decoder) = {
         let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
         let block = builder.create_block();
         builder.append_block_params_for_function_params(block);
@@ -166,8 +231,6 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         }
         compiler.root_terminal_authority = compiler.take_distinguished_root_answer_authority()?;
         let lowered = compiler.lower_expr(&mut builder, expr, &initial_env)?;
-        compiler.require_complete_join_plan_consumption()?;
-        compiler.require_complete_dynamic_splice_edge_consumption()?;
         let result = match lowered {
             Lowered::Trap(trap) => {
                 #[cfg(test)]
@@ -182,6 +245,9 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
                 builder.ins().return_(&[status]);
                 (Some(trap), None)
             }
+            Lowered::RecursiveBackedge if !compiler.partition_queue.is_empty() => {
+                (None, Some(ResultDecoder::ProcessStatus))
+            }
             value => {
                 let (token, decoder) = compiler.emit_result(&mut builder, value)?;
                 builder.ins().return_(&[token]);
@@ -193,10 +259,280 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         result
     };
 
+    let measure = PartitionFunctionMeasure::from_function(&ctx.func);
+    compiler.partition_budget.check(measure)?;
+    record_partition_measure(measure);
+    compiler.partition_measures.push(measure);
+    compiler.capture_partition_ledger_union();
     verify_cranelift_function(&ctx.func, module.isa())?;
     module
         .define_function(func_id, &mut ctx)
         .map_err(|err| backend_module(err.to_string()))?;
+
+    // Compile partition work depth-first. Each work item can enqueue both
+    // mutually-exclusive arms of another host-result fanout, and the owned
+    // residuals contain deep RuntimeExpr/environment descriptors. Consuming
+    // the queue breadth-first retains the complete fanout frontier even though
+    // only one helper is being lowered. Helper identities are assigned when
+    // the call sites are emitted, so LIFO consumption changes neither the
+    // generated call graph nor runtime branch/effect order.
+    while let Some(item) = compiler.partition_queue.pop_back() {
+        let continuation_state_id = match &item {
+            PartitionWorkItem::SourceArm(item) => {
+                compiler
+                    .partition_continuations
+                    .begin_emitting(item.state_id)?;
+                Some(item.state_id)
+            }
+            PartitionWorkItem::Resume(item) => {
+                compiler
+                    .partition_continuations
+                    .begin_emitting(item.state_id)?;
+                Some(item.state_id)
+            }
+            PartitionWorkItem::CleanupStep(item) => {
+                compiler
+                    .partition_continuations
+                    .begin_emitting(item.state_id)?;
+                Some(item.state_id)
+            }
+            PartitionWorkItem::Arm(_) => None,
+        };
+        let required_helper_ids = compiler
+            .partition_next_helper
+            .checked_add(PARTITION_HELPER_ID_RESERVE)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeFunctionPartition",
+                    "partition helper identity exhausted",
+                )
+            })?;
+        for index in compiler.partition_helper_ids.len()..required_helper_ids {
+            let name = format!("{function_name}.__ken_partition_{index}");
+            compiler.partition_helper_ids.push(
+                module
+                    .declare_function(&name, Linkage::Local, &partition_sig)
+                    .map_err(|err| backend_module(err.to_string()))?,
+            );
+        }
+        let helper_id = match &item {
+            PartitionWorkItem::SourceArm(item) => item.function,
+            PartitionWorkItem::Resume(item) => item.function,
+            PartitionWorkItem::Arm(item) => item.function,
+            PartitionWorkItem::CleanupStep(item) => item.function,
+        };
+        match &item {
+            PartitionWorkItem::SourceArm(item) => {
+                compiler.restore_partition_ledger_baseline(&item.ledger_baseline);
+            }
+            PartitionWorkItem::Resume(item) => {
+                compiler.restore_partition_ledger_baseline(&item.ledger_baseline);
+            }
+            PartitionWorkItem::Arm(item) => {
+                compiler.restore_partition_ledger_baseline(&item.ledger_baseline);
+            }
+            PartitionWorkItem::CleanupStep(item) => {
+                compiler.restore_partition_ledger_baseline(&item.ledger_baseline);
+            }
+        }
+        let mut helper_ctx = module.make_context();
+        helper_ctx.func = Function::with_name_signature(
+            UserFuncName::user(0, helper_id.as_u32()),
+            partition_sig.clone(),
+        );
+        compiler.host_dispatch =
+            host_dispatch_id.map(|id| module.declare_func_in_func(id, &mut helper_ctx.func));
+        compiler.native_int_binop =
+            Some(module.declare_func_in_func(native_int.binop, &mut helper_ctx.func));
+        compiler.native_int_compare =
+            Some(module.declare_func_in_func(native_int.compare, &mut helper_ctx.func));
+        compiler.native_int_intern =
+            Some(module.declare_func_in_func(native_int.intern, &mut helper_ctx.func));
+        compiler.native_int_narrow =
+            Some(module.declare_func_in_func(native_int.narrow, &mut helper_ctx.func));
+        compiler.native_int_export =
+            Some(module.declare_func_in_func(native_int.export, &mut helper_ctx.func));
+        compiler.invocation_pointer = None;
+        compiler.native_int_arena = None;
+        compiler.native_int_tags.clear();
+        compiler.partition_cut_armed = false;
+        compiler.partition_output_tag_pointer = None;
+        compiler.partition_live_growth_ticks = 0;
+        compiler.declaration_stack.clear();
+        compiler.active_recursive_declarations.clear();
+        compiler.active_recursive_invocations.clear();
+        compiler.pending_recursive_call = None;
+        compiler.pending_computational_ih_call = None;
+
+        let mut helper_func_ctx = FunctionBuilderContext::new();
+        let helper_result = {
+            let mut builder = FunctionBuilder::new(&mut helper_ctx.func, &mut helper_func_ctx);
+            let block = builder.create_block();
+            builder.append_block_params_for_function_params(block);
+            builder.switch_to_block(block);
+            let invocation = builder.block_params(block)[0];
+            let frame_pointer = builder.block_params(block)[1];
+            let output_tag_pointer = builder.block_params(block)[2];
+            compiler.invocation_pointer = Some(invocation);
+            compiler.partition_output_tag_pointer = Some(output_tag_pointer);
+            let pointer_type = builder.func.dfg.value_type(invocation);
+            let int_arena = builder
+                .ins()
+                .load(pointer_type, MemFlags::trusted(), invocation, 24);
+            Lowering::require_nonzero(&mut builder, int_arena);
+            compiler.native_int_arena = Some(int_arena);
+            let result = match item {
+                PartitionWorkItem::SourceArm(item) => compiler
+                    .lower_source_arm_partition_work_item(&mut builder, item, frame_pointer)?,
+                PartitionWorkItem::Resume(item) => {
+                    compiler.lower_resume_partition_work_item(&mut builder, item, frame_pointer)?
+                }
+                PartitionWorkItem::Arm(item) => {
+                    compiler.lower_arm_partition_work_item(&mut builder, item, frame_pointer)?
+                }
+                PartitionWorkItem::CleanupStep(item) => compiler
+                    .lower_cleanup_step_partition_work_item(&mut builder, item, frame_pointer)?,
+            };
+            builder.seal_all_blocks();
+            builder.finalize();
+            result
+        };
+        if maybe_trap.is_none() {
+            maybe_trap = helper_result.0;
+        }
+        if decoder.is_none() {
+            decoder = Some(helper_result.1);
+        }
+        let measure = PartitionFunctionMeasure::from_function(&helper_ctx.func);
+        compiler.partition_budget.check(measure)?;
+        record_partition_measure(measure);
+        compiler.partition_measures.push(measure);
+        compiler.capture_partition_ledger_union();
+        verify_cranelift_function(&helper_ctx.func, module.isa())?;
+        module
+            .define_function(helper_id, &mut helper_ctx)
+            .map_err(|err| backend_module(err.to_string()))?;
+        if let Some(state_id) = continuation_state_id {
+            compiler
+                .partition_continuations
+                .finish_definition(state_id)?;
+        }
+    }
+
+    compiler.restore_partition_ledger_union();
+    compiler.require_complete_partition_branch_returns()?;
+    compiler.partition_cleanup_transitions.require_complete()?;
+    compiler.partition_continuations.require_complete()?;
+    compiler.require_complete_join_plan_consumption()?;
+    compiler.require_complete_dynamic_splice_edge_consumption()?;
+
+    if std::env::var_os("KEN_NATIVE_PARTITION_METRICS").is_some() {
+        let (states, edges, defined_states) = compiler.partition_continuations.counts();
+        let (
+            state_key_bytes_constructed,
+            state_key_bytes_retained,
+            state_key_bucket_probes,
+            state_key_exact_comparisons,
+            state_key_exact_bytes_compared_upper_bound,
+        ) = compiler.partition_continuations.representation_counts();
+        let (
+            static_descriptor_bytes_constructed,
+            static_descriptor_bytes_retained,
+            static_descriptor_bucket_probes,
+            static_descriptor_exact_comparisons,
+            static_descriptor_exact_bytes_compared_upper_bound,
+        ) = partition_static_descriptor_counts();
+        let (
+            cleanup_suffixes,
+            cleanup_key_bytes_constructed,
+            cleanup_key_bytes_retained,
+            cleanup_key_exact_comparisons,
+        ) = compiler.partition_cleanup_suffixes.counts();
+        let mut dfg_values_total = 0_usize;
+        let mut dfg_instructions_total = 0_usize;
+        let mut dfg_blocks_total = 0_usize;
+        let mut dfg_values_max = 0_usize;
+        let mut dfg_instructions_max = 0_usize;
+        let mut dfg_blocks_max = 0_usize;
+        for measure in &compiler.partition_measures {
+            dfg_values_total = dfg_values_total.saturating_add(measure.values);
+            dfg_instructions_total = dfg_instructions_total.saturating_add(measure.instructions);
+            dfg_blocks_total = dfg_blocks_total.saturating_add(measure.blocks);
+            dfg_values_max = dfg_values_max.max(measure.values);
+            dfg_instructions_max = dfg_instructions_max.max(measure.instructions);
+            dfg_blocks_max = dfg_blocks_max.max(measure.blocks);
+        }
+        eprintln!(
+            "KEN_NATIVE_PARTITION_METRICS_V1 source_bytes={} checked_plan_bytes={} \
+             checked_joins={} checked_predecessors={} states={} edges={} defined_states={} \
+             helper_ids_declared={} helpers_defined={} frame_fields_total={} \
+             frame_fields_max={} frame_stores={} frame_loads={} \
+             cleanup_states={} cleanup_edges={} cleanup_suffixes={} \
+             cleanup_frame_fields_total={} cleanup_frame_fields_max={} \
+             cleanup_frame_stores={} cleanup_frame_loads={} \
+             cleanup_key_bytes_constructed={} cleanup_key_bytes_retained={} \
+             cleanup_key_exact_comparisons={} \
+             source_env_fields_total={} source_env_fields_max={} \
+             source_prefix_fields_total={} source_prefix_fields_max={} \
+             source_scope_fields_total={} source_scope_fields_max={} \
+             source_lineage_fields_total={} source_lineage_fields_max={} \
+             state_key_bytes_constructed={} state_key_bytes_retained={} \
+             state_key_bucket_probes={} state_key_exact_comparisons={} \
+             state_key_exact_bytes_compared_upper_bound={} \
+             static_descriptor_bytes_constructed={} static_descriptor_bytes_retained={} \
+             static_descriptor_bucket_probes={} static_descriptor_exact_comparisons={} \
+             static_descriptor_exact_bytes_compared_upper_bound={} \
+             dfg_values_total={} dfg_values_max={} dfg_instructions_total={} \
+             dfg_instructions_max={} dfg_blocks_total={} dfg_blocks_max={}",
+            partition_source_bytes,
+            checked_plan_bytes,
+            checked_join_count,
+            checked_predecessor_count,
+            states,
+            edges,
+            defined_states,
+            compiler.partition_helper_ids.len(),
+            compiler.partition_measures.len().saturating_sub(1),
+            compiler.partition_metrics.frame_fields_total,
+            compiler.partition_metrics.frame_fields_max,
+            compiler.partition_metrics.frame_stores,
+            compiler.partition_metrics.frame_loads,
+            compiler.partition_metrics.cleanup_states,
+            compiler.partition_metrics.cleanup_edges,
+            cleanup_suffixes,
+            compiler.partition_metrics.cleanup_frame_fields_total,
+            compiler.partition_metrics.cleanup_frame_fields_max,
+            compiler.partition_metrics.cleanup_frame_stores,
+            compiler.partition_metrics.cleanup_frame_loads,
+            cleanup_key_bytes_constructed,
+            cleanup_key_bytes_retained,
+            cleanup_key_exact_comparisons,
+            compiler.partition_metrics.source_env_fields_total,
+            compiler.partition_metrics.source_env_fields_max,
+            compiler.partition_metrics.source_prefix_fields_total,
+            compiler.partition_metrics.source_prefix_fields_max,
+            compiler.partition_metrics.source_scope_fields_total,
+            compiler.partition_metrics.source_scope_fields_max,
+            compiler.partition_metrics.source_lineage_fields_total,
+            compiler.partition_metrics.source_lineage_fields_max,
+            state_key_bytes_constructed,
+            state_key_bytes_retained,
+            state_key_bucket_probes,
+            state_key_exact_comparisons,
+            state_key_exact_bytes_compared_upper_bound,
+            static_descriptor_bytes_constructed,
+            static_descriptor_bytes_retained,
+            static_descriptor_bucket_probes,
+            static_descriptor_exact_comparisons,
+            static_descriptor_exact_bytes_compared_upper_bound,
+            dfg_values_total,
+            dfg_values_max,
+            dfg_instructions_total,
+            dfg_instructions_max,
+            dfg_blocks_total,
+            dfg_blocks_max,
+        );
+    }
 
     Ok(CompiledModule::from_parts(
         module,
@@ -211,6 +547,84 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
 }
 
 impl<'a> Lowering<'a> {
+    fn check_partition_live_growth(
+        &mut self,
+        builder: &FunctionBuilder<'_>,
+    ) -> Result<(), CraneliftBackendError> {
+        if self.active_partition_return_kind.is_none() {
+            return Ok(());
+        }
+        self.partition_live_growth_ticks = self.partition_live_growth_ticks.wrapping_add(1);
+        if !self.partition_live_growth_ticks.is_multiple_of(256) {
+            return Ok(());
+        }
+        let measure = PartitionFunctionMeasure::from_function(builder.func);
+        if measure.values > self.partition_budget.max_values
+            || measure.instructions > self.partition_budget.max_instructions
+            || measure.blocks > self.partition_budget.max_blocks
+        {
+            return Err(unsupported(
+                "NativeFunctionPartition",
+                format!(
+                    "active semantic state crossed the native function budget before reaching \
+                     another admissible checked scalar cut: actual values/instructions/blocks = \
+                     {}/{}/{}, limits = {}/{}/{}",
+                    measure.values,
+                    measure.instructions,
+                    measure.blocks,
+                    self.partition_budget.max_values,
+                    self.partition_budget.max_instructions,
+                    self.partition_budget.max_blocks,
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    fn emit_partition_pair_return(
+        &self,
+        builder: &mut FunctionBuilder<'_>,
+        pair: NativeScalarPairV1,
+    ) {
+        let output = self
+            .partition_output_tag_pointer
+            .expect("partition helper owns its scalar-pair tag output");
+        builder
+            .ins()
+            .store(MemFlags::trusted(), pair.tag, output, 0);
+        builder.ins().return_(&[pair.payload]);
+    }
+
+    fn partition_helper_ref(
+        &self,
+        builder: &mut FunctionBuilder<'_>,
+        helper_index: usize,
+        exhaustion_reason: &'static str,
+    ) -> Result<(FuncId, FuncRef), CraneliftBackendError> {
+        let function = *self
+            .partition_helper_ids
+            .get(helper_index)
+            .ok_or_else(|| unsupported("NativeFunctionPartition", exhaustion_reason))?;
+        let signature = builder
+            .func
+            .import_signature(self.partition_signature.clone());
+        let user_name =
+            builder
+                .func
+                .declare_imported_user_function(cranelift_codegen::ir::UserExternalName {
+                    namespace: 0,
+                    index: function.as_u32(),
+                });
+        let function_ref = builder
+            .func
+            .import_function(cranelift_codegen::ir::ExtFuncData {
+                name: cranelift_codegen::ir::ExternalName::user(user_name),
+                signature,
+                colocated: true,
+            });
+        Ok((function, function_ref))
+    }
+
     fn resume_active_continuation(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -329,6 +743,264 @@ impl<'a> Lowering<'a> {
                 },
             )],
         )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn lower_computational_host_result(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        success: cranelift_codegen::ir::Value,
+        error: Lowered,
+        ok: Lowered,
+        err_constructor: &str,
+        ok_constructor: &str,
+        producer_cases: &[crate::RuntimeMatchCase],
+        producer_default: &RuntimeTrap,
+        producer_env: &[Lowered],
+        eliminators: &[EliminatorFrame<'_>],
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let ok_block = builder.create_block();
+        let err_block = builder.create_block();
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+        builder.append_block_param(merge, types::I64);
+        builder.ins().brif(success, ok_block, &[], err_block, &[]);
+        let mut exit_merge = None;
+        for (block, constructor, payload) in [
+            (ok_block, ok_constructor, ok),
+            (err_block, err_constructor, error),
+        ] {
+            builder.switch_to_block(block);
+            let lowered = if let Some(producer_case) =
+                dynamic_host_result_producer_case(producer_cases, constructor)?
+            {
+                let mut case_env = vec![payload];
+                case_env.extend_from_slice(producer_env);
+                self.lower_computational_producer_expr(
+                    builder,
+                    &producer_case.body,
+                    &case_env,
+                    eliminators,
+                )?
+            } else {
+                Lowered::Trap(producer_default.clone())
+            };
+            let (value, is_exit) =
+                self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
+            Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
+            builder
+                .ins()
+                .jump(merge, &[value.tag.into(), value.payload.into()]);
+        }
+        builder.switch_to_block(merge);
+        let pair = NativeScalarPairV1 {
+            tag: builder.block_params(merge)[0],
+            payload: builder.block_params(merge)[1],
+        };
+        Ok(if exit_merge == Some(true) {
+            Lowered::ProcessExitStatus {
+                value: pair.payload,
+            }
+        } else {
+            self.lowered_from_scalar_pair(ScalarMergeKind::Int, pair)
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn partition_ledger_baseline(&self) -> PartitionLedgerBaseline {
+        PartitionLedgerBaseline {
+            join_sites: self.consumed_join_sites.clone(),
+            subcontinuation_frames: self.consumed_subcontinuation_frames.clone(),
+            recursive_call_templates: self.consumed_recursive_call_templates.clone(),
+        }
+    }
+
+    fn restore_partition_ledger_baseline(&mut self, baseline: &PartitionLedgerBaseline) {
+        self.consumed_join_sites = baseline.join_sites.clone();
+        self.consumed_subcontinuation_frames = baseline.subcontinuation_frames.clone();
+        self.consumed_recursive_call_templates = baseline.recursive_call_templates.clone();
+    }
+
+    fn capture_partition_ledger_union(&mut self) {
+        self.partition_join_site_union
+            .extend(self.consumed_join_sites.iter().copied());
+        self.partition_subcontinuation_frame_union
+            .extend(self.consumed_subcontinuation_frames.iter().copied());
+        self.partition_recursive_call_template_union
+            .extend(self.consumed_recursive_call_templates.iter().copied());
+    }
+
+    fn restore_partition_ledger_union(&mut self) {
+        self.consumed_join_sites = self.partition_join_site_union.clone();
+        self.consumed_subcontinuation_frames = self.partition_subcontinuation_frame_union.clone();
+        self.consumed_recursive_call_templates =
+            self.partition_recursive_call_template_union.clone();
+    }
+
+    fn mint_partition_branch_return(
+        &mut self,
+        partition_site_id: u64,
+        edge_index: u64,
+        helper_index: usize,
+        required_kind: ScalarMergeKind,
+    ) -> Result<PartitionBranchReturnAuthority, CraneliftBackendError> {
+        self.partition_branch_returns.mint(
+            partition_site_id,
+            edge_index,
+            helper_index,
+            required_kind,
+        )
+    }
+
+    fn consume_partition_branch_return(
+        &mut self,
+        authority: PartitionBranchReturnAuthority,
+        helper_index: usize,
+        actual_kind: ScalarMergeKind,
+    ) -> Result<(), CraneliftBackendError> {
+        self.partition_branch_returns
+            .consume(authority, helper_index, actual_kind)
+    }
+
+    fn require_complete_partition_branch_returns(&self) -> Result<(), CraneliftBackendError> {
+        self.partition_branch_returns.require_complete()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn outline_computational_host_result_arms(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        success: cranelift_codegen::ir::Value,
+        error: Lowered,
+        ok: Lowered,
+        err_constructor: &str,
+        ok_constructor: &str,
+        cases: &[crate::RuntimeMatchCase],
+        default: &RuntimeTrap,
+        env: &[Lowered],
+        eliminators: Vec<OwnedPartitionEliminator>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        if !self.has_checked_root_exit_representation()
+            || (self.root_terminal_authority.is_none()
+                && !self
+                    .active_partition_return_kind
+                    .is_some_and(partition_helper_return_kind_is_admissible))
+        {
+            return Err(unsupported(
+                "NativeFunctionPartition",
+                "arm outlining requires the checked ExitCode root representation",
+            ));
+        }
+        let partition_site_id = self.partition_next_site;
+        self.partition_next_site = self.partition_next_site.checked_add(1).ok_or_else(|| {
+            unsupported(
+                "NativeFunctionPartition",
+                "partition fanout identity exhausted",
+            )
+        })?;
+        let ledger_baseline = self.partition_ledger_baseline();
+        let ok_block = builder.create_block();
+        let err_block = builder.create_block();
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+        builder.ins().brif(success, ok_block, &[], err_block, &[]);
+
+        for (arm_index, block, constructor, payload) in [
+            (0_u8, ok_block, ok_constructor, ok),
+            (1_u8, err_block, err_constructor, error),
+        ] {
+            builder.switch_to_block(block);
+            let (body, mut arm_env) =
+                if let Some(case) = dynamic_host_result_producer_case(cases, constructor)? {
+                    let mut arm_env = vec![payload];
+                    arm_env.extend_from_slice(env);
+                    (case.body.clone(), arm_env)
+                } else {
+                    (RuntimeExpr::Trap(default.clone()), env.to_vec())
+                };
+            let helper_index = self.partition_next_helper;
+            if helper_index >= PartitionAggregateBudget::PRODUCTION.max_helpers {
+                return Err(unsupported(
+                    "NativeFunctionPartition",
+                    "aggregate native partition graph exceeds its helper ceiling",
+                ));
+            }
+            let (function, function_ref) = self.partition_helper_ref(
+                builder,
+                helper_index,
+                "host-result fanout exhausted its predeclared helper pool",
+            )?;
+            self.partition_next_helper += 1;
+            let return_authority = self.mint_partition_branch_return(
+                partition_site_id,
+                u64::from(arm_index),
+                helper_index,
+                ScalarMergeKind::ExitCode,
+            )?;
+
+            let mut fields = Vec::new();
+            for value in &arm_env {
+                append_partition_lowered_values(self, builder, value, &mut fields)?;
+            }
+            append_partition_eliminator_values(self, builder, &eliminators, &mut fields)?;
+            let (frame_values, field_types, field_map) = partition_frame_layout(builder, &fields);
+            self.partition_metrics.record_call_frame(frame_values.len());
+            let frame_size = partition_frame_size(frame_values.len())?;
+            let frame = builder.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                frame_size,
+                3,
+            ));
+            for (index, value) in frame_values.iter().copied().enumerate() {
+                let byte_offset = index
+                    .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                    .and_then(|offset| i32::try_from(offset).ok())
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeFunctionPartition",
+                            "private arm frame offset overflowed",
+                        )
+                    })?;
+                builder.ins().stack_store(value, frame, byte_offset);
+            }
+            let invocation = self
+                .invocation_pointer
+                .expect("process partition owns an invocation pointer");
+            let pointer_type = builder.func.dfg.value_type(invocation);
+            let frame_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+            let tag_output = builder.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                PARTITION_FRAME_FIELD_BYTES,
+                3,
+            ));
+            let zero_tag = builder.ins().iconst(types::I64, 0);
+            builder.ins().stack_store(zero_tag, tag_output, 0);
+            let tag_output_pointer = builder.ins().stack_addr(pointer_type, tag_output, 0);
+            let call = builder.ins().call(
+                function_ref,
+                &[invocation, frame_pointer, tag_output_pointer],
+            );
+            let status = builder.inst_results(call)[0];
+            builder.ins().jump(merge, &[status.into()]);
+
+            self.partition_queue
+                .push_back(PartitionWorkItem::Arm(ArmPartitionWorkItem {
+                    function,
+                    helper_index,
+                    field_types,
+                    field_map,
+                    body,
+                    env: std::mem::take(&mut arm_env),
+                    eliminators: eliminators.clone(),
+                    ledger_baseline: ledger_baseline.clone(),
+                    return_authority,
+                }));
+        }
+        builder.switch_to_block(merge);
+        self.partition_cut_armed = false;
+        Ok(Lowered::ProcessExitStatus {
+            value: builder.block_params(merge)[0],
+        })
     }
 
     fn lower_computational_producer_expr(
@@ -951,51 +1623,55 @@ impl<'a> Lowering<'a> {
                     ok_constructor,
                 } = selected
                 {
-                    let ok_block = builder.create_block();
-                    let err_block = builder.create_block();
-                    let merge = builder.create_block();
-                    builder.append_block_param(merge, types::I64);
-                    builder.append_block_param(merge, types::I64);
-                    builder.ins().brif(success, ok_block, &[], err_block, &[]);
-                    let mut exit_merge = None;
-                    for (block, constructor, payload) in [
-                        (ok_block, ok_constructor.as_str(), *ok),
-                        (err_block, err_constructor.as_str(), *error),
-                    ] {
-                        builder.switch_to_block(block);
-                        let lowered = if let Some(producer_case) =
-                            dynamic_host_result_producer_case(producer_cases, constructor)?
-                        {
-                            let mut case_env = vec![payload];
-                            case_env.extend_from_slice(producer_env);
-                            self.lower_computational_producer_expr(
-                                builder,
-                                &producer_case.body,
-                                &case_env,
-                                eliminators,
-                            )?
-                        } else {
-                            Lowered::Trap(producer_default.clone())
-                        };
-                        let (value, is_exit) =
-                            self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
-                        Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
-                        builder
-                            .ins()
-                            .jump(merge, &[value.tag.into(), value.payload.into()]);
-                    }
-                    builder.switch_to_block(merge);
-                    let pair = NativeScalarPairV1 {
-                        tag: builder.block_params(merge)[0],
-                        payload: builder.block_params(merge)[1],
-                    };
-                    return Ok(if exit_merge == Some(true) {
-                        Lowered::ProcessExitStatus {
-                            value: pair.payload,
+                    let host_result_is_admissible =
+                        partition_lowered_is_admissible(&Lowered::HostResult {
+                            success,
+                            error: error.clone(),
+                            ok: ok.clone(),
+                            err_constructor: err_constructor.clone(),
+                            ok_constructor: ok_constructor.clone(),
+                        });
+                    if self.partition_cut_armed
+                        && (self.root_terminal_authority.is_some()
+                            || self.active_partition_return_kind == Some(ScalarMergeKind::ExitCode))
+                        && self.has_checked_root_exit_representation()
+                        && self.active_oriented_semantic_regions == 0
+                        && self.active_join_site.is_none()
+                        && self.active_subcontinuation_frame.is_none()
+                        && self.pending_recursive_call.is_none()
+                        && self.pending_computational_ih_call.is_none()
+                        && self.dynamic_splice_edges.is_empty()
+                        && host_result_is_admissible
+                    {
+                        if let Some(owned_eliminators) = own_partition_eliminators(eliminators) {
+                            if partition_eliminators_are_admissible(&owned_eliminators) {
+                                return self.outline_computational_host_result_arms(
+                                    builder,
+                                    success,
+                                    *error,
+                                    *ok,
+                                    &err_constructor,
+                                    &ok_constructor,
+                                    producer_cases,
+                                    producer_default,
+                                    producer_env,
+                                    owned_eliminators,
+                                );
+                            }
                         }
-                    } else {
-                        self.lowered_from_scalar_pair(ScalarMergeKind::Int, pair)
-                    });
+                    }
+                    return self.lower_computational_host_result(
+                        builder,
+                        success,
+                        *error,
+                        *ok,
+                        &err_constructor,
+                        &ok_constructor,
+                        producer_cases,
+                        producer_default,
+                        producer_env,
+                        eliminators,
+                    );
                 }
                 if let Lowered::DynamicConstructor(dynamic) = selected {
                     return self.lower_dynamic_constructor_match(
@@ -1838,6 +2514,614 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    fn lower_arm_partition_work_item(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        mut item: ArmPartitionWorkItem,
+        frame_pointer: cranelift_codegen::ir::Value,
+    ) -> Result<(Option<RuntimeTrap>, ResultDecoder), CraneliftBackendError> {
+        self.partition_metrics
+            .record_helper_frame_loads(item.field_types.len());
+        let loaded = item
+            .field_types
+            .iter()
+            .enumerate()
+            .map(|(index, field_type)| {
+                let byte_offset = index
+                    .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                    .and_then(|offset| i32::try_from(offset).ok())
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeFunctionPartition",
+                            "private producer frame load offset overflowed",
+                        )
+                    })?;
+                Ok(builder
+                    .ins()
+                    .load(*field_type, MemFlags::trusted(), frame_pointer, byte_offset))
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+        let loaded = expand_partition_frame_values(&loaded, &item.field_map)?;
+        let mut loaded = loaded.into_iter();
+        for value in &mut item.env {
+            rebuild_partition_lowered(value, &mut loaded, &mut self.native_int_tags)?;
+        }
+        rebuild_partition_eliminators(
+            &mut item.eliminators,
+            &mut loaded,
+            &mut self.native_int_tags,
+        )?;
+        if loaded.next().is_some() {
+            return Err(unsupported(
+                "NativeFunctionPartition",
+                "private producer frame has trailing fields",
+            ));
+        }
+        let eliminators = borrow_partition_eliminators(&item.eliminators);
+        self.active_partition_return_kind = Some(item.return_authority.descriptor.required_kind);
+        let lowered =
+            self.lower_computational_producer_expr(builder, &item.body, &item.env, &eliminators);
+        self.active_partition_return_kind = None;
+        let lowered = lowered?;
+        match lowered {
+            Lowered::Trap(trap) => {
+                self.consume_partition_branch_return(
+                    item.return_authority,
+                    item.helper_index,
+                    ScalarMergeKind::ExitCode,
+                )?;
+                let payload = builder.ins().iconst(types::I64, -4);
+                builder.ins().return_(&[payload]);
+                Ok((Some(trap), ResultDecoder::ProcessStatus))
+            }
+            value => {
+                let required_kind = item.return_authority.descriptor.required_kind;
+                let (pair, actual_kind) = self.merge_planned_scalar_branch(
+                    builder,
+                    value,
+                    required_kind,
+                    "NativeFunctionPartition",
+                )?;
+                self.consume_partition_branch_return(
+                    item.return_authority,
+                    item.helper_index,
+                    actual_kind,
+                )?;
+                self.emit_partition_pair_return(builder, pair);
+                Ok((None, ResultDecoder::ProcessStatus))
+            }
+        }
+    }
+
+    fn lower_source_arm_partition_work_item(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        mut item: SourceArmPartitionWorkItem,
+        frame_pointer: cranelift_codegen::ir::Value,
+    ) -> Result<(Option<RuntimeTrap>, ResultDecoder), CraneliftBackendError> {
+        self.partition_metrics
+            .record_helper_frame_loads(item.field_types.len());
+        let loaded = item
+            .field_types
+            .iter()
+            .enumerate()
+            .map(|(index, field_type)| {
+                let byte_offset = index
+                    .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                    .and_then(|offset| i32::try_from(offset).ok())
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeFunctionPartition",
+                            "private source-arm frame load offset overflowed",
+                        )
+                    })?;
+                Ok(builder
+                    .ins()
+                    .load(*field_type, MemFlags::trusted(), frame_pointer, byte_offset))
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+        let loaded = expand_partition_frame_values(&loaded, &item.field_map)?;
+        let mut loaded = loaded.into_iter();
+        for value in &mut item.env {
+            rebuild_partition_lowered(value, &mut loaded, &mut self.native_int_tags)?;
+        }
+        rebuild_partition_prefix(&mut item.prefix, &mut loaded, &mut self.native_int_tags)?;
+        rebuild_partition_scope(
+            &mut item.selected_scope,
+            &mut loaded,
+            &mut self.native_int_tags,
+        )?;
+        rebuild_partition_selected_lineage(
+            &mut item.selected_lineage,
+            &mut loaded,
+            &mut self.native_int_tags,
+        )?;
+        if item.cleanup_head.is_some() {
+            item.cleanup_capture_pointer = Some(loaded.next().ok_or_else(|| {
+                unsupported(
+                    "NativeCleanupStepV1",
+                    "source-arm cleanup capture pointer is missing",
+                )
+            })?);
+        }
+        if loaded.next().is_some() {
+            return Err(unsupported(
+                "NativeFunctionPartition",
+                "private source-arm frame has trailing fields",
+            ));
+        }
+
+        let mut body = item.body;
+        let mut prefix = item.prefix;
+        self.declaration_stack = item.declaration_stack;
+        self.active_recursive_invocations = item.active_recursive_invocations;
+        if item.consume_checked_entry_marker {
+            match body {
+                RuntimeExpr::CheckedRecursiveInvocation {
+                    call_template_id,
+                    body: inner,
+                    ..
+                } => {
+                    let instance =
+                        self.enter_checked_recursive_invocation(call_template_id, &inner)?;
+                    prefix = SourcePrefixTemplate::CheckedRecursiveInvocationReturn {
+                        instance,
+                        next: Box::new(prefix),
+                    };
+                    body = *inner;
+                }
+                RuntimeExpr::CheckedComputationalIHInvocation {
+                    call_template_id,
+                    body: inner,
+                    ..
+                } => {
+                    self.enter_checked_computational_ih_invocation(call_template_id)?;
+                    prefix = SourcePrefixTemplate::CheckedComputationalIHInvocationReturn {
+                        call_template_id,
+                        next: Box::new(prefix),
+                    };
+                    body = *inner;
+                }
+                _ => {
+                    return Err(unsupported(
+                        "NativeFunctionPartition",
+                        "checked-template predecessor lost its exact entry marker",
+                    ));
+                }
+            }
+        }
+        let terminal = SourceContinuationTerminal::ReturnFromPartition {
+            expected_outer: item.terminal_outer,
+        };
+        let continuation = instantiate_partition_prefix(prefix, terminal);
+        let selected_lineage = item
+            .selected_lineage
+            .iter()
+            .map(|selected| SourceSelectedContinuation {
+                activation: selected.activation,
+                cursor: selected.cursor,
+                parent: None,
+                pending: borrow_partition_eliminators(&selected.pending),
+                selected_ancestry: selected.selected_ancestry.clone(),
+                selected_scope: selected.selected_scope.clone(),
+            })
+            .collect();
+        let control = SourceControl {
+            continuation,
+            selected: SourceSelectedContinuation {
+                activation: item.selected_activation,
+                cursor: item.selected_cursor,
+                parent: None,
+                pending: Vec::new(),
+                selected_ancestry: item.selected_ancestry,
+                selected_scope: item.selected_scope,
+            },
+            selected_lineage,
+            terminal_outer: item.terminal_outer,
+        };
+        let required_kind = item.return_contract.required_kind;
+        self.active_partition_return_kind = Some(required_kind);
+        let lowered = self.lower_source_machine_with_continuation(builder, body, item.env, control);
+        self.active_partition_return_kind = None;
+        let mut lowered = lowered?;
+        if !matches!(lowered, Lowered::Trap(_)) {
+            if let Some(cleanup_head) = item.cleanup_head {
+                let capture_pointer = item.cleanup_capture_pointer.ok_or_else(|| {
+                    unsupported(
+                        "NativeCleanupStepV1",
+                        "source arm lost its synchronous cleanup capture chain",
+                    )
+                })?;
+                lowered = self.call_partition_cleanup_step(
+                    builder,
+                    None,
+                    cleanup_head,
+                    capture_pointer,
+                    lowered,
+                    item.return_contract.checked_join.clone(),
+                    required_kind,
+                    &item.ledger_baseline,
+                )?;
+            }
+        }
+        match lowered {
+            Lowered::Trap(trap) => {
+                let payload = builder.ins().iconst(types::I64, -4);
+                builder.ins().return_(&[payload]);
+                Ok((Some(trap), ResultDecoder::ProcessStatus))
+            }
+            value => {
+                let (pair, _actual_kind) = self.merge_planned_scalar_branch(
+                    builder,
+                    value,
+                    required_kind,
+                    "NativeFunctionPartition",
+                )?;
+                self.emit_partition_pair_return(builder, pair);
+                Ok((None, ResultDecoder::ProcessStatus))
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn call_partition_cleanup_step(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        from: Option<PartitionCleanupSuffixId>,
+        suffix: PartitionCleanupSuffixId,
+        capture_pointer: cranelift_codegen::ir::Value,
+        input: Lowered,
+        checked_join: PartitionCheckedJoinIdentity,
+        required_kind: ScalarMergeKind,
+        ledger_baseline: &PartitionLedgerBaseline,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        if !partition_lowered_is_admissible(&input) {
+            return Err(unsupported(
+                "NativeCleanupStepV1",
+                "planning-completeness gap: cleanup input has no exact closed schema",
+            ));
+        }
+        let mut fields = Vec::new();
+        append_partition_lowered_values(self, builder, &input, &mut fields)?;
+        fields.push(capture_pointer);
+        let (frame_values, field_types, field_map) = partition_frame_layout(builder, &fields);
+        let key = PartitionSemanticStateKey::CleanupStep(PartitionCleanupStepKey::new(
+            checked_join.clone(),
+            required_kind,
+            suffix,
+            &input,
+            field_types.clone(),
+            field_map.clone(),
+        ));
+        let return_contract = key.return_contract();
+        let existing = self
+            .partition_continuations
+            .lookup(&key, PartitionAggregateBudget::PRODUCTION)?;
+        let (state_id, state, newly_reserved) = if let Some((state_id, state)) = existing {
+            (state_id, state, false)
+        } else {
+            let helper_index = self.partition_next_helper;
+            let function = *self.partition_helper_ids.get(helper_index).ok_or_else(|| {
+                unsupported(
+                    "NativeCleanupStepV1",
+                    "cleanup step exhausted its predeclared helper pool",
+                )
+            })?;
+            self.partition_next_helper =
+                self.partition_next_helper.checked_add(1).ok_or_else(|| {
+                    unsupported("NativeCleanupStepV1", "cleanup helper identity exhausted")
+                })?;
+            let (state_id, state) = self.partition_continuations.reserve(
+                key,
+                function,
+                helper_index,
+                PartitionAggregateBudget::PRODUCTION,
+            )?;
+            self.partition_metrics.cleanup_states =
+                self.partition_metrics.cleanup_states.saturating_add(1);
+            (state_id, state, true)
+        };
+        self.partition_continuations
+            .validate_call_contract(state_id, &return_contract)?;
+        if !newly_reserved {
+            self.consume_reused_partition_dynamic_splice_edges(std::slice::from_ref(&input))?;
+        }
+        let (_, function_ref) = self.partition_helper_ref(
+            builder,
+            state.helper_index,
+            "cleanup state lost its helper identity",
+        )?;
+        let frame_size = partition_frame_size(frame_values.len())?;
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            frame_size,
+            3,
+        ));
+        self.partition_metrics
+            .record_cleanup_call_frame(frame_values.len());
+        for (index, value) in frame_values.iter().copied().enumerate() {
+            let byte_offset = index
+                .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                .and_then(|offset| i32::try_from(offset).ok())
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeCleanupStepV1",
+                        "cleanup input-cell offset overflowed",
+                    )
+                })?;
+            builder.ins().stack_store(value, frame, byte_offset);
+        }
+        let invocation = self
+            .invocation_pointer
+            .expect("cleanup partition owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let frame_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+        let tag_output = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            PARTITION_FRAME_FIELD_BYTES,
+            3,
+        ));
+        let zero_tag = builder.ins().iconst(types::I64, 0);
+        builder.ins().stack_store(zero_tag, tag_output, 0);
+        let tag_output_pointer = builder.ins().stack_addr(pointer_type, tag_output, 0);
+        let authority =
+            self.partition_cleanup_transitions
+                .mint(from, suffix, state.helper_index)?;
+        let call = builder.ins().call(
+            function_ref,
+            &[invocation, frame_pointer, tag_output_pointer],
+        );
+        self.partition_cleanup_transitions
+            .consume(authority, from, suffix, state.helper_index)?;
+        let pair = NativeScalarPairV1 {
+            tag: builder.ins().stack_load(types::I64, tag_output, 0),
+            payload: builder.inst_results(call)[0],
+        };
+        if newly_reserved {
+            self.partition_queue
+                .push_back(PartitionWorkItem::CleanupStep(
+                    CleanupStepPartitionWorkItem {
+                        state_id,
+                        function: state.function,
+                        helper_index: state.helper_index,
+                        field_types,
+                        field_map,
+                        input,
+                        suffix,
+                        checked_join,
+                        required_kind,
+                        ledger_baseline: ledger_baseline.clone(),
+                    },
+                ));
+        }
+        Ok(self.lowered_from_scalar_pair(required_kind, pair))
+    }
+
+    fn lower_cleanup_step_partition_work_item(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        mut item: CleanupStepPartitionWorkItem,
+        frame_pointer: cranelift_codegen::ir::Value,
+    ) -> Result<(Option<RuntimeTrap>, ResultDecoder), CraneliftBackendError> {
+        self.partition_metrics
+            .record_cleanup_helper_frame_loads(item.field_types.len());
+        let loaded = item
+            .field_types
+            .iter()
+            .enumerate()
+            .map(|(index, field_type)| {
+                let byte_offset = index
+                    .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                    .and_then(|offset| i32::try_from(offset).ok())
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeCleanupStepV1",
+                            "cleanup input-cell load offset overflowed",
+                        )
+                    })?;
+                Ok(builder
+                    .ins()
+                    .load(*field_type, MemFlags::trusted(), frame_pointer, byte_offset))
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+        let loaded = expand_partition_frame_values(&loaded, &item.field_map)?;
+        let mut loaded = loaded.into_iter();
+        rebuild_partition_lowered(&mut item.input, &mut loaded, &mut self.native_int_tags)?;
+        let capture_pointer = loaded.next().ok_or_else(|| {
+            unsupported(
+                "NativeCleanupStepV1",
+                "cleanup input cell omitted its capture link",
+            )
+        })?;
+        if loaded.next().is_some() {
+            return Err(unsupported(
+                "NativeCleanupStepV1",
+                "cleanup input cell has trailing fields",
+            ));
+        }
+
+        let mut definition = self.partition_cleanup_suffixes.definition(item.suffix)?;
+        let capture_values = definition
+            .capture_field_types
+            .iter()
+            .enumerate()
+            .map(|(index, field_type)| {
+                let byte_offset = index
+                    .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                    .and_then(|offset| i32::try_from(offset).ok())
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeCleanupStepV1",
+                            "cleanup capture-cell load offset overflowed",
+                        )
+                    })?;
+                Ok(builder.ins().load(
+                    *field_type,
+                    MemFlags::trusted(),
+                    capture_pointer,
+                    byte_offset,
+                ))
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+        self.partition_metrics.cleanup_frame_loads = self
+            .partition_metrics
+            .cleanup_frame_loads
+            .saturating_add(capture_values.len());
+        self.partition_metrics.frame_loads = self
+            .partition_metrics
+            .frame_loads
+            .saturating_add(capture_values.len());
+        let (next_capture_pointer, current_values) =
+            capture_values.split_last().ok_or_else(|| {
+                unsupported(
+                    "NativeCleanupStepV1",
+                    "cleanup capture cell has no parent link",
+                )
+            })?;
+        let mut current_values = current_values.iter().copied();
+        rebuild_partition_eliminators(
+            std::slice::from_mut(&mut definition.current),
+            &mut current_values,
+            &mut self.native_int_tags,
+        )?;
+        if current_values.next().is_some() {
+            return Err(unsupported(
+                "NativeCleanupStepV1",
+                "cleanup capture cell has trailing dynamic fields",
+            ));
+        }
+        let current = borrow_partition_eliminators(std::slice::from_ref(&definition.current));
+        let one_node = [current[0], EliminatorFrame::InvocationReturn];
+        self.active_partition_return_kind = Some(item.required_kind);
+        let lowered = self.lower_computational_match_value_composed(builder, item.input, &one_node);
+        self.active_partition_return_kind = None;
+        let lowered = lowered?;
+        if let Lowered::Trap(trap) = lowered {
+            let payload = builder.ins().iconst(types::I64, -4);
+            builder.ins().return_(&[payload]);
+            return Ok((Some(trap), ResultDecoder::ProcessStatus));
+        }
+        let lowered = if let Some(successor) = definition.successor {
+            self.call_partition_cleanup_step(
+                builder,
+                Some(item.suffix),
+                successor,
+                *next_capture_pointer,
+                lowered,
+                item.checked_join,
+                item.required_kind,
+                &item.ledger_baseline,
+            )?
+        } else {
+            lowered
+        };
+        let (pair, actual_kind) = self.merge_planned_scalar_branch(
+            builder,
+            lowered,
+            item.required_kind,
+            "NativeCleanupStepV1",
+        )?;
+        debug_assert_eq!(actual_kind, item.required_kind);
+        self.emit_partition_pair_return(builder, pair);
+        let _ = item.helper_index;
+        Ok((None, ResultDecoder::ProcessStatus))
+    }
+
+    fn lower_resume_partition_work_item(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        mut item: ResumePartitionWorkItem,
+        frame_pointer: cranelift_codegen::ir::Value,
+    ) -> Result<(Option<RuntimeTrap>, ResultDecoder), CraneliftBackendError> {
+        self.partition_metrics
+            .record_helper_frame_loads(item.field_types.len());
+        let loaded = item
+            .field_types
+            .iter()
+            .enumerate()
+            .map(|(index, field_type)| {
+                let byte_offset = index
+                    .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                    .and_then(|offset| i32::try_from(offset).ok())
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeFunctionPartition",
+                            "private resume frame load offset overflowed",
+                        )
+                    })?;
+                Ok(builder
+                    .ins()
+                    .load(*field_type, MemFlags::trusted(), frame_pointer, byte_offset))
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+        let loaded = expand_partition_frame_values(&loaded, &item.field_map)?;
+        let mut loaded = loaded.into_iter();
+        rebuild_partition_lowered(&mut item.value, &mut loaded, &mut self.native_int_tags)?;
+        rebuild_partition_eliminators(&mut item.pending, &mut loaded, &mut self.native_int_tags)?;
+        rebuild_partition_scope(
+            &mut item.selected_scope,
+            &mut loaded,
+            &mut self.native_int_tags,
+        )?;
+        rebuild_partition_selected_lineage(
+            &mut item.selected_lineage,
+            &mut loaded,
+            &mut self.native_int_tags,
+        )?;
+        if loaded.next().is_some() {
+            return Err(unsupported(
+                "NativeFunctionPartition",
+                "private resume frame has trailing fields",
+            ));
+        }
+
+        let pending = borrow_partition_eliminators(&item.pending);
+        let selected_lineage = item
+            .selected_lineage
+            .iter()
+            .map(|selected| SourceSelectedContinuation {
+                activation: selected.activation,
+                cursor: selected.cursor,
+                parent: None,
+                pending: borrow_partition_eliminators(&selected.pending),
+                selected_ancestry: selected.selected_ancestry.clone(),
+                selected_scope: selected.selected_scope.clone(),
+            })
+            .collect::<Vec<_>>();
+        let active = ActiveContinuationFrame {
+            activation: item.activation,
+            cursor: item.cursor,
+            parent: None,
+            pending: &pending,
+            selected_ancestry: &item.selected_ancestry,
+            source_lineage: &selected_lineage,
+            source_selected_cursor: Some(item.cursor),
+            selected_scope: item.selected_scope.as_ref(),
+        };
+        let required_kind = item.return_kind;
+        self.active_partition_return_kind = Some(required_kind);
+        let lowered = self.resume_active_continuation(builder, item.value, active);
+        self.active_partition_return_kind = None;
+        match lowered? {
+            Lowered::Trap(trap) => {
+                let payload = builder.ins().iconst(types::I64, -4);
+                builder.ins().return_(&[payload]);
+                Ok((Some(trap), ResultDecoder::ProcessStatus))
+            }
+            value => {
+                let (pair, actual_kind) = self.merge_planned_scalar_branch(
+                    builder,
+                    value,
+                    required_kind,
+                    "NativeFunctionPartition",
+                )?;
+                debug_assert_eq!(actual_kind, required_kind);
+                self.emit_partition_pair_return(builder, pair);
+                Ok((None, ResultDecoder::ProcessStatus))
+            }
+        }
+    }
+
     fn lower_source_machine(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -1906,8 +3190,19 @@ impl<'a> Lowering<'a> {
         env: Vec<Lowered>,
         control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let mut state = SourceMachineState::Eval { expr, env, control };
+        self.lower_source_machine_state_inner(
+            builder,
+            SourceMachineState::Eval { expr, env, control },
+        )
+    }
+
+    fn lower_source_machine_state_inner<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        mut state: SourceMachineState<'b>,
+    ) -> Result<Lowered, CraneliftBackendError> {
         loop {
+            self.check_partition_live_growth(builder)?;
             state = match state {
                 SourceMachineState::Eval {
                     expr,
@@ -1924,9 +3219,21 @@ impl<'a> Lowering<'a> {
                     }
                     RuntimeExpr::CheckedRecursiveInvocation {
                         call_template_id,
+                        checked_occurrence_path,
                         body,
-                        ..
                     } => {
+                        if self.active_partition_return_kind.is_some() {
+                            return self.lower_source_checked_template_predecessor(
+                                builder,
+                                RuntimeExpr::CheckedRecursiveInvocation {
+                                    call_template_id,
+                                    checked_occurrence_path,
+                                    body,
+                                },
+                                env,
+                                control,
+                            );
+                        }
                         let instance =
                             self.enter_checked_recursive_invocation(call_template_id, &body)?;
                         control.continuation =
@@ -1949,9 +3256,21 @@ impl<'a> Lowering<'a> {
                     }
                     RuntimeExpr::CheckedComputationalIHInvocation {
                         call_template_id,
+                        checked_occurrence_path,
                         body,
-                        ..
                     } => {
+                        if self.active_partition_return_kind.is_some() {
+                            return self.lower_source_checked_template_predecessor(
+                                builder,
+                                RuntimeExpr::CheckedComputationalIHInvocation {
+                                    call_template_id,
+                                    checked_occurrence_path,
+                                    body,
+                                },
+                                env,
+                                control,
+                            );
+                        }
                         self.enter_checked_computational_ih_invocation(call_template_id)?;
                         control.continuation =
                             SourceContinuation::CheckedComputationalIHInvocationReturn {
@@ -2145,6 +3464,17 @@ impl<'a> Lowering<'a> {
                                 return Ok(value);
                             }
                             return self.resume_active_continuation(builder, value, *active);
+                        }
+                        SourceContinuation::Terminal(
+                            SourceContinuationTerminal::ReturnFromPartition { expected_outer },
+                        ) => {
+                            if control.terminal_outer != expected_outer {
+                                return Err(unsupported(
+                                    "NativeFunctionPartition",
+                                    "source arm returned through the wrong outer cursor",
+                                ));
+                            }
+                            return Ok(value);
                         }
                         SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(
                             edge,
@@ -2913,6 +4243,35 @@ impl<'a> Lowering<'a> {
                     source_prefix_template,
                     SourceJoinTarget {
                         join_id,
+                        checked_site_id: site_id,
+                        block: merge,
+                        expected_outer: suffix_control.terminal_outer,
+                        required_kind,
+                        terminal_active_prefix: prefix,
+                    },
+                )
+            }
+            SourcePrefixTerminal::ReturnFromPartition => {
+                let active = suffix_control
+                    .selected
+                    .as_active(&suffix_control.selected_lineage);
+                let (prefix, suffix_pending, required_kind, site_id) =
+                    self.planned_active_scalar_cut(active)?;
+                let join_id = self.next_source_join;
+                self.next_source_join = self
+                    .next_source_join
+                    .checked_add(1)
+                    .expect("compiler-private source join identity exhausted");
+                let merge = builder.create_block();
+                builder.append_block_param(merge, types::I64);
+                builder.append_block_param(merge, types::I64);
+                local_completion =
+                    Some((merge, suffix_pending.to_vec(), required_kind, site_id, None));
+                (
+                    source_prefix_template,
+                    SourceJoinTarget {
+                        join_id,
+                        checked_site_id: site_id,
                         block: merge,
                         expected_outer: suffix_control.terminal_outer,
                         required_kind,
@@ -2931,11 +4290,39 @@ impl<'a> Lowering<'a> {
                 .icmp_imm(cranelift_codegen::ir::condcodes::IntCC::Equal, nat.value, 0);
         builder.ins().brif(is_zero, zero_block, &[], suc_block, &[]);
 
+        let owned_return_eliminators = own_partition_eliminators(&target.terminal_active_prefix);
+        let owned_selected_lineage =
+            own_partition_selected_lineage(&suffix_control.selected_lineage);
+        let predecessor_partition_eligible = self.active_partition_return_kind.is_some()
+            && partition_helper_return_kind_is_admissible(target.required_kind)
+            && suffix_control.selected.parent.is_none()
+            && suffix_control.selected.pending.is_empty()
+            && partition_prefix_is_admissible(&source_prefix_template)
+            && partition_scope_is_admissible(&suffix_control.selected.selected_scope)
+            && env.iter().all(partition_lowered_is_admissible)
+            && owned_return_eliminators
+                .as_ref()
+                .is_some_and(|frames| partition_eliminators_are_admissible(frames))
+            && owned_selected_lineage.is_some();
+        let partition_site_id = if predecessor_partition_eligible {
+            let site_id = self.partition_next_site;
+            self.partition_next_site =
+                self.partition_next_site.checked_add(1).ok_or_else(|| {
+                    unsupported(
+                        "NativeFunctionPartition",
+                        "Nat predecessor fanout identity exhausted",
+                    )
+                })?;
+            Some(site_id)
+        } else {
+            None
+        };
+        let ledger_baseline = self.partition_ledger_baseline();
         let frame_baseline = self.consumed_subcontinuation_frames.clone();
         let mut frame_union = frame_baseline.clone();
-        for (arm_name, block, case, predecessor) in [
-            ("Zero", zero_block, zero, None),
-            ("Suc", suc_block, suc, Some(predecessor)),
+        for (edge_index, arm_name, block, case, predecessor) in [
+            (0_u64, "Zero", zero_block, zero, None),
+            (1_u64, "Suc", suc_block, suc, Some(predecessor)),
         ] {
             builder.switch_to_block(block);
             let mut arm_env = predecessor
@@ -2950,6 +4337,28 @@ impl<'a> Lowering<'a> {
                 })
                 .unwrap_or_default();
             arm_env.extend_from_slice(env);
+            if let Some(partition_site_id) = partition_site_id {
+                self.call_partition_source_predecessor(
+                    builder,
+                    partition_site_id,
+                    edge_index,
+                    case.body.clone(),
+                    false,
+                    arm_env,
+                    &source_prefix_template,
+                    &suffix_control.selected,
+                    suffix_control.terminal_outer,
+                    &target,
+                    owned_selected_lineage
+                        .as_deref()
+                        .expect("eligibility proves owned selected lineage"),
+                    owned_return_eliminators
+                        .as_deref()
+                        .expect("eligibility proves owned return eliminators"),
+                    &ledger_baseline,
+                )?;
+                continue;
+            }
             let edge = self.mint_source_predecessor(target.clone());
             let continuation =
                 Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
@@ -3082,6 +4491,32 @@ impl<'a> Lowering<'a> {
                 ));
                 SourceJoinTarget {
                     join_id,
+                    checked_site_id: site_id,
+                    block: merge,
+                    expected_outer: suffix_control.terminal_outer,
+                    required_kind,
+                    terminal_active_prefix: prefix,
+                }
+            }
+            SourcePrefixTerminal::ReturnFromPartition => {
+                let active = suffix_control
+                    .selected
+                    .as_active(&suffix_control.selected_lineage);
+                let (prefix, suffix_pending, required_kind, site_id) =
+                    self.planned_active_scalar_cut(active)?;
+                let join_id = self.next_source_join;
+                self.next_source_join = self
+                    .next_source_join
+                    .checked_add(1)
+                    .expect("compiler-private source join identity exhausted");
+                let merge = builder.create_block();
+                builder.append_block_param(merge, types::I64);
+                builder.append_block_param(merge, types::I64);
+                local_completion =
+                    Some((merge, suffix_pending.to_vec(), required_kind, site_id, None));
+                SourceJoinTarget {
+                    join_id,
+                    checked_site_id: site_id,
                     block: merge,
                     expected_outer: suffix_control.terminal_outer,
                     required_kind,
@@ -3094,12 +4529,63 @@ impl<'a> Lowering<'a> {
         builder
             .ins()
             .brif(condition, true_block, &[], false_block, &[]);
+        let owned_return_eliminators = own_partition_eliminators(&target.terminal_active_prefix);
+        let owned_selected_lineage =
+            own_partition_selected_lineage(&suffix_control.selected_lineage);
+        let predecessor_partition_eligible = self.active_partition_return_kind.is_some()
+            && partition_helper_return_kind_is_admissible(target.required_kind)
+            && suffix_control.selected.parent.is_none()
+            && suffix_control.selected.pending.is_empty()
+            && partition_prefix_is_admissible(&source_prefix_template)
+            && partition_scope_is_admissible(&suffix_control.selected.selected_scope)
+            && env.iter().all(partition_lowered_is_admissible)
+            && owned_return_eliminators
+                .as_ref()
+                .is_some_and(|frames| partition_eliminators_are_admissible(frames))
+            && owned_selected_lineage.is_some();
+        let partition_site_id = if predecessor_partition_eligible {
+            let site_id = self.partition_next_site;
+            self.partition_next_site =
+                self.partition_next_site.checked_add(1).ok_or_else(|| {
+                    unsupported(
+                        "NativeFunctionPartition",
+                        "Bool predecessor fanout identity exhausted",
+                    )
+                })?;
+            Some(site_id)
+        } else {
+            None
+        };
+        let ledger_baseline = self.partition_ledger_baseline();
         let frame_baseline = self.consumed_subcontinuation_frames.clone();
         let mut frame_union = frame_baseline.clone();
-        for (predecessor_id, block, body) in
-            [(0, true_block, true_body), (1, false_block, false_body)]
-        {
+        for (predecessor_id, block, body) in [
+            (0_u64, true_block, true_body),
+            (1_u64, false_block, false_body),
+        ] {
             builder.switch_to_block(block);
+            if let Some(partition_site_id) = partition_site_id {
+                self.call_partition_source_predecessor(
+                    builder,
+                    partition_site_id,
+                    predecessor_id,
+                    body.clone(),
+                    false,
+                    env.to_vec(),
+                    &source_prefix_template,
+                    &suffix_control.selected,
+                    suffix_control.terminal_outer,
+                    &target,
+                    owned_selected_lineage
+                        .as_deref()
+                        .expect("eligibility proves owned selected lineage"),
+                    owned_return_eliminators
+                        .as_deref()
+                        .expect("eligibility proves owned return eliminators"),
+                    &ledger_baseline,
+                )?;
+                continue;
+            }
             let edge = self.mint_source_predecessor(target.clone());
             let continuation =
                 Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
@@ -3156,6 +4642,508 @@ impl<'a> Lowering<'a> {
         self.resume_active_continuation(builder, merged, suffix_active)
     }
 
+    fn build_partition_cleanup_capture_chain(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        checked_join_site_id: u64,
+        eliminators: &[OwnedPartitionEliminator],
+    ) -> Result<
+        (
+            Option<PartitionCleanupSuffixId>,
+            Option<cranelift_codegen::ir::Value>,
+        ),
+        CraneliftBackendError,
+    > {
+        if eliminators.is_empty() {
+            return Ok((None, None));
+        }
+        if eliminators
+            .iter()
+            .any(|frame| matches!(frame, OwnedPartitionEliminator::InvocationReturn))
+        {
+            return Err(unsupported(
+                "NativeCleanupStepV1",
+                "InvocationReturn must remain the scalar terminal, not a cleanup node",
+            ));
+        }
+        let invocation = self
+            .invocation_pointer
+            .expect("cleanup capture planning owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let mut successor_id = None;
+        let mut successor_pointer = builder.ins().iconst(pointer_type, 0);
+        for (terminal_distance, current) in eliminators.iter().rev().enumerate() {
+            let mut capture_fields = Vec::new();
+            append_partition_eliminator_values(
+                self,
+                builder,
+                std::slice::from_ref(current),
+                &mut capture_fields,
+            )?;
+            capture_fields.push(successor_pointer);
+            let capture_field_types = capture_fields
+                .iter()
+                .map(|value| builder.func.dfg.value_type(*value))
+                .collect::<Vec<_>>();
+            let suffix_id = self.partition_cleanup_suffixes.intern_step(
+                checked_join_site_id,
+                terminal_distance,
+                current,
+                capture_field_types,
+                successor_id,
+            );
+            let frame_size = partition_frame_size(capture_fields.len())?;
+            let frame = builder.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                frame_size,
+                3,
+            ));
+            self.partition_metrics
+                .record_call_frame(capture_fields.len());
+            for (index, value) in capture_fields.iter().copied().enumerate() {
+                let byte_offset = index
+                    .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                    .and_then(|offset| i32::try_from(offset).ok())
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeCleanupStepV1",
+                            "cleanup capture-cell offset overflowed",
+                        )
+                    })?;
+                builder.ins().stack_store(value, frame, byte_offset);
+            }
+            successor_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+            successor_id = Some(suffix_id);
+        }
+        Ok((successor_id, Some(successor_pointer)))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn call_partition_source_predecessor<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        partition_site_id: u64,
+        edge_index: u64,
+        body: RuntimeExpr,
+        consume_checked_entry_marker: bool,
+        arm_env: Vec<Lowered>,
+        source_prefix_template: &SourcePrefixTemplate,
+        selected: &SourceSelectedContinuation<'b>,
+        terminal_outer: ContinuationCursorId,
+        target: &SourceJoinTarget<'b>,
+        selected_lineage: &[OwnedSourceSelectedContinuation],
+        return_eliminators: &[OwnedPartitionEliminator],
+        ledger_baseline: &PartitionLedgerBaseline,
+    ) -> Result<(), CraneliftBackendError> {
+        let (cleanup_head, cleanup_capture_pointer) = self.build_partition_cleanup_capture_chain(
+            builder,
+            target.checked_site_id,
+            return_eliminators,
+        )?;
+        let mut fields = Vec::new();
+        for value in &arm_env {
+            append_partition_lowered_values(self, builder, value, &mut fields)?;
+        }
+        let env_fields = fields.len();
+        append_partition_prefix_values(self, builder, source_prefix_template, &mut fields)?;
+        let prefix_fields = fields.len().saturating_sub(env_fields);
+        append_partition_scope_values(self, builder, &selected.selected_scope, &mut fields)?;
+        let scope_fields = fields
+            .len()
+            .saturating_sub(env_fields)
+            .saturating_sub(prefix_fields);
+        append_partition_selected_lineage_values(self, builder, selected_lineage, &mut fields)?;
+        let lineage_fields = fields
+            .len()
+            .saturating_sub(env_fields)
+            .saturating_sub(prefix_fields)
+            .saturating_sub(scope_fields);
+        self.partition_metrics.record_source_frame_components(
+            env_fields,
+            prefix_fields,
+            scope_fields,
+            lineage_fields,
+        );
+        if let Some(pointer) = cleanup_capture_pointer {
+            fields.push(pointer);
+        }
+        let (frame_values, field_types, field_map) = partition_frame_layout(builder, &fields);
+        self.partition_metrics.record_call_frame(frame_values.len());
+        let checked_join = self
+            .native_join_plan
+            .as_ref()
+            .and_then(|plan| {
+                plan.sites
+                    .iter()
+                    .find(|site| site.site_id == target.checked_site_id)
+            })
+            .map(PartitionCheckedJoinIdentity::from)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeFunctionPartition",
+                    "source predecessor has no exact checked join identity",
+                )
+            })?;
+        let key = PartitionSemanticStateKey::SourceArm(PartitionSourceArmKey::new(
+            checked_join,
+            target.required_kind,
+            consume_checked_entry_marker,
+            &body,
+            &arm_env,
+            &self.declaration_stack,
+            &self.active_recursive_invocations,
+            source_prefix_template,
+            &selected.selected_ancestry,
+            &selected.selected_scope,
+            selected_lineage,
+            cleanup_head,
+            field_types.clone(),
+            field_map.clone(),
+        ));
+        let return_contract = key.return_contract();
+        let existing = self
+            .partition_continuations
+            .lookup(&key, PartitionAggregateBudget::PRODUCTION)?;
+        let (state_id, state, newly_reserved) = if let Some((state_id, state)) = existing {
+            (state_id, state, false)
+        } else {
+            let helper_index = self.partition_next_helper;
+            if helper_index >= PartitionAggregateBudget::PRODUCTION.max_helpers {
+                return Err(unsupported(
+                    "NativeFunctionPartition",
+                    "aggregate native partition graph exceeds its helper ceiling",
+                ));
+            }
+            let function = *self.partition_helper_ids.get(helper_index).ok_or_else(|| {
+                unsupported(
+                    "NativeFunctionPartition",
+                    "source predecessor exhausted its predeclared helper pool",
+                )
+            })?;
+            self.partition_next_helper += 1;
+            let (state_id, state) = self.partition_continuations.reserve(
+                key,
+                function,
+                helper_index,
+                PartitionAggregateBudget::PRODUCTION,
+            )?;
+            (state_id, state, true)
+        };
+        self.partition_continuations
+            .validate_call_contract(state_id, &return_contract)?;
+        if !newly_reserved {
+            self.consume_reused_partition_dynamic_splice_edges(&arm_env)?;
+        }
+        let (_, function_ref) = self.partition_helper_ref(
+            builder,
+            state.helper_index,
+            "interned source predecessor lost its helper identity",
+        )?;
+        let frame_size = partition_frame_size(frame_values.len())?;
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            frame_size,
+            3,
+        ));
+        for (index, value) in frame_values.iter().copied().enumerate() {
+            let byte_offset = index
+                .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                .and_then(|offset| i32::try_from(offset).ok())
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeFunctionPartition",
+                        "private source-predecessor frame offset overflowed",
+                    )
+                })?;
+            builder.ins().stack_store(value, frame, byte_offset);
+        }
+        let invocation = self
+            .invocation_pointer
+            .expect("source partition owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let frame_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+        let tag_output = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            PARTITION_FRAME_FIELD_BYTES,
+            3,
+        ));
+        let zero_tag = builder.ins().iconst(types::I64, 0);
+        builder.ins().stack_store(zero_tag, tag_output, 0);
+        let tag_output_pointer = builder.ins().stack_addr(pointer_type, tag_output, 0);
+        let call = builder.ins().call(
+            function_ref,
+            &[invocation, frame_pointer, tag_output_pointer],
+        );
+        let edge_authority = self.mint_partition_branch_return(
+            partition_site_id,
+            edge_index,
+            state.helper_index,
+            return_contract.required_kind,
+        )?;
+        self.consume_partition_branch_return(
+            edge_authority,
+            state.helper_index,
+            return_contract.required_kind,
+        )?;
+        let result_tag = builder.ins().stack_load(types::I64, tag_output, 0);
+        let result_payload = builder.inst_results(call)[0];
+        builder
+            .ins()
+            .jump(target.block, &[result_tag.into(), result_payload.into()]);
+        if newly_reserved {
+            self.partition_queue.push_back(PartitionWorkItem::SourceArm(
+                SourceArmPartitionWorkItem {
+                    state_id,
+                    function: state.function,
+                    field_types,
+                    field_map,
+                    body,
+                    consume_checked_entry_marker,
+                    env: arm_env,
+                    declaration_stack: self.declaration_stack.clone(),
+                    active_recursive_invocations: self.active_recursive_invocations.clone(),
+                    prefix: source_prefix_template.clone(),
+                    selected_activation: selected.activation,
+                    selected_cursor: selected.cursor,
+                    selected_ancestry: selected.selected_ancestry.clone(),
+                    selected_scope: selected.selected_scope.clone(),
+                    selected_lineage: selected_lineage.to_vec(),
+                    terminal_outer,
+                    cleanup_head,
+                    cleanup_capture_pointer,
+                    ledger_baseline: ledger_baseline.clone(),
+                    return_contract,
+                },
+            ));
+        }
+        Ok(())
+    }
+
+    fn consume_reused_partition_dynamic_splice_edges(
+        &mut self,
+        values: &[Lowered],
+    ) -> Result<(), CraneliftBackendError> {
+        fn collect(value: &Lowered, output: &mut BTreeSet<DynamicSpliceEdgeId>) {
+            match value {
+                Lowered::HostResult { error, ok, .. } => {
+                    collect(error, output);
+                    collect(ok, output);
+                }
+                Lowered::DynamicConstructor(dynamic) => {
+                    for field in dynamic
+                        .alternatives
+                        .iter()
+                        .flat_map(|alternative| &alternative.fields)
+                    {
+                        collect(field, output);
+                    }
+                }
+                Lowered::Constructor { args, .. } => {
+                    for value in args {
+                        collect(value, output);
+                    }
+                }
+                Lowered::Record { fields } => {
+                    for (_, value) in fields {
+                        collect(value, output);
+                    }
+                }
+                Lowered::Closure { captures, .. }
+                | Lowered::DeclarationClosure { captures, .. } => {
+                    for value in captures {
+                        collect(value, output);
+                    }
+                }
+                Lowered::ComputationalRecursorClosure {
+                    residual,
+                    invocation,
+                    ..
+                } => {
+                    output.extend(invocation.dynamic_splice_edges.iter().copied());
+                    collect(residual, output);
+                    for value in &invocation.selection.outer_env {
+                        collect(value, output);
+                    }
+                    for layer in &invocation.unwind.later_wrappers_in_construction_order {
+                        for value in &layer.outer_env {
+                            collect(value, output);
+                        }
+                    }
+                }
+                Lowered::Int { .. }
+                | Lowered::Bool { .. }
+                | Lowered::ProcessExitStatus { .. }
+                | Lowered::CapabilityToken { .. }
+                | Lowered::ResourceToken { .. }
+                | Lowered::BoundedNat(_)
+                | Lowered::StructuralNat(_)
+                | Lowered::ResponseBytes { .. }
+                | Lowered::Bytes(_)
+                | Lowered::BorrowedNativeValue { .. }
+                | Lowered::BorrowedOption { .. }
+                | Lowered::String(_)
+                | Lowered::Trap(_)
+                | Lowered::RecursiveBackedge => {}
+            }
+        }
+
+        let mut edge_ids = BTreeSet::new();
+        for value in values {
+            collect(value, &mut edge_ids);
+        }
+        for edge_id in edge_ids {
+            let Some(edge) = self.dynamic_splice_edges.remove(&edge_id) else {
+                // Lowered recursor carriers are cloneable inert handles. A
+                // sibling clone may already have consumed the unique ledger
+                // entry; only a still-live entry transfers to this call edge.
+                continue;
+            };
+            if edge.edge_id != edge_id {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "reused partition call consumed a stale dynamic splice edge identity",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn lower_source_checked_template_predecessor<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        checked_expr: RuntimeExpr,
+        env: Vec<Lowered>,
+        control: SourceControl<'b>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let (source_prefix_template, terminal) = Self::split_source_prefix(control.continuation)?;
+        let mut local_completion = None;
+        let target = match terminal {
+            SourcePrefixTerminal::Join(inherited_edge) => inherited_edge.target,
+            SourcePrefixTerminal::ResumeOuter { root_authority } => {
+                let active = control.selected.as_active(&control.selected_lineage);
+                let (prefix, suffix_pending, required_kind, site_id) =
+                    self.planned_active_scalar_cut(active)?;
+                let join_id = self.next_source_join;
+                self.next_source_join = self
+                    .next_source_join
+                    .checked_add(1)
+                    .expect("compiler-private source join identity exhausted");
+                let merge = builder.create_block();
+                builder.append_block_param(merge, types::I64);
+                builder.append_block_param(merge, types::I64);
+                local_completion = Some((
+                    merge,
+                    suffix_pending.to_vec(),
+                    required_kind,
+                    root_authority,
+                ));
+                SourceJoinTarget {
+                    join_id,
+                    checked_site_id: site_id,
+                    block: merge,
+                    expected_outer: control.terminal_outer,
+                    required_kind,
+                    terminal_active_prefix: prefix,
+                }
+            }
+            SourcePrefixTerminal::ReturnFromPartition => {
+                let active = control.selected.as_active(&control.selected_lineage);
+                let (prefix, suffix_pending, required_kind, site_id) =
+                    self.planned_active_scalar_cut(active)?;
+                let join_id = self.next_source_join;
+                self.next_source_join = self
+                    .next_source_join
+                    .checked_add(1)
+                    .expect("compiler-private source join identity exhausted");
+                let merge = builder.create_block();
+                builder.append_block_param(merge, types::I64);
+                builder.append_block_param(merge, types::I64);
+                local_completion = Some((merge, suffix_pending.to_vec(), required_kind, None));
+                SourceJoinTarget {
+                    join_id,
+                    checked_site_id: site_id,
+                    block: merge,
+                    expected_outer: control.terminal_outer,
+                    required_kind,
+                    terminal_active_prefix: prefix,
+                }
+            }
+        };
+        let return_eliminators = own_partition_eliminators(&target.terminal_active_prefix)
+            .filter(|frames| partition_eliminators_are_admissible(frames))
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeFunctionPartition",
+                    "checked-template predecessor has a non-admissible planned scalar prefix",
+                )
+            })?;
+        let selected_lineage = own_partition_selected_lineage(&control.selected_lineage)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeFunctionPartition",
+                    "checked-template predecessor has a non-admissible selected lineage",
+                )
+            })?;
+        if !partition_helper_return_kind_is_admissible(target.required_kind)
+            || control.selected.parent.is_some()
+            || !control.selected.pending.is_empty()
+            || !partition_prefix_is_admissible(&source_prefix_template)
+            || !partition_scope_is_admissible(&control.selected.selected_scope)
+            || !env.iter().all(partition_lowered_is_admissible)
+        {
+            return Err(unsupported(
+                "NativeFunctionPartition",
+                "checked-template predecessor reached a scalar join but its control/frame schema is not admissible",
+            ));
+        }
+        let partition_site_id = self.partition_next_site;
+        self.partition_next_site = self.partition_next_site.checked_add(1).ok_or_else(|| {
+            unsupported(
+                "NativeFunctionPartition",
+                "checked-template predecessor identity exhausted",
+            )
+        })?;
+        let ledger_baseline = self.partition_ledger_baseline();
+        self.call_partition_source_predecessor(
+            builder,
+            partition_site_id,
+            0,
+            checked_expr,
+            true,
+            env,
+            &source_prefix_template,
+            &control.selected,
+            control.terminal_outer,
+            &target,
+            &selected_lineage,
+            &return_eliminators,
+            &ledger_baseline,
+        )?;
+        let Some((merge, suffix_pending, required_kind, root_authority)) = local_completion else {
+            return Ok(Lowered::RecursiveBackedge);
+        };
+        builder.switch_to_block(merge);
+        let merged = self.lowered_from_scalar_pair(
+            required_kind,
+            NativeScalarPairV1 {
+                tag: builder.block_params(merge)[0],
+                payload: builder.block_params(merge)[1],
+            },
+        );
+        let suffix_active = ActiveContinuationFrame {
+            activation: control.selected.activation,
+            cursor: control.selected.cursor,
+            parent: control.selected.parent,
+            pending: &suffix_pending,
+            selected_ancestry: &control.selected.selected_ancestry,
+            source_lineage: &control.selected_lineage,
+            source_selected_cursor: Some(control.selected.cursor),
+            selected_scope: control.selected.selected_scope.as_ref(),
+        };
+        self.restore_root_terminal_authority(root_authority, control.terminal_outer)?;
+        self.resume_active_continuation(builder, merged, suffix_active)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn lower_source_dynamic_host_result_match<'b>(
         &mut self,
@@ -3198,6 +5186,32 @@ impl<'a> Lowering<'a> {
                 ));
                 SourceJoinTarget {
                     join_id,
+                    checked_site_id: site_id,
+                    block: merge,
+                    expected_outer: suffix_control.terminal_outer,
+                    required_kind,
+                    terminal_active_prefix: prefix,
+                }
+            }
+            SourcePrefixTerminal::ReturnFromPartition => {
+                let active = suffix_control
+                    .selected
+                    .as_active(&suffix_control.selected_lineage);
+                let (prefix, suffix_pending, required_kind, site_id) =
+                    self.planned_active_scalar_cut(active)?;
+                let join_id = self.next_source_join;
+                self.next_source_join = self
+                    .next_source_join
+                    .checked_add(1)
+                    .expect("compiler-private source join identity exhausted");
+                let merge = builder.create_block();
+                builder.append_block_param(merge, types::I64);
+                builder.append_block_param(merge, types::I64);
+                local_completion =
+                    Some((merge, suffix_pending.to_vec(), required_kind, site_id, None));
+                SourceJoinTarget {
+                    join_id,
+                    checked_site_id: site_id,
                     block: merge,
                     expected_outer: suffix_control.terminal_outer,
                     required_kind,
@@ -3205,6 +5219,260 @@ impl<'a> Lowering<'a> {
                 }
             }
         };
+
+        let owned_return_eliminators = own_partition_eliminators(&target.terminal_active_prefix);
+        let owned_selected_lineage =
+            own_partition_selected_lineage(&suffix_control.selected_lineage);
+        let source_arm_partition_eligible = self.partition_cut_armed
+            && partition_helper_return_kind_is_admissible(target.required_kind)
+            && suffix_control.selected.parent.is_none()
+            && suffix_control.selected.pending.is_empty()
+            && partition_prefix_is_admissible(&source_prefix_template)
+            && partition_scope_is_admissible(&suffix_control.selected.selected_scope)
+            && env.iter().all(partition_lowered_is_admissible)
+            && partition_lowered_is_admissible(&ok)
+            && partition_lowered_is_admissible(&error)
+            && owned_return_eliminators
+                .as_ref()
+                .is_some_and(|frames| partition_eliminators_are_admissible(frames))
+            && owned_selected_lineage.is_some();
+        if source_arm_partition_eligible {
+            let return_eliminators =
+                owned_return_eliminators.expect("eligibility proves owned return eliminators");
+            let selected_lineage =
+                owned_selected_lineage.expect("eligibility proves owned selected lineage");
+            let partition_site_id = self.partition_next_site;
+            self.partition_next_site =
+                self.partition_next_site.checked_add(1).ok_or_else(|| {
+                    unsupported(
+                        "NativeFunctionPartition",
+                        "source partition fanout identity exhausted",
+                    )
+                })?;
+            let ledger_baseline = self.partition_ledger_baseline();
+            let ok_block = builder.create_block();
+            let err_block = builder.create_block();
+            builder.ins().brif(success, ok_block, &[], err_block, &[]);
+            for (edge_index, block, constructor, payload) in [
+                (0_u64, ok_block, ok_constructor, ok),
+                (1_u64, err_block, err_constructor, error),
+            ] {
+                builder.switch_to_block(block);
+                let Some(case) = cases
+                    .iter()
+                    .find(|case| case.constructor == constructor && case.binders == 1)
+                else {
+                    // The dynamic test and its fail-closed default stay in the
+                    // caller. Only a valid predecessor may cross the reusable
+                    // state boundary; otherwise outlining would move trap
+                    // identity into a helper and conceal malformed control.
+                    let failure = builder.ins().iconst(types::I64, -4);
+                    builder.ins().return_(&[failure]);
+                    continue;
+                };
+                let body = case.body.clone();
+                let mut arm_env = vec![payload];
+                arm_env.extend_from_slice(env);
+                self.call_partition_source_predecessor(
+                    builder,
+                    partition_site_id,
+                    edge_index,
+                    body,
+                    false,
+                    arm_env,
+                    &source_prefix_template,
+                    &suffix_control.selected,
+                    suffix_control.terminal_outer,
+                    &target,
+                    &selected_lineage,
+                    &return_eliminators,
+                    &ledger_baseline,
+                )?;
+            }
+            self.partition_cut_armed = false;
+            let Some((merge, suffix_pending, required_kind, site_id, root_authority)) =
+                local_completion
+            else {
+                return Ok(Lowered::RecursiveBackedge);
+            };
+            builder.switch_to_block(merge);
+            let merged = self.lowered_from_scalar_pair(
+                required_kind,
+                NativeScalarPairV1 {
+                    tag: builder.block_params(merge)[0],
+                    payload: builder.block_params(merge)[1],
+                },
+            );
+            if !suffix_pending.is_empty() {
+                if let Some(pending) =
+                    own_partition_eliminators(&suffix_pending).filter(|pending| {
+                        partition_eliminators_are_admissible(pending)
+                            && partition_lowered_is_admissible(&merged)
+                    })
+                {
+                    let mut fields = Vec::new();
+                    append_partition_lowered_values(self, builder, &merged, &mut fields)?;
+                    append_partition_eliminator_values(self, builder, &pending, &mut fields)?;
+                    append_partition_scope_values(
+                        self,
+                        builder,
+                        &suffix_control.selected.selected_scope,
+                        &mut fields,
+                    )?;
+                    append_partition_selected_lineage_values(
+                        self,
+                        builder,
+                        &selected_lineage,
+                        &mut fields,
+                    )?;
+                    // The occurrence map records structural aliasing without
+                    // admitting caller-local SSA identities into the state key.
+                    let (frame_values, field_types, field_map) =
+                        partition_frame_layout(builder, &fields);
+                    self.partition_metrics.record_call_frame(frame_values.len());
+                    let checked_join = self
+                        .native_join_plan
+                        .as_ref()
+                        .and_then(|plan| plan.sites.iter().find(|site| site.site_id == site_id))
+                        .map(PartitionCheckedJoinIdentity::from)
+                        .ok_or_else(|| {
+                            unsupported(
+                                "NativeFunctionPartition",
+                                "resume continuation has no exact checked join identity",
+                            )
+                        })?;
+                    let key = PartitionSemanticStateKey::Resume(PartitionContinuationKey::new(
+                        checked_join,
+                        required_kind,
+                        ScalarMergeKind::ExitCode,
+                        &merged,
+                        &pending,
+                        &suffix_control.selected.selected_ancestry,
+                        &suffix_control.selected.selected_scope,
+                        &selected_lineage,
+                        field_types.clone(),
+                        field_map.clone(),
+                    ));
+                    let existing = self
+                        .partition_continuations
+                        .lookup(&key, PartitionAggregateBudget::PRODUCTION)?;
+                    let (state_id, state, newly_reserved) =
+                        if let Some((state_id, state)) = existing {
+                            (state_id, state, false)
+                        } else {
+                            let helper_index = self.partition_next_helper;
+                            let function =
+                                *self.partition_helper_ids.get(helper_index).ok_or_else(|| {
+                                    unsupported(
+                                        "NativeFunctionPartition",
+                                        "resume continuation exhausted its predeclared helper pool",
+                                    )
+                                })?;
+                            self.partition_next_helper =
+                                self.partition_next_helper.checked_add(1).ok_or_else(|| {
+                                    unsupported(
+                                        "NativeFunctionPartition",
+                                        "partition helper identity exhausted",
+                                    )
+                                })?;
+                            let (state_id, state) = self.partition_continuations.reserve(
+                                key,
+                                function,
+                                helper_index,
+                                PartitionAggregateBudget::PRODUCTION,
+                            )?;
+                            (state_id, state, true)
+                        };
+                    let (_, function_ref) = self.partition_helper_ref(
+                        builder,
+                        state.helper_index,
+                        "interned resume continuation lost its helper identity",
+                    )?;
+                    let frame_size = partition_frame_size(frame_values.len())?;
+                    let frame = builder.create_sized_stack_slot(StackSlotData::new(
+                        StackSlotKind::ExplicitSlot,
+                        frame_size,
+                        3,
+                    ));
+                    for (index, value) in frame_values.iter().copied().enumerate() {
+                        let byte_offset = index
+                            .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                            .and_then(|offset| i32::try_from(offset).ok())
+                            .ok_or_else(|| {
+                                unsupported(
+                                    "NativeFunctionPartition",
+                                    "private resume frame offset overflowed",
+                                )
+                            })?;
+                        builder.ins().stack_store(value, frame, byte_offset);
+                    }
+                    let invocation = self
+                        .invocation_pointer
+                        .expect("resume partition owns an invocation pointer");
+                    let pointer_type = builder.func.dfg.value_type(invocation);
+                    let frame_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+                    let tag_output = builder.create_sized_stack_slot(StackSlotData::new(
+                        StackSlotKind::ExplicitSlot,
+                        PARTITION_FRAME_FIELD_BYTES,
+                        3,
+                    ));
+                    let zero_tag = builder.ins().iconst(types::I64, 0);
+                    builder.ins().stack_store(zero_tag, tag_output, 0);
+                    let tag_output_pointer = builder.ins().stack_addr(pointer_type, tag_output, 0);
+                    let call = builder.ins().call(
+                        function_ref,
+                        &[invocation, frame_pointer, tag_output_pointer],
+                    );
+                    let result_tag = builder.ins().stack_load(types::I64, tag_output, 0);
+                    let result_payload = builder.inst_results(call)[0];
+                    if newly_reserved {
+                        self.partition_queue.push_back(PartitionWorkItem::Resume(
+                            ResumePartitionWorkItem {
+                                state_id,
+                                function: state.function,
+                                field_types,
+                                field_map,
+                                value: merged,
+                                activation: suffix_control.selected.activation,
+                                cursor: suffix_control.selected.cursor,
+                                pending,
+                                selected_ancestry: suffix_control
+                                    .selected
+                                    .selected_ancestry
+                                    .clone(),
+                                selected_scope: suffix_control.selected.selected_scope.clone(),
+                                selected_lineage,
+                                ledger_baseline,
+                                return_kind: ScalarMergeKind::ExitCode,
+                            },
+                        ));
+                    }
+                    self.restore_root_terminal_authority(
+                        root_authority,
+                        suffix_control.terminal_outer,
+                    )?;
+                    return Ok(self.lowered_from_scalar_pair(
+                        ScalarMergeKind::ExitCode,
+                        NativeScalarPairV1 {
+                            tag: result_tag,
+                            payload: result_payload,
+                        },
+                    ));
+                }
+            }
+            let suffix_active = ActiveContinuationFrame {
+                activation: suffix_control.selected.activation,
+                cursor: suffix_control.selected.cursor,
+                parent: suffix_control.selected.parent,
+                pending: &suffix_pending,
+                selected_ancestry: &suffix_control.selected.selected_ancestry,
+                source_lineage: &suffix_control.selected_lineage,
+                source_selected_cursor: Some(suffix_control.selected.cursor),
+                selected_scope: suffix_control.selected.selected_scope.as_ref(),
+            };
+            self.restore_root_terminal_authority(root_authority, suffix_control.terminal_outer)?;
+            return self.resume_active_continuation(builder, merged, suffix_active);
+        }
         let ok_block = builder.create_block();
         let err_block = builder.create_block();
         builder.ins().brif(success, ok_block, &[], err_block, &[]);
@@ -3434,6 +5702,7 @@ impl<'a> Lowering<'a> {
         builder.append_block_param(merge, types::I64);
         let target = SourceJoinTarget {
             join_id,
+            checked_site_id: site_id,
             block: merge,
             expected_outer: suffix_control.terminal_outer,
             required_kind,
@@ -3443,6 +5712,7 @@ impl<'a> Lowering<'a> {
             Self::split_source_prefix(suffix_control.continuation)?;
         let root_authority = match terminal {
             SourcePrefixTerminal::ResumeOuter { root_authority } => root_authority,
+            SourcePrefixTerminal::ReturnFromPartition => None,
             SourcePrefixTerminal::Join(_) => {
                 return Err(unsupported(
                     "NativeJoinPlanV1",
@@ -3450,6 +5720,39 @@ impl<'a> Lowering<'a> {
                 ));
             }
         };
+        let owned_return_eliminators = own_partition_eliminators(&target.terminal_active_prefix);
+        let owned_selected_lineage =
+            own_partition_selected_lineage(&suffix_control.selected_lineage);
+        let predecessor_partition_eligible = self.active_partition_return_kind.is_some()
+            && partition_helper_return_kind_is_admissible(target.required_kind)
+            && suffix_control.selected.parent.is_none()
+            && suffix_control.selected.pending.is_empty()
+            && partition_prefix_is_admissible(&source_prefix_template)
+            && partition_scope_is_admissible(&suffix_control.selected.selected_scope)
+            && env.iter().all(partition_lowered_is_admissible)
+            && dynamic
+                .alternatives
+                .iter()
+                .flat_map(|alternative| &alternative.fields)
+                .all(partition_lowered_is_admissible)
+            && owned_return_eliminators
+                .as_ref()
+                .is_some_and(|frames| partition_eliminators_are_admissible(frames))
+            && owned_selected_lineage.is_some();
+        let partition_site_id = if predecessor_partition_eligible {
+            let site_id = self.partition_next_site;
+            self.partition_next_site =
+                self.partition_next_site.checked_add(1).ok_or_else(|| {
+                    unsupported(
+                        "NativeFunctionPartition",
+                        "dynamic predecessor fanout identity exhausted",
+                    )
+                })?;
+            Some(site_id)
+        } else {
+            None
+        };
+        let ledger_baseline = self.partition_ledger_baseline();
         let mut test_block = builder
             .current_block()
             .expect("dynamic constructor source match block");
@@ -3477,6 +5780,30 @@ impl<'a> Lowering<'a> {
                     continue;
                 }
             };
+            let arm_env = materialize_dynamic_constructor_env(&alternative, env);
+            if let Some(partition_site_id) = partition_site_id {
+                self.call_partition_source_predecessor(
+                    builder,
+                    partition_site_id,
+                    predecessor_id as u64,
+                    case.body.clone(),
+                    false,
+                    arm_env,
+                    &source_prefix_template,
+                    &suffix_control.selected,
+                    suffix_control.terminal_outer,
+                    &target,
+                    owned_selected_lineage
+                        .as_deref()
+                        .expect("eligibility proves owned selected lineage"),
+                    owned_return_eliminators
+                        .as_deref()
+                        .expect("eligibility proves owned return eliminators"),
+                    &ledger_baseline,
+                )?;
+                test_block = next;
+                continue;
+            }
             let edge = self.mint_source_predecessor(target.clone());
             let continuation =
                 Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
@@ -3491,7 +5818,7 @@ impl<'a> Lowering<'a> {
                 &frame_baseline,
                 &mut frame_union,
                 case.body.clone(),
-                materialize_dynamic_constructor_env(&alternative, env),
+                arm_env,
                 control,
             )?;
             if Self::seal_source_trap_branch(builder, &lowered) {
@@ -3845,6 +6172,7 @@ impl<'a> Lowering<'a> {
         expr: &RuntimeExpr,
         env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
+        self.check_partition_live_growth(builder)?;
         match expr {
             RuntimeExpr::Value(value) => self.lower_value(builder, value),
             RuntimeExpr::CheckedJoinSite { site_id, body } => {
@@ -4625,16 +6953,20 @@ impl<'a> Lowering<'a> {
                 );
                 record_narrow_failure(builder, invalid, 7);
                 // PX8-SPAN-PROV: trailing `span_origin` acquisition token.
-                let Lowered::ResourceToken { value: span_origin } = lowered.get(3).ok_or_else(
-                    || unsupported("Effect", "BufferFreeze is missing its span origin"),
-                )?
+                let Lowered::ResourceToken { value: span_origin } =
+                    lowered.get(3).ok_or_else(|| {
+                        unsupported("Effect", "BufferFreeze is missing its span origin")
+                    })?
                 else {
                     return Err(unsupported(
                         "Effect",
                         "BufferFreeze span origin is not a resource",
                     ));
                 };
-                for (index, value) in [*token, start, length, *span_origin].into_iter().enumerate() {
+                for (index, value) in [*token, start, length, *span_origin]
+                    .into_iter()
+                    .enumerate()
+                {
                     builder
                         .ins()
                         .stack_store(value, request, request_offset(index));
@@ -4799,6 +7131,9 @@ impl<'a> Lowering<'a> {
             reply,
             i32::try_from(wire.reply_detail_offset).expect("reply detail offset is u32"),
         );
+        self.partition_cut_armed |= self
+            .partition_budget
+            .should_partition(PartitionFunctionMeasure::from_function(builder.func));
         if operation == ken_host::HostOpV1::ConsoleIsTerminal {
             Self::require_i64(builder, tag, wire.reply_bool_tag as i64);
             Ok(Lowered::Bool {
@@ -5185,9 +7520,10 @@ impl<'a> Lowering<'a> {
                 let reply_start_int = self.lower_unsigned_u64_int(builder, reply_start)?;
                 // PX8-SPAN-PROV: bind the minted span to this `readAt`'s buffer
                 // operand acquisition (lowered arg 2, the request seat).
-                let Lowered::ResourceToken { value: span_origin } = lowered
-                    .get(2)
-                    .ok_or_else(|| unsupported("Effect", "FsReadAt is missing its buffer operand"))?
+                let Lowered::ResourceToken { value: span_origin } =
+                    lowered.get(2).ok_or_else(|| {
+                        unsupported("Effect", "FsReadAt is missing its buffer operand")
+                    })?
                 else {
                     return Err(unsupported(
                         "Effect",

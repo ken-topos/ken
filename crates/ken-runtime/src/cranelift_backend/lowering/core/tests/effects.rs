@@ -84,6 +84,25 @@ fn run_checked_bounded_nat_fixture(
         native_int_narrow: None,
         native_int_export: None,
         native_int_tags: BTreeMap::new(),
+        partition_helper_ids: Vec::new(),
+        partition_signature: test_partition_signature(),
+        partition_next_helper: 0,
+        partition_queue: VecDeque::new(),
+        partition_continuations: PartitionContinuationInterner::default(),
+        partition_cleanup_suffixes: PartitionCleanupSuffixInterner::default(),
+        partition_cleanup_transitions: PartitionCleanupTransitionLedger::default(),
+        partition_metrics: PartitionCompilationMetrics::default(),
+        partition_cut_armed: false,
+        partition_budget: PartitionBudget::PRODUCTION,
+        partition_measures: Vec::new(),
+        partition_next_site: 0,
+        partition_branch_returns: PartitionBranchReturnLedger::default(),
+        active_partition_return_kind: None,
+        partition_output_tag_pointer: None,
+        partition_live_growth_ticks: 0,
+        partition_join_site_union: BTreeSet::new(),
+        partition_subcontinuation_frame_union: BTreeSet::new(),
+        partition_recursive_call_template_union: BTreeSet::new(),
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: mutation,
     };
@@ -1283,6 +1302,96 @@ fn run_px8n_arm_fixture(
         .run(Some((&invocation as *const NativeInvocationFixture).cast()))
         .unwrap();
     (result.unwrap(), fixture)
+}
+
+#[test]
+fn native_partition_recurses_under_a_low_per_function_budget() {
+    let budget = PartitionBudget {
+        max_values: 300,
+        max_instructions: 600,
+        max_blocks: 200,
+    };
+    PARTITION_TEST_BUDGET.with(|cell| cell.set(Some(budget)));
+    PARTITION_TEST_FORCE_ARM.with(|cell| cell.set(true));
+    PARTITION_TEST_MEASURES.with(|measures| measures.borrow_mut().clear());
+
+    let isa = native_isa().expect("native ISA");
+    let mut builder = JITBuilder::with_isa(isa, default_libcall_names());
+    builder.symbol(
+        "ken_host_dispatch_v1",
+        px8n_scripted_host_dispatch as *const u8,
+    );
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let scalar = "ctor:fixture::PartitionTree::Scalar".to_string();
+    let expression = RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Match {
+            scrutinee: Box::new(console_write_effect()),
+            cases: vec![
+                RuntimeMatchCase {
+                    constructor: symbols.result_err.clone(),
+                    binders: 1,
+                    body: RuntimeExpr::Construct {
+                        constructor: scalar.clone(),
+                        args: Vec::new(),
+                    },
+                },
+                RuntimeMatchCase {
+                    constructor: symbols.result_ok.clone(),
+                    binders: 1,
+                    body: RuntimeExpr::Construct {
+                        constructor: scalar.clone(),
+                        args: Vec::new(),
+                    },
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "partition low-budget Result default".to_string(),
+            },
+        }),
+        cases: vec![crate::RuntimeComputationalMatchCase {
+            constructor: scalar,
+            argument_binders: 0,
+            recursive_positions: Vec::new(),
+            body: RuntimeExpr::Construct {
+                constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                args: Vec::new(),
+            },
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "partition low-budget tree default".to_string(),
+        },
+    };
+    let result = compile_expr_into_module(
+        JITModule::new(builder),
+        "native_partition_low_budget",
+        Linkage::Local,
+        &expression,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        Some(&symbols),
+        Some(test_only_distinguished_root_join_plan()),
+        None,
+    );
+    PARTITION_TEST_BUDGET.with(|cell| cell.set(None));
+    PARTITION_TEST_FORCE_ARM.with(|cell| cell.set(false));
+
+    result.expect("recursive arm outlining stays within the low function budget");
+    let measures = PARTITION_TEST_MEASURES.with(|measures| measures.borrow().clone());
+    assert!(
+        measures.len() >= 3,
+        "one host-result fanout must produce root plus both arm helpers: {measures:?}"
+    );
+    assert!(
+        measures
+            .iter()
+            .copied()
+            .all(|measure| budget.check(measure).is_ok()),
+        "every recursively compiled function must respect the injected budget: {measures:?}"
+    );
 }
 
 #[cfg(test)]

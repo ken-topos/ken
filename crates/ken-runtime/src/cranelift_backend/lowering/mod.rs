@@ -16,9 +16,12 @@
 //! escape `crate::cranelift_backend`.
 
 pub(in crate::cranelift_backend) mod core;
+mod partition;
+
+use partition::*;
 
 // --- external dependencies -------------------------------------------------
-pub(in crate::cranelift_backend) use std::collections::{BTreeMap, BTreeSet};
+pub(in crate::cranelift_backend) use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 pub(in crate::cranelift_backend) use cranelift_codegen::ir::{
     types, AbiParam, FuncRef, Function, InstBuilder, MemFlags, StackSlotData, StackSlotKind,
@@ -28,7 +31,7 @@ pub(in crate::cranelift_backend) use cranelift_codegen::verify_function;
 pub(in crate::cranelift_backend) use cranelift_frontend::{
     FunctionBuilder, FunctionBuilderContext,
 };
-pub(in crate::cranelift_backend) use cranelift_module::{Linkage, Module};
+pub(in crate::cranelift_backend) use cranelift_module::{FuncId, Linkage, Module};
 
 // --- crate root ------------------------------------------------------------
 pub(in crate::cranelift_backend) use crate::{
@@ -253,6 +256,25 @@ struct Lowering<'a> {
     native_int_narrow: Option<FuncRef>,
     native_int_export: Option<FuncRef>,
     native_int_tags: BTreeMap<cranelift_codegen::ir::Value, cranelift_codegen::ir::Value>,
+    partition_helper_ids: Vec<FuncId>,
+    partition_signature: cranelift_codegen::ir::Signature,
+    partition_next_helper: usize,
+    partition_queue: VecDeque<PartitionWorkItem>,
+    partition_continuations: PartitionContinuationInterner,
+    partition_cleanup_suffixes: PartitionCleanupSuffixInterner,
+    partition_cleanup_transitions: PartitionCleanupTransitionLedger,
+    partition_cut_armed: bool,
+    partition_budget: PartitionBudget,
+    partition_measures: Vec<PartitionFunctionMeasure>,
+    partition_metrics: PartitionCompilationMetrics,
+    partition_next_site: u64,
+    partition_branch_returns: PartitionBranchReturnLedger,
+    active_partition_return_kind: Option<ScalarMergeKind>,
+    partition_output_tag_pointer: Option<cranelift_codegen::ir::Value>,
+    partition_live_growth_ticks: usize,
+    partition_join_site_union: BTreeSet<u64>,
+    partition_subcontinuation_frame_union: BTreeSet<(u64, u64)>,
+    partition_recursive_call_template_union: BTreeSet<u64>,
     #[cfg(test)]
     native_int_mutation: NativeIntLoweringMutation,
     #[cfg(test)]
@@ -1760,6 +1782,7 @@ enum SourceContinuation<'a> {
     },
 }
 enum SourceContinuationTerminal<'a> {
+    #[allow(dead_code)]
     ReturnValue,
     /// The unique affine handoff from source evaluation back to the producer.
     /// The stored unwind segment is consumed here; it is not inferred from
@@ -1777,10 +1800,14 @@ enum SourceContinuationTerminal<'a> {
         root_authority: Option<RootTerminalAnswerAuthority>,
     },
     JumpToJoin(SourcePredecessorEdge<'a>),
+    ReturnFromPartition {
+        expected_outer: ContinuationCursorId,
+    },
 }
 #[derive(Clone)]
 struct SourceJoinTarget<'a> {
     join_id: u64,
+    checked_site_id: u64,
     block: cranelift_codegen::ir::Block,
     expected_outer: ContinuationCursorId,
     required_kind: ScalarMergeKind,
@@ -1878,6 +1905,7 @@ enum SourcePrefixTerminal<'a> {
     ResumeOuter {
         root_authority: Option<RootTerminalAnswerAuthority>,
     },
+    ReturnFromPartition,
     Join(SourcePredecessorEdge<'a>),
 }
 struct SourceBranchFanout<'a> {
@@ -3622,7 +3650,8 @@ impl<'a> Lowering<'a> {
             SourceContinuation::Terminal(
                 SourceContinuationTerminal::ReturnValue
                 | SourceContinuationTerminal::ReturnToProducerHole { .. }
-                | SourceContinuationTerminal::ResumeOuter { .. },
+                | SourceContinuationTerminal::ResumeOuter { .. }
+                | SourceContinuationTerminal::ReturnFromPartition { .. },
             ) => None,
             SourceContinuation::LetBody { next, .. }
             | SourceContinuation::CheckedRecursiveInvocationReturn { next, .. }
@@ -3990,6 +4019,12 @@ impl<'a> Lowering<'a> {
                     "source prefix has no exact outer terminal to split",
                 ));
             }
+            SourceContinuation::Terminal(SourceContinuationTerminal::ReturnFromPartition {
+                expected_outer,
+            }) => (
+                SourcePrefixTemplate::Terminal { expected_outer },
+                SourcePrefixTerminal::ReturnFromPartition,
+            ),
             SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                 expected,
                 root_authority,
