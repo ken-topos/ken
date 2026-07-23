@@ -64,7 +64,7 @@ operation|FsChangeMode|030A|native|FsChangeModeRequestV1|3|HostReplyV1|1
 operation|FsOpen|030B|native|FsOpenRequestV1|3|HostReplyV1|1
 operation|FsHandleMetadata|030C|native|ResourceRequestV1|1|HostReplyV1|1
 operation|FsReadAt|030D|native|FsPositionedRequestV1|5|HostReplyV1|1
-operation|FsWriteAt|030E|native|FsPositionedRequestV1|5|HostReplyV1|1
+operation|FsWriteAt|030E|native|FsWriteAtRequestV1|6|HostReplyV1|1
 operation|ResourceRelease|0401|native|ResourceRequestV1|1|HostReplyV1|1
 operation|BufferAllocate|0402|native|BufferAllocateRequestV1|1|HostReplyV1|1
-operation|BufferFreeze|0403|native|BufferFreezeRequestV1|3|HostReplyV1|1
+operation|BufferFreeze|0403|native|BufferFreezeRequestV1|4|HostReplyV1|1

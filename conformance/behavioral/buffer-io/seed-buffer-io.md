@@ -646,9 +646,23 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ## SP-A. A span is bound to one exact buffer acquisition
 
-The following PX8-SPAN-PROV cases run once against the reference interpreter
-and once against the native backend. Every run asserts its expected result
-directly against `38 §1.7.1`; interpreter/native equality is not an oracle.
+The Phase-1 matrix retains one independent cell per engine; interpreter/native
+equality is not an oracle. PX8-SPAN-PROV Phase 2 makes the complete SP-A freeze
+row GREEN on both engines. The complete interpreter cells for SP-A write, SP-B,
+and SP-C are GREEN, while their native cells are explicitly
+**BLOCKED-ON-NATIVE-REACHABILITY** by [[RT-NATIVE-FNSPLIT]]: the current native
+backend lowers the whole valid four-bracket process into one Cranelift function
+and reaches `VReg::MAX` before execution.
+
+The native route-1 mechanism still has supporting, non-cell evidence: SP-A
+freeze drives the full native foreign-rejection path; a distinct-token native
+lowering fixture proves `FsWriteAt` marshals the sixth `span_origin` request
+field rather than substituting the target; and the shared host dispatcher
+proves both consumers reject before byte exposure or backend writes. This
+evidence makes the landed mechanism auditable, but does not present an
+interpreter fallback or a composed proof as completion of the blocked native
+cells. Those cells turn GREEN only after [[RT-NATIVE-FNSPLIT]] makes the exact
+programs runnable.
 
 The exact foreign-acquisition result is the existing
 `ResourceError.InvalidBounds`, as locked by `38 §1.7.1`. It is the same public
@@ -658,10 +672,12 @@ constructor-private acquisition binding.
 
 ### buffer-io/foreign-span-freeze-rejected-absolute
 
-- status: **RED-UNTIL-PX8-SPAN-PROV Phase 2**
+- status: **GREEN — PX8-SPAN-PROV Phase 2, interpreter + native absolute**
 - spec: `38 §1.7.1`; PX8-SPAN-PROV AC-3
 - engine matrix: run the complete given/expect pair independently on
   `interpreter` and `native`; neither result is inferred from the other
+- evidence:
+  `crates/ken-cli/tests/rt_span_prov_native.rs::sp_a_foreign_span_freeze_rejects_own_span_succeeds_on_both_engines`
 - given: acquire distinct capacity-`8` buffers A and B; use successful
   `readAt` calls to install the same numeric live window `[2, 6)` in both while
   storing distinct bytes `AAAA` in A and `BBBB` in B; retain the host-minted
@@ -677,10 +693,23 @@ constructor-private acquisition binding.
 
 ### buffer-io/foreign-span-write-rejected-before-backend
 
-- status: **RED-UNTIL-PX8-SPAN-PROV Phase 2**
+- status: **PARTIAL — interpreter GREEN; native
+  BLOCKED-ON-NATIVE-REACHABILITY ([[RT-NATIVE-FNSPLIT]])**
 - spec: `38 §1.7.1`; PX8-SPAN-PROV AC-3
-- engine matrix: run the complete given/expect pair independently on
-  `interpreter` and `native`, with a fresh recording destination per arm
+- engine matrix:
+  - `interpreter`: GREEN; run the complete given/expect pair with a fresh
+    recording destination per arm
+  - `native`: BLOCKED; the exact four-bracket program reaches the current
+    single-function Cranelift size limit before execution
+- evidence:
+  - interpreter foreign arm:
+    `rt_span_prov_native::sp_a_foreign_span_write_rejects_before_backend_interp`
+  - interpreter own-span control:
+    `rt_span_prov_native::sp_a_own_span_write_succeeds_with_bytes_interp`
+  - supporting native seam:
+    `ken_runtime::cranelift_backend::lowering::core::tests::effects`
+    distinct-token sixth-field fixture, plus
+    `ken_host::effect_v1::tests::foreign_acquisition_span_rejects_on_both_consumers_before_bytes_or_backend`
 - given: the same A/B pair and spans as
   `foreign-span-freeze-rejected-absolute`, a live writable positioned file, and
   a backend that records every write call and its bytes
@@ -699,9 +728,18 @@ constructor-private acquisition binding.
 
 ### buffer-io/span-validity-follows-host-width-and-precedes-host-effects
 
-- status: **RED-UNTIL-PX8-SPAN-PROV Phase 2**
+- status: **PARTIAL — interpreter GREEN; native
+  BLOCKED-ON-NATIVE-REACHABILITY ([[RT-NATIVE-FNSPLIT]])**
 - spec: `38 §1.7.1`; PX8-SPAN-PROV AC-1/AC-2/AC-3
-- engine matrix: run every arm independently on `interpreter` and `native`
+- engine matrix:
+  - `interpreter`: GREEN; run every arm independently
+  - `native`: BLOCKED; the exact four-bracket programs reach the current
+    single-function Cranelift size limit before execution
+- evidence:
+  - validity/no-effect arms:
+    `rt_span_prov_native::sp_b_foreign_and_stale_window_reject_with_no_effect_interp`
+  - host-width precedence:
+    `rt_span_prov_native::sp_b_host_width_offset_precedes_provenance_interp`
 - given: retain `span_a = [2, 6)` from live buffer A, but install B's current
   live window as `[0, 2)`; keep B live and kind-correct, and keep the positioned
   file live, writable, and at a valid offset
@@ -724,10 +762,18 @@ constructor-private acquisition binding.
 
 ### buffer-io/closed-span-not-revived-by-buffer-slot-reuse
 
-- status: **RED-UNTIL-PX8-SPAN-PROV Phase 2**
+- status: **PARTIAL — interpreter GREEN; native
+  BLOCKED-ON-NATIVE-REACHABILITY ([[RT-NATIVE-FNSPLIT]])**
 - spec: `38 §1.7.1`; PX8-SPAN-PROV AC-3
-- engine matrix: run the complete lifecycle independently on `interpreter` and
-  `native`
+- engine matrix:
+  - `interpreter`: GREEN; run the complete lifecycle
+  - `native`: BLOCKED; the exact four-bracket program reaches the current
+    single-function Cranelift size limit before execution
+- evidence:
+  - complete interpreter lifecycle:
+    `rt_span_prov_native::sp_c_released_span_not_revived_by_slot_reuse_interp`
+  - opaque-token slot/generation proof:
+    `ken_host::effect_v1::tests::released_acquisition_span_is_not_revived_by_slot_reuse`
 - given: acquire capacity-`8` buffer A, install `AAAA` at `[2, 6)`, retain
   `span_old`, and release A; the test harness then acquires capacity-`8` buffer
   B in A's vacated resource-table slot, proves that the slot was reused with a
@@ -904,8 +950,9 @@ or a result that claims success with a nonempty remainder does not conform.
 |---|---|
 | AC-1 exact-acquisition binding and both consumers | SP-A, SP-B |
 | AC-2 exact error identity and precedence | SP-A, SP-B, SP-C |
-| AC-3 absolute same-shape pair on both engines | SP-A |
-| AC-3 close/reallocate generation non-revival | SP-C |
+| AC-3 absolute same-shape freeze pair on both engines | SP-A freeze |
+| AC-3 absolute same-shape write pair | SP-A write: interpreter GREEN; native blocked by [[RT-NATIVE-FNSPLIT]] |
+| AC-3 close/reallocate generation non-revival | SP-C: interpreter GREEN; native blocked by [[RT-NATIVE-FNSPLIT]] |
 
 ## Cross-case, verdict-flip, and reachability sweep
 
@@ -941,17 +988,21 @@ or a result that claims success with a nonempty remainder does not conform.
   minted by the two real acquisition paths, not fabricated encodings. Their
   same-kind controls must succeed. A malformed token has its separate existing
   `MalformedResource` route and cannot satisfy either case.
-- **The provenance experiments are absolute and controlled.** SP-A holds
-  capacity, numeric window, live-window shape, and operation fixed while
-  changing only the span's originating acquisition; both foreign arms reject
-  and both own-span arms succeed on each engine independently. SP-B fixes the
+- **The provenance experiments are absolute and controlled at their recorded
+  status.** SP-A freeze holds capacity, numeric window, live-window shape, and
+  operation fixed while changing only the span's originating acquisition; its
+  foreign arm rejects and its own-span arm succeeds on each engine
+  independently. SP-A write, SP-B, and SP-C run their complete absolute cells
+  on the interpreter; their native cells remain explicitly blocked by
+  [[RT-NATIVE-FNSPLIT]], not inferred from composed evidence. SP-B fixes the
   mismatch's position between host-width admission and live-window/backend
   work. SP-C forces actual slot reuse and changes the generation, so a check on
   slot or numeric span alone fails while a full-acquisition check passes.
 - **The provenance failures expose no bytes and perform no writes.** A matching
   error returned after a freeze result or backend write is not conforming.
-  SP-A–SP-C assert the negative observation as well as the error value, while
-  their own-span controls prove the observation channel is live.
+  In each GREEN cell, SP-A–SP-C assert the negative observation as well as the
+  error value, while their own-span controls prove the observation channel is
+  live.
 - **Reachability gates are explicit.** Runtime owns observation production,
   including `Buffer`, both acquisition paths, positioned host operations,
   progress/error production, mismatch, and admission enforcement. Verify owns

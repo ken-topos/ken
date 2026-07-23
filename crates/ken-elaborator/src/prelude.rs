@@ -1404,7 +1404,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // remainder, making positivity and request-boundedness constructor facts.
     elab.elaborate_decl("data BufferWindow = MkBufferWindow Int Int")
         .map_err(|e| ElabError::Internal(format!("prelude BufferWindow failed: {e}")))?;
-    elab.elaborate_decl("data BufferSpan = PrivateBufferSpan Int Nat")
+    elab.elaborate_decl("data BufferSpan = PrivateBufferSpan (Resource Buffer) Int Nat")
         .map_err(|e| ElabError::Internal(format!("prelude BufferSpan failed: {e}")))?;
     elab.elaborate_decl("data TransferCount = PrivateTransferCount Nat Nat")
         .map_err(|e| ElabError::Internal(format!("prelude TransferCount failed: {e}")))?;
@@ -1431,17 +1431,25 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     )
     .map_err(|e| ElabError::Internal(format!("prelude buffer_window_length failed: {e}")))?;
     elab.elaborate_decl(
-        "fn buffer_span_start (span : BufferSpan) : Int = match span { PrivateBufferSpan start budget |-> start }",
+        "fn buffer_span_start (span : BufferSpan) : Int = match span { PrivateBufferSpan origin start budget |-> start }",
     )
     .map_err(|e| ElabError::Internal(format!("prelude buffer_span_start failed: {e}")))?;
     elab.elaborate_decl(
-        "fn buffer_span_budget (span : BufferSpan) : Nat = match span { PrivateBufferSpan start budget |-> budget }",
+        "fn buffer_span_budget (span : BufferSpan) : Nat = match span { PrivateBufferSpan origin start budget |-> budget }",
     )
     .map_err(|e| ElabError::Internal(format!("prelude buffer_span_budget failed: {e}")))?;
     elab.elaborate_decl(
         "fn buffer_span_length (span : BufferSpan) : Int = buffer_nat_to_int (buffer_span_budget span)",
     )
     .map_err(|e| ElabError::Internal(format!("prelude buffer_span_length failed: {e}")))?;
+    // PX8-SPAN-PROV: constructor-private projection of the originating buffer
+    // acquisition. Used only by the private `spanBytes`/`writeAt`/
+    // `write_all_advance_span` internals below and removed from the public name
+    // map, so a span's origin is never publicly projectable (AC-5).
+    elab.elaborate_decl(
+        "fn buffer_span_origin (span : BufferSpan) : Resource Buffer = match span { PrivateBufferSpan origin start budget |-> origin }",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude buffer_span_origin failed: {e}")))?;
     elab.elaborate_decl(
         "fn transfer_count_nat (count : TransferCount) : Nat = match count { PrivateTransferCount predecessor remaining |-> Suc predecessor }",
     )
@@ -1541,8 +1549,16 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
                     resource_buffer_t.clone(),
                     int_t.clone(),
                     int_t.clone(),
+                    // PX8-SPAN-PROV: trailing `span_origin` acquisition token.
+                    resource_buffer_t.clone(),
                 ]),
-                named(vec![resource_buffer_t, int_t.clone(), int_t]),
+                named(vec![
+                    resource_buffer_t.clone(),
+                    int_t.clone(),
+                    int_t.clone(),
+                    // PX8-SPAN-PROV: trailing `span_origin` acquisition token.
+                    resource_buffer_t,
+                ]),
             ]
         },
     })
@@ -1608,8 +1624,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            PrivateResourceRelease kind resource |-> Result ResourceError Unit; \
            PrivateBufferAllocate capacity |-> Result ResourceError (Resource Buffer); \
            PrivateFsReadAt file file_offset buffer buffer_start length |-> Result ResourceError ReadProgress; \
-           PrivateFsWriteAt file file_offset buffer buffer_start length |-> Result ResourceError WriteProgress; \
-           PrivateBufferFreeze buffer start length |-> Result ResourceError Bytes \
+           PrivateFsWriteAt file file_offset buffer buffer_start length span_origin |-> Result ResourceError WriteProgress; \
+           PrivateBufferFreeze buffer start length span_origin |-> Result ResourceError Bytes \
          }",
     )
     .map_err(|e| ElabError::Internal(format!("prelude fs_resp failed: {}", e)))?;
@@ -1994,7 +2010,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
            (Result ResourceError WriteProgress) \
            (InL (FSOp a) AmbientOp (PrivateFsWriteAt a file file_offset buffer \
-             (buffer_span_start span) (buffer_span_length span))) \
+             (buffer_span_start span) (buffer_span_length span) (buffer_span_origin span))) \
            (\\r. Ret (Coproduct (FSOp a) AmbientOp) \
              (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
              (Result ResourceError WriteProgress) r)",
@@ -2007,7 +2023,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
            (Result ResourceError Bytes) \
            (InL (FSOp a) AmbientOp (PrivateBufferFreeze a buffer \
-             (buffer_span_start span) (buffer_span_length span))) \
+             (buffer_span_start span) (buffer_span_length span) (buffer_span_origin span))) \
            (\\r. Ret (Coproduct (FSOp a) AmbientOp) \
              (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
              (Result ResourceError Bytes) r)",
@@ -2021,7 +2037,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // One private transition serves both the real loop and its public
     // observer-only proposition. It is removed from the source name map below.
     elab.elaborate_decl(
-        "fn write_all_advance_span (span : BufferSpan) (count : TransferCount) : BufferSpan = PrivateBufferSpan (add_int (buffer_span_start span) (transfer_count_int count)) (transfer_count_remaining count)",
+        "fn write_all_advance_span (span : BufferSpan) (count : TransferCount) : BufferSpan = PrivateBufferSpan (buffer_span_origin span) (add_int (buffer_span_start span) (transfer_count_int count)) (transfer_count_remaining count)",
     )
     .map_err(|e| ElabError::Internal(format!("prelude write_all_advance_span failed: {e}")))?;
     elab.elaborate_decl(
@@ -2121,6 +2137,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         "PrivateBufferFreeze",
         "PrivateBufferSpan",
         "PrivateTransferCount",
+        "buffer_span_origin",
         "write_all_advance_span",
         "PrivateResourceRelease",
         "PrivateResourceTraceIdentity",

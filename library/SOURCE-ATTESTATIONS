@@ -25,7 +25,7 @@ ea5ae1500f631b35f886df23c6e1d004715815ac	crates/ken-elaborator/tests/ds3_sum_com
 cf7276e174a07138f771208aa8a6cb2d6e72ca10	crates/ken-elaborator/tests/es3_modules_acceptance.rs
 b30b91ea4ea30703a12264b70bbe9807107db2dd	crates/ken-elaborator/tests/n2_in_repo_loader.rs
 7e5c4e00564f96231b8a7a38498fd7a3e48b90d9	crates/ken-elaborator/tests/surface_transport_acceptance.rs
-2b73b1abb8b48672a61bc04090b1ec923b62f422	crates/ken-interp/src/eval.rs
+ef2c5db706589ff37dbf0f87e0a71602b66c75db	crates/ken-interp/src/eval.rs
 8508a01cb4ac161c9bcc864387eef9b4ac59c909	crates/ken-runtime/src/cranelift_backend.rs
 311a91ed095746c3040582bcb075e34463602414	docs/PRINCIPLES.md
 74456b010ba0f36c24074af067418fff2d2f3e5d	docs/program/07-catalog-style-guide.md

@@ -4793,19 +4793,39 @@ fn fs_dispatch<H: HostHandler>(
         None
     };
     let resource_inputs = match operation {
-        ken_host::HostOpV1::FsReadAt | ken_host::HostOpV1::FsWriteAt => {
-            match (args.get(1), args.get(3)) {
-                (Some(EvalVal::ResourceToken(file)), Some(EvalVal::ResourceToken(buffer))) => {
-                    ken_host::ResourceInputsV1::FileBuffer {
-                        file: *file,
-                        buffer: *buffer,
-                    }
+        ken_host::HostOpV1::FsReadAt => match (args.get(1), args.get(3)) {
+            (Some(EvalVal::ResourceToken(file)), Some(EvalVal::ResourceToken(buffer))) => {
+                ken_host::ResourceInputsV1::FileBuffer {
+                    file: *file,
+                    buffer: *buffer,
                 }
-                _ => return Some(Err(())),
             }
-        }
-        ken_host::HostOpV1::BufferFreeze => match args.get(1) {
-            Some(EvalVal::ResourceToken(token)) => ken_host::ResourceInputsV1::Target(*token),
+            _ => return Some(Err(())),
+        },
+        // PX8-SPAN-PROV: `writeAt`'s effect op carries the trailing
+        // `span_origin` acquisition token (args[6]); the dispatcher rejects a
+        // foreign-acquisition span before any backend write.
+        ken_host::HostOpV1::FsWriteAt => match (args.get(1), args.get(3), args.get(6)) {
+            (
+                Some(EvalVal::ResourceToken(file)),
+                Some(EvalVal::ResourceToken(buffer)),
+                Some(EvalVal::ResourceToken(span_origin)),
+            ) => ken_host::ResourceInputsV1::FileBufferSpan {
+                file: *file,
+                target_buffer: *buffer,
+                span_origin: *span_origin,
+            },
+            _ => return Some(Err(())),
+        },
+        // PX8-SPAN-PROV: `spanBytes`/`freeze` carries the trailing `span_origin`
+        // acquisition token (args[4]).
+        ken_host::HostOpV1::BufferFreeze => match (args.get(1), args.get(4)) {
+            (Some(EvalVal::ResourceToken(token)), Some(EvalVal::ResourceToken(span_origin))) => {
+                ken_host::ResourceInputsV1::BufferSpanTarget {
+                    target: *token,
+                    span_origin: *span_origin,
+                }
+            }
             _ => return Some(Err(())),
         },
         _ => resource.map_or(
@@ -4824,6 +4844,13 @@ fn fs_dispatch<H: HostHandler>(
         &request,
     )
     .map_err(|_| ());
+    // PX8-SPAN-PROV: a successful `readAt` mints its `BufferSpan` bound to the
+    // buffer operand's acquisition (the request seat). Retain that token so the
+    // reifier can copy it into the span's constructor-private origin field.
+    let span_origin = match resource_inputs {
+        ken_host::ResourceInputsV1::FileBuffer { buffer, .. } => Some(buffer),
+        _ => None,
+    };
     let reply = reply.and_then(|reply| {
         if let Some(recorder) = recorder {
             recorder.record(operation, request.clone(), &reply);
@@ -4838,6 +4865,7 @@ fn fs_dispatch<H: HostHandler>(
         reify_host_reply_v1(
             reply.outcome,
             reply.resource_token,
+            span_origin,
             &request,
             operation_id,
             fs,
@@ -4890,6 +4918,7 @@ fn validate_transfer_request_bound(
 fn reify_host_reply_v1(
     outcome: ken_host::CanonicalOutcomeV1,
     resource_token: Option<ken_host::ResourceTokenV1>,
+    span_origin: Option<ken_host::ResourceTokenV1>,
     request: &ken_host::CanonicalRequestV1,
     operation_id: GlobalId,
     fs: &FSIds,
@@ -4960,9 +4989,17 @@ fn reify_host_reply_v1(
                 // once, up front, by `validate_transfer_request_bound`
                 // (BUDGET-EXHAUST, dec_7kcbc14ybndbq) — not re-derived here.
                 let budget = buffer_nat_value(span.length(), fs, store)?;
+                // PX8-SPAN-PROV: bind the minted span to the buffer acquisition
+                // used by this `readAt` (the request seat). `ReadSome` only
+                // arises from `FsReadAt`, so `span_origin` is always present.
+                let origin = span_origin.ok_or(())?;
                 let span = make_ctor(
                     fs.private_buffer_span_id,
-                    vec![EvalVal::BigInt(BigInt::from(span.start())), budget],
+                    vec![
+                        EvalVal::ResourceToken(origin),
+                        EvalVal::BigInt(BigInt::from(span.start())),
+                        budget,
+                    ],
                     store,
                 );
                 let count = transferred.get();
@@ -6075,7 +6112,10 @@ mod px5b_effect_observation_tests {
             panic!("expected BufferSpan")
         };
         assert_eq!(*span_id, fs.private_buffer_span_id);
-        assert_eq!(nat_value(&span_args[1], &fs), 1);
+        // PX8-SPAN-PROV AC-5: BufferSpan is now [origin, start, budget]; the byte
+        // budget moved from span_args[1] to span_args[2]. Effect-semantics (the
+        // reified remaining/effective in count_args below) are unchanged.
+        assert_eq!(nat_value(&span_args[2], &fs), 1);
         let EvalVal::Ctor {
             id: transfer_count_id,
             args: count_args,
@@ -6176,7 +6216,8 @@ mod px5b_effect_observation_tests {
             panic!("expected BufferSpan")
         };
         assert_eq!(*span_id, fs.private_buffer_span_id);
-        assert_eq!(nat_value(&span_args[1], &fs), 4, "span must be capacity-full");
+        // PX8-SPAN-PROV AC-5: budget is span_args[2] now ([origin, start, budget]).
+        assert_eq!(nat_value(&span_args[2], &fs), 4, "span must be capacity-full");
         let EvalVal::Ctor {
             id: transfer_count_id,
             args: count_args,
@@ -6343,6 +6384,10 @@ mod px5b_effect_observation_tests {
                 EvalVal::ResourceToken(buffer),
                 EvalVal::Int(0),
                 EvalVal::Int(8),
+                // PX8-SPAN-PROV AC-5: PrivateFsWriteAt now carries a trailing
+                // span_origin acquisition token. Own-buffer write: origin ==
+                // target buffer, so provenance admits and the write proceeds.
+                EvalVal::ResourceToken(buffer),
             ],
             &mut host,
             &mut resources,

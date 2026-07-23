@@ -301,18 +301,29 @@ pub fn host_effect_wire_layout_v1(
         HostOpV1::FsHandleMetadata | HostOpV1::ResourceRelease => {
             vec![checked_u32(field("resource")?)?]
         }
-        HostOpV1::FsReadAt | HostOpV1::FsWriteAt => vec![
+        HostOpV1::FsReadAt => vec![
             checked_u32(field("file")?)?,
             checked_u32(field("buffer")?)?,
             checked_u32(field("file_offset")?)?,
             checked_u32(field("buffer_start")?)?,
             checked_u32(field("length")?)?,
         ],
+        // PX8-SPAN-PROV: `FsWriteAt` carries the span's originating buffer
+        // acquisition (`span_origin`) so the shared dispatcher can admit it.
+        HostOpV1::FsWriteAt => vec![
+            checked_u32(field("file")?)?,
+            checked_u32(field("buffer")?)?,
+            checked_u32(field("file_offset")?)?,
+            checked_u32(field("buffer_start")?)?,
+            checked_u32(field("length")?)?,
+            checked_u32(field("span_origin")?)?,
+        ],
         HostOpV1::BufferAllocate => vec![checked_u32(field("capacity")?)?],
         HostOpV1::BufferFreeze => vec![
             checked_u32(field("resource")?)?,
             checked_u32(field("start")?)?,
             checked_u32(field("length")?)?,
+            checked_u32(field("span_origin")?)?,
         ],
         _ => return Err(TerminalErrorV1::OperationUnavailable(operation)),
     };
@@ -1345,6 +1356,23 @@ pub enum ResourceInputsV1 {
         file: ResourceTokenV1,
         buffer: ResourceTokenV1,
     },
+    /// `BufferFreeze`/`spanBytes` consumer: the target buffer plus the exact
+    /// buffer acquisition that minted the supplied span (PX8-SPAN-PROV). The
+    /// dispatcher admits only when `span_origin == target` on the full opaque
+    /// token, before any byte exposure.
+    BufferSpanTarget {
+        target: ResourceTokenV1,
+        span_origin: ResourceTokenV1,
+    },
+    /// `FsWriteAt` consumer: the file, the target buffer, and the span's
+    /// originating buffer acquisition (PX8-SPAN-PROV). The dispatcher admits
+    /// only when `span_origin == target_buffer`, after host-width admission and
+    /// before any backend write.
+    FileBufferSpan {
+        file: ResourceTokenV1,
+        target_buffer: ResourceTokenV1,
+        span_origin: ResourceTokenV1,
+    },
 }
 
 /// The only V1 semantic operation switch. Validation and capability denial
@@ -1420,11 +1448,17 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
     let resource_shape_matches = matches!(
         (operation, resource),
         (
-            HostOpV1::FsHandleMetadata | HostOpV1::BufferFreeze | HostOpV1::ResourceRelease,
+            HostOpV1::FsHandleMetadata | HostOpV1::ResourceRelease,
             ResourceInputsV1::Target(_)
         ) | (
-            HostOpV1::FsReadAt | HostOpV1::FsWriteAt,
+            HostOpV1::BufferFreeze,
+            ResourceInputsV1::BufferSpanTarget { .. }
+        ) | (
+            HostOpV1::FsReadAt,
             ResourceInputsV1::FileBuffer { .. }
+        ) | (
+            HostOpV1::FsWriteAt,
+            ResourceInputsV1::FileBufferSpan { .. }
         ) | (
             HostOpV1::BufferAllocate
                 | HostOpV1::ConsoleRead
@@ -1580,21 +1614,36 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             }
         }
         (HostOpV1::BufferFreeze, CanonicalRequestV1::BufferFreeze { start, length }) => {
-            let ResourceInputsV1::Target(token) = resource else {
+            let ResourceInputsV1::BufferSpanTarget {
+                target,
+                span_origin,
+            } = resource
+            else {
                 unreachable!("resource shape validated")
             };
-            match resources.resolve_buffer(token) {
+            match resources.resolve_buffer(target) {
                 Ok((buffer, identity)) => {
                     resource_bindings.push((ResourceBindingRole::Target, identity));
-                    let start = usize::try_from(*start).map_err(|_| ResourceErrorV1::InvalidBounds);
-                    let length =
-                        usize::try_from(*length).map_err(|_| ResourceErrorV1::InvalidBounds);
-                    match start.and_then(|start| length.map(|length| (start, length))) {
-                        Ok((start, length)) => buffer
-                            .initialized_slice(start, length)
-                            .map(|bytes| CanonicalReplyV1::Bytes(bytes.to_vec()))
-                            .map_err(SemanticErrorV1::Resource),
-                        Err(error) => Err(SemanticErrorV1::Resource(error)),
+                    if span_origin != target {
+                        // PX8-SPAN-PROV: the span was minted by a different
+                        // buffer acquisition. Reject before exposing any bytes.
+                        // Acquisition mismatch shares `InvalidBounds` with
+                        // numeric live-window invalidity (`38 §1.7.1`); their
+                        // relative order is not publicly observable, so the
+                        // check may precede the numeric coordinate check.
+                        Err(SemanticErrorV1::Resource(ResourceErrorV1::InvalidBounds))
+                    } else {
+                        let start =
+                            usize::try_from(*start).map_err(|_| ResourceErrorV1::InvalidBounds);
+                        let length =
+                            usize::try_from(*length).map_err(|_| ResourceErrorV1::InvalidBounds);
+                        match start.and_then(|start| length.map(|length| (start, length))) {
+                            Ok((start, length)) => buffer
+                                .initialized_slice(start, length)
+                                .map(|bytes| CanonicalReplyV1::Bytes(bytes.to_vec()))
+                                .map_err(SemanticErrorV1::Resource),
+                            Err(error) => Err(SemanticErrorV1::Resource(error)),
+                        }
                     }
                 }
                 Err(error) => Err(SemanticErrorV1::Resource(error)),
@@ -1666,13 +1715,18 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
                 length,
             },
         ) => {
-            let ResourceInputsV1::FileBuffer { file, buffer } = resource else {
+            let ResourceInputsV1::FileBufferSpan {
+                file,
+                target_buffer,
+                span_origin,
+            } = resource
+            else {
                 unreachable!("resource shape validated")
             };
             resources.with_fs_and_buffer_mut(
                 file,
                 crate::RightSet::WRITE,
-                buffer,
+                target_buffer,
                 |handle, file_identity, region, buffer_identity| {
                     resource_bindings.extend([
                         (ResourceBindingRole::File, file_identity),
@@ -1685,6 +1739,13 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
                         .checked_add(effective as u64)
                         .ok_or(ResourceErrorV1::InvalidOffset)
                         .map_err(SemanticErrorV1::Resource)?;
+                    if span_origin != target_buffer {
+                        // PX8-SPAN-PROV: foreign-acquisition span. Reject after
+                        // existing host-width admission (`InvalidOffset`) and
+                        // before exposing bytes or issuing any backend write, so
+                        // a mismatch records zero backend calls (`38 §1.7.1`).
+                        return Err(SemanticErrorV1::Resource(ResourceErrorV1::InvalidBounds));
+                    }
                     let bytes = region
                         .initialized_slice(start, effective)
                         .map_err(SemanticErrorV1::Resource)?;
@@ -2672,10 +2733,10 @@ mod tests {
             "FsOpen|030b|native|FsOpenRequestV1|3|HostReplyV1|1",
             "FsHandleMetadata|030c|native|ResourceRequestV1|1|HostReplyV1|1",
             "FsReadAt|030d|native|FsPositionedRequestV1|5|HostReplyV1|1",
-            "FsWriteAt|030e|native|FsPositionedRequestV1|5|HostReplyV1|1",
+            "FsWriteAt|030e|native|FsWriteAtRequestV1|6|HostReplyV1|1",
             "ResourceRelease|0401|native|ResourceRequestV1|1|HostReplyV1|1",
             "BufferAllocate|0402|native|BufferAllocateRequestV1|1|HostReplyV1|1",
-            "BufferFreeze|0403|native|BufferFreezeRequestV1|3|HostReplyV1|1",
+            "BufferFreeze|0403|native|BufferFreezeRequestV1|4|HostReplyV1|1",
             "lifetime=filesystem_observation_schema|2",
             "lifetime=resource_observation_schema|1",
             "lifetime=resource_error_reply_schema|1",
@@ -3520,7 +3581,10 @@ mod tests {
             &mut resources,
             HostOpV1::BufferFreeze,
             None,
-            ResourceInputsV1::Target(buffer_token),
+            ResourceInputsV1::BufferSpanTarget {
+                target: buffer_token,
+                span_origin: buffer_token,
+            },
             &CanonicalRequestV1::BufferFreeze {
                 start: 0,
                 length: 4,
@@ -3560,9 +3624,10 @@ mod tests {
             &mut resources,
             HostOpV1::FsWriteAt,
             None,
-            ResourceInputsV1::FileBuffer {
+            ResourceInputsV1::FileBufferSpan {
                 file: target_token,
-                buffer: buffer_token,
+                target_buffer: buffer_token,
+                span_origin: buffer_token,
             },
             &write_request,
         )
@@ -3608,9 +3673,10 @@ mod tests {
                 &mut resources,
                 HostOpV1::FsWriteAt,
                 None,
-                ResourceInputsV1::FileBuffer {
+                ResourceInputsV1::FileBufferSpan {
                     file: truncate_token,
-                    buffer: buffer_token,
+                    target_buffer: buffer_token,
+                    span_origin: buffer_token,
                 },
                 &CanonicalRequestV1::FsWriteAt {
                     file_offset,
@@ -3635,9 +3701,10 @@ mod tests {
             &mut resources,
             HostOpV1::FsWriteAt,
             None,
-            ResourceInputsV1::FileBuffer {
+            ResourceInputsV1::FileBufferSpan {
                 file: target_token,
-                buffer: buffer_token,
+                target_buffer: buffer_token,
+                span_origin: buffer_token,
             },
             &CanonicalRequestV1::FsWriteAt {
                 file_offset: 6,
@@ -3659,9 +3726,10 @@ mod tests {
             &mut resources,
             HostOpV1::FsWriteAt,
             None,
-            ResourceInputsV1::FileBuffer {
+            ResourceInputsV1::FileBufferSpan {
                 file: target_token,
-                buffer: buffer_token,
+                target_buffer: buffer_token,
+                span_origin: buffer_token,
             },
             &CanonicalRequestV1::FsWriteAt {
                 file_offset: 8,
@@ -3733,7 +3801,10 @@ mod tests {
             &mut resources,
             HostOpV1::BufferFreeze,
             None,
-            ResourceInputsV1::Target(source_token),
+            ResourceInputsV1::BufferSpanTarget {
+                target: source_token,
+                span_origin: source_token,
+            },
             &CanonicalRequestV1::BufferFreeze {
                 start: 0,
                 length: 1,
@@ -3776,9 +3847,10 @@ mod tests {
             &mut resources,
             HostOpV1::FsWriteAt,
             None,
-            ResourceInputsV1::FileBuffer {
+            ResourceInputsV1::FileBufferSpan {
                 file: source_token,
-                buffer: buffer_token,
+                target_buffer: buffer_token,
+                span_origin: buffer_token,
             },
             &write_request,
         )
@@ -3810,7 +3882,10 @@ mod tests {
             &mut resources,
             HostOpV1::BufferFreeze,
             None,
-            ResourceInputsV1::Target(buffer_token),
+            ResourceInputsV1::BufferSpanTarget {
+                target: buffer_token,
+                span_origin: buffer_token,
+            },
             &CanonicalRequestV1::BufferFreeze {
                 start: 0,
                 length: 1,
@@ -3822,6 +3897,375 @@ mod tests {
             CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::Closed))
         );
         assert!(closed.resource_bindings.is_empty());
+        resources.finalize_all_with(|owner| {
+            crate::close_resource_v1(owner)
+                .map_err(|error| io_error_identity_v1(&error.into_io_error()))
+        });
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn foreign_acquisition_span_rejects_on_both_consumers_before_bytes_or_backend() {
+        // PX8-SPAN-PROV: two capacity-8 buffers A and B receive the same numeric
+        // window [2,6) but distinct bytes (AAAA vs BBBB). A span minted from A
+        // (`span_origin = token_a`) applied to a B-targeted freeze/write is a
+        // foreign-acquisition span: the shared dispatcher rejects it with
+        // InvalidBounds before exposing any bytes (freeze) or issuing any backend
+        // write (write), while the own-span control (`span_origin = token_b`)
+        // succeeds on the identical numeric shape. Acquisition is the only varied
+        // field: capacity, start, length, and live window are all equal, so this
+        // fails a numeric-only admission and its own-span controls fail an
+        // always-reject one (AC-8 discriminator).
+        let root =
+            std::env::temp_dir().join(format!("ken-spanprov-unit-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("source.bin"), b"AAAABBBB").unwrap();
+        std::fs::write(root.join("target.bin"), b"00000000").unwrap();
+        let rooted = crate::open_root(&crate::RootPath::new(&root).unwrap()).unwrap();
+        let metadata = crate::metadata(&rooted).unwrap();
+        let cap = crate::Cap::mint_scoped(
+            crate::AUTH_FULL,
+            "FS",
+            crate::FsScope::root(
+                crate::RightSet::ALL,
+                crate::FsHandle::Posix(rooted.clone()),
+                crate::FsIdentity::Posix {
+                    device: metadata.identity.device,
+                    inode: metadata.identity.inode,
+                },
+                crate::SymlinkPolicy::NoFollow,
+            ),
+        );
+        let mut capabilities = CapabilityTableV1::default();
+        let capability = capabilities.insert(CapabilityGrantV1 {
+            identity: crate::program_caps_fs_trace_identity_v1(),
+            capability: cap,
+        });
+        let mut resources =
+            ResourceTableV1::with_buffer_limits(BufferLimitsV1::new(8, 16).unwrap());
+        let mut backend = PositionedBackend {
+            root: rooted,
+            write_limit: None,
+        };
+
+        let source = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsOpen,
+            Some(capability),
+            ResourceInputsV1::None,
+            &CanonicalRequestV1::FsOpen {
+                path: b"source.bin".to_vec(),
+                mode: FsOpenModeV1::Read,
+            },
+        )
+        .unwrap();
+        let source_token = source.resource_token.unwrap();
+        let target = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsOpen,
+            Some(capability),
+            ResourceInputsV1::None,
+            &CanonicalRequestV1::FsOpen {
+                path: b"target.bin".to_vec(),
+                mode: FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateOrKeep),
+            },
+        )
+        .unwrap();
+        let target_token = target.resource_token.unwrap();
+
+        let allocate = |resources: &mut ResourceTableV1, backend: &mut PositionedBackend| {
+            dispatch_host_op_v1(
+                backend,
+                &capabilities,
+                resources,
+                HostOpV1::BufferAllocate,
+                None,
+                ResourceInputsV1::None,
+                &CanonicalRequestV1::BufferAllocate { capacity: 8 },
+            )
+            .unwrap()
+            .resource_token
+            .unwrap()
+        };
+        let token_a = allocate(&mut resources, &mut backend);
+        let token_b = allocate(&mut resources, &mut backend);
+
+        // Install the same window [2,6) in both buffers with distinct bytes.
+        for (buffer, file_offset) in [(token_a, 0u64), (token_b, 4u64)] {
+            let read = dispatch_host_op_v1(
+                &mut backend,
+                &capabilities,
+                &mut resources,
+                HostOpV1::FsReadAt,
+                None,
+                ResourceInputsV1::FileBuffer {
+                    file: source_token,
+                    buffer,
+                },
+                &CanonicalRequestV1::FsReadAt {
+                    file_offset,
+                    buffer_start: 2,
+                    length: 4,
+                },
+            )
+            .unwrap();
+            assert!(matches!(
+                read.outcome,
+                CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadProgress(
+                    ReadProgressV1::ReadSome { .. }
+                ))
+            ));
+        }
+
+        let freeze = |resources: &mut ResourceTableV1,
+                      backend: &mut PositionedBackend,
+                      span_origin: ResourceTokenV1| {
+            dispatch_host_op_v1(
+                backend,
+                &capabilities,
+                resources,
+                HostOpV1::BufferFreeze,
+                None,
+                ResourceInputsV1::BufferSpanTarget {
+                    target: token_b,
+                    span_origin,
+                },
+                &CanonicalRequestV1::BufferFreeze {
+                    start: 2,
+                    length: 4,
+                },
+            )
+            .unwrap()
+            .outcome
+        };
+        // Foreign freeze: InvalidBounds, no bytes exposed.
+        assert_eq!(
+            freeze(&mut resources, &mut backend, token_a),
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::InvalidBounds))
+        );
+        // Own-span control: exactly B's window bytes.
+        assert_eq!(
+            freeze(&mut resources, &mut backend, token_b),
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::Bytes(b"BBBB".to_vec()))
+        );
+
+        let write = |resources: &mut ResourceTableV1,
+                     backend: &mut PositionedBackend,
+                     span_origin: ResourceTokenV1| {
+            dispatch_host_op_v1(
+                backend,
+                &capabilities,
+                resources,
+                HostOpV1::FsWriteAt,
+                None,
+                ResourceInputsV1::FileBufferSpan {
+                    file: target_token,
+                    target_buffer: token_b,
+                    span_origin,
+                },
+                &CanonicalRequestV1::FsWriteAt {
+                    file_offset: 0,
+                    buffer_start: 2,
+                    length: 4,
+                },
+            )
+            .unwrap()
+            .outcome
+        };
+        // Foreign write: InvalidBounds and zero backend writes (target unchanged).
+        assert_eq!(
+            write(&mut resources, &mut backend, token_a),
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::InvalidBounds))
+        );
+        assert_eq!(
+            std::fs::read(root.join("target.bin")).unwrap(),
+            b"00000000",
+            "foreign-span write must issue zero backend writes"
+        );
+        // Own-span control: one backend write of exactly B's bytes.
+        assert!(matches!(
+            write(&mut resources, &mut backend, token_b),
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::WriteProgress(WriteProgressV1::Wrote(
+                ref count
+            ))) if count.get() == 4
+        ));
+        assert_eq!(std::fs::read(root.join("target.bin")).unwrap(), b"BBBB0000");
+
+        resources.finalize_all_with(|owner| {
+            crate::close_resource_v1(owner)
+                .map_err(|error| io_error_identity_v1(&error.into_io_error()))
+        });
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn released_acquisition_span_is_not_revived_by_slot_reuse() {
+        // PX8-SPAN-PROV / SP-C: acquire buffer A (`token_a`), release it, then
+        // allocate B which reuses A's vacated resource-table slot with a newer
+        // acquisition generation. A span minted from A (`span_origin = token_a`)
+        // applied to the reused B is rejected with InvalidBounds: slot identity
+        // alone aliases the two acquisitions, but the full acquisition token
+        // (slot+generation) does not, so release/reallocation is a permanent
+        // verdict flip. A fresh span from B (`span_origin = token_b`) succeeds.
+        let root = std::env::temp_dir()
+            .join(format!("ken-spanprov-reuse-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("source.bin"), b"AAAABBBB").unwrap();
+        let rooted = crate::open_root(&crate::RootPath::new(&root).unwrap()).unwrap();
+        let metadata = crate::metadata(&rooted).unwrap();
+        let cap = crate::Cap::mint_scoped(
+            crate::AUTH_FULL,
+            "FS",
+            crate::FsScope::root(
+                crate::RightSet::ALL,
+                crate::FsHandle::Posix(rooted.clone()),
+                crate::FsIdentity::Posix {
+                    device: metadata.identity.device,
+                    inode: metadata.identity.inode,
+                },
+                crate::SymlinkPolicy::NoFollow,
+            ),
+        );
+        let mut capabilities = CapabilityTableV1::default();
+        let capability = capabilities.insert(CapabilityGrantV1 {
+            identity: crate::program_caps_fs_trace_identity_v1(),
+            capability: cap,
+        });
+        let mut resources =
+            ResourceTableV1::with_buffer_limits(BufferLimitsV1::new(8, 16).unwrap());
+        let mut backend = PositionedBackend {
+            root: rooted,
+            write_limit: None,
+        };
+        let source = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsOpen,
+            Some(capability),
+            ResourceInputsV1::None,
+            &CanonicalRequestV1::FsOpen {
+                path: b"source.bin".to_vec(),
+                mode: FsOpenModeV1::Read,
+            },
+        )
+        .unwrap();
+        let source_token = source.resource_token.unwrap();
+
+        let token_a = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::BufferAllocate,
+            None,
+            ResourceInputsV1::None,
+            &CanonicalRequestV1::BufferAllocate { capacity: 8 },
+        )
+        .unwrap()
+        .resource_token
+        .unwrap();
+        dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::ResourceRelease,
+            None,
+            ResourceInputsV1::Target(token_a),
+            &CanonicalRequestV1::ResourceRelease,
+        )
+        .unwrap();
+        let token_b = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::BufferAllocate,
+            None,
+            ResourceInputsV1::None,
+            &CanonicalRequestV1::BufferAllocate { capacity: 8 },
+        )
+        .unwrap()
+        .resource_token
+        .unwrap();
+        // The reused acquisition inhabits A's vacated slot with a newer
+        // generation, so it is a distinct opaque token.
+        assert_ne!(
+            token_b, token_a,
+            "reallocation mints a distinct acquisition token"
+        );
+        assert_eq!(
+            token_b.erased_identity() & 0xffff_ffff,
+            token_a.erased_identity() & 0xffff_ffff,
+            "the vacated resource-table slot is reused"
+        );
+        assert_ne!(
+            token_b.erased_identity(),
+            token_a.erased_identity(),
+            "the reused acquisition has a newer generation"
+        );
+
+        // Install B's live window [2,6) = BBBB so the own-span control has bytes.
+        let read = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsReadAt,
+            None,
+            ResourceInputsV1::FileBuffer {
+                file: source_token,
+                buffer: token_b,
+            },
+            &CanonicalRequestV1::FsReadAt {
+                file_offset: 4,
+                buffer_start: 2,
+                length: 4,
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            read.outcome,
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadProgress(
+                ReadProgressV1::ReadSome { .. }
+            ))
+        ));
+
+        let freeze = |resources: &mut ResourceTableV1,
+                      backend: &mut PositionedBackend,
+                      span_origin: ResourceTokenV1| {
+            dispatch_host_op_v1(
+                backend,
+                &capabilities,
+                resources,
+                HostOpV1::BufferFreeze,
+                None,
+                ResourceInputsV1::BufferSpanTarget {
+                    target: token_b,
+                    span_origin,
+                },
+                &CanonicalRequestV1::BufferFreeze {
+                    start: 2,
+                    length: 4,
+                },
+            )
+            .unwrap()
+            .outcome
+        };
+        // The old acquisition's span does not survive release/reallocation.
+        assert_eq!(
+            freeze(&mut resources, &mut backend, token_a),
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::InvalidBounds))
+        );
+        // A fresh span from the reused acquisition succeeds.
+        assert_eq!(
+            freeze(&mut resources, &mut backend, token_b),
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::Bytes(b"BBBB".to_vec()))
+        );
+
         resources.finalize_all_with(|owner| {
             crate::close_resource_v1(owner)
                 .map_err(|error| io_error_identity_v1(&error.into_io_error()))

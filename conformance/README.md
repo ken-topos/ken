@@ -420,8 +420,10 @@ claim with no conformance case is a claim no one can rely on
   out-of-Ken monitor ownership, exact progress sums, four reaching `writeAll`
   branches, the reversed `ResourceKindMismatch` pair, deterministic
   `BufferLimitsV1`, one resource-export rebaseline, the unchanged no-acquire
-  control, and PX8-SPAN-PROV's absolute per-engine same-shape/slot-reuse
-  acquisition-binding oracles for `freeze` and `writeAt`.
+  control, and PX8-SPAN-PROV's acquisition-binding oracles: SP-A freeze is
+  absolute on both engines; write, precedence, and slot-reuse are complete on
+  the interpreter while their native cells remain explicitly
+  `BLOCKED-ON-NATIVE-REACHABILITY` by [[RT-NATIVE-FNSPLIT]].
 - `behavioral/agentic/seed-agentic.md` — B4 the agentic boundary (WS-B capstone,
   `74`): assuring an embedded agent's outputs **reduces to the existing seam**
   aimed at a maximally-nondeterministic component (agent = maximal `P`) — **no
