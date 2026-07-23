@@ -579,13 +579,22 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
     // R4 (Q-CLAIM-CLOSURE): Q-RESIDUE dropped a `!contains("data SourceId =")`
     // source-text guard against the package locally re-declaring SourceId
     // instead of importing it from Diagnostics.Core. This registry lookup
-    // checks SourceId's SHAPE (one Nat field, below) but NOT its provenance,
-    // and elaboration does not enforce provenance either: a local
-    // `data SourceId = MkSourceIdLocal Nat` is *accepted* (measured), shadowing
-    // the import with a same-shaped local type that this lookup and the Nat
-    // field check would both pass. So the guard is genuinely load-bearing and
-    // is RESTORED below as a substring check on the extracted package source,
-    // not left to a shape check that cannot see it.
+    // checks SourceId's SHAPE (one Nat field, below) but not its provenance:
+    // a same-shaped local type would pass this lookup and the Nat field check.
+    // Elaboration is NOT blind to it, however -- measured: inserting
+    // `data SourceId = MkSourceIdLocal Nat` into Parsing.ken.md is REJECTED at
+    // package elaboration (`KernelRejected(TypeMismatch)`), because
+    // `span_origin`'s `SourceOrigin source ...` cross-reference binds `source`
+    // to the shadowing local type, which no longer unifies with `Origin`'s
+    // `SourceOrigin : SourceId -> ByteRange -> Origin` elaborated earlier
+    // against the genuine import. So the in-file threat is already caught by
+    // nominal typing. The substring guard RESTORED below is kept as cheap
+    // defense-in-depth: it still catches a redeclaration positioned to dodge
+    // that cross-reference, and states the intent where the shape check cannot.
+    // (An earlier draft of this note claimed elaboration *accepts* a local
+    // redeclaration; that measurement was an isolated post-hoc `elaborate_file`
+    // on the built env, not the package source in situ -- QA caught the
+    // mismatch, and it is corrected here.)
     let source_id_inductive = env
         .env
         .inductive(env.globals["SourceId"])
@@ -636,12 +645,14 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
     let extracted = ken_elaborator::literate::extract_ken_md(PARSING_KEN_MD)
         .expect("Capability.Parsing must extract");
     // R4 (Q-CLAIM-CLOSURE): restore the dropped `!contains("data SourceId =")`
-    // provenance guard as a real substring check. SourceId must be imported
-    // from Diagnostics.Core, never re-declared here; the shape check above
-    // cannot distinguish a same-shaped local re-declaration, and elaboration
-    // accepts one, so this text guard is the only thing that catches it. It is
-    // a substring (not a whitespace-token) check because the tell is the
-    // multi-token phrase `data SourceId =`.
+    // provenance guard as a real substring check -- defense-in-depth, NOT the
+    // sole catcher. As measured above, an in-file redeclaration is already
+    // rejected at package elaboration via `span_origin`'s cross-reference; this
+    // guard adds a cheap, explicit second line that also catches a
+    // redeclaration reordered to dodge that cross-reference, and it makes the
+    // "import, never re-declare" intent legible where the shape check cannot.
+    // Substring (not whitespace-token) because the tell is the multi-token
+    // phrase `data SourceId =`.
     assert!(
         !extracted.source.contains("data SourceId ="),
         "Capability.Parsing must import SourceId from Diagnostics.Core, not \
