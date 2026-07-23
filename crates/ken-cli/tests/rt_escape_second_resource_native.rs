@@ -266,6 +266,84 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
   }
 "#;
 
+// Closure across resource *kinds*: the mirror of (c) with the escaped resource
+// being a `Buffer` instead of an `FsHandle`. Escape the BUFFER out of its
+// bracket, then `readAt` it with a still-live file. Same fan-out lowering, other
+// kind — pre-fix this tripped the identical "consumed more than once".
+#[cfg(target_os = "linux")]
+const ESCAPE_BUFFER_THEN_READAT: &str = r#"program capabilities FS AFull
+fn escape_buffer (buffer : Resource Buffer)
+  : HostIO AFull (ResourceBodyResult Unit (Resource Buffer)) =
+  Ret (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (ResourceBodyResult Unit (Resource Buffer))
+    (ResourceBodyOk Unit (Resource Buffer) buffer)
+
+proc read_with_escaped_buffer (file : Resource FsHandle) (buffer_closed : Resource Buffer)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError ReadProgress) (ResourceBodyResult Unit Unit)
+    (readAt AFull file (0 : Int) buffer_closed (MkBufferWindow (0 : Int) (6 : Int)))
+    (\outcome. Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult Unit Unit) (ResourceBodyOk Unit Unit MkUnit))
+
+proc after_buffer_escape
+  (file : Resource FsHandle)
+  (inner : Result ResourceError (ResourceBracketResult Unit (Resource Buffer)))
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  match inner {
+    Err allocate_error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
+    Ok bracket |-> match bracket {
+      ResourceBracketOk buffer_closed |-> read_with_escaped_buffer file buffer_closed;
+      ResourceBracketBodyError error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+        (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
+      ResourceBracketReleaseError error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+        (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
+      ResourceBracketBodyAndReleaseError body_error release_error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+        (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit)
+    }
+  }
+
+proc file_body (file : Resource FsHandle)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError (ResourceBracketResult Unit (Resource Buffer)))
+    (ResourceBodyResult Unit Unit)
+    (withBuffer AFull Unit (Resource Buffer) (6 : Int) escape_buffer)
+    (\inner. after_buffer_escape file inner)
+
+fn finish (outcome : Result FileError (ResourceBracketResult Unit Unit))
+  : HostIO AFull ExitCode =
+  match outcome {
+    Err error |-> host_exit AFull (Failure 81);
+    Ok bracket |-> match bracket {
+      ResourceBracketOk value |-> host_exit AFull Success;
+      ResourceBracketBodyError error |-> host_exit AFull (Failure 82);
+      ResourceBracketReleaseError error |-> host_exit AFull (Failure 83);
+      ResourceBracketBodyAndReleaseError body_error release_error |-> host_exit AFull (Failure 84)
+    }
+  }
+
+proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
+  : HostIO AFull ExitCode visits [FS] =
+  match caps {
+    MkProgramCaps cap |->
+      bind (Coproduct (FSOp AFull) AmbientOp)
+        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+        (Result FileError (ResourceBracketResult Unit Unit)) ExitCode
+        (withResource AFull Unit Unit cap (bytes_encode "held.bin") ResourceRead file_body)
+        (\outcome. finish outcome)
+  }
+"#;
+
 #[cfg(target_os = "linux")]
 #[test]
 fn escape_one_used_matches_interpreter() {
@@ -291,4 +369,14 @@ fn escaped_resource_used_by_fanning_host_op_matches_interpreter() {
     // reach native execution; the assertion below pins interpreter equivalence.
     let diff = differential("escape-file-then-readat", ESCAPE_FILE_THEN_READAT);
     assert_native_matches_interpreter("escape-file-then-readat", &diff);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn escaped_buffer_used_by_fanning_host_op_matches_interpreter() {
+    // Closure across resource kinds: same fan-out defect with an escaped
+    // `Buffer` rather than an escaped `FsHandle`. Also pre-fix "consumed more
+    // than once"; now interpreter-equivalent.
+    let diff = differential("escape-buffer-then-readat", ESCAPE_BUFFER_THEN_READAT);
+    assert_native_matches_interpreter("escape-buffer-then-readat", &diff);
 }
