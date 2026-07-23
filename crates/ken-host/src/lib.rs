@@ -979,6 +979,7 @@ mod tests {
         // by a future rework. Add an assertion -> add its claim here.
         //   (a) fact_count == facts.len()          -- internal consistency [retained, labeled below]
         //   (b) fact NAME inventory == pinned set   -- out-of-band anchor [NEW, replaces dropped `fact_count == 23`]
+        //   (b') generated names are unique          -- duplicate guard [NEW, so (b)'s set compare cannot hide a dup]
         //   (c) dependencies.len() == 4             -- dependency cardinality [retained]
         //   (d) exact (name,version,features) x4    -- dependency identity [retained]
         //   (e) every checksum is 64 hex chars      -- checksum shape [retained]
@@ -1016,11 +1017,13 @@ mod tests {
         // a count catches an added or dropped fact but is blind to a
         // substitution (swap one fact for another and the cardinality is
         // unchanged), which is exactly the silent-ABI-change this exists to
-        // stop. Comparison is a set on both sides, so an addition and an
-        // omission each fail with the offending names spelled out. A genuine
-        // future ABI change goes red HERE, deliberately, forcing whoever makes
-        // it to update this list and thereby acknowledge the change -- which
-        // is the point, not a maintenance cost to design away.
+        // stop. The comparison is a set on both sides so an addition and an
+        // omission each fail with the offending names spelled out; a separate
+        // uniqueness check on the generated side (below) also catches a
+        // duplicate name, which a bare set comparison would otherwise collapse.
+        // A genuine future ABI change goes red HERE, deliberately, forcing
+        // whoever makes it to update this list and thereby acknowledge the
+        // change -- which is the point, not a maintenance cost to design away.
         const EXPECTED_ABI_FACT_NAMES: [&str; 23] = [
             "POINTER_WIDTH",
             "C_INT_WIDTH",
@@ -1053,8 +1056,30 @@ mod tests {
             EXPECTED_ABI_FACT_NAMES.len(),
             "the pinned ABI fact inventory contains a duplicate name"
         );
-        let generated: std::collections::BTreeSet<&str> =
-            TARGET_ABI.facts.iter().map(|fact| fact.name).collect();
+        // Collect the generated names as a LIST first and check uniqueness on
+        // that side too: a `BTreeSet` silently collapses duplicates, so a
+        // manifest emitting the same fact name twice (24 entries, 23 distinct)
+        // would set-compare equal to the pinned 23 and slip through -- yet a
+        // duplicate IS exact-inventory drift claim (b) promises to catch. The
+        // count check (a) does not see it either (fact_count and facts.len()
+        // both move to 24 together). So detect it here, on the generated side.
+        let generated_list: Vec<&str> = TARGET_ABI.facts.iter().map(|fact| fact.name).collect();
+        let generated: std::collections::BTreeSet<&str> = generated_list.iter().copied().collect();
+        assert_eq!(
+            generated_list.len(),
+            generated.len(),
+            "the generated ABI manifest lists a fact name more than once, which \
+             the pinned set comparison below would hide by de-duplicating it. \
+             Duplicate-collapsed names: {:?}",
+            {
+                let mut seen = std::collections::BTreeSet::new();
+                generated_list
+                    .iter()
+                    .filter(|name| !seen.insert(**name))
+                    .copied()
+                    .collect::<Vec<_>>()
+            }
+        );
         let unexpected: Vec<&str> = generated.difference(&pinned).copied().collect();
         let missing: Vec<&str> = pinned.difference(&generated).copied().collect();
         assert!(

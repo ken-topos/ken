@@ -316,8 +316,9 @@ fn cat5_d2_parser_result_surface_is_total_and_located() {
     // (Source, in-bounds start) pair; ParsedValid/FailedValid/ParserLaws are
     // checked (Transparent) declarations; the bespoke fuel recursion
     // (parse_bool_expr_at_fuel/skip_spaces_fuel) is retired; parser_from_decoder
-    // specializes the shared Decoder; decoder_recursive/decoder_many are covered
-    // by the D3 roundtrip [R4 -- acknowledged as subsumed, see foot of test].
+    // specializes the shared Decoder; decoder_recursive/decoder_many type-arg
+    // pins consciously dropped in favor of the D3 roundtrip's behavior, not
+    // subsumed by it [R4 -- see foot of test].
     // Add an assert -> add its claim here.
     //
     // Rework (Q-RESIDUE, 2026-07-21): the surface contract is "the declared
@@ -415,10 +416,16 @@ fn cat5_d2_parser_result_surface_is_total_and_located() {
     // is exercised by `cat5_d3_bool_parser_printer_formatter_roundtrip_on_
     // source_bytes`: the roundtrip parses nested `BAnd`/`BNot` expressions
     // (recursive decoding) and multi-token sequences (repetition/`many`), and
-    // asserts exact output bytes -- a strictly stronger net than pinning the
-    // combinators' type arguments. Recorded here as a conscious subsumption
-    // rather than left as a silent drop; if that roundtrip test is removed,
-    // this cross-reference is the signal to restore the pins.
+    // asserts exact output bytes.
+    //
+    // These pins are recorded as CONSCIOUSLY DROPPED in favor of that
+    // behavioral contract -- NOT subsumed by it. The roundtrip is the better
+    // contract for what the combinators DO, but it is not a strict superset of
+    // the dropped pins: the exact call/signature spelling of `decoder_recursive`
+    // /`decoder_many` can drift while the roundtrip stays green (a refactor that
+    // reroutes through a differently-typed combinator, say). The trade is
+    // deliberate -- behavior over spelling -- and if that roundtrip test is
+    // removed, this cross-reference is the signal to restore the pins.
 }
 
 #[test]
@@ -526,27 +533,23 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
     // compiler/AST/String restored]; extraction never says `data SourceId =`
     // [R4 -- provenance guard restored]. Add an assert -> add its claim here.
     //
-    // Rework (Q-RESIDUE, 2026-07-21): elaborate-then-assert-structurally.
-    // IsUtf8's round-trip-not-reflexive claim and source_length's byte-view
-    // computation are proven behaviorally by
-    // `cat5_d1_reflexive_utf8_proof_rejected` and
-    // `cat5_d1_concrete_nonempty_source_constructs_and_projects` below, so
-    // this test only pins their declared shape. The `!contains("= Axiom")`
-    // check is dropped for the same reason as in D2/D3.
+    // Rework (Q-RESIDUE, 2026-07-21): elaborate-then-assert-structurally. This
+    // test pins the declared SHAPE; behavior is proven by siblings below. The
+    // `!contains("= Axiom")` check is dropped for the same reason as in D2/D3.
     //
-    // R2 (Q-CLAIM-CLOSURE): the behavioral citation for `source_length` is now
-    // grounded, with its residual stated. When this comment was written the
-    // cited concrete test only evaluated `bytes_nat_length` on a raw bytes
-    // constant, disconnected from any Source instance. It now evaluates
-    // `bytes_nat_length (source_bytes sample_source)` -- source_length's own
-    // byte-view computation over the definitionally-equal `source_bytes`
-    // projection (Parsing.ken.md:62,64, same field) -- through the class-backed
-    // instance and checks the count. That pins the byte-view arithmetic over
-    // the instance; it does NOT behaviorally pin `source_length`-by-name, whose
-    // inlined raw field access stays neutral in both the evaluator and the
-    // kernel (see that test's RESIDUAL note). So this test pins the declared
-    // shape and the cited concrete test pins the arithmetic; neither pins
-    // source_length's dynamic value, and the concrete test says why.
+    // R2 (Q-CLAIM-CLOSURE): the earlier draft of this comment claimed the
+    // sibling test proves `source_length`'s byte-view computation
+    // "behaviorally". It does not, and cannot: `source_length`-by-name is
+    // neutral in both the evaluator and the kernel (see that test's RESIDUAL
+    // note), so a hostile redefinition of it leaves both tests green. What is
+    // actually pinned, split across the two:
+    //   - IsUtf8's round-trip-not-reflexive claim -> `cat5_d1_reflexive_utf8_proof_rejected`;
+    //   - the instance-projected `source_bytes` byte count (== 3) ->
+    //     `cat5_d1_concrete_nonempty_source_constructs_and_projects`;
+    //   - `source_length`'s `Source -> Nat` SIGNATURE -> `total_parser_shape_probe`'s
+    //     `LessEqNat start (source_length s)` bound in the D2 surface test.
+    // `source_length` is shape-pinned only. Neither test pins its dynamic value,
+    // and the concrete test documents why.
     let mut env = mk_env();
 
     assert!(matches!(
@@ -794,13 +797,16 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
     // Now the byte-view computation is evaluated for real over the instance,
     // and the residual is stated rather than papered over.
     //
-    // `source_length` is *definitionally* `bytes_nat_length s.source_bytes_field`
-    // and `source_bytes` is `s.source_bytes_field` (Parsing.ken.md:62,64) -- the
-    // SAME field -- so `bytes_nat_length (source_bytes sample_source)` is exactly
-    // the computation `source_length` performs, routed through the `source_bytes`
-    // projection, which reduces to the instance's concrete bytes. This is a
-    // strict improvement over the old `bytes_nat_length sample_abc_bytes` check,
-    // which was disconnected from the Source instance entirely.
+    // What this pins is the INSTANCE-PROJECTED source_bytes byte count, and only
+    // that. `source_length` is *definitionally* `bytes_nat_length
+    // s.source_bytes_field` and `source_bytes` is `s.source_bytes_field`
+    // (Parsing.ken.md:62,64) -- the SAME field -- so `bytes_nat_length
+    // (source_bytes sample_source)` runs the same arithmetic `source_length`
+    // would, over the `source_bytes` projection that reduces to the instance's
+    // concrete bytes. That is a strict improvement over the old `bytes_nat_length
+    // sample_abc_bytes` check, which was disconnected from the Source instance
+    // entirely -- but it does NOT bind `source_length`'s body (see the residual),
+    // so the claim is scoped to the source_bytes count, not to source_length.
     //
     // ⚠ RESIDUAL, measured both ways: `source_length`-BY-NAME cannot be pinned
     // behaviorally in this system, because its inlined raw `.source_bytes_field`
@@ -822,8 +828,10 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
     assert_eq!(
         nat_count(&env, &projected_byte_view_length),
         3,
-        "source_length's byte-view computation must execute through the \
-         class-backed Source instance and count its projected bytes as 3"
+        "the instance-projected source_bytes byte count must be 3 -- this pins \
+         `bytes_nat_length (source_bytes sample_source)`, NOT `source_length` \
+         itself, whose body is not bindable in this evaluator (see the residual \
+         note above); `source_length` is shape-pinned only"
     );
 
     let projected_utf8 = eval_def(&env, &mut store, "projected_utf8");
