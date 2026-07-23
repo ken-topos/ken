@@ -599,10 +599,10 @@ fn sp_a_own_span_write_succeeds_with_bytes_interp() {
         let writes = write_outcomes(&obs);
         assert_eq!(writes.len(), 1, "expected one FsWriteAt event, got {writes:?}");
         match &writes[0] {
-            ken_runtime::CanonicalOutcomeV1::Success(
-                ken_runtime::CanonicalReplyV1::WriteProgress(_),
-            ) => {}
-            other => panic!("interp: own write must succeed (Wrote), got {other:?}"),
+            ken_runtime::CanonicalOutcomeV1::Success(ken_runtime::CanonicalReplyV1::WriteProgress(
+                ken_runtime::WriteProgressV1::Wrote(count),
+            )) if count.get() == 4 && count.effective_request() == 4 => {}
+            other => panic!("interp: own write must be exactly Wrote 4 (effective request 4), got {other:?}"),
         }
         assert_eq!(
             files[0], b"BBBB",
@@ -675,7 +675,7 @@ proc reuse_fresh (dest : Resource FsHandle) (buffer_b : Resource Buffer)
         (\w1. bind (Coproduct (FSOp AFull) AmbientOp)
           (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
           (Result ResourceError WriteProgress) (ResourceBodyResult Unit Unit)
-          (writeAt AFull dest (0 : Int) buffer_b span_b)
+          (writeAt AFull dest (4 : Int) buffer_b span_b)
           (\w2. ret_body (ok_body MkUnit)))))
 
 proc b_body (dest : Resource FsHandle) (source : Resource FsHandle)
@@ -816,14 +816,19 @@ fn sp_c_released_span_not_revived_by_slot_reuse_interp() {
         assert_eq!(writes[0], closed, "pre-reuse: write on released A must be Closed");
         assert_eq!(writes[1], ib, "reuse: old-acquisition write must be InvalidBounds");
         match &writes[2] {
-            ken_runtime::CanonicalOutcomeV1::Success(
-                ken_runtime::CanonicalReplyV1::WriteProgress(_),
-            ) => {}
-            other => panic!("fresh-span write must succeed (Wrote), got {other:?}"),
+            ken_runtime::CanonicalOutcomeV1::Success(ken_runtime::CanonicalReplyV1::WriteProgress(
+                ken_runtime::WriteProgressV1::Wrote(count),
+            )) if count.get() == 4 && count.effective_request() == 4 => {}
+            other => panic!("fresh-span write must be exactly Wrote 4, got {other:?}"),
         }
+        // The rejected Closed/InvalidBounds writes target offset 0; the fresh
+        // write targets offset 4. A forbidden backend effect from either rejected
+        // arm would land in [0,4) (span_old's AAAA), so the zeroed prefix is the
+        // "zero backend for the rejected arms" observation — it cannot be masked
+        // by the non-overlapping fresh BBBB write in [4,8).
         assert_eq!(
-            files[0], b"BBBB",
-            "only the fresh-span write reaches the backend, landing BBBB, got {:?}",
+            files[0], b"\x00\x00\x00\x00BBBB",
+            "rejected arms must leave [0,4) untouched; only the fresh write lands BBBB at [4,8), got {:?}",
             files[0]
         );
     });
