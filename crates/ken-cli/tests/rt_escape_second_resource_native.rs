@@ -344,6 +344,121 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
   }
 "#;
 
+// R2 reaching lane (AC-6): once two nested buffer resources compile, a
+// `BufferSpan` obtained by reading into buffer_a (capacity 6, span length 6)
+// applied to `freeze` on buffer_b (capacity 2) is the cross-buffer overlap
+// fault. Statically predicted outcome: an `InvalidBounds` rejection (the span
+// length exceeds buffer_b's capacity). The trace confirms `BufferFreeze` fails
+// closed with `InvalidBounds` in both executors — the span length is bounded by
+// the *target* buffer, so a span from a larger buffer cannot read a smaller one
+// out of bounds. No distinct BufferFreeze defect; the obligation is discharged
+// as a bounds rejection, not buried.
+#[cfg(target_os = "linux")]
+const R2_CROSS_BUFFER_FREEZE: &str = r#"program capabilities FS AFull
+fn body_from_freeze (r : Result ResourceError Bytes) : ResourceBodyResult Unit Unit =
+  match r {
+    Ok bytes |-> ResourceBodyErr Unit Unit MkUnit;
+    Err error |-> match error {
+      InvalidBounds |-> ResourceBodyOk Unit Unit MkUnit;
+      Closed |-> ResourceBodyErr Unit Unit MkUnit;
+      InvalidOffset |-> ResourceBodyErr Unit Unit MkUnit;
+      BufferLimit |-> ResourceBodyErr Unit Unit MkUnit;
+      NoProgress |-> ResourceBodyErr Unit Unit MkUnit;
+      MalformedResource |-> ResourceBodyErr Unit Unit MkUnit;
+      RightNotHeld required held |-> ResourceBodyErr Unit Unit MkUnit;
+      ResourceHostIO io |-> ResourceBodyErr Unit Unit MkUnit;
+      ReleaseFailed kind identity io |-> ResourceBodyErr Unit Unit MkUnit;
+      ResourceKindMismatch expected actual |-> ResourceBodyErr Unit Unit MkUnit
+    }
+  }
+
+fn body_from_bracket (bracket : ResourceBracketResult Unit Unit) : ResourceBodyResult Unit Unit =
+  match bracket {
+    ResourceBracketOk value |-> ResourceBodyOk Unit Unit MkUnit;
+    ResourceBracketBodyError error |-> ResourceBodyErr Unit Unit MkUnit;
+    ResourceBracketReleaseError error |-> ResourceBodyErr Unit Unit MkUnit;
+    ResourceBracketBodyAndReleaseError body_error release_error |-> ResourceBodyErr Unit Unit MkUnit
+  }
+
+fn body_from_alloc (outcome : Result ResourceError (ResourceBracketResult Unit Unit))
+  : ResourceBodyResult Unit Unit =
+  match outcome {
+    Err error |-> ResourceBodyErr Unit Unit MkUnit;
+    Ok bracket |-> body_from_bracket bracket
+  }
+
+proc after_read (buffer_b : Resource Buffer) (outcome : Result ResourceError ReadProgress)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  match outcome {
+    Err error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
+    Ok progress |-> match progress {
+      ReadEof |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+        (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
+      ReadSome span_a count |->
+        bind (Coproduct (FSOp AFull) AmbientOp)
+          (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+          (Result ResourceError Bytes) (ResourceBodyResult Unit Unit)
+          (freeze AFull buffer_b span_a)
+          (\r. Ret (Coproduct (FSOp AFull) AmbientOp)
+            (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+            (ResourceBodyResult Unit Unit) (body_from_freeze r))
+    }
+  }
+
+proc buffer_b_body (file : Resource FsHandle) (buffer_a : Resource Buffer) (buffer_b : Resource Buffer)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError ReadProgress) (ResourceBodyResult Unit Unit)
+    (readAt AFull file (0 : Int) buffer_a (MkBufferWindow (0 : Int) (6 : Int)))
+    (\outcome. after_read buffer_b outcome)
+
+proc buffer_a_body (file : Resource FsHandle) (buffer_a : Resource Buffer)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError (ResourceBracketResult Unit Unit)) (ResourceBodyResult Unit Unit)
+    (withBuffer AFull Unit Unit (2 : Int) (buffer_b_body file buffer_a))
+    (\outcome. Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult Unit Unit) (body_from_alloc outcome))
+
+proc file_body (file : Resource FsHandle)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError (ResourceBracketResult Unit Unit)) (ResourceBodyResult Unit Unit)
+    (withBuffer AFull Unit Unit (6 : Int) (buffer_a_body file))
+    (\outcome. Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult Unit Unit) (body_from_alloc outcome))
+
+fn finish (outcome : Result FileError (ResourceBracketResult Unit Unit)) : HostIO AFull ExitCode =
+  match outcome {
+    Err error |-> host_exit AFull (Failure 81);
+    Ok bracket |-> match bracket {
+      ResourceBracketOk value |-> host_exit AFull Success;
+      ResourceBracketBodyError error |-> host_exit AFull (Failure 82);
+      ResourceBracketReleaseError error |-> host_exit AFull (Failure 83);
+      ResourceBracketBodyAndReleaseError body_error release_error |-> host_exit AFull (Failure 84)
+    }
+  }
+
+proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
+  : HostIO AFull ExitCode visits [FS] =
+  match caps {
+    MkProgramCaps cap |->
+      bind (Coproduct (FSOp AFull) AmbientOp)
+        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+        (Result FileError (ResourceBracketResult Unit Unit)) ExitCode
+        (withResource AFull Unit Unit cap (bytes_encode "held.bin") ResourceRead file_body)
+        (\outcome. finish outcome)
+  }
+"#;
+
 #[cfg(target_os = "linux")]
 #[test]
 fn escape_one_used_matches_interpreter() {
@@ -379,4 +494,56 @@ fn escaped_buffer_used_by_fanning_host_op_matches_interpreter() {
     // than once"; now interpreter-equivalent.
     let diff = differential("escape-buffer-then-readat", ESCAPE_BUFFER_THEN_READAT);
     assert_native_matches_interpreter("escape-buffer-then-readat", &diff);
+}
+
+/// The nested three-resource R2 fixture needs a deep native stack, as the
+/// oriented subcontinuation tests do.
+#[cfg(target_os = "linux")]
+fn in_large_stack_thread(name: &'static str, body: fn()) {
+    std::thread::Builder::new()
+        .name(name.to_string())
+        .stack_size(256 * 1024 * 1024)
+        .spawn(body)
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+#[cfg(target_os = "linux")]
+fn buffer_freeze_outcome(
+    observation: &ken_runtime::EffectObservation,
+) -> ken_runtime::CanonicalOutcomeV1 {
+    observation
+        .effect_trace
+        .iter()
+        .find(|event| event.operation == ken_runtime::HostOpV1::BufferFreeze)
+        .map(|event| event.outcome.clone())
+        .expect("the cross-buffer freeze must reach dispatch as a BufferFreeze")
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn r2_cross_buffer_freeze_fails_closed_with_invalid_bounds() {
+    in_large_stack_thread("rt-escape-r2", || {
+        // R2 reaching lane: two nested buffer resources compile and run; a span
+        // from buffer_a (length 6) applied to freeze buffer_b (capacity 2) is
+        // rejected with InvalidBounds in both executors. The span length is
+        // bounded by the target buffer, so this is the statically-predicted
+        // bounds rejection, not a distinct BufferFreeze semantic defect.
+        let diff = differential("r2-cross-buffer-freeze", R2_CROSS_BUFFER_FREEZE);
+        assert_native_matches_interpreter("r2-cross-buffer-freeze", &diff);
+        let expected = ken_runtime::CanonicalOutcomeV1::Error(
+            ken_runtime::SemanticErrorV1::Resource(ken_runtime::ResourceErrorV1::InvalidBounds),
+        );
+        assert_eq!(
+            buffer_freeze_outcome(&diff.native),
+            expected,
+            "native: cross-buffer freeze must fail closed with InvalidBounds"
+        );
+        assert_eq!(
+            buffer_freeze_outcome(&diff.interpreted),
+            expected,
+            "interpreter: cross-buffer freeze must fail closed with InvalidBounds"
+        );
+    });
 }
