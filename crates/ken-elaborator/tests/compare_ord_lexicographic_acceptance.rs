@@ -223,20 +223,85 @@ fn structural_ord_instances_and_all_laws_are_checked_zero_delta() {
 
 #[test]
 fn list_instance_routes_the_canonical_compare_into_raw_list_compare() {
-    // Rework (Q-RESIDUE, 2026-07-21): a source-text scan over the literate
-    // `.ken.md` can be satisfied by a spelling that never actually executes,
-    // and can't be fooled by dead comments either way -- neither proves
-    // ROUTING. Instead evaluate `list_ord_leq` (the List Ord instance's own
-    // `leq`, built from `list_compare a (compare a d)`) on two singleton
-    // lists that differ only in their element: canonical Bool order is
-    // False < True (see `raw_lt` above), so only the forward direction can
-    // hold. An implementation that ignored the canonical element comparator
-    // (e.g. compared only list length/shape) would wrongly agree on BOTH
-    // directions, since both lists have the same length -- this pair is a
-    // real, non-degenerate discriminator for "the canonical compare is what
-    // actually drives list ordering", proven by kernel reduction rather than
-    // by grepping either package's source text.
+    // Q-CLAIM-COMPARE-ORD (2026-07-23): restore the two claims the original
+    // block carried, which the Q-RESIDUE rework dropped when it collapsed to a
+    // Bool-only `list_ord_leq` reduction. The original asserted two things by
+    // grepping the `.ken.md` (a source scan, which proves neither -- a spelling
+    // can be dead code, a comment can lie); both are restored here as kernel
+    // reductions:
+    //
+    //   CLAIM 1 (ROUTING): the `Ord (List a)` instance routes the *canonical*
+    //     derived element comparator `compare a d` into `list_compare` at the
+    //     instance layer (LawfulClasses `list_ord_leq a d =
+    //     ord_result_leq (list_compare a (compare a d) ...)`, projected here as
+    //     the instance's own `.leq` field -- so the test exercises the routing
+    //     literally through the instance, not a hand-picked helper).
+    //   CLAIM 2 (PARAMETERIZATION): `list_compare` is raw-comparator
+    //     parameterized -- it takes the element comparator `cmp` as a parameter
+    //     and actually consults it, rather than hardcoding one element type.
+    //
+    // ⛔ THE ELEMENT TYPE MUST BE NON-`Bool`. `Bool` hides both claims: its
+    // canonical `compare Bool Ord_instance_Bool` bottoms out in the primitive
+    // `bool_leq`, so a `list_compare` that ignored `cmp` and hardcoded a Bool
+    // comparison -- or an instance that fed a *constant* comparator instead of
+    // the canonical `compare a d` -- would give identical answers on Bool-element
+    // lists. Using `Pair Bool Bool` elements forces the element's own *derived*
+    // lexicographic comparator (`pair_compare`) to be genuinely routed and
+    // consulted: it is reachable by no non-routing / non-parameterized path, and
+    // a `cmp` hardcoded to `Bool` would not even typecheck at `Pair Bool Bool`.
     let mut env = mk_env();
+
+    // The real `Ord (List (Pair Bool Bool))` instance, projected through its
+    // `.leq` field -- the instance layer whose routing is under test.
+    let list_of_pair_leq = "(Ord_instance_List (Pair Bool Bool) \
+         (Ord_instance_Pair Bool Bool Ord_instance_Bool Ord_instance_Bool)).leq";
+    let singleton = |pair: &str| {
+        format!("(Cons (Pair Bool Bool) (mk_pair Bool Bool {pair}) (Nil (Pair Bool Bool)))")
+    };
+    let ft = singleton("False True");
+    let tf = singleton("True False");
+    let tt = singleton("True True");
+
+    // Head discriminator: the pairs differ in their FIRST component. Canonical
+    // Bool order is False < True, so (False,True) < (True,False) lexicographically
+    // -> the List instance must order [ (False,True) ] < [ (True,False) ]. Only
+    // the forward direction can hold; a length/shape-only comparison would
+    // wrongly agree BOTH ways (both lists are singletons of equal length).
+    assert_bool_reduces(
+        &mut env,
+        "list_pair_head_lt",
+        &format!("{list_of_pair_leq} {ft} {tf}"),
+        "True",
+    );
+    assert_bool_reduces(
+        &mut env,
+        "list_pair_head_gt",
+        &format!("{list_of_pair_leq} {tf} {ft}"),
+        "False",
+    );
+
+    // Tail discriminator: the pairs SHARE their first component and differ only
+    // in the SECOND. This proves the FULL element comparator is routed, not just
+    // its head: (True,False) < (True,True) requires `pair_compare` to recurse
+    // into the second component after the heads tie -- unreachable unless the
+    // canonical element `compare` is genuinely driving the list order.
+    assert_bool_reduces(
+        &mut env,
+        "list_pair_tail_lt",
+        &format!("{list_of_pair_leq} {tf} {tt}"),
+        "True",
+    );
+    assert_bool_reduces(
+        &mut env,
+        "list_pair_tail_gt",
+        &format!("{list_of_pair_leq} {tt} {tf}"),
+        "False",
+    );
+
+    // Bool-element base case, retained from the Q-RESIDUE rework: at the
+    // primitive base the element (not length) drives order. Kept as a sanity
+    // floor; the Pair cases above are what carry the routing/parameterization
+    // claims that Bool cannot.
     let list_leq = "list_ord_leq Bool Ord_instance_Bool";
     assert_bool_reduces(
         &mut env,
