@@ -419,8 +419,9 @@ claim with no conformance case is a claim no one can rely on
   File/Buffer bindings, target-specialized per-kind plans, Ward-delegated /
   out-of-Ken monitor ownership, exact progress sums, four reaching `writeAll`
   branches, the reversed `ResourceKindMismatch` pair, deterministic
-  `BufferLimitsV1`, one resource-export rebaseline, and the unchanged
-  no-acquire control.
+  `BufferLimitsV1`, one resource-export rebaseline, the unchanged no-acquire
+  control, and PX8-SPAN-PROV's absolute per-engine same-shape/slot-reuse
+  acquisition-binding oracles for `freeze` and `writeAt`.
 - `behavioral/agentic/seed-agentic.md` — B4 the agentic boundary (WS-B capstone,
   `74`): assuring an embedded agent's outputs **reduces to the existing seam**
   aimed at a maximally-nondeterministic component (agent = maximal `P`) — **no

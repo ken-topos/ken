@@ -3,7 +3,8 @@
 Format: `../../README.md`. These cases pin the PX8 contracts consumed by the
 runtime and Foundation lanes: role-labelled multi-resource observations, the
 direct lifetime body for external Ward, positioned positive progress,
-`writeAll`, resource-kind mismatch, and deterministic buffer admission limits.
+`writeAll`, resource-kind mismatch, deterministic buffer admission limits, and
+PX8-SPAN-PROV's exact-acquisition binding for `BufferSpan`.
 
 The cases are contract roots, not claims that PX8 is already built. Every case
 names the producer whose arrival makes it reachable. A schema-unit value or a
@@ -643,6 +644,117 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 - why: this closes the error side of the partition. Positive-short success does
   not license a generic fallback that turns unrelated failures into progress.
 
+## SP-A. A span is bound to one exact buffer acquisition
+
+The following PX8-SPAN-PROV cases run once against the reference interpreter
+and once against the native backend. Every run asserts its expected result
+directly against `38 §1.7.1`; interpreter/native equality is not an oracle.
+
+The exact foreign-acquisition result is the existing
+`ResourceError.InvalidBounds`, as locked by `38 §1.7.1`. It is the same public
+identity used when a span's numeric window is not current for its target
+buffer: both reject one invalid span-to-buffer relation without exposing the
+constructor-private acquisition binding.
+
+### buffer-io/foreign-span-freeze-rejected-absolute
+
+- status: **RED-UNTIL-PX8-SPAN-PROV Phase 2**
+- spec: `38 §1.7.1`; PX8-SPAN-PROV AC-3
+- engine matrix: run the complete given/expect pair independently on
+  `interpreter` and `native`; neither result is inferred from the other
+- given: acquire distinct capacity-`8` buffers A and B; use successful
+  `readAt` calls to install the same numeric live window `[2, 6)` in both while
+  storing distinct bytes `AAAA` in A and `BBBB` in B; retain the host-minted
+  `span_a` and `span_b`
+- expect, foreign arm: `freeze B span_a` returns
+  `Err InvalidBounds`; it returns no `Bytes` value and therefore exposes
+  none of B's bytes
+- expect, own-span control: `freeze B span_b` returns exactly `BBBB`
+- why: start, length, capacity, and live-window shape are equal in both arms;
+  only acquisition identity differs. A numeric-only admission accepts the
+  foreign arm and returns `BBBB`, while an always-reject implementation fails
+  the own-span control.
+
+### buffer-io/foreign-span-write-rejected-before-backend
+
+- status: **RED-UNTIL-PX8-SPAN-PROV Phase 2**
+- spec: `38 §1.7.1`; PX8-SPAN-PROV AC-3
+- engine matrix: run the complete given/expect pair independently on
+  `interpreter` and `native`, with a fresh recording destination per arm
+- given: the same A/B pair and spans as
+  `foreign-span-freeze-rejected-absolute`, a live writable positioned file, and
+  a backend that records every write call and its bytes
+- expect, foreign arm: `writeAt file 0 B span_a` returns
+  `Err InvalidBounds`; the backend records zero writes and the destination
+  remains byte-for-byte empty
+- expect, own-span control: `writeAt file 0 B span_b` returns `Wrote 4`; the
+  backend records exactly one call at offset `0` with exactly `BBBB`, and the
+  destination contains exactly `BBBB`
+- why: the rejecting arm observes both the exact public error and absence of a
+  backend effect. Checking provenance after slicing or after host I/O can
+  return the right error while still corrupting the destination; the call-count
+  and byte assertions make that bug red.
+
+## SP-B. Span validity has a locked, observable precedence
+
+### buffer-io/span-validity-follows-host-width-and-precedes-host-effects
+
+- status: **RED-UNTIL-PX8-SPAN-PROV Phase 2**
+- spec: `38 §1.7.1`; PX8-SPAN-PROV AC-1/AC-2/AC-3
+- engine matrix: run every arm independently on `interpreter` and `native`
+- given: retain `span_a = [2, 6)` from live buffer A, but install B's current
+  live window as `[0, 2)`; keep B live and kind-correct, and keep the positioned
+  file live, writable, and at a valid offset
+- expect: both `freeze B span_a` and `writeAt file 0 B span_a` return
+  `Err InvalidBounds`; freeze returns no bytes and write records zero backend
+  calls
+- control: with a host-minted span from B's exact acquisition that is stale
+  only because a later `readAt` changed B's current live window, both consumers
+  return the existing `InvalidBounds`; the write backend is still uncalled
+- control: changing only `fileOffset` to `-1` on the foreign-span write returns
+  the already-locked `InvalidOffset` at host-width admission and records zero
+  backend calls
+- why: these arms locate acquisition admission after the existing host-width
+  gate and place the combined span-validity rejection before backend effects.
+  Acquisition mismatch and stale-window invalidity intentionally share one
+  public identity, so their relative internal order is not observable. The
+  same-shape SP-A pair is the load-bearing acquisition discriminator.
+
+## SP-C. Slot reuse cannot revive a span from a closed acquisition
+
+### buffer-io/closed-span-not-revived-by-buffer-slot-reuse
+
+- status: **RED-UNTIL-PX8-SPAN-PROV Phase 2**
+- spec: `38 §1.7.1`; PX8-SPAN-PROV AC-3
+- engine matrix: run the complete lifecycle independently on `interpreter` and
+  `native`
+- given: acquire capacity-`8` buffer A, install `AAAA` at `[2, 6)`, retain
+  `span_old`, and release A; the test harness then acquires capacity-`8` buffer
+  B in A's vacated resource-table slot, proves that the slot was reused with a
+  newer acquisition generation, and installs `BBBB` at the same `[2, 6)`
+  window without exposing either token component to Ken source
+- expect, closed control: before reuse, applying `span_old` to the released A
+  reports the existing `Closed` identity for both `freeze` and `writeAt`; no
+  bytes are returned and the recording write backend is uncalled
+- expect, reuse arm: after B is live, `freeze B span_old` and
+  `writeAt file 0 B span_old` each return `Err InvalidBounds`; freeze
+  returns no B bytes and write records zero backend calls
+- expect, new-span controls: a span freshly minted by `readAt` on B freezes to
+  exactly `BBBB`, and its positioned write succeeds with exactly one backend
+  call carrying `BBBB`
+- why: slot identity alone aliases the old and new acquisitions. Requiring the
+  full acquisition identity makes release/reallocation a permanent verdict
+  flip, while the fresh-span controls reject an always-stale implementation.
+
+## Clean-room provenance for SP-A–SP-C
+
+These rows were independently derived from the landed `38 §1.7.1` contract,
+the tracked PX8-SPAN-PROV issue/brief and Architect ruling, and the landed Ken
+host/interpreter/native admission paths. No `local/refs/` implementation,
+permissive reference, or copyleft reference was consulted. The originality
+scan is therefore not applicable; this is a recorded no-reference-contact
+statement.
+
 ## Locked `writeAll` oracle
 
 For one constructor-private input span, `writeAll` derives structural `Nat`
@@ -788,6 +900,13 @@ or a result that claims success with a nonempty remainder does not conform.
 | AC5 mismatch pair, same-kind controls, buffer limits | KM-A, KM-B, BL-A, BL-B |
 | AC6 malformed/uncorrelated/I3/kind rejects | RB-B–RB-F, RB-H–RB-K, RB-N, RB-O, KM-A, KM-B |
 
+| PX8-SPAN-PROV acceptance criterion | Cases |
+|---|---|
+| AC-1 exact-acquisition binding and both consumers | SP-A, SP-B |
+| AC-2 exact error identity and precedence | SP-A, SP-B, SP-C |
+| AC-3 absolute same-shape pair on both engines | SP-A |
+| AC-3 close/reallocate generation non-revival | SP-C |
+
 ## Cross-case, verdict-flip, and reachability sweep
 
 - **D1 is non-degenerate on every locked axis.** RB-A/RB-B vary only presence
@@ -822,6 +941,17 @@ or a result that claims success with a nonempty remainder does not conform.
   minted by the two real acquisition paths, not fabricated encodings. Their
   same-kind controls must succeed. A malformed token has its separate existing
   `MalformedResource` route and cannot satisfy either case.
+- **The provenance experiments are absolute and controlled.** SP-A holds
+  capacity, numeric window, live-window shape, and operation fixed while
+  changing only the span's originating acquisition; both foreign arms reject
+  and both own-span arms succeed on each engine independently. SP-B fixes the
+  mismatch's position between host-width admission and live-window/backend
+  work. SP-C forces actual slot reuse and changes the generation, so a check on
+  slot or numeric span alone fails while a full-acquisition check passes.
+- **The provenance failures expose no bytes and perform no writes.** A matching
+  error returned after a freeze result or backend write is not conforming.
+  SP-A–SP-C assert the negative observation as well as the error value, while
+  their own-span controls prove the observation channel is live.
 - **Reachability gates are explicit.** Runtime owns observation production,
   including `Buffer`, both acquisition paths, positioned host operations,
   progress/error production, mismatch, and admission enforcement. Verify owns

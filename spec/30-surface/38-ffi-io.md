@@ -387,6 +387,26 @@ expose the backing region. A `BufferSpan` carries a constructor-private
 structural `Nat` attempt budget equal to its byte length. User code can neither
 forge the budget nor choose a different one.
 
+Every `BufferSpan` has an exact buffer-acquisition binding. A successful
+`readAt` binds the span it mints to the buffer acquisition used by that call. An
+acquisition is one resource lifetime: closing a buffer and later acquiring
+another starts a different acquisition, regardless of internal storage reuse.
+User code can neither forge nor project the binding. A remainder span derived
+by checked library code preserves the original binding.
+
+`spanBytes`/`freeze` and `writeAt` accept a span only with the exact buffer
+acquisition to which it is bound. A different acquisition returns
+`InvalidBounds`, even when capacity, start, length, and live-window shape all
+match. Existing host-width admission retains precedence, so a foreign-span
+`writeAt` whose file offset is rejected there still returns `InvalidOffset`.
+After host-width admission, span validity is decided before copying or exposing
+bytes and before any backend write. Acquisition mismatch and numeric
+live-window invalidity deliberately share `InvalidBounds`: both mean that the
+span is not valid for the supplied buffer, and no relative ordering between
+those two same-identity failures is public. If the acquisition matches, the
+existing resource errors retain their identities; in particular, using the
+span with that exact acquisition after it closes returns `Closed`.
+
 The primitive floor consists of exactly one explicitly positioned transfer per
 direction:
 
