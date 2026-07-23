@@ -1036,131 +1036,11 @@ fn assert_packaging_helper_is_not_reachable_from_outside_ken_runtime() {
 /// happily when its subject has been renamed out from under it.
 fn assert_packaging_helper_is_declared_module_private() {
     const NAME: &str = "build_process_starter_executable_artifact";
-    // The complete set of keywords Rust permits between a visibility keyword
-    // and `fn`. `extern` is followed by an optional ABI string literal.
-    const FN_MODIFIERS: [&str; 4] = ["const", "async", "unsafe", "extern"];
-
-    /// Strip one trailing balanced `(...)` group, so `pub(crate)`,
-    /// `pub (crate)` and `pub(in crate::x)` all reduce to `pub`.
-    fn strip_trailing_group(head: &str) -> &str {
-        if !head.ends_with(')') {
-            return head;
-        }
-        let mut depth = 0usize;
-        for (at, character) in head.char_indices().rev() {
-            match character {
-                ')' => depth += 1,
-                '(' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return head[..at].trim_end();
-                    }
-                }
-                _ => {}
-            }
-        }
-        head
-    }
-
     let mut declarations = Vec::new();
     for file in ken_runtime_source_files() {
         let raw = std::fs::read_to_string(&file)
             .unwrap_or_else(|error| panic!("reading {}: {error}", file.display()));
-        // Comments are removed ONCE, scanning forward, rather than stripped
-        // backwards a form at a time. Backward stripping is where this check
-        // kept going wrong: `/*` and `*/` are not mirror images, so a
-        // backwards `rfind("/*")` lands on the INNERMOST open and Rust -- unlike
-        // C -- permits nested block comments. Forward scanning tracks depth
-        // naturally. Comment bytes become spaces and newlines are kept, so
-        // every offset and line number below is still the real file's.
-        let text = blank_comments(&raw);
-        for (at, _) in text.match_indices(NAME) {
-            // Require the name to be followed by `(` or a generic list, and
-            // preceded by the `fn` keyword -- so a call site never matches.
-            let after = &text[at + NAME.len()..];
-            if !(after.starts_with('(') || after.starts_with('<')) {
-                continue;
-            }
-            // ⛔ WHITESPACE-INSENSITIVE ON PURPOSE, and this is the whole
-            // reason the check is written this way rather than as a line scan.
-            // Matching the visibility keyword against the same LINE's prefix is
-            // defeated by
-            //
-            //     pub
-            //     fn build_process_starter_executable_artifact(
-            //
-            // which is legal Rust, compiles clean, and is a genuine widening.
-            // The previous revision of this assertion did exactly that and
-            // passed green over that mutation -- the vacuous-pass shape this
-            // whole check exists to eliminate, reproduced inside its own
-            // replacement. Walking backwards over arbitrary whitespace makes
-            // every line arrangement of one declaration identical here.
-            let Some(before) = text[..at].trim_end().strip_suffix("fn") else {
-                continue;
-            };
-            if before.ends_with(|character: char| character.is_alphanumeric() || character == '_') {
-                continue; // `myfn name(` is not a declaration of `name`.
-            }
-            // Walk back over anything Rust allows to sit between the
-            // visibility keyword and `fn` -- modifiers and comments alike --
-            // until the token carrying visibility is exposed. Each of these is
-            // a form that would otherwise read as "no visibility keyword", so
-            // each is a way the check could pass over a real widening.
-            let mut head = before.trim_end();
-            loop {
-                let stripped = FN_MODIFIERS.iter().find_map(|modifier| {
-                    let rest = head.strip_suffix(modifier)?;
-                    let bounded = rest.is_empty()
-                        || rest.ends_with(|character: char| {
-                            !character.is_alphanumeric() && character != '_'
-                        });
-                    // An `extern "C"` ABI string sits between the two.
-                    bounded.then(|| strip_trailing_quoted(rest.trim_end()))
-                });
-                match stripped {
-                    Some(rest) => head = rest,
-                    None => break,
-                }
-            }
-            // `pub(crate)` reduces to `pub` for the test, but the failure
-            // message reports the spelling as written -- which of the two
-            // widenings happened is the useful part of the diagnostic.
-            let spelled = head;
-            let reduced = strip_trailing_group(head);
-            let last = reduced
-                .rsplit(|character: char| character.is_whitespace())
-                .next()
-                .unwrap_or_default();
-            // ⛔ THREE outcomes, not two, and this is the fix for the CLASS
-            // rather than for the last form that defeated it. Every previous
-            // revision of this walk answered "no visibility keyword" -- i.e.
-            // PASS -- for any input it did not understand, so each gap in its
-            // parsing was a silent green. Three separate legal forms reached
-            // that default (a line-split keyword, a comment, a NESTED
-            // comment), and the third arrived after I had already "closed" the
-            // second.
-            //
-            // So an unrecognised predecessor is now its own verdict. The walk
-            // may conclude "private" only when it lands on something that
-            // genuinely ends the preceding item -- an attribute's `]`, a block
-            // or item terminator, or the start of the file. Anything else is
-            // reported as undetermined and FAILS, because "I could not tell"
-            // and "it is private" are different answers and only one of them
-            // is evidence.
-            let verdict = if last == "pub" {
-                let at = spelled.rfind("pub").expect("`pub` was just matched");
-                DeclaredVisibility::Widened(spelled[at..].trim().to_string())
-            } else if reduced.is_empty() || reduced.ends_with([']', '}', '{', ';', ')']) {
-                DeclaredVisibility::ModulePrivate
-            } else {
-                let context = reduced
-                    .char_indices()
-                    .rev()
-                    .nth(60)
-                    .map_or(reduced, |(at, _)| &reduced[at..]);
-                DeclaredVisibility::Undetermined(context.trim().to_string())
-            };
-            let line = text[..at].matches('\n').count() + 1;
+        for (line, verdict) in scan_fn_visibilities(&raw, NAME) {
             declarations.push((file.clone(), line, verdict));
         }
     }
@@ -1203,9 +1083,144 @@ fn assert_packaging_helper_is_declared_module_private() {
     }
 }
 
+/// Blank comments over `text`, then report the declared visibility of every
+/// `fn <name>(` (or `fn <name><...>`) it contains, as `(line, verdict)` pairs.
+///
+/// Split out from the real-file assertion above so the backward walk -- and
+/// the comment blanking it depends on -- can be exercised directly on
+/// synthetic fixtures (see the `blank_comments`/`string_literal_end` tests for
+/// the `(b|c)?r` raw-string gap this seam was carved to cover: a `br#"..."#` /
+/// `cr#"..."#` literal the scanner failed to recognize would let a `/*` inside
+/// it open a comment scan that blanks across a following `pub`).
+fn scan_fn_visibilities(text: &str, name: &str) -> Vec<(usize, DeclaredVisibility)> {
+    // The complete set of keywords Rust permits between a visibility keyword
+    // and `fn`. `extern` is followed by an optional ABI string literal.
+    const FN_MODIFIERS: [&str; 4] = ["const", "async", "unsafe", "extern"];
+
+    /// Strip one trailing balanced `(...)` group, so `pub(crate)`,
+    /// `pub (crate)` and `pub(in crate::x)` all reduce to `pub`.
+    fn strip_trailing_group(head: &str) -> &str {
+        if !head.ends_with(')') {
+            return head;
+        }
+        let mut depth = 0usize;
+        for (at, character) in head.char_indices().rev() {
+            match character {
+                ')' => depth += 1,
+                '(' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return head[..at].trim_end();
+                    }
+                }
+                _ => {}
+            }
+        }
+        head
+    }
+
+    // Comments are removed ONCE, scanning forward, rather than stripped
+    // backwards a form at a time. Backward stripping is where this check kept
+    // going wrong: `/*` and `*/` are not mirror images, so a backwards
+    // `rfind("/*")` lands on the INNERMOST open and Rust -- unlike C -- permits
+    // nested block comments. Forward scanning tracks depth naturally. Comment
+    // bytes become spaces and newlines are kept, so every offset and line
+    // number below is still the real text's.
+    let text = blank_comments(text);
+    let mut out = Vec::new();
+    for (at, _) in text.match_indices(name) {
+        // Require the name to be followed by `(` or a generic list, and
+        // preceded by the `fn` keyword -- so a call site never matches.
+        let after = &text[at + name.len()..];
+        if !(after.starts_with('(') || after.starts_with('<')) {
+            continue;
+        }
+        // ⛔ WHITESPACE-INSENSITIVE ON PURPOSE, and this is the whole reason
+        // the check is written this way rather than as a line scan. Matching
+        // the visibility keyword against the same LINE's prefix is defeated by
+        //
+        //     pub
+        //     fn build_process_starter_executable_artifact(
+        //
+        // which is legal Rust, compiles clean, and is a genuine widening. The
+        // previous revision of this assertion did exactly that and passed green
+        // over that mutation -- the vacuous-pass shape this whole check exists
+        // to eliminate, reproduced inside its own replacement. Walking
+        // backwards over arbitrary whitespace makes every line arrangement of
+        // one declaration identical here.
+        let Some(before) = text[..at].trim_end().strip_suffix("fn") else {
+            continue;
+        };
+        if before.ends_with(|character: char| character.is_alphanumeric() || character == '_') {
+            continue; // `myfn name(` is not a declaration of `name`.
+        }
+        // Walk back over anything Rust allows to sit between the visibility
+        // keyword and `fn` -- modifiers and comments alike -- until the token
+        // carrying visibility is exposed. Each of these is a form that would
+        // otherwise read as "no visibility keyword", so each is a way the check
+        // could pass over a real widening.
+        let mut head = before.trim_end();
+        loop {
+            let stripped = FN_MODIFIERS.iter().find_map(|modifier| {
+                let rest = head.strip_suffix(modifier)?;
+                let bounded = rest.is_empty()
+                    || rest.ends_with(|character: char| {
+                        !character.is_alphanumeric() && character != '_'
+                    });
+                // An `extern "C"` ABI string sits between the two.
+                bounded.then(|| strip_trailing_quoted(rest.trim_end()))
+            });
+            match stripped {
+                Some(rest) => head = rest,
+                None => break,
+            }
+        }
+        // `pub(crate)` reduces to `pub` for the test, but the failure message
+        // reports the spelling as written -- which of the two widenings
+        // happened is the useful part of the diagnostic.
+        let spelled = head;
+        let reduced = strip_trailing_group(head);
+        let last = reduced
+            .rsplit(|character: char| character.is_whitespace())
+            .next()
+            .unwrap_or_default();
+        // ⛔ THREE outcomes, not two, and this is the fix for the CLASS rather
+        // than for the last form that defeated it. Every previous revision of
+        // this walk answered "no visibility keyword" -- i.e. PASS -- for any
+        // input it did not understand, so each gap in its parsing was a silent
+        // green. Three separate legal forms reached that default (a line-split
+        // keyword, a comment, a NESTED comment), and the third arrived after I
+        // had already "closed" the second.
+        //
+        // So an unrecognised predecessor is now its own verdict. The walk may
+        // conclude "private" only when it lands on something that genuinely
+        // ends the preceding item -- an attribute's `]`, a block or item
+        // terminator, or the start of the file. Anything else is reported as
+        // undetermined and FAILS, because "I could not tell" and "it is
+        // private" are different answers and only one of them is evidence.
+        let verdict = if last == "pub" {
+            let at = spelled.rfind("pub").expect("`pub` was just matched");
+            DeclaredVisibility::Widened(spelled[at..].trim().to_string())
+        } else if reduced.is_empty() || reduced.ends_with([']', '}', '{', ';', ')']) {
+            DeclaredVisibility::ModulePrivate
+        } else {
+            let context = reduced
+                .char_indices()
+                .rev()
+                .nth(60)
+                .map_or(reduced, |(at, _)| &reduced[at..]);
+            DeclaredVisibility::Undetermined(context.trim().to_string())
+        };
+        let line = text[..at].matches('\n').count() + 1;
+        out.push((line, verdict));
+    }
+    out
+}
+
 /// What the backward walk concluded about one declaration. `Undetermined` is
 /// a first-class outcome rather than an absence, so a parsing gap cannot be
 /// read as "private".
+#[derive(Debug)]
 enum DeclaredVisibility {
     ModulePrivate,
     Widened(String),
@@ -1263,14 +1278,36 @@ fn blank_comments(text: &str) -> String {
 }
 
 /// If a string literal starts at `at`, return the byte index just past it.
-/// Handles `"..."` with escapes and raw strings `r"..."` / `r#"..."#`.
+/// Handles `"..."` with escapes and raw strings with any of Rust's raw-string
+/// prefixes -- `r"..."`, `br"..."`, `cr"..."`, and their `#`-hashed forms.
+///
+/// The prefix is `(b|c)?r` (byte and C raw strings, both stable). Recognizing
+/// only the bare `r` misread `br#"..."#` and `cr#"..."#` as ordinary text, so
+/// a `/*` inside such a literal opened a real comment scan and could blank
+/// across a following declaration (VIS-BR-LITERAL). The prefix must sit at a
+/// token boundary; after an identifier byte it is a tail (`foo_r"x"`,
+/// `xbr#"..."#`), not an opener -- keeping that guard is load-bearing, because
+/// over-permission (reading an identifier as a literal) is the live risk.
 fn string_literal_end(bytes: &[u8], at: usize) -> Option<usize> {
-    if bytes[at] == b'r' {
-        // Only when `r` opens a literal rather than ending an identifier.
+    // Length of the raw-string prefix opening at `at`: 1 for `r`, 2 for `br`
+    // / `cr`, 0 for anything else. Parse the prefix rather than special-casing
+    // a single letter, so `br` and `cr` are handled by the same path.
+    let raw_prefix_len = if bytes[at] == b'r' {
+        1
+    } else if (bytes[at] == b'b' || bytes[at] == b'c')
+        && at + 1 < bytes.len()
+        && bytes[at + 1] == b'r'
+    {
+        2
+    } else {
+        0
+    };
+    if raw_prefix_len > 0 {
+        // Only when the prefix opens a literal rather than ending an identifier.
         if at > 0 && (bytes[at - 1].is_ascii_alphanumeric() || bytes[at - 1] == b'_') {
             return None;
         }
-        let mut cursor = at + 1;
+        let mut cursor = at + raw_prefix_len;
         let mut hashes = 0usize;
         while cursor < bytes.len() && bytes[cursor] == b'#' {
             hashes += 1;
@@ -1318,6 +1355,162 @@ fn strip_trailing_quoted(head: &str) -> &str {
     match rest.rfind('"') {
         Some(at) => rest[..at].trim_end(),
         None => head,
+    }
+}
+
+/// The declaration name the visibility fixtures below drive; matching the real
+/// helper keeps the fixtures faithful to what `blank_comments` feeds the walk.
+#[cfg(test)]
+const VIS_FIXTURE_NAME: &str = "build_process_starter_executable_artifact";
+
+#[test]
+fn string_literal_end_recognizes_every_raw_string_prefix() {
+    // Post-fix: `r`, `br`, `cr` -- hashed or not -- all open a raw literal, so
+    // `string_literal_end` returns the index just past the closing delimiter.
+    // Pre-fix (`if bytes[at] == b'r'` only) the `br`/`cr` cases returned `None`
+    // (the `r` was rejected as an identifier tail after `b`/`c`), which is the
+    // VIS-BR-LITERAL defect. Each opener starts at index 0 (a token boundary).
+    let openers: [&str; 7] = [
+        r####"r"x""####,
+        r####"r#"x"#"####,
+        r####"br"x""####,
+        r####"br#"x"#"####,
+        r####"cr"x""####,
+        r####"cr#"x"#"####,
+        r####"br##"x"##"####,
+    ];
+    for src in openers {
+        let bytes = src.as_bytes();
+        assert_eq!(
+            string_literal_end(bytes, 0),
+            Some(bytes.len()),
+            "raw literal {src:?} must be recognized to its true end"
+        );
+    }
+}
+
+#[test]
+fn string_literal_end_rejects_identifier_tails_at_a_raw_prefix() {
+    // Negative control (load-bearing -- over-permission is the live risk). A
+    // raw prefix only opens a literal at a token boundary; after an identifier
+    // byte it is a tail, not an opener. Reading these as literals would blank
+    // real code as string content.
+    //
+    // `foo_r"x"`: the `r` at index 4 follows `_`.
+    let foo_r = "foo_r\"x\"";
+    assert_eq!(string_literal_end(foo_r.as_bytes(), 4), None);
+    // `xbr#"x"#`: the `b` at index 1 follows `x`, and the `r` at index 2
+    // follows `b` -- both must be rejected so `xbr` reads as one identifier.
+    let xbr = "xbr#\"x\"#";
+    assert_eq!(string_literal_end(xbr.as_bytes(), 1), None);
+    assert_eq!(string_literal_end(xbr.as_bytes(), 2), None);
+    // `ycr"x"`: same shape for the `cr` prefix (the `c` at index 1 follows `y`).
+    let ycr = "ycr\"x\"";
+    assert_eq!(string_literal_end(ycr.as_bytes(), 1), None);
+    assert_eq!(string_literal_end(ycr.as_bytes(), 2), None);
+    // A bare `br` / `cr` with no `"` after the hashes is an identifier, not a
+    // literal, even at a token boundary.
+    assert_eq!(string_literal_end(b"brx", 0), None);
+    assert_eq!(string_literal_end(b"crx", 0), None);
+}
+
+#[test]
+fn string_literal_end_leaves_non_raw_and_plain_strings_intact() {
+    // Regression guards: plain `"..."` (with escapes) and the non-raw `b"..."`
+    // / `c"..."` byte and C strings must not be disturbed by the `(b|c)?r`
+    // change. For the non-raw byte/C strings the `b`/`c` is copied as text and
+    // the `"..."` is scanned at the quote, so `string_literal_end` at the `b`/
+    // `c` returns `None` (no `r` follows) and at the quote returns the end.
+    let plain = "\"a\\\"b\"";
+    assert_eq!(string_literal_end(plain.as_bytes(), 0), Some(plain.len()));
+    let byte_str = "b\"a /* b\"";
+    assert_eq!(string_literal_end(byte_str.as_bytes(), 0), None);
+    assert_eq!(
+        string_literal_end(byte_str.as_bytes(), 1),
+        Some(byte_str.len())
+    );
+    let c_str = "c\"a /* b\"";
+    assert_eq!(string_literal_end(c_str.as_bytes(), 0), None);
+    assert_eq!(string_literal_end(c_str.as_bytes(), 1), Some(c_str.len()));
+}
+
+#[test]
+fn byte_and_c_raw_literals_do_not_leak_a_comment_scan_over_pub() {
+    // VIS-BR-LITERAL end-to-end (load-bearing). A `/*` inside a `br#"..."#` /
+    // `cr#"..."#` literal must NOT open a comment scan that blanks across the
+    // following `pub`. Pre-fix the scanner missed the `b`/`c` prefix, so the
+    // `/*` opened a real comment closed by `*/` inside `pub // */`, and the
+    // `pub fn` read as `ModulePrivate` -- a false GREEN that hid a public
+    // helper. Post-fix the literal is consumed whole, the `pub` survives, and
+    // the walk correctly reports the widening (a FAIL, i.e. NOT the false
+    // GREEN). Both prefixes and the extra-hash form are covered; a `b`-only
+    // patch would leave the `cr` twin open.
+    let fixtures: [&str; 3] = [
+        "const C: &[u8] = br#\"a \" b ; /*\"#;\n\
+         pub // */\n\
+         fn build_process_starter_executable_artifact(x: u8) -> u8 { x }\n",
+        "const C: &[u8] = cr#\"a \" b ; /*\"#;\n\
+         pub // */\n\
+         fn build_process_starter_executable_artifact(x: u8) -> u8 { x }\n",
+        "const C: &[u8] = br##\"a \"# b ; /*\"##;\n\
+         pub // */\n\
+         fn build_process_starter_executable_artifact(x: u8) -> u8 { x }\n",
+    ];
+    for src in fixtures {
+        let verdicts = scan_fn_visibilities(src, VIS_FIXTURE_NAME);
+        assert_eq!(
+            verdicts.len(),
+            1,
+            "exactly one declaration expected in {src:?}"
+        );
+        assert!(
+            matches!(verdicts[0].1, DeclaredVisibility::Widened(_)),
+            "the `pub` must survive the raw literal and read as a widening, \
+             got {:?} for {src:?}",
+            verdicts[0].1
+        );
+        assert!(
+            !matches!(verdicts[0].1, DeclaredVisibility::ModulePrivate),
+            "the pre-fix false GREEN (ModulePrivate) must not survive for {src:?}"
+        );
+    }
+}
+
+#[test]
+fn plain_raw_literal_is_the_unchanged_discriminator() {
+    // Discriminator: `r#"..."#` (no `b`/`c`) was already recognized pre-fix, so
+    // this fixture -- identical to the byte/C ones but for the missing prefix
+    // letter -- behaves the same before and after the change. Pairing it with
+    // the fixtures above pins that the `(b|c)?r` change is specific to the
+    // byte/C prefixes and does not alter the plain-`r` path.
+    let src = "const C: &str = r#\"a \" b ; /*\"#;\n\
+               pub // */\n\
+               fn build_process_starter_executable_artifact(x: u8) -> u8 { x }\n";
+    let verdicts = scan_fn_visibilities(src, VIS_FIXTURE_NAME);
+    assert_eq!(verdicts.len(), 1);
+    assert!(matches!(verdicts[0].1, DeclaredVisibility::Widened(_)));
+}
+
+#[test]
+fn non_raw_byte_and_c_strings_do_not_leak_a_comment_scan() {
+    // Regression, end-to-end: a `/*` inside a NON-raw `b"..."` / `c"..."` is
+    // ordinary string content (the string is scanned at the quote), so the
+    // `pub` must survive here too and read as a widening -- the `(b|c)?r`
+    // change must not regress the non-raw byte/C strings.
+    for prefix in ["b", "c"] {
+        let src = format!(
+            "const C: &[u8] = {prefix}\"a /* b\";\n\
+             pub // */\n\
+             fn build_process_starter_executable_artifact(x: u8) -> u8 {{ x }}\n"
+        );
+        let verdicts = scan_fn_visibilities(&src, VIS_FIXTURE_NAME);
+        assert_eq!(verdicts.len(), 1, "one declaration in {src:?}");
+        assert!(
+            matches!(verdicts[0].1, DeclaredVisibility::Widened(_)),
+            "non-raw {prefix:?} string must not leak a comment scan, \
+             got {:?}",
+            verdicts[0].1
+        );
     }
 }
 
