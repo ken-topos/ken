@@ -449,7 +449,7 @@ pub enum CheckedCoreBodyTerm {
         de_bruijn_index: usize,
     },
     IntegerLiteral {
-        value: i64,
+        value: BigInt,
     },
     DirectDeclarationCall {
         symbol: StableSymbol,
@@ -3071,12 +3071,7 @@ fn decode_supported_body_term_after_tag(
             let bytes = cursor
                 .read_exact(len)
                 .map_err(|reason| malformed_body(owner, reason))?;
-            let value = i64::try_from(BigInt::from_signed_bytes_be(bytes)).map_err(|_| {
-                CheckedCoreBodyViewError::UnsupportedTermShape {
-                    symbol: owner.clone(),
-                    tag: "int_lit_outside_native_i64".to_string(),
-                }
-            })?;
+            let value = BigInt::from_signed_bytes_be(bytes);
             Ok(CheckedCoreBodyTerm::IntegerLiteral { value })
         }
         "const" => {
@@ -4699,7 +4694,10 @@ mod tests {
 
             let mut cursor = CanonicalCursor::new(&bytes);
             let decoded = decode_int_lit(&mut cursor).expect("decode_int_lit must not fail");
-            assert_eq!(decoded, n, "round-trip must preserve the exact BigInt value");
+            assert_eq!(
+                decoded, n,
+                "round-trip must preserve the exact BigInt value"
+            );
             assert_eq!(
                 cursor.remaining(),
                 0,
@@ -5504,6 +5502,32 @@ mod tests {
             },
             other => panic!("expected lambda body, got {other:?}"),
         }
+    }
+
+    /// Durable invariant: the semantic body view preserves every Ken `Int`
+    /// value accepted by the canonical checked-core encoding, including values
+    /// outside the native `i64` range.
+    #[test]
+    fn body_view_preserves_arbitrary_precision_integer_literals() {
+        let (mut package, target, _helper) = body_view_package();
+        let value = BigInt::from(u64::MAX);
+        replace_body(
+            &mut package,
+            &target,
+            Term::IntLit(value.clone()),
+            &table(GlobalId(1), target.clone()),
+        );
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let view = checked_core_declaration_body_view(&package, &selection, &target)
+            .expect("an arbitrary-precision Int literal has a checked runtime body view");
+
+        assert_eq!(
+            view.body,
+            CheckedCoreBodyTerm::IntegerLiteral { value },
+            "the semantic view must not narrow the canonical BigInt payload"
+        );
     }
 
     #[test]
