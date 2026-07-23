@@ -658,9 +658,23 @@ pub(super) fn record_partition_measure(measure: PartitionFunctionMeasure) {
 pub(super) enum PartitionWorkItem {
     SourceArm(SourceArmPartitionWorkItem),
     SourceKont(SourceKontPartitionWorkItem),
-    Resume(ResumePartitionWorkItem),
+    ProducerKont(ProducerKontPartitionWorkItem),
     Arm(ArmPartitionWorkItem),
     CleanupStep(CleanupStepPartitionWorkItem),
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct PartitionProducerKontCursor {
+    pub(super) site_id: usize,
+    pub(super) capture_pointer: Value,
+}
+
+#[derive(Clone)]
+pub(super) struct PartitionProducerKontSitePlan {
+    pub(super) action: ProducerKontAction,
+    pub(super) successor: Option<PartitionProducerKontCursor>,
+    pub(super) checked_join: PartitionCheckedJoinIdentity,
+    pub(super) return_kind: ScalarMergeKind,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1187,10 +1201,33 @@ fn partition_selected_lineage_key(
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PartitionContinuationStaticKey {
-    value: PartitionLoweredKey,
-    pending: Vec<PartitionEliminatorKey>,
-    selected_scope: Option<PartitionSelectedScopeKey>,
-    selected_lineage: Vec<PartitionSelectedContinuationKey>,
+    action: PartitionProducerKontActionKey,
+    successor: Option<usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PartitionProducerKontActionKey {
+    ApplyActiveEliminators {
+        value: PartitionLoweredKey,
+        activation: ContinuationActivationId,
+        cursor: ContinuationCursorId,
+        pending: Vec<PartitionEliminatorKey>,
+        selected_ancestry: Vec<RecursorFrameProvenance>,
+        selected_scope: Option<PartitionSelectedScopeKey>,
+        selected_lineage: Vec<PartitionSelectedContinuationKey>,
+    },
+    ApplyEliminators {
+        value: PartitionLoweredKey,
+        eliminators: Vec<PartitionEliminatorKey>,
+    },
+    OrientedInvocationReturn {
+        value: PartitionLoweredKey,
+        checked: bool,
+    },
+    CheckedComputationalIHReturn {
+        value: PartitionLoweredKey,
+        call_template_id: u64,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1968,6 +2005,7 @@ struct PartitionSourceArmStaticKey {
     declaration_stack: Vec<RuntimeSymbol>,
     active_recursive_sources: Vec<(PartitionInvocationTemplateKey, usize, bool)>,
     source_head: Option<PartitionSourceNodeId>,
+    producer_head: Option<usize>,
     selected_activation: ContinuationActivationId,
     selected_cursor: ContinuationCursorId,
     selected_ancestry: Vec<RecursorFrameProvenance>,
@@ -1999,6 +2037,7 @@ impl PartitionSourceArmKey {
         declaration_stack: &[RuntimeSymbol],
         active_recursive_invocations: &[CheckedRecursiveInvocationInstance],
         source_head: Option<PartitionSourceNodeId>,
+        producer_head: Option<usize>,
         selected_activation: ContinuationActivationId,
         selected_cursor: ContinuationCursorId,
         selected_ancestry: &[RecursorFrameProvenance],
@@ -2026,6 +2065,7 @@ impl PartitionSourceArmKey {
                 })
                 .collect(),
             source_head,
+            producer_head,
             selected_activation,
             selected_cursor,
             selected_ancestry: selected_ancestry.to_vec(),
@@ -2058,6 +2098,7 @@ struct PartitionCleanupStepStaticKey {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PartitionSourceKontStaticKey {
     node: PartitionSourceNodeId,
+    producer_head: Option<usize>,
     input: PartitionLoweredKey,
     declaration_stack: Vec<RuntimeSymbol>,
     active_recursive_sources: Vec<(PartitionInvocationTemplateKey, usize, bool)>,
@@ -2086,6 +2127,7 @@ impl PartitionSourceKontKey {
         checked_join: PartitionCheckedJoinIdentity,
         required_kind: ScalarMergeKind,
         node: PartitionSourceNodeId,
+        producer_head: Option<usize>,
         input: &Lowered,
         declaration_stack: &[RuntimeSymbol],
         active_recursive_invocations: &[CheckedRecursiveInvocationInstance],
@@ -2101,6 +2143,7 @@ impl PartitionSourceKontKey {
     ) -> Self {
         let static_key = PartitionSourceKontStaticKey {
             node,
+            producer_head,
             input: partition_lowered_key(input),
             declaration_stack: declaration_stack.to_vec(),
             active_recursive_sources: active_recursive_invocations
@@ -2171,7 +2214,7 @@ impl PartitionCleanupStepKey {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum PartitionSemanticStateKey {
-    Resume(PartitionContinuationKey),
+    ProducerKont(PartitionContinuationKey),
     SourceArm(PartitionSourceArmKey),
     SourceKont(PartitionSourceKontKey),
     CleanupStep(PartitionCleanupStepKey),
@@ -2180,7 +2223,7 @@ pub(super) enum PartitionSemanticStateKey {
 impl PartitionSemanticStateKey {
     fn site_id(&self) -> u64 {
         match self {
-            Self::Resume(key) => key.site_id(),
+            Self::ProducerKont(key) => key.site_id(),
             Self::SourceArm(key) => key.checked_join.site_id,
             Self::SourceKont(key) => key.checked_join.site_id,
             Self::CleanupStep(key) => key.checked_join.site_id,
@@ -2189,7 +2232,7 @@ impl PartitionSemanticStateKey {
 
     fn bucket(&self) -> (u64, u64, u64) {
         let bucket = match self {
-            Self::Resume(key) => key.static_bucket,
+            Self::ProducerKont(key) => key.static_bucket,
             Self::SourceArm(key) => key.static_bucket,
             Self::SourceKont(key) => key.static_bucket,
             Self::CleanupStep(key) => key.static_bucket,
@@ -2199,7 +2242,7 @@ impl PartitionSemanticStateKey {
 
     pub(super) fn return_contract(&self) -> PartitionStateReturnContract {
         match self {
-            Self::Resume(key) => PartitionStateReturnContract {
+            Self::ProducerKont(key) => PartitionStateReturnContract {
                 checked_join: key.checked_join.clone(),
                 required_kind: key.outer_return_kind,
                 field_types: key.field_types.clone(),
@@ -2234,23 +2277,113 @@ impl PartitionContinuationKey {
         input_kind: ScalarMergeKind,
         outer_return_kind: ScalarMergeKind,
         value: &Lowered,
+        activation: ContinuationActivationId,
+        cursor: ContinuationCursorId,
         pending: &[OwnedPartitionEliminator],
-        _selected_ancestry: &[RecursorFrameProvenance],
+        selected_ancestry: &[RecursorFrameProvenance],
         selected_scope: &Option<OwnedSelectedScope>,
         selected_lineage: &[OwnedSourceSelectedContinuation],
+        successor: Option<usize>,
         field_types: Vec<Type>,
         field_map: Vec<usize>,
     ) -> Self {
         let static_key = PartitionContinuationStaticKey {
-            value: partition_lowered_key(value),
-            pending: pending.iter().map(partition_eliminator_key).collect(),
-            selected_scope: partition_scope_key(selected_scope),
-            selected_lineage: partition_selected_lineage_key(selected_lineage),
+            action: PartitionProducerKontActionKey::ApplyActiveEliminators {
+                value: partition_lowered_key(value),
+                activation,
+                cursor,
+                pending: pending.iter().map(partition_eliminator_key).collect(),
+                selected_ancestry: selected_ancestry.to_vec(),
+                selected_scope: partition_scope_key(selected_scope),
+                selected_lineage: partition_selected_lineage_key(selected_lineage),
+            },
+            successor,
         };
         Self {
             checked_join,
             input_kind,
             outer_return_kind,
+            static_bucket: partition_static_bucket(&static_key),
+            static_key: Arc::new(static_key),
+            field_types,
+            field_map,
+        }
+    }
+
+    pub(super) fn oriented_invocation_return(
+        checked_join: PartitionCheckedJoinIdentity,
+        return_kind: ScalarMergeKind,
+        value: &Lowered,
+        checked: bool,
+        successor: Option<usize>,
+        field_types: Vec<Type>,
+        field_map: Vec<usize>,
+    ) -> Self {
+        let static_key = PartitionContinuationStaticKey {
+            action: PartitionProducerKontActionKey::OrientedInvocationReturn {
+                value: partition_lowered_key(value),
+                checked,
+            },
+            successor,
+        };
+        Self {
+            checked_join,
+            input_kind: return_kind,
+            outer_return_kind: return_kind,
+            static_bucket: partition_static_bucket(&static_key),
+            static_key: Arc::new(static_key),
+            field_types,
+            field_map,
+        }
+    }
+
+    pub(super) fn apply_eliminators(
+        checked_join: PartitionCheckedJoinIdentity,
+        return_kind: ScalarMergeKind,
+        value: &Lowered,
+        eliminators: &[OwnedPartitionEliminator],
+        successor: Option<usize>,
+        field_types: Vec<Type>,
+        field_map: Vec<usize>,
+    ) -> Self {
+        let static_key = PartitionContinuationStaticKey {
+            action: PartitionProducerKontActionKey::ApplyEliminators {
+                value: partition_lowered_key(value),
+                eliminators: eliminators.iter().map(partition_eliminator_key).collect(),
+            },
+            successor,
+        };
+        Self {
+            checked_join,
+            input_kind: return_kind,
+            outer_return_kind: return_kind,
+            static_bucket: partition_static_bucket(&static_key),
+            static_key: Arc::new(static_key),
+            field_types,
+            field_map,
+        }
+    }
+
+    pub(super) fn checked_computational_ih_return(
+        checked_join: PartitionCheckedJoinIdentity,
+        return_kind: ScalarMergeKind,
+        value: &Lowered,
+        call_template_id: u64,
+        successor: Option<usize>,
+        field_types: Vec<Type>,
+        field_map: Vec<usize>,
+    ) -> Self {
+        let static_key = PartitionContinuationStaticKey {
+            action: PartitionProducerKontActionKey::CheckedComputationalIHReturn {
+                value: partition_lowered_key(value),
+                call_template_id,
+            },
+            successor,
+        };
+        Self {
+            checked_join,
+            input_kind: return_kind,
+            outer_return_kind: return_kind,
             static_bucket: partition_static_bucket(&static_key),
             static_key: Arc::new(static_key),
             field_types,
@@ -2706,6 +2839,7 @@ pub(super) struct SourceArmPartitionWorkItem {
     pub(super) active_recursive_invocations: Vec<CheckedRecursiveInvocationInstance>,
     pub(super) source_head: Option<PartitionSourceNodeId>,
     pub(super) source_capture_pointer: Option<Value>,
+    pub(super) producer_kont: Option<PartitionProducerKontCursor>,
     pub(super) selected_activation: ContinuationActivationId,
     pub(super) selected_cursor: ContinuationCursorId,
     pub(super) selected_ancestry: Vec<RecursorFrameProvenance>,
@@ -2741,6 +2875,7 @@ pub(super) struct SourceKontPartitionWorkItem {
     pub(super) input: Lowered,
     pub(super) node: PartitionSourceNodeId,
     pub(super) capture_pointer: Value,
+    pub(super) producer_kont: Option<PartitionProducerKontCursor>,
     pub(super) declaration_stack: Vec<RuntimeSymbol>,
     pub(super) active_recursive_invocations: Vec<CheckedRecursiveInvocationInstance>,
     pub(super) selected_activation: ContinuationActivationId,
@@ -2754,18 +2889,41 @@ pub(super) struct SourceKontPartitionWorkItem {
     pub(super) return_contract: PartitionStateReturnContract,
 }
 
-pub(super) struct ResumePartitionWorkItem {
+#[derive(Clone)]
+pub(super) enum ProducerKontAction {
+    ApplyActiveEliminators {
+        activation: ContinuationActivationId,
+        cursor: ContinuationCursorId,
+        pending: Vec<OwnedPartitionEliminator>,
+        selected_ancestry: Vec<RecursorFrameProvenance>,
+        selected_scope: Option<OwnedSelectedScope>,
+        selected_lineage: Vec<OwnedSourceSelectedContinuation>,
+        capture_field_types: Vec<Type>,
+    },
+    ApplyEliminators {
+        eliminators: Vec<OwnedPartitionEliminator>,
+        capture_field_types: Vec<Type>,
+    },
+    OrientedInvocationReturn {
+        checked: bool,
+        capture_field_types: Vec<Type>,
+    },
+    CheckedComputationalIHReturn {
+        call_template_id: u64,
+        capture_field_types: Vec<Type>,
+    },
+}
+
+pub(super) struct ProducerKontPartitionWorkItem {
     pub(super) state_id: usize,
+    pub(super) site_id: usize,
     pub(super) function: FuncId,
     pub(super) field_types: Vec<Type>,
     pub(super) field_map: Vec<usize>,
     pub(super) value: Lowered,
-    pub(super) activation: ContinuationActivationId,
-    pub(super) cursor: ContinuationCursorId,
-    pub(super) pending: Vec<OwnedPartitionEliminator>,
-    pub(super) selected_ancestry: Vec<RecursorFrameProvenance>,
-    pub(super) selected_scope: Option<OwnedSelectedScope>,
-    pub(super) selected_lineage: Vec<OwnedSourceSelectedContinuation>,
+    pub(super) action: ProducerKontAction,
+    pub(super) capture_pointer: Option<Value>,
+    pub(super) successor: Option<PartitionProducerKontCursor>,
     pub(super) ledger_baseline: PartitionLedgerBaseline,
     pub(super) return_kind: ScalarMergeKind,
 }
@@ -2859,6 +3017,7 @@ pub(super) struct ArmPartitionWorkItem {
     pub(super) body: RuntimeExpr,
     pub(super) env: Vec<Lowered>,
     pub(super) eliminators: Vec<OwnedPartitionEliminator>,
+    pub(super) producer_kont: Option<PartitionProducerKontCursor>,
     pub(super) ledger_baseline: PartitionLedgerBaseline,
     pub(super) return_authority: PartitionBranchReturnAuthority,
 }
@@ -3200,7 +3359,7 @@ mod tests {
         logical_field_types: Vec<Type>,
     ) -> PartitionSemanticStateKey {
         let field_map = (0..logical_field_types.len()).collect();
-        PartitionSemanticStateKey::Resume(PartitionContinuationKey {
+        PartitionSemanticStateKey::ProducerKont(PartitionContinuationKey {
             checked_join: PartitionCheckedJoinIdentity {
                 site_id,
                 declaration: "pkg::main".to_string(),
@@ -3214,10 +3373,18 @@ mod tests {
             outer_return_kind: ScalarMergeKind::ExitCode,
             static_bucket: partition_static_bucket(&("process-exit", site_id)),
             static_key: Arc::new(PartitionContinuationStaticKey {
-                value: partition_lowered_shape_key(PartitionLoweredShape::ProcessExitStatus),
-                pending: Vec::new(),
-                selected_scope: None,
-                selected_lineage: Vec::new(),
+                action: PartitionProducerKontActionKey::ApplyActiveEliminators {
+                    value: partition_lowered_shape_key(
+                        PartitionLoweredShape::ProcessExitStatus,
+                    ),
+                    activation: ContinuationActivationId(1),
+                    cursor: ContinuationCursorId(1),
+                    pending: Vec::new(),
+                    selected_ancestry: Vec::new(),
+                    selected_scope: None,
+                    selected_lineage: Vec::new(),
+                },
+                successor: None,
             }),
             field_types: logical_field_types,
             field_map,
@@ -3253,8 +3420,8 @@ mod tests {
         let mut colliding = first.clone();
         let (first_bucket, colliding_bucket, colliding_key) = match (&first, &mut colliding) {
             (
-                PartitionSemanticStateKey::Resume(first),
-                PartitionSemanticStateKey::Resume(colliding),
+                PartitionSemanticStateKey::ProducerKont(first),
+                PartitionSemanticStateKey::ProducerKont(colliding),
             ) => (
                 first.static_bucket,
                 &mut colliding.static_bucket,
@@ -3264,10 +3431,16 @@ mod tests {
         };
         *colliding_bucket = first_bucket;
         *colliding_key = Arc::new(PartitionContinuationStaticKey {
-            value: partition_lowered_shape_key(PartitionLoweredShape::Bool),
-            pending: Vec::new(),
-            selected_scope: None,
-            selected_lineage: Vec::new(),
+            action: PartitionProducerKontActionKey::ApplyActiveEliminators {
+                value: partition_lowered_shape_key(PartitionLoweredShape::Bool),
+                activation: ContinuationActivationId(1),
+                cursor: ContinuationCursorId(1),
+                pending: Vec::new(),
+                selected_ancestry: Vec::new(),
+                selected_scope: None,
+                selected_lineage: Vec::new(),
+            },
+            successor: None,
         });
 
         interner.lookup(&first, budget).unwrap();
