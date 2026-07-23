@@ -23,6 +23,14 @@ struct Differential {
 }
 
 #[cfg(target_os = "linux")]
+struct DifferentialReading {
+    interpreted: ken_runtime::EffectObservation,
+    native: ken_runtime::EffectObservation,
+    interpreted_files: Vec<Vec<u8>>,
+    native_files: Vec<Vec<u8>>,
+}
+
+#[cfg(target_os = "linux")]
 fn output_dir(name: &str) -> std::path::PathBuf {
     let path = std::env::temp_dir().join(format!(
         "ken-spanprov-{name}-{}-{}",
@@ -82,58 +90,57 @@ fn differential(case: &str, source: &str) -> Differential {
     }
 }
 
-/// Run `source` through the reference interpreter only (no native lowering).
-/// Used where the end-to-end program requires four nested resource brackets
-/// (readable source + writable dest + two buffers) — which currently exceeds the
-/// Cranelift backend's per-function code-size limit ("Code for function is too
-/// large"), so the native executor cannot lower it. Three-bracket programs
-/// (e.g. SP-A freeze) lower and run on both executors.
 #[cfg(target_os = "linux")]
-fn interpret_only(case: &str, source: &str) -> ken_runtime::EffectObservation {
-    let root = output_dir(case);
-    std::fs::write(root.join("spanseed.bin"), b"AAAABBBB").unwrap();
-    let mut host = ken_interp::PosixHost::new_at(&root);
-    let interpreted = ken_cli::run_program_effect_observation(
+fn differential_reading(case: &str, source: &str, reads: &[&str]) -> DifferentialReading {
+    let native_root = output_dir(&format!("{case}-native"));
+    std::fs::write(native_root.join("spanseed.bin"), b"AAAABBBB").unwrap();
+    let output = ken_cli::build_native_program(
         source,
         ken_cli::SourceFormat::Ken,
-        &[],
-        &[],
-        root.as_os_str().as_encoded_bytes(),
-        &mut host,
+        &format!("rt_span_prov_{}", case.replace('-', "_")),
+        &native_root,
     )
-    .unwrap_or_else(|error| panic!("{case}: interpreter run: {error:?}"));
-    std::fs::remove_dir_all(&root).unwrap();
-    interpreted
-}
-
-/// Like `interpret_only`, but reads the named files from the run root *before*
-/// teardown so a test can assert backend effects (destination contents). A
-/// missing file reads as empty — the row's "zero backend / destination empty"
-/// observation for a rejected write. `spanseed.bin` (AAAABBBB) is present.
-#[cfg(target_os = "linux")]
-fn interpret_reading(
-    case: &str,
-    source: &str,
-    reads: &[&str],
-) -> (ken_runtime::EffectObservation, Vec<Vec<u8>>) {
-    let root = output_dir(case);
-    std::fs::write(root.join("spanseed.bin"), b"AAAABBBB").unwrap();
-    let mut host = ken_interp::PosixHost::new_at(&root);
-    let interpreted = ken_cli::run_program_effect_observation(
-        source,
-        ken_cli::SourceFormat::Ken,
-        &[],
-        &[],
-        root.as_os_str().as_encoded_bytes(),
-        &mut host,
+    .unwrap_or_else(|error| panic!("{case}: reaches linked native lowering: {error:?}"));
+    let native = ken_runtime::run_bound_process_effect_observation(
+        &output.artifact,
+        &ken_runtime::NativeEffectRunOptionsV1 {
+            arguments: Vec::new(),
+            environment: Vec::new(),
+            cwd: native_root.clone(),
+            plan_hash: output.plan_transport_hash,
+        },
     )
-    .unwrap_or_else(|error| panic!("{case}: interpreter run: {error:?}"));
-    let contents = reads
+    .unwrap_or_else(|error| panic!("{case}: linked artifact runs: {error:?}"));
+    let native_files = reads
         .iter()
-        .map(|name| std::fs::read(root.join(name)).unwrap_or_default())
+        .map(|name| std::fs::read(native_root.join(name)).unwrap_or_default())
         .collect();
-    std::fs::remove_dir_all(&root).unwrap();
-    (interpreted, contents)
+
+    let interp_root = output_dir(&format!("{case}-interp"));
+    std::fs::write(interp_root.join("spanseed.bin"), b"AAAABBBB").unwrap();
+    let mut host = ken_interp::PosixHost::new_at(&interp_root);
+    let interpreted = ken_cli::run_program_effect_observation(
+        source,
+        ken_cli::SourceFormat::Ken,
+        &[],
+        &[],
+        interp_root.as_os_str().as_encoded_bytes(),
+        &mut host,
+    )
+    .unwrap_or_else(|error| panic!("{case}: source runs in interpreter: {error:?}"));
+    let interpreted_files = reads
+        .iter()
+        .map(|name| std::fs::read(interp_root.join(name)).unwrap_or_default())
+        .collect();
+
+    std::fs::remove_dir_all(native_root).unwrap();
+    std::fs::remove_dir_all(interp_root).unwrap();
+    DifferentialReading {
+        interpreted,
+        native,
+        interpreted_files,
+        native_files,
+    }
 }
 
 /// The ordered canonical outcomes of every `BufferFreeze` in an observation.
@@ -327,8 +334,14 @@ fn sp_a_foreign_span_freeze_rejects_own_span_succeeds_on_both_engines() {
             "sp-a-freeze: exit status must agree; native={:?} interp={:?}",
             diff.native, diff.interpreted
         );
-        assert_eq!(diff.interpreted.exit_status, 0, "sp-a-freeze: interpreter exits Success");
-        assert_eq!(diff.native.exit_status, 0, "sp-a-freeze: native exits Success");
+        assert_eq!(
+            diff.interpreted.exit_status, 0,
+            "sp-a-freeze: interpreter exits Success"
+        );
+        assert_eq!(
+            diff.native.exit_status, 0,
+            "sp-a-freeze: native exits Success"
+        );
         // The load-bearing assertion: exact foreign/own freeze outcomes.
         let native = buffer_freeze_outcomes(&diff.native);
         let interp = buffer_freeze_outcomes(&diff.interpreted);
@@ -458,34 +471,35 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
   }
 "#;
 
-// Interpreter end-to-end for the write consumer's foreign arm. The equivalent
-// native discriminator is blocked by the four-bracket code-size limit (see
-// `interpret_only`); the write consumer's native span-origin ABI is exercised by
-// the own-buffer `px8f_buffer_native`/`px8f_write_partition` writeAll tests, and
-// the shared-host foreign-write rejection (+ zero backend) is proven in
-// `ken_host::effect_v1::tests::foreign_acquisition_span_rejects_on_both_consumers_before_bytes_or_backend`.
+// End-to-end discriminator for the write consumer's foreign arm.
 #[cfg(target_os = "linux")]
 #[test]
-fn sp_a_foreign_span_write_rejects_before_backend_interp() {
-    in_large_stack_thread("sp-a-write-foreign-interp", || {
-        let (obs, files) =
-            interpret_reading("sp-a-write-foreign", SP_A_WRITE_FOREIGN, &["dest.bin"]);
-        assert_eq!(
-            write_outcomes(&obs),
-            vec![ken_runtime::CanonicalOutcomeV1::Error(
-                ken_runtime::SemanticErrorV1::Resource(ken_runtime::ResourceErrorV1::InvalidBounds),
-            )],
-            "interp: foreign-acquisition write must be exactly one InvalidBounds"
-        );
-        assert!(
+fn sp_a_foreign_span_write_rejects_before_backend_both_engines() {
+    in_large_stack_thread("sp-a-write-foreign", || {
+        let diff = differential_reading("sp-a-write-foreign", SP_A_WRITE_FOREIGN, &["dest.bin"]);
+        for (engine, obs, files) in [
+            ("interpreter", &diff.interpreted, &diff.interpreted_files),
+            ("native", &diff.native, &diff.native_files),
+        ] {
+            assert_eq!(
+                write_outcomes(obs),
+                vec![ken_runtime::CanonicalOutcomeV1::Error(
+                    ken_runtime::SemanticErrorV1::Resource(
+                        ken_runtime::ResourceErrorV1::InvalidBounds
+                    ),
+                )],
+                "{engine}: foreign-acquisition write must be exactly one InvalidBounds"
+            );
+            assert!(
             files[0].is_empty(),
-            "interp: foreign write must issue zero backend writes — destination stays empty, got {:?}",
+            "{engine}: foreign write must issue zero backend writes — destination stays empty, got {:?}",
             files[0]
         );
+        }
     });
 }
 
-// SP-A write consumer, own arm — interpreter e2e. A three-bracket program:
+// SP-A write consumer, own arm. A three-bracket program:
 // readAt installs BBBB in B [2,6), then `writeAt dest 0 B span_b` (own span)
 // succeeds. The test asserts the destination file contains exactly BBBB — the
 // row's "one backend call at offset 0 carrying BBBB, destination BBBB". The
@@ -593,37 +607,51 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
 
 #[cfg(target_os = "linux")]
 #[test]
-fn sp_a_own_span_write_succeeds_with_bytes_interp() {
-    in_large_stack_thread("sp-a-write-own-interp", || {
-        let (obs, files) = interpret_reading("sp-a-write-own", SP_A_WRITE_OWN, &["dest.bin"]);
-        let writes = write_outcomes(&obs);
-        assert_eq!(writes.len(), 1, "expected one FsWriteAt event, got {writes:?}");
-        match &writes[0] {
-            ken_runtime::CanonicalOutcomeV1::Success(ken_runtime::CanonicalReplyV1::WriteProgress(
-                ken_runtime::WriteProgressV1::Wrote(count),
-            )) if count.get() == 4 && count.effective_request() == 4 => {}
-            other => panic!("interp: own write must be exactly Wrote 4 (effective request 4), got {other:?}"),
+fn sp_a_own_span_write_succeeds_with_bytes_on_both_engines() {
+    in_large_stack_thread("sp-a-write-own", || {
+        let diff = differential_reading("sp-a-write-own", SP_A_WRITE_OWN, &["dest.bin"]);
+        for (engine, obs, files) in [
+            ("interpreter", &diff.interpreted, &diff.interpreted_files),
+            ("native", &diff.native, &diff.native_files),
+        ] {
+            let writes = write_outcomes(obs);
+            assert_eq!(
+                writes.len(),
+                1,
+                "{engine}: expected one FsWriteAt event, got {writes:?}"
+            );
+            match &writes[0] {
+                ken_runtime::CanonicalOutcomeV1::Success(
+                    ken_runtime::CanonicalReplyV1::WriteProgress(
+                        ken_runtime::WriteProgressV1::Wrote(count),
+                    ),
+                ) if count.get() == 4 && count.effective_request() == 4 => {}
+                other => panic!(
+                    "{engine}: own write must be exactly Wrote 4 \
+                     (effective request 4), got {other:?}"
+                ),
+            }
+            assert_eq!(
+                files[0], b"BBBB",
+                "{engine}: own write must land exactly BBBB at offset 0 \
+                 (one backend call), got {:?}",
+                files[0]
+            );
         }
-        assert_eq!(
-            files[0], b"BBBB",
-            "interp: own write must land exactly BBBB at offset 0 (one backend call), got {:?}",
-            files[0]
-        );
     });
 }
 
-
-// SP-C non-revival, full row — interpreter e2e. Buffer A mints span_old (AAAA
+// SP-C non-revival, full row. Buffer A mints span_old (AAAA
 // [2,6)) and escapes (A, span_old) out of its bracket; A is released on exit.
 // PRE-REUSE closed controls: freeze/writeAt the RELEASED A with span_old -> Closed
 // (no bytes / zero backend). Then B is acquired (reusing A's vacated slot with a
 // newer generation) and installs BBBB. REUSE arm: freeze/writeAt B span_old ->
 // InvalidBounds. FRESH controls: freeze B span_b -> BBBB, writeAt B span_b ->
 // Wrote (destination BBBB). The slot-reused-with-newer-generation *token proof*
-// is the host-unit SP-C test (Ken has no slot projection). Native half is
-// BLOCKED-ON-NATIVE-REACHABILITY. Op order: freeze A span_old (Closed), write A
-// span_old (Closed), freeze B span_old (InvalidBounds), freeze B span_b (BBBB),
-// write B span_old (InvalidBounds), write B span_b (Wrote).
+// is the host-unit SP-C test (Ken has no slot projection). Op order: freeze A
+// span_old (Closed), write A span_old (Closed), freeze B span_old
+// (InvalidBounds), freeze B span_b (BBBB), write B span_old (InvalidBounds),
+// write B span_b (Wrote).
 #[cfg(target_os = "linux")]
 const SP_C_FULL: &str = r#"program capabilities FS AFull
 fn ok_body (unit : Unit) : ResourceBodyResult Unit Unit = ResourceBodyOk Unit Unit MkUnit
@@ -793,54 +821,83 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
 
 #[cfg(target_os = "linux")]
 #[test]
-fn sp_c_released_span_not_revived_by_slot_reuse_interp() {
-    in_large_stack_thread("sp-c-full-interp", || {
-        let (obs, files) = interpret_reading("sp-c-full", SP_C_FULL, &["dest.bin"]);
+fn sp_c_released_span_not_revived_by_slot_reuse_on_both_engines() {
+    in_large_stack_thread("sp-c-full", || {
+        let diff = differential_reading("sp-c-full", SP_C_FULL, &["dest.bin"]);
         let ib = ken_runtime::CanonicalOutcomeV1::Error(ken_runtime::SemanticErrorV1::Resource(
             ken_runtime::ResourceErrorV1::InvalidBounds,
         ));
-        let closed = ken_runtime::CanonicalOutcomeV1::Error(ken_runtime::SemanticErrorV1::Resource(
-            ken_runtime::ResourceErrorV1::Closed,
-        ));
-        let freezes = buffer_freeze_outcomes(&obs);
-        assert_eq!(freezes.len(), 3, "expected three BufferFreeze events, got {freezes:?}");
-        assert_eq!(freezes[0], closed, "pre-reuse: freeze on released A must be Closed");
-        assert_eq!(freezes[1], ib, "reuse: old-acquisition freeze must be InvalidBounds");
-        match &freezes[2] {
-            ken_runtime::CanonicalOutcomeV1::Success(ken_runtime::CanonicalReplyV1::Bytes(b))
-                if b.as_slice() == b"BBBB" => {}
-            other => panic!("fresh-span freeze must be BBBB, got {other:?}"),
-        }
-        let writes = write_outcomes(&obs);
-        assert_eq!(writes.len(), 3, "expected three FsWriteAt events, got {writes:?}");
-        assert_eq!(writes[0], closed, "pre-reuse: write on released A must be Closed");
-        assert_eq!(writes[1], ib, "reuse: old-acquisition write must be InvalidBounds");
-        match &writes[2] {
-            ken_runtime::CanonicalOutcomeV1::Success(ken_runtime::CanonicalReplyV1::WriteProgress(
-                ken_runtime::WriteProgressV1::Wrote(count),
-            )) if count.get() == 4 && count.effective_request() == 4 => {}
-            other => panic!("fresh-span write must be exactly Wrote 4, got {other:?}"),
-        }
-        // The rejected Closed/InvalidBounds writes target offset 0; the fresh
-        // write targets offset 4. A forbidden backend effect from either rejected
-        // arm would land in [0,4) (span_old's AAAA), so the zeroed prefix is the
-        // "zero backend for the rejected arms" observation — it cannot be masked
-        // by the non-overlapping fresh BBBB write in [4,8).
-        assert_eq!(
-            files[0], b"\x00\x00\x00\x00BBBB",
-            "rejected arms must leave [0,4) untouched; only the fresh write lands BBBB at [4,8), got {:?}",
-            files[0]
+        let closed = ken_runtime::CanonicalOutcomeV1::Error(
+            ken_runtime::SemanticErrorV1::Resource(ken_runtime::ResourceErrorV1::Closed),
         );
+        for (engine, obs, files) in [
+            ("interpreter", &diff.interpreted, &diff.interpreted_files),
+            ("native", &diff.native, &diff.native_files),
+        ] {
+            let freezes = buffer_freeze_outcomes(obs);
+            assert_eq!(
+                freezes.len(),
+                3,
+                "expected three BufferFreeze events, got {freezes:?}"
+            );
+            assert_eq!(
+                freezes[0], closed,
+                "pre-reuse: freeze on released A must be Closed"
+            );
+            assert_eq!(
+                freezes[1], ib,
+                "reuse: old-acquisition freeze must be InvalidBounds"
+            );
+            match &freezes[2] {
+                ken_runtime::CanonicalOutcomeV1::Success(ken_runtime::CanonicalReplyV1::Bytes(
+                    b,
+                )) if b.as_slice() == b"BBBB" => {}
+                other => panic!("fresh-span freeze must be BBBB, got {other:?}"),
+            }
+            let writes = write_outcomes(obs);
+            assert_eq!(
+                writes.len(),
+                3,
+                "expected three FsWriteAt events, got {writes:?}"
+            );
+            assert_eq!(
+                writes[0], closed,
+                "pre-reuse: write on released A must be Closed"
+            );
+            assert_eq!(
+                writes[1], ib,
+                "reuse: old-acquisition write must be InvalidBounds"
+            );
+            match &writes[2] {
+                ken_runtime::CanonicalOutcomeV1::Success(
+                    ken_runtime::CanonicalReplyV1::WriteProgress(
+                        ken_runtime::WriteProgressV1::Wrote(count),
+                    ),
+                ) if count.get() == 4 && count.effective_request() == 4 => {}
+                other => panic!("fresh-span write must be exactly Wrote 4, got {other:?}"),
+            }
+            // The rejected Closed/InvalidBounds writes target offset 0; the fresh
+            // write targets offset 4. A forbidden backend effect from either rejected
+            // arm would land in [0,4) (span_old's AAAA), so the zeroed prefix is the
+            // "zero backend for the rejected arms" observation — it cannot be masked
+            // by the non-overlapping fresh BBBB write in [4,8).
+            assert_eq!(
+                files[0], b"\x00\x00\x00\x00BBBB",
+                "{engine}: rejected arms must leave [0,4) untouched; only the fresh \
+             write lands BBBB at [4,8), got {:?}",
+                files[0]
+            );
+        }
     });
 }
 
-// SP-B validity arms — interpreter e2e. Two rejections that intentionally share
+// SP-B validity arms. Two rejections that intentionally share
 // InvalidBounds: (1) a FOREIGN span_a (from A, window [2,6) — numerically equal
 // to B's live window) on B; (2) a matching-acquisition STALE span_b0 (from B's
 // own [0,2) window, made stale by a later readAt that moved B's live window to
 // [2,6)). Both freeze (no bytes) and writeAt (zero backend / empty destination)
 // reject with InvalidBounds. Order: freeze span_a, write span_a, freeze span_b0,
-// write span_b0. Native half is BLOCKED-ON-NATIVE-REACHABILITY.
+// write span_b0.
 #[cfg(target_os = "linux")]
 const SP_B_VALIDITY: &str = r#"program capabilities FS AFull
 fn ok_body (unit : Unit) : ResourceBodyResult Unit Unit = ResourceBodyOk Unit Unit MkUnit
@@ -990,37 +1047,42 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
 
 #[cfg(target_os = "linux")]
 #[test]
-fn sp_b_foreign_and_stale_window_reject_with_no_effect_interp() {
-    in_large_stack_thread("sp-b-validity-interp", || {
-        let (obs, files) = interpret_reading("sp-b-validity", SP_B_VALIDITY, &["dest.bin"]);
+fn sp_b_foreign_and_stale_window_reject_with_no_effect_on_both_engines() {
+    in_large_stack_thread("sp-b-validity", || {
+        let diff = differential_reading("sp-b-validity", SP_B_VALIDITY, &["dest.bin"]);
         let ib = ken_runtime::CanonicalOutcomeV1::Error(ken_runtime::SemanticErrorV1::Resource(
             ken_runtime::ResourceErrorV1::InvalidBounds,
         ));
-        assert_eq!(
-            buffer_freeze_outcomes(&obs),
-            vec![ib.clone(), ib.clone()],
-            "interp: foreign and stale-window freeze must both be InvalidBounds (no bytes)"
-        );
-        assert_eq!(
-            write_outcomes(&obs),
-            vec![ib.clone(), ib.clone()],
-            "interp: foreign and stale-window write must both be InvalidBounds"
-        );
-        assert!(
-            files[0].is_empty(),
-            "interp: both foreign/stale writes must issue zero backend writes — destination empty, got {:?}",
-            files[0]
-        );
+        for (engine, obs, files) in [
+            ("interpreter", &diff.interpreted, &diff.interpreted_files),
+            ("native", &diff.native, &diff.native_files),
+        ] {
+            assert_eq!(
+                buffer_freeze_outcomes(obs),
+                vec![ib.clone(), ib.clone()],
+                "{engine}: foreign and stale-window freeze must both be InvalidBounds (no bytes)"
+            );
+            assert_eq!(
+                write_outcomes(obs),
+                vec![ib.clone(), ib.clone()],
+                "{engine}: foreign and stale-window write must both be InvalidBounds"
+            );
+            assert!(
+                files[0].is_empty(),
+                "{engine}: both foreign/stale writes must issue zero backend writes \
+             — destination empty, got {:?}",
+                files[0]
+            );
+        }
     });
 }
 
-
-// SP-B precedence — interpreter e2e. Host-width admission precedes provenance: a
+// SP-B precedence. Host-width admission precedes provenance: a
 // foreign span_a on B with a valid file offset returns InvalidBounds; changing
 // ONLY the file offset to -1 returns InvalidOffset (host-width) — observed via
 // exit code, since the -1 offset fails at request narrowing, before dispatch, so
 // it is not in the effect trace. Exit 0 iff [foreign@0 -> InvalidBounds,
-// foreign@-1 -> InvalidOffset]. Native half is BLOCKED-ON-NATIVE-REACHABILITY.
+// foreign@-1 -> InvalidOffset].
 #[cfg(target_os = "linux")]
 const SP_B_PRECEDENCE: &str = r#"program capabilities FS AFull
 fn is_invalid_bounds (e : ResourceError) : Bool =
@@ -1165,12 +1227,16 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
 
 #[cfg(target_os = "linux")]
 #[test]
-fn sp_b_host_width_offset_precedes_provenance_interp() {
-    in_large_stack_thread("sp-b-precedence-interp", || {
-        let obs = interpret_only("sp-b-precedence", SP_B_PRECEDENCE);
-        assert_eq!(
-            obs.exit_status, 0,
-            "interp: exit 0 == foreign write@0 -> InvalidBounds AND foreign write@-1 -> InvalidOffset (host-width precedes provenance); got {obs:?}"
-        );
+fn sp_b_host_width_offset_precedes_provenance_on_both_engines() {
+    in_large_stack_thread("sp-b-precedence", || {
+        let diff = differential("sp-b-precedence", SP_B_PRECEDENCE);
+        for (engine, obs) in [("interpreter", &diff.interpreted), ("native", &diff.native)] {
+            assert_eq!(
+                obs.exit_status, 0,
+                "{engine}: exit 0 == foreign write@0 -> InvalidBounds AND \
+                 foreign write@-1 -> InvalidOffset (host-width precedes \
+                 provenance); got {obs:?}"
+            );
+        }
     });
 }

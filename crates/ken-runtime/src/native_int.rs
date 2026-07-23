@@ -12,7 +12,7 @@ use std::ptr;
 pub const NATIVE_INT_SMALL_TAG_V1: u64 = 0;
 pub const NATIVE_INT_BIG_TAG_V1: u64 = 1;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RuntimeIntV1 {
     Small(i64),
     Big { sign: Sign, limbs: Vec<u64> },

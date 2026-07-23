@@ -61,6 +61,10 @@ mod control;
 mod effects;
 mod values;
 
+fn test_partition_signature() -> cranelift_codegen::ir::Signature {
+    cranelift_codegen::ir::Signature::new(cranelift_codegen::isa::CallConv::SystemV)
+}
+
 // Shared by >1 subject module: §10.2 places a helper at the lowest
 // tests/mod.rs ancestor shared by its actual users.
 fn console_write_effect() -> RuntimeExpr {

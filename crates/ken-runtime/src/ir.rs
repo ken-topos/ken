@@ -15,7 +15,7 @@ pub type RuntimeSymbol = String;
 ///
 /// `identity` is observation-only provenance. `value` is the live, opaque
 /// credential and is the only field allowed to authorize a host operation.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RuntimeCapabilityUse {
     pub identity: RuntimeSymbol,
     pub value: Box<RuntimeExpr>,
@@ -302,13 +302,13 @@ pub enum RuntimeFieldStatus {
     ErasedProof,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RuntimePrimitive {
     pub symbol: String,
     pub partiality: RuntimePartiality,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RuntimePartiality {
     Total,
     /// A checked operation whose failure is represented by `None`, never a
@@ -333,7 +333,7 @@ pub enum RuntimePartiality {
 }
 
 /// Backend-neutral runtime expression language.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RuntimeExpr {
     #[doc(hidden)]
     CheckedJoinSite {
@@ -445,14 +445,14 @@ pub enum RuntimeExpr {
     Trap(RuntimeTrap),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RuntimeMatchCase {
     pub constructor: RuntimeSymbol,
     pub binders: usize,
     pub body: RuntimeExpr,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RuntimeComputationalMatchCase {
     pub constructor: RuntimeSymbol,
     pub argument_binders: usize,
@@ -483,7 +483,7 @@ pub fn compiler_private_computational_match_frame_fingerprint(
     crate::fnv1a_64(format!("computational\0{cases:?}\0{default:?}").as_bytes())
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RuntimeValue {
     Bool(bool),
     Int(crate::RuntimeIntV1),
@@ -525,13 +525,13 @@ pub enum RuntimeGroundValue {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RuntimeTrap {
     pub code: RuntimeTrapCode,
     pub message: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RuntimeTrapCode {
     UnsupportedErasure,
     UnsupportedPrimitivePartiality,
