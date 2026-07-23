@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use ken_runtime::*;
+use num_bigint::BigInt;
 
 use crate::checked_core::{
     self, consume_checked_core_package_for_target, validate_checked_core_package,
@@ -4067,9 +4068,9 @@ fn lower_body_term_inner(
             })?;
             Ok(RuntimeExpr::Var(index))
         }
-        CheckedCoreBodyTerm::IntegerLiteral { value } => {
-            Ok(RuntimeExpr::Value(RuntimeValue::Int((*value).into())))
-        }
+        CheckedCoreBodyTerm::IntegerLiteral { value } => Ok(RuntimeExpr::Value(RuntimeValue::Int(
+            runtime_int_from_big_int(value),
+        ))),
         CheckedCoreBodyTerm::DirectDeclarationCall { symbol, level_args } => {
             reject_level_args(root_symbol, level_args)?;
             if stack.contains(symbol) {
@@ -4220,6 +4221,15 @@ fn lower_body_term_inner(
             branch_remap,
         ),
     }
+}
+
+fn runtime_int_from_big_int(value: &BigInt) -> RuntimeIntV1 {
+    let (sign, limbs) = value.to_u64_digits();
+    let sign = match sign {
+        num_bigint::Sign::Minus => ken_runtime::Sign::Negative,
+        num_bigint::Sign::NoSign | num_bigint::Sign::Plus => ken_runtime::Sign::NonNegative,
+    };
+    RuntimeIntV1::from_canonical_parts(sign, limbs)
 }
 
 fn shift_runtime_vars(expr: RuntimeExpr, by: u32, cutoff: u32) -> RuntimeExpr {
@@ -5935,6 +5945,33 @@ mod px7l_tests {
             structural_nat: StableSymbol::declaration("px8ta-total-census", &[], "Nat"),
             exit_code: StableSymbol::declaration("px8ta-total-census", &[], "ExitCode"),
         }
+    }
+
+    /// Durable invariant: erasure preserves arbitrary-precision checked `Int`
+    /// literals in the runtime's exact signed-magnitude carrier.
+    #[test]
+    fn arbitrary_precision_integer_literal_erases_losslessly() {
+        let owner = StableSymbol::declaration("native-handle-carrier", &[], "main");
+        let value = BigInt::from(u64::MAX);
+        let mut stack = vec![owner.clone()];
+
+        let lowered = lower_body_term(
+            &CheckedCoreBodyTerm::IntegerLiteral { value },
+            &BTreeMap::new(),
+            &checked_core::CheckedCoreSemanticInputs::default(),
+            &mut stack,
+            &owner,
+            0,
+        )
+        .expect("the exact runtime Int carrier accepts values outside i64");
+
+        assert_eq!(
+            lowered,
+            RuntimeExpr::Value(RuntimeValue::Int(RuntimeIntV1::Big {
+                sign: ken_runtime::Sign::NonNegative,
+                limbs: vec![u64::MAX],
+            }))
+        );
     }
 
     #[test]

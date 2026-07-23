@@ -506,6 +506,11 @@ pub enum CompilerDriverError {
         section: &'static str,
         symbol: StableSymbol,
     },
+    CheckedCoreBodyView {
+        section: &'static str,
+        symbol: StableSymbol,
+        error: CheckedCoreBodyViewError,
+    },
     EntrypointClosurePackageMismatch {
         field: &'static str,
         expected: String,
@@ -552,6 +557,15 @@ impl fmt::Display for CompilerDriverError {
                 f,
                 "target closure is missing required {section} metadata for {symbol}"
             ),
+            CompilerDriverError::CheckedCoreBodyView {
+                section,
+                symbol,
+                error,
+            } => write!(
+                f,
+                "checked-core body view for {section} at {symbol} failed in lane {}: {error}",
+                error.lane()
+            ),
             CompilerDriverError::EntrypointClosurePackageMismatch {
                 field,
                 expected,
@@ -564,7 +578,14 @@ impl fmt::Display for CompilerDriverError {
     }
 }
 
-impl std::error::Error for CompilerDriverError {}
+impl std::error::Error for CompilerDriverError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            CompilerDriverError::CheckedCoreBodyView { error, .. } => Some(error),
+            _ => None,
+        }
+    }
+}
 
 impl From<ElabError> for CompilerDriverError {
     fn from(value: ElabError) -> Self {
@@ -1998,9 +2019,10 @@ fn checked_computational_ih_templates(
     for (owner, body) in bodies {
         let runtime_body =
             checked_core_declaration_body_view(checked_package, body_view_selection, owner)
-                .map_err(|_| CompilerDriverError::MissingClosureMetadata {
+                .map_err(|error| CompilerDriverError::CheckedCoreBodyView {
                     section: "checked computational IH authoritative runtime body",
                     symbol: owner.clone(),
+                    error,
                 })?;
         let census = crate::checked_core::checked_runtime_match_census(&runtime_body.body)
             .map_err(|_| CompilerDriverError::MissingClosureMetadata {
@@ -4758,7 +4780,9 @@ mod tests {
             .expect("a variable has no global symbol dependency");
         let erased_only = px8ta_match_fixture(CheckedCoreBodyTerm::Lambda {
             parameter_type: erased_ih_reference,
-            body: Box::new(CheckedCoreBodyTerm::IntegerLiteral { value: 0 }),
+            body: Box::new(CheckedCoreBodyTerm::IntegerLiteral {
+                value: num_bigint::BigInt::from(0),
+            }),
         });
         let genuine = px8ta_match_fixture(CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 });
         let runtime_body = CheckedCoreBodyTerm::Let {
