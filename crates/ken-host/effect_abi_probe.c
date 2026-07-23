@@ -33,8 +33,16 @@ struct FsPositionedRequestV1 {
     uint64_t buffer_start;
     uint64_t length;
 };
+struct FsWriteAtRequestV1 {
+    uint64_t file;
+    uint64_t buffer;
+    uint64_t file_offset;
+    uint64_t buffer_start;
+    uint64_t length;
+    uint64_t span_origin;
+};
 struct BufferAllocateRequestV1 { uint64_t capacity; };
-struct BufferFreezeRequestV1 { uint64_t resource; uint64_t start; uint64_t length; };
+struct BufferFreezeRequestV1 { uint64_t resource; uint64_t start; uint64_t length; uint64_t span_origin; };
 struct ResourceErrorReplyV1 {
     uint64_t schema_version;
     uint64_t resource_kind;
@@ -78,8 +86,9 @@ int main(void) {
     FACT_SIZE(FsOpenRequestV1); FACT_ALIGN(FsOpenRequestV1); FACT_OFFSET(FsOpenRequestV1, capability); FACT_OFFSET(FsOpenRequestV1, path); FACT_OFFSET(FsOpenRequestV1, mode);
     FACT_SIZE(ResourceRequestV1); FACT_ALIGN(ResourceRequestV1); FACT_OFFSET(ResourceRequestV1, resource);
     FACT_SIZE(FsPositionedRequestV1); FACT_ALIGN(FsPositionedRequestV1); FACT_OFFSET(FsPositionedRequestV1, file); FACT_OFFSET(FsPositionedRequestV1, buffer); FACT_OFFSET(FsPositionedRequestV1, file_offset); FACT_OFFSET(FsPositionedRequestV1, buffer_start); FACT_OFFSET(FsPositionedRequestV1, length);
+    FACT_SIZE(FsWriteAtRequestV1); FACT_ALIGN(FsWriteAtRequestV1); FACT_OFFSET(FsWriteAtRequestV1, file); FACT_OFFSET(FsWriteAtRequestV1, buffer); FACT_OFFSET(FsWriteAtRequestV1, file_offset); FACT_OFFSET(FsWriteAtRequestV1, buffer_start); FACT_OFFSET(FsWriteAtRequestV1, length); FACT_OFFSET(FsWriteAtRequestV1, span_origin);
     FACT_SIZE(BufferAllocateRequestV1); FACT_ALIGN(BufferAllocateRequestV1); FACT_OFFSET(BufferAllocateRequestV1, capacity);
-    FACT_SIZE(BufferFreezeRequestV1); FACT_ALIGN(BufferFreezeRequestV1); FACT_OFFSET(BufferFreezeRequestV1, resource); FACT_OFFSET(BufferFreezeRequestV1, start); FACT_OFFSET(BufferFreezeRequestV1, length);
+    FACT_SIZE(BufferFreezeRequestV1); FACT_ALIGN(BufferFreezeRequestV1); FACT_OFFSET(BufferFreezeRequestV1, resource); FACT_OFFSET(BufferFreezeRequestV1, start); FACT_OFFSET(BufferFreezeRequestV1, length); FACT_OFFSET(BufferFreezeRequestV1, span_origin);
     FACT_SIZE(ResourceErrorReplyV1); FACT_ALIGN(ResourceErrorReplyV1); FACT_OFFSET(ResourceErrorReplyV1, schema_version); FACT_OFFSET(ResourceErrorReplyV1, resource_kind); FACT_OFFSET(ResourceErrorReplyV1, identity); FACT_OFFSET(ResourceErrorReplyV1, io); FACT_OFFSET(ResourceErrorReplyV1, required); FACT_OFFSET(ResourceErrorReplyV1, held); FACT_OFFSET(ResourceErrorReplyV1, expected_kind); FACT_OFFSET(ResourceErrorReplyV1, actual_kind);
     FACT_SIZE(HostReplyV1); FACT_ALIGN(HostReplyV1); FACT_OFFSET(HostReplyV1, tag); FACT_OFFSET(HostReplyV1, detail); FACT_OFFSET(HostReplyV1, bytes); FACT_OFFSET(HostReplyV1, resource_error); FACT_OFFSET(HostReplyV1, effective_request);
     return 0;

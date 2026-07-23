@@ -4624,7 +4624,17 @@ impl<'a> Lowering<'a> {
                     0,
                 );
                 record_narrow_failure(builder, invalid, 7);
-                for (index, value) in [*token, start, length].into_iter().enumerate() {
+                // PX8-SPAN-PROV: trailing `span_origin` acquisition token.
+                let Lowered::ResourceToken { value: span_origin } = lowered.get(3).ok_or_else(
+                    || unsupported("Effect", "BufferFreeze is missing its span origin"),
+                )?
+                else {
+                    return Err(unsupported(
+                        "Effect",
+                        "BufferFreeze span origin is not a resource",
+                    ));
+                };
+                for (index, value) in [*token, start, length, *span_origin].into_iter().enumerate() {
                     builder
                         .ins()
                         .stack_store(value, request, request_offset(index));
@@ -4677,13 +4687,29 @@ impl<'a> Lowering<'a> {
                     0,
                 );
                 record_narrow_failure(builder, bounds_invalid, 7);
-                for (index, value) in [file, buffer, file_offset, buffer_start, length]
-                    .into_iter()
-                    .enumerate()
-                {
-                    builder
-                        .ins()
-                        .stack_store(value, request, request_offset(index));
+                if operation == ken_host::HostOpV1::FsWriteAt {
+                    // PX8-SPAN-PROV: `FsWriteAt` carries the trailing
+                    // `span_origin` acquisition token; `FsReadAt` mints the span
+                    // and has no origin operand.
+                    let span_origin = resource(5, "span origin")?;
+                    for (index, value) in
+                        [file, buffer, file_offset, buffer_start, length, span_origin]
+                            .into_iter()
+                            .enumerate()
+                    {
+                        builder
+                            .ins()
+                            .stack_store(value, request, request_offset(index));
+                    }
+                } else {
+                    for (index, value) in [file, buffer, file_offset, buffer_start, length]
+                        .into_iter()
+                        .enumerate()
+                    {
+                        builder
+                            .ins()
+                            .stack_store(value, request, request_offset(index));
+                    }
                 }
             }
             _ => unreachable!("availability was checked above"),
@@ -5157,9 +5183,25 @@ impl<'a> Lowering<'a> {
                     Some(reply_start),
                 );
                 let reply_start_int = self.lower_unsigned_u64_int(builder, reply_start)?;
+                // PX8-SPAN-PROV: bind the minted span to this `readAt`'s buffer
+                // operand acquisition (lowered arg 2, the request seat).
+                let Lowered::ResourceToken { value: span_origin } = lowered
+                    .get(2)
+                    .ok_or_else(|| unsupported("Effect", "FsReadAt is missing its buffer operand"))?
+                else {
+                    return Err(unsupported(
+                        "Effect",
+                        "FsReadAt buffer operand is not a resource",
+                    ));
+                };
+                let span_origin = *span_origin;
                 let span = Lowered::Constructor {
                     constructor: self.process_symbols.private_buffer_span.clone(),
-                    args: vec![reply_start_int, Lowered::BoundedNat(count)],
+                    args: vec![
+                        Lowered::ResourceToken { value: span_origin },
+                        reply_start_int,
+                        Lowered::BoundedNat(count),
+                    ],
                 };
                 let transferred = Lowered::Constructor {
                     constructor: self.process_symbols.private_transfer_count.clone(),

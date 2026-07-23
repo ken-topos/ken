@@ -301,18 +301,29 @@ pub fn host_effect_wire_layout_v1(
         HostOpV1::FsHandleMetadata | HostOpV1::ResourceRelease => {
             vec![checked_u32(field("resource")?)?]
         }
-        HostOpV1::FsReadAt | HostOpV1::FsWriteAt => vec![
+        HostOpV1::FsReadAt => vec![
             checked_u32(field("file")?)?,
             checked_u32(field("buffer")?)?,
             checked_u32(field("file_offset")?)?,
             checked_u32(field("buffer_start")?)?,
             checked_u32(field("length")?)?,
         ],
+        // PX8-SPAN-PROV: `FsWriteAt` carries the span's originating buffer
+        // acquisition (`span_origin`) so the shared dispatcher can admit it.
+        HostOpV1::FsWriteAt => vec![
+            checked_u32(field("file")?)?,
+            checked_u32(field("buffer")?)?,
+            checked_u32(field("file_offset")?)?,
+            checked_u32(field("buffer_start")?)?,
+            checked_u32(field("length")?)?,
+            checked_u32(field("span_origin")?)?,
+        ],
         HostOpV1::BufferAllocate => vec![checked_u32(field("capacity")?)?],
         HostOpV1::BufferFreeze => vec![
             checked_u32(field("resource")?)?,
             checked_u32(field("start")?)?,
             checked_u32(field("length")?)?,
+            checked_u32(field("span_origin")?)?,
         ],
         _ => return Err(TerminalErrorV1::OperationUnavailable(operation)),
     };
@@ -1345,6 +1356,23 @@ pub enum ResourceInputsV1 {
         file: ResourceTokenV1,
         buffer: ResourceTokenV1,
     },
+    /// `BufferFreeze`/`spanBytes` consumer: the target buffer plus the exact
+    /// buffer acquisition that minted the supplied span (PX8-SPAN-PROV). The
+    /// dispatcher admits only when `span_origin == target` on the full opaque
+    /// token, before any byte exposure.
+    BufferSpanTarget {
+        target: ResourceTokenV1,
+        span_origin: ResourceTokenV1,
+    },
+    /// `FsWriteAt` consumer: the file, the target buffer, and the span's
+    /// originating buffer acquisition (PX8-SPAN-PROV). The dispatcher admits
+    /// only when `span_origin == target_buffer`, after host-width admission and
+    /// before any backend write.
+    FileBufferSpan {
+        file: ResourceTokenV1,
+        target_buffer: ResourceTokenV1,
+        span_origin: ResourceTokenV1,
+    },
 }
 
 /// The only V1 semantic operation switch. Validation and capability denial
@@ -1420,11 +1448,17 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
     let resource_shape_matches = matches!(
         (operation, resource),
         (
-            HostOpV1::FsHandleMetadata | HostOpV1::BufferFreeze | HostOpV1::ResourceRelease,
+            HostOpV1::FsHandleMetadata | HostOpV1::ResourceRelease,
             ResourceInputsV1::Target(_)
         ) | (
-            HostOpV1::FsReadAt | HostOpV1::FsWriteAt,
+            HostOpV1::BufferFreeze,
+            ResourceInputsV1::BufferSpanTarget { .. }
+        ) | (
+            HostOpV1::FsReadAt,
             ResourceInputsV1::FileBuffer { .. }
+        ) | (
+            HostOpV1::FsWriteAt,
+            ResourceInputsV1::FileBufferSpan { .. }
         ) | (
             HostOpV1::BufferAllocate
                 | HostOpV1::ConsoleRead
@@ -1580,21 +1614,36 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             }
         }
         (HostOpV1::BufferFreeze, CanonicalRequestV1::BufferFreeze { start, length }) => {
-            let ResourceInputsV1::Target(token) = resource else {
+            let ResourceInputsV1::BufferSpanTarget {
+                target,
+                span_origin,
+            } = resource
+            else {
                 unreachable!("resource shape validated")
             };
-            match resources.resolve_buffer(token) {
+            match resources.resolve_buffer(target) {
                 Ok((buffer, identity)) => {
                     resource_bindings.push((ResourceBindingRole::Target, identity));
-                    let start = usize::try_from(*start).map_err(|_| ResourceErrorV1::InvalidBounds);
-                    let length =
-                        usize::try_from(*length).map_err(|_| ResourceErrorV1::InvalidBounds);
-                    match start.and_then(|start| length.map(|length| (start, length))) {
-                        Ok((start, length)) => buffer
-                            .initialized_slice(start, length)
-                            .map(|bytes| CanonicalReplyV1::Bytes(bytes.to_vec()))
-                            .map_err(SemanticErrorV1::Resource),
-                        Err(error) => Err(SemanticErrorV1::Resource(error)),
+                    if span_origin != target {
+                        // PX8-SPAN-PROV: the span was minted by a different
+                        // buffer acquisition. Reject before exposing any bytes.
+                        // Acquisition mismatch shares `InvalidBounds` with
+                        // numeric live-window invalidity (`38 §1.7.1`); their
+                        // relative order is not publicly observable, so the
+                        // check may precede the numeric coordinate check.
+                        Err(SemanticErrorV1::Resource(ResourceErrorV1::InvalidBounds))
+                    } else {
+                        let start =
+                            usize::try_from(*start).map_err(|_| ResourceErrorV1::InvalidBounds);
+                        let length =
+                            usize::try_from(*length).map_err(|_| ResourceErrorV1::InvalidBounds);
+                        match start.and_then(|start| length.map(|length| (start, length))) {
+                            Ok((start, length)) => buffer
+                                .initialized_slice(start, length)
+                                .map(|bytes| CanonicalReplyV1::Bytes(bytes.to_vec()))
+                                .map_err(SemanticErrorV1::Resource),
+                            Err(error) => Err(SemanticErrorV1::Resource(error)),
+                        }
                     }
                 }
                 Err(error) => Err(SemanticErrorV1::Resource(error)),
@@ -1666,13 +1715,18 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
                 length,
             },
         ) => {
-            let ResourceInputsV1::FileBuffer { file, buffer } = resource else {
+            let ResourceInputsV1::FileBufferSpan {
+                file,
+                target_buffer,
+                span_origin,
+            } = resource
+            else {
                 unreachable!("resource shape validated")
             };
             resources.with_fs_and_buffer_mut(
                 file,
                 crate::RightSet::WRITE,
-                buffer,
+                target_buffer,
                 |handle, file_identity, region, buffer_identity| {
                     resource_bindings.extend([
                         (ResourceBindingRole::File, file_identity),
@@ -1685,6 +1739,13 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
                         .checked_add(effective as u64)
                         .ok_or(ResourceErrorV1::InvalidOffset)
                         .map_err(SemanticErrorV1::Resource)?;
+                    if span_origin != target_buffer {
+                        // PX8-SPAN-PROV: foreign-acquisition span. Reject after
+                        // existing host-width admission (`InvalidOffset`) and
+                        // before exposing bytes or issuing any backend write, so
+                        // a mismatch records zero backend calls (`38 §1.7.1`).
+                        return Err(SemanticErrorV1::Resource(ResourceErrorV1::InvalidBounds));
+                    }
                     let bytes = region
                         .initialized_slice(start, effective)
                         .map_err(SemanticErrorV1::Resource)?;
@@ -2672,10 +2733,10 @@ mod tests {
             "FsOpen|030b|native|FsOpenRequestV1|3|HostReplyV1|1",
             "FsHandleMetadata|030c|native|ResourceRequestV1|1|HostReplyV1|1",
             "FsReadAt|030d|native|FsPositionedRequestV1|5|HostReplyV1|1",
-            "FsWriteAt|030e|native|FsPositionedRequestV1|5|HostReplyV1|1",
+            "FsWriteAt|030e|native|FsWriteAtRequestV1|6|HostReplyV1|1",
             "ResourceRelease|0401|native|ResourceRequestV1|1|HostReplyV1|1",
             "BufferAllocate|0402|native|BufferAllocateRequestV1|1|HostReplyV1|1",
-            "BufferFreeze|0403|native|BufferFreezeRequestV1|3|HostReplyV1|1",
+            "BufferFreeze|0403|native|BufferFreezeRequestV1|4|HostReplyV1|1",
             "lifetime=filesystem_observation_schema|2",
             "lifetime=resource_observation_schema|1",
             "lifetime=resource_error_reply_schema|1",
@@ -3520,7 +3581,10 @@ mod tests {
             &mut resources,
             HostOpV1::BufferFreeze,
             None,
-            ResourceInputsV1::Target(buffer_token),
+            ResourceInputsV1::BufferSpanTarget {
+                target: buffer_token,
+                span_origin: buffer_token,
+            },
             &CanonicalRequestV1::BufferFreeze {
                 start: 0,
                 length: 4,
@@ -3560,9 +3624,10 @@ mod tests {
             &mut resources,
             HostOpV1::FsWriteAt,
             None,
-            ResourceInputsV1::FileBuffer {
+            ResourceInputsV1::FileBufferSpan {
                 file: target_token,
-                buffer: buffer_token,
+                target_buffer: buffer_token,
+                span_origin: buffer_token,
             },
             &write_request,
         )
@@ -3608,9 +3673,10 @@ mod tests {
                 &mut resources,
                 HostOpV1::FsWriteAt,
                 None,
-                ResourceInputsV1::FileBuffer {
+                ResourceInputsV1::FileBufferSpan {
                     file: truncate_token,
-                    buffer: buffer_token,
+                    target_buffer: buffer_token,
+                    span_origin: buffer_token,
                 },
                 &CanonicalRequestV1::FsWriteAt {
                     file_offset,
@@ -3635,9 +3701,10 @@ mod tests {
             &mut resources,
             HostOpV1::FsWriteAt,
             None,
-            ResourceInputsV1::FileBuffer {
+            ResourceInputsV1::FileBufferSpan {
                 file: target_token,
-                buffer: buffer_token,
+                target_buffer: buffer_token,
+                span_origin: buffer_token,
             },
             &CanonicalRequestV1::FsWriteAt {
                 file_offset: 6,
@@ -3659,9 +3726,10 @@ mod tests {
             &mut resources,
             HostOpV1::FsWriteAt,
             None,
-            ResourceInputsV1::FileBuffer {
+            ResourceInputsV1::FileBufferSpan {
                 file: target_token,
-                buffer: buffer_token,
+                target_buffer: buffer_token,
+                span_origin: buffer_token,
             },
             &CanonicalRequestV1::FsWriteAt {
                 file_offset: 8,
@@ -3733,7 +3801,10 @@ mod tests {
             &mut resources,
             HostOpV1::BufferFreeze,
             None,
-            ResourceInputsV1::Target(source_token),
+            ResourceInputsV1::BufferSpanTarget {
+                target: source_token,
+                span_origin: source_token,
+            },
             &CanonicalRequestV1::BufferFreeze {
                 start: 0,
                 length: 1,
@@ -3776,9 +3847,10 @@ mod tests {
             &mut resources,
             HostOpV1::FsWriteAt,
             None,
-            ResourceInputsV1::FileBuffer {
+            ResourceInputsV1::FileBufferSpan {
                 file: source_token,
-                buffer: buffer_token,
+                target_buffer: buffer_token,
+                span_origin: buffer_token,
             },
             &write_request,
         )
@@ -3810,7 +3882,10 @@ mod tests {
             &mut resources,
             HostOpV1::BufferFreeze,
             None,
-            ResourceInputsV1::Target(buffer_token),
+            ResourceInputsV1::BufferSpanTarget {
+                target: buffer_token,
+                span_origin: buffer_token,
+            },
             &CanonicalRequestV1::BufferFreeze {
                 start: 0,
                 length: 1,

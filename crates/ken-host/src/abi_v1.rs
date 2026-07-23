@@ -245,6 +245,19 @@ struct FsPositionedRequestV1 {
     length: u64,
 }
 
+// PX8-SPAN-PROV: `FsWriteAt` carries the span's originating buffer acquisition
+// so the shared dispatcher can reject a foreign-acquisition span before any
+// backend write. `FsReadAt` keeps `FsPositionedRequestV1` (it mints the span).
+#[repr(C)]
+struct FsWriteAtRequestV1 {
+    file: u64,
+    buffer: u64,
+    file_offset: u64,
+    buffer_start: u64,
+    length: u64,
+    span_origin: u64,
+}
+
 #[repr(C)]
 struct BufferAllocateRequestV1 {
     capacity: u64,
@@ -255,6 +268,7 @@ struct BufferFreezeRequestV1 {
     resource: u64,
     start: u64,
     length: u64,
+    span_origin: u64,
 }
 
 #[repr(C)]
@@ -1334,33 +1348,41 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
                 request,
             )
         }
-        HostOpV1::FsReadAt | HostOpV1::FsWriteAt
-            if request_size == std::mem::size_of::<FsPositionedRequestV1>() =>
-        {
+        HostOpV1::FsReadAt if request_size == std::mem::size_of::<FsPositionedRequestV1>() => {
             if !request.cast::<FsPositionedRequestV1>().is_aligned() {
                 return -1;
             }
             let wire = unsafe { &*(request.cast::<FsPositionedRequestV1>()) };
-            let request = if op == HostOpV1::FsReadAt {
-                CanonicalRequestV1::FsReadAt {
-                    file_offset: wire.file_offset,
-                    buffer_start: wire.buffer_start,
-                    length: wire.length,
-                }
-            } else {
-                CanonicalRequestV1::FsWriteAt {
-                    file_offset: wire.file_offset,
-                    buffer_start: wire.buffer_start,
-                    length: wire.length,
-                }
-            };
             (
                 None,
                 crate::ResourceInputsV1::FileBuffer {
                     file: crate::ResourceTokenV1::from_erased_identity(wire.file),
                     buffer: crate::ResourceTokenV1::from_erased_identity(wire.buffer),
                 },
-                request,
+                CanonicalRequestV1::FsReadAt {
+                    file_offset: wire.file_offset,
+                    buffer_start: wire.buffer_start,
+                    length: wire.length,
+                },
+            )
+        }
+        HostOpV1::FsWriteAt if request_size == std::mem::size_of::<FsWriteAtRequestV1>() => {
+            if !request.cast::<FsWriteAtRequestV1>().is_aligned() {
+                return -1;
+            }
+            let wire = unsafe { &*(request.cast::<FsWriteAtRequestV1>()) };
+            (
+                None,
+                crate::ResourceInputsV1::FileBufferSpan {
+                    file: crate::ResourceTokenV1::from_erased_identity(wire.file),
+                    target_buffer: crate::ResourceTokenV1::from_erased_identity(wire.buffer),
+                    span_origin: crate::ResourceTokenV1::from_erased_identity(wire.span_origin),
+                },
+                CanonicalRequestV1::FsWriteAt {
+                    file_offset: wire.file_offset,
+                    buffer_start: wire.buffer_start,
+                    length: wire.length,
+                },
             )
         }
         HostOpV1::BufferAllocate
@@ -1385,9 +1407,10 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
             let wire = unsafe { &*(request.cast::<BufferFreezeRequestV1>()) };
             (
                 None,
-                crate::ResourceInputsV1::Target(crate::ResourceTokenV1::from_erased_identity(
-                    wire.resource,
-                )),
+                crate::ResourceInputsV1::BufferSpanTarget {
+                    target: crate::ResourceTokenV1::from_erased_identity(wire.resource),
+                    span_origin: crate::ResourceTokenV1::from_erased_identity(wire.span_origin),
+                },
                 CanonicalRequestV1::BufferFreeze {
                     start: wire.start,
                     length: wire.length,
@@ -1652,6 +1675,7 @@ mod tests {
         size_align!("FsOpenRequestV1", FsOpenRequestV1);
         size_align!("ResourceRequestV1", ResourceRequestV1);
         size_align!("FsPositionedRequestV1", FsPositionedRequestV1);
+        size_align!("FsWriteAtRequestV1", FsWriteAtRequestV1);
         size_align!("BufferAllocateRequestV1", BufferAllocateRequestV1);
         size_align!("BufferFreezeRequestV1", BufferFreezeRequestV1);
         size_align!("ResourceErrorReplyV1", ResourceErrorReplyV1);
