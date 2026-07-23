@@ -658,6 +658,61 @@ fn oriented_edge_mutations_reject_in_the_source_machine_consumer() {
 }
 
 #[test]
+fn rt_escape_within_path_duplicate_frame_consume_still_rejects() {
+    // RT-ESCAPE: forking `consumed_subcontinuation_frames` per mutually-exclusive
+    // arm must not weaken the same-path affine guard. On a straight-line path
+    // (no branch, so `lower_forked_branch`'s per-arm reset never applies),
+    // consuming one checked frame twice must still reject before CFG. Direct-API
+    // PX8DS-fixture style; exercises the frame consume the dynamic-splice-edge
+    // mutation suite does not reach.
+    let seed_env = NativeSeedEnvironment::empty();
+    let (_expr, decl, plan) = occurrence_exact_marker_fixture(false, false);
+    let RuntimeDeclarationKind::Transparent { body } = decl.kind else {
+        panic!("fixture declaration is transparent");
+    };
+    let RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } = body else {
+        panic!("declaration body is a checked subcontinuation frame");
+    };
+    let RuntimeExpr::ComputationalMatch { cases, default, .. } = *body else {
+        panic!("checked frame wraps a computational match");
+    };
+    let mut compiler = root_authority_test_lowering(&seed_env);
+    compiler.native_join_plan = None;
+    compiler.root_terminal_authority = None;
+    compiler.process_object = false;
+    compiler.oriented_subcontinuation_plan = Some(plan);
+
+    // First consume on the path succeeds.
+    compiler
+        .enter_checked_subcontinuation_frame(frame_id)
+        .expect("first enter of the checked frame");
+    assert_eq!(
+        compiler
+            .consume_checked_subcontinuation_frame(&cases, &default)
+            .expect("first consume of the checked frame succeeds"),
+        Some(frame_id)
+    );
+
+    // A second enter + consume of the same frame on the same path rejects.
+    compiler
+        .enter_checked_subcontinuation_frame(frame_id)
+        .expect("second enter re-marks the active frame");
+    let err = compiler
+        .consume_checked_subcontinuation_frame(&cases, &default)
+        .expect_err("a same-path duplicate consume must reject before CFG");
+    assert!(
+        matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "OrientedSubcontinuationPlanV1",
+                ref reason,
+            }) if reason.contains("consumed more than once")
+        ),
+        "expected 'consumed more than once', got {err:?}"
+    );
+}
+
+#[test]
 fn oriented_source_open_occurrence_cross_checks_the_closure_selected_parent() {
     let seed_env = NativeSeedEnvironment::empty();
     let mut compiler = root_authority_test_lowering(&seed_env);

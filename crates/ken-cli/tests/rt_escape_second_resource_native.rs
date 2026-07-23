@@ -22,7 +22,9 @@
 //! that set per mutually-exclusive branch (snapshot → reset-per-arm → union at
 //! rejoin) in the dynamic-match arm lowerers (`lower_forked_branch`), preserving
 //! the within-a-single-path affine rejection (a real double-consume on one path
-//! still rejects — see `rt_escape_within_path_duplicate_still_rejects`).
+//! still rejects — proven by
+//! `rt_escape_within_path_duplicate_frame_consume_still_rejects` in
+//! `crates/ken-runtime/src/cranelift_backend/lowering/core/tests/control.rs`).
 //!
 //! Each case runs the identical source through the linked native artifact and the
 //! reference interpreter and asserts the canonical observations agree, so the
