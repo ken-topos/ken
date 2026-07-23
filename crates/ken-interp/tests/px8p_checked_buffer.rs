@@ -19,28 +19,28 @@ fn env() -> ken_elaborator::ElabEnv {
     );
     env.elaborate_file(
         r#"
-fn px8p_ok_body (_resource : Resource Buffer)
+fn px8p_ok_body (_resource : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) =
   Ret (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
     (ResourceBodyResult Unit Unit)
     (ResourceBodyOk Unit Unit MkUnit)
 
-fn px8p_error_body (_resource : Resource Buffer)
+fn px8p_error_body (_resource : BufferHandle)
   : HostIO AFull (ResourceBodyResult ResourceError Unit) =
   Ret (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
     (ResourceBodyResult ResourceError Unit)
     (ResourceBodyErr ResourceError Unit InvalidBounds)
 
-fn px8p_escape_body (resource : Resource Buffer)
-  : HostIO AFull (ResourceBodyResult Unit (Resource Buffer)) =
+fn px8p_escape_body (resource : BufferHandle)
+  : HostIO AFull (ResourceBodyResult Unit (BufferHandle)) =
   Ret (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-    (ResourceBodyResult Unit (Resource Buffer))
-    (ResourceBodyOk Unit (Resource Buffer) resource)
+    (ResourceBodyResult Unit (BufferHandle))
+    (ResourceBodyOk Unit (BufferHandle) resource)
 
-proc px8p_private_release (resource : Resource Buffer)
+proc px8p_private_release (resource : BufferHandle)
   : HostIO AFull (Result ResourceError Unit) visits [FS] =
   Vis (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -52,7 +52,7 @@ proc px8p_private_release (resource : Resource Buffer)
       (Result ResourceError Unit) settled)
 
 proc px8p_after_escape_bracket
-  (bracket : ResourceBracketResult Unit (Resource Buffer))
+  (bracket : ResourceBracketResult Unit (BufferHandle))
   : HostIO AFull (Result ResourceError Unit) visits [FS] =
   match bracket {
     ResourceBracketOk resource |-> px8p_private_release resource;
@@ -70,7 +70,7 @@ proc px8p_after_escape_bracket
 
 proc px8p_after_escape_outer
   (outcome : Result ResourceError
-    (ResourceBracketResult Unit (Resource Buffer)))
+    (ResourceBracketResult Unit (BufferHandle)))
   : HostIO AFull (Result ResourceError Unit) visits [FS] =
   match outcome {
     Err acquire_error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
@@ -84,9 +84,9 @@ proc px8p_escape_then_release (capacity : Int)
     visits [FS, BufferAllocate, ResourceRelease] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-    (Result ResourceError (ResourceBracketResult Unit (Resource Buffer)))
+    (Result ResourceError (ResourceBracketResult Unit (BufferHandle)))
     (Result ResourceError Unit)
-    (withBuffer AFull Unit (Resource Buffer) capacity px8p_escape_body)
+    (withBuffer AFull Unit (BufferHandle) capacity px8p_escape_body)
     (\outcome. px8p_after_escape_outer outcome)
 "#,
     )

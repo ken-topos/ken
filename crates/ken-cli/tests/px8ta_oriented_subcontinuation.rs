@@ -136,7 +136,7 @@ proc selected_buffer_body (terminal : Bool)
       (\outcome. after_first_countdown outcome)
   }
 
-proc buffer_body (_buffer : Resource Buffer)
+proc buffer_body (_buffer : BufferHandle)
   : HostIO APartial (ResourceBodyResult Unit Unit) visits [Console] =
   bind (Coproduct (FSOp APartial) AmbientOp)
     (resp_coproduct (FSOp APartial) AmbientOp

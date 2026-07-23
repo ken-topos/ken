@@ -32,7 +32,7 @@ fn read_eof_body (_unit : Unit)
   ResourceBodyErr Unit Unit MkUnit
 
 proc after_read
-  (output : Resource FsHandle) (buffer : Resource Buffer)
+  (output : Resource FsHandle) (buffer : BufferHandle)
   (outcome : Result ResourceError ReadProgress)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   match outcome {
@@ -54,7 +54,7 @@ proc after_read
 
 proc buffer_body
   (input : Resource FsHandle) (output : Resource FsHandle)
-  (buffer : Resource Buffer)
+  (buffer : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
