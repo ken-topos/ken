@@ -974,6 +974,22 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn generated_manifest_is_closed_and_probe_comparison_discriminates() {
+        // CLAIM LEDGER (Q-CLAIM-CLOSURE AC-3). This is a multi-claim block;
+        // every claim it carries is enumerated here so none is silently dropped
+        // by a future rework. Add an assertion -> add its claim here.
+        //   (a) fact_count == facts.len()          -- internal consistency [retained, labeled below]
+        //   (b) fact NAME inventory == pinned set   -- out-of-band anchor [NEW, replaces dropped `fact_count == 23`]
+        //   (c) dependencies.len() == 4             -- dependency cardinality [retained]
+        //   (d) exact (name,version,features) x4    -- dependency identity [retained]
+        //   (e) every checksum is 64 hex chars      -- checksum shape [retained]
+        //   (f) backend == "linux_raw"              -- backend identity [retained]
+        //   (g) TARGET_ABI_CANONICAL lacks "SIG"    -- canonical hygiene [retained]
+        //   (h) verify_probe agrees on true values  -- probe round-trips [retained]
+        //   (i) tampered O_RDONLY fails closed       -- value discrimination [retained]
+        //   (j) tampered width facts fail closed     -- width discrimination [retained]
+        // Dropped in Q-RESIDUE, restored as (b): the frozen `fact_count == 23`
+        // literal -- the sole non-generated assertion, i.e. the inventory anchor.
+        //
         // CLAIM (a) -- manifest internal consistency. A `TargetAbi` whose
         // declared `fact_count` diverges from its own `facts` list is
         // malformed. This is a real invariant but a WEAK one: both fields are
@@ -1030,13 +1046,15 @@ mod tests {
             "ERRNO_ENOENT",
             "ERRNO_EEXIST",
         ];
-        let pinned: std::collections::BTreeSet<&str> = EXPECTED_ABI_FACT_NAMES.iter().copied().collect();
+        let pinned: std::collections::BTreeSet<&str> =
+            EXPECTED_ABI_FACT_NAMES.iter().copied().collect();
         assert_eq!(
             pinned.len(),
             EXPECTED_ABI_FACT_NAMES.len(),
             "the pinned ABI fact inventory contains a duplicate name"
         );
-        let generated: std::collections::BTreeSet<&str> = TARGET_ABI.facts.iter().map(|fact| fact.name).collect();
+        let generated: std::collections::BTreeSet<&str> =
+            TARGET_ABI.facts.iter().map(|fact| fact.name).collect();
         let unexpected: Vec<&str> = generated.difference(&pinned).copied().collect();
         let missing: Vec<&str> = pinned.difference(&generated).copied().collect();
         assert!(

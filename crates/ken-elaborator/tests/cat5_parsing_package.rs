@@ -311,6 +311,15 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
 
 #[test]
 fn cat5_d2_parser_result_surface_is_total_and_located() {
+    // CLAIM LEDGER (Q-CLAIM-CLOSURE AC-3): ParseResult exposes Parsed/Failed
+    // with the pinned arg counts (evaluated); Parser is total over a well-formed
+    // (Source, in-bounds start) pair; ParsedValid/FailedValid/ParserLaws are
+    // checked (Transparent) declarations; the bespoke fuel recursion
+    // (parse_bool_expr_at_fuel/skip_spaces_fuel) is retired; parser_from_decoder
+    // specializes the shared Decoder; decoder_recursive/decoder_many are covered
+    // by the D3 roundtrip [R4 -- acknowledged as subsumed, see foot of test].
+    // Add an assert -> add its claim here.
+    //
     // Rework (Q-RESIDUE, 2026-07-21): the surface contract is "the declared
     // shape typechecks and evaluates as claimed", not "the source text is
     // spelled this way" -- checked against the elaborated env, mirroring
@@ -414,6 +423,13 @@ fn cat5_d2_parser_result_surface_is_total_and_located() {
 
 #[test]
 fn cat5_d3_bool_expression_surface_is_package_owned() {
+    // CLAIM LEDGER (Q-CLAIM-CLOSURE AC-3): BoolExpr's four constructors compose
+    // (BAnd/BTrue/BNot/BFalse, evaluated); Syntax is constructible from a
+    // Located root + a List of Located children; erase_spans and ValidSyntax
+    // have their pinned signatures [R4 -- type-pinned, was bare contains_key];
+    // parser/print/format exist with exactly the pinned types (roundtrip
+    // BEHAVIOR is the sibling roundtrip test). Add an assert -> add its claim.
+    //
     // Rework (Q-RESIDUE, 2026-07-21): elaborate-then-assert-structurally, per
     // language-leader's guidance. The parser/printer/formatter roundtrip
     // BEHAVIOR (including the canonical ASCII token bytes) is proven by the
@@ -500,6 +516,16 @@ fn cat5_d3_bool_expression_surface_is_package_owned() {
 
 #[test]
 fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
+    // CLAIM LEDGER (Q-CLAIM-CLOSURE AC-3): IsUtf8 is Decl::Transparent;
+    // source_bytes : Source -> Bytes (probe); Source.field_names ==
+    // [id,bytes,utf8] (no cached-length field); MkSource is not a global; Span
+    // constructible from two Nat; SourceId is a one-constructor inductive whose
+    // single field is Nat [R3 -- field TYPE now checked, not just arity];
+    // span_to_byte_range/span_origin/*_faithful/ValidLocated exported; Located
+    // constructible; extraction names none of the forbidden tokens [R4 --
+    // compiler/AST/String restored]; extraction never says `data SourceId =`
+    // [R4 -- provenance guard restored]. Add an assert -> add its claim here.
+    //
     // Rework (Q-RESIDUE, 2026-07-21): elaborate-then-assert-structurally.
     // IsUtf8's round-trip-not-reflexive claim and source_length's byte-view
     // computation are proven behaviorally by
@@ -578,9 +604,7 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
         "SourceId must wrap exactly one field"
     );
     let ken_kernel::Term::Pi(field_type, _) = source_id_ctor_type else {
-        panic!(
-            "SourceId's constructor must be a one-field Pi, got {source_id_ctor_type:?}"
-        );
+        panic!("SourceId's constructor must be a one-field Pi, got {source_id_ctor_type:?}");
     };
     assert_eq!(
         head_global(field_type),
@@ -691,6 +715,12 @@ fn cat5_d1_valid_half_open_bounds_and_zero_width_offsets_check() {
 
 #[test]
 fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
+    // CLAIM LEDGER (Q-CLAIM-CLOSURE AC-3): projected_bytes == b"abc" (source_bytes
+    // through the instance); projected_length == 3 (bytes_nat_length on the raw
+    // const, byte arithmetic only); projected_byte_view_length == 3 [NEW, R2 --
+    // the byte-view length through the instance]; projected_utf8 == Neutral (a
+    // noncomputational proof field manufactures no evidence). Add an eval+assert
+    // -> add its claim here.
     let mut env = mk_env();
     env.elaborate_file(
         r#"
