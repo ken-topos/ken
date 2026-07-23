@@ -6,7 +6,7 @@ use ken_elaborator::compiler_driver::{compile_checked_target_denotation, Compile
 use ken_elaborator::{emit_checked_target_export, ElabEnv};
 
 const BUFFER_ONLY_PRODUCER: &str = r#"
-fn px8p_buffer_body (_resource : Resource Buffer)
+fn px8p_buffer_body (_resource : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) =
   Ret (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -26,7 +26,7 @@ fn with_buffer_has_the_ruled_surface_and_keeps_raw_allocation_private() {
         r#"
 proc exact_with_buffer_surface
   (a : Auth) (e r : Type) (capacity : Int)
-  (body : Resource Buffer -> HostIO a (ResourceBodyResult e r))
+  (body : BufferHandle -> HostIO a (ResourceBodyResult e r))
   : HostIO a (Result ResourceError (ResourceBracketResult e r)) visits [FS] =
   withBuffer a e r capacity body
 "#,

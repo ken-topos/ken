@@ -224,7 +224,7 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
 // lowering with "checked Runtime frame marker was consumed more than once".
 #[cfg(target_os = "linux")]
 const ESCAPE_FILE_THEN_READAT: &str = r#"program capabilities FS AFull
-proc read_body (file_closed : Resource FsHandle) (buffer : Resource Buffer)
+proc read_body (file_closed : Resource FsHandle) (buffer : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -277,14 +277,14 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
 // kind — pre-fix this tripped the identical "consumed more than once".
 #[cfg(target_os = "linux")]
 const ESCAPE_BUFFER_THEN_READAT: &str = r#"program capabilities FS AFull
-fn escape_buffer (buffer : Resource Buffer)
-  : HostIO AFull (ResourceBodyResult Unit (Resource Buffer)) =
+fn escape_buffer (buffer : BufferHandle)
+  : HostIO AFull (ResourceBodyResult Unit (BufferHandle)) =
   Ret (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-    (ResourceBodyResult Unit (Resource Buffer))
-    (ResourceBodyOk Unit (Resource Buffer) buffer)
+    (ResourceBodyResult Unit (BufferHandle))
+    (ResourceBodyOk Unit (BufferHandle) buffer)
 
-proc read_with_escaped_buffer (file : Resource FsHandle) (buffer_closed : Resource Buffer)
+proc read_with_escaped_buffer (file : Resource FsHandle) (buffer_closed : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -296,7 +296,7 @@ proc read_with_escaped_buffer (file : Resource FsHandle) (buffer_closed : Resour
 
 proc after_buffer_escape
   (file : Resource FsHandle)
-  (inner : Result ResourceError (ResourceBracketResult Unit (Resource Buffer)))
+  (inner : Result ResourceError (ResourceBracketResult Unit (BufferHandle)))
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   match inner {
     Err allocate_error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
@@ -320,9 +320,9 @@ proc file_body (file : Resource FsHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-    (Result ResourceError (ResourceBracketResult Unit (Resource Buffer)))
+    (Result ResourceError (ResourceBracketResult Unit (BufferHandle)))
     (ResourceBodyResult Unit Unit)
-    (withBuffer AFull Unit (Resource Buffer) (6 : Int) escape_buffer)
+    (withBuffer AFull Unit (BufferHandle) (6 : Int) escape_buffer)
     (\inner. after_buffer_escape file inner)
 
 fn finish (outcome : Result FileError (ResourceBracketResult Unit Unit))
@@ -392,7 +392,7 @@ fn body_from_alloc (outcome : Result ResourceError (ResourceBracketResult Unit U
     Ok bracket |-> body_from_bracket bracket
   }
 
-proc after_read (buffer_b : Resource Buffer) (outcome : Result ResourceError ReadProgress)
+proc after_read (buffer_b : BufferHandle) (outcome : Result ResourceError ReadProgress)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   match outcome {
     Err error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
@@ -413,7 +413,7 @@ proc after_read (buffer_b : Resource Buffer) (outcome : Result ResourceError Rea
     }
   }
 
-proc buffer_b_body (file : Resource FsHandle) (buffer_a : Resource Buffer) (buffer_b : Resource Buffer)
+proc buffer_b_body (file : Resource FsHandle) (buffer_a : BufferHandle) (buffer_b : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -421,7 +421,7 @@ proc buffer_b_body (file : Resource FsHandle) (buffer_a : Resource Buffer) (buff
     (readAt AFull file (0 : Int) buffer_a (MkBufferWindow (0 : Int) (6 : Int)))
     (\outcome. after_read buffer_b outcome)
 
-proc buffer_a_body (file : Resource FsHandle) (buffer_a : Resource Buffer)
+proc buffer_a_body (file : Resource FsHandle) (buffer_a : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -473,7 +473,7 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
 // (verified by reverting only the Nat-lane fork). Now interpreter-equivalent.
 #[cfg(target_os = "linux")]
 const NAT_FANOUT_ESCAPED_RESOURCE: &str = r#"program capabilities FS AFull
-proc second_read (file_closed : Resource FsHandle) (buffer : Resource Buffer)
+proc second_read (file_closed : Resource FsHandle) (buffer : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -483,7 +483,7 @@ proc second_read (file_closed : Resource FsHandle) (buffer : Resource Buffer)
       (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
       (ResourceBodyResult Unit Unit) (ResourceBodyOk Unit Unit MkUnit))
 
-proc after_read (file_closed : Resource FsHandle) (buffer : Resource Buffer)
+proc after_read (file_closed : Resource FsHandle) (buffer : BufferHandle)
   (outcome : Result ResourceError ReadProgress)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   match outcome {
@@ -508,7 +508,7 @@ proc after_read (file_closed : Resource FsHandle) (buffer : Resource Buffer)
     }
   }
 
-proc read_body (file_closed : Resource FsHandle) (buffer : Resource Buffer)
+proc read_body (file_closed : Resource FsHandle) (buffer : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)

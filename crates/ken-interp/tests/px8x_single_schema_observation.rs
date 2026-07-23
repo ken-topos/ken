@@ -7,7 +7,7 @@ fn fixture() -> ken_elaborator::ElabEnv {
     let mut env = ken_elaborator::ElabEnv::empty().expect("PX8-X prelude");
     env.elaborate_file(
         r#"
-fn px8x_body (_resource : Resource Buffer)
+fn px8x_body (_resource : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) =
   Ret (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)

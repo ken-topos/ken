@@ -63,30 +63,30 @@ fn checked_surface_is_public_but_proof_carrying_constructors_stay_private() {
         r#"
 proc px8f_exact_read
   (a : Auth) (file : Resource FsHandle) (offset : Int)
-  (buffer : Resource Buffer) (window : BufferWindow)
+  (buffer : BufferHandle) (window : BufferWindow)
   : HostIO a (Result ResourceError ReadProgress) visits [FS] =
   readAt a file offset buffer window
 
 proc px8f_exact_write
   (a : Auth) (file : Resource FsHandle) (offset : Int)
-  (buffer : Resource Buffer) (span : BufferSpan)
+  (buffer : BufferHandle) (span : BufferSpan)
   : HostIO a (Result ResourceError WriteProgress) visits [FS] =
   writeAt a file offset buffer span
 
 proc px8f_exact_freeze
-  (a : Auth) (buffer : Resource Buffer) (span : BufferSpan)
+  (a : Auth) (buffer : BufferHandle) (span : BufferSpan)
   : HostIO a (Result ResourceError Bytes) visits [FS] =
   freeze a buffer span
 
 proc px8f_exact_write_all
   (a : Auth) (file : Resource FsHandle) (offset : Int)
-  (buffer : Resource Buffer) (span : BufferSpan)
+  (buffer : BufferHandle) (span : BufferSpan)
   : HostIO a (Result ResourceError Unit) visits [FS] =
   writeAll a file offset buffer span
 
 proc px8f_readsome_public_consumers
   (a : Auth) (file : Resource FsHandle) (offset : Int)
-  (buffer : Resource Buffer) (window : BufferWindow)
+  (buffer : BufferHandle) (window : BufferWindow)
   : HostIO a (Result ResourceError Unit) visits [FS] =
   bind
     (Coproduct (FSOp a) AmbientOp)
@@ -132,6 +132,7 @@ proc px8f_readsome_public_consumers
     .expect("exact PX8-F public signatures elaborate");
 
     for public in [
+        "BufferHandle",
         "BufferWindow",
         "BufferSpan",
         "TransferCount",
@@ -148,6 +149,9 @@ proc px8f_readsome_public_consumers
         assert!(env.globals.contains_key(public), "missing `{public}`");
     }
     for private in [
+        "PrivateBufferHandle",
+        "buffer_handle_resource",
+        "buffer_handle_capacity",
         "PrivateBufferSpan",
         "write_all_advance_span",
         "PrivateTransferCount",
@@ -274,6 +278,36 @@ fn checked_source_rejects_private_buffer_span_producers() {
             ("write_all_advance_span", Err(ElabError::UnresolvedCon { name, .. })) => {
                 assert_eq!(name, private)
             }
+            other => panic!("`{private}` must reject as an unresolved private name, got {other:?}"),
+        }
+    }
+}
+
+/// Durable invariant (`38 §1.7.1`): the public handle is an ordinary product
+/// internally, but checked source can neither forge it nor project either
+/// acquisition-bound field.
+#[test]
+fn checked_source_cannot_forge_or_project_buffer_handles() {
+    for (private, source) in [
+        (
+            "PrivateBufferHandle",
+            "fn escaped (resource : Resource Buffer) : BufferHandle = \
+             PrivateBufferHandle resource 8",
+        ),
+        (
+            "buffer_handle_resource",
+            "fn escaped (buffer : BufferHandle) : Resource Buffer = \
+             buffer_handle_resource buffer",
+        ),
+        (
+            "buffer_handle_capacity",
+            "fn escaped (buffer : BufferHandle) : Int = \
+             buffer_handle_capacity buffer",
+        ),
+    ] {
+        let mut env = ElabEnv::empty().expect("PX8-F-CAP-41 prelude");
+        match env.elaborate_file(source) {
+            Err(ElabError::UnresolvedCon { name, .. }) => assert_eq!(name, private),
             other => panic!("`{private}` must reject as an unresolved private name, got {other:?}"),
         }
     }
