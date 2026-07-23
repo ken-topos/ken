@@ -3903,4 +3903,203 @@ mod tests {
         });
         std::fs::remove_dir_all(root).unwrap();
     }
+
+    #[test]
+    fn foreign_acquisition_span_rejects_on_both_consumers_before_bytes_or_backend() {
+        // PX8-SPAN-PROV: two capacity-8 buffers A and B receive the same numeric
+        // window [2,6) but distinct bytes (AAAA vs BBBB). A span minted from A
+        // (`span_origin = token_a`) applied to a B-targeted freeze/write is a
+        // foreign-acquisition span: the shared dispatcher rejects it with
+        // InvalidBounds before exposing any bytes (freeze) or issuing any backend
+        // write (write), while the own-span control (`span_origin = token_b`)
+        // succeeds on the identical numeric shape. Acquisition is the only varied
+        // field: capacity, start, length, and live window are all equal, so this
+        // fails a numeric-only admission and its own-span controls fail an
+        // always-reject one (AC-8 discriminator).
+        let root =
+            std::env::temp_dir().join(format!("ken-spanprov-unit-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("source.bin"), b"AAAABBBB").unwrap();
+        std::fs::write(root.join("target.bin"), b"00000000").unwrap();
+        let rooted = crate::open_root(&crate::RootPath::new(&root).unwrap()).unwrap();
+        let metadata = crate::metadata(&rooted).unwrap();
+        let cap = crate::Cap::mint_scoped(
+            crate::AUTH_FULL,
+            "FS",
+            crate::FsScope::root(
+                crate::RightSet::ALL,
+                crate::FsHandle::Posix(rooted.clone()),
+                crate::FsIdentity::Posix {
+                    device: metadata.identity.device,
+                    inode: metadata.identity.inode,
+                },
+                crate::SymlinkPolicy::NoFollow,
+            ),
+        );
+        let mut capabilities = CapabilityTableV1::default();
+        let capability = capabilities.insert(CapabilityGrantV1 {
+            identity: crate::program_caps_fs_trace_identity_v1(),
+            capability: cap,
+        });
+        let mut resources =
+            ResourceTableV1::with_buffer_limits(BufferLimitsV1::new(8, 16).unwrap());
+        let mut backend = PositionedBackend {
+            root: rooted,
+            write_limit: None,
+        };
+
+        let source = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsOpen,
+            Some(capability),
+            ResourceInputsV1::None,
+            &CanonicalRequestV1::FsOpen {
+                path: b"source.bin".to_vec(),
+                mode: FsOpenModeV1::Read,
+            },
+        )
+        .unwrap();
+        let source_token = source.resource_token.unwrap();
+        let target = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsOpen,
+            Some(capability),
+            ResourceInputsV1::None,
+            &CanonicalRequestV1::FsOpen {
+                path: b"target.bin".to_vec(),
+                mode: FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateOrKeep),
+            },
+        )
+        .unwrap();
+        let target_token = target.resource_token.unwrap();
+
+        let allocate = |resources: &mut ResourceTableV1, backend: &mut PositionedBackend| {
+            dispatch_host_op_v1(
+                backend,
+                &capabilities,
+                resources,
+                HostOpV1::BufferAllocate,
+                None,
+                ResourceInputsV1::None,
+                &CanonicalRequestV1::BufferAllocate { capacity: 8 },
+            )
+            .unwrap()
+            .resource_token
+            .unwrap()
+        };
+        let token_a = allocate(&mut resources, &mut backend);
+        let token_b = allocate(&mut resources, &mut backend);
+
+        // Install the same window [2,6) in both buffers with distinct bytes.
+        for (buffer, file_offset) in [(token_a, 0u64), (token_b, 4u64)] {
+            let read = dispatch_host_op_v1(
+                &mut backend,
+                &capabilities,
+                &mut resources,
+                HostOpV1::FsReadAt,
+                None,
+                ResourceInputsV1::FileBuffer {
+                    file: source_token,
+                    buffer,
+                },
+                &CanonicalRequestV1::FsReadAt {
+                    file_offset,
+                    buffer_start: 2,
+                    length: 4,
+                },
+            )
+            .unwrap();
+            assert!(matches!(
+                read.outcome,
+                CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadProgress(
+                    ReadProgressV1::ReadSome { .. }
+                ))
+            ));
+        }
+
+        let freeze = |resources: &mut ResourceTableV1,
+                      backend: &mut PositionedBackend,
+                      span_origin: ResourceTokenV1| {
+            dispatch_host_op_v1(
+                backend,
+                &capabilities,
+                resources,
+                HostOpV1::BufferFreeze,
+                None,
+                ResourceInputsV1::BufferSpanTarget {
+                    target: token_b,
+                    span_origin,
+                },
+                &CanonicalRequestV1::BufferFreeze {
+                    start: 2,
+                    length: 4,
+                },
+            )
+            .unwrap()
+            .outcome
+        };
+        // Foreign freeze: InvalidBounds, no bytes exposed.
+        assert_eq!(
+            freeze(&mut resources, &mut backend, token_a),
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::InvalidBounds))
+        );
+        // Own-span control: exactly B's window bytes.
+        assert_eq!(
+            freeze(&mut resources, &mut backend, token_b),
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::Bytes(b"BBBB".to_vec()))
+        );
+
+        let write = |resources: &mut ResourceTableV1,
+                     backend: &mut PositionedBackend,
+                     span_origin: ResourceTokenV1| {
+            dispatch_host_op_v1(
+                backend,
+                &capabilities,
+                resources,
+                HostOpV1::FsWriteAt,
+                None,
+                ResourceInputsV1::FileBufferSpan {
+                    file: target_token,
+                    target_buffer: token_b,
+                    span_origin,
+                },
+                &CanonicalRequestV1::FsWriteAt {
+                    file_offset: 0,
+                    buffer_start: 2,
+                    length: 4,
+                },
+            )
+            .unwrap()
+            .outcome
+        };
+        // Foreign write: InvalidBounds and zero backend writes (target unchanged).
+        assert_eq!(
+            write(&mut resources, &mut backend, token_a),
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::InvalidBounds))
+        );
+        assert_eq!(
+            std::fs::read(root.join("target.bin")).unwrap(),
+            b"00000000",
+            "foreign-span write must issue zero backend writes"
+        );
+        // Own-span control: one backend write of exactly B's bytes.
+        assert!(matches!(
+            write(&mut resources, &mut backend, token_b),
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::WriteProgress(WriteProgressV1::Wrote(
+                ref count
+            ))) if count.get() == 4
+        ));
+        assert_eq!(std::fs::read(root.join("target.bin")).unwrap(), b"BBBB0000");
+
+        resources.finalize_all_with(|owner| {
+            crate::close_resource_v1(owner)
+                .map_err(|error| io_error_identity_v1(&error.into_io_error()))
+        });
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
