@@ -178,6 +178,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         partition_next_helper: 0,
         partition_queue: VecDeque::new(),
         partition_continuations: PartitionContinuationInterner::default(),
+        partition_source_nodes: PartitionSourceNodeInterner::default(),
         partition_cleanup_suffixes: PartitionCleanupSuffixInterner::default(),
         partition_cleanup_transitions: PartitionCleanupTransitionLedger::default(),
         partition_cut_armed: partition_entry_cut_armed,
@@ -187,6 +188,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         partition_next_site: 0,
         partition_branch_returns: PartitionBranchReturnLedger::default(),
         active_partition_return_kind: None,
+        active_partition_return_contract: None,
         partition_output_tag_pointer: None,
         partition_live_growth_ticks: 0,
         partition_join_site_union: BTreeSet::new(),
@@ -284,6 +286,12 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
                     .begin_emitting(item.state_id)?;
                 Some(item.state_id)
             }
+            PartitionWorkItem::SourceKont(item) => {
+                compiler
+                    .partition_continuations
+                    .begin_emitting(item.state_id)?;
+                Some(item.state_id)
+            }
             PartitionWorkItem::Resume(item) => {
                 compiler
                     .partition_continuations
@@ -317,12 +325,16 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         }
         let helper_id = match &item {
             PartitionWorkItem::SourceArm(item) => item.function,
+            PartitionWorkItem::SourceKont(item) => item.function,
             PartitionWorkItem::Resume(item) => item.function,
             PartitionWorkItem::Arm(item) => item.function,
             PartitionWorkItem::CleanupStep(item) => item.function,
         };
         match &item {
             PartitionWorkItem::SourceArm(item) => {
+                compiler.restore_partition_ledger_baseline(&item.ledger_baseline);
+            }
+            PartitionWorkItem::SourceKont(item) => {
                 compiler.restore_partition_ledger_baseline(&item.ledger_baseline);
             }
             PartitionWorkItem::Resume(item) => {
@@ -357,6 +369,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         compiler.native_int_tags.clear();
         compiler.partition_cut_armed = false;
         compiler.partition_output_tag_pointer = None;
+        compiler.active_partition_return_contract = None;
         compiler.partition_live_growth_ticks = 0;
         compiler.declaration_stack.clear();
         compiler.active_recursive_declarations.clear();
@@ -384,6 +397,8 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
             let result = match item {
                 PartitionWorkItem::SourceArm(item) => compiler
                     .lower_source_arm_partition_work_item(&mut builder, item, frame_pointer)?,
+                PartitionWorkItem::SourceKont(item) => compiler
+                    .lower_source_kont_partition_work_item(&mut builder, item, frame_pointer)?,
                 PartitionWorkItem::Resume(item) => {
                     compiler.lower_resume_partition_work_item(&mut builder, item, frame_pointer)?
                 }
@@ -547,6 +562,88 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
 }
 
 impl<'a> Lowering<'a> {
+    fn push_partition_source_cursor(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        control: &mut SourceControl<'_>,
+    ) -> Result<(), CraneliftBackendError> {
+        let current =
+            partition_source_head_template(&control.continuation, control.terminal_outer)?;
+        let mut capture_values = Vec::new();
+        append_partition_prefix_values(self, builder, &current, &mut capture_values)?;
+        let capture_field_types = capture_values
+            .iter()
+            .map(|value| builder.func.dfg.value_type(*value))
+            .collect::<Vec<_>>();
+        let successor = control.partition_cursor.map(|cursor| cursor.node);
+        let node =
+            self.partition_source_nodes
+                .intern(current, capture_field_types, successor);
+
+        let invocation = self
+            .invocation_pointer
+            .expect("source continuation capture owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let field_count = capture_values.len().checked_add(1).ok_or_else(|| {
+            unsupported(
+                "NativeSourceContinuationStepV1",
+                "source-continuation cell width overflowed",
+            )
+        })?;
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            partition_frame_size(field_count)?,
+            3,
+        ));
+        let parent = control.partition_cursor.map_or_else(
+            || builder.ins().iconst(pointer_type, 0),
+            |cursor| cursor.capture_pointer,
+        );
+        builder.ins().stack_store(parent, frame, 0);
+        for (index, value) in capture_values.iter().copied().enumerate() {
+            let offset = index
+                .checked_add(1)
+                .and_then(|field| field.checked_mul(PARTITION_FRAME_FIELD_BYTES as usize))
+                .and_then(|offset| i32::try_from(offset).ok())
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeSourceContinuationStepV1",
+                        "source-continuation cell store offset overflowed",
+                    )
+                })?;
+            builder.ins().stack_store(value, frame, offset);
+        }
+        let capture_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+        control.partition_cursor = Some(PartitionSourceCursor {
+            node,
+            capture_pointer,
+        });
+        Ok(())
+    }
+
+    fn pop_partition_source_cursor(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        control: &mut SourceControl<'_>,
+    ) -> Result<(), CraneliftBackendError> {
+        let Some(cursor) = control.partition_cursor else {
+            return Ok(());
+        };
+        let definition = self.partition_source_nodes.definition(cursor.node)?;
+        let pointer_type = builder.func.dfg.value_type(cursor.capture_pointer);
+        let successor_pointer = builder.ins().load(
+            pointer_type,
+            MemFlags::trusted(),
+            cursor.capture_pointer,
+            0,
+        );
+        control.partition_cursor = definition.successor.map(|node| PartitionSourceCursor {
+            node,
+            capture_pointer: successor_pointer,
+        });
+        Ok(())
+    }
+
     fn check_partition_live_growth(
         &mut self,
         builder: &FunctionBuilder<'_>,
@@ -563,6 +660,17 @@ impl<'a> Lowering<'a> {
             || measure.instructions > self.partition_budget.max_instructions
             || measure.blocks > self.partition_budget.max_blocks
         {
+            if std::env::var_os("KEN_NATIVE_PARTITION_METRICS").is_some() {
+                eprintln!(
+                    "KEN_NATIVE_PARTITION_BUDGET_CONTEXT declaration_stack={:?} \
+                     active_recursive={:?}",
+                    self.declaration_stack,
+                    self.active_recursive_declarations
+                        .iter()
+                        .map(|active| active.symbol.as_str())
+                        .collect::<Vec<_>>(),
+                );
+            }
             return Err(unsupported(
                 "NativeFunctionPartition",
                 format!(
@@ -2625,9 +2733,21 @@ impl<'a> Lowering<'a> {
         for value in &mut item.env {
             rebuild_partition_lowered(value, &mut loaded, &mut self.native_int_tags)?;
         }
-        rebuild_partition_prefix(&mut item.prefix, &mut loaded, &mut self.native_int_tags)?;
+        if item.source_head.is_some() {
+            item.source_capture_pointer = Some(loaded.next().ok_or_else(|| {
+                unsupported(
+                    "NativeSourceContinuationStepV1",
+                    "source Eval state lost its continuation capture pointer",
+                )
+            })?);
+        }
         rebuild_partition_scope(
             &mut item.selected_scope,
+            &mut loaded,
+            &mut self.native_int_tags,
+        )?;
+        rebuild_partition_eliminators(
+            &mut item.selected_pending,
             &mut loaded,
             &mut self.native_int_tags,
         )?;
@@ -2652,48 +2772,27 @@ impl<'a> Lowering<'a> {
         }
 
         let mut body = item.body;
-        let mut prefix = item.prefix;
         self.declaration_stack = item.declaration_stack;
         self.active_recursive_invocations = item.active_recursive_invocations;
-        if item.consume_checked_entry_marker {
-            match body {
-                RuntimeExpr::CheckedRecursiveInvocation {
-                    call_template_id,
-                    body: inner,
-                    ..
-                } => {
-                    let instance =
-                        self.enter_checked_recursive_invocation(call_template_id, &inner)?;
-                    prefix = SourcePrefixTemplate::CheckedRecursiveInvocationReturn {
-                        instance,
-                        next: Box::new(prefix),
-                    };
-                    body = *inner;
-                }
-                RuntimeExpr::CheckedComputationalIHInvocation {
-                    call_template_id,
-                    body: inner,
-                    ..
-                } => {
-                    self.enter_checked_computational_ih_invocation(call_template_id)?;
-                    prefix = SourcePrefixTemplate::CheckedComputationalIHInvocationReturn {
-                        call_template_id,
-                        next: Box::new(prefix),
-                    };
-                    body = *inner;
-                }
-                _ => {
-                    return Err(unsupported(
-                        "NativeFunctionPartition",
-                        "checked-template predecessor lost its exact entry marker",
-                    ));
-                }
-            }
-        }
         let terminal = SourceContinuationTerminal::ReturnFromPartition {
             expected_outer: item.terminal_outer,
         };
-        let continuation = instantiate_partition_prefix(prefix, terminal);
+        let continuation = match (item.source_head, item.source_capture_pointer) {
+            (Some(node), Some(capture_pointer)) => SourceContinuation::Partitioned {
+                head: PartitionSourceCursor {
+                    node,
+                    capture_pointer,
+                },
+                terminal,
+            },
+            (None, None) => SourceContinuation::Terminal(terminal),
+            _ => {
+                return Err(unsupported(
+                    "NativeSourceContinuationStepV1",
+                    "source Eval state has an incomplete continuation cursor",
+                ));
+            }
+        };
         let selected_lineage = item
             .selected_lineage
             .iter()
@@ -2706,22 +2805,69 @@ impl<'a> Lowering<'a> {
                 selected_scope: selected.selected_scope.clone(),
             })
             .collect();
-        let control = SourceControl {
+        let mut control = SourceControl {
             continuation,
+            partition_cursor: item.source_head.zip(item.source_capture_pointer).map(
+                |(node, capture_pointer)| PartitionSourceCursor {
+                    node,
+                    capture_pointer,
+                },
+            ),
             selected: SourceSelectedContinuation {
                 activation: item.selected_activation,
                 cursor: item.selected_cursor,
                 parent: None,
-                pending: Vec::new(),
+                pending: borrow_partition_eliminators(&item.selected_pending),
                 selected_ancestry: item.selected_ancestry,
                 selected_scope: item.selected_scope,
             },
             selected_lineage,
             terminal_outer: item.terminal_outer,
         };
+        if item.consume_checked_entry_marker {
+            match body {
+                RuntimeExpr::CheckedRecursiveInvocation {
+                    call_template_id,
+                    body: inner,
+                    ..
+                } => {
+                    let instance =
+                        self.enter_checked_recursive_invocation(call_template_id, &inner)?;
+                    control.continuation =
+                        SourceContinuation::CheckedRecursiveInvocationReturn {
+                            instance,
+                            next: Box::new(control.continuation),
+                        };
+                    self.push_partition_source_cursor(builder, &mut control)?;
+                    body = *inner;
+                }
+                RuntimeExpr::CheckedComputationalIHInvocation {
+                    call_template_id,
+                    body: inner,
+                    ..
+                } => {
+                    self.enter_checked_computational_ih_invocation(call_template_id)?;
+                    control.continuation =
+                        SourceContinuation::CheckedComputationalIHInvocationReturn {
+                            call_template_id,
+                            next: Box::new(control.continuation),
+                        };
+                    self.push_partition_source_cursor(builder, &mut control)?;
+                    body = *inner;
+                }
+                _ => {
+                    return Err(unsupported(
+                        "NativeSourceContinuationStepV1",
+                        "checked-template Eval state lost its exact entry marker",
+                    ));
+                }
+            }
+        }
         let required_kind = item.return_contract.required_kind;
         self.active_partition_return_kind = Some(required_kind);
+        self.active_partition_return_contract = Some(item.return_contract.clone());
         let lowered = self.lower_source_machine_with_continuation(builder, body, item.env, control);
+        self.active_partition_return_contract = None;
         self.active_partition_return_kind = None;
         let mut lowered = lowered?;
         if !matches!(lowered, Lowered::Trap(_)) {
@@ -2761,6 +2907,531 @@ impl<'a> Lowering<'a> {
                 Ok((None, ResultDecoder::ProcessStatus))
             }
         }
+    }
+
+    fn lower_source_kont_partition_work_item(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        mut item: SourceKontPartitionWorkItem,
+        frame_pointer: cranelift_codegen::ir::Value,
+    ) -> Result<(Option<RuntimeTrap>, ResultDecoder), CraneliftBackendError> {
+        self.partition_metrics
+            .record_helper_frame_loads(item.field_types.len());
+        let loaded = item
+            .field_types
+            .iter()
+            .enumerate()
+            .map(|(index, field_type)| {
+                let byte_offset = index
+                    .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                    .and_then(|offset| i32::try_from(offset).ok())
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeSourceContinuationStepV1",
+                            "private Kont input-cell load offset overflowed",
+                        )
+                    })?;
+                Ok(builder
+                    .ins()
+                    .load(*field_type, MemFlags::trusted(), frame_pointer, byte_offset))
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+        let loaded = expand_partition_frame_values(&loaded, &item.field_map)?;
+        let mut loaded = loaded.into_iter();
+        rebuild_partition_lowered(&mut item.input, &mut loaded, &mut self.native_int_tags)?;
+        item.capture_pointer = loaded.next().ok_or_else(|| {
+            unsupported(
+                "NativeSourceContinuationStepV1",
+                "Kont input cell lost its immediate-capture pointer",
+            )
+        })?;
+        rebuild_partition_eliminators(
+            &mut item.selected_pending,
+            &mut loaded,
+            &mut self.native_int_tags,
+        )?;
+        rebuild_partition_scope(
+            &mut item.selected_scope,
+            &mut loaded,
+            &mut self.native_int_tags,
+        )?;
+        rebuild_partition_selected_lineage(
+            &mut item.selected_lineage,
+            &mut loaded,
+            &mut self.native_int_tags,
+        )?;
+        if loaded.next().is_some() {
+            return Err(unsupported(
+                "NativeSourceContinuationStepV1",
+                "private Kont input cell has trailing fields",
+            ));
+        }
+
+        let mut definition = self.partition_source_nodes.definition(item.node)?;
+        let pointer_type = builder.func.dfg.value_type(item.capture_pointer);
+        let parent_pointer =
+            builder
+                .ins()
+                .load(pointer_type, MemFlags::trusted(), item.capture_pointer, 0);
+        let mut captures = definition
+            .capture_field_types
+            .iter()
+            .enumerate()
+            .map(|(index, field_type)| {
+                let offset = index
+                    .checked_add(1)
+                    .and_then(|field| field.checked_mul(PARTITION_FRAME_FIELD_BYTES as usize))
+                    .and_then(|offset| i32::try_from(offset).ok())
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeSourceContinuationStepV1",
+                            "Kont immediate-capture load offset overflowed",
+                        )
+                    })?;
+                Ok(builder.ins().load(
+                    *field_type,
+                    MemFlags::trusted(),
+                    item.capture_pointer,
+                    offset,
+                ))
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?
+            .into_iter();
+        rebuild_partition_prefix(
+            &mut definition.current,
+            &mut captures,
+            &mut self.native_int_tags,
+        )?;
+        if captures.next().is_some() {
+            return Err(unsupported(
+                "NativeSourceContinuationStepV1",
+                "Kont immediate-capture cell has trailing fields",
+            ));
+        }
+        let terminal = SourceContinuationTerminal::ReturnFromPartition {
+            expected_outer: item.terminal_outer,
+        };
+        let successor = match definition.successor {
+            Some(node) => SourceContinuation::Partitioned {
+                head: PartitionSourceCursor {
+                    node,
+                    capture_pointer: parent_pointer,
+                },
+                terminal,
+            },
+            None => SourceContinuation::Terminal(terminal),
+        };
+        let continuation = instantiate_partition_source_node(definition.current, successor)?;
+        let selected_lineage = item
+            .selected_lineage
+            .iter()
+            .map(|selected| SourceSelectedContinuation {
+                activation: selected.activation,
+                cursor: selected.cursor,
+                parent: None,
+                pending: borrow_partition_eliminators(&selected.pending),
+                selected_ancestry: selected.selected_ancestry.clone(),
+                selected_scope: selected.selected_scope.clone(),
+            })
+            .collect();
+        let control = SourceControl {
+            continuation,
+            partition_cursor: Some(PartitionSourceCursor {
+                node: item.node,
+                capture_pointer: item.capture_pointer,
+            }),
+            selected: SourceSelectedContinuation {
+                activation: item.selected_activation,
+                cursor: item.selected_cursor,
+                parent: None,
+                pending: borrow_partition_eliminators(&item.selected_pending),
+                selected_ancestry: item.selected_ancestry,
+                selected_scope: item.selected_scope,
+            },
+            selected_lineage,
+            terminal_outer: item.terminal_outer,
+        };
+        self.declaration_stack = item.declaration_stack;
+        self.active_recursive_invocations = item.active_recursive_invocations;
+        self.active_partition_return_kind = Some(item.return_contract.required_kind);
+        self.active_partition_return_contract = Some(item.return_contract.clone());
+        let lowered = self.lower_source_machine_state_inner(
+            builder,
+            SourceMachineState::Value {
+                value: item.input,
+                control,
+            },
+        );
+        self.active_partition_return_contract = None;
+        self.active_partition_return_kind = None;
+        match lowered? {
+            Lowered::Trap(trap) => {
+                let payload = builder.ins().iconst(types::I64, -4);
+                builder.ins().return_(&[payload]);
+                Ok((Some(trap), ResultDecoder::ProcessStatus))
+            }
+            value => {
+                let (pair, _) = self.merge_planned_scalar_branch(
+                    builder,
+                    value,
+                    item.return_contract.required_kind,
+                    "NativeSourceContinuationStepV1",
+                )?;
+                self.emit_partition_pair_return(builder, pair);
+                Ok((None, ResultDecoder::ProcessStatus))
+            }
+        }
+    }
+
+    fn call_partition_source_eval<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        body: RuntimeExpr,
+        env: Vec<Lowered>,
+        control: SourceControl<'b>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        if control.selected.parent.is_some()
+            || !env.iter().all(partition_lowered_is_admissible)
+            || !partition_scope_is_admissible(&control.selected.selected_scope)
+        {
+            return Err(unsupported(
+                "NativeSourceContinuationStepV1",
+                "planning completeness: Eval state has no exact closed input schema",
+            ));
+        }
+        let return_contract = self
+            .active_partition_return_contract
+            .clone()
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeSourceContinuationStepV1",
+                    "Eval transfer has no checked scalar return contract",
+                )
+            })?;
+        let selected_pending =
+            own_partition_eliminators(&control.selected.pending).ok_or_else(|| {
+                unsupported(
+                    "NativeSourceContinuationStepV1",
+                    "planning completeness: Eval selected pending control has no exact schema",
+                )
+            })?;
+        let selected_lineage =
+            own_partition_selected_lineage(&control.selected_lineage).ok_or_else(|| {
+                unsupported(
+                    "NativeSourceContinuationStepV1",
+                    "planning completeness: Eval selected lineage has no exact schema",
+                )
+            })?;
+        let mut fields = Vec::new();
+        for value in &env {
+            append_partition_lowered_values(self, builder, value, &mut fields)?;
+        }
+        if let Some(cursor) = control.partition_cursor {
+            fields.push(cursor.capture_pointer);
+        }
+        append_partition_scope_values(
+            self,
+            builder,
+            &control.selected.selected_scope,
+            &mut fields,
+        )?;
+        append_partition_eliminator_values(self, builder, &selected_pending, &mut fields)?;
+        append_partition_selected_lineage_values(
+            self,
+            builder,
+            &selected_lineage,
+            &mut fields,
+        )?;
+        let (frame_values, field_types, field_map) = partition_frame_layout(builder, &fields);
+        self.partition_metrics.record_call_frame(frame_values.len());
+        let key = PartitionSemanticStateKey::SourceArm(PartitionSourceArmKey::new(
+            return_contract.checked_join.clone(),
+            return_contract.required_kind,
+            false,
+            &body,
+            &env,
+            &self.declaration_stack,
+            &self.active_recursive_invocations,
+            control.partition_cursor.map(|cursor| cursor.node),
+            control.selected.activation,
+            control.selected.cursor,
+            &control.selected.selected_ancestry,
+            &selected_pending,
+            &control.selected.selected_scope,
+            &selected_lineage,
+            control.terminal_outer,
+            None,
+            field_types.clone(),
+            field_map.clone(),
+        ));
+        let expected_contract = key.return_contract();
+        let existing = self
+            .partition_continuations
+            .lookup(&key, PartitionAggregateBudget::PRODUCTION)?;
+        let (state_id, state, newly_reserved) = if let Some((state_id, state)) = existing {
+            (state_id, state, false)
+        } else {
+            let helper_index = self.partition_next_helper;
+            let function = *self.partition_helper_ids.get(helper_index).ok_or_else(|| {
+                unsupported(
+                    "NativeSourceContinuationStepV1",
+                    "Eval state exhausted its predeclared helper pool",
+                )
+            })?;
+            self.partition_next_helper += 1;
+            let (state_id, state) = self.partition_continuations.reserve(
+                key,
+                function,
+                helper_index,
+                PartitionAggregateBudget::PRODUCTION,
+            )?;
+            (state_id, state, true)
+        };
+        self.partition_continuations
+            .validate_call_contract(state_id, &expected_contract)?;
+        if !newly_reserved {
+            self.consume_reused_partition_dynamic_splice_edges(&env)?;
+        }
+        let (_, function_ref) = self.partition_helper_ref(
+            builder,
+            state.helper_index,
+            "interned Eval state lost its helper identity",
+        )?;
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            partition_frame_size(frame_values.len())?,
+            3,
+        ));
+        for (index, value) in frame_values.iter().copied().enumerate() {
+            let offset = index
+                .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                .and_then(|offset| i32::try_from(offset).ok())
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeSourceContinuationStepV1",
+                        "Eval input-cell store offset overflowed",
+                    )
+                })?;
+            builder.ins().stack_store(value, frame, offset);
+        }
+        let invocation = self
+            .invocation_pointer
+            .expect("Eval transfer owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let frame_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+        let tag_output = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            PARTITION_FRAME_FIELD_BYTES,
+            3,
+        ));
+        let zero = builder.ins().iconst(types::I64, 0);
+        builder.ins().stack_store(zero, tag_output, 0);
+        let tag_pointer = builder.ins().stack_addr(pointer_type, tag_output, 0);
+        let call = builder
+            .ins()
+            .call(function_ref, &[invocation, frame_pointer, tag_pointer]);
+        let tag = builder.ins().stack_load(types::I64, tag_output, 0);
+        let payload = builder.inst_results(call)[0];
+        if newly_reserved {
+            self.partition_queue
+                .push_back(PartitionWorkItem::SourceArm(SourceArmPartitionWorkItem {
+                    state_id,
+                    function: state.function,
+                    field_types,
+                    field_map,
+                    body,
+                    consume_checked_entry_marker: false,
+                    env,
+                    declaration_stack: self.declaration_stack.clone(),
+                    active_recursive_invocations: self.active_recursive_invocations.clone(),
+                    source_head: control.partition_cursor.map(|cursor| cursor.node),
+                    source_capture_pointer: control
+                        .partition_cursor
+                        .map(|cursor| cursor.capture_pointer),
+                    selected_activation: control.selected.activation,
+                    selected_cursor: control.selected.cursor,
+                    selected_ancestry: control.selected.selected_ancestry,
+                    selected_pending,
+                    selected_scope: control.selected.selected_scope,
+                    selected_lineage,
+                    terminal_outer: control.terminal_outer,
+                    cleanup_head: None,
+                    cleanup_capture_pointer: None,
+                    ledger_baseline: self.partition_ledger_baseline(),
+                    return_contract: expected_contract.clone(),
+                }));
+        }
+        Ok(self.lowered_from_scalar_pair(
+            expected_contract.required_kind,
+            NativeScalarPairV1 { tag, payload },
+        ))
+    }
+
+    fn call_partition_source_kont<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        head: PartitionSourceCursor,
+        input: Lowered,
+        control: SourceControl<'b>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        if !partition_lowered_is_admissible(&input) {
+            return Err(unsupported(
+                "NativeSourceContinuationStepV1",
+                "planning completeness: Kont input has no exact closed schema",
+            ));
+        }
+        let return_contract = self
+            .active_partition_return_contract
+            .clone()
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeSourceContinuationStepV1",
+                    "Kont transfer has no checked scalar return contract",
+                )
+            })?;
+        let selected_pending = own_partition_eliminators(&control.selected.pending).ok_or_else(
+            || {
+                unsupported(
+                    "NativeSourceContinuationStepV1",
+                    "planning completeness: selected pending control has no exact schema",
+                )
+            },
+        )?;
+        let selected_lineage =
+            own_partition_selected_lineage(&control.selected_lineage).ok_or_else(|| {
+                unsupported(
+                    "NativeSourceContinuationStepV1",
+                    "planning completeness: selected lineage has no exact schema",
+                )
+            })?;
+        let mut fields = Vec::new();
+        append_partition_lowered_values(self, builder, &input, &mut fields)?;
+        fields.push(head.capture_pointer);
+        append_partition_eliminator_values(self, builder, &selected_pending, &mut fields)?;
+        append_partition_scope_values(
+            self,
+            builder,
+            &control.selected.selected_scope,
+            &mut fields,
+        )?;
+        append_partition_selected_lineage_values(
+            self,
+            builder,
+            &selected_lineage,
+            &mut fields,
+        )?;
+        let (frame_values, field_types, field_map) = partition_frame_layout(builder, &fields);
+        self.partition_metrics.record_call_frame(frame_values.len());
+        let key = PartitionSemanticStateKey::SourceKont(PartitionSourceKontKey::new(
+            return_contract.checked_join.clone(),
+            return_contract.required_kind,
+            head.node,
+            &input,
+            &self.declaration_stack,
+            &self.active_recursive_invocations,
+            control.selected.activation,
+            control.selected.cursor,
+            &control.selected.selected_ancestry,
+            &selected_pending,
+            &control.selected.selected_scope,
+            &selected_lineage,
+            control.terminal_outer,
+            field_types.clone(),
+            field_map.clone(),
+        ));
+        let expected_contract = key.return_contract();
+        let existing = self
+            .partition_continuations
+            .lookup(&key, PartitionAggregateBudget::PRODUCTION)?;
+        let (state_id, state, newly_reserved) = if let Some((state_id, state)) = existing {
+            (state_id, state, false)
+        } else {
+            let helper_index = self.partition_next_helper;
+            let function = *self.partition_helper_ids.get(helper_index).ok_or_else(|| {
+                unsupported(
+                    "NativeSourceContinuationStepV1",
+                    "Kont state exhausted its predeclared helper pool",
+                )
+            })?;
+            self.partition_next_helper += 1;
+            let (state_id, state) = self.partition_continuations.reserve(
+                key,
+                function,
+                helper_index,
+                PartitionAggregateBudget::PRODUCTION,
+            )?;
+            (state_id, state, true)
+        };
+        self.partition_continuations
+            .validate_call_contract(state_id, &expected_contract)?;
+        let (_, function_ref) = self.partition_helper_ref(
+            builder,
+            state.helper_index,
+            "interned Kont state lost its helper identity",
+        )?;
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            partition_frame_size(frame_values.len())?,
+            3,
+        ));
+        for (index, value) in frame_values.iter().copied().enumerate() {
+            let offset = index
+                .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                .and_then(|offset| i32::try_from(offset).ok())
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeSourceContinuationStepV1",
+                        "Kont input-cell store offset overflowed",
+                    )
+                })?;
+            builder.ins().stack_store(value, frame, offset);
+        }
+        let invocation = self
+            .invocation_pointer
+            .expect("Kont transfer owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let frame_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+        let tag_output = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            PARTITION_FRAME_FIELD_BYTES,
+            3,
+        ));
+        let zero = builder.ins().iconst(types::I64, 0);
+        builder.ins().stack_store(zero, tag_output, 0);
+        let tag_pointer = builder.ins().stack_addr(pointer_type, tag_output, 0);
+        let call = builder
+            .ins()
+            .call(function_ref, &[invocation, frame_pointer, tag_pointer]);
+        let tag = builder.ins().stack_load(types::I64, tag_output, 0);
+        let payload = builder.inst_results(call)[0];
+        if newly_reserved {
+            self.partition_queue
+                .push_back(PartitionWorkItem::SourceKont(SourceKontPartitionWorkItem {
+                    state_id,
+                    function: state.function,
+                    helper_index: state.helper_index,
+                    field_types,
+                    field_map,
+                    input,
+                    node: head.node,
+                    capture_pointer: head.capture_pointer,
+                    declaration_stack: self.declaration_stack.clone(),
+                    active_recursive_invocations: self.active_recursive_invocations.clone(),
+                    selected_activation: control.selected.activation,
+                    selected_cursor: control.selected.cursor,
+                    selected_ancestry: control.selected.selected_ancestry,
+                    selected_pending,
+                    selected_scope: control.selected.selected_scope,
+                    selected_lineage,
+                    terminal_outer: control.terminal_outer,
+                    ledger_baseline: self.partition_ledger_baseline(),
+                    return_contract: expected_contract.clone(),
+                }));
+        }
+        Ok(self.lowered_from_scalar_pair(
+            expected_contract.required_kind,
+            NativeScalarPairV1 { tag, payload },
+        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3148,6 +3819,7 @@ impl<'a> Lowering<'a> {
                 active,
                 root_authority,
             }),
+            partition_cursor: None,
             selected: SourceSelectedContinuation {
                 activation: active.activation,
                 cursor: active.cursor,
@@ -3201,8 +3873,30 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         mut state: SourceMachineState<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
+        let mut first_state = true;
         loop {
             self.check_partition_live_growth(builder)?;
+            if !first_state && self.active_partition_return_contract.is_some() {
+                match state {
+                    SourceMachineState::Eval { expr, env, control } => {
+                        return self.call_partition_source_eval(builder, expr, env, control);
+                    }
+                    SourceMachineState::Value { value, control }
+                        if matches!(value, Lowered::Trap(_)) =>
+                    {
+                        return Ok(value);
+                    }
+                    SourceMachineState::Value { value, control } => {
+                        if let Some(head) = control.partition_cursor {
+                            return self.call_partition_source_kont(
+                                builder, head, value, control,
+                            );
+                        }
+                        state = SourceMachineState::Value { value, control };
+                    }
+                }
+            }
+            first_state = false;
             state = match state {
                 SourceMachineState::Eval {
                     expr,
@@ -3219,21 +3913,9 @@ impl<'a> Lowering<'a> {
                     }
                     RuntimeExpr::CheckedRecursiveInvocation {
                         call_template_id,
-                        checked_occurrence_path,
+                        checked_occurrence_path: _,
                         body,
                     } => {
-                        if self.active_partition_return_kind.is_some() {
-                            return self.lower_source_checked_template_predecessor(
-                                builder,
-                                RuntimeExpr::CheckedRecursiveInvocation {
-                                    call_template_id,
-                                    checked_occurrence_path,
-                                    body,
-                                },
-                                env,
-                                control,
-                            );
-                        }
                         let instance =
                             self.enter_checked_recursive_invocation(call_template_id, &body)?;
                         control.continuation =
@@ -3241,6 +3923,7 @@ impl<'a> Lowering<'a> {
                                 instance,
                                 next: Box::new(control.continuation),
                             };
+                        self.push_partition_source_cursor(builder, &mut control)?;
                         SourceMachineState::Eval {
                             expr: *body,
                             env,
@@ -3256,27 +3939,16 @@ impl<'a> Lowering<'a> {
                     }
                     RuntimeExpr::CheckedComputationalIHInvocation {
                         call_template_id,
-                        checked_occurrence_path,
+                        checked_occurrence_path: _,
                         body,
                     } => {
-                        if self.active_partition_return_kind.is_some() {
-                            return self.lower_source_checked_template_predecessor(
-                                builder,
-                                RuntimeExpr::CheckedComputationalIHInvocation {
-                                    call_template_id,
-                                    checked_occurrence_path,
-                                    body,
-                                },
-                                env,
-                                control,
-                            );
-                        }
                         self.enter_checked_computational_ih_invocation(call_template_id)?;
                         control.continuation =
                             SourceContinuation::CheckedComputationalIHInvocationReturn {
                                 call_template_id,
                                 next: Box::new(control.continuation),
                             };
+                        self.push_partition_source_cursor(builder, &mut control)?;
                         SourceMachineState::Eval {
                             expr: *body,
                             env,
@@ -3299,6 +3971,7 @@ impl<'a> Lowering<'a> {
                             env: env.clone(),
                             next: Box::new(control.continuation),
                         };
+                        self.push_partition_source_cursor(builder, &mut control)?;
                         SourceMachineState::Eval {
                             expr: *value,
                             env: env.clone(),
@@ -3327,6 +4000,7 @@ impl<'a> Lowering<'a> {
                                 env: env.clone(),
                                 next: Box::new(control.continuation),
                             };
+                            self.push_partition_source_cursor(builder, &mut control)?;
                             SourceMachineState::Eval {
                                 expr: first,
                                 env,
@@ -3345,6 +4019,7 @@ impl<'a> Lowering<'a> {
                             env: env.clone(),
                             next: Box::new(control.continuation),
                         };
+                        self.push_partition_source_cursor(builder, &mut control)?;
                         SourceMachineState::Eval {
                             expr: *scrutinee,
                             env,
@@ -3357,6 +4032,7 @@ impl<'a> Lowering<'a> {
                             env: env.clone(),
                             next: Box::new(control.continuation),
                         };
+                        self.push_partition_source_cursor(builder, &mut control)?;
                         SourceMachineState::Eval {
                             expr: *callee,
                             env,
@@ -3379,6 +4055,7 @@ impl<'a> Lowering<'a> {
                             answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
                             next: Box::new(control.continuation),
                         };
+                        self.push_partition_source_cursor(builder, &mut control)?;
                         SourceMachineState::Eval {
                             expr: *scrutinee,
                             env,
@@ -3393,6 +4070,12 @@ impl<'a> Lowering<'a> {
                 SourceMachineState::Value { value, mut control } => {
                     if matches!(value, Lowered::Trap(_)) {
                         control.continuation = Self::discard_source_prefix(control.continuation);
+                        control.partition_cursor = None;
+                    } else if !matches!(
+                        &control.continuation,
+                        SourceContinuation::Terminal(_) | SourceContinuation::Partitioned { .. }
+                    ) {
+                        self.pop_partition_source_cursor(builder, &mut control)?;
                     }
                     match control.continuation {
                         SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue) => {
@@ -3442,6 +4125,7 @@ impl<'a> Lowering<'a> {
                                     },
                                 )),
                             };
+                            self.push_partition_source_cursor(builder, &mut control)?;
                             SourceMachineState::Value { value, control }
                         }
                         SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
@@ -3571,7 +4255,21 @@ impl<'a> Lowering<'a> {
                             {
                                 return Err(unsupported(
                                     "OrientedSubcontinuationPlanV1",
-                                    "selected-case return delimiter does not match its open occurrence",
+                                    format!(
+                                        "selected-case return delimiter does not match its open occurrence: \
+                                         current activation={:?} cursor={:?} scope={:?} frame={:?} invocation={:?}; \
+                                         delimiter activation={:?} cursor={:?} scope={:?} frame={:?} invocation={:?}",
+                                        control.selected.activation,
+                                        control.selected.cursor,
+                                        scope.scope_origin,
+                                        scope.frame.checked_frame_id,
+                                        scope.frame.checked_invocation_id,
+                                        delimiter.activation,
+                                        delimiter.cursor,
+                                        delimiter.scope_origin,
+                                        delimiter.frame_id,
+                                        delimiter.invocation_id,
+                                    ),
                                 ));
                             }
                             let previous = control.selected_lineage.pop().ok_or_else(|| {
@@ -3614,6 +4312,7 @@ impl<'a> Lowering<'a> {
                                     answer_route,
                                     next,
                                 };
+                            self.push_partition_source_cursor(builder, &mut control)?;
                             SourceMachineState::Value { value, control }
                         }
                         SourceContinuation::UnwindRecursorSegment {
@@ -3649,6 +4348,13 @@ impl<'a> Lowering<'a> {
                                 let answer_route =
                                     SourceComputationalAnswerRoute::for_recursor_layer(&layer);
                                 control.continuation =
+                                    SourceContinuation::UnwindRecursorSegment {
+                                        stack,
+                                        resume_cursor,
+                                        next,
+                                    };
+                                self.push_partition_source_cursor(builder, &mut control)?;
+                                control.continuation =
                                     SourceContinuation::ComputationalMatchScrutinee {
                                         cases: layer.cases,
                                         default: layer.default,
@@ -3656,12 +4362,9 @@ impl<'a> Lowering<'a> {
                                         provenance: layer.provenance,
                                         checked_frame_id: layer.checked_frame_id,
                                         answer_route,
-                                        next: Box::new(SourceContinuation::UnwindRecursorSegment {
-                                            stack,
-                                            resume_cursor,
-                                            next,
-                                        }),
+                                        next: Box::new(control.continuation),
                                     };
+                                self.push_partition_source_cursor(builder, &mut control)?;
                                 SourceMachineState::Value { value, control }
                             } else {
                                 control.continuation = *next;
@@ -3695,6 +4398,7 @@ impl<'a> Lowering<'a> {
                                     env: env.clone(),
                                     next: Box::new(control.continuation),
                                 };
+                                self.push_partition_source_cursor(builder, &mut control)?;
                                 SourceMachineState::Eval {
                                     expr: first,
                                     env,
@@ -4090,6 +4794,9 @@ impl<'a> Lowering<'a> {
                             } else {
                                 *next
                             };
+                            if frame.checked_frame_id.is_some() {
+                                self.push_partition_source_cursor(builder, &mut control)?;
+                            }
                             control.selected = SourceSelectedContinuation {
                                 activation,
                                 cursor,
@@ -4131,6 +4838,7 @@ impl<'a> Lowering<'a> {
                                     env: env.clone(),
                                     next: Box::new(control.continuation),
                                 };
+                                self.push_partition_source_cursor(builder, &mut control)?;
                                 SourceMachineState::Eval {
                                     expr: first,
                                     env,
@@ -4163,6 +4871,7 @@ impl<'a> Lowering<'a> {
                                     env: env.clone(),
                                     next: Box::new(control.continuation),
                                 };
+                                self.push_partition_source_cursor(builder, &mut control)?;
                                 SourceMachineState::Eval {
                                     expr: first,
                                     env,
@@ -4176,6 +4885,12 @@ impl<'a> Lowering<'a> {
                                 "ComputationalRecursor",
                                 "source continuation frame is not implemented",
                             ));
+                        }
+                        SourceContinuation::Partitioned { head, terminal } => {
+                            control.continuation = SourceContinuation::Terminal(terminal);
+                            return self.call_partition_source_kont(
+                                builder, head, value, control,
+                            );
                         }
                     }
                 }
@@ -4346,6 +5061,7 @@ impl<'a> Lowering<'a> {
                     false,
                     arm_env,
                     &source_prefix_template,
+                    suffix_control.partition_cursor,
                     &suffix_control.selected,
                     suffix_control.terminal_outer,
                     &target,
@@ -4364,6 +5080,7 @@ impl<'a> Lowering<'a> {
                 Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
             let branch_control = SourceControl {
                 continuation,
+                partition_cursor: suffix_control.partition_cursor,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
@@ -4573,6 +5290,7 @@ impl<'a> Lowering<'a> {
                     false,
                     env.to_vec(),
                     &source_prefix_template,
+                    suffix_control.partition_cursor,
                     &suffix_control.selected,
                     suffix_control.terminal_outer,
                     &target,
@@ -4591,6 +5309,7 @@ impl<'a> Lowering<'a> {
                 Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
             let branch_control = SourceControl {
                 continuation,
+                partition_cursor: suffix_control.partition_cursor,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
@@ -4727,7 +5446,8 @@ impl<'a> Lowering<'a> {
         body: RuntimeExpr,
         consume_checked_entry_marker: bool,
         arm_env: Vec<Lowered>,
-        source_prefix_template: &SourcePrefixTemplate,
+        _source_prefix_template: &SourcePrefixTemplate,
+        source_cursor: Option<PartitionSourceCursor>,
         selected: &SourceSelectedContinuation<'b>,
         terminal_outer: ContinuationCursorId,
         target: &SourceJoinTarget<'b>,
@@ -4745,9 +5465,18 @@ impl<'a> Lowering<'a> {
             append_partition_lowered_values(self, builder, value, &mut fields)?;
         }
         let env_fields = fields.len();
-        append_partition_prefix_values(self, builder, source_prefix_template, &mut fields)?;
+        if let Some(cursor) = source_cursor {
+            fields.push(cursor.capture_pointer);
+        }
         let prefix_fields = fields.len().saturating_sub(env_fields);
         append_partition_scope_values(self, builder, &selected.selected_scope, &mut fields)?;
+        let selected_pending = own_partition_eliminators(&selected.pending).ok_or_else(|| {
+            unsupported(
+                "NativeSourceContinuationStepV1",
+                "source Eval state selected pending control has no exact schema",
+            )
+        })?;
+        append_partition_eliminator_values(self, builder, &selected_pending, &mut fields)?;
         let scope_fields = fields
             .len()
             .saturating_sub(env_fields)
@@ -4792,10 +5521,14 @@ impl<'a> Lowering<'a> {
             &arm_env,
             &self.declaration_stack,
             &self.active_recursive_invocations,
-            source_prefix_template,
+            source_cursor.map(|cursor| cursor.node),
+            selected.activation,
+            selected.cursor,
             &selected.selected_ancestry,
+            &selected_pending,
             &selected.selected_scope,
             selected_lineage,
+            terminal_outer,
             cleanup_head,
             field_types.clone(),
             field_map.clone(),
@@ -4902,10 +5635,12 @@ impl<'a> Lowering<'a> {
                     env: arm_env,
                     declaration_stack: self.declaration_stack.clone(),
                     active_recursive_invocations: self.active_recursive_invocations.clone(),
-                    prefix: source_prefix_template.clone(),
+                    source_head: source_cursor.map(|cursor| cursor.node),
+                    source_capture_pointer: source_cursor.map(|cursor| cursor.capture_pointer),
                     selected_activation: selected.activation,
                     selected_cursor: selected.cursor,
                     selected_ancestry: selected.selected_ancestry.clone(),
+                    selected_pending,
                     selected_scope: selected.selected_scope.clone(),
                     selected_lineage: selected_lineage.to_vec(),
                     terminal_outer,
@@ -5112,6 +5847,7 @@ impl<'a> Lowering<'a> {
             true,
             env,
             &source_prefix_template,
+            control.partition_cursor,
             &control.selected,
             control.terminal_outer,
             &target,
@@ -5223,7 +5959,8 @@ impl<'a> Lowering<'a> {
         let owned_return_eliminators = own_partition_eliminators(&target.terminal_active_prefix);
         let owned_selected_lineage =
             own_partition_selected_lineage(&suffix_control.selected_lineage);
-        let source_arm_partition_eligible = self.partition_cut_armed
+        let source_arm_partition_eligible = (self.partition_cut_armed
+            || self.active_partition_return_kind.is_some())
             && partition_helper_return_kind_is_admissible(target.required_kind)
             && suffix_control.selected.parent.is_none()
             && suffix_control.selected.pending.is_empty()
@@ -5281,6 +6018,7 @@ impl<'a> Lowering<'a> {
                     false,
                     arm_env,
                     &source_prefix_template,
+                    suffix_control.partition_cursor,
                     &suffix_control.selected,
                     suffix_control.terminal_outer,
                     &target,
@@ -5489,6 +6227,7 @@ impl<'a> Lowering<'a> {
                 Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
             let branch_control = SourceControl {
                 continuation,
+                partition_cursor: suffix_control.partition_cursor,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
@@ -5646,6 +6385,7 @@ impl<'a> Lowering<'a> {
                 Self::instantiate_source_prefix_template(&fanout.source_prefix_template, edge)?;
             let control = SourceControl {
                 continuation,
+                partition_cursor: suffix_control.partition_cursor,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
@@ -5790,6 +6530,7 @@ impl<'a> Lowering<'a> {
                     false,
                     arm_env,
                     &source_prefix_template,
+                    suffix_control.partition_cursor,
                     &suffix_control.selected,
                     suffix_control.terminal_outer,
                     &target,
@@ -5809,6 +6550,7 @@ impl<'a> Lowering<'a> {
                 Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
             let control = SourceControl {
                 continuation,
+                partition_cursor: suffix_control.partition_cursor,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
