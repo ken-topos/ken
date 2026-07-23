@@ -205,7 +205,7 @@ fn body_from_alloc (outcome : Result ResourceError (ResourceBracketResult Unit U
     }
   }
 
-proc do_freezes (buffer_b : Resource Buffer) (span_a : BufferSpan) (span_b : BufferSpan)
+proc do_freezes (buffer_b : BufferHandle) (span_a : BufferSpan) (span_b : BufferSpan)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -219,7 +219,7 @@ proc do_freezes (buffer_b : Resource Buffer) (span_a : BufferSpan) (span_b : Buf
         (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
         (ResourceBodyResult Unit Unit) (ok_body MkUnit)))
 
-proc b_after_read (buffer_b : Resource Buffer) (span_a : BufferSpan)
+proc b_after_read (buffer_b : BufferHandle) (span_a : BufferSpan)
   (outcome : Result ResourceError ReadProgress)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   match outcome {
@@ -234,7 +234,7 @@ proc b_after_read (buffer_b : Resource Buffer) (span_a : BufferSpan)
     }
   }
 
-proc b_body (file : Resource FsHandle) (span_a : BufferSpan) (buffer_b : Resource Buffer)
+proc b_body (file : Resource FsHandle) (span_a : BufferSpan) (buffer_b : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -252,7 +252,7 @@ proc a_after_read (file : Resource FsHandle) (span_a : BufferSpan)
       (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
       (ResourceBodyResult Unit Unit) (body_from_alloc outcome))
 
-proc a_body (file : Resource FsHandle) (buffer_a : Resource Buffer)
+proc a_body (file : Resource FsHandle) (buffer_a : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -375,7 +375,7 @@ fn from_file_alloc (outcome : Result FileError (ResourceBracketResult Unit Unit)
     }
   }
 
-proc b_body (dest : Resource FsHandle) (span_a : BufferSpan) (buffer_b : Resource Buffer)
+proc b_body (dest : Resource FsHandle) (span_a : BufferSpan) (buffer_b : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -395,7 +395,7 @@ proc a_after_read (dest : Resource FsHandle) (span_a : BufferSpan)
       (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
       (ResourceBodyResult Unit Unit) (from_buffer_alloc outcome))
 
-proc a_body (dest : Resource FsHandle) (source : Resource FsHandle) (buffer_a : Resource Buffer)
+proc a_body (dest : Resource FsHandle) (source : Resource FsHandle) (buffer_a : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -518,7 +518,7 @@ fn from_file_alloc (outcome : Result FileError (ResourceBracketResult Unit Unit)
     }
   }
 
-proc do_write (dest : Resource FsHandle) (buffer_b : Resource Buffer) (span_b : BufferSpan)
+proc do_write (dest : Resource FsHandle) (buffer_b : BufferHandle) (span_b : BufferSpan)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -528,7 +528,7 @@ proc do_write (dest : Resource FsHandle) (buffer_b : Resource Buffer) (span_b : 
       (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
       (ResourceBodyResult Unit Unit) (ok_body MkUnit))
 
-proc b_body (dest : Resource FsHandle) (source : Resource FsHandle) (buffer_b : Resource Buffer)
+proc b_body (dest : Resource FsHandle) (source : Resource FsHandle) (buffer_b : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -657,7 +657,7 @@ fn from_file_alloc (outcome : Result FileError (ResourceBracketResult Unit Unit)
     }
   }
 
-proc reuse_fresh (dest : Resource FsHandle) (buffer_b : Resource Buffer)
+proc reuse_fresh (dest : Resource FsHandle) (buffer_b : BufferHandle)
   (span_old : BufferSpan) (span_b : BufferSpan)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
@@ -679,7 +679,7 @@ proc reuse_fresh (dest : Resource FsHandle) (buffer_b : Resource Buffer)
           (\w2. ret_body (ok_body MkUnit)))))
 
 proc b_body (dest : Resource FsHandle) (source : Resource FsHandle)
-  (span_old : BufferSpan) (buffer_b : Resource Buffer)
+  (span_old : BufferSpan) (buffer_b : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -694,7 +694,7 @@ proc b_body (dest : Resource FsHandle) (source : Resource FsHandle)
     })
 
 proc closed_controls (dest : Resource FsHandle) (source : Resource FsHandle)
-  (bufA : Resource Buffer) (span_old : BufferSpan)
+  (bufA : BufferHandle) (span_old : BufferSpan)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -711,7 +711,7 @@ proc closed_controls (dest : Resource FsHandle) (source : Resource FsHandle)
         (\outcome. ret_body (from_span_bracket outcome))))
 
 proc after_a (dest : Resource FsHandle) (source : Resource FsHandle)
-  (inner : Result ResourceError (ResourceBracketResult Unit (Prod (Resource Buffer) BufferSpan)))
+  (inner : Result ResourceError (ResourceBracketResult Unit (Prod (BufferHandle) BufferSpan)))
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   match inner {
     Err error |-> ret_body (ResourceBodyErr Unit Unit MkUnit);
@@ -725,27 +725,27 @@ proc after_a (dest : Resource FsHandle) (source : Resource FsHandle)
     }
   }
 
-proc read_a (source : Resource FsHandle) (buffer_a : Resource Buffer)
-  : HostIO AFull (ResourceBodyResult Unit (Prod (Resource Buffer) BufferSpan)) visits [FS] =
+proc read_a (source : Resource FsHandle) (buffer_a : BufferHandle)
+  : HostIO AFull (ResourceBodyResult Unit (Prod (BufferHandle) BufferSpan)) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-    (Result ResourceError ReadProgress) (ResourceBodyResult Unit (Prod (Resource Buffer) BufferSpan))
+    (Result ResourceError ReadProgress) (ResourceBodyResult Unit (Prod (BufferHandle) BufferSpan))
     (readAt AFull source (0 : Int) buffer_a (MkBufferWindow (2 : Int) (4 : Int)))
     (\outcome. match outcome {
       Err error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
         (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-        (ResourceBodyResult Unit (Prod (Resource Buffer) BufferSpan))
-        (ResourceBodyErr Unit (Prod (Resource Buffer) BufferSpan) MkUnit);
+        (ResourceBodyResult Unit (Prod (BufferHandle) BufferSpan))
+        (ResourceBodyErr Unit (Prod (BufferHandle) BufferSpan) MkUnit);
       Ok progress |-> match progress {
         ReadEof |-> Ret (Coproduct (FSOp AFull) AmbientOp)
           (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-          (ResourceBodyResult Unit (Prod (Resource Buffer) BufferSpan))
-          (ResourceBodyErr Unit (Prod (Resource Buffer) BufferSpan) MkUnit);
+          (ResourceBodyResult Unit (Prod (BufferHandle) BufferSpan))
+          (ResourceBodyErr Unit (Prod (BufferHandle) BufferSpan) MkUnit);
         ReadSome span_a count |-> Ret (Coproduct (FSOp AFull) AmbientOp)
           (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-          (ResourceBodyResult Unit (Prod (Resource Buffer) BufferSpan))
-          (ResourceBodyOk Unit (Prod (Resource Buffer) BufferSpan)
-            (MkProd (Resource Buffer) BufferSpan buffer_a span_a))
+          (ResourceBodyResult Unit (Prod (BufferHandle) BufferSpan))
+          (ResourceBodyOk Unit (Prod (BufferHandle) BufferSpan)
+            (MkProd (BufferHandle) BufferSpan buffer_a span_a))
       }
     })
 
@@ -753,9 +753,9 @@ proc source_body (dest : Resource FsHandle) (source : Resource FsHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-    (Result ResourceError (ResourceBracketResult Unit (Prod (Resource Buffer) BufferSpan)))
+    (Result ResourceError (ResourceBracketResult Unit (Prod (BufferHandle) BufferSpan)))
     (ResourceBodyResult Unit Unit)
-    (withBuffer AFull Unit (Prod (Resource Buffer) BufferSpan) (8 : Int) (read_a source))
+    (withBuffer AFull Unit (Prod (BufferHandle) BufferSpan) (8 : Int) (read_a source))
     (\outcome. after_a dest source outcome)
 
 proc dest_body (cap : Cap AFull) (dest : Resource FsHandle)
@@ -874,7 +874,7 @@ fn ret_body (b : ResourceBodyResult Unit Unit) : HostIO AFull (ResourceBodyResul
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
     (ResourceBodyResult Unit Unit) b
 
-proc four_ops (dest : Resource FsHandle) (buffer_b : Resource Buffer)
+proc four_ops (dest : Resource FsHandle) (buffer_b : BufferHandle)
   (span_a : BufferSpan) (span_b0 : BufferSpan)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
@@ -896,7 +896,7 @@ proc four_ops (dest : Resource FsHandle) (buffer_b : Resource Buffer)
           (\w2. ret_body (ok_body MkUnit)))))
 
 proc b_rewindow (dest : Resource FsHandle) (source : Resource FsHandle)
-  (span_a : BufferSpan) (span_b0 : BufferSpan) (buffer_b : Resource Buffer)
+  (span_a : BufferSpan) (span_b0 : BufferSpan) (buffer_b : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -911,7 +911,7 @@ proc b_rewindow (dest : Resource FsHandle) (source : Resource FsHandle)
     })
 
 proc b_body (dest : Resource FsHandle) (source : Resource FsHandle)
-  (span_a : BufferSpan) (buffer_b : Resource Buffer)
+  (span_a : BufferSpan) (buffer_b : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -933,7 +933,7 @@ proc a_after_read (dest : Resource FsHandle) (source : Resource FsHandle) (span_
     (withBuffer AFull Unit Unit (8 : Int) (b_body dest source span_a))
     (\outcome. ret_body (from_buffer_alloc outcome))
 
-proc a_body (dest : Resource FsHandle) (source : Resource FsHandle) (buffer_a : Resource Buffer)
+proc a_body (dest : Resource FsHandle) (source : Resource FsHandle) (buffer_a : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -1072,7 +1072,7 @@ fn ret_code (b : ResourceBodyResult Unit ExitCode)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
     (ResourceBodyResult Unit ExitCode) b
 
-proc verdict (dest : Resource FsHandle) (buffer_b : Resource Buffer) (span_a : BufferSpan)
+proc verdict (dest : Resource FsHandle) (buffer_b : BufferHandle) (span_a : BufferSpan)
   : HostIO AFull (ResourceBodyResult Unit ExitCode) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -1096,7 +1096,7 @@ proc verdict (dest : Resource FsHandle) (buffer_b : Resource Buffer) (span_a : B
       }
     })
 
-proc b_body (dest : Resource FsHandle) (span_a : BufferSpan) (buffer_b : Resource Buffer)
+proc b_body (dest : Resource FsHandle) (span_a : BufferSpan) (buffer_b : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit ExitCode) visits [FS] =
   verdict dest buffer_b span_a
 
@@ -1108,7 +1108,7 @@ proc a_after_read (dest : Resource FsHandle) (span_a : BufferSpan)
     (withBuffer AFull Unit ExitCode (8 : Int) (b_body dest span_a))
     (\outcome. ret_code (from_buffer_alloc outcome))
 
-proc a_body (dest : Resource FsHandle) (source : Resource FsHandle) (buffer_a : Resource Buffer)
+proc a_body (dest : Resource FsHandle) (source : Resource FsHandle) (buffer_a : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit ExitCode) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)

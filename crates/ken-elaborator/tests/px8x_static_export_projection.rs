@@ -10,7 +10,7 @@ use ken_elaborator::{
 use ken_host::{HostOpV1, ResourceBindingRole, ResourceKindV1};
 
 const BUFFER_ONLY_PRODUCER: &str = r#"
-fn px8v_buffer_body (_resource : Resource Buffer)
+fn px8v_buffer_body (_resource : BufferHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) =
   Ret (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
