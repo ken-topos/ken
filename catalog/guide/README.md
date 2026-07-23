@@ -85,7 +85,8 @@ forgotten or deferred on purpose:
   §3`) are not covered in depth — the catalog tree now mirrors Section >
   Domain and a dotted `import A.B.C` is regular addressing for it
   (`07-catalog-style-guide.md` "Path ⇔ import"). The loader itself resolves
-  cross-file `import` (`spec/30-surface/33-declarations.md:147-158`), but
+  cross-file `import`
+  (`spec/30-surface/33-declarations.md#32-importing-and-exporting`), but
   **no landed catalog entry yet exercises the cross-file case** — a
   corpus-coverage gap, not a capability one. The working pattern for a
   catalog entry that needs another package's helper is still DS-1's

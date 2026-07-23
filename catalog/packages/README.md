@@ -45,7 +45,8 @@ second copy:
   bare `<Section>/<Pkg>.ken`, or one shared `MANIFEST.md` inside a Domain
   directory covering every leaf package in it.
 - The loader resolves cross-file `import`
-  (`spec/30-surface/33-declarations.md:147-158`); within one compilation
+  (`spec/30-surface/33-declarations.md#32-importing-and-exporting`); within
+  one compilation
   unit, dotted refs already work too. **No landed catalog entry yet
   exercises the cross-file case** — see `07`'s honesty note — a
   corpus-coverage gap, not a capability one.

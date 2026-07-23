@@ -88,7 +88,8 @@ name defined in a *different* package file:
 
 This is not those four entries being broken; it is a corpus-coverage gap,
 not a loader capability one. The loader itself resolves cross-file `import`
-(`spec/30-surface/33-declarations.md:147-158`); what's still true is
+(`spec/30-surface/33-declarations.md#32-importing-and-exporting`); what's
+still true is
 narrower — no landed catalog entry yet exercises the cross-file case, so "a
 catalog entry that needs another package's helper today still inlines
 it… not imports it." These four entries were written assuming (or awaiting)
