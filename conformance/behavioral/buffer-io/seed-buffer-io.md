@@ -599,23 +599,54 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/positioned-transfer-bounds
 
-- status: **RED-UNTIL-PX8-F-CAP — checked capacity observation absent**
-- spec: `38 §1.7.1/§1.7.2`; PX8-T D3/AC3
-- deferred: the closed-endpoint `ReadEof`-without-host-visit discharge requires
-  buffer-capacity observation absent from the current surface; current `readAt`
-  fail-closes as `InvalidBounds`, a completeness gap rather than a soundness
-  hole. Tracked by **PX8-F-CAP**.
-- given: a capacity-`8` buffer, a positive length-`4` request, and explicit
-  file offsets
-- expect: start `6` is capped to the available tail and a positive transfer is
-  at most `2`; start `8` has zero effective length and the derived wrapper
-  invokes no positive-length primitive; start `9` is an invalid-bounds error;
-  a negative file offset or offset-plus-length overflow is an error
+- status: **RED-UNTIL-PX8-F-CAP-41 Phase 2 — §38 contract locked;
+  capacity-carrying checked handle and derived admission not implemented**
+- spec: `38 §1.7.1/§1.7.2`; PX8-T D3/AC3; PX8-F-CAP-41 Phase 1
+- engine matrix: run every row independently on `interpreter` and `native`.
+  Each engine must satisfy the exact result and absence observations directly
+  against `38 §1.7.1`; equality between engines is not an oracle.
+- given: in each row, acquire a fresh capacity-`8` `BufferHandle` only through
+  `withBuffer 8`, use a fresh live readable positioned file, record the
+  post-acquisition `FsReadAt` trace baseline, and use a host backend that
+  records every read call from zero
+- expect, absolute rows:
+
+  | File offset | Raw `BufferWindow` | Exact result | Private `FsReadAt` / host read |
+  |---|---|---|---|
+  | `0` | `(start = 8, length = 4)` | `Ok ReadEof` | none / none |
+  | `0` | `(start = 9, length = 4)` | `Err InvalidBounds` | none / none |
+  | `-1` | `(start = 8, length = 4)` | `Err InvalidOffset` | none / none |
+  | `-1` | `(start = 9, length = 4)` | `Err InvalidOffset` | none / none |
+
+- expect: the closed-endpoint row is derived checked behavior: no private
+  `FsReadAt` operation is emitted, the canonical `FsReadAt` event count does
+  not advance from its post-acquisition baseline, and the host backend is not
+  visited. The same absence observations hold for every early-error row.
+- expect: start `6` with positive length `4` is capped to the available tail
+  and a positive transfer is at most `2`; offset-plus-effective overflow is
+  `InvalidOffset` before host I/O
 - expect: neither read nor write mutates a hidden file cursor; a later call's
   result depends on its explicit offset
-- why: this separates ordinary short progress, the inclusive capacity boundary,
-  an out-of-range start, and arithmetic failure. Treating the closed endpoint as
-  invalid or invoking a positive-length primitive for it fails the case.
+- phase boundary: Phase 1 locks the sealed, acquisition-bound `BufferHandle`
+  and these result/absence observations in the spec and conformance corpus.
+  It does not make either engine row GREEN: Phase 2 must implement the handle,
+  migrate the checked consumers, and make the real derived `readAt` route reach
+  these rows. A hand-fed capacity or result, a direct host call, or an
+  interpreter result used as the native expectation cannot discharge them.
+- why: the first two rows separate the inclusive capacity boundary from an
+  out-of-range start. The last two rows prove that host-width offset admission
+  precedes both the derived closed-endpoint result and window bounds admission.
+  Treating the closed endpoint as invalid, consulting caller-forgeable
+  capacity, invoking the host for a zero-effective request, or inspecting the
+  window before the offset makes at least one exact result or trace red.
+
+## Clean-room provenance for PR-B
+
+These rows were independently derived from the exact Phase-1
+`38 §1.7.1/§1.7.2` candidate, the existing PX8 seed, and the Steward/spec-leader
+assignment. No `local/refs/` implementation, permissive reference, or copyleft
+reference was consulted. The originality scan is therefore not applicable;
+this is a recorded no-reference-contact statement.
 
 ## PR-C. Failures never masquerade as progress
 
@@ -946,6 +977,12 @@ or a result that claims success with a nonempty remainder does not conform.
 | AC5 mismatch pair, same-kind controls, buffer limits | KM-A, KM-B, BL-A, BL-B |
 | AC6 malformed/uncorrelated/I3/kind rejects | RB-B–RB-F, RB-H–RB-K, RB-N, RB-O, KM-A, KM-B |
 
+| PX8-F-CAP-41 Phase-1 contract | Cases |
+|---|---|
+| closed endpoint derives `ReadEof` with no private operation or host visit | PR-B, row 1, independently on both engines |
+| start greater than acquisition capacity is `InvalidBounds` | PR-B, row 2, independently on both engines |
+| invalid offset precedes closed-endpoint and window-bounds admission | PR-B, rows 3–4, independently on both engines |
+
 | PX8-SPAN-PROV acceptance criterion | Cases |
 |---|---|
 | AC-1 exact-acquisition binding and both consumers | SP-A, SP-B |
@@ -988,6 +1025,16 @@ or a result that claims success with a nonempty remainder does not conform.
   minted by the two real acquisition paths, not fabricated encodings. Their
   same-kind controls must succeed. A malformed token has its separate existing
   `MalformedResource` route and cannot satisfy either case.
+- **PR-B is absolute, ordered, and independently reaching.** Every row runs
+  once per engine from a fresh acquisition, file, trace, and recording backend.
+  The closed-endpoint and out-of-range rows hold all inputs fixed except
+  `start = 8` versus `start = 9`, so treating the inclusive endpoint as invalid
+  flips the exact result. The two invalid-offset rows hold offset fixed at
+  `-1` while exercising each downstream outcome; returning `ReadEof` or
+  `InvalidBounds` instead proves that the wrapper inspected the window before
+  host-width admission. The no-event/no-host assertions separately catch a
+  route that returns the right value only after emitting or dispatching a
+  forbidden positive read.
 - **The provenance experiments are absolute and controlled at their recorded
   status.** SP-A freeze holds capacity, numeric window, live-window shape, and
   operation fixed while changing only the span's originating acquisition; its
@@ -1006,11 +1053,13 @@ or a result that claims success with a nonempty remainder does not conform.
 - **Reachability gates are explicit.** Runtime owns observation production,
   including `Buffer`, both acquisition paths, positioned host operations,
   progress/error production, mismatch, and admission enforcement. Verify owns
-  the static export projection. Foundation owns `withBuffer`, the surface sums,
-  and the derived-Ken `writeAll`. The external Ward project alone owns monitor
-  execution and verdicts; they stay delegated and out of Ken. Until those
-  producers and consumers land, these are RED contract roots, not current green
-  claims.
+  the static export projection. Foundation owns the landed `withBuffer` and
+  surface sums, plus the derived-Ken `writeAll`; PX8-F-CAP-41 Phase 2 owns the
+  capacity-carrying `BufferHandle`, consumer migration, and ordered PR-B
+  admission needed to make the new rows reachable. The external Ward project
+  alone owns monitor execution and verdicts; they stay delegated and out of
+  Ken. Until each named producer and consumer lands, its cases remain RED
+  contract roots rather than current green claims.
 - **The schema collapse is controlled, not compatibility.** RB-G reuses the
   landed checked `px7f_export_resource` producer and pins its one intentional
   direct-body rebaseline. Its independent checked no-acquire control retains the
