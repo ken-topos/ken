@@ -1093,7 +1093,8 @@ fn px8n_read_arm_fixture_with_start(
             scrutinee: Box::new(total_primitive(
                 "eq_int",
                 vec![
-                    RuntimeExpr::Var(1),
+                    // PX8-SPAN-PROV: reply-start span field shifted +1 (origin is field 0).
+                    RuntimeExpr::Var(2),
                     big(crate::Sign::NonNegative, &[PX8I_BIG_U64]),
                 ],
             )),
@@ -1107,8 +1108,10 @@ fn px8n_read_arm_fixture_with_start(
         scrutinee: Box::new(RuntimeExpr::Var(0)),
         cases: vec![crate::RuntimeMatchCase {
             constructor: symbols.private_buffer_span.clone(),
-            binders: 2,
-            body: px8n_exact_nat(symbols, RuntimeExpr::Var(1), 1, exact),
+            // PX8-SPAN-PROV: span is now [origin, start, budget]; every span-field
+            // reference shifts +1 (budget: Var(1) -> Var(2)).
+            binders: 3,
+            body: px8n_exact_nat(symbols, RuntimeExpr::Var(2), 1, exact),
         }],
         default: trap(),
     };
@@ -1446,6 +1449,8 @@ fn px8n_write_arm_fixture_with_start(
             RuntimeExpr::Var(0),
             start,
             RuntimeExpr::Value(RuntimeValue::Int((4).into())),
+            // PX8-SPAN-PROV: span origin = the target buffer (own-buffer write).
+            RuntimeExpr::Var(0),
         ],
     };
     let transfer_observation = px8n_exact_nat(
