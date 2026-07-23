@@ -2931,6 +2931,8 @@ impl<'a> Lowering<'a> {
                 .icmp_imm(cranelift_codegen::ir::condcodes::IntCC::Equal, nat.value, 0);
         builder.ins().brif(is_zero, zero_block, &[], suc_block, &[]);
 
+        let frame_baseline = self.consumed_subcontinuation_frames.clone();
+        let mut frame_union = frame_baseline.clone();
         for (arm_name, block, case, predecessor) in [
             ("Zero", zero_block, zero, None),
             ("Suc", suc_block, suc, Some(predecessor)),
@@ -2957,8 +2959,10 @@ impl<'a> Lowering<'a> {
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
-            let lowered = self.lower_source_machine_with_continuation(
+            let lowered = self.lower_forked_branch(
                 builder,
+                &frame_baseline,
+                &mut frame_union,
                 case.body.clone(),
                 arm_env,
                 branch_control,
@@ -2978,6 +2982,7 @@ impl<'a> Lowering<'a> {
                 ));
             }
         }
+        self.consumed_subcontinuation_frames = frame_union;
 
         let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
             local_completion
@@ -3004,6 +3009,40 @@ impl<'a> Lowering<'a> {
         };
         self.restore_root_terminal_authority(root_authority, suffix_control.terminal_outer)?;
         self.resume_active_continuation(builder, merged, suffix_active)
+    }
+
+    /// Lower one mutually-exclusive match arm with the checked-subcontinuation-
+    /// frame consumption set rewound to `frame_baseline`, then fold the arm's
+    /// resulting consumptions into `frame_union`.
+    ///
+    /// A dynamic match lowers its shared post-match continuation once per arm —
+    /// each arm inlines its own copy of the source-prefix template. The arms are
+    /// mutually exclusive at run time (selected by one `brif`), so a checked
+    /// subcontinuation frame occurring in that shared continuation is a *distinct
+    /// lawful activation per arm*, not a repeated consumption of one activation.
+    /// `consumed_subcontinuation_frames` is a single per-lowering set, so without
+    /// this fork the second arm's lawful consume of the same
+    /// `(invocation_id, frame_id)` is misreported as "consumed more than once"
+    /// (RT-ESCAPE: e.g. an escaped resource used by a host op whose `Result`
+    /// match fans out). Rewinding to the pre-match baseline before each arm
+    /// preserves the affine check *within* a single control-flow path — a real
+    /// double-consume on one path still collides — and is neither a set-clear nor
+    /// a key-salt: it is per-branch scoping. Unioning the arms afterward keeps
+    /// every frame consumed on any arm marked consumed for the post-join
+    /// continuation, so a genuine revisit *across* the join still rejects.
+    fn lower_forked_branch<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        frame_baseline: &std::collections::BTreeSet<(u64, u64)>,
+        frame_union: &mut std::collections::BTreeSet<(u64, u64)>,
+        expr: RuntimeExpr,
+        env: Vec<Lowered>,
+        control: SourceControl<'b>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        self.consumed_subcontinuation_frames = frame_baseline.clone();
+        let lowered = self.lower_source_machine_with_continuation(builder, expr, env, control)?;
+        frame_union.extend(self.consumed_subcontinuation_frames.iter().copied());
+        Ok(lowered)
     }
 
     fn lower_source_dynamic_bool_match<'b>(
@@ -3055,6 +3094,8 @@ impl<'a> Lowering<'a> {
         builder
             .ins()
             .brif(condition, true_block, &[], false_block, &[]);
+        let frame_baseline = self.consumed_subcontinuation_frames.clone();
+        let mut frame_union = frame_baseline.clone();
         for (predecessor_id, block, body) in
             [(0, true_block, true_body), (1, false_block, false_body)]
         {
@@ -3068,8 +3109,10 @@ impl<'a> Lowering<'a> {
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
-            let lowered = self.lower_source_machine_with_continuation(
+            let lowered = self.lower_forked_branch(
                 builder,
+                &frame_baseline,
+                &mut frame_union,
                 body.clone(),
                 env.to_vec(),
                 branch_control,
@@ -3085,6 +3128,7 @@ impl<'a> Lowering<'a> {
                 ));
             }
         }
+        self.consumed_subcontinuation_frames = frame_union;
         let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
             local_completion
         else {
@@ -3165,6 +3209,8 @@ impl<'a> Lowering<'a> {
         let err_block = builder.create_block();
         builder.ins().brif(success, ok_block, &[], err_block, &[]);
 
+        let frame_baseline = self.consumed_subcontinuation_frames.clone();
+        let mut frame_union = frame_baseline.clone();
         for (predecessor_id, block, constructor, payload) in [
             (0, ok_block, ok_constructor, ok),
             (1, err_block, err_constructor, error),
@@ -3185,15 +3231,19 @@ impl<'a> Lowering<'a> {
             {
                 let mut arm_env = vec![payload];
                 arm_env.extend_from_slice(env);
-                self.lower_source_machine_with_continuation(
+                self.lower_forked_branch(
                     builder,
+                    &frame_baseline,
+                    &mut frame_union,
                     case.body.clone(),
                     arm_env,
                     branch_control,
                 )?
             } else {
-                self.lower_source_machine_with_continuation(
+                self.lower_forked_branch(
                     builder,
+                    &frame_baseline,
+                    &mut frame_union,
                     RuntimeExpr::Trap(default.clone()),
                     env.to_vec(),
                     branch_control,
@@ -3210,6 +3260,7 @@ impl<'a> Lowering<'a> {
                 ));
             }
         }
+        self.consumed_subcontinuation_frames = frame_union;
 
         let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
             local_completion
@@ -3298,6 +3349,8 @@ impl<'a> Lowering<'a> {
         let mut test_block = builder
             .current_block()
             .expect("dynamic constructor source match block");
+        let frame_baseline = self.consumed_subcontinuation_frames.clone();
+        let mut frame_union = frame_baseline.clone();
         for alternative in dynamic.alternatives {
             let arm = builder.create_block();
             let next = builder.create_block();
@@ -3329,8 +3382,10 @@ impl<'a> Lowering<'a> {
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
-            let lowered = self.lower_source_machine_with_continuation(
+            let lowered = self.lower_forked_branch(
                 builder,
+                &frame_baseline,
+                &mut frame_union,
                 case.body.clone(),
                 materialize_dynamic_constructor_env(&alternative, env),
                 control,
@@ -3345,6 +3400,7 @@ impl<'a> Lowering<'a> {
             }
             test_block = next;
         }
+        self.consumed_subcontinuation_frames = frame_union;
         builder.switch_to_block(test_block);
         let malformed = builder
             .ins()
@@ -3397,6 +3453,8 @@ impl<'a> Lowering<'a> {
         let mut test_block = builder
             .current_block()
             .expect("dynamic constructor source match block");
+        let frame_baseline = self.consumed_subcontinuation_frames.clone();
+        let mut frame_union = frame_baseline.clone();
         for (predecessor_id, alternative) in dynamic.alternatives.into_iter().enumerate() {
             let arm = builder.create_block();
             let next = builder.create_block();
@@ -3428,8 +3486,10 @@ impl<'a> Lowering<'a> {
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
-            let lowered = self.lower_source_machine_with_continuation(
+            let lowered = self.lower_forked_branch(
                 builder,
+                &frame_baseline,
+                &mut frame_union,
                 case.body.clone(),
                 materialize_dynamic_constructor_env(&alternative, env),
                 control,
@@ -3446,6 +3506,7 @@ impl<'a> Lowering<'a> {
             }
             test_block = next;
         }
+        self.consumed_subcontinuation_frames = frame_union;
         builder.switch_to_block(test_block);
         let malformed = builder
             .ins()
