@@ -613,18 +613,28 @@ fn sp_a_own_span_write_succeeds_with_bytes_interp() {
 }
 
 
-// SP-C non-revival — interpreter e2e. Buffer A mints span_a and is released; B is
-// then acquired (reusing A's vacated slot with a newer generation) and installs
-// BBBB. The old acquisition's span (span_a) applied to B is rejected with
-// InvalidBounds; a fresh span (span_b) from B succeeds. Native half is
-// BLOCKED-ON-NATIVE-REACHABILITY. (Freeze arm shown; the write arm is covered by
-// SP-A-write's foreign/own controls + the shared-host slot-reuse unit test.)
+// SP-C non-revival, freeze+write old/fresh — interpreter e2e. Buffer A mints
+// span_a and is released; B is acquired (reusing A's vacated slot with a newer
+// generation) and installs BBBB. The old acquisition's span (span_a) on B is
+// rejected with InvalidBounds by BOTH freeze (no bytes) and writeAt (zero
+// backend); a fresh span (span_b) from B freezes to BBBB and writes BBBB to the
+// destination. Order: freeze span_a, freeze span_b, write span_a, write span_b.
+// The pre-reuse Closed controls and the slot-reused-with-newer-generation proof
+// require a released handle / token observation the interpreter Ken program
+// cannot express; those cells are the host-unit SP-C test
+// (ken_host::effect_v1::tests::released_acquisition_span_is_not_revived_by_slot_reuse).
+// Native half is BLOCKED-ON-NATIVE-REACHABILITY.
 #[cfg(target_os = "linux")]
-const SP_C_FREEZE: &str = r#"program capabilities FS AFull
+const SP_C_REUSE: &str = r#"program capabilities FS AFull
 fn ok_body (unit : Unit) : ResourceBodyResult Unit Unit = ResourceBodyOk Unit Unit MkUnit
 
 fn escape_span (span : BufferSpan) : ResourceBodyResult Unit BufferSpan =
   ResourceBodyOk Unit BufferSpan span
+
+fn ret_body (b : ResourceBodyResult Unit Unit) : HostIO AFull (ResourceBodyResult Unit Unit) =
+  Ret (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (ResourceBodyResult Unit Unit) b
 
 fn from_span_bracket (inner : Result ResourceError (ResourceBracketResult Unit Unit))
   : ResourceBodyResult Unit Unit =
@@ -638,63 +648,69 @@ fn from_span_bracket (inner : Result ResourceError (ResourceBracketResult Unit U
     }
   }
 
-proc do_freezes (buffer_b : Resource Buffer) (span_a : BufferSpan) (span_b : BufferSpan)
+fn from_file_alloc (outcome : Result FileError (ResourceBracketResult Unit Unit))
+  : ResourceBodyResult Unit Unit =
+  match outcome {
+    Err error |-> ResourceBodyErr Unit Unit MkUnit;
+    Ok bracket |-> match bracket {
+      ResourceBracketOk value |-> ResourceBodyOk Unit Unit MkUnit;
+      ResourceBracketBodyError error |-> ResourceBodyErr Unit Unit MkUnit;
+      ResourceBracketReleaseError error |-> ResourceBodyErr Unit Unit MkUnit;
+      ResourceBracketBodyAndReleaseError be re |-> ResourceBodyErr Unit Unit MkUnit
+    }
+  }
+
+proc do_ops (dest : Resource FsHandle) (buffer_b : Resource Buffer)
+  (span_old : BufferSpan) (span_fresh : BufferSpan)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
     (Result ResourceError Bytes) (ResourceBodyResult Unit Unit)
-    (freeze AFull buffer_b span_a)
-    (\ra. bind (Coproduct (FSOp AFull) AmbientOp)
+    (freeze AFull buffer_b span_old)
+    (\f1. bind (Coproduct (FSOp AFull) AmbientOp)
       (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
       (Result ResourceError Bytes) (ResourceBodyResult Unit Unit)
-      (freeze AFull buffer_b span_b)
-      (\rb. Ret (Coproduct (FSOp AFull) AmbientOp)
+      (freeze AFull buffer_b span_fresh)
+      (\f2. bind (Coproduct (FSOp AFull) AmbientOp)
         (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-        (ResourceBodyResult Unit Unit) (ok_body MkUnit)))
+        (Result ResourceError WriteProgress) (ResourceBodyResult Unit Unit)
+        (writeAt AFull dest (0 : Int) buffer_b span_old)
+        (\w1. bind (Coproduct (FSOp AFull) AmbientOp)
+          (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+          (Result ResourceError WriteProgress) (ResourceBodyResult Unit Unit)
+          (writeAt AFull dest (0 : Int) buffer_b span_fresh)
+          (\w2. ret_body (ok_body MkUnit)))))
 
-proc b_body (source : Resource FsHandle) (span_a : BufferSpan) (buffer_b : Resource Buffer)
+proc b_body (dest : Resource FsHandle) (source : Resource FsHandle)
+  (span_old : BufferSpan) (buffer_b : Resource Buffer)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
     (Result ResourceError ReadProgress) (ResourceBodyResult Unit Unit)
     (readAt AFull source (4 : Int) buffer_b (MkBufferWindow (2 : Int) (4 : Int)))
     (\outcome. match outcome {
-      Err error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
-        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-        (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
+      Err error |-> ret_body (ResourceBodyErr Unit Unit MkUnit);
       Ok progress |-> match progress {
-        ReadEof |-> Ret (Coproduct (FSOp AFull) AmbientOp)
-          (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-          (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
-        ReadSome span_b count |-> do_freezes buffer_b span_a span_b
+        ReadEof |-> ret_body (ResourceBodyErr Unit Unit MkUnit);
+        ReadSome span_fresh count |-> do_ops dest buffer_b span_old span_fresh
       }
     })
 
-proc after_a (source : Resource FsHandle)
+proc after_a (dest : Resource FsHandle) (source : Resource FsHandle)
   (inner : Result ResourceError (ResourceBracketResult Unit BufferSpan))
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   match inner {
-    Err error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
-      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-      (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
+    Err error |-> ret_body (ResourceBodyErr Unit Unit MkUnit);
     Ok bracket |-> match bracket {
-      ResourceBracketOk span_a |->
+      ResourceBracketOk span_old |->
         bind (Coproduct (FSOp AFull) AmbientOp)
           (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
           (Result ResourceError (ResourceBracketResult Unit Unit)) (ResourceBodyResult Unit Unit)
-          (withBuffer AFull Unit Unit (8 : Int) (b_body source span_a))
-          (\outcome. Ret (Coproduct (FSOp AFull) AmbientOp)
-            (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-            (ResourceBodyResult Unit Unit) (from_span_bracket outcome));
-      ResourceBracketBodyError error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
-        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-        (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
-      ResourceBracketReleaseError error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
-        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-        (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
-      ResourceBracketBodyAndReleaseError be re |-> Ret (Coproduct (FSOp AFull) AmbientOp)
-        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-        (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit)
+          (withBuffer AFull Unit Unit (8 : Int) (b_body dest source span_old))
+          (\outcome. ret_body (from_span_bracket outcome));
+      ResourceBracketBodyError error |-> ret_body (ResourceBodyErr Unit Unit MkUnit);
+      ResourceBracketReleaseError error |-> ret_body (ResourceBodyErr Unit Unit MkUnit);
+      ResourceBracketBodyAndReleaseError be re |-> ret_body (ResourceBodyErr Unit Unit MkUnit)
     }
   }
 
@@ -718,13 +734,22 @@ proc read_a (source : Resource FsHandle) (buffer_a : Resource Buffer)
       }
     })
 
-proc source_body (source : Resource FsHandle)
+proc source_body (dest : Resource FsHandle) (source : Resource FsHandle)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
     (Result ResourceError (ResourceBracketResult Unit BufferSpan)) (ResourceBodyResult Unit Unit)
     (withBuffer AFull Unit BufferSpan (8 : Int) (read_a source))
-    (\outcome. after_a source outcome)
+    (\outcome. after_a dest source outcome)
+
+proc dest_body (cap : Cap AFull) (dest : Resource FsHandle)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result FileError (ResourceBracketResult Unit Unit)) (ResourceBodyResult Unit Unit)
+    (withResource AFull Unit Unit cap (bytes_encode "spanseed.bin") ResourceRead
+      (source_body dest))
+    (\outcome. ret_body (from_file_alloc outcome))
 
 fn finish (outcome : Result FileError (ResourceBracketResult Unit Unit)) : HostIO AFull ExitCode =
   match outcome {
@@ -744,191 +769,7 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
       bind (Coproduct (FSOp AFull) AmbientOp)
         (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
         (Result FileError (ResourceBracketResult Unit Unit)) ExitCode
-        (withResource AFull Unit Unit cap (bytes_encode "spanseed.bin") ResourceRead
-          source_body)
-        (\outcome. finish outcome)
-  }
-"#;
-
-#[cfg(target_os = "linux")]
-#[test]
-fn sp_c_released_span_not_revived_by_slot_reuse_interp() {
-    in_large_stack_thread("sp-c-freeze-interp", || {
-        let obs = interpret_only("sp-c-freeze", SP_C_FREEZE);
-        let freezes = buffer_freeze_outcomes(&obs);
-        assert_eq!(freezes.len(), 2, "expected two BufferFreeze events, got {freezes:?}");
-        match &freezes[0] {
-            ken_runtime::CanonicalOutcomeV1::Error(ken_runtime::SemanticErrorV1::Resource(
-                ken_runtime::ResourceErrorV1::InvalidBounds,
-            )) => {}
-            other => panic!("interp: released-acquisition span must be InvalidBounds, got {other:?}"),
-        }
-        match &freezes[1] {
-            ken_runtime::CanonicalOutcomeV1::Success(ken_runtime::CanonicalReplyV1::Bytes(b))
-                if b.as_slice() == b"BBBB" => {}
-            other => panic!("interp: fresh span must freeze to BBBB, got {other:?}"),
-        }
-    });
-}
-
-// SP-B precedence — interpreter e2e. A foreign-acquisition span on target B: with
-// a valid file offset the span-validity relation returns InvalidBounds; changing
-// only the file offset to -1 returns the already-locked InvalidOffset at
-// host-width admission (which precedes the provenance check). Observed via exit
-// code (the -1 offset fails at request narrowing, before dispatch, so it is not
-// in the effect trace). Exit 0 iff [foreign@0 -> InvalidBounds, foreign@-1 ->
-// InvalidOffset]. Native half is BLOCKED-ON-NATIVE-REACHABILITY.
-#[cfg(target_os = "linux")]
-const SP_B_PRECEDENCE: &str = r#"program capabilities FS AFull
-fn is_invalid_bounds (e : ResourceError) : Bool =
-  match e {
-    ResourceHostIO io |-> False; Closed |-> False; MalformedResource |-> False;
-    RightNotHeld required held |-> False; ReleaseFailed kind identity io |-> False;
-    ResourceKindMismatch expected actual |-> False; BufferLimit |-> False;
-    InvalidOffset |-> False; InvalidBounds |-> True; NoProgress |-> False
-  }
-
-fn is_invalid_offset (e : ResourceError) : Bool =
-  match e {
-    ResourceHostIO io |-> False; Closed |-> False; MalformedResource |-> False;
-    RightNotHeld required held |-> False; ReleaseFailed kind identity io |-> False;
-    ResourceKindMismatch expected actual |-> False; BufferLimit |-> False;
-    InvalidOffset |-> True; InvalidBounds |-> False; NoProgress |-> False
-  }
-
-fn ok_code (code : ExitCode) : ResourceBodyResult Unit ExitCode =
-  ResourceBodyOk Unit ExitCode code
-
-fn from_buffer_alloc (outcome : Result ResourceError (ResourceBracketResult Unit ExitCode))
-  : ResourceBodyResult Unit ExitCode =
-  match outcome {
-    Err error |-> ResourceBodyOk Unit ExitCode (Failure 80);
-    Ok bracket |-> match bracket {
-      ResourceBracketOk code |-> ResourceBodyOk Unit ExitCode code;
-      ResourceBracketBodyError error |-> ResourceBodyOk Unit ExitCode (Failure 81);
-      ResourceBracketReleaseError error |-> ResourceBodyOk Unit ExitCode (Failure 82);
-      ResourceBracketBodyAndReleaseError be re |-> ResourceBodyOk Unit ExitCode (Failure 83)
-    }
-  }
-
-fn from_file_alloc (outcome : Result FileError (ResourceBracketResult Unit ExitCode))
-  : ResourceBodyResult Unit ExitCode =
-  match outcome {
-    Err error |-> ResourceBodyOk Unit ExitCode (Failure 84);
-    Ok bracket |-> match bracket {
-      ResourceBracketOk code |-> ResourceBodyOk Unit ExitCode code;
-      ResourceBracketBodyError error |-> ResourceBodyOk Unit ExitCode (Failure 85);
-      ResourceBracketReleaseError error |-> ResourceBodyOk Unit ExitCode (Failure 86);
-      ResourceBracketBodyAndReleaseError be re |-> ResourceBodyOk Unit ExitCode (Failure 87)
-    }
-  }
-
-proc verdict (dest : Resource FsHandle) (buffer_b : Resource Buffer) (span_a : BufferSpan)
-  : HostIO AFull (ResourceBodyResult Unit ExitCode) visits [FS] =
-  bind (Coproduct (FSOp AFull) AmbientOp)
-    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-    (Result ResourceError WriteProgress) (ResourceBodyResult Unit ExitCode)
-    (writeAt AFull dest (0 : Int) buffer_b span_a)
-    (\valid. match valid {
-      Ok progress |-> Ret (Coproduct (FSOp AFull) AmbientOp)
-        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-        (ResourceBodyResult Unit ExitCode) (ok_code (Failure 71));
-      Err eb |-> match is_invalid_bounds eb {
-        False |-> Ret (Coproduct (FSOp AFull) AmbientOp)
-          (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-          (ResourceBodyResult Unit ExitCode) (ok_code (Failure 73));
-        True |-> bind (Coproduct (FSOp AFull) AmbientOp)
-          (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-          (Result ResourceError WriteProgress) (ResourceBodyResult Unit ExitCode)
-          (writeAt AFull dest (sub_int 0 1) buffer_b span_a)
-          (\neg. match neg {
-            Ok progress |-> Ret (Coproduct (FSOp AFull) AmbientOp)
-              (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-              (ResourceBodyResult Unit ExitCode) (ok_code (Failure 72));
-            Err eo |-> match is_invalid_offset eo {
-              True |-> Ret (Coproduct (FSOp AFull) AmbientOp)
-                (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-                (ResourceBodyResult Unit ExitCode) (ok_code Success);
-              False |-> Ret (Coproduct (FSOp AFull) AmbientOp)
-                (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-                (ResourceBodyResult Unit ExitCode) (ok_code (Failure 74))
-            }
-          })
-      }
-    })
-
-proc b_body (dest : Resource FsHandle) (span_a : BufferSpan) (buffer_b : Resource Buffer)
-  : HostIO AFull (ResourceBodyResult Unit ExitCode) visits [FS] =
-  verdict dest buffer_b span_a
-
-proc a_after_read (dest : Resource FsHandle) (span_a : BufferSpan)
-  : HostIO AFull (ResourceBodyResult Unit ExitCode) visits [FS] =
-  bind (Coproduct (FSOp AFull) AmbientOp)
-    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-    (Result ResourceError (ResourceBracketResult Unit ExitCode)) (ResourceBodyResult Unit ExitCode)
-    (withBuffer AFull Unit ExitCode (8 : Int) (b_body dest span_a))
-    (\outcome. Ret (Coproduct (FSOp AFull) AmbientOp)
-      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-      (ResourceBodyResult Unit ExitCode) (from_buffer_alloc outcome))
-
-proc a_body (dest : Resource FsHandle) (source : Resource FsHandle) (buffer_a : Resource Buffer)
-  : HostIO AFull (ResourceBodyResult Unit ExitCode) visits [FS] =
-  bind (Coproduct (FSOp AFull) AmbientOp)
-    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-    (Result ResourceError ReadProgress) (ResourceBodyResult Unit ExitCode)
-    (readAt AFull source (0 : Int) buffer_a (MkBufferWindow (2 : Int) (4 : Int)))
-    (\outcome. match outcome {
-      Err error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
-        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-        (ResourceBodyResult Unit ExitCode) (ok_code (Failure 88));
-      Ok progress |-> match progress {
-        ReadEof |-> Ret (Coproduct (FSOp AFull) AmbientOp)
-          (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-          (ResourceBodyResult Unit ExitCode) (ok_code (Failure 89));
-        ReadSome span_a count |-> a_after_read dest span_a
-      }
-    })
-
-proc source_body (dest : Resource FsHandle) (source : Resource FsHandle)
-  : HostIO AFull (ResourceBodyResult Unit ExitCode) visits [FS] =
-  bind (Coproduct (FSOp AFull) AmbientOp)
-    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-    (Result ResourceError (ResourceBracketResult Unit ExitCode)) (ResourceBodyResult Unit ExitCode)
-    (withBuffer AFull Unit ExitCode (8 : Int) (a_body dest source))
-    (\outcome. Ret (Coproduct (FSOp AFull) AmbientOp)
-      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-      (ResourceBodyResult Unit ExitCode) (from_buffer_alloc outcome))
-
-proc dest_body (cap : Cap AFull) (dest : Resource FsHandle)
-  : HostIO AFull (ResourceBodyResult Unit ExitCode) visits [FS] =
-  bind (Coproduct (FSOp AFull) AmbientOp)
-    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-    (Result FileError (ResourceBracketResult Unit ExitCode)) (ResourceBodyResult Unit ExitCode)
-    (withResource AFull Unit ExitCode cap (bytes_encode "spanseed.bin") ResourceRead
-      (source_body dest))
-    (\outcome. Ret (Coproduct (FSOp AFull) AmbientOp)
-      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-      (ResourceBodyResult Unit ExitCode) (from_file_alloc outcome))
-
-fn finish (outcome : Result FileError (ResourceBracketResult Unit ExitCode)) : HostIO AFull ExitCode =
-  match outcome {
-    Err error |-> host_exit AFull (Failure 96);
-    Ok bracket |-> match bracket {
-      ResourceBracketOk code |-> host_exit AFull code;
-      ResourceBracketBodyError error |-> host_exit AFull (Failure 93);
-      ResourceBracketReleaseError error |-> host_exit AFull (Failure 94);
-      ResourceBracketBodyAndReleaseError body_error release_error |-> host_exit AFull (Failure 95)
-    }
-  }
-
-proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
-  : HostIO AFull ExitCode visits [FS] =
-  match caps {
-    MkProgramCaps cap |->
-      bind (Coproduct (FSOp AFull) AmbientOp)
-        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-        (Result FileError (ResourceBracketResult Unit ExitCode)) ExitCode
-        (withResource AFull Unit ExitCode cap (bytes_encode "dest.bin")
+        (withResource AFull Unit Unit cap (bytes_encode "dest.bin")
           (ResourceWriteCreate CreateOrTruncate) (dest_body cap))
         (\outcome. finish outcome)
   }
@@ -936,12 +777,33 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
 
 #[cfg(target_os = "linux")]
 #[test]
-fn sp_b_host_width_offset_precedes_provenance_interp() {
-    in_large_stack_thread("sp-b-precedence-interp", || {
-        let obs = interpret_only("sp-b-precedence", SP_B_PRECEDENCE);
+fn sp_c_released_span_not_revived_by_slot_reuse_interp() {
+    in_large_stack_thread("sp-c-reuse-interp", || {
+        let (obs, files) = interpret_reading("sp-c-reuse", SP_C_REUSE, &["dest.bin"]);
+        let ib = ken_runtime::CanonicalOutcomeV1::Error(ken_runtime::SemanticErrorV1::Resource(
+            ken_runtime::ResourceErrorV1::InvalidBounds,
+        ));
+        let freezes = buffer_freeze_outcomes(&obs);
+        assert_eq!(freezes.len(), 2, "expected two BufferFreeze events, got {freezes:?}");
+        assert_eq!(freezes[0], ib, "interp: old-acquisition freeze must be InvalidBounds (no bytes)");
+        match &freezes[1] {
+            ken_runtime::CanonicalOutcomeV1::Success(ken_runtime::CanonicalReplyV1::Bytes(b))
+                if b.as_slice() == b"BBBB" => {}
+            other => panic!("interp: fresh-span freeze must be BBBB, got {other:?}"),
+        }
+        let writes = write_outcomes(&obs);
+        assert_eq!(writes.len(), 2, "expected two FsWriteAt events, got {writes:?}");
+        assert_eq!(writes[0], ib, "interp: old-acquisition write must be InvalidBounds (zero backend)");
+        match &writes[1] {
+            ken_runtime::CanonicalOutcomeV1::Success(
+                ken_runtime::CanonicalReplyV1::WriteProgress(_),
+            ) => {}
+            other => panic!("interp: fresh-span write must succeed (Wrote), got {other:?}"),
+        }
         assert_eq!(
-            obs.exit_status, 0,
-            "interp: exit 0 == foreign write@0 -> InvalidBounds AND foreign write@-1 -> InvalidOffset (host-width precedes provenance); got {obs:?}"
+            files[0], b"BBBB",
+            "interp: only the fresh-span write reaches the backend, landing BBBB, got {:?}",
+            files[0]
         );
     });
 }
