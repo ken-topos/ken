@@ -6112,7 +6112,10 @@ mod px5b_effect_observation_tests {
             panic!("expected BufferSpan")
         };
         assert_eq!(*span_id, fs.private_buffer_span_id);
-        assert_eq!(nat_value(&span_args[1], &fs), 1);
+        // PX8-SPAN-PROV AC-5: BufferSpan is now [origin, start, budget]; the byte
+        // budget moved from span_args[1] to span_args[2]. Effect-semantics (the
+        // reified remaining/effective in count_args below) are unchanged.
+        assert_eq!(nat_value(&span_args[2], &fs), 1);
         let EvalVal::Ctor {
             id: transfer_count_id,
             args: count_args,
@@ -6213,7 +6216,8 @@ mod px5b_effect_observation_tests {
             panic!("expected BufferSpan")
         };
         assert_eq!(*span_id, fs.private_buffer_span_id);
-        assert_eq!(nat_value(&span_args[1], &fs), 4, "span must be capacity-full");
+        // PX8-SPAN-PROV AC-5: budget is span_args[2] now ([origin, start, budget]).
+        assert_eq!(nat_value(&span_args[2], &fs), 4, "span must be capacity-full");
         let EvalVal::Ctor {
             id: transfer_count_id,
             args: count_args,
@@ -6380,6 +6384,10 @@ mod px5b_effect_observation_tests {
                 EvalVal::ResourceToken(buffer),
                 EvalVal::Int(0),
                 EvalVal::Int(8),
+                // PX8-SPAN-PROV AC-5: PrivateFsWriteAt now carries a trailing
+                // span_origin acquisition token. Own-buffer write: origin ==
+                // target buffer, so provenance admits and the write proceeds.
+                EvalVal::ResourceToken(buffer),
             ],
             &mut host,
             &mut resources,
