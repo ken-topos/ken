@@ -657,6 +657,7 @@ pub(super) fn record_partition_measure(measure: PartitionFunctionMeasure) {
 
 pub(super) enum PartitionWorkItem {
     SourceArm(SourceArmPartitionWorkItem),
+    SourceKont(SourceKontPartitionWorkItem),
     Resume(ResumePartitionWorkItem),
     Arm(ArmPartitionWorkItem),
     CleanupStep(CleanupStepPartitionWorkItem),
@@ -711,17 +712,26 @@ impl From<InvocationTemplateRef> for PartitionInvocationTemplateKey {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum PartitionLayerRoleKey {
-    SelectsOccurrence,
-    ExitsScope { has_parent_scope: bool },
+    SelectsOccurrence {
+        origin: RecursorProducerOriginId,
+    },
+    ExitsScope {
+        origin: RecursorProducerOriginId,
+        scope_origin: RecursorProducerOriginId,
+        parent_scope: Option<RecursorProducerOriginId>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PartitionLayerKey {
     eliminator_descriptor: PartitionStaticDescriptor,
     outer_env: Vec<PartitionLoweredKey>,
+    provenance: RecursorFrameProvenance,
     role: PartitionLayerRoleKey,
     checked_frame_id: Option<u64>,
+    checked_invocation_id: Option<u64>,
     checked_invocation_source: Option<PartitionInvocationTemplateKey>,
+    checked_invocation_depth: usize,
     semantic_pending: bool,
 }
 
@@ -732,16 +742,25 @@ fn partition_layer_key(layer: &ComputationalRecursorLayer) -> PartitionLayerKey 
             &layer.default,
         ),
         outer_env: layer.outer_env.iter().map(partition_lowered_key).collect(),
+        provenance: layer.provenance,
         role: match layer.role {
-            RecursorLayerRole::SelectsOccurrence { .. } => PartitionLayerRoleKey::SelectsOccurrence,
-            RecursorLayerRole::ExitsScope { parent_scope, .. } => {
-                PartitionLayerRoleKey::ExitsScope {
-                    has_parent_scope: parent_scope.is_some(),
-                }
+            RecursorLayerRole::SelectsOccurrence { origin } => {
+                PartitionLayerRoleKey::SelectsOccurrence { origin }
             }
+            RecursorLayerRole::ExitsScope {
+                origin,
+                scope_origin,
+                parent_scope,
+            } => PartitionLayerRoleKey::ExitsScope {
+                origin,
+                scope_origin,
+                parent_scope,
+            },
         },
         checked_frame_id: layer.checked_frame_id,
+        checked_invocation_id: layer.checked_invocation_id,
         checked_invocation_source: layer.checked_invocation_source.map(Into::into),
+        checked_invocation_depth: layer.checked_invocation_depth,
         semantic_pending: layer.semantic_pending,
     }
 }
@@ -1105,16 +1124,21 @@ impl PartitionCleanupSuffixInterner {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PartitionSelectedScopeKey {
-    has_parent_scope: bool,
+    scope_origin: RecursorProducerOriginId,
+    parent_scope: Option<RecursorProducerOriginId>,
     eliminator_descriptor: PartitionStaticDescriptor,
     outer_env: Vec<PartitionLoweredKey>,
+    provenance: RecursorFrameProvenance,
     checked_frame_id: Option<u64>,
+    checked_invocation_id: Option<u64>,
     checked_invocation_source: Option<PartitionInvocationTemplateKey>,
+    checked_invocation_depth: usize,
 }
 
 fn partition_scope_key(scope: &Option<OwnedSelectedScope>) -> Option<PartitionSelectedScopeKey> {
     scope.as_ref().map(|scope| PartitionSelectedScopeKey {
-        has_parent_scope: scope.parent_scope.is_some(),
+        scope_origin: scope.scope_origin,
+        parent_scope: scope.parent_scope,
         eliminator_descriptor: partition_computational_match_descriptor(
             &scope.frame.cases,
             &scope.frame.default,
@@ -1125,14 +1149,20 @@ fn partition_scope_key(scope: &Option<OwnedSelectedScope>) -> Option<PartitionSe
             .iter()
             .map(partition_lowered_key)
             .collect(),
+        provenance: scope.frame.provenance,
         checked_frame_id: scope.frame.checked_frame_id,
+        checked_invocation_id: scope.frame.checked_invocation_id,
         checked_invocation_source: scope.frame.checked_invocation_source.map(Into::into),
+        checked_invocation_depth: scope.frame.checked_invocation_depth,
     })
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PartitionSelectedContinuationKey {
+    activation: ContinuationActivationId,
+    cursor: ContinuationCursorId,
     pending: Vec<PartitionEliminatorKey>,
+    selected_ancestry: Vec<RecursorFrameProvenance>,
     selected_scope: Option<PartitionSelectedScopeKey>,
 }
 
@@ -1142,11 +1172,14 @@ fn partition_selected_lineage_key(
     lineage
         .iter()
         .map(|selected| PartitionSelectedContinuationKey {
+            activation: selected.activation,
+            cursor: selected.cursor,
             pending: selected
                 .pending
                 .iter()
                 .map(partition_eliminator_key)
                 .collect(),
+            selected_ancestry: selected.selected_ancestry.clone(),
             selected_scope: partition_scope_key(&selected.selected_scope),
         })
         .collect()
@@ -1173,9 +1206,14 @@ pub(super) struct PartitionContinuationKey {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum PartitionSourcePrefixKey {
-    Terminal,
+    Terminal {
+        expected_outer: ContinuationCursorId,
+    },
     CheckedRecursiveInvocationReturn {
         source: PartitionInvocationTemplateKey,
+        invocation_instance_id: u64,
+        semantic_depth: usize,
+        dynamic_splice_edge: Option<DynamicSpliceEdgeId>,
         next: Box<Self>,
     },
     CheckedComputationalIHInvocationReturn {
@@ -1183,8 +1221,11 @@ enum PartitionSourcePrefixKey {
         next: Box<Self>,
     },
     ReturnFromSelectedCase {
+        activation: ContinuationActivationId,
+        cursor: ContinuationCursorId,
+        scope_origin: RecursorProducerOriginId,
         frame_id: Option<u64>,
-        has_invocation: bool,
+        invocation_id: Option<u64>,
         next: Box<Self>,
     },
     LetBody {
@@ -1198,6 +1239,7 @@ enum PartitionSourcePrefixKey {
     },
     UnwindRecursorSegment {
         stack: Vec<PartitionLayerKey>,
+        resume_cursor: ContinuationCursorId,
         next: Box<Self>,
     },
     IfScrutinee {
@@ -1220,6 +1262,7 @@ enum PartitionSourcePrefixKey {
     ComputationalMatchScrutinee {
         eliminator_descriptor: PartitionStaticDescriptor,
         env: Vec<PartitionLoweredKey>,
+        provenance: RecursorFrameProvenance,
         checked_frame_id: Option<u64>,
         answer_route: SourceComputationalAnswerRoute,
         next: Box<Self>,
@@ -1245,10 +1288,17 @@ enum PartitionSourcePrefixKey {
 fn partition_source_prefix_key(prefix: &SourcePrefixTemplate) -> PartitionSourcePrefixKey {
     let lowered = |values: &[Lowered]| values.iter().map(partition_lowered_key).collect();
     match prefix {
-        SourcePrefixTemplate::Terminal { .. } => PartitionSourcePrefixKey::Terminal,
+        SourcePrefixTemplate::Terminal { expected_outer } => {
+            PartitionSourcePrefixKey::Terminal {
+                expected_outer: *expected_outer,
+            }
+        }
         SourcePrefixTemplate::CheckedRecursiveInvocationReturn { instance, next } => {
             PartitionSourcePrefixKey::CheckedRecursiveInvocationReturn {
                 source: instance.source.into(),
+                invocation_instance_id: instance.invocation_instance_id,
+                semantic_depth: instance.semantic_depth,
+                dynamic_splice_edge: instance.dynamic_splice_edge,
                 next: Box::new(partition_source_prefix_key(next)),
             }
         }
@@ -1261,8 +1311,11 @@ fn partition_source_prefix_key(prefix: &SourcePrefixTemplate) -> PartitionSource
         },
         SourcePrefixTemplate::ReturnFromSelectedCase { delimiter, next } => {
             PartitionSourcePrefixKey::ReturnFromSelectedCase {
+                activation: delimiter.activation,
+                cursor: delimiter.cursor,
+                scope_origin: delimiter.scope_origin,
                 frame_id: delimiter.frame_id,
-                has_invocation: delimiter.invocation_id.is_some(),
+                invocation_id: delimiter.invocation_id,
                 next: Box::new(partition_source_prefix_key(next)),
             }
         }
@@ -1277,13 +1330,18 @@ fn partition_source_prefix_key(prefix: &SourcePrefixTemplate) -> PartitionSource
                 next: Box::new(partition_source_prefix_key(next)),
             }
         }
-        SourcePrefixTemplate::UnwindRecursorSegment { stack, next, .. } => {
+        SourcePrefixTemplate::UnwindRecursorSegment {
+            stack,
+            resume_cursor,
+            next,
+        } => {
             PartitionSourcePrefixKey::UnwindRecursorSegment {
                 stack: stack
                     .later_wrappers_in_construction_order
                     .iter()
                     .map(partition_layer_key)
                     .collect(),
+                resume_cursor: *resume_cursor,
                 next: Box::new(partition_source_prefix_key(next)),
             }
         }
@@ -1324,13 +1382,14 @@ fn partition_source_prefix_key(prefix: &SourcePrefixTemplate) -> PartitionSource
             cases,
             default,
             env,
+            provenance,
             checked_frame_id,
             answer_route,
             next,
-            ..
         } => PartitionSourcePrefixKey::ComputationalMatchScrutinee {
             eliminator_descriptor: partition_computational_match_descriptor(cases, default),
             env: lowered(env),
+            provenance: *provenance,
             checked_frame_id: *checked_frame_id,
             answer_route: *answer_route,
             next: Box::new(partition_source_prefix_key(next)),
@@ -1364,6 +1423,543 @@ fn partition_source_prefix_key(prefix: &SourcePrefixTemplate) -> PartitionSource
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct PartitionSourceNodeId(pub(super) u32);
+
+#[derive(Clone, Copy)]
+pub(super) struct PartitionSourceCursor {
+    pub(super) node: PartitionSourceNodeId,
+    pub(super) capture_pointer: Value,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PartitionSourceNodeKey {
+    current: PartitionSourcePrefixKey,
+    capture_field_types: Vec<Type>,
+    successor: Option<PartitionSourceNodeId>,
+}
+
+#[derive(Clone)]
+pub(super) struct PartitionSourceNodeDefinition {
+    pub(super) current: SourcePrefixTemplate,
+    pub(super) capture_field_types: Vec<Type>,
+    pub(super) successor: Option<PartitionSourceNodeId>,
+}
+
+#[derive(Default)]
+pub(super) struct PartitionSourceNodeInterner {
+    by_bucket: BTreeMap<(u64, u64), Vec<PartitionSourceNodeId>>,
+    keys: Vec<PartitionSourceNodeKey>,
+    definitions: Vec<PartitionSourceNodeDefinition>,
+    bytes_constructed: usize,
+    bytes_retained: usize,
+    exact_comparisons: usize,
+}
+
+impl PartitionSourceNodeInterner {
+    pub(super) fn intern(
+        &mut self,
+        current: SourcePrefixTemplate,
+        capture_field_types: Vec<Type>,
+        successor: Option<PartitionSourceNodeId>,
+    ) -> PartitionSourceNodeId {
+        let key = PartitionSourceNodeKey {
+            current: partition_source_prefix_key(&current),
+            capture_field_types: capture_field_types.clone(),
+            successor,
+        };
+        let bucket = partition_static_bucket(&key);
+        self.bytes_constructed = self.bytes_constructed.saturating_add(bucket.bytes as usize);
+        let bucket_key = (bucket.hash, bucket.bytes);
+        if let Some(candidates) = self.by_bucket.get(&bucket_key) {
+            for candidate in candidates.iter().copied() {
+                self.exact_comparisons = self.exact_comparisons.saturating_add(1);
+                if self.keys[candidate.0 as usize] == key {
+                    return candidate;
+                }
+            }
+        }
+        let id = PartitionSourceNodeId(
+            u32::try_from(self.keys.len())
+                .expect("compiler-private source-continuation node identity exhausted"),
+        );
+        self.bytes_retained = self.bytes_retained.saturating_add(bucket.bytes as usize);
+        self.keys.push(key);
+        self.definitions.push(PartitionSourceNodeDefinition {
+            current,
+            capture_field_types,
+            successor,
+        });
+        self.by_bucket.entry(bucket_key).or_default().push(id);
+        id
+    }
+
+    pub(super) fn definition(
+        &self,
+        id: PartitionSourceNodeId,
+    ) -> Result<PartitionSourceNodeDefinition, CraneliftBackendError> {
+        self.definitions.get(id.0 as usize).cloned().ok_or_else(|| {
+            unsupported(
+                "NativeSourceContinuationStepV1",
+                "source-continuation node identity is out of bounds",
+            )
+        })
+    }
+
+    pub(super) fn counts(&self) -> (usize, usize, usize, usize) {
+        (
+            self.definitions.len(),
+            self.bytes_constructed,
+            self.bytes_retained,
+            self.exact_comparisons,
+        )
+    }
+}
+
+pub(super) fn partition_source_head_template(
+    continuation: &SourceContinuation<'_>,
+    expected_outer: ContinuationCursorId,
+) -> Result<SourcePrefixTemplate, CraneliftBackendError> {
+    let terminal = || SourcePrefixTemplate::Terminal { expected_outer };
+    Ok(match continuation {
+        SourceContinuation::CheckedRecursiveInvocationReturn { instance, .. } => {
+            SourcePrefixTemplate::CheckedRecursiveInvocationReturn {
+                instance: instance.clone(),
+                next: Box::new(terminal()),
+            }
+        }
+        SourceContinuation::CheckedComputationalIHInvocationReturn {
+            call_template_id, ..
+        } => SourcePrefixTemplate::CheckedComputationalIHInvocationReturn {
+            call_template_id: *call_template_id,
+            next: Box::new(terminal()),
+        },
+        SourceContinuation::ReturnFromSelectedCase { delimiter, .. } => {
+            SourcePrefixTemplate::ReturnFromSelectedCase {
+                delimiter: *delimiter,
+                next: Box::new(terminal()),
+            }
+        }
+        SourceContinuation::LetBody { body, env, .. } => SourcePrefixTemplate::LetBody {
+            body: body.clone(),
+            env: env.clone(),
+            next: Box::new(terminal()),
+        },
+        SourceContinuation::ApplyRecursorSelection { layer, .. } => {
+            SourcePrefixTemplate::ApplyRecursorSelection {
+                layer: layer.clone(),
+                next: Box::new(terminal()),
+            }
+        }
+        SourceContinuation::UnwindRecursorSegment {
+            stack,
+            resume_cursor,
+            ..
+        } => SourcePrefixTemplate::UnwindRecursorSegment {
+            stack: stack.clone(),
+            resume_cursor: *resume_cursor,
+            next: Box::new(terminal()),
+        },
+        SourceContinuation::IfScrutinee {
+            then_expr,
+            else_expr,
+            env,
+            ..
+        } => SourcePrefixTemplate::IfScrutinee {
+            then_expr: then_expr.clone(),
+            else_expr: else_expr.clone(),
+            env: env.clone(),
+            next: Box::new(terminal()),
+        },
+        SourceContinuation::ConstructArgument {
+            constructor,
+            remaining,
+            lowered,
+            env,
+            ..
+        } => SourcePrefixTemplate::ConstructArgument {
+            constructor: constructor.clone(),
+            remaining: remaining.clone(),
+            lowered: lowered.clone(),
+            env: env.clone(),
+            next: Box::new(terminal()),
+        },
+        SourceContinuation::MatchScrutinee {
+            cases,
+            default,
+            env,
+            ..
+        } => SourcePrefixTemplate::MatchScrutinee {
+            cases: cases.clone(),
+            default: default.clone(),
+            env: env.clone(),
+            next: Box::new(terminal()),
+        },
+        SourceContinuation::ComputationalMatchScrutinee {
+            cases,
+            default,
+            env,
+            provenance,
+            checked_frame_id,
+            answer_route,
+            ..
+        } => SourcePrefixTemplate::ComputationalMatchScrutinee {
+            cases: cases.clone(),
+            default: default.clone(),
+            env: env.clone(),
+            provenance: *provenance,
+            checked_frame_id: *checked_frame_id,
+            answer_route: *answer_route,
+            next: Box::new(terminal()),
+        },
+        SourceContinuation::ProjectRecord { field, .. } => {
+            SourcePrefixTemplate::ProjectRecord {
+                field: field.clone(),
+                next: Box::new(terminal()),
+            }
+        }
+        SourceContinuation::CallCallee { args, env, .. } => SourcePrefixTemplate::CallCallee {
+            args: args.clone(),
+            env: env.clone(),
+            next: Box::new(terminal()),
+        },
+        SourceContinuation::CallArgument {
+            callee,
+            remaining,
+            lowered,
+            env,
+            ..
+        } => SourcePrefixTemplate::CallArgument {
+            callee: callee.clone(),
+            remaining: remaining.clone(),
+            lowered: lowered.clone(),
+            env: env.clone(),
+            next: Box::new(terminal()),
+        },
+        SourceContinuation::Terminal(_) | SourceContinuation::Partitioned { .. } => {
+            return Err(unsupported(
+                "NativeSourceContinuationStepV1",
+                "planning completeness: terminal/partitioned continuation cannot be pushed",
+            ));
+        }
+    })
+}
+
+pub(super) fn partition_source_continuation_next<'a, 'b>(
+    continuation: &'a SourceContinuation<'b>,
+) -> Option<&'a SourceContinuation<'b>> {
+    match continuation {
+        SourceContinuation::CheckedRecursiveInvocationReturn { next, .. }
+        | SourceContinuation::CheckedComputationalIHInvocationReturn { next, .. }
+        | SourceContinuation::ReturnFromSelectedCase { next, .. }
+        | SourceContinuation::LetBody { next, .. }
+        | SourceContinuation::ApplyRecursorSelection { next, .. }
+        | SourceContinuation::UnwindRecursorSegment { next, .. }
+        | SourceContinuation::IfScrutinee { next, .. }
+        | SourceContinuation::ConstructArgument { next, .. }
+        | SourceContinuation::MatchScrutinee { next, .. }
+        | SourceContinuation::ComputationalMatchScrutinee { next, .. }
+        | SourceContinuation::ProjectRecord { next, .. }
+        | SourceContinuation::CallCallee { next, .. }
+        | SourceContinuation::CallArgument { next, .. } => Some(next.as_ref()),
+        SourceContinuation::Terminal(_) | SourceContinuation::Partitioned { .. } => None,
+    }
+}
+
+pub(super) fn partition_source_prefix_head_template<'a>(
+    prefix: &'a SourcePrefixTemplate,
+    expected_outer: ContinuationCursorId,
+) -> Result<Option<(SourcePrefixTemplate, &'a SourcePrefixTemplate)>, CraneliftBackendError> {
+    let terminal = || SourcePrefixTemplate::Terminal { expected_outer };
+    Ok(Some(match prefix {
+        SourcePrefixTemplate::Terminal {
+            expected_outer: actual,
+        } => {
+            if *actual != expected_outer {
+                return Err(unsupported(
+                    "NativeSourceContinuationStepV1",
+                    "source-prefix terminal cursor does not match its persistent-cell contract",
+                ));
+            }
+            return Ok(None);
+        }
+        SourcePrefixTemplate::CheckedRecursiveInvocationReturn { instance, next } => (
+            SourcePrefixTemplate::CheckedRecursiveInvocationReturn {
+                instance: instance.clone(),
+                next: Box::new(terminal()),
+            },
+            next.as_ref(),
+        ),
+        SourcePrefixTemplate::CheckedComputationalIHInvocationReturn {
+            call_template_id,
+            next,
+        } => (
+            SourcePrefixTemplate::CheckedComputationalIHInvocationReturn {
+                call_template_id: *call_template_id,
+                next: Box::new(terminal()),
+            },
+            next.as_ref(),
+        ),
+        SourcePrefixTemplate::ReturnFromSelectedCase { delimiter, next } => (
+            SourcePrefixTemplate::ReturnFromSelectedCase {
+                delimiter: *delimiter,
+                next: Box::new(terminal()),
+            },
+            next.as_ref(),
+        ),
+        SourcePrefixTemplate::LetBody { body, env, next } => (
+            SourcePrefixTemplate::LetBody {
+                body: body.clone(),
+                env: env.clone(),
+                next: Box::new(terminal()),
+            },
+            next.as_ref(),
+        ),
+        SourcePrefixTemplate::ApplyRecursorSelection { layer, next } => (
+            SourcePrefixTemplate::ApplyRecursorSelection {
+                layer: layer.clone(),
+                next: Box::new(terminal()),
+            },
+            next.as_ref(),
+        ),
+        SourcePrefixTemplate::UnwindRecursorSegment {
+            stack,
+            resume_cursor,
+            next,
+        } => (
+            SourcePrefixTemplate::UnwindRecursorSegment {
+                stack: stack.clone(),
+                resume_cursor: *resume_cursor,
+                next: Box::new(terminal()),
+            },
+            next.as_ref(),
+        ),
+        SourcePrefixTemplate::IfScrutinee {
+            then_expr,
+            else_expr,
+            env,
+            next,
+        } => (
+            SourcePrefixTemplate::IfScrutinee {
+                then_expr: then_expr.clone(),
+                else_expr: else_expr.clone(),
+                env: env.clone(),
+                next: Box::new(terminal()),
+            },
+            next.as_ref(),
+        ),
+        SourcePrefixTemplate::ConstructArgument {
+            constructor,
+            remaining,
+            lowered,
+            env,
+            next,
+        } => (
+            SourcePrefixTemplate::ConstructArgument {
+                constructor: constructor.clone(),
+                remaining: remaining.clone(),
+                lowered: lowered.clone(),
+                env: env.clone(),
+                next: Box::new(terminal()),
+            },
+            next.as_ref(),
+        ),
+        SourcePrefixTemplate::MatchScrutinee {
+            cases,
+            default,
+            env,
+            next,
+        } => (
+            SourcePrefixTemplate::MatchScrutinee {
+                cases: cases.clone(),
+                default: default.clone(),
+                env: env.clone(),
+                next: Box::new(terminal()),
+            },
+            next.as_ref(),
+        ),
+        SourcePrefixTemplate::ComputationalMatchScrutinee {
+            cases,
+            default,
+            env,
+            provenance,
+            checked_frame_id,
+            answer_route,
+            next,
+        } => (
+            SourcePrefixTemplate::ComputationalMatchScrutinee {
+                cases: cases.clone(),
+                default: default.clone(),
+                env: env.clone(),
+                provenance: *provenance,
+                checked_frame_id: *checked_frame_id,
+                answer_route: *answer_route,
+                next: Box::new(terminal()),
+            },
+            next.as_ref(),
+        ),
+        SourcePrefixTemplate::ProjectRecord { field, next } => (
+            SourcePrefixTemplate::ProjectRecord {
+                field: field.clone(),
+                next: Box::new(terminal()),
+            },
+            next.as_ref(),
+        ),
+        SourcePrefixTemplate::CallCallee { args, env, next } => (
+            SourcePrefixTemplate::CallCallee {
+                args: args.clone(),
+                env: env.clone(),
+                next: Box::new(terminal()),
+            },
+            next.as_ref(),
+        ),
+        SourcePrefixTemplate::CallArgument {
+            callee,
+            remaining,
+            lowered,
+            env,
+            next,
+        } => (
+            SourcePrefixTemplate::CallArgument {
+                callee: callee.clone(),
+                remaining: remaining.clone(),
+                lowered: lowered.clone(),
+                env: env.clone(),
+                next: Box::new(terminal()),
+            },
+            next.as_ref(),
+        ),
+    }))
+}
+
+pub(super) fn instantiate_partition_source_node<'a>(
+    current: SourcePrefixTemplate,
+    successor: SourceContinuation<'a>,
+) -> Result<SourceContinuation<'a>, CraneliftBackendError> {
+    Ok(match current {
+        SourcePrefixTemplate::Terminal { .. } => {
+            return Err(unsupported(
+                "NativeSourceContinuationStepV1",
+                "planning completeness: a Kont node cannot be terminal",
+            ));
+        }
+        SourcePrefixTemplate::CheckedRecursiveInvocationReturn { instance, .. } => {
+            SourceContinuation::CheckedRecursiveInvocationReturn {
+                instance,
+                next: Box::new(successor),
+            }
+        }
+        SourcePrefixTemplate::CheckedComputationalIHInvocationReturn {
+            call_template_id, ..
+        } => SourceContinuation::CheckedComputationalIHInvocationReturn {
+            call_template_id,
+            next: Box::new(successor),
+        },
+        SourcePrefixTemplate::ReturnFromSelectedCase { delimiter, .. } => {
+            SourceContinuation::ReturnFromSelectedCase {
+                delimiter,
+                next: Box::new(successor),
+            }
+        }
+        SourcePrefixTemplate::LetBody { body, env, .. } => SourceContinuation::LetBody {
+            body,
+            env,
+            next: Box::new(successor),
+        },
+        SourcePrefixTemplate::ApplyRecursorSelection { layer, .. } => {
+            SourceContinuation::ApplyRecursorSelection {
+                layer,
+                next: Box::new(successor),
+            }
+        }
+        SourcePrefixTemplate::UnwindRecursorSegment {
+            stack,
+            resume_cursor,
+            ..
+        } => SourceContinuation::UnwindRecursorSegment {
+            stack,
+            resume_cursor,
+            next: Box::new(successor),
+        },
+        SourcePrefixTemplate::IfScrutinee {
+            then_expr,
+            else_expr,
+            env,
+            ..
+        } => SourceContinuation::IfScrutinee {
+            then_expr,
+            else_expr,
+            env,
+            next: Box::new(successor),
+        },
+        SourcePrefixTemplate::ConstructArgument {
+            constructor,
+            remaining,
+            lowered,
+            env,
+            ..
+        } => SourceContinuation::ConstructArgument {
+            constructor,
+            remaining,
+            lowered,
+            env,
+            next: Box::new(successor),
+        },
+        SourcePrefixTemplate::MatchScrutinee {
+            cases,
+            default,
+            env,
+            ..
+        } => SourceContinuation::MatchScrutinee {
+            cases,
+            default,
+            env,
+            next: Box::new(successor),
+        },
+        SourcePrefixTemplate::ComputationalMatchScrutinee {
+            cases,
+            default,
+            env,
+            provenance,
+            checked_frame_id,
+            answer_route,
+            ..
+        } => SourceContinuation::ComputationalMatchScrutinee {
+            cases,
+            default,
+            env,
+            provenance,
+            checked_frame_id,
+            answer_route,
+            next: Box::new(successor),
+        },
+        SourcePrefixTemplate::ProjectRecord { field, .. } => {
+            SourceContinuation::ProjectRecord {
+                field,
+                next: Box::new(successor),
+            }
+        }
+        SourcePrefixTemplate::CallCallee { args, env, .. } => SourceContinuation::CallCallee {
+            args,
+            env,
+            next: Box::new(successor),
+        },
+        SourcePrefixTemplate::CallArgument {
+            callee,
+            remaining,
+            lowered,
+            env,
+            ..
+        } => SourceContinuation::CallArgument {
+            callee,
+            remaining,
+            lowered,
+            env,
+            next: Box::new(successor),
+        },
+    })
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PartitionSourceArmStaticKey {
     consume_checked_entry_marker: bool,
@@ -1371,9 +1967,14 @@ struct PartitionSourceArmStaticKey {
     env: Vec<PartitionLoweredKey>,
     declaration_stack: Vec<RuntimeSymbol>,
     active_recursive_sources: Vec<(PartitionInvocationTemplateKey, usize, bool)>,
-    prefix: PartitionSourcePrefixKey,
+    source_head: Option<PartitionSourceNodeId>,
+    selected_activation: ContinuationActivationId,
+    selected_cursor: ContinuationCursorId,
+    selected_ancestry: Vec<RecursorFrameProvenance>,
+    selected_pending: Vec<PartitionEliminatorKey>,
     selected_scope: Option<PartitionSelectedScopeKey>,
     selected_lineage: Vec<PartitionSelectedContinuationKey>,
+    terminal_outer: ContinuationCursorId,
     cleanup_head: Option<PartitionCleanupSuffixId>,
 }
 
@@ -1397,10 +1998,14 @@ impl PartitionSourceArmKey {
         env: &[Lowered],
         declaration_stack: &[RuntimeSymbol],
         active_recursive_invocations: &[CheckedRecursiveInvocationInstance],
-        prefix: &SourcePrefixTemplate,
-        _selected_ancestry: &[RecursorFrameProvenance],
+        source_head: Option<PartitionSourceNodeId>,
+        selected_activation: ContinuationActivationId,
+        selected_cursor: ContinuationCursorId,
+        selected_ancestry: &[RecursorFrameProvenance],
+        selected_pending: &[OwnedPartitionEliminator],
         selected_scope: &Option<OwnedSelectedScope>,
         selected_lineage: &[OwnedSourceSelectedContinuation],
+        terminal_outer: ContinuationCursorId,
         cleanup_head: Option<PartitionCleanupSuffixId>,
         field_types: Vec<Type>,
         field_map: Vec<usize>,
@@ -1420,9 +2025,17 @@ impl PartitionSourceArmKey {
                     )
                 })
                 .collect(),
-            prefix: partition_source_prefix_key(prefix),
+            source_head,
+            selected_activation,
+            selected_cursor,
+            selected_ancestry: selected_ancestry.to_vec(),
+            selected_pending: selected_pending
+                .iter()
+                .map(partition_eliminator_key)
+                .collect(),
             selected_scope: partition_scope_key(selected_scope),
             selected_lineage: partition_selected_lineage_key(selected_lineage),
+            terminal_outer,
             cleanup_head,
         };
         Self {
@@ -1440,6 +2053,86 @@ impl PartitionSourceArmKey {
 struct PartitionCleanupStepStaticKey {
     suffix: PartitionCleanupSuffixId,
     input: PartitionLoweredKey,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PartitionSourceKontStaticKey {
+    node: PartitionSourceNodeId,
+    input: PartitionLoweredKey,
+    declaration_stack: Vec<RuntimeSymbol>,
+    active_recursive_sources: Vec<(PartitionInvocationTemplateKey, usize, bool)>,
+    selected_activation: ContinuationActivationId,
+    selected_cursor: ContinuationCursorId,
+    selected_ancestry: Vec<RecursorFrameProvenance>,
+    selected_pending: Vec<PartitionEliminatorKey>,
+    selected_scope: Option<PartitionSelectedScopeKey>,
+    selected_lineage: Vec<PartitionSelectedContinuationKey>,
+    terminal_outer: ContinuationCursorId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct PartitionSourceKontKey {
+    checked_join: PartitionCheckedJoinIdentity,
+    required_kind: ScalarMergeKind,
+    static_bucket: PartitionStaticFingerprint,
+    static_key: Arc<PartitionSourceKontStaticKey>,
+    field_types: Vec<Type>,
+    field_map: Vec<usize>,
+}
+
+impl PartitionSourceKontKey {
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn new(
+        checked_join: PartitionCheckedJoinIdentity,
+        required_kind: ScalarMergeKind,
+        node: PartitionSourceNodeId,
+        input: &Lowered,
+        declaration_stack: &[RuntimeSymbol],
+        active_recursive_invocations: &[CheckedRecursiveInvocationInstance],
+        selected_activation: ContinuationActivationId,
+        selected_cursor: ContinuationCursorId,
+        selected_ancestry: &[RecursorFrameProvenance],
+        selected_pending: &[OwnedPartitionEliminator],
+        selected_scope: &Option<OwnedSelectedScope>,
+        selected_lineage: &[OwnedSourceSelectedContinuation],
+        terminal_outer: ContinuationCursorId,
+        field_types: Vec<Type>,
+        field_map: Vec<usize>,
+    ) -> Self {
+        let static_key = PartitionSourceKontStaticKey {
+            node,
+            input: partition_lowered_key(input),
+            declaration_stack: declaration_stack.to_vec(),
+            active_recursive_sources: active_recursive_invocations
+                .iter()
+                .map(|instance| {
+                    (
+                        instance.source.into(),
+                        instance.semantic_depth,
+                        instance.dynamic_splice_edge.is_some(),
+                    )
+                })
+                .collect(),
+            selected_activation,
+            selected_cursor,
+            selected_ancestry: selected_ancestry.to_vec(),
+            selected_pending: selected_pending
+                .iter()
+                .map(partition_eliminator_key)
+                .collect(),
+            selected_scope: partition_scope_key(selected_scope),
+            selected_lineage: partition_selected_lineage_key(selected_lineage),
+            terminal_outer,
+        };
+        Self {
+            checked_join,
+            required_kind,
+            static_bucket: partition_static_bucket(&static_key),
+            static_key: Arc::new(static_key),
+            field_types,
+            field_map,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1480,6 +2173,7 @@ impl PartitionCleanupStepKey {
 pub(super) enum PartitionSemanticStateKey {
     Resume(PartitionContinuationKey),
     SourceArm(PartitionSourceArmKey),
+    SourceKont(PartitionSourceKontKey),
     CleanupStep(PartitionCleanupStepKey),
 }
 
@@ -1488,6 +2182,7 @@ impl PartitionSemanticStateKey {
         match self {
             Self::Resume(key) => key.site_id(),
             Self::SourceArm(key) => key.checked_join.site_id,
+            Self::SourceKont(key) => key.checked_join.site_id,
             Self::CleanupStep(key) => key.checked_join.site_id,
         }
     }
@@ -1496,6 +2191,7 @@ impl PartitionSemanticStateKey {
         let bucket = match self {
             Self::Resume(key) => key.static_bucket,
             Self::SourceArm(key) => key.static_bucket,
+            Self::SourceKont(key) => key.static_bucket,
             Self::CleanupStep(key) => key.static_bucket,
         };
         (self.site_id(), bucket.hash, bucket.bytes)
@@ -1510,6 +2206,12 @@ impl PartitionSemanticStateKey {
                 field_map: key.field_map.clone(),
             },
             Self::SourceArm(key) => PartitionStateReturnContract {
+                checked_join: key.checked_join.clone(),
+                required_kind: key.required_kind,
+                field_types: key.field_types.clone(),
+                field_map: key.field_map.clone(),
+            },
+            Self::SourceKont(key) => PartitionStateReturnContract {
                 checked_join: key.checked_join.clone(),
                 required_kind: key.required_kind,
                 field_types: key.field_types.clone(),
@@ -2002,10 +2704,12 @@ pub(super) struct SourceArmPartitionWorkItem {
     pub(super) env: Vec<Lowered>,
     pub(super) declaration_stack: Vec<RuntimeSymbol>,
     pub(super) active_recursive_invocations: Vec<CheckedRecursiveInvocationInstance>,
-    pub(super) prefix: SourcePrefixTemplate,
+    pub(super) source_head: Option<PartitionSourceNodeId>,
+    pub(super) source_capture_pointer: Option<Value>,
     pub(super) selected_activation: ContinuationActivationId,
     pub(super) selected_cursor: ContinuationCursorId,
     pub(super) selected_ancestry: Vec<RecursorFrameProvenance>,
+    pub(super) selected_pending: Vec<OwnedPartitionEliminator>,
     pub(super) selected_scope: Option<OwnedSelectedScope>,
     pub(super) selected_lineage: Vec<OwnedSourceSelectedContinuation>,
     pub(super) terminal_outer: ContinuationCursorId,
@@ -2026,6 +2730,28 @@ pub(super) struct CleanupStepPartitionWorkItem {
     pub(super) checked_join: PartitionCheckedJoinIdentity,
     pub(super) required_kind: ScalarMergeKind,
     pub(super) ledger_baseline: PartitionLedgerBaseline,
+}
+
+pub(super) struct SourceKontPartitionWorkItem {
+    pub(super) state_id: usize,
+    pub(super) function: FuncId,
+    pub(super) helper_index: usize,
+    pub(super) field_types: Vec<Type>,
+    pub(super) field_map: Vec<usize>,
+    pub(super) input: Lowered,
+    pub(super) node: PartitionSourceNodeId,
+    pub(super) capture_pointer: Value,
+    pub(super) declaration_stack: Vec<RuntimeSymbol>,
+    pub(super) active_recursive_invocations: Vec<CheckedRecursiveInvocationInstance>,
+    pub(super) selected_activation: ContinuationActivationId,
+    pub(super) selected_cursor: ContinuationCursorId,
+    pub(super) selected_ancestry: Vec<RecursorFrameProvenance>,
+    pub(super) selected_pending: Vec<OwnedPartitionEliminator>,
+    pub(super) selected_scope: Option<OwnedSelectedScope>,
+    pub(super) selected_lineage: Vec<OwnedSourceSelectedContinuation>,
+    pub(super) terminal_outer: ContinuationCursorId,
+    pub(super) ledger_baseline: PartitionLedgerBaseline,
+    pub(super) return_contract: PartitionStateReturnContract,
 }
 
 pub(super) struct ResumePartitionWorkItem {

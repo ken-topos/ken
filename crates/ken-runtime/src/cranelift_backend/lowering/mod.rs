@@ -261,6 +261,7 @@ struct Lowering<'a> {
     partition_next_helper: usize,
     partition_queue: VecDeque<PartitionWorkItem>,
     partition_continuations: PartitionContinuationInterner,
+    partition_source_nodes: PartitionSourceNodeInterner,
     partition_cleanup_suffixes: PartitionCleanupSuffixInterner,
     partition_cleanup_transitions: PartitionCleanupTransitionLedger,
     partition_cut_armed: bool,
@@ -270,6 +271,7 @@ struct Lowering<'a> {
     partition_next_site: u64,
     partition_branch_returns: PartitionBranchReturnLedger,
     active_partition_return_kind: Option<ScalarMergeKind>,
+    active_partition_return_contract: Option<PartitionStateReturnContract>,
     partition_output_tag_pointer: Option<cranelift_codegen::ir::Value>,
     partition_live_growth_ticks: usize,
     partition_join_site_union: BTreeSet<u64>,
@@ -1780,6 +1782,10 @@ enum SourceContinuation<'a> {
         env: Vec<Lowered>,
         next: Box<SourceContinuation<'a>>,
     },
+    Partitioned {
+        head: PartitionSourceCursor,
+        terminal: SourceContinuationTerminal<'a>,
+    },
 }
 enum SourceContinuationTerminal<'a> {
     #[allow(dead_code)]
@@ -1974,6 +1980,7 @@ fn source_active_cursor<'a: 'b, 'b>(
 }
 struct SourceControl<'a> {
     continuation: SourceContinuation<'a>,
+    partition_cursor: Option<PartitionSourceCursor>,
     selected: SourceSelectedContinuation<'a>,
     selected_lineage: Vec<SourceSelectedContinuation<'a>>,
     terminal_outer: ContinuationCursorId,
@@ -3653,6 +3660,13 @@ impl<'a> Lowering<'a> {
                 | SourceContinuationTerminal::ResumeOuter { .. }
                 | SourceContinuationTerminal::ReturnFromPartition { .. },
             ) => None,
+            SourceContinuation::Partitioned { terminal, .. } => match terminal {
+                SourceContinuationTerminal::JumpToJoin(edge) => Some(&edge.target),
+                SourceContinuationTerminal::ReturnValue
+                | SourceContinuationTerminal::ReturnToProducerHole { .. }
+                | SourceContinuationTerminal::ResumeOuter { .. }
+                | SourceContinuationTerminal::ReturnFromPartition { .. } => None,
+            },
             SourceContinuation::LetBody { next, .. }
             | SourceContinuation::CheckedRecursiveInvocationReturn { next, .. }
             | SourceContinuation::CheckedComputationalIHInvocationReturn { next, .. }
@@ -3672,6 +3686,9 @@ impl<'a> Lowering<'a> {
     fn discard_source_prefix<'b>(continuation: SourceContinuation<'b>) -> SourceContinuation<'b> {
         match continuation {
             terminal @ SourceContinuation::Terminal(_) => terminal,
+            SourceContinuation::Partitioned { terminal, .. } => {
+                SourceContinuation::Terminal(terminal)
+            }
             SourceContinuation::CheckedRecursiveInvocationReturn { instance, next } => {
                 SourceContinuation::CheckedRecursiveInvocationReturn {
                     instance,
@@ -3886,6 +3903,23 @@ impl<'a> Lowering<'a> {
                 root_authority,
             }),
             terminal @ SourceContinuation::Terminal(_) => terminal,
+            SourceContinuation::Partitioned { head, terminal } => {
+                let terminal = match terminal {
+                    SourceContinuationTerminal::ResumeOuter {
+                        expected,
+                        active,
+                        root_authority,
+                    } => SourceContinuationTerminal::ReturnToProducerHole {
+                        stack,
+                        resume_cursor,
+                        expected,
+                        active,
+                        root_authority,
+                    },
+                    terminal => terminal,
+                };
+                SourceContinuation::Partitioned { head, terminal }
+            }
         })
     }
 
@@ -4051,6 +4085,12 @@ impl<'a> Lowering<'a> {
                 },
                 SourcePrefixTerminal::Join(edge),
             ),
+            SourceContinuation::Partitioned { .. } => {
+                return Err(unsupported(
+                    "NativeSourceContinuationStepV1",
+                    "planning completeness: partitioned source prefix cannot be flattened",
+                ));
+            }
             SourceContinuation::LetBody { body, env, next } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
                 (
