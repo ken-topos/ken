@@ -650,16 +650,16 @@ The following PX8-SPAN-PROV cases run once against the reference interpreter
 and once against the native backend. Every run asserts its expected result
 directly against `38 §1.7.1`; interpreter/native equality is not an oracle.
 
-`FOREIGN-SPAN-ERROR` below is a Phase-1 handoff metavariable, **not** a proposed
-surface constructor. The spec-author must replace every occurrence with the
-exact existing `ResourceError` constructor selected and locked in `38 §1.7.1`
-before the joint candidate reaches review. If the contract requires a new
-constructor, this WP hard-stops instead of silently adding one.
+The exact foreign-acquisition result is the existing
+`ResourceError.InvalidBounds`, as locked by `38 §1.7.1`. It is the same public
+identity used when a span's numeric window is not current for its target
+buffer: both reject one invalid span-to-buffer relation without exposing the
+constructor-private acquisition binding.
 
 ### buffer-io/foreign-span-freeze-rejected-absolute
 
 - status: **RED-UNTIL-PX8-SPAN-PROV Phase 2**
-- spec: `38 §1.7.1` (exact-acquisition fold pending); PX8-SPAN-PROV AC-3
+- spec: `38 §1.7.1`; PX8-SPAN-PROV AC-3
 - engine matrix: run the complete given/expect pair independently on
   `interpreter` and `native`; neither result is inferred from the other
 - given: acquire distinct capacity-`8` buffers A and B; use successful
@@ -667,7 +667,7 @@ constructor, this WP hard-stops instead of silently adding one.
   storing distinct bytes `AAAA` in A and `BBBB` in B; retain the host-minted
   `span_a` and `span_b`
 - expect, foreign arm: `freeze B span_a` returns
-  `Err FOREIGN-SPAN-ERROR`; it returns no `Bytes` value and therefore exposes
+  `Err InvalidBounds`; it returns no `Bytes` value and therefore exposes
   none of B's bytes
 - expect, own-span control: `freeze B span_b` returns exactly `BBBB`
 - why: start, length, capacity, and live-window shape are equal in both arms;
@@ -685,7 +685,7 @@ constructor, this WP hard-stops instead of silently adding one.
   `foreign-span-freeze-rejected-absolute`, a live writable positioned file, and
   a backend that records every write call and its bytes
 - expect, foreign arm: `writeAt file 0 B span_a` returns
-  `Err FOREIGN-SPAN-ERROR`; the backend records zero writes and the destination
+  `Err InvalidBounds`; the backend records zero writes and the destination
   remains byte-for-byte empty
 - expect, own-span control: `writeAt file 0 B span_b` returns `Wrote 4`; the
   backend records exactly one call at offset `0` with exactly `BBBB`, and the
@@ -695,9 +695,9 @@ constructor, this WP hard-stops instead of silently adding one.
   return the right error while still corrupting the destination; the call-count
   and byte assertions make that bug red.
 
-## SP-B. Provenance has a locked, observable precedence
+## SP-B. Span validity has a locked, observable precedence
 
-### buffer-io/foreign-span-error-precedes-span-window-and-host-effects
+### buffer-io/span-validity-follows-host-width-and-precedes-host-effects
 
 - status: **RED-UNTIL-PX8-SPAN-PROV Phase 2**
 - spec: `38 §1.7.1`; PX8-SPAN-PROV AC-1/AC-2/AC-3
@@ -706,8 +706,8 @@ constructor, this WP hard-stops instead of silently adding one.
   live window as `[0, 2)`; keep B live and kind-correct, and keep the positioned
   file live, writable, and at a valid offset
 - expect: both `freeze B span_a` and `writeAt file 0 B span_a` return
-  `Err FOREIGN-SPAN-ERROR`; freeze returns no bytes, write records zero backend
-  calls, and neither operation substitutes the neighbouring live-window error
+  `Err InvalidBounds`; freeze returns no bytes and write records zero backend
+  calls
 - control: with a host-minted span from B's exact acquisition that is stale
   only because a later `readAt` changed B's current live window, both consumers
   return the existing `InvalidBounds`; the write backend is still uncalled
@@ -715,9 +715,10 @@ constructor, this WP hard-stops instead of silently adding one.
   the already-locked `InvalidOffset` at host-width admission and records zero
   backend calls
 - why: these arms locate acquisition admission after the existing host-width
-  gate but before span-window validation and backend effects. The same-shape
-  SP-A pair remains the load-bearing equality discriminator even if the enclave
-  selects `InvalidBounds` for `FOREIGN-SPAN-ERROR`.
+  gate and place the combined span-validity rejection before backend effects.
+  Acquisition mismatch and stale-window invalidity intentionally share one
+  public identity, so their relative internal order is not observable. The
+  same-shape SP-A pair is the load-bearing acquisition discriminator.
 
 ## SP-C. Slot reuse cannot revive a span from a closed acquisition
 
@@ -736,7 +737,7 @@ constructor, this WP hard-stops instead of silently adding one.
   reports the existing `Closed` identity for both `freeze` and `writeAt`; no
   bytes are returned and the recording write backend is uncalled
 - expect, reuse arm: after B is live, `freeze B span_old` and
-  `writeAt file 0 B span_old` each return `Err FOREIGN-SPAN-ERROR`; freeze
+  `writeAt file 0 B span_old` each return `Err InvalidBounds`; freeze
   returns no B bytes and write records zero backend calls
 - expect, new-span controls: a span freshly minted by `readAt` on B freezes to
   exactly `BBBB`, and its positioned write succeeds with exactly one backend
