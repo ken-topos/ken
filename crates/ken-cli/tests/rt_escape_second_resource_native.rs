@@ -20,7 +20,10 @@
 //! *distinct lawful activation per arm*. The single per-lowering
 //! `consumed_subcontinuation_frames` set conflated the two arms. The repair forks
 //! that set per mutually-exclusive branch (snapshot → reset-per-arm → union at
-//! rejoin) in the dynamic-match arm lowerers (`lower_forked_branch`), preserving
+//! rejoin) in every source-prefix fanout lowerer via `lower_forked_branch` — the
+//! complete set (each instantiates one `source_prefix_template` per arm off a
+//! single `brif`) is bounded-Nat (`Zero`/`Suc`), Bool, host-result, and the two
+//! dynamic-constructor variants (nested + planned). The fork preserves
 //! the within-a-single-path affine rejection (a real double-consume on one path
 //! still rejects — proven by
 //! `rt_escape_within_path_duplicate_frame_consume_still_rejects` in
@@ -461,6 +464,95 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
   }
 "#;
 
+// Closure across the bounded-Nat fanout lowerer (`lower_source_bounded_nat_match`,
+// the fifth source-prefix fanout): escape the file, `readAt` it, then
+// `match (buffer_span_budget span) { Zero; Suc }` whose SHARED continuation does
+// a *second* `readAt` on the escaped file. The Nat match fans out (Zero/Suc off
+// one `brif`) and the second read's checked frame lives in its shared tail, so
+// pre-fix it tripped the identical "consumed more than once" on the Nat lane
+// (verified by reverting only the Nat-lane fork). Now interpreter-equivalent.
+#[cfg(target_os = "linux")]
+const NAT_FANOUT_ESCAPED_RESOURCE: &str = r#"program capabilities FS AFull
+proc second_read (file_closed : Resource FsHandle) (buffer : Resource Buffer)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError ReadProgress) (ResourceBodyResult Unit Unit)
+    (readAt AFull file_closed (0 : Int) buffer (MkBufferWindow (0 : Int) (6 : Int)))
+    (\r2. Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult Unit Unit) (ResourceBodyOk Unit Unit MkUnit))
+
+proc after_read (file_closed : Resource FsHandle) (buffer : Resource Buffer)
+  (outcome : Result ResourceError ReadProgress)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  match outcome {
+    Err error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
+    Ok progress |-> match progress {
+      ReadEof |-> second_read file_closed buffer;
+      ReadSome span count |->
+        bind (Coproduct (FSOp AFull) AmbientOp)
+          (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+          (Result ResourceError ReadProgress) (ResourceBodyResult Unit Unit)
+          (match buffer_span_budget span {
+            Zero |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+              (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+              (Result ResourceError ReadProgress) (Ok ResourceError ReadProgress ReadEof);
+            Suc m |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+              (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+              (Result ResourceError ReadProgress) (Ok ResourceError ReadProgress ReadEof)
+          })
+          (\_ignored. second_read file_closed buffer)
+    }
+  }
+
+proc read_body (file_closed : Resource FsHandle) (buffer : Resource Buffer)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError ReadProgress) (ResourceBodyResult Unit Unit)
+    (readAt AFull file_closed (0 : Int) buffer (MkBufferWindow (0 : Int) (6 : Int)))
+    (\outcome. after_read file_closed buffer outcome)
+
+proc after_file_escape (file_closed : Resource FsHandle)
+  : HostIO AFull ExitCode visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError (ResourceBracketResult Unit Unit)) ExitCode
+    (withBuffer AFull Unit Unit (6 : Int) (read_body file_closed))
+    (\outcome. host_exit AFull Success)
+
+proc handle_outer (outcome : Result FileError (ResourceBracketResult Unit (Resource FsHandle)))
+  : HostIO AFull ExitCode visits [FS] =
+  match outcome {
+    Err open_error |-> host_exit AFull (Failure 96);
+    Ok bracket |-> match bracket {
+      ResourceBracketOk file_closed |-> after_file_escape file_closed;
+      ResourceBracketBodyError error |-> host_exit AFull (Failure 93);
+      ResourceBracketReleaseError error |-> host_exit AFull (Failure 94);
+      ResourceBracketBodyAndReleaseError body_error release_error |-> host_exit AFull (Failure 95)
+    }
+  }
+
+proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
+  : HostIO AFull ExitCode visits [FS] =
+  match caps {
+    MkProgramCaps cap |->
+      bind (Coproduct (FSOp AFull) AmbientOp)
+        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+        (Result FileError (ResourceBracketResult Unit (Resource FsHandle))) ExitCode
+        (withResource AFull Unit (Resource FsHandle)
+          cap (bytes_encode "held.bin") ResourceRead
+          (\resource. Ret (Coproduct (FSOp AFull) AmbientOp)
+            (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+            (ResourceBodyResult Unit (Resource FsHandle))
+            (ResourceBodyOk Unit (Resource FsHandle) resource)))
+        (\outcome. handle_outer outcome)
+  }
+"#;
+
 #[cfg(target_os = "linux")]
 #[test]
 fn escape_one_used_matches_interpreter() {
@@ -496,6 +588,20 @@ fn escaped_buffer_used_by_fanning_host_op_matches_interpreter() {
     // than once"; now interpreter-equivalent.
     let diff = differential("escape-buffer-then-readat", ESCAPE_BUFFER_THEN_READAT);
     assert_native_matches_interpreter("escape-buffer-then-readat", &diff);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn nat_fanout_escaped_resource_matches_interpreter() {
+    // Closure across the bounded-Nat fanout lowerer: an escaped-resource checked
+    // frame in the shared continuation of a `match n {Zero;Suc}` fanout. Pre-fix
+    // this tripped "consumed more than once" on the Nat lane (confirmed by
+    // reverting only `lower_source_bounded_nat_match`'s fork); now reaches native
+    // execution with interpreter-equal semantics.
+    in_large_stack_thread("rt-escape-nat-fanout", || {
+        let diff = differential("nat-fanout-escaped", NAT_FANOUT_ESCAPED_RESOURCE);
+        assert_native_matches_interpreter("nat-fanout-escaped", &diff);
+    });
 }
 
 /// The nested three-resource R2 fixture needs a deep native stack, as the

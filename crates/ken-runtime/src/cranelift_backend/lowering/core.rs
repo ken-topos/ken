@@ -2931,6 +2931,8 @@ impl<'a> Lowering<'a> {
                 .icmp_imm(cranelift_codegen::ir::condcodes::IntCC::Equal, nat.value, 0);
         builder.ins().brif(is_zero, zero_block, &[], suc_block, &[]);
 
+        let frame_baseline = self.consumed_subcontinuation_frames.clone();
+        let mut frame_union = frame_baseline.clone();
         for (arm_name, block, case, predecessor) in [
             ("Zero", zero_block, zero, None),
             ("Suc", suc_block, suc, Some(predecessor)),
@@ -2957,8 +2959,10 @@ impl<'a> Lowering<'a> {
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
-            let lowered = self.lower_source_machine_with_continuation(
+            let lowered = self.lower_forked_branch(
                 builder,
+                &frame_baseline,
+                &mut frame_union,
                 case.body.clone(),
                 arm_env,
                 branch_control,
@@ -2978,6 +2982,7 @@ impl<'a> Lowering<'a> {
                 ));
             }
         }
+        self.consumed_subcontinuation_frames = frame_union;
 
         let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
             local_completion
