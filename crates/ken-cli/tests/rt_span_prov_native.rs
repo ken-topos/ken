@@ -106,6 +106,36 @@ fn interpret_only(case: &str, source: &str) -> ken_runtime::EffectObservation {
     interpreted
 }
 
+/// Like `interpret_only`, but reads the named files from the run root *before*
+/// teardown so a test can assert backend effects (destination contents). A
+/// missing file reads as empty — the row's "zero backend / destination empty"
+/// observation for a rejected write. `spanseed.bin` (AAAABBBB) is present.
+#[cfg(target_os = "linux")]
+fn interpret_reading(
+    case: &str,
+    source: &str,
+    reads: &[&str],
+) -> (ken_runtime::EffectObservation, Vec<Vec<u8>>) {
+    let root = output_dir(case);
+    std::fs::write(root.join("spanseed.bin"), b"AAAABBBB").unwrap();
+    let mut host = ken_interp::PosixHost::new_at(&root);
+    let interpreted = ken_cli::run_program_effect_observation(
+        source,
+        ken_cli::SourceFormat::Ken,
+        &[],
+        &[],
+        root.as_os_str().as_encoded_bytes(),
+        &mut host,
+    )
+    .unwrap_or_else(|error| panic!("{case}: interpreter run: {error:?}"));
+    let contents = reads
+        .iter()
+        .map(|name| std::fs::read(root.join(name)).unwrap_or_default())
+        .collect();
+    std::fs::remove_dir_all(&root).unwrap();
+    (interpreted, contents)
+}
+
 /// The ordered canonical outcomes of every `BufferFreeze` in an observation.
 #[cfg(target_os = "linux")]
 fn buffer_freeze_outcomes(
@@ -438,25 +468,30 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
 #[test]
 fn sp_a_foreign_span_write_rejects_before_backend_interp() {
     in_large_stack_thread("sp-a-write-foreign-interp", || {
-        let obs = interpret_only("sp-a-write-foreign", SP_A_WRITE_FOREIGN);
-        let writes = write_outcomes(&obs);
+        let (obs, files) =
+            interpret_reading("sp-a-write-foreign", SP_A_WRITE_FOREIGN, &["dest.bin"]);
         assert_eq!(
-            writes,
+            write_outcomes(&obs),
             vec![ken_runtime::CanonicalOutcomeV1::Error(
                 ken_runtime::SemanticErrorV1::Resource(ken_runtime::ResourceErrorV1::InvalidBounds),
             )],
-            "interp: foreign-acquisition write must be exactly one InvalidBounds, zero backend write"
+            "interp: foreign-acquisition write must be exactly one InvalidBounds"
+        );
+        assert!(
+            files[0].is_empty(),
+            "interp: foreign write must issue zero backend writes — destination stays empty, got {:?}",
+            files[0]
         );
     });
 }
 
-// SP-A write consumer, full row (foreign + own) — interpreter e2e. The native
-// half is BLOCKED-ON-NATIVE-REACHABILITY (four brackets exceed the Cranelift
-// code-size limit); the native span-origin ABI is covered by the distinct-token
-// px8n write-arm discriminator + own-buffer writeAll native tests, and the
-// engine-agnostic dispatcher by the shared-host unit test.
+// SP-A write consumer, own arm — interpreter e2e. A three-bracket program:
+// readAt installs BBBB in B [2,6), then `writeAt dest 0 B span_b` (own span)
+// succeeds. The test asserts the destination file contains exactly BBBB — the
+// row's "one backend call at offset 0 carrying BBBB, destination BBBB". The
+// foreign arm's zero-backend/empty-destination is asserted separately above.
 #[cfg(target_os = "linux")]
-const SP_A_WRITE_BOTH: &str = r#"program capabilities FS AFull
+const SP_A_WRITE_OWN: &str = r#"program capabilities FS AFull
 fn ok_body (unit : Unit) : ResourceBodyResult Unit Unit = ResourceBodyOk Unit Unit MkUnit
 
 fn from_buffer_alloc (outcome : Result ResourceError (ResourceBracketResult Unit Unit))
@@ -483,23 +518,17 @@ fn from_file_alloc (outcome : Result FileError (ResourceBracketResult Unit Unit)
     }
   }
 
-proc do_writes (dest : Resource FsHandle) (buffer_b : Resource Buffer)
-  (span_a : BufferSpan) (span_b : BufferSpan)
+proc do_write (dest : Resource FsHandle) (buffer_b : Resource Buffer) (span_b : BufferSpan)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
     (Result ResourceError WriteProgress) (ResourceBodyResult Unit Unit)
-    (writeAt AFull dest (0 : Int) buffer_b span_a)
-    (\wa. bind (Coproduct (FSOp AFull) AmbientOp)
+    (writeAt AFull dest (0 : Int) buffer_b span_b)
+    (\w. Ret (Coproduct (FSOp AFull) AmbientOp)
       (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-      (Result ResourceError WriteProgress) (ResourceBodyResult Unit Unit)
-      (writeAt AFull dest (4 : Int) buffer_b span_b)
-      (\wb. Ret (Coproduct (FSOp AFull) AmbientOp)
-        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-        (ResourceBodyResult Unit Unit) (ok_body MkUnit)))
+      (ResourceBodyResult Unit Unit) (ok_body MkUnit))
 
-proc b_body (dest : Resource FsHandle) (source : Resource FsHandle)
-  (span_a : BufferSpan) (buffer_b : Resource Buffer)
+proc b_body (dest : Resource FsHandle) (source : Resource FsHandle) (buffer_b : Resource Buffer)
   : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
@@ -513,35 +542,7 @@ proc b_body (dest : Resource FsHandle) (source : Resource FsHandle)
         ReadEof |-> Ret (Coproduct (FSOp AFull) AmbientOp)
           (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
           (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
-        ReadSome span_b count |-> do_writes dest buffer_b span_a span_b
-      }
-    })
-
-proc a_after_read (dest : Resource FsHandle) (source : Resource FsHandle) (span_a : BufferSpan)
-  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
-  bind (Coproduct (FSOp AFull) AmbientOp)
-    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-    (Result ResourceError (ResourceBracketResult Unit Unit)) (ResourceBodyResult Unit Unit)
-    (withBuffer AFull Unit Unit (8 : Int) (b_body dest source span_a))
-    (\outcome. Ret (Coproduct (FSOp AFull) AmbientOp)
-      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-      (ResourceBodyResult Unit Unit) (from_buffer_alloc outcome))
-
-proc a_body (dest : Resource FsHandle) (source : Resource FsHandle) (buffer_a : Resource Buffer)
-  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
-  bind (Coproduct (FSOp AFull) AmbientOp)
-    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-    (Result ResourceError ReadProgress) (ResourceBodyResult Unit Unit)
-    (readAt AFull source (0 : Int) buffer_a (MkBufferWindow (2 : Int) (4 : Int)))
-    (\outcome. match outcome {
-      Err error |-> Ret (Coproduct (FSOp AFull) AmbientOp)
-        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-        (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
-      Ok progress |-> match progress {
-        ReadEof |-> Ret (Coproduct (FSOp AFull) AmbientOp)
-          (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-          (ResourceBodyResult Unit Unit) (ResourceBodyErr Unit Unit MkUnit);
-        ReadSome span_a count |-> a_after_read dest source span_a
+        ReadSome span_b count |-> do_write dest buffer_b span_b
       }
     })
 
@@ -550,7 +551,7 @@ proc source_body (dest : Resource FsHandle) (source : Resource FsHandle)
   bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
     (Result ResourceError (ResourceBracketResult Unit Unit)) (ResourceBodyResult Unit Unit)
-    (withBuffer AFull Unit Unit (8 : Int) (a_body dest source))
+    (withBuffer AFull Unit Unit (8 : Int) (b_body dest source))
     (\outcome. Ret (Coproduct (FSOp AFull) AmbientOp)
       (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
       (ResourceBodyResult Unit Unit) (from_buffer_alloc outcome))
@@ -592,25 +593,25 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
 
 #[cfg(target_os = "linux")]
 #[test]
-fn sp_a_write_foreign_rejects_own_succeeds_interp() {
-    in_large_stack_thread("sp-a-write-both-interp", || {
-        let obs = interpret_only("sp-a-write-both", SP_A_WRITE_BOTH);
+fn sp_a_own_span_write_succeeds_with_bytes_interp() {
+    in_large_stack_thread("sp-a-write-own-interp", || {
+        let (obs, files) = interpret_reading("sp-a-write-own", SP_A_WRITE_OWN, &["dest.bin"]);
         let writes = write_outcomes(&obs);
-        assert_eq!(writes.len(), 2, "expected two FsWriteAt events, got {writes:?}");
+        assert_eq!(writes.len(), 1, "expected one FsWriteAt event, got {writes:?}");
         match &writes[0] {
-            ken_runtime::CanonicalOutcomeV1::Error(ken_runtime::SemanticErrorV1::Resource(
-                ken_runtime::ResourceErrorV1::InvalidBounds,
-            )) => {}
-            other => panic!("interp: foreign write must be InvalidBounds, got {other:?}"),
-        }
-        match &writes[1] {
             ken_runtime::CanonicalOutcomeV1::Success(
                 ken_runtime::CanonicalReplyV1::WriteProgress(_),
             ) => {}
             other => panic!("interp: own write must succeed (Wrote), got {other:?}"),
         }
+        assert_eq!(
+            files[0], b"BBBB",
+            "interp: own write must land exactly BBBB at offset 0 (one backend call), got {:?}",
+            files[0]
+        );
     });
 }
+
 
 // SP-C non-revival — interpreter e2e. Buffer A mints span_a and is released; B is
 // then acquired (reusing A's vacated slot with a newer generation) and installs
@@ -941,6 +942,186 @@ fn sp_b_host_width_offset_precedes_provenance_interp() {
         assert_eq!(
             obs.exit_status, 0,
             "interp: exit 0 == foreign write@0 -> InvalidBounds AND foreign write@-1 -> InvalidOffset (host-width precedes provenance); got {obs:?}"
+        );
+    });
+}
+
+// SP-B validity arms — interpreter e2e. Two rejections that intentionally share
+// InvalidBounds: (1) a FOREIGN span_a (from A, window [2,6) — numerically equal
+// to B's live window) on B; (2) a matching-acquisition STALE span_b0 (from B's
+// own [0,2) window, made stale by a later readAt that moved B's live window to
+// [2,6)). Both freeze (no bytes) and writeAt (zero backend / empty destination)
+// reject with InvalidBounds. Order: freeze span_a, write span_a, freeze span_b0,
+// write span_b0. Native half is BLOCKED-ON-NATIVE-REACHABILITY.
+#[cfg(target_os = "linux")]
+const SP_B_VALIDITY: &str = r#"program capabilities FS AFull
+fn ok_body (unit : Unit) : ResourceBodyResult Unit Unit = ResourceBodyOk Unit Unit MkUnit
+
+fn from_buffer_alloc (outcome : Result ResourceError (ResourceBracketResult Unit Unit))
+  : ResourceBodyResult Unit Unit =
+  match outcome {
+    Err error |-> ResourceBodyErr Unit Unit MkUnit;
+    Ok bracket |-> match bracket {
+      ResourceBracketOk value |-> ResourceBodyOk Unit Unit MkUnit;
+      ResourceBracketBodyError error |-> ResourceBodyErr Unit Unit MkUnit;
+      ResourceBracketReleaseError error |-> ResourceBodyErr Unit Unit MkUnit;
+      ResourceBracketBodyAndReleaseError be re |-> ResourceBodyErr Unit Unit MkUnit
+    }
+  }
+
+fn from_file_alloc (outcome : Result FileError (ResourceBracketResult Unit Unit))
+  : ResourceBodyResult Unit Unit =
+  match outcome {
+    Err error |-> ResourceBodyErr Unit Unit MkUnit;
+    Ok bracket |-> match bracket {
+      ResourceBracketOk value |-> ResourceBodyOk Unit Unit MkUnit;
+      ResourceBracketBodyError error |-> ResourceBodyErr Unit Unit MkUnit;
+      ResourceBracketReleaseError error |-> ResourceBodyErr Unit Unit MkUnit;
+      ResourceBracketBodyAndReleaseError be re |-> ResourceBodyErr Unit Unit MkUnit
+    }
+  }
+
+fn ret_body (b : ResourceBodyResult Unit Unit) : HostIO AFull (ResourceBodyResult Unit Unit) =
+  Ret (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (ResourceBodyResult Unit Unit) b
+
+proc four_ops (dest : Resource FsHandle) (buffer_b : Resource Buffer)
+  (span_a : BufferSpan) (span_b0 : BufferSpan)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError Bytes) (ResourceBodyResult Unit Unit)
+    (freeze AFull buffer_b span_a)
+    (\f1. bind (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (Result ResourceError WriteProgress) (ResourceBodyResult Unit Unit)
+      (writeAt AFull dest (0 : Int) buffer_b span_a)
+      (\w1. bind (Coproduct (FSOp AFull) AmbientOp)
+        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+        (Result ResourceError Bytes) (ResourceBodyResult Unit Unit)
+        (freeze AFull buffer_b span_b0)
+        (\f2. bind (Coproduct (FSOp AFull) AmbientOp)
+          (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+          (Result ResourceError WriteProgress) (ResourceBodyResult Unit Unit)
+          (writeAt AFull dest (0 : Int) buffer_b span_b0)
+          (\w2. ret_body (ok_body MkUnit)))))
+
+proc b_rewindow (dest : Resource FsHandle) (source : Resource FsHandle)
+  (span_a : BufferSpan) (span_b0 : BufferSpan) (buffer_b : Resource Buffer)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError ReadProgress) (ResourceBodyResult Unit Unit)
+    (readAt AFull source (2 : Int) buffer_b (MkBufferWindow (2 : Int) (4 : Int)))
+    (\outcome. match outcome {
+      Err error |-> ret_body (ResourceBodyErr Unit Unit MkUnit);
+      Ok progress |-> match progress {
+        ReadEof |-> ret_body (ResourceBodyErr Unit Unit MkUnit);
+        ReadSome span_new count |-> four_ops dest buffer_b span_a span_b0
+      }
+    })
+
+proc b_body (dest : Resource FsHandle) (source : Resource FsHandle)
+  (span_a : BufferSpan) (buffer_b : Resource Buffer)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError ReadProgress) (ResourceBodyResult Unit Unit)
+    (readAt AFull source (0 : Int) buffer_b (MkBufferWindow (0 : Int) (2 : Int)))
+    (\outcome. match outcome {
+      Err error |-> ret_body (ResourceBodyErr Unit Unit MkUnit);
+      Ok progress |-> match progress {
+        ReadEof |-> ret_body (ResourceBodyErr Unit Unit MkUnit);
+        ReadSome span_b0 count |-> b_rewindow dest source span_a span_b0 buffer_b
+      }
+    })
+
+proc a_after_read (dest : Resource FsHandle) (source : Resource FsHandle) (span_a : BufferSpan)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError (ResourceBracketResult Unit Unit)) (ResourceBodyResult Unit Unit)
+    (withBuffer AFull Unit Unit (8 : Int) (b_body dest source span_a))
+    (\outcome. ret_body (from_buffer_alloc outcome))
+
+proc a_body (dest : Resource FsHandle) (source : Resource FsHandle) (buffer_a : Resource Buffer)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError ReadProgress) (ResourceBodyResult Unit Unit)
+    (readAt AFull source (0 : Int) buffer_a (MkBufferWindow (2 : Int) (4 : Int)))
+    (\outcome. match outcome {
+      Err error |-> ret_body (ResourceBodyErr Unit Unit MkUnit);
+      Ok progress |-> match progress {
+        ReadEof |-> ret_body (ResourceBodyErr Unit Unit MkUnit);
+        ReadSome span_a count |-> a_after_read dest source span_a
+      }
+    })
+
+proc source_body (dest : Resource FsHandle) (source : Resource FsHandle)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError (ResourceBracketResult Unit Unit)) (ResourceBodyResult Unit Unit)
+    (withBuffer AFull Unit Unit (8 : Int) (a_body dest source))
+    (\outcome. ret_body (from_buffer_alloc outcome))
+
+proc dest_body (cap : Cap AFull) (dest : Resource FsHandle)
+  : HostIO AFull (ResourceBodyResult Unit Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result FileError (ResourceBracketResult Unit Unit)) (ResourceBodyResult Unit Unit)
+    (withResource AFull Unit Unit cap (bytes_encode "spanseed.bin") ResourceRead
+      (source_body dest))
+    (\outcome. ret_body (from_file_alloc outcome))
+
+fn finish (outcome : Result FileError (ResourceBracketResult Unit Unit)) : HostIO AFull ExitCode =
+  match outcome {
+    Err error |-> host_exit AFull (Failure 81);
+    Ok bracket |-> match bracket {
+      ResourceBracketOk value |-> host_exit AFull Success;
+      ResourceBracketBodyError error |-> host_exit AFull (Failure 82);
+      ResourceBracketReleaseError error |-> host_exit AFull (Failure 83);
+      ResourceBracketBodyAndReleaseError body_error release_error |-> host_exit AFull (Failure 84)
+    }
+  }
+
+proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
+  : HostIO AFull ExitCode visits [FS] =
+  match caps {
+    MkProgramCaps cap |->
+      bind (Coproduct (FSOp AFull) AmbientOp)
+        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+        (Result FileError (ResourceBracketResult Unit Unit)) ExitCode
+        (withResource AFull Unit Unit cap (bytes_encode "dest.bin")
+          (ResourceWriteCreate CreateOrTruncate) (dest_body cap))
+        (\outcome. finish outcome)
+  }
+"#;
+
+#[cfg(target_os = "linux")]
+#[test]
+fn sp_b_foreign_and_stale_window_reject_with_no_effect_interp() {
+    in_large_stack_thread("sp-b-validity-interp", || {
+        let (obs, files) = interpret_reading("sp-b-validity", SP_B_VALIDITY, &["dest.bin"]);
+        let ib = ken_runtime::CanonicalOutcomeV1::Error(ken_runtime::SemanticErrorV1::Resource(
+            ken_runtime::ResourceErrorV1::InvalidBounds,
+        ));
+        assert_eq!(
+            buffer_freeze_outcomes(&obs),
+            vec![ib.clone(), ib.clone()],
+            "interp: foreign and stale-window freeze must both be InvalidBounds (no bytes)"
+        );
+        assert_eq!(
+            write_outcomes(&obs),
+            vec![ib.clone(), ib.clone()],
+            "interp: foreign and stale-window write must both be InvalidBounds"
+        );
+        assert!(
+            files[0].is_empty(),
+            "interp: both foreign/stale writes must issue zero backend writes — destination empty, got {:?}",
+            files[0]
         );
     });
 }
