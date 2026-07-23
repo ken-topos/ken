@@ -179,6 +179,18 @@ fn pi_arity(term: &ken_kernel::Term) -> usize {
     }
 }
 
+/// The head `GlobalId` a type term applies -- the inductive former or constant
+/// at the spine of `Nat`, `List Nat`, etc. Used to check a constructor field's
+/// declared TYPE (not just its arity), so a claim like "wraps exactly one Nat"
+/// is carried by the term rather than by an assertion message.
+fn head_global(term: &ken_kernel::Term) -> Option<ken_kernel::GlobalId> {
+    match term {
+        ken_kernel::Term::IndFormer { id, .. } | ken_kernel::Term::Const { id, .. } => Some(*id),
+        ken_kernel::Term::App(function, _) => head_global(function),
+        _ => None,
+    }
+}
+
 #[test]
 fn cat5_d1_source_span_package_elaborates_zero_delta() {
     let mut env = dependency_env();
@@ -299,6 +311,16 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
 
 #[test]
 fn cat5_d2_parser_result_surface_is_total_and_located() {
+    // CLAIM LEDGER (Q-CLAIM-CLOSURE AC-3): ParseResult exposes Parsed/Failed
+    // with the pinned arg counts (evaluated); Parser is total over a well-formed
+    // (Source, in-bounds start) pair; ParsedValid/FailedValid/ParserLaws are
+    // checked (Transparent) declarations; the bespoke fuel recursion
+    // (parse_bool_expr_at_fuel/skip_spaces_fuel) is retired; parser_from_decoder
+    // specializes the shared Decoder; decoder_recursive/decoder_many type-arg
+    // pins consciously dropped in favor of the D3 roundtrip's behavior, not
+    // subsumed by it [R4 -- see foot of test].
+    // Add an assert -> add its claim here.
+    //
     // Rework (Q-RESIDUE, 2026-07-21): the surface contract is "the declared
     // shape typechecks and evaluates as claimed", not "the source text is
     // spelled this way" -- checked against the elaborated env, mirroring
@@ -387,10 +409,34 @@ fn cat5_d2_parser_result_surface_is_total_and_located() {
         env.globals.contains_key("parser_from_decoder"),
         "D2 must specialize the shared Decoder via parser_from_decoder"
     );
+
+    // R4 (Q-CLAIM-CLOSURE): Q-RESIDUE dropped D2's type-argument pins on
+    // `decoder_recursive` and `decoder_many` (the shared Decoder's recursion
+    // and repetition combinators, defined in `Decoder.ken.md`). Their behavior
+    // is exercised by `cat5_d3_bool_parser_printer_formatter_roundtrip_on_
+    // source_bytes`: the roundtrip parses nested `BAnd`/`BNot` expressions
+    // (recursive decoding) and multi-token sequences (repetition/`many`), and
+    // asserts exact output bytes.
+    //
+    // These pins are recorded as CONSCIOUSLY DROPPED in favor of that
+    // behavioral contract -- NOT subsumed by it. The roundtrip is the better
+    // contract for what the combinators DO, but it is not a strict superset of
+    // the dropped pins: the exact call/signature spelling of `decoder_recursive`
+    // /`decoder_many` can drift while the roundtrip stays green (a refactor that
+    // reroutes through a differently-typed combinator, say). The trade is
+    // deliberate -- behavior over spelling -- and if that roundtrip test is
+    // removed, this cross-reference is the signal to restore the pins.
 }
 
 #[test]
 fn cat5_d3_bool_expression_surface_is_package_owned() {
+    // CLAIM LEDGER (Q-CLAIM-CLOSURE AC-3): BoolExpr's four constructors compose
+    // (BAnd/BTrue/BNot/BFalse, evaluated); Syntax is constructible from a
+    // Located root + a List of Located children; erase_spans and ValidSyntax
+    // have their pinned signatures [R4 -- type-pinned, was bare contains_key];
+    // parser/print/format exist with exactly the pinned types (roundtrip
+    // BEHAVIOR is the sibling roundtrip test). Add an assert -> add its claim.
+    //
     // Rework (Q-RESIDUE, 2026-07-21): elaborate-then-assert-structurally, per
     // language-leader's guidance. The parser/printer/formatter roundtrip
     // BEHAVIOR (including the canonical ASCII token bytes) is proven by the
@@ -444,12 +490,23 @@ fn cat5_d3_bool_expression_surface_is_package_owned() {
     assert!(
         matches!(children, EvalVal::Ctor { id, args, .. } if *id == env.globals["Nil"] && args.len() == 1)
     );
-    for name in ["erase_spans", "ValidSyntax"] {
-        assert!(
-            env.globals.contains_key(name),
-            "D3 Syntax must expose {name}"
-        );
-    }
+    // R4 (Q-CLAIM-CLOSURE): these two were narrowed from signature-pinning to a
+    // bare `contains_key` presence check -- strictly weaker than the parser/
+    // printer/formatter probes a few lines down, which pin full types. A
+    // presence check passes even if the signature drifts. Restore type-pinning
+    // so the narrowing is undone rather than merely acknowledged, consistent
+    // with the neighbours.
+    env.elaborate_file(
+        r#"
+        fn erase_spans_shape_probe (x : Syntax BoolExpr) : BoolExpr = erase_spans x
+        fn valid_syntax_shape_probe (s : Source) (x : Syntax BoolExpr) : Prop =
+          ValidSyntax BoolExpr s x
+        "#,
+    )
+    .expect(
+        "erase_spans must be `Syntax BoolExpr -> BoolExpr` and ValidSyntax must be \
+         `(a : Type) (s : Source) (x : Syntax a) -> Prop`",
+    );
 
     // parser/printer/formatter exist with exactly the pinned types; the
     // roundtrip behavior is proven by the sibling test below, not restated
@@ -466,13 +523,33 @@ fn cat5_d3_bool_expression_surface_is_package_owned() {
 
 #[test]
 fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
-    // Rework (Q-RESIDUE, 2026-07-21): elaborate-then-assert-structurally.
-    // IsUtf8's round-trip-not-reflexive claim and source_length's byte-view
-    // computation are proven behaviorally by
-    // `cat5_d1_reflexive_utf8_proof_rejected` and
-    // `cat5_d1_concrete_nonempty_source_constructs_and_projects` below, so
-    // this test only pins their declared shape. The `!contains("= Axiom")`
-    // check is dropped for the same reason as in D2/D3.
+    // CLAIM LEDGER (Q-CLAIM-CLOSURE AC-3): IsUtf8 is Decl::Transparent;
+    // source_bytes : Source -> Bytes (probe); Source.field_names ==
+    // [id,bytes,utf8] (no cached-length field); MkSource is not a global; Span
+    // constructible from two Nat; SourceId is a one-constructor inductive whose
+    // single field is Nat [R3 -- field TYPE now checked, not just arity];
+    // span_to_byte_range/span_origin/*_faithful/ValidLocated exported; Located
+    // constructible; extraction names none of the forbidden tokens [R4 --
+    // compiler/AST/String restored]; extraction never says `data SourceId =`
+    // [R4 -- provenance guard restored]. Add an assert -> add its claim here.
+    //
+    // Rework (Q-RESIDUE, 2026-07-21): elaborate-then-assert-structurally. This
+    // test pins the declared SHAPE; behavior is proven by siblings below. The
+    // `!contains("= Axiom")` check is dropped for the same reason as in D2/D3.
+    //
+    // R2 (Q-CLAIM-CLOSURE): the earlier draft of this comment claimed the
+    // sibling test proves `source_length`'s byte-view computation
+    // "behaviorally". It does not, and cannot: `source_length`-by-name is
+    // neutral in both the evaluator and the kernel (see that test's RESIDUAL
+    // note), so a hostile redefinition of it leaves both tests green. What is
+    // actually pinned, split across the two:
+    //   - IsUtf8's round-trip-not-reflexive claim -> `cat5_d1_reflexive_utf8_proof_rejected`;
+    //   - the instance-projected `source_bytes` byte count (== 3) ->
+    //     `cat5_d1_concrete_nonempty_source_constructs_and_projects`;
+    //   - `source_length`'s `Source -> Nat` SIGNATURE -> `total_parser_shape_probe`'s
+    //     `LessEqNat start (source_length s)` bound in the D2 surface test.
+    // `source_length` is shape-pinned only. Neither test pins its dynamic value,
+    // and the concrete test documents why.
     let mut env = mk_env();
 
     assert!(matches!(
@@ -501,15 +578,50 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
     // SourceId lives in Capability.Diagnostics.Core (already elaborated by
     // `dependency_env()` before Parsing.ken.md), not redefined here: it
     // wraps exactly one Nat.
+    //
+    // R4 (Q-CLAIM-CLOSURE): Q-RESIDUE dropped a `!contains("data SourceId =")`
+    // source-text guard against the package locally re-declaring SourceId
+    // instead of importing it from Diagnostics.Core. This registry lookup
+    // checks SourceId's SHAPE (one Nat field, below) but not its provenance:
+    // a same-shaped local type would pass this lookup and the Nat field check.
+    // Elaboration is NOT blind to it, however -- measured: inserting
+    // `data SourceId = MkSourceIdLocal Nat` into Parsing.ken.md is REJECTED at
+    // package elaboration (`KernelRejected(TypeMismatch)`), because
+    // `span_origin`'s `SourceOrigin source ...` cross-reference binds `source`
+    // to the shadowing local type, which no longer unifies with `Origin`'s
+    // `SourceOrigin : SourceId -> ByteRange -> Origin` elaborated earlier
+    // against the genuine import. So the in-file threat is already caught by
+    // nominal typing. The substring guard RESTORED below is kept as cheap
+    // defense-in-depth: it still catches a redeclaration positioned to dodge
+    // that cross-reference, and states the intent where the shape check cannot.
+    // (An earlier draft of this note claimed elaboration *accepts* a local
+    // redeclaration; that measurement was an isolated post-hoc `elaborate_file`
+    // on the built env, not the package source in situ -- QA caught the
+    // mismatch, and it is corrected here.)
     let source_id_inductive = env
         .env
         .inductive(env.globals["SourceId"])
         .expect("SourceId inductive");
     assert_eq!(source_id_inductive.constructors.len(), 1);
+    let source_id_ctor_type = &source_id_inductive.constructors[0].type_;
+    // R3 (Q-CLAIM-CLOSURE): `pi_arity` counts the Pi-telescope depth and
+    // discards each domain, so on its own it proves only "exactly one field" --
+    // the "one Nat" half of the message was carried by the message alone, and
+    // changing `MkSourceId`'s field to any other single-argument type left this
+    // green. Check the field COUNT and the field TYPE separately so both halves
+    // of the claim are evidence.
     assert_eq!(
-        pi_arity(&source_id_inductive.constructors[0].type_),
+        pi_arity(source_id_ctor_type),
         1,
-        "SourceId must wrap exactly one Nat"
+        "SourceId must wrap exactly one field"
+    );
+    let ken_kernel::Term::Pi(field_type, _) = source_id_ctor_type else {
+        panic!("SourceId's constructor must be a one-field Pi, got {source_id_ctor_type:?}");
+    };
+    assert_eq!(
+        head_global(field_type),
+        Some(env.globals["Nat"]),
+        "SourceId's single field must be Nat, not {field_type:?}"
     );
 
     for name in [
@@ -535,6 +647,28 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
     // elaborated-term equivalent to check it against.
     let extracted = ken_elaborator::literate::extract_ken_md(PARSING_KEN_MD)
         .expect("Capability.Parsing must extract");
+    // R4 (Q-CLAIM-CLOSURE): restore the dropped `!contains("data SourceId =")`
+    // provenance guard as a real substring check -- defense-in-depth, NOT the
+    // sole catcher. As measured above, an in-file redeclaration is already
+    // rejected at package elaboration via `span_origin`'s cross-reference; this
+    // guard adds a cheap, explicit second line that also catches a
+    // redeclaration reordered to dodge that cross-reference, and it makes the
+    // "import, never re-declare" intent legible where the shape check cannot.
+    // Substring (not whitespace-token) because the tell is the multi-token
+    // phrase `data SourceId =`.
+    assert!(
+        !extracted.source.contains("data SourceId ="),
+        "Capability.Parsing must import SourceId from Diagnostics.Core, not \
+         re-declare it locally with `data SourceId =`"
+    );
+    // R4 (Q-CLAIM-CLOSURE): `compiler`, `AST`, and `String` restore three
+    // source-text guards dropped in Q-RESIDUE with no replacement. The first
+    // two guard that the package's own emission never describes itself as a
+    // compiler/AST (it is a package-owned located-syntax surface, not compiler
+    // internals -- cf. the D3 comment); `String` restores D1's
+    // `!contains("String Nat")` guard that source lengths stay byte/Nat-based
+    // and never route through a String view. All three are currently absent as
+    // whitespace tokens, so this is a restored guard, not a new constraint.
     for forbidden in [
         "byte_unit_zero_int",
         "SourceLength",
@@ -542,6 +676,9 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
         "bytes_length",
         "bytes_slice",
         "bytes_at",
+        "compiler",
+        "AST",
+        "String",
     ] {
         assert!(
             !extracted
@@ -592,6 +729,12 @@ fn cat5_d1_valid_half_open_bounds_and_zero_width_offsets_check() {
 
 #[test]
 fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
+    // CLAIM LEDGER (Q-CLAIM-CLOSURE AC-3): projected_bytes == b"abc" (source_bytes
+    // through the instance); projected_length == 3 (bytes_nat_length on the raw
+    // const, byte arithmetic only); projected_byte_view_length == 3 [NEW, R2 --
+    // the byte-view length through the instance]; projected_utf8 == Neutral (a
+    // noncomputational proof field manufactures no evidence). Add an eval+assert
+    // -> add its claim here.
     let mut env = mk_env();
     env.elaborate_file(
         r#"
@@ -610,6 +753,7 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
 
         const projected_bytes : Bytes = source_bytes sample_source
         const projected_length : Nat = bytes_nat_length sample_abc_bytes
+        const projected_byte_view_length : Nat = bytes_nat_length (source_bytes sample_source)
         lemma projected_utf8 : IsUtf8 (source_bytes sample_source) =
           source_bytes::utf8 sample_source
         const full_source_span : Span = MkSpan Zero (source_length sample_source)
@@ -634,11 +778,64 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
 
     let mut length_store = make_store(&env);
     neutralize_fixture_proofs(&env, &mut length_store, &["sample_utf8_valid"]);
+    // `projected_length` computes the byte count on the raw `sample_abc_bytes`
+    // constant via `bytes_nat_length` -- it corroborates the arithmetic but
+    // does NOT route through `source_length` or the Source instance, so its
+    // message says exactly that.
     let projected_length = eval_def(&env, &mut length_store, "projected_length");
     assert_eq!(
         nat_count(&env, &projected_length),
         3,
-        "source_length must execute through the same class-backed Source instance"
+        "bytes_nat_length must count the raw source bytes as 3"
+    );
+    // R2 (Q-CLAIM-CLOSURE): the "source_length executes through the
+    // class-backed Source instance" claim was previously asserted with this
+    // message on `projected_length` above, which never calls `source_length`
+    // and never touches the Source instance -- redefining `source_length` to a
+    // constant left the test green.
+    //
+    // Now the byte-view computation is evaluated for real over the instance,
+    // and the residual is stated rather than papered over.
+    //
+    // What this pins is the INSTANCE-PROJECTED source_bytes byte count, and only
+    // that. `source_length` is *definitionally* `bytes_nat_length
+    // s.source_bytes_field` and `source_bytes` is `s.source_bytes_field`
+    // (Parsing.ken.md:62,64) -- the SAME field -- so `bytes_nat_length
+    // (source_bytes sample_source)` runs the same arithmetic `source_length`
+    // would, over the `source_bytes` projection that reduces to the instance's
+    // concrete bytes. That is a strict improvement over the old `bytes_nat_length
+    // sample_abc_bytes` check, which was disconnected from the Source instance
+    // entirely -- but it does NOT bind `source_length`'s body (see the residual),
+    // so the claim is scoped to the source_bytes count, not to source_length.
+    //
+    // ⚠ RESIDUAL, measured both ways: `source_length`-BY-NAME cannot be pinned
+    // behaviorally in this system, because its inlined raw `.source_bytes_field`
+    // access stays NEUTRAL in both engines -- `source_length sample_source`
+    // evaluates to `Unknown` in the interpreter, and `Eq Nat (source_length
+    // sample_source) 3` is rejected by the kernel as "not convertible". So a
+    // hostile redefinition of `source_length` to a constant would NOT be caught
+    // here (only the definitionally-equal `source_bytes` form reduces). What
+    // this test carries is the byte-view arithmetic over the instance, and
+    // nothing more: the definitional identity `source_length s ==
+    // bytes_nat_length (source_bytes s)` holds in the current source
+    // (Parsing.ken.md:62,64), but this test does NOT bind it -- a redefinition
+    // that broke that identity would stay green here. `source_length`'s
+    // `Source -> Nat` signature is pinned separately by
+    // `total_parser_shape_probe`'s `LessEqNat start (source_length s)` bound in
+    // the D2 surface test. Pinning its dynamic value would require the
+    // evaluator/conversion to reduce raw instance-field access
+    // -- outside this WP's scope.
+    let mut byte_view_store = make_store(&env);
+    neutralize_fixture_proofs(&env, &mut byte_view_store, &["sample_utf8_valid"]);
+    let projected_byte_view_length =
+        eval_def(&env, &mut byte_view_store, "projected_byte_view_length");
+    assert_eq!(
+        nat_count(&env, &projected_byte_view_length),
+        3,
+        "the instance-projected source_bytes byte count must be 3 -- this pins \
+         `bytes_nat_length (source_bytes sample_source)`, NOT `source_length` \
+         itself, whose body is not bindable in this evaluator (see the residual \
+         note above); `source_length` is shape-pinned only"
     );
 
     let projected_utf8 = eval_def(&env, &mut store, "projected_utf8");

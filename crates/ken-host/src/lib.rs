@@ -974,13 +974,120 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn generated_manifest_is_closed_and_probe_comparison_discriminates() {
-        // Rework (Q-RESIDUE, 2026-07-21): `fact_count == 23` duplicated the
-        // relational self-consistency check below as a copy of its size --
-        // a legitimate future fact addition would go red for no semantic
-        // reason. The relational check alone is the durable invariant (a
-        // manifest whose declared count diverges from its real fact list is
-        // tampered/malformed); it does not need a frozen literal beside it.
+        // CLAIM LEDGER (Q-CLAIM-CLOSURE AC-3). This is a multi-claim block;
+        // every claim it carries is enumerated here so none is silently dropped
+        // by a future rework. Add an assertion -> add its claim here.
+        //   (a) fact_count == facts.len()          -- internal consistency [retained, labeled below]
+        //   (b) fact NAME inventory == pinned set   -- out-of-band anchor [NEW, replaces dropped `fact_count == 23`; carries add/omit/substitution, NOT duplicates -- those are caught upstream in build.rs, see below]
+        //   (c) dependencies.len() == 4             -- dependency cardinality [retained]
+        //   (d) exact (name,version,features) x4    -- dependency identity [retained]
+        //   (e) every checksum is 64 hex chars      -- checksum shape [retained]
+        //   (f) backend == "linux_raw"              -- backend identity [retained]
+        //   (g) TARGET_ABI_CANONICAL lacks "SIG"    -- canonical hygiene [retained]
+        //   (h) verify_probe agrees on true values  -- probe round-trips [retained]
+        //   (i) tampered O_RDONLY fails closed       -- value discrimination [retained]
+        //   (j) tampered width facts fail closed     -- width discrimination [retained]
+        // Dropped in Q-RESIDUE, restored as (b): the frozen `fact_count == 23`
+        // literal -- the sole non-generated assertion, i.e. the inventory anchor.
+        //
+        // CLAIM (a) -- manifest internal consistency. A `TargetAbi` whose
+        // declared `fact_count` diverges from its own `facts` list is
+        // malformed. This is a real invariant but a WEAK one: both fields are
+        // emitted from the same generator expression in `build.rs` (`facts`
+        // is interpolated as the array, `fact_count` is
+        // `facts.matches("AbiFact").count()` over that same text), so it fails
+        // only if that substring heuristic miscounts. It is NOT an inventory
+        // anchor and was never meant to stand in for one.
         assert_eq!(TARGET_ABI.fact_count, TARGET_ABI.facts.len());
+
+        // CLAIM (b) -- ABI fact INVENTORY anchor, out-of-band from the
+        // generator. Q-RESIDUE dropped `fact_count == 23` on the theory that
+        // the relational check above subsumed it; it did not. Everything the
+        // manifest carries -- `facts`, `fact_count`, `TARGET_ABI_CANONICAL`,
+        // and `TARGET_ABI_MANIFEST_HASH` -- is produced by the SAME `build.rs`
+        // run, so there is no independent artifact to check the fact set
+        // against: if `build.rs` emitted a different set of facts, the hash
+        // would be the hash of THAT set and every generated-vs-generated check
+        // stays green. The one assertion that was not itself generated -- the
+        // frozen literal -- was carrying the entire inventory guarantee.
+        //
+        // The replacement restores that guarantee as a hand-authored list the
+        // generator does not produce. It pins NAMES rather than a bare count:
+        // a count catches an added or dropped fact but is blind to a
+        // substitution (swap one fact for another and the cardinality is
+        // unchanged), which is exactly the silent-ABI-change this exists to
+        // stop. The comparison is a set on both sides, so this anchor carries
+        // exactly three cases -- a new-name ADDITION, an OMISSION, and a
+        // count-preserving SUBSTITUTION -- each failing with the offending
+        // names spelled out. A genuine future ABI change of any of those goes
+        // red HERE, deliberately, forcing whoever makes it to update this list
+        // and thereby acknowledge the change -- which is the point, not a
+        // maintenance cost to design away.
+        //
+        // What this anchor does NOT carry is a DUPLICATE fact name: a set
+        // collapses duplicates, so two facts sharing a name would compare equal
+        // to the pinned set. That case is not this anchor's to catch, and it is
+        // not left uncovered -- it is rejected EARLIER, before `TARGET_ABI` is
+        // ever written, by `build.rs`'s three-way boundary closure: a
+        // count-changing duplicate trips the probe-cardinality check
+        // (`build_support.rs` `verify_probe`, panicking at `build.rs`'s
+        // `run_probe` with "probe emitted N facts; expected the closed
+        // inventory of M" -- reproduced), a count-preserving one trips
+        // `verify_boundary_inventory`'s producer/consumer closure
+        // ("unmanifested producer ABI fact: ..."), and a duplicated probe line
+        // trips `parse_probe`'s "duplicate probe fact". Those pre-existing gates
+        // are the real first line for duplicates; this anchor is not, and does
+        // not claim to be.
+        const EXPECTED_ABI_FACT_NAMES: [&str; 23] = [
+            "POINTER_WIDTH",
+            "C_INT_WIDTH",
+            "O_RDONLY",
+            "O_WRONLY",
+            "O_RDWR",
+            "O_APPEND",
+            "O_CREAT",
+            "O_EXCL",
+            "O_TRUNC",
+            "O_DIRECTORY",
+            "O_NOFOLLOW",
+            "O_CLOEXEC",
+            "AT_REMOVEDIR",
+            "MODE_FILE_CREATE",
+            "MODE_DIRECTORY_CREATE",
+            "SYS_OPENAT",
+            "SYS_MKDIRAT",
+            "SYS_UNLINKAT",
+            "SYS_RENAMEAT",
+            "SYS_READLINKAT",
+            "SYS_FCHMOD",
+            "ERRNO_ENOENT",
+            "ERRNO_EEXIST",
+        ];
+        let pinned: std::collections::BTreeSet<&str> =
+            EXPECTED_ABI_FACT_NAMES.iter().copied().collect();
+        assert_eq!(
+            pinned.len(),
+            EXPECTED_ABI_FACT_NAMES.len(),
+            "the pinned ABI fact inventory contains a duplicate name"
+        );
+        let generated: std::collections::BTreeSet<&str> =
+            TARGET_ABI.facts.iter().map(|fact| fact.name).collect();
+        let unexpected: Vec<&str> = generated.difference(&pinned).copied().collect();
+        let missing: Vec<&str> = pinned.difference(&generated).copied().collect();
+        assert!(
+            unexpected.is_empty() && missing.is_empty(),
+            "generated ABI fact inventory diverged from the pinned out-of-band \
+             anchor.\n  facts present in the manifest but NOT pinned (added by \
+             build.rs): {unexpected:?}\n  facts pinned but ABSENT from the \
+             manifest (dropped/renamed by build.rs): {missing:?}\nThis anchor is \
+             hand-authored precisely because every generated artifact (facts, \
+             fact_count, canonical, manifest hash) moves together when the fact \
+             set changes and so cannot witness the change. If this divergence is \
+             an intended ABI change, update EXPECTED_ABI_FACT_NAMES to match -- \
+             that edit is the conscious acknowledgement the anchor exists to \
+             force."
+        );
+
         assert_eq!(TARGET_ABI.dependencies.len(), 4);
         assert_eq!(
             TARGET_ABI
