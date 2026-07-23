@@ -815,11 +815,15 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
     // sample_source) 3` is rejected by the kernel as "not convertible". So a
     // hostile redefinition of `source_length` to a constant would NOT be caught
     // here (only the definitionally-equal `source_bytes` form reduces). What
-    // this test carries is the byte-view arithmetic over the instance plus the
-    // definitional identity; `source_length`'s `Source -> Nat` signature is
-    // pinned separately by `total_parser_shape_probe`'s `LessEqNat start
-    // (source_length s)` bound in the D2 surface test. Pinning its dynamic value
-    // would require the evaluator/conversion to reduce raw instance-field access
+    // this test carries is the byte-view arithmetic over the instance, and
+    // nothing more: the definitional identity `source_length s ==
+    // bytes_nat_length (source_bytes s)` holds in the current source
+    // (Parsing.ken.md:62,64), but this test does NOT bind it -- a redefinition
+    // that broke that identity would stay green here. `source_length`'s
+    // `Source -> Nat` signature is pinned separately by
+    // `total_parser_shape_probe`'s `LessEqNat start (source_length s)` bound in
+    // the D2 surface test. Pinning its dynamic value would require the
+    // evaluator/conversion to reduce raw instance-field access
     // -- outside this WP's scope.
     let mut byte_view_store = make_store(&env);
     neutralize_fixture_proofs(&env, &mut byte_view_store, &["sample_utf8_valid"]);
