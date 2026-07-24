@@ -199,6 +199,8 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         active_partition_return_kind: None,
         active_partition_return_contract: None,
         active_partition_state_id: None,
+        active_partition_function_index: 0,
+        pending_partition_call_edges: Vec::new(),
         active_partition_source_return: None,
         active_partition_completed_producer_tail: None,
         partition_output_tag_pointer: None,
@@ -211,6 +213,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         #[cfg(test)]
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
     };
+    let mut deferred_functions = Vec::new();
     let (mut maybe_trap, mut decoder) = {
         let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
         let block = builder.create_block();
@@ -278,10 +281,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     record_partition_measure(measure);
     compiler.partition_measures.push(measure);
     compiler.capture_partition_ledger_union();
-    verify_cranelift_function(&ctx.func, module.isa())?;
-    module
-        .define_function(func_id, &mut ctx)
-        .map_err(|err| backend_module(err.to_string()))?;
+    deferred_functions.push((func_id, ctx));
 
     // Compile partition work depth-first. Each work item can enqueue both
     // mutually-exclusive arms of another host-result fanout, and the owned
@@ -384,6 +384,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         compiler.active_partition_producer_kont = None;
         compiler.active_partition_return_contract = None;
         compiler.active_partition_state_id = continuation_state_id;
+        compiler.active_partition_function_index = deferred_functions.len();
         compiler.partition_live_growth_ticks = 0;
         compiler.declaration_stack.clear();
         compiler.active_recursive_declarations.clear();
@@ -437,10 +438,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         record_partition_measure(measure);
         compiler.partition_measures.push(measure);
         compiler.capture_partition_ledger_union();
-        verify_cranelift_function(&helper_ctx.func, module.isa())?;
-        module
-            .define_function(helper_id, &mut helper_ctx)
-            .map_err(|err| backend_module(err.to_string()))?;
+        deferred_functions.push((helper_id, helper_ctx));
         if let Some(state_id) = continuation_state_id {
             compiler
                 .partition_continuations
@@ -452,8 +450,22 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     compiler.require_complete_partition_branch_returns()?;
     compiler.partition_cleanup_transitions.require_complete()?;
     compiler.partition_continuations.require_complete()?;
+    compiler.seal_partition_call_edges(&mut deferred_functions)?;
     compiler.require_complete_join_plan_consumption()?;
     compiler.require_complete_dynamic_splice_edge_consumption()?;
+
+    if deferred_functions.len() != compiler.partition_measures.len() {
+        return Err(unsupported(
+            "NativeFunctionPartition",
+            "deferred semantic-CFG function accounting diverged from its measures",
+        ));
+    }
+    for (definition_id, mut deferred) in deferred_functions {
+        verify_cranelift_function(&deferred.func, module.isa())?;
+        module
+            .define_function(definition_id, &mut deferred)
+            .map_err(|err| backend_module(err.to_string()))?;
+    }
 
     if std::env::var_os("KEN_NATIVE_PARTITION_METRICS").is_some() {
         let (states, edges, defined_states) = compiler.partition_continuations.counts();
@@ -1875,6 +1887,102 @@ impl<'a> Lowering<'a> {
 
     fn require_complete_partition_branch_returns(&self) -> Result<(), CraneliftBackendError> {
         self.partition_branch_returns.require_complete()
+    }
+
+    fn record_pending_partition_call_edge(
+        &mut self,
+        call_inst: Inst,
+        result_payload: Value,
+        callee_state_id: usize,
+        kind: PartitionPendingCallKind,
+    ) {
+        self.pending_partition_call_edges
+            .push(PartitionPendingCallEdge {
+                function_index: self.active_partition_function_index,
+                caller_state_id: self.active_partition_state_id,
+                callee_state_id,
+                kind,
+                call_inst,
+                result_payload,
+            });
+    }
+
+    fn seal_partition_call_edges(
+        &mut self,
+        functions: &mut [(FuncId, cranelift_codegen::Context)],
+    ) -> Result<(), CraneliftBackendError> {
+        for edge in self.pending_partition_call_edges.iter().copied() {
+            let summary = self
+                .partition_continuations
+                .exit_summary(edge.callee_state_id)?;
+            match (summary.normal, summary.abrupt) {
+                (
+                    PartitionNormalExitSummary::Completed { .. },
+                    PartitionAbruptExitSummary::None,
+                ) => {
+                    self.partition_metrics.sealed_normal_call_edges = self
+                        .partition_metrics
+                        .sealed_normal_call_edges
+                        .saturating_add(1);
+                }
+                (
+                    PartitionNormalExitSummary::NoReturn,
+                    PartitionAbruptExitSummary::MayDeclaredAbandon,
+                ) => {
+                    let function = &mut functions
+                        .get_mut(edge.function_index)
+                        .ok_or_else(|| {
+                            unsupported(
+                                "NativeProducerContinuationStepV1",
+                                "deferred partition call edge lost its caller function",
+                            )
+                        })?
+                        .1;
+                    if function.func.layout.inst_block(edge.call_inst).is_none() {
+                        continue;
+                    }
+                    let mut cursor = FuncCursor::new(&mut function.func).after_inst(edge.call_inst);
+                    while cursor.current_inst().is_some() {
+                        cursor.remove_inst();
+                    }
+                    cursor.ins().return_(&[edge.result_payload]);
+                    self.partition_metrics.sealed_terminal_call_edges = self
+                        .partition_metrics
+                        .sealed_terminal_call_edges
+                        .saturating_add(1);
+                }
+                (
+                    PartitionNormalExitSummary::Completed { .. },
+                    PartitionAbruptExitSummary::MayDeclaredAbandon,
+                ) => {
+                    return Err(unsupported(
+                        "NativeProducerContinuationStepV1",
+                        format!(
+                            "{:?} edge {:?} -> state {} is mixed normal/declared-abandon before \
+                             the locked scalar helper boundary; the normal continuation is not \
+                             yet closed inside the callee",
+                            edge.kind, edge.caller_state_id, edge.callee_state_id,
+                        ),
+                    ));
+                }
+                (PartitionNormalExitSummary::NoReturn, PartitionAbruptExitSummary::None) => {
+                    return Err(unsupported(
+                        "NativeProducerContinuationStepV1",
+                        format!(
+                            "nonreturning state {} has no explicit terminal edge",
+                            edge.callee_state_id,
+                        ),
+                    ));
+                }
+                (PartitionNormalExitSummary::Unresolved, _) => {
+                    return Err(unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "an unresolved partition call edge survived semantic graph sealing",
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 
     fn complete_partition_producer_tail(
@@ -4369,6 +4477,14 @@ impl<'a> Lowering<'a> {
                         return_contract: expected_contract.clone(),
                     },
                 ));
+        }
+        if expected_contract.live_producer_tail.is_some() {
+            self.record_pending_partition_call_edge(
+                call,
+                payload,
+                state_id,
+                PartitionPendingCallKind::ProducerKont,
+            );
         }
         let lowered =
             self.lowered_from_scalar_pair(plan.return_kind, NativeScalarPairV1 { tag, payload });
@@ -10480,6 +10596,14 @@ impl<'a> Lowering<'a> {
         builder
             .ins()
             .jump(target.block, &[result_tag.into(), result_payload.into()]);
+        if return_contract.live_producer_tail.is_some() {
+            self.record_pending_partition_call_edge(
+                call,
+                result_payload,
+                state_id,
+                PartitionPendingCallKind::SourcePredecessor,
+            );
+        }
         if newly_reserved {
             self.partition_queue.push_back(PartitionWorkItem::SourceArm(
                 SourceArmPartitionWorkItem {
