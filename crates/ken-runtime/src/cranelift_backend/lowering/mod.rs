@@ -796,41 +796,19 @@ fn oriented_layer_is_pending_semantic(layer: &ComputationalRecursorLayer) -> boo
     layer.semantic_pending
 }
 fn validate_oriented_control_projection(
-    producer_origin: RecursorProducerOriginId,
+    _producer_origin: RecursorProducerOriginId,
     layers: &[ComputationalRecursorLayer],
 ) -> Result<(), CraneliftBackendError> {
-    let mut invocation_sources = BTreeMap::new();
-    let mut open_scopes = BTreeMap::new();
     for layer in layers {
-        let role_origin = match layer.role {
-            RecursorLayerRole::SelectsOccurrence { origin, .. }
-            | RecursorLayerRole::ExitsScope { origin, .. } => origin,
-        };
-        if role_origin != producer_origin {
-            return Err(unsupported(
-                "OrientedSubcontinuationPlanV1",
-                "control occurrence was transplanted across producer regions",
-            ));
-        }
         match (layer.checked_invocation_id, layer.checked_invocation_source) {
-            (Some(instance), Some(source)) => {
-                if invocation_sources
-                    .insert(instance, source)
-                    .is_some_and(|old| old != source)
-                {
-                    return Err(unsupported(
-                        "OrientedSubcontinuationPlanV1",
-                        "one invocation instance is shared by distinct checked templates",
-                    ));
-                }
-            }
+            (Some(_), Some(_)) | (None, None) => {}
             (None, Some(_)) => {
                 return Err(unsupported(
                     "OrientedSubcontinuationPlanV1",
                     "checked invocation source has no affine instance identity",
                 ));
             }
-            _ => {}
+            (Some(_), None) => {}
         }
         match (layer.role, layer.semantic_pending) {
             (RecursorLayerRole::SelectsOccurrence { .. }, false) => {
@@ -842,27 +820,17 @@ fn validate_oriented_control_projection(
             _ => {}
         }
         if let RecursorLayerRole::ExitsScope {
-            scope_origin,
             parent_scope,
+            parent_scope_instance,
             ..
         } = layer.role
         {
-            if layer.checked_invocation_id.is_some() {
-                if open_scopes.insert(scope_origin, parent_scope).is_some() {
-                    return Err(unsupported(
-                        "OrientedSubcontinuationPlanV1",
-                        "open control obligation is duplicated",
-                    ));
-                }
+            if parent_scope.is_some() != parent_scope_instance.is_some() {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "open control obligation parent schema is inconsistent",
+                ));
             }
-        }
-    }
-    for parent in open_scopes.values().flatten() {
-        if !open_scopes.contains_key(parent) {
-            return Err(unsupported(
-                "OrientedSubcontinuationPlanV1",
-                "open control obligation has a stale or cross-region parent",
-            ));
         }
     }
     Ok(())
@@ -1709,11 +1677,12 @@ fn active_context_cursor_instance(
         .or_else(|| {
             (active.source_selected_cursor == Some(cursor)).then_some(active.cursor_instance)
         })
-        .or_else(|| active.source_lineage.iter().rev().find_map(|candidate| {
-            let candidate = candidate.as_active(active.source_lineage);
-            find_continuation_cursor(&candidate, cursor)
-                .map(|frame| frame.cursor_instance)
-        }))
+        .or_else(|| {
+            active.source_lineage.iter().rev().find_map(|candidate| {
+                let candidate = candidate.as_active(active.source_lineage);
+                find_continuation_cursor(&candidate, cursor).map(|frame| frame.cursor_instance)
+            })
+        })
 }
 #[derive(Clone, Copy)]
 enum EliminatorFrame<'a> {
@@ -3022,121 +2991,125 @@ impl<'a> Lowering<'a> {
         let segment_resume_cursor_instance = payload
             .as_ref()
             .map(|(_, invocation)| invocation.resume_cursor_instance);
-        let (selection, unwind) =
-            if let Some((_, invocation)) = payload {
-                let splice_caller = splice_caller.ok_or_else(|| {
-                    unsupported(
-                        "ComputationalRecursor",
-                        "recursive payload splice has no active continuation",
-                    )
-                })?;
-                let source_cursor_is_live = source_control.is_some_and(|(selected, lineage)| {
-                    source_active_cursor(selected, lineage, invocation.resume_cursor).is_some()
-                });
-                if !active_context_contains_cursor(splice_caller, invocation.resume_cursor)
-                    && !source_cursor_is_live
-                    && !recursor_invocation_is_checked(&invocation)
-                {
-                    return Err(unsupported(
-                        "ComputationalRecursor",
-                        "recursive payload resume cursor is not active",
-                    ));
-                }
-                let mut unwind = invocation.unwind;
-                let parent_scope = unwind.later_wrappers_in_construction_order.last().and_then(
-                    |layer| match layer.role {
-                        RecursorLayerRole::ExitsScope { scope_origin, .. } => Some(scope_origin),
-                        RecursorLayerRole::SelectsOccurrence { .. } => None,
-                    },
-                );
-                let unwind_role = match role {
-                    RecursorLayerRole::SelectsOccurrence { origin_scope, .. } => {
-                        RecursorLayerRole::ExitsScope {
-                            origin: segment_origin,
-                            origin_scope,
-                            scope_origin: origin,
-                            scope_instance: origin_scope,
-                            parent_scope,
-                            parent_scope_instance: None,
-                        }
-                    }
+        let (selection, unwind) = if let Some((_, invocation)) = payload {
+            let splice_caller = splice_caller.ok_or_else(|| {
+                unsupported(
+                    "ComputationalRecursor",
+                    "recursive payload splice has no active continuation",
+                )
+            })?;
+            let source_cursor_is_live = source_control.is_some_and(|(selected, lineage)| {
+                source_active_cursor(selected, lineage, invocation.resume_cursor).is_some()
+            });
+            if !active_context_contains_cursor(splice_caller, invocation.resume_cursor)
+                && !source_cursor_is_live
+                && !recursor_invocation_is_checked(&invocation)
+            {
+                return Err(unsupported(
+                    "ComputationalRecursor",
+                    "recursive payload resume cursor is not active",
+                ));
+            }
+            let mut unwind = invocation.unwind;
+            let (parent_scope, parent_scope_instance) = unwind
+                .later_wrappers_in_construction_order
+                .last()
+                .map_or((None, None), |layer| match layer.role {
                     RecursorLayerRole::ExitsScope {
-                        origin_scope,
                         scope_origin,
                         scope_instance,
-                        parent_scope,
-                        parent_scope_instance,
                         ..
-                    } => RecursorLayerRole::ExitsScope {
+                    } => (Some(scope_origin), Some(scope_instance)),
+                    RecursorLayerRole::SelectsOccurrence { .. } => (None, None),
+                });
+            let unwind_role = match role {
+                RecursorLayerRole::SelectsOccurrence { origin_scope, .. } => {
+                    RecursorLayerRole::ExitsScope {
                         origin: segment_origin,
                         origin_scope,
-                        scope_origin,
-                        scope_instance,
+                        scope_origin: origin,
+                        scope_instance: origin_scope,
                         parent_scope,
                         parent_scope_instance,
-                    },
-                };
-                current_layer.role = unwind_role;
-                unwind
-                    .later_wrappers_in_construction_order
-                    .push(current_layer);
-                if let Some((selected, lineage)) = source_control {
-                    if selected.selected_scope.is_none() {
-                        return Err(unsupported(
-                            "ComputationalRecursor",
-                            "source recursor invocation is missing its owned selected scope",
-                        ));
-                    }
-                    for scope in lineage
-                        .iter()
-                        .filter_map(|selected| selected.selected_scope.as_ref())
-                        .chain(selected.selected_scope.iter())
-                    {
-                        if unwind
-                            .later_wrappers_in_construction_order
-                            .iter()
-                            .any(|layer| {
-                                matches!(
-                                    layer.role,
-                                    RecursorLayerRole::ExitsScope { scope_origin, .. }
-                                        if scope_origin == scope.scope_origin
-                                )
-                            })
-                        {
-                            continue;
-                        }
-                        unwind.later_wrappers_in_construction_order.push(
-                            ComputationalRecursorLayer {
-                                cases: scope.frame.cases.clone(),
-                                default: scope.frame.default.clone(),
-                                outer_env: scope.frame.outer_env.clone(),
-                                provenance: scope.frame.provenance,
-                                checked_frame_id: scope.frame.checked_frame_id,
-                                checked_invocation_id: scope.frame.checked_invocation_id,
-                                checked_invocation_source: scope.frame.checked_invocation_source,
-                                checked_invocation_depth: scope.frame.checked_invocation_depth,
-                                semantic_pending: false,
-                                role: RecursorLayerRole::ExitsScope {
-                                    origin: segment_origin,
-                                    origin_scope: scope.scope_instance,
-                                    scope_origin: scope.scope_origin,
-                                    scope_instance: scope.scope_instance,
-                                    parent_scope: scope.parent_scope,
-                                    parent_scope_instance: scope.parent_scope_instance,
-                                },
-                            },
-                        );
                     }
                 }
-                (invocation.selection, unwind)
-            } else {
-                (
-                    current_layer,
-                    RecursorUnwindStack {
-                        later_wrappers_in_construction_order: Vec::new(),
-                    },
-                )
+                RecursorLayerRole::ExitsScope {
+                    origin_scope,
+                    scope_origin,
+                    scope_instance,
+                    parent_scope,
+                    parent_scope_instance,
+                    ..
+                } => RecursorLayerRole::ExitsScope {
+                    origin: segment_origin,
+                    origin_scope,
+                    scope_origin,
+                    scope_instance,
+                    parent_scope,
+                    parent_scope_instance,
+                },
             };
+            current_layer.role = unwind_role;
+            unwind
+                .later_wrappers_in_construction_order
+                .push(current_layer);
+            if let Some((selected, lineage)) = source_control {
+                if selected.selected_scope.is_none() {
+                    return Err(unsupported(
+                        "ComputationalRecursor",
+                        "source recursor invocation is missing its owned selected scope",
+                    ));
+                }
+                for scope in lineage
+                    .iter()
+                    .filter_map(|selected| selected.selected_scope.as_ref())
+                    .chain(selected.selected_scope.iter())
+                {
+                    if unwind
+                        .later_wrappers_in_construction_order
+                        .iter()
+                        .any(|layer| {
+                            matches!(
+                                layer.role,
+                                RecursorLayerRole::ExitsScope { scope_origin, .. }
+                                    if scope_origin == scope.scope_origin
+                            )
+                        })
+                    {
+                        continue;
+                    }
+                    unwind
+                        .later_wrappers_in_construction_order
+                        .push(ComputationalRecursorLayer {
+                            cases: scope.frame.cases.clone(),
+                            default: scope.frame.default.clone(),
+                            outer_env: scope.frame.outer_env.clone(),
+                            provenance: scope.frame.provenance,
+                            checked_frame_id: scope.frame.checked_frame_id,
+                            checked_invocation_id: scope.frame.checked_invocation_id,
+                            checked_invocation_source: scope.frame.checked_invocation_source,
+                            checked_invocation_depth: scope.frame.checked_invocation_depth,
+                            semantic_pending: false,
+                            role: RecursorLayerRole::ExitsScope {
+                                origin: segment_origin,
+                                origin_scope: scope.scope_instance,
+                                scope_origin: scope.scope_origin,
+                                scope_instance: scope.scope_instance,
+                                parent_scope: scope.parent_scope,
+                                parent_scope_instance: scope.parent_scope_instance,
+                            },
+                        });
+                }
+            }
+            (invocation.selection, unwind)
+        } else {
+            (
+                current_layer,
+                RecursorUnwindStack {
+                    later_wrappers_in_construction_order: Vec::new(),
+                },
+            )
+        };
         let resume_cursor_instance =
             segment_resume_cursor_instance.unwrap_or(resume_cursor_instance);
         let mut invocation = RecursorInvocationSegment::new(
@@ -4374,12 +4347,10 @@ impl<'a> Lowering<'a> {
                 delimiter,
                 parent_capture,
                 next,
-            } => {
-                SourceContinuation::ReturnFromSelectedCase {
-                    delimiter: *delimiter,
-                    next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
-                }
-            }
+            } => SourceContinuation::ReturnFromSelectedCase {
+                delimiter: *delimiter,
+                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+            },
             SourcePrefixTemplate::LetBody { body, env, next } => SourceContinuation::LetBody {
                 body: body.clone(),
                 env: env.clone(),
@@ -5385,6 +5356,7 @@ impl<'a> Lowering<'a> {
         })
     }
 
+    #[track_caller]
     fn native_int_tag(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -5403,8 +5375,9 @@ impl<'a> Lowering<'a> {
             "NativeInt",
             format!(
                 "dynamic Int value {payload:?} lost its two-word tag transport in {:?} \
-                 (known dynamic tags={})",
+                 at {} (known dynamic tags={})",
                 builder.func.name,
+                std::panic::Location::caller(),
                 self.native_int_tags.len(),
             ),
         ))
