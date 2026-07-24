@@ -2335,6 +2335,164 @@ impl<'a> Lowering<'a> {
         Ok(())
     }
 
+    fn source_return_reaches(
+        &self,
+        immediate: SourceKontReturnId,
+        outer: SourceKontReturnId,
+    ) -> Result<bool, CraneliftBackendError> {
+        let mut current = immediate;
+        let mut visited = BTreeSet::new();
+        loop {
+            if current == outer {
+                return Ok(true);
+            }
+            if !visited.insert(current) {
+                return Err(unsupported(
+                    "NativeSourceKontSuccessorV1",
+                    "source-return topology contains a cycle",
+                ));
+            }
+            let descriptor = self.partition_source_returns.definition(current)?;
+            match descriptor.key.parent {
+                PartitionSourceKontReturnParent::Continue(parent) => current = parent,
+                PartitionSourceKontReturnParent::FinalScalar(_) => return Ok(false),
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn resolve_closed_source_arm_fanout_edge(
+        &mut self,
+        functions: &mut [(FuncId, cranelift_codegen::Context)],
+        fanout: ClosedSourceArmFanoutId,
+        role: ClosedSourceArmHostResultRole,
+        block: cranelift_codegen::ir::Block,
+        function_index: usize,
+        edge: PartitionPendingClosedSourceArmFanoutEdge,
+        resolving: &mut BTreeSet<ClosedSourceArmRequestId>,
+    ) -> Result<
+        (
+            ClosedSourceArmFanoutEdge,
+            Option<NormalSourceKontSuccessorId>,
+        ),
+        CraneliftBackendError,
+    > {
+        let role_offset = match role {
+            ClosedSourceArmHostResultRole::Ok => 0_u32,
+            ClosedSourceArmHostResultRole::Err => 1_u32,
+        };
+        let edge_id = ClosedSourceArmFanoutEdgeId(
+            fanout
+                .0
+                .checked_mul(2)
+                .and_then(|base| base.checked_add(role_offset))
+                .expect("compiler-private closed SourceArm fanout edge identity exhausted"),
+        );
+        match edge {
+            PartitionPendingClosedSourceArmFanoutEdge::NormalChild {
+                child,
+                child_state_id,
+                call_inst,
+                authority,
+            } => {
+                if authority.fanout != fanout
+                    || authority.edge != edge_id
+                    || authority.role != role
+                    || authority.child != child
+                    || authority.call_inst != call_inst
+                    || functions
+                        .get(function_index)
+                        .and_then(|(_, function)| function.func.layout.inst_block(call_inst))
+                        != Some(block)
+                {
+                    return Err(unsupported(
+                        "NativeSourceKontSuccessorV1",
+                        "HostResult normal branch authority or call edge was swapped",
+                    ));
+                }
+                let child_entry =
+                    self.resolve_closed_source_arm_request(functions, child, resolving)?;
+                let (child_key, child_definition) =
+                    self.partition_closed_source_arms.definition(child_entry)?;
+                if child_key.template_state_id != child_state_id {
+                    return Err(unsupported(
+                        "NativeSourceKontSuccessorV1",
+                        "HostResult normal branch resolved the wrong child entry",
+                    ));
+                }
+                let successor = match child_definition.terminator {
+                    ClosedSourceArmNormalTerminator::DirectSourceKont { successor, .. }
+                    | ClosedSourceArmNormalTerminator::DelegateSourceArm { successor, .. }
+                    | ClosedSourceArmNormalTerminator::FanoutHostResult { successor, .. } => {
+                        successor
+                    }
+                };
+                if successor != child_key.normal_successor {
+                    return Err(unsupported(
+                        "NativeSourceKontSuccessorV1",
+                        "HostResult normal child terminator changed its ultimate successor",
+                    ));
+                }
+                Ok((
+                    ClosedSourceArmFanoutEdge::NormalChild {
+                        role,
+                        child: child_entry,
+                        call_inst,
+                    },
+                    Some(successor),
+                ))
+            }
+            PartitionPendingClosedSourceArmFanoutEdge::AbruptTerminal { trap, authority } => {
+                if authority.fanout != fanout
+                    || authority.edge != edge_id
+                    || authority.role != role
+                    || authority.trap != trap
+                {
+                    return Err(unsupported(
+                        "NativeSourceKontSuccessorV1",
+                        "HostResult abrupt branch authority was swapped or replayed",
+                    ));
+                }
+                let function = &functions
+                    .get(function_index)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeSourceKontSuccessorV1",
+                            "closed HostResult fanout lost its emitted function",
+                        )
+                    })?
+                    .1
+                    .func;
+                let instructions = function.layout.block_insts(block).collect::<Vec<_>>();
+                let [failure, ret] = instructions.as_slice() else {
+                    return Err(unsupported(
+                        "NativeSourceKontSuccessorV1",
+                        "HostResult abrupt role retained noncanonical semantic work",
+                    ));
+                };
+                let failure_is_exact = matches!(
+                    function.dfg.insts[*failure],
+                    InstructionData::UnaryImm {
+                        opcode: Opcode::Iconst,
+                        imm,
+                    } if imm.bits() == -4_i64
+                );
+                let failure_value = function.dfg.inst_results(*failure).first().copied();
+                let return_is_exact = failure_value.is_some_and(|failure_value| {
+                    function.dfg.insts[*ret].opcode() == Opcode::Return
+                        && function.dfg.inst_args(*ret) == [failure_value]
+                });
+                if !failure_is_exact || !return_is_exact {
+                    return Err(unsupported(
+                        "NativeSourceKontSuccessorV1",
+                        "HostResult abrupt role is not the exact fail-closed terminal",
+                    ));
+                }
+                Ok((ClosedSourceArmFanoutEdge::AbruptTerminal { role }, None))
+            }
+        }
+    }
+
     fn resolve_closed_source_arm_request(
         &mut self,
         functions: &mut [(FuncId, cranelift_codegen::Context)],
@@ -2362,10 +2520,10 @@ impl<'a> Lowering<'a> {
             } => {
                 let successor_contract =
                     self.partition_continuations.return_contract(successor.0)?;
-                if self
+                let immediate_return = self
                     .partition_continuations
-                    .post_fanout_return_id(successor.0)?
-                    != authority.source_return
+                    .post_fanout_return_id(successor.0)?;
+                if !self.source_return_reaches(immediate_return, authority.source_return)?
                     || successor_contract.checked_join != authority.checked_join
                     || successor_contract.required_kind != authority.required_kind
                     || successor_contract.live_producer_tail != authority.live_producer_tail
@@ -2403,7 +2561,8 @@ impl<'a> Lowering<'a> {
                 let child_key = child_key.clone();
                 let child_call_matches = match child_definition.terminator {
                     ClosedSourceArmNormalTerminator::DirectSourceKont { successor, .. }
-                    | ClosedSourceArmNormalTerminator::DelegateSourceArm { successor, .. } => {
+                    | ClosedSourceArmNormalTerminator::DelegateSourceArm { successor, .. }
+                    | ClosedSourceArmNormalTerminator::FanoutHostResult { successor, .. } => {
                         successor == child_key.normal_successor
                     }
                 };
@@ -2438,6 +2597,90 @@ impl<'a> Lowering<'a> {
                     call_inst,
                     function_index,
                     authority,
+                )?
+            }
+            PartitionPendingClosedSourceArmTerminator::FanoutHostResult { fanout } => {
+                if fanout.parent != request
+                    || fanout.authority.parent != request
+                    || fanout.authority.fanout != fanout.id
+                    || fanout.authority.site_id != fanout.site_id
+                    || fanout.authority.dispatch_inst != fanout.dispatch_inst
+                {
+                    return Err(unsupported(
+                        "NativeSourceKontSuccessorV1",
+                        "HostResult fanout authority disagrees with its parent request",
+                    ));
+                }
+                let function = &functions
+                    .get(fanout.function_index)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeSourceKontSuccessorV1",
+                            "closed HostResult fanout lost its emitted function",
+                        )
+                    })?
+                    .1
+                    .func;
+                let destinations = function.dfg.insts[fanout.dispatch_inst]
+                    .branch_destination(&function.dfg.jump_tables);
+                let dispatch_is_exact = function.dfg.insts[fanout.dispatch_inst].opcode()
+                    == Opcode::Brif
+                    && destinations.len() == 2
+                    && destinations[0].block(&function.dfg.value_lists) == fanout.ok_block
+                    && destinations[1].block(&function.dfg.value_lists) == fanout.err_block;
+                if !dispatch_is_exact {
+                    return Err(unsupported(
+                        "NativeSourceKontSuccessorV1",
+                        "closed HostResult fanout lost its exact Ok/Err discriminator",
+                    ));
+                }
+                let (ok, ok_successor) = self.resolve_closed_source_arm_fanout_edge(
+                    functions,
+                    fanout.id,
+                    ClosedSourceArmHostResultRole::Ok,
+                    fanout.ok_block,
+                    fanout.function_index,
+                    fanout.ok,
+                    resolving,
+                )?;
+                let (err, err_successor) = self.resolve_closed_source_arm_fanout_edge(
+                    functions,
+                    fanout.id,
+                    ClosedSourceArmHostResultRole::Err,
+                    fanout.err_block,
+                    fanout.function_index,
+                    fanout.err,
+                    resolving,
+                )?;
+                let successor = match (ok_successor, err_successor) {
+                    (Some(ok), Some(err)) if ok == err => ok,
+                    (Some(successor), None) | (None, Some(successor)) => successor,
+                    (Some(_), Some(_)) => {
+                        return Err(unsupported(
+                            "NativeSourceKontSuccessorV1",
+                            "HostResult normal roles closed over different successors",
+                        ));
+                    }
+                    (None, None) => {
+                        return Err(unsupported(
+                            "NativeSourceKontSuccessorV1",
+                            "HostResult fanout has no normal-capable role",
+                        ));
+                    }
+                };
+                self.partition_closed_source_arms.seal_host_result_fanout(
+                    request,
+                    fanout.id,
+                    fanout.site_id,
+                    fanout.dispatch_inst,
+                    successor,
+                    ok,
+                    err,
+                    fanout.function_index,
+                    fanout.ok_block,
+                    fanout.err_block,
+                    fanout.merge_block,
+                    fanout.authority,
                 )?
             }
         };
@@ -2512,7 +2755,7 @@ impl<'a> Lowering<'a> {
             .definition(closed_entry_id)?;
         let closed_key = closed_key.clone();
         if closed_key.template_state_id != callee_state_id
-            || closed_key.source_return != source_return
+            || !self.source_return_reaches(source_return, closed_key.source_return)?
             || closed_key.checked_join != checked_join
             || closed_key.required_kind != required_kind
             || closed_key.live_producer_tail != contract.live_producer_tail
@@ -2565,6 +2808,23 @@ impl<'a> Lowering<'a> {
                 call_inst,
                 ..
             } if successor == closed_key.normal_successor => call_inst,
+            ClosedSourceArmNormalTerminator::FanoutHostResult {
+                successor,
+                dispatch,
+            } if successor == closed_key.normal_successor => {
+                let witness = self
+                    .partition_closed_source_arms
+                    .fanout_witnesses()
+                    .into_iter()
+                    .find(|witness| witness.fanout == dispatch)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeSourceKontSuccessorV1",
+                            "closed SourceArm fanout lost its emission witness",
+                        )
+                    })?;
+                witness.dispatch_inst
+            }
             _ => {
                 return Err(unsupported(
                     "NativeSourceKontSuccessorV1",
@@ -3007,6 +3267,65 @@ impl<'a> Lowering<'a> {
                     ));
                 }
             }
+        }
+        self.remove_closed_host_result_fanout_merges(functions)?;
+        Ok(())
+    }
+
+    fn remove_closed_host_result_fanout_merges(
+        &self,
+        functions: &mut [(FuncId, cranelift_codegen::Context)],
+    ) -> Result<(), CraneliftBackendError> {
+        for witness in self.partition_closed_source_arms.fanout_witnesses() {
+            let function = &mut functions
+                .get_mut(witness.function_index)
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeSourceKontSuccessorV1",
+                        "closed HostResult fanout lost its emitted function",
+                    )
+                })?
+                .1
+                .func;
+            let dispatch_destinations = function.dfg.insts[witness.dispatch_inst]
+                .branch_destination(&function.dfg.jump_tables);
+            if function.dfg.insts[witness.dispatch_inst].opcode() != Opcode::Brif
+                || dispatch_destinations.len() != 2
+                || dispatch_destinations[0].block(&function.dfg.value_lists) != witness.ok_block
+                || dispatch_destinations[1].block(&function.dfg.value_lists) != witness.err_block
+            {
+                return Err(unsupported(
+                    "NativeSourceKontSuccessorV1",
+                    "closed HostResult fanout discriminator changed during edge sealing",
+                ));
+            }
+            let merge_predecessors = function
+                .layout
+                .blocks()
+                .flat_map(|block| function.layout.block_insts(block))
+                .filter(|inst| {
+                    function.dfg.insts[*inst]
+                        .branch_destination(&function.dfg.jump_tables)
+                        .iter()
+                        .any(|destination| {
+                            destination.block(&function.dfg.value_lists) == witness.merge_block
+                        })
+                })
+                .collect::<Vec<_>>();
+            if !merge_predecessors.is_empty() {
+                return Err(unsupported(
+                    "NativeSourceKontSuccessorV1",
+                    "closed HostResult fanout retained an unconditional normal merge edge",
+                ));
+            }
+            let merge_instructions = function
+                .layout
+                .block_insts(witness.merge_block)
+                .collect::<Vec<_>>();
+            for inst in merge_instructions {
+                function.layout.remove_inst(inst);
+            }
+            function.layout.remove_block(witness.merge_block);
         }
         Ok(())
     }
@@ -6684,9 +7003,14 @@ impl<'a> Lowering<'a> {
             item.closure_request,
             item.source_return,
         ) {
-            (Some(source_return), Some(request), Some(source_return_cursor))
-                if source_return_cursor.return_id == source_return =>
-            {
+            (Some(source_return), Some(request), Some(source_return_cursor)) => {
+                if !self.source_return_reaches(source_return_cursor.return_id, source_return)? {
+                    return Err(unsupported(
+                        "NativeSourceKontSuccessorV1",
+                        "SourceArm dynamic return activation does not reach its inherited closed \
+                         topology",
+                    ));
+                }
                 Some(PartitionActiveSourceArmClosure {
                     request,
                     template_state_id: item.state_id,
@@ -6694,6 +7018,7 @@ impl<'a> Lowering<'a> {
                     source_return_cursor,
                     successor: None,
                     delegated_arm: None,
+                    host_result_fanout: None,
                 })
             }
             (None, None, _) => None,
@@ -6713,8 +7038,12 @@ impl<'a> Lowering<'a> {
         self.active_partition_producer_kont = None;
         self.pending_computational_ih_call = None;
         if let Some(closure) = source_arm_closure {
-            match (closure.successor, closure.delegated_arm) {
-                (Some((normal_successor, successor_call_inst)), None) => {
+            match (
+                closure.successor,
+                closure.delegated_arm,
+                closure.host_result_fanout,
+            ) {
+                (Some((normal_successor, successor_call_inst)), None, None) => {
                     let successor_contract = self
                         .partition_continuations
                         .return_contract(normal_successor.0)?;
@@ -6745,6 +7074,7 @@ impl<'a> Lowering<'a> {
                         local_tag_output,
                         caller_tag_pointer,
                     )),
+                    None,
                 ) => {
                     self.partition_closed_source_arms.define_delegation(
                         closure.request,
@@ -6755,6 +7085,14 @@ impl<'a> Lowering<'a> {
                         local_tag_output,
                         caller_tag_pointer,
                     )?;
+                }
+                (None, None, Some(fanout)) => {
+                    self.partition_closed_source_arms
+                        .define_host_result_fanout(
+                            closure.request,
+                            fanout,
+                            self.active_partition_function_index,
+                        )?;
                 }
                 _ => {
                     let exit = lowered
@@ -7237,14 +7575,17 @@ impl<'a> Lowering<'a> {
             .as_ref()
             .map(|closure| closure.source_return_cursor);
         let effective_source_return = match (control.source_return, inherited_source_return) {
-            (Some(current), Some(inherited))
-                if current.return_id != inherited.return_id
-                    || current.capture_pointer != inherited.capture_pointer =>
-            {
-                return Err(unsupported(
-                    "NativeSourceKontSuccessorV1",
-                    "nested SourceArm changed its inherited return activation",
-                ));
+            (Some(current), Some(inherited)) => {
+                if !self.source_return_reaches(current.return_id, inherited.return_id)?
+                    || (current.return_id == inherited.return_id
+                        && current.capture_pointer != inherited.capture_pointer)
+                {
+                    return Err(unsupported(
+                        "NativeSourceKontSuccessorV1",
+                        "nested SourceArm changed its inherited return activation",
+                    ));
+                }
+                Some(current)
             }
             (Some(current), _) => Some(current),
             (None, inherited) => inherited,
@@ -7598,11 +7939,13 @@ impl<'a> Lowering<'a> {
                     Some(cursor.return_id),
                 );
             }
-            if self
+            let closes_active_source_arm = self
                 .active_partition_source_arm_closure
                 .as_ref()
-                .is_some_and(|closure| closure.source_return == cursor.return_id)
-            {
+                .map(|closure| self.source_return_reaches(cursor.return_id, closure.source_return))
+                .transpose()?
+                .unwrap_or(false);
+            if closes_active_source_arm {
                 return self.call_partition_source_kont_entry(
                     builder,
                     None,
@@ -7705,6 +8048,86 @@ impl<'a> Lowering<'a> {
         control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
         self.call_partition_source_kont_entry(builder, Some(head), input, control, None)
+    }
+
+    fn inline_closed_host_result_source_head(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        head: PartitionSourceCursor,
+        control: &mut SourceControl<'_>,
+    ) -> Result<bool, CraneliftBackendError> {
+        let mut definition = self.partition_source_nodes.definition(head.node)?;
+        if !matches!(
+            definition.current,
+            SourcePrefixTemplate::ConstructArgument { .. }
+                | SourcePrefixTemplate::MatchScrutinee { .. }
+        ) {
+            let kind = match definition.current {
+                SourcePrefixTemplate::Terminal { .. } => "Terminal",
+                SourcePrefixTemplate::CheckedRecursiveInvocationReturn { .. } => {
+                    "CheckedRecursiveInvocationReturn"
+                }
+                SourcePrefixTemplate::CheckedComputationalIHInvocationReturn { .. } => {
+                    "CheckedComputationalIHInvocationReturn"
+                }
+                SourcePrefixTemplate::ReturnFromSelectedCase { .. } => "ReturnFromSelectedCase",
+                SourcePrefixTemplate::LetBody { .. } => "LetBody",
+                SourcePrefixTemplate::ApplyRecursorSelection { .. } => "ApplyRecursorSelection",
+                SourcePrefixTemplate::UnwindRecursorSegment { .. } => "UnwindRecursorSegment",
+                SourcePrefixTemplate::IfScrutinee { .. } => "IfScrutinee",
+                SourcePrefixTemplate::ConstructArgument { .. }
+                | SourcePrefixTemplate::MatchScrutinee { .. } => unreachable!(),
+                SourcePrefixTemplate::ComputationalMatchScrutinee { .. } => {
+                    "ComputationalMatchScrutinee"
+                }
+                SourcePrefixTemplate::ProjectRecord { .. } => "ProjectRecord",
+                SourcePrefixTemplate::CallCallee { .. } => "CallCallee",
+                SourcePrefixTemplate::CallArgument { .. } => "CallArgument",
+            };
+            eprintln!("closed SourceArm source head {} is {kind}", head.node.0);
+            return Ok(false);
+        }
+        let mut captures = definition
+            .capture_field_types
+            .iter()
+            .enumerate()
+            .map(|(index, field_type)| {
+                let offset = index
+                    .checked_add(1)
+                    .and_then(|field| field.checked_mul(PARTITION_FRAME_FIELD_BYTES as usize))
+                    .and_then(|offset| i32::try_from(offset).ok())
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeSourceKontSuccessorV1",
+                            "closed HostResult match capture offset overflowed",
+                        )
+                    })?;
+                Ok(builder.ins().load(
+                    *field_type,
+                    MemFlags::trusted(),
+                    head.capture_pointer,
+                    offset,
+                ))
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?
+            .into_iter();
+        rebuild_partition_prefix(
+            &mut definition.current,
+            &mut captures,
+            &mut self.native_int_tags,
+        )?;
+        if captures.next().is_some() {
+            return Err(unsupported(
+                "NativeSourceKontSuccessorV1",
+                "closed HostResult match capture has trailing fields",
+            ));
+        }
+        let terminal = std::mem::replace(
+            &mut control.continuation,
+            SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue),
+        );
+        control.continuation = instantiate_partition_source_node(definition.current, terminal)?;
+        Ok(true)
     }
 
     fn call_partition_source_kont_entry<'b>(
@@ -7912,6 +8335,12 @@ impl<'a> Lowering<'a> {
             .ins()
             .call(function_ref, &[invocation, frame_pointer, tag_pointer]);
         if let Some(return_id) = post_fanout_return_id {
+            let reaches_closed_return = self
+                .active_partition_source_arm_closure
+                .as_ref()
+                .map(|closure| self.source_return_reaches(return_id, closure.source_return))
+                .transpose()?
+                .unwrap_or(false);
             if let Some(closure) = &mut self.active_partition_source_arm_closure {
                 if closure.template_state_id
                     != self.active_partition_state_id.ok_or_else(|| {
@@ -7920,7 +8349,7 @@ impl<'a> Lowering<'a> {
                             "normal SourceKont successor was emitted outside a SourceArm state",
                         )
                     })?
-                    || closure.source_return != return_id
+                    || !reaches_closed_return
                 {
                     return Err(unsupported(
                         "NativeSourceKontSuccessorV1",
@@ -9629,9 +10058,19 @@ impl<'a> Lowering<'a> {
                     {
                         return Ok(value);
                     }
-                    SourceMachineState::Value { value, control } => {
+                    SourceMachineState::Value { value, mut control } => {
                         if let Some(head) = control.partition_cursor {
-                            return self.call_partition_source_kont(builder, head, value, control);
+                            let inline_closed_host_result =
+                                self.active_partition_source_arm_closure.is_some()
+                                    && self.inline_closed_host_result_source_head(
+                                        builder,
+                                        head,
+                                        &mut control,
+                                    )?;
+                            if !inline_closed_host_result {
+                                return self
+                                    .call_partition_source_kont(builder, head, value, control);
+                            }
                         }
                         state = SourceMachineState::Value { value, control };
                     }
@@ -10006,18 +10445,22 @@ impl<'a> Lowering<'a> {
                                 .map(|closure| closure.source_return_cursor);
                             let source_return =
                                 match (control.source_return, inherited_source_return) {
-                                    (Some(current), Some(inherited))
-                                        if current.return_id != inherited.return_id
-                                            || current.capture_pointer
-                                                != inherited.capture_pointer =>
-                                    {
-                                        return Err(unsupported(
-                                            "NativeSourceKontSuccessorV1",
-                                            "SourceArm terminal changed its inherited return \
+                                    (Some(current), Some(inherited)) => {
+                                        if !self.source_return_reaches(
+                                            current.return_id,
+                                            inherited.return_id,
+                                        )? || (current.return_id == inherited.return_id
+                                            && current.capture_pointer != inherited.capture_pointer)
+                                        {
+                                            return Err(unsupported(
+                                                "NativeSourceKontSuccessorV1",
+                                                "SourceArm terminal changed its inherited return \
                                              activation",
-                                        ));
+                                            ));
+                                        }
+                                        Some(current)
                                     }
-                                    (Some(current), _) => Some(current),
+                                    (Some(current), None) => Some(current),
                                     (None, inherited) => inherited,
                                 };
                             return if let Some(source_return) = source_return {
@@ -11850,10 +12293,22 @@ impl<'a> Lowering<'a> {
         };
         self.partition_continuations
             .validate_call_contract(state_id, &return_contract)?;
+        let inherited_fanout_return =
+            self.active_partition_source_arm_closure
+                .as_ref()
+                .and_then(|closure| {
+                    closure
+                        .host_result_fanout
+                        .as_ref()
+                        .filter(|fanout| fanout.site_id == partition_site_id)
+                        .map(|_| closure.source_return)
+                });
+        let closure_source_return = inherited_fanout_return
+            .or_else(|| source_return.map(|source_return| source_return.return_id));
         let closure_request = source_return.map(|source_return| {
             self.partition_closed_source_arms.reserve_request(
                 state_id,
-                source_return.return_id,
+                closure_source_return.unwrap_or(source_return.return_id),
                 &return_contract,
             )
         });
@@ -11919,6 +12374,39 @@ impl<'a> Lowering<'a> {
         let forward_inst = builder
             .ins()
             .jump(target.block, &[result_tag.into(), result_payload.into()]);
+        if let Some(fanout) = self
+            .active_partition_source_arm_closure
+            .as_mut()
+            .and_then(|closure| closure.host_result_fanout.as_mut())
+            .filter(|fanout| fanout.site_id == partition_site_id)
+        {
+            let edge = PartitionActiveClosedSourceArmFanoutEdge::NormalChild {
+                child: closure_request.ok_or_else(|| {
+                    unsupported(
+                        "NativeSourceKontSuccessorV1",
+                        "closed HostResult fanout child has no closure request",
+                    )
+                })?,
+                child_state_id: state_id,
+                call_inst: call,
+            };
+            let slot = match edge_index {
+                0 => &mut fanout.ok,
+                1 => &mut fanout.err,
+                _ => {
+                    return Err(unsupported(
+                        "NativeSourceKontSuccessorV1",
+                        "closed HostResult fanout has a non-binary predecessor role",
+                    ));
+                }
+            };
+            if slot.replace(edge).is_some() {
+                return Err(unsupported(
+                    "NativeSourceKontSuccessorV1",
+                    "closed HostResult fanout role was emitted more than once",
+                ));
+            }
+        }
         if return_contract.live_producer_tail.is_some() {
             if let Some(source_return) = source_return {
                 let caller_state_id = match self.active_partition_caller_role {
@@ -12010,7 +12498,7 @@ impl<'a> Lowering<'a> {
                     cleanup_head,
                     cleanup_capture_pointer,
                     source_return,
-                    normal_successor_return: source_return.map(|cursor| cursor.return_id),
+                    normal_successor_return: closure_source_return,
                     closure_request,
                     completed_producer_tail: self.active_partition_completed_producer_tail,
                     ledger_baseline: ledger_baseline.clone(),
@@ -12360,9 +12848,10 @@ impl<'a> Lowering<'a> {
         };
 
         let owned_return_eliminators = own_partition_eliminators(&target.terminal_active_prefix);
-        let owned_post_fanout_suffix = local_completion
-            .as_ref()
-            .and_then(|(_, suffix_pending, _, _, _)| own_partition_eliminators(suffix_pending));
+        let owned_post_fanout_suffix = match local_completion.as_ref() {
+            Some((_, suffix_pending, _, _, _)) => own_partition_eliminators(suffix_pending),
+            None => Some(Vec::new()),
+        };
         let owned_selected_lineage =
             own_partition_selected_lineage(&suffix_control.selected_lineage);
         let source_arm_partition_eligible = (self.partition_cut_armed
@@ -12428,7 +12917,30 @@ impl<'a> Lowering<'a> {
             let ledger_baseline = self.partition_ledger_baseline();
             let ok_block = builder.create_block();
             let err_block = builder.create_block();
-            builder.ins().brif(success, ok_block, &[], err_block, &[]);
+            let dispatch_inst = builder.ins().brif(success, ok_block, &[], err_block, &[]);
+            if let Some(closure) = &mut self.active_partition_source_arm_closure {
+                if closure.successor.is_some()
+                    || closure.delegated_arm.is_some()
+                    || closure.host_result_fanout.is_some()
+                {
+                    return Err(unsupported(
+                        "NativeSourceKontSuccessorV1",
+                        "closed SourceArm emitted more than one normal terminator",
+                    ));
+                }
+                let merge_block = local_completion
+                    .as_ref()
+                    .map_or(target.block, |(merge, ..)| *merge);
+                closure.host_result_fanout = Some(PartitionActiveClosedSourceArmHostResultFanout {
+                    site_id: partition_site_id,
+                    dispatch_inst,
+                    ok_block,
+                    err_block,
+                    merge_block,
+                    ok: None,
+                    err: None,
+                });
+            }
             for (edge_index, block, constructor, payload) in [
                 (0_u64, ok_block, ok_constructor, ok),
                 (1_u64, err_block, err_constructor, error),
@@ -12444,6 +12956,27 @@ impl<'a> Lowering<'a> {
                     // identity into a helper and conceal malformed control.
                     let failure = builder.ins().iconst(types::I64, -4);
                     builder.ins().return_(&[failure]);
+                    if let Some(fanout) = self
+                        .active_partition_source_arm_closure
+                        .as_mut()
+                        .and_then(|closure| closure.host_result_fanout.as_mut())
+                        .filter(|fanout| fanout.site_id == partition_site_id)
+                    {
+                        let edge = PartitionActiveClosedSourceArmFanoutEdge::AbruptTerminal {
+                            trap: default.clone(),
+                        };
+                        let slot = match edge_index {
+                            0 => &mut fanout.ok,
+                            1 => &mut fanout.err,
+                            _ => unreachable!("sealed HostResult has exactly two roles"),
+                        };
+                        if slot.replace(edge).is_some() {
+                            return Err(unsupported(
+                                "NativeSourceKontSuccessorV1",
+                                "closed HostResult abrupt role was emitted more than once",
+                            ));
+                        }
+                    }
                     continue;
                 };
                 let body = case.body.clone();

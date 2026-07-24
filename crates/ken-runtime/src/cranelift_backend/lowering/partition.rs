@@ -1654,6 +1654,18 @@ pub(super) struct ClosedSourceArmEntryId(pub(super) u32);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct ClosedSourceArmRequestId(pub(super) u32);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct ClosedSourceArmFanoutId(pub(super) u32);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct ClosedSourceArmFanoutEdgeId(pub(super) u32);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum ClosedSourceArmHostResultRole {
+    Ok,
+    Err,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct PartitionFinalScalarReturnAuthority {
     pub(super) partition_site_id: u64,
@@ -3368,6 +3380,10 @@ pub(super) enum ClosedSourceArmNormalTerminator {
         child: ClosedSourceArmEntryId,
         call_inst: Inst,
     },
+    FanoutHostResult {
+        successor: NormalSourceKontSuccessorId,
+        dispatch: ClosedSourceArmFanoutId,
+    },
 }
 
 #[derive(Clone, Copy)]
@@ -3406,6 +3422,55 @@ pub(super) struct SourceArmDelegationAuthority {
     pub(super) call_inst: Inst,
 }
 
+pub(super) struct HostResultFanoutAuthority {
+    pub(super) parent: ClosedSourceArmRequestId,
+    pub(super) fanout: ClosedSourceArmFanoutId,
+    pub(super) site_id: u64,
+    pub(super) dispatch_inst: Inst,
+}
+
+pub(super) struct SourceArmFanoutDelegationAuthority {
+    pub(super) fanout: ClosedSourceArmFanoutId,
+    pub(super) edge: ClosedSourceArmFanoutEdgeId,
+    pub(super) role: ClosedSourceArmHostResultRole,
+    pub(super) child: ClosedSourceArmRequestId,
+    pub(super) call_inst: Inst,
+}
+
+pub(super) struct SourceArmFanoutAbruptAuthority {
+    pub(super) fanout: ClosedSourceArmFanoutId,
+    pub(super) edge: ClosedSourceArmFanoutEdgeId,
+    pub(super) role: ClosedSourceArmHostResultRole,
+    pub(super) trap: RuntimeTrap,
+}
+
+pub(super) enum PartitionPendingClosedSourceArmFanoutEdge {
+    NormalChild {
+        child: ClosedSourceArmRequestId,
+        child_state_id: usize,
+        call_inst: Inst,
+        authority: SourceArmFanoutDelegationAuthority,
+    },
+    AbruptTerminal {
+        trap: RuntimeTrap,
+        authority: SourceArmFanoutAbruptAuthority,
+    },
+}
+
+pub(super) struct PartitionPendingClosedSourceArmHostResultFanout {
+    pub(super) id: ClosedSourceArmFanoutId,
+    pub(super) parent: ClosedSourceArmRequestId,
+    pub(super) site_id: u64,
+    pub(super) dispatch_inst: Inst,
+    pub(super) ok_block: cranelift_codegen::ir::Block,
+    pub(super) err_block: cranelift_codegen::ir::Block,
+    pub(super) merge_block: cranelift_codegen::ir::Block,
+    pub(super) ok: PartitionPendingClosedSourceArmFanoutEdge,
+    pub(super) err: PartitionPendingClosedSourceArmFanoutEdge,
+    pub(super) function_index: usize,
+    pub(super) authority: HostResultFanoutAuthority,
+}
+
 pub(super) enum PartitionPendingClosedSourceArmTerminator {
     DirectSourceKont {
         successor: NormalSourceKontSuccessorId,
@@ -3422,6 +3487,44 @@ pub(super) enum PartitionPendingClosedSourceArmTerminator {
         caller_tag_pointer: Value,
         authority: SourceArmDelegationAuthority,
     },
+    FanoutHostResult {
+        fanout: PartitionPendingClosedSourceArmHostResultFanout,
+    },
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum ClosedSourceArmFanoutEdge {
+    NormalChild {
+        role: ClosedSourceArmHostResultRole,
+        child: ClosedSourceArmEntryId,
+        call_inst: Inst,
+    },
+    AbruptTerminal {
+        role: ClosedSourceArmHostResultRole,
+    },
+}
+
+#[derive(Clone)]
+pub(super) struct ClosedSourceArmHostResultFanout {
+    pub(super) id: ClosedSourceArmFanoutId,
+    pub(super) site_id: u64,
+    pub(super) ok: ClosedSourceArmFanoutEdgeId,
+    pub(super) err: ClosedSourceArmFanoutEdgeId,
+    pub(super) successor: NormalSourceKontSuccessorId,
+    pub(super) source_return: SourceKontReturnId,
+    pub(super) checked_join: PartitionCheckedJoinIdentity,
+    pub(super) required_kind: ScalarMergeKind,
+    pub(super) live_producer_tail: Option<usize>,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct ClosedSourceArmHostResultFanoutWitness {
+    pub(super) fanout: ClosedSourceArmFanoutId,
+    pub(super) function_index: usize,
+    pub(super) dispatch_inst: Inst,
+    pub(super) ok_block: cranelift_codegen::ir::Block,
+    pub(super) err_block: cranelift_codegen::ir::Block,
+    pub(super) merge_block: cranelift_codegen::ir::Block,
 }
 
 #[derive(Default)]
@@ -3430,6 +3533,9 @@ pub(super) struct PartitionClosedSourceArmInterner {
     request_terminators: Vec<Option<PartitionPendingClosedSourceArmTerminator>>,
     resolved_keys: Vec<Option<PartitionClosedSourceArmEntryKey>>,
     definitions: Vec<Option<PartitionClosedSourceArmEntry>>,
+    fanouts: Vec<Option<ClosedSourceArmHostResultFanout>>,
+    fanout_edges: Vec<Option<ClosedSourceArmFanoutEdge>>,
+    fanout_witnesses: Vec<Option<ClosedSourceArmHostResultFanoutWitness>>,
 }
 
 impl PartitionClosedSourceArmInterner {
@@ -3546,22 +3652,20 @@ impl PartitionClosedSourceArmInterner {
                 "closed SourceArm delegation changed its exact return contract",
             ));
         }
-        let slot = self
-            .request_terminators
-            .get_mut(parent.0 as usize)
-            .ok_or_else(|| {
-                unsupported(
-                    "NativeSourceKontSuccessorV1",
-                    "closed SourceArm delegation request identity is out of bounds",
-                )
-            })?;
+        let slot_index = parent.0 as usize;
+        let slot = self.request_terminators.get(slot_index).ok_or_else(|| {
+            unsupported(
+                "NativeSourceKontSuccessorV1",
+                "closed SourceArm delegation request identity is out of bounds",
+            )
+        })?;
         if slot.is_some() {
             return Err(unsupported(
                 "NativeSourceKontSuccessorV1",
                 "one closed SourceArm request was defined more than once",
             ));
         }
-        *slot = Some(
+        self.request_terminators[slot_index] = Some(
             PartitionPendingClosedSourceArmTerminator::DelegateSourceArm {
                 child,
                 call_inst,
@@ -3577,6 +3681,134 @@ impl PartitionClosedSourceArmInterner {
                     required_kind: parent_key.required_kind,
                     live_producer_tail: parent_key.live_producer_tail,
                     call_inst,
+                },
+            },
+        );
+        Ok(())
+    }
+
+    pub(super) fn define_host_result_fanout(
+        &mut self,
+        parent: ClosedSourceArmRequestId,
+        fanout: PartitionActiveClosedSourceArmHostResultFanout,
+        function_index: usize,
+    ) -> Result<(), CraneliftBackendError> {
+        let parent_key = self.request_key(parent)?.clone();
+        let id = ClosedSourceArmFanoutId(
+            u32::try_from(self.fanouts.len())
+                .expect("compiler-private closed SourceArm fanout identity exhausted"),
+        );
+        let edge_id = |role| {
+            let role_offset = match role {
+                ClosedSourceArmHostResultRole::Ok => 0_u32,
+                ClosedSourceArmHostResultRole::Err => 1_u32,
+            };
+            ClosedSourceArmFanoutEdgeId(
+                id.0.checked_mul(2)
+                    .and_then(|base| base.checked_add(role_offset))
+                    .expect("compiler-private closed SourceArm fanout edge identity exhausted"),
+            )
+        };
+        let make_edge = |role, active, edge| match active {
+            PartitionActiveClosedSourceArmFanoutEdge::NormalChild {
+                child,
+                child_state_id,
+                call_inst,
+            } => PartitionPendingClosedSourceArmFanoutEdge::NormalChild {
+                child,
+                child_state_id,
+                call_inst,
+                authority: SourceArmFanoutDelegationAuthority {
+                    fanout: id,
+                    edge,
+                    role,
+                    child,
+                    call_inst,
+                },
+            },
+            PartitionActiveClosedSourceArmFanoutEdge::AbruptTerminal { trap } => {
+                PartitionPendingClosedSourceArmFanoutEdge::AbruptTerminal {
+                    trap: trap.clone(),
+                    authority: SourceArmFanoutAbruptAuthority {
+                        fanout: id,
+                        edge,
+                        role,
+                        trap,
+                    },
+                }
+            }
+        };
+        let ok = make_edge(
+            ClosedSourceArmHostResultRole::Ok,
+            fanout.ok.ok_or_else(|| {
+                unsupported(
+                    "NativeSourceKontSuccessorV1",
+                    "closed HostResult fanout left its Ok role unresolved",
+                )
+            })?,
+            edge_id(ClosedSourceArmHostResultRole::Ok),
+        );
+        let err = make_edge(
+            ClosedSourceArmHostResultRole::Err,
+            fanout.err.ok_or_else(|| {
+                unsupported(
+                    "NativeSourceKontSuccessorV1",
+                    "closed HostResult fanout left its Err role unresolved",
+                )
+            })?,
+            edge_id(ClosedSourceArmHostResultRole::Err),
+        );
+        for edge in [&ok, &err] {
+            if let PartitionPendingClosedSourceArmFanoutEdge::NormalChild { child, .. } = edge {
+                let child_key = self.request_key(*child)?;
+                if parent_key.source_return != child_key.source_return
+                    || parent_key.checked_join != child_key.checked_join
+                    || parent_key.required_kind != child_key.required_kind
+                    || parent_key.live_producer_tail != child_key.live_producer_tail
+                {
+                    return Err(unsupported(
+                        "NativeSourceKontSuccessorV1",
+                        "closed HostResult fanout child changed its inherited contract",
+                    ));
+                }
+            }
+        }
+        let slot_index = parent.0 as usize;
+        let slot = self.request_terminators.get(slot_index).ok_or_else(|| {
+            unsupported(
+                "NativeSourceKontSuccessorV1",
+                "closed HostResult fanout request identity is out of bounds",
+            )
+        })?;
+        if slot.is_some() {
+            return Err(unsupported(
+                "NativeSourceKontSuccessorV1",
+                "one closed SourceArm request was defined more than once",
+            ));
+        }
+        self.fanouts.push(None);
+        self.fanout_edges.push(None);
+        self.fanout_edges.push(None);
+        self.fanout_witnesses.push(None);
+        self.request_terminators[slot_index] = Some(
+            PartitionPendingClosedSourceArmTerminator::FanoutHostResult {
+                fanout: PartitionPendingClosedSourceArmHostResultFanout {
+                    id,
+                    parent,
+                    site_id: fanout.site_id,
+                    dispatch_inst: fanout.dispatch_inst,
+                    ok_block: fanout.ok_block,
+                    err_block: fanout.err_block,
+                    merge_block: fanout.merge_block,
+                    ok,
+                    err,
+                    function_index,
+                    authority: HostResultFanoutAuthority {
+                        parent,
+                        fanout: id,
+                        site_id: fanout.site_id,
+                        dispatch_inst: fanout.dispatch_inst,
+                    },
                 },
             },
         );
@@ -3683,6 +3915,81 @@ impl PartitionClosedSourceArmInterner {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn seal_host_result_fanout(
+        &mut self,
+        request: ClosedSourceArmRequestId,
+        fanout: ClosedSourceArmFanoutId,
+        site_id: u64,
+        dispatch_inst: Inst,
+        successor: NormalSourceKontSuccessorId,
+        ok: ClosedSourceArmFanoutEdge,
+        err: ClosedSourceArmFanoutEdge,
+        function_index: usize,
+        ok_block: cranelift_codegen::ir::Block,
+        err_block: cranelift_codegen::ir::Block,
+        merge_block: cranelift_codegen::ir::Block,
+        authority: HostResultFanoutAuthority,
+    ) -> Result<ClosedSourceArmEntryId, CraneliftBackendError> {
+        let request_key = self.request_key(request)?.clone();
+        if authority.parent != request
+            || authority.fanout != fanout
+            || authority.site_id != site_id
+            || authority.dispatch_inst != dispatch_inst
+            || self
+                .fanouts
+                .get(fanout.0 as usize)
+                .is_none_or(Option::is_some)
+        {
+            return Err(unsupported(
+                "NativeSourceKontSuccessorV1",
+                "HostResult fanout authority was swapped or replayed",
+            ));
+        }
+        let ok_id = ClosedSourceArmFanoutEdgeId(
+            fanout
+                .0
+                .checked_mul(2)
+                .expect("compiler-private closed SourceArm fanout edge identity exhausted"),
+        );
+        let err_id = ClosedSourceArmFanoutEdgeId(
+            ok_id
+                .0
+                .checked_add(1)
+                .expect("compiler-private closed SourceArm fanout edge identity exhausted"),
+        );
+        self.fanout_edges[ok_id.0 as usize] = Some(ok);
+        self.fanout_edges[err_id.0 as usize] = Some(err);
+        self.fanouts[fanout.0 as usize] = Some(ClosedSourceArmHostResultFanout {
+            id: fanout,
+            site_id,
+            ok: ok_id,
+            err: err_id,
+            successor,
+            source_return: request_key.source_return,
+            checked_join: request_key.checked_join,
+            required_kind: request_key.required_kind,
+            live_producer_tail: request_key.live_producer_tail,
+        });
+        self.fanout_witnesses[fanout.0 as usize] = Some(ClosedSourceArmHostResultFanoutWitness {
+            fanout,
+            function_index,
+            dispatch_inst,
+            ok_block,
+            err_block,
+            merge_block,
+        });
+        self.seal_entry(
+            request,
+            successor,
+            ClosedSourceArmNormalTerminator::FanoutHostResult {
+                successor,
+                dispatch: fanout,
+            },
+            function_index,
+        )
+    }
+
     fn seal_entry(
         &mut self,
         request: ClosedSourceArmRequestId,
@@ -3759,6 +4066,13 @@ impl PartitionClosedSourceArmInterner {
     pub(super) fn request_count(&self) -> usize {
         self.request_keys.len()
     }
+
+    pub(super) fn fanout_witnesses(&self) -> Vec<ClosedSourceArmHostResultFanoutWitness> {
+        self.fanout_witnesses
+            .iter()
+            .filter_map(|witness| *witness)
+            .collect()
+    }
 }
 
 pub(super) struct PartitionActiveSourceArmClosure {
@@ -3775,6 +4089,28 @@ pub(super) struct PartitionActiveSourceArmClosure {
         StackSlot,
         Value,
     )>,
+    pub(super) host_result_fanout: Option<PartitionActiveClosedSourceArmHostResultFanout>,
+}
+
+pub(super) enum PartitionActiveClosedSourceArmFanoutEdge {
+    NormalChild {
+        child: ClosedSourceArmRequestId,
+        child_state_id: usize,
+        call_inst: Inst,
+    },
+    AbruptTerminal {
+        trap: RuntimeTrap,
+    },
+}
+
+pub(super) struct PartitionActiveClosedSourceArmHostResultFanout {
+    pub(super) site_id: u64,
+    pub(super) dispatch_inst: Inst,
+    pub(super) ok_block: cranelift_codegen::ir::Block,
+    pub(super) err_block: cranelift_codegen::ir::Block,
+    pub(super) merge_block: cranelift_codegen::ir::Block,
+    pub(super) ok: Option<PartitionActiveClosedSourceArmFanoutEdge>,
+    pub(super) err: Option<PartitionActiveClosedSourceArmFanoutEdge>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
