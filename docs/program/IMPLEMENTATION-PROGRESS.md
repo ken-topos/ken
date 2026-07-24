@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-24 22:40:51Z — from 48 issue file(s) in `docs/program/issues/`.
+2026-07-24 22:49:20Z — from 48 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -76,7 +76,7 @@ the committed file matches the generator's output.
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | merged | runtime | M | none | PR #911 @ 238a5c5d (origin/main 4ac9141e, CI green) |
 | `RT-NATIVE-FNSPLIT` | Native backend: bound per-function lowering growth to O(n) — helper identity is a variable-width whole-configuration key (orig. single-Function VReg::MAX, since fixed) | active | runtime | TBD | none | — |
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
-| `RT-PLANNER-ATTRIB-K` | Boundary A planner: fixed K is a design invariant — move the K-exceeded rejection off the capacity channel | ready | runtime | XS | none | — |
+| `RT-PLANNER-ATTRIB-K` | Boundary A planner: fixed K is a design invariant — move the K-exceeded rejection off the capacity channel | active | runtime | XS | none | — |
 | `RT-PLANNER-DIAGNOSTIC-K` | Boundary A planner: report planner-invariant failures as planner defects, and assert fixed_k CONSTANT rather than merely affine | merged | runtime | S | none | https://github.com/ken-topos/ken/pull/929 |
 | `RT-SPLIT` | decompose cranelift_backend.rs | merged | runtime | L | none | — |
 | `RT-SRC-DISPATCH-COVER` | close the source-machine scrutinee-dispatch coverage tier surfaced by RT-SPLIT slice 4 | draft | runtime | TBD | none | — |
@@ -95,7 +95,6 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `KW-THEOREM` — rename the surface keyword `lemma` to `theorem`
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
-- `RT-PLANNER-ATTRIB-K` — Boundary A planner: fixed K is a design invariant — move the K-exceeded rejection off the capacity channel
 - `STR-BIJ` — the String/List Char 'bijection' over-claim (adversary A1 + A2)
 
 ## Blockers
