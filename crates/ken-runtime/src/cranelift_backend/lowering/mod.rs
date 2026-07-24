@@ -735,6 +735,17 @@ struct RecursorUnwindStack {
     partition_qualification: Option<PartitionRecursorQualificationCursor>,
     partition_open_obligation: Option<PartitionOpenControlObligationCursor>,
 }
+struct PoppedPartitionRecursorLayer {
+    layer: ComputationalRecursorLayer,
+    target: Option<PartitionRecursorCursor>,
+    exit_obligation: Option<PartitionOpenControlObligationCursor>,
+    exit_obligation_successor: Option<PartitionOpenControlObligationCursor>,
+}
+struct ReservedPartitionExitCursor {
+    popped: Vec<PoppedPartitionRecursorLayer>,
+    resume_cursor: ContinuationCursorId,
+    resume_cursor_instance: ControlCursorRef,
+}
 #[derive(Clone, Copy)]
 enum PartitionCheckedParent {
     Selection,
@@ -1171,11 +1182,19 @@ fn compose_oriented_subcontinuation(
                 plan.map(|plan| (
                     plan.recursive_calls
                         .iter()
-                        .map(|call| (call.call_template_id, call.declaration.as_str(), call.callee.as_str()))
+                        .map(|call| (
+                            call.call_template_id,
+                            call.declaration.as_str(),
+                            call.callee.as_str()
+                        ))
                         .collect::<Vec<_>>(),
                     plan.computational_ih_calls
                         .iter()
-                        .map(|call| (call.call_template_id, call.declaration.as_str(), call.slot_template_id))
+                        .map(|call| (
+                            call.call_template_id,
+                            call.declaration.as_str(),
+                            call.slot_template_id
+                        ))
                         .collect::<Vec<_>>()
                 ))
             ),
@@ -2663,7 +2682,7 @@ impl<'a> Lowering<'a> {
                         selected.checked_invocation_depth,
                         invocation.dynamic_splice_edges,
                     ),
-                ))
+                ));
             }
         };
         let selected_site = plan
