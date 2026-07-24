@@ -262,6 +262,8 @@ struct Lowering<'a> {
     partition_queue: VecDeque<PartitionWorkItem>,
     partition_continuations: PartitionContinuationInterner,
     partition_source_nodes: PartitionSourceNodeInterner,
+    partition_recursor_nodes: PartitionRecursorNodeInterner,
+    partition_recursor_qualifications: PartitionRecursorQualificationNodeInterner,
     partition_cleanup_suffixes: PartitionCleanupSuffixInterner,
     partition_cleanup_transitions: PartitionCleanupTransitionLedger,
     partition_cut_armed: bool,
@@ -716,6 +718,7 @@ struct RecursorInvocationSegment {
     resume_cursor_instance: ControlCursorRef,
     checked_invocation: Option<CheckedRecursiveInvocationInstance>,
     computational_ih_slot_template_id: Option<u64>,
+    checked_parent: Option<PartitionCheckedParent>,
     /// Inert handles into `Lowering::dynamic_splice_edges`. Cloning a lowered
     /// recursor can copy a handle, but only one clone can consume the unique
     /// compiler-owned edge; every replay rejects before CFG.
@@ -728,6 +731,13 @@ struct RecursorInvocationSegment {
 #[derive(Clone)]
 struct RecursorUnwindStack {
     later_wrappers_in_construction_order: Vec<ComputationalRecursorLayer>,
+    partition_cursor: Option<PartitionRecursorCursor>,
+    partition_qualification: Option<PartitionRecursorQualificationCursor>,
+}
+#[derive(Clone, Copy)]
+enum PartitionCheckedParent {
+    Selection,
+    Unwind(PartitionRecursorCursor),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct OpenControlObligation {
@@ -868,6 +878,7 @@ impl RecursorInvocationSegment {
         resume_cursor_instance: ControlCursorRef,
         checked_invocation: Option<CheckedRecursiveInvocationInstance>,
         computational_ih_slot_template_id: Option<u64>,
+        checked_parent: Option<PartitionCheckedParent>,
     ) -> Self {
         let open_control_obligations = open_control_obligations(&unwind);
         Self {
@@ -879,6 +890,7 @@ impl RecursorInvocationSegment {
             resume_cursor_instance,
             checked_invocation,
             computational_ih_slot_template_id,
+            checked_parent,
             dynamic_splice_edges: Vec::new(),
             open_control_obligations,
         }
@@ -2536,6 +2548,7 @@ impl<'a> Lowering<'a> {
 
     fn mint_checked_computational_ih_instance(
         &mut self,
+        builder: &mut FunctionBuilder<'_>,
         value: &mut Lowered,
     ) -> Result<Option<CheckedRecursiveInvocationInstance>, CraneliftBackendError> {
         let Some(call_template_id) = self.pending_computational_ih_call.take() else {
@@ -2579,28 +2592,48 @@ impl<'a> Lowering<'a> {
                 "computational IH invocation has no checked parent segment",
             )
         })?;
-        let mut parents = std::iter::once(&invocation.selection)
-            .chain(
-                invocation
-                    .unwind
-                    .later_wrappers_in_construction_order
-                    .iter(),
-            )
-            .filter(|layer| {
-                layer.semantic_pending && layer.checked_frame_id == Some(parent_frame_template_id)
-            });
-        let selected = parents.next().ok_or_else(|| {
-            unsupported(
-                "OrientedSubcontinuationPlanV1",
-                "computational IH closure has no exact checked open parent occurrence",
-            )
-        })?;
-        if parents.next().is_some() {
-            return Err(unsupported(
-                "OrientedSubcontinuationPlanV1",
-                "computational IH closure has multiple candidate dynamic parent occurrences",
-            ));
-        }
+        let selected = if let Some(parent) = invocation.checked_parent {
+            let selected = match parent {
+                PartitionCheckedParent::Selection => invocation.selection.clone(),
+                PartitionCheckedParent::Unwind(cursor) => {
+                    self.partition_recursor_nodes.definition(cursor.node)?.current
+                }
+            };
+            if !selected.semantic_pending
+                || selected.checked_frame_id != Some(parent_frame_template_id)
+            {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "persistent checked parent disagrees with its checked call template",
+                ));
+            }
+            selected
+        } else {
+            let mut parents = std::iter::once(&invocation.selection)
+                .chain(
+                    invocation
+                        .unwind
+                        .later_wrappers_in_construction_order
+                        .iter(),
+                )
+                .filter(|layer| {
+                    layer.semantic_pending
+                        && layer.checked_frame_id == Some(parent_frame_template_id)
+                });
+            let selected = parents.next().cloned().ok_or_else(|| {
+                unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "computational IH closure has no exact checked open parent occurrence",
+                )
+            })?;
+            if parents.next().is_some() {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "computational IH closure has multiple candidate dynamic parent occurrences",
+                ));
+            }
+            selected
+        };
         let parent_invocation_instance_id = match selected.checked_invocation_id {
             Some(instance_id) => instance_id,
             None if selected.checked_invocation_source.is_none() => 0,
@@ -2668,6 +2701,30 @@ impl<'a> Lowering<'a> {
             ));
         }
         invocation.dynamic_splice_edges.push(edge_id);
+        if invocation.unwind.partition_cursor.is_some() {
+            match invocation.checked_parent {
+                Some(PartitionCheckedParent::Selection) => {
+                    invocation.selection.checked_invocation_id =
+                        Some((1_u64 << 63) | call_template_id);
+                    invocation.selection.checked_invocation_source = Some(instance.source);
+                    invocation.selection.checked_invocation_depth = 0;
+                }
+                Some(PartitionCheckedParent::Unwind(target)) => {
+                    self.push_partition_recursor_qualification(
+                        builder,
+                        &mut invocation.unwind,
+                        target,
+                        instance.source,
+                    )?;
+                }
+                None => {
+                    return Err(unsupported(
+                        "NativeRecursorContinuationStepV1",
+                        "persistent checked invocation has no exact parent carrier",
+                    ));
+                }
+            }
+        }
         Ok(Some(instance))
     }
 
@@ -2732,14 +2789,20 @@ impl<'a> Lowering<'a> {
 
     fn finish_checked_computational_ih_marker(
         &mut self,
+        builder: &mut FunctionBuilder<'_>,
         mut value: Lowered,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let Some(instance) = self.mint_checked_computational_ih_instance(&mut value)? else {
+        let Some(instance) = self.mint_checked_computational_ih_instance(builder, &mut value)?
+        else {
             return Ok(value);
         };
         let Lowered::ComputationalRecursorClosure { invocation, .. } = &mut value else {
             unreachable!("IH instance mint validates one recursor closure")
         };
+        if invocation.unwind.partition_cursor.is_some() {
+            invocation.checked_invocation = None;
+            return Ok(value);
+        }
         let plan = self.oriented_subcontinuation_plan.as_ref().ok_or_else(|| {
             unsupported(
                 "OrientedSubcontinuationPlanV1",
@@ -2916,6 +2979,7 @@ impl<'a> Lowering<'a> {
 
     fn make_computational_recursor(
         &mut self,
+        builder: &mut FunctionBuilder<'_>,
         recursive: Lowered,
         cases: Vec<crate::RuntimeComputationalMatchCase>,
         default: RuntimeTrap,
@@ -3107,9 +3171,55 @@ impl<'a> Lowering<'a> {
                 current_layer,
                 RecursorUnwindStack {
                     later_wrappers_in_construction_order: Vec::new(),
+                    partition_cursor: None,
+                    partition_qualification: None,
                 },
             )
         };
+        let mut unwind = unwind;
+        let checked_parent_frame = computational_ih_slot_template_id
+            .map(|slot_template_id| {
+                self.oriented_subcontinuation_plan
+                    .as_ref()
+                    .and_then(|plan| plan.computational_ih_slot(slot_template_id))
+                    .map(|slot| slot.frame_template_id)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "OrientedSubcontinuationPlanV1",
+                            "computational recursor names a stale checked IH slot",
+                        )
+                    })
+            })
+            .transpose()?;
+        let mut checked_parent = checked_parent_frame
+            .filter(|frame| {
+                selection.semantic_pending && selection.checked_frame_id == Some(*frame)
+            })
+            .map(|_| PartitionCheckedParent::Selection);
+        if self.active_partition_return_contract.is_some() {
+            let unwind_parent = self.materialize_partition_recursor_stack(
+                builder,
+                &mut unwind,
+                checked_parent_frame,
+            )?;
+            if let Some(unwind_parent) = unwind_parent {
+                if checked_parent
+                    .replace(PartitionCheckedParent::Unwind(unwind_parent))
+                    .is_some()
+                {
+                    return Err(unsupported(
+                        "NativeRecursorContinuationStepV1",
+                        "persistent recursor carrier has multiple exact checked parents",
+                    ));
+                }
+            }
+            if checked_parent_frame.is_some() && checked_parent.is_none() {
+                return Err(unsupported(
+                    "NativeRecursorContinuationStepV1",
+                    "persistent recursor carrier lost its exact checked parent",
+                ));
+            }
+        }
         let resume_cursor_instance =
             segment_resume_cursor_instance.unwrap_or(resume_cursor_instance);
         let mut invocation = RecursorInvocationSegment::new(
@@ -3121,6 +3231,7 @@ impl<'a> Lowering<'a> {
             resume_cursor_instance,
             segment_checked_invocation,
             computational_ih_slot_template_id,
+            checked_parent,
         );
         invocation.dynamic_splice_edges = segment_dynamic_splice_edges;
         Ok(Lowered::ComputationalRecursorClosure {
@@ -3996,6 +4107,21 @@ impl<'a> Lowering<'a> {
         invocation: RecursorInvocationSegment,
         checked_ih_invocation: Option<CheckedRecursiveInvocationInstance>,
     ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
+        if invocation.unwind.partition_cursor.is_some() {
+            let _dynamic_splice_edges = self.take_dynamic_splice_edges(&invocation)?;
+            let selection = invocation.selection;
+            let stack = invocation.unwind;
+            let continuation = Self::replace_source_terminal_with_unwind(
+                continuation,
+                stack,
+                invocation.resume_cursor,
+                invocation.resume_cursor_instance,
+            )?;
+            return Ok(SourceContinuation::ApplyRecursorSelection {
+                layer: selection,
+                next: Box::new(continuation),
+            });
+        }
         if !recursor_invocation_is_checked(&invocation) {
             validate_recursor_invocation_install_shape(&invocation)?;
         }
@@ -4055,6 +4181,8 @@ impl<'a> Lowering<'a> {
                 .expect("validated recursor invocation has a selection frame");
             let stack = RecursorUnwindStack {
                 later_wrappers_in_construction_order: frames.rev().collect(),
+                partition_cursor: None,
+                partition_qualification: None,
             };
             let continuation = Self::replace_source_terminal_with_unwind(
                 continuation,

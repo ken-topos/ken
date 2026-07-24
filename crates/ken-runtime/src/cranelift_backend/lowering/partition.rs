@@ -715,6 +715,23 @@ enum PartitionInvocationTemplateKey {
     ComputationalIHCall(u64),
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PartitionCheckedParentKey {
+    Selection,
+    Unwind(PartitionRecursorNodeId),
+}
+
+fn partition_checked_parent_key(
+    parent: Option<PartitionCheckedParent>,
+) -> Option<PartitionCheckedParentKey> {
+    parent.map(|parent| match parent {
+        PartitionCheckedParent::Selection => PartitionCheckedParentKey::Selection,
+        PartitionCheckedParent::Unwind(cursor) => {
+            PartitionCheckedParentKey::Unwind(cursor.node)
+        }
+    })
+}
+
 impl From<InvocationTemplateRef> for PartitionInvocationTemplateKey {
     fn from(value: InvocationTemplateRef) -> Self {
         match value {
@@ -808,10 +825,11 @@ enum PartitionLoweredShape {
         residual: PartitionLoweredKey,
         sibling_position: usize,
         selection: PartitionLayerKey,
-        unwind: Vec<PartitionLayerKey>,
+        unwind_head: Option<PartitionRecursorNodeId>,
+        qualification_head: Option<PartitionRecursorQualificationNodeId>,
+        checked_parent: Option<PartitionCheckedParentKey>,
         computational_ih_slot_template_id: Option<u64>,
         checked_invocation_source: Option<PartitionInvocationTemplateKey>,
-        open_control_obligations: Vec<(Option<u64>, bool, bool)>,
     },
     Trap(RuntimeTrap),
     RecursiveBackedge,
@@ -931,35 +949,21 @@ fn partition_lowered_key(value: &Lowered) -> PartitionLoweredKey {
             residual,
             invocation,
             ..
-        } => {
-            let open_control_obligations = invocation
-                .open_control_obligations
-                .iter()
-                .map(|obligation| {
-                    (
-                        obligation.checked_frame_id,
-                        obligation.semantic_pending,
-                        obligation.parent_scope.is_some(),
-                    )
-                })
-                .collect();
-            PartitionLoweredShape::ComputationalRecursorClosure {
-                residual: partition_lowered_key(residual),
-                sibling_position: invocation.sibling_position,
-                selection: partition_layer_key(&invocation.selection),
-                unwind: invocation
-                    .unwind
-                    .later_wrappers_in_construction_order
-                    .iter()
-                    .map(partition_layer_key)
-                    .collect(),
-                computational_ih_slot_template_id: invocation.computational_ih_slot_template_id,
-                checked_invocation_source: invocation
-                    .checked_invocation
-                    .map(|checked| checked.source.into()),
-                open_control_obligations,
-            }
-        }
+        } => PartitionLoweredShape::ComputationalRecursorClosure {
+            residual: partition_lowered_key(residual),
+            sibling_position: invocation.sibling_position,
+            selection: partition_layer_key(&invocation.selection),
+            unwind_head: invocation.unwind.partition_cursor.map(|cursor| cursor.node),
+            qualification_head: invocation
+                .unwind
+                .partition_qualification
+                .map(|cursor| cursor.node),
+            checked_parent: partition_checked_parent_key(invocation.checked_parent),
+            computational_ih_slot_template_id: invocation.computational_ih_slot_template_id,
+            checked_invocation_source: invocation
+                .checked_invocation
+                .map(|checked| checked.source.into()),
+        },
         Lowered::Trap(trap) => PartitionLoweredShape::Trap(trap.clone()),
         Lowered::RecursiveBackedge => PartitionLoweredShape::RecursiveBackedge,
     };
@@ -1251,7 +1255,8 @@ enum PartitionSourcePrefixKey {
         next: Box<Self>,
     },
     UnwindRecursorSegment {
-        stack: Vec<PartitionLayerKey>,
+        stack_head: Option<PartitionRecursorNodeId>,
+        qualification_head: Option<PartitionRecursorQualificationNodeId>,
         next: Box<Self>,
     },
     IfScrutinee {
@@ -1345,11 +1350,10 @@ fn partition_source_prefix_key(prefix: &SourcePrefixTemplate) -> PartitionSource
         }
         SourcePrefixTemplate::UnwindRecursorSegment { stack, next, .. } => {
             PartitionSourcePrefixKey::UnwindRecursorSegment {
-                stack: stack
-                    .later_wrappers_in_construction_order
-                    .iter()
-                    .map(partition_layer_key)
-                    .collect(),
+                stack_head: stack.partition_cursor.map(|cursor| cursor.node),
+                qualification_head: stack
+                    .partition_qualification
+                    .map(|cursor| cursor.node),
                 next: Box::new(partition_source_prefix_key(next)),
             }
         }
@@ -1520,6 +1524,163 @@ impl PartitionSourceNodeInterner {
             self.bytes_retained,
             self.exact_comparisons,
         )
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct PartitionRecursorNodeId(pub(super) u32);
+
+#[derive(Clone, Copy)]
+pub(super) struct PartitionRecursorCursor {
+    pub(super) node: PartitionRecursorNodeId,
+    pub(super) capture_pointer: Value,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct PartitionRecursorQualificationCursor {
+    pub(super) node: PartitionRecursorQualificationNodeId,
+    pub(super) capture_pointer: Value,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PartitionRecursorNodeKey {
+    current: PartitionLayerKey,
+    capture_field_types: Vec<Type>,
+    successor: Option<PartitionRecursorNodeId>,
+}
+
+#[derive(Clone)]
+pub(super) struct PartitionRecursorNodeDefinition {
+    pub(super) current: ComputationalRecursorLayer,
+    pub(super) capture_field_types: Vec<Type>,
+    pub(super) successor: Option<PartitionRecursorNodeId>,
+}
+
+#[derive(Default)]
+pub(super) struct PartitionRecursorNodeInterner {
+    by_bucket: BTreeMap<(u64, u64), Vec<PartitionRecursorNodeId>>,
+    keys: Vec<PartitionRecursorNodeKey>,
+    definitions: Vec<PartitionRecursorNodeDefinition>,
+}
+
+impl PartitionRecursorNodeInterner {
+    pub(super) fn intern(
+        &mut self,
+        current: ComputationalRecursorLayer,
+        capture_field_types: Vec<Type>,
+        successor: Option<PartitionRecursorNodeId>,
+    ) -> PartitionRecursorNodeId {
+        let key = PartitionRecursorNodeKey {
+            current: partition_layer_key(&current),
+            capture_field_types: capture_field_types.clone(),
+            successor,
+        };
+        let bucket = partition_static_bucket(&key);
+        let bucket_key = (bucket.hash, bucket.bytes);
+        if let Some(candidates) = self.by_bucket.get(&bucket_key) {
+            for candidate in candidates.iter().copied() {
+                if self.keys[candidate.0 as usize] == key {
+                    return candidate;
+                }
+            }
+        }
+        let id = PartitionRecursorNodeId(
+            u32::try_from(self.keys.len())
+                .expect("compiler-private recursor-continuation node identity exhausted"),
+        );
+        self.keys.push(key);
+        self.definitions.push(PartitionRecursorNodeDefinition {
+            current,
+            capture_field_types,
+            successor,
+        });
+        self.by_bucket.entry(bucket_key).or_default().push(id);
+        id
+    }
+
+    pub(super) fn definition(
+        &self,
+        id: PartitionRecursorNodeId,
+    ) -> Result<PartitionRecursorNodeDefinition, CraneliftBackendError> {
+        self.definitions.get(id.0 as usize).cloned().ok_or_else(|| {
+            unsupported(
+                "NativeRecursorContinuationStepV1",
+                "recursor-continuation node identity is out of bounds",
+            )
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct PartitionRecursorQualificationNodeId(pub(super) u32);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PartitionRecursorQualificationNodeKey {
+    target: PartitionRecursorNodeId,
+    source: PartitionInvocationTemplateKey,
+    successor: Option<PartitionRecursorQualificationNodeId>,
+}
+
+#[derive(Clone)]
+pub(super) struct PartitionRecursorQualificationNodeDefinition {
+    pub(super) target: PartitionRecursorNodeId,
+    pub(super) source: InvocationTemplateRef,
+    pub(super) successor: Option<PartitionRecursorQualificationNodeId>,
+}
+
+#[derive(Default)]
+pub(super) struct PartitionRecursorQualificationNodeInterner {
+    by_bucket: BTreeMap<(u64, u64), Vec<PartitionRecursorQualificationNodeId>>,
+    keys: Vec<PartitionRecursorQualificationNodeKey>,
+    definitions: Vec<PartitionRecursorQualificationNodeDefinition>,
+}
+
+impl PartitionRecursorQualificationNodeInterner {
+    pub(super) fn intern(
+        &mut self,
+        target: PartitionRecursorNodeId,
+        source: InvocationTemplateRef,
+        successor: Option<PartitionRecursorQualificationNodeId>,
+    ) -> PartitionRecursorQualificationNodeId {
+        let key = PartitionRecursorQualificationNodeKey {
+            target,
+            source: source.into(),
+            successor,
+        };
+        let bucket = partition_static_bucket(&key);
+        let bucket_key = (bucket.hash, bucket.bytes);
+        if let Some(candidates) = self.by_bucket.get(&bucket_key) {
+            for candidate in candidates.iter().copied() {
+                if self.keys[candidate.0 as usize] == key {
+                    return candidate;
+                }
+            }
+        }
+        let id = PartitionRecursorQualificationNodeId(
+            u32::try_from(self.keys.len())
+                .expect("compiler-private recursor-qualification node identity exhausted"),
+        );
+        self.keys.push(key);
+        self.definitions
+            .push(PartitionRecursorQualificationNodeDefinition {
+                target,
+                source,
+                successor,
+            });
+        self.by_bucket.entry(bucket_key).or_default().push(id);
+        id
+    }
+
+    pub(super) fn definition(
+        &self,
+        id: PartitionRecursorQualificationNodeId,
+    ) -> Result<PartitionRecursorQualificationNodeDefinition, CraneliftBackendError> {
+        self.definitions.get(id.0 as usize).cloned().ok_or_else(|| {
+            unsupported(
+                "NativeRecursorContinuationStepV1",
+                "recursor-qualification node identity is out of bounds",
+            )
+        })
     }
 }
 
@@ -3940,10 +4101,13 @@ pub(super) fn partition_prefix_is_admissible(prefix: &SourcePrefixTemplate) -> b
         SourcePrefixTemplate::ApplyRecursorSelection { layer, .. } => {
             partition_layer_is_admissible(layer)
         }
-        SourcePrefixTemplate::UnwindRecursorSegment { stack, .. } => stack
-            .later_wrappers_in_construction_order
-            .iter()
-            .all(partition_layer_is_admissible),
+        SourcePrefixTemplate::UnwindRecursorSegment { stack, .. } => {
+            stack.partition_cursor.is_some()
+                || stack
+                    .later_wrappers_in_construction_order
+                    .iter()
+                    .all(partition_layer_is_admissible)
+        }
         SourcePrefixTemplate::ConstructArgument { lowered, env, .. } => lowered
             .iter()
             .chain(env)
@@ -4057,8 +4221,14 @@ pub(super) fn append_partition_lowered_values(
             append_partition_lowered_values(lowering, builder, residual, output)?;
             output.push(invocation.resume_cursor_instance.0);
             append_partition_layer_values(lowering, builder, &invocation.selection, output)?;
-            for layer in &invocation.unwind.later_wrappers_in_construction_order {
-                append_partition_layer_values(lowering, builder, layer, output)?;
+            if let Some(cursor) = invocation.unwind.partition_cursor {
+                output.push(cursor.capture_pointer);
+            }
+            if let Some(cursor) = invocation.unwind.partition_qualification {
+                output.push(cursor.capture_pointer);
+            }
+            if let Some(PartitionCheckedParent::Unwind(cursor)) = invocation.checked_parent {
+                output.push(cursor.capture_pointer);
             }
         }
         Lowered::RecursiveBackedge => {
@@ -4071,7 +4241,7 @@ pub(super) fn append_partition_lowered_values(
     Ok(())
 }
 
-fn append_partition_layer_values(
+pub(super) fn append_partition_layer_values(
     lowering: &mut Lowering<'_>,
     builder: &mut FunctionBuilder<'_>,
     layer: &ComputationalRecursorLayer,
@@ -4148,8 +4318,15 @@ pub(super) fn append_partition_prefix_values(
             ..
         } => {
             output.push(resume_cursor_instance.0);
-            for layer in &stack.later_wrappers_in_construction_order {
-                append_partition_layer_values(lowering, builder, layer, output)?;
+            if let Some(cursor) = stack.partition_cursor {
+                output.push(cursor.capture_pointer);
+            } else {
+                for layer in &stack.later_wrappers_in_construction_order {
+                    append_partition_layer_values(lowering, builder, layer, output)?;
+                }
+            }
+            if let Some(cursor) = stack.partition_qualification {
+                output.push(cursor.capture_pointer);
             }
         }
         SourcePrefixTemplate::ConstructArgument { lowered, env, .. } => {
@@ -4293,10 +4470,17 @@ pub(super) fn rebuild_partition_lowered(
             rebuild_partition_lowered(residual, values, native_int_tags)?;
             invocation.resume_cursor_instance = ControlCursorRef(next_partition_value(values)?);
             rebuild_partition_layer(&mut invocation.selection, values, native_int_tags)?;
-            for layer in &mut invocation.unwind.later_wrappers_in_construction_order {
-                rebuild_partition_layer(layer, values, native_int_tags)?;
+            if let Some(cursor) = &mut invocation.unwind.partition_cursor {
+                cursor.capture_pointer = next_partition_value(values)?;
             }
-            invocation.open_control_obligations = open_control_obligations(&invocation.unwind);
+            if let Some(cursor) = &mut invocation.unwind.partition_qualification {
+                cursor.capture_pointer = next_partition_value(values)?;
+            }
+            if let Some(PartitionCheckedParent::Unwind(cursor)) =
+                &mut invocation.checked_parent
+            {
+                cursor.capture_pointer = next_partition_value(values)?;
+            }
         }
         Lowered::RecursiveBackedge => {
             return Err(unsupported(
@@ -4308,7 +4492,7 @@ pub(super) fn rebuild_partition_lowered(
     Ok(())
 }
 
-fn rebuild_partition_layer(
+pub(super) fn rebuild_partition_layer(
     layer: &mut ComputationalRecursorLayer,
     values: &mut impl Iterator<Item = Value>,
     native_int_tags: &mut BTreeMap<Value, Value>,
@@ -4383,8 +4567,15 @@ pub(super) fn rebuild_partition_prefix(
             ..
         } => {
             *resume_cursor_instance = ControlCursorRef(next_partition_value(values)?);
-            for layer in &mut stack.later_wrappers_in_construction_order {
-                rebuild_partition_layer(layer, values, native_int_tags)?;
+            if let Some(cursor) = &mut stack.partition_cursor {
+                cursor.capture_pointer = next_partition_value(values)?;
+            } else {
+                for layer in &mut stack.later_wrappers_in_construction_order {
+                    rebuild_partition_layer(layer, values, native_int_tags)?;
+                }
+            }
+            if let Some(cursor) = &mut stack.partition_qualification {
+                cursor.capture_pointer = next_partition_value(values)?;
             }
         }
         SourcePrefixTemplate::ConstructArgument { lowered, env, .. } => {
