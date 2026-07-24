@@ -281,6 +281,7 @@ struct Lowering<'a> {
     active_partition_producer_kont: Option<PartitionProducerKontCursor>,
     active_partition_return_kind: Option<ScalarMergeKind>,
     active_partition_return_contract: Option<PartitionStateReturnContract>,
+    active_partition_state_id: Option<usize>,
     active_partition_source_return: Option<PartitionSourceKontReturnCursor>,
     active_partition_completed_producer_tail: Option<PartitionProducerTailCompletion>,
     partition_output_tag_pointer: Option<cranelift_codegen::ir::Value>,
