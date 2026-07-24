@@ -25,7 +25,57 @@
 >   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
 >   the AC rather than gaming it.
 >
-> ### ✅ `RT-PLANNER-ATTRIB-K` IS KICKED AND RUNNING (2026-07-24 ~23:0xZ)
+> ### ⏳ `RT-PLANNER-ATTRIB-K` IS PUBLISHING — PR #935 @ `23412242` (23:1xZ)
+>
+> **Ring closed it in ~20 minutes.** Decision `dec_2ef4dcemsersr` **resolved**,
+> verified from the object: `status: resolved`, `resolved_by:
+> agt_37reqftfe6g00` (**the Architect**, not the proposing leader), naming exact
+> `23412242dd3a15a493721bccf56dd12d0bf882cd`. One rejection round preceded it
+> (`dec_f1hrzgphn8j1`, superseded). Scope = one file, +17/−12,
+> `planning/static_transition.rs`; no `semantic_ir.rs`, no spec/conformance ⇒ no
+> Spec vote.
+>
+> **⚠ The branch was NOT on origin** when the `git_request` arrived — I pushed
+> `23412242` via the mint path first, and verified local ref == target SHA and
+> the branch checked out nowhere (the publisher force-pushes the *local* branch,
+> not your target).
+>
+> ⛔ **I did NOT bundle** the tracker/briefing/playbook commits onto the
+> candidate. The Architect approved a **crates-only** diff; adding `agent/` or
+> `docs/` would silently expand a reviewed scope past §14a. **Publish the
+> process batch separately, after this lands** — once it lands, no ring holds
+> finished unmerged work, so §10⁻ permits it.
+>
+> **On merge:** verify on `main` by content (the K site on `planner_error`, six
+> `u32` sites still on capacity, `semantic_ir.rs` untouched, `fixed_k` = 8), then
+> request retros from runtime-leader, then notify the adversary.
+>
+> ### ✅ NEW MECHANISM LANDED LOCALLY — the symptom inventory (operator-directed)
+>
+> Operator, 2026-07-24, on why FNSPLIT ran to 33: *"The iterations didn't
+> accumulate the defects and failed to track the global picture, hindering the
+> decision-making abilities of the architect."*
+>
+> - **architect §1b** — append one inventory line per hard-stop **in the tracked
+>   file**; at the **3rd entry** answer *"do these share a predicate?"* Name it
+>   (⇒ structural closure, hand the Steward a recut) or rule them independent.
+> - **steward §5a-ii** — seed the armed section at release, backstop the check
+>   (framing only, never the answer), and own the recut when a predicate is named.
+> - **Armed on the live FNSPLIT chain**, seeded with the held chain's four
+>   entries and the predicate they shared.
+>
+> ⚠ **Two traps encoded, because both are TRUE and both defeat the check:**
+> *"each ruling was locally correct"* (that is what makes the shared predicate
+> invisible) and *"the architecture is still viable"* (FNSPLIT's review correctly
+> affirmed viability — the **representation** insight beside it is what
+> unblocked the work; a viability verdict is **not** an answer to §1b).
+>
+> ⛔ **Distinct from the §5a research cadence, which is NOT a substitute:** that
+> imports external prior art for the *current* fork; this accumulates *our own*
+> forks. On FNSPLIT the advisories fired at #24/27/30/33 and were useful — and
+> the chain still ran to 33.
+>
+> ### ✅ `RT-PLANNER-ATTRIB-K` was kicked at ~23:0xZ (history)
 >
 > Full handoff gate run: retros in → quiescent → all three panes verified
 > `Context compacted` at worktree `5554b33f` → contention checked on **both**
