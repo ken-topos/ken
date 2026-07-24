@@ -39,3 +39,9 @@ role and team playbooks already active in the session for checks, review, and
 handoff. A mid-session edit to this skill does not update a running seat's
 registered skill body; read this file directly when verifying the in-fleet
 path.
+
+Route Findings instead of leaving them in task notes: gaps in authoring
+guidance go to the relevant `catalog/guide/` strand; recurring sugar candidates
+and confusing manual elaboration go to Ergo; reusable `def`/`lemma`/`prop`
+artifacts go into the catalog; kernel-reduction defects go to Kernel through
+the enclave.

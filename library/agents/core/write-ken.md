@@ -54,7 +54,18 @@ ken check <file>
   language constructs, not only in comments.
 - At an equality goal, reduce both endpoints before choosing `Proved` or
   `Refl`.
-- Preserve branch and effect order when introducing a local `let`.
+- Name local `let` bindings for their domain or proof role, not for the
+  mechanism that computes them. Keep each binding in the narrowest useful
+  scope, preserve branch and effect order, and write two or more sequential
+  bindings as one `;`-separated binding group before `in`.
+- Keep a familiar one-step expression, small exhaustive match, direct
+  recursion, or single constructor assembly inline when a local name would
+  merely repeat its syntax. Expression length is evidence, never the decision;
+  there is no binding quota or depth threshold.
+- `(C T)` is a class applied to its head: the dictionary's type, not an
+  instance value. Outside a resolved `where` call, use the synthesized global
+  `C_instance_T` as the value and project its fields like an ordinary record.
+  Projecting a field from `(C T)` is invalid.
 - New type-like names use PascalCase; new functions and fields use snake_case.
 - Do not invent imports, primitives, effects, capabilities, or proof tactics.
 

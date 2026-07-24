@@ -139,6 +139,15 @@ fn resolve_confined(base: &Path, rel: &str, repo_root: &Path) -> Option<PathBuf>
     Some(normalized)
 }
 
+fn resolve_controlled_path(repo_root: &Path, rel: &str, owner: &str) -> PathBuf {
+    resolve_confined(repo_root, rel, repo_root).unwrap_or_else(|| {
+        panic!(
+            "{owner}: controlled path {rel:?} is absolute, escapes the repository, \
+             or resolves through an escaping symlink"
+        )
+    })
+}
+
 // --- a hand-rolled parser for library/manifest.toml's controlled subset ---
 //
 // Only what the manifest actually uses: a run of `[[document]]` tables,
@@ -2772,6 +2781,18 @@ fn record_scalar<'a>(record: &'a ControlledRecord, field: &str) -> &'a str {
         .unwrap_or("")
 }
 
+fn duplicate_record_ids(records: &[ControlledRecord]) -> BTreeSet<String> {
+    let mut seen = BTreeSet::new();
+    let mut duplicates = BTreeSet::new();
+    for record in records {
+        let id = record_scalar(record, "id").to_string();
+        if !seen.insert(id.clone()) {
+            duplicates.insert(id);
+        }
+    }
+    duplicates
+}
+
 fn unicode_whitespace_tokens(path: &Path) -> usize {
     std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
@@ -2944,6 +2965,11 @@ fn agent_library_manifest_schema_contract_and_measurements_hold() {
     let manifest_packs = parse_controlled_records(&manifest_src, "pack");
     assert_eq!(modules.len(), 10, "Wave 2 requires four core and six task modules");
     assert!(!manifest_packs.is_empty(), "agent manifest has no packs");
+    let duplicate_pack_ids = duplicate_record_ids(&manifest_packs);
+    assert!(
+        duplicate_pack_ids.is_empty(),
+        "agent manifest has duplicate pack IDs: {duplicate_pack_ids:?}"
+    );
 
     let mut module_ids = BTreeSet::new();
     let mut module_sizes = BTreeMap::new();
@@ -2961,12 +2987,13 @@ fn agent_library_manifest_schema_contract_and_measurements_hold() {
         if !missing.is_empty() {
             bad.push(format!("{id}: missing schema fields {missing:?}"));
         }
-        let full_path = root.join(path);
+        let full_path = resolve_controlled_path(&root, path, id);
         let src = std::fs::read_to_string(&full_path)
             .unwrap_or_else(|e| panic!("read {}: {e}", full_path.display()));
         bad.extend(module_contract_violations(&full_path, &src));
         for source in module.arrays.get("sources").into_iter().flatten() {
-            if !root.join(source).exists() {
+            let source_path = resolve_controlled_path(&root, source, id);
+            if !source_path.exists() {
                 bad.push(format!("{id}: source {source:?} does not exist"));
             }
         }
@@ -2986,7 +3013,8 @@ fn agent_library_manifest_schema_contract_and_measurements_hold() {
     let mut packs = BTreeMap::new();
     for manifest_pack in &manifest_packs {
         let id = record_scalar(manifest_pack, "id");
-        let path = root.join(record_scalar(manifest_pack, "path"));
+        let path =
+            resolve_controlled_path(&root, record_scalar(manifest_pack, "path"), id);
         let missing: Vec<_> = pack_required
             .difference(&record_field_names(manifest_pack))
             .cloned()
@@ -3016,7 +3044,10 @@ fn agent_library_manifest_schema_contract_and_measurements_hold() {
                 "{id}: {field} drift between manifest and pack file"
             );
         }
-        packs.insert(id.to_string(), pack);
+        assert!(
+            packs.insert(id.to_string(), pack).is_none(),
+            "agent manifest has duplicate pack ID {id:?}"
+        );
     }
     let graph_bad = graph_violations(&module_ids, &packs);
     assert!(graph_bad.is_empty(), "agent pack graph violations:\n{}", graph_bad.join("\n"));
@@ -3072,6 +3103,45 @@ fn agent_pack_integrity_rejects_missing_modules_and_cycles() {
     );
 }
 
+// Durable invariant: manifest key spaces stay injective as the corpus grows.
+#[test]
+fn agent_key_space_detectors_reject_duplicate_pack_and_task_ids() {
+    let duplicate_packs = parse_controlled_records(
+        "[[pack]]\nid = \"write-pure\"\n[[pack]]\nid = \"write-pure\"\n",
+        "pack",
+    );
+    assert_eq!(
+        duplicate_record_ids(&duplicate_packs),
+        BTreeSet::from(["write-pure".to_string()]),
+        "planted duplicate pack ID was not rejected at the named key-space detector"
+    );
+
+    let duplicate_tasks = parse_controlled_records(
+        "[[task]]\nid = \"write-pure\"\n[[task]]\nid = \"write-pure\"\n",
+        "task",
+    );
+    assert_eq!(
+        duplicate_record_ids(&duplicate_tasks),
+        BTreeSet::from(["write-pure".to_string()]),
+        "planted duplicate task ID was not rejected at the named key-space detector"
+    );
+}
+
+// Durable invariant: controlled data can name only repository-confined paths.
+#[test]
+fn agent_controlled_paths_fail_loudly_on_escape() {
+    let root = repo_root();
+    for raw in ["../outside-repository", "/tmp/outside-repository"] {
+        let result = std::panic::catch_unwind(|| {
+            resolve_controlled_path(&root, raw, "planted controlled-path violation")
+        });
+        assert!(
+            result.is_err(),
+            "planted controlled path {raw:?} was not rejected loudly"
+        );
+    }
+}
+
 #[test]
 fn agent_evaluation_tasks_and_packs_cover_each_other_exactly() {
     let root = repo_root();
@@ -3086,14 +3156,21 @@ fn agent_evaluation_tasks_and_packs_cover_each_other_exactly() {
         .expect("read evaluation tasks");
     let tasks = parse_controlled_records(&tasks_src, "task");
     assert_eq!(tasks.len(), 7, "the Wave 2 evaluation corpus must have seven tasks");
+    let duplicate_task_ids = duplicate_record_ids(&tasks);
+    assert!(
+        duplicate_task_ids.is_empty(),
+        "evaluation corpus has duplicate task IDs: {duplicate_task_ids:?}"
+    );
     let selected_packs: BTreeSet<String> = tasks
         .iter()
         .map(|task| {
             let pack = record_scalar(task, "pack");
             assert!(!pack.is_empty(), "{} selects no pack", record_scalar(task, "id"));
             let fixture = record_scalar(task, "fixture");
+            let fixture_path =
+                resolve_controlled_path(&root, fixture, record_scalar(task, "id"));
             assert!(
-                root.join(fixture).is_file(),
+                fixture_path.is_file(),
                 "{} fixture does not exist: {fixture}",
                 record_scalar(task, "id")
             );
@@ -3129,6 +3206,11 @@ fn agent_evaluation_tasks_and_packs_cover_each_other_exactly() {
         .iter()
         .map(|task| record_scalar(task, "id").to_string())
         .collect();
+    assert_eq!(
+        task_ids.len(),
+        tasks.len(),
+        "evaluation task ID cardinality must equal task record cardinality"
+    );
     let mut latest = BTreeMap::new();
     let mut observed_invention_failure = false;
     for run in &runs {
@@ -3208,10 +3290,11 @@ fn has_checked_examples(src: &str) -> bool {
 }
 
 fn applies_to_checked_example_records(entry: &DocEntry) -> bool {
-    let path = repo_root().join(&entry.path);
-    std::fs::read_to_string(&path)
-        .map(|src| has_checked_examples(&src))
-        .unwrap_or(false)
+    let root = repo_root();
+    let path = resolve_controlled_path(&root, &entry.path, "checked-example applicability");
+    let src = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    has_checked_examples(&src)
 }
 
 fn run_checked_markdown(path: &Path, src: &str, index: usize) -> std::process::Output {
@@ -3241,7 +3324,8 @@ fn check_checked_examples() {
         .filter(|entry| applies_to_checked_example_records(entry))
         .enumerate()
     {
-        let path = root.join(&entry.path);
+        let path =
+            resolve_controlled_path(&root, &entry.path, "checked-example execution");
         let src = std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
         let output = run_checked_markdown(&path, &src, index);
