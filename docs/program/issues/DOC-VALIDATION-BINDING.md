@@ -1,8 +1,8 @@
 ---
 id: DOC-VALIDATION-BINDING
 title: "validation vocabulary claims a 1:1 binding to the gates; nothing binds it"
-status: ready
-owner: doc
+status: active
+owner: verify
 size: S
 gate: none
 depends_on: [DOC-W0]
@@ -10,6 +10,25 @@ blocks: []
 github: null
 origin: adversary finding evt_59w0kkk1gf75e (2026-07-22), post-merge on DOC-W0 @ 6be9754b
 ---
+
+> **Re-homed doc → verify, 2026-07-24 (Steward).** The mechanism is
+> `crates/ken-cli/tests/library_documentation_gates.rs`, a Rust gate harness —
+> not `library/` content. The doc ring's concurrency licence rests on being
+> path-disjoint from `crates/`, so this is not theirs; Verify owns gates.
+> ⚠ Consequently the COORDINATION §14a doc-only exemption does **not** apply:
+> **the Architect's vote is required.** Kicked as Track 2 (`evt_3fv5d1men6r9y`),
+> contention-checked against RT-NATIVE-FNSPLIT (disjoint crates + ledger).
+>
+> ⚠ **SCOPE GREW 2026-07-24: this WP now HOLDS the `library/` ledger axis**
+> (`evt_79ytm04m0dt53`). The Architect's binding route tokenizes the
+> unconditional delimiter gate as `transport-delimiter`, so it also changes
+> **every `library/manifest.toml` validation list** and the **generated
+> `library/STATUS.md`**. All three land in ONE branch/squash; STATUS.md is
+> **regenerated**, never hand-edited. ⛔ The scripted publisher runs
+> `gen-doc-status.sh --check` on `origin/main` *after* merge and **freezes the
+> publisher path** on red without reverting — a manifest/STATUS mismatch does
+> not fail the PR, it freezes everyone. Steward ruling `evt_tmv40vgtg63k`.
+> **[[STR-BIJ]] is held behind this WP** for the same axis.
 
 **Severity: lower than [`DOC-CURRENCY-ANCHOR`](DOC-CURRENCY-ANCHOR.md).** An
 accuracy gap in a self-describing vocabulary, not a wrong result today. Does

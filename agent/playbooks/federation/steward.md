@@ -252,6 +252,42 @@ brief** — the implementer should execute mostly mechanically, not design
 >    makes the Steward the de-facto leader. See
 >    [[verify-a-tmux-rouse-actually-submitted]].
 >
+> 7b. **★ CONTENTION CHECK — against every WP IN FLIGHT, not just the frontier
+>    candidates you are choosing between.** Before you release, list the files
+>    the new WP will touch and intersect them with **each WP already active or
+>    publishing**. The WP that is merging right now is an operand too.
+>
+>    ⛔ **And the file-set check is not sufficient — contention has a LEDGER
+>    axis.** Two WPs contend if one **mutates a source the other's domain
+>    attests** (`library/SOURCE-ATTESTATIONS`), even with disjoint scopes.
+>
+>    **2026-07-22, both halves failed in one hour.** I wrote the ledger-axis
+>    rule onto `STR-BIJ` as a sequencing constraint, then released
+>    `LOADER-STALE-PREMISE` **while `ORACLE-VIS-PACKAGING` was publishing** —
+>    having checked only the two frontier items I was choosing between. Both
+>    touch `library/SOURCE-ATTESTATIONS` **and** `library/STATUS.md`.
+>    ★ *Writing the rule down did not make me apply it, because I applied it to
+>    the pair I was deciding between and never to the thing already in flight.*
+>
+>    **The measured result is why this is a gate step and not advice:**
+>
+>    ```
+>    Auto-merging library/SOURCE-ATTESTATIONS       <- SILENT UNION, no conflict
+>    CONFLICT (content): Merge conflict in library/STATUS.md
+>    ```
+>
+>    The ledger is one row per source; the two WPs changed **different rows**,
+>    so git merged a union of two independently-correct halves with nothing to
+>    complain about. Exactly **one** of the two colliding files shouted, and
+>    that was the layout of a generated digest — **not a guard**. ⛔ Do not
+>    conclude "a ledger collision gets caught"; `SOURCE-ATTESTATIONS` alone
+>    would have merged clean and wrong.
+>
+>    ⇒ Build the result (`git merge-tree --write-tree`) and assert a
+>    post-condition you **predicted before measuring**. If they contend,
+>    sequence them and **re-derive the consumer population after the first
+>    lands** — it will have changed, which is the point.
+>
 > 8. **★ FLIP THE WP's TRACKER STATUS TO `active` — as part of the kickoff, not
 >    "later."** The kickoff is not complete until the catalog says the work is
 >    in flight. Edit `status:` in `docs/program/issues/<ID>.md`, run
@@ -1021,6 +1057,63 @@ shape is in the Architect playbook keyed to *its* work-unit (one review) and
 *its* checkpoint (`ARCHITECT-STATE.md`); Librarian gets it as it next touches
 the corpus.
 
+## 2d. ⛔ TOOL DESIGN: separate judgment from action (OODA)
+
+**Operator directive, 2026-07-22**, given twice in one hour on two different
+scripts. You own the publisher path and the tooling around it, so this is the
+standing rule for how you build any of it.
+
+> *"Rather than encode the logic and the judgement into the script, use the
+> script as an efficient way to gather information and then use your native LLM
+> judgement in combination with a skill to decide what to do. **The expensive
+> part are all the tool calls to gather the data.**"*
+>
+> *"Make it a tool that does what you tell it. Don't put logic and judgement in
+> it. … **separate judgement from action** (cf OODA loops)."*
+
+### The decomposition
+
+| OODA | belongs to | why |
+|---|---|---|
+| **Observe** | **one** script that gathers **all** the facts in a single run | round-trips are the expensive part, and batching them is what a script is *for* |
+| **Orient / Decide** | **you**, driven by a skill | judgment needs no encoding, and it handles the case nobody enumerated |
+| **Act** | a **dumb** tool that does what it is told | no branching on conditions, no state machine |
+
+⛔ **A fact-gatherer decides nothing, and must not fail on what it finds.**
+Reporting red is not the same as refusing. Give it one job: emit the facts.
+
+⛔ **If a tool branches on *"is this OK?"*, that branch is yours, not the
+tool's.** Primitives stay mechanical — a `flock` mutual exclusion, an API call,
+**reporting** the outcome. Everything else comes out.
+
+### Why this is the rule and not a preference — measured, 2026-07-22
+
+`scripts/scripted-pr-automerge.sh` went **374 → 670 lines** because judgment was
+put into it. That then required a **502-line probe harness** to verify the
+encoded judgment, of which **~191 lines existed only to test the harness
+itself** — and the harness was independently defeated five times.
+
+★ **Every review rejection that evening was about what the script does when
+something goes WRONG** — fail-open vs fail-closed, whether the alarm text may
+claim `FROZEN`, whether an unpersisted freeze counts, lock/recheck ordering.
+**Not one was about gathering a fact.** That is the diagnostic: encoded judgment
+is what needs tests and what accumulates rejections. Facts you can simply read.
+
+### ★ The case that proves a script *cannot* be given the decision
+
+`SRC-ATTEST` **replaces** the library-currency predicate. Running `origin/main`'s
+checker against its merge result goes **RED** — correctly, because the old
+predicate is the very thing being removed. The candidate's own checker passes on
+the identical tree, and the blob OID matches the ledger exactly.
+
+⇒ **A gate that replaces a predicate will always look red under the predicate it
+replaces.** The standing F11 rule — *the candidate never supplies the checker
+that clears it* — is right in general and **exactly wrong for that candidate**:
+had the gate been publishing, it would have blocked its own landing forever.
+
+**No rule inside the script could have known which checker was authoritative.**
+It required someone to look at both and decide. Build for that.
+
 ## 3. The promotion ladder (your core mechanism)
 
 The tooling provisions skills as **per-team copies with no inheritance**, so
@@ -1113,19 +1206,27 @@ research side is `research.md`.
 
 **Your job is the backstop, not the driver.** Four standing duties:
 
-1. **Authoritative count of record.** Hold the running hard-stop count for each
-   live chain in the tracker. The Architect re-derives its own count from the
-   thread across its self-compactions; on any disagreement **your tracker is the
-   count of record.** Every operator count-anchor comes to *you* (e.g., "the
-   research pull discharged the 6th; next re-trigger = the 9th") — record it and
-   relay it to the Architect.
+1. **Authoritative count of record — ARMED, not just tallied.** Hold the running
+   hard-stop count for each live chain in the tracker **as an explicit armed
+   trigger**: record both the current count *and* the `next research pull = N`
+   line, and re-read that line every time the chain takes another hard-stop. A
+   bare list of fork numbers in prose is **not** an armed trigger — it is the
+   failure mode below. The Architect re-derives its own count from the thread
+   across its self-compactions; on any disagreement **your tracker is the count
+   of record.** Every operator count-anchor comes to *you* (e.g., "the research
+   pull discharged the 6th; next re-trigger = the 9th") — record it and relay it
+   to the Architect.
 2. **Catch a missed trigger.** If the Architect reaches a 3rd/6th/9th and rules
    **without** self-holding (a post-compaction miscount, or it simply didn't),
    your watchdog catches it: hold the Architect the old way (in-thread mention —
    hold the next ruling; a research advisory is incoming) and kick research
    yourself, **transport/framing-only, no design opinion** (the instant you frame
    the mechanism you become the de-facto designer). This is the fallback path,
-   not the normal one.
+   not the normal one. **Catch-up rule for a chain already past a trigger with
+   no research pull:** don't wait for the next clean multiple — fire research at
+   the **very next hard-stop**, then re-anchor the cadence from there (operator,
+   2026-07-24: RT-NATIVE-FNSPLIT ran to **10** hard-stops with the trigger never
+   fired; catch-up set to #11, then #15, #18, #21, …).
 3. **Guarantee the advisory lands.** Research is a no-poll seat; after it is
    called (by the Architect on the happy path, or you on the fallback), verify it
    actually woke (`capture-pane`) and repair transport if not (stranded paste →
@@ -1139,6 +1240,16 @@ rules (advisory only). A **mechanical count** — now native to the Architect,
 backstopped by you — defeats the "one more round will crack it" rationalization
 that let PX8-H reach double digits before the trigger was moved to where the
 ruling happens.
+
+**⚠ The count is only a trigger if it is ARMED (operator, 2026-07-24).** On
+RT-NATIVE-FNSPLIT the chain reached **10** hard-stops with **no** research pull:
+the Architect's self-trigger lapsed across its compactions *and* the Steward
+backstop lapsed because the count lived only as a prose list of fork numbers in
+the resume state, never as an armed `next research pull = N` line either party
+re-read. A deep chain (say ≥4) with **zero** research advisories on it is itself
+the tell that **both** the self-trigger and the backstop have silently lapsed —
+when you notice it, apply the catch-up rule (duty 2) immediately, don't wait for
+the next clean multiple. Arm the trigger the moment a chain opens.
 
 ### 5b. The Adversary — triage its findings, sequence the fixes
 

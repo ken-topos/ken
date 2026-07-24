@@ -1,7 +1,7 @@
 ---
 id: SRC-ATTEST
 title: "squash-stable whole-source attestation + fresh merge-result authorization"
-status: active
+status: merged
 owner: doc
 size: M
 gate: none

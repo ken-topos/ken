@@ -1,7 +1,7 @@
 ---
 id: ORACLE-VIS-PACKAGING
 title: "replace the text-pin visibility oracle on build_process_starter_executable_artifact"
-status: in-review
+status: merged
 owner: runtime
 size: XS
 gate: none

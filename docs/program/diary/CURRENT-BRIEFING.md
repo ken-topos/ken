@@ -5,38 +5,136 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-22 ~13:49Z. OPERATOR IS PRESENT.**
+**As of 2026-07-24 ~16:5xZ. OPERATOR IS PRESENT.**
 
 ## Standing state
 
-- **`origin/main = 9ebebb8e`.** Green. **Three merges landed this window:**
-  `9d2b4feb` DOC-W1-2 → `214bf4de` BUDGET-EFF (host/interp) → `9ebebb8e`
-  ABI-REVOKE (spec + conformance).
-- **★ FOUR TRACKS** (operator directive 2026-07-22 ~12:30Z — *"double the rate
-  of use… as soon as we can parallelize to two tracks on the implementation
-  side, we should"*).
+- **`origin/main = 8ebe370a`** (`PX8-F-CAP-41 Phase 1` — sealed checked buffer-
+  capacity handle, §38 fold). Green. Recent landings behind it: `cbf6a298`
+  PX8-SPAN-PROV Phase 2 → `b64ad9f3` Phase 1 → `4ac9141e` SEAL-2 →
+  `238a5c5d` RT-ESCAPE.
+- **⚡ THE BOX LOST POWER at ~16:19Z, and again at ~16:33Z** (two disconnect
+  waves in the space feed; operator-confirmed). **Every seat re-oriented from
+  cold.** Consequences that outlived the restart are in the next block — read
+  it before diagnosing anything as a stall.
 
-| track | ring | work | state |
-|---|---|---|---|
-| impl 1 | runtime | **RT-SPLIT slice 7** — the last slice | active, with QA |
-| impl 2 | verify | BUDGET-EFF | **host/interp MERGED**; native half deferred |
-| doc | doc | **DOC-W1-3** (Wave 1, slice 3 of 5) | active, kicked 13:44Z |
-| spec | enclave | ABI-REVOKE contract | **MERGED `9ebebb8e`**; retros pending |
+### ⛔ THE ONE LIVE CHAIN — RT-NATIVE-FNSPLIT, hard-stop #33
 
+**The entire runtime frontier is serialized behind this single chain**, and
+everything else downstream of it is blocked by construction:
+
+```text
+RT-NATIVE-FNSPLIT (active, runtime)
+  └─ NATIVE-HANDLE-CARRIER (draft)  ← blocked on it
+       └─ PX8-F-CAP-41 Phase 2      ← blocked on that
+```
+
+| seat | state @ 17:2xZ |
+|---|---|
+| `runtime-implementer` | **implementing the #33 ruling** off `d43b6933` (ack `evt_61n2zpnj5rgvm`) |
+| `architect` | **#33 RULED** `evt_55c62m0anfyyk`; now working the **viability review** |
+| `research` | #33 advisory delivered `evt_138ty4vycfgr5`; idle/ready |
+
+**#33 ruled: choose A** — compose the selected head into the exact final
+producer cursor *before* `reserve_partition_source_return`, giving
+`producer_head = W(selected, successor=T)` / `live_producer_tail = T`, with STOP
+kept strict and the consumed cursor admitted only as a **pointer-free spent
+receipt**. Normal execution is exactly `W once → T once → CompletedTail(T)`.
+
+### ⛔⛔ VIABILITY RULED 2026-07-24 — HOLD + RECUT. THE CADENCE IS OVER.
+
+**`evt_3m1g3v4m2bj51`. Runtime is HELD at clean `b077eb7a` until I author the
+recut frame — that is the Steward's owed act and nothing moves without it.**
+
+- **Single-`Function` inlining is DEAD AND ALREADY REPLACED.** The root cause
+  this WP was filed on is **stale**; `b077eb7a` already emits one function per
+  `PartitionWorkItem`. The issue file's title + origin section are now marked
+  superseded inline.
+- **The mechanism family is VIABLE (Θ(n) reachable); this REPRESENTATION is
+  not.** Helper identity is a Cartesian tuple of variable-width dimensions, so
+  **Θ(n) states × Θ(n)-wide data ⇒ Θ(n²)** descriptor/comparison/frame work.
+  ★ **Hash-consing children cannot save it** — it shares equal subterms, it
+  cannot merge distinct tuples whose components merely overlap.
+- **More per-hard-stop sealing has NO route to the gate.** Sealing is linear
+  only in the graph it *receives*.
+- **Count FROZEN at 33; research cadence SUSPENDED** with the machine it
+  counted (#34 is evidence, not a ruled stop). Re-arm against the recut chain.
+- ★ **Honest reading of n=4 preserved:** one point cannot establish an exponent
+  — `370n`, `93n²` and a threshold-at-n=5 all pass through it. **The hold rests
+  on code inspection rejecting an O(n) proof, not on curve-fitting.**
+
+**Next unit is a planner/census recut — NOT #35:** generate n=3…7 *before*
+lowering bodies; acceptance needs bounded first differences **and** structural
+invariants (fixed K helpers per static node, constant max key/frame width).
+
+★ **This is what the operator's viability call bought:** 33 hard-stops of
+correct, converging semantic work were being spent on a representation that
+provably could not reach the gate. **Every individual ruling was right; the
+thing they were accumulating into was not.**
+
+### ⚡ The escalation that produced it (for method, not status)
+
+Operator ruled 2026-07-24 that 33 hard-stops with SP-A still scaling-red
+warrants a step back. Escalated to the Architect as `evt_98j3z2n49bpg`:
+
+> Can single-`Function` inlining + defunctionalized continuation sealing reach
+> the O(n) scaling gate **at all**, or is 1,482 states at n=4 structural
+> super-linearity further sealing cannot remove?
+
+I framed the question only — the ruling is the Architect's. **Sequencing call I
+made:** the implementer *continues* #33 meanwhile, because that ownership fix
+moves toward the constant-width form under any outcome; the Architect can hold
+it with one word. Told it to pull Research immediately rather than wait for #36.
+
+★ **Best grounding came from the Architect's own #33 ruling:**
+`PartitionProducerKontSiteActionKey::ApplyActiveEliminators` still carries
+**vector-shaped** `pending`/scope/capture data (`partition.rs:5700–5777`) — it
+called this *"not the scalable form of this ruling."* A measured defect, not a
+forecast.
+
+**Thread for everything on this chain: `thr_7vdcfhxgfw128`.** The open question
+is *selected-head ownership at the STOP predicate* — candidates A (precompose
+selected-head work into the exact final producer cursor) vs B (selected
+ancestry/scope as typed dynamic activation subordinate to the producer cursor).
+⚠ **That is the Architect's lane. Do not form or transmit a view on it.**
+
+**Two stacked transport failures cost this chain a restart's worth of latency —
+both repaired 2026-07-24 ~16:5xZ:**
+
+1. The Architect's advisory request `evt_3vr382mrv99pe` posted with an **empty
+   `mentions` array** ("mentioning Architect only" in its prose refers to
+   *research's reply*, not its own routing). Research is a **no-poll seat**, so
+   it was never notified and re-oriented to *"awaiting dispatch"* while the
+   Architect sat `blocked-on-Research` **indefinitely**. Repaired by pointing
+   research at the event verbatim (`evt_d2b3vahe7khj`) — **transport only, the
+   question was not restated.**
+2. **`architect` and `librarian` both died on `⚠ Selected model is at
+   capacity`** mid-re-orientation. Research runs the *same* model and was fine,
+   so **capacity is transient per-request, not a model-wide block** — a rouse
+   clears it (architect roused → `Working`). `librarian` re-oriented fully and
+   holds no obligation, so its idle is correct.
+
+★ **The generalizable tell: a seat whose turn dies on a capacity error is
+indistinguishable from a healthy idle seat.** Neither posts, neither pushes.
+Only a **wide** `capture-pane` shows the `at capacity` line above the composer.
+
+- **§5a research trigger is now ARMED in the issue file** (it was not — that is
+  why this chain ran **10 hard-stops dry**): `docs/program/issues/`
+  `RT-NATIVE-FNSPLIT.md` carries `hard-stop count = 33` /
+  `NEXT RESEARCH PULL = #36`, cadence every 3rd. **My tracker is the count of
+  record**; the Architect re-derives its own across compactions and loses.
+- **⛔ RT-NATIVE-FNSPLIT DOES NOT MERGE ON "the tests pass"** — the operator's
+  scaling gate (`evt_4btfhwqhah1ye`) binds: empirical n=3..7 harness +
+  research-grounded analytical growth order + a verdict. **SP-A is
+  independently scaling-red at 1,482 states / 1,525 edges**; no advisory in this
+  chain has cured that, and each one says so explicitly.
 - **Build side is capped at TWO implementation tracks** (operator). Doc is the
   standing exception; the enclave is not a build team, so it does not count
-  against the cap.
+  against the cap. **Track 1 = runtime/FNSPLIT. Track 2 is currently EMPTY.**
 - **⛔ IDLE BUILD RINGS ARE CORRECT — DO NOT "FIX" IT.** Operator ruling
-  2026-07-22 ~13:1xZ: *"just doc plus two implementation tracks."* `kernel`,
-  `language`, `ergo`, `foundation` sitting idle with zero ready items is the
-  **intended** state, not a stall to diagnose. **There is NO WP-authoring
-  obligation for them.** (This supersedes the earlier framing of the ready
-  queue as the binding constraint — that framing was correct as an observation
-  and wrong as a call to action.)
-- **Verify is idle by construction, not by neglect:** both of its next items —
-  BUDGET-EFF's native half and `BUDGET-EXHAUST` — are blocked (on slice 7 and
-  on an Architect mechanism ruling respectively). Nothing to kick.
-- **Do not kick a WP while the operator has an open question below.**
+  2026-07-22: *"just doc plus two implementation tracks."* `kernel`, `language`,
+  `ergo` idle with zero ready items is the **intended** state, not a stall.
+  **There is NO WP-authoring obligation for them.**
 
 ### ⛔ Retraction: the stale-base "near-miss" was FALSE (2026-07-22 ~13:43Z)
 
@@ -89,6 +187,15 @@ to the storage layer, where nobody was looking.
 
 > ### 🚨 INFRA ESCALATION FOR THE OPERATOR — `runtime-qa` convo outbound is DEAD
 >
+> ⚠⚠ **UNVERIFIED SINCE THE 2026-07-24 POWER CYCLE — DO NOT CITE THIS, TEST IT.**
+> This is a claim about **mutable external state** (COORDINATION §7a): it can
+> become false without any file changing, and the box has since power-cycled
+> twice, which restarts the MCP client this diagnosis was about. **The next time
+> `runtime-qa` needs to post, have it try — do not pre-emptively route it to the
+> commit-a-verdict workaround on the strength of this block, and do not escalate
+> it to the operator again without a fresh failed attempt.** Everything below is
+> evidence about 2026-07-22, not about now.
+>
 > **Inbound works** (it receives mentions and reviews normally); **it cannot
 > POST.** Unchanged across 4 watchdog ticks and 2 `/mcp` reconnect attempts.
 > Server-side is healthy — every other seat posts normally.
@@ -105,150 +212,114 @@ to the storage layer, where nobody was looking.
 > (`ergo-qa @ cf791c7f`, `verify-qa @ 04efa001`). **A relay verifies the
 > selection; a commit eliminates the selection.**
 
-### ▶ Build track — RT-SPLIT (Runtime ring) — **SLICE 7, THE LAST ONE**
+### ▶ Track 1 — RT-NATIVE-FNSPLIT (Runtime ring) — THE ONLY LIVE BUILD TRACK
 
-**Slice 6 merged `@ 7c6e03c8` — six of seven done, budget 22/24, retros in.**
-`cranelift_backend.rs` is down to **1,445 lines** from 22,081; `core.rs` and
-`lowering/mod.rs` were **0-byte diffs** (the no-re-touch rule has now held
-across five consecutive slices).
+Full state in **Standing state** above. One line here so this section is not a
+second source of truth: **held at hard-stop #33 / `d43b6933`; research advisory
+in flight; Architect rules after it lands; operator scaling gate still unmet.**
 
-⛔ **Slices 6 and 7 were REVERSED mid-series** (Architect `evt_2j4gnwffr7h63`):
-`artifact::api` led, artifact internals follow. Artifact-first would have cost
-7 `pub(super)` widenings (22→29 vs cap 24) because api-destined callers were
-still in the residual parent — **a visibility forecast from the FINAL module
-graph says nothing about the TRANSITIONAL graph a slice compiles against.**
+### ▶ Track 2 — `DOC-VALIDATION-BINDING` (Verify ring), kicked 2026-07-24
 
-**Slice 7 is kicked** (`evt_1aj141722jfq3`) on `wp/rt-split-7-artifact-internals`
-off `7c6e03c8`. Four things bind it:
+Operator-directed fill of the empty second slot. Kicked `evt_3fv5d1men6r9y`;
+ring compact-verified at `8ebe370a`; branch
+`wp/DOC-VALIDATION-BINDING-gate-token-binding` off current `origin/main`.
 
-1. **Delete all six scaffold imports in `artifact/mod.rs`** — and **`api.rs`
-   must NOT change at that point. If it does, the scaffold was wrong.** The
-   adversary will test exactly this on merge; it makes slice 6 retroactively
-   falsifiable by slice 7's diff.
-2. Module comment → *"final ruled users span `lowering` and `artifact::api`"*.
-3. **Re-run the final-destination census** — recompute from rows in code with
-   the blocking assertion; do not implement the number the frame states.
-4. **Placement changes ONLY on a changed DIRECT-use population** — the
-   quantifier, not a paraphrase.
+⚠ **Re-homed doc → verify, and the reason matters.** I first offered this to the
+operator as *"scoped to `library/`, doc-only, Architect does not vote"* — **that
+was wrong.** The mechanism is `crates/ken-cli/tests/library_documentation_gates.rs`,
+a 106 KB Rust gate harness. Consequences: the doc ring cannot own it (its
+concurrency licence *is* path-disjointness from `crates/`), and **the
+COORDINATION §14a doc-only exemption does not apply — the Architect must vote.**
+Corrected to the operator in the same breath as acting on it.
 
-**`cranelift_backend/**` is slice 7's exclusive territory**, and its landing
-**releases Verify's deferred BUDGET-EFF half** (the native reifier in
-`lowering/core.rs`). Slice 7 is therefore the release point for the other
-track, not just the end of this one.
+★ **Transferable:** *a WP's tracked `owner:` field is a routing claim, not a
+grounded one.* This one said `doc` and had said so since it was filed. **Grep
+where the mechanism actually lives before you route on the field.**
 
-### ▶ Build track 2 — BUDGET-EFF (Verify ring)
+`PX8-F-CAP-41` Phase 2 was the natural Track 2 but is **blocked** behind
+`NATIVE-HANDLE-CARRIER` → `RT-NATIVE-FNSPLIT`, so the PX8 spine cannot fill this
+slot while #33 is open.
 
-**Scope split ruled `evt_2sw8883abc3m4`** after I asserted path-disjointness
-**from a string literal** and `verify-implementer` caught it (my grep matched
-`"ctor:prelude::TransferCount::PrivateTransferCount"` — a constructor *name*
-inside quotes — while the real reifier sits in `cranelift_backend/lowering/`).
+### ⛔ FOUR OPERATOR DIRECTIVES ARE LAW AND ARE **NOT ON `main`**
 
-- **In scope:** `ken-host`, `ken-interp`, **AC-3 oracle rewrite**
-- **⛔ Deferred until slice 7 lands:** anything under `cranelift_backend*`
+Found 2026-07-24 while checking `steward/work` drift. Verified **by content**
+(`git grep <phrase> origin/main`), not by branch-ahead, so the squash-merge trap
+is excluded:
 
-`ken-host` piece landed on `wp/BUDGET-EFF @ f4a86050` — two-field inseparable
-`TransferCountV1` carrier per Architect ruling `dec_1m6xdwjp2ttyn`, 46/46 green.
-`ken-interp` in progress.
+| item | status |
+|---|---|
+| `COORDINATION §8a` — Architect/Librarian review in PARALLEL over disjoint domains | **not on main** |
+| `COORDINATION §10⁻a` — adversary channel report-only, scoped to `crates/`+catalog | **not on main** |
+| steward playbook §2d — separate judgment from action (OODA) | **not on main** |
+| steward playbook — contention has a LEDGER axis | **not on main** |
 
-★ **Load-bearing oracle shape:** capped-full alone (raw 8, effective 4, count 4
-→ remaining 0) is satisfiable by the wrong shortcut `effective := count`. The
-suite needs **both capped-full AND capped-short** to discriminate.
+⛔ **Why this is not bookkeeping.** Every seat reads `agent/COORDINATION.md`
+**from its own worktree at `origin/main`.** After the power cycle the whole
+fleet re-oriented against a COORDINATION that is **missing two operator
+directives**. I hold them only because I read from `steward/work`. So the fleet
+is currently reviewing in series where §8a says parallel, and the adversary is
+operating without its §10⁻a scope fence.
 
-★ **RULE ADOPTED:** *path-disjointness is re-derived BY THE RECEIVING RING at
-pickup and reported before implementation starts — never asserted by me in a
-kickoff.*
+⚠ **`steward/work` is 70+ commits ahead of `origin/main`**, against §6a's *"at
+most the current unpublished tracker delta."* Most is the squash-merge trap —
+**do not treat branch-ahead as unmerged.** The correct route is §6a step 2: cut
+`wp/steward-<slug>` from **current** `origin/main` and apply only the intended
+changes; never publish `steward/work` itself.
 
-> ### ⛔ SLICE 6 IS BLOCKED ON THE ARCHITECT'S FIDELITY REVIEW, NOT ON THE RING
->
-> The **12-item frame sweep is written and committed** (`06d72bde`). It folds
-> the post-slice-5 rulings into
-> `docs/program/wp/rt-split-cranelift-backend.md`. **@architect reviews the
-> exact published SHA for fidelity; then `runtime-leader` may kick slice 6.**
->
-> **The three rulings that reshape slice 6:**
->
-> 1. **`verify_cranelift_function` is LOWERING-owned** (`evt_3tgaw9ws44fqg`),
->    not artifact-owned. It has exactly **one** production consumer. The two
->    test adapters are therefore **symmetric across the boundary** — the JIT
->    bridge in `artifact/mod.rs` (slice 6), the verifier bridge
->    `verify_cranelift_function_for_artifact_tests` in `lowering/mod.rs`
->    (landed slice 5). ⛔ **Slice 6 must NOT re-touch `lowering/mod.rs`** — the
->    transitional facade alias exists so it does not have to.
-> 2. **Classify by COMPILATION REACH, never by a production/`cfg(test)`
->    binary** (`evt_2mexay4h5tr6y`, frame §10.4b). A predicate satisfiable with
->    `test = false` is production-reachable, **and a feature name containing
->    `test-support` does not change that** — `ken-cli` enables
->    `px8-ds-test-support` on its ordinary `ken-runtime` dependency. Every sweep
->    run against this file — mine, the adversary's, the implementer's —
->    partitioned on the two-cell binary and was blind to the third cell in the
->    same way.
-> 3. **Residual-parent closure is TWO-LAYERED** (frame AC-9): a full
->    source-coverage partition **and** a macro-aware declaration/`cfg` ledger,
->    plus a configuration matrix. **Neither substitutes for the other** — line
->    coverage passed a semicolon mis-split; a declaration regex missed the
->    indented `thread_local!` statics. ⛔ **Every "exactly two" / "closed by
->    construction" claim is WITHDRAWN.**
+**Awaiting the operator's call on publishing this** (§10⁻: process work is
+subordinate to product flow — but these are the operator's own directives, and
+their absence is actively changing how the fleet behaves).
 
-> ⚠ **A gate that cannot see its own subject.** `with_px8ds_retired_flat_order`
-> is bare `pub`, re-exported via `lib.rs:39`, consumed cross-crate by
-> `crates/ken-cli/tests/px8ta_oriented_subcontinuation.rs`. The feature is
-> **default-off**, so AC-2's rustdoc dump reads 338→338 whether the facade
-> re-export is right, wrong, or **missing** — *incapable*, not weak — and
-> `-p ken-runtime` compiles the block away. **Omitting it leaves every local
-> gate GREEN and another crate broken, caught only by CI.** Only local
-> evidence: `scripts/ken-cargo test -p ken-cli --test
-> px8ta_oriented_subcontinuation`. ⛔ **NOT `--workspace`.**
+### ▶ Doc track — IDLE
 
-### ▶ Doc track — WAVE 1 IS UNBLOCKED
+`DOC-W0`/`DOC-W1` closed, `DOC-W1-*` slices merged. `DOC-W2` is `draft` (a MAP,
+framed only when Wave 1's exit condition is met). `DOC-VALIDATION-BINDING` is
+`ready` and unassigned — the cheapest genuinely-parallel item on the board.
 
-**`DOC-CURRENCY-ANCHOR` is CLOSED** (acceptance re-derived against the landed
-`scripts/gen-doc-status.sh` on `origin/main`, not from a working tree). The
-outage that made `main` red on its own documentation gate is resolved; the
-three-fold history is in [`2026/Jul/22.md`](2026/Jul/22.md) and the closure
-record. **`DOC-W1` is now ungated** — its `status: draft` means *framed and
-releasable*, and it needs the handoff gate before a kick.
+### ⏭ Releasable frontier (generated — `IMPLEMENTATION-PROGRESS.md`)
 
-### ⏭ Steward's own queue under the away-window directive
+All deps met, nothing blocking a kickoff. **Ownership shown is the tracked
+owner, not an assignment.**
 
-1. ✅ **DONE — Waves 1 and 2 framed** (`issues/DOC-W1.md`, `issues/DOC-W2.md`,
-   `origin/main @ a87e1cae`). Both `status: draft` meaning **GATED, not
-   unscoped** — the schema has no `blocked` state. Wave 1b and
-   `tasks/ffi-and-platform.md` are deferred with reasons stated in-file.
-2. ✅ **DONE — the six-wave body** is `12-documentation-program.md` §4a/§4b/§4c.
-   §4a is the load-bearing part: DOC-W0's eight findings tabulated as one
-   defect class, with the three carries every wave frame inherits.
-   **⏭ Remaining: Wave 1b and Waves 3–6 are a MAP, framed only when their
-   predecessor's exit condition is actually met.**
+| item | owner | note |
+|---|---|---|
+| `DOC-VALIDATION-BINDING` | doc | validation vocabulary claims a 1:1 gate binding nothing enforces |
+| `STR-BIJ` | spec-enclave | String/`List Char` bijection over-claim; ⚠ carries a **ledger-axis** sequencing constraint |
+| `KW-THEOREM` | spec | rename surface keyword `lemma` → `theorem` |
+| `F1-37` | runtime | bignum `Int` soundness review for K3 trusted-base promotion — ⛔ *same ring as FNSPLIT, so not concurrent* |
+| `MODELS-TIER` | steward | MODELS.md — Runtime seating is the norm, not an exception |
+| `PUB-VERIFY` | steward | `scripted-pr-automerge.sh` exits 0 on a failed push |
 
-> ✅ **PUBLISHED — the §7 *ledger-is-an-output* heuristic is on `main`**
-> (verified by CONTENT at `docs/program/wp/rt-split-cranelift-backend.md:329`,
-> not by branch-ahead). The old "held, unpublished" note is discharged.
-> The duty-assignment lesson that sat here has moved to
-> [`2026/Jul/22.md`](2026/Jul/22.md); its rule is durable: **an instruction
-> whose verb names a capability I hold and the recipient does not is mine to
-> execute** — *push, compact, merge, mint*.
+★ **`PUB-VERIFY` is the one with teeth:** a publisher that exits 0 on a failed
+push means a "published" report can be false. It is *my* tooling, so §10⁻
+applies — it waits behind product unless it actually blocks a landing.
 
-3. ✅ **`issues/ABI-REVOKE.md` — FRAMED**, and it is **not shovel-ready by
-   design.** Grounding found a blocking prerequisite the charter does not
-   name: `62 §4` ties the membrane to a controlling **`36 §4` space cell**,
-   and **no `36 §4` space exists in any runtime crate.** The `Space` in
-   `ken-runtime/src/store.rs:198` is the **`44 §3` arena reclamation unit** — a
-   different concept sharing the word, which greps positively and is why the
-   charter's *"fold into PX7"* read as plausible. **Routed to the Architect for
-   a design pass + ADR before any sizing.** PX7's generation table guards
-   use-after-close; revocation must deny a handle that is **still valid**.
-4. `BUDGET-EFF` — shovel-ready, queued behind RT-SPLIT, ahead of ABI-M1.
-5. ⏭ **Queued small fix:** rustfmt drift at `crates/ken-runtime/src/store.rs:602`
-   — **pre-existing on `origin/main`**, verified there and not introduced by
-   RT-SPLIT (the implementer reverted rather than bundling it — correct call).
-   One hunk. **Touches `crates/` ⇒ needs the normal ring gates**; a standalone
-   item behind RT-SPLIT, never a rider.
-6. ⏭ **`agent/COORDINATION.md §12a` — `git stash` is now fleet law.** The stash
-   stack is **one stack shared by ~70 worktrees**; a bare `pop` takes whichever
-   agent parked last. ⚠ **Do not reap the existing entries** — they belong to
-   other seats.
-7. ⏭ Sweep ~20 stale `/tmp/ken-*` worktrees. **ASK before touching any with
-   tracked changes.**
+### ⏭ Durable rules kept from the closed RT-SPLIT / BUDGET-EFF tracks
+
+The track narrative moved to [`2026/Jul/22.md`](2026/Jul/22.md). These outlived
+it:
+
+- ★ **Path-disjointness is re-derived BY THE RECEIVING RING at pickup and
+  reported before implementation starts — never asserted by me in a kickoff.**
+  I once asserted it *from a string literal* (a constructor **name** inside
+  quotes) and the ring caught it.
+- ★ **Classify by COMPILATION REACH, never by a `production`/`cfg(test)`
+  binary.** A predicate satisfiable with `test = false` is production-reachable,
+  and a feature name containing `test-support` does not change that. Every
+  independent sweep of that file — mine, the adversary's, the implementer's —
+  partitioned on the two-cell binary and was blind to the third cell **the same
+  way**.
+- ★ **A gate can be incapable of seeing its own subject.** A `default-off`
+  feature's rustdoc dump reads identically whether a re-export is right, wrong,
+  or **missing** — *incapable*, not weak. Local gates stay green while another
+  crate is broken; only CI catches it. ⛔ Never `--workspace` locally to chase
+  this — name the one cross-crate test instead.
+- ⏭ **Queued small fix:** rustfmt drift at `crates/ken-runtime/src/store.rs:602`,
+  **pre-existing on `origin/main`** (verified there, not introduced by RT-SPLIT).
+  Touches `crates/` ⇒ normal ring gates; a standalone item, **never a rider**.
+- ⏭ Sweep ~20 stale `/tmp/ken-*` worktrees. **ASK before touching any with
+  tracked changes.**
+
 
 ### ⛔ PUBLISH DISCIPLINE — tightened 2026-07-22 after invalidating a Decision
 

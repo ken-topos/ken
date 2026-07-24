@@ -1,7 +1,7 @@
 ---
 id: CI-SKIPPED-NATIVE-TESTS
 title: "Restore rt_parity_native — dedicated CI job, outlier not fixed"
-status: active
+status: merged
 owner: verify
 size: S
 gate: none
