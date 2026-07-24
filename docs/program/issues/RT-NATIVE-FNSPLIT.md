@@ -78,7 +78,7 @@ this line wins.** Re-read this line on every hard-stop.
 
 ```text
 RECUT CHAIN (live, from kickoff evt_2kgfmmeeh2x7w, 2026-07-24)
-hard-stop count    = 3   ← RESEARCH PULL DUE AND DISPATCHED
+hard-stop count    = 3   ← PULL FIRED AND CONSUMED (advisory evt_rwqb8ear89wx)
   #1 = Architect amendment ruling evt_6dpb96kn1583f (2026-07-24) — Phase 1's
        held-checkpoint premise is FALSE; census returns could_not_determine;
        empirical gate moves to the recut in two closed boundaries. Frame
@@ -114,7 +114,15 @@ hard-stop count    = 3   ← RESEARCH PULL DUE AND DISPATCHED
        advisory, at the implementer's own request.
 NEXT RESEARCH PULL = hard-stop #6, then #9, #12, …
 
-⚠ The count is at 3 and the pull has FIRED. Re-arm: the next pull is #6.
+⚠ The count is at 3; the pull FIRED and is CONSUMED. Advisory delivered at
+   evt_rwqb8ear89wx (Danvy/Nielsen defunctionalization granularity; Agda
+   TTerm / Lean FnBody / Cranelift IR as closed-IR precedent; Maranget on why
+   small-n affine tables mislead). Re-arm: the next pull is #6.
+
+⚠ BOUNDARY A IS MERGED (647a2e5b, retros in) BUT THIS WP STAYS `active` —
+   Boundary B is in flight and stopped at #3. Do not flip this parent to
+   `merged` on a boundary landing; it closes only when both boundaries land
+   and the scaling gate above is satisfied.
 
 HELD CHAIN (closed, historical — does NOT carry forward)
 hard-stop count = 33            (FROZEN)
