@@ -1,7 +1,7 @@
 ---
 id: DOC-W2
 title: "documentation Wave 2 — agent core modules, task packs, and cold-context evals"
-status: ready
+status: active
 owner: doc
 size: L
 gate: none

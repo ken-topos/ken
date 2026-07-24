@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-24 21:55:44Z — from 48 issue file(s) in `docs/program/issues/`.
+2026-07-24 22:12:40Z — from 48 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -53,7 +53,7 @@ the committed file matches the generator's output.
 | `DOC-VALIDATION-BINDING` | validation vocabulary claims a 1:1 binding to the gates; nothing binds it | merged | verify | S | none | — |
 | `DOC-W0` | documentation Wave 0 — library/ charter and currency substrate | closed | doc | M | none | 830 |
 | `DOC-W1` | documentation Wave 1 — the read-Ken spine, taught from checked fragments | closed | doc | L | none | — |
-| `DOC-W2` | documentation Wave 2 — agent core modules, task packs, and cold-context evals | ready | doc | L | none | — |
+| `DOC-W2` | documentation Wave 2 — agent core modules, task packs, and cold-context evals | active | doc | L | none | — |
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
 | `F3-39` | F3 [task-list #39] — reducer: degrade-not-wrap + retire legacy arms | draft | runtime | TBD | none | — |
 | `F4` | content-addressing + value-model design (aka PX8-F-PROOF) | draft | foundation+spec-enclave | M | none | — |
