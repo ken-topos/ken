@@ -25,8 +25,8 @@ pub(in crate::cranelift_backend) use std::collections::{BTreeMap, BTreeSet, VecD
 
 pub(in crate::cranelift_backend) use cranelift_codegen::cursor::{Cursor, FuncCursor};
 pub(in crate::cranelift_backend) use cranelift_codegen::ir::{
-    types, AbiParam, FuncRef, Function, Inst, InstBuilder, MemFlags, StackSlotData, StackSlotKind,
-    UserFuncName, Value,
+    types, AbiParam, FuncRef, Function, Inst, InstBuilder, InstructionData, MemFlags, Opcode,
+    StackSlot, StackSlotData, StackSlotKind, UserFuncName, Value,
 };
 pub(in crate::cranelift_backend) use cranelift_codegen::verify_function;
 pub(in crate::cranelift_backend) use cranelift_frontend::{
@@ -284,6 +284,7 @@ struct Lowering<'a> {
     active_partition_return_contract: Option<PartitionStateReturnContract>,
     active_partition_state_id: Option<usize>,
     active_partition_function_index: usize,
+    active_partition_caller_role: PartitionPendingCallerRole,
     pending_partition_call_edges: Vec<PartitionPendingCallEdge>,
     active_partition_source_return: Option<PartitionSourceKontReturnCursor>,
     active_partition_completed_producer_tail: Option<PartitionProducerTailCompletion>,
