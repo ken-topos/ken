@@ -5,7 +5,17 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-24 ~20:5xZ. OPERATOR IS PRESENT.**
+**As of 2026-07-24 ~21:0xZ. OPERATOR IS PRESENT.**
+
+> ## ⇢ RESUME HERE — the frontier in six lines
+>
+> **`origin/main = d4b96433`** (+ a doc-only publish of the recut in flight).
+> **RT-NATIVE-FNSPLIT Boundary A is MERGED** (`647a2e5b`, retros in). The
+> Architect ruled hard-stop #3 → **fork (b)**, a closed semantic-IR arena
+> (`evt_49bnspfb74tne` + addendum `evt_3b2a75fcaegja`). **I recut Boundary B
+> into B1 (representation checkpoint) + B2 (body port)** and kicked the Runtime
+> ring on `RT-PLANNER-DIAGNOSTIC-K` first, then B1 (`evt_1an76223hfsq3`).
+> **Verify ring is building `DOC-GATE-CONTROL-BINDING`.** Cadence = 3, next #6.
 
 > ## ⚡ OPERATOR PRIORITY (2026-07-24): **LAND RT-NATIVE-FNSPLIT.**
 > *"I did not mean to abandon the RT-NATIVE-FNSPLIT effort. Continue that work.
@@ -45,7 +55,50 @@
 > Everything it owed is done: drops verified, Runtime kicked, cadence re-armed,
 > watchdog re-armed.
 >
-> ## Where the frontier is — BOUNDARY A IS MERGING; BOUNDARY B IS STOPPED AT HARD-STOP #3
+> ## ✅ HARD-STOP #3 IS RULED — fork (b), and Boundary B is RECUT into B1 + B2
+>
+> **Architect ruling `evt_49bnspfb74tne`** (+ addendum `evt_3b2a75fcaegja`
+> folding in the adversary's measured zero-K-headroom): **a small closed
+> semantic-IR arena with explicit static-origin preservation.** ⛔ NOT another
+> `TransitionKind` per exposed responsibility — that is the research advisory's
+> *rejected middle*, a taxonomy of lowering accidents with neither a derivation
+> nor a structural bound.
+>
+> **I recut Boundary B into two slices at a review gate**
+> (`docs/program/wp/RT-NATIVE-FNSPLIT-recut-B1-semantic-ir.md`), because the
+> ruling requires the opcode enum + its exhaustive builder to be a
+> representation checkpoint **before** the retained body port resumes. The
+> stopped port is **+21,544/−2,086 across 12 files**; a closed grammar with no
+> admissible wildcard arm cannot be reviewed inside that.
+>
+> ⛔ **THREE FIXED INPUTS FOR B1 — settled, contradicting one is a hard-stop:**
+> fork (b) is chosen · Boundary A is retained as the outer plan · **ZERO outer
+> planned helpers per static source** (`fixed_k = 8` vs cap `8` — the inventory
+> is FULL; an IR record is not a helper).
+>
+> **Kicked `evt_1an76223hfsq3`**, ring compacted + drops verified. Order:
+> **`RT-PLANNER-DIAGNOSTIC-K` (S) FIRST**, then B1 — they contend on
+> `planning/static_transition.rs`.
+>
+> ### ⚠ MY RE-ANCHOR GUARD WAS WRONG — the 4th instance of the promoted lesson
+>
+> I told Runtime that A's planner files appearing in
+> `git diff --stat origin/main...<B tip>` meant a bad re-anchor. **That tests
+> path overlap; the property is content re-introduction** — and since B's whole
+> job is to make A's plan load-bearing, it MUST edit A's files. The guard was
+> **unsatisfiable by construction**. The leader correctly stopped rather than
+> declaring it inapplicable.
+>
+> ★ I wrote that guard **an hour after promoting**
+> `agent/memory/build/a-check-that-measures-a-proxy-passes-for-the-wrong-reason.md`.
+> **Recording a discipline does not install it.**
+>
+> **The correct evidence is CONTENT:** parent == landed SHA · patch-ID stable
+> (`890a6774`) · A's signature tokens appear **exactly once** · A's file =
+> main's size + B's net delta, not doubled. All verified; B is clean at
+> `415b5aa7`.
+>
+> ## (historical) Where the frontier was — Boundary A merging, B stopped at #3
 >
 > **`origin/main = 64b0811f`.** Boundary A is **approved by QA and the Architect**
 > at `7547da95` and is publishing as **PR #923** (branch FROZEN, CI running).

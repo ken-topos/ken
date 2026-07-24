@@ -1,7 +1,7 @@
 ---
 id: RT-PLANNER-DIAGNOSTIC-K
 title: "Boundary A planner: report planner-invariant failures as planner defects, and assert fixed_k CONSTANT rather than merely affine"
-status: ready
+status: active
 owner: runtime
 size: S
 gate: none
