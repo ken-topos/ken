@@ -1,7 +1,7 @@
 ---
 id: DOC-W2
 title: "documentation Wave 2 — agent core modules, task packs, and cold-context evals"
-status: draft
+status: ready
 owner: doc
 size: L
 gate: none
@@ -11,7 +11,19 @@ github: null
 origin: research/librarian-documentation-program-proposal.md Wave 2; framed 2026-07-22 per operator directive (frame Waves 1-2 only)
 ---
 
-**⛔ BLOCKED on `DOC-W1`.** Waves run sequentially (operator, 2026-07-22:
+> ## ✅ UNBLOCKED 2026-07-24 — `DOC-W1`'s dependency is DISCHARGED
+>
+> Verified on `origin/main` by deliverable, not by status word: the read-Ken
+> spine is landed — `library/learn/reading-ken/01-anatomy.md` through
+> `06-execution.md`, plus `fragments.md`, the exercises set, `quickstart.md`,
+> and `introduction.md` (17 files under `library/`). ⚠ `DOC-W1` carries
+> `status: closed`, which the schema legend also uses for *superseded/withdrawn*
+> — so the word alone did not settle it. **The files did.**
+>
+> ⇒ This brief was already complete and shovel-ready; only the gate was
+> outstanding. Status flipped `draft` → `ready`.
+
+**(historical) ⛔ BLOCKED on `DOC-W1`.** Waves run sequentially (operator, 2026-07-22:
 three seats, no fan-out). The agent modules describe the same product
 knowledge the Wave 1 curriculum teaches; authoring them first would fork the
 explanation and guarantee drift between the two.
