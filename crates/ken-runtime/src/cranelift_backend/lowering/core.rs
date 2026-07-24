@@ -179,6 +179,8 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         partition_queue: VecDeque::new(),
         partition_continuations: PartitionContinuationInterner::default(),
         partition_source_nodes: PartitionSourceNodeInterner::default(),
+        partition_recursor_nodes: PartitionRecursorNodeInterner::default(),
+        partition_recursor_qualifications: PartitionRecursorQualificationNodeInterner::default(),
         partition_cleanup_suffixes: PartitionCleanupSuffixInterner::default(),
         partition_cleanup_transitions: PartitionCleanupTransitionLedger::default(),
         partition_cut_armed: partition_entry_cut_armed,
@@ -733,6 +735,230 @@ impl<'a> Lowering<'a> {
             capture_pointer,
         });
         Ok(())
+    }
+
+    fn push_partition_recursor_layer(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        stack: &mut RecursorUnwindStack,
+        layer: ComputationalRecursorLayer,
+    ) -> Result<(), CraneliftBackendError> {
+        let mut capture_values = Vec::new();
+        append_partition_layer_values(self, builder, &layer, &mut capture_values)?;
+        let capture_field_types = capture_values
+            .iter()
+            .map(|value| builder.func.dfg.value_type(*value))
+            .collect::<Vec<_>>();
+        let successor = stack.partition_cursor.map(|cursor| cursor.node);
+        let node = self
+            .partition_recursor_nodes
+            .intern(layer, capture_field_types, successor);
+        let invocation = self
+            .invocation_pointer
+            .expect("recursor continuation capture owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let field_count = capture_values.len().checked_add(1).ok_or_else(|| {
+            unsupported(
+                "NativeRecursorContinuationStepV1",
+                "recursor-continuation cell width overflowed",
+            )
+        })?;
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            partition_frame_size(field_count)?,
+            3,
+        ));
+        let successor_pointer = stack.partition_cursor.map_or_else(
+            || builder.ins().iconst(pointer_type, 0),
+            |cursor| cursor.capture_pointer,
+        );
+        builder.ins().stack_store(successor_pointer, frame, 0);
+        for (index, value) in capture_values.iter().copied().enumerate() {
+            let offset = index
+                .checked_add(1)
+                .and_then(|field| field.checked_mul(PARTITION_FRAME_FIELD_BYTES as usize))
+                .and_then(|offset| i32::try_from(offset).ok())
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeRecursorContinuationStepV1",
+                        "recursor-continuation cell store offset overflowed",
+                    )
+                })?;
+            builder.ins().stack_store(value, frame, offset);
+        }
+        stack.partition_cursor = Some(PartitionRecursorCursor {
+            node,
+            capture_pointer: builder.ins().stack_addr(pointer_type, frame, 0),
+        });
+        Ok(())
+    }
+
+    pub(super) fn materialize_partition_recursor_stack(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        stack: &mut RecursorUnwindStack,
+        checked_parent_frame: Option<u64>,
+    ) -> Result<Option<PartitionRecursorCursor>, CraneliftBackendError> {
+        let flat = std::mem::take(&mut stack.later_wrappers_in_construction_order);
+        let mut checked_parent = None;
+        for layer in flat {
+            let is_checked_parent = checked_parent_frame.is_some_and(|frame| {
+                layer.semantic_pending && layer.checked_frame_id == Some(frame)
+            });
+            self.push_partition_recursor_layer(builder, stack, layer)?;
+            if is_checked_parent {
+                if checked_parent.replace(
+                    stack
+                        .partition_cursor
+                        .expect("pushed recursor layer has a persistent cursor"),
+                )
+                .is_some()
+                {
+                    return Err(unsupported(
+                        "NativeRecursorContinuationStepV1",
+                        "persistent recursor stack has multiple exact checked parents",
+                    ));
+                }
+            }
+        }
+        Ok(checked_parent)
+    }
+
+    pub(super) fn push_partition_recursor_qualification(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        stack: &mut RecursorUnwindStack,
+        target: PartitionRecursorCursor,
+        source: InvocationTemplateRef,
+    ) -> Result<(), CraneliftBackendError> {
+        let successor = stack
+            .partition_qualification
+            .map(|cursor| cursor.node);
+        let node = self
+            .partition_recursor_qualifications
+            .intern(target.node, source, successor);
+        let invocation = self
+            .invocation_pointer
+            .expect("recursor qualification capture owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            PARTITION_FRAME_FIELD_BYTES * 2,
+            3,
+        ));
+        let successor_pointer = stack.partition_qualification.map_or_else(
+            || builder.ins().iconst(pointer_type, 0),
+            |cursor| cursor.capture_pointer,
+        );
+        builder.ins().stack_store(successor_pointer, frame, 0);
+        builder.ins().stack_store(
+            target.capture_pointer,
+            frame,
+            PARTITION_FRAME_FIELD_BYTES as i32,
+        );
+        stack.partition_qualification = Some(PartitionRecursorQualificationCursor {
+            node,
+            capture_pointer: builder.ins().stack_addr(pointer_type, frame, 0),
+        });
+        Ok(())
+    }
+
+    fn pop_partition_recursor_layer(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        stack: &mut RecursorUnwindStack,
+    ) -> Result<Option<ComputationalRecursorLayer>, CraneliftBackendError> {
+        let Some(cursor) = stack.partition_cursor else {
+            if stack.partition_qualification.is_some() {
+                return Err(unsupported(
+                    "NativeRecursorContinuationStepV1",
+                    "recursor qualification outlived its exact target stack",
+                ));
+            }
+            return Ok(stack.later_wrappers_in_construction_order.pop());
+        };
+        let mut definition = self.partition_recursor_nodes.definition(cursor.node)?;
+        let mut captures = definition
+            .capture_field_types
+            .iter()
+            .enumerate()
+            .map(|(index, field_type)| {
+                let offset = index
+                    .checked_add(1)
+                    .and_then(|field| field.checked_mul(PARTITION_FRAME_FIELD_BYTES as usize))
+                    .and_then(|offset| i32::try_from(offset).ok())
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeRecursorContinuationStepV1",
+                            "recursor-continuation cell load offset overflowed",
+                        )
+                    })?;
+                Ok(builder.ins().load(
+                    *field_type,
+                    MemFlags::trusted(),
+                    cursor.capture_pointer,
+                    offset,
+                ))
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?
+            .into_iter();
+        rebuild_partition_layer(
+            &mut definition.current,
+            &mut captures,
+            &mut self.native_int_tags,
+        )?;
+        if captures.next().is_some() {
+            return Err(unsupported(
+                "NativeRecursorContinuationStepV1",
+                "recursor-continuation cell has trailing fields",
+            ));
+        }
+        let pointer_type = builder.func.dfg.value_type(cursor.capture_pointer);
+        if let Some(qualification) = stack.partition_qualification {
+            let qualification_definition = self
+                .partition_recursor_qualifications
+                .definition(qualification.node)?;
+            if qualification_definition.target == cursor.node {
+                let expected_pointer = builder.ins().load(
+                    pointer_type,
+                    MemFlags::trusted(),
+                    qualification.capture_pointer,
+                    PARTITION_FRAME_FIELD_BYTES as i32,
+                );
+                self.emit_control_cell_ref_guard(
+                    builder,
+                    &[(cursor.capture_pointer, expected_pointer)],
+                );
+                definition.current.checked_invocation_id = Some(
+                    (1_u64 << 63) | u64::from(qualification.node.0),
+                );
+                definition.current.checked_invocation_source =
+                    Some(qualification_definition.source);
+                definition.current.checked_invocation_depth = 0;
+                let successor_qualification_pointer = builder.ins().load(
+                    pointer_type,
+                    MemFlags::trusted(),
+                    qualification.capture_pointer,
+                    0,
+                );
+                stack.partition_qualification =
+                    qualification_definition.successor.map(|node| {
+                        PartitionRecursorQualificationCursor {
+                            node,
+                            capture_pointer: successor_qualification_pointer,
+                        }
+                    });
+            }
+        }
+        let successor_pointer =
+            builder
+                .ins()
+                .load(pointer_type, MemFlags::trusted(), cursor.capture_pointer, 0);
+        stack.partition_cursor = definition.successor.map(|node| PartitionRecursorCursor {
+            node,
+            capture_pointer: successor_pointer,
+        });
+        Ok(Some(definition.current))
     }
 
     fn pop_partition_source_cursor(
@@ -1350,6 +1576,11 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
+                let explicit_return =
+                    self.push_checked_computational_ih_producer_kont(builder, *call_template_id)?;
+                let outer_producer_kont = explicit_return.map(|producer_kont| {
+                    self.active_partition_producer_kont.replace(producer_kont)
+                });
                 self.enter_checked_computational_ih_invocation(*call_template_id)?;
                 let value = self.lower_computational_producer_expr(
                     builder,
@@ -1357,7 +1588,13 @@ impl<'a> Lowering<'a> {
                     producer_env,
                     eliminators,
                 )?;
-                self.finish_checked_computational_ih_marker(value)
+                if let Some(outer_producer_kont) = outer_producer_kont {
+                    self.active_partition_producer_kont = outer_producer_kont;
+                    self.pending_computational_ih_call = None;
+                    Ok(value)
+                } else {
+                    self.finish_checked_computational_ih_marker(builder, value)
+                }
             }
             RuntimeExpr::Let { value, body } => {
                 if reaches_environment_computational_recursor(body, producer_env, 1) {
@@ -1522,7 +1759,7 @@ impl<'a> Lowering<'a> {
                     }
                     mut callee @ Lowered::ComputationalRecursorClosure { .. } => {
                         let checked_ih_invocation =
-                            self.mint_checked_computational_ih_instance(&mut callee)?;
+                            self.mint_checked_computational_ih_instance(builder, &mut callee)?;
                         let (base, boundary) = decompose_computational_recursor(callee);
                         let (activation, invocation) =
                             boundary.expect("recursor closure carries an invocation segment");
@@ -2524,6 +2761,28 @@ impl<'a> Lowering<'a> {
         }))
     }
 
+    fn call_restored_selected_producer_kont<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        successor: PartitionProducerKontCursor,
+        value: Lowered,
+        selected: &SourceSelectedContinuation<'b>,
+        selected_lineage: &[SourceSelectedContinuation<'b>],
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let previous = self.active_partition_producer_kont.replace(successor);
+        let active = selected.as_active(selected_lineage);
+        let head = self
+            .push_selected_head_producer_kont(builder, active)?
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "restored selected head has no explicit producer transition",
+                )
+            })?;
+        self.active_partition_producer_kont = previous;
+        self.call_partition_producer_kont(builder, head, value)
+    }
+
     fn push_checked_computational_ih_producer_kont(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -2920,6 +3179,7 @@ impl<'a> Lowering<'a> {
                         .position(|candidate| *candidate == position)
                         .and_then(|index| ih_slots[index]);
                     let induction_hypothesis = self.make_computational_recursor(
+                        builder,
                         args[position].clone(),
                         eliminator.cases.to_vec(),
                         eliminator.default.clone(),
@@ -3399,6 +3659,7 @@ impl<'a> Lowering<'a> {
                         .position(|candidate| *candidate == position)
                         .and_then(|index| ih_slots[index]);
                     let induction_hypothesis = self.make_computational_recursor(
+                        builder,
                         constructor_args[position].clone(),
                         frame.cases.to_vec(),
                         frame.default.clone(),
@@ -4799,7 +5060,31 @@ impl<'a> Lowering<'a> {
                     source_selected_cursor: Some(*cursor),
                     selected_scope: selected_scope.as_ref(),
                 };
-                self.resume_active_continuation(builder, item.value, active)
+                if let Some(scope) = selected_scope.as_ref() {
+                    let selected_frame =
+                        EliminatorFrame::Computational(ComputationalEliminatorFrame {
+                            cases: &scope.frame.cases,
+                            default: &scope.frame.default,
+                            env: &scope.frame.outer_env,
+                            retained_scrutinee_index: None,
+                            deferred_constructor_case: None,
+                            provenance: scope.frame.provenance,
+                            checked_frame_id: scope.frame.checked_frame_id,
+                            checked_invocation_id: scope.frame.checked_invocation_id,
+                            checked_invocation_source: scope.frame.checked_invocation_source,
+                            checked_invocation_depth: scope.frame.checked_invocation_depth,
+                        });
+                    let mut selected_then_pending = Vec::with_capacity(pending.len() + 1);
+                    selected_then_pending.push(selected_frame);
+                    selected_then_pending.extend(pending);
+                    self.lower_computational_match_value_composed(
+                        builder,
+                        item.value,
+                        &selected_then_pending,
+                    )
+                } else {
+                    self.resume_active_continuation(builder, item.value, active)
+                }
             }
             ProducerKontAction::ApplyEliminators {
                 eliminators,
@@ -4896,7 +5181,7 @@ impl<'a> Lowering<'a> {
                 Ok(item.value)
             }
             ProducerKontAction::CheckedComputationalIHReturn {
-                call_template_id: _,
+                call_template_id,
                 capture_field_types,
             } => {
                 let capture_pointer = item.capture_pointer.expect("producer capture pointer");
@@ -4936,7 +5221,8 @@ impl<'a> Lowering<'a> {
                         "checked-marker capture cell has trailing fields",
                     ));
                 }
-                self.finish_checked_computational_ih_marker(item.value)
+                self.pending_computational_ih_call = Some(*call_template_id);
+                self.finish_checked_computational_ih_marker(builder, item.value)
             }
         };
         self.active_partition_producer_kont = None;
@@ -5004,11 +5290,7 @@ impl<'a> Lowering<'a> {
                 }
             }
         }
-        let producer_kont = if self.active_partition_producer_kont.is_some() {
-            self.push_selected_head_producer_kont(builder, *active)?
-        } else {
-            None
-        };
+        let producer_kont = self.active_partition_producer_kont;
         let control = SourceControl {
             continuation: SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                 expected: active.cursor,
@@ -5361,7 +5643,13 @@ impl<'a> Lowering<'a> {
                                 return Ok(value);
                             }
                             return if let Some(producer_kont) = control.producer_kont {
-                                self.call_partition_producer_kont(builder, producer_kont, value)
+                                self.call_restored_selected_producer_kont(
+                                    builder,
+                                    producer_kont,
+                                    value,
+                                    &control.selected,
+                                    &control.selected_lineage,
+                                )
                             } else {
                                 self.resume_active_continuation(builder, value, *active)
                             };
@@ -5376,7 +5664,13 @@ impl<'a> Lowering<'a> {
                                 ));
                             }
                             return if let Some(producer_kont) = control.producer_kont {
-                                self.call_partition_producer_kont(builder, producer_kont, value)
+                                self.call_restored_selected_producer_kont(
+                                    builder,
+                                    producer_kont,
+                                    value,
+                                    &control.selected,
+                                    &control.selected_lineage,
+                                )
                             } else {
                                 Ok(value)
                             };
@@ -5456,7 +5750,8 @@ impl<'a> Lowering<'a> {
                                     "computational IH invocation return crossed another marker",
                                 ));
                             }
-                            let value = self.finish_checked_computational_ih_marker(value)?;
+                            let value =
+                                self.finish_checked_computational_ih_marker(builder, value)?;
                             control.continuation = *next;
                             SourceMachineState::Value { value, control }
                         }
@@ -5602,7 +5897,9 @@ impl<'a> Lowering<'a> {
                                 builder,
                                 &[(resume_active.cursor_instance.0, resume_cursor_instance.0)],
                             );
-                            if let Some(layer) = stack.later_wrappers_in_construction_order.pop() {
+                            if let Some(layer) =
+                                self.pop_partition_recursor_layer(builder, &mut stack)?
+                            {
                                 #[cfg(test)]
                                 if let RecursorLayerRole::ExitsScope {
                                     origin,
@@ -5989,6 +6286,7 @@ impl<'a> Lowering<'a> {
                                         .position(|candidate| *candidate == position)
                                         .and_then(|index| ih_slots[index]);
                                     let induction_hypothesis = self.make_computational_recursor(
+                                        builder,
                                         args[position].clone(),
                                         cases.clone(),
                                         default.clone(),
@@ -7994,7 +8292,7 @@ impl<'a> Lowering<'a> {
             }
             mut recursor @ Lowered::ComputationalRecursorClosure { .. } => {
                 let checked_ih_invocation =
-                    self.mint_checked_computational_ih_instance(&mut recursor)?;
+                    self.mint_checked_computational_ih_instance(builder, &mut recursor)?;
                 if let Some(CheckedRecursiveInvocationInstance {
                     source: InvocationTemplateRef::ComputationalIHCall(call_template_id),
                     ..
@@ -8308,7 +8606,7 @@ impl<'a> Lowering<'a> {
             } => {
                 self.enter_checked_computational_ih_invocation(*call_template_id)?;
                 let value = self.lower_expr(builder, body, env)?;
-                self.finish_checked_computational_ih_marker(value)
+                self.finish_checked_computational_ih_marker(builder, value)
             }
             RuntimeExpr::Var(index) => env
                 .get(*index as usize)
@@ -8711,7 +9009,7 @@ impl<'a> Lowering<'a> {
                     }
                     mut callee @ Lowered::ComputationalRecursorClosure { .. } => {
                         let checked_ih_invocation =
-                            self.mint_checked_computational_ih_instance(&mut callee)?;
+                            self.mint_checked_computational_ih_instance(builder, &mut callee)?;
                         let (base, boundary) = decompose_computational_recursor(callee);
                         let (activation, invocation) = boundary.expect(
                             "recursor closure carries an invocation segment",
