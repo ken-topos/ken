@@ -8622,7 +8622,12 @@ impl<'a> Lowering<'a> {
                                         "selected-case return has no open control obligation",
                                     )
                                 })?;
-                            if scope.frame.checked_frame_id != delimiter.frame_id {
+                            if control.selected.activation != delimiter.activation
+                                || control.selected.cursor != delimiter.cursor
+                                || scope.scope_origin != delimiter.scope_origin
+                                || scope.frame.checked_frame_id != delimiter.frame_id
+                                || scope.frame.checked_invocation_id != delimiter.invocation_id
+                            {
                                 return Err(unsupported(
                                     "OrientedSubcontinuationPlanV1",
                                     format!(
@@ -8642,6 +8647,7 @@ impl<'a> Lowering<'a> {
                                     ),
                                 ));
                             }
+                            control.selected.cursor_instance = delimiter.cursor_instance;
                             self.emit_control_cell_ref_guard(
                                 builder,
                                 &[
