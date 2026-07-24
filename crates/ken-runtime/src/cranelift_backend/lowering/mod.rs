@@ -271,6 +271,7 @@ struct Lowering<'a> {
     partition_next_site: u64,
     partition_branch_returns: PartitionBranchReturnLedger,
     partition_producer_sites: BTreeMap<usize, PartitionProducerKontSitePlan>,
+    partition_producer_site_interner: PartitionProducerKontSiteInterner,
     partition_next_producer_site: usize,
     active_partition_producer_kont: Option<PartitionProducerKontCursor>,
     active_partition_return_kind: Option<ScalarMergeKind>,

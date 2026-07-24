@@ -1207,6 +1207,10 @@ struct PartitionContinuationStaticKey {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum PartitionProducerKontActionKey {
+    Done {
+        value: PartitionLoweredKey,
+        terminal: PartitionProducerKontTerminalIdentity,
+    },
     ApplyActiveEliminators {
         value: PartitionLoweredKey,
         activation: ContinuationActivationId,
@@ -1227,6 +1231,14 @@ enum PartitionProducerKontActionKey {
     CheckedComputationalIHReturn {
         value: PartitionLoweredKey,
         call_template_id: u64,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum PartitionProducerKontTerminalIdentity {
+    CheckedJoin,
+    ScalarArmReturn {
+        edge_index: u64,
     },
 }
 
@@ -2000,6 +2012,7 @@ pub(super) fn instantiate_partition_source_node<'a>(
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PartitionSourceArmStaticKey {
     consume_checked_entry_marker: bool,
+    pending_computational_ih_call: Option<u64>,
     body: PartitionStaticDescriptor,
     env: Vec<PartitionLoweredKey>,
     declaration_stack: Vec<RuntimeSymbol>,
@@ -2032,6 +2045,7 @@ impl PartitionSourceArmKey {
         checked_join: PartitionCheckedJoinIdentity,
         required_kind: ScalarMergeKind,
         consume_checked_entry_marker: bool,
+        pending_computational_ih_call: Option<u64>,
         body: &RuntimeExpr,
         env: &[Lowered],
         declaration_stack: &[RuntimeSymbol],
@@ -2051,6 +2065,7 @@ impl PartitionSourceArmKey {
     ) -> Self {
         let static_key = PartitionSourceArmStaticKey {
             consume_checked_entry_marker,
+            pending_computational_ih_call,
             body: partition_runtime_expr_descriptor(body),
             env: env.iter().map(partition_lowered_key).collect(),
             declaration_stack: declaration_stack.to_vec(),
@@ -2099,6 +2114,7 @@ struct PartitionCleanupStepStaticKey {
 struct PartitionSourceKontStaticKey {
     node: PartitionSourceNodeId,
     producer_head: Option<usize>,
+    pending_computational_ih_call: Option<u64>,
     input: PartitionLoweredKey,
     declaration_stack: Vec<RuntimeSymbol>,
     active_recursive_sources: Vec<(PartitionInvocationTemplateKey, usize, bool)>,
@@ -2128,6 +2144,7 @@ impl PartitionSourceKontKey {
         required_kind: ScalarMergeKind,
         node: PartitionSourceNodeId,
         producer_head: Option<usize>,
+        pending_computational_ih_call: Option<u64>,
         input: &Lowered,
         declaration_stack: &[RuntimeSymbol],
         active_recursive_invocations: &[CheckedRecursiveInvocationInstance],
@@ -2144,6 +2161,7 @@ impl PartitionSourceKontKey {
         let static_key = PartitionSourceKontStaticKey {
             node,
             producer_head,
+            pending_computational_ih_call,
             input: partition_lowered_key(input),
             declaration_stack: declaration_stack.to_vec(),
             active_recursive_sources: active_recursive_invocations
@@ -2271,6 +2289,32 @@ impl PartitionSemanticStateKey {
 }
 
 impl PartitionContinuationKey {
+    pub(super) fn done(
+        checked_join: PartitionCheckedJoinIdentity,
+        return_kind: ScalarMergeKind,
+        value: &Lowered,
+        terminal: PartitionProducerKontTerminalIdentity,
+        field_types: Vec<Type>,
+        field_map: Vec<usize>,
+    ) -> Self {
+        let static_key = PartitionContinuationStaticKey {
+            action: PartitionProducerKontActionKey::Done {
+                value: partition_lowered_key(value),
+                terminal,
+            },
+            successor: None,
+        };
+        Self {
+            checked_join,
+            input_kind: return_kind,
+            outer_return_kind: return_kind,
+            static_bucket: partition_static_bucket(&static_key),
+            static_key: Arc::new(static_key),
+            field_types,
+            field_map,
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         checked_join: PartitionCheckedJoinIdentity,
@@ -2413,6 +2457,20 @@ pub(super) struct PartitionStateReturnContract {
     pub(super) required_kind: ScalarMergeKind,
     field_types: Vec<Type>,
     field_map: Vec<usize>,
+}
+
+impl PartitionStateReturnContract {
+    pub(super) fn producer_terminal(
+        checked_join: PartitionCheckedJoinIdentity,
+        required_kind: ScalarMergeKind,
+    ) -> Self {
+        Self {
+            checked_join,
+            required_kind,
+            field_types: Vec::new(),
+            field_map: Vec::new(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -2834,6 +2892,7 @@ pub(super) struct SourceArmPartitionWorkItem {
     pub(super) field_map: Vec<usize>,
     pub(super) body: RuntimeExpr,
     pub(super) consume_checked_entry_marker: bool,
+    pub(super) pending_computational_ih_call: Option<u64>,
     pub(super) env: Vec<Lowered>,
     pub(super) declaration_stack: Vec<RuntimeSymbol>,
     pub(super) active_recursive_invocations: Vec<CheckedRecursiveInvocationInstance>,
@@ -2876,6 +2935,7 @@ pub(super) struct SourceKontPartitionWorkItem {
     pub(super) node: PartitionSourceNodeId,
     pub(super) capture_pointer: Value,
     pub(super) producer_kont: Option<PartitionProducerKontCursor>,
+    pub(super) pending_computational_ih_call: Option<u64>,
     pub(super) declaration_stack: Vec<RuntimeSymbol>,
     pub(super) active_recursive_invocations: Vec<CheckedRecursiveInvocationInstance>,
     pub(super) selected_activation: ContinuationActivationId,
@@ -2891,6 +2951,9 @@ pub(super) struct SourceKontPartitionWorkItem {
 
 #[derive(Clone)]
 pub(super) enum ProducerKontAction {
+    Done {
+        terminal: PartitionProducerKontTerminalIdentity,
+    },
     ApplyActiveEliminators {
         activation: ContinuationActivationId,
         cursor: ContinuationCursorId,
@@ -2914,6 +2977,150 @@ pub(super) enum ProducerKontAction {
     },
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PartitionProducerKontSiteActionKey {
+    Done {
+        terminal: PartitionProducerKontTerminalIdentity,
+    },
+    ApplyActiveEliminators {
+        activation: ContinuationActivationId,
+        cursor: ContinuationCursorId,
+        pending: Vec<PartitionEliminatorKey>,
+        selected_ancestry: Vec<RecursorFrameProvenance>,
+        selected_scope: Option<PartitionSelectedScopeKey>,
+        selected_lineage: Vec<PartitionSelectedContinuationKey>,
+        capture_field_types: Vec<Type>,
+    },
+    ApplyEliminators {
+        eliminators: Vec<PartitionEliminatorKey>,
+        capture_field_types: Vec<Type>,
+    },
+    OrientedInvocationReturn {
+        checked: bool,
+        capture_field_types: Vec<Type>,
+    },
+    CheckedComputationalIHReturn {
+        call_template_id: u64,
+        capture_field_types: Vec<Type>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct PartitionProducerKontSiteKey {
+    checked_join: PartitionCheckedJoinIdentity,
+    return_kind: ScalarMergeKind,
+    successor: Option<usize>,
+    action: PartitionProducerKontSiteActionKey,
+    static_bucket: PartitionStaticFingerprint,
+}
+
+impl PartitionProducerKontSiteKey {
+    pub(super) fn new(
+        action: &ProducerKontAction,
+        successor: Option<PartitionProducerKontCursor>,
+        checked_join: PartitionCheckedJoinIdentity,
+        return_kind: ScalarMergeKind,
+    ) -> Self {
+        let action = match action {
+            ProducerKontAction::Done { terminal } => {
+                PartitionProducerKontSiteActionKey::Done {
+                    terminal: *terminal,
+                }
+            }
+            ProducerKontAction::ApplyActiveEliminators {
+                activation,
+                cursor,
+                pending,
+                selected_ancestry,
+                selected_scope,
+                selected_lineage,
+                capture_field_types,
+            } => PartitionProducerKontSiteActionKey::ApplyActiveEliminators {
+                activation: *activation,
+                cursor: *cursor,
+                pending: pending.iter().map(partition_eliminator_key).collect(),
+                selected_ancestry: selected_ancestry.clone(),
+                selected_scope: partition_scope_key(selected_scope),
+                selected_lineage: partition_selected_lineage_key(selected_lineage),
+                capture_field_types: capture_field_types.clone(),
+            },
+            ProducerKontAction::ApplyEliminators {
+                eliminators,
+                capture_field_types,
+            } => PartitionProducerKontSiteActionKey::ApplyEliminators {
+                eliminators: eliminators.iter().map(partition_eliminator_key).collect(),
+                capture_field_types: capture_field_types.clone(),
+            },
+            ProducerKontAction::OrientedInvocationReturn {
+                checked,
+                capture_field_types,
+            } => PartitionProducerKontSiteActionKey::OrientedInvocationReturn {
+                checked: *checked,
+                capture_field_types: capture_field_types.clone(),
+            },
+            ProducerKontAction::CheckedComputationalIHReturn {
+                call_template_id,
+                capture_field_types,
+            } => PartitionProducerKontSiteActionKey::CheckedComputationalIHReturn {
+                call_template_id: *call_template_id,
+                capture_field_types: capture_field_types.clone(),
+            },
+        };
+        let successor = successor.map(|cursor| cursor.site_id);
+        let static_bucket = partition_static_bucket(&(
+            &checked_join,
+            return_kind,
+            successor,
+            &action,
+        ));
+        Self {
+            checked_join,
+            return_kind,
+            successor,
+            action,
+            static_bucket,
+        }
+    }
+}
+
+#[derive(Default)]
+pub(super) struct PartitionProducerKontSiteInterner {
+    by_bucket: BTreeMap<(u64, u64), Vec<usize>>,
+    keys: Vec<PartitionProducerKontSiteKey>,
+}
+
+impl PartitionProducerKontSiteInterner {
+    pub(super) fn lookup(&self, key: &PartitionProducerKontSiteKey) -> Option<usize> {
+        self.by_bucket
+            .get(&(key.static_bucket.hash, key.static_bucket.bytes))
+            .and_then(|candidates| {
+                candidates
+                    .iter()
+                    .copied()
+                    .find(|site_id| self.keys.get(*site_id) == Some(key))
+            })
+    }
+
+    pub(super) fn insert(
+        &mut self,
+        site_id: usize,
+        key: PartitionProducerKontSiteKey,
+    ) -> Result<(), CraneliftBackendError> {
+        if site_id != self.keys.len() || self.lookup(&key).is_some() {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer continuation site identity was reserved twice",
+            ));
+        }
+        self.by_bucket
+            .entry((key.static_bucket.hash, key.static_bucket.bytes))
+            .or_default()
+            .push(site_id);
+        self.keys.push(key);
+        Ok(())
+    }
+}
+
 pub(super) struct ProducerKontPartitionWorkItem {
     pub(super) state_id: usize,
     pub(super) site_id: usize,
@@ -2925,6 +3132,9 @@ pub(super) struct ProducerKontPartitionWorkItem {
     pub(super) capture_pointer: Option<Value>,
     pub(super) successor: Option<PartitionProducerKontCursor>,
     pub(super) ledger_baseline: PartitionLedgerBaseline,
+    pub(super) declaration_stack: Vec<RuntimeSymbol>,
+    pub(super) active_recursive_invocations: Vec<CheckedRecursiveInvocationInstance>,
+    pub(super) checked_join: PartitionCheckedJoinIdentity,
     pub(super) return_kind: ScalarMergeKind,
 }
 
