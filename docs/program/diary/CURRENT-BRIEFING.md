@@ -177,6 +177,27 @@
 > ⚠ **This is mutable external state (§7a) — TEST it, do not cite this block.**
 > It may be fixed by the time you read this.
 >
+> **Outage still live at 19:34Z** (6 attempts, latest incident
+> `DA54:39E685:12AC979:12EB77B:6A63BE4E`). Watchdog retries it as **step 0** of
+> every tick, so recovery is picked up automatically. ⛔ No PR ⇒ no CI has run.
+> ⛔ Do **not** try to route around branch protection — §14 requires the path to
+> stop and route the fact, not to improvise.
+>
+> ### ✅ Boundary A: FOLD DISCHARGED on `e70bb2a5` (supersedes `92cac774`)
+>
+> Steward half **APPROVED** (`evt_4g5qe6tz3s4k0`). The repair is the strong form:
+> `helper_key_for_activation(node, frameA)` vs `(node, frameB)` — same static
+> node, two **real closed** frames, key **recomputed** each time, asserted to
+> collapse to one; plus `planned_helpers` unchanged. **And it is enforced in
+> `validate()` over every node**, so the invariant is structural, not merely
+> tested. ★ The old `u32::MAX` frame would now be rejected as *unclosed* — the
+> original approach could not have worked even with a correct assertion.
+> ⚠ **Outstanding: the n=3..7 table for `e70bb2a5`.** The typed
+> `PlannedHelperKey` inventory now drives the census, so the `92cac774` numbers
+> (nodes Δ28 / edges Δ34 / helpers Δ62 / persistent Δ37) are **NOT authoritative
+> and must not be carried forward.** Requested a restatement.
+> **Boundary B opens only when the Architect also returns its half.**
+>
 > ## (resolved) The Decision was `proposed` — held, then unblocked in seconds
 >
 > **A `git_request` arrived (`evt_517mjv8rr6kb`) and I did NOT merge.**
