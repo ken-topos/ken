@@ -669,6 +669,12 @@ pub(super) struct PartitionProducerKontCursor {
     pub(super) capture_pointer: Value,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct PartitionProducerTailCompletion {
+    pub(super) tail_site_id: usize,
+    pub(super) fanout_site_id: u64,
+}
+
 #[derive(Clone)]
 pub(super) struct PartitionProducerKontSitePlan {
     pub(super) action: ProducerKontAction,
@@ -891,7 +897,9 @@ fn partition_lowered_key(value: &Lowered) -> PartitionLoweredKey {
     let shape = match value {
         Lowered::Int { .. } => PartitionLoweredShape::Int,
         Lowered::Bool { .. } => PartitionLoweredShape::Bool,
-        Lowered::ProcessExitStatus { .. } => PartitionLoweredShape::ProcessExitStatus,
+        Lowered::ProcessExitStatus { .. } | Lowered::CompletedProducerTail { .. } => {
+            PartitionLoweredShape::ProcessExitStatus
+        }
         Lowered::CapabilityToken { .. } => PartitionLoweredShape::CapabilityToken,
         Lowered::ResourceToken { .. } => PartitionLoweredShape::ResourceToken,
         Lowered::BoundedNat(_) => PartitionLoweredShape::BoundedNat,
@@ -4485,7 +4493,7 @@ pub(super) fn partition_lowered_is_admissible(value: &Lowered) -> bool {
                     .iter()
                     .all(partition_layer_is_admissible)
         }
-        Lowered::RecursiveBackedge => false,
+        Lowered::RecursiveBackedge | Lowered::CompletedProducerTail { .. } => false,
         Lowered::Int { .. }
         | Lowered::Bool { .. }
         | Lowered::ProcessExitStatus { .. }
@@ -4593,6 +4601,12 @@ pub(super) fn append_partition_lowered_values(
         | Lowered::ProcessExitStatus { value }
         | Lowered::CapabilityToken { value }
         | Lowered::ResourceToken { value } => output.push(*value),
+        Lowered::CompletedProducerTail { .. } => {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer-tail completion evidence cannot cross a private frame",
+            ));
+        }
         Lowered::BoundedNat(value) => output.push(value.value),
         Lowered::StructuralNat(value) => output.push(value.value),
         Lowered::ResponseBytes { pointer, len } => {
@@ -4867,6 +4881,12 @@ pub(super) fn rebuild_partition_lowered(
         Lowered::ProcessExitStatus { value }
         | Lowered::CapabilityToken { value }
         | Lowered::ResourceToken { value } => *value = next_partition_value(values)?,
+        Lowered::CompletedProducerTail { .. } => {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer-tail completion evidence cannot be rebuilt from a private frame",
+            ));
+        }
         Lowered::BoundedNat(value) => {
             value.value = next_partition_value(values)?;
         }
