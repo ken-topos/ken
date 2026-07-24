@@ -2036,7 +2036,7 @@ mod tests {
     #[test]
     fn planner_invariant_failures_have_compiler_bug_attribution() {
         // Promise class: durable invariant. These distinct planner
-        // self-consistency failures are compiler bugs. The capacity channel is
+        // self-consistency failures are compiler bugs. The former fixed-K capacity arm is
         // not input-reachable because fixed K is a structural planner invariant.
         let plan =
             plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
