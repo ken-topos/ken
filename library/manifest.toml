@@ -18,16 +18,11 @@
 #   sources       "path" or "path#anchor" this document is grounded in;
 #                 an anchor must name a real heading in the target file
 #                 (gate 3) — this is the drift gate D1 requires
-#   validation    the CLOSED set of gate names that apply to this record:
-#                 manifest-coverage, manifest-completeness, links,
-#                 source-anchors, availability-label, authority-class
-#                 (all documents), plus EITHER source-currency (every
-#                 non-status document — every cited source is unchanged
-#                 since REVISION) OR generated-current (status docs only
-#                 — always regenerated fresh, so idempotency subsumes
-#                 source-currency for it) — see KNOWN_VALIDATION_TOKENS
-#                 in crates/ken-cli/tests/library_documentation_gates.rs,
-#                 the single source of truth for this vocabulary
+#   validation    the CLOSED set of registered record-validation gates
+#                 that apply to this record. See VALIDATION_GATES in
+#                 crates/ken-cli/tests/library_documentation_gates.rs,
+#                 the single source of truth for vocabulary,
+#                 applicability, and executable validation.
 #   owner         the team responsible
 #
 # library/REVISION holds the explicit, hand-set validated repository
@@ -51,6 +46,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "transport-delimiter",
   "source-currency",
 ]
 owner = "doc"
@@ -77,6 +73,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "transport-delimiter",
   "source-currency",
 ]
 owner = "doc"
@@ -112,6 +109,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "transport-delimiter",
   "source-currency",
 ]
 owner = "doc"
@@ -138,6 +136,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "transport-delimiter",
   "source-currency",
 ]
 owner = "doc"
@@ -168,6 +167,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "transport-delimiter",
   "source-currency",
 ]
 owner = "doc"
@@ -204,6 +204,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "transport-delimiter",
   "source-currency",
 ]
 owner = "doc"
@@ -236,6 +237,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "transport-delimiter",
   "source-currency",
 ]
 owner = "doc"
@@ -274,6 +276,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "transport-delimiter",
   "source-currency",
 ]
 owner = "doc"
@@ -324,6 +327,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "transport-delimiter",
   "source-currency",
 ]
 owner = "doc"
@@ -344,6 +348,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "transport-delimiter",
   "source-currency",
 ]
 owner = "doc"
@@ -369,6 +374,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "transport-delimiter",
   "source-currency",
 ]
 owner = "doc"
@@ -410,6 +416,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "transport-delimiter",
   "source-currency",
 ]
 owner = "doc"
@@ -436,6 +443,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "transport-delimiter",
   "source-currency",
 ]
 owner = "doc"
@@ -454,6 +462,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "transport-delimiter",
   "generated-current",
 ]
 owner = "doc"

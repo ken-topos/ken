@@ -41,9 +41,10 @@ fi
 # using each record's FINAL `kind`, anchor stripped, deduped) — kept as a
 # literal duplicate rather than a shared sourced function, so a change to
 # one is visible as a diff against the other rather than silently applying
-# to both; `status_md_generation_is_idempotent` plus the ledger-population
-# tests in crates/ken-cli/tests/library_documentation_gates.rs are the
-# safety net that would catch the two drifting apart.
+# to both; the registered source-currency/generated-current runners, executed
+# by `registered_record_validation_gates_run`, plus the ledger-population tests
+# in crates/ken-cli/tests/library_documentation_gates.rs are the safety net
+# that would catch the two drifting apart.
 REQUIRED_PATHS="$(awk '
   function flush_record() {
     if (kind != "status" && buf != "") {
