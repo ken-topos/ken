@@ -5,7 +5,126 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-24 ~16:5xZ. OPERATOR IS PRESENT.**
+**As of 2026-07-24 ~18:0xZ. OPERATOR IS PRESENT.**
+
+> ## ⚡ OPERATOR PRIORITY (2026-07-24): **LAND RT-NATIVE-FNSPLIT.**
+> *"I did not mean to abandon the RT-NATIVE-FNSPLIT effort. Continue that work.
+> Your primary goal now should be to land RT-NATIVE-FNSPLIT."*
+>
+> ⛔ **Nothing was abandoned** — the Architect's viability ruling explicitly
+> retains bounded-function partitioning and every proved semantic from #24–#33.
+> It replaces the **representation**, not the effort.
+>
+> ✅ **THE OWED ACT IS DISCHARGED.** The recut frame is **on `main`**
+> (`docs/program/wp/RT-NATIVE-FNSPLIT-recut.md`, landed `6964b053`), the handoff
+> gate ran and was drop-verified, and **the Runtime ring is KICKED on Phase 1**
+> — kickoff `evt_2kgfmmeeh2x7w`, `runtime-leader` confirmed `Working`.
+> Runtime now owns the move; I am the backstop, not the driver.
+>
+> ★ **The frame's load-bearing choice:** Phase 1 measures the **HELD** (unchanged)
+> representation at n=3..7 *before* any rewrite — because that is precisely the
+> Architect's own falsifier for the hold. It either **kills the rewrite as
+> unnecessary** (cheapest possible exit) or yields the baseline every later claim
+> is measured against. Do not let Phase 1 be skipped as a formality.
+
+### ✅ Landed this window
+- **`origin/main = bf00f1a9`** — the four operator directives are ON MAIN
+  (verified by content, not by the publisher's report): COORDINATION §8a + §10⁻a,
+  steward playbook §2d + ledger axis, plus the §5a armed trigger.
+- **`PUB-VERIFY` CLOSED** as landed-by-other-work (operator-directed).
+- **`DOC-VALIDATION-BINDING` PUBLISHING** @ `f1eb7408`, branch FROZEN
+  (`evt_6ewc3t460tvn7`). ⚠ My corpus publish moved main `8ebe370a → bf00f1a9`
+  under its Decision; **intersection tested EMPTY**, so immaterial — no rebase.
+  **Retros still owed before it closes.**
+
+
+> # ⇢ LIVE STATE — 2026-07-24, Opus 5.0 session, post-restart
+>
+> **The successor handoff is DISCHARGED and has been retired from this block.**
+> Everything it owed is done: drops verified, Runtime kicked, cadence re-armed,
+> watchdog re-armed.
+>
+> ## Where the frontier is
+>
+> **`RT-NATIVE-FNSPLIT` recut Phase 1 is WITH THE RUNTIME RING.** Kickoff
+> `evt_2kgfmmeeh2x7w`; `runtime-leader` confirmed `Working` (pane, not the post
+> receipt). Frame on `main` at `docs/program/wp/RT-NATIVE-FNSPLIT-recut.md`
+> (`6964b053`). The ring cuts a **fresh** build branch off current `origin/main`
+> — ⛔ not `wp/RT-NATIVE-FNSPLIT-native-partition`, which belongs to the held
+> chain and still has `runtime-implementer`'s worktree parked on it.
+>
+> **⛔ Phase 1 STOPS for a Steward + Architect read (AC1.4).** It measures the
+> **held, unchanged** `b077eb7a` representation at n=3..7 *before* any rewrite,
+> because that is the Architect's own falsifier for its hold. Two outcomes, both
+> valuable: **hold falsified** ⇒ the rewrite is unnecessary, resume sealing, and
+> we keep a harness we wanted anyway; **hold confirmed** ⇒ we hold the baseline
+> every Phase-3 claim is measured against. When the table arrives, **my job is to
+> read it with the Architect and rule which outcome obtains** — not to wave it
+> through. `n=4` alone proves nothing about the exponent (`370n`, `93n²`, and a
+> product switching on at n=5 all pass through 1,482 states); acceptance rests on
+> structural invariants, the table corroborates.
+>
+> **Runtime WPs legitimately run for HOURS** (T1 `sol` implementer, 16-hour
+> single-WP sessions on record). That is not a stall — do not tune thresholds to
+> tens of minutes on this ring.
+>
+> ## Research cadence — ARMED (this is the count of record)
+>
+> ```text
+> RECUT CHAIN: hard-stop count = 0 · NEXT RESEARCH PULL = #3, then #6, #9, …
+> HELD CHAIN:  frozen at 33, closed, does NOT carry forward
+> ```
+>
+> Written into `issues/RT-NATIVE-FNSPLIT.md` as an armed line, not prose. **A
+> deep chain with zero advisories is the tell that BOTH the Architect's
+> self-trigger and my backstop have lapsed** — that already happened once here
+> (10 hard-stops dry). Catch-up rule: if a trigger is missed, fire at the **very
+> next** hard-stop, don't wait for the next clean multiple.
+>
+> ## ✅ Checkpoint `b077eb7a` is DURABLE — and this nearly went wrong
+>
+> `git tag rt-native-fnsplit-checkpoint-b077eb7a`, **pushed to origin** (verified
+> by `ls-remote`). When found it lived on **one local branch with zero off-box
+> copies**; `handoff-gate-compact.sh` then **hard-reset that exact branch within
+> ten minutes** (local fallback:
+> `preserved/wp-RT-NATIVE-FNSPLIT-native-partition-b077eb7a`).
+> ⛔ **Do not delete the tag.** Phase 1 measures it; Phases 2–3 port from it.
+>
+> ## Open loops I own (in priority order, and NONE outranks Runtime)
+>
+> 1. **Harvest + promote the `DOC-VALIDATION-BINDING` retros** (`evt_78qng91927xvj`;
+>    merged `96ab2b4b`). One carry is strong and was **independently validated
+>    twice in one day** — the implementer hit it, and so did my own verification
+>    probe — so it clears the §10 bar: *after deleting or renaming a load-bearing
+>    symbol, repo-wide grep its old spelling and classify EVERY survivor as
+>    live-to-update or intentionally historical before handoff.* A second carry
+>    worth promoting: the **reverse-dependency proof** (rename the runner, show
+>    the build fails *at the registry line*, restore byte-for-byte) — it
+>    demonstrates a binding instead of arguing for one.
+> 2. **Compact the Verify ring** at its WP seam (retros are in, so it is unblocked).
+> 3. **`STR-BIJ` stays HELD** until I re-derive the `library/` ledger consumer
+>    population — DOC-VALIDATION-BINDING landed and **changed it**, which is the
+>    point. Contention has a LEDGER axis, not just a file axis.
+>
+> ⛔ **§10⁻ ceiling:** retro/lesson artifacts **batch**; they do not each earn a
+> merge, and no process merge happens while a ring holds finished unmerged work.
+> The tell is one command: `git log --since=<3h ago> origin/main` with paths —
+> if nothing in the window touched product, a ring is stalled and something is
+> reporting it as fine.
+>
+> ## Fleet state
+>
+> `origin/main = 6964b053` · **Runtime**: Phase 1 active, leader `Working` ·
+> **Verify**: idle, WP merged, retros in, awaiting my compaction · **Architect /
+> research / adversary / everyone else**: idle, no obligation.
+> ⚠ **Two T1 seats died on `Selected model is at capacity` today. That state is
+> indistinguishable from healthy idle except in a WIDE capture** (`tail -20+`) —
+> the `Compacting…` bar and the work spinner both render ABOVE the input line, so
+> a narrow `tail -5` false-read idle on me twice. Rouse clears it.
+> ⚠ **Unpublished on `steward/work`:** this briefing + the armed cadence line +
+> the checkpoint-tag record. Bundle into the next publish (§2a); do **not**
+> publish `steward/work` itself.
+
 
 ## Standing state
 
