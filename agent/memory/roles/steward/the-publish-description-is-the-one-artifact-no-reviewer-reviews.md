@@ -7,7 +7,9 @@ source: adversary G1 on DOC-GATE-RECORD-AXIS (64b0811f), thr_2seh2bm1kr5mh
   the git log as the squash commit message.
 ---
 
-# The publish description is the **one artifact in the WP pipeline that no reviewer reviews** — and it lands on `main` forever
+# The publish description is the **one artifact no reviewer reviews**
+
+*…and it lands on `main` forever, as the squash commit message.*
 
 Every other artifact in a work package has a reader positioned to catch it. QA
 reads the code. The Architect reads the mechanism. The Steward reads the
