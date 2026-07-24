@@ -5,7 +5,7 @@ status: ready
 owner: doc
 size: L
 gate: none
-depends_on: [DOC-W1]
+depends_on: [DOC-W1, DOC-GATE-WIRE-BINDING]
 blocks: []
 github: null
 origin: research/librarian-documentation-program-proposal.md Wave 2; framed 2026-07-22 per operator directive (frame Waves 1-2 only)
@@ -22,6 +22,39 @@ origin: research/librarian-documentation-program-proposal.md Wave 2; framed 2026
 >
 > ⇒ This brief was already complete and shovel-ready; only the gate was
 > outstanding. Status flipped `draft` → `ready`.
+
+> ## ⛔ SEQUENCED AFTER `DOC-GATE-WIRE-BINDING` — a silent-union collision
+>
+> Both WPs write `library/manifest.toml`, and **git will merge them cleanly and
+> wrongly.** `DOC-GATE-WIRE-BINDING` adds a `document-kind` row to
+> `VALIDATION_GATES` with `applies_to_every_record`; this wave appends ~12 new
+> records. The hunks are disjoint — token lines inside 14 existing records
+> versus new records at the end — so **nothing conflicts.**
+>
+> ★ The break is not textual, it is the gate:
+> `library_documentation_gates.rs:667` tests `declared != required` as **exact
+> set equality per record**. New records authored against today's 8-token
+> requirement would land declaring 8 where 9 are required, and
+> `gate_validation_tokens_are_closed_and_match_applicable_checks` reddens
+> `main` **after** both merged clean.
+>
+> ⇒ Land the XS first, then author this wave's records against the 9-token
+> requirement. **This is recorded as a `depends_on`, not a prose note, so the
+> generator derives the block** — a sequencing constraint that lives only in
+> prose is one I have already failed to apply.
+>
+> ### ⚠ The dependency binds the MERGE and the manifest step — NOT the start
+>
+> This wave is `L` and almost all of it — twelve modules against the §3
+> ten-point contract, the pack schema, the evaluation suite — **touches nothing
+> `DOC-GATE-WIRE-BINDING` touches.** Idling the whole wave behind an `XS` would
+> trade hours of critical path for a collision confined to the last step.
+>
+> ⇒ **Authoring starts now.** Write the modules first and the
+> `library/manifest.toml` records **last**, rebasing onto the landed
+> `document-kind` row before you write them. ⛔ Do not author manifest records
+> against the 8-token requirement "to be updated later" — that is the exact
+> silent-union artifact this note exists to prevent.
 
 **(historical) ⛔ BLOCKED on `DOC-W1`.** Waves run sequentially (operator, 2026-07-22:
 three seats, no fan-out). The agent modules describe the same product

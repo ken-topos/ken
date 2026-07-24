@@ -1,7 +1,7 @@
 ---
 id: DOC-GATE-WIRE-BINDING
 title: "validation-gate registry: bind the kind-vocabulary RULE to its GATE by registering it as a VALIDATION_GATES row"
-status: ready
+status: active
 owner: verify
 size: XS
 gate: none

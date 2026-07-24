@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-24 21:44:00Z — from 48 issue file(s) in `docs/program/issues/`.
+2026-07-24 21:55:44Z — from 48 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -49,7 +49,7 @@ the committed file matches the generator's output.
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | closed | doc | S | none | — |
 | `DOC-GATE-CONTROL-BINDING` | validation-gate registry: make the two DOC-GATE-RECORD-AXIS checks orphan-proof by lifting them to pure detectors with committed controls | merged | verify | S | none | https://github.com/ken-topos/ken/pull/928 |
 | `DOC-GATE-RECORD-AXIS` | validation-gate registry: bind token→runner COVERAGE on the record axis, and close the `kind` vocabulary | merged | verify | S | none | https://github.com/ken-topos/ken/pull/922 |
-| `DOC-GATE-WIRE-BINDING` | validation-gate registry: bind the kind-vocabulary RULE to its GATE by registering it as a VALIDATION_GATES row | ready | verify | XS | none | — |
+| `DOC-GATE-WIRE-BINDING` | validation-gate registry: bind the kind-vocabulary RULE to its GATE by registering it as a VALIDATION_GATES row | active | verify | XS | none | — |
 | `DOC-VALIDATION-BINDING` | validation vocabulary claims a 1:1 binding to the gates; nothing binds it | merged | verify | S | none | — |
 | `DOC-W0` | documentation Wave 0 — library/ charter and currency substrate | closed | doc | M | none | 830 |
 | `DOC-W1` | documentation Wave 1 — the read-Ken spine, taught from checked fragments | closed | doc | L | none | — |
@@ -92,8 +92,6 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
-- `DOC-GATE-WIRE-BINDING` — validation-gate registry: bind the kind-vocabulary RULE to its GATE by registering it as a VALIDATION_GATES row
-- `DOC-W2` — documentation Wave 2 — agent core modules, task packs, and cold-context evals
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `KW-THEOREM` — rename the surface keyword `lemma` to `theorem`
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
@@ -104,6 +102,7 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 Items not yet `merged`/`closed` whose `depends_on` names an id that
 is itself not yet `merged`/`closed`:
 
+- `DOC-W2` blocked by `DOC-GATE-WIRE-BINDING` (status: active)
 - `F4` blocked by `A3` (status: draft)
 - `NATIVE-HANDLE-CARRIER` blocked by `RT-NATIVE-FNSPLIT` (status: active)
 - `PX8-F-CAP-41` blocked by `NATIVE-HANDLE-CARRIER` (status: draft)
