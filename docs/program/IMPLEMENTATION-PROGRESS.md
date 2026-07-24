@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-24 17:43:39Z — from 43 issue file(s) in `docs/program/issues/`.
+2026-07-24 18:10:24Z — from 43 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -47,7 +47,7 @@ the committed file matches the generator's output.
 | `CI-SKIPPED-NATIVE-TESTS` | Restore rt_parity_native — dedicated CI job, outlier not fixed | merged | verify | S | none | — |
 | `CI-TRACKER-GATE` | Wire the issue-tracker schema + regeneration gate into CI | closed | operator | S | none | 804 |
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | closed | doc | S | none | — |
-| `DOC-VALIDATION-BINDING` | validation vocabulary claims a 1:1 binding to the gates; nothing binds it | active | verify | S | none | — |
+| `DOC-VALIDATION-BINDING` | validation vocabulary claims a 1:1 binding to the gates; nothing binds it | merged | verify | S | none | — |
 | `DOC-W0` | documentation Wave 0 — library/ charter and currency substrate | closed | doc | M | none | 830 |
 | `DOC-W1` | documentation Wave 1 — the read-Ken spine, taught from checked fragments | closed | doc | L | none | — |
 | `DOC-W2` | documentation Wave 2 — agent core modules, task packs, and cold-context evals | draft | doc | L | none | — |
