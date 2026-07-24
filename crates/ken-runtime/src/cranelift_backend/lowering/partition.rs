@@ -741,8 +741,14 @@ impl From<InvocationTemplateRef> for PartitionInvocationTemplateKey {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum PartitionLayerRoleKey {
-    SelectsOccurrence,
-    ExitsScope { has_parent_scope: bool },
+    SelectsOccurrence {
+        origin: RecursorProducerOriginId,
+    },
+    ExitsScope {
+        origin: RecursorProducerOriginId,
+        scope_origin: RecursorProducerOriginId,
+        parent_scope: Option<RecursorProducerOriginId>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -750,8 +756,11 @@ struct PartitionLayerKey {
     eliminator_descriptor: PartitionStaticDescriptor,
     outer_env: Vec<PartitionLoweredKey>,
     role: PartitionLayerRoleKey,
+    provenance: RecursorFrameProvenance,
     checked_frame_id: Option<u64>,
+    checked_invocation_id: Option<u64>,
     checked_invocation_source: Option<PartitionInvocationTemplateKey>,
+    checked_invocation_depth: usize,
     semantic_pending: bool,
 }
 
@@ -763,15 +772,25 @@ fn partition_layer_key(layer: &ComputationalRecursorLayer) -> PartitionLayerKey 
         ),
         outer_env: layer.outer_env.iter().map(partition_lowered_key).collect(),
         role: match layer.role {
-            RecursorLayerRole::SelectsOccurrence { .. } => PartitionLayerRoleKey::SelectsOccurrence,
-            RecursorLayerRole::ExitsScope { parent_scope, .. } => {
-                PartitionLayerRoleKey::ExitsScope {
-                    has_parent_scope: parent_scope.is_some(),
-                }
+            RecursorLayerRole::SelectsOccurrence { origin, .. } => {
+                PartitionLayerRoleKey::SelectsOccurrence { origin }
             }
+            RecursorLayerRole::ExitsScope {
+                origin,
+                scope_origin,
+                parent_scope,
+                ..
+            } => PartitionLayerRoleKey::ExitsScope {
+                origin,
+                scope_origin,
+                parent_scope,
+            },
         },
+        provenance: layer.provenance,
         checked_frame_id: layer.checked_frame_id,
+        checked_invocation_id: layer.checked_invocation_id,
         checked_invocation_source: layer.checked_invocation_source.map(Into::into),
+        checked_invocation_depth: layer.checked_invocation_depth,
         semantic_pending: layer.semantic_pending,
     }
 }
@@ -1212,6 +1231,12 @@ enum PartitionProducerKontActionKey {
         value: PartitionLoweredKey,
         call_template_id: u64,
     },
+    ScopeBodyReturn {
+        value: PartitionLoweredKey,
+        target: PartitionRecursorNodeId,
+        obligation: PartitionOpenControlObligationNodeId,
+        source_successor: PartitionSourceResumeSite,
+    },
     ExitScopeStart {
         value: PartitionLoweredKey,
         target: PartitionRecursorNodeId,
@@ -1222,13 +1247,17 @@ enum PartitionProducerKontActionKey {
         target: PartitionRecursorNodeId,
         obligation: PartitionOpenControlObligationNodeId,
         obligation_successor: Option<PartitionOpenControlObligationNodeId>,
+        source_successor: PartitionSourceResumeSite,
     },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum PartitionProducerKontTerminalIdentity {
     CheckedJoin,
-    ScalarArmReturn { edge_index: u64 },
+    ScalarArmReturn {
+        partition_site_id: u64,
+        edge_index: u64,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1257,6 +1286,11 @@ enum PartitionSourcePrefixKey {
     ReturnFromSelectedCase {
         frame_id: Option<u64>,
         parent: PartitionSelectedContinuationKey,
+        exit: Option<(
+            PartitionRecursorNodeId,
+            PartitionOpenControlObligationNodeId,
+            Option<PartitionOpenControlObligationNodeId>,
+        )>,
         next: Box<Self>,
     },
     LetBody {
@@ -1340,6 +1374,7 @@ fn partition_source_prefix_key(prefix: &SourcePrefixTemplate) -> PartitionSource
         SourcePrefixTemplate::ReturnFromSelectedCase {
             delimiter,
             parent_capture,
+            exit_transition,
             next,
         } => {
             let parent = parent_capture
@@ -1349,6 +1384,21 @@ fn partition_source_prefix_key(prefix: &SourcePrefixTemplate) -> PartitionSource
             PartitionSourcePrefixKey::ReturnFromSelectedCase {
                 frame_id: delimiter.frame_id,
                 parent,
+                exit: exit_transition.as_ref().map(|transition| {
+                    (
+                        transition
+                            .target
+                            .expect("planned source exit owns its recursor cell")
+                            .node,
+                        transition
+                            .exit_obligation
+                            .expect("planned source exit owns its obligation cell")
+                            .node,
+                        transition
+                            .exit_obligation_successor
+                            .map(|cursor| cursor.node),
+                    )
+                }),
                 next: Box::new(partition_source_prefix_key(next)),
             }
         }
@@ -1455,6 +1505,50 @@ pub(super) struct PartitionSourceNodeId(pub(super) u32);
 pub(super) struct PartitionSourceCursor {
     pub(super) node: PartitionSourceNodeId,
     pub(super) capture_pointer: Value,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum PartitionSourceResumeTarget {
+    Kont(PartitionSourceNodeId),
+    Terminal,
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum PartitionSourceResumeCursor {
+    Kont(PartitionSourceCursor),
+    Terminal,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum PartitionProducerResumeTarget {
+    Producer(usize),
+    Terminal,
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum PartitionProducerResumeCursor {
+    Producer(PartitionProducerKontCursor),
+    Terminal,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct PartitionSourceResumeSite {
+    pub(super) target: PartitionSourceResumeTarget,
+    pub(super) parent_return: PartitionSourceNodeId,
+    pub(super) producer: PartitionProducerResumeTarget,
+    pub(super) terminal_outer: ContinuationCursorId,
+    pub(super) pending_exit_head: Option<PartitionRecursorNodeId>,
+    pub(super) pending_qualification_head: Option<PartitionRecursorQualificationNodeId>,
+    pub(super) pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
+}
+
+#[derive(Clone)]
+pub(super) struct PartitionSourceResume {
+    pub(super) site: PartitionSourceResumeSite,
+    pub(super) cursor: PartitionSourceResumeCursor,
+    pub(super) parent_return_capture_pointer: Value,
+    pub(super) producer: PartitionProducerResumeCursor,
+    pub(super) pending_exit_stack: Option<RecursorUnwindStack>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1809,6 +1903,7 @@ pub(super) fn partition_source_head_template(
             SourcePrefixTemplate::ReturnFromSelectedCase {
                 delimiter: *delimiter,
                 parent_capture: None,
+                exit_transition: None,
                 next: Box::new(terminal()),
             }
         }
@@ -1975,11 +2070,13 @@ pub(super) fn partition_source_prefix_head_template<'a>(
         SourcePrefixTemplate::ReturnFromSelectedCase {
             delimiter,
             parent_capture,
+            exit_transition,
             next,
         } => (
             SourcePrefixTemplate::ReturnFromSelectedCase {
                 delimiter: *delimiter,
                 parent_capture: parent_capture.clone(),
+                exit_transition: exit_transition.clone(),
                 next: Box::new(terminal()),
             },
             next.as_ref(),
@@ -2248,6 +2345,9 @@ struct PartitionSourceArmStaticKey {
     declaration_stack: Vec<RuntimeSymbol>,
     active_recursive_sources: Vec<(PartitionInvocationTemplateKey, bool)>,
     source_head: Option<PartitionSourceNodeId>,
+    pending_exit_head: Option<PartitionRecursorNodeId>,
+    pending_qualification_head: Option<PartitionRecursorQualificationNodeId>,
+    pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
     producer_head: Option<usize>,
     selected_has_ancestry: bool,
     selected_pending: Vec<PartitionEliminatorKey>,
@@ -2278,6 +2378,9 @@ impl PartitionSourceArmKey {
         declaration_stack: &[RuntimeSymbol],
         active_recursive_invocations: &[CheckedRecursiveInvocationInstance],
         source_head: Option<PartitionSourceNodeId>,
+        pending_exit_head: Option<PartitionRecursorNodeId>,
+        pending_qualification_head: Option<PartitionRecursorQualificationNodeId>,
+        pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
         producer_head: Option<usize>,
         _selected_activation: ContinuationActivationId,
         _selected_cursor: ContinuationCursorId,
@@ -2306,6 +2409,9 @@ impl PartitionSourceArmKey {
                 })
                 .collect(),
             source_head,
+            pending_exit_head,
+            pending_qualification_head,
+            pending_obligation_head,
             producer_head,
             selected_has_ancestry: !selected_ancestry.is_empty(),
             selected_pending: selected_pending
@@ -2336,6 +2442,10 @@ struct PartitionCleanupStepStaticKey {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PartitionSourceKontStaticKey {
     node: PartitionSourceNodeId,
+    resume_parent_return: Option<PartitionSourceNodeId>,
+    pending_exit_head: Option<PartitionRecursorNodeId>,
+    pending_qualification_head: Option<PartitionRecursorQualificationNodeId>,
+    pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
     producer_head: Option<usize>,
     pending_computational_ih_call: Option<u64>,
     input: PartitionLoweredKey,
@@ -2363,6 +2473,9 @@ impl PartitionSourceKontKey {
         checked_join: PartitionCheckedJoinIdentity,
         required_kind: ScalarMergeKind,
         node: PartitionSourceNodeId,
+        pending_exit_head: Option<PartitionRecursorNodeId>,
+        pending_qualification_head: Option<PartitionRecursorQualificationNodeId>,
+        pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
         producer_head: Option<usize>,
         pending_computational_ih_call: Option<u64>,
         input: &Lowered,
@@ -2380,6 +2493,10 @@ impl PartitionSourceKontKey {
     ) -> Self {
         let static_key = PartitionSourceKontStaticKey {
             node,
+            resume_parent_return: None,
+            pending_exit_head,
+            pending_qualification_head,
+            pending_obligation_head,
             producer_head,
             pending_computational_ih_call,
             input: partition_lowered_key(input),
@@ -2400,6 +2517,57 @@ impl PartitionSourceKontKey {
                 .collect(),
             selected_scope: partition_scope_key(selected_scope),
             selected_has_parent: !selected_lineage.is_empty(),
+        };
+        Self {
+            checked_join,
+            required_kind,
+            static_bucket: partition_static_bucket(&static_key),
+            static_key: Arc::new(static_key),
+            field_types,
+            field_map,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn new_resume(
+        checked_join: PartitionCheckedJoinIdentity,
+        required_kind: ScalarMergeKind,
+        node: PartitionSourceNodeId,
+        parent_return: PartitionSourceNodeId,
+        pending_exit_head: Option<PartitionRecursorNodeId>,
+        pending_qualification_head: Option<PartitionRecursorQualificationNodeId>,
+        pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
+        producer_head: Option<usize>,
+        pending_computational_ih_call: Option<u64>,
+        input: &Lowered,
+        declaration_stack: &[RuntimeSymbol],
+        active_recursive_invocations: &[CheckedRecursiveInvocationInstance],
+        field_types: Vec<Type>,
+        field_map: Vec<usize>,
+    ) -> Self {
+        let static_key = PartitionSourceKontStaticKey {
+            node,
+            resume_parent_return: Some(parent_return),
+            pending_exit_head,
+            pending_qualification_head,
+            pending_obligation_head,
+            producer_head,
+            pending_computational_ih_call,
+            input: partition_lowered_key(input),
+            declaration_stack: declaration_stack.to_vec(),
+            active_recursive_sources: active_recursive_invocations
+                .iter()
+                .map(|instance| {
+                    (
+                        instance.source.into(),
+                        instance.dynamic_splice_edge.is_some(),
+                    )
+                })
+                .collect(),
+            selected_has_ancestry: false,
+            selected_pending: Vec::new(),
+            selected_scope: None,
+            selected_has_parent: false,
         };
         Self {
             checked_join,
@@ -2649,6 +2817,37 @@ impl PartitionContinuationKey {
         }
     }
 
+    pub(super) fn scope_body_return(
+        checked_join: PartitionCheckedJoinIdentity,
+        return_kind: ScalarMergeKind,
+        value: &Lowered,
+        target: PartitionRecursorNodeId,
+        obligation: PartitionOpenControlObligationNodeId,
+        source_successor: PartitionSourceResumeSite,
+        successor: usize,
+        field_types: Vec<Type>,
+        field_map: Vec<usize>,
+    ) -> Self {
+        let static_key = PartitionContinuationStaticKey {
+            action: PartitionProducerKontActionKey::ScopeBodyReturn {
+                value: partition_lowered_key(value),
+                target,
+                obligation,
+                source_successor,
+            },
+            successor: Some(successor),
+        };
+        Self {
+            checked_join,
+            input_kind: return_kind,
+            outer_return_kind: return_kind,
+            static_bucket: partition_static_bucket(&static_key),
+            static_key: Arc::new(static_key),
+            field_types,
+            field_map,
+        }
+    }
+
     pub(super) fn exit_scope_start(
         checked_join: PartitionCheckedJoinIdentity,
         return_kind: ScalarMergeKind,
@@ -2685,7 +2884,7 @@ impl PartitionContinuationKey {
         target: PartitionRecursorNodeId,
         obligation: PartitionOpenControlObligationNodeId,
         obligation_successor: Option<PartitionOpenControlObligationNodeId>,
-        successor: Option<usize>,
+        source_successor: PartitionSourceResumeSite,
         field_types: Vec<Type>,
         field_map: Vec<usize>,
     ) -> Self {
@@ -2695,8 +2894,9 @@ impl PartitionContinuationKey {
                 target,
                 obligation,
                 obligation_successor,
+                source_successor,
             },
-            successor,
+            successor: None,
         };
         Self {
             checked_join,
@@ -3187,6 +3387,7 @@ pub(super) struct SourceArmPartitionWorkItem {
     pub(super) active_recursive_invocations: Vec<CheckedRecursiveInvocationInstance>,
     pub(super) source_head: Option<PartitionSourceNodeId>,
     pub(super) source_capture_pointer: Option<Value>,
+    pub(super) pending_partition_exit_stack: Option<RecursorUnwindStack>,
     pub(super) producer_kont: Option<PartitionProducerKontCursor>,
     pub(super) selected_activation: ContinuationActivationId,
     pub(super) selected_activation_instance: ActivationInstanceRef,
@@ -3225,6 +3426,8 @@ pub(super) struct SourceKontPartitionWorkItem {
     pub(super) input: Lowered,
     pub(super) node: PartitionSourceNodeId,
     pub(super) capture_pointer: Value,
+    pub(super) resume_parent: Option<PartitionSourceCursor>,
+    pub(super) pending_partition_exit_stack: Option<RecursorUnwindStack>,
     pub(super) producer_kont: Option<PartitionProducerKontCursor>,
     pub(super) pending_computational_ih_call: Option<u64>,
     pub(super) declaration_stack: Vec<RuntimeSymbol>,
@@ -3270,6 +3473,11 @@ pub(super) enum ProducerKontAction {
         call_template_id: u64,
         capture_field_types: Vec<Type>,
     },
+    ScopeBodyReturn {
+        target: PartitionRecursorNodeId,
+        obligation: PartitionOpenControlObligationNodeId,
+        source_successor: PartitionSourceResumeSite,
+    },
     ExitScopeStart {
         target: PartitionRecursorNodeId,
         obligation: PartitionOpenControlObligationNodeId,
@@ -3278,6 +3486,7 @@ pub(super) enum ProducerKontAction {
         target: PartitionRecursorNodeId,
         obligation: PartitionOpenControlObligationNodeId,
         obligation_successor: Option<PartitionOpenControlObligationNodeId>,
+        source_successor: PartitionSourceResumeSite,
     },
 }
 
@@ -3305,6 +3514,11 @@ enum PartitionProducerKontSiteActionKey {
         call_template_id: u64,
         capture_field_types: Vec<Type>,
     },
+    ScopeBodyReturn {
+        target: PartitionRecursorNodeId,
+        obligation: PartitionOpenControlObligationNodeId,
+        source_successor: PartitionSourceResumeSite,
+    },
     ExitScopeStart {
         target: PartitionRecursorNodeId,
         obligation: PartitionOpenControlObligationNodeId,
@@ -3313,6 +3527,7 @@ enum PartitionProducerKontSiteActionKey {
         target: PartitionRecursorNodeId,
         obligation: PartitionOpenControlObligationNodeId,
         obligation_successor: Option<PartitionOpenControlObligationNodeId>,
+        source_successor: PartitionSourceResumeSite,
     },
 }
 
@@ -3371,6 +3586,15 @@ impl PartitionProducerKontSiteKey {
                 call_template_id: *call_template_id,
                 capture_field_types: capture_field_types.clone(),
             },
+            ProducerKontAction::ScopeBodyReturn {
+                target,
+                obligation,
+                source_successor,
+            } => PartitionProducerKontSiteActionKey::ScopeBodyReturn {
+                target: *target,
+                obligation: *obligation,
+                source_successor: *source_successor,
+            },
             ProducerKontAction::ExitScopeStart { target, obligation } => {
                 PartitionProducerKontSiteActionKey::ExitScopeStart {
                     target: *target,
@@ -3381,10 +3605,12 @@ impl PartitionProducerKontSiteKey {
                 target,
                 obligation,
                 obligation_successor,
+                source_successor,
             } => PartitionProducerKontSiteActionKey::ExitScopeComplete {
                 target: *target,
                 obligation: *obligation,
                 obligation_successor: *obligation_successor,
+                source_successor: *source_successor,
             },
         };
         let successor = successor.map(|cursor| cursor.site_id);
@@ -4483,6 +4709,7 @@ pub(super) fn append_partition_prefix_values(
         SourcePrefixTemplate::ReturnFromSelectedCase {
             delimiter,
             parent_capture,
+            exit_transition,
             ..
         } => {
             output.push(delimiter.activation_instance.0);
@@ -4498,6 +4725,28 @@ pub(super) fn append_partition_prefix_values(
             output.push(parent.cursor_instance.0);
             append_partition_eliminator_values(lowering, builder, &parent.pending, output)?;
             append_partition_scope_values(lowering, builder, &parent.selected_scope, output)?;
+            if let Some(transition) = exit_transition {
+                output.push(
+                    transition
+                        .target
+                        .expect("source exit owns its recursor cell")
+                        .capture_pointer,
+                );
+                output.push(
+                    transition
+                        .exit_obligation
+                        .expect("source exit owns its obligation cell")
+                        .capture_pointer,
+                );
+                let invocation = lowering
+                    .invocation_pointer
+                    .expect("source exit capture owns an invocation pointer");
+                let pointer_type = builder.func.dfg.value_type(invocation);
+                output.push(transition.exit_obligation_successor.map_or_else(
+                    || builder.ins().iconst(pointer_type, 0),
+                    |cursor| cursor.capture_pointer,
+                ));
+            }
         }
         SourcePrefixTemplate::LetBody { env, .. }
         | SourcePrefixTemplate::IfScrutinee { env, .. }
@@ -4736,6 +4985,7 @@ pub(super) fn rebuild_partition_prefix(
         SourcePrefixTemplate::ReturnFromSelectedCase {
             delimiter,
             parent_capture,
+            exit_transition,
             ..
         } => {
             delimiter.activation_instance = ActivationInstanceRef(next_partition_value(values)?);
@@ -4751,6 +5001,22 @@ pub(super) fn rebuild_partition_prefix(
             parent.cursor_instance = ControlCursorRef(next_partition_value(values)?);
             rebuild_partition_eliminators(&mut parent.pending, values, native_int_tags)?;
             rebuild_partition_scope(&mut parent.selected_scope, values, native_int_tags)?;
+            if let Some(transition) = exit_transition {
+                transition
+                    .target
+                    .as_mut()
+                    .expect("source exit owns its recursor cell")
+                    .capture_pointer = next_partition_value(values)?;
+                transition
+                    .exit_obligation
+                    .as_mut()
+                    .expect("source exit owns its obligation cell")
+                    .capture_pointer = next_partition_value(values)?;
+                let successor_pointer = next_partition_value(values)?;
+                if let Some(successor) = &mut transition.exit_obligation_successor {
+                    successor.capture_pointer = successor_pointer;
+                }
+            }
         }
         SourcePrefixTemplate::LetBody { env, .. }
         | SourcePrefixTemplate::IfScrutinee { env, .. }

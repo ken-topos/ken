@@ -656,12 +656,21 @@ impl<'a> Lowering<'a> {
     ) -> Result<(), CraneliftBackendError> {
         let mut current = &control.continuation;
         let mut prefix = Vec::new();
+        let mut exit_stack = control.pending_partition_exit_stack.take();
         while let Some(next) = partition_source_continuation_next(current) {
             prefix.push(partition_source_head_template(
                 current,
                 control.terminal_outer,
             )?);
             current = next;
+        }
+        if exit_stack.is_none() {
+            if let SourceContinuation::Terminal(
+            SourceContinuationTerminal::ReturnToProducerHole { stack, .. },
+            ) = current
+            {
+                exit_stack = Some(stack.clone());
+            }
         }
         for mut template in prefix.into_iter().rev() {
             if let SourcePrefixTemplate::ReturnFromSelectedCase { parent_capture, .. } =
@@ -677,6 +686,7 @@ impl<'a> Lowering<'a> {
             }
             self.push_partition_source_template(builder, control, template)?;
         }
+        control.pending_partition_exit_stack = exit_stack;
         Ok(())
     }
 
@@ -735,6 +745,49 @@ impl<'a> Lowering<'a> {
             node,
             capture_pointer,
         });
+        Ok(())
+    }
+
+    fn append_partition_exit_stack_values(
+        stack: &Option<RecursorUnwindStack>,
+        output: &mut Vec<cranelift_codegen::ir::Value>,
+    ) {
+        if let Some(stack) = stack {
+            if let Some(cursor) = stack.partition_cursor {
+                output.push(cursor.capture_pointer);
+            }
+            if let Some(cursor) = stack.partition_qualification {
+                output.push(cursor.capture_pointer);
+            }
+            if let Some(cursor) = stack.partition_open_obligation {
+                output.push(cursor.capture_pointer);
+            }
+        }
+    }
+
+    fn rebuild_partition_exit_stack_values(
+        stack: &mut Option<RecursorUnwindStack>,
+        values: &mut impl Iterator<Item = cranelift_codegen::ir::Value>,
+    ) -> Result<(), CraneliftBackendError> {
+        let next = |values: &mut dyn Iterator<Item = cranelift_codegen::ir::Value>| {
+            values.next().ok_or_else(|| {
+                unsupported(
+                    "NativeExitScopeTransitionV1",
+                    "partition exit stack input cell ended early",
+                )
+            })
+        };
+        if let Some(stack) = stack {
+            if let Some(cursor) = &mut stack.partition_cursor {
+                cursor.capture_pointer = next(values)?;
+            }
+            if let Some(cursor) = &mut stack.partition_qualification {
+                cursor.capture_pointer = next(values)?;
+            }
+            if let Some(cursor) = &mut stack.partition_open_obligation {
+                cursor.capture_pointer = next(values)?;
+            }
+        }
         Ok(())
     }
 
@@ -845,7 +898,7 @@ impl<'a> Lowering<'a> {
         let pointer_type = builder.func.dfg.value_type(invocation);
         let frame = builder.create_sized_stack_slot(StackSlotData::new(
             StackSlotKind::ExplicitSlot,
-            PARTITION_FRAME_FIELD_BYTES * 4,
+            PARTITION_FRAME_FIELD_BYTES * 5,
             3,
         ));
         let successor_pointer = stack.partition_open_obligation.map_or_else(
@@ -866,6 +919,11 @@ impl<'a> Lowering<'a> {
             parent_scope.map_or(null_parent, |parent| parent.0),
             frame,
             (PARTITION_FRAME_FIELD_BYTES * 3) as i32,
+        );
+        builder.ins().stack_store(
+            null_parent,
+            frame,
+            (PARTITION_FRAME_FIELD_BYTES * 4) as i32,
         );
         stack.partition_open_obligation = Some(PartitionOpenControlObligationCursor {
             node,
@@ -1152,80 +1210,6 @@ impl<'a> Lowering<'a> {
         Ok((Some(obligation), successor))
     }
 
-    fn drain_partition_exit_stack(
-        &mut self,
-        builder: &mut FunctionBuilder<'_>,
-        stack: &mut RecursorUnwindStack,
-    ) -> Result<Vec<PoppedPartitionRecursorLayer>, CraneliftBackendError> {
-        if stack.partition_cursor.is_none() {
-            return Ok(Vec::new());
-        }
-        let mut popped = Vec::new();
-        while let Some(step) = self.pop_partition_recursor_layer(builder, stack)? {
-            if !matches!(step.layer.role, RecursorLayerRole::ExitsScope { .. }) {
-                return Err(unsupported(
-                    "NativeExitScopeTransitionV1",
-                    "persistent unwind retained a non-exit layer after its selected occurrence",
-                ));
-            }
-            #[cfg(test)]
-            if let RecursorLayerRole::ExitsScope {
-                origin,
-                scope_origin,
-                parent_scope,
-                ..
-            } = step.layer.role
-            {
-                px8j_record_source_event(Px8jSourceTraceEvent::Exit {
-                    origin,
-                    scope_origin,
-                    parent_scope,
-                });
-            }
-            popped.push(step);
-        }
-        Ok(popped)
-    }
-
-    fn reserve_partition_scope_exits_from_tail<'b>(
-        &mut self,
-        builder: &mut FunctionBuilder<'_>,
-        continuation: &mut SourceContinuation<'b>,
-    ) -> Result<Vec<PoppedPartitionRecursorLayer>, CraneliftBackendError> {
-        let mut current = continuation;
-        loop {
-            match current {
-                SourceContinuation::UnwindRecursorSegment { stack, .. } => {
-                    return self.drain_partition_exit_stack(builder, stack);
-                }
-                SourceContinuation::Terminal(
-                    SourceContinuationTerminal::ReturnToProducerHole { stack, .. },
-                ) => return self.drain_partition_exit_stack(builder, stack),
-                SourceContinuation::Partitioned { terminal, .. } => {
-                    return match terminal {
-                        SourceContinuationTerminal::ReturnToProducerHole { stack, .. } => {
-                            self.drain_partition_exit_stack(builder, stack)
-                        }
-                        _ => Ok(Vec::new()),
-                    };
-                }
-                SourceContinuation::Terminal(_) => return Ok(Vec::new()),
-                SourceContinuation::CheckedRecursiveInvocationReturn { next, .. }
-                | SourceContinuation::CheckedComputationalIHInvocationReturn { next, .. }
-                | SourceContinuation::ReturnFromSelectedCase { next, .. }
-                | SourceContinuation::LetBody { next, .. }
-                | SourceContinuation::ApplyRecursorSelection { next, .. }
-                | SourceContinuation::IfScrutinee { next, .. }
-                | SourceContinuation::ConstructArgument { next, .. }
-                | SourceContinuation::MatchScrutinee { next, .. }
-                | SourceContinuation::ComputationalMatchScrutinee { next, .. }
-                | SourceContinuation::ProjectRecord { next, .. }
-                | SourceContinuation::CallCallee { next, .. }
-                | SourceContinuation::CallArgument { next, .. } => current = next,
-            }
-        }
-    }
-
     fn pop_partition_source_cursor(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -1235,11 +1219,27 @@ impl<'a> Lowering<'a> {
             return Ok(());
         };
         let definition = self.partition_source_nodes.definition(cursor.node)?;
+        if std::env::var_os("KEN_NATIVE_EXIT_TRACE").is_some() {
+            use std::io::Write as _;
+            if let Ok(mut trace) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/ken-native-exit-trace")
+            {
+                let kind = match definition.current {
+                    SourcePrefixTemplate::ReturnFromSelectedCase { .. } => "return",
+                    SourcePrefixTemplate::UnwindRecursorSegment { .. } => "unwind",
+                    _ => "other",
+                };
+                let _ = writeln!(trace, "pop node={} kind={kind}", cursor.node.0);
+            }
+        }
         let pointer_type = builder.func.dfg.value_type(cursor.capture_pointer);
         let successor_pointer =
             builder
                 .ins()
                 .load(pointer_type, MemFlags::trusted(), cursor.capture_pointer, 0);
+        control.consumed_partition_cursor = Some(cursor);
         control.partition_cursor = definition.successor.map(|node| PartitionSourceCursor {
             node,
             capture_pointer: successor_pointer,
@@ -1250,19 +1250,16 @@ impl<'a> Lowering<'a> {
     fn reserve_partition_exit_source_cursor(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        cursor: &mut Option<PartitionSourceCursor>,
-    ) -> Result<Option<ReservedPartitionExitCursor>, CraneliftBackendError> {
-        let Some(head) = *cursor else {
+        control: &mut SourceControl<'_>,
+    ) -> Result<Option<(PoppedPartitionRecursorLayer, PartitionSourceResume)>, CraneliftBackendError>
+    {
+        let Some(parent_return) = control.consumed_partition_cursor else {
             return Ok(None);
         };
-        let mut definition = self.partition_source_nodes.definition(head.node)?;
-        if !matches!(
-            definition.current,
-            SourcePrefixTemplate::UnwindRecursorSegment { .. }
-        ) {
-            return Ok(None);
-        }
-        let mut captures = definition
+        let mut return_definition = self
+            .partition_source_nodes
+            .definition(parent_return.node)?;
+        let mut captures = return_definition
             .capture_field_types
             .iter()
             .enumerate()
@@ -1280,14 +1277,14 @@ impl<'a> Lowering<'a> {
                 Ok(builder.ins().load(
                     *field_type,
                     MemFlags::trusted(),
-                    head.capture_pointer,
+                    parent_return.capture_pointer,
                     offset,
                 ))
             })
             .collect::<Result<Vec<_>, CraneliftBackendError>>()?
             .into_iter();
         rebuild_partition_prefix(
-            &mut definition.current,
+            &mut return_definition.current,
             &mut captures,
             &mut self.native_int_tags,
         )?;
@@ -1297,33 +1294,103 @@ impl<'a> Lowering<'a> {
                 "exit source-cursor capture has trailing fields",
             ));
         }
-        let SourcePrefixTemplate::UnwindRecursorSegment {
-            mut stack,
-            resume_cursor,
-            resume_cursor_instance,
-            ..
-        } = definition.current
-        else {
-            unreachable!("unwind source cursor was checked before reconstruction");
+        let SourcePrefixTemplate::ReturnFromSelectedCase { .. } = return_definition.current else {
+            return Ok(None);
         };
-        if stack.partition_cursor.is_none() {
+        let Some(stack) = &control.pending_partition_exit_stack else {
+            return Ok(None);
+        };
+        let mut candidate = stack.clone();
+        let Some(popped) = self.pop_partition_recursor_layer(builder, &mut candidate)? else {
+            return Ok(None);
+        };
+        let matches_parent = match (
+            popped.layer.role,
+            control.selected.selected_scope.as_ref(),
+        ) {
+            (RecursorLayerRole::ExitsScope { scope_origin, .. }, Some(scope)) => {
+                scope.scope_origin == scope_origin
+                    && scope.frame.provenance == popped.layer.provenance
+                    && scope.frame.checked_frame_id == popped.layer.checked_frame_id
+            }
+            _ => false,
+        };
+        if !matches_parent {
             return Ok(None);
         }
-        let popped = self.drain_partition_exit_stack(builder, &mut stack)?;
-        let pointer_type = builder.func.dfg.value_type(head.capture_pointer);
-        let successor_pointer =
-            builder
-                .ins()
-                .load(pointer_type, MemFlags::trusted(), head.capture_pointer, 0);
-        *cursor = definition.successor.map(|node| PartitionSourceCursor {
-            node,
-            capture_pointer: successor_pointer,
-        });
-        Ok(Some(ReservedPartitionExitCursor {
+        let parent_producer = control.producer_kont.ok_or_else(|| {
+            unsupported(
+                "NativeExitScopeTransitionV1",
+                "scope body return lost its parent producer tail",
+            )
+        })?;
+        if popped.exit_obligation.is_none() {
+            return Ok(None);
+        }
+        control.pending_partition_exit_stack = Some(candidate);
+        #[cfg(test)]
+        if let RecursorLayerRole::ExitsScope {
+            origin,
+            scope_origin,
+            parent_scope,
+            ..
+        } = popped.layer.role
+        {
+            px8j_record_source_event(Px8jSourceTraceEvent::Exit {
+                origin,
+                scope_origin,
+                parent_scope,
+            });
+        }
+        let source_cursor = match control.partition_cursor {
+            Some(cursor) => PartitionSourceResumeCursor::Kont(cursor),
+            None => PartitionSourceResumeCursor::Terminal,
+        };
+        control.consumed_partition_cursor = None;
+        // ExitScopeComplete crosses only into this exact residual SourceKont.
+        // That SourceKont, not the Complete action, restores the prior producer
+        // tail after the bracket body has settled.
+        let producer = PartitionProducerResumeCursor::Producer(parent_producer);
+        let pending_exit_stack = control.pending_partition_exit_stack.take();
+        let site = PartitionSourceResumeSite {
+            target: match source_cursor {
+                PartitionSourceResumeCursor::Kont(cursor) => {
+                    PartitionSourceResumeTarget::Kont(cursor.node)
+                }
+                PartitionSourceResumeCursor::Terminal => PartitionSourceResumeTarget::Terminal,
+            },
+            parent_return: parent_return.node,
+            producer: match producer {
+                PartitionProducerResumeCursor::Producer(cursor) => {
+                    PartitionProducerResumeTarget::Producer(cursor.site_id)
+                }
+                PartitionProducerResumeCursor::Terminal => {
+                    PartitionProducerResumeTarget::Terminal
+                }
+            },
+            terminal_outer: control.terminal_outer,
+            pending_exit_head: pending_exit_stack
+                .as_ref()
+                .and_then(|stack| stack.partition_cursor.map(|cursor| cursor.node)),
+            pending_qualification_head: pending_exit_stack
+                .as_ref()
+                .and_then(|stack| stack.partition_qualification.map(|cursor| cursor.node)),
+            pending_obligation_head: pending_exit_stack.as_ref().and_then(|stack| {
+                stack
+                    .partition_open_obligation
+                    .map(|cursor| cursor.node)
+            }),
+        };
+        Ok(Some((
             popped,
-            resume_cursor,
-            resume_cursor_instance,
-        }))
+            PartitionSourceResume {
+                site,
+                cursor: source_cursor,
+                parent_return_capture_pointer: parent_return.capture_pointer,
+                producer,
+                pending_exit_stack,
+            },
+        )))
     }
 
     fn check_partition_live_growth(
@@ -2257,10 +2324,11 @@ impl<'a> Lowering<'a> {
                         .iter()
                         .map(|arg| self.lower_expr(builder, arg, producer_env))
                         .collect::<Result<Vec<_>, _>>()?;
-                    return Ok(Lowered::Constructor {
+                    let value = Lowered::Constructor {
                         constructor: constructor.clone(),
                         args: lowered_args,
-                    });
+                    };
+                    return Ok(value);
                 }
                 let (case_body, argument_binder_offset) = match eliminator {
                     EliminatorFrame::Computational(eliminator) => {
@@ -2896,6 +2964,109 @@ impl<'a> Lowering<'a> {
         })
     }
 
+    fn push_scope_body_return_producer_kont(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        popped: &PoppedPartitionRecursorLayer,
+        source_successor: &PartitionSourceResume,
+        start: PartitionProducerKontCursor,
+        checked_join: PartitionCheckedJoinIdentity,
+        return_kind: ScalarMergeKind,
+    ) -> Result<PartitionProducerKontCursor, CraneliftBackendError> {
+        let target = popped.target.ok_or_else(|| {
+            unsupported(
+                "NativeExitScopeTransitionV1",
+                "scope body return lost its exact recursor cell",
+            )
+        })?;
+        let obligation = popped.exit_obligation.ok_or_else(|| {
+            unsupported(
+                "NativeExitScopeTransitionV1",
+                "scope body return lost its exact open obligation",
+            )
+        })?;
+        let invocation = self
+            .invocation_pointer
+            .expect("scope body return planning owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let null = builder.ins().iconst(pointer_type, 0);
+        let source_pointer = match source_successor.cursor {
+            PartitionSourceResumeCursor::Kont(cursor) => cursor.capture_pointer,
+            PartitionSourceResumeCursor::Terminal => null,
+        };
+        let parent_producer_pointer = match source_successor.producer {
+            PartitionProducerResumeCursor::Producer(cursor) => cursor.capture_pointer,
+            PartitionProducerResumeCursor::Terminal => {
+                return Err(unsupported(
+                    "NativeExitScopeTransitionV1",
+                    "scope body return has no parent producer tail",
+                ));
+            }
+        };
+        let fields = [
+            obligation.capture_pointer,
+            start.capture_pointer,
+            source_pointer,
+            source_successor.parent_return_capture_pointer,
+            parent_producer_pointer,
+        ];
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            partition_frame_size(fields.len())?,
+            3,
+        ));
+        self.partition_metrics
+            .record_cleanup_call_frame(fields.len());
+        for (index, value) in fields.into_iter().enumerate() {
+            let offset = index
+                .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                .and_then(|offset| i32::try_from(offset).ok())
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeExitScopeTransitionV1",
+                        "scope body return cell offset overflowed",
+                    )
+                })?;
+            builder.ins().stack_store(value, frame, offset);
+        }
+        let fresh_capture_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+        let bound_capture_pointer = builder.ins().load(
+            pointer_type,
+            MemFlags::trusted(),
+            obligation.capture_pointer,
+            (PARTITION_FRAME_FIELD_BYTES * 4) as i32,
+        );
+        let unbound = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            bound_capture_pointer,
+            0,
+        );
+        let capture_pointer =
+            builder
+                .ins()
+                .select(unbound, fresh_capture_pointer, bound_capture_pointer);
+        builder.ins().store(
+            MemFlags::trusted(),
+            capture_pointer,
+            obligation.capture_pointer,
+            (PARTITION_FRAME_FIELD_BYTES * 4) as i32,
+        );
+        let site_id = self.intern_producer_kont_site(PartitionProducerKontSitePlan {
+            action: ProducerKontAction::ScopeBodyReturn {
+                target: target.node,
+                obligation: obligation.node,
+                source_successor: source_successor.site,
+            },
+            successor: Some(start),
+            checked_join,
+            return_kind,
+        })?;
+        Ok(PartitionProducerKontCursor {
+            site_id,
+            capture_pointer,
+        })
+    }
+
     fn push_one_owned_producer_kont(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -2957,7 +3128,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         popped: &PoppedPartitionRecursorLayer,
-        successor: PartitionProducerKontCursor,
+        source_successor: PartitionSourceResume,
         checked_join: PartitionCheckedJoinIdentity,
         return_kind: ScalarMergeKind,
     ) -> Result<PartitionProducerKontCursor, CraneliftBackendError> {
@@ -2993,6 +3164,29 @@ impl<'a> Lowering<'a> {
         let obligation_successor_pointer = popped
             .exit_obligation_successor
             .map_or(null, |cursor| cursor.capture_pointer);
+        let source_successor_pointer = match source_successor.cursor {
+            PartitionSourceResumeCursor::Kont(cursor) => cursor.capture_pointer,
+            PartitionSourceResumeCursor::Terminal => null,
+        };
+        let producer_successor_pointer = match source_successor.producer {
+            PartitionProducerResumeCursor::Producer(cursor) => cursor.capture_pointer,
+            PartitionProducerResumeCursor::Terminal => null,
+        };
+        let pending_exit_pointer = source_successor
+            .pending_exit_stack
+            .as_ref()
+            .and_then(|stack| stack.partition_cursor)
+            .map_or(null, |cursor| cursor.capture_pointer);
+        let pending_qualification_pointer = source_successor
+            .pending_exit_stack
+            .as_ref()
+            .and_then(|stack| stack.partition_qualification)
+            .map_or(null, |cursor| cursor.capture_pointer);
+        let pending_obligation_pointer = source_successor
+            .pending_exit_stack
+            .as_ref()
+            .and_then(|stack| stack.partition_open_obligation)
+            .map_or(null, |cursor| cursor.capture_pointer);
 
         let complete_fields = [
             obligation.capture_pointer,
@@ -3000,7 +3194,12 @@ impl<'a> Lowering<'a> {
             scope_instance.0,
             parent_pointer,
             obligation_successor_pointer,
-            successor.capture_pointer,
+            source_successor_pointer,
+            source_successor.parent_return_capture_pointer,
+            producer_successor_pointer,
+            pending_exit_pointer,
+            pending_qualification_pointer,
+            pending_obligation_pointer,
         ];
         let complete_frame = builder.create_sized_stack_slot(StackSlotData::new(
             StackSlotKind::ExplicitSlot,
@@ -3027,8 +3226,9 @@ impl<'a> Lowering<'a> {
                 target: target.node,
                 obligation: obligation.node,
                 obligation_successor: popped.exit_obligation_successor.map(|cursor| cursor.node),
+                source_successor: source_successor.site,
             },
-            successor: Some(successor),
+            successor: None,
             checked_join: checked_join.clone(),
             return_kind,
         };
@@ -3080,79 +3280,6 @@ impl<'a> Lowering<'a> {
         })
     }
 
-    fn install_partition_exit_scope_chain<'b>(
-        &mut self,
-        builder: &mut FunctionBuilder<'_>,
-        selected: &mut SourceSelectedContinuation<'b>,
-        selected_lineage: &[SourceSelectedContinuation<'b>],
-        producer_kont: &mut Option<PartitionProducerKontCursor>,
-        popped: &[PoppedPartitionRecursorLayer],
-    ) -> Result<(), CraneliftBackendError> {
-        if popped.is_empty() {
-            return Ok(());
-        }
-        let contract = self
-            .active_partition_return_contract
-            .clone()
-            .ok_or_else(|| {
-                unsupported(
-                    "NativeExitScopeTransitionV1",
-                    "persistent scope exit has no scalar return contract",
-                )
-            })?;
-        let outer = producer_kont.ok_or_else(|| {
-            unsupported(
-                "NativeExitScopeTransitionV1",
-                "persistent scope exit has no explicit parent producer successor",
-            )
-        })?;
-        let owned_provenance = popped
-            .iter()
-            .map(|step| step.layer.provenance)
-            .collect::<Vec<_>>();
-        selected.pending.retain(|frame| match frame {
-            EliminatorFrame::Computational(frame) => !owned_provenance
-                .iter()
-                .any(|owned| *owned == frame.provenance),
-            _ => true,
-        });
-        if selected.selected_scope.as_ref().is_some_and(|scope| {
-            owned_provenance
-                .iter()
-                .any(|owned| *owned == scope.frame.provenance)
-        }) {
-            selected.selected_scope = None;
-        }
-
-        let previous = self.active_partition_producer_kont.replace(outer);
-        let generic_parent = self
-            .push_selected_head_producer_kont(builder, selected.as_active(selected_lineage))?
-            .ok_or_else(|| {
-                unsupported(
-                    "NativeExitScopeTransitionV1",
-                    "scope-exit chain could not seal its generic parent successor",
-                )
-            })?;
-        self.active_partition_producer_kont = previous;
-        let mut head = generic_parent;
-        for step in popped.iter().rev() {
-            head = self.push_exit_scope_producer_kont(
-                builder,
-                step,
-                head,
-                contract.checked_join.clone(),
-                contract.required_kind,
-            )?;
-        }
-        // The exact remaining selected work is sealed behind the exit chain.
-        // The eventual source terminal contributes only an obligation-free
-        // pass-through selected head.
-        selected.pending.clear();
-        selected.selected_scope = None;
-        *producer_kont = Some(head);
-        Ok(())
-    }
-
     fn install_source_recursor_invocation<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -3171,7 +3298,6 @@ impl<'a> Lowering<'a> {
             return Ok(control);
         }
 
-        let _dynamic_splice_edges = self.take_dynamic_splice_edges(&invocation)?;
         let resume_active = source_active_cursor(
             &control.selected,
             &control.selected_lineage,
@@ -3190,25 +3316,22 @@ impl<'a> Lowering<'a> {
                 invocation.resume_cursor_instance.0,
             )],
         );
+        let _dynamic_splice_edges = self.take_dynamic_splice_edges(&invocation)?;
         let RecursorInvocationSegment {
-            selection,
-            mut unwind,
-            ..
+            selection, unwind, ..
         } = invocation;
-        let popped = self.drain_partition_exit_stack(builder, &mut unwind)?;
-        let mut producer_selected = control.selected.clone();
-        let producer_lineage = control.selected_lineage.clone();
-        self.install_partition_exit_scope_chain(
-            builder,
-            &mut producer_selected,
-            &producer_lineage,
-            &mut control.producer_kont,
-            &popped,
-        )?;
+        if control.pending_partition_exit_stack.is_some() {
+            return Err(unsupported(
+                "NativeExitScopeTransitionV1",
+                "source invocation crossed an unsealed partition exit stack",
+            ));
+        }
+        control.pending_partition_exit_stack = Some(unwind);
         control.continuation = SourceContinuation::ApplyRecursorSelection {
             layer: selection,
             next: Box::new(control.continuation),
         };
+        let _ = (activation, checked_ih_invocation);
         Ok(control)
     }
 
@@ -3406,36 +3529,6 @@ impl<'a> Lowering<'a> {
         ))
     }
 
-    fn producer_kont_starts_selected_scope_exit(
-        &self,
-        cursor: PartitionProducerKontCursor,
-        selected_scope: Option<&OwnedSelectedScope>,
-    ) -> Result<bool, CraneliftBackendError> {
-        let plan = self
-            .partition_producer_sites
-            .get(&cursor.site_id)
-            .ok_or_else(|| {
-                unsupported(
-                    "NativeExitScopeTransitionV1",
-                    "selected return lost its planned scope-exit successor",
-                )
-            })?;
-        let ProducerKontAction::ExitScopeStart { target, .. } = plan.action else {
-            return Ok(false);
-        };
-        let target = self.partition_recursor_nodes.definition(target)?;
-        let target_scope_origin = match target.current.role {
-            RecursorLayerRole::ExitsScope { scope_origin, .. } => Some(scope_origin),
-            RecursorLayerRole::SelectsOccurrence { .. } => None,
-        };
-        let matches = selected_scope.is_some_and(|scope| {
-            scope.frame.provenance == target.current.provenance
-                && scope.frame.checked_frame_id == target.current.checked_frame_id
-                && Some(scope.scope_origin) == target_scope_origin
-        });
-        Ok(matches)
-    }
-
     fn push_checked_computational_ih_producer_kont(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -3514,7 +3607,17 @@ impl<'a> Lowering<'a> {
                     "producer continuation head has no planned site",
                 )
             })?;
-        if !matches!(&plan.action, ProducerKontAction::Done { .. }) && plan.successor.is_none() {
+        if matches!(&plan.action, ProducerKontAction::Done { .. }) && plan.successor.is_some() {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer terminal cannot carry a successor",
+            ));
+        }
+        if !matches!(
+            &plan.action,
+            ProducerKontAction::Done { .. } | ProducerKontAction::ExitScopeComplete { .. }
+        ) && plan.successor.is_none()
+        {
             return Err(unsupported(
                 "NativeProducerContinuationStepV1",
                 "nonterminal producer continuation has no explicit successor",
@@ -3566,6 +3669,23 @@ impl<'a> Lowering<'a> {
                 field_types.clone(),
                 field_map.clone(),
             ),
+            ProducerKontAction::ScopeBodyReturn {
+                target,
+                obligation,
+                source_successor,
+            } => PartitionContinuationKey::scope_body_return(
+                plan.checked_join.clone(),
+                plan.return_kind,
+                &input,
+                *target,
+                *obligation,
+                *source_successor,
+                plan.successor
+                    .expect("scope body return has an exact Start successor")
+                    .site_id,
+                field_types.clone(),
+                field_map.clone(),
+            ),
             ProducerKontAction::ExitScopeStart { target, obligation } => {
                 PartitionContinuationKey::exit_scope_start(
                     plan.checked_join.clone(),
@@ -3582,6 +3702,7 @@ impl<'a> Lowering<'a> {
                 target,
                 obligation,
                 obligation_successor,
+                source_successor,
             } => PartitionContinuationKey::exit_scope_complete(
                 plan.checked_join.clone(),
                 plan.return_kind,
@@ -3589,7 +3710,7 @@ impl<'a> Lowering<'a> {
                 *target,
                 *obligation,
                 *obligation_successor,
-                plan.successor.map(|successor| successor.site_id),
+                *source_successor,
                 field_types.clone(),
                 field_map.clone(),
             ),
@@ -3732,6 +3853,51 @@ impl<'a> Lowering<'a> {
                 true,
                 eliminators,
             );
+        }
+        if std::env::var_os("KEN_NATIVE_EXIT_TRACE").is_some()
+            && !matches!(scrutinee, Lowered::Constructor { .. })
+        {
+            use std::io::Write as _;
+            if let Ok(mut trace) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/ken-native-exit-trace")
+            {
+                let active_producer = self.active_partition_producer_kont.and_then(|cursor| {
+                    self.partition_producer_sites.get(&cursor.site_id).map(|plan| {
+                        (
+                            cursor.site_id,
+                            match plan.action {
+                                ProducerKontAction::Done { .. } => "done",
+                                ProducerKontAction::ApplyActiveEliminators { .. } => "active",
+                                ProducerKontAction::ApplyEliminators { .. } => "eliminators",
+                                ProducerKontAction::OrientedInvocationReturn { .. } => "oriented",
+                                ProducerKontAction::CheckedComputationalIHReturn { .. } => {
+                                    "checked-ih"
+                                }
+                                ProducerKontAction::ScopeBodyReturn { .. } => "scope-body-return",
+                                ProducerKontAction::ExitScopeStart { .. } => "exit-start",
+                                ProducerKontAction::ExitScopeComplete { .. } => "exit-complete",
+                            },
+                        )
+                    })
+                });
+                let eliminator_kinds = eliminators
+                    .iter()
+                    .map(|frame| match frame {
+                        EliminatorFrame::Computational(_) => "computational",
+                        EliminatorFrame::Ordinary(_) => "ordinary",
+                        EliminatorFrame::PendingLet(_) => "pending-let",
+                        EliminatorFrame::Active(_) => "active",
+                        EliminatorFrame::InvocationReturn => "return",
+                    })
+                    .collect::<Vec<_>>();
+                let _ = writeln!(
+                    trace,
+                    "bad-match value={} eliminators={eliminator_kinds:?} producer={active_producer:?}",
+                    lowered_value_kind(&scrutinee),
+                );
+            }
         }
         let Lowered::Constructor { constructor, args } = scrutinee else {
             return Err(unsupported(
@@ -4477,6 +4643,7 @@ impl<'a> Lowering<'a> {
                 checked_join.clone(),
                 item.return_authority.descriptor.required_kind,
                 PartitionProducerKontTerminalIdentity::ScalarArmReturn {
+                    partition_site_id: item.return_authority.descriptor.partition_site_id,
                     edge_index: item.return_authority.descriptor.edge_index,
                 },
             )?
@@ -4589,6 +4756,10 @@ impl<'a> Lowering<'a> {
                 )
             })?;
         }
+        Self::rebuild_partition_exit_stack_values(
+            &mut item.pending_partition_exit_stack,
+            &mut loaded,
+        )?;
         item.selected_activation_instance =
             ActivationInstanceRef(loaded.next().ok_or_else(|| {
                 unsupported(
@@ -4652,6 +4823,8 @@ impl<'a> Lowering<'a> {
                     capture_pointer,
                 },
             ),
+            consumed_partition_cursor: None,
+            pending_partition_exit_stack: item.pending_partition_exit_stack,
             producer_kont: item.producer_kont,
             selected: SourceSelectedContinuation {
                 activation: item.selected_activation,
@@ -4797,29 +4970,42 @@ impl<'a> Lowering<'a> {
                 )
             })?;
         }
-        item.selected_activation_instance =
-            ActivationInstanceRef(loaded.next().ok_or_else(|| {
+        Self::rebuild_partition_exit_stack_values(
+            &mut item.pending_partition_exit_stack,
+            &mut loaded,
+        )?;
+        if let Some(parent_return) = &mut item.resume_parent {
+            parent_return.capture_pointer = loaded.next().ok_or_else(|| {
+                unsupported(
+                    "NativeExitScopeTransitionV1",
+                    "source resume lost its selected-return cell pointer",
+                )
+            })?;
+        } else {
+            item.selected_activation_instance =
+                ActivationInstanceRef(loaded.next().ok_or_else(|| {
+                    unsupported(
+                        "NativeControlCellV1",
+                        "source Kont state lost its activation-instance reference",
+                    )
+                })?);
+            item.selected_cursor_instance = ControlCursorRef(loaded.next().ok_or_else(|| {
                 unsupported(
                     "NativeControlCellV1",
-                    "source Kont state lost its activation-instance reference",
+                    "source Kont state lost its cursor-instance reference",
                 )
             })?);
-        item.selected_cursor_instance = ControlCursorRef(loaded.next().ok_or_else(|| {
-            unsupported(
-                "NativeControlCellV1",
-                "source Kont state lost its cursor-instance reference",
-            )
-        })?);
-        rebuild_partition_eliminators(
-            &mut item.selected_pending,
-            &mut loaded,
-            &mut self.native_int_tags,
-        )?;
-        rebuild_partition_scope(
-            &mut item.selected_scope,
-            &mut loaded,
-            &mut self.native_int_tags,
-        )?;
+            rebuild_partition_eliminators(
+                &mut item.selected_pending,
+                &mut loaded,
+                &mut self.native_int_tags,
+            )?;
+            rebuild_partition_scope(
+                &mut item.selected_scope,
+                &mut loaded,
+                &mut self.native_int_tags,
+            )?;
+        }
         if loaded.next().is_some() {
             return Err(unsupported(
                 "NativeSourceContinuationStepV1",
@@ -4892,24 +5078,47 @@ impl<'a> Lowering<'a> {
         };
         let successor = SourceContinuation::Terminal(terminal);
         let continuation = instantiate_partition_source_node(definition.current, successor)?;
+        let restored_selected = item
+            .resume_parent
+            .map(|parent_return| self.restore_partition_selected_parent(builder, parent_return))
+            .transpose()?;
         let control = SourceControl {
             continuation,
             partition_cursor: Some(PartitionSourceCursor {
                 node: item.node,
                 capture_pointer: item.capture_pointer,
             }),
+            consumed_partition_cursor: None,
+            pending_partition_exit_stack: item.pending_partition_exit_stack,
             producer_kont: item.producer_kont,
-            selected: SourceSelectedContinuation {
-                activation: item.selected_activation,
-                activation_instance: item.selected_activation_instance,
-                cursor: item.selected_cursor,
-                cursor_instance: item.selected_cursor_instance,
-                parent: None,
-                pending: borrow_partition_eliminators(&item.selected_pending),
-                selected_ancestry: item.selected_ancestry,
-                selected_scope: item.selected_scope,
+            selected: if let Some(parent) = &restored_selected {
+                SourceSelectedContinuation {
+                    activation: parent.activation,
+                    activation_instance: parent.activation_instance,
+                    cursor: parent.cursor,
+                    cursor_instance: parent.cursor_instance,
+                    parent: None,
+                    pending: borrow_partition_eliminators(&parent.pending),
+                    selected_ancestry: parent.selected_ancestry.clone(),
+                    selected_scope: parent.selected_scope.clone(),
+                }
+            } else {
+                SourceSelectedContinuation {
+                    activation: item.selected_activation,
+                    activation_instance: item.selected_activation_instance,
+                    cursor: item.selected_cursor,
+                    cursor_instance: item.selected_cursor_instance,
+                    parent: None,
+                    pending: borrow_partition_eliminators(&item.selected_pending),
+                    selected_ancestry: item.selected_ancestry,
+                    selected_scope: item.selected_scope,
+                }
             },
-            selected_lineage,
+            selected_lineage: if restored_selected.is_some() {
+                Vec::new()
+            } else {
+                selected_lineage
+            },
             terminal_outer: item.terminal_outer,
         };
         self.declaration_stack = item.declaration_stack;
@@ -4948,6 +5157,96 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    fn restore_partition_selected_parent(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        parent_return: PartitionSourceCursor,
+    ) -> Result<OwnedSourceSelectedContinuation, CraneliftBackendError> {
+        let mut definition = self
+            .partition_source_nodes
+            .definition(parent_return.node)?;
+        let mut captures = definition
+            .capture_field_types
+            .iter()
+            .enumerate()
+            .map(|(index, field_type)| {
+                let offset = index
+                    .checked_add(1)
+                    .and_then(|field| field.checked_mul(PARTITION_FRAME_FIELD_BYTES as usize))
+                    .and_then(|offset| i32::try_from(offset).ok())
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeExitScopeTransitionV1",
+                            "selected-parent capture offset overflowed",
+                        )
+                    })?;
+                Ok(builder.ins().load(
+                    *field_type,
+                    MemFlags::trusted(),
+                    parent_return.capture_pointer,
+                    offset,
+                ))
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?
+            .into_iter();
+        rebuild_partition_prefix(
+            &mut definition.current,
+            &mut captures,
+            &mut self.native_int_tags,
+        )?;
+        if captures.next().is_some() {
+            return Err(unsupported(
+                "NativeExitScopeTransitionV1",
+                "selected-parent source cell has trailing fields",
+            ));
+        }
+        let SourcePrefixTemplate::ReturnFromSelectedCase {
+            delimiter,
+            parent_capture: Some(mut parent),
+            ..
+        } = definition.current
+        else {
+            return Err(unsupported(
+                "NativeExitScopeTransitionV1",
+                "source resume parent is not an exact selected-return node",
+            ));
+        };
+        let pointer_type = builder
+            .func
+            .dfg
+            .value_type(delimiter.cursor_instance.0);
+        parent.activation_instance = ActivationInstanceRef(builder.ins().load(
+            pointer_type,
+            MemFlags::trusted(),
+            delimiter.cursor_instance.0,
+            0,
+        ));
+        parent.cursor_instance = ControlCursorRef(builder.ins().load(
+            pointer_type,
+            MemFlags::trusted(),
+            delimiter.cursor_instance.0,
+            PARTITION_FRAME_FIELD_BYTES as i32,
+        ));
+        if let Some(parent_scope) = &mut parent.selected_scope {
+            parent_scope.scope_instance = ScopeInstanceRef(builder.ins().load(
+                pointer_type,
+                MemFlags::trusted(),
+                delimiter.cursor_instance.0,
+                (PARTITION_FRAME_FIELD_BYTES * 2) as i32,
+            ));
+            if parent_scope.parent_scope.is_some() {
+                parent_scope.parent_scope_instance =
+                    Some(ScopeInstanceRef(builder.ins().load(
+                        pointer_type,
+                        MemFlags::trusted(),
+                        parent_scope.scope_instance.0,
+                        (PARTITION_FRAME_FIELD_BYTES * 2) as i32,
+                    )));
+            }
+        }
+        Ok(parent)
+    }
+
     fn call_partition_source_eval<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -4955,15 +5254,6 @@ impl<'a> Lowering<'a> {
         env: Vec<Lowered>,
         mut control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let popped =
-            self.reserve_partition_scope_exits_from_tail(builder, &mut control.continuation)?;
-        self.install_partition_exit_scope_chain(
-            builder,
-            &mut control.selected,
-            &control.selected_lineage,
-            &mut control.producer_kont,
-            &popped,
-        )?;
         if control.selected.parent.is_some()
             || !env.iter().all(partition_lowered_is_admissible)
             || !partition_scope_is_admissible(&control.selected.selected_scope)
@@ -5006,6 +5296,10 @@ impl<'a> Lowering<'a> {
         if let Some(producer_kont) = control.producer_kont {
             fields.push(producer_kont.capture_pointer);
         }
+        Self::append_partition_exit_stack_values(
+            &control.pending_partition_exit_stack,
+            &mut fields,
+        );
         fields.push(control.selected.activation_instance.0);
         fields.push(control.selected.cursor_instance.0);
         append_partition_scope_values(
@@ -5027,6 +5321,18 @@ impl<'a> Lowering<'a> {
             &self.declaration_stack,
             &self.active_recursive_invocations,
             control.partition_cursor.map(|cursor| cursor.node),
+            control
+                .pending_partition_exit_stack
+                .as_ref()
+                .and_then(|stack| stack.partition_cursor.map(|cursor| cursor.node)),
+            control
+                .pending_partition_exit_stack
+                .as_ref()
+                .and_then(|stack| stack.partition_qualification.map(|cursor| cursor.node)),
+            control
+                .pending_partition_exit_stack
+                .as_ref()
+                .and_then(|stack| stack.partition_open_obligation.map(|cursor| cursor.node)),
             control.producer_kont.map(|cursor| cursor.site_id),
             control.selected.activation,
             control.selected.cursor,
@@ -5124,6 +5430,7 @@ impl<'a> Lowering<'a> {
                     source_capture_pointer: control
                         .partition_cursor
                         .map(|cursor| cursor.capture_pointer),
+                    pending_partition_exit_stack: control.pending_partition_exit_stack,
                     producer_kont: control.producer_kont,
                     selected_activation: control.selected.activation,
                     selected_activation_instance: control.selected.activation_instance,
@@ -5154,15 +5461,6 @@ impl<'a> Lowering<'a> {
         input: Lowered,
         mut control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let popped =
-            self.reserve_partition_scope_exits_from_tail(builder, &mut control.continuation)?;
-        self.install_partition_exit_scope_chain(
-            builder,
-            &mut control.selected,
-            &control.selected_lineage,
-            &mut control.producer_kont,
-            &popped,
-        )?;
         if !partition_lowered_is_admissible(&input) {
             return Err(unsupported(
                 "NativeSourceContinuationStepV1",
@@ -5198,6 +5496,10 @@ impl<'a> Lowering<'a> {
         if let Some(producer_kont) = control.producer_kont {
             fields.push(producer_kont.capture_pointer);
         }
+        Self::append_partition_exit_stack_values(
+            &control.pending_partition_exit_stack,
+            &mut fields,
+        );
         fields.push(control.selected.activation_instance.0);
         fields.push(control.selected.cursor_instance.0);
         append_partition_eliminator_values(self, builder, &selected_pending, &mut fields)?;
@@ -5213,6 +5515,18 @@ impl<'a> Lowering<'a> {
             return_contract.checked_join.clone(),
             return_contract.required_kind,
             head.node,
+            control
+                .pending_partition_exit_stack
+                .as_ref()
+                .and_then(|stack| stack.partition_cursor.map(|cursor| cursor.node)),
+            control
+                .pending_partition_exit_stack
+                .as_ref()
+                .and_then(|stack| stack.partition_qualification.map(|cursor| cursor.node)),
+            control
+                .pending_partition_exit_stack
+                .as_ref()
+                .and_then(|stack| stack.partition_open_obligation.map(|cursor| cursor.node)),
             control.producer_kont.map(|cursor| cursor.site_id),
             self.pending_computational_ih_call,
             &input,
@@ -5304,6 +5618,8 @@ impl<'a> Lowering<'a> {
                     input,
                     node: head.node,
                     capture_pointer: head.capture_pointer,
+                    resume_parent: None,
+                    pending_partition_exit_stack: control.pending_partition_exit_stack,
                     producer_kont: control.producer_kont,
                     pending_computational_ih_call: self.pending_computational_ih_call,
                     declaration_stack: self.declaration_stack.clone(),
@@ -5317,6 +5633,180 @@ impl<'a> Lowering<'a> {
                     selected_scope: control.selected.selected_scope,
                     selected_lineage,
                     terminal_outer: control.terminal_outer,
+                    ledger_baseline: self.partition_ledger_baseline(),
+                    return_contract: expected_contract.clone(),
+                }));
+        }
+        Ok(self.lowered_from_scalar_pair(
+            expected_contract.required_kind,
+            NativeScalarPairV1 { tag, payload },
+        ))
+    }
+
+    fn call_partition_source_resume(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        head: PartitionSourceCursor,
+        parent_return: PartitionSourceCursor,
+        producer_kont: Option<PartitionProducerKontCursor>,
+        pending_exit_stack: Option<RecursorUnwindStack>,
+        terminal_outer: ContinuationCursorId,
+        input: Lowered,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        if !partition_lowered_is_admissible(&input) {
+            return Err(unsupported(
+                "NativeExitScopeTransitionV1",
+                "source-resume input has no exact closed schema",
+            ));
+        }
+        let return_contract = self
+            .active_partition_return_contract
+            .clone()
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeExitScopeTransitionV1",
+                    "source resume has no checked scalar return contract",
+                )
+            })?;
+        let parent_schema = match self
+            .partition_source_nodes
+            .definition(parent_return.node)?
+            .current
+        {
+            SourcePrefixTemplate::ReturnFromSelectedCase {
+                parent_capture: Some(parent),
+                ..
+            } => parent,
+            _ => {
+                return Err(unsupported(
+                    "NativeExitScopeTransitionV1",
+                    "source resume parent schema is not a selected return",
+                ));
+            }
+        };
+        let mut fields = Vec::new();
+        append_partition_lowered_values(self, builder, &input, &mut fields)?;
+        fields.push(head.capture_pointer);
+        if let Some(producer) = producer_kont {
+            fields.push(producer.capture_pointer);
+        }
+        Self::append_partition_exit_stack_values(&pending_exit_stack, &mut fields);
+        fields.push(parent_return.capture_pointer);
+        let (frame_values, field_types, field_map) = partition_frame_layout(builder, &fields);
+        self.partition_metrics.record_call_frame(frame_values.len());
+        let key = PartitionSemanticStateKey::SourceKont(PartitionSourceKontKey::new_resume(
+            return_contract.checked_join.clone(),
+            return_contract.required_kind,
+            head.node,
+            parent_return.node,
+            pending_exit_stack
+                .as_ref()
+                .and_then(|stack| stack.partition_cursor.map(|cursor| cursor.node)),
+            pending_exit_stack
+                .as_ref()
+                .and_then(|stack| stack.partition_qualification.map(|cursor| cursor.node)),
+            pending_exit_stack
+                .as_ref()
+                .and_then(|stack| stack.partition_open_obligation.map(|cursor| cursor.node)),
+            producer_kont.map(|cursor| cursor.site_id),
+            self.pending_computational_ih_call,
+            &input,
+            &self.declaration_stack,
+            &self.active_recursive_invocations,
+            field_types.clone(),
+            field_map.clone(),
+        ));
+        let expected_contract = key.return_contract();
+        let existing = self
+            .partition_continuations
+            .lookup(&key, PartitionAggregateBudget::PRODUCTION)?;
+        let (state_id, state, newly_reserved) = if let Some((state_id, state)) = existing {
+            (state_id, state, false)
+        } else {
+            let helper_index = self.partition_next_helper;
+            let function = *self.partition_helper_ids.get(helper_index).ok_or_else(|| {
+                unsupported(
+                    "NativeExitScopeTransitionV1",
+                    "source resume exhausted its predeclared helper pool",
+                )
+            })?;
+            self.partition_next_helper += 1;
+            let (state_id, state) = self.partition_continuations.reserve(
+                key,
+                function,
+                helper_index,
+                PartitionAggregateBudget::PRODUCTION,
+            )?;
+            (state_id, state, true)
+        };
+        self.partition_continuations
+            .validate_call_contract(state_id, &expected_contract)?;
+        let (_, function_ref) = self.partition_helper_ref(
+            builder,
+            state.helper_index,
+            "interned source resume lost its helper identity",
+        )?;
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            partition_frame_size(frame_values.len())?,
+            3,
+        ));
+        for (index, value) in frame_values.iter().copied().enumerate() {
+            let offset = index
+                .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                .and_then(|offset| i32::try_from(offset).ok())
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeExitScopeTransitionV1",
+                        "source-resume input-cell store offset overflowed",
+                    )
+                })?;
+            builder.ins().stack_store(value, frame, offset);
+        }
+        let invocation = self
+            .invocation_pointer
+            .expect("source resume owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let frame_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+        let tag_output = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            PARTITION_FRAME_FIELD_BYTES,
+            3,
+        ));
+        let zero = builder.ins().iconst(types::I64, 0);
+        builder.ins().stack_store(zero, tag_output, 0);
+        let tag_pointer = builder.ins().stack_addr(pointer_type, tag_output, 0);
+        let call = builder
+            .ins()
+            .call(function_ref, &[invocation, frame_pointer, tag_pointer]);
+        let tag = builder.ins().stack_load(types::I64, tag_output, 0);
+        let payload = builder.inst_results(call)[0];
+        if newly_reserved {
+            self.partition_queue
+                .push_back(PartitionWorkItem::SourceKont(SourceKontPartitionWorkItem {
+                    state_id,
+                    function: state.function,
+                    helper_index: state.helper_index,
+                    field_types,
+                    field_map,
+                    input,
+                    node: head.node,
+                    capture_pointer: head.capture_pointer,
+                    resume_parent: Some(parent_return),
+                    pending_partition_exit_stack: pending_exit_stack,
+                    producer_kont,
+                    pending_computational_ih_call: self.pending_computational_ih_call,
+                    declaration_stack: self.declaration_stack.clone(),
+                    active_recursive_invocations: self.active_recursive_invocations.clone(),
+                    selected_activation: parent_schema.activation,
+                    selected_activation_instance: parent_schema.activation_instance,
+                    selected_cursor: parent_schema.cursor,
+                    selected_cursor_instance: parent_schema.cursor_instance,
+                    selected_ancestry: Vec::new(),
+                    selected_pending: Vec::new(),
+                    selected_scope: None,
+                    selected_lineage: Vec::new(),
+                    terminal_outer,
                     ledger_baseline: self.partition_ledger_baseline(),
                     return_contract: expected_contract.clone(),
                 }));
@@ -5639,6 +6129,7 @@ impl<'a> Lowering<'a> {
             ProducerKontAction::OrientedInvocationReturn { .. }
             | ProducerKontAction::ApplyEliminators { .. }
             | ProducerKontAction::CheckedComputationalIHReturn { .. }
+            | ProducerKontAction::ScopeBodyReturn { .. }
             | ProducerKontAction::ExitScopeStart { .. }
             | ProducerKontAction::ExitScopeComplete { .. } => true,
         };
@@ -5656,13 +6147,20 @@ impl<'a> Lowering<'a> {
                     item.successor
                 };
         }
-        let lowered = match &mut item.action {
+        let lowered = if matches!(item.value, Lowered::Trap(_)) {
+            Ok(item.value)
+        } else {
+            match &mut item.action {
             ProducerKontAction::Done { .. } => {
-                if item.successor.is_some() {
-                    return Err(unsupported(
-                        "NativeProducerContinuationStepV1",
-                        "explicit producer terminal unexpectedly has a successor",
-                    ));
+                if let Some(successor) = &mut item.successor {
+                    let capture_pointer = item.capture_pointer.expect("producer capture pointer");
+                    let pointer_type = builder.func.dfg.value_type(capture_pointer);
+                    successor.capture_pointer = builder.ins().load(
+                        pointer_type,
+                        MemFlags::trusted(),
+                        capture_pointer,
+                        0,
+                    );
                 }
                 Ok(item.value)
             }
@@ -5738,6 +6236,7 @@ impl<'a> Lowering<'a> {
                             "selected-head capture cell has trailing fields",
                         ));
                     }
+                    self.active_partition_producer_kont = item.successor;
                 }
                 let pending = borrow_partition_eliminators(pending);
                 let selected_lineage = selected_lineage
@@ -5929,6 +6428,153 @@ impl<'a> Lowering<'a> {
                 self.pending_computational_ih_call = Some(*call_template_id);
                 self.finish_checked_computational_ih_marker(builder, item.value)
             }
+            ProducerKontAction::ScopeBodyReturn {
+                target,
+                obligation,
+                source_successor,
+            } => {
+                if std::env::var_os("KEN_NATIVE_EXIT_TRACE").is_some() {
+                    use std::io::Write as _;
+                    if let Ok(mut trace) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open("/tmp/ken-native-exit-trace")
+                    {
+                        let _ = writeln!(
+                            trace,
+                            "scope-body-return target={} obligation={} value={}",
+                            target.0,
+                            obligation.0,
+                            lowered_value_kind(&item.value),
+                        );
+                    }
+                }
+                let capture_pointer = item.capture_pointer.expect("producer capture pointer");
+                let pointer_type = builder.func.dfg.value_type(capture_pointer);
+                let fields = (0..5)
+                    .map(|index| {
+                        builder.ins().load(
+                            pointer_type,
+                            MemFlags::trusted(),
+                            capture_pointer,
+                            index * PARTITION_FRAME_FIELD_BYTES as i32,
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let obligation_pointer = fields[0];
+                let start_pointer = fields[1];
+                let source_pointer = fields[2];
+                let parent_return_pointer = fields[3];
+                let parent_producer_pointer = fields[4];
+                let start = item.successor.as_mut().ok_or_else(|| {
+                    unsupported(
+                        "NativeExitScopeTransitionV1",
+                        "scope body return lost its exact Start successor",
+                    )
+                })?;
+                let start_plan = self
+                    .partition_producer_sites
+                    .get(&start.site_id)
+                    .cloned()
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeExitScopeTransitionV1",
+                            "scope body return Start site is not planned",
+                        )
+                    })?;
+                if !matches!(
+                    start_plan.action,
+                    ProducerKontAction::ExitScopeStart {
+                        target: start_target,
+                        obligation: start_obligation,
+                    } if start_target == *target && start_obligation == *obligation
+                ) {
+                    return Err(unsupported(
+                        "NativeExitScopeTransitionV1",
+                        "scope body return does not own its exact Start transition",
+                    ));
+                }
+                let complete = start_plan.successor.ok_or_else(|| {
+                    unsupported(
+                        "NativeExitScopeTransitionV1",
+                        "scope body return Start has no Complete successor",
+                    )
+                })?;
+                let complete_plan = self
+                    .partition_producer_sites
+                    .get(&complete.site_id)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeExitScopeTransitionV1",
+                            "scope body return Complete site is not planned",
+                        )
+                    })?;
+                if !matches!(
+                    complete_plan.action,
+                    ProducerKontAction::ExitScopeComplete {
+                        target: complete_target,
+                        obligation: complete_obligation,
+                        source_successor: complete_source,
+                        ..
+                    } if complete_target == *target
+                        && complete_obligation == *obligation
+                        && complete_source == *source_successor
+                ) {
+                    return Err(unsupported(
+                        "NativeExitScopeTransitionV1",
+                        "scope body return does not own its exact Complete/Source edge",
+                    ));
+                }
+                let start_obligation = builder.ins().load(
+                    pointer_type,
+                    MemFlags::trusted(),
+                    start_pointer,
+                    0,
+                );
+                let complete_pointer = builder.ins().load(
+                    pointer_type,
+                    MemFlags::trusted(),
+                    start_pointer,
+                    (PARTITION_FRAME_FIELD_BYTES * 4) as i32,
+                );
+                let complete_obligation = builder.ins().load(
+                    pointer_type,
+                    MemFlags::trusted(),
+                    complete_pointer,
+                    0,
+                );
+                let complete_source = builder.ins().load(
+                    pointer_type,
+                    MemFlags::trusted(),
+                    complete_pointer,
+                    (PARTITION_FRAME_FIELD_BYTES * 5) as i32,
+                );
+                let complete_parent_return = builder.ins().load(
+                    pointer_type,
+                    MemFlags::trusted(),
+                    complete_pointer,
+                    (PARTITION_FRAME_FIELD_BYTES * 6) as i32,
+                );
+                let complete_parent_producer = builder.ins().load(
+                    pointer_type,
+                    MemFlags::trusted(),
+                    complete_pointer,
+                    (PARTITION_FRAME_FIELD_BYTES * 7) as i32,
+                );
+                self.emit_control_cell_ref_guard(
+                    builder,
+                    &[
+                        (obligation_pointer, start_obligation),
+                        (obligation_pointer, complete_obligation),
+                        (source_pointer, complete_source),
+                        (parent_return_pointer, complete_parent_return),
+                        (parent_producer_pointer, complete_parent_producer),
+                    ],
+                );
+                start.capture_pointer = start_pointer;
+                self.active_partition_producer_kont = item.successor;
+                Ok(item.value)
+            }
             ProducerKontAction::ExitScopeStart { target, obligation } => {
                 let capture_pointer = item.capture_pointer.expect("producer capture pointer");
                 let pointer_type = builder.func.dfg.value_type(capture_pointer);
@@ -6077,10 +6723,11 @@ impl<'a> Lowering<'a> {
                 target,
                 obligation,
                 obligation_successor,
+                source_successor,
             } => {
                 let capture_pointer = item.capture_pointer.expect("producer capture pointer");
                 let pointer_type = builder.func.dfg.value_type(capture_pointer);
-                let fields = (0..6)
+                let fields = (0..11)
                     .map(|index| {
                         builder.ins().load(
                             pointer_type,
@@ -6095,9 +6742,12 @@ impl<'a> Lowering<'a> {
                 let scope_pointer = fields[2];
                 let parent_pointer = fields[3];
                 let obligation_successor_pointer = fields[4];
-                if let Some(successor) = &mut item.successor {
-                    successor.capture_pointer = fields[5];
-                }
+                let source_successor_pointer = fields[5];
+                let parent_return_pointer = fields[6];
+                let producer_successor_pointer = fields[7];
+                let pending_exit_pointer = fields[8];
+                let pending_qualification_pointer = fields[9];
+                let pending_obligation_pointer = fields[10];
                 let obligation_definition = self
                     .partition_open_control_obligations
                     .definition(*obligation)?;
@@ -6140,7 +6790,96 @@ impl<'a> Lowering<'a> {
                         (obligation_successor_pointer, obligation_next),
                     ],
                 );
-                Ok(item.value)
+                let producer_kont = match source_successor.producer {
+                    PartitionProducerResumeTarget::Producer(site_id) => {
+                        Some(PartitionProducerKontCursor {
+                            site_id,
+                            capture_pointer: producer_successor_pointer,
+                        })
+                    }
+                    PartitionProducerResumeTarget::Terminal => None,
+                };
+                let parent_return = PartitionSourceCursor {
+                    node: source_successor.parent_return,
+                    capture_pointer: parent_return_pointer,
+                };
+                let pending_exit_stack = if source_successor.pending_exit_head.is_some()
+                    || source_successor.pending_qualification_head.is_some()
+                    || source_successor.pending_obligation_head.is_some()
+                {
+                    Some(RecursorUnwindStack {
+                        later_wrappers_in_construction_order: Vec::new(),
+                        partition_cursor: source_successor.pending_exit_head.map(|node| {
+                            PartitionRecursorCursor {
+                                node,
+                                capture_pointer: pending_exit_pointer,
+                            }
+                        }),
+                        partition_qualification: source_successor
+                            .pending_qualification_head
+                            .map(|node| PartitionRecursorQualificationCursor {
+                                node,
+                                capture_pointer: pending_qualification_pointer,
+                            }),
+                        partition_open_obligation: source_successor
+                            .pending_obligation_head
+                            .map(|node| PartitionOpenControlObligationCursor {
+                                node,
+                                capture_pointer: pending_obligation_pointer,
+                            }),
+                    })
+                } else {
+                    None
+                };
+                match source_successor.target {
+                    PartitionSourceResumeTarget::Kont(node) => self.call_partition_source_resume(
+                        builder,
+                        PartitionSourceCursor {
+                            node,
+                            capture_pointer: source_successor_pointer,
+                        },
+                        parent_return,
+                        producer_kont,
+                        pending_exit_stack,
+                        source_successor.terminal_outer,
+                        item.value,
+                    ),
+                    PartitionSourceResumeTarget::Terminal => {
+                        let parent =
+                            self.restore_partition_selected_parent(builder, parent_return)?;
+                        let control = SourceControl {
+                            continuation: SourceContinuation::Terminal(
+                                SourceContinuationTerminal::ReturnFromPartition {
+                                    expected_outer: source_successor.terminal_outer,
+                                },
+                            ),
+                            partition_cursor: None,
+                            consumed_partition_cursor: None,
+                            pending_partition_exit_stack: pending_exit_stack,
+                            producer_kont,
+                            selected: SourceSelectedContinuation {
+                                activation: parent.activation,
+                                activation_instance: parent.activation_instance,
+                                cursor: parent.cursor,
+                                cursor_instance: parent.cursor_instance,
+                                parent: None,
+                                pending: borrow_partition_eliminators(&parent.pending),
+                                selected_ancestry: parent.selected_ancestry,
+                                selected_scope: parent.selected_scope,
+                            },
+                            selected_lineage: Vec::new(),
+                            terminal_outer: source_successor.terminal_outer,
+                        };
+                        self.lower_source_machine_state_inner(
+                            builder,
+                            SourceMachineState::Value {
+                                value: item.value,
+                                control,
+                            },
+                        )
+                    }
+                }
+            }
             }
         };
         self.active_partition_producer_kont = None;
@@ -6153,20 +6892,22 @@ impl<'a> Lowering<'a> {
             ));
         }
         let lowered = lowered?;
-        let lowered = match (&item.action, item.successor) {
-            (ProducerKontAction::Done { .. }, None) => lowered,
-            (ProducerKontAction::Done { .. }, Some(_)) => {
-                unreachable!("explicit producer terminal successor was rejected before lowering")
-            }
-            (ProducerKontAction::ExitScopeStart { .. }, Some(_)) => lowered,
-            (_, Some(successor)) => {
-                self.call_partition_producer_kont(builder, successor, lowered)?
-            }
-            (_, None) => {
-                return Err(unsupported(
-                    "NativeProducerContinuationStepV1",
-                    "nonterminal producer continuation reached scalarization without Done",
-                ));
+        let lowered = if matches!(lowered, Lowered::Trap(_)) {
+            lowered
+        } else {
+            match (&item.action, item.successor) {
+                (ProducerKontAction::Done { .. }, None) => lowered,
+                (ProducerKontAction::ExitScopeStart { .. }, Some(_)) => lowered,
+                (ProducerKontAction::ExitScopeComplete { .. }, None) => lowered,
+                (_, Some(successor)) => {
+                    self.call_partition_producer_kont(builder, successor, lowered)?
+                }
+                (_, None) => {
+                    return Err(unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "nonterminal producer continuation reached scalarization without Done",
+                    ));
+                }
             }
         };
         match lowered {
@@ -6217,6 +6958,8 @@ impl<'a> Lowering<'a> {
                 root_authority,
             }),
             partition_cursor: None,
+            consumed_partition_cursor: None,
+            pending_partition_exit_stack: None,
             producer_kont,
             selected: SourceSelectedContinuation {
                 activation: active.activation,
@@ -6287,35 +7030,103 @@ impl<'a> Lowering<'a> {
                         return Ok(value);
                     }
                     SourceMachineState::Value { value, mut control } => {
-                        if let Some(reserved) = self.reserve_partition_exit_source_cursor(
-                            builder,
-                            &mut control.partition_cursor,
-                        )? {
-                            let resume_active = source_active_cursor(
+                        if let Some((popped, source_successor)) =
+                            self.reserve_partition_exit_source_cursor(builder, &mut control)?
+                        {
+                            if std::env::var_os("KEN_NATIVE_EXIT_TRACE").is_some() {
+                                use std::io::Write as _;
+                                let producer = control.producer_kont.and_then(|cursor| {
+                                    self.partition_producer_sites.get(&cursor.site_id).map(
+                                        |plan| match plan.action {
+                                            ProducerKontAction::Done {
+                                                terminal:
+                                                    PartitionProducerKontTerminalIdentity::CheckedJoin,
+                                            } => "done-checked",
+                                            ProducerKontAction::Done {
+                                                terminal:
+                                                    PartitionProducerKontTerminalIdentity::ScalarArmReturn {
+                                                        ..
+                                                    },
+                                            } => "done-arm",
+                                            ProducerKontAction::ApplyActiveEliminators { .. } => {
+                                                "active"
+                                            }
+                                            ProducerKontAction::ApplyEliminators { .. } => {
+                                                "eliminators"
+                                            }
+                                            ProducerKontAction::OrientedInvocationReturn {
+                                                ..
+                                            } => "oriented-return",
+                                            ProducerKontAction::CheckedComputationalIHReturn {
+                                                ..
+                                            } => "checked-return",
+                                            ProducerKontAction::ScopeBodyReturn { .. } => {
+                                                "scope-body-return"
+                                            }
+                                            ProducerKontAction::ExitScopeStart { .. } => "exit-start",
+                                            ProducerKontAction::ExitScopeComplete { .. } => {
+                                                "exit-complete"
+                                            }
+                                        },
+                                    )
+                                });
+                                if let Ok(mut trace) = std::fs::OpenOptions::new()
+                                    .create(true)
+                                    .append(true)
+                                    .open("/tmp/ken-native-exit-trace")
+                                {
+                                    let value_detail = match &value {
+                                        Lowered::Constructor { constructor, .. } => {
+                                            constructor.as_str()
+                                        }
+                                        _ => lowered_value_kind(&value),
+                                    };
+                                    let _ = writeln!(
+                                        trace,
+                                        "activate-exit target={:?} obligation={:?} value={} \
+                                         producer={producer:?} scope={:?}",
+                                        popped.target.map(|cursor| cursor.node.0),
+                                        popped.exit_obligation.map(|cursor| cursor.node.0),
+                                        value_detail,
+                                        control
+                                            .selected
+                                            .selected_scope
+                                            .as_ref()
+                                            .map(|scope| scope.scope_origin),
+                                    );
+                                }
+                            }
+                            let contract = self
+                                .active_partition_return_contract
+                                .clone()
+                                .ok_or_else(|| {
+                                    unsupported(
+                                        "NativeExitScopeTransitionV1",
+                                        "scope exit has no checked scalar return contract",
+                                    )
+                                })?;
+                            let start = self.push_exit_scope_producer_kont(
+                                builder,
+                                &popped,
+                                source_successor.clone(),
+                                contract.checked_join.clone(),
+                                contract.required_kind,
+                            )?;
+                            let body_return = self.push_scope_body_return_producer_kont(
+                                builder,
+                                &popped,
+                                &source_successor,
+                                start,
+                                contract.checked_join,
+                                contract.required_kind,
+                            )?;
+                            return self.call_restored_selected_producer_kont(
+                                builder,
+                                body_return,
+                                value,
                                 &control.selected,
                                 &control.selected_lineage,
-                                reserved.resume_cursor,
-                            )
-                            .ok_or_else(|| {
-                                unsupported(
-                                    "NativeExitScopeTransitionV1",
-                                    "reserved exit source cursor lost its resume owner",
-                                )
-                            })?;
-                            self.emit_control_cell_ref_guard(
-                                builder,
-                                &[(
-                                    resume_active.cursor_instance.0,
-                                    reserved.resume_cursor_instance.0,
-                                )],
                             );
-                            self.install_partition_exit_scope_chain(
-                                builder,
-                                &mut control.selected,
-                                &control.selected_lineage,
-                                &mut control.producer_kont,
-                                &reserved.popped,
-                            )?;
                         }
                         if let Some(head) = control.partition_cursor {
                             return self.call_partition_source_kont(builder, head, value, control);
@@ -6519,6 +7330,21 @@ impl<'a> Lowering<'a> {
                                 root_authority,
                             },
                         ) => {
+                            if std::env::var_os("KEN_NATIVE_EXIT_TRACE").is_some() {
+                                use std::io::Write as _;
+                                if let Ok(mut trace) = std::fs::OpenOptions::new()
+                                    .create(true)
+                                    .append(true)
+                                    .open("/tmp/ken-native-exit-trace")
+                                {
+                                    let _ = writeln!(
+                                        trace,
+                                        "return-hole stack={:?} source={:?}",
+                                        stack.partition_cursor.map(|cursor| cursor.node.0),
+                                        control.partition_cursor.map(|cursor| cursor.node.0),
+                                    );
+                                }
+                            }
                             #[cfg(test)]
                             px8j_record_source_event(Px8jSourceTraceEvent::ReturnHole {
                                 cursor: resume_cursor,
@@ -6808,29 +7634,7 @@ impl<'a> Lowering<'a> {
                                 }
                             }
                             control.selected = previous;
-                            let mut next = *next;
-                            let popped =
-                                self.reserve_partition_scope_exits_from_tail(builder, &mut next)?;
-                            self.install_partition_exit_scope_chain(
-                                builder,
-                                &mut control.selected,
-                                &control.selected_lineage,
-                                &mut control.producer_kont,
-                                &popped,
-                            )?;
-                            control.continuation = next;
-                            if let Some(producer_kont) = control.producer_kont {
-                                if self.producer_kont_starts_selected_scope_exit(
-                                    producer_kont,
-                                    control.selected.selected_scope.as_ref(),
-                                )? {
-                                    return self.call_partition_producer_kont(
-                                        builder,
-                                        producer_kont,
-                                        value,
-                                    );
-                                }
-                            }
+                            control.continuation = *next;
                             SourceMachineState::Value { value, control }
                         }
                         SourceContinuation::ApplyRecursorSelection { layer, next } => {
@@ -6873,6 +7677,24 @@ impl<'a> Lowering<'a> {
                             resume_cursor_instance,
                             next,
                         } => {
+                            if std::env::var_os("KEN_NATIVE_EXIT_TRACE").is_some() {
+                                use std::io::Write as _;
+                                if let Ok(mut trace) = std::fs::OpenOptions::new()
+                                    .create(true)
+                                    .append(true)
+                                    .open("/tmp/ken-native-exit-trace")
+                                {
+                                    let _ = writeln!(
+                                        trace,
+                                        "unwind-exec stack={:?} source={:?} consumed={:?}",
+                                        stack.partition_cursor.map(|cursor| cursor.node.0),
+                                        control.partition_cursor.map(|cursor| cursor.node.0),
+                                        control
+                                            .consumed_partition_cursor
+                                            .map(|cursor| cursor.node.0),
+                                    );
+                                }
+                            }
                             let resume_active = source_active_cursor(
                                 &control.selected,
                                 &control.selected_lineage,
@@ -6888,19 +7710,7 @@ impl<'a> Lowering<'a> {
                                 builder,
                                 &[(resume_active.cursor_instance.0, resume_cursor_instance.0)],
                             );
-                            if stack.partition_cursor.is_some() {
-                                let popped =
-                                    self.drain_partition_exit_stack(builder, &mut stack)?;
-                                self.install_partition_exit_scope_chain(
-                                    builder,
-                                    &mut control.selected,
-                                    &control.selected_lineage,
-                                    &mut control.producer_kont,
-                                    &popped,
-                                )?;
-                                control.continuation = *next;
-                                SourceMachineState::Value { value, control }
-                            } else if let Some(popped) =
+                            if let Some(popped) =
                                 self.pop_partition_recursor_layer(builder, &mut stack)?
                             {
                                 let layer = popped.layer;
@@ -7689,6 +8499,7 @@ impl<'a> Lowering<'a> {
                     arm_env,
                     &source_prefix_template,
                     suffix_control.partition_cursor,
+                    suffix_control.pending_partition_exit_stack.clone(),
                     &suffix_control.selected,
                     suffix_control.terminal_outer,
                     &target,
@@ -7708,6 +8519,10 @@ impl<'a> Lowering<'a> {
             let branch_control = SourceControl {
                 continuation,
                 partition_cursor: suffix_control.partition_cursor,
+                consumed_partition_cursor: suffix_control.consumed_partition_cursor,
+                pending_partition_exit_stack: suffix_control
+                    .pending_partition_exit_stack
+                    .clone(),
                 producer_kont: suffix_control.producer_kont,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
@@ -7918,10 +8733,11 @@ impl<'a> Lowering<'a> {
                     predecessor_id,
                     body.clone(),
                     false,
-                    env.to_vec(),
-                    &source_prefix_template,
-                    suffix_control.partition_cursor,
-                    &suffix_control.selected,
+                env.to_vec(),
+                &source_prefix_template,
+                suffix_control.partition_cursor,
+                suffix_control.pending_partition_exit_stack.clone(),
+                &suffix_control.selected,
                     suffix_control.terminal_outer,
                     &target,
                     owned_selected_lineage
@@ -7940,6 +8756,10 @@ impl<'a> Lowering<'a> {
             let branch_control = SourceControl {
                 continuation,
                 partition_cursor: suffix_control.partition_cursor,
+                consumed_partition_cursor: suffix_control.consumed_partition_cursor,
+                pending_partition_exit_stack: suffix_control
+                    .pending_partition_exit_stack
+                    .clone(),
                 producer_kont: suffix_control.producer_kont,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
@@ -8081,6 +8901,7 @@ impl<'a> Lowering<'a> {
         arm_env: Vec<Lowered>,
         _source_prefix_template: &SourcePrefixTemplate,
         source_cursor: Option<PartitionSourceCursor>,
+        pending_exit_stack: Option<RecursorUnwindStack>,
         selected: &SourceSelectedContinuation<'b>,
         terminal_outer: ContinuationCursorId,
         target: &SourceJoinTarget<'b>,
@@ -8104,6 +8925,7 @@ impl<'a> Lowering<'a> {
         if let Some(producer_kont) = self.active_partition_producer_kont {
             fields.push(producer_kont.capture_pointer);
         }
+        Self::append_partition_exit_stack_values(&pending_exit_stack, &mut fields);
         fields.push(selected.activation_instance.0);
         fields.push(selected.cursor_instance.0);
         let prefix_fields = fields.len().saturating_sub(env_fields);
@@ -8156,6 +8978,15 @@ impl<'a> Lowering<'a> {
             &self.declaration_stack,
             &self.active_recursive_invocations,
             source_cursor.map(|cursor| cursor.node),
+            pending_exit_stack
+                .as_ref()
+                .and_then(|stack| stack.partition_cursor.map(|cursor| cursor.node)),
+            pending_exit_stack
+                .as_ref()
+                .and_then(|stack| stack.partition_qualification.map(|cursor| cursor.node)),
+            pending_exit_stack
+                .as_ref()
+                .and_then(|stack| stack.partition_open_obligation.map(|cursor| cursor.node)),
             self.active_partition_producer_kont
                 .map(|cursor| cursor.site_id),
             selected.activation,
@@ -8274,6 +9105,7 @@ impl<'a> Lowering<'a> {
                     active_recursive_invocations: self.active_recursive_invocations.clone(),
                     source_head: source_cursor.map(|cursor| cursor.node),
                     source_capture_pointer: source_cursor.map(|cursor| cursor.capture_pointer),
+                    pending_partition_exit_stack: pending_exit_stack,
                     producer_kont: self.active_partition_producer_kont,
                     selected_activation: selected.activation,
                     selected_activation_instance: selected.activation_instance,
@@ -8488,6 +9320,7 @@ impl<'a> Lowering<'a> {
             env,
             &source_prefix_template,
             control.partition_cursor,
+            control.pending_partition_exit_stack.clone(),
             &control.selected,
             control.terminal_outer,
             &target,
@@ -8661,6 +9494,7 @@ impl<'a> Lowering<'a> {
                     arm_env,
                     &source_prefix_template,
                     suffix_control.partition_cursor,
+                    suffix_control.pending_partition_exit_stack.clone(),
                     &suffix_control.selected,
                     suffix_control.terminal_outer,
                     &target,
@@ -8891,6 +9725,10 @@ impl<'a> Lowering<'a> {
             let branch_control = SourceControl {
                 continuation,
                 partition_cursor: suffix_control.partition_cursor,
+                consumed_partition_cursor: suffix_control.consumed_partition_cursor,
+                pending_partition_exit_stack: suffix_control
+                    .pending_partition_exit_stack
+                    .clone(),
                 producer_kont: suffix_control.producer_kont,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
@@ -9052,6 +9890,10 @@ impl<'a> Lowering<'a> {
             let control = SourceControl {
                 continuation,
                 partition_cursor: suffix_control.partition_cursor,
+                consumed_partition_cursor: suffix_control.consumed_partition_cursor,
+                pending_partition_exit_stack: suffix_control
+                    .pending_partition_exit_stack
+                    .clone(),
                 producer_kont: suffix_control.producer_kont,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
@@ -9198,6 +10040,7 @@ impl<'a> Lowering<'a> {
                     arm_env,
                     &source_prefix_template,
                     suffix_control.partition_cursor,
+                    suffix_control.pending_partition_exit_stack.clone(),
                     &suffix_control.selected,
                     suffix_control.terminal_outer,
                     &target,
@@ -9218,6 +10061,10 @@ impl<'a> Lowering<'a> {
             let control = SourceControl {
                 continuation,
                 partition_cursor: suffix_control.partition_cursor,
+                consumed_partition_cursor: suffix_control.consumed_partition_cursor,
+                pending_partition_exit_stack: suffix_control
+                    .pending_partition_exit_stack
+                    .clone(),
                 producer_kont: suffix_control.producer_kont,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
@@ -9741,10 +10588,11 @@ impl<'a> Lowering<'a> {
                         }));
                     }
                 }
-                Ok(Lowered::Constructor {
+                let value = Lowered::Constructor {
                     constructor: constructor.clone(),
                     args: lowered_args,
-                })
+                };
+                Ok(value)
             }
             RuntimeExpr::Match {
                 scrutinee,
