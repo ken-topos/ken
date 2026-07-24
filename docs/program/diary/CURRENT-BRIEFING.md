@@ -7,15 +7,28 @@
 
 **As of 2026-07-24 ~21:0xZ. OPERATOR IS PRESENT.**
 
-> ## ⇢ RESUME HERE — the frontier in six lines
+> ## ⇢ RESUME HERE — the frontier
 >
-> **`origin/main = d4b96433`** (+ a doc-only publish of the recut in flight).
-> **RT-NATIVE-FNSPLIT Boundary A is MERGED** (`647a2e5b`, retros in). The
-> Architect ruled hard-stop #3 → **fork (b)**, a closed semantic-IR arena
-> (`evt_49bnspfb74tne` + addendum `evt_3b2a75fcaegja`). **I recut Boundary B
-> into B1 (representation checkpoint) + B2 (body port)** and kicked the Runtime
-> ring on `RT-PLANNER-DIAGNOSTIC-K` first, then B1 (`evt_1an76223hfsq3`).
-> **Verify ring is building `DOC-GATE-CONTROL-BINDING`.** Cadence = 3, next #6.
+> **`origin/main = f0ceb702`.** Merged today, all verified by content:
+> `DOC-GATE-RECORD-AXIS` `64b0811f` · **RT-NATIVE-FNSPLIT Boundary A**
+> `647a2e5b` · `DOC-GATE-CONTROL-BINDING` `f0ceb702` (tests 22→24 — the metric
+> that was **0** when I falsely claimed a positive control). All closed except
+> the last, whose retros are pending.
+>
+> **IN FLIGHT: `RT-PLANNER-DIAGNOSTIC-K` — PR #929 at approved `913aded3`**, CI
+> running. Then **Boundary B1**.
+>
+> **Hard-stop #3 is RULED — fork (b)**, a closed semantic-IR arena
+> (`evt_49bnspfb74tne` + addendum `evt_3b2a75fcaegja`). I recut Boundary B into
+> **B1** (representation checkpoint, own review gate —
+> `wp/RT-NATIVE-FNSPLIT-recut-B1-semantic-ir.md`) **+ B2** (body port). ⛔ B1 is
+> NOT cut from `415b5aa7`; B2 does not start until B1 lands.
+> **Cadence = 3, pull consumed, next #6.**
+>
+> ⚠ **`steward/work` is re-anchored and ready to publish** (playbook gate step
+> 8b + tracker). ⚠ **FOUR single-ref exposures today**, three of them
+> reviewer-approved — gate step **8b** now makes `ls-remote` + Steward-side push
+> a step, not a reminder. Build seats have **no** credential by design.
 
 > ## ⚡ OPERATOR PRIORITY (2026-07-24): **LAND RT-NATIVE-FNSPLIT.**
 > *"I did not mean to abandon the RT-NATIVE-FNSPLIT effort. Continue that work.
