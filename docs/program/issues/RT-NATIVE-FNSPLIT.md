@@ -119,6 +119,9 @@ NEXT RESEARCH PULL = hard-stop #6, then #9, #12, …
    TTerm / Lean FnBody / Cranelift IR as closed-IR precedent; Maranget on why
    small-n affine tables mislead). Re-arm: the next pull is #6.
 
+⚠ BOUNDARY B1 KICKED 2026-07-24 (evt_784nkjqzzbxn) under the fork-(b) ruling;
+   ring compacted, drops verified. RT-PLANNER-DIAGNOSTIC-K closed at 36dd61f6.
+
 ⚠ BOUNDARY A IS MERGED (647a2e5b, retros in) BUT THIS WP STAYS `active` —
    Boundary B is in flight and stopped at #3. Do not flip this parent to
    `merged` on a boundary landing; it closes only when both boundaries land
