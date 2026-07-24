@@ -1,13 +1,13 @@
 ---
 id: RT-PLANNER-DIAGNOSTIC-K
 title: "Boundary A planner: report planner-invariant failures as planner defects, and assert fixed_k CONSTANT rather than merely affine"
-status: active
+status: merged
 owner: runtime
 size: S
 gate: none
 depends_on: []
 blocks: []
-github: null
+github: https://github.com/ken-topos/ken/pull/929
 origin: adversary findings H2 + H3 on landed RT-NATIVE-FNSPLIT Boundary A (647a2e5b), side thread thr_2seh2bm1kr5mh evt_4pb2t6ve1ysfr, 2026-07-24. Steward-filed (agents cannot create tracked work per COORDINATION §2); Steward triage = both CONFIRMED against landed code. H1 (zero K headroom) is NOT in this WP — it was routed to the Architect as an input to the hard-stop-#3 ruling.
 ---
 

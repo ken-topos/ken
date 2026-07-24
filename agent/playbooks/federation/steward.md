@@ -307,6 +307,47 @@ brief** — the implementer should execute mostly mechanically, not design
 >    Same lesson as the ctx%-scan and the stranded-paste sweep: **where a
 >    backstop depends on you remembering to look, convert it into a step.**
 >
+> 8b. **★★ `ls-remote` THE WP BRANCH — approved work lives on ONE LOCAL REF far
+>    more often than you expect, and build seats CANNOT push it themselves.**
+>
+>    ```sh
+>    git ls-remote origin refs/heads/wp/<ID>-<slug>      # empty ⇒ ZERO off-box copies
+>    git for-each-ref --contains <sha> --format='%(refname)'
+>    ```
+>
+>    ⛔ **Build seats have NO GitHub credential, by design.** A seat that
+>    finishes a fold and reports an exact SHA has often *tried* to push and
+>    failed with `could not read Username`. It cannot fix this, and it will
+>    keep working while the only copy sits on one local ref.
+>
+>    ⚠ **You CAN push it, and it is yours to just do** — no operator routing, no
+>    `scripted-pr-automerge.sh`. A WP-branch push is not a merge and does not
+>    mutate `main`. The credential is **minted on demand**, the same way the
+>    publisher does it at its own line 91:
+>
+>    ```sh
+>    T="$(.devcontainer/mint-gh-token.sh)"   # PRINTS the token — never `source` it
+>    git push "https://x-access-token:${T}@github.com/ken-topos/ken.git" \
+>      <sha>:refs/heads/<branch> 2>&1 | sed 's/x-access-token:[^@]*@/x-access-token:***@/g'
+>    unset T
+>    ```
+>
+>    Re-anchor first (`git cat-file -t <sha>`; parent an ancestor of `main`),
+>    then `ls-remote` to confirm, and report the exact remote SHA back.
+>    Use `--force-with-lease=<branch>:<old-sha>` **only** on a respin.
+>
+>    **2026-07-24: THREE single-ref exposures in one session** — `7547da95` and
+>    `d2d0fa0d` were reviewer-**approved** and unpushed when I went to publish;
+>    `415b5aa7` was 21k lines of stopped WIP. The same condition nearly lost the
+>    `b077eb7a` checkpoint, where a compaction helper **hard-reset that exact
+>    branch within ten minutes**. ★ I also told a seat "it has to come from you,"
+>    which is **false** and stalled its active unit — it correctly refused to
+>    proceed on a durability gap it had no power to close.
+>
+>    ⇒ **Tell rings: report an unpushed ref and KEEP GOING.** Raising it is not
+>    gating on it. **Where a backstop depends on you remembering to look, convert
+>    it into a step** — same lesson as step 8 and the stranded-paste sweep.
+>
 > 9. **★ ON PUBLISH — ack "PR #N is open at `<SHA>` — the branch is FROZEN" into
 >    the WP thread, immediately.** A `git_request` becoming a live PR is
 >    **invisible to the ring that produced it**: the branch is now the head of an
