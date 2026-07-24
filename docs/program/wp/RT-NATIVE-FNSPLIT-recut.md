@@ -178,13 +178,26 @@ measurement of unchanged `b077eb7a` and must not be described as one.
 there is no lowering yet. Requiring them of a pre-lowering planner census is a
 category error.
 
-### Boundary B — FULL EMISSION, after the semantic port
+### ⛔ Boundary B — SUPERSEDED 2026-07-24. It is now TWO slices.
 
-Report emitted helpers · CLIF instructions/bytes · descriptor
-construction/comparison work · compile wall + peak RSS · the same structural
-counts — **plus** the exact normal/abrupt/trap/join/affine differential suite.
+**Architect ruling `evt_49bnspfb74tne` (fork (b)) + addendum `evt_3b2a75fcaegja`
+split Boundary B at a review gate.** The authoritative frame for the first slice
+is **`RT-NATIVE-FNSPLIT-recut-B1-semantic-ir.md`** — read it, not this section.
 
-⛔ **A post-failure prefix cannot substitute for either boundary.**
+- **B1 — the semantic-IR representation checkpoint.** Origin-preserving closed
+  IR arena, its exhaustive builder, and the strengthened census. **Its own
+  review gate and its own merge unit.** ⛔ Runtime may **not** resume the
+  retained semantic body port until B1 is reviewed and landed.
+- **B2 — the retained body port + FULL EMISSION.** The metrics below are B2's,
+  unchanged: emitted helpers · CLIF instructions/bytes · descriptor
+  construction/comparison work · compile wall + peak RSS · the same structural
+  counts — **plus** the exact normal/abrupt/trap/join/affine differential suite.
+
+⛔ **A post-failure prefix cannot substitute for any boundary.**
+
+⚠ **Boundary A's landed census (`647a2e5b`) is true only for the OUTER planner
+and remains PROVISIONAL for the completed representation.** Do not cite
+`87/115/143/171/199`, K=8, or widths `12/32/16` as a settled baseline.
 
 ### ⛔ WIDTH METRIC — CORRECTED. The original frame's version was WRONG.
 
