@@ -10,6 +10,7 @@ to one team belongs in `teams/<team>`.
 
 | Lesson | One-line |
 |---|---|
+| [a-check-that-measures-a-proxy-passes-for-the-wrong-reason](a-check-that-measures-a-proxy-passes-for-the-wrong-reason.md) | ★★ A check comparing a PROXY (self-identity, label-membership, cardinality) instead of the PROPERTY is green either way; write the claim as a sentence and confirm the code's operands are its nouns |
 | [assert-specific-error-variant-not-is-err](assert-specific-error-variant-not-is-err.md) | Assert the specific error variant, not a bare `is_err()` |
 | [bundled-changes-need-per-mechanism-isolation-flip](bundled-changes-need-per-mechanism-isolation-flip.md) | Bundled changes need a per-mechanism isolation-flip |
 | [declaration-order-claim-needs-three-probe-net](declaration-order-claim-needs-three-probe-net.md) | A load-bearing declaration-order claim needs a 3-probe net (acyclic-forward / backward / mutual-cycle) before it becomes authoring guidance |
