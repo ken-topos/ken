@@ -5,30 +5,62 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-24 ~21:0xZ. OPERATOR IS PRESENT.**
+**As of 2026-07-24 ~22:20Z. OPERATOR IS PRESENT.**
 
 > ## ⇢ RESUME HERE — the frontier
 >
-> **`origin/main = f0ceb702`.** Merged today, all verified by content:
+> **`origin/main = bf8036c0`.** Merged today, all verified by content:
 > `DOC-GATE-RECORD-AXIS` `64b0811f` · **RT-NATIVE-FNSPLIT Boundary A**
-> `647a2e5b` · `DOC-GATE-CONTROL-BINDING` `f0ceb702` (tests 22→24 — the metric
-> that was **0** when I falsely claimed a positive control). All closed except
-> the last, whose retros are pending.
+> `647a2e5b` · `DOC-GATE-CONTROL-BINDING` `f0ceb702` · `RT-PLANNER-DIAGNOSTIC-K`
+> `36dd61f6`, plus steward publishes through #932.
 >
-> **IN FLIGHT: `RT-PLANNER-DIAGNOSTIC-K` — PR #929 at approved `913aded3`**, CI
-> running. Then **Boundary B1**.
+> ### ⚡ TWO PUBLISHES IN FLIGHT — check `origin/main` FIRST, both may have landed
 >
-> **Hard-stop #3 is RULED — fork (b)**, a closed semantic-IR arena
-> (`evt_49bnspfb74tne` + addendum `evt_3b2a75fcaegja`). I recut Boundary B into
-> **B1** (representation checkpoint, own review gate —
-> `wp/RT-NATIVE-FNSPLIT-recut-B1-semantic-ir.md`) **+ B2** (body port). ⛔ B1 is
-> NOT cut from `415b5aa7`; B2 does not start until B1 lands.
-> **Cadence = 3, pull consumed, next #6.**
+> 1. **`DOC-GATE-WIRE-BINDING`** — publisher running (NOT doc-only, so it polls
+>    CI). Exact `54e4eb5e`, Decision `dec_2e926xqn9a0ra` resolved (QA + Architect).
+> 2. **⚡ `RT-NATIVE-FNSPLIT` Boundary B1 — THE OPERATOR PRIORITY, ready and
+>    UNPUBLISHED.** Exact `3d04293a` on `wp/RT-NATIVE-FNSPLIT-recut-B1-semantic-ir`
+>    (pushed to origin by me), parent `4e2917f1`, Decision `dec_5cb9mvk1tx0k2`
+>    resolved with QA PASS + Architect APPROVE. **Publish it the moment the
+>    WIRE-BINDING publisher returns** — I serialized them so two publishers do not
+>    race on `main`. Intersection with `main` is EMPTY and stays empty
+>    (`ken-runtime` vs `ken-cli/tests` + `library/`).
 >
-> ⚠ **`steward/work` is re-anchored and ready to publish** (playbook gate step
-> 8b + tracker). ⚠ **FOUR single-ref exposures today**, three of them
-> reviewer-approved — gate step **8b** now makes `ls-remote` + Steward-side push
-> a step, not a reminder. Build seats have **no** credential by design.
+> ### Boundary A / B — the concepts, for a cold resume
+>
+> **A = the PLANNER** (static code identity factored from dynamic activation;
+> nodes/edges/planned helpers/fixed K) — **landed `647a2e5b`**, census
+> PROVISIONAL for the outer planner only. **B = making that plan load-bearing**;
+> split at an Architect-required review gate into **B1** (closed semantic-IR
+> plane + sole exhaustive builder + strengthened census) and **B2** (retained
+> body port + full emission). ⛔ B2 does not start until B1 lands. B1 is NOT cut
+> from `415b5aa7` — that is a preserved semantic ORACLE, not an acceptance path.
+>
+> B1 QA verdict: six opcodes, exhaustive, **no wildcard**; census linear in n
+> (origins Δ28, edges Δ34, operands Δ84); `fixed_k 8,8,8,8,8` against cap 8; five
+> named negative controls each red **at a named artifact**; `316 passed`.
+>
+> ### Queued
+>
+> - **`RT-PLANNER-ATTRIB-K`** (XS, filed, `ready`) — Architect J1 ruling; moves
+>   the K-exceeded rejection off the `unsupported` channel. ⛔ CONTENDS with B1 on
+>   `static_transition.rs` — dispatch only after B1 lands.
+> - **`DOC-W2`** (L) — doc ring ACTIVE, branch `wp/DOC-W2-agent-core-packs`.
+>   ⛔ Manifest records LAST, after `document-kind` lands. I ruled two frame
+>   questions in `thr_2bzhq9q6gsee1` (`evt_24cne5pvpva1y`): pack-integrity checks
+>   **extend the `ken-cli` gate** (accept `crates/` scope + Architect vote — an
+>   unwired script re-opens the hole two WPs just closed); pack/schema population
+>   closed by **predicate** (each §5 task performable by exactly one pack; a
+>   schema exists iff the checker validates against it). **Amendment to the frame
+>   file still owed.**
+> - **`STR-BIJ`** — held pending a re-derived `library/` ledger consumer set.
+>
+> ⚠ **FIVE single-ref exposures today** (incl. B1 itself — a full slice on one
+> local ref). Gate step **8b** makes `ls-remote` + Steward-side push a step, not
+> a reminder. Build seats have **no** credential by design.
+>
+> ⚠ **Unpublished tracker commits on `steward/work`** (`708bc70c`, `2722f442`).
+> Bundle into the next product publish; never publish alone (§10⁻).
 
 > ## ⚡ OPERATOR PRIORITY (2026-07-24): **LAND RT-NATIVE-FNSPLIT.**
 > *"I did not mean to abandon the RT-NATIVE-FNSPLIT effort. Continue that work.
