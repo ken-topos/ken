@@ -516,6 +516,8 @@ pub(super) struct PartitionCompilationMetrics {
     pub(super) source_scope_fields_max: usize,
     pub(super) source_lineage_fields_total: usize,
     pub(super) source_lineage_fields_max: usize,
+    pub(super) sealed_normal_call_edges: usize,
+    pub(super) sealed_terminal_call_edges: usize,
 }
 
 impl PartitionCompilationMetrics {
@@ -3334,6 +3336,22 @@ impl Default for PartitionStateExitSummary {
             sealed: false,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum PartitionPendingCallKind {
+    ProducerKont,
+    SourcePredecessor,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct PartitionPendingCallEdge {
+    pub(super) function_index: usize,
+    pub(super) caller_state_id: Option<usize>,
+    pub(super) callee_state_id: usize,
+    pub(super) kind: PartitionPendingCallKind,
+    pub(super) call_inst: Inst,
+    pub(super) result_payload: Value,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
