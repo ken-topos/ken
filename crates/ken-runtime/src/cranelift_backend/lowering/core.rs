@@ -29,6 +29,10 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         &declarations,
         oriented_subcontinuation_plan.as_ref(),
     )?;
+    // Boundary A of RT-NATIVE-FNSPLIT: close and validate the factored static
+    // graph before Cranelift sees any semantic body. Phase 2 will consume this
+    // plan for emission; until then the existing emitter remains unchanged.
+    let static_transition_plan = plan_static_transition_graph(expr, &declarations)?;
     let mut sig = module.make_signature();
     sig.params
         .push(AbiParam::new(module.target_config().pointer_type()));
@@ -197,6 +201,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     module
         .define_function(func_id, &mut ctx)
         .map_err(|err| backend_module(err.to_string()))?;
+    drop(static_transition_plan);
 
     Ok(CompiledModule::from_parts(
         module,
