@@ -571,13 +571,100 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
 }
 
 impl<'a> Lowering<'a> {
+    fn allocate_control_cursor_ref(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        parent: Option<ControlCursorRef>,
+    ) -> Result<ControlCursorRef, CraneliftBackendError> {
+        let invocation = self
+            .invocation_pointer
+            .expect("control-cell allocation owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let slot = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            PARTITION_FRAME_FIELD_BYTES,
+            3,
+        ));
+        let parent = parent.map_or_else(
+            || builder.ins().iconst(pointer_type, 0),
+            |parent| parent.0,
+        );
+        builder.ins().stack_store(parent, slot, 0);
+        Ok(ControlCursorRef(
+            builder.ins().stack_addr(pointer_type, slot, 0),
+        ))
+    }
+
+    fn allocate_selected_control_refs(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        parent_activation: Option<ActivationInstanceRef>,
+        parent_cursor: Option<ControlCursorRef>,
+        parent_scope: Option<ScopeInstanceRef>,
+    ) -> Result<
+        (
+            ActivationInstanceRef,
+            ControlCursorRef,
+            ScopeInstanceRef,
+        ),
+        CraneliftBackendError,
+    > {
+        let invocation = self
+            .invocation_pointer
+            .expect("selected-control cell allocation owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let slot = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            PARTITION_FRAME_FIELD_BYTES * 3,
+            3,
+        ));
+        let parent_activation = parent_activation.map_or_else(
+            || builder.ins().iconst(pointer_type, 0),
+            |parent| parent.0,
+        );
+        let parent_cursor = parent_cursor.map_or_else(
+            || builder.ins().iconst(pointer_type, 0),
+            |parent| parent.0,
+        );
+        let parent_scope = parent_scope.map_or_else(
+            || builder.ins().iconst(pointer_type, 0),
+            |parent| parent.0,
+        );
+        builder.ins().stack_store(parent_activation, slot, 0);
+        builder
+            .ins()
+            .stack_store(parent_cursor, slot, PARTITION_FRAME_FIELD_BYTES as i32);
+        builder.ins().stack_store(
+            parent_scope,
+            slot,
+            (PARTITION_FRAME_FIELD_BYTES * 2) as i32,
+        );
+        let pointer = builder.ins().stack_addr(pointer_type, slot, 0);
+        Ok((
+            ActivationInstanceRef(pointer),
+            ControlCursorRef(pointer),
+            ScopeInstanceRef(pointer),
+        ))
+    }
+
     fn push_partition_source_cursor(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         control: &mut SourceControl<'_>,
     ) -> Result<(), CraneliftBackendError> {
-        let current =
+        let mut current =
             partition_source_head_template(&control.continuation, control.terminal_outer)?;
+        if let SourcePrefixTemplate::ReturnFromSelectedCase {
+            parent_capture, ..
+        } = &mut current
+        {
+            *parent_capture = Some(own_partition_selected(&control.selected).ok_or_else(|| {
+                unsupported(
+                    "NativeControlCellV1",
+                    "selected return parent has no exact immediate capture schema",
+                )
+            })?);
+        }
         self.push_partition_source_template(builder, control, current)
     }
 
@@ -595,7 +682,19 @@ impl<'a> Lowering<'a> {
             )?);
             current = next;
         }
-        for template in prefix.into_iter().rev() {
+        for mut template in prefix.into_iter().rev() {
+            if let SourcePrefixTemplate::ReturnFromSelectedCase {
+                parent_capture, ..
+            } = &mut template
+            {
+                *parent_capture =
+                    Some(own_partition_selected(&control.selected).ok_or_else(|| {
+                        unsupported(
+                            "NativeControlCellV1",
+                            "selected return parent has no exact immediate capture schema",
+                        )
+                    })?);
+            }
             self.push_partition_source_template(builder, control, template)?;
         }
         Ok(())
@@ -741,6 +840,42 @@ impl<'a> Lowering<'a> {
         builder.ins().return_(&[pair.payload]);
     }
 
+    fn emit_control_cell_ref_guard(
+        &self,
+        builder: &mut FunctionBuilder<'_>,
+        pairs: &[(
+            cranelift_codegen::ir::Value,
+            cranelift_codegen::ir::Value,
+        )],
+    ) {
+        let mut pairs = pairs.iter().copied();
+        let Some((left, right)) = pairs.next() else {
+            return;
+        };
+        let mut valid = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            left,
+            right,
+        );
+        for (left, right) in pairs {
+            let equal = builder.ins().icmp(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                left,
+                right,
+            );
+            valid = builder.ins().band(valid, equal);
+        }
+        let pass = builder.create_block();
+        let reject = builder.create_block();
+        builder.ins().brif(valid, pass, &[], reject, &[]);
+        builder.seal_block(reject);
+        builder.switch_to_block(reject);
+        let failure = builder.ins().iconst(types::I64, -4);
+        builder.ins().return_(&[failure]);
+        builder.seal_block(pass);
+        builder.switch_to_block(pass);
+    }
+
     fn partition_helper_ref(
         &self,
         builder: &mut FunctionBuilder<'_>,
@@ -781,9 +916,13 @@ impl<'a> Lowering<'a> {
             return Ok(value);
         };
         let cursor = self.mint_continuation_cursor();
+        let cursor_instance =
+            self.allocate_control_cursor_ref(builder, Some(active.cursor_instance))?;
         let successor = EliminatorFrame::Active(ActiveContinuationFrame {
             activation: active.activation,
+            activation_instance: active.activation_instance,
             cursor,
+            cursor_instance,
             parent: Some(&active),
             pending: tail,
             selected_ancestry: active.selected_ancestry,
@@ -1670,9 +1809,20 @@ impl<'a> Lowering<'a> {
                     if let Some(active) = splice_caller {
                         pending.extend_from_slice(active.pending);
                     }
+                    let (activation_instance, cursor_instance, _) =
+                        self.allocate_selected_control_refs(
+                            builder,
+                            splice_caller.map(|active| active.activation_instance),
+                            splice_caller.map(|active| active.cursor_instance),
+                            splice_caller
+                                .and_then(|active| active.selected_scope)
+                                .map(|scope| scope.scope_instance),
+                        )?;
                     let selected_active = ActiveContinuationFrame {
                         activation: self.mint_continuation_activation(),
+                        activation_instance,
                         cursor: self.mint_continuation_cursor(),
+                        cursor_instance,
                         parent: splice_caller.and_then(|active| active.parent),
                         pending: &pending,
                         selected_ancestry: &selected_ancestry,
@@ -2356,14 +2506,10 @@ impl<'a> Lowering<'a> {
             )
         })?;
         let mut capture_fields = Vec::new();
+        capture_fields.push(active.activation_instance.0);
+        capture_fields.push(active.cursor_instance.0);
         append_partition_eliminator_values(self, builder, &pending, &mut capture_fields)?;
         append_partition_scope_values(self, builder, &selected_scope, &mut capture_fields)?;
-        append_partition_selected_lineage_values(
-            self,
-            builder,
-            &selected_lineage,
-            &mut capture_fields,
-        )?;
         capture_fields.push(successor.capture_pointer);
         let capture_field_types = capture_fields
             .iter()
@@ -2396,7 +2542,9 @@ impl<'a> Lowering<'a> {
         let plan = PartitionProducerKontSitePlan {
             action: ProducerKontAction::ApplyActiveEliminators {
                 activation: active.activation,
+                activation_instance: active.activation_instance,
                 cursor: active.cursor,
+                cursor_instance: active.cursor_instance,
                 pending,
                 selected_ancestry: active.selected_ancestry.to_vec(),
                 selected_scope,
@@ -2751,11 +2899,24 @@ impl<'a> Lowering<'a> {
                 let activation = self.mint_continuation_activation();
                 let cursor = self.mint_continuation_cursor();
                 let producer_origin = self.mint_recursor_producer_origin();
+                let (activation_instance, cursor_instance, scope_instance) =
+                    self.allocate_selected_control_refs(
+                        builder,
+                        splice_caller.map(|active| active.activation_instance),
+                        splice_caller.map(|active| active.cursor_instance),
+                        splice_caller
+                            .and_then(|active| active.selected_scope)
+                            .map(|scope| scope.scope_instance),
+                    )?;
                 let selected_scope = OwnedSelectedScope {
                     scope_origin: producer_origin,
+                    scope_instance,
                     parent_scope: splice_caller
                         .and_then(|active| active.selected_scope)
                         .map(|scope| scope.scope_origin),
+                    parent_scope_instance: splice_caller
+                        .and_then(|active| active.selected_scope)
+                        .map(|scope| scope.scope_instance),
                     frame: ComputationalRecursorFramePayload {
                         cases: eliminator.cases.to_vec(),
                         default: eliminator.default.clone(),
@@ -2770,7 +2931,9 @@ impl<'a> Lowering<'a> {
                 let selected_scope = Some(selected_scope);
                 let active_state = ActiveContinuationFrame {
                     activation,
+                    activation_instance,
                     cursor,
+                    cursor_instance,
                     parent: splice_caller.and_then(|active| active.parent),
                     pending: &pending,
                     selected_ancestry: &selected_ancestry,
@@ -2813,10 +2976,12 @@ impl<'a> Lowering<'a> {
                         position,
                         RecursorLayerRole::SelectsOccurrence {
                             origin: producer_origin,
+                            origin_scope: scope_instance,
                         },
                         activation,
                         cursor,
-                        splice_caller,
+                        cursor_instance,
+                        Some(&active_state),
                         None,
                     )?;
                     #[cfg(test)]
@@ -3251,6 +3416,16 @@ impl<'a> Lowering<'a> {
                 let ih_slots =
                     self.computational_ih_slots_for_case(case, frame.checked_frame_id)?;
                 let producer_origin = self.mint_recursor_producer_origin();
+                let producer_scope_instance = deferred
+                    .selected_active
+                    .selected_scope
+                    .map(|scope| scope.scope_instance)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeControlCellV1",
+                            "deferred recursive producer has no owning selected-scope cell",
+                        )
+                    })?;
                 #[cfg(test)]
                 px8j_record_source_event(Px8jSourceTraceEvent::Mint {
                     path: Px8jProducerPath::DeferredConstructor,
@@ -3280,10 +3455,12 @@ impl<'a> Lowering<'a> {
                         position,
                         RecursorLayerRole::SelectsOccurrence {
                             origin: producer_origin,
+                            origin_scope: producer_scope_instance,
                         },
                         deferred.selected_active.activation,
                         deferred.selected_active.cursor,
-                        deferred.splice_caller,
+                        deferred.selected_active.cursor_instance,
+                        Some(&deferred.selected_active),
                         None,
                     )?;
                     #[cfg(test)]
@@ -3517,6 +3694,20 @@ impl<'a> Lowering<'a> {
                 )
             })?;
         }
+        item.selected_activation_instance =
+            ActivationInstanceRef(loaded.next().ok_or_else(|| {
+                unsupported(
+                    "NativeControlCellV1",
+                    "source Eval state lost its activation-instance reference",
+                )
+            })?);
+        item.selected_cursor_instance =
+            ControlCursorRef(loaded.next().ok_or_else(|| {
+                unsupported(
+                    "NativeControlCellV1",
+                    "source Eval state lost its cursor-instance reference",
+                )
+            })?);
         rebuild_partition_scope(
             &mut item.selected_scope,
             &mut loaded,
@@ -3524,11 +3715,6 @@ impl<'a> Lowering<'a> {
         )?;
         rebuild_partition_eliminators(
             &mut item.selected_pending,
-            &mut loaded,
-            &mut self.native_int_tags,
-        )?;
-        rebuild_partition_selected_lineage(
-            &mut item.selected_lineage,
             &mut loaded,
             &mut self.native_int_tags,
         )?;
@@ -3568,7 +3754,9 @@ impl<'a> Lowering<'a> {
             .iter()
             .map(|selected| SourceSelectedContinuation {
                 activation: selected.activation,
+                activation_instance: selected.activation_instance,
                 cursor: selected.cursor,
+                cursor_instance: selected.cursor_instance,
                 parent: None,
                 pending: borrow_partition_eliminators(&selected.pending),
                 selected_ancestry: selected.selected_ancestry.clone(),
@@ -3586,7 +3774,9 @@ impl<'a> Lowering<'a> {
             producer_kont: item.producer_kont,
             selected: SourceSelectedContinuation {
                 activation: item.selected_activation,
+                activation_instance: item.selected_activation_instance,
                 cursor: item.selected_cursor,
+                cursor_instance: item.selected_cursor_instance,
                 parent: None,
                 pending: borrow_partition_eliminators(&item.selected_pending),
                 selected_ancestry: item.selected_ancestry,
@@ -3727,6 +3917,20 @@ impl<'a> Lowering<'a> {
                 )
             })?;
         }
+        item.selected_activation_instance =
+            ActivationInstanceRef(loaded.next().ok_or_else(|| {
+                unsupported(
+                    "NativeControlCellV1",
+                    "source Kont state lost its activation-instance reference",
+                )
+            })?);
+        item.selected_cursor_instance =
+            ControlCursorRef(loaded.next().ok_or_else(|| {
+                unsupported(
+                    "NativeControlCellV1",
+                    "source Kont state lost its cursor-instance reference",
+                )
+            })?);
         rebuild_partition_eliminators(
             &mut item.selected_pending,
             &mut loaded,
@@ -3734,11 +3938,6 @@ impl<'a> Lowering<'a> {
         )?;
         rebuild_partition_scope(
             &mut item.selected_scope,
-            &mut loaded,
-            &mut self.native_int_tags,
-        )?;
-        rebuild_partition_selected_lineage(
-            &mut item.selected_lineage,
             &mut loaded,
             &mut self.native_int_tags,
         )?;
@@ -3779,6 +3978,19 @@ impl<'a> Lowering<'a> {
             &mut captures,
             &mut self.native_int_tags,
         )?;
+        if let SourcePrefixTemplate::ReturnFromSelectedCase {
+            parent_capture: Some(parent),
+            ..
+        } = &definition.current
+        {
+            let slot = item.selected_lineage.last_mut().ok_or_else(|| {
+                unsupported(
+                    "NativeControlCellV1",
+                    "selected return state has no parent slot to restore",
+                )
+            })?;
+            *slot = parent.clone();
+        }
         if captures.next().is_some() {
             return Err(unsupported(
                 "NativeSourceContinuationStepV1",
@@ -3795,7 +4007,9 @@ impl<'a> Lowering<'a> {
             .iter()
             .map(|selected| SourceSelectedContinuation {
                 activation: selected.activation,
+                activation_instance: selected.activation_instance,
                 cursor: selected.cursor,
+                cursor_instance: selected.cursor_instance,
                 parent: None,
                 pending: borrow_partition_eliminators(&selected.pending),
                 selected_ancestry: selected.selected_ancestry.clone(),
@@ -3811,7 +4025,9 @@ impl<'a> Lowering<'a> {
             producer_kont: item.producer_kont,
             selected: SourceSelectedContinuation {
                 activation: item.selected_activation,
+                activation_instance: item.selected_activation_instance,
                 cursor: item.selected_cursor,
+                cursor_instance: item.selected_cursor_instance,
                 parent: None,
                 pending: borrow_partition_eliminators(&item.selected_pending),
                 selected_ancestry: item.selected_ancestry,
@@ -3905,6 +4121,8 @@ impl<'a> Lowering<'a> {
         if let Some(producer_kont) = control.producer_kont {
             fields.push(producer_kont.capture_pointer);
         }
+        fields.push(control.selected.activation_instance.0);
+        fields.push(control.selected.cursor_instance.0);
         append_partition_scope_values(
             self,
             builder,
@@ -3912,12 +4130,6 @@ impl<'a> Lowering<'a> {
             &mut fields,
         )?;
         append_partition_eliminator_values(self, builder, &selected_pending, &mut fields)?;
-        append_partition_selected_lineage_values(
-            self,
-            builder,
-            &selected_lineage,
-            &mut fields,
-        )?;
         let (frame_values, field_types, field_map) = partition_frame_layout(builder, &fields);
         self.partition_metrics.record_call_frame(frame_values.len());
         let key = PartitionSemanticStateKey::SourceArm(PartitionSourceArmKey::new(
@@ -4029,7 +4241,9 @@ impl<'a> Lowering<'a> {
                         .map(|cursor| cursor.capture_pointer),
                     producer_kont: control.producer_kont,
                     selected_activation: control.selected.activation,
+                    selected_activation_instance: control.selected.activation_instance,
                     selected_cursor: control.selected.cursor,
+                    selected_cursor_instance: control.selected.cursor_instance,
                     selected_ancestry: control.selected.selected_ancestry,
                     selected_pending,
                     selected_scope: control.selected.selected_scope,
@@ -4090,17 +4304,13 @@ impl<'a> Lowering<'a> {
         if let Some(producer_kont) = control.producer_kont {
             fields.push(producer_kont.capture_pointer);
         }
+        fields.push(control.selected.activation_instance.0);
+        fields.push(control.selected.cursor_instance.0);
         append_partition_eliminator_values(self, builder, &selected_pending, &mut fields)?;
         append_partition_scope_values(
             self,
             builder,
             &control.selected.selected_scope,
-            &mut fields,
-        )?;
-        append_partition_selected_lineage_values(
-            self,
-            builder,
-            &selected_lineage,
             &mut fields,
         )?;
         let (frame_values, field_types, field_map) = partition_frame_layout(builder, &fields);
@@ -4205,7 +4415,9 @@ impl<'a> Lowering<'a> {
                     declaration_stack: self.declaration_stack.clone(),
                     active_recursive_invocations: self.active_recursive_invocations.clone(),
                     selected_activation: control.selected.activation,
+                    selected_activation_instance: control.selected.activation_instance,
                     selected_cursor: control.selected.cursor,
+                    selected_cursor_instance: control.selected.cursor_instance,
                     selected_ancestry: control.selected.selected_ancestry,
                     selected_pending,
                     selected_scope: control.selected.selected_scope,
@@ -4555,7 +4767,9 @@ impl<'a> Lowering<'a> {
             }
             ProducerKontAction::ApplyActiveEliminators {
                 activation,
+                activation_instance,
                 cursor,
+                cursor_instance,
                 pending,
                 selected_ancestry,
                 selected_scope,
@@ -4594,6 +4808,19 @@ impl<'a> Lowering<'a> {
                 } else {
                     &mut loaded
                 };
+                *activation_instance =
+                    ActivationInstanceRef(values.next().ok_or_else(|| {
+                        unsupported(
+                            "NativeControlCellV1",
+                            "selected head lost its activation-instance reference",
+                        )
+                    })?);
+                *cursor_instance = ControlCursorRef(values.next().ok_or_else(|| {
+                    unsupported(
+                        "NativeControlCellV1",
+                        "selected head lost its cursor-instance reference",
+                    )
+                })?);
                 rebuild_partition_eliminators(
                     pending,
                     values,
@@ -4601,11 +4828,6 @@ impl<'a> Lowering<'a> {
                 )?;
                 rebuild_partition_scope(
                     selected_scope,
-                    values,
-                    &mut self.native_int_tags,
-                )?;
-                rebuild_partition_selected_lineage(
-                    selected_lineage,
                     values,
                     &mut self.native_int_tags,
                 )?;
@@ -4630,7 +4852,9 @@ impl<'a> Lowering<'a> {
                     .iter()
                     .map(|selected| SourceSelectedContinuation {
                         activation: selected.activation,
+                        activation_instance: selected.activation_instance,
                         cursor: selected.cursor,
+                        cursor_instance: selected.cursor_instance,
                         parent: None,
                         pending: borrow_partition_eliminators(&selected.pending),
                         selected_ancestry: selected.selected_ancestry.clone(),
@@ -4639,7 +4863,9 @@ impl<'a> Lowering<'a> {
                     .collect::<Vec<_>>();
                 let active = ActiveContinuationFrame {
                     activation: *activation,
+                    activation_instance: *activation_instance,
                     cursor: *cursor,
+                    cursor_instance: *cursor_instance,
                     parent: None,
                     pending: &pending,
                     selected_ancestry,
@@ -4871,7 +5097,9 @@ impl<'a> Lowering<'a> {
             producer_kont,
             selected: SourceSelectedContinuation {
                 activation: active.activation,
+                activation_instance: active.activation_instance,
                 cursor: active.cursor,
+                cursor_instance: active.cursor_instance,
                 parent: active.parent,
                 pending: active.pending.to_vec(),
                 selected_ancestry: active.selected_ancestry.to_vec(),
@@ -5134,6 +5362,7 @@ impl<'a> Lowering<'a> {
                             SourceContinuationTerminal::ReturnToProducerHole {
                                 stack,
                                 resume_cursor,
+                                resume_cursor_instance,
                                 expected,
                                 active,
                                 root_authority,
@@ -5152,7 +5381,7 @@ impl<'a> Lowering<'a> {
                             if matches!(value, Lowered::Trap(_)) {
                                 return Ok(value);
                             }
-                            source_active_cursor(
+                            let resume_active = source_active_cursor(
                                 &control.selected,
                                 &control.selected_lineage,
                                 resume_cursor,
@@ -5163,9 +5392,17 @@ impl<'a> Lowering<'a> {
                                     "producer-hole resume cursor is no longer active",
                                 )
                             })?;
+                            self.emit_control_cell_ref_guard(
+                                builder,
+                                &[(
+                                    resume_active.cursor_instance.0,
+                                    resume_cursor_instance.0,
+                                )],
+                            );
                             control.continuation = SourceContinuation::UnwindRecursorSegment {
                                 stack,
                                 resume_cursor,
+                                resume_cursor_instance,
                                 next: Box::new(SourceContinuation::Terminal(
                                     SourceContinuationTerminal::ResumeOuter {
                                         expected,
@@ -5322,12 +5559,7 @@ impl<'a> Lowering<'a> {
                                         "selected-case return has no open control obligation",
                                     )
                                 })?;
-                            if control.selected.activation != delimiter.activation
-                                || control.selected.cursor != delimiter.cursor
-                                || scope.scope_origin != delimiter.scope_origin
-                                || scope.frame.checked_frame_id != delimiter.frame_id
-                                || scope.frame.checked_invocation_id != delimiter.invocation_id
-                            {
+                            if scope.frame.checked_frame_id != delimiter.frame_id {
                                 return Err(unsupported(
                                     "OrientedSubcontinuationPlanV1",
                                     format!(
@@ -5347,12 +5579,63 @@ impl<'a> Lowering<'a> {
                                     ),
                                 ));
                             }
-                            let previous = control.selected_lineage.pop().ok_or_else(|| {
+                            self.emit_control_cell_ref_guard(
+                                builder,
+                                &[
+                                    (
+                                        control.selected.activation_instance.0,
+                                        delimiter.activation_instance.0,
+                                    ),
+                                    (
+                                        control.selected.cursor_instance.0,
+                                        delimiter.cursor_instance.0,
+                                    ),
+                                    (scope.scope_instance.0, delimiter.scope_instance.0),
+                                ],
+                            );
+                            let mut previous = control.selected_lineage.pop().ok_or_else(|| {
                                 unsupported(
                                     "OrientedSubcontinuationPlanV1",
                                     "selected-case return has no exact parent control state",
                                 )
                             })?;
+                            let pointer_type = builder
+                                .func
+                                .dfg
+                                .value_type(control.selected.cursor_instance.0);
+                            previous.activation_instance = ActivationInstanceRef(
+                                builder.ins().load(
+                                    pointer_type,
+                                    MemFlags::trusted(),
+                                    control.selected.cursor_instance.0,
+                                    0,
+                                ),
+                            );
+                            previous.cursor_instance = ControlCursorRef(builder.ins().load(
+                                pointer_type,
+                                MemFlags::trusted(),
+                                control.selected.cursor_instance.0,
+                                PARTITION_FRAME_FIELD_BYTES as i32,
+                            ));
+                            if let Some(parent_scope) = &mut previous.selected_scope {
+                                parent_scope.scope_instance = ScopeInstanceRef(
+                                    builder.ins().load(
+                                        pointer_type,
+                                        MemFlags::trusted(),
+                                        control.selected.cursor_instance.0,
+                                        (PARTITION_FRAME_FIELD_BYTES * 2) as i32,
+                                    ),
+                                );
+                                if parent_scope.parent_scope.is_some() {
+                                    parent_scope.parent_scope_instance =
+                                        Some(ScopeInstanceRef(builder.ins().load(
+                                            pointer_type,
+                                            MemFlags::trusted(),
+                                            parent_scope.scope_instance.0,
+                                            (PARTITION_FRAME_FIELD_BYTES * 2) as i32,
+                                        )));
+                                }
+                            }
                             control.selected = previous;
                             control.continuation = *next;
                             SourceMachineState::Value { value, control }
@@ -5360,7 +5643,7 @@ impl<'a> Lowering<'a> {
                         SourceContinuation::ApplyRecursorSelection { layer, next } => {
                             #[cfg(test)]
                             match layer.role {
-                                RecursorLayerRole::SelectsOccurrence { origin } => {
+                                RecursorLayerRole::SelectsOccurrence { origin, .. } => {
                                     px8j_record_source_event(Px8jSourceTraceEvent::Selection {
                                         origin,
                                     });
@@ -5369,10 +5652,12 @@ impl<'a> Lowering<'a> {
                                     origin,
                                     scope_origin,
                                     parent_scope,
+                                    ..
                                 } => px8j_record_source_event(Px8jSourceTraceEvent::Exit {
                                     origin,
                                     scope_origin,
                                     parent_scope,
+                                    ..
                                 }),
                             }
                             let answer_route =
@@ -5393,9 +5678,10 @@ impl<'a> Lowering<'a> {
                         SourceContinuation::UnwindRecursorSegment {
                             mut stack,
                             resume_cursor,
+                            resume_cursor_instance,
                             next,
                         } => {
-                            source_active_cursor(
+                            let resume_active = source_active_cursor(
                                 &control.selected,
                                 &control.selected_lineage,
                                 resume_cursor,
@@ -5406,6 +5692,13 @@ impl<'a> Lowering<'a> {
                                     "source recursor resume cursor is no longer active",
                                 )
                             })?;
+                            self.emit_control_cell_ref_guard(
+                                builder,
+                                &[(
+                                    resume_active.cursor_instance.0,
+                                    resume_cursor_instance.0,
+                                )],
+                            );
                             if let Some(layer) = stack.later_wrappers_in_construction_order.pop() {
                                 #[cfg(test)]
                                 if let RecursorLayerRole::ExitsScope {
@@ -5426,6 +5719,7 @@ impl<'a> Lowering<'a> {
                                     SourceContinuation::UnwindRecursorSegment {
                                         stack,
                                         resume_cursor,
+                                        resume_cursor_instance,
                                         next,
                                     };
                                 self.push_partition_source_cursor(builder, &mut control)?;
@@ -5753,6 +6047,20 @@ impl<'a> Lowering<'a> {
                             };
                             let activation = self.mint_continuation_activation();
                             let cursor = self.mint_continuation_cursor();
+                            let (
+                                activation_instance,
+                                cursor_instance,
+                                scope_instance,
+                            ) = self.allocate_selected_control_refs(
+                                builder,
+                                Some(control.selected.activation_instance),
+                                Some(control.selected.cursor_instance),
+                                control
+                                    .selected
+                                    .selected_scope
+                                    .as_ref()
+                                    .map(|scope| scope.scope_instance),
+                            )?;
                             let mut ancestry = control.selected.selected_ancestry.clone();
                             ancestry.push(provenance);
                             let mut induction_hypotheses =
@@ -5793,9 +6101,11 @@ impl<'a> Lowering<'a> {
                                         position,
                                         RecursorLayerRole::SelectsOccurrence {
                                             origin: producer_origin,
+                                            origin_scope: scope_instance,
                                         },
                                         activation,
                                         cursor,
+                                        cursor_instance,
                                         Some(&qold),
                                         Some((
                                             &control.selected,
@@ -5825,11 +6135,17 @@ impl<'a> Lowering<'a> {
                             let pending = std::mem::take(&mut control.selected.pending);
                             let selected_scope = OwnedSelectedScope {
                                 scope_origin: producer_origin,
+                                scope_instance,
                                 parent_scope: control
                                     .selected
                                     .selected_scope
                                     .as_ref()
                                     .map(|scope| scope.scope_origin),
+                                parent_scope_instance: control
+                                    .selected
+                                    .selected_scope
+                                    .as_ref()
+                                    .map(|scope| scope.scope_instance),
                                 frame: ComputationalRecursorFramePayload {
                                     cases: cases.clone(),
                                     default: default.clone(),
@@ -5855,10 +6171,13 @@ impl<'a> Lowering<'a> {
                                         )
                                     })?;
                                 SourceContinuation::ReturnFromSelectedCase {
-                                    delimiter: SelectedCaseReturnDelimiter {
-                                        activation,
-                                        cursor,
-                                        scope_origin: selected_scope_ref.scope_origin,
+                                        delimiter: SelectedCaseReturnDelimiter {
+                                            activation,
+                                            activation_instance,
+                                            cursor,
+                                            cursor_instance,
+                                            scope_origin: selected_scope_ref.scope_origin,
+                                            scope_instance,
                                         frame_id: selected_scope_ref.frame.checked_frame_id,
                                         invocation_id: selected_scope_ref
                                             .frame
@@ -5874,7 +6193,9 @@ impl<'a> Lowering<'a> {
                             }
                             control.selected = SourceSelectedContinuation {
                                 activation,
+                                activation_instance,
                                 cursor,
+                                cursor_instance,
                                 parent,
                                 pending,
                                 selected_ancestry: ancestry,
@@ -6201,7 +6522,9 @@ impl<'a> Lowering<'a> {
         );
         let suffix_active = ActiveContinuationFrame {
             activation: suffix_control.selected.activation,
+            activation_instance: suffix_control.selected.activation_instance,
             cursor: suffix_control.selected.cursor,
+            cursor_instance: suffix_control.selected.cursor_instance,
             parent: suffix_control.selected.parent,
             pending: &suffix_pending,
             selected_ancestry: &suffix_control.selected.selected_ancestry,
@@ -6426,7 +6749,9 @@ impl<'a> Lowering<'a> {
         );
         let suffix_active = ActiveContinuationFrame {
             activation: suffix_control.selected.activation,
+            activation_instance: suffix_control.selected.activation_instance,
             cursor: suffix_control.selected.cursor,
+            cursor_instance: suffix_control.selected.cursor_instance,
             parent: suffix_control.selected.parent,
             pending: &suffix_pending,
             selected_ancestry: &suffix_control.selected.selected_ancestry,
@@ -6548,6 +6873,8 @@ impl<'a> Lowering<'a> {
         if let Some(producer_kont) = self.active_partition_producer_kont {
             fields.push(producer_kont.capture_pointer);
         }
+        fields.push(selected.activation_instance.0);
+        fields.push(selected.cursor_instance.0);
         let prefix_fields = fields.len().saturating_sub(env_fields);
         append_partition_scope_values(self, builder, &selected.selected_scope, &mut fields)?;
         let selected_pending = own_partition_eliminators(&selected.pending).ok_or_else(|| {
@@ -6561,12 +6888,7 @@ impl<'a> Lowering<'a> {
             .len()
             .saturating_sub(env_fields)
             .saturating_sub(prefix_fields);
-        append_partition_selected_lineage_values(self, builder, selected_lineage, &mut fields)?;
-        let lineage_fields = fields
-            .len()
-            .saturating_sub(env_fields)
-            .saturating_sub(prefix_fields)
-            .saturating_sub(scope_fields);
+        let lineage_fields = 0;
         self.partition_metrics.record_source_frame_components(
             env_fields,
             prefix_fields,
@@ -6723,7 +7045,9 @@ impl<'a> Lowering<'a> {
                     source_capture_pointer: source_cursor.map(|cursor| cursor.capture_pointer),
                     producer_kont: self.active_partition_producer_kont,
                     selected_activation: selected.activation,
+                    selected_activation_instance: selected.activation_instance,
                     selected_cursor: selected.cursor,
+                    selected_cursor_instance: selected.cursor_instance,
                     selected_ancestry: selected.selected_ancestry.clone(),
                     selected_pending,
                     selected_scope: selected.selected_scope.clone(),
@@ -6953,7 +7277,9 @@ impl<'a> Lowering<'a> {
         );
         let suffix_active = ActiveContinuationFrame {
             activation: control.selected.activation,
+            activation_instance: control.selected.activation_instance,
             cursor: control.selected.cursor,
+            cursor_instance: control.selected.cursor_instance,
             parent: control.selected.parent,
             pending: &suffix_pending,
             selected_ancestry: &control.selected.selected_ancestry,
@@ -7135,17 +7461,13 @@ impl<'a> Lowering<'a> {
                 {
                     let mut fields = Vec::new();
                     append_partition_lowered_values(self, builder, &merged, &mut fields)?;
+                    fields.push(suffix_control.selected.activation_instance.0);
+                    fields.push(suffix_control.selected.cursor_instance.0);
                     append_partition_eliminator_values(self, builder, &pending, &mut fields)?;
                     append_partition_scope_values(
                         self,
                         builder,
                         &suffix_control.selected.selected_scope,
-                        &mut fields,
-                    )?;
-                    append_partition_selected_lineage_values(
-                        self,
-                        builder,
-                        &selected_lineage,
                         &mut fields,
                     )?;
                     // The occurrence map records structural aliasing without
@@ -7264,7 +7586,11 @@ impl<'a> Lowering<'a> {
                                 value: merged,
                                 action: ProducerKontAction::ApplyActiveEliminators {
                                     activation: suffix_control.selected.activation,
+                                    activation_instance: suffix_control
+                                        .selected
+                                        .activation_instance,
                                     cursor: suffix_control.selected.cursor,
+                                    cursor_instance: suffix_control.selected.cursor_instance,
                                     pending,
                                     selected_ancestry: suffix_control
                                         .selected
@@ -7304,7 +7630,9 @@ impl<'a> Lowering<'a> {
             }
             let suffix_active = ActiveContinuationFrame {
                 activation: suffix_control.selected.activation,
+                activation_instance: suffix_control.selected.activation_instance,
                 cursor: suffix_control.selected.cursor,
+                cursor_instance: suffix_control.selected.cursor_instance,
                 parent: suffix_control.selected.parent,
                 pending: &suffix_pending,
                 selected_ancestry: &suffix_control.selected.selected_ancestry,
@@ -7389,7 +7717,9 @@ impl<'a> Lowering<'a> {
         );
         let suffix_active = ActiveContinuationFrame {
             activation: suffix_control.selected.activation,
+            activation_instance: suffix_control.selected.activation_instance,
             cursor: suffix_control.selected.cursor,
+            cursor_instance: suffix_control.selected.cursor_instance,
             parent: suffix_control.selected.parent,
             pending: &suffix_pending,
             selected_ancestry: &suffix_control.selected.selected_ancestry,
@@ -7698,7 +8028,9 @@ impl<'a> Lowering<'a> {
         );
         let suffix_active = ActiveContinuationFrame {
             activation: suffix_control.selected.activation,
+            activation_instance: suffix_control.selected.activation_instance,
             cursor: suffix_control.selected.cursor,
+            cursor_instance: suffix_control.selected.cursor_instance,
             parent: suffix_control.selected.parent,
             pending: &suffix_pending,
             selected_ancestry: &suffix_control.selected.selected_ancestry,
@@ -7826,6 +8158,7 @@ impl<'a> Lowering<'a> {
                 let armed = ArmedInvocation {
                     suspended: control,
                     expected_selected: invocation.resume_cursor,
+                    expected_selected_instance: invocation.resume_cursor_instance,
                 };
                 if source_active_cursor(
                     &armed.suspended.selected,

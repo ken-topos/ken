@@ -321,14 +321,24 @@ struct ContinuationCursorId(u64);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct RecursorProducerOriginId(u64);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ActivationInstanceRef(cranelift_codegen::ir::Value);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ControlCursorRef(cranelift_codegen::ir::Value);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ScopeInstanceRef(cranelift_codegen::ir::Value);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RecursorLayerRole {
     SelectsOccurrence {
         origin: RecursorProducerOriginId,
+        origin_scope: ScopeInstanceRef,
     },
     ExitsScope {
         origin: RecursorProducerOriginId,
+        origin_scope: ScopeInstanceRef,
         scope_origin: RecursorProducerOriginId,
+        scope_instance: ScopeInstanceRef,
         parent_scope: Option<RecursorProducerOriginId>,
+        parent_scope_instance: Option<ScopeInstanceRef>,
     },
 }
 #[derive(Clone)]
@@ -345,7 +355,9 @@ struct ComputationalRecursorFramePayload {
 #[derive(Clone)]
 struct OwnedSelectedScope {
     scope_origin: RecursorProducerOriginId,
+    scope_instance: ScopeInstanceRef,
     parent_scope: Option<RecursorProducerOriginId>,
+    parent_scope_instance: Option<ScopeInstanceRef>,
     frame: ComputationalRecursorFramePayload,
 }
 #[derive(Clone, Copy)]
@@ -668,7 +680,9 @@ struct PendingLetContinuationFrame<'a> {
 #[derive(Clone, Copy)]
 struct ActiveContinuationFrame<'a> {
     activation: ContinuationActivationId,
+    activation_instance: ActivationInstanceRef,
     cursor: ContinuationCursorId,
+    cursor_instance: ControlCursorRef,
     parent: Option<&'a ActiveContinuationFrame<'a>>,
     pending: &'a [EliminatorFrame<'a>],
     selected_ancestry: &'a [RecursorFrameProvenance],
@@ -699,6 +713,7 @@ struct RecursorInvocationSegment {
     selection: ComputationalRecursorLayer,
     unwind: RecursorUnwindStack,
     resume_cursor: ContinuationCursorId,
+    resume_cursor_instance: ControlCursorRef,
     checked_invocation: Option<CheckedRecursiveInvocationInstance>,
     computational_ih_slot_template_id: Option<u64>,
     /// Inert handles into `Lowering::dynamic_splice_edges`. Cloning a lowered
@@ -717,7 +732,9 @@ struct RecursorUnwindStack {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct OpenControlObligation {
     scope_origin: RecursorProducerOriginId,
+    scope_instance: ScopeInstanceRef,
     parent_scope: Option<RecursorProducerOriginId>,
+    parent_scope_instance: Option<ScopeInstanceRef>,
     checked_frame_id: Option<u64>,
     semantic_pending: bool,
 }
@@ -728,11 +745,15 @@ fn open_control_obligations(unwind: &RecursorUnwindStack) -> Vec<OpenControlObli
         .filter_map(|layer| match layer.role {
             RecursorLayerRole::ExitsScope {
                 scope_origin,
+                scope_instance,
                 parent_scope,
+                parent_scope_instance,
                 ..
             } => Some(OpenControlObligation {
                 scope_origin,
+                scope_instance,
                 parent_scope,
+                parent_scope_instance,
                 checked_frame_id: layer.checked_frame_id,
                 semantic_pending: layer.semantic_pending,
             }),
@@ -782,7 +803,7 @@ fn validate_oriented_control_projection(
     let mut open_scopes = BTreeMap::new();
     for layer in layers {
         let role_origin = match layer.role {
-            RecursorLayerRole::SelectsOccurrence { origin }
+            RecursorLayerRole::SelectsOccurrence { origin, .. }
             | RecursorLayerRole::ExitsScope { origin, .. } => origin,
         };
         if role_origin != producer_origin {
@@ -856,6 +877,7 @@ struct OwnedOrientedSubcontinuationSegment {
     semantic_frames: Vec<ComputationalRecursorLayer>,
     control_ledger: Vec<OrientedControlLedgerEntry>,
     resume_cursor: ContinuationCursorId,
+    resume_cursor_instance: ControlCursorRef,
     capability: AffineSpliceCapability,
 }
 struct InstalledOrientedSubcontinuationSegment {
@@ -866,6 +888,7 @@ struct InstalledOrientedSubcontinuationSegment {
     semantic_frames: Vec<ComputationalRecursorLayer>,
     control_ledger: Vec<OrientedControlLedgerEntry>,
     resume_cursor: ContinuationCursorId,
+    resume_cursor_instance: ControlCursorRef,
 }
 impl RecursorInvocationSegment {
     fn new(
@@ -874,6 +897,7 @@ impl RecursorInvocationSegment {
         selection: ComputationalRecursorLayer,
         unwind: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
+        resume_cursor_instance: ControlCursorRef,
         checked_invocation: Option<CheckedRecursiveInvocationInstance>,
         computational_ih_slot_template_id: Option<u64>,
     ) -> Self {
@@ -884,6 +908,7 @@ impl RecursorInvocationSegment {
             selection,
             unwind,
             resume_cursor,
+            resume_cursor_instance,
             checked_invocation,
             computational_ih_slot_template_id,
             dynamic_splice_edges: Vec::new(),
@@ -1068,6 +1093,7 @@ fn compose_oriented_subcontinuation(
     let producer_origin = segment.origin;
     let sibling_position = segment.sibling_position;
     let resume_cursor = segment.resume_cursor;
+    let resume_cursor_instance = segment.resume_cursor_instance;
     let mut control_layers =
         Vec::with_capacity(1 + segment.unwind.later_wrappers_in_construction_order.len());
     control_layers.push(segment.selection);
@@ -1491,6 +1517,7 @@ fn compose_oriented_subcontinuation(
         semantic_frames,
         control_ledger,
         resume_cursor,
+        resume_cursor_instance,
         capability: AffineSpliceCapability {
             state: AffineSpliceState::Open,
         },
@@ -1514,6 +1541,7 @@ fn compose_oriented_subcontinuation(
         semantic_frames: owned.semantic_frames,
         control_ledger: owned.control_ledger,
         resume_cursor: owned.resume_cursor,
+        resume_cursor_instance: owned.resume_cursor_instance,
     })
 }
 fn recursor_invocation_is_checked(segment: &RecursorInvocationSegment) -> bool {
@@ -1554,7 +1582,7 @@ fn validate_recursor_invocation_install_shape(
 ) -> Result<(), CraneliftBackendError> {
     if !matches!(
         segment.selection.role,
-        RecursorLayerRole::SelectsOccurrence { origin } if origin == segment.origin
+        RecursorLayerRole::SelectsOccurrence { origin, .. } if origin == segment.origin
     ) {
         return Err(unsupported(
             "ComputationalRecursor",
@@ -1594,7 +1622,7 @@ fn validate_recursor_invocation_segment(
 ) -> Result<(), CraneliftBackendError> {
     if !matches!(
         segment.selection.role,
-        RecursorLayerRole::SelectsOccurrence { origin } if origin == segment.origin
+        RecursorLayerRole::SelectsOccurrence { origin, .. } if origin == segment.origin
     ) {
         return Err(unsupported(
             "ComputationalRecursor",
@@ -1611,6 +1639,7 @@ fn validate_recursor_invocation_segment(
             origin,
             scope_origin,
             parent_scope,
+            ..
         } = layer.role
         else {
             return Err(unsupported(
@@ -1669,12 +1698,22 @@ fn active_context_contains_cursor(
     active: &ActiveContinuationFrame<'_>,
     cursor: ContinuationCursorId,
 ) -> bool {
-    find_continuation_cursor(active, cursor).is_some()
-        || active.source_selected_cursor == Some(cursor)
-        || active.source_lineage.iter().rev().any(|candidate| {
-            let candidate = candidate.as_active(active.source_lineage);
-            find_continuation_cursor(&candidate, cursor).is_some()
+    active_context_cursor_instance(active, cursor).is_some()
+}
+fn active_context_cursor_instance(
+    active: &ActiveContinuationFrame<'_>,
+    cursor: ContinuationCursorId,
+) -> Option<ControlCursorRef> {
+    find_continuation_cursor(active, cursor)
+        .map(|frame| frame.cursor_instance)
+        .or_else(|| {
+            (active.source_selected_cursor == Some(cursor)).then_some(active.cursor_instance)
         })
+        .or_else(|| active.source_lineage.iter().rev().find_map(|candidate| {
+            let candidate = candidate.as_active(active.source_lineage);
+            find_continuation_cursor(&candidate, cursor)
+                .map(|frame| frame.cursor_instance)
+        }))
 }
 #[derive(Clone, Copy)]
 enum EliminatorFrame<'a> {
@@ -1740,6 +1779,7 @@ enum SourceContinuation<'a> {
     UnwindRecursorSegment {
         stack: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
+        resume_cursor_instance: ControlCursorRef,
         next: Box<SourceContinuation<'a>>,
     },
     IfScrutinee {
@@ -1800,6 +1840,7 @@ enum SourceContinuationTerminal<'a> {
     ReturnToProducerHole {
         stack: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
+        resume_cursor_instance: ControlCursorRef,
         expected: ContinuationCursorId,
         active: &'a ActiveContinuationFrame<'a>,
         root_authority: Option<RootTerminalAnswerAuthority>,
@@ -1850,6 +1891,7 @@ enum SourcePrefixTemplate {
     },
     ReturnFromSelectedCase {
         delimiter: SelectedCaseReturnDelimiter,
+        parent_capture: Option<OwnedSourceSelectedContinuation>,
         next: Box<SourcePrefixTemplate>,
     },
     LetBody {
@@ -1864,6 +1906,7 @@ enum SourcePrefixTemplate {
     UnwindRecursorSegment {
         stack: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
+        resume_cursor_instance: ControlCursorRef,
         next: Box<SourcePrefixTemplate>,
     },
     IfScrutinee {
@@ -1925,11 +1968,14 @@ struct SourceBranchFanout<'a> {
 struct ArmedInvocation<'a> {
     suspended: SourceControl<'a>,
     expected_selected: ContinuationCursorId,
+    expected_selected_instance: ControlCursorRef,
 }
 #[derive(Clone)]
 struct SourceSelectedContinuation<'a> {
     activation: ContinuationActivationId,
+    activation_instance: ActivationInstanceRef,
     cursor: ContinuationCursorId,
+    cursor_instance: ControlCursorRef,
     parent: Option<&'a ActiveContinuationFrame<'a>>,
     pending: Vec<EliminatorFrame<'a>>,
     selected_ancestry: Vec<RecursorFrameProvenance>,
@@ -1945,7 +1991,9 @@ impl<'a> SourceSelectedContinuation<'a> {
     {
         ActiveContinuationFrame {
             activation: self.activation,
+            activation_instance: self.activation_instance,
             cursor: self.cursor,
+            cursor_instance: self.cursor_instance,
             parent: self.parent,
             pending: &self.pending,
             selected_ancestry: &self.selected_ancestry,
@@ -1993,8 +2041,11 @@ struct SourceControl<'a> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct SelectedCaseReturnDelimiter {
     activation: ContinuationActivationId,
+    activation_instance: ActivationInstanceRef,
     cursor: ContinuationCursorId,
+    cursor_instance: ControlCursorRef,
     scope_origin: RecursorProducerOriginId,
+    scope_instance: ScopeInstanceRef,
     frame_id: Option<u64>,
     invocation_id: Option<u64>,
 }
@@ -2908,6 +2959,7 @@ impl<'a> Lowering<'a> {
         role: RecursorLayerRole,
         activation: ContinuationActivationId,
         resume_cursor: ContinuationCursorId,
+        resume_cursor_instance: ControlCursorRef,
         splice_caller: Option<&ActiveContinuationFrame<'_>>,
         source_control: Option<(
             &SourceSelectedContinuation<'_>,
@@ -2967,6 +3019,9 @@ impl<'a> Lowering<'a> {
             .as_ref()
             .map(|(_, invocation)| invocation.dynamic_splice_edges.clone())
             .unwrap_or_default();
+        let segment_resume_cursor_instance = payload
+            .as_ref()
+            .map(|(_, invocation)| invocation.resume_cursor_instance);
         let (selection, unwind) =
             if let Some((_, invocation)) = payload {
                 let splice_caller = splice_caller.ok_or_else(|| {
@@ -2995,21 +3050,30 @@ impl<'a> Lowering<'a> {
                     },
                 );
                 let unwind_role = match role {
-                    RecursorLayerRole::SelectsOccurrence { origin: _ } => {
+                    RecursorLayerRole::SelectsOccurrence { origin_scope, .. } => {
                         RecursorLayerRole::ExitsScope {
                             origin: segment_origin,
+                            origin_scope,
                             scope_origin: origin,
+                            scope_instance: origin_scope,
                             parent_scope,
+                            parent_scope_instance: None,
                         }
                     }
                     RecursorLayerRole::ExitsScope {
-                        origin: _,
+                        origin_scope,
                         scope_origin,
+                        scope_instance,
                         parent_scope,
+                        parent_scope_instance,
+                        ..
                     } => RecursorLayerRole::ExitsScope {
                         origin: segment_origin,
+                        origin_scope,
                         scope_origin,
+                        scope_instance,
                         parent_scope,
+                        parent_scope_instance,
                     },
                 };
                 current_layer.role = unwind_role;
@@ -3054,8 +3118,11 @@ impl<'a> Lowering<'a> {
                                 semantic_pending: false,
                                 role: RecursorLayerRole::ExitsScope {
                                     origin: segment_origin,
+                                    origin_scope: scope.scope_instance,
                                     scope_origin: scope.scope_origin,
+                                    scope_instance: scope.scope_instance,
                                     parent_scope: scope.parent_scope,
+                                    parent_scope_instance: scope.parent_scope_instance,
                                 },
                             },
                         );
@@ -3070,12 +3137,15 @@ impl<'a> Lowering<'a> {
                     },
                 )
             };
+        let resume_cursor_instance =
+            segment_resume_cursor_instance.unwrap_or(resume_cursor_instance);
         let mut invocation = RecursorInvocationSegment::new(
             segment_origin,
             segment_sibling_position,
             selection,
             unwind,
             resume_cursor,
+            resume_cursor_instance,
             segment_checked_invocation,
             computational_ih_slot_template_id,
         );
@@ -3727,6 +3797,7 @@ impl<'a> Lowering<'a> {
         continuation: SourceContinuation<'b>,
         stack: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
+        resume_cursor_instance: ControlCursorRef,
     ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
         Ok(match continuation {
             SourceContinuation::CheckedRecursiveInvocationReturn { instance, next } => {
@@ -3736,6 +3807,7 @@ impl<'a> Lowering<'a> {
                         *next,
                         stack,
                         resume_cursor,
+                        resume_cursor_instance,
                     )?),
                 }
             }
@@ -3748,6 +3820,7 @@ impl<'a> Lowering<'a> {
                     *next,
                     stack,
                     resume_cursor,
+                    resume_cursor_instance,
                 )?),
             },
             SourceContinuation::ReturnFromSelectedCase { delimiter, next } => {
@@ -3757,6 +3830,7 @@ impl<'a> Lowering<'a> {
                         *next,
                         stack,
                         resume_cursor,
+                        resume_cursor_instance,
                     )?),
                 }
             }
@@ -3767,6 +3841,7 @@ impl<'a> Lowering<'a> {
                     *next,
                     stack,
                     resume_cursor,
+                    resume_cursor_instance,
                 )?),
             },
             SourceContinuation::ApplyRecursorSelection { layer, next } => {
@@ -3776,20 +3851,24 @@ impl<'a> Lowering<'a> {
                         *next,
                         stack,
                         resume_cursor,
+                        resume_cursor_instance,
                     )?),
                 }
             }
             SourceContinuation::UnwindRecursorSegment {
                 stack: outer_stack,
                 resume_cursor: outer_cursor,
+                resume_cursor_instance: outer_cursor_instance,
                 next,
             } => SourceContinuation::UnwindRecursorSegment {
                 stack: outer_stack,
                 resume_cursor: outer_cursor,
+                resume_cursor_instance: outer_cursor_instance,
                 next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
                     stack,
                     resume_cursor,
+                    resume_cursor_instance,
                 )?),
             },
             SourceContinuation::IfScrutinee {
@@ -3805,6 +3884,7 @@ impl<'a> Lowering<'a> {
                     *next,
                     stack,
                     resume_cursor,
+                    resume_cursor_instance,
                 )?),
             },
             SourceContinuation::ConstructArgument {
@@ -3822,6 +3902,7 @@ impl<'a> Lowering<'a> {
                     *next,
                     stack,
                     resume_cursor,
+                    resume_cursor_instance,
                 )?),
             },
             SourceContinuation::MatchScrutinee {
@@ -3837,6 +3918,7 @@ impl<'a> Lowering<'a> {
                     *next,
                     stack,
                     resume_cursor,
+                    resume_cursor_instance,
                 )?),
             },
             SourceContinuation::ComputationalMatchScrutinee {
@@ -3858,6 +3940,7 @@ impl<'a> Lowering<'a> {
                     *next,
                     stack,
                     resume_cursor,
+                    resume_cursor_instance,
                 )?),
             },
             SourceContinuation::ProjectRecord { field, next } => {
@@ -3867,6 +3950,7 @@ impl<'a> Lowering<'a> {
                         *next,
                         stack,
                         resume_cursor,
+                        resume_cursor_instance,
                     )?),
                 }
             }
@@ -3877,6 +3961,7 @@ impl<'a> Lowering<'a> {
                     *next,
                     stack,
                     resume_cursor,
+                    resume_cursor_instance,
                 )?),
             },
             SourceContinuation::CallArgument {
@@ -3894,6 +3979,7 @@ impl<'a> Lowering<'a> {
                     *next,
                     stack,
                     resume_cursor,
+                    resume_cursor_instance,
                 )?),
             },
             SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
@@ -3903,6 +3989,7 @@ impl<'a> Lowering<'a> {
             }) => SourceContinuation::Terminal(SourceContinuationTerminal::ReturnToProducerHole {
                 stack,
                 resume_cursor,
+                resume_cursor_instance,
                 expected,
                 active,
                 root_authority,
@@ -3917,6 +4004,7 @@ impl<'a> Lowering<'a> {
                     } => SourceContinuationTerminal::ReturnToProducerHole {
                         stack,
                         resume_cursor,
+                        resume_cursor_instance,
                         expected,
                         active,
                         root_authority,
@@ -3971,7 +4059,7 @@ impl<'a> Lowering<'a> {
             .control_ledger
             .iter()
             .all(|entry| match entry.role {
-                RecursorLayerRole::SelectsOccurrence { origin }
+                RecursorLayerRole::SelectsOccurrence { origin, .. }
                 | RecursorLayerRole::ExitsScope { origin, .. } => {
                     origin == installed.producer_origin
                 }
@@ -3999,6 +4087,7 @@ impl<'a> Lowering<'a> {
                 continuation,
                 stack,
                 installed.resume_cursor,
+                installed.resume_cursor_instance,
             )?;
             return Ok(SourceContinuation::ApplyRecursorSelection {
                 layer: selection,
@@ -4047,6 +4136,7 @@ impl<'a> Lowering<'a> {
                 (
                     SourcePrefixTemplate::ReturnFromSelectedCase {
                         delimiter,
+                        parent_capture: None,
                         next: Box::new(next),
                     },
                     terminal,
@@ -4120,6 +4210,7 @@ impl<'a> Lowering<'a> {
             SourceContinuation::UnwindRecursorSegment {
                 stack,
                 resume_cursor,
+                resume_cursor_instance,
                 next,
             } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
@@ -4127,6 +4218,7 @@ impl<'a> Lowering<'a> {
                     SourcePrefixTemplate::UnwindRecursorSegment {
                         stack,
                         resume_cursor,
+                        resume_cursor_instance,
                         next: Box::new(next),
                     },
                     terminal,
@@ -4278,7 +4370,11 @@ impl<'a> Lowering<'a> {
                 call_template_id: *call_template_id,
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
-            SourcePrefixTemplate::ReturnFromSelectedCase { delimiter, next } => {
+            SourcePrefixTemplate::ReturnFromSelectedCase {
+                delimiter,
+                parent_capture,
+                next,
+            } => {
                 SourceContinuation::ReturnFromSelectedCase {
                     delimiter: *delimiter,
                     next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
@@ -4298,10 +4394,12 @@ impl<'a> Lowering<'a> {
             SourcePrefixTemplate::UnwindRecursorSegment {
                 stack,
                 resume_cursor,
+                resume_cursor_instance,
                 next,
             } => SourceContinuation::UnwindRecursorSegment {
                 stack: stack.clone(),
                 resume_cursor: *resume_cursor,
+                resume_cursor_instance: *resume_cursor_instance,
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
             SourcePrefixTemplate::IfScrutinee {
@@ -5303,7 +5401,12 @@ impl<'a> Lowering<'a> {
         }
         Err(unsupported(
             "NativeInt",
-            "dynamic Int value lost its two-word tag transport",
+            format!(
+                "dynamic Int value {payload:?} lost its two-word tag transport in {:?} \
+                 (known dynamic tags={})",
+                builder.func.name,
+                self.native_int_tags.len(),
+            ),
         ))
     }
 
