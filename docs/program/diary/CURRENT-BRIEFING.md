@@ -192,11 +192,43 @@
 > `validate()` over every node**, so the invariant is structural, not merely
 > tested. ★ The old `u32::MAX` frame would now be rejected as *unclosed* — the
 > original approach could not have worked even with a correct assertion.
-> ⚠ **Outstanding: the n=3..7 table for `e70bb2a5`.** The typed
-> `PlannedHelperKey` inventory now drives the census, so the `92cac774` numbers
-> (nodes Δ28 / edges Δ34 / helpers Δ62 / persistent Δ37) are **NOT authoritative
-> and must not be carried forward.** Requested a restatement.
-> **Boundary B opens only when the Architect also returns its half.**
+> ✅ **Census table restated for `e70bb2a5`** (`evt_1favdzgj04y02`) — and the
+> counts are **identical** to `92cac774`: nodes 87/115/143/171/199 (Δ28),
+> edges 103→239 (Δ34), helpers 190→438 (Δ62), persistent 128→276 (Δ37), all
+> Δ²=0; K=8 flat; **helper-key 12 B** (the honest fixed width of the typed
+> `PlannedHelperKey::{Node,Edge}` inventory), frame 32 B, store 16 B, all flat.
+> Asking was still right — the inventory *had* changed; the counts happened not
+> to.
+>
+> ### ⛔ ARCHITECT BLOCKED `e70bb2a5` (`evt_2km3wm7h9ckgp`) — a THIRD candidate is due
+>
+> It **confirms my fold is real and may stand**, and confirms the eight-slot
+> frame + `{kind,local,aux,child}` store are expressive **without a ninth slot**
+> (the expressibility question I routed to it). But it reproduced **two
+> production closure holes** with exact mutations:
+>
+> 1. **Alternate callable edges bypass W.** `validate_source_return_topology`
+>    proves the R→W/W→T/T→CompletedTail edges *exist* and makes W's incoming
+>    exclusive, but **not** T's or CompletedTail's; the CompletedTail check
+>    counts only edges already labelled `CompleteProducerTail`, so a second
+>    incoming edge of another kind is **invisible**. Fix: close the quartet by
+>    **set equality, not existence**.
+> 2. **Entry closure inferred from CARDINALITY.** Reachability compares
+>    `reachable.len()` with `nodes.len()` and never proves each entry is a real
+>    node ID — so an out-of-range root `StaticNodeId(u32::MAX)` balances the
+>    count and `validate()` returns `Ok(())` while a real node is unreachable.
+>    Fix: range+uniqueness before traversal, **exact set equality** after.
+>
+> `runtime-implementer` picked it up 71s later and is working the fold.
+> **Cadence: still hard-stop count 1** — the Architect explicitly said this is a
+> review fold, not a hard-stop, and that the count remains mine.
+>
+> ★★ **PROMOTION CANDIDATE — all THREE Boundary-A findings are one shape:** a
+> check that compares a **proxy** instead of the **property**. Mine
+> (`assert_eq!(x,x)` + a mutation that never re-enters the mechanism), the
+> Architect's #1 (counting only the *labelled* subset), and #2 (**cardinality**
+> standing in for **set equality**). Three independent instances in one WP, found
+> by two different seats ⇒ this clears the §10 bar. Write it up.
 >
 > ## (resolved) The Decision was `proposed` — held, then unblocked in seconds
 >
