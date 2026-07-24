@@ -8,7 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::surface::{unsupported, CraneliftBackendError};
+use super::surface::{backend, unsupported, BackendFailure, CraneliftBackendError};
 use crate::{RuntimeDeclaration, RuntimeDeclarationKind, RuntimeExpr, RuntimeProgram};
 
 mod static_transition;
