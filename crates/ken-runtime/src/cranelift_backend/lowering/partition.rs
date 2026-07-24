@@ -727,9 +727,7 @@ impl From<InvocationTemplateRef> for PartitionInvocationTemplateKey {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum PartitionLayerRoleKey {
     SelectsOccurrence,
-    ExitsScope {
-        has_parent_scope: bool,
-    },
+    ExitsScope { has_parent_scope: bool },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -750,15 +748,12 @@ fn partition_layer_key(layer: &ComputationalRecursorLayer) -> PartitionLayerKey 
         ),
         outer_env: layer.outer_env.iter().map(partition_lowered_key).collect(),
         role: match layer.role {
-            RecursorLayerRole::SelectsOccurrence { .. } => {
-                PartitionLayerRoleKey::SelectsOccurrence
+            RecursorLayerRole::SelectsOccurrence { .. } => PartitionLayerRoleKey::SelectsOccurrence,
+            RecursorLayerRole::ExitsScope { parent_scope, .. } => {
+                PartitionLayerRoleKey::ExitsScope {
+                    has_parent_scope: parent_scope.is_some(),
+                }
             }
-            RecursorLayerRole::ExitsScope {
-                parent_scope,
-                ..
-            } => PartitionLayerRoleKey::ExitsScope {
-                has_parent_scope: parent_scope.is_some(),
-            },
         },
         checked_frame_id: layer.checked_frame_id,
         checked_invocation_source: layer.checked_invocation_source.map(Into::into),
@@ -1196,7 +1191,7 @@ enum PartitionProducerKontActionKey {
         pending: Vec<PartitionEliminatorKey>,
         selected_has_ancestry: bool,
         selected_scope: Option<PartitionSelectedScopeKey>,
-        selected_parent: Option<PartitionSelectedContinuationKey>,
+        selected_has_parent: bool,
     },
     ApplyEliminators {
         value: PartitionLoweredKey,
@@ -1215,9 +1210,7 @@ enum PartitionProducerKontActionKey {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum PartitionProducerKontTerminalIdentity {
     CheckedJoin,
-    ScalarArmReturn {
-        edge_index: u64,
-    },
+    ScalarArmReturn { edge_index: u64 },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1350,11 +1343,7 @@ fn partition_source_prefix_key(prefix: &SourcePrefixTemplate) -> PartitionSource
                 next: Box::new(partition_source_prefix_key(next)),
             }
         }
-        SourcePrefixTemplate::UnwindRecursorSegment {
-            stack,
-            next,
-            ..
-        } => {
+        SourcePrefixTemplate::UnwindRecursorSegment { stack, next, .. } => {
             PartitionSourcePrefixKey::UnwindRecursorSegment {
                 stack: stack
                     .later_wrappers_in_construction_order
@@ -1633,12 +1622,10 @@ pub(super) fn partition_source_head_template(
             answer_route: *answer_route,
             next: Box::new(terminal()),
         },
-        SourceContinuation::ProjectRecord { field, .. } => {
-            SourcePrefixTemplate::ProjectRecord {
-                field: field.clone(),
-                next: Box::new(terminal()),
-            }
-        }
+        SourceContinuation::ProjectRecord { field, .. } => SourcePrefixTemplate::ProjectRecord {
+            field: field.clone(),
+            next: Box::new(terminal()),
+        },
         SourceContinuation::CallCallee { args, env, .. } => SourcePrefixTemplate::CallCallee {
             args: args.clone(),
             env: env.clone(),
@@ -1963,12 +1950,10 @@ pub(super) fn instantiate_partition_source_node<'a>(
             answer_route,
             next: Box::new(successor),
         },
-        SourcePrefixTemplate::ProjectRecord { field, .. } => {
-            SourceContinuation::ProjectRecord {
-                field,
-                next: Box::new(successor),
-            }
-        }
+        SourcePrefixTemplate::ProjectRecord { field, .. } => SourceContinuation::ProjectRecord {
+            field,
+            next: Box::new(successor),
+        },
         SourcePrefixTemplate::CallCallee { args, env, .. } => SourceContinuation::CallCallee {
             args,
             env,
@@ -2003,7 +1988,7 @@ struct PartitionSourceArmStaticKey {
     selected_has_ancestry: bool,
     selected_pending: Vec<PartitionEliminatorKey>,
     selected_scope: Option<PartitionSelectedScopeKey>,
-    selected_parent: Option<PartitionSelectedContinuationKey>,
+    selected_has_parent: bool,
     cleanup_head: Option<PartitionCleanupSuffixId>,
 }
 
@@ -2064,7 +2049,7 @@ impl PartitionSourceArmKey {
                 .map(partition_eliminator_key)
                 .collect(),
             selected_scope: partition_scope_key(selected_scope),
-            selected_parent: selected_lineage.last().map(partition_selected_key),
+            selected_has_parent: !selected_lineage.is_empty(),
             cleanup_head,
         };
         Self {
@@ -2095,7 +2080,7 @@ struct PartitionSourceKontStaticKey {
     selected_has_ancestry: bool,
     selected_pending: Vec<PartitionEliminatorKey>,
     selected_scope: Option<PartitionSelectedScopeKey>,
-    selected_parent: Option<PartitionSelectedContinuationKey>,
+    selected_has_parent: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2150,7 +2135,7 @@ impl PartitionSourceKontKey {
                 .map(partition_eliminator_key)
                 .collect(),
             selected_scope: partition_scope_key(selected_scope),
-            selected_parent: selected_lineage.last().map(partition_selected_key),
+            selected_has_parent: !selected_lineage.is_empty(),
         };
         Self {
             checked_join,
@@ -2304,7 +2289,7 @@ impl PartitionContinuationKey {
                 pending: pending.iter().map(partition_eliminator_key).collect(),
                 selected_has_ancestry: !selected_ancestry.is_empty(),
                 selected_scope: partition_scope_key(selected_scope),
-                selected_parent: selected_lineage.last().map(partition_selected_key),
+                selected_has_parent: !selected_lineage.is_empty(),
             },
             successor,
         };
@@ -2549,9 +2534,7 @@ impl PartitionContinuationInterner {
             ));
         }
         let state_id = self.states.len();
-        if std::env::var_os("KEN_NATIVE_PARTITION_METRICS").is_some()
-            && state_id % 64 == 0
-        {
+        if std::env::var_os("KEN_NATIVE_PARTITION_METRICS").is_some() && state_id % 64 == 0 {
             let kind = match &key {
                 PartitionSemanticStateKey::ProducerKont(_) => "producer",
                 PartitionSemanticStateKey::SourceArm(_) => "eval",
@@ -2974,7 +2957,7 @@ enum PartitionProducerKontSiteActionKey {
         pending: Vec<PartitionEliminatorKey>,
         selected_has_ancestry: bool,
         selected_scope: Option<PartitionSelectedScopeKey>,
-        selected_parent: Option<PartitionSelectedContinuationKey>,
+        selected_has_parent: bool,
         capture_field_types: Vec<Type>,
     },
     ApplyEliminators {
@@ -3008,11 +2991,9 @@ impl PartitionProducerKontSiteKey {
         return_kind: ScalarMergeKind,
     ) -> Self {
         let action = match action {
-            ProducerKontAction::Done { terminal } => {
-                PartitionProducerKontSiteActionKey::Done {
-                    terminal: *terminal,
-                }
-            }
+            ProducerKontAction::Done { terminal } => PartitionProducerKontSiteActionKey::Done {
+                terminal: *terminal,
+            },
             ProducerKontAction::ApplyActiveEliminators {
                 pending,
                 selected_ancestry,
@@ -3024,7 +3005,7 @@ impl PartitionProducerKontSiteKey {
                 pending: pending.iter().map(partition_eliminator_key).collect(),
                 selected_has_ancestry: !selected_ancestry.is_empty(),
                 selected_scope: partition_scope_key(selected_scope),
-                selected_parent: selected_lineage.last().map(partition_selected_key),
+                selected_has_parent: !selected_lineage.is_empty(),
                 capture_field_types: capture_field_types.clone(),
             },
             ProducerKontAction::ApplyEliminators {
@@ -3050,12 +3031,8 @@ impl PartitionProducerKontSiteKey {
             },
         };
         let successor = successor.map(|cursor| cursor.site_id);
-        let static_bucket = partition_static_bucket(&(
-            &checked_join,
-            return_kind,
-            successor,
-            &action,
-        ));
+        let static_bucket =
+            partition_static_bucket(&(&checked_join, return_kind, successor, &action));
         Self {
             checked_join,
             return_kind,
@@ -3158,9 +3135,7 @@ pub(super) fn own_partition_selected_lineage(
 ) -> Option<Vec<OwnedSourceSelectedContinuation>> {
     lineage
         .iter()
-        .map(|selected| {
-            own_partition_selected(selected)
-        })
+        .map(|selected| own_partition_selected(selected))
         .collect()
 }
 
@@ -3590,9 +3565,7 @@ mod tests {
             static_bucket: partition_static_bucket(&("process-exit", site_id)),
             static_key: Arc::new(PartitionContinuationStaticKey {
                 action: PartitionProducerKontActionKey::ApplyActiveEliminators {
-                    value: partition_lowered_shape_key(
-                        PartitionLoweredShape::ProcessExitStatus,
-                    ),
+                    value: partition_lowered_shape_key(PartitionLoweredShape::ProcessExitStatus),
                     activation: ContinuationActivationId(1),
                     cursor: ContinuationCursorId(1),
                     pending: Vec::new(),
@@ -4318,14 +4291,12 @@ pub(super) fn rebuild_partition_lowered(
             ..
         } => {
             rebuild_partition_lowered(residual, values, native_int_tags)?;
-            invocation.resume_cursor_instance =
-                ControlCursorRef(next_partition_value(values)?);
+            invocation.resume_cursor_instance = ControlCursorRef(next_partition_value(values)?);
             rebuild_partition_layer(&mut invocation.selection, values, native_int_tags)?;
             for layer in &mut invocation.unwind.later_wrappers_in_construction_order {
                 rebuild_partition_layer(layer, values, native_int_tags)?;
             }
-            invocation.open_control_obligations =
-                open_control_obligations(&invocation.unwind);
+            invocation.open_control_obligations = open_control_obligations(&invocation.unwind);
         }
         Lowered::RecursiveBackedge => {
             return Err(unsupported(
@@ -4355,8 +4326,7 @@ fn rebuild_partition_layer(
             *origin_scope = ScopeInstanceRef(next_partition_value(values)?);
             *scope_instance = ScopeInstanceRef(next_partition_value(values)?);
             if parent_scope_instance.is_some() {
-                *parent_scope_instance =
-                    Some(ScopeInstanceRef(next_partition_value(values)?));
+                *parent_scope_instance = Some(ScopeInstanceRef(next_partition_value(values)?));
             }
         }
     }
@@ -4381,32 +4351,19 @@ pub(super) fn rebuild_partition_prefix(
             parent_capture,
             ..
         } => {
-            delimiter.activation_instance =
-                ActivationInstanceRef(next_partition_value(values)?);
-            delimiter.cursor_instance =
-                ControlCursorRef(next_partition_value(values)?);
-            delimiter.scope_instance =
-                ScopeInstanceRef(next_partition_value(values)?);
+            delimiter.activation_instance = ActivationInstanceRef(next_partition_value(values)?);
+            delimiter.cursor_instance = ControlCursorRef(next_partition_value(values)?);
+            delimiter.scope_instance = ScopeInstanceRef(next_partition_value(values)?);
             let parent = parent_capture.as_mut().ok_or_else(|| {
                 unsupported(
                     "NativeControlCellV1",
                     "selected return has no immediate parent capture",
                 )
             })?;
-            parent.activation_instance =
-                ActivationInstanceRef(next_partition_value(values)?);
-            parent.cursor_instance =
-                ControlCursorRef(next_partition_value(values)?);
-            rebuild_partition_eliminators(
-                &mut parent.pending,
-                values,
-                native_int_tags,
-            )?;
-            rebuild_partition_scope(
-                &mut parent.selected_scope,
-                values,
-                native_int_tags,
-            )?;
+            parent.activation_instance = ActivationInstanceRef(next_partition_value(values)?);
+            parent.cursor_instance = ControlCursorRef(next_partition_value(values)?);
+            rebuild_partition_eliminators(&mut parent.pending, values, native_int_tags)?;
+            rebuild_partition_scope(&mut parent.selected_scope, values, native_int_tags)?;
         }
         SourcePrefixTemplate::LetBody { env, .. }
         | SourcePrefixTemplate::IfScrutinee { env, .. }
@@ -4425,8 +4382,7 @@ pub(super) fn rebuild_partition_prefix(
             resume_cursor_instance,
             ..
         } => {
-            *resume_cursor_instance =
-                ControlCursorRef(next_partition_value(values)?);
+            *resume_cursor_instance = ControlCursorRef(next_partition_value(values)?);
             for layer in &mut stack.later_wrappers_in_construction_order {
                 rebuild_partition_layer(layer, values, native_int_tags)?;
             }
@@ -4476,8 +4432,7 @@ pub(super) fn rebuild_partition_scope(
     if let Some(scope) = scope {
         scope.scope_instance = ScopeInstanceRef(next_partition_value(values)?);
         if scope.parent_scope_instance.is_some() {
-            scope.parent_scope_instance =
-                Some(ScopeInstanceRef(next_partition_value(values)?));
+            scope.parent_scope_instance = Some(ScopeInstanceRef(next_partition_value(values)?));
         }
         for value in &mut scope.frame.outer_env {
             rebuild_partition_lowered(value, values, native_int_tags)?;
@@ -4506,15 +4461,11 @@ pub(super) fn instantiate_partition_prefix<'a>(
             next: Box::new(instantiate_partition_prefix(*next, terminal)),
         },
         SourcePrefixTemplate::ReturnFromSelectedCase {
+            delimiter, next, ..
+        } => SourceContinuation::ReturnFromSelectedCase {
             delimiter,
-            next,
-            ..
-        } => {
-            SourceContinuation::ReturnFromSelectedCase {
-                delimiter,
-                next: Box::new(instantiate_partition_prefix(*next, terminal)),
-            }
-        }
+            next: Box::new(instantiate_partition_prefix(*next, terminal)),
+        },
         SourcePrefixTemplate::LetBody { body, env, next } => SourceContinuation::LetBody {
             body,
             env,
