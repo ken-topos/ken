@@ -430,8 +430,28 @@ fn check_manifest_coverage() {
 // every other gate stays green — `sources = []` in particular means "what
 // grounds it" is not mechanically declared, so `sources` is required
 // non-empty, not merely present.
-fn check_manifest_completeness() {
+fn invalid_kind_violations(entries: &[DocEntry]) -> Vec<String> {
     const VALID_KINDS: &[&str] = &["explanatory", "portal", "reference", "status", "tutorial"];
+    let mut bad = Vec::new();
+
+    for entry in entries {
+        if !entry.kind.is_empty() && !VALID_KINDS.contains(&entry.kind.as_str()) {
+            let label = if entry.path.is_empty() {
+                "<no path>"
+            } else {
+                &entry.path
+            };
+            bad.push(format!(
+                "{label}: kind {:?} is not one of {VALID_KINDS:?}",
+                entry.kind
+            ));
+        }
+    }
+
+    bad
+}
+
+fn check_manifest_completeness() {
     let entries = load_manifest();
     let mut bad = Vec::new();
     let mut seen_paths: HashSet<String> = HashSet::new();
@@ -447,11 +467,8 @@ fn check_manifest_completeness() {
         }
         if entry.kind.is_empty() {
             bad.push(format!("{label}: missing `kind`"));
-        } else if !VALID_KINDS.contains(&entry.kind.as_str()) {
-            bad.push(format!(
-                "{label}: kind {:?} is not one of {VALID_KINDS:?}",
-                entry.kind
-            ));
+        } else {
+            bad.extend(invalid_kind_violations(std::slice::from_ref(entry)));
         }
         if entry.audience.is_empty() {
             bad.push(format!("{label}: missing `audience`"));
@@ -484,6 +501,22 @@ fn check_manifest_completeness() {
         bad.is_empty(),
         "manifest record(s) with a missing/invalid required field or a duplicate path:\n{}",
         bad.join("\n")
+    );
+}
+
+#[test]
+fn invalid_kind_detector_rejects_case_variant() {
+    let entries = [DocEntry {
+        path: "library/fixture.md".to_string(),
+        kind: "Status".to_string(),
+        ..DocEntry::default()
+    }];
+
+    assert_eq!(
+        invalid_kind_violations(&entries),
+        vec!["library/fixture.md: kind \"Status\" is not one of \
+             [\"explanatory\", \"portal\", \"reference\", \"status\", \"tutorial\"]"
+            .to_string()]
     );
 }
 
@@ -580,27 +613,40 @@ fn registered_record_validation_gates_run() {
     }
 }
 
-#[test]
-fn gate_validation_tokens_are_closed_and_match_applicable_checks() {
-    let entries = load_manifest();
-    let mut bad = Vec::new();
-    let known: BTreeSet<&str> = VALIDATION_GATES.iter().map(|gate| gate.token).collect();
+fn status_record_population_violations(entries: &[DocEntry]) -> Vec<String> {
     let status_records: BTreeSet<&str> = entries
         .iter()
         .filter(|entry| entry.kind == "status")
         .map(|entry| entry.path.as_str())
         .collect();
 
+    if status_records == BTreeSet::from(["library/STATUS.md"]) {
+        Vec::new()
+    } else {
+        vec![format!(
+            "status-kind records were {status_records:?}; expected exactly \
+             {{\"library/STATUS.md\"}}"
+        )]
+    }
+}
+
+#[test]
+fn gate_validation_tokens_are_closed_and_match_applicable_checks() {
+    let entries = load_manifest();
+    let mut bad = Vec::new();
+    let known: BTreeSet<&str> = VALIDATION_GATES.iter().map(|gate| gate.token).collect();
+    let status_record_violations = status_record_population_violations(&entries);
+
     assert_eq!(
         known.len(),
         VALIDATION_GATES.len(),
         "registered record-validation gate tokens must be unique"
     );
-    assert_eq!(
-        status_records,
-        BTreeSet::from(["library/STATUS.md"]),
+    assert!(
+        status_record_violations.is_empty(),
         "check_generated_current is hard-coded to gen-doc-status.sh/library/STATUS.md; a \
-         second status-kind record needs its own registered runner, not `generated-current`"
+         second status-kind record needs its own registered runner, not `generated-current`:\n{}",
+        status_record_violations.join("\n")
     );
 
     for entry in &entries {
@@ -630,6 +676,29 @@ fn gate_validation_tokens_are_closed_and_match_applicable_checks() {
         bad.is_empty(),
         "document(s) with an unknown or incomplete validation list:\n{}",
         bad.join("\n")
+    );
+}
+
+#[test]
+fn status_record_population_detector_rejects_second_status_record() {
+    let entries = [
+        DocEntry {
+            path: "library/STATUS.md".to_string(),
+            kind: "status".to_string(),
+            ..DocEntry::default()
+        },
+        DocEntry {
+            path: "library/second-status.md".to_string(),
+            kind: "status".to_string(),
+            ..DocEntry::default()
+        },
+    ];
+
+    let bad = status_record_population_violations(&entries);
+    assert_eq!(bad.len(), 1, "expected one population violation: {bad:?}");
+    assert!(
+        bad[0].contains("library/STATUS.md") && bad[0].contains("library/second-status.md"),
+        "violation must name the complete status-record population: {bad:?}"
     );
 }
 
