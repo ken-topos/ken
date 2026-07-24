@@ -19,7 +19,7 @@ declared in [`manifest.toml`](manifest.toml).
 | **Write Ken** — author a checked program | *not yet available here* | planned — Wave 1/3 |
 | **Look something up** — a rule, a diagnostic, a CLI flag | *not yet available here* | planned — Wave 4 |
 | **Find a package** — browse the catalog by task | [`catalog/packages/`](../catalog/packages/README.md) directly, for now | planned generated portal — Wave 5 |
-| **Load agent context** — select product knowledge for a coding agent | [`agent/playbooks/tools/write-ken.md`](../agent/playbooks/tools/write-ken.md), for now | planned — Wave 2 |
+| **Load agent context** — select product knowledge for a coding agent | [`agents/README.md`](agents/README.md) | current |
 
 A route with no library page yet is **planned**, not silently missing — see
 [the Waves table](../docs/program/12-documentation-program.md#4-waves) for

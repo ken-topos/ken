@@ -49,8 +49,11 @@ them from this summary.
 3. Identify the capability value or enclosing handler that supplies authority.
 4. Check the signature and body together.
 5. Run only with an explicit valid entrypoint and host supply.
-6. Stop if any effect lacks a landed label, capability path, or supported
-   driver.
+6. Stop if a current artifact establishes that an effect lacks a landed label,
+   capability path, or supported driver. If the loaded context does not settle
+   presence or absence, report that execution support is **not established by
+   the loaded evidence**; do not convert missing evidence into an unavailable
+   capability claim.
 
 ## 7. Failure signatures
 
@@ -78,4 +81,7 @@ The FFI/platform surface is deliberately outside this module. Not every
 specified effect or handler has a checked catalog example or a host driver on
 every execution path. If no landed capability and driver exist for the
 requested effect, refuse to author the boundary instead of inventing syntax or
-claiming that a row alone makes it executable.
+claiming that a row alone makes it executable. The absence of a host driver is
+itself an as-built claim requiring a current source or test: when the selected
+context does not identify one, say only that the driver is **not established
+here**, not that no driver is landed.

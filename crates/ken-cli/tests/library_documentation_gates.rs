@@ -582,6 +582,11 @@ const VALIDATION_GATES: &[ValidationGate] = &[
         run: check_document_kinds,
     },
     ValidationGate {
+        token: "checked-examples",
+        applies: applies_to_checked_example_records,
+        run: check_checked_examples,
+    },
+    ValidationGate {
         token: "links",
         applies: applies_to_every_record,
         run: check_links,
@@ -3086,6 +3091,12 @@ fn agent_evaluation_tasks_and_packs_cover_each_other_exactly() {
         .map(|task| {
             let pack = record_scalar(task, "pack");
             assert!(!pack.is_empty(), "{} selects no pack", record_scalar(task, "id"));
+            let fixture = record_scalar(task, "fixture");
+            assert!(
+                root.join(fixture).is_file(),
+                "{} fixture does not exist: {fixture}",
+                record_scalar(task, "id")
+            );
             pack.to_string()
         })
         .collect();
@@ -3105,10 +3116,95 @@ fn agent_evaluation_tasks_and_packs_cover_each_other_exactly() {
         !refusal.arrays.get("must_refuse").unwrap_or(&Vec::new()).is_empty(),
         "refusal task must name prohibited inventions"
     );
+
+    let results_src =
+        std::fs::read_to_string(agent_root.join("evaluations/results-2026-07-24.toml"))
+            .expect("read cold-context evaluation results");
+    let runs = parse_controlled_records(&results_src, "run");
+    assert!(
+        runs.len() >= tasks.len(),
+        "evaluation results must record at least one run per task"
+    );
+    let task_ids: BTreeSet<String> = tasks
+        .iter()
+        .map(|task| record_scalar(task, "id").to_string())
+        .collect();
+    let mut latest = BTreeMap::new();
+    let mut observed_invention_failure = false;
+    for run in &runs {
+        let task_id = record_scalar(run, "task_id");
+        assert!(task_ids.contains(task_id), "result names unknown task {task_id:?}");
+        for field in [
+            "run_id",
+            "variant",
+            "seat_id",
+            "cold_evidence",
+            "pack",
+            "correctness",
+            "cited_authority",
+            "validation",
+        ] {
+            assert!(
+                !record_scalar(run, field).is_empty(),
+                "{task_id}: result omits axis/evidence field {field:?}"
+            );
+        }
+        for field in [
+            "correctness_evidence",
+            "unnecessary_loads",
+            "inventions",
+            "authority_paths",
+            "exact_loads",
+        ] {
+            assert!(
+                run.arrays.contains_key(field),
+                "{task_id}: result omits array axis/evidence field {field:?}"
+            );
+        }
+        if !run.arrays["inventions"].is_empty() {
+            observed_invention_failure = true;
+            assert_ne!(
+                record_scalar(run, "correctness"),
+                "correct",
+                "{task_id}: a run with an invention cannot be scored correct"
+            );
+        }
+        latest.insert(task_id.to_string(), run);
+    }
+    assert!(
+        observed_invention_failure,
+        "results must preserve the initial invented-capability failure, not smooth it into a pass"
+    );
+    assert_eq!(
+        latest.keys().cloned().collect::<BTreeSet<_>>(),
+        task_ids,
+        "results do not close every evaluation task"
+    );
+    for (task_id, run) in latest {
+        assert_eq!(
+            record_scalar(run, "correctness"),
+            "correct",
+            "{task_id}: latest cold result is not correct"
+        );
+        assert!(
+            run.arrays["inventions"].is_empty(),
+            "{task_id}: latest cold result invents syntax or capability"
+        );
+        assert_eq!(
+            record_scalar(run, "cited_authority"),
+            "complete",
+            "{task_id}: latest cold result does not cite complete authority"
+        );
+    }
 }
 
 fn has_checked_examples(src: &str) -> bool {
-    src.contains("```ken example") || src.contains("```ken reject")
+    src.lines().any(|line| {
+        matches!(
+            line.trim(),
+            "```ken example" | "```ken reject"
+        )
+    })
 }
 
 fn applies_to_checked_example_records(entry: &DocEntry) -> bool {

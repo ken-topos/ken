@@ -1,0 +1,4 @@
+Using the landed Console text package, sketch its supported text boundary.
+Name the effect row, authority supply, validation, and execution evidence
+boundary. Distinguish “not established by the selected context” from
+“unavailable”; do not invent either the presence or absence of a host binding.

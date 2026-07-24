@@ -64,3 +64,8 @@ the answer.
 
 The corpus is a bounded oracle. A green suite does not establish behavior no
 task exercises.
+
+The first run and its held-back repair are recorded in
+`results-2026-07-24.toml`. The record preserves the initial invented
+capability-absence claim as a suite failure, then reports the corrected cold
+rerun separately.

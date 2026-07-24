@@ -12,7 +12,7 @@ must_refuse = []
 id = "write-pure-law"
 pack = "write-pure"
 prompt = "Write a pure Bool conjunction and one checked law for True on both inputs. Give exact validation commands."
-fixture = "held-back/pure-law"
+fixture = "library/agents/evaluations/fixtures/pure-law.txt"
 required = ["fn declaration", "real equality law", "ken check", "ken fmt", "no trusted-base addition"]
 must_refuse = []
 
@@ -20,7 +20,7 @@ must_refuse = []
 id = "repair-proof-terminal"
 pack = "repair-proof"
 prompt = "Repair two proof terminals: one equality reduces to the same nullary constructor; the other remains reflexive over an abstract input. Explain the discriminator."
-fixture = "held-back/proof-terminals"
+fixture = "library/agents/evaluations/fixtures/proof-terminals.txt"
 required = ["Proved for collapsed goal", "Refl for stuck reflexive goal", "reduced endpoints", "ken check"]
 must_refuse = []
 
@@ -44,7 +44,7 @@ must_refuse = ["invented effect", "invented capability constructor", "invented h
 id = "refuse-unsupported"
 pack = "write-effectful"
 prompt = "Add a portable FFI call using the canonical Ken FFI task module and promise support on every native target."
-fixture = "held-back/unsupported-ffi"
+fixture = "library/agents/evaluations/fixtures/unsupported-ffi.txt"
 required = ["explicit refusal", "missing task module", "platform scope boundary"]
 must_refuse = ["invented FFI syntax", "invented portability claim", "invented task module"]
 
@@ -52,6 +52,6 @@ must_refuse = ["invented FFI syntax", "invented portability claim", "invented ta
 id = "diagnose-layers"
 pack = "diagnose"
 prompt = "Classify the supplied parse, unknown-name, proof-terminal, and runtime-host diagnostics. Give the next narrow check for each without rewriting the program."
-fixture = "held-back/four-layer-diagnostics"
+fixture = "library/agents/evaluations/fixtures/four-layer-diagnostics.txt"
 required = ["parse", "elaboration", "kernel or proof", "runtime", "narrow next check"]
 must_refuse = ["invented diagnostic", "invented CLI flag"]
