@@ -14,19 +14,30 @@
 > `647a2e5b` · `DOC-GATE-CONTROL-BINDING` `f0ceb702` · `RT-PLANNER-DIAGNOSTIC-K`
 > `36dd61f6`, plus steward publishes through #932.
 >
-> ### ⚡ B1 IS PUBLISHING — check `origin/main` FIRST, it may have landed
+> ### ✅ BOTH LANDED. `origin/main = 5554b33f`.
 >
-> - ✅ **`DOC-GATE-WIRE-BINDING` LANDED** — `a9860e9c`, PR #933, all CI green.
->   ⇒ `DOC-W2`'s manifest step is now unblocked (rebase onto the
->   `document-kind` row before writing records).
-> - **⚡ `RT-NATIVE-FNSPLIT` Boundary B1 — THE OPERATOR PRIORITY — PR #934 open at
->   exact `3d04293a`**, publisher polling CI (669s wait; NOT doc-only). Decision
->   `dec_5cb9mvk1tx0k2` resolved, QA PASS + Architect APPROVE.
->   **Pre-publish checks all re-run against the ADVANCED `main`:** intersection
->   **empty**; dep `36dd61f6` **is an ancestor** of the candidate; `fixed_k`
->   constancy assertion present; **zero wildcard arms** in `semantic_ir.rs`.
->   ⇒ **On resume: verify it landed BY CONTENT on `main`, never by exit code.**
->   Then `RT-PLANNER-ATTRIB-K` unblocks (contends on `static_transition.rs`).
+> - ✅ **`RT-NATIVE-FNSPLIT` Boundary B1 — `5554b33f`, PR #934. THE OPERATOR
+>   PRIORITY, DELIVERED.** Closed on the **first candidate** — no review folds, no
+>   re-anchor, no hard-stop. Verified by content: `semantic_ir.rs` present,
+>   **zero wildcard arms**, `build_semantic_plane` at 5 sites, `fixed_k`
+>   assertion intact, sibling `document-kind` row survived. **Retros IN.**
+> - ✅ **`DOC-GATE-WIRE-BINDING` — `a9860e9c`, PR #933.** Closes adversary I1.
+>   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
+>   the AC rather than gaming it.
+>
+> ### ⇢ NEXT ACT — runtime ring is COMPACTING for `RT-PLANNER-ATTRIB-K`
+>
+> Retros in, ring quiescent, `handoff-gate-compact.sh` run. **On resume: verify
+> the `Context compacted` marker on all three panes, then KICK
+> `RT-PLANNER-ATTRIB-K`** (XS, `ready`, frame
+> `docs/program/issues/RT-PLANNER-ATTRIB-K.md`, dependency edge CLEARED).
+> ⛔ **B2 is NOT next and is not framed for release.**
+>
+> **Verify ring:** retros in, **no WP queued** — leave idle.
+> **Doc ring:** authoring `DOC-W2` on `wp/DOC-W2-agent-core-packs`, origin tip
+> `720f3d33` (rebased onto `a9860e9c`; I force-with-lease pushed it). Four
+> Steward frame rulings in `docs/program/issues/DOC-W2.md` §6a — R1 gate home,
+> R2 pack/schema predicate, R3 `checked-examples` oracle, and `tt`→`Proved`.
 >
 > ### Boundary A / B — the concepts, for a cold resume
 >
