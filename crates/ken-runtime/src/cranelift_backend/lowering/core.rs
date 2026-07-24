@@ -3561,6 +3561,13 @@ impl<'a> Lowering<'a> {
             return Ok(control);
         }
 
+        if control.selected.cursor != invocation.resume_cursor {
+            return Err(unsupported(
+                "NativeExitScopeTransitionV1",
+                "partitioned recursor invocation resume owner is not the current selected head",
+            ));
+        }
+        control.selected.cursor_instance = invocation.resume_cursor_instance;
         let resume_active = source_active_cursor(
             &control.selected,
             &control.selected_lineage,
