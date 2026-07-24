@@ -25,19 +25,59 @@
 >   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
 >   the AC rather than gaming it.
 >
-> ### ⇢ NEXT ACT — runtime ring is COMPACTING for `RT-PLANNER-ATTRIB-K`
+> ### ✅ `RT-PLANNER-ATTRIB-K` IS KICKED AND RUNNING (2026-07-24 ~23:0xZ)
 >
-> Retros in, ring quiescent, `handoff-gate-compact.sh` run. **On resume: verify
-> the `Context compacted` marker on all three panes, then KICK
-> `RT-PLANNER-ATTRIB-K`** (XS, `ready`, frame
-> `docs/program/issues/RT-PLANNER-ATTRIB-K.md`, dependency edge CLEARED).
-> ⛔ **B2 is NOT next and is not framed for release.**
+> Full handoff gate run: retros in → quiescent → all three panes verified
+> `Context compacted` at worktree `5554b33f` → contention checked on **both**
+> axes → tracker flipped `active` → kicked → **implementer confirmed `Working`**.
+> Runtime ring is turning; leader idle-after-dispatch (no capacity banner).
+>
+> ⛔ **B2 is NOT next and is not framed for release.** Honor the ring's own B1
+> carry: *gate the sole exhaustive builder before allowing downstream body work.*
+>
+> **⚠ THE AMENDED FRAME IS NOT ON `main`.** It is on **`origin/steward/work` =
+> `77fb493b`** (pushed for exactly this reason). `origin/main`'s copy carries the
+> **stale** anchors and will until this rides a publish. The runtime leader hit
+> this and blocked — see the defect note below.
+>
+> **What I changed in the frame before kicking** (all verified against
+> `5554b33f`, none of it optional):
+>
+> - **Re-anchored every line number** — B1 renumbered the file to 2495 lines.
+>   D1 `:860-863`→**`:923-926`** · D2 `:1523-1591`→**`:2033-2102`** · six `u32`
+>   sites →**`:276,:287,:336,:375,:389,:783`** · census →**`:1994/:2014/:2019`**.
+> - **AC-1's window is now TWO files.** B1 added the submodule
+>   `planning/static_transition/semantic_ir.rs` with **7 capacity + 27 invariant
+>   sites of its own**, all of which stay put. Enumerating one file would be
+>   *correct about the wrong universe*.
+> - **⭐ D4 — folded in adversary finding K1** (preventive). B1's frame-rotation
+>   independence control is **vacuous if frames ever go uniform** (a rotation is
+>   a no-op when all elements are equal) — nothing rules that out. Verified
+>   myself: unguarded, and live today. Folded here rather than filed separately
+>   because it is the **same file** and would otherwise contend.
 >
 > **Verify ring:** retros in, **no WP queued** — leave idle.
 > **Doc ring:** authoring `DOC-W2` on `wp/DOC-W2-agent-core-packs`, origin tip
-> `720f3d33` (rebased onto `a9860e9c`; I force-with-lease pushed it). Four
-> Steward frame rulings in `docs/program/issues/DOC-W2.md` §6a — R1 gate home,
-> R2 pack/schema predicate, R3 `checked-examples` oracle, and `tt`→`Proved`.
+> `720f3d33`. Four Steward frame rulings in `docs/program/issues/DOC-W2.md` §6a.
+> **I returned a `FAIL` Steward-surface review on `720f3d33`** (`agent/` domain
+> only): F1 the local-binding convention migrated as a **fragment** (a caveat
+> without its rule or LET2's required counter-rule), F2 the `C_instance_T`
+> gotcha lost its only teaching site, F3 the Findings loop was deleted though
+> the migration ledger contracts the skill to *keep its workflow trigger*.
+> ⚠ **And it touches `agent/`, so §14a does NOT exempt it — the Architect's vote
+> IS required**, in parallel with the Librarian.
+>
+> ### ⛔ MY DEFECT THIS SESSION — a frame amendment nobody could read
+>
+> I amended the ATTRIB-K frame **locally**, committed to `steward/work`, and
+> kicked the ring **without publishing it**. The leader did the right thing —
+> `git show origin/main:<frame>` — and correctly found the **stale** anchors, so
+> the frame and the kickoff disagreed and the ring blocked. Fixed by pushing
+> `steward/work` to origin.
+>
+> ★ **A frame amendment that is not on a fetchable ref has not happened.** The
+> kickoff message scrolls away; the frame is what persists. Publish the frame
+> **before** the mention, or say explicitly in the mention which ref carries it.
 >
 > ### Boundary A / B — the concepts, for a cold resume
 >
