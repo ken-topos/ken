@@ -55,16 +55,18 @@ harness defect.
 ruled that unacceptable without understanding the scaling law. RT-NATIVE-FNSPLIT does
 **not merge** until:
 1. **Empirical scaling harness (Runtime, permanent tests):** minimal programs at
-   **n = 3,4,5,6,7** nested resource brackets, each measured under a bounded harness
-   (`prlimit`, fail-safe) for compile wall-time, peak RSS, and internal counts
-   (distinct interned semantic states, defined helpers, total DFG/instr/blocks). Report
-   the table + fitted growth curve.
-2. **Analytical scaling model (Architect):** predicted order of growth vs. n; whether
-   103 s/4 GB @ n=4 is bad-constants-on-**O(n)** or residual super-linearity (→ further
-   mechanism gap). Must be **research-grounded** (research dispatch `evt_62fqpe7pfvym4`).
-3. **Verdict:** either (a) empirically+analytically **linear O(n)** + a plan to reduce
-   the constants; or (b) a **research-supported** reason growth is inherently
-   super-linear + an explicit operator ceiling/acceptability decision.
+   **n = 3,4,5,6,7** nested resource brackets, each measured under a bounded
+   harness (`prlimit`, fail-safe) for compile wall-time, peak RSS, and internal
+   counts (distinct interned semantic states, defined helpers, total
+   DFG/instr/blocks). Report the table + fitted growth curve.
+2. **Analytical scaling model (Architect):** predicted order of growth vs. n;
+   whether 103 s/4 GB @ n=4 is bad-constants-on-**O(n)** or residual
+   super-linearity (→ further mechanism gap). Must be
+   **research-grounded** (research dispatch `evt_62fqpe7pfvym4`).
+3. **Verdict:** either (a) empirically+analytically **linear O(n)** + a plan
+   to reduce the constants; or (b) a **research-supported** reason growth is
+   inherently super-linear + an explicit operator ceiling/acceptability
+   decision.
 
 Gates the [[NATIVE-HANDLE-CARRIER]] fast-follow + [[PX8-F-CAP-41]] too.
 
@@ -75,15 +77,24 @@ Architect re-derives its own count across compactions; **on any disagreement
 this line wins.** Re-read this line on every hard-stop.
 
 ```text
+RECUT CHAIN (live, from kickoff evt_2kgfmmeeh2x7w, 2026-07-24)
+hard-stop count    = 0
+NEXT RESEARCH PULL = hard-stop #3, then #6, #9, #12, …
+
+HELD CHAIN (closed, historical — does NOT carry forward)
 hard-stop count = 33            (FROZEN)
 cadence           = SUSPENDED   (viability ruling 2026-07-24)
-NEXT RESEARCH PULL = re-arm when the recut frame opens, then every 3rd
 ```
 
-⛔ **The cadence is suspended with the machine it counted.** #34 was raised but
-is **evidence, not a ruled stop**, so the count stays 33. Do **not** resume an
-every-3rd pull against the held representation — re-arm this line against the
-**recut** chain when the new frame opens.
+✅ **RE-ARMED 2026-07-24** when the recut frame was kicked to the Runtime ring.
+The old count is **frozen and does not carry**: it counted the *held*
+representation, and the recut replaces the machine those stops were about. The
+recut chain starts at **zero** and pulls research on **every 3rd** hard-stop.
+
+⛔ The frozen 33 is retained above as history only. #34 was raised but is
+**evidence, not a ruled stop**, which is why the held count stayed at 33 rather
+than advancing. Do not resume an every-3rd pull against the held
+representation — that chain is closed.
 
 **Advisories on record:** #24 `evt_5gshpmyb2ta79` · #27 `evt_7s6b3zg82n7n5` ·
 #30 `evt_1stmfwh0tj5gm` · #33 `evt_3vr382mrv99pe` (requested by Architect
@@ -225,6 +236,24 @@ abrupt exit, trap identity/order, joins, and affine single-spend differentials.
 n=3…7, constant key/frame/env/pending/path maxima, bounded K states per source
 node, and stable first differences for graph, code **and descriptor** work —
 *not merely state/edge counts*.
+
+### ✅ THE CHECKPOINT IS DURABLE — `b077eb7a` is tagged ON ORIGIN
+
+```
+refs/tags/rt-native-fnsplit-checkpoint-b077eb7a  ->  b077eb7a   (verified by ls-remote)
+```
+
+⚠ **When found, `b077eb7a` lived on ONE local branch
+(`wp/RT-NATIVE-FNSPLIT-native-partition`) with ZERO refs on origin** — no copy
+anywhere off this box, in a repo where `handoff-gate-compact.sh` hard-resets
+branches and where a `git branch -f` would have orphaned it silently. It carries
+the proved semantics of #24–#33 that **Phase 1 must measure and Phases 2–3 must
+port from**; losing it would have cost the recut its reference implementation.
+
+★ **Same failure family as the QA bound-verdict attestations:** *a workaround (or
+a hold) that leaves load-bearing state on one local ref in one clone.* A "frozen"
+checkpoint is only frozen if something outside this machine holds it. ⛔ Do not
+delete this tag.
 
 ### Steward duties from this ruling
 
