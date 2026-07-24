@@ -1658,6 +1658,7 @@ impl<'a> Lowering<'a> {
         builder.append_block_param(merge, types::I64);
         builder.ins().brif(success, ok_block, &[], err_block, &[]);
         let mut exit_merge = None;
+        let producer_tail = self.active_partition_producer_kont;
         for (block, constructor, payload) in [
             (ok_block, ok_constructor, ok),
             (err_block, err_constructor, error),
@@ -1677,6 +1678,15 @@ impl<'a> Lowering<'a> {
             } else {
                 Lowered::Trap(producer_default.clone())
             };
+            let lowered = if let Some(producer_tail) = producer_tail {
+                self.transfer_partition_producer_tail_before_scalarization(
+                    builder,
+                    lowered,
+                    producer_tail,
+                )?
+            } else {
+                lowered
+            };
             let (value, is_exit) =
                 self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
             Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
@@ -1689,13 +1699,26 @@ impl<'a> Lowering<'a> {
             tag: builder.block_params(merge)[0],
             payload: builder.block_params(merge)[1],
         };
-        Ok(if exit_merge == Some(true) {
+        let lowered = if exit_merge == Some(true) {
             Lowered::ProcessExitStatus {
                 value: pair.payload,
             }
         } else {
             self.lowered_from_scalar_pair(ScalarMergeKind::Int, pair)
-        })
+        };
+        if let Some(tail) = producer_tail {
+            let fanout_site_id = self.partition_next_site;
+            self.partition_next_site =
+                self.partition_next_site.checked_add(1).ok_or_else(|| {
+                    unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "inline producer-tail fanout identity exhausted",
+                    )
+                })?;
+            Self::complete_partition_producer_tail(lowered, tail, fanout_site_id)
+        } else {
+            Ok(lowered)
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1756,6 +1779,81 @@ impl<'a> Lowering<'a> {
 
     fn require_complete_partition_branch_returns(&self) -> Result<(), CraneliftBackendError> {
         self.partition_branch_returns.require_complete()
+    }
+
+    fn complete_partition_producer_tail(
+        lowered: Lowered,
+        tail: PartitionProducerKontCursor,
+        fanout_site_id: u64,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        match lowered {
+            Lowered::ProcessExitStatus { value } => Ok(Lowered::CompletedProducerTail {
+                value,
+                completion: PartitionProducerTailCompletion {
+                    tail_site_id: tail.site_id,
+                    fanout_site_id,
+                },
+            }),
+            Lowered::CompletedProducerTail { .. } => Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer-tail completion was replayed by an ancestor fanout",
+            )),
+            _ => Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer-tail fanout completed without an ExitCode result",
+            )),
+        }
+    }
+
+    fn consume_partition_producer_tail_completion(
+        lowered: Lowered,
+        expected: PartitionProducerKontCursor,
+    ) -> Result<(Lowered, bool), CraneliftBackendError> {
+        match lowered {
+            Lowered::CompletedProducerTail { value, completion } => {
+                if completion.tail_site_id != expected.site_id {
+                    return Err(unsupported(
+                        "NativeProducerContinuationStepV1",
+                        format!(
+                            "producer-tail completion from fanout {} names the wrong exact tail",
+                            completion.fanout_site_id
+                        ),
+                    ));
+                }
+                Ok((Lowered::ProcessExitStatus { value }, true))
+            }
+            lowered => Ok((lowered, false)),
+        }
+    }
+
+    fn transfer_partition_producer_tail_before_scalarization(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        lowered: Lowered,
+        tail: PartitionProducerKontCursor,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let (lowered, completed_by_descendant) =
+            Self::consume_partition_producer_tail_completion(lowered, tail)?;
+        match lowered {
+            Lowered::Trap(_) => Ok(lowered),
+            Lowered::ProcessExitStatus { .. } if completed_by_descendant => Ok(lowered),
+            Lowered::ProcessExitStatus { .. } => Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "fanout scalarized before discharging its exact producer tail",
+            )),
+            lowered => {
+                let completed = self.call_partition_producer_kont(builder, tail, lowered)?;
+                let (lowered, consumed) =
+                    Self::consume_partition_producer_tail_completion(completed, tail)?;
+                if !consumed {
+                    return Err(unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "producer-tail helper returned without exact completion evidence",
+                    ));
+                }
+                Ok(lowered)
+            }
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1894,9 +1992,14 @@ impl<'a> Lowering<'a> {
         }
         builder.switch_to_block(merge);
         self.partition_cut_armed = false;
-        Ok(Lowered::ProcessExitStatus {
+        let lowered = Lowered::ProcessExitStatus {
             value: builder.block_params(merge)[0],
-        })
+        };
+        if let Some(tail) = self.active_partition_producer_kont {
+            Self::complete_partition_producer_tail(lowered, tail, partition_site_id)
+        } else {
+            Ok(lowered)
+        }
     }
 
     fn lower_computational_producer_expr(
@@ -2539,6 +2642,20 @@ impl<'a> Lowering<'a> {
                             eliminators,
                         );
                     }
+                    let producer_tail = self.active_partition_producer_kont;
+                    let fanout_site_id = if producer_tail.is_some() {
+                        let site_id = self.partition_next_site;
+                        self.partition_next_site =
+                            self.partition_next_site.checked_add(1).ok_or_else(|| {
+                                unsupported(
+                                    "NativeProducerContinuationStepV1",
+                                    "Bool producer-tail fanout identity exhausted",
+                                )
+                            })?;
+                        Some(site_id)
+                    } else {
+                        None
+                    };
                     let true_block = builder.create_block();
                     let false_block = builder.create_block();
                     let merge = builder.create_block();
@@ -2556,6 +2673,15 @@ impl<'a> Lowering<'a> {
                             producer_env,
                             eliminators,
                         )?;
+                        let lowered = if let Some(producer_tail) = producer_tail {
+                            self.transfer_partition_producer_tail_before_scalarization(
+                                builder,
+                                lowered,
+                                producer_tail,
+                            )?
+                        } else {
+                            lowered
+                        };
                         let (value, is_exit) =
                             self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
                         Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
@@ -2568,13 +2694,20 @@ impl<'a> Lowering<'a> {
                         tag: builder.block_params(merge)[0],
                         payload: builder.block_params(merge)[1],
                     };
-                    return Ok(if exit_merge == Some(true) {
+                    let lowered = if exit_merge == Some(true) {
                         Lowered::ProcessExitStatus {
                             value: pair.payload,
                         }
                     } else {
                         self.lowered_from_scalar_pair(ScalarMergeKind::Int, pair)
-                    });
+                    };
+                    return if let (Some(tail), Some(site_id)) =
+                        (producer_tail, fanout_site_id)
+                    {
+                        Self::complete_partition_producer_tail(lowered, tail, site_id)
+                    } else {
+                        Ok(lowered)
+                    };
                 }
                 if let Lowered::HostResult {
                     success,
@@ -2770,6 +2903,20 @@ impl<'a> Lowering<'a> {
                         eliminators,
                     );
                 }
+                let producer_tail = self.active_partition_producer_kont;
+                let fanout_site_id = if producer_tail.is_some() {
+                    let site_id = self.partition_next_site;
+                    self.partition_next_site =
+                        self.partition_next_site.checked_add(1).ok_or_else(|| {
+                            unsupported(
+                                "NativeProducerContinuationStepV1",
+                                "If producer-tail fanout identity exhausted",
+                            )
+                        })?;
+                    Some(site_id)
+                } else {
+                    None
+                };
                 let then_block = builder.create_block();
                 let else_block = builder.create_block();
                 let merge = builder.create_block();
@@ -2785,6 +2932,15 @@ impl<'a> Lowering<'a> {
                         producer_env,
                         eliminators,
                     )?;
+                    let lowered = if let Some(producer_tail) = producer_tail {
+                        self.transfer_partition_producer_tail_before_scalarization(
+                            builder,
+                            lowered,
+                            producer_tail,
+                        )?
+                    } else {
+                        lowered
+                    };
                     let (value, is_exit) =
                         self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
                     Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
@@ -2797,13 +2953,18 @@ impl<'a> Lowering<'a> {
                     tag: builder.block_params(merge)[0],
                     payload: builder.block_params(merge)[1],
                 };
-                Ok(if exit_merge == Some(true) {
+                let lowered = if exit_merge == Some(true) {
                     Lowered::ProcessExitStatus {
                         value: pair.payload,
                     }
                 } else {
                     self.lowered_from_scalar_pair(ScalarMergeKind::Int, pair)
-                })
+                };
+                if let (Some(tail), Some(site_id)) = (producer_tail, fanout_site_id) {
+                    Self::complete_partition_producer_tail(lowered, tail, site_id)
+                } else {
+                    Ok(lowered)
+                }
             }
             _ => {
                 let value = self.lower_expr(builder, scrutinee, producer_env)?;
@@ -3506,7 +3667,25 @@ impl<'a> Lowering<'a> {
                 )
             })?;
         self.active_partition_producer_kont = previous;
-        self.call_partition_producer_kont(builder, head, value)
+        let completed = self.call_partition_producer_kont(builder, head, value)?;
+        let (lowered, consumed) =
+            Self::consume_partition_producer_tail_completion(completed, head)?;
+        if !consumed {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "selected-head helper returned without exact completion evidence",
+            ));
+        }
+        Self::complete_partition_producer_tail(
+            lowered,
+            successor,
+            u64::try_from(head.site_id).map_err(|_| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "selected-head site identity exceeds producer-tail evidence",
+                )
+            })?,
+        )
     }
 
     fn producer_kont_is_scope_exit_bridge(
@@ -3825,7 +4004,19 @@ impl<'a> Lowering<'a> {
                     },
                 ));
         }
-        Ok(self.lowered_from_scalar_pair(plan.return_kind, NativeScalarPairV1 { tag, payload }))
+        let lowered =
+            self.lowered_from_scalar_pair(plan.return_kind, NativeScalarPairV1 { tag, payload });
+        if plan.return_kind == ScalarMergeKind::ExitCode {
+            let transfer_site_id = u64::try_from(state_id).map_err(|_| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "producer state identity exceeds producer-tail evidence",
+                )
+            })?;
+            Self::complete_partition_producer_tail(lowered, cursor, transfer_site_id)
+        } else {
+            Ok(lowered)
+        }
     }
 
     fn lower_computational_match_value_composed(
@@ -4674,9 +4865,30 @@ impl<'a> Lowering<'a> {
         self.active_partition_return_kind = None;
         self.active_partition_producer_kont = None;
         let lowered = lowered?;
+        let (lowered, producer_tail_completed) =
+            Self::consume_partition_producer_tail_completion(lowered, producer_kont)?;
         let lowered = match lowered {
-            Lowered::Trap(_) | Lowered::ProcessExitStatus { .. } => lowered,
-            value => self.call_partition_producer_kont(builder, producer_kont, value)?,
+            Lowered::Trap(_) => lowered,
+            Lowered::ProcessExitStatus { .. } if producer_tail_completed => lowered,
+            Lowered::ProcessExitStatus { .. } => {
+                return Err(unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "outlined arm returned an unaccounted scalar with a live producer tail",
+                ));
+            }
+            value => {
+                let completed =
+                    self.call_partition_producer_kont(builder, producer_kont, value)?;
+                let (lowered, consumed) =
+                    Self::consume_partition_producer_tail_completion(completed, producer_kont)?;
+                if !consumed {
+                    return Err(unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "outlined arm producer helper returned without exact completion evidence",
+                    ));
+                }
+                lowered
+            }
         };
         match lowered {
             Lowered::Trap(trap) => {
@@ -5254,6 +5466,7 @@ impl<'a> Lowering<'a> {
         env: Vec<Lowered>,
         mut control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
+        let producer_tail = control.producer_kont;
         if control.selected.parent.is_some()
             || !env.iter().all(partition_lowered_is_admissible)
             || !partition_scope_is_admissible(&control.selected.selected_scope)
@@ -5448,10 +5661,21 @@ impl<'a> Lowering<'a> {
                 },
             ));
         }
-        Ok(self.lowered_from_scalar_pair(
+        let lowered = self.lowered_from_scalar_pair(
             expected_contract.required_kind,
             NativeScalarPairV1 { tag, payload },
-        ))
+        );
+        if let Some(tail) = producer_tail {
+            let transfer_site_id = u64::try_from(state_id).map_err(|_| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "source Eval state identity exceeds producer-tail evidence",
+                )
+            })?;
+            Self::complete_partition_producer_tail(lowered, tail, transfer_site_id)
+        } else {
+            Ok(lowered)
+        }
     }
 
     fn call_partition_source_kont<'b>(
@@ -5461,6 +5685,7 @@ impl<'a> Lowering<'a> {
         input: Lowered,
         mut control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
+        let producer_tail = control.producer_kont;
         if !partition_lowered_is_admissible(&input) {
             return Err(unsupported(
                 "NativeSourceContinuationStepV1",
@@ -5637,10 +5862,21 @@ impl<'a> Lowering<'a> {
                     return_contract: expected_contract.clone(),
                 }));
         }
-        Ok(self.lowered_from_scalar_pair(
+        let lowered = self.lowered_from_scalar_pair(
             expected_contract.required_kind,
             NativeScalarPairV1 { tag, payload },
-        ))
+        );
+        if let Some(tail) = producer_tail {
+            let transfer_site_id = u64::try_from(state_id).map_err(|_| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "SourceKont state identity exceeds producer-tail evidence",
+                )
+            })?;
+            Self::complete_partition_producer_tail(lowered, tail, transfer_site_id)
+        } else {
+            Ok(lowered)
+        }
     }
 
     fn call_partition_source_resume(
@@ -5811,10 +6047,21 @@ impl<'a> Lowering<'a> {
                     return_contract: expected_contract.clone(),
                 }));
         }
-        Ok(self.lowered_from_scalar_pair(
+        let lowered = self.lowered_from_scalar_pair(
             expected_contract.required_kind,
             NativeScalarPairV1 { tag, payload },
-        ))
+        );
+        if let Some(tail) = producer_kont {
+            let transfer_site_id = u64::try_from(state_id).map_err(|_| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "source-resume state identity exceeds producer-tail evidence",
+                )
+            })?;
+            Self::complete_partition_producer_tail(lowered, tail, transfer_site_id)
+        } else {
+            Ok(lowered)
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -6892,7 +7139,17 @@ impl<'a> Lowering<'a> {
             ));
         }
         let lowered = lowered?;
-        let lowered = if matches!(lowered, Lowered::Trap(_)) {
+        let (lowered, successor_completed) = if let Some(successor) = item.successor {
+            Self::consume_partition_producer_tail_completion(lowered, successor)?
+        } else if matches!(lowered, Lowered::CompletedProducerTail { .. }) {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer-tail completion reached an action without its exact successor",
+            ));
+        } else {
+            (lowered, false)
+        };
+        let lowered = if matches!(lowered, Lowered::Trap(_)) || successor_completed {
             lowered
         } else {
             match (&item.action, item.successor) {
@@ -6900,7 +7157,17 @@ impl<'a> Lowering<'a> {
                 (ProducerKontAction::ExitScopeStart { .. }, Some(_)) => lowered,
                 (ProducerKontAction::ExitScopeComplete { .. }, None) => lowered,
                 (_, Some(successor)) => {
-                    self.call_partition_producer_kont(builder, successor, lowered)?
+                    let completed =
+                        self.call_partition_producer_kont(builder, successor, lowered)?;
+                    let (lowered, consumed) =
+                        Self::consume_partition_producer_tail_completion(completed, successor)?;
+                    if !consumed {
+                        return Err(unsupported(
+                            "NativeProducerContinuationStepV1",
+                            "producer successor returned without exact completion evidence",
+                        ));
+                    }
+                    lowered
                 }
                 (_, None) => {
                     return Err(unsupported(
@@ -7487,6 +7754,15 @@ impl<'a> Lowering<'a> {
                                 self.lower_computational_match_value_composed(
                                     builder, value, &prefix,
                                 )?
+                            };
+                            let value = if let Some(producer_tail) = control.producer_kont {
+                                self.call_partition_producer_kont(
+                                    builder,
+                                    producer_tail,
+                                    value,
+                                )?
+                            } else {
+                                value
                             };
                             let (value, actual_kind) = self.merge_planned_scalar_branch(
                                 builder,
@@ -9180,6 +9456,7 @@ impl<'a> Lowering<'a> {
                 Lowered::Int { .. }
                 | Lowered::Bool { .. }
                 | Lowered::ProcessExitStatus { .. }
+                | Lowered::CompletedProducerTail { .. }
                 | Lowered::CapabilityToken { .. }
                 | Lowered::ResourceToken { .. }
                 | Lowered::BoundedNat(_)
@@ -9369,6 +9646,19 @@ impl<'a> Lowering<'a> {
         env: &[Lowered],
         suffix_control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
+        let transferred_producer_tail = self.active_partition_producer_kont;
+        if let (Some(active), Some(control)) =
+            (transferred_producer_tail, suffix_control.producer_kont)
+        {
+            if active.site_id != control.site_id
+                || active.capture_pointer != control.capture_pointer
+            {
+                return Err(unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "host-result fanout active tail disagrees with its Source control tail",
+                ));
+            }
+        }
         let (source_prefix_template, terminal) =
             Self::split_source_prefix(suffix_control.continuation)?;
         let mut local_completion = None;
@@ -9517,6 +9807,18 @@ impl<'a> Lowering<'a> {
                     payload: builder.block_params(merge)[1],
                 },
             );
+            let merged = if let Some(tail) = transferred_producer_tail {
+                Self::complete_partition_producer_tail(merged, tail, partition_site_id)?
+            } else {
+                merged
+            };
+            if matches!(merged, Lowered::CompletedProducerTail { .. }) {
+                self.restore_root_terminal_authority(
+                    root_authority,
+                    suffix_control.terminal_outer,
+                )?;
+                return Ok(merged);
+            }
             if !suffix_pending.is_empty() {
                 if let Some(pending) =
                     own_partition_eliminators(&suffix_pending).filter(|pending| {
@@ -12419,6 +12721,19 @@ impl<'a> Lowering<'a> {
         let ok_block = builder.create_block();
         let err_block = builder.create_block();
         let mut merge_kind = None;
+        let producer_tail = self.active_partition_producer_kont;
+        let fanout_site_id = if producer_tail.is_some() {
+            let site_id = self.partition_next_site;
+            self.partition_next_site = self.partition_next_site.checked_add(1).ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "ordinary host-result fanout identity exhausted",
+                )
+            })?;
+            Some(site_id)
+        } else {
+            None
+        };
         builder.ins().brif(success, ok_block, &[], err_block, &[]);
         for (block, constructor, payload) in [
             (ok_block, ok_constructor, ok),
@@ -12436,6 +12751,15 @@ impl<'a> Lowering<'a> {
             let mut arm_env = vec![payload];
             arm_env.extend_from_slice(env);
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
+            let lowered = if let Some(producer_tail) = producer_tail {
+                self.transfer_partition_producer_tail_before_scalarization(
+                    builder,
+                    lowered,
+                    producer_tail,
+                )?
+            } else {
+                lowered
+            };
             let (value, branch_kind) = self.merge_scalar_branch(builder, lowered, "Match")?;
             Self::record_scalar_merge_kind("Match", &mut merge_kind, branch_kind)?;
             builder
@@ -12447,10 +12771,15 @@ impl<'a> Lowering<'a> {
             tag: builder.block_params(merge)[0],
             payload: builder.block_params(merge)[1],
         };
-        Ok(self.lowered_from_scalar_pair(
+        let lowered = self.lowered_from_scalar_pair(
             merge_kind.expect("HostResult emits both closed alternatives"),
             pair,
-        ))
+        );
+        if let (Some(tail), Some(site_id)) = (producer_tail, fanout_site_id) {
+            Self::complete_partition_producer_tail(lowered, tail, site_id)
+        } else {
+            Ok(lowered)
+        }
     }
 
     fn lower_bounded_nat_match(

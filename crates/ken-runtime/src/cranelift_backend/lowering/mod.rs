@@ -390,6 +390,10 @@ enum Lowered {
     ProcessExitStatus {
         value: cranelift_codegen::ir::Value,
     },
+    CompletedProducerTail {
+        value: cranelift_codegen::ir::Value,
+        completion: PartitionProducerTailCompletion,
+    },
     CapabilityToken {
         value: cranelift_codegen::ir::Value,
     },
@@ -3326,6 +3330,21 @@ impl<'a> Lowering<'a> {
                 },
                 true,
             )),
+            Lowered::CompletedProducerTail { value, .. }
+                if self.active_partition_producer_kont.is_none() =>
+            {
+                Ok((
+                    NativeScalarPairV1 {
+                        tag: zero_tag,
+                        payload: value,
+                    },
+                    true,
+                ))
+            }
+            Lowered::CompletedProducerTail { .. } => Err(unsupported(
+                construct,
+                "producer-tail completion reached a scalar merge before its owner consumed it",
+            )),
             lowered if checked_root_exit_representation => Ok((
                 NativeScalarPairV1 {
                     tag: zero_tag,
@@ -3404,6 +3423,21 @@ impl<'a> Lowering<'a> {
                     payload: value,
                 },
                 ScalarMergeKind::ExitCode,
+            )),
+            Lowered::CompletedProducerTail { value, .. }
+                if self.active_partition_producer_kont.is_none() =>
+            {
+                Ok((
+                    NativeScalarPairV1 {
+                        tag: zero_tag,
+                        payload: value,
+                    },
+                    ScalarMergeKind::ExitCode,
+                ))
+            }
+            Lowered::CompletedProducerTail { .. } => Err(unsupported(
+                construct,
+                "producer-tail completion reached a scalar merge before its owner consumed it",
             )),
             lowered if checked_root_exit_representation => Ok((
                 NativeScalarPairV1 {
@@ -3554,6 +3588,21 @@ impl<'a> Lowering<'a> {
                         payload: value,
                     },
                     ScalarMergeKind::ExitCode,
+                )),
+                Lowered::CompletedProducerTail { value, .. }
+                    if self.active_partition_producer_kont.is_none() =>
+                {
+                    Ok((
+                        NativeScalarPairV1 {
+                            tag: zero_tag,
+                            payload: value,
+                        },
+                        ScalarMergeKind::ExitCode,
+                    ))
+                }
+                Lowered::CompletedProducerTail { .. } => Err(unsupported(
+                    construct,
+                    "producer-tail completion reached a scalar merge before its owner consumed it",
                 )),
                 lowered if self.process_object => Ok((
                     NativeScalarPairV1 {
@@ -6118,7 +6167,7 @@ impl<'a> Lowering<'a> {
                 "Result",
                 "native aggregate result contains a non-constant Bool field",
             )),
-            Lowered::ProcessExitStatus { .. } => Err(unsupported(
+            Lowered::ProcessExitStatus { .. } | Lowered::CompletedProducerTail { .. } => Err(unsupported(
                 "Result",
                 "process exit status cannot escape a native process call",
             )),
@@ -6228,6 +6277,7 @@ fn lowered_value_kind(value: &Lowered) -> &'static str {
         Lowered::Int { .. } => "Int",
         Lowered::Bool { .. } => "Bool",
         Lowered::ProcessExitStatus { .. } => "ProcessExitStatus",
+        Lowered::CompletedProducerTail { .. } => "CompletedProducerTail",
         Lowered::CapabilityToken { .. } => "CapabilityToken",
         Lowered::ResourceToken { .. } => "ResourceToken",
         Lowered::BoundedNat(_) => "BoundedNat",
