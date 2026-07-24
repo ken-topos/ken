@@ -745,6 +745,120 @@ impl From<InvocationTemplateRef> for PartitionInvocationTemplateKey {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct SelectedEdgeDescriptorId(pub(super) u32);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct SelectedEdgeDescriptorKey {
+    checked_frame_id: u64,
+    checked_invocation_source: Option<PartitionInvocationTemplateKey>,
+    edge_ordinal: usize,
+    constructor: RuntimeSymbol,
+    argument_binders: usize,
+    recursive_positions: Vec<usize>,
+    parent: Option<SelectedEdgeDescriptorId>,
+}
+
+impl SelectedEdgeDescriptorKey {
+    pub(super) fn checked_child_return(
+        checked_frame_id: u64,
+        checked_invocation_source: Option<InvocationTemplateRef>,
+        edge_ordinal: usize,
+        case: &crate::RuntimeComputationalMatchCase,
+        parent: Option<SelectedEdgeDescriptorId>,
+    ) -> Self {
+        Self {
+            checked_frame_id,
+            checked_invocation_source: checked_invocation_source.map(Into::into),
+            edge_ordinal,
+            constructor: case.constructor.clone(),
+            argument_binders: case.argument_binders,
+            recursive_positions: case.recursive_positions.clone(),
+            parent,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct SelectedEdgeDescriptor {
+    pub(super) id: SelectedEdgeDescriptorId,
+    pub(super) activation: ContinuationActivationId,
+    pub(super) cursor: ContinuationCursorId,
+    pub(super) scope_origin: RecursorProducerOriginId,
+}
+
+#[derive(Default)]
+pub(super) struct SelectedEdgeDescriptorInterner {
+    by_bucket: BTreeMap<(u64, u64), Vec<SelectedEdgeDescriptorId>>,
+    keys: Vec<SelectedEdgeDescriptorKey>,
+    definitions: Vec<SelectedEdgeDescriptor>,
+    bytes_constructed: usize,
+    bytes_retained: usize,
+    key_bytes_max: usize,
+    exact_comparisons: usize,
+}
+
+impl SelectedEdgeDescriptorInterner {
+    pub(super) fn lookup(
+        &mut self,
+        key: &SelectedEdgeDescriptorKey,
+    ) -> Option<SelectedEdgeDescriptor> {
+        let bucket = partition_static_bucket(key);
+        self.bytes_constructed = self.bytes_constructed.saturating_add(bucket.bytes as usize);
+        self.key_bytes_max = self.key_bytes_max.max(bucket.bytes as usize);
+        self.by_bucket
+            .get(&(bucket.hash, bucket.bytes))
+            .and_then(|candidates| {
+                for candidate in candidates.iter().copied() {
+                    self.exact_comparisons = self.exact_comparisons.saturating_add(1);
+                    if self.keys[candidate.0 as usize] == *key {
+                        return Some(self.definitions[candidate.0 as usize]);
+                    }
+                }
+                None
+            })
+    }
+
+    pub(super) fn intern_new(
+        &mut self,
+        key: SelectedEdgeDescriptorKey,
+        activation: ContinuationActivationId,
+        cursor: ContinuationCursorId,
+        scope_origin: RecursorProducerOriginId,
+    ) -> SelectedEdgeDescriptor {
+        let bucket = partition_static_bucket(&key);
+        let id = SelectedEdgeDescriptorId(
+            u32::try_from(self.keys.len())
+                .expect("compiler-private selected-edge descriptor identity exhausted"),
+        );
+        let descriptor = SelectedEdgeDescriptor {
+            id,
+            activation,
+            cursor,
+            scope_origin,
+        };
+        self.bytes_retained = self.bytes_retained.saturating_add(bucket.bytes as usize);
+        self.key_bytes_max = self.key_bytes_max.max(bucket.bytes as usize);
+        self.keys.push(key);
+        self.definitions.push(descriptor);
+        self.by_bucket
+            .entry((bucket.hash, bucket.bytes))
+            .or_default()
+            .push(id);
+        descriptor
+    }
+
+    pub(super) fn counts(&self) -> (usize, usize, usize, usize, usize) {
+        (
+            self.definitions.len(),
+            self.bytes_constructed,
+            self.bytes_retained,
+            self.key_bytes_max,
+            self.exact_comparisons,
+        )
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum PartitionLayerRoleKey {
     SelectsOccurrence {
@@ -1172,6 +1286,7 @@ fn partition_scope_key(scope: &Option<OwnedSelectedScope>) -> Option<PartitionSe
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PartitionSelectedContinuationKey {
+    selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
     pending: Vec<PartitionEliminatorKey>,
     selected_has_ancestry: bool,
     selected_scope: Option<PartitionSelectedScopeKey>,
@@ -1183,6 +1298,7 @@ fn partition_selected_lineage_key(
     lineage
         .iter()
         .map(|selected| PartitionSelectedContinuationKey {
+            selected_edge_descriptor: selected.selected_edge_descriptor,
             pending: selected
                 .pending
                 .iter()
@@ -1198,6 +1314,7 @@ fn partition_selected_key(
     selected: &OwnedSourceSelectedContinuation,
 ) -> PartitionSelectedContinuationKey {
     PartitionSelectedContinuationKey {
+        selected_edge_descriptor: selected.selected_edge_descriptor,
         pending: selected
             .pending
             .iter()
@@ -1222,6 +1339,7 @@ enum PartitionProducerKontActionKey {
     },
     ApplyActiveEliminators {
         value: PartitionLoweredKey,
+        selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
         pending: Vec<PartitionEliminatorKey>,
         selected_has_ancestry: bool,
         selected_scope: Option<PartitionSelectedScopeKey>,
@@ -1294,7 +1412,7 @@ enum PartitionSourcePrefixKey {
         next: Box<Self>,
     },
     ReturnFromSelectedCase {
-        frame_id: Option<u64>,
+        edge_descriptor: SelectedEdgeDescriptorId,
         parent: PartitionSelectedContinuationKey,
         exit: Option<(
             PartitionRecursorNodeId,
@@ -1392,7 +1510,7 @@ fn partition_source_prefix_key(prefix: &SourcePrefixTemplate) -> PartitionSource
                 .map(partition_selected_key)
                 .expect("planned selected return owns one immediate parent capture");
             PartitionSourcePrefixKey::ReturnFromSelectedCase {
-                frame_id: delimiter.frame_id,
+                edge_descriptor: delimiter.edge_descriptor,
                 parent,
                 exit: exit_transition.as_ref().map(|transition| {
                     (
@@ -2472,6 +2590,7 @@ struct PartitionSourceArmStaticKey {
     pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
     producer_head: Option<usize>,
     return_producer_tail: Option<usize>,
+    selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
     selected_has_ancestry: bool,
     selected_pending: Vec<PartitionEliminatorKey>,
     selected_scope: Option<PartitionSelectedScopeKey>,
@@ -2508,8 +2627,7 @@ impl PartitionSourceArmKey {
         pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
         producer_head: Option<usize>,
         return_producer_tail: Option<usize>,
-        _selected_activation: ContinuationActivationId,
-        _selected_cursor: ContinuationCursorId,
+        selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
         selected_ancestry: &[RecursorFrameProvenance],
         selected_pending: &[OwnedPartitionEliminator],
         selected_scope: &Option<OwnedSelectedScope>,
@@ -2542,6 +2660,7 @@ impl PartitionSourceArmKey {
             pending_obligation_head,
             producer_head,
             return_producer_tail,
+            selected_edge_descriptor,
             selected_has_ancestry: !selected_ancestry.is_empty(),
             selected_pending: selected_pending
                 .iter()
@@ -2590,6 +2709,7 @@ struct PartitionSourceKontStaticKey {
     pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
     producer_head: Option<usize>,
     return_producer_tail: Option<usize>,
+    selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
     pending_computational_ih_call: Option<u64>,
     input: PartitionLoweredKey,
     declaration_stack: Vec<RuntimeSymbol>,
@@ -2627,8 +2747,7 @@ impl PartitionSourceKontKey {
         input: &Lowered,
         declaration_stack: &[RuntimeSymbol],
         active_recursive_invocations: &[CheckedRecursiveInvocationInstance],
-        _selected_activation: ContinuationActivationId,
-        _selected_cursor: ContinuationCursorId,
+        selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
         selected_ancestry: &[RecursorFrameProvenance],
         selected_pending: &[OwnedPartitionEliminator],
         selected_scope: &Option<OwnedSelectedScope>,
@@ -2649,6 +2768,7 @@ impl PartitionSourceKontKey {
             pending_obligation_head,
             producer_head,
             return_producer_tail,
+            selected_edge_descriptor,
             pending_computational_ih_call,
             input: partition_lowered_key(input),
             declaration_stack: declaration_stack.to_vec(),
@@ -2711,6 +2831,7 @@ impl PartitionSourceKontKey {
             pending_obligation_head,
             producer_head,
             return_producer_tail,
+            selected_edge_descriptor: None,
             pending_computational_ih_call,
             input: partition_lowered_key(input),
             declaration_stack: declaration_stack.to_vec(),
@@ -2755,6 +2876,7 @@ impl PartitionSourceKontKey {
         input: &Lowered,
         declaration_stack: &[RuntimeSymbol],
         active_recursive_invocations: &[CheckedRecursiveInvocationInstance],
+        selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
         selected_ancestry: &[RecursorFrameProvenance],
         selected_pending: &[OwnedPartitionEliminator],
         selected_scope: &Option<OwnedSelectedScope>,
@@ -2771,6 +2893,7 @@ impl PartitionSourceKontKey {
             pending_obligation_head,
             producer_head,
             return_producer_tail,
+            selected_edge_descriptor,
             pending_computational_ih_call,
             input: partition_lowered_key(input),
             declaration_stack: declaration_stack.to_vec(),
@@ -2939,8 +3062,7 @@ impl PartitionContinuationKey {
         input_kind: ScalarMergeKind,
         outer_return_kind: ScalarMergeKind,
         value: &Lowered,
-        _activation: ContinuationActivationId,
-        _cursor: ContinuationCursorId,
+        selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
         pending: &[OwnedPartitionEliminator],
         selected_ancestry: &[RecursorFrameProvenance],
         selected_scope: &Option<OwnedSelectedScope>,
@@ -2953,6 +3075,7 @@ impl PartitionContinuationKey {
         let static_key = PartitionContinuationStaticKey {
             action: PartitionProducerKontActionKey::ApplyActiveEliminators {
                 value: partition_lowered_key(value),
+                selected_edge_descriptor,
                 pending: pending.iter().map(partition_eliminator_key).collect(),
                 selected_has_ancestry: !selected_ancestry.is_empty(),
                 selected_scope: partition_scope_key(selected_scope),
@@ -3768,6 +3891,7 @@ pub(super) struct SourceArmPartitionWorkItem {
     pub(super) source_capture_pointer: Option<Value>,
     pub(super) pending_partition_exit_stack: Option<RecursorUnwindStack>,
     pub(super) producer_kont: Option<PartitionProducerKontCursor>,
+    pub(super) selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
     pub(super) selected_activation: ContinuationActivationId,
     pub(super) selected_activation_instance: ActivationInstanceRef,
     pub(super) selected_cursor: ContinuationCursorId,
@@ -3813,6 +3937,7 @@ pub(super) struct SourceKontPartitionWorkItem {
     pub(super) pending_computational_ih_call: Option<u64>,
     pub(super) declaration_stack: Vec<RuntimeSymbol>,
     pub(super) active_recursive_invocations: Vec<CheckedRecursiveInvocationInstance>,
+    pub(super) selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
     pub(super) selected_activation: ContinuationActivationId,
     pub(super) selected_activation_instance: ActivationInstanceRef,
     pub(super) selected_cursor: ContinuationCursorId,
@@ -3835,6 +3960,7 @@ pub(super) enum ProducerKontAction {
         terminal: PartitionProducerKontTerminalIdentity,
     },
     ApplyActiveEliminators {
+        selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
         activation: ContinuationActivationId,
         activation_instance: ActivationInstanceRef,
         cursor: ContinuationCursorId,
@@ -3881,6 +4007,7 @@ enum PartitionProducerKontSiteActionKey {
         terminal: PartitionProducerKontTerminalIdentity,
     },
     ApplyActiveEliminators {
+        selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
         pending: Vec<PartitionEliminatorKey>,
         selected_has_ancestry: bool,
         selected_scope: Option<PartitionSelectedScopeKey>,
@@ -3938,6 +4065,7 @@ impl PartitionProducerKontSiteKey {
                 terminal: *terminal,
             },
             ProducerKontAction::ApplyActiveEliminators {
+                selected_edge_descriptor,
                 pending,
                 selected_ancestry,
                 selected_scope,
@@ -3946,6 +4074,7 @@ impl PartitionProducerKontSiteKey {
                 defer_successor_until_after_selected_scope,
                 ..
             } => PartitionProducerKontSiteActionKey::ApplyActiveEliminators {
+                selected_edge_descriptor: *selected_edge_descriptor,
                 pending: pending.iter().map(partition_eliminator_key).collect(),
                 selected_has_ancestry: !selected_ancestry.is_empty(),
                 selected_scope: partition_scope_key(selected_scope),
@@ -4073,6 +4202,7 @@ pub(super) struct ProducerKontPartitionWorkItem {
 
 #[derive(Clone)]
 pub(super) struct OwnedSourceSelectedContinuation {
+    pub(super) selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
     pub(super) activation: ContinuationActivationId,
     pub(super) activation_instance: ActivationInstanceRef,
     pub(super) cursor: ContinuationCursorId,
@@ -4093,6 +4223,7 @@ pub(super) fn own_partition_selected(
         return None;
     }
     Some(OwnedSourceSelectedContinuation {
+        selected_edge_descriptor: selected.selected_edge_descriptor,
         activation: selected.activation,
         activation_instance: selected.activation_instance,
         cursor: selected.cursor,

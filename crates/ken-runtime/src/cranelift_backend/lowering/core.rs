@@ -178,6 +178,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         partition_next_helper: 0,
         partition_queue: VecDeque::new(),
         partition_continuations: PartitionContinuationInterner::default(),
+        partition_selected_edges: SelectedEdgeDescriptorInterner::default(),
         partition_source_nodes: PartitionSourceNodeInterner::default(),
         partition_source_returns: PartitionSourceKontReturnInterner::default(),
         partition_recursor_nodes: PartitionRecursorNodeInterner::default(),
@@ -473,6 +474,13 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
             cleanup_key_bytes_retained,
             cleanup_key_exact_comparisons,
         ) = compiler.partition_cleanup_suffixes.counts();
+        let (
+            selected_edge_descriptors,
+            selected_edge_key_bytes_constructed,
+            selected_edge_key_bytes_retained,
+            selected_edge_key_bytes_max,
+            selected_edge_key_exact_comparisons,
+        ) = compiler.partition_selected_edges.counts();
         let mut dfg_values_total = 0_usize;
         let mut dfg_instructions_total = 0_usize;
         let mut dfg_blocks_total = 0_usize;
@@ -501,6 +509,9 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
              source_prefix_fields_total={} source_prefix_fields_max={} \
              source_scope_fields_total={} source_scope_fields_max={} \
              source_lineage_fields_total={} source_lineage_fields_max={} \
+             selected_edge_descriptors={} selected_edge_key_bytes_constructed={} \
+             selected_edge_key_bytes_retained={} selected_edge_key_bytes_max={} \
+             selected_edge_key_exact_comparisons={} \
              state_key_bytes_constructed={} state_key_bytes_retained={} \
              state_key_bucket_probes={} state_key_exact_comparisons={} \
              state_key_exact_bytes_compared_upper_bound={} \
@@ -540,6 +551,11 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
             compiler.partition_metrics.source_scope_fields_max,
             compiler.partition_metrics.source_lineage_fields_total,
             compiler.partition_metrics.source_lineage_fields_max,
+            selected_edge_descriptors,
+            selected_edge_key_bytes_constructed,
+            selected_edge_key_bytes_retained,
+            selected_edge_key_bytes_max,
+            selected_edge_key_exact_comparisons,
             state_key_bytes_constructed,
             state_key_bytes_retained,
             state_key_bucket_probes,
@@ -572,6 +588,20 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
 }
 
 impl<'a> Lowering<'a> {
+    fn intern_selected_edge_descriptor(
+        &mut self,
+        key: SelectedEdgeDescriptorKey,
+    ) -> SelectedEdgeDescriptor {
+        if let Some(descriptor) = self.partition_selected_edges.lookup(&key) {
+            return descriptor;
+        }
+        let activation = self.mint_continuation_activation();
+        let cursor = self.mint_continuation_cursor();
+        let scope_origin = self.mint_recursor_producer_origin();
+        self.partition_selected_edges
+            .intern_new(key, activation, cursor, scope_origin)
+    }
+
     fn allocate_control_cursor_ref(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -1518,6 +1548,7 @@ impl<'a> Lowering<'a> {
         let cursor_instance =
             self.allocate_control_cursor_ref(builder, Some(active.cursor_instance))?;
         let successor = EliminatorFrame::Active(ActiveContinuationFrame {
+            selected_edge_descriptor: active.selected_edge_descriptor,
             activation: active.activation,
             activation_instance: active.activation_instance,
             cursor,
@@ -2635,6 +2666,8 @@ impl<'a> Lowering<'a> {
                                 .map(|scope| scope.scope_instance),
                         )?;
                     let selected_active = ActiveContinuationFrame {
+                        selected_edge_descriptor: splice_caller
+                            .and_then(|active| active.selected_edge_descriptor),
                         activation: self.mint_continuation_activation(),
                         activation_instance,
                         cursor: self.mint_continuation_cursor(),
@@ -3772,6 +3805,7 @@ impl<'a> Lowering<'a> {
         let capture_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
         let plan = PartitionProducerKontSitePlan {
             action: ProducerKontAction::ApplyActiveEliminators {
+                selected_edge_descriptor: active.selected_edge_descriptor,
                 activation: active.activation,
                 activation_instance: active.activation_instance,
                 cursor: active.cursor,
@@ -4108,8 +4142,7 @@ impl<'a> Lowering<'a> {
                     field_map.clone(),
                 ),
                 ProducerKontAction::ApplyActiveEliminators {
-                    activation,
-                    cursor,
+                    selected_edge_descriptor,
                     pending,
                     selected_ancestry,
                     selected_scope,
@@ -4121,8 +4154,7 @@ impl<'a> Lowering<'a> {
                     plan.return_kind,
                     plan.return_kind,
                     &input,
-                    *activation,
-                    *cursor,
+                    *selected_edge_descriptor,
                     pending,
                     selected_ancestry,
                     selected_scope,
@@ -4335,12 +4367,13 @@ impl<'a> Lowering<'a> {
         let remaining_eliminators = &eliminators[1..];
         let (body, case_env) = match eliminator {
             EliminatorFrame::Computational(eliminator) => {
-                let (case, _) = match select_computational_case(
-                    std::slice::from_ref(&eliminator),
-                    &constructor,
-                ) {
-                    Ok(selected) => selected,
-                    Err(trap) => return Ok(Lowered::Trap(trap)),
+                let Some((case_ordinal, case)) = eliminator
+                    .cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, case)| case.constructor == constructor)
+                else {
+                    return Ok(Lowered::Trap(eliminator.default.clone()));
                 };
                 if case.argument_binders != args.len() {
                     return Err(unsupported(
@@ -4379,9 +4412,29 @@ impl<'a> Lowering<'a> {
                 if let Some(active) = splice_caller {
                     pending.extend_from_slice(active.pending);
                 }
-                let activation = self.mint_continuation_activation();
-                let cursor = self.mint_continuation_cursor();
-                let producer_origin = self.mint_recursor_producer_origin();
+                let selected_edge = eliminator.checked_frame_id.map(|checked_frame_id| {
+                    self.intern_selected_edge_descriptor(
+                        SelectedEdgeDescriptorKey::checked_child_return(
+                            checked_frame_id,
+                            eliminator.checked_invocation_source,
+                            case_ordinal,
+                            case,
+                            splice_caller.and_then(|active| active.selected_edge_descriptor),
+                        ),
+                    )
+                });
+                let (activation, cursor, producer_origin) = match selected_edge {
+                    Some(descriptor) => (
+                        descriptor.activation,
+                        descriptor.cursor,
+                        descriptor.scope_origin,
+                    ),
+                    None => (
+                        self.mint_continuation_activation(),
+                        self.mint_continuation_cursor(),
+                        self.mint_recursor_producer_origin(),
+                    ),
+                };
                 let (activation_instance, cursor_instance, scope_instance) = self
                     .allocate_selected_control_refs(
                         builder,
@@ -4413,6 +4466,7 @@ impl<'a> Lowering<'a> {
                 };
                 let selected_scope = Some(selected_scope);
                 let active_state = ActiveContinuationFrame {
+                    selected_edge_descriptor: selected_edge.map(|descriptor| descriptor.id),
                     activation,
                     activation_instance,
                     cursor,
@@ -5285,6 +5339,7 @@ impl<'a> Lowering<'a> {
             pending_partition_exit_stack: item.pending_partition_exit_stack,
             producer_kont: item.producer_kont,
             selected: SourceSelectedContinuation {
+                selected_edge_descriptor: item.selected_edge_descriptor,
                 activation: item.selected_activation,
                 activation_instance: item.selected_activation_instance,
                 cursor: item.selected_cursor,
@@ -5534,6 +5589,7 @@ impl<'a> Lowering<'a> {
             .as_ref()
             .map(|parent| {
                 vec![SourceSelectedContinuation {
+                    selected_edge_descriptor: parent.selected_edge_descriptor,
                     activation: parent.activation,
                     activation_instance: parent.activation_instance,
                     cursor: parent.cursor,
@@ -5571,6 +5627,7 @@ impl<'a> Lowering<'a> {
             producer_kont: item.producer_kont,
             selected: if let Some(parent) = &restored_selected {
                 SourceSelectedContinuation {
+                    selected_edge_descriptor: parent.selected_edge_descriptor,
                     activation: parent.activation,
                     activation_instance: parent.activation_instance,
                     cursor: parent.cursor,
@@ -5582,6 +5639,7 @@ impl<'a> Lowering<'a> {
                 }
             } else {
                 SourceSelectedContinuation {
+                    selected_edge_descriptor: item.selected_edge_descriptor,
                     activation: item.selected_activation,
                     activation_instance: item.selected_activation_instance,
                     cursor: item.selected_cursor,
@@ -5824,8 +5882,7 @@ impl<'a> Lowering<'a> {
             return_contract
                 .live_producer_tail
                 .or_else(|| control.producer_kont.map(|cursor| cursor.site_id)),
-            control.selected.activation,
-            control.selected.cursor,
+            control.selected.selected_edge_descriptor,
             &control.selected.selected_ancestry,
             &selected_pending,
             &control.selected.selected_scope,
@@ -5924,6 +5981,7 @@ impl<'a> Lowering<'a> {
                         .map(|cursor| cursor.capture_pointer),
                     pending_partition_exit_stack: control.pending_partition_exit_stack,
                     producer_kont: control.producer_kont,
+                    selected_edge_descriptor: control.selected.selected_edge_descriptor,
                     selected_activation: control.selected.activation,
                     selected_activation_instance: control.selected.activation_instance,
                     selected_cursor: control.selected.cursor,
@@ -6210,6 +6268,7 @@ impl<'a> Lowering<'a> {
                     &input,
                     &self.declaration_stack,
                     &self.active_recursive_invocations,
+                    control.selected.selected_edge_descriptor,
                     &control.selected.selected_ancestry,
                     &selected_pending,
                     &control.selected.selected_scope,
@@ -6233,8 +6292,7 @@ impl<'a> Lowering<'a> {
                     &input,
                     &self.declaration_stack,
                     &self.active_recursive_invocations,
-                    control.selected.activation,
-                    control.selected.cursor,
+                    control.selected.selected_edge_descriptor,
                     &control.selected.selected_ancestry,
                     &selected_pending,
                     &control.selected.selected_scope,
@@ -6328,6 +6386,7 @@ impl<'a> Lowering<'a> {
                     pending_computational_ih_call: self.pending_computational_ih_call,
                     declaration_stack: self.declaration_stack.clone(),
                     active_recursive_invocations: self.active_recursive_invocations.clone(),
+                    selected_edge_descriptor: control.selected.selected_edge_descriptor,
                     selected_activation: control.selected.activation,
                     selected_activation_instance: control.selected.activation_instance,
                     selected_cursor: control.selected.cursor,
@@ -6565,6 +6624,7 @@ impl<'a> Lowering<'a> {
                     pending_computational_ih_call: self.pending_computational_ih_call,
                     declaration_stack: self.declaration_stack.clone(),
                     active_recursive_invocations: self.active_recursive_invocations.clone(),
+                    selected_edge_descriptor: parent_schema.selected_edge_descriptor,
                     selected_activation: parent_schema.activation,
                     selected_activation_instance: parent_schema.activation_instance,
                     selected_cursor: parent_schema.cursor,
@@ -7060,6 +7120,7 @@ impl<'a> Lowering<'a> {
                     }
                 }
                 ProducerKontAction::ApplyActiveEliminators {
+                    selected_edge_descriptor,
                     activation,
                     activation_instance,
                     cursor,
@@ -7145,6 +7206,7 @@ impl<'a> Lowering<'a> {
                     let selected_lineage = selected_lineage
                         .iter()
                         .map(|selected| SourceSelectedContinuation {
+                            selected_edge_descriptor: selected.selected_edge_descriptor,
                             activation: selected.activation,
                             activation_instance: selected.activation_instance,
                             cursor: selected.cursor,
@@ -7156,6 +7218,7 @@ impl<'a> Lowering<'a> {
                         })
                         .collect::<Vec<_>>();
                     let active = ActiveContinuationFrame {
+                        selected_edge_descriptor: *selected_edge_descriptor,
                         activation: *activation,
                         activation_instance: *activation_instance,
                         cursor: *cursor,
@@ -7775,6 +7838,7 @@ impl<'a> Lowering<'a> {
                                 pending_partition_exit_stack: pending_exit_stack,
                                 producer_kont,
                                 selected: SourceSelectedContinuation {
+                                    selected_edge_descriptor: parent.selected_edge_descriptor,
                                     activation: parent.activation,
                                     activation_instance: parent.activation_instance,
                                     cursor: parent.cursor,
@@ -7963,6 +8027,7 @@ impl<'a> Lowering<'a> {
             pending_partition_exit_stack: None,
             producer_kont,
             selected: SourceSelectedContinuation {
+                selected_edge_descriptor: active.selected_edge_descriptor,
                 activation: active.activation,
                 activation_instance: active.activation_instance,
                 cursor: active.cursor,
@@ -8622,7 +8687,9 @@ impl<'a> Lowering<'a> {
                                         "selected-case return has no open control obligation",
                                     )
                                 })?;
-                            if control.selected.activation != delimiter.activation
+                            if control.selected.selected_edge_descriptor
+                                != Some(delimiter.edge_descriptor)
+                                || control.selected.activation != delimiter.activation
                                 || control.selected.cursor != delimiter.cursor
                                 || scope.scope_origin != delimiter.scope_origin
                                 || scope.frame.checked_frame_id != delimiter.frame_id
@@ -9027,13 +9094,14 @@ impl<'a> Lowering<'a> {
                                 _ => None,
                             };
                             let selected = match &value {
-                                Lowered::Constructor { constructor, .. } => {
-                                    cases.iter().find(|case| case.constructor == *constructor)
-                                }
+                                Lowered::Constructor { constructor, .. } => cases
+                                    .iter()
+                                    .enumerate()
+                                    .find(|(_, case)| case.constructor == *constructor),
                                 _ => None,
                             };
-                            let case = if let Some(case) = selected {
-                                case
+                            let (case_ordinal, case) = if let Some(selected) = selected {
+                                selected
                             } else if answer_route
                                 == SourceComputationalAnswerRoute::CheckedSelectedRecursor
                                 && matches!(&value, Lowered::Constructor { .. })
@@ -9159,8 +9227,29 @@ impl<'a> Lowering<'a> {
                                     .last()
                                     .map_or(0, |instance| instance.semantic_depth),
                             };
-                            let activation = self.mint_continuation_activation();
-                            let cursor = self.mint_continuation_cursor();
+                            let selected_edge = frame.checked_frame_id.map(|checked_frame_id| {
+                                self.intern_selected_edge_descriptor(
+                                    SelectedEdgeDescriptorKey::checked_child_return(
+                                        checked_frame_id,
+                                        frame.checked_invocation_source,
+                                        case_ordinal,
+                                        case,
+                                        control.selected.selected_edge_descriptor,
+                                    ),
+                                )
+                            });
+                            let (activation, cursor, producer_origin) = match selected_edge {
+                                Some(descriptor) => (
+                                    descriptor.activation,
+                                    descriptor.cursor,
+                                    descriptor.scope_origin,
+                                ),
+                                None => (
+                                    self.mint_continuation_activation(),
+                                    self.mint_continuation_cursor(),
+                                    self.mint_recursor_producer_origin(),
+                                ),
+                            };
                             let (activation_instance, cursor_instance, scope_instance) = self
                                 .allocate_selected_control_refs(
                                     builder,
@@ -9178,7 +9267,6 @@ impl<'a> Lowering<'a> {
                                 Vec::with_capacity(case.recursive_positions.len());
                             let ih_slots =
                                 self.computational_ih_slots_for_case(case, frame.checked_frame_id)?;
-                            let producer_origin = self.mint_recursor_producer_origin();
                             #[cfg(test)]
                             px8j_record_source_event(Px8jSourceTraceEvent::Mint {
                                 path: Px8jProducerPath::SourceMachine,
@@ -9284,6 +9372,9 @@ impl<'a> Lowering<'a> {
                                     })?;
                                 SourceContinuation::ReturnFromSelectedCase {
                                     delimiter: SelectedCaseReturnDelimiter {
+                                        edge_descriptor: selected_edge
+                                            .expect("checked selection owns an edge descriptor")
+                                            .id,
                                         activation,
                                         activation_instance,
                                         cursor,
@@ -9304,6 +9395,8 @@ impl<'a> Lowering<'a> {
                                 self.push_partition_source_cursor(builder, &mut control)?;
                             }
                             control.selected = SourceSelectedContinuation {
+                                selected_edge_descriptor: selected_edge
+                                    .map(|descriptor| descriptor.id),
                                 activation,
                                 activation_instance,
                                 cursor,
@@ -9639,6 +9732,7 @@ impl<'a> Lowering<'a> {
             },
         );
         let suffix_active = ActiveContinuationFrame {
+            selected_edge_descriptor: suffix_control.selected.selected_edge_descriptor,
             activation: suffix_control.selected.activation,
             activation_instance: suffix_control.selected.activation_instance,
             cursor: suffix_control.selected.cursor,
@@ -9882,6 +9976,7 @@ impl<'a> Lowering<'a> {
             },
         );
         let suffix_active = ActiveContinuationFrame {
+            selected_edge_descriptor: suffix_control.selected.selected_edge_descriptor,
             activation: suffix_control.selected.activation,
             activation_instance: suffix_control.selected.activation_instance,
             cursor: suffix_control.selected.cursor,
@@ -10189,8 +10284,7 @@ impl<'a> Lowering<'a> {
                     self.active_partition_producer_kont
                         .map(|cursor| cursor.site_id)
                 }),
-            selected.activation,
-            selected.cursor,
+            selected.selected_edge_descriptor,
             &selected.selected_ancestry,
             &selected_pending,
             &selected.selected_scope,
@@ -10309,6 +10403,7 @@ impl<'a> Lowering<'a> {
                     source_capture_pointer: source_cursor.map(|cursor| cursor.capture_pointer),
                     pending_partition_exit_stack: pending_exit_stack,
                     producer_kont: self.active_partition_producer_kont,
+                    selected_edge_descriptor: selected.selected_edge_descriptor,
                     selected_activation: selected.activation,
                     selected_activation_instance: selected.activation_instance,
                     selected_cursor: selected.cursor,
@@ -10548,6 +10643,7 @@ impl<'a> Lowering<'a> {
             },
         );
         let suffix_active = ActiveContinuationFrame {
+            selected_edge_descriptor: control.selected.selected_edge_descriptor,
             activation: control.selected.activation,
             activation_instance: control.selected.activation_instance,
             cursor: control.selected.cursor,
@@ -10876,6 +10972,7 @@ impl<'a> Lowering<'a> {
             },
         );
         let suffix_active = ActiveContinuationFrame {
+            selected_edge_descriptor: suffix_control.selected.selected_edge_descriptor,
             activation: suffix_control.selected.activation,
             activation_instance: suffix_control.selected.activation_instance,
             cursor: suffix_control.selected.cursor,
@@ -11199,6 +11296,7 @@ impl<'a> Lowering<'a> {
             },
         );
         let suffix_active = ActiveContinuationFrame {
+            selected_edge_descriptor: suffix_control.selected.selected_edge_descriptor,
             activation: suffix_control.selected.activation,
             activation_instance: suffix_control.selected.activation_instance,
             cursor: suffix_control.selected.cursor,

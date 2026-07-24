@@ -261,6 +261,7 @@ struct Lowering<'a> {
     partition_next_helper: usize,
     partition_queue: VecDeque<PartitionWorkItem>,
     partition_continuations: PartitionContinuationInterner,
+    partition_selected_edges: SelectedEdgeDescriptorInterner,
     partition_source_nodes: PartitionSourceNodeInterner,
     partition_source_returns: PartitionSourceKontReturnInterner,
     partition_recursor_nodes: PartitionRecursorNodeInterner,
@@ -689,6 +690,7 @@ struct PendingLetContinuationFrame<'a> {
 }
 #[derive(Clone, Copy)]
 struct ActiveContinuationFrame<'a> {
+    selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
     activation: ContinuationActivationId,
     activation_instance: ActivationInstanceRef,
     cursor: ContinuationCursorId,
@@ -1990,6 +1992,7 @@ struct ArmedInvocation<'a> {
 }
 #[derive(Clone)]
 struct SourceSelectedContinuation<'a> {
+    selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
     activation: ContinuationActivationId,
     activation_instance: ActivationInstanceRef,
     cursor: ContinuationCursorId,
@@ -2008,6 +2011,7 @@ impl<'a> SourceSelectedContinuation<'a> {
         'a: 'b,
     {
         ActiveContinuationFrame {
+            selected_edge_descriptor: self.selected_edge_descriptor,
             activation: self.activation,
             activation_instance: self.activation_instance,
             cursor: self.cursor,
@@ -2062,6 +2066,7 @@ struct SourceControl<'a> {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct SelectedCaseReturnDelimiter {
+    edge_descriptor: SelectedEdgeDescriptorId,
     activation: ContinuationActivationId,
     activation_instance: ActivationInstanceRef,
     cursor: ContinuationCursorId,

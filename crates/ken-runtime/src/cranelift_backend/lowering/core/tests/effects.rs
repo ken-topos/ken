@@ -89,6 +89,7 @@ fn run_checked_bounded_nat_fixture(
         partition_next_helper: 0,
         partition_queue: VecDeque::new(),
         partition_continuations: PartitionContinuationInterner::default(),
+        partition_selected_edges: SelectedEdgeDescriptorInterner::default(),
         partition_source_nodes: PartitionSourceNodeInterner::default(),
         partition_cleanup_suffixes: PartitionCleanupSuffixInterner::default(),
         partition_cleanup_transitions: PartitionCleanupTransitionLedger::default(),
