@@ -1,7 +1,7 @@
 ---
 id: DOC-GATE-RECORD-AXIS
 title: "validation-gate registry: bind token→runner COVERAGE on the record axis, and close the `kind` vocabulary"
-status: ready
+status: active
 owner: verify
 size: S
 gate: none

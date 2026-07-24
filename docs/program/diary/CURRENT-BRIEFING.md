@@ -44,36 +44,63 @@
 > Everything it owed is done: drops verified, Runtime kicked, cadence re-armed,
 > watchdog re-armed.
 >
-> ## Where the frontier is
+> ## Where the frontier is — PHASE 1 IS CLOSED; BOUNDARY A IS THE LIVE UNIT
 >
-> **`RT-NATIVE-FNSPLIT` recut Phase 1 is WITH THE RUNTIME RING.** Kickoff
-> `evt_2kgfmmeeh2x7w`; `runtime-leader` confirmed `Working` (pane, not the post
-> receipt). Frame on `main` at `docs/program/wp/RT-NATIVE-FNSPLIT-recut.md`
-> (`6964b053`). The ring cuts a **fresh** build branch off current `origin/main`
-> — ⛔ not `wp/RT-NATIVE-FNSPLIT-native-partition`, which belongs to the held
-> chain and still has `runtime-implementer`'s worktree parked on it.
+> **`origin/main = 510de0e3`.** The recut frame was **AMENDED** after Architect
+> hard-stop #1 (`evt_6dpb96kn1583f`) and handed back: `evt_30a344an210g`,
+> `runtime-leader` pane-confirmed `Working`. Ring was compacted first (drops
+> verified) **without** `handoff-gate-compact.sh`, deliberately — see below.
 >
-> **⛔ Phase 1 STOPS for a Steward + Architect read (AC1.4).** It measures the
-> **held, unchanged** `b077eb7a` representation at n=3..7 *before* any rewrite,
-> because that is the Architect's own falsifier for its hold. Two outcomes, both
-> valuable: **hold falsified** ⇒ the rewrite is unnecessary, resume sealing, and
-> we keep a harness we wanted anyway; **hold confirmed** ⇒ we hold the baseline
-> every Phase-3 claim is measured against. When the table arrives, **my job is to
-> read it with the Architect and rule which outcome obtains** — not to wave it
-> through. `n=4` alone proves nothing about the exponent (`370n`, `93n²`, and a
-> product switching on at n=5 all pass through 1,482 states); acceptance rests on
-> structural invariants, the table corroborates.
+> **⛔ Phase 1 is CLOSED at `could_not_determine`. Do not re-run it.** My frame's
+> central premise was **false against the landed code**: unchanged `b077eb7a`
+> cannot complete even the checkpoint's own depth-2 public control (fails
+> `NativeExitScopeTransitionV1: scope body return lost its parent producer tail`),
+> and it has no pre-existing planner boundary to measure at. **AC1.1's fail-closed
+> third outcome caught it** — it refused to return the permissive answer. The
+> ring escalated instead of building around it, exactly as the perishability
+> clause asks.
+>
+> ⛔ **What that falsifies is the BASELINE PREMISE, not the representation hold.**
+> The hold stands **structurally** (variable-width composite identity, no
+> fixed-K/key-width invariants) — it never rested on curve-fitting. Do not read
+> `could_not_determine` as "the rewrite is unnecessary."
+>
+> **Live unit = Boundary A (planner census) ONLY**, on a fresh branch off current
+> `origin/main`: the factored static transition graph for n=3..7, reporting static
+> nodes/edges/planned helpers, persistent-store nodes, out-of-line evidence
+> records, fixed K per static node, and fixed key/frame/store schemas. **It STOPS
+> for a Steward + Architect read before any semantic body emission (AC1.4′) — I
+> owe that read.** ⛔ CLIF bytes and wall/RSS belong to Boundary B and must not be
+> demanded of A.
+>
+> ⛔ **WIDTH METRIC — my original was WRONG and would have rejected a correct
+> design.** Constant applies to **inline identity/frame/store-node width**;
+> logical persistent-chain depth MAY be Θ(n) because the frame carries one
+> constant-width ID. Never demand constant chain length.
 >
 > **Runtime WPs legitimately run for HOURS** (T1 `sol` implementer, 16-hour
 > single-WP sessions on record). That is not a stall — do not tune thresholds to
 > tens of minutes on this ring.
 >
+> ### ⛔ DO NOT run `handoff-gate-compact.sh` on `runtime-implementer`
+>
+> It hard-resets each worktree branch to `origin/main`.
+> `wp/RT-NATIVE-FNSPLIT-recut-phase-1-census` is **30 commits of genuinely
+> unmerged work** (the held representation + the census WIP), and the Architect
+> ruled it **stays held** — Phase 3 ports from it. Compact that ring with a plain
+> `tmux send-keys -l '/compact'` instead, which touches no refs. Verified: the
+> branch tip was still `82bd1f43` after compaction.
+>
 > ## Research cadence — ARMED (this is the count of record)
 >
 > ```text
-> RECUT CHAIN: hard-stop count = 0 · NEXT RESEARCH PULL = #3, then #6, #9, …
+> RECUT CHAIN: hard-stop count = 1 · NEXT RESEARCH PULL = #3, then #6, #9, …
+>   #1 = Architect amendment ruling evt_6dpb96kn1583f (frame amended in response)
 > HELD CHAIN:  frozen at 33, closed, does NOT carry forward
 > ```
+>
+> The Architect **explicitly deferred to this count** on #1 ("the Steward's
+> tracker remains the count of record, so no Research pull is due before #3").
 >
 > Written into `issues/RT-NATIVE-FNSPLIT.md` as an armed line, not prose. **A
 > deep chain with zero advisories is the tell that BOTH the Architect's
@@ -89,6 +116,19 @@
 > ten minutes** (local fallback:
 > `preserved/wp-RT-NATIVE-FNSPLIT-native-partition-b077eb7a`).
 > ⛔ **Do not delete the tag.** Phase 1 measures it; Phases 2–3 port from it.
+>
+> ## ▶ Track 2 is LIVE — `DOC-GATE-RECORD-AXIS` with the Verify ring
+>
+> Kicked `evt_4sv449b1e4tcy`; ring compacted + reset to `510de0e3` (drops
+> verified); leader pane-confirmed `Working`; tracker flipped to `active`.
+> Adversary F1+F2, both **confirmed preventive**, both cheap. **Deadline is a
+> precondition, not a date: close before the next `library/` record is added.**
+> Reviewer is **Architect only** (`crates/`-only diff, §8a).
+>
+> ⚠ **F1 is `DOC-VALIDATION-BINDING`'s own defect class on a different axis** —
+> token→runner *existence* is bound, *coverage* is not. I verified all three
+> adversary anchors against current `main` and they hold; the harness is
+> unchanged since `96ab2b4b`.
 >
 > ## Open loops I own (in priority order, and NONE outranks Runtime)
 >
