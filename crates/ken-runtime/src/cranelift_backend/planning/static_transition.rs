@@ -727,6 +727,21 @@ impl StaticTransitionPlan {
             }
             expected_helpers.insert(PlannedHelperKey::node(node.transition, node.id));
         }
+        let closed_nodes = self
+            .nodes
+            .iter()
+            .map(|node| node.id)
+            .collect::<BTreeSet<_>>();
+        if self
+            .entries
+            .iter()
+            .any(|entry| entry.0 as usize >= self.nodes.len())
+        {
+            return Err(planner_error("graph entry is outside the closed node set"));
+        }
+        if self.entries.iter().copied().collect::<BTreeSet<_>>().len() != self.entries.len() {
+            return Err(planner_error("closed graph contains a duplicate entry"));
+        }
         for (index, edge) in self.edges.iter().enumerate() {
             if edge.id.0 as usize != index {
                 return Err(planner_error(
@@ -784,11 +799,6 @@ impl StaticTransitionPlan {
                 };
             *helpers.entry(owner).or_default() += 1;
         }
-        if helpers.values().copied().max().unwrap_or(0) > MAX_HELPERS_PER_STATIC_SOURCE {
-            return Err(planner_error(
-                "fixed K helpers per static source was exceeded",
-            ));
-        }
 
         for (index, (edge, evidence)) in self.edges.iter().zip(&self.evidence).enumerate() {
             if evidence.edge as usize != index
@@ -840,6 +850,11 @@ impl StaticTransitionPlan {
         }
 
         self.validate_source_return_topology()?;
+        if helpers.values().copied().max().unwrap_or(0) > MAX_HELPERS_PER_STATIC_SOURCE {
+            return Err(planner_error(
+                "fixed K helpers per static source was exceeded",
+            ));
+        }
 
         let mut reachable = self.entries.iter().copied().collect::<BTreeSet<_>>();
         reachable.extend([terminal, trap_terminal]);
@@ -854,7 +869,7 @@ impl StaticTransitionPlan {
                 break;
             }
         }
-        if reachable.len() != self.nodes.len() {
+        if reachable != closed_nodes {
             return Err(planner_error(
                 "closed graph contains unreachable transitions",
             ));
@@ -918,62 +933,69 @@ impl StaticTransitionPlan {
                     "source-return descriptor does not name its exact W and T",
                 ));
             }
-            self.require_exact_edge(
+            self.require_only_outgoing_edge(
                 resume.id,
                 wrapper.id,
                 EdgeKind::InvokeProducerWrapper,
-                "source-return resume must invoke its exact producer wrapper once",
+                "source-return resume must have only its exact wrapper invocation",
             )?;
-            self.require_exact_edge(
+            self.require_only_incoming_edge(
+                wrapper.id,
+                resume.id,
+                EdgeKind::InvokeProducerWrapper,
+                "producer wrapper must have only its exact resume invocation",
+            )?;
+            self.require_only_outgoing_edge(
                 wrapper.id,
                 tail.id,
                 EdgeKind::InvokeProducerTail,
-                "producer wrapper must invoke its exact live producer tail once",
+                "producer wrapper must have only its exact tail invocation",
             )?;
-            self.require_exact_edge(
+            self.require_only_incoming_edge(
+                tail.id,
+                wrapper.id,
+                EdgeKind::InvokeProducerTail,
+                "producer tail must have only its exact wrapper invocation",
+            )?;
+            self.require_only_outgoing_edge(
                 tail.id,
                 completed.id,
                 EdgeKind::CompleteProducerTail,
-                "producer tail must complete through its exact CompletedTail once",
+                "producer tail must have only its exact completion edge",
             )?;
-            if self
-                .edges
-                .iter()
-                .filter(|edge| edge.to == wrapper.id)
-                .count()
-                != 1
-            {
-                return Err(planner_error(
-                    "producer wrapper has another incoming callable edge",
-                ));
-            }
+            self.require_only_incoming_edge(
+                completed.id,
+                tail.id,
+                EdgeKind::CompleteProducerTail,
+                "CompletedTail must have only its exact producer-tail completion",
+            )?;
             if self.entries.contains(&wrapper.id) {
                 return Err(planner_error(
                     "producer wrapper cannot be a pre-source graph entry",
                 ));
             }
-            if self
-                .edges
-                .iter()
-                .filter(|edge| {
-                    edge.to == completed.id && edge.kind == EdgeKind::CompleteProducerTail
-                })
-                .count()
-                != 1
-            {
-                return Err(planner_error(
-                    "CompletedTail completion must originate from its exact producer tail",
-                ));
-            }
-            if self
+
+            let successor = self.activation_successor(completed)?;
+            let completed_edges = self
                 .edges
                 .iter()
                 .filter(|edge| edge.from == completed.id)
-                .count()
-                != 1
-            {
+                .collect::<Vec<_>>();
+            if !matches!(completed_edges.as_slice(), [edge] if edge.to == successor) {
                 return Err(planner_error(
-                    "CompletedTail must have exactly one normal successor",
+                    "CompletedTail must have only its activation-named successor",
+                ));
+            }
+            let completed_edge = completed_edges[0];
+            let successor_transition = self.nodes[successor.0 as usize].transition;
+            let expected_kind = if successor_transition == TransitionKind::SourceReturnResume {
+                EdgeKind::SourceReturnOwnedResume
+            } else {
+                EdgeKind::Continue
+            };
+            if completed_edge.kind != expected_kind {
+                return Err(planner_error(
+                    "CompletedTail successor does not use its normal-resume edge kind",
                 ));
             }
         }
@@ -1031,24 +1053,61 @@ impl StaticTransitionPlan {
         Ok(())
     }
 
-    fn require_exact_edge(
+    fn activation_successor(
+        &self,
+        node: &StaticNode,
+    ) -> Result<StaticNodeId, CraneliftBackendError> {
+        let continuation_index =
+            node.frame.normal.0.checked_sub(1).ok_or_else(|| {
+                planner_error("activation does not name a closed normal continuation")
+            })? as usize;
+        let continuation = self
+            .stores
+            .get(continuation_index)
+            .filter(|store| store.kind == StoreKind::Continuation)
+            .ok_or_else(|| {
+                planner_error("activation does not name a closed normal continuation")
+            })?;
+        let successor = StaticNodeId(continuation.local);
+        if successor.0 as usize >= self.nodes.len() {
+            return Err(planner_error(
+                "activation normal continuation is outside the closed graph",
+            ));
+        }
+        Ok(successor)
+    }
+
+    fn require_only_outgoing_edge(
         &self,
         from: StaticNodeId,
         to: StaticNodeId,
         kind: EdgeKind,
         error: &'static str,
     ) -> Result<(), CraneliftBackendError> {
-        let matching = self
+        let edges = self
             .edges
             .iter()
-            .filter(|edge| edge.from == from && edge.to == to && edge.kind == kind)
-            .count();
-        let same_kind_from = self
+            .filter(|edge| edge.from == from)
+            .collect::<Vec<_>>();
+        if !matches!(edges.as_slice(), [edge] if edge.to == to && edge.kind == kind) {
+            return Err(planner_error(error));
+        }
+        Ok(())
+    }
+
+    fn require_only_incoming_edge(
+        &self,
+        to: StaticNodeId,
+        from: StaticNodeId,
+        kind: EdgeKind,
+        error: &'static str,
+    ) -> Result<(), CraneliftBackendError> {
+        let edges = self
             .edges
             .iter()
-            .filter(|edge| edge.from == from && edge.kind == kind)
-            .count();
-        if matching != 1 || same_kind_from != 1 {
+            .filter(|edge| edge.to == to)
+            .collect::<Vec<_>>();
+        if !matches!(edges.as_slice(), [edge] if edge.from == from && edge.kind == kind) {
             return Err(planner_error(error));
         }
         Ok(())
@@ -1547,7 +1606,7 @@ mod tests {
         );
         assert_eq!(
             crossed_wrapper.validate().unwrap_err(),
-            planner_error("source-return resume must invoke its exact producer wrapper once")
+            planner_error("source-return resume must have only its exact wrapper invocation")
         );
 
         let wrapper_edge = *plan
@@ -1565,7 +1624,7 @@ mod tests {
         );
         assert_eq!(
             crossed_tail.validate().unwrap_err(),
-            planner_error("producer wrapper must invoke its exact live producer tail once")
+            planner_error("producer wrapper must have only its exact tail invocation")
         );
 
         let descriptor = first_wrapper.frame.source_return.0 as usize - 1;
@@ -1598,7 +1657,7 @@ mod tests {
         );
         assert_eq!(
             duplicate_wrapper.validate().unwrap_err(),
-            planner_error("source-return resume must invoke its exact producer wrapper once")
+            planner_error("source-return resume must have only its exact wrapper invocation")
         );
 
         let mut terminal_resume = plan.clone();
@@ -1619,6 +1678,136 @@ mod tests {
         assert_eq!(
             wrapper_entry.validate().unwrap_err(),
             planner_error("producer wrapper cannot be a pre-source graph entry")
+        );
+    }
+
+    #[test]
+    fn quartet_edge_sets_and_completed_successor_reject_alternate_calls() {
+        // Promise class: durable invariant.
+        let plan =
+            plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
+        let wrapper = plan
+            .nodes
+            .iter()
+            .find(|node| node.transition == TransitionKind::ProducerWrapper)
+            .unwrap();
+        let node_for = |transition| {
+            plan.nodes
+                .iter()
+                .find(|node| node.owner == wrapper.owner && node.transition == transition)
+                .unwrap()
+                .id
+        };
+        let resume = node_for(TransitionKind::SourceReturnResume);
+        let tail = node_for(TransitionKind::ProducerTail);
+        let completed = node_for(TransitionKind::CompletedTail);
+        let ordinary = plan
+            .nodes
+            .iter()
+            .find(|node| node.owner != wrapper.owner && node.transition == TransitionKind::Evaluate)
+            .unwrap()
+            .id;
+
+        let mut alternate_tail_incoming = plan.clone();
+        append_edge(
+            &mut alternate_tail_incoming,
+            ordinary,
+            tail,
+            EdgeKind::Continue,
+        );
+        assert_eq!(
+            alternate_tail_incoming.validate().unwrap_err(),
+            planner_error("producer tail must have only its exact wrapper invocation")
+        );
+
+        let mut alternate_completed_incoming = plan.clone();
+        append_edge(
+            &mut alternate_completed_incoming,
+            ordinary,
+            completed,
+            EdgeKind::Continue,
+        );
+        assert_eq!(
+            alternate_completed_incoming.validate().unwrap_err(),
+            planner_error("CompletedTail must have only its exact producer-tail completion")
+        );
+
+        for (from, expected) in [
+            (
+                resume,
+                "source-return resume must have only its exact wrapper invocation",
+            ),
+            (
+                wrapper.id,
+                "producer wrapper must have only its exact tail invocation",
+            ),
+            (
+                tail,
+                "producer tail must have only its exact completion edge",
+            ),
+        ] {
+            let mut alternate_outgoing = plan.clone();
+            append_edge(
+                &mut alternate_outgoing,
+                from,
+                plan.terminal_id(),
+                EdgeKind::Continue,
+            );
+            assert_eq!(
+                alternate_outgoing.validate().unwrap_err(),
+                planner_error(expected)
+            );
+        }
+
+        let completed_edge = *plan
+            .edges
+            .iter()
+            .find(|edge| edge.from == completed)
+            .unwrap();
+        let mut wrong_successor = plan.clone();
+        rewrite_edge(
+            &mut wrong_successor,
+            completed_edge.id,
+            completed,
+            plan.trap_terminal_id(),
+            completed_edge.kind,
+        );
+        assert_eq!(
+            wrong_successor.validate().unwrap_err(),
+            planner_error("CompletedTail must have only its activation-named successor")
+        );
+
+        let mut wrong_resume_kind = plan.clone();
+        rewrite_edge(
+            &mut wrong_resume_kind,
+            completed_edge.id,
+            completed,
+            completed_edge.to,
+            EdgeKind::Trap,
+        );
+        assert_eq!(
+            wrong_resume_kind.validate().unwrap_err(),
+            planner_error("CompletedTail successor does not use its normal-resume edge kind")
+        );
+    }
+
+    #[test]
+    fn entry_and_reachability_closure_rejects_balancing_invalid_root() {
+        // Promise class: durable invariant.
+        let plan = plan_static_transition_graph(&unit(), &BTreeMap::new()).unwrap();
+
+        let mut outside = plan.clone();
+        outside.entries[0] = StaticNodeId(u32::MAX);
+        assert_eq!(
+            outside.validate().unwrap_err(),
+            planner_error("graph entry is outside the closed node set")
+        );
+
+        let mut duplicate = plan.clone();
+        duplicate.entries.push(duplicate.entries[0]);
+        assert_eq!(
+            duplicate.validate().unwrap_err(),
+            planner_error("closed graph contains a duplicate entry")
         );
     }
 
@@ -1696,6 +1885,14 @@ mod tests {
                 .iter()
                 .find(|node| node.transition == TransitionKind::Terminal)
                 .expect("closed graph has Terminal")
+                .id
+        }
+
+        fn trap_terminal_id(&self) -> StaticNodeId {
+            self.nodes
+                .iter()
+                .find(|node| node.transition == TransitionKind::TrapTerminal)
+                .expect("closed graph has TrapTerminal")
                 .id
         }
     }
