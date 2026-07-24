@@ -123,9 +123,9 @@ NEXT RESEARCH PULL = hard-stop #6, then #9, #12, …
    ring compacted, drops verified. RT-PLANNER-DIAGNOSTIC-K closed at 36dd61f6.
 
 ⚠ BOUNDARY A IS MERGED (647a2e5b, retros in) BUT THIS WP STAYS `active` —
-   Boundary B is in flight and stopped at #3. Do not flip this parent to
-   `merged` on a boundary landing; it closes only when both boundaries land
-   and the scaling gate above is satisfied.
+   B1 is in flight and B2 has not started. Do not flip this parent to `merged`
+   on a boundary landing; it closes only when B1 AND B2 land and the operator
+   scaling gate above is satisfied.
 
 HELD CHAIN (closed, historical — does NOT carry forward)
 hard-stop count = 33            (FROZEN)
