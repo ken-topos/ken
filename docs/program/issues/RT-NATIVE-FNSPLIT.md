@@ -78,12 +78,43 @@ this line wins.** Re-read this line on every hard-stop.
 
 ```text
 RECUT CHAIN (live, from kickoff evt_2kgfmmeeh2x7w, 2026-07-24)
-hard-stop count    = 1
+hard-stop count    = 3   ← RESEARCH PULL DUE AND DISPATCHED
   #1 = Architect amendment ruling evt_6dpb96kn1583f (2026-07-24) — Phase 1's
        held-checkpoint premise is FALSE; census returns could_not_determine;
        empirical gate moves to the recut in two closed boundaries. Frame
        amended by the Steward in response. NO research pull due (< #3).
-NEXT RESEARCH PULL = hard-stop #3, then #6, #9, #12, …
+  #2 = Boundary B static-to-semantic bridge, raised by runtime-implementer on
+       WIP d4df9278, ruled by the Architect at evt_2jt1s5r7c1g2z (2026-07-24) —
+       Boundary A's plan is closed and constant-width but retains NO static
+       helper -> semantic-body association, while the retained emitter still
+       allocates FuncId from PartitionSemanticStateKey (vectors/strings/
+       recursive keys). Ruling: extend A with an OUT-OF-LINE semantic
+       descriptor plane keyed by the existing planned node/edge IDs; planned
+       IDs are the sole code identity; no discovery-order or hashed-key
+       fallback. NO research pull due (< #3).
+  #3 = Boundary B grounding found GENUINELY UNREPRESENTED activation-
+       independent semantic classes, raised by runtime-implementer at
+       evt_21yr288qkpb92 on clean checkpoint ed54b17e (2026-07-24).
+       SourceKont is not uniformly R (PartitionSourcePrefixKey carries LetBody,
+       ApplyRecursorSelection, UnwindRecursorSegment, checked recursive/IH
+       returns, selected-case return, terminal steps — these transform
+       value/control and may own a body, so they are neither R nor
+       authority-only edges). ProducerKont is not classifiable by action-name
+       mapping (OrientedInvocationReturn, CheckedComputationalIHReturn,
+       ScopeBodyReturn have independent control semantics; A has only R/W/T/C,
+       and R is ruled to own no body). SourceArm bodies lose exact occurrence
+       identity before reserve (cloned RuntimeExpr). Definition scheduling is
+       still state-owned per whole semantic key.
+       ⇒ This hits the ESCAPE HATCH in the Architect's hard-stop-#2 ruling:
+       "add an explicit planner node/transition kind and RETURN BOUNDARY A for
+       amended census and fresh review." The ring correctly refused to overload
+       R/W/T/C, assign by discovery order, or retain first-activation body
+       selection.
+       ⇒ RESEARCH PULL FIRED (§5a). Architect ruling is gated BEHIND the
+       advisory, at the implementer's own request.
+NEXT RESEARCH PULL = hard-stop #6, then #9, #12, …
+
+⚠ The count is at 3 and the pull has FIRED. Re-arm: the next pull is #6.
 
 HELD CHAIN (closed, historical — does NOT carry forward)
 hard-stop count = 33            (FROZEN)

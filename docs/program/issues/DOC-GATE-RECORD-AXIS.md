@@ -1,13 +1,13 @@
 ---
 id: DOC-GATE-RECORD-AXIS
 title: "validation-gate registry: bind token→runner COVERAGE on the record axis, and close the `kind` vocabulary"
-status: active
+status: merged
 owner: verify
 size: S
 gate: none
 depends_on: []
 blocks: []
-github: null
+github: https://github.com/ken-topos/ken/pull/922
 origin: adversary findings F1 + F2 on DOC-VALIDATION-BINDING (96ab2b4b), side thread thr_2seh2bm1kr5mh evt_382156eh3xayn, 2026-07-24. Steward-filed (agents cannot create tracked work per COORDINATION §2); Steward triage = both CONFIRMED PREVENTIVE.
 ---
 
