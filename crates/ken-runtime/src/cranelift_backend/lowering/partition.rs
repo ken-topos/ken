@@ -3354,6 +3354,8 @@ pub(super) struct PartitionContinuationInterner {
     states: Vec<PartitionContinuationState>,
     contracts: Vec<PartitionStateReturnContract>,
     tail_exit_dispositions: Vec<Option<PartitionTailExitDisposition>>,
+    tail_completion_dependencies: Vec<BTreeSet<usize>>,
+    root_tail_completion_dependencies: BTreeSet<usize>,
     edges: usize,
     emitted: usize,
     descriptor_bytes_constructed: usize,
@@ -3475,6 +3477,7 @@ impl PartitionContinuationInterner {
         self.states.push(state);
         self.contracts.push(self.keys[state_id].return_contract());
         self.tail_exit_dispositions.push(None);
+        self.tail_completion_dependencies.push(BTreeSet::new());
         Ok((state_id, state))
     }
 
@@ -3524,6 +3527,71 @@ impl PartitionContinuationInterner {
                 scalar_kind: contract.required_kind,
             },
         )
+    }
+
+    pub(super) fn record_tail_completion_dependency(
+        &mut self,
+        caller_state_id: Option<usize>,
+        callee_state_id: usize,
+        callee_contract: &PartitionStateReturnContract,
+    ) -> Result<(), CraneliftBackendError> {
+        if self.contracts.get(callee_state_id) != Some(callee_contract) {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer-tail dependency disagrees with the callee return contract",
+            ));
+        }
+        if caller_state_id == Some(callee_state_id) {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer-tail completion cannot depend on the same helper state",
+            ));
+        }
+        let Some(caller_state_id) = caller_state_id else {
+            self.root_tail_completion_dependencies
+                .insert(callee_state_id);
+            return Ok(());
+        };
+        let caller_contract = self.contracts.get(caller_state_id).ok_or_else(|| {
+            unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer-tail dependency names an unknown caller state",
+            )
+        })?;
+        if caller_contract.required_kind != callee_contract.required_kind {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                format!(
+                    "producer-tail dependency from caller {caller_state_id} \
+                     kind={:?} tail={:?} to callee {callee_state_id} kind={:?} tail={:?} \
+                     crosses incompatible semantic return contracts",
+                    caller_contract.required_kind,
+                    caller_contract.live_producer_tail,
+                    callee_contract.required_kind,
+                    callee_contract.live_producer_tail,
+                ),
+            ));
+        }
+        if self
+            .states
+            .get(caller_state_id)
+            .is_none_or(|state| state.lifecycle != PartitionStateLifecycle::Emitting)
+        {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer-tail dependency is not owned by the emitting caller state",
+            ));
+        }
+        self.tail_completion_dependencies
+            .get_mut(caller_state_id)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "producer-tail dependency lost its caller ledger",
+                )
+            })?
+            .insert(callee_state_id);
+        Ok(())
     }
 
     pub(super) fn record_declared_tail_abandon(
@@ -3661,6 +3729,109 @@ impl PartitionContinuationInterner {
                 ),
             ));
         }
+        let mut visiting = BTreeSet::new();
+        let mut verified = BTreeSet::new();
+        for state_id in 0..self.states.len() {
+            self.verify_tail_completion_state(state_id, &mut visiting, &mut verified)?;
+        }
+        for callee_state_id in &self.root_tail_completion_dependencies {
+            let callee_contract = &self.contracts[*callee_state_id];
+            match self.tail_exit_dispositions[*callee_state_id].as_ref() {
+                Some(PartitionTailExitDisposition::Completed {
+                    tail_site_id,
+                    scalar_kind,
+                    ..
+                }) if Some(*tail_site_id) == callee_contract.live_producer_tail
+                    && *scalar_kind == callee_contract.required_kind => {}
+                _ => {
+                    return Err(unsupported(
+                        "NativeProducerContinuationStepV1",
+                        format!(
+                            "root scalarized through callee state {callee_state_id} without an \
+                             exact defined completion disposition",
+                        ),
+                    ));
+                }
+            }
+            self.verify_tail_completion_state(*callee_state_id, &mut visiting, &mut verified)?;
+        }
+        Ok(())
+    }
+
+    fn verify_tail_completion_state(
+        &self,
+        state_id: usize,
+        visiting: &mut BTreeSet<usize>,
+        verified: &mut BTreeSet<usize>,
+    ) -> Result<(), CraneliftBackendError> {
+        if verified.contains(&state_id) {
+            return Ok(());
+        }
+        let dependencies = self
+            .tail_completion_dependencies
+            .get(state_id)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "producer-tail dependency lost its state ledger",
+                )
+            })?;
+        if dependencies.is_empty() {
+            verified.insert(state_id);
+            return Ok(());
+        }
+        if !visiting.insert(state_id) {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer-tail completion dependency graph contains a cycle",
+            ));
+        }
+        let caller_contract = &self.contracts[state_id];
+        for callee_state_id in dependencies {
+            let callee_contract = self.contracts.get(*callee_state_id).ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "producer-tail dependency names an unknown callee state",
+                )
+            })?;
+            if caller_contract.required_kind != callee_contract.required_kind {
+                return Err(unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "producer-tail dependency changed semantic contract after reservation",
+                ));
+            }
+            match (
+                self.states.get(*callee_state_id),
+                self.tail_exit_dispositions
+                    .get(*callee_state_id)
+                    .and_then(Option::as_ref),
+            ) {
+                (
+                    Some(PartitionContinuationState {
+                        lifecycle: PartitionStateLifecycle::Defined,
+                        ..
+                    }),
+                    Some(PartitionTailExitDisposition::Completed {
+                        tail_site_id,
+                        scalar_kind,
+                        ..
+                    }),
+                ) if Some(*tail_site_id) == callee_contract.live_producer_tail
+                    && *scalar_kind == callee_contract.required_kind => {}
+                _ => {
+                    return Err(unsupported(
+                        "NativeProducerContinuationStepV1",
+                        format!(
+                            "caller state {state_id} scalarized through callee state \
+                             {callee_state_id} without an exact defined completion disposition",
+                        ),
+                    ));
+                }
+            }
+            self.verify_tail_completion_state(*callee_state_id, visiting, verified)?;
+        }
+        visiting.remove(&state_id);
+        verified.insert(state_id);
         Ok(())
     }
 
