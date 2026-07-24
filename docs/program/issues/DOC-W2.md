@@ -277,6 +277,35 @@ cross-cutting property, not a task with its own pack.** It is satisfied by point
 ★ A schema nothing validates against is documentation of an intention, not a
 constraint.
 
+### R3 — AC-5's fence oracle: a `checked-examples` VALIDATION_GATES row
+
+**Verified on `bf8036c0`:** `library_documentation_gates.rs` is the *only*
+`ken-cli` test that walks a real repository corpus (`repo_root()` ×19); every
+other one that touches `check` uses synthetic fixtures. **Nothing invokes
+`ken check` over `library/` fences.** AC-5 therefore had no persistent oracle.
+
+⇒ **Register `checked-examples` as a `VALIDATION_GATES` row**, applying to
+records that declare checked examples, with a runner that invokes `ken check` on
+each extracted fence. ⛔ **Not** `ken_check_mode.rs` — that proves the *binary's*
+behaviour on fixtures it builds; AC-5 is a claim about a **corpus**, and the
+walker, `repo_root()`, and registry already live in the gate file.
+
+★ Unlike pack-integrity, this **is** a per-record claim — *"this document's
+checked examples check"* is true or false *of a document* — so it takes a
+registry row where pack-integrity takes a standalone test. **That contrast is R1's
+shape test working, not an inconsistency.**
+
+⚠ **R1's delta limit is AMENDED.** It said *"the integrity checks and their
+registration, nothing else"*, which foreclosed this fix. The `crates/` delta is
+now **(a)** pack-integrity checks, **(b)** the `checked-examples` gate and
+runner, **(c)** their registration — **and still nothing else.**
+
+⚠ **Cost, chosen rather than discovered:** `ken check` per fence is far more
+expensive than any existing gate here. **Scope the row to records that declare
+checked examples.** If CI runtime proves unacceptable, **stop and escalate** —
+⛔ do not silently narrow what the gate checks, which leaves the AC nominally
+satisfied and actually hollow.
+
 ## 7. Framing traps
 
 - **The evaluation suite is itself a corpus-shaped oracle** and is only as
