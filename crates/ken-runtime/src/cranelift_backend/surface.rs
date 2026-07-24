@@ -188,6 +188,7 @@ pub enum BackendFailure {
     Target(String),
     Verifier(String),
     Module(String),
+    PlannerInvariant(String),
     NativeResultDecode { token: i64 },
 }
 
@@ -241,6 +242,11 @@ impl fmt::Display for BackendFailure {
             BackendFailure::Target(msg) => write!(f, "target setup failed: {msg}"),
             BackendFailure::Verifier(msg) => write!(f, "verifier rejected function: {msg}"),
             BackendFailure::Module(msg) => write!(f, "module operation failed: {msg}"),
+            BackendFailure::PlannerInvariant(msg) => write!(
+                f,
+                "native static transition planner invariant failed; \
+                 please report this compiler bug: {msg}"
+            ),
             BackendFailure::NativeResultDecode { token } => {
                 write!(f, "native result token {token} is not in the result table")
             }
@@ -292,6 +298,7 @@ mod surface_diagnostics_tests {
             BackendFailure::Target("no isa for wasm64".to_string()),
             BackendFailure::Verifier("inst12 has no type".to_string()),
             BackendFailure::Module("duplicate symbol".to_string()),
+            BackendFailure::PlannerInvariant("edge evidence is incomplete".to_string()),
             BackendFailure::NativeResultDecode { token: -7 },
         ];
         for case in &cases {
@@ -300,6 +307,10 @@ mod surface_diagnostics_tests {
                 BackendFailure::Target(msg) => format!("target setup failed: {msg}"),
                 BackendFailure::Verifier(msg) => format!("verifier rejected function: {msg}"),
                 BackendFailure::Module(msg) => format!("module operation failed: {msg}"),
+                BackendFailure::PlannerInvariant(msg) => format!(
+                    "native static transition planner invariant failed; \
+                     please report this compiler bug: {msg}"
+                ),
                 BackendFailure::NativeResultDecode { token } => {
                     format!("native result token {token} is not in the result table")
                 }

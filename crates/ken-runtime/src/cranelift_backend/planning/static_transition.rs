@@ -7,7 +7,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{unsupported, CraneliftBackendError, RuntimeDeclaration, RuntimeDeclarationKind};
+use super::{
+    backend, unsupported, BackendFailure, CraneliftBackendError, RuntimeDeclaration,
+    RuntimeDeclarationKind,
+};
 use crate::RuntimeExpr;
 
 pub(super) const MAX_HELPERS_PER_STATIC_SOURCE: usize = 8;
@@ -192,6 +195,10 @@ struct Planner {
 }
 
 fn planner_error(detail: impl Into<String>) -> CraneliftBackendError {
+    backend(BackendFailure::PlannerInvariant(detail.into()))
+}
+
+fn planner_capacity_error(detail: impl Into<String>) -> CraneliftBackendError {
     unsupported("NativeStaticTransitionPlanner", detail)
 }
 
@@ -235,7 +242,7 @@ impl Planner {
         self.next_source = self
             .next_source
             .checked_add(1)
-            .ok_or_else(|| planner_error("static source identity exhausted"))?;
+            .ok_or_else(|| planner_capacity_error("static source identity exhausted"))?;
         Ok(StaticSourceId(id))
     }
 
@@ -246,7 +253,7 @@ impl Planner {
         frame: DynamicActivationFrame,
     ) -> Result<StaticNodeId, CraneliftBackendError> {
         let id = u32::try_from(self.plan.nodes.len())
-            .map_err(|_| planner_error("static node identity exhausted"))?;
+            .map_err(|_| planner_capacity_error("static node identity exhausted"))?;
         let id = StaticNodeId(id);
         self.plan.nodes.push(StaticNode {
             id,
@@ -268,7 +275,7 @@ impl Planner {
     ) -> Result<(), CraneliftBackendError> {
         let edge = u32::try_from(self.plan.edges.len())
             .map(StaticEdgeId)
-            .map_err(|_| planner_error("static edge identity exhausted"))?;
+            .map_err(|_| planner_capacity_error("static edge identity exhausted"))?;
         let owner = self.plan.nodes[from.0 as usize].owner;
         self.plan.edges.push(StaticEdge {
             id: edge,
@@ -307,7 +314,7 @@ impl Planner {
         }
         let id = u32::try_from(self.plan.stores.len() + 1)
             .map(PersistentNodeId)
-            .map_err(|_| planner_error("persistent store identity exhausted"))?;
+            .map_err(|_| planner_capacity_error("persistent store identity exhausted"))?;
         let child_depth = if child.0 == 0 {
             0
         } else {
@@ -321,7 +328,7 @@ impl Planner {
         self.plan.store_depths.push(
             child_depth
                 .checked_add(1)
-                .ok_or_else(|| planner_error("persistent chain depth exhausted"))?,
+                .ok_or_else(|| planner_capacity_error("persistent chain depth exhausted"))?,
         );
         self.store_interner.insert(node, id);
         Ok(id)
@@ -710,7 +717,7 @@ impl StaticTransitionPlan {
             };
             let depth = child_depth
                 .checked_add(1)
-                .ok_or_else(|| planner_error("persistent chain depth exhausted"))?;
+                .ok_or_else(|| planner_capacity_error("persistent chain depth exhausted"))?;
             if self.store_depths[index] != depth {
                 return Err(planner_error(
                     "persistent store depth does not match its child chain",
@@ -851,7 +858,7 @@ impl StaticTransitionPlan {
 
         self.validate_source_return_topology()?;
         if helpers.values().copied().max().unwrap_or(0) > MAX_HELPERS_PER_STATIC_SOURCE {
-            return Err(planner_error(
+            return Err(planner_capacity_error(
                 "fixed K helpers per static source was exceeded",
             ));
         }
@@ -1427,10 +1434,6 @@ mod tests {
                 "source_return_resume_nodes",
                 values(&rows, |r| r.source_return_resume_nodes),
             ),
-            (
-                "fixed_k",
-                values(&rows, |r| r.max_helpers_per_static_source),
-            ),
             ("helper_key_bytes", values(&rows, |r| r.helper_key_bytes)),
             (
                 "activation_frame_bytes",
@@ -1477,16 +1480,30 @@ mod tests {
                 "{name} is not affine across n=3..7"
             );
         }
-        for field in [
-            |r: &BoundaryACensus| r.helper_key_bytes,
-            |r: &BoundaryACensus| r.activation_frame_bytes,
-            |r: &BoundaryACensus| r.store_node_bytes,
-            |r: &BoundaryACensus| r.helper_key_schemas,
-            |r: &BoundaryACensus| r.frame_schemas,
-            |r: &BoundaryACensus| r.store_node_schemas,
+        for (name, field) in [
+            (
+                "fixed_k",
+                (|r: &BoundaryACensus| r.max_helpers_per_static_source)
+                    as fn(&BoundaryACensus) -> usize,
+            ),
+            ("helper_key_bytes", |r: &BoundaryACensus| r.helper_key_bytes),
+            ("activation_frame_bytes", |r: &BoundaryACensus| {
+                r.activation_frame_bytes
+            }),
+            ("store_node_bytes", |r: &BoundaryACensus| r.store_node_bytes),
+            ("helper_key_schemas", |r: &BoundaryACensus| {
+                r.helper_key_schemas
+            }),
+            ("frame_schemas", |r: &BoundaryACensus| r.frame_schemas),
+            ("store_node_schemas", |r: &BoundaryACensus| {
+                r.store_node_schemas
+            }),
         ] {
             let values = values(&rows, field);
-            assert!(values.windows(2).all(|pair| pair[0] == pair[1]));
+            assert!(
+                values.windows(2).all(|pair| pair[0] == pair[1]),
+                "{name} is not constant across n=3..7"
+            );
         }
         assert!(rows
             .iter()
@@ -1501,6 +1518,76 @@ mod tests {
                 && row.max_continuation_depth <= row.persistent_store_nodes as u32
                 && row.max_path_depth <= row.persistent_store_nodes as u32
         }));
+    }
+
+    #[test]
+    fn planner_invariants_and_input_capacity_have_distinct_attribution() {
+        // Promise class: durable invariant. Internal planner defects and
+        // input-capacity limits remain different error identities.
+        let plan =
+            plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
+
+        let mut missing_helper = plan.clone();
+        missing_helper.planned_helpers.pop();
+        let invariant = missing_helper.validate().unwrap_err();
+        assert!(matches!(
+            &invariant,
+            CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(detail))
+                if detail == "planned helper inventory is not exact for the closed graph"
+        ));
+        assert_eq!(
+            invariant.to_string(),
+            "Cranelift backend failure: native static transition planner invariant failed; \
+             please report this compiler bug: planned helper inventory is not exact for the \
+             closed graph"
+        );
+        assert!(!invariant.to_string().contains("unsupported"));
+
+        let mut helpers_per_source = BTreeMap::<StaticSourceId, usize>::new();
+        for helper in &plan.planned_helpers {
+            let owner = match *helper {
+                PlannedHelperKey::Node(_, id) => plan.nodes[id.0 as usize].owner,
+                PlannedHelperKey::Edge(_, id) => {
+                    let edge = plan.edges[id.0 as usize];
+                    plan.nodes[edge.from.0 as usize].owner
+                }
+            };
+            *helpers_per_source.entry(owner).or_default() += 1;
+        }
+        let owner = helpers_per_source
+            .iter()
+            .find_map(|(owner, count)| (*count == MAX_HELPERS_PER_STATIC_SOURCE).then_some(*owner))
+            .expect("nested bracket plan has a source at the fixed K capacity");
+        let frame = plan
+            .nodes
+            .iter()
+            .find(|node| node.owner == owner)
+            .expect("capacity owner has a node")
+            .frame;
+        let mut over_capacity = plan.clone();
+        let id = StaticNodeId(over_capacity.nodes.len() as u32);
+        over_capacity.nodes.push(StaticNode {
+            id,
+            transition: TransitionKind::Evaluate,
+            owner,
+            frame,
+        });
+        over_capacity
+            .planned_helpers
+            .push(PlannedHelperKey::node(TransitionKind::Evaluate, id));
+
+        let capacity = over_capacity.validate().unwrap_err();
+        assert!(matches!(
+            &capacity,
+            CraneliftBackendError::Unsupported(unsupported)
+                if unsupported.construct == "NativeStaticTransitionPlanner"
+                    && unsupported.reason == "fixed K helpers per static source was exceeded"
+        ));
+        assert_eq!(
+            capacity.to_string(),
+            "unsupported runtime-IR lowering: NativeStaticTransitionPlanner: fixed K helpers per \
+             static source was exceeded"
+        );
     }
 
     #[test]
