@@ -64,54 +64,195 @@ identity coupled to environment / control / layout **contents**.
 
 ---
 
-## ⚠ Phase 1 — CENSUS FIRST, ON THE HELD REPRESENTATION. This is the cheapest
-## possible exit and it runs BEFORE any rewrite.
+## ✅ Phase 1 — CLOSED, `could_not_determine`. AMENDED 2026-07-24 (recut hard-stop #1)
 
-**Deliverable:** a permanent, bounded scaling harness that generates the minimal
-nested resource-bracket family at **n = 3,4,5,6,7** and reports, **by state
-kind**, against **`b077eb7a` unchanged**:
+> ### ⛔ PHASE 1 IS RESOLVED. IT IS NOT PENDING WORK. DO NOT RE-RUN IT.
+>
+> **The original Phase 1 rested on a premise that is FALSE against the landed
+> code**, and this section now records the outcome rather than asking for it. It
+> is retained (not deleted) because the *result* is a fixed input to everything
+> below. Architect ruling `evt_6dpb96kn1583f`; implementer report on clean WIP
+> `82bd1f43`, tagged durably on origin as
+> `rt-native-fnsplit-census-wip-82bd1f43`.
+
+### The result, and the proved cause
+
+**`b077eb7a` cannot supply a complete empirical baseline at all.** On the
+generated n=3 family *and* on the checkpoint's own pre-existing public depth-2
+control, it fails with:
+
+```text
+NativeExitScopeTransitionV1: scope body return lost its parent producer tail
+```
+
+★ **That it reproduces on the checkpoint's existing depth-2 control — not only on
+the new generator — is what makes this structural rather than a generator bug.**
+
+⇒ **AC1.1 correctly returned `could_not_determine`; AC1.2 and the binary AC1.4
+were unreachable.** The fail-closed third outcome did exactly the job it was
+written for: a step that could not reach an answer **refused to return the
+permissive one.** That is the mechanism working, not a failure of it.
+
+There is also **no pre-existing planner boundary in the held representation** to
+measure at: `core.rs:301–520` consumes `partition_queue`, lowers each
+`PartitionWorkItem`, verifies and defines the functions, and the census is
+emitted only afterward at `core.rs:523+`, with interner counts accumulated
+*while* those work items are being materialized. **An earlier print is a
+failure-frontier-dependent prefix, not a closed graph.**
+
+### ⛔ What this DOES and DOES NOT falsify — the distinction is load-bearing
+
+| falsified | NOT falsified |
+|---|---|
+| The premise that unchanged `b077eb7a` can supply a complete empirical baseline | **The representation hold** |
+
+**The hold stands, established STRUCTURALLY** — variable-width composite helper
+identity, and the absence of fixed-K / fixed-key-width invariants. It never
+depended on curve-fitting, which is why losing the empirical baseline does not
+disturb it. ⛔ **Do not read `could_not_determine` as "the rewrite is
+unnecessary."** The cheap exit the original Phase 1 hoped for **does not exist**;
+the recut proceeds.
+
+### ⛔ Phase 1 landing rules
+
+- **Preserve** `82bd1f43` and `rt-native-fnsplit-checkpoint-b077eb7a` as
+  **diagnostic evidence**. Both are on origin. Do not delete either.
+- ⛔ **Do NOT publish the held representation, nor its representation-specific
+  census instrumentation.** Neither lands on `main`.
+- ⛔ **Do NOT land a permanent test whose only honest explicit result is
+  currently indeterminate.** A reusable fail-closed harness/schema may be split
+  or ported **only when it measures a tree that can satisfy its declared
+  contract.**
+- ⚠ **This supersedes the Steward's earlier "Phase 1 merges the harness only"
+  ruling (`evt_3zapwrrpkbq08`).** That ruling correctly kept the held
+  representation off `main`, but it still assumed a *landable* harness. There is
+  **no Phase-1 merge**; the harness ports forward into the recut instead.
+
+### ⛔ Do not "finish" the old machine
+
+- **Do NOT complete #34 in the held machine.** The durable viability ruling makes
+  #34 **evidence, not work to finish** — its source-return-owned resume edge
+  belongs in the **new** graph.
+- **Do NOT accept partial pre-error counts** as a census.
+- **Do NOT describe a newly-built dry-run path through `b077eb7a` as an
+  "unchanged-representation" census.** Building a new path through it means it is
+  no longer unchanged, and the claim would be false.
+
+★ **Repairing the old composite-key machine would contradict a fixed input and
+restart the very sealing cadence the viability ruling ended.**
+
+### Historical — the original Phase-1 deliverable, for the record
+
+*Superseded. A permanent bounded harness generating n = 3,4,5,6,7 and reporting,
+by state kind, against `b077eb7a` unchanged:*
 
 - static nodes, edges, helpers, emitted CLIF instructions/bytes
 - descriptor bytes constructed **and** retained; exact-comparison bytes
 - total frame fields **and** maximum frame fields
 - maximum static-key bytes; maximum env / pending / path lengths
+  ⛔ *(this metric was WRONG — see the width-metric correction below)*
 - compile wall-time and peak RSS under `prlimit` (fail-safe, never unbounded)
-
-**Why this order, and it is the load-bearing decision in this frame.** The
-Architect's own falsifier for the hold is: *the unchanged representation showing
-constant key/frame/env/pending/path maxima, bounded K states per source node, and
-stable first differences for graph, code AND descriptor work.* Measuring the held
-representation therefore either:
-
-- **falsifies the hold** — in which case **the entire rewrite is unnecessary**,
-  we resume sealing, and Phase 1 cost is a harness we needed anyway; or
-- **confirms it** — and we now hold the **baseline** every Phase-3 claim is
-  measured against.
-
-⇒ **Phase 1 is a genuine decision point, not a formality.** Report the table and
-**stop for a Steward/Architect read** before starting Phase 2.
-
-**Phase 1 acceptance:**
-
-- **AC1.1** The harness is a permanent test, bounded by `prlimit`, and **fails
-  safe** — a run that cannot complete reports *"could not determine"* as a
-  **third outcome that FAILS**, never a silent pass. (A step that cannot reach an
-  answer must not return the permissive one.)
-- **AC1.2** The n=3..7 table is produced for **every** metric above, by state
-  kind. Missing a metric is a failed AC, not a footnote.
-- **AC1.3** Report **first and second finite differences**, not ratios.
-  ⛔ A single ratio, or a fitted curve alone, does not discharge anything.
-- **AC1.4** State explicitly, in the report, **which of the two Phase-1 outcomes
-  obtains** — hold falsified, or hold confirmed — and do not proceed to Phase 2
-  without that statement being read by the Steward + Architect.
-- **AC1.5** ⛔ **Do not claim an exponent from few points.** `370n`, `93n²`, and a
-  product that only switches on at n=5 all pass through the observed n=4 datum.
-  Structural evidence (widths, K-per-node) is what discriminates; the table alone
-  is corroboration.
 
 ---
 
-## Phase 2 — the factored representation (only if Phase 1 confirms the hold)
+## ⚠ THE COMPLETE n=3..7 EMPIRICAL GATE MOVES TO THE RECUT — two CLOSED boundaries
+
+The operator's scaling gate is unchanged and still a merge condition. What
+changes is **where** it is measured, because it can no longer be measured on the
+held representation. It splits into **two closed boundaries**, and **neither may
+stand in for the other.**
+
+### Boundary A — PLANNER, before any semantic body emission
+
+Build the new factored static transition graph for **n = 3..7** and report:
+
+- static nodes · edges · **planned** helpers
+- persistent-store nodes · out-of-line evidence records
+- **fixed K** per static source/control node
+- fixed key schemas · fixed frame/store-node schemas
+
+**This is the recut's FIRST empirical acceptance gate.** ⛔ It is **not** a
+measurement of unchanged `b077eb7a` and must not be described as one.
+
+⛔ **CLIF instructions/bytes and full compile wall/RSS CANNOT be required here** —
+there is no lowering yet. Requiring them of a pre-lowering planner census is a
+category error.
+
+### Boundary B — FULL EMISSION, after the semantic port
+
+Report emitted helpers · CLIF instructions/bytes · descriptor
+construction/comparison work · compile wall + peak RSS · the same structural
+counts — **plus** the exact normal/abrupt/trap/join/affine differential suite.
+
+⛔ **A post-failure prefix cannot substitute for either boundary.**
+
+### ⛔ WIDTH METRIC — CORRECTED. The original frame's version was WRONG.
+
+**The original Phase-1 metric list demanded constant maxima for "env / pending /
+path lengths". That is the wrong invariant and would have rejected a CORRECT
+design.**
+
+The constant invariants are maximum **inline identity / frame / store-node
+widths**. **Logical persistent-chain DEPTH for environment / pending / path may
+grow Θ(n), and that is SOUND** — because the helper/frame carries **one
+constant-width ID** into the persistent store rather than the chain itself.
+
+⇒ The gate requires, precisely:
+
+1. **No flattened env / pending / path member in helper identity.**
+2. **Constant ID / node payload width.**
+3. **Affine total persistent nodes.**
+4. **At most affine logical chain depth.**
+
+⛔ **Do NOT require the logical chain length itself to be constant.**
+
+### ⛔ The first planner graph must carry #34 explicitly
+
+The **source-return-owned resume transition** must be present **from the first
+accepted planner shape** — not retrofitted. `Terminal` stays un-overloaded (it
+means *no continuation*; this state has a live continuation owned indirectly by an
+exact source-return descriptor), and Option 2's duplicate direct W remains
+rejected.
+
+★ **This is topology planning in the new representation, not a semantic patch to
+the old one** — which is what keeps it out of the ended cadence.
+
+### Acceptance
+
+- **AC1.1′** Fail-closed is retained verbatim for **both** boundaries: a run that
+  cannot complete reports `could_not_determine` as a **third outcome that FAILS**,
+  never a silent pass.
+- **AC1.2′** Each boundary reports **every** metric in *its own* list. Missing one
+  is a failed AC, not a footnote. ⛔ Do not borrow Boundary B's metrics into A.
+- **AC1.3′** Report **first and second finite differences**, not ratios. ⛔ A
+  single ratio, or a fitted curve alone, discharges nothing.
+- **AC1.4′** Boundary A is a **genuine stop**: report and **hold for a Steward +
+  Architect read** before the semantic port. The binary
+  hold-falsified/hold-confirmed question is **closed** above and is not re-asked.
+- **AC1.5′** ⛔ **Do not claim an exponent from few points.** `370n`, `93n²`, and
+  a product switching on at n=5 all pass through the historic n=4 datum. **The
+  structural invariants (1)–(4) are what discriminate**; the table corroborates.
+
+---
+
+## Phase 2 — the factored representation
+
+> ### ⛔ ENTRY CONDITION — AMENDED 2026-07-24
+>
+> The original entry condition was *"only if Phase 1 confirms the hold."* **That
+> condition can never be met as written**, because Phase 1 returned
+> `could_not_determine` and the binary question is closed. The amended entry
+> condition is:
+>
+> 1. **This amended frame is authoritative** (it is — that is what makes the
+>    planner-first sequence the live unit), **and**
+> 2. **Boundary A (the planner census) is the first thing built** — the factored
+>    static transition graph for n=3..7, reported and **held for a Steward +
+>    Architect read** before any semantic body emission.
+>
+> **The hold is established structurally, not empirically** (see Phase 1). Phase 2
+> proceeds on that basis. ⛔ Do not wait for an empirical confirmation that cannot
+> be produced, and do not re-open the viability question to get one.
 
 Replace the scheduled identity with:
 
@@ -151,6 +292,13 @@ not reduce the product-state count.**
   helper key schema has a **fixed maximum width independent of n**. Demonstrate
   by construction (fixed-arity key types, no `Vec`/`String`/path members), not by
   measurement alone.
+  ⚠ **Read this with the corrected width metric above.** "Fixed width" governs
+  **inline identity / frame / store-node width** — *not* logical
+  persistent-chain depth, which **may grow Θ(n)** and is sound because the
+  helper/frame carries one constant-width ID. The four precise requirements are
+  (1) no flattened env/pending/path member in helper identity, (2) constant
+  ID/node payload width, (3) affine total persistent nodes, (4) at most affine
+  logical chain depth. ⛔ Do not assert or demand a constant chain length.
 - **AC2.2** Each static source/control node owns **at most a fixed K**
   transition/helper nodes. **Name K** and assert it in a test.
 - **AC2.3** No `Debug`-serialization, recursive walk, or variable-width member
@@ -170,9 +318,27 @@ the Phase-1 table **and** the differential suite.
 
 **Phase 3 acceptance:**
 
+> ### ⛔ BASELINE HONESTY — AMENDED 2026-07-24. THERE IS NO BASELINE.
+>
+> **No apples-to-apples complete wall/RSS baseline exists at `b077eb7a`** — it
+> cannot complete even the depth-2 public control (Phase 1). So:
+>
+> - **Report the recut's ABSOLUTE n=3..7 values.** They stand on their own.
+> - ⛔ **Label the historic n=4 `1,482 states / 1,525 edges` comparison
+>   NON-COMPARABLE** unless it came from the **identical source, phase boundary,
+>   and metric schema**. It did not.
+> - ★ **Operator review decides the constants from the new complete
+>   measurements. It must NOT inherit a fabricated baseline.** Writing a
+>   comparison against a number that was never produced by the same measurement
+>   is the failure mode here — an honest absolute table beats a flattering delta
+>   against an incommensurable figure.
+
 - **AC3.1** The n=3..7 table shows **all** graph, code and descriptor totals
-  **affine in n**, with bounded first differences — and constant maxima for key
-  bytes, frame fields, env/pending/path lengths.
+  **affine in n**, with bounded first differences — and constant maxima for
+  **inline identity/frame/store-node widths**.
+  ⚠ **Corrected:** *not* "env/pending/path lengths" — logical chain depth may be
+  Θ(n) (see the width-metric correction). Require affine total persistent nodes
+  and at most affine logical chain depth instead.
 - **AC3.2 — differential, against `b077eb7a` behavior:** exact normal return;
   **every** abrupt exit; trap identity **and order**; joins; affine single-spend.
   Each unchanged. ⛔ One case per guard position, plus one where the problem hides
@@ -197,14 +363,43 @@ the Phase-1 table **and** the differential suite.
 - ⛔ Growing the scalar ABI, minting a trusted primitive, or widening the TCB to
   make a phase pass. Any of those is an **operator** call, not a build call.
 
+### Added by the 2026-07-24 amendment (hard-stop #1)
+
+- ⛔ **Phase 1's `could_not_determine` is CLOSED.** Do not re-run the
+  held-checkpoint census, and do not re-ask the binary
+  hold-falsified/hold-confirmed question.
+- ⛔ **The representation hold is established STRUCTURALLY.** Do not treat the
+  missing empirical baseline as evidence against it, and do not reopen viability
+  to manufacture a confirmation.
+- ⛔ **Do not repair, complete, or dry-run the held machine** — not #34, not a new
+  path through `b077eb7a`, not a partial pre-error count presented as a census.
+- ⛔ **Do not land the held representation or its representation-specific census
+  instrumentation**, and do not land a permanent test whose only honest result is
+  currently indeterminate.
+- ⛔ **Do not require constant logical persistent-chain depth.** Θ(n) depth with
+  constant-width IDs is the *correct* design; demanding otherwise rejects it.
+- ⛔ **Do not compare Phase-3 numbers to the historic n=4 `1,482 / 1,525` figures**
+  as if commensurable, and do not hand the operator a baseline that was never
+  measured under the same schema.
+
 ## Research cadence
 
-**Count FROZEN at 33; the every-3rd hard-stop cadence is SUSPENDED** with the
-machine it counted. When this frame opens a new chain, the Steward re-arms an
-explicit `next research pull = N` line in `issues/RT-NATIVE-FNSPLIT.md`. **The
-Steward holds the count of record**; the Architect's re-derivation loses on
-disagreement. A deep chain carrying **zero** advisories is itself the tell that
-both the self-trigger and the backstop have lapsed.
+**The held chain's count is FROZEN at 33 and does NOT carry forward** — it counted
+the machine this frame replaces.
+
+**The recut chain is ARMED and live:**
+
+```text
+RECUT CHAIN: hard-stop count = 1   (#1 = the Architect's 2026-07-24 amendment ruling)
+NEXT RESEARCH PULL = hard-stop #3, then #6, #9, #12, …
+```
+
+**The Steward holds the count of record**; the Architect's re-derivation loses on
+disagreement (it explicitly deferred on #1). The armed line lives in
+`issues/RT-NATIVE-FNSPLIT.md` and is the one to re-read on every hard-stop. **No
+research pull is due before #3.** A deep chain carrying **zero** advisories is
+itself the tell that both the self-trigger and the backstop have lapsed — that
+already happened once on the held chain (10 hard-stops dry).
 
 ## ⚠ Perishability — this clause binds
 
