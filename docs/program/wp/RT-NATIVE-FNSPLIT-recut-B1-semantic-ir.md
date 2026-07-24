@@ -198,10 +198,20 @@ Boundary A's retros found **one** cause behind all three of its review folds:
 > VIOLATES the property.** If you can build one, the check is broken.
 
 This is not advice; it is why AC-B1.7 says *pairwise-equal* rather than *affine*.
-**The landed planner already carries this exact defect**: `fixed_k` is asserted
-affine but not constant, so `4,5,6,7,8` passes while the zero headroom in fixed
-input 3 goes negative just past the measured window (adversary H3;
-`RT-PLANNER-DIAGNOSTIC-K`). ⚠ **Arithmetic corroborates but cannot close.**
+The landed planner **carried** this exact defect — `fixed_k` asserted affine but
+not constant, so `4,5,6,7,8` would pass while the zero headroom in fixed input 3
+goes negative just past the measured window (adversary H3).
+
+⚠ **CORRECTED 2026-07-24 (Architect, `evt_6091m3nhregch`).**
+`RT-PLANNER-DIAGNOSTIC-K` landed at `36dd61f6` and **fixed it**: `fixed_k` is now
+in the pairwise-equal list (`static_transition.rs:1485`, asserted at `:1504`),
+alongside the surviving `≤ MAX_HELPERS_PER_STATIC_SOURCE` bound (`:1510`).
+**Do not read this section as describing live code.**
+
+⇒ What still stands, and is the reason the discipline binds you: the `n=3..7`
+census varies **depth only**, so it is **corroboration along one axis — not
+closure.** Universal K rests on the exhaustive source-local construction
+argument, not on the row. ⚠ **Arithmetic corroborates but cannot close.**
 
 ## Escalation — when to hard-stop rather than improvise
 
@@ -218,9 +228,14 @@ fold is not a hard-stop.
 ## Branch and sequencing
 
 - **B1 is its own branch and its own merge unit.** ⛔ Do not grow it into B2.
-- ⚠ **`RT-PLANNER-DIAGNOSTIC-K` (S, Runtime) is sequenced AHEAD of B1** — both
-  touch `planning/static_transition.rs`. Land it first, then cut B1 from the
-  result.
+- ✅ **`RT-PLANNER-DIAGNOSTIC-K` (S, Runtime) was sequenced ahead of B1 and
+  LANDED at `36dd61f6`** — both touch `planning/static_transition.rs`. Cut B1
+  from that result, not from an earlier base.
+- ⚠ **`RT-PLANNER-ATTRIB-K` (XS, Runtime) is sequenced STRICTLY AFTER B1** —
+  same file. It moves the K-exceeded rejection off the capacity channel per the
+  Architect's J1 ruling. ⛔ It does **not** change the cap, the census, or any
+  B1 constraint — in particular the zero-outer-helper requirement stands exactly
+  as written.
 - The stopped `415b5aa7` checkpoint is **useful evidence and a semantic oracle**,
   and it is **not** an acceptance path to complete by adding enum cases. Keep it;
   do not build on it.

@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-24 21:34:38Z — from 47 issue file(s) in `docs/program/issues/`.
+2026-07-24 21:44:00Z — from 48 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -76,6 +76,7 @@ the committed file matches the generator's output.
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | merged | runtime | M | none | PR #911 @ 238a5c5d (origin/main 4ac9141e, CI green) |
 | `RT-NATIVE-FNSPLIT` | Native backend: bound per-function lowering growth to O(n) — helper identity is a variable-width whole-configuration key (orig. single-Function VReg::MAX, since fixed) | active | runtime | TBD | none | — |
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
+| `RT-PLANNER-ATTRIB-K` | Boundary A planner: fixed K is a design invariant — move the K-exceeded rejection off the capacity channel | ready | runtime | XS | none | — |
 | `RT-PLANNER-DIAGNOSTIC-K` | Boundary A planner: report planner-invariant failures as planner defects, and assert fixed_k CONSTANT rather than merely affine | merged | runtime | S | none | https://github.com/ken-topos/ken/pull/929 |
 | `RT-SPLIT` | decompose cranelift_backend.rs | merged | runtime | L | none | — |
 | `RT-SRC-DISPATCH-COVER` | close the source-machine scrutinee-dispatch coverage tier surfaced by RT-SPLIT slice 4 | draft | runtime | TBD | none | — |
@@ -106,6 +107,7 @@ is itself not yet `merged`/`closed`:
 - `F4` blocked by `A3` (status: draft)
 - `NATIVE-HANDLE-CARRIER` blocked by `RT-NATIVE-FNSPLIT` (status: active)
 - `PX8-F-CAP-41` blocked by `NATIVE-HANDLE-CARRIER` (status: draft)
+- `RT-PLANNER-ATTRIB-K` blocked by `RT-NATIVE-FNSPLIT` (status: active)
 
 ## Gate progress
 
