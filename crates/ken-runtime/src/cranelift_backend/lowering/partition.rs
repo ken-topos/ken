@@ -1286,6 +1286,26 @@ fn partition_scope_key(scope: &Option<OwnedSelectedScope>) -> Option<PartitionSe
     })
 }
 
+pub(super) fn partition_selected_payload_static_matches(
+    left_pending: &[OwnedPartitionEliminator],
+    left_scope: &Option<OwnedSelectedScope>,
+    right_pending: &[OwnedPartitionEliminator],
+    right_scope: &Option<OwnedSelectedScope>,
+) -> bool {
+    left_pending
+        .iter()
+        .map(partition_eliminator_key)
+        .eq(right_pending.iter().map(partition_eliminator_key))
+        && partition_scope_key(left_scope) == partition_scope_key(right_scope)
+}
+
+pub(super) fn partition_selected_lineage_static_matches(
+    left: &[OwnedSourceSelectedContinuation],
+    right: &[OwnedSourceSelectedContinuation],
+) -> bool {
+    partition_selected_lineage_key(left) == partition_selected_lineage_key(right)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PartitionSelectedContinuationKey {
     selected_edge_descriptor: Option<SelectedEdgeDescriptorId>,
@@ -2696,6 +2716,7 @@ struct PartitionSourceArmStaticKey {
     selected_pending: Vec<PartitionEliminatorKey>,
     selected_scope: Option<PartitionSelectedScopeKey>,
     selected_has_parent: bool,
+    selected_head_owner: Option<usize>,
     cleanup_head: Option<PartitionCleanupSuffixId>,
     source_return: Option<SourceKontReturnId>,
     completed_producer_tail: Option<PartitionProducerTailCompletion>,
@@ -2733,6 +2754,7 @@ impl PartitionSourceArmKey {
         selected_pending: &[OwnedPartitionEliminator],
         selected_scope: &Option<OwnedSelectedScope>,
         selected_lineage: &[OwnedSourceSelectedContinuation],
+        selected_head_owner: Option<usize>,
         _terminal_outer: ContinuationCursorId,
         cleanup_head: Option<PartitionCleanupSuffixId>,
         source_return: Option<SourceKontReturnId>,
@@ -2769,6 +2791,7 @@ impl PartitionSourceArmKey {
                 .collect(),
             selected_scope: partition_scope_key(selected_scope),
             selected_has_parent: !selected_lineage.is_empty(),
+            selected_head_owner,
             cleanup_head,
             source_return,
             completed_producer_tail,
@@ -5589,6 +5612,7 @@ pub(super) struct SourceArmPartitionWorkItem {
     pub(super) selected_pending: Vec<OwnedPartitionEliminator>,
     pub(super) selected_scope: Option<OwnedSelectedScope>,
     pub(super) selected_lineage: Vec<OwnedSourceSelectedContinuation>,
+    pub(super) selected_head_owner: Option<usize>,
     pub(super) terminal_outer: ContinuationCursorId,
     pub(super) cleanup_head: Option<PartitionCleanupSuffixId>,
     pub(super) cleanup_capture_pointer: Option<Value>,
