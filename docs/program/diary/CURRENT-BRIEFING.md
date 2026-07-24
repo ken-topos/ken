@@ -46,13 +46,21 @@
 >   the K-exceeded rejection off the `unsupported` channel. ⛔ CONTENDS with B1 on
 >   `static_transition.rs` — dispatch only after B1 lands.
 > - **`DOC-W2`** (L) — doc ring ACTIVE, branch `wp/DOC-W2-agent-core-packs`.
->   ⛔ Manifest records LAST, after `document-kind` lands. I ruled two frame
->   questions in `thr_2bzhq9q6gsee1` (`evt_24cne5pvpva1y`): pack-integrity checks
->   **extend the `ken-cli` gate** (accept `crates/` scope + Architect vote — an
->   unwired script re-opens the hole two WPs just closed); pack/schema population
->   closed by **predicate** (each §5 task performable by exactly one pack; a
->   schema exists iff the checker validates against it). **Amendment to the frame
->   file still owed.**
+>   ⛔ Manifest records LAST, after `document-kind` lands. **THREE frame rulings,
+>   all folded into `docs/program/issues/DOC-W2.md` §6a and committed** —
+>   `evt_24cne5pvpva1y` (R1, R2) + `evt_3sg3ep69atxcb` (R3), thread
+>   `thr_2bzhq9q6gsee1`:
+>   **R1** pack-integrity checks **extend `library_documentation_gates.rs`**
+>   (accept `crates/` scope + Architect vote — an unwired script re-opens the hole
+>   two WPs just closed); a graph invariant takes a standalone test, not a
+>   registry row. **R2** pack/schema population closed by **predicate** — each §5
+>   task performable by exactly ONE pack, no pack no task needs; a schema exists
+>   iff the checker validates against it. ⛔ no "refusal pack". **R3** AC-5 had
+>   **no fence oracle at all** (verified: nothing invokes `ken check` over
+>   `library/` fences) ⇒ register `checked-examples` as a per-record gate row;
+>   R1's "nothing else" delta limit is amended to admit it.
+>   ★ All three gaps were MINE, found by the Librarian's preflight **before a
+>   candidate existed**.
 > - **`STR-BIJ`** — held pending a re-derived `library/` ledger consumer set.
 >
 > ⚠ **FIVE single-ref exposures today** (incl. B1 itself — a full slice on one
