@@ -218,6 +218,65 @@ used.**
 7. **The `write-ken` refactor re-points both consumers** (§4), and the in-fleet
    seat path is verified, not assumed.
 
+## 6a. ⚖ STEWARD RULINGS 2026-07-24 — two frame gaps the Librarian's QA preflight found
+
+Both were genuine gaps in §2/AC-1 and AC-3. Ruled in `thr_2bzhq9q6gsee1`
+(`evt_24cne5pvpva1y`); this section is authoritative.
+
+### R1 — pack-integrity checks EXTEND `crates/ken-cli/tests/library_documentation_gates.rs`
+
+AC-3 says the checks must *reject*; the proposal says *"the build should
+reject."* The only CI-running documentation-gate home is that `ken-cli` test
+file. ⇒ **Extend it. Accept the `crates/` scope and the Architect vote.**
+
+⛔ **A standalone unwired script does not satisfy AC-3.** Shipping one would
+re-open, in a new file, exactly the hole `DOC-GATE-CONTROL-BINDING` and
+`DOC-GATE-WIRE-BINDING` were spent closing: a rule bound to a test but not to a
+gate is silent when its invocation is deleted.
+
+Consequences, stated rather than absorbed:
+
+- **Architect vote required.** §14a's doc-only exemption does **not** apply.
+- ⚠ The concurrency exception's real content is **contention-freeness**, not the
+  path list. `DOC-W2` still does not contend with Runtime (`ken-cli/tests` vs
+  `ken-runtime`) — the *review* couples, the *files* do not.
+- ⛔ Keep the `crates/` delta **minimal and mechanical**: the integrity checks and
+  their registration only. No surrounding refactor, no `repo_root()` change, no
+  touching the `document-kind` row.
+- ⭐ **Do not force the registry mechanism where it does not fit.** A genuine
+  per-record validation claim gets a `VALIDATION_GATES` row; a **global invariant
+  over the pack graph** — which "no missing module" and "no cycle" almost
+  certainly are — is a standalone committed test, and a row would be a **category
+  error**. Same call that excluded the status-population rule from
+  `DOC-GATE-WIRE-BINDING`. **State which shape each check is, and why.**
+
+### R2 — pack and schema population close by PREDICATE, not by a list
+
+§2 names directories; the proposal's pack list is explicitly *"such as"* — a
+sample. A hand-picked cardinality would be the rejected
+one-kind-per-responsibility taxonomy in another costume. So:
+
+> **Packs.** Each of the **seven §5 evaluation tasks must be performable by
+> loading exactly ONE pack**, and **no pack may exist that no §5 task requires.**
+
+Both halves bind: the first forbids assembling three packs for one task, the
+second forbids speculative packs. Completeness is tied to acceptance criteria
+that already exist and are load-bearing, and it is **verified by the suite you
+already run**. The proposal's `read-review` / `write-pure` / `write-effectful` /
+`author-package` / `repair-proof` stay a *sample* — adopt, split, or merge as the
+predicate requires. ⛔ `ffi-platform` remains deferred.
+
+⚠ **§5 task 6 — "refuse an unsupported or unproved request honestly" — is a
+cross-cutting property, not a task with its own pack.** It is satisfied by point
+10 of every module. ⛔ **Do not mint a "refusal pack."**
+
+> **Schemas.** A schema exists for **exactly those manifest formats the
+> pack-integrity checker validates.** If the checker does not read it, it does
+> not ship.
+
+★ A schema nothing validates against is documentation of an intention, not a
+constraint.
+
 ## 7. Framing traps
 
 - **The evaluation suite is itself a corpus-shaped oracle** and is only as
