@@ -9211,6 +9211,7 @@ impl<'a> Lowering<'a> {
                     owned_selected_lineage
                         .as_deref()
                         .expect("eligibility proves owned selected lineage"),
+                    None,
                     owned_return_eliminators
                         .as_deref()
                         .expect("eligibility proves owned return eliminators"),
@@ -9459,6 +9460,7 @@ impl<'a> Lowering<'a> {
                     owned_selected_lineage
                         .as_deref()
                         .expect("eligibility proves owned selected lineage"),
+                    None,
                     owned_return_eliminators
                         .as_deref()
                         .expect("eligibility proves owned return eliminators"),
@@ -9632,6 +9634,7 @@ impl<'a> Lowering<'a> {
         terminal_outer: ContinuationCursorId,
         target: &SourceJoinTarget<'b>,
         selected_lineage: &[OwnedSourceSelectedContinuation],
+        selected_pending_override: Option<&[OwnedPartitionEliminator]>,
         return_eliminators: &[OwnedPartitionEliminator],
         ledger_baseline: &PartitionLedgerBaseline,
     ) -> Result<(), CraneliftBackendError> {
@@ -9656,12 +9659,16 @@ impl<'a> Lowering<'a> {
         fields.push(selected.cursor_instance.0);
         let prefix_fields = fields.len().saturating_sub(env_fields);
         append_partition_scope_values(self, builder, &selected.selected_scope, &mut fields)?;
-        let selected_pending = own_partition_eliminators(&selected.pending).ok_or_else(|| {
-            unsupported(
-                "NativeSourceContinuationStepV1",
-                "source Eval state selected pending control has no exact schema",
-            )
-        })?;
+        let selected_pending = if let Some(selected_pending) = selected_pending_override {
+            selected_pending.to_vec()
+        } else {
+            own_partition_eliminators(&selected.pending).ok_or_else(|| {
+                unsupported(
+                    "NativeSourceContinuationStepV1",
+                    "source Eval state selected pending control has no exact schema",
+                )
+            })?
+        };
         append_partition_eliminator_values(self, builder, &selected_pending, &mut fields)?;
         let scope_fields = fields
             .len()
@@ -10060,6 +10067,7 @@ impl<'a> Lowering<'a> {
             control.terminal_outer,
             &target,
             &selected_lineage,
+            None,
             &return_eliminators,
             &ledger_baseline,
         )?;
@@ -10189,6 +10197,9 @@ impl<'a> Lowering<'a> {
         };
 
         let owned_return_eliminators = own_partition_eliminators(&target.terminal_active_prefix);
+        let owned_post_fanout_suffix = local_completion.as_ref().and_then(
+            |(_, suffix_pending, _, _, _)| own_partition_eliminators(suffix_pending),
+        );
         let owned_selected_lineage =
             own_partition_selected_lineage(&suffix_control.selected_lineage);
         let source_arm_partition_eligible = (self.partition_cut_armed
@@ -10204,12 +10215,20 @@ impl<'a> Lowering<'a> {
             && owned_return_eliminators
                 .as_ref()
                 .is_some_and(|frames| partition_eliminators_are_admissible(frames))
+            && owned_post_fanout_suffix
+                .as_ref()
+                .is_some_and(|frames| partition_eliminators_are_admissible(frames))
             && owned_selected_lineage.is_some();
         if source_arm_partition_eligible {
-            let return_eliminators =
+            let mut post_fanout_pending =
                 owned_return_eliminators.expect("eligibility proves owned return eliminators");
+            post_fanout_pending.extend(
+                owned_post_fanout_suffix
+                    .expect("eligibility proves an owned post-fanout suffix"),
+            );
             let selected_lineage =
                 owned_selected_lineage.expect("eligibility proves owned selected lineage");
+            let post_fanout_source_cursor = suffix_control.partition_cursor;
             let partition_site_id = self.partition_next_site;
             self.partition_next_site =
                 self.partition_next_site.checked_add(1).ok_or_else(|| {
@@ -10250,18 +10269,19 @@ impl<'a> Lowering<'a> {
                     false,
                     arm_env,
                     &source_prefix_template,
-                    suffix_control.partition_cursor,
+                    post_fanout_source_cursor,
                     suffix_control.pending_partition_exit_stack.clone(),
                     &suffix_control.selected,
                     suffix_control.terminal_outer,
                     &target,
                     &selected_lineage,
-                    &return_eliminators,
+                    Some(&post_fanout_pending),
+                    &[],
                     &ledger_baseline,
                 )?;
             }
             self.partition_cut_armed = false;
-            let Some((merge, suffix_pending, required_kind, site_id, root_authority)) =
+            let Some((merge, _suffix_pending, required_kind, _site_id, root_authority)) =
                 local_completion
             else {
                 return Ok(Lowered::RecursiveBackedge);
@@ -10274,220 +10294,15 @@ impl<'a> Lowering<'a> {
                     payload: builder.block_params(merge)[1],
                 },
             );
-            if !suffix_pending.is_empty() {
-                if let Some(pending) =
-                    own_partition_eliminators(&suffix_pending).filter(|pending| {
-                        partition_eliminators_are_admissible(pending)
-                            && partition_lowered_is_admissible(&merged)
-                    })
-                {
-                    let mut fields = Vec::new();
-                    append_partition_lowered_values(self, builder, &merged, &mut fields)?;
-                    fields.push(suffix_control.selected.activation_instance.0);
-                    fields.push(suffix_control.selected.cursor_instance.0);
-                    append_partition_eliminator_values(self, builder, &pending, &mut fields)?;
-                    append_partition_scope_values(
-                        self,
-                        builder,
-                        &suffix_control.selected.selected_scope,
-                        &mut fields,
-                    )?;
-                    // The occurrence map records structural aliasing without
-                    // admitting caller-local SSA identities into the state key.
-                    let (frame_values, field_types, field_map) =
-                        partition_frame_layout(builder, &fields);
-                    self.partition_metrics.record_call_frame(frame_values.len());
-                    let checked_join = self
-                        .native_join_plan
-                        .as_ref()
-                        .and_then(|plan| plan.sites.iter().find(|site| site.site_id == site_id))
-                        .map(PartitionCheckedJoinIdentity::from)
-                        .ok_or_else(|| {
-                            unsupported(
-                                "NativeFunctionPartition",
-                                "resume continuation has no exact checked join identity",
-                            )
-                        })?;
-                    let key =
-                        PartitionSemanticStateKey::ProducerKont(PartitionContinuationKey::new(
-                            checked_join.clone(),
-                            required_kind,
-                            ScalarMergeKind::ExitCode,
-                            &merged,
-                            suffix_control.selected.activation,
-                            suffix_control.selected.cursor,
-                            &pending,
-                            &suffix_control.selected.selected_ancestry,
-                            &suffix_control.selected.selected_scope,
-                            &selected_lineage,
-                            false,
-                            None,
-                            field_types.clone(),
-                            field_map.clone(),
-                        ));
-                    let existing = self
-                        .partition_continuations
-                        .lookup(&key, PartitionAggregateBudget::PRODUCTION)?;
-                    let (state_id, state, newly_reserved) =
-                        if let Some((state_id, state)) = existing {
-                            (state_id, state, false)
-                        } else {
-                            let helper_index = self.partition_next_helper;
-                            let function =
-                                *self.partition_helper_ids.get(helper_index).ok_or_else(|| {
-                                    unsupported(
-                                        "NativeFunctionPartition",
-                                        "resume continuation exhausted its predeclared helper pool",
-                                    )
-                                })?;
-                            self.partition_next_helper =
-                                self.partition_next_helper.checked_add(1).ok_or_else(|| {
-                                    unsupported(
-                                        "NativeFunctionPartition",
-                                        "partition helper identity exhausted",
-                                    )
-                                })?;
-                            let (state_id, state) = self.partition_continuations.reserve(
-                                key,
-                                function,
-                                helper_index,
-                                PartitionAggregateBudget::PRODUCTION,
-                            )?;
-                            (state_id, state, true)
-                        };
-                    let (_, function_ref) = self.partition_helper_ref(
-                        builder,
-                        state.helper_index,
-                        "interned resume continuation lost its helper identity",
-                    )?;
-                    let frame_size = partition_frame_size(frame_values.len())?;
-                    let frame = builder.create_sized_stack_slot(StackSlotData::new(
-                        StackSlotKind::ExplicitSlot,
-                        frame_size,
-                        3,
-                    ));
-                    for (index, value) in frame_values.iter().copied().enumerate() {
-                        let byte_offset = index
-                            .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
-                            .and_then(|offset| i32::try_from(offset).ok())
-                            .ok_or_else(|| {
-                                unsupported(
-                                    "NativeFunctionPartition",
-                                    "private resume frame offset overflowed",
-                                )
-                            })?;
-                        builder.ins().stack_store(value, frame, byte_offset);
-                    }
-                    let invocation = self
-                        .invocation_pointer
-                        .expect("resume partition owns an invocation pointer");
-                    let pointer_type = builder.func.dfg.value_type(invocation);
-                    let frame_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
-                    let tag_output = builder.create_sized_stack_slot(StackSlotData::new(
-                        StackSlotKind::ExplicitSlot,
-                        PARTITION_FRAME_FIELD_BYTES,
-                        3,
-                    ));
-                    let zero_tag = builder.ins().iconst(types::I64, 0);
-                    builder.ins().stack_store(zero_tag, tag_output, 0);
-                    let tag_output_pointer = builder.ins().stack_addr(pointer_type, tag_output, 0);
-                    let call = builder.ins().call(
-                        function_ref,
-                        &[invocation, frame_pointer, tag_output_pointer],
-                    );
-                    let result_tag = builder.ins().stack_load(types::I64, tag_output, 0);
-                    let result_payload = builder.inst_results(call)[0];
-                    if newly_reserved {
-                        self.partition_queue
-                            .push_back(PartitionWorkItem::ProducerKont(
-                                ProducerKontPartitionWorkItem {
-                                    state_id,
-                                    site_id: usize::MAX,
-                                    function: state.function,
-                                    field_types,
-                                    field_map,
-                                    value: merged,
-                                    action: ProducerKontAction::ApplyActiveEliminators {
-                                        activation: suffix_control.selected.activation,
-                                        activation_instance: suffix_control
-                                            .selected
-                                            .activation_instance,
-                                        cursor: suffix_control.selected.cursor,
-                                        cursor_instance: suffix_control.selected.cursor_instance,
-                                        pending,
-                                        selected_ancestry: suffix_control
-                                            .selected
-                                            .selected_ancestry
-                                            .clone(),
-                                        selected_scope: suffix_control
-                                            .selected
-                                            .selected_scope
-                                            .clone(),
-                                        selected_lineage,
-                                        capture_field_types: Vec::new(),
-                                        defer_successor_until_after_selected_scope: false,
-                                    },
-                                    capture_pointer: None,
-                                    successor: None,
-                                    ledger_baseline,
-                                    declaration_stack: self.declaration_stack.clone(),
-                                    active_recursive_invocations: self
-                                        .active_recursive_invocations
-                                        .clone(),
-                                    return_contract:
-                                        PartitionStateReturnContract::producer_terminal(
-                                            checked_join.clone(),
-                                            ScalarMergeKind::ExitCode,
-                                        ),
-                                    checked_join,
-                                    return_kind: ScalarMergeKind::ExitCode,
-                                },
-                            ));
-                    }
-                    self.restore_root_terminal_authority(
-                        root_authority,
-                        suffix_control.terminal_outer,
-                    )?;
-                    let lowered = self.lowered_from_scalar_pair(
-                        ScalarMergeKind::ExitCode,
-                        NativeScalarPairV1 {
-                            tag: result_tag,
-                            payload: result_payload,
-                        },
-                    );
-                    return if let Some(tail) = transferred_producer_tail {
-                        Self::complete_partition_producer_tail(
-                            lowered,
-                            self.partition_return_tail_cursor(tail),
-                            partition_site_id,
-                        )
-                    } else {
-                        Ok(lowered)
-                    };
-                }
-            }
-            let suffix_active = ActiveContinuationFrame {
-                activation: suffix_control.selected.activation,
-                activation_instance: suffix_control.selected.activation_instance,
-                cursor: suffix_control.selected.cursor,
-                cursor_instance: suffix_control.selected.cursor_instance,
-                parent: suffix_control.selected.parent,
-                pending: &suffix_pending,
-                selected_ancestry: &suffix_control.selected.selected_ancestry,
-                source_lineage: &suffix_control.selected_lineage,
-                source_selected_cursor: Some(suffix_control.selected.cursor),
-                selected_scope: suffix_control.selected.selected_scope.as_ref(),
-            };
             self.restore_root_terminal_authority(root_authority, suffix_control.terminal_outer)?;
-            let lowered = self.resume_active_continuation(builder, merged, suffix_active)?;
             return if let Some(tail) = transferred_producer_tail {
                 Self::complete_partition_producer_tail(
-                    lowered,
+                    merged,
                     self.partition_return_tail_cursor(tail),
                     partition_site_id,
                 )
             } else {
-                Ok(lowered)
+                Ok(merged)
             };
         }
         let ok_block = builder.create_block();
@@ -10830,6 +10645,7 @@ impl<'a> Lowering<'a> {
                     owned_selected_lineage
                         .as_deref()
                         .expect("eligibility proves owned selected lineage"),
+                    None,
                     owned_return_eliminators
                         .as_deref()
                         .expect("eligibility proves owned return eliminators"),

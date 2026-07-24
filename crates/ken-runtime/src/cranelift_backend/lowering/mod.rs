@@ -4556,20 +4556,56 @@ impl<'a> Lowering<'a> {
         template: &SourcePrefixTemplate,
         edge: SourcePredecessorEdge<'b>,
     ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
+        Self::instantiate_source_prefix_with_terminal(
+            template,
+            SourceContinuationTerminal::JumpToJoin(edge),
+        )
+    }
+
+    fn instantiate_source_prefix_partition_terminal<'b>(
+        template: &SourcePrefixTemplate,
+        expected_outer: ContinuationCursorId,
+    ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
+        Self::instantiate_source_prefix_with_terminal(
+            template,
+            SourceContinuationTerminal::ReturnFromPartition { expected_outer },
+        )
+    }
+
+    fn instantiate_source_prefix_with_terminal<'b>(
+        template: &SourcePrefixTemplate,
+        terminal: SourceContinuationTerminal<'b>,
+    ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
         Ok(match template {
             SourcePrefixTemplate::Terminal { expected_outer } => {
-                if *expected_outer != edge.target.expected_outer {
+                let terminal_outer = match &terminal {
+                    SourceContinuationTerminal::JumpToJoin(edge) => {
+                        edge.target.expected_outer
+                    }
+                    SourceContinuationTerminal::ReturnFromPartition { expected_outer } => {
+                        *expected_outer
+                    }
+                    _ => {
+                        return Err(unsupported(
+                            "NativeSourceContinuationStepV1",
+                            "partition prefix received a non-partition terminal",
+                        ));
+                    }
+                };
+                if *expected_outer != terminal_outer {
                     return Err(unsupported(
                         "NativeJoinPlanV1",
                         "source prefix terminal does not match the planned outer cursor",
                     ));
                 }
-                SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge))
+                SourceContinuation::Terminal(terminal)
             }
             SourcePrefixTemplate::CheckedRecursiveInvocationReturn { instance, next } => {
                 SourceContinuation::CheckedRecursiveInvocationReturn {
                     instance: *instance,
-                    next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                    next: Box::new(Self::instantiate_source_prefix_with_terminal(
+                        next, terminal,
+                    )?),
                 }
             }
             SourcePrefixTemplate::CheckedComputationalIHInvocationReturn {
@@ -4577,7 +4613,9 @@ impl<'a> Lowering<'a> {
                 next,
             } => SourceContinuation::CheckedComputationalIHInvocationReturn {
                 call_template_id: *call_template_id,
-                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                next: Box::new(Self::instantiate_source_prefix_with_terminal(
+                    next, terminal,
+                )?),
             },
             SourcePrefixTemplate::ReturnFromSelectedCase {
                 delimiter,
@@ -4586,17 +4624,23 @@ impl<'a> Lowering<'a> {
                 next,
             } => SourceContinuation::ReturnFromSelectedCase {
                 delimiter: *delimiter,
-                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                next: Box::new(Self::instantiate_source_prefix_with_terminal(
+                    next, terminal,
+                )?),
             },
             SourcePrefixTemplate::LetBody { body, env, next } => SourceContinuation::LetBody {
                 body: body.clone(),
                 env: env.clone(),
-                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                next: Box::new(Self::instantiate_source_prefix_with_terminal(
+                    next, terminal,
+                )?),
             },
             SourcePrefixTemplate::ApplyRecursorSelection { layer, next } => {
                 SourceContinuation::ApplyRecursorSelection {
                     layer: layer.clone(),
-                    next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                    next: Box::new(Self::instantiate_source_prefix_with_terminal(
+                        next, terminal,
+                    )?),
                 }
             }
             SourcePrefixTemplate::UnwindRecursorSegment {
@@ -4608,7 +4652,9 @@ impl<'a> Lowering<'a> {
                 stack: stack.clone(),
                 resume_cursor: *resume_cursor,
                 resume_cursor_instance: *resume_cursor_instance,
-                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                next: Box::new(Self::instantiate_source_prefix_with_terminal(
+                    next, terminal,
+                )?),
             },
             SourcePrefixTemplate::IfScrutinee {
                 then_expr,
@@ -4619,7 +4665,9 @@ impl<'a> Lowering<'a> {
                 then_expr: then_expr.clone(),
                 else_expr: else_expr.clone(),
                 env: env.clone(),
-                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                next: Box::new(Self::instantiate_source_prefix_with_terminal(
+                    next, terminal,
+                )?),
             },
             SourcePrefixTemplate::ConstructArgument {
                 constructor,
@@ -4632,7 +4680,9 @@ impl<'a> Lowering<'a> {
                 remaining: remaining.clone(),
                 lowered: lowered.clone(),
                 env: env.clone(),
-                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                next: Box::new(Self::instantiate_source_prefix_with_terminal(
+                    next, terminal,
+                )?),
             },
             SourcePrefixTemplate::MatchScrutinee {
                 cases,
@@ -4643,7 +4693,9 @@ impl<'a> Lowering<'a> {
                 cases: cases.clone(),
                 default: default.clone(),
                 env: env.clone(),
-                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                next: Box::new(Self::instantiate_source_prefix_with_terminal(
+                    next, terminal,
+                )?),
             },
             SourcePrefixTemplate::ComputationalMatchScrutinee {
                 cases,
@@ -4660,19 +4712,25 @@ impl<'a> Lowering<'a> {
                 provenance: *provenance,
                 checked_frame_id: *checked_frame_id,
                 answer_route: *answer_route,
-                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                next: Box::new(Self::instantiate_source_prefix_with_terminal(
+                    next, terminal,
+                )?),
             },
             SourcePrefixTemplate::ProjectRecord { field, next } => {
                 SourceContinuation::ProjectRecord {
                     field: field.clone(),
-                    next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                    next: Box::new(Self::instantiate_source_prefix_with_terminal(
+                        next, terminal,
+                    )?),
                 }
             }
             SourcePrefixTemplate::CallCallee { args, env, next } => {
                 SourceContinuation::CallCallee {
                     args: args.clone(),
                     env: env.clone(),
-                    next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                    next: Box::new(Self::instantiate_source_prefix_with_terminal(
+                        next, terminal,
+                    )?),
                 }
             }
             SourcePrefixTemplate::CallArgument {
@@ -4686,7 +4744,9 @@ impl<'a> Lowering<'a> {
                 remaining: remaining.clone(),
                 lowered: lowered.clone(),
                 env: env.clone(),
-                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                next: Box::new(Self::instantiate_source_prefix_with_terminal(
+                    next, terminal,
+                )?),
             },
         })
     }
