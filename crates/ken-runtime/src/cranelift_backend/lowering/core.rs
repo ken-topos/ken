@@ -200,6 +200,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         active_partition_return_contract: None,
         active_partition_state_id: None,
         active_partition_function_index: 0,
+        active_partition_caller_role: PartitionPendingCallerRole::ExportedRoot,
         pending_partition_call_edges: Vec::new(),
         active_partition_source_return: None,
         active_partition_completed_producer_tail: None,
@@ -385,6 +386,23 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         compiler.active_partition_return_contract = None;
         compiler.active_partition_state_id = continuation_state_id;
         compiler.active_partition_function_index = deferred_functions.len();
+        compiler.active_partition_caller_role = match &item {
+            PartitionWorkItem::Arm(item) => PartitionPendingCallerRole::Arm {
+                helper_index: item.helper_index,
+            },
+            PartitionWorkItem::SourceArm(item) => PartitionPendingCallerRole::State {
+                state_id: item.state_id,
+            },
+            PartitionWorkItem::SourceKont(item) => PartitionPendingCallerRole::State {
+                state_id: item.state_id,
+            },
+            PartitionWorkItem::ProducerKont(item) => PartitionPendingCallerRole::State {
+                state_id: item.state_id,
+            },
+            PartitionWorkItem::CleanupStep(item) => PartitionPendingCallerRole::State {
+                state_id: item.state_id,
+            },
+        };
         compiler.partition_live_growth_ticks = 0;
         compiler.declaration_stack.clear();
         compiler.active_recursive_declarations.clear();
@@ -447,10 +465,10 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     }
 
     compiler.restore_partition_ledger_union();
-    compiler.require_complete_partition_branch_returns()?;
     compiler.partition_cleanup_transitions.require_complete()?;
     compiler.partition_continuations.require_complete()?;
     compiler.seal_partition_call_edges(&mut deferred_functions)?;
+    compiler.require_complete_partition_branch_returns()?;
     compiler.require_complete_join_plan_consumption()?;
     compiler.require_complete_dynamic_splice_edge_consumption()?;
 
@@ -1893,33 +1911,341 @@ impl<'a> Lowering<'a> {
         &mut self,
         call_inst: Inst,
         result_payload: Value,
+        local_tag_output: StackSlot,
         callee_state_id: usize,
         kind: PartitionPendingCallKind,
     ) {
         self.pending_partition_call_edges
             .push(PartitionPendingCallEdge {
                 function_index: self.active_partition_function_index,
-                caller_state_id: self.active_partition_state_id,
+                caller: self.active_partition_caller_role,
                 callee_state_id,
                 kind,
                 call_inst,
                 result_payload,
+                local_tag_output,
+                target: PartitionPendingCallTarget::Ordinary,
             });
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn defer_or_consume_partition_arm_return(
+        &mut self,
+        authority: PartitionBranchReturnAuthority,
+        caller_helper_index: usize,
+        actual_kind: ScalarMergeKind,
+        checked_join: PartitionCheckedJoinIdentity,
+        result_payload: Value,
+        caller_tag_pointer: Value,
+        outer_call: PartitionArmOuterCallWitness,
+    ) -> Result<(), CraneliftBackendError> {
+        let candidates = self
+            .pending_partition_call_edges
+            .iter()
+            .enumerate()
+            .filter_map(|(index, edge)| {
+                (edge.function_index == self.active_partition_function_index
+                    && edge.caller
+                        == (PartitionPendingCallerRole::Arm {
+                            helper_index: caller_helper_index,
+                        })
+                    && edge.kind == PartitionPendingCallKind::ProducerKont
+                    && edge.result_payload == result_payload
+                    && matches!(edge.target, PartitionPendingCallTarget::Ordinary))
+                .then_some(index)
+            })
+            .collect::<Vec<_>>();
+        let Some(&edge_index) = candidates.first() else {
+            return self.consume_partition_branch_return(
+                authority,
+                caller_helper_index,
+                actual_kind,
+            );
+        };
+        if candidates.len() != 1 {
+            return Err(unsupported(
+                "NativeFunctionPartition",
+                "one Arm final scalar result aliases multiple pending producer calls",
+            ));
+        }
+        if authority.descriptor != outer_call.branch_return
+            || authority.descriptor.helper_index != caller_helper_index
+            || authority.descriptor.required_kind != actual_kind
+            || actual_kind != ScalarMergeKind::ExitCode
+        {
+            return Err(unsupported(
+                "NativeFunctionPartition",
+                "deferred Arm final scalar authority disagrees with its exact call edge",
+            ));
+        }
+        let edge = self
+            .pending_partition_call_edges
+            .get_mut(edge_index)
+            .expect("pending Arm edge index was just resolved");
+        edge.target = PartitionPendingCallTarget::FinalScalarArm {
+            checked_join,
+            required_kind: actual_kind,
+            branch_return: authority,
+            caller_helper_index,
+            caller_tag_pointer,
+            outer_call,
+        };
+        Ok(())
+    }
+
+    fn function_value_uses(function: &cranelift_codegen::ir::Function, value: Value) -> Vec<Inst> {
+        function
+            .layout
+            .blocks()
+            .flat_map(|block| function.layout.block_insts(block))
+            .filter(|inst| function.dfg.inst_values(*inst).any(|arg| arg == value))
+            .collect()
+    }
+
+    fn audit_partition_arm_outer_payload_only(
+        functions: &[(FuncId, cranelift_codegen::Context)],
+        witness: PartitionArmOuterCallWitness,
+    ) -> Result<(), CraneliftBackendError> {
+        let function = &functions
+            .get(witness.function_index)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeFunctionPartition",
+                    "deferred Arm target lost its outer fanout function",
+                )
+            })?
+            .1
+            .func;
+        let call_block = function
+            .layout
+            .inst_block(witness.call_inst)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeFunctionPartition",
+                    "deferred Arm target lost its outer fanout call",
+                )
+            })?;
+        let results_exact =
+            function.dfg.inst_results(witness.call_inst) == [witness.result_payload];
+        let tag_arg_exact =
+            function.dfg.inst_args(witness.call_inst).last().copied() == Some(witness.tag_pointer);
+        let tag_uses = Self::function_value_uses(function, witness.tag_pointer);
+        let result_uses = Self::function_value_uses(function, witness.result_payload);
+        let forward_opcode = function.dfg.insts[witness.forward_inst].opcode();
+        let forward_args = function
+            .dfg
+            .inst_values(witness.forward_inst)
+            .collect::<Vec<_>>();
+        let suffix = function
+            .layout
+            .block_insts(call_block)
+            .skip_while(|inst| *inst != witness.call_inst)
+            .skip(1)
+            .collect::<Vec<_>>();
+        if !results_exact
+            || !tag_arg_exact
+            || tag_uses != [witness.call_inst]
+            || result_uses != [witness.forward_inst]
+            || forward_opcode != Opcode::Jump
+            || forward_args != [witness.result_payload]
+            || suffix != [witness.forward_inst]
+        {
+            return Err(unsupported(
+                "NativeFunctionPartition",
+                format!(
+                    "FinalScalarArm outer fanout does not consume only the helper payload: \
+                     results_exact={results_exact}, tag_arg_exact={tag_arg_exact}, \
+                     tag_uses={tag_uses:?}, result_uses={result_uses:?}, \
+                     forward_opcode={forward_opcode}, forward_args={forward_args:?}, \
+                     suffix={suffix:?}",
+                ),
+            ));
+        }
+        let tag_loads = function
+            .layout
+            .blocks()
+            .flat_map(|block| function.layout.block_insts(block))
+            .filter(|inst| {
+                matches!(
+                    function.dfg.insts[*inst],
+                    InstructionData::StackLoad {
+                        opcode: Opcode::StackLoad,
+                        stack_slot,
+                        ..
+                    }
+                        if stack_slot == witness.tag_output
+                )
+            })
+            .collect::<Vec<_>>();
+        if !tag_loads.is_empty() {
+            let tag_loads = tag_loads
+                .iter()
+                .map(|inst| function.dfg.display_inst(*inst).to_string())
+                .collect::<Vec<_>>();
+            return Err(unsupported(
+                "NativeFunctionPartition",
+                format!(
+                    "FinalScalarArm outer fanout observes the helper tag result at {tag_loads:?}",
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    fn audit_and_rewrite_partition_arm_final_suffix(
+        function: &mut cranelift_codegen::ir::Function,
+        call_inst: Inst,
+        result_payload: Value,
+        local_tag_output: StackSlot,
+        caller_tag_pointer: Value,
+        rewrite: bool,
+    ) -> Result<(), CraneliftBackendError> {
+        let call_block = function.layout.inst_block(call_inst).ok_or_else(|| {
+            unsupported(
+                "NativeFunctionPartition",
+                "FinalScalarArm lost its pending helper call",
+            )
+        })?;
+        let suffix = function
+            .layout
+            .block_insts(call_block)
+            .skip_while(|inst| *inst != call_inst)
+            .skip(1)
+            .collect::<Vec<_>>();
+        let [tag_load, zero, tag_store, ret] = suffix.as_slice() else {
+            return Err(unsupported(
+                "NativeFunctionPartition",
+                "FinalScalarArm has semantic or noncanonical work after its helper call",
+            ));
+        };
+        let load_is_exact = matches!(
+            function.dfg.insts[*tag_load],
+            InstructionData::StackLoad {
+                opcode: Opcode::StackLoad,
+                stack_slot,
+                offset,
+            } if stack_slot == local_tag_output && i32::from(offset) == 0
+        );
+        let zero_is_exact = matches!(
+            function.dfg.insts[*zero],
+            InstructionData::UnaryImm {
+                opcode: Opcode::Iconst,
+                imm,
+            } if imm.bits() == 0
+        );
+        let zero_value = function.dfg.inst_results(*zero).first().copied();
+        let store_is_exact = zero_value.is_some_and(|zero_value| {
+            matches!(
+                function.dfg.insts[*tag_store],
+                InstructionData::Store {
+                    opcode: Opcode::Store,
+                    args,
+                    offset,
+                    ..
+                } if args == [zero_value, caller_tag_pointer] && i32::from(offset) == 0
+            )
+        });
+        let return_is_exact = function.dfg.insts[*ret].opcode() == Opcode::Return
+            && function.dfg.inst_args(*ret) == [result_payload];
+        let load_result_is_dead = function
+            .dfg
+            .inst_results(*tag_load)
+            .first()
+            .is_some_and(|value| Self::function_value_uses(function, *value).is_empty());
+        if !load_is_exact
+            || !zero_is_exact
+            || !store_is_exact
+            || !return_is_exact
+            || !load_result_is_dead
+        {
+            return Err(unsupported(
+                "NativeFunctionPartition",
+                "FinalScalarArm post-call suffix is not dead-tag-load plus canonical scalar return",
+            ));
+        }
+        if rewrite {
+            let mut cursor = FuncCursor::new(function).after_inst(call_inst);
+            while cursor.current_inst().is_some() {
+                cursor.remove_inst();
+            }
+            let zero = cursor.ins().iconst(types::I64, 0);
+            cursor
+                .ins()
+                .store(MemFlags::trusted(), zero, caller_tag_pointer, 0);
+            cursor.ins().return_(&[result_payload]);
+        }
+        Ok(())
     }
 
     fn seal_partition_call_edges(
         &mut self,
         functions: &mut [(FuncId, cranelift_codegen::Context)],
     ) -> Result<(), CraneliftBackendError> {
-        for edge in self.pending_partition_call_edges.iter().copied() {
+        let edges = std::mem::take(&mut self.pending_partition_call_edges);
+        for edge in edges {
             let summary = self
                 .partition_continuations
                 .exit_summary(edge.callee_state_id)?;
+            let contract = self
+                .partition_continuations
+                .return_contract(edge.callee_state_id)?;
             match (summary.normal, summary.abrupt) {
                 (
-                    PartitionNormalExitSummary::Completed { .. },
+                    PartitionNormalExitSummary::Completed {
+                        tail_site_id,
+                        scalar_kind,
+                    },
                     PartitionAbruptExitSummary::None,
                 ) => {
+                    if let PartitionPendingCallTarget::FinalScalarArm {
+                        checked_join,
+                        required_kind,
+                        branch_return,
+                        caller_helper_index,
+                        caller_tag_pointer,
+                        outer_call,
+                    } = edge.target
+                    {
+                        if contract.live_producer_tail != Some(tail_site_id)
+                            || contract.checked_join != checked_join
+                            || contract.required_kind != scalar_kind
+                            || required_kind != scalar_kind
+                            || edge.caller
+                                != (PartitionPendingCallerRole::Arm {
+                                    helper_index: caller_helper_index,
+                                })
+                            || branch_return.descriptor != outer_call.branch_return
+                        {
+                            return Err(unsupported(
+                                "NativeFunctionPartition",
+                                "completed FinalScalarArm target disagrees with its exact contract",
+                            ));
+                        }
+                        Self::audit_partition_arm_outer_payload_only(functions, outer_call)?;
+                        let function = &mut functions
+                            .get_mut(edge.function_index)
+                            .ok_or_else(|| {
+                                unsupported(
+                                    "NativeFunctionPartition",
+                                    "FinalScalarArm lost its caller function",
+                                )
+                            })?
+                            .1
+                            .func;
+                        Self::audit_and_rewrite_partition_arm_final_suffix(
+                            function,
+                            edge.call_inst,
+                            edge.result_payload,
+                            edge.local_tag_output,
+                            caller_tag_pointer,
+                            false,
+                        )?;
+                        self.consume_partition_branch_return(
+                            branch_return,
+                            caller_helper_index,
+                            required_kind,
+                        )?;
+                    }
                     self.partition_metrics.sealed_normal_call_edges = self
                         .partition_metrics
                         .sealed_normal_call_edges
@@ -1929,41 +2255,178 @@ impl<'a> Lowering<'a> {
                     PartitionNormalExitSummary::NoReturn,
                     PartitionAbruptExitSummary::MayDeclaredAbandon,
                 ) => {
-                    let function = &mut functions
-                        .get_mut(edge.function_index)
-                        .ok_or_else(|| {
-                            unsupported(
-                                "NativeProducerContinuationStepV1",
-                                "deferred partition call edge lost its caller function",
-                            )
-                        })?
-                        .1;
-                    if function.func.layout.inst_block(edge.call_inst).is_none() {
-                        continue;
+                    match edge.target {
+                        PartitionPendingCallTarget::FinalScalarArm {
+                            checked_join,
+                            required_kind,
+                            branch_return,
+                            caller_helper_index,
+                            caller_tag_pointer,
+                            outer_call,
+                        } => {
+                            if contract.checked_join != checked_join
+                                || contract.required_kind != required_kind
+                                || required_kind != ScalarMergeKind::ExitCode
+                                || edge.caller
+                                    != (PartitionPendingCallerRole::Arm {
+                                        helper_index: caller_helper_index,
+                                    })
+                                || branch_return.descriptor != outer_call.branch_return
+                            {
+                                return Err(unsupported(
+                                    "NativeFunctionPartition",
+                                    "abrupt FinalScalarArm target disagrees with its exact contract",
+                                ));
+                            }
+                            Self::audit_partition_arm_outer_payload_only(functions, outer_call)?;
+                            let function = &mut functions
+                                .get_mut(edge.function_index)
+                                .ok_or_else(|| {
+                                    unsupported(
+                                        "NativeFunctionPartition",
+                                        "FinalScalarArm lost its caller function",
+                                    )
+                                })?
+                                .1
+                                .func;
+                            Self::audit_and_rewrite_partition_arm_final_suffix(
+                                function,
+                                edge.call_inst,
+                                edge.result_payload,
+                                edge.local_tag_output,
+                                caller_tag_pointer,
+                                true,
+                            )?;
+                            self.consume_partition_branch_return(
+                                branch_return,
+                                caller_helper_index,
+                                required_kind,
+                            )?;
+                        }
+                        PartitionPendingCallTarget::Ordinary => {
+                            let function = &mut functions
+                                .get_mut(edge.function_index)
+                                .ok_or_else(|| {
+                                    unsupported(
+                                        "NativeProducerContinuationStepV1",
+                                        "deferred partition call edge lost its caller function",
+                                    )
+                                })?
+                                .1;
+                            if function.func.layout.inst_block(edge.call_inst).is_none() {
+                                continue;
+                            }
+                            let mut cursor =
+                                FuncCursor::new(&mut function.func).after_inst(edge.call_inst);
+                            while cursor.current_inst().is_some() {
+                                cursor.remove_inst();
+                            }
+                            cursor.ins().return_(&[edge.result_payload]);
+                        }
                     }
-                    let mut cursor = FuncCursor::new(&mut function.func).after_inst(edge.call_inst);
-                    while cursor.current_inst().is_some() {
-                        cursor.remove_inst();
-                    }
-                    cursor.ins().return_(&[edge.result_payload]);
                     self.partition_metrics.sealed_terminal_call_edges = self
                         .partition_metrics
                         .sealed_terminal_call_edges
                         .saturating_add(1);
                 }
                 (
-                    PartitionNormalExitSummary::Completed { .. },
+                    PartitionNormalExitSummary::Completed {
+                        tail_site_id,
+                        scalar_kind,
+                    },
                     PartitionAbruptExitSummary::MayDeclaredAbandon,
                 ) => {
-                    return Err(unsupported(
-                        "NativeProducerContinuationStepV1",
-                        format!(
-                            "{:?} edge {:?} -> state {} is mixed normal/declared-abandon before \
-                             the locked scalar helper boundary; the normal continuation is not \
-                             yet closed inside the callee",
-                            edge.kind, edge.caller_state_id, edge.callee_state_id,
-                        ),
-                    ));
+                    let PartitionPendingCallTarget::FinalScalarArm {
+                        checked_join,
+                        required_kind,
+                        branch_return,
+                        caller_helper_index,
+                        caller_tag_pointer,
+                        outer_call,
+                    } = edge.target
+                    else {
+                        let caller_kind = match edge.caller {
+                            PartitionPendingCallerRole::State { state_id } => {
+                                self.partition_continuations.state_kind(state_id)?
+                            }
+                            PartitionPendingCallerRole::ExportedRoot => "ExportedRoot",
+                            PartitionPendingCallerRole::Arm { .. } => "Arm",
+                        };
+                        let callee_kind = self
+                            .partition_continuations
+                            .state_kind(edge.callee_state_id)?;
+                        let suffix = functions
+                            .get(edge.function_index)
+                            .and_then(|(_, function)| {
+                                let block = function.func.layout.inst_block(edge.call_inst)?;
+                                Some(
+                                    function
+                                        .func
+                                        .layout
+                                        .block_insts(block)
+                                        .skip_while(|inst| *inst != edge.call_inst)
+                                        .skip(1)
+                                        .map(|inst| {
+                                            function.func.dfg.insts[inst].opcode().to_string()
+                                        })
+                                        .collect::<Vec<_>>(),
+                                )
+                            })
+                            .unwrap_or_default();
+                        return Err(unsupported(
+                            "NativeProducerContinuationStepV1",
+                            format!(
+                                "{:?} edge {:?} ({caller_kind}) -> state {} ({callee_kind}) is \
+                                 mixed before the locked scalar boundary without an exact final \
+                                 target; caller suffix={suffix:?}",
+                                edge.kind, edge.caller, edge.callee_state_id,
+                            ),
+                        ));
+                    };
+                    if contract.live_producer_tail != Some(tail_site_id)
+                        || contract.checked_join != checked_join
+                        || contract.required_kind != scalar_kind
+                        || required_kind != scalar_kind
+                        || required_kind != ScalarMergeKind::ExitCode
+                        || edge.caller
+                            != (PartitionPendingCallerRole::Arm {
+                                helper_index: caller_helper_index,
+                            })
+                        || branch_return.descriptor != outer_call.branch_return
+                    {
+                        return Err(unsupported(
+                            "NativeFunctionPartition",
+                            "mixed FinalScalarArm target disagrees with its exact contract",
+                        ));
+                    }
+                    Self::audit_partition_arm_outer_payload_only(functions, outer_call)?;
+                    let function = &mut functions
+                        .get_mut(edge.function_index)
+                        .ok_or_else(|| {
+                            unsupported(
+                                "NativeFunctionPartition",
+                                "FinalScalarArm lost its caller function",
+                            )
+                        })?
+                        .1
+                        .func;
+                    Self::audit_and_rewrite_partition_arm_final_suffix(
+                        function,
+                        edge.call_inst,
+                        edge.result_payload,
+                        edge.local_tag_output,
+                        caller_tag_pointer,
+                        true,
+                    )?;
+                    self.consume_partition_branch_return(
+                        branch_return,
+                        caller_helper_index,
+                        required_kind,
+                    )?;
+                    self.partition_metrics.sealed_terminal_call_edges = self
+                        .partition_metrics
+                        .sealed_terminal_call_edges
+                        .saturating_add(1);
                 }
                 (PartitionNormalExitSummary::NoReturn, PartitionAbruptExitSummary::None) => {
                     return Err(unsupported(
@@ -2319,7 +2782,16 @@ impl<'a> Lowering<'a> {
                 &[invocation, frame_pointer, tag_output_pointer],
             );
             let status = builder.inst_results(call)[0];
-            builder.ins().jump(merge, &[status.into()]);
+            let forward_inst = builder.ins().jump(merge, &[status.into()]);
+            let outer_call = PartitionArmOuterCallWitness {
+                function_index: self.active_partition_function_index,
+                call_inst: call,
+                forward_inst,
+                result_payload: status,
+                tag_output,
+                tag_pointer: tag_output_pointer,
+                branch_return: return_authority.descriptor,
+            };
 
             self.partition_queue
                 .push_back(PartitionWorkItem::Arm(ArmPartitionWorkItem {
@@ -2332,6 +2804,7 @@ impl<'a> Lowering<'a> {
                     eliminators: eliminators.clone(),
                     producer_kont: self.active_partition_producer_kont,
                     ledger_baseline: ledger_baseline.clone(),
+                    outer_call,
                     return_authority,
                 }));
         }
@@ -4482,6 +4955,7 @@ impl<'a> Lowering<'a> {
             self.record_pending_partition_call_edge(
                 call,
                 payload,
+                tag_output,
                 state_id,
                 PartitionPendingCallKind::ProducerKont,
             );
@@ -5359,7 +5833,7 @@ impl<'a> Lowering<'a> {
             builder,
             item.eliminators.clone(),
             terminal,
-            checked_join,
+            checked_join.clone(),
             item.return_authority.descriptor.required_kind,
         )?;
         self.active_partition_producer_kont = Some(producer_kont);
@@ -5425,10 +5899,20 @@ impl<'a> Lowering<'a> {
                     required_kind,
                     "NativeFunctionPartition",
                 )?;
-                self.consume_partition_branch_return(
+                let caller_tag_pointer = self.partition_output_tag_pointer.ok_or_else(|| {
+                    unsupported(
+                        "NativeFunctionPartition",
+                        "outlined Arm final scalar return has no caller tag output",
+                    )
+                })?;
+                self.defer_or_consume_partition_arm_return(
                     item.return_authority,
                     item.helper_index,
                     actual_kind,
+                    checked_join,
+                    pair.payload,
+                    caller_tag_pointer,
+                    item.outer_call,
                 )?;
                 self.emit_partition_pair_return(builder, pair);
                 Ok((None, ResultDecoder::ProcessStatus))
@@ -10600,6 +11084,7 @@ impl<'a> Lowering<'a> {
             self.record_pending_partition_call_edge(
                 call,
                 result_payload,
+                tag_output,
                 state_id,
                 PartitionPendingCallKind::SourcePredecessor,
             );

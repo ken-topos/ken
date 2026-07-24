@@ -3345,13 +3345,44 @@ pub(super) enum PartitionPendingCallKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum PartitionPendingCallerRole {
+    ExportedRoot,
+    Arm { helper_index: usize },
+    State { state_id: usize },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct PartitionArmOuterCallWitness {
+    pub(super) function_index: usize,
+    pub(super) call_inst: Inst,
+    pub(super) forward_inst: Inst,
+    pub(super) result_payload: Value,
+    pub(super) tag_output: StackSlot,
+    pub(super) tag_pointer: Value,
+    pub(super) branch_return: PartitionBranchReturnDescriptor,
+}
+
+pub(super) enum PartitionPendingCallTarget {
+    Ordinary,
+    FinalScalarArm {
+        checked_join: PartitionCheckedJoinIdentity,
+        required_kind: ScalarMergeKind,
+        branch_return: PartitionBranchReturnAuthority,
+        caller_helper_index: usize,
+        caller_tag_pointer: Value,
+        outer_call: PartitionArmOuterCallWitness,
+    },
+}
+
 pub(super) struct PartitionPendingCallEdge {
     pub(super) function_index: usize,
-    pub(super) caller_state_id: Option<usize>,
+    pub(super) caller: PartitionPendingCallerRole,
     pub(super) callee_state_id: usize,
     pub(super) kind: PartitionPendingCallKind,
     pub(super) call_inst: Inst,
     pub(super) result_payload: Value,
+    pub(super) local_tag_output: StackSlot,
+    pub(super) target: PartitionPendingCallTarget,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -4004,6 +4035,38 @@ impl PartitionContinuationInterner {
         Ok(summary)
     }
 
+    pub(super) fn return_contract(
+        &self,
+        state_id: usize,
+    ) -> Result<PartitionStateReturnContract, CraneliftBackendError> {
+        self.contracts.get(state_id).cloned().ok_or_else(|| {
+            unsupported(
+                "NativeProducerContinuationStepV1",
+                "partition return-contract query names an unknown semantic state",
+            )
+        })
+    }
+
+    pub(super) fn state_kind(
+        &self,
+        state_id: usize,
+    ) -> Result<&'static str, CraneliftBackendError> {
+        self.keys
+            .get(state_id)
+            .map(|key| match key {
+                PartitionSemanticStateKey::ProducerKont(_) => "ProducerKont",
+                PartitionSemanticStateKey::SourceArm(_) => "SourceArm",
+                PartitionSemanticStateKey::SourceKont(_) => "SourceKont",
+                PartitionSemanticStateKey::CleanupStep(_) => "CleanupStep",
+            })
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "partition state-kind query names an unknown semantic state",
+                )
+            })
+    }
+
     pub(super) fn counts(&self) -> (usize, usize, usize) {
         (self.states.len(), self.edges, self.emitted)
     }
@@ -4654,6 +4717,7 @@ pub(super) struct ArmPartitionWorkItem {
     pub(super) eliminators: Vec<OwnedPartitionEliminator>,
     pub(super) producer_kont: Option<PartitionProducerKontCursor>,
     pub(super) ledger_baseline: PartitionLedgerBaseline,
+    pub(super) outer_call: PartitionArmOuterCallWitness,
     pub(super) return_authority: PartitionBranchReturnAuthority,
 }
 
