@@ -14,17 +14,19 @@
 > `647a2e5b` · `DOC-GATE-CONTROL-BINDING` `f0ceb702` · `RT-PLANNER-DIAGNOSTIC-K`
 > `36dd61f6`, plus steward publishes through #932.
 >
-> ### ⚡ TWO PUBLISHES IN FLIGHT — check `origin/main` FIRST, both may have landed
+> ### ⚡ B1 IS PUBLISHING — check `origin/main` FIRST, it may have landed
 >
-> 1. **`DOC-GATE-WIRE-BINDING`** — publisher running (NOT doc-only, so it polls
->    CI). Exact `54e4eb5e`, Decision `dec_2e926xqn9a0ra` resolved (QA + Architect).
-> 2. **⚡ `RT-NATIVE-FNSPLIT` Boundary B1 — THE OPERATOR PRIORITY, ready and
->    UNPUBLISHED.** Exact `3d04293a` on `wp/RT-NATIVE-FNSPLIT-recut-B1-semantic-ir`
->    (pushed to origin by me), parent `4e2917f1`, Decision `dec_5cb9mvk1tx0k2`
->    resolved with QA PASS + Architect APPROVE. **Publish it the moment the
->    WIRE-BINDING publisher returns** — I serialized them so two publishers do not
->    race on `main`. Intersection with `main` is EMPTY and stays empty
->    (`ken-runtime` vs `ken-cli/tests` + `library/`).
+> - ✅ **`DOC-GATE-WIRE-BINDING` LANDED** — `a9860e9c`, PR #933, all CI green.
+>   ⇒ `DOC-W2`'s manifest step is now unblocked (rebase onto the
+>   `document-kind` row before writing records).
+> - **⚡ `RT-NATIVE-FNSPLIT` Boundary B1 — THE OPERATOR PRIORITY — PR #934 open at
+>   exact `3d04293a`**, publisher polling CI (669s wait; NOT doc-only). Decision
+>   `dec_5cb9mvk1tx0k2` resolved, QA PASS + Architect APPROVE.
+>   **Pre-publish checks all re-run against the ADVANCED `main`:** intersection
+>   **empty**; dep `36dd61f6` **is an ancestor** of the candidate; `fixed_k`
+>   constancy assertion present; **zero wildcard arms** in `semantic_ir.rs`.
+>   ⇒ **On resume: verify it landed BY CONTENT on `main`, never by exit code.**
+>   Then `RT-PLANNER-ATTRIB-K` unblocks (contends on `static_transition.rs`).
 >
 > ### Boundary A / B — the concepts, for a cold resume
 >
