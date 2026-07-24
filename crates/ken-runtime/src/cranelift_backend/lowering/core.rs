@@ -5617,6 +5617,242 @@ impl<'a> Lowering<'a> {
         }))
     }
 
+    fn selected_control_has_executable_payload(
+        selected: &SourceSelectedContinuation<'_>,
+        selected_lineage: &[SourceSelectedContinuation<'_>],
+    ) -> bool {
+        selected.parent.is_some()
+            || !selected.pending.is_empty()
+            || !selected.selected_ancestry.is_empty()
+            || selected.selected_scope.is_some()
+            || !selected_lineage.is_empty()
+    }
+
+    fn capture_selected_head_for_source_return(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        control: &mut SourceControl<'_>,
+    ) -> Result<Option<PartitionProducerKontCursor>, CraneliftBackendError> {
+        if !Self::selected_control_has_executable_payload(
+            &control.selected,
+            &control.selected_lineage,
+        ) {
+            if control.pending_partition_exit_stack.is_none() {
+                control.consumed_partition_cursor = None;
+            }
+            return Ok(None);
+        }
+        if control.pending_partition_exit_stack.is_some() {
+            // This is still inside a selected-exit reservation, so it is not
+            // the last seam where W can take ownership. The residual return
+            // remains a predecessor of the later no-pending seam.
+            return Ok(None);
+        }
+        let Some(successor) = control.producer_kont else {
+            // An inner source fanout may reserve before the terminal producer
+            // cursor exists. Its return descriptor remains a predecessor of
+            // the later seam where both selected ownership and T coexist.
+            return Ok(None);
+        };
+        let previous = self.active_partition_producer_kont.replace(successor);
+        let head = self.push_selected_head_producer_kont(
+            builder,
+            control.selected.as_active(&control.selected_lineage),
+            false,
+        );
+        self.active_partition_producer_kont = previous;
+        let head = head?.ok_or_else(|| {
+            unsupported(
+                "NativeProducerContinuationStepV1",
+                "selected-head source return has no checked return contract",
+            )
+        })?;
+        if head.site_id == successor.site_id {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "selected-head wrapper aliases its exact producer successor",
+            ));
+        }
+        control.producer_kont = Some(head);
+        control.selected.parent = None;
+        control.selected.pending.clear();
+        control.selected.selected_ancestry.clear();
+        control.selected.selected_scope = None;
+        control.selected_lineage.clear();
+        control.consumed_partition_cursor = None;
+        Ok(Some(head))
+    }
+
+    fn spend_borrowed_selected_head_for_source_return(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        producer: PartitionProducerKontCursor,
+        selected: &mut SourceSelectedContinuation<'_>,
+        selected_lineage: &mut Vec<SourceSelectedContinuation<'_>>,
+    ) -> Result<(), CraneliftBackendError> {
+        let mut plan = self
+            .partition_producer_sites
+            .get(&producer.site_id)
+            .cloned()
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "final source return selected owner has no producer plan",
+                )
+            })?;
+        let successor = plan.successor.ok_or_else(|| {
+            unsupported(
+                "NativeProducerContinuationStepV1",
+                "final source return selected owner has no exact successor",
+            )
+        })?;
+        let ProducerKontAction::ApplyActiveEliminators {
+            selected_edge_descriptor,
+            activation,
+            activation_instance,
+            cursor,
+            cursor_instance,
+            pending,
+            selected_ancestry,
+            selected_scope,
+            selected_lineage: owned_lineage,
+            capture_field_types,
+            defer_successor_until_after_selected_scope,
+        } = &mut plan.action
+        else {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "final source return retained selected control without a selected-head owner",
+            ));
+        };
+        let current_pending = own_partition_eliminators(&selected.pending).ok_or_else(|| {
+            unsupported(
+                "NativeProducerContinuationStepV1",
+                "borrowed selected control has no exact pending schema",
+            )
+        })?;
+        let current_lineage =
+            own_partition_selected_lineage(selected_lineage).ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "borrowed selected control has no exact lineage schema",
+                )
+            })?;
+        if *defer_successor_until_after_selected_scope
+            || successor.site_id == producer.site_id
+            || selected.selected_edge_descriptor != *selected_edge_descriptor
+            || selected.activation != *activation
+            || selected.cursor != *cursor
+            || selected.selected_ancestry != *selected_ancestry
+            || !partition_selected_payload_static_matches(
+                &current_pending,
+                &selected.selected_scope,
+                pending,
+                selected_scope,
+            )
+            || !partition_selected_lineage_static_matches(
+                &current_lineage,
+                owned_lineage,
+            )
+        {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "final source return selected control differs from its exact producer owner",
+            ));
+        }
+        let captured = capture_field_types
+            .iter()
+            .enumerate()
+            .map(|(index, field_type)| {
+                let offset = index
+                    .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                    .and_then(|offset| i32::try_from(offset).ok())
+                    .ok_or_else(|| {
+                        unsupported(
+                            "NativeProducerContinuationStepV1",
+                            "selected-owner audit capture offset overflowed",
+                        )
+                    })?;
+                Ok(builder.ins().load(
+                    *field_type,
+                    MemFlags::trusted(),
+                    producer.capture_pointer,
+                    offset,
+                ))
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+        let mut captured = captured.into_iter();
+        *activation_instance = ActivationInstanceRef(captured.next().ok_or_else(|| {
+            unsupported(
+                "NativeControlCellV1",
+                "selected-owner audit lost its activation-instance reference",
+            )
+        })?);
+        *cursor_instance = ControlCursorRef(captured.next().ok_or_else(|| {
+            unsupported(
+                "NativeControlCellV1",
+                "selected-owner audit lost its cursor-instance reference",
+            )
+        })?);
+        rebuild_partition_eliminators(pending, &mut captured, &mut self.native_int_tags)?;
+        rebuild_partition_scope(
+            selected_scope,
+            &mut captured,
+            &mut self.native_int_tags,
+        )?;
+        let _successor_capture = captured.next().ok_or_else(|| {
+            unsupported(
+                "NativeProducerContinuationStepV1",
+                "selected-owner audit lost its successor-cell pointer",
+            )
+        })?;
+        if captured.next().is_some() {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "selected-owner audit capture has trailing fields",
+            ));
+        }
+        let mut exact_refs = vec![
+            (
+                selected.activation_instance.0,
+                activation_instance.0,
+            ),
+            (selected.cursor_instance.0, cursor_instance.0),
+        ];
+        match (selected.selected_scope.as_ref(), selected_scope.as_ref()) {
+            (Some(current), Some(owned)) => {
+                exact_refs.push((current.scope_instance.0, owned.scope_instance.0));
+                match (
+                    current.parent_scope_instance,
+                    owned.parent_scope_instance,
+                ) {
+                    (Some(current), Some(owned)) => exact_refs.push((current.0, owned.0)),
+                    (None, None) => {}
+                    _ => {
+                        return Err(unsupported(
+                            "NativeProducerContinuationStepV1",
+                            "selected-owner audit changed parent-scope identity",
+                        ));
+                    }
+                }
+            }
+            (None, None) => {}
+            _ => {
+                return Err(unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "selected-owner audit changed scope presence",
+                ));
+            }
+        }
+        self.emit_control_cell_ref_guard(builder, &exact_refs);
+        selected.parent = None;
+        selected.pending.clear();
+        selected.selected_ancestry.clear();
+        selected.selected_scope = None;
+        selected_lineage.clear();
+        Ok(())
+    }
+
     fn call_restored_selected_producer_kont<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -7066,29 +7302,32 @@ impl<'a> Lowering<'a> {
             &mut item.pending_partition_exit_stack,
             &mut loaded,
         )?;
-        item.selected_activation_instance =
-            ActivationInstanceRef(loaded.next().ok_or_else(|| {
-                unsupported(
-                    "NativeControlCellV1",
-                    "source Eval state lost its activation-instance reference",
-                )
-            })?);
-        item.selected_cursor_instance = ControlCursorRef(loaded.next().ok_or_else(|| {
-            unsupported(
-                "NativeControlCellV1",
-                "source Eval state lost its cursor-instance reference",
-            )
-        })?);
-        rebuild_partition_scope(
-            &mut item.selected_scope,
-            &mut loaded,
-            &mut self.native_int_tags,
-        )?;
-        rebuild_partition_eliminators(
-            &mut item.selected_pending,
-            &mut loaded,
-            &mut self.native_int_tags,
-        )?;
+        if item.selected_head_owner.is_none() {
+            item.selected_activation_instance =
+                ActivationInstanceRef(loaded.next().ok_or_else(|| {
+                    unsupported(
+                        "NativeControlCellV1",
+                        "source Eval state lost its activation-instance reference",
+                    )
+                })?);
+            item.selected_cursor_instance =
+                ControlCursorRef(loaded.next().ok_or_else(|| {
+                    unsupported(
+                        "NativeControlCellV1",
+                        "source Eval state lost its cursor-instance reference",
+                    )
+                })?);
+            rebuild_partition_scope(
+                &mut item.selected_scope,
+                &mut loaded,
+                &mut self.native_int_tags,
+            )?;
+            rebuild_partition_eliminators(
+                &mut item.selected_pending,
+                &mut loaded,
+                &mut self.native_int_tags,
+            )?;
+        }
         if item.cleanup_head.is_some() {
             item.cleanup_capture_pointer = Some(loaded.next().ok_or_else(|| {
                 unsupported(
@@ -7104,6 +7343,141 @@ impl<'a> Lowering<'a> {
                     "source Eval state lost its return-descriptor cell pointer",
                 )
             })?;
+        }
+        if let Some(owner_site_id) = item.selected_head_owner {
+            let source_return = item.source_return.ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "selected-head-owned source state lost its return descriptor",
+                )
+            })?;
+            let descriptor = self
+                .partition_source_returns
+                .definition(source_return.return_id)?;
+            if descriptor.key.producer_head != Some(owner_site_id) {
+                return Err(unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "source state return descriptor substituted its selected-head owner",
+                ));
+            }
+            let mut plan = self
+                .partition_producer_sites
+                .get(&owner_site_id)
+                .cloned()
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "source state selected-head owner has no producer plan",
+                    )
+                })?;
+            let successor = plan.successor.ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "source state selected-head owner has no exact successor",
+                )
+            })?;
+            let ProducerKontAction::ApplyActiveEliminators {
+                selected_edge_descriptor,
+                activation,
+                activation_instance,
+                cursor,
+                cursor_instance,
+                pending,
+                selected_ancestry,
+                selected_scope,
+                selected_lineage,
+                capture_field_types,
+                defer_successor_until_after_selected_scope,
+            } = &mut plan.action
+            else {
+                return Err(unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "source state selected-head owner has the wrong producer action",
+                ));
+            };
+            if *defer_successor_until_after_selected_scope
+                || item.selected_edge_descriptor != *selected_edge_descriptor
+                || item.selected_activation != *activation
+                || item.selected_cursor != *cursor
+                || item.selected_ancestry != *selected_ancestry
+            {
+                return Err(unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "source state selected topology differs from its producer owner",
+                ));
+            }
+            let pointer_type = builder.func.dfg.value_type(source_return.capture_pointer);
+            let capture_pointer = builder.ins().load(
+                pointer_type,
+                MemFlags::trusted(),
+                source_return.capture_pointer,
+                (PARTITION_FRAME_FIELD_BYTES * 2) as i32,
+            );
+            let captured = capture_field_types
+                .iter()
+                .enumerate()
+                .map(|(index, field_type)| {
+                    let offset = index
+                        .checked_mul(PARTITION_FRAME_FIELD_BYTES as usize)
+                        .and_then(|offset| i32::try_from(offset).ok())
+                        .ok_or_else(|| {
+                            unsupported(
+                                "NativeProducerContinuationStepV1",
+                                "borrowed selected-head capture offset overflowed",
+                            )
+                        })?;
+                    Ok(builder.ins().load(
+                        *field_type,
+                        MemFlags::trusted(),
+                        capture_pointer,
+                        offset,
+                    ))
+                })
+                .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+            let mut captured = captured.into_iter();
+            *activation_instance =
+                ActivationInstanceRef(captured.next().ok_or_else(|| {
+                    unsupported(
+                        "NativeControlCellV1",
+                        "borrowed selected head lost its activation-instance reference",
+                    )
+                })?);
+            *cursor_instance = ControlCursorRef(captured.next().ok_or_else(|| {
+                unsupported(
+                    "NativeControlCellV1",
+                    "borrowed selected head lost its cursor-instance reference",
+                )
+            })?);
+            rebuild_partition_eliminators(pending, &mut captured, &mut self.native_int_tags)?;
+            rebuild_partition_scope(
+                selected_scope,
+                &mut captured,
+                &mut self.native_int_tags,
+            )?;
+            let successor_capture = captured.next().ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "borrowed selected head lost its successor-cell pointer",
+                )
+            })?;
+            if captured.next().is_some() {
+                return Err(unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "borrowed selected-head capture has trailing fields",
+                ));
+            }
+            if successor.site_id == owner_site_id {
+                return Err(unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "borrowed selected-head owner aliases its successor",
+                ));
+            }
+            let _ = successor_capture;
+            item.selected_activation_instance = *activation_instance;
+            item.selected_cursor_instance = *cursor_instance;
+            item.selected_pending = std::mem::take(pending);
+            item.selected_scope = selected_scope.take();
+            item.selected_lineage = std::mem::take(selected_lineage);
         }
         if loaded.next().is_some() {
             return Err(unsupported(
@@ -7875,6 +8249,7 @@ impl<'a> Lowering<'a> {
             &selected_pending,
             &control.selected.selected_scope,
             &selected_lineage,
+            None,
             control.terminal_outer,
             None,
             effective_source_return.map(|cursor| cursor.return_id),
@@ -8019,6 +8394,7 @@ impl<'a> Lowering<'a> {
                     selected_pending,
                     selected_scope: control.selected.selected_scope,
                     selected_lineage,
+                    selected_head_owner: None,
                     terminal_outer: control.terminal_outer,
                     cleanup_head: None,
                     cleanup_capture_pointer: None,
@@ -8080,7 +8456,7 @@ impl<'a> Lowering<'a> {
             let descriptor = self.partition_source_returns.definition(cursor.return_id)?;
             let contract = self
                 .active_partition_return_contract
-                .as_ref()
+                .clone()
                 .ok_or_else(|| {
                     unsupported(
                         "NativeSourceKontReturnV1",
@@ -8194,6 +8570,38 @@ impl<'a> Lowering<'a> {
                     control,
                     Some(cursor.return_id),
                 );
+            }
+            if matches!(
+                descriptor.key.parent,
+                PartitionSourceKontReturnParent::FinalScalar(_)
+            ) && Self::selected_control_has_executable_payload(
+                &control.selected,
+                &control.selected_lineage,
+            ) {
+                let producer = control.producer_kont.ok_or_else(|| {
+                    unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "final source return retained selected control without a producer owner",
+                    )
+                })?;
+                self.spend_borrowed_selected_head_for_source_return(
+                    builder,
+                    producer,
+                    &mut control.selected,
+                    &mut control.selected_lineage,
+                )?;
+            }
+            if matches!(
+                descriptor.key.parent,
+                PartitionSourceKontReturnParent::FinalScalar(_)
+            ) && control.partition_cursor.is_none()
+                && control.pending_partition_exit_stack.is_none()
+            {
+                // The final scalar return is past every source-arm closure and
+                // selected-exit reservation that can consume this cursor. Do
+                // not carry its capture pointer across the STOP boundary as
+                // nominally spent history.
+                control.consumed_partition_cursor = None;
             }
             let completed_tail_reservation = if !matches!(input, Lowered::Trap(_))
                 && control.completed_producer_tail.is_none()
@@ -8319,24 +8727,19 @@ impl<'a> Lowering<'a> {
             };
             if !matches!(input, Lowered::Trap(_)) && control.completed_producer_tail.is_none() {
                 if let Some(producer_kont) = control.producer_kont.take() {
+                    if Self::selected_control_has_executable_payload(
+                        &control.selected,
+                        &control.selected_lineage,
+                    ) {
+                        return Err(unsupported(
+                            "NativeProducerContinuationStepV1",
+                            "terminal source return retained executable selected control beside \
+                             its captured producer head",
+                        ));
+                    }
                     let pending_edge_baseline = self.pending_partition_call_edges.len();
-                    let completed = if self.producer_kont_is_scope_exit_bridge(producer_kont)? {
-                        if !control.selected_lineage.is_empty() {
-                            return Err(unsupported(
-                                "NativeExitScopeTransitionV1",
-                                "terminal source return retained a child selected head",
-                            ));
-                        }
-                        self.call_partition_producer_kont(builder, producer_kont, input)?
-                    } else {
-                        self.call_restored_selected_producer_kont(
-                            builder,
-                            producer_kont,
-                            input,
-                            &control.selected,
-                            &control.selected_lineage,
-                        )?
-                    };
+                    let completed =
+                        self.call_partition_producer_kont(builder, producer_kont, input)?;
                     if let Some(reservation) = completed_tail_reservation {
                         if self.pending_partition_call_edges.len()
                             != pending_edge_baseline.saturating_add(1)
@@ -12040,6 +12443,7 @@ impl<'a> Lowering<'a> {
                         .as_deref()
                         .expect("eligibility proves owned selected lineage"),
                     None,
+                    None,
                     owned_return_eliminators
                         .as_deref()
                         .expect("eligibility proves owned return eliminators"),
@@ -12296,6 +12700,7 @@ impl<'a> Lowering<'a> {
                     owned_selected_lineage
                         .as_deref()
                         .expect("eligibility proves owned selected lineage"),
+                    None,
                     None,
                     owned_return_eliminators
                         .as_deref()
@@ -12571,11 +12976,29 @@ impl<'a> Lowering<'a> {
         terminal_outer: ContinuationCursorId,
         target: &SourceJoinTarget<'b>,
         selected_lineage: &[OwnedSourceSelectedContinuation],
+        selected_head_owner: Option<PartitionProducerKontCursor>,
         selected_pending_override: Option<&[OwnedPartitionEliminator]>,
         return_eliminators: &[OwnedPartitionEliminator],
         source_return: Option<PartitionSourceKontReturnCursor>,
         ledger_baseline: &PartitionLedgerBaseline,
     ) -> Result<(), CraneliftBackendError> {
+        if let Some(owner) = selected_head_owner {
+            let source_return = source_return.ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "selected-head-owned source predecessor has no return descriptor",
+                )
+            })?;
+            let descriptor = self
+                .partition_source_returns
+                .definition(source_return.return_id)?;
+            if descriptor.key.producer_head != Some(owner.site_id) {
+                return Err(unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "source predecessor selected owner differs from its return producer head",
+                ));
+            }
+        }
         let (cleanup_head, cleanup_capture_pointer) = self.build_partition_cleanup_capture_chain(
             builder,
             target.checked_site_id,
@@ -12593,10 +13016,12 @@ impl<'a> Lowering<'a> {
             fields.push(producer_kont.capture_pointer);
         }
         Self::append_partition_exit_stack_values(&pending_exit_stack, &mut fields);
-        fields.push(selected.activation_instance.0);
-        fields.push(selected.cursor_instance.0);
+        let direct_selected_capture = selected_head_owner.is_none();
+        if direct_selected_capture {
+            fields.push(selected.activation_instance.0);
+            fields.push(selected.cursor_instance.0);
+        }
         let prefix_fields = fields.len().saturating_sub(env_fields);
-        append_partition_scope_values(self, builder, &selected.selected_scope, &mut fields)?;
         let selected_pending = if let Some(selected_pending) = selected_pending_override {
             selected_pending.to_vec()
         } else {
@@ -12607,7 +13032,10 @@ impl<'a> Lowering<'a> {
                 )
             })?
         };
-        append_partition_eliminator_values(self, builder, &selected_pending, &mut fields)?;
+        if direct_selected_capture {
+            append_partition_scope_values(self, builder, &selected.selected_scope, &mut fields)?;
+            append_partition_eliminator_values(self, builder, &selected_pending, &mut fields)?;
+        }
         let scope_fields = fields
             .len()
             .saturating_sub(env_fields)
@@ -12675,6 +13103,7 @@ impl<'a> Lowering<'a> {
             &selected_pending,
             &selected.selected_scope,
             selected_lineage,
+            selected_head_owner.map(|owner| owner.site_id),
             terminal_outer,
             cleanup_head,
             source_return.map(|cursor| cursor.return_id),
@@ -12914,6 +13343,7 @@ impl<'a> Lowering<'a> {
                     selected_pending,
                     selected_scope: selected.selected_scope.clone(),
                     selected_lineage: selected_lineage.to_vec(),
+                    selected_head_owner: selected_head_owner.map(|owner| owner.site_id),
                     terminal_outer,
                     cleanup_head,
                     cleanup_capture_pointer,
@@ -13131,6 +13561,7 @@ impl<'a> Lowering<'a> {
             &target,
             &selected_lineage,
             None,
+            None,
             &return_eliminators,
             control.source_return,
             &ledger_baseline,
@@ -13309,6 +13740,8 @@ impl<'a> Lowering<'a> {
                 completed_producer_tail: suffix_control.completed_producer_tail,
             };
             self.push_partition_source_prefix(builder, &mut return_control)?;
+            let captured_selected_head =
+                self.capture_selected_head_for_source_return(builder, &mut return_control)?;
             let mut post_fanout_pending =
                 owned_return_eliminators.expect("eligibility proves owned return eliminators");
             post_fanout_pending.extend(
@@ -13412,11 +13845,12 @@ impl<'a> Lowering<'a> {
                     arm_env,
                     &source_prefix_template,
                     None,
-                    suffix_control.pending_partition_exit_stack.clone(),
+                    return_control.pending_partition_exit_stack.clone(),
                     &suffix_control.selected,
-                    suffix_control.terminal_outer,
+                    return_control.terminal_outer,
                     &target,
                     &selected_lineage,
+                    captured_selected_head,
                     Some(&post_fanout_pending),
                     &[],
                     Some(post_fanout_return),
@@ -13797,6 +14231,7 @@ impl<'a> Lowering<'a> {
                     owned_selected_lineage
                         .as_deref()
                         .expect("eligibility proves owned selected lineage"),
+                    None,
                     None,
                     owned_return_eliminators
                         .as_deref()
