@@ -193,6 +193,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         partition_metrics: PartitionCompilationMetrics::default(),
         partition_next_site: 0,
         partition_branch_returns: PartitionBranchReturnLedger::default(),
+        partition_completed_tails: CompletedTailAuthorityLedger::default(),
         partition_producer_sites: BTreeMap::new(),
         partition_producer_site_interner: PartitionProducerKontSiteInterner::default(),
         partition_next_producer_site: 0,
@@ -472,6 +473,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     compiler.partition_continuations.require_complete()?;
     compiler.resolve_closed_source_arm_requests(&mut deferred_functions)?;
     compiler.seal_partition_call_edges(&mut deferred_functions)?;
+    compiler.partition_completed_tails.require_complete()?;
     compiler.require_complete_partition_branch_returns()?;
     compiler.require_complete_join_plan_consumption()?;
     compiler.require_complete_dynamic_splice_edge_consumption()?;
@@ -2918,7 +2920,7 @@ impl<'a> Lowering<'a> {
         functions: &mut [(FuncId, cranelift_codegen::Context)],
     ) -> Result<(), CraneliftBackendError> {
         let edges = std::mem::take(&mut self.pending_partition_call_edges);
-        for edge in edges {
+        for (pending_call_edge, edge) in edges.into_iter().enumerate() {
             let summary = self
                 .partition_continuations
                 .exit_summary(edge.callee_state_id)?;
@@ -3024,6 +3026,26 @@ impl<'a> Lowering<'a> {
                                 source_return,
                             )?;
                         }
+                        PartitionPendingCallTarget::CompletedTailSourceKont {
+                            authority,
+                            caller_tag_pointer,
+                        } => {
+                            self.seal_completed_tail_source_kont(
+                                functions,
+                                pending_call_edge,
+                                edge.function_index,
+                                edge.caller,
+                                edge.callee_state_id,
+                                edge.call_inst,
+                                edge.result_payload,
+                                edge.local_tag_output,
+                                &contract,
+                                tail_site_id,
+                                scalar_kind,
+                                authority,
+                                caller_tag_pointer,
+                            )?;
+                        }
                         PartitionPendingCallTarget::Ordinary => {}
                     }
                     self.partition_metrics.sealed_normal_call_edges = self
@@ -3113,6 +3135,12 @@ impl<'a> Lowering<'a> {
                                 target_block,
                                 source_return,
                             )?;
+                        }
+                        PartitionPendingCallTarget::CompletedTailSourceKont { .. } => {
+                            return Err(unsupported(
+                                "NativeCompletedTailV1",
+                                "completed-tail authority reached only an abrupt exit",
+                            ));
                         }
                         PartitionPendingCallTarget::Ordinary => {
                             let function = &mut functions
@@ -3238,6 +3266,26 @@ impl<'a> Lowering<'a> {
                                 source_return,
                             )?;
                         }
+                        PartitionPendingCallTarget::CompletedTailSourceKont {
+                            authority,
+                            caller_tag_pointer,
+                        } => {
+                            self.seal_completed_tail_source_kont(
+                                functions,
+                                pending_call_edge,
+                                edge.function_index,
+                                edge.caller,
+                                edge.callee_state_id,
+                                edge.call_inst,
+                                edge.result_payload,
+                                edge.local_tag_output,
+                                &contract,
+                                tail_site_id,
+                                scalar_kind,
+                                authority,
+                                caller_tag_pointer,
+                            )?;
+                        }
                         PartitionPendingCallTarget::Ordinary => {
                             let caller_kind = match edge.caller {
                                 PartitionPendingCallerRole::State { state_id } => {
@@ -3306,6 +3354,105 @@ impl<'a> Lowering<'a> {
         }
         self.remove_closed_host_result_fanout_merges(functions)?;
         Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn seal_completed_tail_source_kont(
+        &mut self,
+        functions: &mut [(FuncId, cranelift_codegen::Context)],
+        pending_call_edge: usize,
+        function_index: usize,
+        caller: PartitionPendingCallerRole,
+        callee_state_id: usize,
+        call_inst: Inst,
+        result_payload: Value,
+        local_tag_output: StackSlot,
+        contract: &PartitionStateReturnContract,
+        tail_site_id: usize,
+        scalar_kind: ScalarMergeKind,
+        authority: CompletedTailAuthority,
+        caller_tag_pointer: Value,
+    ) -> Result<(), CraneliftBackendError> {
+        let descriptor = self.partition_completed_tails.bound_descriptor(
+            &authority,
+            callee_state_id,
+            pending_call_edge,
+            call_inst,
+        )?;
+        if caller
+            != (PartitionPendingCallerRole::State {
+                state_id: descriptor.caller_state_id,
+            })
+            || self
+                .partition_continuations
+                .state_kind(descriptor.caller_state_id)?
+                != "SourceKont"
+            || contract.live_producer_tail != Some(tail_site_id)
+            || tail_site_id != descriptor.expected_tail_site_id
+            || contract.checked_join != descriptor.checked_join
+            || contract.required_kind != scalar_kind
+            || scalar_kind != descriptor.required_kind
+            || descriptor.required_kind != ScalarMergeKind::ExitCode
+            || descriptor.final_scalar.checked_join != descriptor.checked_join
+            || descriptor.final_scalar.required_kind != descriptor.required_kind
+            || descriptor.canonical_suffix
+                != CompletedTailCanonicalSuffix::ExitCodePayloadAndZeroTagReturn
+        {
+            return Err(unsupported(
+                "NativeCompletedTailV1",
+                "completed-tail edge disagrees with its exact final contract",
+            ));
+        }
+        let return_descriptor = self
+            .partition_source_returns
+            .definition(descriptor.source_return_id)?;
+        if return_descriptor.key.source_head.is_some()
+            || return_descriptor.key.checked_join != descriptor.checked_join
+            || return_descriptor.key.required_kind != descriptor.required_kind
+            || return_descriptor.key.live_producer_tail != Some(descriptor.expected_tail_site_id)
+            || return_descriptor.key.pending_exit_head.is_some()
+            || return_descriptor.key.pending_qualification_head.is_some()
+            || return_descriptor.key.pending_obligation_head.is_some()
+            || return_descriptor
+                .key
+                .pending_computational_ih_call
+                .is_some()
+            || return_descriptor.key.terminal_outer != descriptor.terminal_outer
+            || !matches!(
+                return_descriptor.key.parent,
+                PartitionSourceKontReturnParent::FinalScalar(ref final_scalar)
+                    if final_scalar == &descriptor.final_scalar
+            )
+        {
+            return Err(unsupported(
+                "NativeCompletedTailV1",
+                "completed-tail source return changed after edge reservation",
+            ));
+        }
+        let witness = self.partition_continuations.normal_completion_witness(
+            callee_state_id,
+            descriptor.expected_tail_site_id,
+            descriptor.required_kind,
+        )?;
+        let function = &mut functions
+            .get_mut(function_index)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeCompletedTailV1",
+                    "completed-tail edge lost its SourceKont caller function",
+                )
+            })?
+            .1
+            .func;
+        Self::audit_and_rewrite_partition_arm_final_suffix(
+            function,
+            call_inst,
+            result_payload,
+            local_tag_output,
+            caller_tag_pointer,
+            false,
+        )?;
+        self.partition_completed_tails.seal(authority, witness)
     }
 
     fn remove_closed_host_result_fanout_merges(
@@ -7990,8 +8137,100 @@ impl<'a> Lowering<'a> {
                     Some(cursor.return_id),
                 );
             }
+            let completed_tail_reservation = if !matches!(input, Lowered::Trap(_))
+                && control.completed_producer_tail.is_none()
+                && control.producer_kont.is_some()
+                && matches!(
+                    descriptor.key.parent,
+                    PartitionSourceKontReturnParent::FinalScalar(_)
+                ) {
+                let PartitionPendingCallerRole::State {
+                    state_id: caller_state_id,
+                } = self.active_partition_caller_role
+                else {
+                    return Err(unsupported(
+                        "NativeCompletedTailV1",
+                        "final source return is not owned by an interned SourceKont caller",
+                    ));
+                };
+                if self.partition_continuations.state_kind(caller_state_id)? != "SourceKont" {
+                    return Err(unsupported(
+                        "NativeCompletedTailV1",
+                        "final source return is not owned by a SourceKont state",
+                    ));
+                }
+                let PartitionSourceKontReturnParent::FinalScalar(final_scalar) =
+                    descriptor.key.parent.clone()
+                else {
+                    unreachable!("guarded by the FinalScalar match");
+                };
+                let expected_tail_site_id = contract.live_producer_tail.ok_or_else(|| {
+                    unsupported(
+                        "NativeCompletedTailV1",
+                        "final source return has no exact live producer tail",
+                    )
+                })?;
+                let producer_kont = control.producer_kont.ok_or_else(|| {
+                    unsupported(
+                        "NativeCompletedTailV1",
+                        "final source return lost its exact producer cursor",
+                    )
+                })?;
+                let terminal_matches = matches!(
+                    control.continuation,
+                    SourceContinuation::Terminal(
+                        SourceContinuationTerminal::ReturnFromPartition { expected_outer }
+                    ) if expected_outer == control.terminal_outer
+                );
+                if descriptor.key.source_head.is_some()
+                    || descriptor.key.live_producer_tail != Some(expected_tail_site_id)
+                    || descriptor.key.pending_exit_head.is_some()
+                    || descriptor.key.pending_qualification_head.is_some()
+                    || descriptor.key.pending_obligation_head.is_some()
+                    || descriptor.key.pending_computational_ih_call.is_some()
+                    || descriptor.key.producer_head != Some(producer_kont.site_id)
+                    || descriptor.key.terminal_outer != control.terminal_outer
+                    || control.source_return.is_some()
+                    || control.partition_cursor.is_some()
+                    || control.consumed_partition_cursor.is_some()
+                    || control.pending_partition_exit_stack.is_some()
+                    || control.selected.parent.is_some()
+                    || !control.selected.pending.is_empty()
+                    || !control.selected.selected_ancestry.is_empty()
+                    || control.selected.selected_scope.is_some()
+                    || !control.selected_lineage.is_empty()
+                    || self.pending_computational_ih_call.is_some()
+                    || self.active_partition_source_arm_closure.is_some()
+                    || !terminal_matches
+                    || final_scalar.checked_join != descriptor.key.checked_join
+                    || final_scalar.required_kind != descriptor.key.required_kind
+                    || descriptor.key.required_kind != ScalarMergeKind::ExitCode
+                {
+                    return Err(unsupported(
+                        "NativeCompletedTailV1",
+                        "final source return failed the exact no-residual STOP predicate",
+                    ));
+                }
+                Some(
+                    self.partition_completed_tails
+                        .reserve(CompletedTailReservationDescriptor {
+                            caller_state_id,
+                            source_return_id: cursor.return_id,
+                            final_scalar,
+                            expected_tail_site_id,
+                            checked_join: descriptor.key.checked_join.clone(),
+                            required_kind: descriptor.key.required_kind,
+                            terminal_outer: descriptor.key.terminal_outer,
+                            canonical_suffix:
+                                CompletedTailCanonicalSuffix::ExitCodePayloadAndZeroTagReturn,
+                        }),
+                )
+            } else {
+                None
+            };
             if !matches!(input, Lowered::Trap(_)) && control.completed_producer_tail.is_none() {
                 if let Some(producer_kont) = control.producer_kont.take() {
+                    let pending_edge_baseline = self.pending_partition_call_edges.len();
                     let completed = if self.producer_kont_is_scope_exit_bridge(producer_kont)? {
                         if !control.selected_lineage.is_empty() {
                             return Err(unsupported(
@@ -8009,6 +8248,67 @@ impl<'a> Lowering<'a> {
                             &control.selected_lineage,
                         )?
                     };
+                    if let Some(reservation) = completed_tail_reservation {
+                        if self.pending_partition_call_edges.len()
+                            != pending_edge_baseline.saturating_add(1)
+                        {
+                            return Err(unsupported(
+                                "NativeCompletedTailV1",
+                                "final source return did not emit exactly one producer call edge",
+                            ));
+                        }
+                        let pending_call_edge = pending_edge_baseline;
+                        let edge = self
+                            .pending_partition_call_edges
+                            .get_mut(pending_call_edge)
+                            .ok_or_else(|| {
+                                unsupported(
+                                    "NativeCompletedTailV1",
+                                    "final source return lost its pending producer call edge",
+                                )
+                            })?;
+                        let caller_state_id = match edge.caller {
+                            PartitionPendingCallerRole::State { state_id } => state_id,
+                            _ => {
+                                return Err(unsupported(
+                                    "NativeCompletedTailV1",
+                                    "final source return producer edge has the wrong caller role",
+                                ));
+                            }
+                        };
+                        if edge.kind != PartitionPendingCallKind::ProducerKont
+                            || !matches!(edge.target, PartitionPendingCallTarget::Ordinary)
+                        {
+                            return Err(unsupported(
+                                "NativeCompletedTailV1",
+                                "final source return did not own one ordinary producer edge",
+                            ));
+                        }
+                        let authority = self.partition_completed_tails.bind(
+                            reservation,
+                            edge.callee_state_id,
+                            pending_call_edge,
+                            edge.call_inst,
+                        )?;
+                        let caller_tag_pointer =
+                            self.partition_output_tag_pointer.ok_or_else(|| {
+                                unsupported(
+                                    "NativeCompletedTailV1",
+                                    "final SourceKont caller has no scalar tag output",
+                                )
+                            })?;
+                        if self.partition_continuations.state_kind(caller_state_id)? != "SourceKont"
+                        {
+                            return Err(unsupported(
+                                "NativeCompletedTailV1",
+                                "bound completed-tail caller changed semantic sort",
+                            ));
+                        }
+                        edge.target = PartitionPendingCallTarget::CompletedTailSourceKont {
+                            authority,
+                            caller_tag_pointer,
+                        };
+                    }
                     let expected_tail = self
                         .active_partition_return_contract
                         .as_ref()
