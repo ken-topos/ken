@@ -78,7 +78,11 @@ this line wins.** Re-read this line on every hard-stop.
 
 ```text
 RECUT CHAIN (live, from kickoff evt_2kgfmmeeh2x7w, 2026-07-24)
-hard-stop count    = 0
+hard-stop count    = 1
+  #1 = Architect amendment ruling evt_6dpb96kn1583f (2026-07-24) — Phase 1's
+       held-checkpoint premise is FALSE; census returns could_not_determine;
+       empirical gate moves to the recut in two closed boundaries. Frame
+       amended by the Steward in response. NO research pull due (< #3).
 NEXT RESEARCH PULL = hard-stop #3, then #6, #9, #12, …
 
 HELD CHAIN (closed, historical — does NOT carry forward)
