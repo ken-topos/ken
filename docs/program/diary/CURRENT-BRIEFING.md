@@ -5,7 +5,7 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-24 ~18:0xZ. OPERATOR IS PRESENT.**
+**As of 2026-07-24 ~20:5xZ. OPERATOR IS PRESENT.**
 
 > ## ⚡ OPERATOR PRIORITY (2026-07-24): **LAND RT-NATIVE-FNSPLIT.**
 > *"I did not mean to abandon the RT-NATIVE-FNSPLIT effort. Continue that work.
@@ -28,14 +28,15 @@
 > is measured against. Do not let Phase 1 be skipped as a formality.
 
 ### ✅ Landed this window
-- **`origin/main = bf00f1a9`** — the four operator directives are ON MAIN
-  (verified by content, not by the publisher's report): COORDINATION §8a + §10⁻a,
-  steward playbook §2d + ledger axis, plus the §5a armed trigger.
-- **`PUB-VERIFY` CLOSED** as landed-by-other-work (operator-directed).
-- **`DOC-VALIDATION-BINDING` PUBLISHING** @ `f1eb7408`, branch FROZEN
-  (`evt_6ewc3t460tvn7`). ⚠ My corpus publish moved main `8ebe370a → bf00f1a9`
-  under its Decision; **intersection tested EMPTY**, so immaterial — no rebase.
-  **Retros still owed before it closes.**
+- **`origin/main = 64b0811f`.** `DOC-GATE-RECORD-AXIS` MERGED via PR #922 from
+  approved `b3afd48b` — verified **by content**: `VALID_KINDS` closes the `kind`
+  vocabulary; the record-axis assertion names the second-`status`-record case.
+- **`RT-NATIVE-FNSPLIT` Boundary A publishing** — PR #923 open at approved
+  `7547da95`, branch FROZEN, CI running. **This is the operator priority.**
+- **The ~30-minute GitHub write outage is OVER** (writes to the pulls endpoint
+  failed, 10 distinct incident IDs, reads fine throughout). It cleared on its
+  own; no workaround was applied and none should be.
+- **`DOC-VALIDATION-BINDING`** merged earlier at `96ab2b4b`.
 
 
 > # ⇢ LIVE STATE — 2026-07-24, Opus 5.0 session, post-restart
@@ -44,12 +45,50 @@
 > Everything it owed is done: drops verified, Runtime kicked, cadence re-armed,
 > watchdog re-armed.
 >
-> ## Where the frontier is — PHASE 1 IS CLOSED; BOUNDARY A IS THE LIVE UNIT
+> ## Where the frontier is — BOUNDARY A IS MERGING; BOUNDARY B IS STOPPED AT HARD-STOP #3
 >
-> **`origin/main = 510de0e3`.** The recut frame was **AMENDED** after Architect
-> hard-stop #1 (`evt_6dpb96kn1583f`) and handed back: `evt_30a344an210g`,
-> `runtime-leader` pane-confirmed `Working`. Ring was compacted first (drops
-> verified) **without** `handoff-gate-compact.sh`, deliberately — see below.
+> **`origin/main = 64b0811f`.** Boundary A is **approved by QA and the Architect**
+> at `7547da95` and is publishing as **PR #923** (branch FROZEN, CI running).
+>
+> **⛔ BOUNDARY B IS STOPPED at recut hard-stop #3** (`evt_21yr288qkpb92`, clean
+> WIP `ed54b17e` on `wp/RT-NATIVE-FNSPLIT-boundary-b-semantic-port`, cut from
+> `7547da95`). Grounding found **activation-independent semantic classes with no
+> representation in A's inventory**: `SourceKont` is not uniformly `R`
+> (`PartitionSourcePrefixKey` carries `LetBody`, `ApplyRecursorSelection`,
+> `UnwindRecursorSegment`, IH returns, selected-case return, terminal steps —
+> these transform value/control and may own a body); `ProducerKont` is not
+> mappable by action name; `SourceArm` bodies lose occurrence identity before
+> reserve (cloned `RuntimeExpr`).
+>
+> ★ **The ring refused three unsound repairs** — overloading `R`/`W`/`T`/`C`,
+> assigning identity by discovery order (traversal order would choose code
+> identity), and retaining first-activation body selection. That refusal is why
+> this is a hard-stop and not a latent defect.
+>
+> **⇒ RESEARCH PULL FIRED** (`evt_3eesgc76aczw3`, research compacted first, drop
+> verified, pane-confirmed `Working`). **The Architect ruling is gated BEHIND the
+> advisory**, at the implementer's own request — I told @architect to hold
+> (`evt_41h956g1wk7ch`). The fork: **(a)** enumerate explicit planner
+> node/transition kinds per action responsibility, vs **(b)** lower these classes
+> into a small semantic IR arena. Research advises; the Architect rules.
+>
+> ⚠ **A's n=3..7 census is PROVISIONAL.** Hard-stop #3 hits the escape hatch in
+> the Architect's #2 ruling (*"add an explicit planner node/transition kind and
+> return Boundary A for amended census and fresh review"*), so
+> `87/115/143/171/199` nodes, `190/…/438` helpers, K=8, widths `12/32/16` are
+> very likely to be superseded. **Do not cite that table as a downstream
+> baseline.** I merged anyway and the reasoning is on record: an amendment is
+> additive, and merged it is a clean delta while unmerged it grows A into a
+> combined unit no reviewer can isolate. Supersession documented beats
+> supersession silent.
+>
+> **When A lands:** post the SHA, then tell the ring to re-anchor B by **RESET +
+> RE-APPLY of B's own delta — NEVER `git rebase`** (A lands as a squash; its
+> commits dangle ahead of `main` with content already in). Then
+> `git diff --stat origin/main...<B tip>` must show only B's files.
+>
+> *(historical) The recut frame was AMENDED after Architect hard-stop #1
+> (`evt_6dpb96kn1583f`) and handed back at `evt_30a344an210g`.*
 >
 > **⛔ Phase 1 is CLOSED at `could_not_determine`. Do not re-run it.** My frame's
 > central premise was **false against the landed code**: unchanged `b077eb7a`
@@ -64,6 +103,38 @@
 > The hold stands **structurally** (variable-width composite identity, no
 > fixed-K/key-width invariants) — it never rested on curve-fitting. Do not read
 > `could_not_determine` as "the rewrite is unnecessary."
+>
+> ### ✅ BOUNDARY A REPORTED AND I HAVE RULED MY HALF (`evt_7wgktr1dk4qvk`)
+>
+> Candidate `92cac774` on `wp/RT-NATIVE-FNSPLIT-recut-boundary-a-planner`.
+> **Sequence APPROVED with ONE required fold.** Runtime stays stopped on the
+> semantic port until the fold lands **and** the Architect returns its half
+> (the frame requires Steward **+** Architect).
+>
+> **Verified by me, not taken from the report:** all four series affine — second
+> differences exactly zero (nodes Δ28, edges Δ34, helpers Δ62, persistent Δ37);
+> scope genuinely pre-emission (4 `ken-runtime` files, no CLIF/wall/RSS);
+> depths correctly reported as **affine, not forced constant** (honors the
+> corrected width metric); the exact-mutation guard test is real (drives
+> production `validate()`, asserts exact error strings).
+>
+> ★ **The construction proof is stronger than AC2.1 asked for:**
+> `StaticHelperKey{node,transition}` derives **`Copy`**, and `Copy` is
+> incompatible with `Vec`/`String`/`Box` — so "no variable-width member in
+> identity" is **compile-enforced**. ⚠ `size_of` alone would NOT have proved
+> this (a `Vec` field has constant `size_of`, variable content).
+>
+> **⛔ The fold:** `helper_identity_excludes_dynamic_activation_…` is **vacuous** —
+> `assert_eq!(wrapper.key, wrapper.key)` is a tautology and `assert_ne!(frame,
+> changed)` tests its own setup; `changed` is never fed back through the planner.
+> **Phase-2 point 2 has no guard at all**, while the report cited this test as
+> evidence for it. The invariant *does* hold by construction — this is an
+> unguarded invariant + an over-cited test. Required fix is the real property:
+> two distinct activations through one static node share **one** key and do
+> **not** grow planned-helper count.
+>
+> **Cadence: hard-stop count STAYS 1.** A planned stop for a required read is not
+> a hard-stop, and neither is a review fold. Next pull still #3.
 >
 > **Live unit = Boundary A (planner census) ONLY**, on a fresh branch off current
 > `origin/main`: the factored static transition graph for n=3..7, reporting static
@@ -94,10 +165,20 @@
 > ## Research cadence — ARMED (this is the count of record)
 >
 > ```text
-> RECUT CHAIN: hard-stop count = 1 · NEXT RESEARCH PULL = #3, then #6, #9, …
+> RECUT CHAIN: hard-stop count = 3 · PULL FIRED AT #3 · NEXT = #6, then #9, …
 >   #1 = Architect amendment ruling evt_6dpb96kn1583f (frame amended in response)
+>   #2 = static->semantic bridge; Architect ruled an out-of-line semantic
+>        descriptor plane keyed by existing planned node/edge IDs
+>        (evt_2jt1s5r7c1g2z). Not a research trigger (< #3).
+>   #3 = unrepresented SourceKont/ProducerKont static semantics
+>        (evt_21yr288qkpb92). ⇒ RESEARCH PULL FIRED, evt_3eesgc76aczw3.
 > HELD CHAIN:  frozen at 33, closed, does NOT carry forward
 > ```
+>
+> ⚠ **A review fold is NOT a hard-stop; a genuine "I cannot say this honestly" IS.**
+> Two Architect folds on Boundary A were correctly not counted. The count is
+> authoritative in `docs/program/issues/RT-NATIVE-FNSPLIT.md`, and the Architect
+> has deferred to it explicitly three times.
 >
 > The Architect **explicitly deferred to this count** on #1 ("the Steward's
 > tracker remains the count of record, so no Research pull is due before #3").
@@ -117,7 +198,160 @@
 > `preserved/wp-RT-NATIVE-FNSPLIT-native-partition-b077eb7a`).
 > ⛔ **Do not delete the tag.** Phase 1 measures it; Phases 2–3 port from it.
 >
-> ## ▶ Track 2 is LIVE — `DOC-GATE-RECORD-AXIS` with the Verify ring
+> ## ✅ `DOC-GATE-RECORD-AXIS` MERGED at `64b0811f` — and it carries MY defect
+>
+> Published from approved `b3afd48b` via PR #922; verified by content. Retros
+> still owed from the Verify ring before it closes.
+>
+> ### ⛔⛔ MY PUBLISH DESCRIPTION OVERCLAIMED, AND IT IS PERMANENT ON `main`
+>
+> Adversary **G1** (`evt_4j8fschh7v4vx`) hunted *the correction to its own
+> findings* — on the reasoning that a fix to a finding is the highest-yield
+> target available: same author, same topic, reassuring register, everyone
+> relieved. **It caught me.** My PR description, which the publisher turned into
+> the squash commit message, says *"binds coverage on the record axis, **with a
+> positive control that fails when the binding is removed**."* Measured against
+> the tree with probe controls: **0 tests added**, 0 removed, 22 present in the
+> file. Both new checks are bare assertions inside test bodies — **delete either
+> and nothing reddens.**
+>
+> ★ **The precise distinction, and I initially got it wrong in my own
+> correction.** QA **did** run a real positive control — it added a second
+> `kind = "status"` record and watched the assertion fire. **A control that was
+> RUN is not a control that is COMMITTED.** The run proves the property *today*;
+> only a committed artifact guards it *tomorrow*. My sentence claimed the second
+> while the ring had honestly delivered the first, and I then told QA there
+> "was none to approve," which was unfair and untrue.
+>
+> ⇒ Filed **`DOC-GATE-CONTROL-BINDING`** (ready, Verify, S): lift both checks to
+> pure `fn(&[DocEntry]) -> Vec<String>` detectors with committed tests, mirroring
+> the in-file precedent at `:700`/`:730`/`:747`. Mechanism unchanged; **form
+> only**. ⛔ Not the `run: fn(&DocEntry)` refactor — the Adversary declined it
+> twice.
+>
+> ⇒ New steward memory:
+> `agent/memory/roles/steward/the-publish-description-is-the-one-artifact-no-reviewer-reviews.md`
+> — the publish description is authored **after the last gate closes**, nobody
+> reviews it, and it lands in the git log forever. Every verification-flavored
+> clause in it is a **factual claim about the diff**: grep for the artifact it
+> names before publishing.
+>
+> *(historical) It sat ~30 min behind a GitHub write outage — every WRITE to the
+> pulls endpoint failed across 2 mechanisms with 10 distinct incident IDs while
+> READS stayed clean (rate limit untouched at 5000). Not auth, not rate limit,
+> not branch protection. It cleared on its own; no workaround was applied.*
+>
+> ⚠ **This is mutable external state (§7a) — TEST it, do not cite this block.**
+> It may be fixed by the time you read this.
+>
+> **Outage still live at 19:34Z** (6 attempts, latest incident
+> `DA54:39E685:12AC979:12EB77B:6A63BE4E`). Watchdog retries it as **step 0** of
+> every tick, so recovery is picked up automatically. ⛔ No PR ⇒ no CI has run.
+> ⛔ Do **not** try to route around branch protection — §14 requires the path to
+> stop and route the fact, not to improvise.
+>
+> ### ✅ Boundary A: FOLD DISCHARGED on `e70bb2a5` (supersedes `92cac774`)
+>
+> Steward half **APPROVED** (`evt_4g5qe6tz3s4k0`). The repair is the strong form:
+> `helper_key_for_activation(node, frameA)` vs `(node, frameB)` — same static
+> node, two **real closed** frames, key **recomputed** each time, asserted to
+> collapse to one; plus `planned_helpers` unchanged. **And it is enforced in
+> `validate()` over every node**, so the invariant is structural, not merely
+> tested. ★ The old `u32::MAX` frame would now be rejected as *unclosed* — the
+> original approach could not have worked even with a correct assertion.
+> ✅ **Census table restated for `e70bb2a5`** (`evt_1favdzgj04y02`) — and the
+> counts are **identical** to `92cac774`: nodes 87/115/143/171/199 (Δ28),
+> edges 103→239 (Δ34), helpers 190→438 (Δ62), persistent 128→276 (Δ37), all
+> Δ²=0; K=8 flat; **helper-key 12 B** (the honest fixed width of the typed
+> `PlannedHelperKey::{Node,Edge}` inventory), frame 32 B, store 16 B, all flat.
+> Asking was still right — the inventory *had* changed; the counts happened not
+> to.
+>
+> ### ✅ BOUNDARY A DISCHARGED on `7547da95` — QA PASS + Architect APPROVE
+>
+> Both closure holes closed by set equality (quartet) and exact node-ID set
+> equality (reachability). **Architect authorizes Boundary B.** ⚠ **Boundary A
+> is APPROVED AND UNPUBLISHED — blocked only by the GitHub write outage.**
+> Publish it right after `DOC-GATE-RECORD-AXIS`; both are queued on the same
+> outage.
+>
+> ✅ **Boundary A is now ON ORIGIN at `7547da95`** — I pushed it. It had been on
+> **one local ref with zero off-box copies** while Boundary B was being cut from
+> it, so losing it would have taken both. `git push` works fine; only the pulls
+> endpoint is down. **Both queued branches are now durable off-box.**
+>
+> **My sequencing ruling** (`evt_5vn8kwcfz445y`): A and B are **separate merge
+> units**; Boundary B cuts from the approved tip **`7547da95`** now rather than
+> idling the ring on my infra problem. ⛔ **When A lands, B re-anchors onto
+> `origin/main` by RESET + RE-APPLY of B's own delta — never `git rebase`** (A
+> lands as a squash; rebase replays already-landed commits into conflicts).
+> B's merge Decision must show a diff of **only B's** changes.
+>
+> ⚠ **Watched property I flagged but did NOT override (mechanism = Architect's
+> lane):** Boundary A calls `plan_static_transition_graph(expr, &declarations)?`
+> on the **live** compile path and `drop`s the result. Emission is unchanged, so
+> it ships no representation change and does not trip the operator's scaling
+> gate — but the `?` means **a planner rejection now fails a native compile that
+> previously succeeded**, for a plan nothing consumes yet. CI + 309/309 is the
+> whole net. ⇒ **If CI reddens on a program that compiled before, it is this
+> line** — a planner gap, not a lowering bug. Boundary B removes the concern by
+> making the plan load-bearing.
+>
+> ### (historical) Architect BLOCK on `e70bb2a5` (`evt_2km3wm7h9ckgp`) — now closed
+>
+> It **confirms my fold is real and may stand**, and confirms the eight-slot
+> frame + `{kind,local,aux,child}` store are expressive **without a ninth slot**
+> (the expressibility question I routed to it). But it reproduced **two
+> production closure holes** with exact mutations:
+>
+> 1. **Alternate callable edges bypass W.** `validate_source_return_topology`
+>    proves the R→W/W→T/T→CompletedTail edges *exist* and makes W's incoming
+>    exclusive, but **not** T's or CompletedTail's; the CompletedTail check
+>    counts only edges already labelled `CompleteProducerTail`, so a second
+>    incoming edge of another kind is **invisible**. Fix: close the quartet by
+>    **set equality, not existence**.
+> 2. **Entry closure inferred from CARDINALITY.** Reachability compares
+>    `reachable.len()` with `nodes.len()` and never proves each entry is a real
+>    node ID — so an out-of-range root `StaticNodeId(u32::MAX)` balances the
+>    count and `validate()` returns `Ok(())` while a real node is unreachable.
+>    Fix: range+uniqueness before traversal, **exact set equality** after.
+>
+> `runtime-implementer` picked it up 71s later and is working the fold.
+> **Cadence: still hard-stop count 1** — the Architect explicitly said this is a
+> review fold, not a hard-stop, and that the count remains mine.
+>
+> ★★ **PROMOTION CANDIDATE — all THREE Boundary-A findings are one shape:** a
+> check that compares a **proxy** instead of the **property**. Mine
+> (`assert_eq!(x,x)` + a mutation that never re-enters the mechanism), the
+> Architect's #1 (counting only the *labelled* subset), and #2 (**cardinality**
+> standing in for **set equality**). Three independent instances in one WP, found
+> by two different seats ⇒ this clears the §10 bar. Write it up.
+>
+> ## (resolved) The Decision was `proposed` — held, then unblocked in seconds
+>
+> **A `git_request` arrived (`evt_517mjv8rr6kb`) and I did NOT merge.**
+> `dec_7htr8nc7076x` is **`status: "proposed"`** — `resolved_by`/`resolved_at`/
+> `resolution` all `null`. §14: merge only on a **resolved** Decision, never on
+> `merge_ready` prose. Held at `evt_6ja7bqqawx3pr`.
+>
+> **Everything else is verified clean, so this is a one-step unblock — publish the
+> instant it resolves:** tip == approved SHA `b3afd48b` ✅ · scope is exactly
+> `crates/ken-cli/tests/library_documentation_gates.rs` so Architect-only review
+> is correct ✅ · merge-base == current `origin/main` == `757ce46a` ✅ ·
+> intersection **empty**, no rebase wanted ✅.
+>
+> ⚠ **I am not disputing the votes happened** — both were cited with real event
+> IDs (QA `evt_5qstakpep4njx`, Architect `evt_1qtygnzf4a67q`). What is missing is
+> the *resolution*. Also asked them to confirm **AC1's positive control** (that
+> the F1 assertion was proved to fire by actually adding a second
+> `kind = "status"` record, not inferred).
+>
+> ★ **Probe discipline that mattered here:** `list_decisions(resolved)` did not
+> contain it — but I only trusted that after a **positive control** (a decision I
+> knew was resolved *was* in the same dump, 1 of 400). Then confirmed directly on
+> the `proposed` list. Don't conclude absence from one negative lookup.
+>
+> ## ▶ Track 2 — `DOC-GATE-RECORD-AXIS` with the Verify ring
 >
 > Kicked `evt_4sv449b1e4tcy`; ring compacted + reset to `510de0e3` (drops
 > verified); leader pane-confirmed `Working`; tracker flipped to `active`.

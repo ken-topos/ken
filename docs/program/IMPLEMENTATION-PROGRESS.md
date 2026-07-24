@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-24 19:06:34Z — from 44 issue file(s) in `docs/program/issues/`.
+2026-07-24 20:46:32Z — from 45 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -47,7 +47,8 @@ the committed file matches the generator's output.
 | `CI-SKIPPED-NATIVE-TESTS` | Restore rt_parity_native — dedicated CI job, outlier not fixed | merged | verify | S | none | — |
 | `CI-TRACKER-GATE` | Wire the issue-tracker schema + regeneration gate into CI | closed | operator | S | none | 804 |
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | closed | doc | S | none | — |
-| `DOC-GATE-RECORD-AXIS` | validation-gate registry: bind token→runner COVERAGE on the record axis, and close the `kind` vocabulary | active | verify | S | none | — |
+| `DOC-GATE-CONTROL-BINDING` | validation-gate registry: make the two DOC-GATE-RECORD-AXIS checks orphan-proof by lifting them to pure detectors with committed controls | active | verify | S | none | — |
+| `DOC-GATE-RECORD-AXIS` | validation-gate registry: bind token→runner COVERAGE on the record axis, and close the `kind` vocabulary | merged | verify | S | none | https://github.com/ken-topos/ken/pull/922 |
 | `DOC-VALIDATION-BINDING` | validation vocabulary claims a 1:1 binding to the gates; nothing binds it | merged | verify | S | none | — |
 | `DOC-W0` | documentation Wave 0 — library/ charter and currency substrate | closed | doc | M | none | 830 |
 | `DOC-W1` | documentation Wave 1 — the read-Ken spine, taught from checked fragments | closed | doc | L | none | — |
