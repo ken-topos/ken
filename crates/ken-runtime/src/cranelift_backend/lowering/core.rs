@@ -181,6 +181,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         partition_source_nodes: PartitionSourceNodeInterner::default(),
         partition_recursor_nodes: PartitionRecursorNodeInterner::default(),
         partition_recursor_qualifications: PartitionRecursorQualificationNodeInterner::default(),
+        partition_open_control_obligations: PartitionOpenControlObligationNodeInterner::default(),
         partition_cleanup_suffixes: PartitionCleanupSuffixInterner::default(),
         partition_cleanup_transitions: PartitionCleanupTransitionLedger::default(),
         partition_cut_armed: partition_entry_cut_armed,
@@ -743,6 +744,19 @@ impl<'a> Lowering<'a> {
         stack: &mut RecursorUnwindStack,
         layer: ComputationalRecursorLayer,
     ) -> Result<(), CraneliftBackendError> {
+        let obligation = match layer.role {
+            RecursorLayerRole::ExitsScope {
+                scope_instance,
+                parent_scope_instance,
+                ..
+            } => Some((
+                layer.checked_frame_id,
+                layer.semantic_pending,
+                scope_instance,
+                parent_scope_instance,
+            )),
+            RecursorLayerRole::SelectsOccurrence { .. } => None,
+        };
         let mut capture_values = Vec::new();
         append_partition_layer_values(self, builder, &layer, &mut capture_values)?;
         let capture_field_types = capture_values
@@ -790,6 +804,73 @@ impl<'a> Lowering<'a> {
             node,
             capture_pointer: builder.ins().stack_addr(pointer_type, frame, 0),
         });
+        if let Some((checked_frame_id, semantic_pending, scope, parent_scope)) = obligation {
+            let target = stack
+                .partition_cursor
+                .expect("new recursor layer has an exact persistent cursor");
+            self.push_partition_open_control_obligation(
+                builder,
+                stack,
+                target,
+                checked_frame_id,
+                semantic_pending,
+                scope,
+                parent_scope,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn push_partition_open_control_obligation(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        stack: &mut RecursorUnwindStack,
+        target: PartitionRecursorCursor,
+        checked_frame_id: Option<u64>,
+        semantic_pending: bool,
+        scope: ScopeInstanceRef,
+        parent_scope: Option<ScopeInstanceRef>,
+    ) -> Result<(), CraneliftBackendError> {
+        let successor = stack.partition_open_obligation.map(|cursor| cursor.node);
+        let node = self.partition_open_control_obligations.intern(
+            target.node,
+            checked_frame_id,
+            semantic_pending,
+            parent_scope.is_some(),
+            successor,
+        );
+        let invocation = self
+            .invocation_pointer
+            .expect("open control obligation owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            PARTITION_FRAME_FIELD_BYTES * 4,
+            3,
+        ));
+        let successor_pointer = stack.partition_open_obligation.map_or_else(
+            || builder.ins().iconst(pointer_type, 0),
+            |cursor| cursor.capture_pointer,
+        );
+        let null_parent = builder.ins().iconst(pointer_type, 0);
+        builder.ins().stack_store(successor_pointer, frame, 0);
+        builder.ins().stack_store(
+            target.capture_pointer,
+            frame,
+            PARTITION_FRAME_FIELD_BYTES as i32,
+        );
+        builder
+            .ins()
+            .stack_store(scope.0, frame, (PARTITION_FRAME_FIELD_BYTES * 2) as i32);
+        builder.ins().stack_store(
+            parent_scope.map_or(null_parent, |parent| parent.0),
+            frame,
+            (PARTITION_FRAME_FIELD_BYTES * 3) as i32,
+        );
+        stack.partition_open_obligation = Some(PartitionOpenControlObligationCursor {
+            node,
+            capture_pointer: builder.ins().stack_addr(pointer_type, frame, 0),
+        });
         Ok(())
     }
 
@@ -807,12 +888,13 @@ impl<'a> Lowering<'a> {
             });
             self.push_partition_recursor_layer(builder, stack, layer)?;
             if is_checked_parent {
-                if checked_parent.replace(
-                    stack
-                        .partition_cursor
-                        .expect("pushed recursor layer has a persistent cursor"),
-                )
-                .is_some()
+                if checked_parent
+                    .replace(
+                        stack
+                            .partition_cursor
+                            .expect("pushed recursor layer has a persistent cursor"),
+                    )
+                    .is_some()
                 {
                     return Err(unsupported(
                         "NativeRecursorContinuationStepV1",
@@ -831,9 +913,7 @@ impl<'a> Lowering<'a> {
         target: PartitionRecursorCursor,
         source: InvocationTemplateRef,
     ) -> Result<(), CraneliftBackendError> {
-        let successor = stack
-            .partition_qualification
-            .map(|cursor| cursor.node);
+        let successor = stack.partition_qualification.map(|cursor| cursor.node);
         let node = self
             .partition_recursor_qualifications
             .intern(target.node, source, successor);
@@ -873,6 +953,12 @@ impl<'a> Lowering<'a> {
                 return Err(unsupported(
                     "NativeRecursorContinuationStepV1",
                     "recursor qualification outlived its exact target stack",
+                ));
+            }
+            if stack.partition_open_obligation.is_some() {
+                return Err(unsupported(
+                    "NativeOpenControlObligationStepV1",
+                    "open control obligation outlived its exact recursor stack",
                 ));
             }
             return Ok(stack.later_wrappers_in_construction_order.pop());
@@ -929,9 +1015,8 @@ impl<'a> Lowering<'a> {
                     builder,
                     &[(cursor.capture_pointer, expected_pointer)],
                 );
-                definition.current.checked_invocation_id = Some(
-                    (1_u64 << 63) | u64::from(qualification.node.0),
-                );
+                definition.current.checked_invocation_id =
+                    Some((1_u64 << 63) | u64::from(qualification.node.0));
                 definition.current.checked_invocation_source =
                     Some(qualification_definition.source);
                 definition.current.checked_invocation_depth = 0;
@@ -941,15 +1026,20 @@ impl<'a> Lowering<'a> {
                     qualification.capture_pointer,
                     0,
                 );
-                stack.partition_qualification =
-                    qualification_definition.successor.map(|node| {
-                        PartitionRecursorQualificationCursor {
-                            node,
-                            capture_pointer: successor_qualification_pointer,
-                        }
-                    });
+                stack.partition_qualification = qualification_definition.successor.map(|node| {
+                    PartitionRecursorQualificationCursor {
+                        node,
+                        capture_pointer: successor_qualification_pointer,
+                    }
+                });
             }
         }
+        self.consume_partition_open_control_obligation(
+            builder,
+            stack,
+            cursor,
+            &definition.current,
+        )?;
         let successor_pointer =
             builder
                 .ins()
@@ -959,6 +1049,85 @@ impl<'a> Lowering<'a> {
             capture_pointer: successor_pointer,
         });
         Ok(Some(definition.current))
+    }
+
+    fn consume_partition_open_control_obligation(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        stack: &mut RecursorUnwindStack,
+        target: PartitionRecursorCursor,
+        layer: &ComputationalRecursorLayer,
+    ) -> Result<(), CraneliftBackendError> {
+        let RecursorLayerRole::ExitsScope {
+            scope_instance,
+            parent_scope_instance,
+            ..
+        } = layer.role
+        else {
+            return Ok(());
+        };
+        let obligation = stack.partition_open_obligation.ok_or_else(|| {
+            unsupported(
+                "NativeOpenControlObligationStepV1",
+                "scope-exit layer has no exact open control obligation",
+            )
+        })?;
+        let definition = self
+            .partition_open_control_obligations
+            .definition(obligation.node)?;
+        if definition.target != target.node
+            || definition.checked_frame_id != layer.checked_frame_id
+            || definition.semantic_pending != layer.semantic_pending
+            || definition.has_parent_scope != parent_scope_instance.is_some()
+        {
+            return Err(unsupported(
+                "NativeOpenControlObligationStepV1",
+                "scope-exit layer does not own the current open control obligation",
+            ));
+        }
+        let pointer_type = builder.func.dfg.value_type(obligation.capture_pointer);
+        let expected_target = builder.ins().load(
+            pointer_type,
+            MemFlags::trusted(),
+            obligation.capture_pointer,
+            PARTITION_FRAME_FIELD_BYTES as i32,
+        );
+        let expected_scope = builder.ins().load(
+            pointer_type,
+            MemFlags::trusted(),
+            obligation.capture_pointer,
+            (PARTITION_FRAME_FIELD_BYTES * 2) as i32,
+        );
+        let expected_parent = builder.ins().load(
+            pointer_type,
+            MemFlags::trusted(),
+            obligation.capture_pointer,
+            (PARTITION_FRAME_FIELD_BYTES * 3) as i32,
+        );
+        let actual_parent = parent_scope_instance
+            .map_or_else(|| builder.ins().iconst(pointer_type, 0), |parent| parent.0);
+        self.emit_control_cell_ref_guard(
+            builder,
+            &[
+                (target.capture_pointer, expected_target),
+                (scope_instance.0, expected_scope),
+                (actual_parent, expected_parent),
+            ],
+        );
+        let successor_pointer = builder.ins().load(
+            pointer_type,
+            MemFlags::trusted(),
+            obligation.capture_pointer,
+            0,
+        );
+        stack.partition_open_obligation =
+            definition
+                .successor
+                .map(|node| PartitionOpenControlObligationCursor {
+                    node,
+                    capture_pointer: successor_pointer,
+                });
+        Ok(())
     }
 
     fn pop_partition_source_cursor(
@@ -5900,6 +6069,37 @@ impl<'a> Lowering<'a> {
                             if let Some(layer) =
                                 self.pop_partition_recursor_layer(builder, &mut stack)?
                             {
+                                if let RecursorLayerRole::ExitsScope {
+                                    scope_origin,
+                                    scope_instance,
+                                    parent_scope,
+                                    parent_scope_instance,
+                                    ..
+                                } = layer.role
+                                {
+                                    control.selected.activation_instance =
+                                        ActivationInstanceRef(scope_instance.0);
+                                    control.selected.cursor_instance =
+                                        ControlCursorRef(scope_instance.0);
+                                    control.selected.selected_scope = Some(OwnedSelectedScope {
+                                        scope_origin,
+                                        scope_instance,
+                                        parent_scope,
+                                        parent_scope_instance,
+                                        frame: ComputationalRecursorFramePayload {
+                                            cases: layer.cases.clone(),
+                                            default: layer.default.clone(),
+                                            outer_env: layer.outer_env.clone(),
+                                            provenance: layer.provenance,
+                                            checked_frame_id: layer.checked_frame_id,
+                                            checked_invocation_id: layer.checked_invocation_id,
+                                            checked_invocation_source: layer
+                                                .checked_invocation_source,
+                                            checked_invocation_depth: layer
+                                                .checked_invocation_depth,
+                                        },
+                                    });
+                                }
                                 #[cfg(test)]
                                 if let RecursorLayerRole::ExitsScope {
                                     origin,
