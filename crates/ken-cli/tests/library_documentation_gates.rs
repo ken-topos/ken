@@ -451,6 +451,15 @@ fn invalid_kind_violations(entries: &[DocEntry]) -> Vec<String> {
     bad
 }
 
+fn check_document_kinds() {
+    let bad = invalid_kind_violations(&load_manifest());
+    assert!(
+        bad.is_empty(),
+        "manifest document-kind violation(s):\n{}",
+        bad.join("\n")
+    );
+}
+
 fn check_manifest_completeness() {
     let entries = load_manifest();
     let mut bad = Vec::new();
@@ -467,8 +476,6 @@ fn check_manifest_completeness() {
         }
         if entry.kind.is_empty() {
             bad.push(format!("{label}: missing `kind`"));
-        } else {
-            bad.extend(invalid_kind_violations(std::slice::from_ref(entry)));
         }
         if entry.audience.is_empty() {
             bad.push(format!("{label}: missing `audience`"));
@@ -568,6 +575,11 @@ const VALIDATION_GATES: &[ValidationGate] = &[
         token: "manifest-completeness",
         applies: applies_to_every_record,
         run: check_manifest_completeness,
+    },
+    ValidationGate {
+        token: "document-kind",
+        applies: applies_to_every_record,
+        run: check_document_kinds,
     },
     ValidationGate {
         token: "links",

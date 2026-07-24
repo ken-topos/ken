@@ -1,6 +1,6 @@
 ---
 id: DOC-GATE-WIRE-BINDING
-title: "validation-gate registry: bind the kind-vocabulary RULE to its GATE by registering it as a VALIDATION_GATES row"
+title: "validation-gate registry: give the kind vocabulary one registered production runner"
 status: ready
 owner: verify
 size: XS
@@ -60,6 +60,16 @@ That makes deletion loud **twice**:
    `gate_validation_tokens_are_closed_and_match_applicable_checks` fails on
    *both* the unknown-token arm **and** the `declared != required` arm.
 
+This binds token ↔ row ↔ runner existence. `check_document_kinds` is the
+vocabulary rule's sole production owner, and the registry row names that runner
+directly. The old invocation in `check_manifest_completeness` is removed.
+
+⚠ This does **not** bind arbitrary semantics inside a `fn()` runner body.
+Emptying the runner remains observationally silent against today's valid
+manifest, just as it does for other gate bodies in this file. A full
+body-semantic binding would require a different interface with injectable
+manifest entries, which this XS deliberately excludes.
+
 ## ⛔ Scope — the status-population rule is deliberately EXCLUDED
 
 `status_record_population_violations` is a **global invariant over the record
@@ -79,18 +89,21 @@ declined three times now.
   (a) delete the runner ⇒ `E0425` **at the registry line**, quoted;
   (b) delete the row ⇒ name the failing test **and which arm** fired.
   Restore byte-for-byte and re-verify green after each.
-- **AC-3 — the invocation wire is now bound.** Repeat the adversary's exact
-  mutation — remove the vocabulary check's production call — and show it now
-  **reddens**. This is the finding; closing it without this check is not closing
-  it.
+- **AC-3 — the vocabulary rule has one production owner.**
+  `check_document_kinds` is the sole production owner, the `document-kind`
+  registry row names it directly, and the old invocation in
+  `check_manifest_completeness` is absent. Demonstrate those source locations;
+  do not claim that deleting arbitrary runner-body semantics is loud.
 - **AC-4 — no vacuity.** State which line you removed for each proof.
 
 ## ⚠ Fair attribution — this is a strict improvement, not a failed fix
 
-**Every gate body in this file shares this residual** — emptying `check_links`
-reddens nothing either. The pre-`f0ceb702` state had **both** deletion modes
-silent; `DOC-GATE-CONTROL-BINDING` converted one of two to loud. ⛔ Do not read
-the parent WP as having failed. It did exactly what was asked.
+**Every gate body in this file shares the body-semantics residual** — emptying
+`check_links` reddens nothing either. The pre-`f0ceb702` state had both rule
+deletion and production ownership unguarded; `DOC-GATE-CONTROL-BINDING` made
+rule deletion loud, and this WP gives the vocabulary rule one registered
+production owner whose existence is structurally bound. ⛔ Do not read the
+parent WP as having failed. It did exactly what was asked.
 
 ## ⚠ The Steward overclaim — THIRD instance this session, same direction
 
