@@ -149,7 +149,31 @@
 > `preserved/wp-RT-NATIVE-FNSPLIT-native-partition-b077eb7a`).
 > ⛔ **Do not delete the tag.** Phase 1 measures it; Phases 2–3 port from it.
 >
-> ## ▶ Track 2 is LIVE — `DOC-GATE-RECORD-AXIS` with the Verify ring
+> ## ⛔ IMMEDIATE: `DOC-GATE-RECORD-AXIS` publish is HELD on an unresolved Decision
+>
+> **A `git_request` arrived (`evt_517mjv8rr6kb`) and I did NOT merge.**
+> `dec_7htr8nc7076x` is **`status: "proposed"`** — `resolved_by`/`resolved_at`/
+> `resolution` all `null`. §14: merge only on a **resolved** Decision, never on
+> `merge_ready` prose. Held at `evt_6ja7bqqawx3pr`.
+>
+> **Everything else is verified clean, so this is a one-step unblock — publish the
+> instant it resolves:** tip == approved SHA `b3afd48b` ✅ · scope is exactly
+> `crates/ken-cli/tests/library_documentation_gates.rs` so Architect-only review
+> is correct ✅ · merge-base == current `origin/main` == `757ce46a` ✅ ·
+> intersection **empty**, no rebase wanted ✅.
+>
+> ⚠ **I am not disputing the votes happened** — both were cited with real event
+> IDs (QA `evt_5qstakpep4njx`, Architect `evt_1qtygnzf4a67q`). What is missing is
+> the *resolution*. Also asked them to confirm **AC1's positive control** (that
+> the F1 assertion was proved to fire by actually adding a second
+> `kind = "status"` record, not inferred).
+>
+> ★ **Probe discipline that mattered here:** `list_decisions(resolved)` did not
+> contain it — but I only trusted that after a **positive control** (a decision I
+> knew was resolved *was* in the same dump, 1 of 400). Then confirmed directly on
+> the `proposed` list. Don't conclude absence from one negative lookup.
+>
+> ## ▶ Track 2 — `DOC-GATE-RECORD-AXIS` with the Verify ring
 >
 > Kicked `evt_4sv449b1e4tcy`; ring compacted + reset to `510de0e3` (drops
 > verified); leader pane-confirmed `Working`; tracker flipped to `active`.
