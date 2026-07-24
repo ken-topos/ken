@@ -1,7 +1,7 @@
 ---
 id: DOC-VALIDATION-BINDING
 title: "validation vocabulary claims a 1:1 binding to the gates; nothing binds it"
-status: active
+status: merged
 owner: verify
 size: S
 gate: none
@@ -10,6 +10,9 @@ blocks: []
 github: null
 origin: adversary finding evt_59w0kkk1gf75e (2026-07-22), post-merge on DOC-W0 @ 6be9754b
 ---
+
+> ✅ **MERGED `96ab2b4b`** 2026-07-24 (PR via publisher; verified on main by
+> content). ⚠ **Retros still owed** — the WP is not closed until they are in.
 
 > **Re-homed doc → verify, 2026-07-24 (Steward).** The mechanism is
 > `crates/ken-cli/tests/library_documentation_gates.rs`, a Rust gate harness —
