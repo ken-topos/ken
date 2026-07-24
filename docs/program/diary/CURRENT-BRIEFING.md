@@ -208,6 +208,11 @@
 > Publish it right after `DOC-GATE-RECORD-AXIS`; both are queued on the same
 > outage.
 >
+> ✅ **Boundary A is now ON ORIGIN at `7547da95`** — I pushed it. It had been on
+> **one local ref with zero off-box copies** while Boundary B was being cut from
+> it, so losing it would have taken both. `git push` works fine; only the pulls
+> endpoint is down. **Both queued branches are now durable off-box.**
+>
 > **My sequencing ruling** (`evt_5vn8kwcfz445y`): A and B are **separate merge
 > units**; Boundary B cuts from the approved tip **`7547da95`** now rather than
 > idling the ring on my infra problem. ⛔ **When A lands, B re-anchors onto
