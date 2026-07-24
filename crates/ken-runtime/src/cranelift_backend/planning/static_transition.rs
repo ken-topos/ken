@@ -921,7 +921,7 @@ impl StaticTransitionPlan {
 
         self.validate_source_return_topology()?;
         if helpers.values().copied().max().unwrap_or(0) > MAX_HELPERS_PER_STATIC_SOURCE {
-            return Err(planner_capacity_error(
+            return Err(planner_error(
                 "fixed K helpers per static source was exceeded",
             ));
         }
@@ -1779,6 +1779,10 @@ mod tests {
 
         let mut changed_frames = plan.nodes.clone();
         let frames = plan.nodes.iter().map(|node| node.frame).collect::<Vec<_>>();
+        assert!(
+            frames.iter().any(|frame| *frame != frames[0]),
+            "frame rotation is a no-op: all frames are equal, so this control proves nothing"
+        );
         for (index, node) in changed_frames.iter_mut().enumerate() {
             node.frame = frames[(index + 1) % frames.len()];
         }
@@ -2030,9 +2034,10 @@ mod tests {
     }
 
     #[test]
-    fn planner_invariants_and_input_capacity_have_distinct_attribution() {
-        // Promise class: durable invariant. Internal planner defects and
-        // input-capacity limits remain different error identities.
+    fn planner_invariant_failures_have_compiler_bug_attribution() {
+        // Promise class: durable invariant. These distinct planner
+        // self-consistency failures are compiler bugs. The capacity channel is
+        // not input-reachable because fixed K is a structural planner invariant.
         let plan =
             plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
 
@@ -2085,18 +2090,18 @@ mod tests {
             .planned_helpers
             .push(PlannedHelperKey::node(TransitionKind::Evaluate, id));
 
-        let capacity = over_capacity.validate().unwrap_err();
+        let fixed_k_invariant = over_capacity.validate().unwrap_err();
         assert!(matches!(
-            &capacity,
-            CraneliftBackendError::Unsupported(unsupported)
-                if unsupported.construct == "NativeStaticTransitionPlanner"
-                    && unsupported.reason == "fixed K helpers per static source was exceeded"
+            &fixed_k_invariant,
+            CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(detail))
+                if detail == "fixed K helpers per static source was exceeded"
         ));
         assert_eq!(
-            capacity.to_string(),
-            "unsupported runtime-IR lowering: NativeStaticTransitionPlanner: fixed K helpers per \
-             static source was exceeded"
+            fixed_k_invariant.to_string(),
+            "Cranelift backend failure: native static transition planner invariant failed; \
+             please report this compiler bug: fixed K helpers per static source was exceeded"
         );
+        assert!(!fixed_k_invariant.to_string().contains("unsupported"));
     }
 
     #[test]
