@@ -2261,6 +2261,7 @@ impl<'a> Lowering<'a> {
         result_payload: Value,
         local_tag_output: StackSlot,
         caller_tag_pointer: Value,
+        required_kind: ScalarMergeKind,
     ) -> Result<(), CraneliftBackendError> {
         let call_block = function.layout.inst_block(call_inst).ok_or_else(|| {
             unsupported(
@@ -2274,7 +2275,77 @@ impl<'a> Lowering<'a> {
             .skip_while(|inst| *inst != call_inst)
             .skip(1)
             .collect::<Vec<_>>();
-        let [tag_load, tag_store, ret] = suffix.as_slice() else {
+        let exact_forward = match suffix.as_slice() {
+            [tag_load, tag_store, ret] => {
+                let load_is_exact = matches!(
+                    function.dfg.insts[*tag_load],
+                    InstructionData::StackLoad {
+                        opcode: Opcode::StackLoad,
+                        stack_slot,
+                        offset,
+                    } if stack_slot == local_tag_output && i32::from(offset) == 0
+                );
+                let tag = function.dfg.inst_results(*tag_load).first().copied();
+                let store_is_exact = tag.is_some_and(|tag| {
+                    matches!(
+                        function.dfg.insts[*tag_store],
+                        InstructionData::Store {
+                            opcode: Opcode::Store,
+                            args,
+                            offset,
+                            ..
+                        } if args == [tag, caller_tag_pointer] && i32::from(offset) == 0
+                    )
+                });
+                load_is_exact
+                    && store_is_exact
+                    && tag
+                        .is_some_and(|tag| Self::function_value_uses(function, tag) == [*tag_store])
+                    && function.dfg.insts[*ret].opcode() == Opcode::Return
+                    && function.dfg.inst_args(*ret) == [result_payload]
+                    && Self::function_value_uses(function, result_payload) == [*ret]
+            }
+            [tag_load, zero, tag_store, ret] if required_kind != ScalarMergeKind::Int => {
+                let load_is_exact = matches!(
+                    function.dfg.insts[*tag_load],
+                    InstructionData::StackLoad {
+                        opcode: Opcode::StackLoad,
+                        stack_slot,
+                        offset,
+                    } if stack_slot == local_tag_output && i32::from(offset) == 0
+                );
+                let loaded_tag = function.dfg.inst_results(*tag_load).first().copied();
+                let zero_is_exact = matches!(
+                    function.dfg.insts[*zero],
+                    InstructionData::UnaryImm {
+                        opcode: Opcode::Iconst,
+                        imm,
+                    } if imm.bits() == 0
+                );
+                let zero_value = function.dfg.inst_results(*zero).first().copied();
+                let store_is_exact = zero_value.is_some_and(|zero_value| {
+                    matches!(
+                        function.dfg.insts[*tag_store],
+                        InstructionData::Store {
+                            opcode: Opcode::Store,
+                            args,
+                            offset,
+                            ..
+                        } if args == [zero_value, caller_tag_pointer] && i32::from(offset) == 0
+                    )
+                });
+                load_is_exact
+                    && loaded_tag
+                        .is_some_and(|tag| Self::function_value_uses(function, tag).is_empty())
+                    && zero_is_exact
+                    && store_is_exact
+                    && function.dfg.insts[*ret].opcode() == Opcode::Return
+                    && function.dfg.inst_args(*ret) == [result_payload]
+                    && Self::function_value_uses(function, result_payload) == [*ret]
+            }
+            _ => false,
+        };
+        if !exact_forward {
             return Err(unsupported(
                 "NativeSourceKontSuccessorV1",
                 format!(
@@ -2285,42 +2356,6 @@ impl<'a> Lowering<'a> {
                         .map(|inst| function.dfg.display_inst(*inst).to_string())
                         .collect::<Vec<_>>(),
                 ),
-            ));
-        };
-        let load_is_exact = matches!(
-            function.dfg.insts[*tag_load],
-            InstructionData::StackLoad {
-                opcode: Opcode::StackLoad,
-                stack_slot,
-                offset,
-            } if stack_slot == local_tag_output && i32::from(offset) == 0
-        );
-        let tag = function.dfg.inst_results(*tag_load).first().copied();
-        let store_is_exact = tag.is_some_and(|tag| {
-            matches!(
-                function.dfg.insts[*tag_store],
-                InstructionData::Store {
-                    opcode: Opcode::Store,
-                    args,
-                    offset,
-                    ..
-                } if args == [tag, caller_tag_pointer] && i32::from(offset) == 0
-            )
-        });
-        let return_is_exact = function.dfg.insts[*ret].opcode() == Opcode::Return
-            && function.dfg.inst_args(*ret) == [result_payload];
-        let tag_has_one_use =
-            tag.is_some_and(|tag| Self::function_value_uses(function, tag) == [*tag_store]);
-        let payload_has_one_use = Self::function_value_uses(function, result_payload) == [*ret];
-        if !load_is_exact
-            || !store_is_exact
-            || !return_is_exact
-            || !tag_has_one_use
-            || !payload_has_one_use
-        {
-            return Err(unsupported(
-                "NativeSourceKontSuccessorV1",
-                "closed SourceArm child suffix is not exact channel-neutral scalar forwarding",
             ));
         }
         let mut cursor = FuncCursor::new(function).after_inst(call_inst);
@@ -2588,6 +2623,7 @@ impl<'a> Lowering<'a> {
                     result_payload,
                     local_tag_output,
                     caller_tag_pointer,
+                    child_key.required_kind,
                 )?;
                 self.partition_closed_source_arms.seal_delegation(
                     request,
@@ -8054,37 +8090,21 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         head: PartitionSourceCursor,
+        input: &Lowered,
         control: &mut SourceControl<'_>,
     ) -> Result<bool, CraneliftBackendError> {
         let mut definition = self.partition_source_nodes.definition(head.node)?;
-        if !matches!(
+        let inline = matches!(
             definition.current,
             SourcePrefixTemplate::ConstructArgument { .. }
-                | SourcePrefixTemplate::MatchScrutinee { .. }
-        ) {
-            let kind = match definition.current {
-                SourcePrefixTemplate::Terminal { .. } => "Terminal",
-                SourcePrefixTemplate::CheckedRecursiveInvocationReturn { .. } => {
-                    "CheckedRecursiveInvocationReturn"
-                }
-                SourcePrefixTemplate::CheckedComputationalIHInvocationReturn { .. } => {
-                    "CheckedComputationalIHInvocationReturn"
-                }
-                SourcePrefixTemplate::ReturnFromSelectedCase { .. } => "ReturnFromSelectedCase",
-                SourcePrefixTemplate::LetBody { .. } => "LetBody",
-                SourcePrefixTemplate::ApplyRecursorSelection { .. } => "ApplyRecursorSelection",
-                SourcePrefixTemplate::UnwindRecursorSegment { .. } => "UnwindRecursorSegment",
-                SourcePrefixTemplate::IfScrutinee { .. } => "IfScrutinee",
-                SourcePrefixTemplate::ConstructArgument { .. }
-                | SourcePrefixTemplate::MatchScrutinee { .. } => unreachable!(),
-                SourcePrefixTemplate::ComputationalMatchScrutinee { .. } => {
-                    "ComputationalMatchScrutinee"
-                }
-                SourcePrefixTemplate::ProjectRecord { .. } => "ProjectRecord",
-                SourcePrefixTemplate::CallCallee { .. } => "CallCallee",
-                SourcePrefixTemplate::CallArgument { .. } => "CallArgument",
-            };
-            eprintln!("closed SourceArm source head {} is {kind}", head.node.0);
+        ) || matches!(
+            (&definition.current, input),
+            (
+                SourcePrefixTemplate::MatchScrutinee { .. },
+                Lowered::HostResult { .. }
+            )
+        );
+        if !inline {
             return Ok(false);
         }
         let mut captures = definition
@@ -10065,11 +10085,25 @@ impl<'a> Lowering<'a> {
                                     && self.inline_closed_host_result_source_head(
                                         builder,
                                         head,
+                                        &value,
                                         &mut control,
                                     )?;
                             if !inline_closed_host_result {
-                                return self
-                                    .call_partition_source_kont(builder, head, value, control);
+                                let closed_return = self
+                                    .active_partition_source_arm_closure
+                                    .as_ref()
+                                    .map(|closure| closure.source_return);
+                                return if let Some(return_id) = closed_return {
+                                    self.call_partition_source_kont_entry(
+                                        builder,
+                                        Some(head),
+                                        value,
+                                        control,
+                                        Some(return_id),
+                                    )
+                                } else {
+                                    self.call_partition_source_kont(builder, head, value, control)
+                                };
                             }
                         }
                         state = SourceMachineState::Value { value, control };
