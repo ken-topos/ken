@@ -200,7 +200,32 @@
 > Asking was still right — the inventory *had* changed; the counts happened not
 > to.
 >
-> ### ⛔ ARCHITECT BLOCKED `e70bb2a5` (`evt_2km3wm7h9ckgp`) — a THIRD candidate is due
+> ### ✅ BOUNDARY A DISCHARGED on `7547da95` — QA PASS + Architect APPROVE
+>
+> Both closure holes closed by set equality (quartet) and exact node-ID set
+> equality (reachability). **Architect authorizes Boundary B.** ⚠ **Boundary A
+> is APPROVED AND UNPUBLISHED — blocked only by the GitHub write outage.**
+> Publish it right after `DOC-GATE-RECORD-AXIS`; both are queued on the same
+> outage.
+>
+> **My sequencing ruling** (`evt_5vn8kwcfz445y`): A and B are **separate merge
+> units**; Boundary B cuts from the approved tip **`7547da95`** now rather than
+> idling the ring on my infra problem. ⛔ **When A lands, B re-anchors onto
+> `origin/main` by RESET + RE-APPLY of B's own delta — never `git rebase`** (A
+> lands as a squash; rebase replays already-landed commits into conflicts).
+> B's merge Decision must show a diff of **only B's** changes.
+>
+> ⚠ **Watched property I flagged but did NOT override (mechanism = Architect's
+> lane):** Boundary A calls `plan_static_transition_graph(expr, &declarations)?`
+> on the **live** compile path and `drop`s the result. Emission is unchanged, so
+> it ships no representation change and does not trip the operator's scaling
+> gate — but the `?` means **a planner rejection now fails a native compile that
+> previously succeeded**, for a plan nothing consumes yet. CI + 309/309 is the
+> whole net. ⇒ **If CI reddens on a program that compiled before, it is this
+> line** — a planner gap, not a lowering bug. Boundary B removes the concern by
+> making the plan load-bearing.
+>
+> ### (historical) Architect BLOCK on `e70bb2a5` (`evt_2km3wm7h9ckgp`) — now closed
 >
 > It **confirms my fold is real and may stand**, and confirms the eight-slot
 > frame + `{kind,local,aux,child}` store are expressive **without a ninth slot**
