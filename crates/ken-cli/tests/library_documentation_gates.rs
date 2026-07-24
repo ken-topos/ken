@@ -3107,38 +3107,48 @@ fn agent_evaluation_tasks_and_packs_cover_each_other_exactly() {
     );
 }
 
-#[test]
-fn agent_library_checked_fences_elaborate_at_this_revision() {
+fn has_checked_examples(src: &str) -> bool {
+    src.contains("```ken example") || src.contains("```ken reject")
+}
+
+fn applies_to_checked_example_records(entry: &DocEntry) -> bool {
+    let path = repo_root().join(&entry.path);
+    std::fs::read_to_string(&path)
+        .map(|src| has_checked_examples(&src))
+        .unwrap_or(false)
+}
+
+fn run_checked_markdown(path: &Path, src: &str, index: usize) -> std::process::Output {
+    // Agent modules are ordinary `.md` documents, while `ken check` selects
+    // literate extraction by the `.ken.md` suffix. Preserve the complete
+    // source bytes in a temporary literate file so every checked fence is
+    // exercised through the real extractor without changing the
+    // product-facing document name.
+    let probe = std::env::temp_dir().join(format!(
+        "doc-w2-checked-examples-{}-{index}.ken.md",
+        std::process::id()
+    ));
+    std::fs::write(&probe, src).unwrap_or_else(|e| panic!("write {}: {e}", probe.display()));
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_ken"))
+        .arg("check")
+        .arg(&probe)
+        .output()
+        .unwrap_or_else(|e| panic!("run ken check {}: {e}", path.display()));
+    let _ = std::fs::remove_file(&probe);
+    output
+}
+
+fn check_checked_examples() {
     let root = repo_root();
-    let manifest = std::fs::read_to_string(root.join("library/agents/manifest.toml"))
-        .expect("read agent manifest");
-    for (index, module) in parse_controlled_records(&manifest, "module")
+    for (index, entry) in load_manifest()
         .into_iter()
+        .filter(|entry| applies_to_checked_example_records(entry))
         .enumerate()
     {
-        let path = root.join(record_scalar(&module, "path"));
+        let path = root.join(&entry.path);
         let src = std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-        if !src.contains("```ken") {
-            continue;
-        }
-        // Agent modules are ordinary `.md` documents, while `ken check`
-        // selects literate extraction by the `.ken.md` suffix. Preserve the
-        // complete source bytes in a temporary literate file so every checked
-        // fence is exercised through the real extractor without changing the
-        // product-facing module name.
-        let probe = std::env::temp_dir().join(format!(
-            "doc-w2-checked-examples-{}-{index}.ken.md",
-            std::process::id()
-        ));
-        std::fs::write(&probe, &src)
-            .unwrap_or_else(|e| panic!("write {}: {e}", probe.display()));
-        let output = std::process::Command::new(env!("CARGO_BIN_EXE_ken"))
-            .arg("check")
-            .arg(&probe)
-            .output()
-            .unwrap_or_else(|e| panic!("run ken check {}: {e}", path.display()));
-        let _ = std::fs::remove_file(&probe);
+        let output = run_checked_markdown(&path, &src, index);
         assert!(
             output.status.success(),
             "checked fences failed in {}:\nstdout:\n{}\nstderr:\n{}",
@@ -3147,4 +3157,27 @@ fn agent_library_checked_fences_elaborate_at_this_revision() {
             String::from_utf8_lossy(&output.stderr)
         );
     }
+}
+
+#[test]
+fn checked_examples_detector_rejects_invalid_example_and_stale_reject() {
+    let invalid_example = "# Fixture\n\n```ken example\nconst broken : Bool = Missing\n```\n";
+    let invalid = run_checked_markdown(Path::new("invalid-example.md"), invalid_example, 10_001);
+    assert!(
+        !invalid.status.success()
+            && String::from_utf8_lossy(&invalid.stderr)
+                .contains("a 'ken example' block failed to elaborate"),
+        "invalid `ken example` did not fail at the checked-example artifact: {}",
+        String::from_utf8_lossy(&invalid.stderr)
+    );
+
+    let stale_reject = "# Fixture\n\n```ken reject\nconst valid : Bool = True\n```\n";
+    let stale = run_checked_markdown(Path::new("stale-reject.md"), stale_reject, 10_002);
+    assert!(
+        !stale.status.success()
+            && String::from_utf8_lossy(&stale.stderr)
+                .contains("a 'ken reject' block unexpectedly elaborated"),
+        "stale `ken reject` did not fail at the checked-example artifact: {}",
+        String::from_utf8_lossy(&stale.stderr)
+    );
 }

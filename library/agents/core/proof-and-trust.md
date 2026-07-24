@@ -83,4 +83,7 @@ Ken cannot manufacture a proof for a false, underspecified, or externally
 delegated claim. Some runtime properties remain delegated even when structural
 properties of the program are proved. If the only apparent closure adds trust,
 assumes an unproved lemma, or relies on execution evidence, stop and state that
-boundary instead of returning a fabricated proof.
+boundary instead of returning a fabricated proof. Kernel internals and older
+prose may call the `Top` inhabitant `tt`; the writable surface name is
+`Proved`. Do not copy internal `tt` into Ken source as if it were an alternate
+surface spelling.
