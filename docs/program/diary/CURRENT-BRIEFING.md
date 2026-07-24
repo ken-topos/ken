@@ -5,7 +5,7 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-24 ~18:0xZ. OPERATOR IS PRESENT.**
+**As of 2026-07-24 ~20:5xZ. OPERATOR IS PRESENT.**
 
 > ## ⚡ OPERATOR PRIORITY (2026-07-24): **LAND RT-NATIVE-FNSPLIT.**
 > *"I did not mean to abandon the RT-NATIVE-FNSPLIT effort. Continue that work.
@@ -28,14 +28,15 @@
 > is measured against. Do not let Phase 1 be skipped as a formality.
 
 ### ✅ Landed this window
-- **`origin/main = bf00f1a9`** — the four operator directives are ON MAIN
-  (verified by content, not by the publisher's report): COORDINATION §8a + §10⁻a,
-  steward playbook §2d + ledger axis, plus the §5a armed trigger.
-- **`PUB-VERIFY` CLOSED** as landed-by-other-work (operator-directed).
-- **`DOC-VALIDATION-BINDING` PUBLISHING** @ `f1eb7408`, branch FROZEN
-  (`evt_6ewc3t460tvn7`). ⚠ My corpus publish moved main `8ebe370a → bf00f1a9`
-  under its Decision; **intersection tested EMPTY**, so immaterial — no rebase.
-  **Retros still owed before it closes.**
+- **`origin/main = 64b0811f`.** `DOC-GATE-RECORD-AXIS` MERGED via PR #922 from
+  approved `b3afd48b` — verified **by content**: `VALID_KINDS` closes the `kind`
+  vocabulary; the record-axis assertion names the second-`status`-record case.
+- **`RT-NATIVE-FNSPLIT` Boundary A publishing** — PR #923 open at approved
+  `7547da95`, branch FROZEN, CI running. **This is the operator priority.**
+- **The ~30-minute GitHub write outage is OVER** (writes to the pulls endpoint
+  failed, 10 distinct incident IDs, reads fine throughout). It cleared on its
+  own; no workaround was applied and none should be.
+- **`DOC-VALIDATION-BINDING`** merged earlier at `96ab2b4b`.
 
 
 > # ⇢ LIVE STATE — 2026-07-24, Opus 5.0 session, post-restart
@@ -44,12 +45,50 @@
 > Everything it owed is done: drops verified, Runtime kicked, cadence re-armed,
 > watchdog re-armed.
 >
-> ## Where the frontier is — PHASE 1 IS CLOSED; BOUNDARY A IS THE LIVE UNIT
+> ## Where the frontier is — BOUNDARY A IS MERGING; BOUNDARY B IS STOPPED AT HARD-STOP #3
 >
-> **`origin/main = 510de0e3`.** The recut frame was **AMENDED** after Architect
-> hard-stop #1 (`evt_6dpb96kn1583f`) and handed back: `evt_30a344an210g`,
-> `runtime-leader` pane-confirmed `Working`. Ring was compacted first (drops
-> verified) **without** `handoff-gate-compact.sh`, deliberately — see below.
+> **`origin/main = 64b0811f`.** Boundary A is **approved by QA and the Architect**
+> at `7547da95` and is publishing as **PR #923** (branch FROZEN, CI running).
+>
+> **⛔ BOUNDARY B IS STOPPED at recut hard-stop #3** (`evt_21yr288qkpb92`, clean
+> WIP `ed54b17e` on `wp/RT-NATIVE-FNSPLIT-boundary-b-semantic-port`, cut from
+> `7547da95`). Grounding found **activation-independent semantic classes with no
+> representation in A's inventory**: `SourceKont` is not uniformly `R`
+> (`PartitionSourcePrefixKey` carries `LetBody`, `ApplyRecursorSelection`,
+> `UnwindRecursorSegment`, IH returns, selected-case return, terminal steps —
+> these transform value/control and may own a body); `ProducerKont` is not
+> mappable by action name; `SourceArm` bodies lose occurrence identity before
+> reserve (cloned `RuntimeExpr`).
+>
+> ★ **The ring refused three unsound repairs** — overloading `R`/`W`/`T`/`C`,
+> assigning identity by discovery order (traversal order would choose code
+> identity), and retaining first-activation body selection. That refusal is why
+> this is a hard-stop and not a latent defect.
+>
+> **⇒ RESEARCH PULL FIRED** (`evt_3eesgc76aczw3`, research compacted first, drop
+> verified, pane-confirmed `Working`). **The Architect ruling is gated BEHIND the
+> advisory**, at the implementer's own request — I told @architect to hold
+> (`evt_41h956g1wk7ch`). The fork: **(a)** enumerate explicit planner
+> node/transition kinds per action responsibility, vs **(b)** lower these classes
+> into a small semantic IR arena. Research advises; the Architect rules.
+>
+> ⚠ **A's n=3..7 census is PROVISIONAL.** Hard-stop #3 hits the escape hatch in
+> the Architect's #2 ruling (*"add an explicit planner node/transition kind and
+> return Boundary A for amended census and fresh review"*), so
+> `87/115/143/171/199` nodes, `190/…/438` helpers, K=8, widths `12/32/16` are
+> very likely to be superseded. **Do not cite that table as a downstream
+> baseline.** I merged anyway and the reasoning is on record: an amendment is
+> additive, and merged it is a clean delta while unmerged it grows A into a
+> combined unit no reviewer can isolate. Supersession documented beats
+> supersession silent.
+>
+> **When A lands:** post the SHA, then tell the ring to re-anchor B by **RESET +
+> RE-APPLY of B's own delta — NEVER `git rebase`** (A lands as a squash; its
+> commits dangle ahead of `main` with content already in). Then
+> `git diff --stat origin/main...<B tip>` must show only B's files.
+>
+> *(historical) The recut frame was AMENDED after Architect hard-stop #1
+> (`evt_6dpb96kn1583f`) and handed back at `evt_30a344an210g`.*
 >
 > **⛔ Phase 1 is CLOSED at `could_not_determine`. Do not re-run it.** My frame's
 > central premise was **false against the landed code**: unchanged `b077eb7a`
@@ -126,10 +165,20 @@
 > ## Research cadence — ARMED (this is the count of record)
 >
 > ```text
-> RECUT CHAIN: hard-stop count = 1 · NEXT RESEARCH PULL = #3, then #6, #9, …
+> RECUT CHAIN: hard-stop count = 3 · PULL FIRED AT #3 · NEXT = #6, then #9, …
 >   #1 = Architect amendment ruling evt_6dpb96kn1583f (frame amended in response)
+>   #2 = static->semantic bridge; Architect ruled an out-of-line semantic
+>        descriptor plane keyed by existing planned node/edge IDs
+>        (evt_2jt1s5r7c1g2z). Not a research trigger (< #3).
+>   #3 = unrepresented SourceKont/ProducerKont static semantics
+>        (evt_21yr288qkpb92). ⇒ RESEARCH PULL FIRED, evt_3eesgc76aczw3.
 > HELD CHAIN:  frozen at 33, closed, does NOT carry forward
 > ```
+>
+> ⚠ **A review fold is NOT a hard-stop; a genuine "I cannot say this honestly" IS.**
+> Two Architect folds on Boundary A were correctly not counted. The count is
+> authoritative in `docs/program/issues/RT-NATIVE-FNSPLIT.md`, and the Architect
+> has deferred to it explicitly three times.
 >
 > The Architect **explicitly deferred to this count** on #1 ("the Steward's
 > tracker remains the count of record, so no Research pull is due before #3").
@@ -149,30 +198,48 @@
 > `preserved/wp-RT-NATIVE-FNSPLIT-native-partition-b077eb7a`).
 > ⛔ **Do not delete the tag.** Phase 1 measures it; Phases 2–3 port from it.
 >
-> ## 🚨 IMMEDIATE — `DOC-GATE-RECORD-AXIS`: ALL GATES PASS, publish blocked by a GITHUB WRITE OUTAGE
+> ## ✅ `DOC-GATE-RECORD-AXIS` MERGED at `64b0811f` — and it carries MY defect
 >
-> **This is the first thing to retry on resume.** Everything is done except the
-> publish itself.
+> Published from approved `b3afd48b` via PR #922; verified by content. Retros
+> still owed from the Verify ring before it closes.
 >
-> - **Branch is on `origin` at the exact approved SHA** —
->   `wp/DOC-GATE-RECORD-AXIS-gate-record-axis` @ `b3afd48b`, confirmed by
->   `ls-remote`. ⛔ **FROZEN — do not rebase/amend/re-anchor.**
-> - `dec_7htr8nc7076x` **resolved** (the `proposed` list is empty); QA
->   `evt_5qstakpep4njx` + Architect `evt_1qtygnzf4a67q` on that SHA; scope one
->   file ⇒ Architect-only correct; merge-base == `757ce46a`; intersection empty.
-> - **AC1 positive control was genuinely run** — QA added a real second
->   `kind = "status"` record and watched the assertion FIRE.
+> ### ⛔⛔ MY PUBLISH DESCRIPTION OVERCLAIMED, AND IT IS PERMANENT ON `main`
 >
-> **The blocker: GitHub fails every WRITE to the pulls endpoint while READS
-> succeed.** 5 attempts / 2 mechanisms (`gh pr create` GraphQL; REST
-> `POST /pulls` → empty body), each a distinct server-side incident ID (last:
-> `C2B2:1E7A6B:120E2A5:124A855:6A63BBE2`). **Positive control:** `GET` PR #921
-> returns fine, rate limit untouched at 5000. ⇒ **not** auth, **not** rate limit,
-> **not** branch protection, **not** a gate.
+> Adversary **G1** (`evt_4j8fschh7v4vx`) hunted *the correction to its own
+> findings* — on the reasoning that a fix to a finding is the highest-yield
+> target available: same author, same topic, reassuring register, everyone
+> relieved. **It caught me.** My PR description, which the publisher turned into
+> the squash commit message, says *"binds coverage on the record axis, **with a
+> positive control that fails when the binding is removed**."* Measured against
+> the tree with probe controls: **0 tests added**, 0 removed, 22 present in the
+> file. Both new checks are bare assertions inside test bodies — **delete either
+> and nothing reddens.**
 >
-> **No PR exists ⇒ no CI has run.** On recovery: open the PR on the frozen SHA,
-> let CI gate it, merge on green, then verify **by content on `origin/main`** and
-> post to the ring. Ring owes nothing; I hold it. Retros owed when it lands.
+> ★ **The precise distinction, and I initially got it wrong in my own
+> correction.** QA **did** run a real positive control — it added a second
+> `kind = "status"` record and watched the assertion fire. **A control that was
+> RUN is not a control that is COMMITTED.** The run proves the property *today*;
+> only a committed artifact guards it *tomorrow*. My sentence claimed the second
+> while the ring had honestly delivered the first, and I then told QA there
+> "was none to approve," which was unfair and untrue.
+>
+> ⇒ Filed **`DOC-GATE-CONTROL-BINDING`** (ready, Verify, S): lift both checks to
+> pure `fn(&[DocEntry]) -> Vec<String>` detectors with committed tests, mirroring
+> the in-file precedent at `:700`/`:730`/`:747`. Mechanism unchanged; **form
+> only**. ⛔ Not the `run: fn(&DocEntry)` refactor — the Adversary declined it
+> twice.
+>
+> ⇒ New steward memory:
+> `agent/memory/roles/steward/the-publish-description-is-the-one-artifact-no-reviewer-reviews.md`
+> — the publish description is authored **after the last gate closes**, nobody
+> reviews it, and it lands in the git log forever. Every verification-flavored
+> clause in it is a **factual claim about the diff**: grep for the artifact it
+> names before publishing.
+>
+> *(historical) It sat ~30 min behind a GitHub write outage — every WRITE to the
+> pulls endpoint failed across 2 mechanisms with 10 distinct incident IDs while
+> READS stayed clean (rate limit untouched at 5000). Not auth, not rate limit,
+> not branch protection. It cleared on its own; no workaround was applied.*
 >
 > ⚠ **This is mutable external state (§7a) — TEST it, do not cite this block.**
 > It may be fixed by the time you read this.
