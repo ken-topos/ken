@@ -50,7 +50,8 @@ pub(in crate::cranelift_backend) use crate::{
 pub(in crate::cranelift_backend) use super::compiled::{CompiledModule, ResultDecoder};
 pub(in crate::cranelift_backend) use super::planning::{
     collect_checked_oriented_markers, collect_checked_subcontinuation_frames,
-    validate_oriented_subcontinuation_transport, CheckedOrientedMarkerSets,
+    plan_static_transition_graph, validate_oriented_subcontinuation_transport,
+    CheckedOrientedMarkerSets,
 };
 pub(in crate::cranelift_backend) use super::surface::{
     backend, backend_module, unsupported, BackendFailure, CraneliftBackendError,

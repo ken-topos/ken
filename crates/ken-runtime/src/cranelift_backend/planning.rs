@@ -11,6 +11,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::surface::{unsupported, CraneliftBackendError};
 use crate::{RuntimeDeclaration, RuntimeDeclarationKind, RuntimeExpr, RuntimeProgram};
 
+mod static_transition;
+
+pub(super) use static_transition::plan_static_transition_graph;
+
 pub(super) fn native_join_plan_for_program(
     program: &RuntimeProgram,
 ) -> Result<Option<crate::NativeJoinPlanV1>, CraneliftBackendError> {
