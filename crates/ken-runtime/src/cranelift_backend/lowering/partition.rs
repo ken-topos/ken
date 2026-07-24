@@ -1226,6 +1226,7 @@ enum PartitionProducerKontActionKey {
         selected_has_ancestry: bool,
         selected_scope: Option<PartitionSelectedScopeKey>,
         selected_has_parent: bool,
+        defer_successor_until_after_selected_scope: bool,
     },
     ApplyEliminators {
         value: PartitionLoweredKey,
@@ -1273,6 +1274,7 @@ pub(super) struct PartitionContinuationKey {
     checked_join: PartitionCheckedJoinIdentity,
     input_kind: ScalarMergeKind,
     outer_return_kind: ScalarMergeKind,
+    return_producer_tail: Option<usize>,
     static_bucket: PartitionStaticFingerprint,
     static_key: Arc<PartitionContinuationStaticKey>,
     field_types: Vec<Type>,
@@ -2357,6 +2359,7 @@ struct PartitionSourceArmStaticKey {
     pending_qualification_head: Option<PartitionRecursorQualificationNodeId>,
     pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
     producer_head: Option<usize>,
+    return_producer_tail: Option<usize>,
     selected_has_ancestry: bool,
     selected_pending: Vec<PartitionEliminatorKey>,
     selected_scope: Option<PartitionSelectedScopeKey>,
@@ -2390,6 +2393,7 @@ impl PartitionSourceArmKey {
         pending_qualification_head: Option<PartitionRecursorQualificationNodeId>,
         pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
         producer_head: Option<usize>,
+        return_producer_tail: Option<usize>,
         _selected_activation: ContinuationActivationId,
         _selected_cursor: ContinuationCursorId,
         selected_ancestry: &[RecursorFrameProvenance],
@@ -2421,6 +2425,7 @@ impl PartitionSourceArmKey {
             pending_qualification_head,
             pending_obligation_head,
             producer_head,
+            return_producer_tail,
             selected_has_ancestry: !selected_ancestry.is_empty(),
             selected_pending: selected_pending
                 .iter()
@@ -2455,6 +2460,7 @@ struct PartitionSourceKontStaticKey {
     pending_qualification_head: Option<PartitionRecursorQualificationNodeId>,
     pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
     producer_head: Option<usize>,
+    return_producer_tail: Option<usize>,
     pending_computational_ih_call: Option<u64>,
     input: PartitionLoweredKey,
     declaration_stack: Vec<RuntimeSymbol>,
@@ -2485,6 +2491,7 @@ impl PartitionSourceKontKey {
         pending_qualification_head: Option<PartitionRecursorQualificationNodeId>,
         pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
         producer_head: Option<usize>,
+        return_producer_tail: Option<usize>,
         pending_computational_ih_call: Option<u64>,
         input: &Lowered,
         declaration_stack: &[RuntimeSymbol],
@@ -2506,6 +2513,7 @@ impl PartitionSourceKontKey {
             pending_qualification_head,
             pending_obligation_head,
             producer_head,
+            return_producer_tail,
             pending_computational_ih_call,
             input: partition_lowered_key(input),
             declaration_stack: declaration_stack.to_vec(),
@@ -2546,6 +2554,7 @@ impl PartitionSourceKontKey {
         pending_qualification_head: Option<PartitionRecursorQualificationNodeId>,
         pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
         producer_head: Option<usize>,
+        return_producer_tail: Option<usize>,
         pending_computational_ih_call: Option<u64>,
         input: &Lowered,
         declaration_stack: &[RuntimeSymbol],
@@ -2560,6 +2569,7 @@ impl PartitionSourceKontKey {
             pending_qualification_head,
             pending_obligation_head,
             producer_head,
+            return_producer_tail,
             pending_computational_ih_call,
             input: partition_lowered_key(input),
             declaration_stack: declaration_stack.to_vec(),
@@ -2655,24 +2665,28 @@ impl PartitionSemanticStateKey {
             Self::ProducerKont(key) => PartitionStateReturnContract {
                 checked_join: key.checked_join.clone(),
                 required_kind: key.outer_return_kind,
+                live_producer_tail: key.return_producer_tail,
                 field_types: key.field_types.clone(),
                 field_map: key.field_map.clone(),
             },
             Self::SourceArm(key) => PartitionStateReturnContract {
                 checked_join: key.checked_join.clone(),
                 required_kind: key.required_kind,
+                live_producer_tail: key.static_key.return_producer_tail,
                 field_types: key.field_types.clone(),
                 field_map: key.field_map.clone(),
             },
             Self::SourceKont(key) => PartitionStateReturnContract {
                 checked_join: key.checked_join.clone(),
                 required_kind: key.required_kind,
+                live_producer_tail: key.static_key.return_producer_tail,
                 field_types: key.field_types.clone(),
                 field_map: key.field_map.clone(),
             },
             Self::CleanupStep(key) => PartitionStateReturnContract {
                 checked_join: key.checked_join.clone(),
                 required_kind: key.required_kind,
+                live_producer_tail: None,
                 field_types: key.field_types.clone(),
                 field_map: key.field_map.clone(),
             },
@@ -2681,6 +2695,14 @@ impl PartitionSemanticStateKey {
 }
 
 impl PartitionContinuationKey {
+    pub(super) fn with_return_producer_tail(
+        mut self,
+        return_producer_tail: Option<usize>,
+    ) -> Self {
+        self.return_producer_tail = return_producer_tail;
+        self
+    }
+
     pub(super) fn done(
         checked_join: PartitionCheckedJoinIdentity,
         return_kind: ScalarMergeKind,
@@ -2700,6 +2722,7 @@ impl PartitionContinuationKey {
             checked_join,
             input_kind: return_kind,
             outer_return_kind: return_kind,
+            return_producer_tail: None,
             static_bucket: partition_static_bucket(&static_key),
             static_key: Arc::new(static_key),
             field_types,
@@ -2719,6 +2742,7 @@ impl PartitionContinuationKey {
         selected_ancestry: &[RecursorFrameProvenance],
         selected_scope: &Option<OwnedSelectedScope>,
         selected_lineage: &[OwnedSourceSelectedContinuation],
+        defer_successor_until_after_selected_scope: bool,
         successor: Option<usize>,
         field_types: Vec<Type>,
         field_map: Vec<usize>,
@@ -2730,6 +2754,7 @@ impl PartitionContinuationKey {
                 selected_has_ancestry: !selected_ancestry.is_empty(),
                 selected_scope: partition_scope_key(selected_scope),
                 selected_has_parent: !selected_lineage.is_empty(),
+                defer_successor_until_after_selected_scope,
             },
             successor,
         };
@@ -2737,6 +2762,7 @@ impl PartitionContinuationKey {
             checked_join,
             input_kind,
             outer_return_kind,
+            return_producer_tail: None,
             static_bucket: partition_static_bucket(&static_key),
             static_key: Arc::new(static_key),
             field_types,
@@ -2764,6 +2790,7 @@ impl PartitionContinuationKey {
             checked_join,
             input_kind: return_kind,
             outer_return_kind: return_kind,
+            return_producer_tail: None,
             static_bucket: partition_static_bucket(&static_key),
             static_key: Arc::new(static_key),
             field_types,
@@ -2791,6 +2818,7 @@ impl PartitionContinuationKey {
             checked_join,
             input_kind: return_kind,
             outer_return_kind: return_kind,
+            return_producer_tail: None,
             static_bucket: partition_static_bucket(&static_key),
             static_key: Arc::new(static_key),
             field_types,
@@ -2818,6 +2846,7 @@ impl PartitionContinuationKey {
             checked_join,
             input_kind: return_kind,
             outer_return_kind: return_kind,
+            return_producer_tail: None,
             static_bucket: partition_static_bucket(&static_key),
             static_key: Arc::new(static_key),
             field_types,
@@ -2849,6 +2878,7 @@ impl PartitionContinuationKey {
             checked_join,
             input_kind: return_kind,
             outer_return_kind: return_kind,
+            return_producer_tail: None,
             static_bucket: partition_static_bucket(&static_key),
             static_key: Arc::new(static_key),
             field_types,
@@ -2878,6 +2908,7 @@ impl PartitionContinuationKey {
             checked_join,
             input_kind: return_kind,
             outer_return_kind: return_kind,
+            return_producer_tail: None,
             static_bucket: partition_static_bucket(&static_key),
             static_key: Arc::new(static_key),
             field_types,
@@ -2910,6 +2941,7 @@ impl PartitionContinuationKey {
             checked_join,
             input_kind: return_kind,
             outer_return_kind: return_kind,
+            return_producer_tail: None,
             static_bucket: partition_static_bucket(&static_key),
             static_key: Arc::new(static_key),
             field_types,
@@ -2937,8 +2969,26 @@ pub(super) struct PartitionContinuationState {
 pub(super) struct PartitionStateReturnContract {
     pub(super) checked_join: PartitionCheckedJoinIdentity,
     pub(super) required_kind: ScalarMergeKind,
+    /// Exact producer tail that must be discharged before this helper may
+    /// execute its scalar return. This is a static helper contract, not an
+    /// inference from the returned scalar pair.
+    pub(super) live_producer_tail: Option<usize>,
     field_types: Vec<Type>,
     field_map: Vec<usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PartitionTailExitDisposition {
+    Completed {
+        tail_site_id: usize,
+        transfer_site_id: u64,
+        scalar_kind: ScalarMergeKind,
+    },
+    DeclaredAbandon {
+        tail_site_id: usize,
+        action_site_id: usize,
+        trap: RuntimeTrap,
+    },
 }
 
 impl PartitionStateReturnContract {
@@ -2949,6 +2999,7 @@ impl PartitionStateReturnContract {
         Self {
             checked_join,
             required_kind,
+            live_producer_tail: None,
             field_types: Vec::new(),
             field_map: Vec::new(),
         }
@@ -2976,6 +3027,7 @@ pub(super) struct PartitionContinuationInterner {
     keys: Vec<PartitionSemanticStateKey>,
     states: Vec<PartitionContinuationState>,
     contracts: Vec<PartitionStateReturnContract>,
+    tail_exit_dispositions: Vec<Option<PartitionTailExitDisposition>>,
     edges: usize,
     emitted: usize,
     descriptor_bytes_constructed: usize,
@@ -3096,6 +3148,7 @@ impl PartitionContinuationInterner {
         self.keys.push(key);
         self.states.push(state);
         self.contracts.push(self.keys[state_id].return_contract());
+        self.tail_exit_dispositions.push(None);
         Ok((state_id, state))
     }
 
@@ -3130,6 +3183,76 @@ impl PartitionContinuationInterner {
         Ok(())
     }
 
+    pub(super) fn record_completed_tail_exit(
+        &mut self,
+        state_id: usize,
+        contract: &PartitionStateReturnContract,
+        completion: PartitionProducerTailCompletion,
+    ) -> Result<(), CraneliftBackendError> {
+        self.record_tail_exit(
+            state_id,
+            contract,
+            PartitionTailExitDisposition::Completed {
+                tail_site_id: completion.tail_site_id,
+                transfer_site_id: completion.fanout_site_id,
+                scalar_kind: contract.required_kind,
+            },
+        )
+    }
+
+    pub(super) fn record_declared_tail_abandon(
+        &mut self,
+        state_id: usize,
+        contract: &PartitionStateReturnContract,
+        trap: RuntimeTrap,
+    ) -> Result<(), CraneliftBackendError> {
+        let tail_site_id = contract.live_producer_tail.ok_or_else(|| {
+            unsupported(
+                "NativeProducerContinuationStepV1",
+                "declared producer-tail abandonment has an empty-tail return contract",
+            )
+        })?;
+        self.record_tail_exit(
+            state_id,
+            contract,
+            PartitionTailExitDisposition::DeclaredAbandon {
+                tail_site_id,
+                action_site_id: state_id,
+                trap,
+            },
+        )
+    }
+
+    fn record_tail_exit(
+        &mut self,
+        state_id: usize,
+        contract: &PartitionStateReturnContract,
+        disposition: PartitionTailExitDisposition,
+    ) -> Result<(), CraneliftBackendError> {
+        if self.contracts.get(state_id) != Some(contract) {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "emitted producer-tail exit disagrees with its static helper return contract",
+            ));
+        }
+        let recorded = self
+            .tail_exit_dispositions
+            .get_mut(state_id)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "producer-tail exit names an unknown helper state",
+                )
+            })?;
+        if recorded.replace(disposition).is_some() {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "one helper state recorded more than one terminal producer-tail disposition",
+            ));
+        }
+        Ok(())
+    }
+
     pub(super) fn finish_definition(
         &mut self,
         state_id: usize,
@@ -3145,6 +3268,48 @@ impl PartitionContinuationInterner {
                 "NativeFunctionPartition",
                 "continuation state definition did not own its reserved state",
             ));
+        }
+        let contract = self.contracts.get(state_id).ok_or_else(|| {
+            unsupported(
+                "NativeProducerContinuationStepV1",
+                "defined helper state lost its static return contract",
+            )
+        })?;
+        match (
+            contract.live_producer_tail,
+            self.tail_exit_dispositions
+                .get(state_id)
+                .and_then(Option::as_ref),
+        ) {
+            (Some(expected), Some(PartitionTailExitDisposition::Completed {
+                tail_site_id,
+                scalar_kind,
+                ..
+            })) if *tail_site_id == expected && *scalar_kind == contract.required_kind => {}
+            (
+                Some(expected),
+                Some(PartitionTailExitDisposition::DeclaredAbandon { tail_site_id, .. }),
+            ) if *tail_site_id == expected => {}
+            (Some(_), Some(_)) => {
+                return Err(unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "helper tail-exit evidence does not match its static return contract",
+                ));
+            }
+            (Some(_), None) => {
+                return Err(unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "helper with a live producer tail defined a scalar return without an exact \
+                     completion or declared-abandon disposition",
+                ));
+            }
+            (None, Some(_)) => {
+                return Err(unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "empty-tail helper recorded a producer-tail exit disposition",
+                ));
+            }
+            (None, None) => {}
         }
         state.lifecycle = PartitionStateLifecycle::Defined;
         self.emitted += 1;
@@ -3468,6 +3633,7 @@ pub(super) enum ProducerKontAction {
         selected_scope: Option<OwnedSelectedScope>,
         selected_lineage: Vec<OwnedSourceSelectedContinuation>,
         capture_field_types: Vec<Type>,
+        defer_successor_until_after_selected_scope: bool,
     },
     ApplyEliminators {
         eliminators: Vec<OwnedPartitionEliminator>,
@@ -3509,6 +3675,7 @@ enum PartitionProducerKontSiteActionKey {
         selected_scope: Option<PartitionSelectedScopeKey>,
         selected_has_parent: bool,
         capture_field_types: Vec<Type>,
+        defer_successor_until_after_selected_scope: bool,
     },
     ApplyEliminators {
         eliminators: Vec<PartitionEliminatorKey>,
@@ -3565,6 +3732,7 @@ impl PartitionProducerKontSiteKey {
                 selected_scope,
                 selected_lineage,
                 capture_field_types,
+                defer_successor_until_after_selected_scope,
                 ..
             } => PartitionProducerKontSiteActionKey::ApplyActiveEliminators {
                 pending: pending.iter().map(partition_eliminator_key).collect(),
@@ -3572,6 +3740,8 @@ impl PartitionProducerKontSiteKey {
                 selected_scope: partition_scope_key(selected_scope),
                 selected_has_parent: !selected_lineage.is_empty(),
                 capture_field_types: capture_field_types.clone(),
+                defer_successor_until_after_selected_scope:
+                    *defer_successor_until_after_selected_scope,
             },
             ProducerKontAction::ApplyEliminators {
                 eliminators,
@@ -3687,6 +3857,7 @@ pub(super) struct ProducerKontPartitionWorkItem {
     pub(super) active_recursive_invocations: Vec<CheckedRecursiveInvocationInstance>,
     pub(super) checked_join: PartitionCheckedJoinIdentity,
     pub(super) return_kind: ScalarMergeKind,
+    pub(super) return_contract: PartitionStateReturnContract,
 }
 
 #[derive(Clone)]
