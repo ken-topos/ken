@@ -314,7 +314,8 @@ fi
 #   header explains) — checking it would fail every time REVISION is used
 #   correctly. `STATUS.md`'s manifest record visibly narrows its own claim
 #   (`crates/ken-cli/tests/library_documentation_gates.rs`,
-#   `applicable_validation_tokens`): a `kind = "status"` document does not
+#   `VALIDATION_GATES` applicability predicate): a `kind = "status"`
+#   document does not
 #   carry `source-currency` at all — its freshness is what `generated-
 #   current` (idempotency) already establishes, which subsumes "unchanged
 #   since REVISION" for a document that is, by definition, always

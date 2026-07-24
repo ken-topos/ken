@@ -8,9 +8,9 @@
 //!     audience, authority, availability, sources, validation, owner —
 //!     all non-empty) and no `path` repeats (AC1: a page whose fields
 //!     can silently go missing is not "declaring what it is").
-//! 1c. `validation` is a closed, known vocabulary that names exactly the
-//!     checks this file actually runs against that record — not free
-//!     prose (AC1: "how its currency is checked" must be mechanical).
+//! 1c. `validation` is a closed, known vocabulary that names exactly all
+//!     registered record-validation gates that apply to that record — not
+//!     free prose (AC1: "how its currency is checked" must be mechanical).
 //! 1d. no manifest scalar/array-string value contains a literal `|` —
 //!     the generator's row transport delimiter — so gate and generator
 //!     can't silently disagree about where one field ends and the next
@@ -362,8 +362,7 @@ fn split_source(source: &str) -> (&str, Option<&str>) {
 
 // --- gate 1: manifest coverage + path existence ---------------------------
 
-#[test]
-fn gate1_manifest_covers_every_document_and_every_path_exists() {
+fn check_manifest_coverage() {
     let entries = load_manifest();
     let root = repo_root();
 
@@ -431,8 +430,7 @@ fn gate1_manifest_covers_every_document_and_every_path_exists() {
 // every other gate stays green — `sources = []` in particular means "what
 // grounds it" is not mechanically declared, so `sources` is required
 // non-empty, not merely present.
-#[test]
-fn gate_manifest_records_declare_the_complete_required_shape_and_unique_paths() {
+fn check_manifest_completeness() {
     let entries = load_manifest();
     let mut bad = Vec::new();
     let mut seen_paths: HashSet<String> = HashSet::new();
@@ -483,14 +481,11 @@ fn gate_manifest_records_declare_the_complete_required_shape_and_unique_paths() 
     );
 }
 
-// `validation` names which checks apply to a record — it must be a closed,
-// known vocabulary tied 1:1 to the gates this file actually runs, not free
-// prose (librarian QA, thr_74hvpkqnxjp9q, second pass, finding 2): a
-// `["banana"]` list passed every other gate. Every current gate below runs
-// unconditionally over every entry except `generated-current` (`status_md_
-// generation_is_idempotent`) and `source-currency`, which apply in exactly
-// opposite directions on `kind = "status"` — so the applicable set is
-// exact, not merely a subset check.
+// `validation` names all registered record-validation gates that apply to a
+// record. The registry below is the sole owner of each token, its applicability
+// predicate, and the executable runner that enforces it. The manifest agreement
+// test derives both the closed vocabulary and each record's exact required set
+// from that registry.
 //
 // Librarian QA (thr_15yrvjrpap9td, first pass, finding 1): an earlier cut
 // gave EVERY document `source-currency`, including `library/STATUS.md` —
@@ -506,52 +501,106 @@ fn gate_manifest_records_declare_the_complete_required_shape_and_unique_paths() 
 // that has no independent existence apart from its own generation. Every
 // OTHER document's `library/`-referencing sources (none exist today, but
 // none are exempted by path either) are bound like any other citation.
-const KNOWN_VALIDATION_TOKENS: &[&str] = &[
-    "manifest-coverage",
-    "manifest-completeness",
-    "links",
-    "source-anchors",
-    "availability-label",
-    "authority-class",
-    "source-currency",
-    "generated-current",
+struct ValidationGate {
+    token: &'static str,
+    applies: fn(&DocEntry) -> bool,
+    run: fn(),
+}
+
+fn applies_to_every_record(_: &DocEntry) -> bool {
+    true
+}
+
+fn applies_to_status_records(entry: &DocEntry) -> bool {
+    entry.kind == "status"
+}
+
+fn applies_to_non_status_records(entry: &DocEntry) -> bool {
+    entry.kind != "status"
+}
+
+const VALIDATION_GATES: &[ValidationGate] = &[
+    ValidationGate {
+        token: "manifest-coverage",
+        applies: applies_to_every_record,
+        run: check_manifest_coverage,
+    },
+    ValidationGate {
+        token: "manifest-completeness",
+        applies: applies_to_every_record,
+        run: check_manifest_completeness,
+    },
+    ValidationGate {
+        token: "links",
+        applies: applies_to_every_record,
+        run: check_links,
+    },
+    ValidationGate {
+        token: "source-anchors",
+        applies: applies_to_every_record,
+        run: check_source_anchors,
+    },
+    ValidationGate {
+        token: "availability-label",
+        applies: applies_to_every_record,
+        run: check_availability_labels,
+    },
+    ValidationGate {
+        token: "authority-class",
+        applies: applies_to_every_record,
+        run: check_authority_classes,
+    },
+    ValidationGate {
+        token: "source-currency",
+        applies: applies_to_non_status_records,
+        run: check_source_currency,
+    },
+    ValidationGate {
+        token: "generated-current",
+        applies: applies_to_status_records,
+        run: check_generated_current,
+    },
+    ValidationGate {
+        token: "transport-delimiter",
+        applies: applies_to_every_record,
+        run: check_transport_delimiter,
+    },
 ];
 
-fn applicable_validation_tokens(entry: &DocEntry) -> BTreeSet<&'static str> {
-    let mut set: BTreeSet<&'static str> = [
-        "manifest-coverage",
-        "manifest-completeness",
-        "links",
-        "source-anchors",
-        "availability-label",
-        "authority-class",
-    ]
-    .into_iter()
-    .collect();
-    if entry.kind == "status" {
-        set.insert("generated-current");
-    } else {
-        set.insert("source-currency");
+#[test]
+fn registered_record_validation_gates_run() {
+    for gate in VALIDATION_GATES {
+        (gate.run)();
     }
-    set
 }
 
 #[test]
 fn gate_validation_tokens_are_closed_and_match_applicable_checks() {
     let entries = load_manifest();
     let mut bad = Vec::new();
+    let known: BTreeSet<&str> = VALIDATION_GATES.iter().map(|gate| gate.token).collect();
+
+    assert_eq!(
+        known.len(),
+        VALIDATION_GATES.len(),
+        "registered record-validation gate tokens must be unique"
+    );
 
     for entry in &entries {
         for tok in &entry.validation {
-            if !KNOWN_VALIDATION_TOKENS.contains(&tok.as_str()) {
+            if !known.contains(tok.as_str()) {
                 bad.push(format!(
-                    "{}: unknown validation token {tok:?} (known: {KNOWN_VALIDATION_TOKENS:?})",
+                    "{}: unknown validation token {tok:?} (known: {known:?})",
                     entry.path
                 ));
             }
         }
         let declared: BTreeSet<&str> = entry.validation.iter().map(String::as_str).collect();
-        let required = applicable_validation_tokens(entry);
+        let required: BTreeSet<&str> = VALIDATION_GATES
+            .iter()
+            .filter(|gate| (gate.applies)(entry))
+            .map(|gate| gate.token)
+            .collect();
         if declared != required {
             bad.push(format!(
                 "{}: validation {declared:?} does not exactly match the applicable checks {required:?}",
@@ -591,8 +640,7 @@ fn all_string_fields(entry: &DocEntry) -> Vec<(&'static str, &str)> {
     fields
 }
 
-#[test]
-fn gate_manifest_scalars_reject_the_transport_delimiter() {
+fn check_transport_delimiter() {
     let entries = load_manifest();
     let mut bad = Vec::new();
     for entry in &entries {
@@ -741,8 +789,7 @@ fn is_well_formed_external_url(url: &str) -> bool {
     !host.is_empty() && host.contains('.')
 }
 
-#[test]
-fn gate2_links_are_valid() {
+fn check_links() {
     // Librarian QA (thr_74hvpkqnxjp9q, finding 3): a link's `#anchor` must
     // resolve too, same-file or cross-file — not just the file it points
     // at. `introduction.md#no-such-heading` is broken exactly like
@@ -812,8 +859,7 @@ fn gate2_links_are_valid() {
 
 // --- gate 3: every manifest `sources` path + anchor exists ----------------
 
-#[test]
-fn gate3_every_manifest_source_path_and_anchor_exists() {
+fn check_source_anchors() {
     let entries = load_manifest();
     let root = repo_root();
     let mut bad = Vec::new();
@@ -857,8 +903,7 @@ fn gate3_every_manifest_source_path_and_anchor_exists() {
 
 // --- gate 6: every document labels a valid availability -------------------
 
-#[test]
-fn gate6_every_document_labels_a_valid_availability() {
+fn check_availability_labels() {
     const VALID: &[&str] = &["current", "partial", "planned", "unavailable"];
     let entries = load_manifest();
     let mut bad = Vec::new();
@@ -879,8 +924,7 @@ fn gate6_every_document_labels_a_valid_availability() {
 
 // --- AC3: STATUS.md generation is idempotent on an unchanged tree ---------
 
-#[test]
-fn status_md_generation_is_idempotent() {
+fn run_status_generator_check() {
     let root = repo_root();
     let script = root.join("scripts/gen-doc-status.sh");
     let output = std::process::Command::new("bash")
@@ -898,9 +942,17 @@ fn status_md_generation_is_idempotent() {
     );
 }
 
+fn check_source_currency() {
+    run_status_generator_check();
+}
+
+fn check_generated_current() {
+    run_status_generator_check();
+}
+
 // --- library/REVISION resolves in a SHALLOW clone (Steward, PR #830) ------
 //
-// `status_md_generation_is_idempotent` above only ever runs against this
+// The registered generated-current runner above only ever runs against this
 // worktree, which has full history — it could not have caught PR #830's
 // CI failure. CI's default `actions/checkout` is SHALLOW (depth 1), so
 // `git cat-file -e "${REVISION}^{commit}"` failed for a genuine ancestor
@@ -2121,9 +2173,10 @@ fn generator_only_ever_writes_the_proposed_sibling_never_the_real_ledger() {
 // Landed post-merge outage (thr_15yrvjrpap9td/thr_sq41qedhmtas, adversary
 // evt_504x5h9t6veqq, 2026-07-22): `DOC-CURRENCY-ANCHOR` merged with
 // `library/REVISION` naming `cc2af484`, the WP branch's own immediate-parent
-// commit -- correct on the branch (where `status_md_generation_is_idempotent`
-// demanded exactly that bump) and where three folds, an Architect approval,
-// a Librarian QA pass, and green CI all checked it. The publisher
+// commit -- correct on the branch (where the registered `generated-current`
+// runner's status-generator check demanded exactly that bump) and where three
+// folds, an Architect approval, a Librarian QA pass, and green CI all checked
+// it. The publisher
 // **squash-merges**: the merged commit's sole parent is the pre-merge `main`
 // tip, so no pre-squash branch commit survives as an ancestor of `main`.
 // `origin/main` went CI-red on its own documentation gate the moment the
@@ -2378,8 +2431,7 @@ fn missing_origin_main_anchor_is_rejected_not_silently_skipped() {
 
 // --- authority class is one of D1's closed set -----------------------------
 
-#[test]
-fn every_document_declares_a_closed_authority_class() {
+fn check_authority_classes() {
     const VALID: &[&str] = &[
         "derived-reference",
         "explanatory",
