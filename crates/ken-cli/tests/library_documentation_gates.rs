@@ -431,6 +431,7 @@ fn check_manifest_coverage() {
 // grounds it" is not mechanically declared, so `sources` is required
 // non-empty, not merely present.
 fn check_manifest_completeness() {
+    const VALID_KINDS: &[&str] = &["explanatory", "portal", "reference", "status", "tutorial"];
     let entries = load_manifest();
     let mut bad = Vec::new();
     let mut seen_paths: HashSet<String> = HashSet::new();
@@ -446,6 +447,11 @@ fn check_manifest_completeness() {
         }
         if entry.kind.is_empty() {
             bad.push(format!("{label}: missing `kind`"));
+        } else if !VALID_KINDS.contains(&entry.kind.as_str()) {
+            bad.push(format!(
+                "{label}: kind {:?} is not one of {VALID_KINDS:?}",
+                entry.kind
+            ));
         }
         if entry.audience.is_empty() {
             bad.push(format!("{label}: missing `audience`"));
@@ -476,7 +482,7 @@ fn check_manifest_completeness() {
 
     assert!(
         bad.is_empty(),
-        "manifest record(s) with a missing required field or a duplicate path:\n{}",
+        "manifest record(s) with a missing/invalid required field or a duplicate path:\n{}",
         bad.join("\n")
     );
 }
@@ -579,11 +585,22 @@ fn gate_validation_tokens_are_closed_and_match_applicable_checks() {
     let entries = load_manifest();
     let mut bad = Vec::new();
     let known: BTreeSet<&str> = VALIDATION_GATES.iter().map(|gate| gate.token).collect();
+    let status_records: BTreeSet<&str> = entries
+        .iter()
+        .filter(|entry| entry.kind == "status")
+        .map(|entry| entry.path.as_str())
+        .collect();
 
     assert_eq!(
         known.len(),
         VALIDATION_GATES.len(),
         "registered record-validation gate tokens must be unique"
+    );
+    assert_eq!(
+        status_records,
+        BTreeSet::from(["library/STATUS.md"]),
+        "check_generated_current is hard-coded to gen-doc-status.sh/library/STATUS.md; a \
+         second status-kind record needs its own registered runner, not `generated-current`"
     );
 
     for entry in &entries {
