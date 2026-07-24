@@ -1715,6 +1715,8 @@ pub(super) struct PartitionSourceKontReturnInterner {
     by_bucket: BTreeMap<(u64, u64), Vec<SourceKontReturnId>>,
     keys: Vec<PartitionSourceKontReturnDescriptorKey>,
     definitions: Vec<PartitionSourceKontReturnDescriptor>,
+    source_head_residuals: BTreeMap<SourceKontReturnId, SourceKontReturnId>,
+    source_head_residual_ids: BTreeSet<SourceKontReturnId>,
     bytes_constructed: usize,
     bytes_retained: usize,
     exact_comparisons: usize,
@@ -1758,6 +1760,82 @@ impl PartitionSourceKontReturnInterner {
                 "source return descriptor identity is out of bounds",
             )
         })
+    }
+
+    pub(super) fn residual_after_source_head(
+        &mut self,
+        original: SourceKontReturnId,
+    ) -> Result<SourceKontReturnId, CraneliftBackendError> {
+        if let Some(residual) = self.source_head_residuals.get(&original).copied() {
+            self.validate_source_head_residual(original, residual)?;
+            return Ok(residual);
+        }
+        let original_key = self.definition(original)?.key;
+        if original_key.source_head.is_none() {
+            return Err(unsupported(
+                "NativeSourceKontReturnV1",
+                "source-head residualization requires one exact source head",
+            ));
+        }
+        let mut residual_key = original_key.clone();
+        residual_key.source_head = None;
+        let residual = self.intern(residual_key);
+        self.validate_source_head_residual(original, residual)?;
+        if self
+            .source_head_residuals
+            .insert(original, residual)
+            .is_some()
+        {
+            return Err(unsupported(
+                "NativeSourceKontReturnV1",
+                "one source return was residualized more than once",
+            ));
+        }
+        self.source_head_residual_ids.insert(residual);
+        Ok(residual)
+    }
+
+    pub(super) fn is_source_head_residual(
+        &self,
+        residual: SourceKontReturnId,
+    ) -> bool {
+        self.source_head_residual_ids.contains(&residual)
+    }
+
+    pub(super) fn is_exact_source_head_residual(
+        &self,
+        residual: SourceKontReturnId,
+        original: SourceKontReturnId,
+    ) -> Result<bool, CraneliftBackendError> {
+        let matches = self.source_head_residuals.get(&original).copied() == Some(residual);
+        if matches {
+            self.validate_source_head_residual(original, residual)?;
+        }
+        Ok(matches)
+    }
+
+    fn validate_source_head_residual(
+        &self,
+        original: SourceKontReturnId,
+        residual: SourceKontReturnId,
+    ) -> Result<(), CraneliftBackendError> {
+        let original_key = self.definition(original)?.key;
+        let residual_key = self.definition(residual)?.key;
+        if original_key.source_head.is_none() {
+            return Err(unsupported(
+                "NativeSourceKontReturnV1",
+                "source-head residual relation lost its consumed source head",
+            ));
+        }
+        let mut expected = original_key;
+        expected.source_head = None;
+        if residual_key != expected {
+            return Err(unsupported(
+                "NativeSourceKontReturnV1",
+                "source-head residual changed semantic return topology",
+            ));
+        }
+        Ok(())
     }
 
     pub(super) fn counts(&self) -> (usize, usize, usize, usize) {
