@@ -217,6 +217,8 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         #[cfg(test)]
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
     };
+    let root_env_fields =
+        usize::from(process_mode).saturating_mul(2) + usize::from(staged_process_input.is_some());
     let mut deferred_functions = Vec::new();
     let (mut maybe_trap, mut decoder) = {
         let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
@@ -283,6 +285,15 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     let measure = PartitionFunctionMeasure::from_function(&ctx.func);
     compiler.partition_budget.check(measure)?;
     record_partition_measure(measure);
+    compiler.partition_metrics.record_nonsemantic_helper(
+        PartitionCensusKind::ExportedRoot,
+        0,
+        root_env_fields,
+        0,
+    );
+    compiler
+        .partition_metrics
+        .record_function(PartitionCensusKind::ExportedRoot, measure);
     compiler.partition_measures.push(measure);
     compiler.capture_partition_ledger_union();
     deferred_functions.push((func_id, ctx));
@@ -295,6 +306,21 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     // the call sites are emitted, so LIFO consumption changes neither the
     // generated call graph nor runtime branch/effect order.
     while let Some(item) = compiler.partition_queue.pop_back() {
+        let census_kind = match &item {
+            PartitionWorkItem::SourceArm(_) => PartitionCensusKind::SourceArm,
+            PartitionWorkItem::SourceKont(_) => PartitionCensusKind::SourceKont,
+            PartitionWorkItem::ProducerKont(_) => PartitionCensusKind::ProducerKont,
+            PartitionWorkItem::Arm(item) => {
+                compiler.partition_metrics.record_nonsemantic_helper(
+                    PartitionCensusKind::Arm,
+                    item.field_types.len(),
+                    item.env.len(),
+                    item.eliminators.len(),
+                );
+                PartitionCensusKind::Arm
+            }
+            PartitionWorkItem::CleanupStep(_) => PartitionCensusKind::CleanupStep,
+        };
         let continuation_state_id = match &item {
             PartitionWorkItem::SourceArm(item) => {
                 compiler
@@ -458,6 +484,9 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         let measure = PartitionFunctionMeasure::from_function(&helper_ctx.func);
         compiler.partition_budget.check(measure)?;
         record_partition_measure(measure);
+        compiler
+            .partition_metrics
+            .record_function(census_kind, measure);
         compiler.partition_measures.push(measure);
         compiler.capture_partition_ledger_union();
         deferred_functions.push((helper_id, helper_ctx));
@@ -491,7 +520,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
             .map_err(|err| backend_module(err.to_string()))?;
     }
 
-    if std::env::var_os("KEN_NATIVE_PARTITION_METRICS").is_some() {
+    if process_mode && std::env::var_os("KEN_NATIVE_PARTITION_METRICS").is_some() {
         let (states, edges, defined_states) = compiler.partition_continuations.counts();
         let (
             state_key_bytes_constructed,
@@ -503,6 +532,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         let (
             static_descriptor_bytes_constructed,
             static_descriptor_bytes_retained,
+            static_descriptor_bytes_max,
             static_descriptor_bucket_probes,
             static_descriptor_exact_comparisons,
             static_descriptor_exact_bytes_compared_upper_bound,
@@ -511,6 +541,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
             cleanup_suffixes,
             cleanup_key_bytes_constructed,
             cleanup_key_bytes_retained,
+            cleanup_key_bytes_max,
             cleanup_key_exact_comparisons,
         ) = compiler.partition_cleanup_suffixes.counts();
         let (
@@ -534,6 +565,89 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
             dfg_instructions_max = dfg_instructions_max.max(measure.instructions);
             dfg_blocks_max = dfg_blocks_max.max(measure.blocks);
         }
+        let mut census = compiler.partition_continuations.census();
+        for kind in PartitionCensusKind::ALL {
+            census[kind as usize].merge(compiler.partition_metrics.census[kind as usize]);
+        }
+        let mut census_total = PartitionCensusMetrics::default();
+        for kind in PartitionCensusKind::ALL {
+            let metrics = census[kind as usize];
+            census_total.merge(metrics);
+            eprintln!(
+                "KEN_NATIVE_PARTITION_CENSUS_V1 kind={} nodes={} source_nodes={} \
+                 states_per_source_max={} edges={} helpers={} \
+                 clif_instructions={} clif_bytes={} descriptor_bytes_constructed={} \
+                 descriptor_bytes_retained={} exact_comparison_bytes={} \
+                 frame_fields_total={} frame_fields_max={} static_key_bytes_max={} \
+                 env_len_max={} pending_len_max={} path_len_max={}",
+                kind.name(),
+                metrics.nodes,
+                metrics.source_nodes,
+                metrics.states_per_source_max,
+                metrics.edges,
+                metrics.helpers,
+                metrics.clif_instructions,
+                metrics.clif_bytes,
+                metrics.descriptor_bytes_constructed,
+                metrics.descriptor_bytes_retained,
+                metrics.exact_comparison_bytes,
+                metrics.frame_fields_total,
+                metrics.frame_fields_max,
+                metrics.static_key_bytes_max,
+                metrics.env_len_max,
+                metrics.pending_len_max,
+                metrics.path_len_max,
+            );
+        }
+        census_total.descriptor_bytes_constructed = census_total
+            .descriptor_bytes_constructed
+            .saturating_add(static_descriptor_bytes_constructed)
+            .saturating_add(cleanup_key_bytes_constructed)
+            .saturating_add(selected_edge_key_bytes_constructed);
+        census_total.descriptor_bytes_retained = census_total
+            .descriptor_bytes_retained
+            .saturating_add(static_descriptor_bytes_retained)
+            .saturating_add(cleanup_key_bytes_retained)
+            .saturating_add(selected_edge_key_bytes_retained);
+        census_total.exact_comparison_bytes = census_total
+            .exact_comparison_bytes
+            .saturating_add(static_descriptor_exact_bytes_compared_upper_bound)
+            .saturating_add(
+                cleanup_key_exact_comparisons.saturating_mul(cleanup_key_bytes_max),
+            )
+            .saturating_add(
+                selected_edge_key_exact_comparisons
+                    .saturating_mul(selected_edge_key_bytes_max),
+            );
+        census_total.static_key_bytes_max = census_total
+            .static_key_bytes_max
+            .max(static_descriptor_bytes_max)
+            .max(cleanup_key_bytes_max)
+            .max(selected_edge_key_bytes_max);
+        eprintln!(
+            "KEN_NATIVE_PARTITION_CENSUS_V1 kind=all nodes={} source_nodes={} \
+             states_per_source_max={} edges={} helpers={} \
+             clif_instructions={} clif_bytes={} descriptor_bytes_constructed={} \
+             descriptor_bytes_retained={} exact_comparison_bytes={} \
+             frame_fields_total={} frame_fields_max={} static_key_bytes_max={} \
+             env_len_max={} pending_len_max={} path_len_max={}",
+            census_total.nodes,
+            census_total.source_nodes,
+            census_total.states_per_source_max,
+            census_total.edges,
+            census_total.helpers,
+            census_total.clif_instructions,
+            census_total.clif_bytes,
+            census_total.descriptor_bytes_constructed,
+            census_total.descriptor_bytes_retained,
+            census_total.exact_comparison_bytes,
+            census_total.frame_fields_total,
+            census_total.frame_fields_max,
+            census_total.static_key_bytes_max,
+            census_total.env_len_max,
+            census_total.pending_len_max,
+            census_total.path_len_max,
+        );
         eprintln!(
             "KEN_NATIVE_PARTITION_METRICS_V1 source_bytes={} checked_plan_bytes={} \
              checked_joins={} checked_predecessors={} states={} edges={} defined_states={} \

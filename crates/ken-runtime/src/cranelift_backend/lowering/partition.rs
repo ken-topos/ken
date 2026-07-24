@@ -36,6 +36,7 @@ struct PartitionStaticDescriptorInterner {
     canonical: Vec<Arc<[u8]>>,
     bytes_constructed: usize,
     bytes_retained: usize,
+    bytes_max: usize,
     bucket_probes: usize,
     exact_comparisons: usize,
     exact_bytes_compared_upper_bound: usize,
@@ -48,6 +49,7 @@ impl PartitionStaticDescriptorInterner {
         canonical: Vec<u8>,
     ) -> PartitionStaticDescriptor {
         self.bytes_constructed = self.bytes_constructed.saturating_add(canonical.len());
+        self.bytes_max = self.bytes_max.max(canonical.len());
         let bucket = (fingerprint.hash, fingerprint.bytes);
         if let Some(candidates) = self.by_bucket.get(&bucket) {
             self.bucket_probes = self.bucket_probes.saturating_add(candidates.len());
@@ -86,12 +88,13 @@ pub(super) fn reset_partition_static_descriptors() {
     });
 }
 
-pub(super) fn partition_static_descriptor_counts() -> (usize, usize, usize, usize, usize) {
+pub(super) fn partition_static_descriptor_counts() -> (usize, usize, usize, usize, usize, usize) {
     PARTITION_STATIC_DESCRIPTORS.with(|interner| {
         let interner = interner.borrow();
         (
             interner.bytes_constructed,
             interner.bytes_retained,
+            interner.bytes_max,
             interner.bucket_probes,
             interner.exact_comparisons,
             interner.exact_bytes_compared_upper_bound,
@@ -494,6 +497,95 @@ pub(super) struct PartitionFunctionMeasure {
     pub(super) values: usize,
     pub(super) instructions: usize,
     pub(super) blocks: usize,
+    pub(super) clif_bytes: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(usize)]
+pub(super) enum PartitionCensusKind {
+    ExportedRoot,
+    Arm,
+    ProducerKont,
+    SourceArm,
+    SourceKont,
+    CleanupStep,
+}
+
+impl PartitionCensusKind {
+    pub(super) const ALL: [Self; 6] = [
+        Self::ExportedRoot,
+        Self::Arm,
+        Self::ProducerKont,
+        Self::SourceArm,
+        Self::SourceKont,
+        Self::CleanupStep,
+    ];
+
+    pub(super) const fn name(self) -> &'static str {
+        match self {
+            Self::ExportedRoot => "exported_root",
+            Self::Arm => "arm",
+            Self::ProducerKont => "producer_kont",
+            Self::SourceArm => "source_arm",
+            Self::SourceKont => "source_kont",
+            Self::CleanupStep => "cleanup_step",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct PartitionCensusMetrics {
+    pub(super) nodes: usize,
+    pub(super) source_nodes: usize,
+    pub(super) states_per_source_max: usize,
+    pub(super) edges: usize,
+    pub(super) helpers: usize,
+    pub(super) clif_instructions: usize,
+    pub(super) clif_bytes: usize,
+    pub(super) descriptor_bytes_constructed: usize,
+    pub(super) descriptor_bytes_retained: usize,
+    pub(super) exact_comparison_bytes: usize,
+    pub(super) frame_fields_total: usize,
+    pub(super) frame_fields_max: usize,
+    pub(super) static_key_bytes_max: usize,
+    pub(super) env_len_max: usize,
+    pub(super) pending_len_max: usize,
+    pub(super) path_len_max: usize,
+}
+
+impl PartitionCensusMetrics {
+    pub(super) fn merge(&mut self, other: Self) {
+        self.nodes = self.nodes.saturating_add(other.nodes);
+        self.source_nodes = self.source_nodes.saturating_add(other.source_nodes);
+        self.states_per_source_max = self
+            .states_per_source_max
+            .max(other.states_per_source_max);
+        self.edges = self.edges.saturating_add(other.edges);
+        self.helpers = self.helpers.saturating_add(other.helpers);
+        self.clif_instructions = self
+            .clif_instructions
+            .saturating_add(other.clif_instructions);
+        self.clif_bytes = self.clif_bytes.saturating_add(other.clif_bytes);
+        self.descriptor_bytes_constructed = self
+            .descriptor_bytes_constructed
+            .saturating_add(other.descriptor_bytes_constructed);
+        self.descriptor_bytes_retained = self
+            .descriptor_bytes_retained
+            .saturating_add(other.descriptor_bytes_retained);
+        self.exact_comparison_bytes = self
+            .exact_comparison_bytes
+            .saturating_add(other.exact_comparison_bytes);
+        self.frame_fields_total = self
+            .frame_fields_total
+            .saturating_add(other.frame_fields_total);
+        self.frame_fields_max = self.frame_fields_max.max(other.frame_fields_max);
+        self.static_key_bytes_max = self
+            .static_key_bytes_max
+            .max(other.static_key_bytes_max);
+        self.env_len_max = self.env_len_max.max(other.env_len_max);
+        self.pending_len_max = self.pending_len_max.max(other.pending_len_max);
+        self.path_len_max = self.path_len_max.max(other.path_len_max);
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -518,6 +610,7 @@ pub(super) struct PartitionCompilationMetrics {
     pub(super) source_lineage_fields_max: usize,
     pub(super) sealed_normal_call_edges: usize,
     pub(super) sealed_terminal_call_edges: usize,
+    pub(super) census: [PartitionCensusMetrics; 6],
 }
 
 impl PartitionCompilationMetrics {
@@ -560,6 +653,36 @@ impl PartitionCompilationMetrics {
         self.source_lineage_fields_total = self.source_lineage_fields_total.saturating_add(lineage);
         self.source_lineage_fields_max = self.source_lineage_fields_max.max(lineage);
     }
+
+    pub(super) fn record_function(
+        &mut self,
+        kind: PartitionCensusKind,
+        measure: PartitionFunctionMeasure,
+    ) {
+        let metrics = &mut self.census[kind as usize];
+        metrics.clif_instructions = metrics
+            .clif_instructions
+            .saturating_add(measure.instructions);
+        metrics.clif_bytes = metrics.clif_bytes.saturating_add(measure.clif_bytes);
+    }
+
+    pub(super) fn record_nonsemantic_helper(
+        &mut self,
+        kind: PartitionCensusKind,
+        frame_fields: usize,
+        env_len: usize,
+        pending_len: usize,
+    ) {
+        let metrics = &mut self.census[kind as usize];
+        metrics.nodes = metrics.nodes.saturating_add(1);
+        metrics.source_nodes = metrics.source_nodes.saturating_add(1);
+        metrics.states_per_source_max = metrics.states_per_source_max.max(1);
+        metrics.helpers = metrics.helpers.saturating_add(1);
+        metrics.frame_fields_total = metrics.frame_fields_total.saturating_add(frame_fields);
+        metrics.frame_fields_max = metrics.frame_fields_max.max(frame_fields);
+        metrics.env_len_max = metrics.env_len_max.max(env_len);
+        metrics.pending_len_max = metrics.pending_len_max.max(pending_len);
+    }
 }
 
 impl PartitionFunctionMeasure {
@@ -572,6 +695,11 @@ impl PartitionFunctionMeasure {
                 .map(|block| function.layout.block_insts(block).count())
                 .sum(),
             blocks: function.layout.blocks().count(),
+            // Cranelift's stable textual IR is the only backend-independent
+            // byte representation available before ObjectModule consumes the
+            // function. Count its exact emitted UTF-8 bytes alongside the DFG
+            // instruction count.
+            clif_bytes: function.display().to_string().len(),
         }
     }
 }
@@ -1190,6 +1318,7 @@ pub(super) struct PartitionCleanupSuffixInterner {
     definitions: Vec<PartitionCleanupSuffixDefinition>,
     bytes_constructed: usize,
     bytes_retained: usize,
+    key_bytes_max: usize,
     bucket_probes: usize,
     exact_comparisons: usize,
 }
@@ -1212,6 +1341,7 @@ impl PartitionCleanupSuffixInterner {
         };
         let bucket = partition_static_bucket(&key);
         self.bytes_constructed = self.bytes_constructed.saturating_add(bucket.bytes as usize);
+        self.key_bytes_max = self.key_bytes_max.max(bucket.bytes as usize);
         let bucket_key = (bucket.hash, bucket.bytes);
         if let Some(candidates) = self.by_bucket.get(&bucket_key) {
             self.bucket_probes = self.bucket_probes.saturating_add(candidates.len());
@@ -1227,6 +1357,7 @@ impl PartitionCleanupSuffixInterner {
                 .expect("compiler-private cleanup suffix identity exhausted"),
         );
         self.bytes_retained = self.bytes_retained.saturating_add(bucket.bytes as usize);
+        self.key_bytes_max = self.key_bytes_max.max(bucket.bytes as usize);
         self.keys.push(key);
         self.definitions.push(PartitionCleanupSuffixDefinition {
             current: current.clone(),
@@ -1249,11 +1380,12 @@ impl PartitionCleanupSuffixInterner {
         })
     }
 
-    pub(super) fn counts(&self) -> (usize, usize, usize, usize) {
+    pub(super) fn counts(&self) -> (usize, usize, usize, usize, usize) {
         (
             self.definitions.len(),
             self.bytes_constructed,
             self.bytes_retained,
+            self.key_bytes_max,
             self.exact_comparisons,
         )
     }
@@ -3093,7 +3225,114 @@ pub(super) enum PartitionSemanticStateKey {
     CleanupStep(PartitionCleanupStepKey),
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct PartitionKeyShape {
+    frame_fields: usize,
+    env_len: usize,
+    pending_len: usize,
+    path_len: usize,
+}
+
+fn partition_eliminator_env_len(key: &PartitionEliminatorKey) -> usize {
+    match key {
+        PartitionEliminatorKey::Computational { env, .. }
+        | PartitionEliminatorKey::Ordinary { env, .. } => env.len(),
+        PartitionEliminatorKey::InvocationReturn => 0,
+    }
+}
+
+fn partition_selected_scope_env_len(scope: &Option<PartitionSelectedScopeKey>) -> usize {
+    scope.as_ref().map_or(0, |scope| scope.outer_env.len())
+}
+
+fn partition_pending_env_len(pending: &[PartitionEliminatorKey]) -> usize {
+    pending
+        .iter()
+        .map(partition_eliminator_env_len)
+        .max()
+        .unwrap_or(0)
+}
+
 impl PartitionSemanticStateKey {
+    pub(super) fn census_kind(&self) -> PartitionCensusKind {
+        match self {
+            Self::ProducerKont(_) => PartitionCensusKind::ProducerKont,
+            Self::SourceArm(_) => PartitionCensusKind::SourceArm,
+            Self::SourceKont(_) => PartitionCensusKind::SourceKont,
+            Self::CleanupStep(_) => PartitionCensusKind::CleanupStep,
+        }
+    }
+
+    fn census_shape(&self) -> PartitionKeyShape {
+        match self {
+            Self::ProducerKont(key) => {
+                let (env_len, pending_len) = match &key.static_key.action {
+                    PartitionProducerKontActionKey::ApplyActiveEliminators {
+                        pending,
+                        selected_scope,
+                        ..
+                    } => (
+                        partition_pending_env_len(pending)
+                            .max(partition_selected_scope_env_len(selected_scope)),
+                        pending.len(),
+                    ),
+                    PartitionProducerKontActionKey::ApplyEliminators { eliminators, .. } => {
+                        (partition_pending_env_len(eliminators), eliminators.len())
+                    }
+                    PartitionProducerKontActionKey::Done { .. }
+                    | PartitionProducerKontActionKey::OrientedInvocationReturn { .. }
+                    | PartitionProducerKontActionKey::CheckedComputationalIHReturn { .. }
+                    | PartitionProducerKontActionKey::ScopeBodyReturn { .. }
+                    | PartitionProducerKontActionKey::ExitScopeStart { .. }
+                    | PartitionProducerKontActionKey::ExitScopeComplete { .. } => (0, 0),
+                };
+                PartitionKeyShape {
+                    frame_fields: key.field_types.len(),
+                    env_len,
+                    pending_len,
+                    path_len: key.checked_join.checked_occurrence_path.len(),
+                }
+            }
+            Self::SourceArm(key) => PartitionKeyShape {
+                frame_fields: key.field_types.len(),
+                env_len: key
+                    .static_key
+                    .env
+                    .len()
+                    .max(partition_pending_env_len(&key.static_key.selected_pending))
+                    .max(partition_selected_scope_env_len(
+                        &key.static_key.selected_scope,
+                    )),
+                pending_len: key.static_key.selected_pending.len(),
+                path_len: key
+                    .checked_join
+                    .checked_occurrence_path
+                    .len()
+                    .max(key.static_key.declaration_stack.len())
+                    .max(key.static_key.active_recursive_sources.len()),
+            },
+            Self::SourceKont(key) => PartitionKeyShape {
+                frame_fields: key.field_types.len(),
+                env_len: partition_pending_env_len(&key.static_key.selected_pending).max(
+                    partition_selected_scope_env_len(&key.static_key.selected_scope),
+                ),
+                pending_len: key.static_key.selected_pending.len(),
+                path_len: key
+                    .checked_join
+                    .checked_occurrence_path
+                    .len()
+                    .max(key.static_key.declaration_stack.len())
+                    .max(key.static_key.active_recursive_sources.len()),
+            },
+            Self::CleanupStep(key) => PartitionKeyShape {
+                frame_fields: key.field_types.len(),
+                env_len: 0,
+                pending_len: 0,
+                path_len: key.checked_join.checked_occurrence_path.len(),
+            },
+        }
+    }
+
     fn site_id(&self) -> u64 {
         match self {
             Self::ProducerKont(key) => key.site_id(),
@@ -4515,6 +4754,8 @@ pub(super) struct PartitionContinuationInterner {
     bucket_probes: usize,
     exact_key_comparisons: usize,
     exact_key_bytes_compared_upper_bound: usize,
+    census: [PartitionCensusMetrics; 6],
+    census_states_by_source: BTreeMap<(usize, u64), usize>,
 }
 
 impl PartitionContinuationInterner {
@@ -4539,6 +4780,21 @@ impl PartitionContinuationInterner {
             ));
         }
         let bucket = key.bucket();
+        let kind = key.census_kind();
+        let shape = key.census_shape();
+        let census = &mut self.census[kind as usize];
+        census.edges = census.edges.saturating_add(1);
+        census.descriptor_bytes_constructed = census
+            .descriptor_bytes_constructed
+            .saturating_add(bucket.2 as usize);
+        census.frame_fields_total = census
+            .frame_fields_total
+            .saturating_add(shape.frame_fields);
+        census.frame_fields_max = census.frame_fields_max.max(shape.frame_fields);
+        census.static_key_bytes_max = census.static_key_bytes_max.max(bucket.2 as usize);
+        census.env_len_max = census.env_len_max.max(shape.env_len);
+        census.pending_len_max = census.pending_len_max.max(shape.pending_len);
+        census.path_len_max = census.path_len_max.max(shape.path_len);
         self.descriptor_bytes_constructed = self
             .descriptor_bytes_constructed
             .saturating_add(bucket.2 as usize);
@@ -4548,6 +4804,9 @@ impl PartitionContinuationInterner {
             for state_id in candidates.iter().copied() {
                 self.exact_key_comparisons = self.exact_key_comparisons.saturating_add(1);
                 let candidate_bytes = self.keys[state_id].bucket().2 as usize;
+                census.exact_comparison_bytes = census
+                    .exact_comparison_bytes
+                    .saturating_add(candidate_bytes.max(bucket.2 as usize));
                 self.exact_key_bytes_compared_upper_bound = self
                     .exact_key_bytes_compared_upper_bound
                     .saturating_add(candidate_bytes.max(bucket.2 as usize));
@@ -4616,6 +4875,26 @@ impl PartitionContinuationInterner {
         self.descriptor_bytes_retained = self
             .descriptor_bytes_retained
             .saturating_add(key.bucket().2 as usize);
+        let kind = key.census_kind();
+        let shape = key.census_shape();
+        let census = &mut self.census[kind as usize];
+        census.nodes = census.nodes.saturating_add(1);
+        census.helpers = census.helpers.saturating_add(1);
+        census.descriptor_bytes_retained = census
+            .descriptor_bytes_retained
+            .saturating_add(key.bucket().2 as usize);
+        census.frame_fields_max = census.frame_fields_max.max(shape.frame_fields);
+        census.static_key_bytes_max = census
+            .static_key_bytes_max
+            .max(key.bucket().2 as usize);
+        census.env_len_max = census.env_len_max.max(shape.env_len);
+        census.pending_len_max = census.pending_len_max.max(shape.pending_len);
+        census.path_len_max = census.path_len_max.max(shape.path_len);
+        let states_for_source = self
+            .census_states_by_source
+            .entry((kind as usize, key.site_id()))
+            .or_default();
+        *states_for_source = states_for_source.saturating_add(1);
         let state = PartitionContinuationState {
             function,
             helper_index,
@@ -5388,6 +5667,16 @@ impl PartitionContinuationInterner {
             self.exact_key_comparisons,
             self.exact_key_bytes_compared_upper_bound,
         )
+    }
+
+    pub(super) fn census(&self) -> [PartitionCensusMetrics; 6] {
+        let mut census = self.census;
+        for ((kind, _), states) in &self.census_states_by_source {
+            census[*kind].source_nodes = census[*kind].source_nodes.saturating_add(1);
+            census[*kind].states_per_source_max =
+                census[*kind].states_per_source_max.max(*states);
+        }
+        census
     }
 }
 
