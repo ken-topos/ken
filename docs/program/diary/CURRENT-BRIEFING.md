@@ -65,6 +65,38 @@
 > fixed-K/key-width invariants) — it never rested on curve-fitting. Do not read
 > `could_not_determine` as "the rewrite is unnecessary."
 >
+> ### ✅ BOUNDARY A REPORTED AND I HAVE RULED MY HALF (`evt_7wgktr1dk4qvk`)
+>
+> Candidate `92cac774` on `wp/RT-NATIVE-FNSPLIT-recut-boundary-a-planner`.
+> **Sequence APPROVED with ONE required fold.** Runtime stays stopped on the
+> semantic port until the fold lands **and** the Architect returns its half
+> (the frame requires Steward **+** Architect).
+>
+> **Verified by me, not taken from the report:** all four series affine — second
+> differences exactly zero (nodes Δ28, edges Δ34, helpers Δ62, persistent Δ37);
+> scope genuinely pre-emission (4 `ken-runtime` files, no CLIF/wall/RSS);
+> depths correctly reported as **affine, not forced constant** (honors the
+> corrected width metric); the exact-mutation guard test is real (drives
+> production `validate()`, asserts exact error strings).
+>
+> ★ **The construction proof is stronger than AC2.1 asked for:**
+> `StaticHelperKey{node,transition}` derives **`Copy`**, and `Copy` is
+> incompatible with `Vec`/`String`/`Box` — so "no variable-width member in
+> identity" is **compile-enforced**. ⚠ `size_of` alone would NOT have proved
+> this (a `Vec` field has constant `size_of`, variable content).
+>
+> **⛔ The fold:** `helper_identity_excludes_dynamic_activation_…` is **vacuous** —
+> `assert_eq!(wrapper.key, wrapper.key)` is a tautology and `assert_ne!(frame,
+> changed)` tests its own setup; `changed` is never fed back through the planner.
+> **Phase-2 point 2 has no guard at all**, while the report cited this test as
+> evidence for it. The invariant *does* hold by construction — this is an
+> unguarded invariant + an over-cited test. Required fix is the real property:
+> two distinct activations through one static node share **one** key and do
+> **not** grow planned-helper count.
+>
+> **Cadence: hard-stop count STAYS 1.** A planned stop for a required read is not
+> a hard-stop, and neither is a review fold. Next pull still #3.
+>
 > **Live unit = Boundary A (planner census) ONLY**, on a fresh branch off current
 > `origin/main`: the factored static transition graph for n=3..7, reporting static
 > nodes/edges/planned helpers, persistent-store nodes, out-of-line evidence
