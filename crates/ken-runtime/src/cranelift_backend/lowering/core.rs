@@ -1282,6 +1282,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         control: &mut SourceControl<'_>,
+        delimiter: SelectedCaseReturnDelimiter,
     ) -> Result<Option<(PoppedPartitionRecursorLayer, PartitionSourceResume)>, CraneliftBackendError>
     {
         let Some(parent_return) = control.consumed_partition_cursor else {
@@ -1323,35 +1324,100 @@ impl<'a> Lowering<'a> {
                 "exit source-cursor capture has trailing fields",
             ));
         }
-        let SourcePrefixTemplate::ReturnFromSelectedCase { .. } = return_definition.current else {
-            return Ok(None);
+        let SourcePrefixTemplate::ReturnFromSelectedCase {
+            delimiter: linked_delimiter,
+            ..
+        } = return_definition.current
+        else {
+            return Err(unsupported(
+                "NativeExitScopeTransitionV1",
+                "selected return did not consume its exact linked return edge",
+            ));
         };
+        if linked_delimiter.edge_descriptor != delimiter.edge_descriptor
+            || linked_delimiter.activation != delimiter.activation
+            || linked_delimiter.cursor != delimiter.cursor
+            || linked_delimiter.scope_origin != delimiter.scope_origin
+            || linked_delimiter.frame_id != delimiter.frame_id
+            || linked_delimiter.invocation_id != delimiter.invocation_id
+        {
+            return Err(unsupported(
+                "NativeExitScopeTransitionV1",
+                "selected return consumed a different static delimiter edge",
+            ));
+        }
+        self.emit_control_cell_ref_guard(
+            builder,
+            &[
+                (
+                    linked_delimiter.activation_instance.0,
+                    delimiter.activation_instance.0,
+                ),
+                (
+                    linked_delimiter.cursor_instance.0,
+                    delimiter.cursor_instance.0,
+                ),
+                (
+                    linked_delimiter.scope_instance.0,
+                    delimiter.scope_instance.0,
+                ),
+            ],
+        );
         let Some(stack) = &control.pending_partition_exit_stack else {
+            control.consumed_partition_cursor = None;
             return Ok(None);
         };
         let mut candidate = stack.clone();
         let Some(popped) = self.pop_partition_recursor_layer(builder, &mut candidate)? else {
+            control.consumed_partition_cursor = None;
             return Ok(None);
         };
-        let matches_parent = match (popped.layer.role, control.selected.selected_scope.as_ref()) {
-            (RecursorLayerRole::ExitsScope { scope_origin, .. }, Some(scope)) => {
-                scope.scope_origin == scope_origin
-                    && scope.frame.provenance == popped.layer.provenance
-                    && scope.frame.checked_frame_id == popped.layer.checked_frame_id
-            }
-            _ => false,
+        let Some(scope) = control.selected.selected_scope.as_ref() else {
+            return Err(unsupported(
+                "NativeExitScopeTransitionV1",
+                "selected return lost its exact child scope",
+            ));
         };
-        if !matches_parent {
+        let RecursorLayerRole::ExitsScope {
+            scope_origin,
+            scope_instance,
+            ..
+        } = popped.layer.role
+        else {
+            control.consumed_partition_cursor = None;
+            return Ok(None);
+        };
+        if scope_origin != delimiter.scope_origin {
+            control.consumed_partition_cursor = None;
             return Ok(None);
         }
+        if scope.scope_origin != scope_origin
+            || scope.frame.provenance != popped.layer.provenance
+            || scope.frame.checked_frame_id != popped.layer.checked_frame_id
+        {
+            return Err(unsupported(
+                "NativeExitScopeTransitionV1",
+                "same-scope pending exit does not match the selected return target",
+            ));
+        }
+        self.emit_control_cell_ref_guard(
+            builder,
+            &[
+                (scope_instance.0, delimiter.scope_instance.0),
+                (scope.scope_instance.0, delimiter.scope_instance.0),
+            ],
+        );
         let parent_producer = control.producer_kont.ok_or_else(|| {
             unsupported(
                 "NativeExitScopeTransitionV1",
                 "scope body return lost its parent producer tail",
             )
         })?;
-        if popped.exit_obligation.is_none() {
-            return Ok(None);
+        if popped.target.is_none() || popped.exit_obligation.is_none() {
+            return Err(unsupported(
+                "NativeExitScopeTransitionV1",
+                "same-scope pending exit lost its exact target or obligation",
+            ));
         }
         control.pending_partition_exit_stack = Some(candidate);
         #[cfg(test)]
@@ -3945,7 +4011,8 @@ impl<'a> Lowering<'a> {
             })?;
         Ok(matches!(
             plan.action,
-            ProducerKontAction::ExitScopeStart { .. }
+            ProducerKontAction::ScopeBodyReturn { .. }
+                | ProducerKontAction::ExitScopeStart { .. }
                 | ProducerKontAction::ExitScopeComplete { .. }
         ))
     }
@@ -5794,7 +5861,7 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         body: RuntimeExpr,
         env: Vec<Lowered>,
-        mut control: SourceControl<'b>,
+        control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
         if control.selected.parent.is_some()
             || !env.iter().all(partition_lowered_is_admissible)
@@ -8092,104 +8159,12 @@ impl<'a> Lowering<'a> {
                     SourceMachineState::Eval { expr, env, control } => {
                         return self.call_partition_source_eval(builder, expr, env, control);
                     }
-                    SourceMachineState::Value { value, control }
+                    SourceMachineState::Value { value, control: _ }
                         if matches!(value, Lowered::Trap(_)) =>
                     {
                         return Ok(value);
                     }
-                    SourceMachineState::Value { value, mut control } => {
-                        if let Some((popped, source_successor)) =
-                            self.reserve_partition_exit_source_cursor(builder, &mut control)?
-                        {
-                            if std::env::var_os("KEN_NATIVE_EXIT_TRACE").is_some() {
-                                use std::io::Write as _;
-                                let producer = control.producer_kont.and_then(|cursor| {
-                                    self.partition_producer_sites.get(&cursor.site_id).map(
-                                        |plan| match plan.action {
-                                            ProducerKontAction::Done {
-                                                terminal:
-                                                    PartitionProducerKontTerminalIdentity::CheckedJoin,
-                                            } => "done-checked",
-                                            ProducerKontAction::Done {
-                                                terminal:
-                                                    PartitionProducerKontTerminalIdentity::ScalarArmReturn {
-                                                        ..
-                                                    },
-                                            } => "done-arm",
-                                            ProducerKontAction::ApplyActiveEliminators { .. } => {
-                                                "active"
-                                            }
-                                            ProducerKontAction::ApplyEliminators { .. } => {
-                                                "eliminators"
-                                            }
-                                            ProducerKontAction::OrientedInvocationReturn {
-                                                ..
-                                            } => "oriented-return",
-                                            ProducerKontAction::CheckedComputationalIHReturn {
-                                                ..
-                                            } => "checked-return",
-                                            ProducerKontAction::ScopeBodyReturn { .. } => {
-                                                "scope-body-return"
-                                            }
-                                            ProducerKontAction::ExitScopeStart { .. } => "exit-start",
-                                            ProducerKontAction::ExitScopeComplete { .. } => {
-                                                "exit-complete"
-                                            }
-                                        },
-                                    )
-                                });
-                                if let Ok(mut trace) = std::fs::OpenOptions::new()
-                                    .create(true)
-                                    .append(true)
-                                    .open("/tmp/ken-native-exit-trace")
-                                {
-                                    let value_detail = match &value {
-                                        Lowered::Constructor { constructor, .. } => {
-                                            constructor.as_str()
-                                        }
-                                        _ => lowered_value_kind(&value),
-                                    };
-                                    let _ = writeln!(
-                                        trace,
-                                        "activate-exit target={:?} obligation={:?} value={} \
-                                         producer={producer:?} scope={:?}",
-                                        popped.target.map(|cursor| cursor.node.0),
-                                        popped.exit_obligation.map(|cursor| cursor.node.0),
-                                        value_detail,
-                                        control
-                                            .selected
-                                            .selected_scope
-                                            .as_ref()
-                                            .map(|scope| scope.scope_origin),
-                                    );
-                                }
-                            }
-                            let contract = self
-                                .active_partition_return_contract
-                                .clone()
-                                .ok_or_else(|| {
-                                    unsupported(
-                                        "NativeExitScopeTransitionV1",
-                                        "scope exit has no checked scalar return contract",
-                                    )
-                                })?;
-                            let start = self.push_exit_scope_producer_kont(
-                                builder,
-                                &popped,
-                                source_successor.clone(),
-                                contract.checked_join.clone(),
-                                contract.required_kind,
-                            )?;
-                            let body_return = self.push_scope_body_return_producer_kont(
-                                builder,
-                                &popped,
-                                &source_successor,
-                                start,
-                                contract.checked_join,
-                                contract.required_kind,
-                            )?;
-                            control.producer_kont = Some(body_return);
-                        }
+                    SourceMachineState::Value { value, control } => {
                         if let Some(head) = control.partition_cursor {
                             return self.call_partition_source_kont(builder, head, value, control);
                         }
@@ -8606,13 +8581,27 @@ impl<'a> Lowering<'a> {
                                 )?
                             };
                             let value = if let Some(producer_tail) = control.producer_kont {
-                                self.call_restored_selected_producer_kont(
-                                    builder,
-                                    producer_tail,
-                                    value,
-                                    &control.selected,
-                                    &control.selected_lineage,
-                                )?
+                                if self.producer_kont_is_scope_exit_bridge(producer_tail)? {
+                                    if !control.selected_lineage.is_empty() {
+                                        return Err(unsupported(
+                                            "NativeExitScopeTransitionV1",
+                                            "join scope-exit completion retained a child selected head",
+                                        ));
+                                    }
+                                    self.call_partition_producer_kont(
+                                        builder,
+                                        producer_tail,
+                                        value,
+                                    )?
+                                } else {
+                                    self.call_restored_selected_producer_kont(
+                                        builder,
+                                        producer_tail,
+                                        value,
+                                        &control.selected,
+                                        &control.selected_lineage,
+                                    )?
+                                }
                             } else {
                                 value
                             };
@@ -8680,6 +8669,7 @@ impl<'a> Lowering<'a> {
                             SourceMachineState::Value { value, control }
                         }
                         SourceContinuation::ReturnFromSelectedCase { delimiter, next } => {
+                            control.continuation = *next;
                             let scope =
                                 control.selected.selected_scope.as_ref().ok_or_else(|| {
                                     unsupported(
@@ -8729,6 +8719,39 @@ impl<'a> Lowering<'a> {
                                     (scope.scope_instance.0, delimiter.scope_instance.0),
                                 ],
                             );
+                            if let Some((popped, source_successor)) = self
+                                .reserve_partition_exit_source_cursor(
+                                    builder,
+                                    &mut control,
+                                    delimiter,
+                                )?
+                            {
+                                let contract = self
+                                    .active_partition_return_contract
+                                    .clone()
+                                    .ok_or_else(|| {
+                                        unsupported(
+                                            "NativeExitScopeTransitionV1",
+                                            "scope body return has no checked scalar return contract",
+                                        )
+                                    })?;
+                                let start = self.push_exit_scope_producer_kont(
+                                    builder,
+                                    &popped,
+                                    source_successor.clone(),
+                                    contract.checked_join.clone(),
+                                    contract.required_kind,
+                                )?;
+                                let body_return = self.push_scope_body_return_producer_kont(
+                                    builder,
+                                    &popped,
+                                    &source_successor,
+                                    start,
+                                    contract.checked_join,
+                                    contract.required_kind,
+                                )?;
+                                control.producer_kont = Some(body_return);
+                            }
                             let mut previous = control.selected_lineage.pop().ok_or_else(|| {
                                 unsupported(
                                     "OrientedSubcontinuationPlanV1",
@@ -8770,7 +8793,6 @@ impl<'a> Lowering<'a> {
                                 }
                             }
                             control.selected = previous;
-                            control.continuation = *next;
                             SourceMachineState::Value { value, control }
                         }
                         SourceContinuation::ApplyRecursorSelection { layer, next } => {
@@ -9506,7 +9528,7 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeMatchCase],
         _default: &RuntimeTrap,
         env: &[Lowered],
-        mut suffix_control: SourceControl<'b>,
+        suffix_control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
         let transferred_producer_tail = self.active_partition_producer_kont;
         let zero = cases
