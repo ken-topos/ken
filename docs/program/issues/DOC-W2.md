@@ -148,7 +148,7 @@ cards follow Wave 5's D4 re-check.
 > An agent module's characteristic harm is not being incomplete — it is being
 > **confidently silent** about a boundary, which reads to the consuming agent
 > as permission. The **negative knowledge** is the part that pays: unsupported
-> forms, misleading near-syntax, `tt` versus `Refl`, and the exact point at
+> forms, misleading near-syntax, `Proved` versus `Refl`, and the exact point at
 > which an agent must **stop** instead of inventing a proof, primitive,
 > capability, or package.
 
@@ -178,7 +178,7 @@ start** — a mid-session edit does not reach a running seat.
 
 1. explain a small Ken program's contract and trust posture;
 2. write and check a pure function with one real law;
-3. distinguish and repair `tt` versus `Refl` proof endpoints;
+3. distinguish and repair `Proved` versus `Refl` proof endpoints;
 4. find and use a catalog package **by task rather than guessed name**;
 5. author an effectful boundary without omitting its capability or row;
 6. **refuse an unsupported or unproved request honestly**;
