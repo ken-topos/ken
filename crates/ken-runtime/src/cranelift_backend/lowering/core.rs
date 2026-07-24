@@ -2397,6 +2397,35 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    fn source_return_reaches_closed_topology(
+        &self,
+        immediate: SourceKontReturnId,
+        outer: SourceKontReturnId,
+    ) -> Result<bool, CraneliftBackendError> {
+        if self
+            .partition_source_returns
+            .is_exact_source_head_residual(immediate, outer)?
+        {
+            return Ok(true);
+        }
+        self.source_return_reaches(immediate, outer)
+    }
+
+    fn source_return_activation_reaches(
+        &self,
+        current: PartitionSourceKontReturnCursor,
+        inherited: PartitionSourceKontReturnCursor,
+    ) -> Result<bool, CraneliftBackendError> {
+        if current.return_id == inherited.return_id
+            || self
+                .partition_source_returns
+                .is_exact_source_head_residual(current.return_id, inherited.return_id)?
+        {
+            return Ok(current.capture_pointer == inherited.capture_pointer);
+        }
+        self.source_return_reaches(current.return_id, inherited.return_id)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn resolve_closed_source_arm_fanout_edge(
         &mut self,
@@ -7187,7 +7216,10 @@ impl<'a> Lowering<'a> {
             item.source_return,
         ) {
             (Some(source_return), Some(request), Some(source_return_cursor)) => {
-                if !self.source_return_reaches(source_return_cursor.return_id, source_return)? {
+                if !self.source_return_reaches_closed_topology(
+                    source_return_cursor.return_id,
+                    source_return,
+                )? {
                     return Err(unsupported(
                         "NativeSourceKontSuccessorV1",
                         "SourceArm dynamic return activation does not reach its inherited closed \
@@ -7759,10 +7791,7 @@ impl<'a> Lowering<'a> {
             .map(|closure| closure.source_return_cursor);
         let effective_source_return = match (control.source_return, inherited_source_return) {
             (Some(current), Some(inherited)) => {
-                if !self.source_return_reaches(current.return_id, inherited.return_id)?
-                    || (current.return_id == inherited.return_id
-                        && current.capture_pointer != inherited.capture_pointer)
-                {
+                if !self.source_return_activation_reaches(current, inherited)? {
                     return Err(unsupported(
                         "NativeSourceKontSuccessorV1",
                         "nested SourceArm changed its inherited return activation",
@@ -8071,6 +8100,42 @@ impl<'a> Lowering<'a> {
                 builder
                     .ins()
                     .load(pointer_type, MemFlags::trusted(), cursor.capture_pointer, 0);
+            if let Some(node) = descriptor.key.source_head {
+                if control.producer_kont.is_some() {
+                    return Err(unsupported(
+                        "NativeSourceKontReturnV1",
+                        "source-head residualization found duplicate direct producer ownership",
+                    ));
+                }
+                let residual_return_id = self
+                    .partition_source_returns
+                    .residual_after_source_head(cursor.return_id)?;
+                control.producer_kont = None;
+                control.source_return = Some(PartitionSourceKontReturnCursor {
+                    return_id: residual_return_id,
+                    capture_pointer: cursor.capture_pointer,
+                });
+                return self.call_partition_source_kont_entry(
+                    builder,
+                    Some(PartitionSourceCursor {
+                        node,
+                        capture_pointer: source_capture,
+                    }),
+                    input,
+                    control,
+                    Some(cursor.return_id),
+                );
+            }
+            if self
+                .partition_source_returns
+                .is_source_head_residual(cursor.return_id)
+                && control.producer_kont.is_some()
+            {
+                return Err(unsupported(
+                    "NativeSourceKontReturnV1",
+                    "source-head residual cursor duplicated its owned producer",
+                ));
+            }
             let parent_capture = builder.ins().load(
                 pointer_type,
                 MemFlags::trusted(),
@@ -8110,22 +8175,15 @@ impl<'a> Lowering<'a> {
                     None
                 }
             };
-            if let Some(node) = descriptor.key.source_head {
-                return self.call_partition_source_kont_entry(
-                    builder,
-                    Some(PartitionSourceCursor {
-                        node,
-                        capture_pointer: source_capture,
-                    }),
-                    input,
-                    control,
-                    Some(cursor.return_id),
-                );
-            }
             let closes_active_source_arm = self
                 .active_partition_source_arm_closure
                 .as_ref()
-                .map(|closure| self.source_return_reaches(cursor.return_id, closure.source_return))
+                .map(|closure| {
+                    self.source_return_reaches_closed_topology(
+                        cursor.return_id,
+                        closure.source_return,
+                    )
+                })
                 .transpose()?
                 .unwrap_or(false);
             if closes_active_source_arm {
@@ -8208,7 +8266,38 @@ impl<'a> Lowering<'a> {
                 {
                     return Err(unsupported(
                         "NativeCompletedTailV1",
-                        "final source return failed the exact no-residual STOP predicate",
+                        format!(
+                            "final source return failed the exact no-residual STOP predicate: \
+                             source_head={:?} live_tail={:?}/{expected_tail_site_id} \
+                             pending={:?}/{:?}/{:?}/{:?} producer={:?}/{:?} \
+                             outer={:?}/{:?} source_return={} source_cursor={:?}/{:?} \
+                             selected={}/{}/{}/{} lineage={} ih={} closure={} terminal={} \
+                             final={:?}/{:?} required={:?}",
+                            descriptor.key.source_head,
+                            descriptor.key.live_producer_tail,
+                            descriptor.key.pending_exit_head,
+                            descriptor.key.pending_qualification_head,
+                            descriptor.key.pending_obligation_head,
+                            descriptor.key.pending_computational_ih_call,
+                            descriptor.key.producer_head,
+                            Some(producer_kont.site_id),
+                            descriptor.key.terminal_outer,
+                            control.terminal_outer,
+                            control.source_return.is_some(),
+                            control.partition_cursor.map(|cursor| cursor.node),
+                            control.consumed_partition_cursor.map(|cursor| cursor.node),
+                            control.selected.parent.is_some(),
+                            control.selected.pending.len(),
+                            control.selected.selected_ancestry.len(),
+                            control.selected.selected_scope.is_some(),
+                            control.selected_lineage.len(),
+                            self.pending_computational_ih_call.is_some(),
+                            self.active_partition_source_arm_closure.is_some(),
+                            terminal_matches,
+                            final_scalar.checked_join,
+                            descriptor.key.checked_join,
+                            descriptor.key.required_kind,
+                        ),
                     ));
                 }
                 Some(
@@ -10780,12 +10869,9 @@ impl<'a> Lowering<'a> {
                             let source_return =
                                 match (control.source_return, inherited_source_return) {
                                     (Some(current), Some(inherited)) => {
-                                        if !self.source_return_reaches(
-                                            current.return_id,
-                                            inherited.return_id,
-                                        )? || (current.return_id == inherited.return_id
-                                            && current.capture_pointer != inherited.capture_pointer)
-                                        {
+                                        if !self.source_return_activation_reaches(
+                                            current, inherited,
+                                        )? {
                                             return Err(unsupported(
                                                 "NativeSourceKontSuccessorV1",
                                                 "SourceArm terminal changed its inherited return \
