@@ -1645,6 +1645,12 @@ pub(super) struct PartitionSourceCursor {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct SourceKontReturnId(pub(super) u32);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct NormalSourceKontSuccessorId(pub(super) usize);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct ClosedSourceArmEntryId(pub(super) u32);
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct PartitionFinalScalarReturnAuthority {
     pub(super) partition_site_id: u64,
@@ -2699,7 +2705,7 @@ enum PartitionSourceKontEntryMode {
     },
     PostFanoutResume {
         return_id: SourceKontReturnId,
-        node: PartitionSourceNodeId,
+        node: Option<PartitionSourceNodeId>,
     },
 }
 
@@ -2868,7 +2874,7 @@ impl PartitionSourceKontKey {
         return_id: SourceKontReturnId,
         checked_join: PartitionCheckedJoinIdentity,
         required_kind: ScalarMergeKind,
-        node: PartitionSourceNodeId,
+        node: Option<PartitionSourceNodeId>,
         pending_exit_head: Option<PartitionRecursorNodeId>,
         pending_qualification_head: Option<PartitionRecursorQualificationNodeId>,
         pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
@@ -3338,6 +3344,108 @@ impl Default for PartitionStateExitSummary {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct PartitionClosedSourceArmEntryKey {
+    pub(super) template_state_id: usize,
+    pub(super) normal_successor: NormalSourceKontSuccessorId,
+    pub(super) source_return: SourceKontReturnId,
+    pub(super) checked_join: PartitionCheckedJoinIdentity,
+    pub(super) required_kind: ScalarMergeKind,
+    pub(super) live_producer_tail: Option<usize>,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct PartitionClosedSourceArmEntry {
+    pub(super) id: ClosedSourceArmEntryId,
+    pub(super) successor_call_inst: Inst,
+    pub(super) function_index: usize,
+}
+
+#[derive(Default)]
+pub(super) struct PartitionClosedSourceArmInterner {
+    keys: Vec<PartitionClosedSourceArmEntryKey>,
+    definitions: Vec<PartitionClosedSourceArmEntry>,
+}
+
+impl PartitionClosedSourceArmInterner {
+    pub(super) fn intern(
+        &mut self,
+        key: PartitionClosedSourceArmEntryKey,
+        successor_call_inst: Inst,
+        function_index: usize,
+    ) -> Result<ClosedSourceArmEntryId, CraneliftBackendError> {
+        if let Some((index, _)) = self
+            .keys
+            .iter()
+            .enumerate()
+            .find(|(_, candidate)| **candidate == key)
+        {
+            let definition = self.definitions[index];
+            if definition.successor_call_inst != successor_call_inst
+                || definition.function_index != function_index
+            {
+                return Err(unsupported(
+                    "NativeSourceKontSuccessorV1",
+                    "one closed SourceArm identity was emitted with two normal terminators",
+                ));
+            }
+            return Ok(definition.id);
+        }
+        let id = ClosedSourceArmEntryId(
+            u32::try_from(self.keys.len())
+                .expect("compiler-private closed SourceArm identity exhausted"),
+        );
+        self.keys.push(key);
+        self.definitions.push(PartitionClosedSourceArmEntry {
+            id,
+            successor_call_inst,
+            function_index,
+        });
+        Ok(id)
+    }
+
+    pub(super) fn definition_for_template(
+        &self,
+        template_state_id: usize,
+    ) -> Result<
+        (
+            &PartitionClosedSourceArmEntryKey,
+            PartitionClosedSourceArmEntry,
+        ),
+        CraneliftBackendError,
+    > {
+        let mut matches = self
+            .keys
+            .iter()
+            .enumerate()
+            .filter(|(_, key)| key.template_state_id == template_state_id);
+        let Some((index, key)) = matches.next() else {
+            return Err(unsupported(
+                "NativeSourceKontSuccessorV1",
+                "SourceArm call edge has no closed normal-successor entry",
+            ));
+        };
+        if matches.next().is_some() {
+            return Err(unsupported(
+                "NativeSourceKontSuccessorV1",
+                "one SourceArm template was closed over multiple successor identities",
+            ));
+        }
+        Ok((key, self.definitions[index]))
+    }
+
+    pub(super) fn counts(&self) -> usize {
+        self.keys.len()
+    }
+}
+
+pub(super) struct PartitionActiveSourceArmClosure {
+    pub(super) template_state_id: usize,
+    pub(super) source_return: SourceKontReturnId,
+    pub(super) successor: Option<(NormalSourceKontSuccessorId, Inst)>,
+    pub(super) delegated_arm: Option<(usize, Inst)>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum PartitionPendingCallKind {
     ProducerKont,
@@ -3371,6 +3479,16 @@ pub(super) enum PartitionPendingCallTarget {
         caller_helper_index: usize,
         caller_tag_pointer: Value,
         outer_call: PartitionArmOuterCallWitness,
+    },
+    FinalSourcePredecessor {
+        checked_join: PartitionCheckedJoinIdentity,
+        required_kind: ScalarMergeKind,
+        branch_return: PartitionBranchReturnAuthority,
+        caller_state_id: usize,
+        caller_tag_pointer: Value,
+        forward_inst: Inst,
+        target_block: cranelift_codegen::ir::Block,
+        source_return: SourceKontReturnId,
     },
 }
 
@@ -4067,6 +4185,44 @@ impl PartitionContinuationInterner {
             })
     }
 
+    pub(super) fn state_helper_index(
+        &self,
+        state_id: usize,
+    ) -> Result<usize, CraneliftBackendError> {
+        self.states
+            .get(state_id)
+            .map(|state| state.helper_index)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeSourceKontSuccessorV1",
+                    "partition helper query names an unknown semantic state",
+                )
+            })
+    }
+
+    pub(super) fn post_fanout_return_id(
+        &self,
+        state_id: usize,
+    ) -> Result<SourceKontReturnId, CraneliftBackendError> {
+        match self.keys.get(state_id) {
+            Some(PartitionSemanticStateKey::SourceKont(key)) => match &key.static_key.entry_mode {
+                PartitionSourceKontEntryMode::PostFanoutResume { return_id, .. } => Ok(*return_id),
+                PartitionSourceKontEntryMode::Node { .. } => Err(unsupported(
+                    "NativeSourceKontSuccessorV1",
+                    "normal successor is a SourceKont node entry, not PostFanoutResume",
+                )),
+            },
+            Some(_) => Err(unsupported(
+                "NativeSourceKontSuccessorV1",
+                "normal successor is not a SourceKont state",
+            )),
+            None => Err(unsupported(
+                "NativeSourceKontSuccessorV1",
+                "normal successor names an unknown semantic state",
+            )),
+        }
+    }
+
     pub(super) fn counts(&self) -> (usize, usize, usize) {
         (self.states.len(), self.edges, self.emitted)
     }
@@ -4307,6 +4463,7 @@ pub(super) struct SourceArmPartitionWorkItem {
     pub(super) cleanup_head: Option<PartitionCleanupSuffixId>,
     pub(super) cleanup_capture_pointer: Option<Value>,
     pub(super) source_return: Option<PartitionSourceKontReturnCursor>,
+    pub(super) normal_successor_return: Option<SourceKontReturnId>,
     pub(super) completed_producer_tail: Option<PartitionProducerTailCompletion>,
     pub(super) ledger_baseline: PartitionLedgerBaseline,
     pub(super) return_contract: PartitionStateReturnContract,
@@ -4332,8 +4489,8 @@ pub(super) struct SourceKontPartitionWorkItem {
     pub(super) field_types: Vec<Type>,
     pub(super) field_map: Vec<usize>,
     pub(super) input: Lowered,
-    pub(super) node: PartitionSourceNodeId,
-    pub(super) capture_pointer: Value,
+    pub(super) node: Option<PartitionSourceNodeId>,
+    pub(super) capture_pointer: Option<Value>,
     pub(super) resume_parent: Option<PartitionSourceCursor>,
     pub(super) pending_partition_exit_stack: Option<RecursorUnwindStack>,
     pub(super) producer_kont: Option<PartitionProducerKontCursor>,
