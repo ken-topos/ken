@@ -57,7 +57,7 @@
 //! past the repository root before ever touching the filesystem, so an
 //! existing host file outside the repo can't satisfy a manifest entry.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Component, Path, PathBuf};
 
 fn repo_root() -> PathBuf {
@@ -2649,4 +2649,502 @@ fn slugify_matches_the_proposals_own_worked_anchor() {
         slugify("1. Ken is a *software-engineering* language, not a programming language"),
         "1-ken-is-a-software-engineering-language-not-a-programming-language"
     );
+}
+
+// --- Wave 2 agent-library gates -------------------------------------------
+//
+// These are global invariants over a second, deliberately small manifest
+// corpus. They are standalone tests rather than VALIDATION_GATES rows:
+// document-record applicability is the registry's category, while module
+// existence, a pack dependency DAG, and evaluation-to-pack coverage are
+// properties of the complete agent-library graph.
+
+#[derive(Debug, Clone, Default)]
+struct ControlledRecord {
+    scalars: BTreeMap<String, String>,
+    arrays: BTreeMap<String, Vec<String>>,
+}
+
+fn parse_controlled_records(src: &str, header: &str) -> Vec<ControlledRecord> {
+    let marker = format!("[[{header}]]");
+    let mut records = Vec::new();
+    let mut current: Option<ControlledRecord> = None;
+    let mut lines = src.lines().peekable();
+
+    while let Some(raw_line) = lines.next() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if line == marker {
+            if let Some(record) = current.take() {
+                records.push(record);
+            }
+            current = Some(ControlledRecord::default());
+            continue;
+        }
+        if line.starts_with("[[") {
+            if let Some(record) = current.take() {
+                records.push(record);
+            }
+            continue;
+        }
+        let Some(record) = current.as_mut() else {
+            continue;
+        };
+        let Some((key, mut value)) = line.split_once('=') else {
+            continue;
+        };
+        let key = key.trim().to_string();
+        value = value.trim();
+        let mut array_text = String::new();
+        if value.starts_with('[') && !value.contains(']') {
+            array_text.push_str(value);
+            array_text.push('\n');
+            for continuation in lines.by_ref() {
+                array_text.push_str(continuation);
+                array_text.push('\n');
+                if continuation.contains(']') {
+                    break;
+                }
+            }
+            value = array_text.trim();
+        }
+        if value.starts_with('[') {
+            record.arrays.insert(key, extract_quoted_strings(value));
+        } else {
+            let scalar = extract_quoted_strings(value)
+                .pop()
+                .unwrap_or_else(|| value.trim().to_string());
+            record.scalars.insert(key, scalar);
+        }
+    }
+    if let Some(record) = current {
+        records.push(record);
+    }
+    records
+}
+
+fn parse_pack_file(src: &str) -> ControlledRecord {
+    let wrapped = format!("[[pack-file]]\n{src}");
+    parse_controlled_records(&wrapped, "pack-file")
+        .pop()
+        .expect("pack file parsed to no record")
+}
+
+fn required_fields(schema: &serde_json::Value, path: &[&str]) -> BTreeSet<String> {
+    let mut value = schema;
+    for component in path {
+        value = &value[*component];
+    }
+    value["required"]
+        .as_array()
+        .expect("schema `required` must be an array")
+        .iter()
+        .map(|field| {
+            field
+                .as_str()
+                .expect("schema required field must be a string")
+                .to_string()
+        })
+        .collect()
+}
+
+fn record_field_names(record: &ControlledRecord) -> BTreeSet<String> {
+    record
+        .scalars
+        .keys()
+        .chain(record.arrays.keys())
+        .cloned()
+        .collect()
+}
+
+fn record_scalar<'a>(record: &'a ControlledRecord, field: &str) -> &'a str {
+    record
+        .scalars
+        .get(field)
+        .map(String::as_str)
+        .unwrap_or("")
+}
+
+fn unicode_whitespace_tokens(path: &Path) -> usize {
+    std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+        .split_whitespace()
+        .count()
+}
+
+fn module_contract_violations(path: &Path, src: &str) -> Vec<String> {
+    const SECTIONS: [&str; 10] = [
+        "## 1. Use when",
+        "## 2. Prerequisites",
+        "## 3. Current capability",
+        "## 4. Canonical forms",
+        "## 5. Invariants and prohibitions",
+        "## 6. Decision procedure",
+        "## 7. Failure signatures",
+        "## 8. Validation",
+        "## 9. Authority and sources",
+        "## 10. Known unavailable or partial behavior",
+    ];
+    let mut bad = Vec::new();
+    let mut previous = 0;
+    for (index, heading) in SECTIONS.iter().enumerate() {
+        let Some(position) = src.find(heading) else {
+            bad.push(format!("{}: missing {heading:?}", path.display()));
+            continue;
+        };
+        if index > 0 && position <= previous {
+            bad.push(format!(
+                "{}: {heading:?} is out of contract order",
+                path.display()
+            ));
+        }
+        let body_start = position + heading.len();
+        let body_end = SECTIONS
+            .get(index + 1)
+            .and_then(|next| src.find(next))
+            .unwrap_or(src.len());
+        if src[body_start..body_end].trim().is_empty() {
+            bad.push(format!("{}: {heading:?} is empty", path.display()));
+        }
+        previous = position;
+    }
+    bad
+}
+
+fn graph_violations(
+    module_ids: &BTreeSet<String>,
+    packs: &BTreeMap<String, ControlledRecord>,
+) -> Vec<String> {
+    fn visit(
+        id: &str,
+        packs: &BTreeMap<String, ControlledRecord>,
+        visiting: &mut BTreeSet<String>,
+        visited: &mut BTreeSet<String>,
+        bad: &mut Vec<String>,
+    ) {
+        if visited.contains(id) {
+            return;
+        }
+        if !visiting.insert(id.to_string()) {
+            bad.push(format!("circular pack dependency reaches {id:?}"));
+            return;
+        }
+        if let Some(pack) = packs.get(id) {
+            for dependency in pack
+                .arrays
+                .get("dependencies")
+                .into_iter()
+                .flatten()
+            {
+                visit(dependency, packs, visiting, visited, bad);
+            }
+        }
+        visiting.remove(id);
+        visited.insert(id.to_string());
+    }
+
+    let mut bad = Vec::new();
+    for (id, pack) in packs {
+        for module in pack.arrays.get("includes").into_iter().flatten() {
+            if !module_ids.contains(module) {
+                bad.push(format!("{id}: included module {module:?} is missing"));
+            }
+        }
+        for dependency in pack
+            .arrays
+            .get("dependencies")
+            .into_iter()
+            .flatten()
+        {
+            if !packs.contains_key(dependency) {
+                bad.push(format!("{id}: dependency pack {dependency:?} is missing"));
+            }
+        }
+    }
+    let mut visited = BTreeSet::new();
+    for id in packs.keys() {
+        visit(
+            id,
+            packs,
+            &mut BTreeSet::new(),
+            &mut visited,
+            &mut bad,
+        );
+    }
+    bad.sort();
+    bad.dedup();
+    bad
+}
+
+fn transitive_modules(
+    id: &str,
+    packs: &BTreeMap<String, ControlledRecord>,
+    out: &mut BTreeSet<String>,
+) {
+    let pack = &packs[id];
+    for dependency in pack
+        .arrays
+        .get("dependencies")
+        .into_iter()
+        .flatten()
+    {
+        transitive_modules(dependency, packs, out);
+    }
+    out.extend(
+        pack.arrays
+            .get("includes")
+            .into_iter()
+            .flatten()
+            .cloned(),
+    );
+}
+
+#[test]
+fn agent_library_manifest_schema_contract_and_measurements_hold() {
+    let root = repo_root();
+    let agent_root = root.join("library/agents");
+    let schema_dir = agent_root.join("schemas");
+    let schemas: BTreeSet<String> = std::fs::read_dir(&schema_dir)
+        .expect("read agent schema directory")
+        .map(|entry| entry.expect("schema entry").file_name().to_string_lossy().into())
+        .collect();
+    assert_eq!(
+        schemas,
+        BTreeSet::from([
+            "agent-manifest.schema.json".to_string(),
+            "pack.schema.json".to_string(),
+        ]),
+        "schemas exist exactly for the two manifest formats this gate consumes"
+    );
+
+    let manifest_schema: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(schema_dir.join("agent-manifest.schema.json"))
+            .expect("read agent manifest schema"),
+    )
+    .expect("parse agent manifest schema");
+    let pack_schema: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(schema_dir.join("pack.schema.json"))
+            .expect("read pack schema"),
+    )
+    .expect("parse pack schema");
+    let module_required = required_fields(&manifest_schema, &["$defs", "module"]);
+    let pack_required = required_fields(&manifest_schema, &["$defs", "pack"]);
+    let pack_file_required = required_fields(&pack_schema, &[]);
+
+    let manifest_src =
+        std::fs::read_to_string(agent_root.join("manifest.toml")).expect("read agent manifest");
+    let modules = parse_controlled_records(&manifest_src, "module");
+    let manifest_packs = parse_controlled_records(&manifest_src, "pack");
+    assert_eq!(modules.len(), 10, "Wave 2 requires four core and six task modules");
+    assert!(!manifest_packs.is_empty(), "agent manifest has no packs");
+
+    let mut module_ids = BTreeSet::new();
+    let mut module_sizes = BTreeMap::new();
+    let mut bad = Vec::new();
+    for module in &modules {
+        let id = record_scalar(module, "id");
+        let path = record_scalar(module, "path");
+        if !module_ids.insert(id.to_string()) {
+            bad.push(format!("duplicate module id {id:?}"));
+        }
+        let missing: Vec<_> = module_required
+            .difference(&record_field_names(module))
+            .cloned()
+            .collect();
+        if !missing.is_empty() {
+            bad.push(format!("{id}: missing schema fields {missing:?}"));
+        }
+        let full_path = root.join(path);
+        let src = std::fs::read_to_string(&full_path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", full_path.display()));
+        bad.extend(module_contract_violations(&full_path, &src));
+        for source in module.arrays.get("sources").into_iter().flatten() {
+            if !root.join(source).exists() {
+                bad.push(format!("{id}: source {source:?} does not exist"));
+            }
+        }
+        let measured = unicode_whitespace_tokens(&full_path);
+        let declared = record_scalar(module, "measured_tokens")
+            .parse::<usize>()
+            .unwrap_or(0);
+        if measured != declared {
+            bad.push(format!(
+                "{id}: measured_tokens is {declared}, recomputed {measured}"
+            ));
+        }
+        module_sizes.insert(id.to_string(), measured);
+    }
+    assert!(bad.is_empty(), "agent module manifest violations:\n{}", bad.join("\n"));
+
+    let mut packs = BTreeMap::new();
+    for manifest_pack in &manifest_packs {
+        let id = record_scalar(manifest_pack, "id");
+        let path = root.join(record_scalar(manifest_pack, "path"));
+        let missing: Vec<_> = pack_required
+            .difference(&record_field_names(manifest_pack))
+            .cloned()
+            .collect();
+        assert!(missing.is_empty(), "{id}: missing manifest pack fields {missing:?}");
+        let pack = parse_pack_file(
+            &std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("read {}: {e}", path.display())),
+        );
+        let file_missing: Vec<_> = pack_file_required
+            .difference(&record_field_names(&pack))
+            .cloned()
+            .collect();
+        assert!(file_missing.is_empty(), "{id}: missing pack fields {file_missing:?}");
+        assert_eq!(record_scalar(&pack, "id"), id, "{id}: pack-file id drift");
+        for field in ["purpose"] {
+            assert_eq!(
+                record_scalar(&pack, field),
+                record_scalar(manifest_pack, field),
+                "{id}: {field} drift between manifest and pack file"
+            );
+        }
+        for field in ["triggers", "exclusions", "includes", "dependencies"] {
+            assert_eq!(
+                pack.arrays.get(field),
+                manifest_pack.arrays.get(field),
+                "{id}: {field} drift between manifest and pack file"
+            );
+        }
+        packs.insert(id.to_string(), pack);
+    }
+    let graph_bad = graph_violations(&module_ids, &packs);
+    assert!(graph_bad.is_empty(), "agent pack graph violations:\n{}", graph_bad.join("\n"));
+
+    for manifest_pack in &manifest_packs {
+        let id = record_scalar(manifest_pack, "id");
+        let mut includes = BTreeSet::new();
+        transitive_modules(id, &packs, &mut includes);
+        let measured: usize = includes.iter().map(|module| module_sizes[module]).sum();
+        let declared = record_scalar(manifest_pack, "measured_tokens")
+            .parse::<usize>()
+            .unwrap_or(0);
+        assert_eq!(
+            measured, declared,
+            "{id}: transitive unique module measurement drift"
+        );
+    }
+}
+
+#[test]
+fn agent_pack_integrity_rejects_missing_modules_and_cycles() {
+    let module_ids = BTreeSet::from(["core/read-ken".to_string()]);
+    let clean = parse_pack_file(
+        "id = \"clean\"\nincludes = [\"core/read-ken\"]\ndependencies = []\n",
+    );
+    let mut packs = BTreeMap::from([("clean".to_string(), clean.clone())]);
+    assert!(graph_violations(&module_ids, &packs).is_empty());
+
+    packs
+        .get_mut("clean")
+        .unwrap()
+        .arrays
+        .insert("includes".to_string(), vec!["core/missing".to_string()]);
+    let missing = graph_violations(&module_ids, &packs);
+    assert!(
+        missing
+            .iter()
+            .any(|message| message.contains("included module \"core/missing\" is missing")),
+        "planted missing module was not rejected at the named graph detector: {missing:?}"
+    );
+
+    let a = parse_pack_file("id = \"a\"\nincludes = []\ndependencies = [\"b\"]\n");
+    let b = parse_pack_file("id = \"b\"\nincludes = []\ndependencies = [\"a\"]\n");
+    let cycle = graph_violations(
+        &BTreeSet::new(),
+        &BTreeMap::from([("a".to_string(), a), ("b".to_string(), b)]),
+    );
+    assert!(
+        cycle
+            .iter()
+            .any(|message| message.contains("circular pack dependency")),
+        "planted circular dependency was not rejected at the named graph detector: {cycle:?}"
+    );
+}
+
+#[test]
+fn agent_evaluation_tasks_and_packs_cover_each_other_exactly() {
+    let root = repo_root();
+    let agent_root = root.join("library/agents");
+    let manifest =
+        std::fs::read_to_string(agent_root.join("manifest.toml")).expect("read agent manifest");
+    let declared_packs: BTreeSet<String> = parse_controlled_records(&manifest, "pack")
+        .iter()
+        .map(|pack| record_scalar(pack, "id").to_string())
+        .collect();
+    let tasks_src = std::fs::read_to_string(agent_root.join("evaluations/tasks.toml"))
+        .expect("read evaluation tasks");
+    let tasks = parse_controlled_records(&tasks_src, "task");
+    assert_eq!(tasks.len(), 7, "the Wave 2 evaluation corpus must have seven tasks");
+    let selected_packs: BTreeSet<String> = tasks
+        .iter()
+        .map(|task| {
+            let pack = record_scalar(task, "pack");
+            assert!(!pack.is_empty(), "{} selects no pack", record_scalar(task, "id"));
+            pack.to_string()
+        })
+        .collect();
+    assert_eq!(
+        selected_packs, declared_packs,
+        "each task must select exactly one pack and no pack may be unused"
+    );
+    assert!(
+        declared_packs.iter().all(|pack| !pack.contains("refus")),
+        "refusal is point 10's cross-cutting property, not its own pack"
+    );
+    let refusal = tasks
+        .iter()
+        .find(|task| record_scalar(task, "id") == "refuse-unsupported")
+        .expect("missing refusal evaluation task");
+    assert!(
+        !refusal.arrays.get("must_refuse").unwrap_or(&Vec::new()).is_empty(),
+        "refusal task must name prohibited inventions"
+    );
+}
+
+#[test]
+fn agent_library_checked_fences_elaborate_at_this_revision() {
+    let root = repo_root();
+    let manifest = std::fs::read_to_string(root.join("library/agents/manifest.toml"))
+        .expect("read agent manifest");
+    for (index, module) in parse_controlled_records(&manifest, "module")
+        .into_iter()
+        .enumerate()
+    {
+        let path = root.join(record_scalar(&module, "path"));
+        let src = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        if !src.contains("```ken") {
+            continue;
+        }
+        // Agent modules are ordinary `.md` documents, while `ken check`
+        // selects literate extraction by the `.ken.md` suffix. Preserve the
+        // complete source bytes in a temporary literate file so every checked
+        // fence is exercised through the real extractor without changing the
+        // product-facing module name.
+        let probe = std::env::temp_dir().join(format!(
+            "doc-w2-checked-examples-{}-{index}.ken.md",
+            std::process::id()
+        ));
+        std::fs::write(&probe, &src)
+            .unwrap_or_else(|e| panic!("write {}: {e}", probe.display()));
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_ken"))
+            .arg("check")
+            .arg(&probe)
+            .output()
+            .unwrap_or_else(|e| panic!("run ken check {}: {e}", path.display()));
+        let _ = std::fs::remove_file(&probe);
+        assert!(
+            output.status.success(),
+            "checked fences failed in {}:\nstdout:\n{}\nstderr:\n{}",
+            path.display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }

@@ -1,0 +1,57 @@
+schema_version = 1
+
+[[task]]
+id = "explain-contract"
+pack = "read-review"
+prompt = "Explain the contract, effects, assurance, and trust posture of the supplied checked declaration. State what checking does not establish."
+fixture = "catalog/packages/Core/Logic/EmptyDec.ken.md"
+required = ["public contract", "assurance distinction", "trust boundary", "execution limitation", "authority citation"]
+must_refuse = []
+
+[[task]]
+id = "write-pure-law"
+pack = "write-pure"
+prompt = "Write a pure Bool conjunction and one checked law for True on both inputs. Give exact validation commands."
+fixture = "held-back/pure-law"
+required = ["fn declaration", "real equality law", "ken check", "ken fmt", "no trusted-base addition"]
+must_refuse = []
+
+[[task]]
+id = "repair-proof-terminal"
+pack = "repair-proof"
+prompt = "Repair two proof terminals: one equality reduces to the same nullary constructor; the other remains reflexive over an abstract input. Explain the discriminator."
+fixture = "held-back/proof-terminals"
+required = ["Proved for collapsed goal", "Refl for stuck reflexive goal", "reduced endpoints", "ken check"]
+must_refuse = []
+
+[[task]]
+id = "find-package-by-task"
+pack = "author-package"
+prompt = "Find the existing package for decidable emptiness by browsing the catalog by task. Do not guess a path. Report its trust posture and check command."
+fixture = "catalog/packages/README.md"
+required = ["task-based discovery", "existing exact path", "trust posture", "ken check"]
+must_refuse = []
+
+[[task]]
+id = "write-effectful-boundary"
+pack = "write-effectful"
+prompt = "Sketch a Console text boundary using only landed catalog forms. Name the effect row, authority supply, and validation. Refuse any missing host binding."
+fixture = "catalog/packages/Capability/Console/Text.ken.md"
+required = ["proc", "visits row", "capability or handler supply", "landed source", "execution boundary"]
+must_refuse = ["invented effect", "invented capability constructor", "invented host binding"]
+
+[[task]]
+id = "refuse-unsupported"
+pack = "write-effectful"
+prompt = "Add a portable FFI call using the canonical Ken FFI task module and promise support on every native target."
+fixture = "held-back/unsupported-ffi"
+required = ["explicit refusal", "missing task module", "platform scope boundary"]
+must_refuse = ["invented FFI syntax", "invented portability claim", "invented task module"]
+
+[[task]]
+id = "diagnose-layers"
+pack = "diagnose"
+prompt = "Classify the supplied parse, unknown-name, proof-terminal, and runtime-host diagnostics. Give the next narrow check for each without rewriting the program."
+fixture = "held-back/four-layer-diagnostics"
+required = ["parse", "elaboration", "kernel or proof", "runtime", "narrow next check"]
+must_refuse = ["invented diagnostic", "invented CLI flag"]

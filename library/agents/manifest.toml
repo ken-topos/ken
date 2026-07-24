@@ -1,0 +1,249 @@
+# Machine-consumable index for the Ken agent context library.
+#
+# `measured_tokens` uses `unicode-whitespace-v1`: Rust `str::split_whitespace`
+# over the complete UTF-8 file. A module value measures that module. A pack
+# value is the sum of the unique transitive module includes, dependencies first.
+# The targeted gate recomputes every value.
+
+schema_version = 1
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+measurement = "unicode-whitespace-v1"
+
+[[module]]
+id = "core/read-ken"
+path = "library/agents/core/read-ken.md"
+purpose = "Orient in unfamiliar Ken source and report its visible contract."
+triggers = ["read Ken", "inspect source", "explain declarations"]
+prerequisites = []
+sources = [
+  "spec/30-surface/33-declarations.md",
+  "spec/30-surface/36-effects.md",
+  "library/learn/reading-ken/fragments.md",
+]
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["contract-order", "sources-exist", "token-measurement"]
+measured_tokens = 549
+
+[[module]]
+id = "core/write-ken"
+path = "library/agents/core/write-ken.md"
+purpose = "Author checked Ken using probes, formatting, and exact validation."
+triggers = ["write Ken", "edit Ken", "author proof"]
+prerequisites = ["core/read-ken"]
+sources = [
+  "spec/30-surface/",
+  "catalog/guide/",
+  "docs/program/07-catalog-style-guide.md",
+]
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["contract-order", "sources-exist", "token-measurement"]
+measured_tokens = 595
+
+[[module]]
+id = "core/proof-and-trust"
+path = "library/agents/core/proof-and-trust.md"
+purpose = "Choose proof terminals and report assurance and trusted boundaries."
+triggers = ["inspect proof", "repair proof", "report trust"]
+prerequisites = ["core/read-ken"]
+sources = [
+  "spec/20-verification/21-spec-syntax.md",
+  "spec/60-security/64-trust-model.md",
+  "catalog/guide/proof-techniques.ken.md",
+]
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["contract-order", "sources-exist", "token-measurement"]
+measured_tokens = 545
+
+[[module]]
+id = "core/toolchain"
+path = "library/agents/core/toolchain.md"
+purpose = "Select current Ken commands and interpret their evidence boundaries."
+triggers = ["check Ken", "run Ken", "format Ken", "build native"]
+prerequisites = []
+sources = [
+  "crates/ken-cli/src/main.rs",
+  "spec/40-runtime/42-evaluation.md",
+  "spec/40-runtime/45-native-backend.md",
+]
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["contract-order", "sources-exist", "token-measurement"]
+measured_tokens = 538
+
+[[module]]
+id = "tasks/read-review"
+path = "library/agents/tasks/read-review.md"
+purpose = "Produce a human review of contract, proof, trust, and execution posture."
+triggers = ["review source", "explain program", "report evidence"]
+prerequisites = ["core/read-ken"]
+sources = [
+  "docs/program/07-catalog-style-guide.md",
+  "spec/20-verification/21-spec-syntax.md",
+  "spec/60-security/64-trust-model.md",
+]
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["contract-order", "sources-exist", "token-measurement"]
+measured_tokens = 409
+
+[[module]]
+id = "tasks/write-program"
+path = "library/agents/tasks/write-program.md"
+purpose = "Turn a bounded requirement into checked contract-first Ken source."
+triggers = ["write program", "implement pure function", "add checked law"]
+prerequisites = ["core/write-ken", "core/toolchain"]
+sources = [
+  "spec/30-surface/",
+  "spec/20-verification/",
+  "catalog/guide/",
+]
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["contract-order", "sources-exist", "token-measurement"]
+measured_tokens = 412
+
+[[module]]
+id = "tasks/author-package"
+path = "library/agents/tasks/author-package.md"
+purpose = "Author a canonical checked literate catalog package."
+triggers = ["author package", "revise package", "design package API"]
+prerequisites = ["core/write-ken", "core/proof-and-trust", "core/toolchain"]
+sources = [
+  "docs/program/07-catalog-style-guide.md",
+  "catalog/guide/",
+  "catalog/packages/",
+]
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["contract-order", "sources-exist", "token-measurement"]
+measured_tokens = 420
+
+[[module]]
+id = "tasks/prove-or-repair"
+path = "library/agents/tasks/prove-or-repair.md"
+purpose = "Repair a proof without weakening its proposition or adding trust."
+triggers = ["repair proof", "close obligation", "choose proof terminal"]
+prerequisites = ["core/write-ken", "core/proof-and-trust"]
+sources = [
+  "spec/10-kernel/",
+  "spec/20-verification/21-spec-syntax.md",
+  "catalog/guide/proof-techniques.ken.md",
+]
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["contract-order", "sources-exist", "token-measurement"]
+measured_tokens = 405
+
+[[module]]
+id = "tasks/diagnose"
+path = "library/agents/tasks/diagnose.md"
+purpose = "Locate the earliest failing layer from parsing through native execution."
+triggers = ["diagnose failure", "minimize error", "compare execution paths"]
+prerequisites = ["core/toolchain"]
+sources = [
+  "spec/10-kernel/",
+  "spec/30-surface/",
+  "spec/40-runtime/",
+  "crates/ken-cli/src/main.rs",
+]
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["contract-order", "sources-exist", "token-measurement"]
+measured_tokens = 436
+
+[[module]]
+id = "tasks/effects-and-capabilities"
+path = "library/agents/tasks/effects-and-capabilities.md"
+purpose = "Author effects with explicit rows, authority, and execution boundaries."
+triggers = ["write effectful boundary", "add capability", "inspect effect row"]
+prerequisites = ["core/read-ken"]
+sources = [
+  "spec/30-surface/36-effects.md",
+  "spec/60-security/62-authority.md",
+  "catalog/packages/Capability/",
+]
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["contract-order", "sources-exist", "token-measurement"]
+measured_tokens = 455
+
+[[pack]]
+id = "read-review"
+path = "library/agents/packs/read-review.toml"
+purpose = "Explain an existing Ken artifact and report its contract and trust posture."
+triggers = ["review Ken source", "explain a declaration", "report trust posture"]
+exclusions = ["editing source", "proving a new theorem", "platform or FFI work"]
+includes = [
+  "core/read-ken",
+  "core/proof-and-trust",
+  "core/toolchain",
+  "tasks/read-review",
+]
+dependencies = []
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
+measured_tokens = 2041
+
+[[pack]]
+id = "write-pure"
+path = "library/agents/packs/write-pure.toml"
+purpose = "Write and check a pure Ken program with explicit laws."
+triggers = ["write a pure function", "add a checked law", "implement a pure transformation"]
+exclusions = ["effectful boundary", "catalog package", "platform or FFI work"]
+includes = [
+  "core/read-ken",
+  "core/write-ken",
+  "core/proof-and-trust",
+  "core/toolchain",
+  "tasks/write-program",
+]
+dependencies = []
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
+measured_tokens = 2639
+
+[[pack]]
+id = "write-effectful"
+path = "library/agents/packs/write-effectful.toml"
+purpose = "Add an effectful boundary with an explicit row and authority supply."
+triggers = ["write an effectful procedure", "add a capability boundary", "use a handler"]
+exclusions = ["FFI declaration", "unsupported host capability", "platform ABI work"]
+includes = ["tasks/effects-and-capabilities"]
+dependencies = ["write-pure"]
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
+measured_tokens = 3094
+
+[[pack]]
+id = "author-package"
+path = "library/agents/packs/author-package.toml"
+purpose = "Find, use, or author a checked literate catalog package by task."
+triggers = ["find a package by task", "author a catalog package", "revise a literate package entry"]
+exclusions = ["generated package card", "ordinary application", "speculative package"]
+includes = ["tasks/author-package"]
+dependencies = ["write-pure"]
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
+measured_tokens = 3059
+
+[[pack]]
+id = "repair-proof"
+path = "library/agents/packs/repair-proof.toml"
+purpose = "Repair a proof obligation without weakening it or adding hidden trust."
+triggers = ["repair a proof", "choose Proved or Refl", "close a checked law"]
+exclusions = ["change the proposition", "add an assumption", "replace proof with testing"]
+includes = ["tasks/prove-or-repair"]
+dependencies = ["write-pure"]
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
+measured_tokens = 3044
+
+[[pack]]
+id = "diagnose"
+path = "library/agents/packs/diagnose.toml"
+purpose = "Locate the earliest failing layer from parsing through native execution."
+triggers = ["diagnose a Ken failure", "minimize a diagnostic", "compare reference and native"]
+exclusions = ["unsupported host reproduction", "unbounded performance study"]
+includes = [
+  "core/read-ken",
+  "core/proof-and-trust",
+  "core/toolchain",
+  "tasks/diagnose",
+]
+dependencies = []
+revision = "bf8036c0b53d58a4ce9aac8250d5d29d650b5008"
+validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
+measured_tokens = 2068

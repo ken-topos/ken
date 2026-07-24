@@ -1,0 +1,13 @@
+schema_version = 1
+id = "write-pure"
+purpose = "Write and check a pure Ken program with explicit laws."
+triggers = ["write a pure function", "add a checked law", "implement a pure transformation"]
+exclusions = ["effectful boundary", "catalog package", "platform or FFI work"]
+dependencies = []
+includes = [
+  "core/read-ken",
+  "core/write-ken",
+  "core/proof-and-trust",
+  "core/toolchain",
+  "tasks/write-program",
+]
