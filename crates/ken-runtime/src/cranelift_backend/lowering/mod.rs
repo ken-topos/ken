@@ -262,6 +262,7 @@ struct Lowering<'a> {
     partition_queue: VecDeque<PartitionWorkItem>,
     partition_continuations: PartitionContinuationInterner,
     partition_source_nodes: PartitionSourceNodeInterner,
+    partition_source_returns: PartitionSourceKontReturnInterner,
     partition_recursor_nodes: PartitionRecursorNodeInterner,
     partition_recursor_qualifications: PartitionRecursorQualificationNodeInterner,
     partition_open_control_obligations: PartitionOpenControlObligationNodeInterner,
@@ -279,6 +280,8 @@ struct Lowering<'a> {
     active_partition_producer_kont: Option<PartitionProducerKontCursor>,
     active_partition_return_kind: Option<ScalarMergeKind>,
     active_partition_return_contract: Option<PartitionStateReturnContract>,
+    active_partition_source_return: Option<PartitionSourceKontReturnCursor>,
+    active_partition_completed_producer_tail: Option<PartitionProducerTailCompletion>,
     partition_output_tag_pointer: Option<cranelift_codegen::ir::Value>,
     partition_live_growth_ticks: usize,
     partition_join_site_union: BTreeSet<u64>,
@@ -2054,6 +2057,8 @@ struct SourceControl<'a> {
     selected: SourceSelectedContinuation<'a>,
     selected_lineage: Vec<SourceSelectedContinuation<'a>>,
     terminal_outer: ContinuationCursorId,
+    source_return: Option<PartitionSourceKontReturnCursor>,
+    completed_producer_tail: Option<PartitionProducerTailCompletion>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct SelectedCaseReturnDelimiter {
@@ -4579,9 +4584,7 @@ impl<'a> Lowering<'a> {
         Ok(match template {
             SourcePrefixTemplate::Terminal { expected_outer } => {
                 let terminal_outer = match &terminal {
-                    SourceContinuationTerminal::JumpToJoin(edge) => {
-                        edge.target.expected_outer
-                    }
+                    SourceContinuationTerminal::JumpToJoin(edge) => edge.target.expected_outer,
                     SourceContinuationTerminal::ReturnFromPartition { expected_outer } => {
                         *expected_outer
                     }
@@ -6227,10 +6230,12 @@ impl<'a> Lowering<'a> {
                 "Result",
                 "native aggregate result contains a non-constant Bool field",
             )),
-            Lowered::ProcessExitStatus { .. } | Lowered::CompletedProducerTail { .. } => Err(unsupported(
-                "Result",
-                "process exit status cannot escape a native process call",
-            )),
+            Lowered::ProcessExitStatus { .. } | Lowered::CompletedProducerTail { .. } => {
+                Err(unsupported(
+                    "Result",
+                    "process exit status cannot escape a native process call",
+                ))
+            }
             Lowered::Bytes(value) => Ok(RuntimeGroundValue::Bytes(value)),
             Lowered::BorrowedNativeValue { .. }
             | Lowered::BorrowedOption { .. }

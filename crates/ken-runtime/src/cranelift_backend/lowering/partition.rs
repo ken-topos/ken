@@ -1517,6 +1517,118 @@ pub(super) struct PartitionSourceCursor {
     pub(super) capture_pointer: Value,
 }
 
+/// Non-callable identity for one source-machine return topology.
+///
+/// A return descriptor is reserved before mutually-exclusive source arms are
+/// lowered.  Calls always target a closed `PostFanoutResume` state, never this
+/// identity directly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct SourceKontReturnId(pub(super) u32);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct PartitionFinalScalarReturnAuthority {
+    pub(super) partition_site_id: u64,
+    pub(super) checked_join: PartitionCheckedJoinIdentity,
+    pub(super) required_kind: ScalarMergeKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum PartitionSourceKontReturnParent {
+    Continue(SourceKontReturnId),
+    FinalScalar(PartitionFinalScalarReturnAuthority),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct PartitionSourceKontReturnDescriptorKey {
+    /// Exact linked residual source topology.  Dynamic captures live in the
+    /// corresponding synchronous source cell, not in this key.
+    pub(super) source_head: Option<PartitionSourceNodeId>,
+    pub(super) checked_join: PartitionCheckedJoinIdentity,
+    pub(super) required_kind: ScalarMergeKind,
+    pub(super) live_producer_tail: Option<usize>,
+    pub(super) pending_exit_head: Option<PartitionRecursorNodeId>,
+    pub(super) pending_qualification_head: Option<PartitionRecursorQualificationNodeId>,
+    pub(super) pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
+    pub(super) producer_head: Option<usize>,
+    pub(super) pending_computational_ih_call: Option<u64>,
+    pub(super) terminal_outer: ContinuationCursorId,
+    pub(super) parent: PartitionSourceKontReturnParent,
+}
+
+#[derive(Clone)]
+pub(super) struct PartitionSourceKontReturnDescriptor {
+    pub(super) key: PartitionSourceKontReturnDescriptorKey,
+}
+
+/// Runtime instantiation of a return descriptor.  The ID is static semantic
+/// topology; the pointer names a constant-width cell containing the exact
+/// linked-source activation and, when present, its parent return cell.
+#[derive(Clone, Copy)]
+pub(super) struct PartitionSourceKontReturnCursor {
+    pub(super) return_id: SourceKontReturnId,
+    pub(super) capture_pointer: Value,
+}
+
+#[derive(Default)]
+pub(super) struct PartitionSourceKontReturnInterner {
+    by_bucket: BTreeMap<(u64, u64), Vec<SourceKontReturnId>>,
+    keys: Vec<PartitionSourceKontReturnDescriptorKey>,
+    definitions: Vec<PartitionSourceKontReturnDescriptor>,
+    bytes_constructed: usize,
+    bytes_retained: usize,
+    exact_comparisons: usize,
+}
+
+impl PartitionSourceKontReturnInterner {
+    pub(super) fn intern(
+        &mut self,
+        key: PartitionSourceKontReturnDescriptorKey,
+    ) -> SourceKontReturnId {
+        let bucket = partition_static_bucket(&key);
+        self.bytes_constructed = self.bytes_constructed.saturating_add(bucket.bytes as usize);
+        let bucket_key = (bucket.hash, bucket.bytes);
+        if let Some(candidates) = self.by_bucket.get(&bucket_key) {
+            for candidate in candidates.iter().copied() {
+                self.exact_comparisons = self.exact_comparisons.saturating_add(1);
+                if self.keys[candidate.0 as usize] == key {
+                    return candidate;
+                }
+            }
+        }
+        let id = SourceKontReturnId(
+            u32::try_from(self.keys.len())
+                .expect("compiler-private source return identity exhausted"),
+        );
+        self.bytes_retained = self.bytes_retained.saturating_add(bucket.bytes as usize);
+        self.keys.push(key.clone());
+        self.definitions
+            .push(PartitionSourceKontReturnDescriptor { key });
+        self.by_bucket.entry(bucket_key).or_default().push(id);
+        id
+    }
+
+    pub(super) fn definition(
+        &self,
+        id: SourceKontReturnId,
+    ) -> Result<PartitionSourceKontReturnDescriptor, CraneliftBackendError> {
+        self.definitions.get(id.0 as usize).cloned().ok_or_else(|| {
+            unsupported(
+                "NativeSourceKontReturnV1",
+                "source return descriptor identity is out of bounds",
+            )
+        })
+    }
+
+    pub(super) fn counts(&self) -> (usize, usize, usize, usize) {
+        (
+            self.definitions.len(),
+            self.bytes_constructed,
+            self.bytes_retained,
+            self.exact_comparisons,
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum PartitionSourceResumeTarget {
     Kont(PartitionSourceNodeId),
@@ -2365,6 +2477,8 @@ struct PartitionSourceArmStaticKey {
     selected_scope: Option<PartitionSelectedScopeKey>,
     selected_has_parent: bool,
     cleanup_head: Option<PartitionCleanupSuffixId>,
+    source_return: Option<SourceKontReturnId>,
+    completed_producer_tail: Option<PartitionProducerTailCompletion>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2402,6 +2516,8 @@ impl PartitionSourceArmKey {
         selected_lineage: &[OwnedSourceSelectedContinuation],
         _terminal_outer: ContinuationCursorId,
         cleanup_head: Option<PartitionCleanupSuffixId>,
+        source_return: Option<SourceKontReturnId>,
+        completed_producer_tail: Option<PartitionProducerTailCompletion>,
         field_types: Vec<Type>,
         field_map: Vec<usize>,
     ) -> Self {
@@ -2434,6 +2550,8 @@ impl PartitionSourceArmKey {
             selected_scope: partition_scope_key(selected_scope),
             selected_has_parent: !selected_lineage.is_empty(),
             cleanup_head,
+            source_return,
+            completed_producer_tail,
         };
         Self {
             checked_join,
@@ -2453,9 +2571,20 @@ struct PartitionCleanupStepStaticKey {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+enum PartitionSourceKontEntryMode {
+    Node {
+        node: PartitionSourceNodeId,
+        resume_parent_return: Option<PartitionSourceNodeId>,
+    },
+    PostFanoutResume {
+        return_id: SourceKontReturnId,
+        node: PartitionSourceNodeId,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct PartitionSourceKontStaticKey {
-    node: PartitionSourceNodeId,
-    resume_parent_return: Option<PartitionSourceNodeId>,
+    entry_mode: PartitionSourceKontEntryMode,
     pending_exit_head: Option<PartitionRecursorNodeId>,
     pending_qualification_head: Option<PartitionRecursorQualificationNodeId>,
     pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
@@ -2469,6 +2598,8 @@ struct PartitionSourceKontStaticKey {
     selected_pending: Vec<PartitionEliminatorKey>,
     selected_scope: Option<PartitionSelectedScopeKey>,
     selected_has_parent: bool,
+    source_return: Option<SourceKontReturnId>,
+    completed_producer_tail: Option<PartitionProducerTailCompletion>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2503,12 +2634,16 @@ impl PartitionSourceKontKey {
         selected_scope: &Option<OwnedSelectedScope>,
         selected_lineage: &[OwnedSourceSelectedContinuation],
         _terminal_outer: ContinuationCursorId,
+        source_return: Option<SourceKontReturnId>,
+        completed_producer_tail: Option<PartitionProducerTailCompletion>,
         field_types: Vec<Type>,
         field_map: Vec<usize>,
     ) -> Self {
         let static_key = PartitionSourceKontStaticKey {
-            node,
-            resume_parent_return: None,
+            entry_mode: PartitionSourceKontEntryMode::Node {
+                node,
+                resume_parent_return: None,
+            },
             pending_exit_head,
             pending_qualification_head,
             pending_obligation_head,
@@ -2533,6 +2668,8 @@ impl PartitionSourceKontKey {
                 .collect(),
             selected_scope: partition_scope_key(selected_scope),
             selected_has_parent: !selected_lineage.is_empty(),
+            source_return,
+            completed_producer_tail,
         };
         Self {
             checked_join,
@@ -2559,12 +2696,16 @@ impl PartitionSourceKontKey {
         input: &Lowered,
         declaration_stack: &[RuntimeSymbol],
         active_recursive_invocations: &[CheckedRecursiveInvocationInstance],
+        source_return: Option<SourceKontReturnId>,
+        completed_producer_tail: Option<PartitionProducerTailCompletion>,
         field_types: Vec<Type>,
         field_map: Vec<usize>,
     ) -> Self {
         let static_key = PartitionSourceKontStaticKey {
-            node,
-            resume_parent_return: Some(parent_return),
+            entry_mode: PartitionSourceKontEntryMode::Node {
+                node,
+                resume_parent_return: Some(parent_return),
+            },
             pending_exit_head,
             pending_qualification_head,
             pending_obligation_head,
@@ -2586,6 +2727,71 @@ impl PartitionSourceKontKey {
             selected_pending: Vec::new(),
             selected_scope: None,
             selected_has_parent: false,
+            source_return,
+            completed_producer_tail,
+        };
+        Self {
+            checked_join,
+            required_kind,
+            static_bucket: partition_static_bucket(&static_key),
+            static_key: Arc::new(static_key),
+            field_types,
+            field_map,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn new_post_fanout(
+        return_id: SourceKontReturnId,
+        checked_join: PartitionCheckedJoinIdentity,
+        required_kind: ScalarMergeKind,
+        node: PartitionSourceNodeId,
+        pending_exit_head: Option<PartitionRecursorNodeId>,
+        pending_qualification_head: Option<PartitionRecursorQualificationNodeId>,
+        pending_obligation_head: Option<PartitionOpenControlObligationNodeId>,
+        producer_head: Option<usize>,
+        return_producer_tail: Option<usize>,
+        pending_computational_ih_call: Option<u64>,
+        input: &Lowered,
+        declaration_stack: &[RuntimeSymbol],
+        active_recursive_invocations: &[CheckedRecursiveInvocationInstance],
+        selected_ancestry: &[RecursorFrameProvenance],
+        selected_pending: &[OwnedPartitionEliminator],
+        selected_scope: &Option<OwnedSelectedScope>,
+        selected_lineage: &[OwnedSourceSelectedContinuation],
+        source_return: Option<SourceKontReturnId>,
+        completed_producer_tail: Option<PartitionProducerTailCompletion>,
+        field_types: Vec<Type>,
+        field_map: Vec<usize>,
+    ) -> Self {
+        let static_key = PartitionSourceKontStaticKey {
+            entry_mode: PartitionSourceKontEntryMode::PostFanoutResume { return_id, node },
+            pending_exit_head,
+            pending_qualification_head,
+            pending_obligation_head,
+            producer_head,
+            return_producer_tail,
+            pending_computational_ih_call,
+            input: partition_lowered_key(input),
+            declaration_stack: declaration_stack.to_vec(),
+            active_recursive_sources: active_recursive_invocations
+                .iter()
+                .map(|instance| {
+                    (
+                        instance.source.into(),
+                        instance.dynamic_splice_edge.is_some(),
+                    )
+                })
+                .collect(),
+            selected_has_ancestry: !selected_ancestry.is_empty(),
+            selected_pending: selected_pending
+                .iter()
+                .map(partition_eliminator_key)
+                .collect(),
+            selected_scope: partition_scope_key(selected_scope),
+            selected_has_parent: !selected_lineage.is_empty(),
+            source_return,
+            completed_producer_tail,
         };
         Self {
             checked_join,
@@ -2695,10 +2901,7 @@ impl PartitionSemanticStateKey {
 }
 
 impl PartitionContinuationKey {
-    pub(super) fn with_return_producer_tail(
-        mut self,
-        return_producer_tail: Option<usize>,
-    ) -> Self {
+    pub(super) fn with_return_producer_tail(mut self, return_producer_tail: Option<usize>) -> Self {
         self.return_producer_tail = return_producer_tail;
         self
     }
@@ -3281,11 +3484,14 @@ impl PartitionContinuationInterner {
                 .get(state_id)
                 .and_then(Option::as_ref),
         ) {
-            (Some(expected), Some(PartitionTailExitDisposition::Completed {
-                tail_site_id,
-                scalar_kind,
-                ..
-            })) if *tail_site_id == expected && *scalar_kind == contract.required_kind => {}
+            (
+                Some(expected),
+                Some(PartitionTailExitDisposition::Completed {
+                    tail_site_id,
+                    scalar_kind,
+                    ..
+                }),
+            ) if *tail_site_id == expected && *scalar_kind == contract.required_kind => {}
             (
                 Some(expected),
                 Some(PartitionTailExitDisposition::DeclaredAbandon { tail_site_id, .. }),
@@ -3573,6 +3779,8 @@ pub(super) struct SourceArmPartitionWorkItem {
     pub(super) terminal_outer: ContinuationCursorId,
     pub(super) cleanup_head: Option<PartitionCleanupSuffixId>,
     pub(super) cleanup_capture_pointer: Option<Value>,
+    pub(super) source_return: Option<PartitionSourceKontReturnCursor>,
+    pub(super) completed_producer_tail: Option<PartitionProducerTailCompletion>,
     pub(super) ledger_baseline: PartitionLedgerBaseline,
     pub(super) return_contract: PartitionStateReturnContract,
 }
@@ -3614,6 +3822,9 @@ pub(super) struct SourceKontPartitionWorkItem {
     pub(super) selected_scope: Option<OwnedSelectedScope>,
     pub(super) selected_lineage: Vec<OwnedSourceSelectedContinuation>,
     pub(super) terminal_outer: ContinuationCursorId,
+    pub(super) source_return: Option<PartitionSourceKontReturnCursor>,
+    pub(super) completed_producer_tail: Option<PartitionProducerTailCompletion>,
+    pub(super) post_fanout_return_id: Option<SourceKontReturnId>,
     pub(super) ledger_baseline: PartitionLedgerBaseline,
     pub(super) return_contract: PartitionStateReturnContract,
 }
