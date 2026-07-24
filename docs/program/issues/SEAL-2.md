@@ -1,13 +1,13 @@
 ---
 id: SEAL-2
 title: carrier producer closure, over a derived enumeration
-status: draft
+status: merged
 owner: foundation
 size: M
 gate: none
 depends_on: [RT-PARITY, BUDGET-EFF]
 blocks: []
-github: null
+github: "PR #912 @ 4ac9141e (origin/main, CI green)"
 origin: evt_74mjc4txd9y1e
 ---
 

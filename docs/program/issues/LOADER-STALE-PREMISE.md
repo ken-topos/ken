@@ -1,7 +1,7 @@
 ---
 id: LOADER-STALE-PREMISE
 title: "\"no disk loader yet\" is stale in 9 places — including already-landed library/ content"
-status: ready
+status: merged
 owner: doc
 size: S
 gate: none

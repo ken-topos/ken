@@ -58,10 +58,37 @@ Two clauses, both load-bearing, both learned the hard way:
 |---|---|---|
 | `SPAN-SEAL` | ✅ merged | co-indexing for carrier producers |
 | `RT-PARITY` | ✅ closed | interp/native parity — **necessary, not sufficient**, see (a) |
-| `BUDGET-EFF` | ▶ **active** | `remaining` bounded by the effective request |
-| `SEAL-2` | queued | derived carrier-producer enumeration; `depends_on: [RT-PARITY, BUDGET-EFF]` |
-| `RT-ESCAPE` | queued | ⚠ `size: TBD` — size it before releasing |
-| `RT-SPLIT` | ⚠ **see below** | probably NOT a PX8 semantic dependency |
+| `BUDGET-EFF` | ✅ merged | `remaining` bounded by the effective request |
+| `SEAL-2` | ✅ merged | derived carrier-producer enumeration (PR #912 @ 4ac9141e, CI green) |
+| `RT-ESCAPE` | ✅ merged | native-lowering completeness (PR #911 @ 238a5c5d, CI green) |
+| `RT-SPLIT` | ✅ merged | ruled NOT a PX8 semantic dependency (see below) — does not gate |
+
+> **The known-sufficient set went fully green as of `origin/main = 4ac9141e`
+> (2026-07-23) — and PX8 STILL DID NOT CLOSE.** The Architect's grounded
+> closure-property verdict (`evt_163mfgjs7fkh8`) derived the live reified-value
+> population from the closed Rust sums (`ReadEof`, `ReadSome(BufferSpan,
+> TransferCount)`, `Wrote(TransferCount)`, `SemanticErrorV1` — `crates/ken-host/
+> src/effect_v1.rs:2089-2101`) rather than from the WP list, and found the
+> property **fails on both clauses**. This is exactly the outcome this file was
+> created to catch: the named mechanisms all merged, and the property still had
+> holes. **Three closure-insufficiency items now gate PX8** (do not close until
+> all three discharge AND the property is re-verified):
+>
+> | gap | clause | item | shovel-readiness |
+> |---|---|---|---|
+> | A1 — closed-endpoint `start==capacity` host-rejects instead of deriving `ReadEof` | (a) behavior | [[PX8-F-CAP-41]] | bounded fix + RED conformance oracle; **operator queuing gate** |
+> | A2 — interp capped-short `Wrote` no absolute oracle; PR-C error identities unreached | (a) evidence | [[PX8-WROTE-ABS]] | `Wrote` oracle shovel-ready; error-row set needs a normative scoping call |
+> | (b) — `BufferSpan` has no originating-buffer identity; `freeze` accepts a same-shape foreign span | (b) provenance | [[PX8-SPAN-PROV]] | ✅ **MERGED @ `cbf6a298` (PR #914), 2026-07-23 — clause-(b) DISCHARGED**; deferred native cells → [[RT-NATIVE-FNSPLIT]] |
+>
+> **UPDATE 2026-07-23:** clause-(b) [[PX8-SPAN-PROV]] MERGED (@ `cbf6a298`,
+> PR #914) — **DISCHARGED**. **Two clause-(a) items remain:** [[PX8-F-CAP-41]]
+> (A1 — operator queuing gate RELEASED; running as Foundation Track 2 alongside
+> [[RT-NATIVE-FNSPLIT]]) and [[PX8-WROTE-ABS]] (A2 — needs a normative scoping
+> call on the PR-C error-row set). PX8 does NOT close until both discharge AND
+> the closure property is re-verified (absolute, co-indexed, both engines).
+>
+> PX8 stays `active`; **ABI-R3 and PX9 stay held.** This IS the artifact-backed
+> gate working — a list-green close would have shipped three real defects.
 
 ### ⚠ RT-SPLIT is bundled into PX8 by the docs, and probably should not be
 

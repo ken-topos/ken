@@ -452,6 +452,54 @@ particular, a local `wp/<ID>` branch ready for publisher-path merge handling is
 merge-Decision request is `review_request`. When unsure, `question` is always
 accepted.
 
+## 8a. ⛔ ARCHITECT AND LIBRARIAN ARE PARALLEL, OVER DISJOINT DOMAINS
+
+**Operator directive, 2026-07-22.** They review **at the same time**, each in
+their own domain, and **they should not need to interact.**
+
+| reviewer | domain |
+|---|---|
+| **Architect** | `catalog/`, `crates/` |
+| **Librarian** | `library/` |
+
+⛔ **Neither is a gate on the other, and neither's approval is a precondition for
+the other starting.** A candidate touching both domains goes to **both at once**.
+
+### The rule that actually saves the time
+
+⛔ **A fold in one domain does NOT invalidate the other domain's approval.**
+An approval binds the exact SHA **for its own domain**. When a fold touches only
+`crates/`, the Librarian's `library/` approval **carries forward** — re-run the
+Librarian only if the fold touched `library/`.
+
+★ **This is why it matters, measured on SRC-ATTEST 2026-07-22:** the WP was gated
+*Librarian QA → Architect*, in series. Three Architect rejections, each landing
+in `scripts/`, each sending the candidate **back through a full Librarian
+re-review of `library/` that no fold had touched.** Every review found something
+real — the serialization was not catching bugs, it was **re-asking a question
+already answered** while the fleet's top priority sat blocked behind it. Roughly
+an hour, entirely in the handoff, not in the work.
+
+⇒ **Serial review across disjoint domains buys nothing and costs a full
+round-trip per iteration.** If two reviewers cannot invalidate each other's
+finding, they must not be sequenced.
+
+### Assembling parallel verdicts
+
+- Each reviewer votes on the **exact SHA** for **their** domain, and says which
+  domain they bound.
+- The **owning leader** assembles: the candidate is ready when **every touched
+  domain has a live approval on the current SHA**.
+- ⛔ On a fold, the leader re-requests **only the domains the fold touched** —
+  and must state which approvals it is carrying forward, so a stale carry-forward
+  is visible rather than assumed.
+
+⚠ **`scripts/` and `agent/` are not in the operator's split.** Until the operator
+rules, treat publisher/tooling changes under `scripts/` as the **Architect's**
+review surface (machinery, not library content) and `agent/` as the **Steward's**
+own. **This paragraph is the Steward's inference, not an operator ruling** —
+flagged as such so it is cheap to correct.
+
 ## 9. Topology is invariant — including the query edges
 
 Who hands off to whom, who reviews, who merges, and **which cross-team query
@@ -577,6 +625,53 @@ it has inverted its purpose.** Three binding rules:
 origin/main` with paths. **If nothing in the window touched product, stop and
 find out why** — the answer is never "the corpus needed attention." It is
 usually that a ring is stalled and something is reporting it as fine.
+
+## 10⁻a. ⛔ THE ADVERSARY CHANNEL IS REPORT-ONLY AND SCOPED TO PRODUCT
+
+**Operator directive, 2026-07-22.** §10⁻ named the failure — a high-quality
+finding stream plus a Steward who services it immediately is a mechanism for
+crowding out product — but left the Steward to police themselves, which is the
+one thing the failure mode guarantees will not work. **This is the structural
+version, and it binds the edge rather than the intention.**
+
+### Scope — what the adversary may report on
+
+| may report | may NOT report |
+|---|---|
+| **`crates/`** — Ken's implementation | `scripts/` — publisher, harnesses, tooling |
+| **catalog / `library/`** issues | `agent/` — playbooks, COORDINATION, memory |
+| | process, workflow, coordination mechanics |
+| | anything else |
+
+⛔ **A report outside that scope is out of scope even if it is correct, cheap,
+and load-bearing.** The value of the finding is not the test — the *scope* is
+the test. Tooling and process defects are found by the ring that trips over
+them, in the course of product work, or they wait.
+
+### Traffic — the complete permitted set
+
+The edge is **report-only and one-directional**. In full:
+
+1. The Steward **may notify** the adversary on a code merge.
+2. The Steward **may receive** reports.
+3. **Nothing else.**
+
+⛔ **No acknowledgement.** No "taken", no "committed as `<sha>`", no thanks, no
+routing note, no explanation of why something was queued, no correction of the
+adversary's framing, and **no reply of any kind** — including a reply whose
+content is that no reply is owed. **Do not answer a report.** Act on it inside
+product work, or do not.
+
+⛔ **No conversation, no thread.** Do not ask the adversary to hunt something,
+do not confirm a finding, do not agree or disagree with it in the channel, and
+do not invite follow-up. **A request for an attack is a conversation** — the
+Steward does not make one.
+
+★ **Why the ack is banned specifically, since it is the part that will feel
+wrong to withhold:** the acknowledgement is where the servicing loop restarts.
+It costs a message, invites a reply, converts a report into a thread, and every
+step is individually courteous. **The prohibition is the mechanism; a Steward
+who may reply "just this once" has no rule at all.**
 
 ## 10. Knowledge promotion: retro → synthesis → promotion ladder
 

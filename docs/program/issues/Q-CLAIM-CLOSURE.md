@@ -1,7 +1,7 @@
 ---
 id: Q-CLAIM-CLOSURE
 title: "Q-RESIDUE adversary findings — claim-loss in multi-claim test blocks, plus R1/R2/R3"
-status: ready
+status: merged
 owner: runtime
 size: S
 gate: none
@@ -113,8 +113,21 @@ the `= Axiom` drops were).
 2. R2/R3: either make the cited evidence real, or correct the claim to what is
    actually checked. Both are valid; an honest narrower claim beats a false
    broader one.
-3. For each of the three multi-claim tests, **enumerate the claims the original
-   block carried** and mark each replaced or consciously dropped, with reason.
+3. For **every multi-claim block this WP actually reworks** — the
+   `generated_manifest_is_closed…` test in `ken-host/src/lib.rs` plus the cat5
+   R2/R3/R4 blocks — **enumerate the claims the original block carried** and
+   mark each replaced or consciously dropped, with reason.
+   ⚠ **Scope note (verified against the tree 2026-07-22):** the "three
+   multi-claim tests" of the generator-finding table is a **Q-RESIDUE**
+   artifact — that table spanned the whole multi-team rework
+   (`eval.rs` + `cat5` + `compare_ord` + `ken-host`). Only
+   `generated_manifest_is_closed…` is in *this* WP's file scope.
+   `list_instance_routes…` lives in
+   `crates/ken-elaborator/tests/compare_ord_lexicographic_acceptance.rs` (out
+   of scope → tracked as **`Q-CLAIM-COMPARE-ORD`**), and
+   `resource_table_lifetime…` no longer exists in `crates/` under that name.
+   ⛔ **Do not reach into `compare_ord` or `eval.rs`** — that is a file-set
+   expansion into another review lane.
 4. R4's narrowings: acknowledge in-test or restore. Silence is the defect.
 5. Mutation proof per reworked claim — **per claim, not per test.** That is the
    whole point of this item.
