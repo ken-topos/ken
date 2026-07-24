@@ -1,7 +1,7 @@
 ---
 id: DOC-GATE-CONTROL-BINDING
 title: "validation-gate registry: make the two DOC-GATE-RECORD-AXIS checks orphan-proof by lifting them to pure detectors with committed controls"
-status: ready
+status: active
 owner: verify
 size: S
 gate: none
@@ -107,10 +107,24 @@ new idiom.
 
 The commit message on `main` at `64b0811f` claims *"binds coverage on the record
 axis, with a positive control that fails when the binding is removed."* **Both
-halves are false against the tree**: there was no positive control, and the
-mechanism pins **one instance** via one hard-coded path literal rather than
-binding an axis. A future registry row whose `applies` predicate selects a wider
-set than its runner inspects is exactly as unbound as `generated-current` was.
+halves are false against the tree** — but be precise about *why*, because the
+imprecise version is unfair to the ring:
+
+- **QA DID run a genuine positive control** — it added a real second
+  `kind = "status"` record and watched the assertion fire. The property was
+  verified. **What is missing is a COMMITTED control.** A control that was *run*
+  proves the property today; only a committed artifact guards it tomorrow. The
+  publish sentence claimed the second in the present tense while the ring had
+  honestly delivered the first.
+- **The mechanism pins one instance**, via one hard-coded path literal, rather
+  than binding an axis. A future registry row whose `applies` predicate selects
+  a wider set than its runner inspects is exactly as unbound as
+  `generated-current` was.
+
+★ QA named the root cause in its retro, and it is a **frame** defect: *"the
+frame made 'run a control' read as complete, while 'leave a control behind' was
+an unstated distinct obligation."* That is why AC-3 below is phrased as an
+artifact rather than an activity.
 
 That text was the **Steward's publish description**, authored *after* the last
 review gate, and it is now permanent in the git log. **It is the one artifact in

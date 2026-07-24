@@ -1,10 +1,11 @@
 ---
 scope: build
 audience: (see scope README)
-source: RT-NATIVE-FNSPLIT Boundary A review, 2026-07-24 — three independent
-  instances in one candidate, found by two seats (Steward on 92cac774,
-  Architect on e70bb2a5, evt_158mxvyp2qfvn). Three instances / two seats / one
-  WP clears the COORDINATION §10 promotion bar.
+source: RT-NATIVE-FNSPLIT Boundary A, 2026-07-24 — three instances in one
+  candidate (Steward on 92cac774; Architect on e70bb2a5, evt_158mxvyp2qfvn),
+  plus a fourth the Steward committed in a WP guard an hour after writing this
+  file. Retros (evt_2y7q11tz5jk99) confirmed a SINGLE common cause across all
+  three, reached independently by implementer, QA, and leader.
 ---
 
 # A check that measures a **proxy** passes for the wrong reason — and looks identical to passing for the right one
@@ -51,6 +52,20 @@ out-of-range `StaticNodeId(u32::MAX)` made the reachable set
 `{bad-id, Terminal, TrapTerminal}` — **same count, wrong set** — so validation
 returned `Ok(())` while the real node was unreachable. The count balanced.
 
+**4. Path overlap as a proxy for content replay (the Steward, one hour after
+writing this file).** A WP guard said: *"if `git diff --stat origin/main...<B
+tip>` still shows Boundary A's files, the re-anchor was done wrong."* But
+Boundary B's whole job was to make A's plan load-bearing, so it **must** edit
+A's files. The guard was **unsatisfiable by construction** — a correct B could
+never pass it. The property was *"A's content was not re-introduced"*; the
+evidence that settled it was content, not paths: A's signature tokens appearing
+**exactly once** (`B=1, main=1`) and A's file at `main`'s size plus B's net
+delta rather than doubled.
+
+★ **That fourth instance is the most useful one in this file**: the lesson was
+already written down and indexed, and it did not fire. Recording a discipline
+does not install it — only a step in a checklist does.
+
 ## The shared shape
 
 Each check measured a quantity that **agrees with the property on the cases the
@@ -63,6 +78,32 @@ code's operands are its nouns. *"A dynamic activation cannot change static
 helper identity"* has **two** operands — an activation and a derived identity.
 Code containing neither an activation nor a derivation is not testing that
 sentence, whatever it is named.
+
+## ⭐ The one test that catches all of them — build the discriminating pair
+
+The Boundary A ring converged on this independently, from three seats, and it is
+sharper than any advice below:
+
+> **Before accepting a check, construct a case that PRESERVES the proxy and
+> VIOLATES the property.** If you can build one, the check is broken. If you
+> genuinely cannot, the proxy is sound *for that claim*.
+
+It falls out immediately in every instance: a second frame leaves `x == x` true
+(1); an unlabelled incoming edge leaves the label-count true (2); an
+out-of-range root leaves the cardinality true (3); an incremental edit to A's
+file leaves the path present (4). **Each pair takes under a minute to imagine
+and none of them were.**
+
+⚠ **Arithmetic corroborates but cannot close.** A census that comes out affine,
+a count that balances, a size that matches — these are consistent with the
+property and also consistent with its violation. Do not let a satisfying number
+substitute for the pair.
+
+⇒ **Frame authors and leaders: this is a plan-time obligation, not a review-time
+one.** The Boundary A leader's carry: *pair every structural claim with its
+exact counterexample class — alternate edge, alternate activation, alternate
+entry — before implementation begins.* Naming the counterexample class in the
+frame is what stops a proxy-first test from being authored at all.
 
 ## How to apply
 
