@@ -277,6 +277,7 @@ struct Lowering<'a> {
     partition_metrics: PartitionCompilationMetrics,
     partition_next_site: u64,
     partition_branch_returns: PartitionBranchReturnLedger,
+    partition_completed_tails: CompletedTailAuthorityLedger,
     partition_producer_sites: BTreeMap<usize, PartitionProducerKontSitePlan>,
     partition_producer_site_interner: PartitionProducerKontSiteInterner,
     partition_next_producer_site: usize,

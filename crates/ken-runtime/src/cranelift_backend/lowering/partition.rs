@@ -4137,6 +4137,155 @@ pub(super) struct PartitionArmOuterCallWitness {
     pub(super) branch_return: PartitionBranchReturnDescriptor,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CompletedTailCanonicalSuffix {
+    ExitCodePayloadAndZeroTagReturn,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct CompletedTailReservationDescriptor {
+    pub(super) caller_state_id: usize,
+    pub(super) source_return_id: SourceKontReturnId,
+    pub(super) final_scalar: PartitionFinalScalarReturnAuthority,
+    pub(super) expected_tail_site_id: usize,
+    pub(super) checked_join: PartitionCheckedJoinIdentity,
+    pub(super) required_kind: ScalarMergeKind,
+    pub(super) terminal_outer: ContinuationCursorId,
+    pub(super) canonical_suffix: CompletedTailCanonicalSuffix,
+}
+
+pub(super) struct CompletedTailReservationAuthority {
+    id: usize,
+}
+
+pub(super) struct CompletedTailAuthority {
+    id: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CompletedTailBinding {
+    producer_callee_state_id: usize,
+    pending_call_edge: usize,
+    call_inst: Inst,
+}
+
+#[derive(Clone, Debug)]
+struct CompletedTailAuthorityRecord {
+    descriptor: CompletedTailReservationDescriptor,
+    binding: Option<CompletedTailBinding>,
+    sealed_witness: Option<PartitionNormalCompletionWitnessId>,
+}
+
+#[derive(Default)]
+pub(super) struct CompletedTailAuthorityLedger {
+    records: Vec<CompletedTailAuthorityRecord>,
+}
+
+impl CompletedTailAuthorityLedger {
+    pub(super) fn reserve(
+        &mut self,
+        descriptor: CompletedTailReservationDescriptor,
+    ) -> CompletedTailReservationAuthority {
+        let id = self.records.len();
+        self.records.push(CompletedTailAuthorityRecord {
+            descriptor,
+            binding: None,
+            sealed_witness: None,
+        });
+        CompletedTailReservationAuthority { id }
+    }
+
+    pub(super) fn bind(
+        &mut self,
+        reservation: CompletedTailReservationAuthority,
+        producer_callee_state_id: usize,
+        pending_call_edge: usize,
+        call_inst: Inst,
+    ) -> Result<CompletedTailAuthority, CraneliftBackendError> {
+        let record = self.records.get_mut(reservation.id).ok_or_else(|| {
+            unsupported(
+                "NativeCompletedTailV1",
+                "completed-tail reservation names no authority record",
+            )
+        })?;
+        if record.binding.is_some() || record.sealed_witness.is_some() {
+            return Err(unsupported(
+                "NativeCompletedTailV1",
+                "completed-tail authority was rebound or replayed",
+            ));
+        }
+        record.binding = Some(CompletedTailBinding {
+            producer_callee_state_id,
+            pending_call_edge,
+            call_inst,
+        });
+        Ok(CompletedTailAuthority { id: reservation.id })
+    }
+
+    pub(super) fn bound_descriptor(
+        &self,
+        authority: &CompletedTailAuthority,
+        producer_callee_state_id: usize,
+        pending_call_edge: usize,
+        call_inst: Inst,
+    ) -> Result<CompletedTailReservationDescriptor, CraneliftBackendError> {
+        let record = self.records.get(authority.id).ok_or_else(|| {
+            unsupported(
+                "NativeCompletedTailV1",
+                "completed-tail target names no authority record",
+            )
+        })?;
+        if record.binding
+            != Some(CompletedTailBinding {
+                producer_callee_state_id,
+                pending_call_edge,
+                call_inst,
+            })
+            || record.sealed_witness.is_some()
+        {
+            return Err(unsupported(
+                "NativeCompletedTailV1",
+                "completed-tail target disagrees with its exact bound call edge",
+            ));
+        }
+        Ok(record.descriptor.clone())
+    }
+
+    pub(super) fn seal(
+        &mut self,
+        authority: CompletedTailAuthority,
+        witness: PartitionNormalCompletionWitnessId,
+    ) -> Result<(), CraneliftBackendError> {
+        let record = self.records.get_mut(authority.id).ok_or_else(|| {
+            unsupported(
+                "NativeCompletedTailV1",
+                "completed-tail seal names no authority record",
+            )
+        })?;
+        if record.binding.is_none() || record.sealed_witness.replace(witness).is_some() {
+            return Err(unsupported(
+                "NativeCompletedTailV1",
+                "completed-tail authority was dropped, replayed, or sealed twice",
+            ));
+        }
+        Ok(())
+    }
+
+    pub(super) fn require_complete(&self) -> Result<(), CraneliftBackendError> {
+        if self
+            .records
+            .iter()
+            .any(|record| record.binding.is_none() || record.sealed_witness.is_none())
+        {
+            return Err(unsupported(
+                "NativeCompletedTailV1",
+                "completed-tail authority ledger contains an unbound or unsealed reservation",
+            ));
+        }
+        Ok(())
+    }
+}
+
 pub(super) enum PartitionPendingCallTarget {
     Ordinary,
     FinalScalarArm {
@@ -4157,6 +4306,10 @@ pub(super) enum PartitionPendingCallTarget {
         forward_inst: Inst,
         target_block: cranelift_codegen::ir::Block,
         source_return: SourceKontReturnId,
+    },
+    CompletedTailSourceKont {
+        authority: CompletedTailAuthority,
+        caller_tag_pointer: Value,
     },
 }
 
@@ -4187,6 +4340,29 @@ enum PartitionExitEvidence {
         callee_state_id: usize,
         tail_site_id: usize,
         scalar_kind: ScalarMergeKind,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct PartitionNormalCompletionWitnessId(u32);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PartitionNormalCompletionWitnessNodeId(u32);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PartitionNormalCompletionWitnessNode {
+    Origin {
+        state_id: usize,
+        tail_site_id: usize,
+        transfer_site_id: u64,
+        scalar_kind: ScalarMergeKind,
+        next: Option<PartitionNormalCompletionWitnessNodeId>,
+    },
+    Dependency {
+        caller_state_id: usize,
+        callee_state_id: usize,
+        child_witness_id: PartitionNormalCompletionWitnessId,
+        next: Option<PartitionNormalCompletionWitnessNodeId>,
     },
 }
 
@@ -4228,6 +4404,8 @@ pub(super) struct PartitionContinuationInterner {
     contracts: Vec<PartitionStateReturnContract>,
     exit_summaries: Vec<PartitionStateExitSummary>,
     exit_evidence: Vec<Vec<PartitionExitEvidence>>,
+    normal_witness_roots: Vec<Option<PartitionNormalCompletionWitnessNodeId>>,
+    normal_witness_nodes: Vec<PartitionNormalCompletionWitnessNode>,
     root_tail_completion_dependencies: BTreeSet<usize>,
     edges: usize,
     emitted: usize,
@@ -4352,6 +4530,7 @@ impl PartitionContinuationInterner {
         self.exit_summaries
             .push(PartitionStateExitSummary::default());
         self.exit_evidence.push(Vec::new());
+        self.normal_witness_roots.push(None);
         Ok((state_id, state))
     }
 
@@ -4578,6 +4757,7 @@ impl PartitionContinuationInterner {
             ));
         }
         self.solve_exit_summaries()?;
+        self.build_normal_completion_witnesses()?;
         for callee_state_id in &self.root_tail_completion_dependencies {
             let summary = self.exit_summaries.get(*callee_state_id).ok_or_else(|| {
                 unsupported(
@@ -4596,6 +4776,210 @@ impl PartitionContinuationInterner {
             }
         }
         Ok(())
+    }
+
+    fn build_normal_completion_witnesses(&mut self) -> Result<(), CraneliftBackendError> {
+        if !self.normal_witness_nodes.is_empty()
+            || self.normal_witness_roots.iter().any(Option::is_some)
+        {
+            return Err(unsupported(
+                "NativeCompletedTailV1",
+                "normal completion witness graph was built more than once",
+            ));
+        }
+        for state_id in 0..self.states.len() {
+            if !matches!(
+                self.exit_summaries[state_id].normal,
+                PartitionNormalExitSummary::Completed { .. }
+            ) {
+                continue;
+            }
+            let mut edges = self.exit_evidence[state_id]
+                .iter()
+                .filter_map(|edge| match *edge {
+                    PartitionExitEvidence::NormalOrigin {
+                        tail_site_id,
+                        transfer_site_id,
+                        scalar_kind,
+                    } => Some((0_u8, tail_site_id, transfer_site_id, scalar_kind, 0_usize)),
+                    PartitionExitEvidence::Dependency {
+                        callee_state_id,
+                        tail_site_id,
+                        scalar_kind,
+                    } if matches!(
+                        self.exit_summaries[callee_state_id].normal,
+                        PartitionNormalExitSummary::Completed { .. }
+                    ) =>
+                    {
+                        Some((
+                            1_u8,
+                            tail_site_id,
+                            u64::try_from(callee_state_id).unwrap_or(u64::MAX),
+                            scalar_kind,
+                            callee_state_id,
+                        ))
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            edges.sort_by_key(|(kind, tail, transfer, scalar, callee)| {
+                (*kind, *tail, *transfer, *scalar as u8, *callee)
+            });
+            edges.dedup();
+            let mut next = None;
+            for (kind, tail_site_id, transfer_site_id, scalar_kind, callee_state_id) in
+                edges.into_iter().rev()
+            {
+                let node = if kind == 0 {
+                    PartitionNormalCompletionWitnessNode::Origin {
+                        state_id,
+                        tail_site_id,
+                        transfer_site_id,
+                        scalar_kind,
+                        next,
+                    }
+                } else {
+                    PartitionNormalCompletionWitnessNode::Dependency {
+                        caller_state_id: state_id,
+                        callee_state_id,
+                        child_witness_id: PartitionNormalCompletionWitnessId(
+                            u32::try_from(callee_state_id).map_err(|_| {
+                                unsupported(
+                                    "NativeCompletedTailV1",
+                                    "normal witness state identity exceeded its fixed-width ID",
+                                )
+                            })?,
+                        ),
+                        next,
+                    }
+                };
+                let id = PartitionNormalCompletionWitnessNodeId(
+                    u32::try_from(self.normal_witness_nodes.len()).map_err(|_| {
+                        unsupported(
+                            "NativeCompletedTailV1",
+                            "normal witness graph exceeded its fixed-width node identity",
+                        )
+                    })?,
+                );
+                self.normal_witness_nodes.push(node);
+                next = Some(id);
+            }
+            if next.is_none() {
+                return Err(unsupported(
+                    "NativeCompletedTailV1",
+                    "completed summary has no exact normal completion witness",
+                ));
+            }
+            self.normal_witness_roots[state_id] = next;
+        }
+        Ok(())
+    }
+
+    pub(super) fn normal_completion_witness(
+        &self,
+        state_id: usize,
+        expected_tail_site_id: usize,
+        expected_kind: ScalarMergeKind,
+    ) -> Result<PartitionNormalCompletionWitnessId, CraneliftBackendError> {
+        let root = self
+            .normal_witness_roots
+            .get(state_id)
+            .and_then(|root| *root)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeCompletedTailV1",
+                    "completed-tail edge has no sealed normal witness root",
+                )
+            })?;
+        let mut roots = vec![PartitionNormalCompletionWitnessId(
+            u32::try_from(state_id).map_err(|_| {
+                unsupported(
+                    "NativeCompletedTailV1",
+                    "normal witness state identity exceeded its fixed-width ID",
+                )
+            })?,
+        )];
+        let mut seen_roots = BTreeSet::new();
+        let mut origin_count = 0_usize;
+        while let Some(witness) = roots.pop() {
+            if !seen_roots.insert(witness.0) {
+                continue;
+            }
+            let mut node = self
+                .normal_witness_roots
+                .get(witness.0 as usize)
+                .and_then(|root| *root)
+                .ok_or_else(|| {
+                    unsupported(
+                        "NativeCompletedTailV1",
+                        "normal witness dependency names no sealed child root",
+                    )
+                })?;
+            loop {
+                match self.normal_witness_nodes.get(node.0 as usize).copied() {
+                    Some(PartitionNormalCompletionWitnessNode::Origin {
+                        state_id: origin_state,
+                        tail_site_id,
+                        transfer_site_id,
+                        scalar_kind,
+                        next,
+                    }) => {
+                        if tail_site_id != expected_tail_site_id
+                            || scalar_kind != expected_kind
+                            || transfer_site_id == u64::MAX
+                            || origin_state >= self.states.len()
+                        {
+                            return Err(unsupported(
+                                "NativeCompletedTailV1",
+                                "normal completion origin is incompatible with final contract",
+                            ));
+                        }
+                        origin_count = origin_count.saturating_add(1);
+                        let Some(next) = next else { break };
+                        node = next;
+                    }
+                    Some(PartitionNormalCompletionWitnessNode::Dependency {
+                        caller_state_id,
+                        callee_state_id,
+                        child_witness_id,
+                        next,
+                    }) => {
+                        if caller_state_id != witness.0 as usize
+                            || child_witness_id.0 as usize != callee_state_id
+                        {
+                            return Err(unsupported(
+                                "NativeCompletedTailV1",
+                                "normal completion dependency changed its exact topology",
+                            ));
+                        }
+                        roots.push(child_witness_id);
+                        let Some(next) = next else { break };
+                        node = next;
+                    }
+                    None => {
+                        return Err(unsupported(
+                            "NativeCompletedTailV1",
+                            "normal completion witness names no fixed-width graph node",
+                        ));
+                    }
+                }
+            }
+        }
+        if origin_count == 0 {
+            return Err(unsupported(
+                "NativeCompletedTailV1",
+                "normal completion witness has no reachable exact origin",
+            ));
+        }
+        let _ = root;
+        Ok(PartitionNormalCompletionWitnessId(
+            u32::try_from(state_id).map_err(|_| {
+                unsupported(
+                    "NativeCompletedTailV1",
+                    "normal witness state identity exceeded its fixed-width ID",
+                )
+            })?,
+        ))
     }
 
     fn solve_exit_summaries(&mut self) -> Result<(), CraneliftBackendError> {
