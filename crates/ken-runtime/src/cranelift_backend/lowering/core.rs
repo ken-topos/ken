@@ -188,6 +188,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         partition_next_site: 0,
         partition_branch_returns: PartitionBranchReturnLedger::default(),
         partition_producer_sites: BTreeMap::new(),
+        partition_producer_site_interner: PartitionProducerKontSiteInterner::default(),
         partition_next_producer_site: 0,
         active_partition_producer_kont: None,
         active_partition_return_kind: None,
@@ -2087,17 +2088,26 @@ impl<'a> Lowering<'a> {
                 };
                 (checked_join, ScalarMergeKind::ExitCode)
             };
-        let outer = self.active_partition_producer_kont;
+        let outer = if let Some(outer) = self.active_partition_producer_kont {
+            outer
+        } else {
+            self.push_done_producer_kont(
+                builder,
+                checked_join.clone(),
+                return_kind,
+                PartitionProducerKontTerminalIdentity::CheckedJoin,
+            )?
+        };
         let successor = if owned.is_empty() {
             outer
         } else {
-            Some(self.push_owned_producer_kont(
+            self.push_owned_producer_kont(
                 builder,
                 owned,
                 outer,
                 checked_join.clone(),
                 return_kind,
-            )?)
+            )?
         };
         self.push_oriented_return_producer_kont(
             builder,
@@ -2113,42 +2123,98 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         owned: Vec<OwnedPartitionEliminator>,
-        mut successor: Option<PartitionProducerKontCursor>,
+        mut successor: PartitionProducerKontCursor,
         checked_join: PartitionCheckedJoinIdentity,
         return_kind: ScalarMergeKind,
     ) -> Result<PartitionProducerKontCursor, CraneliftBackendError> {
-        if owned.is_empty() {
-            return Err(unsupported(
-                "NativeProducerContinuationStepV1",
-                "empty eliminator sequence has no producer step",
-            ));
-        }
         for eliminator in owned.into_iter().rev() {
-            successor = Some(self.push_one_owned_producer_kont(
+            successor = self.push_one_owned_producer_kont(
                 builder,
                 eliminator,
                 successor,
                 checked_join.clone(),
                 return_kind,
-            )?);
+            )?;
         }
-        Ok(successor.expect("non-empty eliminator sequence builds one producer step"))
+        Ok(successor)
+    }
+
+    fn intern_producer_kont_site(
+        &mut self,
+        plan: PartitionProducerKontSitePlan,
+    ) -> Result<usize, CraneliftBackendError> {
+        let key = PartitionProducerKontSiteKey::new(
+            &plan.action,
+            plan.successor,
+            plan.checked_join.clone(),
+            plan.return_kind,
+        );
+        if let Some(site_id) = self.partition_producer_site_interner.lookup(&key) {
+            return Ok(site_id);
+        }
+        let site_id = self.partition_next_producer_site;
+        self.partition_next_producer_site = self
+            .partition_next_producer_site
+            .checked_add(1)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "producer continuation site identity exhausted",
+                )
+            })?;
+        self.partition_producer_site_interner.insert(site_id, key)?;
+        if self.partition_producer_sites.insert(site_id, plan).is_some() {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "producer continuation site was planned twice",
+            ));
+        }
+        Ok(site_id)
+    }
+
+    fn push_done_producer_kont(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        checked_join: PartitionCheckedJoinIdentity,
+        return_kind: ScalarMergeKind,
+        terminal: PartitionProducerKontTerminalIdentity,
+    ) -> Result<PartitionProducerKontCursor, CraneliftBackendError> {
+        let frame = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            partition_frame_size(0)?,
+            3,
+        ));
+        self.partition_metrics.record_call_frame(0);
+        let invocation = self
+            .invocation_pointer
+            .expect("producer terminal planning owns an invocation pointer");
+        let pointer_type = builder.func.dfg.value_type(invocation);
+        let capture_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
+        let plan = PartitionProducerKontSitePlan {
+            action: ProducerKontAction::Done { terminal },
+            successor: None,
+            checked_join,
+            return_kind,
+        };
+        let site_id = self.intern_producer_kont_site(plan)?;
+        Ok(PartitionProducerKontCursor {
+            site_id,
+            capture_pointer,
+        })
     }
 
     fn push_one_owned_producer_kont(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         eliminator: OwnedPartitionEliminator,
-        successor: Option<PartitionProducerKontCursor>,
+        successor: PartitionProducerKontCursor,
         checked_join: PartitionCheckedJoinIdentity,
         return_kind: ScalarMergeKind,
     ) -> Result<PartitionProducerKontCursor, CraneliftBackendError> {
         let owned = vec![eliminator];
         let mut capture_fields = Vec::new();
         append_partition_eliminator_values(self, builder, &owned, &mut capture_fields)?;
-        if let Some(successor) = successor {
-            capture_fields.push(successor.capture_pointer);
-        }
+        capture_fields.push(successor.capture_pointer);
         let capture_field_types = capture_fields
             .iter()
             .map(|value| builder.func.dfg.value_type(*value))
@@ -2177,32 +2243,17 @@ impl<'a> Lowering<'a> {
             .expect("producer continuation planning owns an invocation pointer");
         let pointer_type = builder.func.dfg.value_type(invocation);
         let capture_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
-        let site_id = self.partition_next_producer_site;
-        self.partition_next_producer_site = self
-            .partition_next_producer_site
-            .checked_add(1)
-            .ok_or_else(|| {
-                unsupported(
-                    "NativeProducerContinuationStepV1",
-                    "producer continuation site identity exhausted",
-                )
-            })?;
         let action = ProducerKontAction::ApplyEliminators {
             eliminators: owned,
             capture_field_types,
         };
         let plan = PartitionProducerKontSitePlan {
             action,
-            successor,
+            successor: Some(successor),
             checked_join,
             return_kind,
         };
-        if self.partition_producer_sites.insert(site_id, plan).is_some() {
-            return Err(unsupported(
-                "NativeProducerContinuationStepV1",
-                "producer continuation site was planned twice",
-            ));
-        }
+        let site_id = self.intern_producer_kont_site(plan)?;
         Ok(PartitionProducerKontCursor {
             site_id,
             capture_pointer,
@@ -2213,13 +2264,11 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         checked: bool,
-        successor: Option<PartitionProducerKontCursor>,
+        successor: PartitionProducerKontCursor,
         checked_join: PartitionCheckedJoinIdentity,
         return_kind: ScalarMergeKind,
     ) -> Result<PartitionProducerKontCursor, CraneliftBackendError> {
-        let capture_fields = successor
-            .map(|successor| vec![successor.capture_pointer])
-            .unwrap_or_default();
+        let capture_fields = vec![successor.capture_pointer];
         let capture_field_types = capture_fields
             .iter()
             .map(|value| builder.func.dfg.value_type(*value))
@@ -2248,31 +2297,16 @@ impl<'a> Lowering<'a> {
             .expect("producer continuation planning owns an invocation pointer");
         let pointer_type = builder.func.dfg.value_type(invocation);
         let capture_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
-        let site_id = self.partition_next_producer_site;
-        self.partition_next_producer_site = self
-            .partition_next_producer_site
-            .checked_add(1)
-            .ok_or_else(|| {
-                unsupported(
-                    "NativeProducerContinuationStepV1",
-                    "producer continuation site identity exhausted",
-                )
-            })?;
         let plan = PartitionProducerKontSitePlan {
             action: ProducerKontAction::OrientedInvocationReturn {
                 checked,
                 capture_field_types,
             },
-            successor,
+            successor: Some(successor),
             checked_join,
             return_kind,
         };
-        if self.partition_producer_sites.insert(site_id, plan).is_some() {
-            return Err(unsupported(
-                "NativeProducerContinuationStepV1",
-                "producer continuation site was planned twice",
-            ));
-        }
+        let site_id = self.intern_producer_kont_site(plan)?;
         Ok(PartitionProducerKontCursor {
             site_id,
             capture_pointer,
@@ -2315,7 +2349,12 @@ impl<'a> Lowering<'a> {
                 "entry selected head has no exact admissible capture schema",
             ));
         }
-        let successor = self.active_partition_producer_kont;
+        let successor = self.active_partition_producer_kont.ok_or_else(|| {
+            unsupported(
+                "NativeProducerContinuationStepV1",
+                "selected-head producer step has no explicit successor",
+            )
+        })?;
         let mut capture_fields = Vec::new();
         append_partition_eliminator_values(self, builder, &pending, &mut capture_fields)?;
         append_partition_scope_values(self, builder, &selected_scope, &mut capture_fields)?;
@@ -2325,9 +2364,7 @@ impl<'a> Lowering<'a> {
             &selected_lineage,
             &mut capture_fields,
         )?;
-        if let Some(successor) = successor {
-            capture_fields.push(successor.capture_pointer);
-        }
+        capture_fields.push(successor.capture_pointer);
         let capture_field_types = capture_fields
             .iter()
             .map(|value| builder.func.dfg.value_type(*value))
@@ -2356,16 +2393,6 @@ impl<'a> Lowering<'a> {
             .expect("producer continuation planning owns an invocation pointer");
         let pointer_type = builder.func.dfg.value_type(invocation);
         let capture_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
-        let site_id = self.partition_next_producer_site;
-        self.partition_next_producer_site = self
-            .partition_next_producer_site
-            .checked_add(1)
-            .ok_or_else(|| {
-                unsupported(
-                    "NativeProducerContinuationStepV1",
-                    "producer continuation site identity exhausted",
-                )
-            })?;
         let plan = PartitionProducerKontSitePlan {
             action: ProducerKontAction::ApplyActiveEliminators {
                 activation: active.activation,
@@ -2376,16 +2403,11 @@ impl<'a> Lowering<'a> {
                 selected_lineage,
                 capture_field_types,
             },
-            successor,
+            successor: Some(successor),
             checked_join: return_contract.checked_join,
             return_kind: return_contract.required_kind,
         };
-        if self.partition_producer_sites.insert(site_id, plan).is_some() {
-            return Err(unsupported(
-                "NativeProducerContinuationStepV1",
-                "producer continuation site was planned twice",
-            ));
-        }
+        let site_id = self.intern_producer_kont_site(plan)?;
         Ok(Some(PartitionProducerKontCursor {
             site_id,
             capture_pointer,
@@ -2400,11 +2422,10 @@ impl<'a> Lowering<'a> {
         let Some(return_contract) = self.active_partition_return_contract.clone() else {
             return Ok(None);
         };
-        let successor = self.active_partition_producer_kont;
-        let mut capture_fields = Vec::new();
-        if let Some(successor) = successor {
-            capture_fields.push(successor.capture_pointer);
-        }
+        let Some(successor) = self.active_partition_producer_kont else {
+            return Ok(None);
+        };
+        let capture_fields = vec![successor.capture_pointer];
         let capture_field_types = capture_fields
             .iter()
             .map(|value| builder.func.dfg.value_type(*value))
@@ -2433,31 +2454,16 @@ impl<'a> Lowering<'a> {
             .expect("producer continuation planning owns an invocation pointer");
         let pointer_type = builder.func.dfg.value_type(invocation);
         let capture_pointer = builder.ins().stack_addr(pointer_type, frame, 0);
-        let site_id = self.partition_next_producer_site;
-        self.partition_next_producer_site = self
-            .partition_next_producer_site
-            .checked_add(1)
-            .ok_or_else(|| {
-                unsupported(
-                    "NativeProducerContinuationStepV1",
-                    "producer continuation site identity exhausted",
-                )
-            })?;
         let plan = PartitionProducerKontSitePlan {
             action: ProducerKontAction::CheckedComputationalIHReturn {
                 call_template_id,
                 capture_field_types,
             },
-            successor,
+            successor: Some(successor),
             checked_join: return_contract.checked_join,
             return_kind: return_contract.required_kind,
         };
-        if self.partition_producer_sites.insert(site_id, plan).is_some() {
-            return Err(unsupported(
-                "NativeProducerContinuationStepV1",
-                "checked-marker producer site was planned twice",
-            ));
-        }
+        let site_id = self.intern_producer_kont_site(plan)?;
         Ok(Some(PartitionProducerKontCursor {
             site_id,
             capture_pointer,
@@ -2486,11 +2492,27 @@ impl<'a> Lowering<'a> {
                     "producer continuation head has no planned site",
                 )
         })?;
+        if !matches!(&plan.action, ProducerKontAction::Done { .. })
+            && plan.successor.is_none()
+        {
+            return Err(unsupported(
+                "NativeProducerContinuationStepV1",
+                "nonterminal producer continuation has no explicit successor",
+            ));
+        }
         let mut fields = Vec::new();
         append_partition_lowered_values(self, builder, &input, &mut fields)?;
         fields.push(cursor.capture_pointer);
         let (frame_values, field_types, field_map) = partition_frame_layout(builder, &fields);
         let key = PartitionSemanticStateKey::ProducerKont(match &plan.action {
+            ProducerKontAction::Done { terminal } => PartitionContinuationKey::done(
+                plan.checked_join.clone(),
+                plan.return_kind,
+                &input,
+                *terminal,
+                field_types.clone(),
+                field_map.clone(),
+            ),
             ProducerKontAction::OrientedInvocationReturn {
                 checked,
                 ..
@@ -2630,6 +2652,9 @@ impl<'a> Lowering<'a> {
                         capture_pointer: Some(cursor.capture_pointer),
                         successor: plan.successor,
                         ledger_baseline: self.partition_ledger_baseline(),
+                        declaration_stack: self.declaration_stack.clone(),
+                        active_recursive_invocations: self.active_recursive_invocations.clone(),
+                        checked_join: plan.checked_join,
                         return_kind: plan.return_kind,
                     },
                 ));
@@ -3372,23 +3397,41 @@ impl<'a> Lowering<'a> {
                     "outlined scalar arm has no distinguished checked terminal",
                 )
             })?;
-        self.active_partition_producer_kont = item.producer_kont;
+        let terminal = if let Some(producer_kont) = item.producer_kont {
+            producer_kont
+        } else {
+            self.push_done_producer_kont(
+                builder,
+                checked_join.clone(),
+                item.return_authority.descriptor.required_kind,
+                PartitionProducerKontTerminalIdentity::ScalarArmReturn {
+                    edge_index: item.return_authority.descriptor.edge_index,
+                },
+            )?
+        };
+        let return_contract = PartitionStateReturnContract::producer_terminal(
+            checked_join.clone(),
+            item.return_authority.descriptor.required_kind,
+        );
+        self.active_partition_producer_kont = Some(terminal);
         let producer_kont = self.push_owned_producer_kont(
             builder,
             item.eliminators.clone(),
-            item.producer_kont,
+            terminal,
             checked_join,
             item.return_authority.descriptor.required_kind,
         )?;
         self.active_partition_producer_kont = Some(producer_kont);
         let invocation_return = [EliminatorFrame::InvocationReturn];
         self.active_partition_return_kind = Some(item.return_authority.descriptor.required_kind);
+        self.active_partition_return_contract = Some(return_contract);
         let lowered = self.lower_computational_producer_expr(
             builder,
             &item.body,
             &item.env,
             &invocation_return,
         );
+        self.active_partition_return_contract = None;
         self.active_partition_return_kind = None;
         self.active_partition_producer_kont = None;
         let lowered = lowered?;
@@ -3507,6 +3550,7 @@ impl<'a> Lowering<'a> {
         let mut body = item.body;
         self.declaration_stack = item.declaration_stack;
         self.active_recursive_invocations = item.active_recursive_invocations;
+        self.pending_computational_ih_call = item.pending_computational_ih_call;
         let terminal = SourceContinuationTerminal::ReturnFromPartition {
             expected_outer: item.terminal_outer,
         };
@@ -3598,6 +3642,7 @@ impl<'a> Lowering<'a> {
         self.active_partition_return_contract = None;
         self.active_partition_return_kind = None;
         self.active_partition_producer_kont = None;
+        self.pending_computational_ih_call = None;
         let mut lowered = lowered?;
         if !matches!(lowered, Lowered::Trap(_)) {
             if let Some(cleanup_head) = item.cleanup_head {
@@ -3777,6 +3822,7 @@ impl<'a> Lowering<'a> {
         };
         self.declaration_stack = item.declaration_stack;
         self.active_recursive_invocations = item.active_recursive_invocations;
+        self.pending_computational_ih_call = item.pending_computational_ih_call;
         self.active_partition_producer_kont = item.producer_kont;
         self.active_partition_return_kind = Some(item.return_contract.required_kind);
         self.active_partition_return_contract = Some(item.return_contract.clone());
@@ -3790,6 +3836,7 @@ impl<'a> Lowering<'a> {
         self.active_partition_return_contract = None;
         self.active_partition_return_kind = None;
         self.active_partition_producer_kont = None;
+        self.pending_computational_ih_call = None;
         match lowered? {
             Lowered::Trap(trap) => {
                 let payload = builder.ins().iconst(types::I64, -4);
@@ -3877,6 +3924,7 @@ impl<'a> Lowering<'a> {
             return_contract.checked_join.clone(),
             return_contract.required_kind,
             false,
+            self.pending_computational_ih_call,
             &body,
             &env,
             &self.declaration_stack,
@@ -3971,6 +4019,7 @@ impl<'a> Lowering<'a> {
                     field_map,
                     body,
                     consume_checked_entry_marker: false,
+                    pending_computational_ih_call: self.pending_computational_ih_call,
                     env,
                     declaration_stack: self.declaration_stack.clone(),
                     active_recursive_invocations: self.active_recursive_invocations.clone(),
@@ -4061,6 +4110,7 @@ impl<'a> Lowering<'a> {
             return_contract.required_kind,
             head.node,
             control.producer_kont.map(|cursor| cursor.site_id),
+            self.pending_computational_ih_call,
             &input,
             &self.declaration_stack,
             &self.active_recursive_invocations,
@@ -4151,6 +4201,7 @@ impl<'a> Lowering<'a> {
                     node: head.node,
                     capture_pointer: head.capture_pointer,
                     producer_kont: control.producer_kont,
+                    pending_computational_ih_call: self.pending_computational_ih_call,
                     declaration_stack: self.declaration_stack.clone(),
                     active_recursive_invocations: self.active_recursive_invocations.clone(),
                     selected_activation: control.selected.activation,
@@ -4440,6 +4491,8 @@ impl<'a> Lowering<'a> {
         mut item: ProducerKontPartitionWorkItem,
         frame_pointer: cranelift_codegen::ir::Value,
     ) -> Result<(Option<RuntimeTrap>, ResultDecoder), CraneliftBackendError> {
+        self.declaration_stack = item.declaration_stack.clone();
+        self.active_recursive_invocations = item.active_recursive_invocations.clone();
         self.partition_metrics
             .record_helper_frame_loads(item.field_types.len());
         let loaded = item
@@ -4466,7 +4519,13 @@ impl<'a> Lowering<'a> {
         rebuild_partition_lowered(&mut item.value, &mut loaded, &mut self.native_int_tags)?;
         let required_kind = item.return_kind;
         self.active_partition_return_kind = Some(required_kind);
+        self.active_partition_return_contract =
+            Some(PartitionStateReturnContract::producer_terminal(
+                item.checked_join.clone(),
+                required_kind,
+            ));
         let action_has_capture_cell = match &item.action {
+            ProducerKontAction::Done { .. } => true,
             ProducerKontAction::ApplyActiveEliminators {
                 capture_field_types,
                 ..
@@ -4485,6 +4544,15 @@ impl<'a> Lowering<'a> {
             self.active_partition_producer_kont = item.successor;
         }
         let lowered = match &mut item.action {
+            ProducerKontAction::Done { .. } => {
+                if item.successor.is_some() {
+                    return Err(unsupported(
+                        "NativeProducerContinuationStepV1",
+                        "explicit producer terminal unexpectedly has a successor",
+                    ));
+                }
+                Ok(item.value)
+            }
             ProducerKontAction::ApplyActiveEliminators {
                 activation,
                 cursor,
@@ -4724,6 +4792,7 @@ impl<'a> Lowering<'a> {
             }
         };
         self.active_partition_producer_kont = None;
+        self.active_partition_return_contract = None;
         self.active_partition_return_kind = None;
         if loaded.next().is_some() {
             return Err(unsupported(
@@ -4732,10 +4801,20 @@ impl<'a> Lowering<'a> {
             ));
         }
         let lowered = lowered?;
-        let lowered = if let Some(successor) = item.successor {
-            self.call_partition_producer_kont(builder, successor, lowered)?
-        } else {
-            lowered
+        let lowered = match (&item.action, item.successor) {
+            (ProducerKontAction::Done { .. }, None) => lowered,
+            (ProducerKontAction::Done { .. }, Some(_)) => unreachable!(
+                "explicit producer terminal successor was rejected before lowering"
+            ),
+            (_, Some(successor)) => {
+                self.call_partition_producer_kont(builder, successor, lowered)?
+            }
+            (_, None) => {
+                return Err(unsupported(
+                    "NativeProducerContinuationStepV1",
+                    "nonterminal producer continuation reached scalarization without Done",
+                ));
+            }
         };
         match lowered {
             Lowered::Trap(trap) => {
@@ -6518,6 +6597,7 @@ impl<'a> Lowering<'a> {
             checked_join,
             target.required_kind,
             consume_checked_entry_marker,
+            self.pending_computational_ih_call,
             &body,
             &arm_env,
             &self.declaration_stack,
@@ -6635,6 +6715,7 @@ impl<'a> Lowering<'a> {
                     field_map,
                     body,
                     consume_checked_entry_marker,
+                    pending_computational_ih_call: self.pending_computational_ih_call,
                     env: arm_env,
                     declaration_stack: self.declaration_stack.clone(),
                     active_recursive_invocations: self.active_recursive_invocations.clone(),
@@ -7085,7 +7166,7 @@ impl<'a> Lowering<'a> {
                         })?;
                     let key =
                         PartitionSemanticStateKey::ProducerKont(PartitionContinuationKey::new(
-                        checked_join,
+                        checked_join.clone(),
                         required_kind,
                         ScalarMergeKind::ExitCode,
                         &merged,
@@ -7199,6 +7280,11 @@ impl<'a> Lowering<'a> {
                                 capture_pointer: None,
                                 successor: None,
                                 ledger_baseline,
+                                declaration_stack: self.declaration_stack.clone(),
+                                active_recursive_invocations: self
+                                    .active_recursive_invocations
+                                    .clone(),
+                                checked_join,
                                 return_kind: ScalarMergeKind::ExitCode,
                             },
                         ));
