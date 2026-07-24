@@ -149,7 +149,35 @@
 > `preserved/wp-RT-NATIVE-FNSPLIT-native-partition-b077eb7a`).
 > ⛔ **Do not delete the tag.** Phase 1 measures it; Phases 2–3 port from it.
 >
-> ## ⛔ IMMEDIATE: `DOC-GATE-RECORD-AXIS` publish is HELD on an unresolved Decision
+> ## 🚨 IMMEDIATE — `DOC-GATE-RECORD-AXIS`: ALL GATES PASS, publish blocked by a GITHUB WRITE OUTAGE
+>
+> **This is the first thing to retry on resume.** Everything is done except the
+> publish itself.
+>
+> - **Branch is on `origin` at the exact approved SHA** —
+>   `wp/DOC-GATE-RECORD-AXIS-gate-record-axis` @ `b3afd48b`, confirmed by
+>   `ls-remote`. ⛔ **FROZEN — do not rebase/amend/re-anchor.**
+> - `dec_7htr8nc7076x` **resolved** (the `proposed` list is empty); QA
+>   `evt_5qstakpep4njx` + Architect `evt_1qtygnzf4a67q` on that SHA; scope one
+>   file ⇒ Architect-only correct; merge-base == `757ce46a`; intersection empty.
+> - **AC1 positive control was genuinely run** — QA added a real second
+>   `kind = "status"` record and watched the assertion FIRE.
+>
+> **The blocker: GitHub fails every WRITE to the pulls endpoint while READS
+> succeed.** 5 attempts / 2 mechanisms (`gh pr create` GraphQL; REST
+> `POST /pulls` → empty body), each a distinct server-side incident ID (last:
+> `C2B2:1E7A6B:120E2A5:124A855:6A63BBE2`). **Positive control:** `GET` PR #921
+> returns fine, rate limit untouched at 5000. ⇒ **not** auth, **not** rate limit,
+> **not** branch protection, **not** a gate.
+>
+> **No PR exists ⇒ no CI has run.** On recovery: open the PR on the frozen SHA,
+> let CI gate it, merge on green, then verify **by content on `origin/main`** and
+> post to the ring. Ring owes nothing; I hold it. Retros owed when it lands.
+>
+> ⚠ **This is mutable external state (§7a) — TEST it, do not cite this block.**
+> It may be fixed by the time you read this.
+>
+> ## (resolved) The Decision was `proposed` — held, then unblocked in seconds
 >
 > **A `git_request` arrived (`evt_517mjv8rr6kb`) and I did NOT merge.**
 > `dec_7htr8nc7076x` is **`status: "proposed"`** — `resolved_by`/`resolved_at`/
