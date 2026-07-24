@@ -1212,6 +1212,17 @@ enum PartitionProducerKontActionKey {
         value: PartitionLoweredKey,
         call_template_id: u64,
     },
+    ExitScopeStart {
+        value: PartitionLoweredKey,
+        target: PartitionRecursorNodeId,
+        obligation: PartitionOpenControlObligationNodeId,
+    },
+    ExitScopeComplete {
+        value: PartitionLoweredKey,
+        target: PartitionRecursorNodeId,
+        obligation: PartitionOpenControlObligationNodeId,
+        obligation_successor: Option<PartitionOpenControlObligationNodeId>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2638,6 +2649,66 @@ impl PartitionContinuationKey {
         }
     }
 
+    pub(super) fn exit_scope_start(
+        checked_join: PartitionCheckedJoinIdentity,
+        return_kind: ScalarMergeKind,
+        value: &Lowered,
+        target: PartitionRecursorNodeId,
+        obligation: PartitionOpenControlObligationNodeId,
+        successor: Option<usize>,
+        field_types: Vec<Type>,
+        field_map: Vec<usize>,
+    ) -> Self {
+        let static_key = PartitionContinuationStaticKey {
+            action: PartitionProducerKontActionKey::ExitScopeStart {
+                value: partition_lowered_key(value),
+                target,
+                obligation,
+            },
+            successor,
+        };
+        Self {
+            checked_join,
+            input_kind: return_kind,
+            outer_return_kind: return_kind,
+            static_bucket: partition_static_bucket(&static_key),
+            static_key: Arc::new(static_key),
+            field_types,
+            field_map,
+        }
+    }
+
+    pub(super) fn exit_scope_complete(
+        checked_join: PartitionCheckedJoinIdentity,
+        return_kind: ScalarMergeKind,
+        value: &Lowered,
+        target: PartitionRecursorNodeId,
+        obligation: PartitionOpenControlObligationNodeId,
+        obligation_successor: Option<PartitionOpenControlObligationNodeId>,
+        successor: Option<usize>,
+        field_types: Vec<Type>,
+        field_map: Vec<usize>,
+    ) -> Self {
+        let static_key = PartitionContinuationStaticKey {
+            action: PartitionProducerKontActionKey::ExitScopeComplete {
+                value: partition_lowered_key(value),
+                target,
+                obligation,
+                obligation_successor,
+            },
+            successor,
+        };
+        Self {
+            checked_join,
+            input_kind: return_kind,
+            outer_return_kind: return_kind,
+            static_bucket: partition_static_bucket(&static_key),
+            static_key: Arc::new(static_key),
+            field_types,
+            field_map,
+        }
+    }
+
     fn site_id(&self) -> u64 {
         self.checked_join.site_id
     }
@@ -3199,6 +3270,15 @@ pub(super) enum ProducerKontAction {
         call_template_id: u64,
         capture_field_types: Vec<Type>,
     },
+    ExitScopeStart {
+        target: PartitionRecursorNodeId,
+        obligation: PartitionOpenControlObligationNodeId,
+    },
+    ExitScopeComplete {
+        target: PartitionRecursorNodeId,
+        obligation: PartitionOpenControlObligationNodeId,
+        obligation_successor: Option<PartitionOpenControlObligationNodeId>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -3224,6 +3304,15 @@ enum PartitionProducerKontSiteActionKey {
     CheckedComputationalIHReturn {
         call_template_id: u64,
         capture_field_types: Vec<Type>,
+    },
+    ExitScopeStart {
+        target: PartitionRecursorNodeId,
+        obligation: PartitionOpenControlObligationNodeId,
+    },
+    ExitScopeComplete {
+        target: PartitionRecursorNodeId,
+        obligation: PartitionOpenControlObligationNodeId,
+        obligation_successor: Option<PartitionOpenControlObligationNodeId>,
     },
 }
 
@@ -3281,6 +3370,21 @@ impl PartitionProducerKontSiteKey {
             } => PartitionProducerKontSiteActionKey::CheckedComputationalIHReturn {
                 call_template_id: *call_template_id,
                 capture_field_types: capture_field_types.clone(),
+            },
+            ProducerKontAction::ExitScopeStart { target, obligation } => {
+                PartitionProducerKontSiteActionKey::ExitScopeStart {
+                    target: *target,
+                    obligation: *obligation,
+                }
+            }
+            ProducerKontAction::ExitScopeComplete {
+                target,
+                obligation,
+                obligation_successor,
+            } => PartitionProducerKontSiteActionKey::ExitScopeComplete {
+                target: *target,
+                obligation: *obligation,
+                obligation_successor: *obligation_successor,
             },
         };
         let successor = successor.map(|cursor| cursor.site_id);
