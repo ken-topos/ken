@@ -1651,6 +1651,9 @@ pub(super) struct NormalSourceKontSuccessorId(pub(super) usize);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct ClosedSourceArmEntryId(pub(super) u32);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct ClosedSourceArmRequestId(pub(super) u32);
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct PartitionFinalScalarReturnAuthority {
     pub(super) partition_site_id: u64,
@@ -3354,59 +3357,367 @@ pub(super) struct PartitionClosedSourceArmEntryKey {
     pub(super) live_producer_tail: Option<usize>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ClosedSourceArmNormalTerminator {
+    DirectSourceKont {
+        successor: NormalSourceKontSuccessorId,
+        call_inst: Inst,
+    },
+    DelegateSourceArm {
+        successor: NormalSourceKontSuccessorId,
+        child: ClosedSourceArmEntryId,
+        call_inst: Inst,
+    },
+}
+
 #[derive(Clone, Copy)]
 pub(super) struct PartitionClosedSourceArmEntry {
     pub(super) id: ClosedSourceArmEntryId,
-    pub(super) successor_call_inst: Inst,
+    pub(super) terminator: ClosedSourceArmNormalTerminator,
     pub(super) function_index: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PartitionClosedSourceArmRequestKey {
+    template_state_id: usize,
+    source_return: SourceKontReturnId,
+    checked_join: PartitionCheckedJoinIdentity,
+    required_kind: ScalarMergeKind,
+    live_producer_tail: Option<usize>,
+}
+
+pub(super) struct NormalSourceKontSuccessorAuthority {
+    pub(super) request: ClosedSourceArmRequestId,
+    pub(super) successor: NormalSourceKontSuccessorId,
+    pub(super) source_return: SourceKontReturnId,
+    pub(super) checked_join: PartitionCheckedJoinIdentity,
+    pub(super) required_kind: ScalarMergeKind,
+    pub(super) live_producer_tail: Option<usize>,
+    pub(super) call_inst: Inst,
+}
+
+pub(super) struct SourceArmDelegationAuthority {
+    pub(super) parent: ClosedSourceArmRequestId,
+    pub(super) child: ClosedSourceArmRequestId,
+    pub(super) source_return: SourceKontReturnId,
+    pub(super) checked_join: PartitionCheckedJoinIdentity,
+    pub(super) required_kind: ScalarMergeKind,
+    pub(super) live_producer_tail: Option<usize>,
+    pub(super) call_inst: Inst,
+}
+
+pub(super) enum PartitionPendingClosedSourceArmTerminator {
+    DirectSourceKont {
+        successor: NormalSourceKontSuccessorId,
+        call_inst: Inst,
+        function_index: usize,
+        authority: NormalSourceKontSuccessorAuthority,
+    },
+    DelegateSourceArm {
+        child: ClosedSourceArmRequestId,
+        call_inst: Inst,
+        function_index: usize,
+        result_payload: Value,
+        local_tag_output: StackSlot,
+        caller_tag_pointer: Value,
+        authority: SourceArmDelegationAuthority,
+    },
 }
 
 #[derive(Default)]
 pub(super) struct PartitionClosedSourceArmInterner {
-    keys: Vec<PartitionClosedSourceArmEntryKey>,
-    definitions: Vec<PartitionClosedSourceArmEntry>,
+    request_keys: Vec<PartitionClosedSourceArmRequestKey>,
+    request_terminators: Vec<Option<PartitionPendingClosedSourceArmTerminator>>,
+    resolved_keys: Vec<Option<PartitionClosedSourceArmEntryKey>>,
+    definitions: Vec<Option<PartitionClosedSourceArmEntry>>,
 }
 
 impl PartitionClosedSourceArmInterner {
-    pub(super) fn intern(
+    pub(super) fn reserve_request(
         &mut self,
-        key: PartitionClosedSourceArmEntryKey,
-        successor_call_inst: Inst,
-        function_index: usize,
-    ) -> Result<ClosedSourceArmEntryId, CraneliftBackendError> {
+        template_state_id: usize,
+        source_return: SourceKontReturnId,
+        contract: &PartitionStateReturnContract,
+    ) -> ClosedSourceArmRequestId {
+        let key = PartitionClosedSourceArmRequestKey {
+            template_state_id,
+            source_return,
+            checked_join: contract.checked_join.clone(),
+            required_kind: contract.required_kind,
+            live_producer_tail: contract.live_producer_tail,
+        };
         if let Some((index, _)) = self
-            .keys
+            .request_keys
             .iter()
             .enumerate()
             .find(|(_, candidate)| **candidate == key)
         {
-            let definition = self.definitions[index];
-            if definition.successor_call_inst != successor_call_inst
-                || definition.function_index != function_index
-            {
-                return Err(unsupported(
-                    "NativeSourceKontSuccessorV1",
-                    "one closed SourceArm identity was emitted with two normal terminators",
-                ));
-            }
-            return Ok(definition.id);
+            return ClosedSourceArmRequestId(
+                u32::try_from(index)
+                    .expect("compiler-private closed SourceArm request identity exhausted"),
+            );
         }
-        let id = ClosedSourceArmEntryId(
-            u32::try_from(self.keys.len())
-                .expect("compiler-private closed SourceArm identity exhausted"),
+        let id = ClosedSourceArmRequestId(
+            u32::try_from(self.request_keys.len())
+                .expect("compiler-private closed SourceArm request identity exhausted"),
         );
-        self.keys.push(key);
-        self.definitions.push(PartitionClosedSourceArmEntry {
+        self.request_keys.push(key);
+        self.request_terminators.push(None);
+        self.resolved_keys.push(None);
+        self.definitions.push(None);
+        id
+    }
+
+    fn request_key(
+        &self,
+        request: ClosedSourceArmRequestId,
+    ) -> Result<&PartitionClosedSourceArmRequestKey, CraneliftBackendError> {
+        self.request_keys.get(request.0 as usize).ok_or_else(|| {
+            unsupported(
+                "NativeSourceKontSuccessorV1",
+                "closed SourceArm request identity is out of bounds",
+            )
+        })
+    }
+
+    pub(super) fn define_direct(
+        &mut self,
+        request: ClosedSourceArmRequestId,
+        successor: NormalSourceKontSuccessorId,
+        call_inst: Inst,
+        function_index: usize,
+    ) -> Result<(), CraneliftBackendError> {
+        let key = self.request_key(request)?.clone();
+        let slot = self
+            .request_terminators
+            .get_mut(request.0 as usize)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeSourceKontSuccessorV1",
+                    "closed SourceArm direct request identity is out of bounds",
+                )
+            })?;
+        if slot.is_some() {
+            return Err(unsupported(
+                "NativeSourceKontSuccessorV1",
+                "one closed SourceArm request was defined more than once",
+            ));
+        }
+        *slot = Some(
+            PartitionPendingClosedSourceArmTerminator::DirectSourceKont {
+                successor,
+                call_inst,
+                function_index,
+                authority: NormalSourceKontSuccessorAuthority {
+                    request,
+                    successor,
+                    source_return: key.source_return,
+                    checked_join: key.checked_join,
+                    required_kind: key.required_kind,
+                    live_producer_tail: key.live_producer_tail,
+                    call_inst,
+                },
+            },
+        );
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn define_delegation(
+        &mut self,
+        parent: ClosedSourceArmRequestId,
+        child: ClosedSourceArmRequestId,
+        call_inst: Inst,
+        function_index: usize,
+        result_payload: Value,
+        local_tag_output: StackSlot,
+        caller_tag_pointer: Value,
+    ) -> Result<(), CraneliftBackendError> {
+        let parent_key = self.request_key(parent)?.clone();
+        let child_key = self.request_key(child)?;
+        if parent == child
+            || parent_key.source_return != child_key.source_return
+            || parent_key.checked_join != child_key.checked_join
+            || parent_key.required_kind != child_key.required_kind
+            || parent_key.live_producer_tail != child_key.live_producer_tail
+        {
+            return Err(unsupported(
+                "NativeSourceKontSuccessorV1",
+                "closed SourceArm delegation changed its exact return contract",
+            ));
+        }
+        let slot = self
+            .request_terminators
+            .get_mut(parent.0 as usize)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeSourceKontSuccessorV1",
+                    "closed SourceArm delegation request identity is out of bounds",
+                )
+            })?;
+        if slot.is_some() {
+            return Err(unsupported(
+                "NativeSourceKontSuccessorV1",
+                "one closed SourceArm request was defined more than once",
+            ));
+        }
+        *slot = Some(
+            PartitionPendingClosedSourceArmTerminator::DelegateSourceArm {
+                child,
+                call_inst,
+                function_index,
+                result_payload,
+                local_tag_output,
+                caller_tag_pointer,
+                authority: SourceArmDelegationAuthority {
+                    parent,
+                    child,
+                    source_return: parent_key.source_return,
+                    checked_join: parent_key.checked_join,
+                    required_kind: parent_key.required_kind,
+                    live_producer_tail: parent_key.live_producer_tail,
+                    call_inst,
+                },
+            },
+        );
+        Ok(())
+    }
+
+    pub(super) fn take_request_terminator(
+        &mut self,
+        request: ClosedSourceArmRequestId,
+    ) -> Result<PartitionPendingClosedSourceArmTerminator, CraneliftBackendError> {
+        self.request_terminators
+            .get_mut(request.0 as usize)
+            .and_then(Option::take)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeSourceKontSuccessorV1",
+                    "closed SourceArm request has no exact normal terminator",
+                )
+            })
+    }
+
+    pub(super) fn resolved_entry(
+        &self,
+        request: ClosedSourceArmRequestId,
+    ) -> Option<ClosedSourceArmEntryId> {
+        self.definitions
+            .get(request.0 as usize)
+            .and_then(|definition| definition.as_ref())
+            .map(|definition| definition.id)
+    }
+
+    pub(super) fn seal_direct(
+        &mut self,
+        request: ClosedSourceArmRequestId,
+        successor: NormalSourceKontSuccessorId,
+        call_inst: Inst,
+        function_index: usize,
+        authority: NormalSourceKontSuccessorAuthority,
+    ) -> Result<ClosedSourceArmEntryId, CraneliftBackendError> {
+        let request_key = self.request_key(request)?.clone();
+        if authority.request != request
+            || authority.successor != successor
+            || authority.source_return != request_key.source_return
+            || authority.checked_join != request_key.checked_join
+            || authority.required_kind != request_key.required_kind
+            || authority.live_producer_tail != request_key.live_producer_tail
+            || authority.call_inst != call_inst
+        {
+            return Err(unsupported(
+                "NativeSourceKontSuccessorV1",
+                "normal SourceKont successor authority was swapped or replayed",
+            ));
+        }
+        self.seal_entry(
+            request,
+            successor,
+            ClosedSourceArmNormalTerminator::DirectSourceKont {
+                successor,
+                call_inst,
+            },
+            function_index,
+        )
+    }
+
+    pub(super) fn seal_delegation(
+        &mut self,
+        parent: ClosedSourceArmRequestId,
+        child: ClosedSourceArmRequestId,
+        successor: NormalSourceKontSuccessorId,
+        child_entry: ClosedSourceArmEntryId,
+        call_inst: Inst,
+        function_index: usize,
+        authority: SourceArmDelegationAuthority,
+    ) -> Result<ClosedSourceArmEntryId, CraneliftBackendError> {
+        let parent_key = self.request_key(parent)?.clone();
+        let child_key = self.request_key(child)?.clone();
+        if authority.parent != parent
+            || authority.child != child
+            || authority.source_return != parent_key.source_return
+            || authority.checked_join != parent_key.checked_join
+            || authority.required_kind != parent_key.required_kind
+            || authority.live_producer_tail != parent_key.live_producer_tail
+            || authority.call_inst != call_inst
+            || parent_key.source_return != child_key.source_return
+            || parent_key.checked_join != child_key.checked_join
+            || parent_key.required_kind != child_key.required_kind
+            || parent_key.live_producer_tail != child_key.live_producer_tail
+            || child_entry.0 != child.0
+        {
+            return Err(unsupported(
+                "NativeSourceKontSuccessorV1",
+                "SourceArm delegation authority was swapped or replayed",
+            ));
+        }
+        self.seal_entry(
+            parent,
+            successor,
+            ClosedSourceArmNormalTerminator::DelegateSourceArm {
+                successor,
+                child: child_entry,
+                call_inst,
+            },
+            function_index,
+        )
+    }
+
+    fn seal_entry(
+        &mut self,
+        request: ClosedSourceArmRequestId,
+        normal_successor: NormalSourceKontSuccessorId,
+        terminator: ClosedSourceArmNormalTerminator,
+        function_index: usize,
+    ) -> Result<ClosedSourceArmEntryId, CraneliftBackendError> {
+        if self.definitions[request.0 as usize].is_some() {
+            return Err(unsupported(
+                "NativeSourceKontSuccessorV1",
+                "closed SourceArm entry was sealed more than once",
+            ));
+        }
+        let request_key = self.request_key(request)?.clone();
+        let key = PartitionClosedSourceArmEntryKey {
+            template_state_id: request_key.template_state_id,
+            normal_successor,
+            source_return: request_key.source_return,
+            checked_join: request_key.checked_join,
+            required_kind: request_key.required_kind,
+            live_producer_tail: request_key.live_producer_tail,
+        };
+        let id = ClosedSourceArmEntryId(request.0);
+        self.resolved_keys[request.0 as usize] = Some(key);
+        self.definitions[request.0 as usize] = Some(PartitionClosedSourceArmEntry {
             id,
-            successor_call_inst,
+            terminator,
             function_index,
         });
         Ok(id)
     }
 
-    pub(super) fn definition_for_template(
+    pub(super) fn definition(
         &self,
-        template_state_id: usize,
+        entry: ClosedSourceArmEntryId,
     ) -> Result<
         (
             &PartitionClosedSourceArmEntryKey,
@@ -3414,36 +3725,56 @@ impl PartitionClosedSourceArmInterner {
         ),
         CraneliftBackendError,
     > {
-        let mut matches = self
-            .keys
-            .iter()
-            .enumerate()
-            .filter(|(_, key)| key.template_state_id == template_state_id);
-        let Some((index, key)) = matches.next() else {
-            return Err(unsupported(
-                "NativeSourceKontSuccessorV1",
-                "SourceArm call edge has no closed normal-successor entry",
-            ));
-        };
-        if matches.next().is_some() {
-            return Err(unsupported(
-                "NativeSourceKontSuccessorV1",
-                "one SourceArm template was closed over multiple successor identities",
-            ));
-        }
-        Ok((key, self.definitions[index]))
+        let index = entry.0 as usize;
+        let key = self
+            .resolved_keys
+            .get(index)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeSourceKontSuccessorV1",
+                    "closed SourceArm entry has no resolved key",
+                )
+            })?;
+        let definition = self
+            .definitions
+            .get(index)
+            .and_then(|definition| *definition)
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeSourceKontSuccessorV1",
+                    "closed SourceArm entry has no resolved definition",
+                )
+            })?;
+        Ok((key, definition))
     }
 
     pub(super) fn counts(&self) -> usize {
-        self.keys.len()
+        self.definitions
+            .iter()
+            .filter(|definition| definition.is_some())
+            .count()
+    }
+
+    pub(super) fn request_count(&self) -> usize {
+        self.request_keys.len()
     }
 }
 
 pub(super) struct PartitionActiveSourceArmClosure {
+    pub(super) request: ClosedSourceArmRequestId,
     pub(super) template_state_id: usize,
     pub(super) source_return: SourceKontReturnId,
+    pub(super) source_return_cursor: PartitionSourceKontReturnCursor,
     pub(super) successor: Option<(NormalSourceKontSuccessorId, Inst)>,
-    pub(super) delegated_arm: Option<(usize, Inst)>,
+    pub(super) delegated_arm: Option<(
+        ClosedSourceArmRequestId,
+        usize,
+        Inst,
+        Value,
+        StackSlot,
+        Value,
+    )>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3481,6 +3812,7 @@ pub(super) enum PartitionPendingCallTarget {
         outer_call: PartitionArmOuterCallWitness,
     },
     FinalSourcePredecessor {
+        closure_request: ClosedSourceArmRequestId,
         checked_join: PartitionCheckedJoinIdentity,
         required_kind: ScalarMergeKind,
         branch_return: PartitionBranchReturnAuthority,
@@ -4464,6 +4796,7 @@ pub(super) struct SourceArmPartitionWorkItem {
     pub(super) cleanup_capture_pointer: Option<Value>,
     pub(super) source_return: Option<PartitionSourceKontReturnCursor>,
     pub(super) normal_successor_return: Option<SourceKontReturnId>,
+    pub(super) closure_request: Option<ClosedSourceArmRequestId>,
     pub(super) completed_producer_tail: Option<PartitionProducerTailCompletion>,
     pub(super) ledger_baseline: PartitionLedgerBaseline,
     pub(super) return_contract: PartitionStateReturnContract,
