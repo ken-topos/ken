@@ -5,7 +5,7 @@ status: ready
 owner: runtime
 size: XS
 gate: none
-depends_on: [RT-NATIVE-FNSPLIT]
+depends_on: []
 blocks: []
 github: null
 origin: adversary finding J1 on RT-PLANNER-DIAGNOSTIC-K (36dd61f6), side thread thr_2seh2bm1kr5mh evt_3zcz8pz8hd8jp, 2026-07-24 — routed to the Architect as a representation fork; ruled (a) at evt_6091m3nhregch, which names the Steward as next mover. Steward-filed (agents cannot create tracked work per COORDINATION §2).
@@ -156,7 +156,18 @@ verdicts; confirm none regressed rather than assuming.
   `-p ken-runtime` suite, not a targeted filter: this file's siblings observe
   minted error shapes.
 
-## ⛔ Contention — sequenced STRICTLY AFTER Boundary B1
+## ✅ CONTENTION DISCHARGED 2026-07-24 — Boundary B1 LANDED at `5554b33f`
+
+`depends_on` was `[RT-NATIVE-FNSPLIT]`, which was a **modeling error**: the real
+constraint was contention with **B1** on `planning/static_transition.rs`, not on
+the parent WP. The parent stays `active` until **B2** lands, so that edge would
+have read *blocked* for hours after the actual blocker cleared — and the
+frontier is exactly what the next sequencing pass trusts.
+
+⇒ Edge cleared. **This WP is dispatchable now.** The historical constraint is
+kept below because its verification instruction still applies.
+
+## ⛔ Contention (historical) — was sequenced STRICTLY AFTER Boundary B1
 
 Touches `crates/ken-runtime/src/cranelift_backend/planning/static_transition.rs`
 — **the file Boundary B1 is editing right now.** The runtime ring is a
