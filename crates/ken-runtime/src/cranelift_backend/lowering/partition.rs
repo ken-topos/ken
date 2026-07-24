@@ -726,9 +726,7 @@ fn partition_checked_parent_key(
 ) -> Option<PartitionCheckedParentKey> {
     parent.map(|parent| match parent {
         PartitionCheckedParent::Selection => PartitionCheckedParentKey::Selection,
-        PartitionCheckedParent::Unwind(cursor) => {
-            PartitionCheckedParentKey::Unwind(cursor.node)
-        }
+        PartitionCheckedParent::Unwind(cursor) => PartitionCheckedParentKey::Unwind(cursor.node),
     })
 }
 
@@ -827,6 +825,7 @@ enum PartitionLoweredShape {
         selection: PartitionLayerKey,
         unwind_head: Option<PartitionRecursorNodeId>,
         qualification_head: Option<PartitionRecursorQualificationNodeId>,
+        open_obligation_head: Option<PartitionOpenControlObligationNodeId>,
         checked_parent: Option<PartitionCheckedParentKey>,
         computational_ih_slot_template_id: Option<u64>,
         checked_invocation_source: Option<PartitionInvocationTemplateKey>,
@@ -957,6 +956,10 @@ fn partition_lowered_key(value: &Lowered) -> PartitionLoweredKey {
             qualification_head: invocation
                 .unwind
                 .partition_qualification
+                .map(|cursor| cursor.node),
+            open_obligation_head: invocation
+                .unwind
+                .partition_open_obligation
                 .map(|cursor| cursor.node),
             checked_parent: partition_checked_parent_key(invocation.checked_parent),
             computational_ih_slot_template_id: invocation.computational_ih_slot_template_id,
@@ -1257,6 +1260,7 @@ enum PartitionSourcePrefixKey {
     UnwindRecursorSegment {
         stack_head: Option<PartitionRecursorNodeId>,
         qualification_head: Option<PartitionRecursorQualificationNodeId>,
+        open_obligation_head: Option<PartitionOpenControlObligationNodeId>,
         next: Box<Self>,
     },
     IfScrutinee {
@@ -1351,9 +1355,8 @@ fn partition_source_prefix_key(prefix: &SourcePrefixTemplate) -> PartitionSource
         SourcePrefixTemplate::UnwindRecursorSegment { stack, next, .. } => {
             PartitionSourcePrefixKey::UnwindRecursorSegment {
                 stack_head: stack.partition_cursor.map(|cursor| cursor.node),
-                qualification_head: stack
-                    .partition_qualification
-                    .map(|cursor| cursor.node),
+                qualification_head: stack.partition_qualification.map(|cursor| cursor.node),
+                open_obligation_head: stack.partition_open_obligation.map(|cursor| cursor.node),
                 next: Box::new(partition_source_prefix_key(next)),
             }
         }
@@ -1542,6 +1545,12 @@ pub(super) struct PartitionRecursorQualificationCursor {
     pub(super) capture_pointer: Value,
 }
 
+#[derive(Clone, Copy)]
+pub(super) struct PartitionOpenControlObligationCursor {
+    pub(super) node: PartitionOpenControlObligationNodeId,
+    pub(super) capture_pointer: Value,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PartitionRecursorNodeKey {
     current: PartitionLayerKey,
@@ -1679,6 +1688,89 @@ impl PartitionRecursorQualificationNodeInterner {
             unsupported(
                 "NativeRecursorContinuationStepV1",
                 "recursor-qualification node identity is out of bounds",
+            )
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct PartitionOpenControlObligationNodeId(pub(super) u32);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PartitionOpenControlObligationNodeKey {
+    target: PartitionRecursorNodeId,
+    checked_frame_id: Option<u64>,
+    semantic_pending: bool,
+    has_parent_scope: bool,
+    successor: Option<PartitionOpenControlObligationNodeId>,
+}
+
+#[derive(Clone)]
+pub(super) struct PartitionOpenControlObligationNodeDefinition {
+    pub(super) target: PartitionRecursorNodeId,
+    pub(super) checked_frame_id: Option<u64>,
+    pub(super) semantic_pending: bool,
+    pub(super) has_parent_scope: bool,
+    pub(super) successor: Option<PartitionOpenControlObligationNodeId>,
+}
+
+#[derive(Default)]
+pub(super) struct PartitionOpenControlObligationNodeInterner {
+    by_bucket: BTreeMap<(u64, u64), Vec<PartitionOpenControlObligationNodeId>>,
+    keys: Vec<PartitionOpenControlObligationNodeKey>,
+    definitions: Vec<PartitionOpenControlObligationNodeDefinition>,
+}
+
+impl PartitionOpenControlObligationNodeInterner {
+    pub(super) fn intern(
+        &mut self,
+        target: PartitionRecursorNodeId,
+        checked_frame_id: Option<u64>,
+        semantic_pending: bool,
+        has_parent_scope: bool,
+        successor: Option<PartitionOpenControlObligationNodeId>,
+    ) -> PartitionOpenControlObligationNodeId {
+        let key = PartitionOpenControlObligationNodeKey {
+            target,
+            checked_frame_id,
+            semantic_pending,
+            has_parent_scope,
+            successor,
+        };
+        let bucket = partition_static_bucket(&key);
+        let bucket_key = (bucket.hash, bucket.bytes);
+        if let Some(candidates) = self.by_bucket.get(&bucket_key) {
+            for candidate in candidates.iter().copied() {
+                if self.keys[candidate.0 as usize] == key {
+                    return candidate;
+                }
+            }
+        }
+        let id = PartitionOpenControlObligationNodeId(
+            u32::try_from(self.keys.len())
+                .expect("compiler-private open-control-obligation identity exhausted"),
+        );
+        self.keys.push(key);
+        self.definitions
+            .push(PartitionOpenControlObligationNodeDefinition {
+                target,
+                checked_frame_id,
+                semantic_pending,
+                has_parent_scope,
+                successor,
+            });
+        self.by_bucket.entry(bucket_key).or_default().push(id);
+        id
+    }
+
+    pub(super) fn definition(
+        &self,
+        id: PartitionOpenControlObligationNodeId,
+    ) -> Result<PartitionOpenControlObligationNodeDefinition, CraneliftBackendError> {
+        self.definitions.get(id.0 as usize).cloned().ok_or_else(|| {
+            unsupported(
+                "NativeOpenControlObligationStepV1",
+                "open-control-obligation node identity is out of bounds",
             )
         })
     }
@@ -4227,6 +4319,9 @@ pub(super) fn append_partition_lowered_values(
             if let Some(cursor) = invocation.unwind.partition_qualification {
                 output.push(cursor.capture_pointer);
             }
+            if let Some(cursor) = invocation.unwind.partition_open_obligation {
+                output.push(cursor.capture_pointer);
+            }
             if let Some(PartitionCheckedParent::Unwind(cursor)) = invocation.checked_parent {
                 output.push(cursor.capture_pointer);
             }
@@ -4326,6 +4421,9 @@ pub(super) fn append_partition_prefix_values(
                 }
             }
             if let Some(cursor) = stack.partition_qualification {
+                output.push(cursor.capture_pointer);
+            }
+            if let Some(cursor) = stack.partition_open_obligation {
                 output.push(cursor.capture_pointer);
             }
         }
@@ -4476,9 +4574,10 @@ pub(super) fn rebuild_partition_lowered(
             if let Some(cursor) = &mut invocation.unwind.partition_qualification {
                 cursor.capture_pointer = next_partition_value(values)?;
             }
-            if let Some(PartitionCheckedParent::Unwind(cursor)) =
-                &mut invocation.checked_parent
-            {
+            if let Some(cursor) = &mut invocation.unwind.partition_open_obligation {
+                cursor.capture_pointer = next_partition_value(values)?;
+            }
+            if let Some(PartitionCheckedParent::Unwind(cursor)) = &mut invocation.checked_parent {
                 cursor.capture_pointer = next_partition_value(values)?;
             }
         }
@@ -4575,6 +4674,9 @@ pub(super) fn rebuild_partition_prefix(
                 }
             }
             if let Some(cursor) = &mut stack.partition_qualification {
+                cursor.capture_pointer = next_partition_value(values)?;
+            }
+            if let Some(cursor) = &mut stack.partition_open_obligation {
                 cursor.capture_pointer = next_partition_value(values)?;
             }
         }

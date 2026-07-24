@@ -264,6 +264,7 @@ struct Lowering<'a> {
     partition_source_nodes: PartitionSourceNodeInterner,
     partition_recursor_nodes: PartitionRecursorNodeInterner,
     partition_recursor_qualifications: PartitionRecursorQualificationNodeInterner,
+    partition_open_control_obligations: PartitionOpenControlObligationNodeInterner,
     partition_cleanup_suffixes: PartitionCleanupSuffixInterner,
     partition_cleanup_transitions: PartitionCleanupTransitionLedger,
     partition_cut_armed: bool,
@@ -723,9 +724,8 @@ struct RecursorInvocationSegment {
     /// recursor can copy a handle, but only one clone can consume the unique
     /// compiler-owned edge; every replay rejects before CFG.
     dynamic_splice_edges: Vec<DynamicSpliceEdgeId>,
-    /// Immutable mint-time witness for every already-open control extent.
-    /// Qualification may attach a fresh invocation identity later, but it may
-    /// not delete, duplicate, reorder, or transplant an exit obligation.
+    /// Legacy flat-path mint-time witnesses. Persistent partitioned stacks
+    /// instead carry one exact typed obligation cell per exit layer.
     open_control_obligations: Vec<OpenControlObligation>,
 }
 #[derive(Clone)]
@@ -733,6 +733,7 @@ struct RecursorUnwindStack {
     later_wrappers_in_construction_order: Vec<ComputationalRecursorLayer>,
     partition_cursor: Option<PartitionRecursorCursor>,
     partition_qualification: Option<PartitionRecursorQualificationCursor>,
+    partition_open_obligation: Option<PartitionOpenControlObligationCursor>,
 }
 #[derive(Clone, Copy)]
 enum PartitionCheckedParent {
@@ -880,7 +881,11 @@ impl RecursorInvocationSegment {
         computational_ih_slot_template_id: Option<u64>,
         checked_parent: Option<PartitionCheckedParent>,
     ) -> Self {
-        let open_control_obligations = open_control_obligations(&unwind);
+        let open_control_obligations = if unwind.partition_cursor.is_some() {
+            Vec::new()
+        } else {
+            open_control_obligations(&unwind)
+        };
         Self {
             origin,
             sibling_position,
@@ -897,6 +902,15 @@ impl RecursorInvocationSegment {
     }
 
     fn validate_open_control_obligations(&self) -> Result<(), CraneliftBackendError> {
+        if self.unwind.partition_cursor.is_some() {
+            if !self.open_control_obligations.is_empty() {
+                return Err(unsupported(
+                    "NativeOpenControlObligationStepV1",
+                    "persistent recursor segment retained a copied obligation vector",
+                ));
+            }
+            return Ok(());
+        }
         if open_control_obligations(&self.unwind) != self.open_control_obligations {
             return Err(unsupported(
                 "OrientedSubcontinuationPlanV1",
@@ -2596,7 +2610,9 @@ impl<'a> Lowering<'a> {
             let selected = match parent {
                 PartitionCheckedParent::Selection => invocation.selection.clone(),
                 PartitionCheckedParent::Unwind(cursor) => {
-                    self.partition_recursor_nodes.definition(cursor.node)?.current
+                    self.partition_recursor_nodes
+                        .definition(cursor.node)?
+                        .current
                 }
             };
             if !selected.semantic_pending
@@ -3114,9 +3130,6 @@ impl<'a> Lowering<'a> {
                 },
             };
             current_layer.role = unwind_role;
-            unwind
-                .later_wrappers_in_construction_order
-                .push(current_layer);
             if let Some((selected, lineage)) = source_control {
                 if selected.selected_scope.is_none() {
                     return Err(unsupported(
@@ -3165,6 +3178,31 @@ impl<'a> Lowering<'a> {
                         });
                 }
             }
+            if let Some(RecursorLayerRole::ExitsScope {
+                scope_origin,
+                scope_instance,
+                ..
+            }) = unwind
+                .later_wrappers_in_construction_order
+                .last()
+                .map(|layer| layer.role)
+            {
+                if let RecursorLayerRole::ExitsScope {
+                    parent_scope,
+                    parent_scope_instance,
+                    ..
+                } = &mut current_layer.role
+                {
+                    *parent_scope = Some(scope_origin);
+                    *parent_scope_instance = Some(scope_instance);
+                }
+            }
+            // The stack is stored outer-to-inner and popped inner-to-outer.
+            // Restored source scopes are the parents of the new current
+            // layer, so they must precede it in construction order.
+            unwind
+                .later_wrappers_in_construction_order
+                .push(current_layer);
             (invocation.selection, unwind)
         } else {
             (
@@ -3173,6 +3211,7 @@ impl<'a> Lowering<'a> {
                     later_wrappers_in_construction_order: Vec::new(),
                     partition_cursor: None,
                     partition_qualification: None,
+                    partition_open_obligation: None,
                 },
             )
         };
@@ -4183,6 +4222,7 @@ impl<'a> Lowering<'a> {
                 later_wrappers_in_construction_order: frames.rev().collect(),
                 partition_cursor: None,
                 partition_qualification: None,
+                partition_open_obligation: None,
             };
             let continuation = Self::replace_source_terminal_with_unwind(
                 continuation,
