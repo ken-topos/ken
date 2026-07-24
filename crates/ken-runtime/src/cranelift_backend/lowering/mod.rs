@@ -735,16 +735,12 @@ struct RecursorUnwindStack {
     partition_qualification: Option<PartitionRecursorQualificationCursor>,
     partition_open_obligation: Option<PartitionOpenControlObligationCursor>,
 }
+#[derive(Clone)]
 struct PoppedPartitionRecursorLayer {
     layer: ComputationalRecursorLayer,
     target: Option<PartitionRecursorCursor>,
     exit_obligation: Option<PartitionOpenControlObligationCursor>,
     exit_obligation_successor: Option<PartitionOpenControlObligationCursor>,
-}
-struct ReservedPartitionExitCursor {
-    popped: Vec<PoppedPartitionRecursorLayer>,
-    resume_cursor: ContinuationCursorId,
-    resume_cursor_instance: ControlCursorRef,
 }
 #[derive(Clone, Copy)]
 enum PartitionCheckedParent {
@@ -1906,6 +1902,7 @@ enum SourcePrefixTemplate {
     ReturnFromSelectedCase {
         delimiter: SelectedCaseReturnDelimiter,
         parent_capture: Option<OwnedSourceSelectedContinuation>,
+        exit_transition: Option<PoppedPartitionRecursorLayer>,
         next: Box<SourcePrefixTemplate>,
     },
     LetBody {
@@ -2047,6 +2044,8 @@ fn source_active_cursor<'a: 'b, 'b>(
 struct SourceControl<'a> {
     continuation: SourceContinuation<'a>,
     partition_cursor: Option<PartitionSourceCursor>,
+    consumed_partition_cursor: Option<PartitionSourceCursor>,
+    pending_partition_exit_stack: Option<RecursorUnwindStack>,
     producer_kont: Option<PartitionProducerKontCursor>,
     selected: SourceSelectedContinuation<'a>,
     selected_lineage: Vec<SourceSelectedContinuation<'a>>,
@@ -4297,6 +4296,7 @@ impl<'a> Lowering<'a> {
                     SourcePrefixTemplate::ReturnFromSelectedCase {
                         delimiter,
                         parent_capture: None,
+                        exit_transition: None,
                         next: Box::new(next),
                     },
                     terminal,
@@ -4532,7 +4532,8 @@ impl<'a> Lowering<'a> {
             },
             SourcePrefixTemplate::ReturnFromSelectedCase {
                 delimiter,
-                parent_capture,
+                parent_capture: _,
+                exit_transition: _,
                 next,
             } => SourceContinuation::ReturnFromSelectedCase {
                 delimiter: *delimiter,
