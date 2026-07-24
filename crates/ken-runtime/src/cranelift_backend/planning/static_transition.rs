@@ -1,8 +1,9 @@
 //! Factored, pre-emission native transition planner.
 //!
-//! Code identity is only `(transition kind, static node id)`. Dynamic
-//! environment, continuation, cleanup, source, and affine state travels as
-//! constant-width IDs into hash-consed persistent stores.
+//! Node code identity is `(transition kind, static node id)` and edge code
+//! identity is `(edge kind, static edge id)`. Dynamic environment,
+//! continuation, cleanup, source, and affine state travels as constant-width
+//! IDs into hash-consed persistent stores.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -14,6 +15,9 @@ pub(super) const MAX_HELPERS_PER_STATIC_SOURCE: usize = 8;
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
 struct StaticNodeId(u32);
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
+struct StaticEdgeId(u32);
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
 struct StaticSourceId(u32);
@@ -63,12 +67,23 @@ enum StoreKind {
     SourceReturn,
 }
 
-/// The complete helper identity. It contains no activation or occurrence path.
+/// The complete fixed-width helper identity. It contains no activation or
+/// occurrence path.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(C)]
-struct StaticHelperKey {
-    node: StaticNodeId,
-    transition: TransitionKind,
+enum PlannedHelperKey {
+    Node(TransitionKind, StaticNodeId),
+    Edge(EdgeKind, StaticEdgeId),
+}
+
+impl PlannedHelperKey {
+    const fn node(transition: TransitionKind, node: StaticNodeId) -> Self {
+        Self::Node(transition, node)
+    }
+
+    const fn edge(kind: EdgeKind, edge: StaticEdgeId) -> Self {
+        Self::Edge(kind, edge)
+    }
 }
 
 /// Fixed ABI shape carried between helpers. Every field is one dense ID.
@@ -98,13 +113,15 @@ struct PersistentStoreNode {
 
 #[derive(Clone, Copy, Debug)]
 struct StaticNode {
-    key: StaticHelperKey,
+    id: StaticNodeId,
+    transition: TransitionKind,
     owner: StaticSourceId,
     frame: DynamicActivationFrame,
 }
 
 #[derive(Clone, Copy, Debug)]
 struct StaticEdge {
+    id: StaticEdgeId,
     from: StaticNodeId,
     to: StaticNodeId,
     kind: EdgeKind,
@@ -139,6 +156,7 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan {
     stores: Vec<PersistentStoreNode>,
     store_depths: Vec<u32>,
     evidence: Vec<EdgeEvidence>,
+    planned_helpers: Vec<PlannedHelperKey>,
 }
 
 #[cfg(test)]
@@ -198,6 +216,7 @@ impl Planner {
                 stores: Vec::new(),
                 store_depths: Vec::new(),
                 evidence: Vec::new(),
+                planned_helpers: Vec::new(),
             },
             store_interner: BTreeMap::new(),
             next_source: 0,
@@ -228,15 +247,17 @@ impl Planner {
     ) -> Result<StaticNodeId, CraneliftBackendError> {
         let id = u32::try_from(self.plan.nodes.len())
             .map_err(|_| planner_error("static node identity exhausted"))?;
+        let id = StaticNodeId(id);
         self.plan.nodes.push(StaticNode {
-            key: StaticHelperKey {
-                node: StaticNodeId(id),
-                transition: kind,
-            },
+            id,
+            transition: kind,
             owner,
             frame,
         });
-        Ok(StaticNodeId(id))
+        self.plan
+            .planned_helpers
+            .push(PlannedHelperKey::node(kind, id));
+        Ok(id)
     }
 
     fn edge(
@@ -246,16 +267,25 @@ impl Planner {
         kind: EdgeKind,
     ) -> Result<(), CraneliftBackendError> {
         let edge = u32::try_from(self.plan.edges.len())
+            .map(StaticEdgeId)
             .map_err(|_| planner_error("static edge identity exhausted"))?;
         let owner = self.plan.nodes[from.0 as usize].owner;
-        self.plan.edges.push(StaticEdge { from, to, kind });
+        self.plan.edges.push(StaticEdge {
+            id: edge,
+            from,
+            to,
+            kind,
+        });
         self.plan.evidence.push(EdgeEvidence {
-            edge,
+            edge: edge.0,
             owner,
             from,
             to,
             kind,
         });
+        self.plan
+            .planned_helpers
+            .push(PlannedHelperKey::edge(kind, edge));
         Ok(())
     }
 
@@ -464,17 +494,23 @@ impl Planner {
                 };
                 let completed = self.node(TransitionKind::CompletedTail, owner, frame)?;
                 let tail = self.node(TransitionKind::ProducerTail, owner, frame)?;
+                let wrapper = self.node(TransitionKind::ProducerWrapper, owner, frame)?;
                 let resume = self.node(TransitionKind::SourceReturnResume, owner, frame)?;
-                self.edge(resume, tail, EdgeKind::InvokeProducerTail)?;
+                self.edge(resume, wrapper, EdgeKind::InvokeProducerWrapper)?;
+                self.edge(wrapper, tail, EdgeKind::InvokeProducerTail)?;
                 self.edge(tail, completed, EdgeKind::CompleteProducerTail)?;
                 self.edge(completed, successor, exit_kind)?;
-                let source_return =
-                    self.store(StoreKind::SourceReturn, resume.0, tail.0, ctx.source_return)?;
+                let source_return = self.store(
+                    StoreKind::SourceReturn,
+                    wrapper.0,
+                    tail.0,
+                    ctx.source_return,
+                )?;
                 let control_ctx = PlanContext {
                     source_return,
                     ..control_ctx
                 };
-                for id in [completed, tail, resume] {
+                for id in [completed, tail, wrapper, resume] {
                     self.plan.nodes[id.0 as usize].frame.source_return = source_return;
                     self.plan.nodes[id.0 as usize].frame.cleanup = cleanup;
                     self.plan.nodes[id.0 as usize].frame.affine = affine;
@@ -500,12 +536,7 @@ impl Planner {
                 )?;
                 let scrutinee =
                     self.plan_expr(scrutinee, control_ctx, dispatch, EdgeKind::Continue, 0)?;
-                let wrapper = self.node(TransitionKind::ProducerWrapper, owner, frame)?;
-                self.plan.nodes[wrapper.0 as usize].frame.source_return = source_return;
-                self.plan.nodes[wrapper.0 as usize].frame.cleanup = cleanup;
-                self.plan.nodes[wrapper.0 as usize].frame.affine = affine;
-                self.edge(wrapper, scrutinee, EdgeKind::InvokeProducerWrapper)?;
-                Ok(wrapper)
+                Ok(scrutinee)
             }
             RuntimeExpr::Closure { body, .. } => {
                 let body_return_owner = self.source()?;
@@ -618,6 +649,36 @@ impl Planner {
 }
 
 impl StaticTransitionPlan {
+    fn helper_key_for_activation(
+        &self,
+        node: StaticNodeId,
+        activation: DynamicActivationFrame,
+    ) -> Result<PlannedHelperKey, CraneliftBackendError> {
+        let static_node = self
+            .nodes
+            .get(node.0 as usize)
+            .ok_or_else(|| planner_error("activation names an unknown static node"))?;
+        let store_is_closed =
+            |id: PersistentNodeId| id.0 == 0 || id.0 as usize <= self.stores.len();
+        for id in [
+            activation.syntax,
+            activation.environment,
+            activation.normal,
+            activation.abrupt,
+            activation.path,
+            activation.cleanup,
+            activation.affine,
+            activation.source_return,
+        ] {
+            if !store_is_closed(id) {
+                return Err(planner_error(
+                    "activation frame references an unclosed persistent node",
+                ));
+            }
+        }
+        Ok(PlannedHelperKey::node(static_node.transition, node))
+    }
+
     fn validate(&self) -> Result<(), CraneliftBackendError> {
         if self.entries.is_empty() {
             return Err(planner_error("closed graph has no entry"));
@@ -625,55 +686,110 @@ impl StaticTransitionPlan {
         if self.evidence.len() != self.edges.len() {
             return Err(planner_error("edge evidence is incomplete"));
         }
-        let mut helpers = BTreeMap::<StaticSourceId, usize>::new();
-        for node in &self.nodes {
-            if node.key.node.0 as usize >= self.nodes.len() {
-                return Err(planner_error("node key is outside the closed graph"));
-            }
-            *helpers.entry(node.owner).or_default() += 1;
+
+        if self.store_depths.len() != self.stores.len() {
+            return Err(planner_error(
+                "persistent store depth table does not match the store",
+            ));
         }
-        for edge in &self.edges {
+        let mut unique_stores = BTreeSet::new();
+        for (index, node) in self.stores.iter().enumerate() {
+            if !unique_stores.insert(*node) {
+                return Err(planner_error("persistent store contains a duplicate node"));
+            }
+            let child_depth = if node.child.0 == 0 {
+                0
+            } else {
+                let child_index = node.child.0 as usize - 1;
+                if child_index >= index {
+                    return Err(planner_error(
+                        "persistent store child is not an earlier closed node",
+                    ));
+                }
+                self.store_depths[child_index]
+            };
+            let depth = child_depth
+                .checked_add(1)
+                .ok_or_else(|| planner_error("persistent chain depth exhausted"))?;
+            if self.store_depths[index] != depth {
+                return Err(planner_error(
+                    "persistent store depth does not match its child chain",
+                ));
+            }
+        }
+
+        let mut expected_helpers = BTreeSet::new();
+        for (index, node) in self.nodes.iter().enumerate() {
+            if node.id.0 as usize != index {
+                return Err(planner_error(
+                    "static node identity does not match its closed position",
+                ));
+            }
+            expected_helpers.insert(PlannedHelperKey::node(node.transition, node.id));
+        }
+        for (index, edge) in self.edges.iter().enumerate() {
+            if edge.id.0 as usize != index {
+                return Err(planner_error(
+                    "static edge identity does not match its closed position",
+                ));
+            }
             if edge.from.0 as usize >= self.nodes.len() || edge.to.0 as usize >= self.nodes.len() {
                 return Err(planner_error("edge endpoint is outside the closed graph"));
             }
-            *helpers
-                .entry(self.nodes[edge.from.0 as usize].owner)
-                .or_default() += 1;
+            expected_helpers.insert(PlannedHelperKey::edge(edge.kind, edge.id));
+        }
+        let actual_helpers = self
+            .planned_helpers
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        if actual_helpers.len() != self.planned_helpers.len() {
+            return Err(planner_error(
+                "planned helper inventory contains a duplicate identity",
+            ));
+        }
+        if actual_helpers != expected_helpers
+            || self.planned_helpers.len() != self.nodes.len() + self.edges.len()
+        {
+            return Err(planner_error(
+                "planned helper inventory is not exact for the closed graph",
+            ));
+        }
+        let mut helpers = BTreeMap::<StaticSourceId, usize>::new();
+        for helper in &self.planned_helpers {
+            let owner =
+                match *helper {
+                    PlannedHelperKey::Node(transition, id) => {
+                        let node = self.nodes.get(id.0 as usize).ok_or_else(|| {
+                            planner_error("planned node helper is outside the graph")
+                        })?;
+                        if transition != node.transition || id != node.id {
+                            return Err(planner_error(
+                                "planned node helper does not match its static node",
+                            ));
+                        }
+                        node.owner
+                    }
+                    PlannedHelperKey::Edge(kind, id) => {
+                        let edge = self.edges.get(id.0 as usize).ok_or_else(|| {
+                            planner_error("planned edge helper is outside the graph")
+                        })?;
+                        if kind != edge.kind || id != edge.id {
+                            return Err(planner_error(
+                                "planned edge helper does not match its static edge",
+                            ));
+                        }
+                        self.nodes[edge.from.0 as usize].owner
+                    }
+                };
+            *helpers.entry(owner).or_default() += 1;
         }
         if helpers.values().copied().max().unwrap_or(0) > MAX_HELPERS_PER_STATIC_SOURCE {
             return Err(planner_error(
                 "fixed K helpers per static source was exceeded",
             ));
         }
-        for node in self
-            .nodes
-            .iter()
-            .filter(|node| node.key.transition == TransitionKind::ProducerWrapper)
-        {
-            let direct = self
-                .edges
-                .iter()
-                .filter(|edge| {
-                    edge.from == node.key.node && edge.kind == EdgeKind::InvokeProducerWrapper
-                })
-                .count();
-            if direct != 1 {
-                return Err(planner_error(
-                    "producer wrapper must have exactly one direct invocation edge",
-                ));
-            }
-        }
-        for edge in self
-            .edges
-            .iter()
-            .filter(|edge| edge.kind == EdgeKind::SourceReturnOwnedResume)
-        {
-            if self.nodes[edge.to.0 as usize].key.transition != TransitionKind::SourceReturnResume {
-                return Err(planner_error(
-                    "source-return-owned edge does not target its explicit resume node",
-                ));
-            }
-        }
+
         for (index, (edge, evidence)) in self.edges.iter().zip(&self.evidence).enumerate() {
             if evidence.edge as usize != index
                 || evidence.owner != self.nodes[edge.from.0 as usize].owner
@@ -684,40 +800,47 @@ impl StaticTransitionPlan {
                 return Err(planner_error("out-of-line edge evidence is not exact"));
             }
         }
-        let store_is_closed =
-            |id: PersistentNodeId| id.0 == 0 || id.0 as usize <= self.stores.len();
         for node in &self.nodes {
-            for id in [
-                node.frame.syntax,
-                node.frame.environment,
-                node.frame.normal,
-                node.frame.abrupt,
-                node.frame.path,
-                node.frame.cleanup,
-                node.frame.affine,
-                node.frame.source_return,
-            ] {
-                if !store_is_closed(id) {
-                    return Err(planner_error(
-                        "activation frame references an unclosed persistent node",
-                    ));
-                }
+            if self.helper_key_for_activation(node.id, node.frame)?
+                != PlannedHelperKey::node(node.transition, node.id)
+            {
+                return Err(planner_error(
+                    "dynamic activation changed static helper identity",
+                ));
             }
         }
-        let terminal = self
+
+        let terminals = self
             .nodes
             .iter()
-            .find(|node| node.key.transition == TransitionKind::Terminal)
-            .ok_or_else(|| planner_error("closed graph has no Terminal"))?
-            .key
-            .node;
-        let trap_terminal = self
+            .filter(|node| node.transition == TransitionKind::Terminal)
+            .map(|node| node.id)
+            .collect::<Vec<_>>();
+        let trap_terminals = self
             .nodes
             .iter()
-            .find(|node| node.key.transition == TransitionKind::TrapTerminal)
-            .ok_or_else(|| planner_error("closed graph has no TrapTerminal"))?
-            .key
-            .node;
+            .filter(|node| node.transition == TransitionKind::TrapTerminal)
+            .map(|node| node.id)
+            .collect::<Vec<_>>();
+        if terminals.len() != 1 || trap_terminals.len() != 1 {
+            return Err(planner_error(
+                "closed graph must have exactly one Terminal and TrapTerminal",
+            ));
+        }
+        let terminal = terminals[0];
+        let trap_terminal = trap_terminals[0];
+        if self
+            .edges
+            .iter()
+            .any(|edge| edge.from == terminal || edge.from == trap_terminal)
+        {
+            return Err(planner_error(
+                "Terminal and TrapTerminal must have no outgoing edges",
+            ));
+        }
+
+        self.validate_source_return_topology()?;
+
         let mut reachable = self.entries.iter().copied().collect::<BTreeSet<_>>();
         reachable.extend([terminal, trap_terminal]);
         loop {
@@ -739,6 +862,198 @@ impl StaticTransitionPlan {
         Ok(())
     }
 
+    fn validate_source_return_topology(&self) -> Result<(), CraneliftBackendError> {
+        let special = |transition| {
+            matches!(
+                transition,
+                TransitionKind::SourceReturnResume
+                    | TransitionKind::ProducerWrapper
+                    | TransitionKind::ProducerTail
+                    | TransitionKind::CompletedTail
+            )
+        };
+        let owners = self
+            .nodes
+            .iter()
+            .filter(|node| special(node.transition))
+            .map(|node| node.owner)
+            .collect::<BTreeSet<_>>();
+        for owner in owners {
+            let one = |transition| {
+                let nodes = self
+                    .nodes
+                    .iter()
+                    .filter(|node| node.owner == owner && node.transition == transition)
+                    .collect::<Vec<_>>();
+                match nodes.as_slice() {
+                    [node] => Ok(*node),
+                    _ => Err(planner_error(
+                        "computational source owner lacks one R/W/T/CompletedTail quartet",
+                    )),
+                }
+            };
+            let resume = one(TransitionKind::SourceReturnResume)?;
+            let wrapper = one(TransitionKind::ProducerWrapper)?;
+            let tail = one(TransitionKind::ProducerTail)?;
+            let completed = one(TransitionKind::CompletedTail)?;
+            let descriptor = wrapper.frame.source_return;
+            if descriptor.0 == 0
+                || [resume, tail, completed]
+                    .iter()
+                    .any(|node| node.frame.source_return != descriptor)
+            {
+                return Err(planner_error(
+                    "computational quartet does not share one source-return descriptor",
+                ));
+            }
+            let stored = self
+                .stores
+                .get(descriptor.0 as usize - 1)
+                .ok_or_else(|| planner_error("source-return descriptor is not closed"))?;
+            if stored.kind != StoreKind::SourceReturn
+                || stored.local != wrapper.id.0
+                || stored.aux != tail.id.0
+            {
+                return Err(planner_error(
+                    "source-return descriptor does not name its exact W and T",
+                ));
+            }
+            self.require_exact_edge(
+                resume.id,
+                wrapper.id,
+                EdgeKind::InvokeProducerWrapper,
+                "source-return resume must invoke its exact producer wrapper once",
+            )?;
+            self.require_exact_edge(
+                wrapper.id,
+                tail.id,
+                EdgeKind::InvokeProducerTail,
+                "producer wrapper must invoke its exact live producer tail once",
+            )?;
+            self.require_exact_edge(
+                tail.id,
+                completed.id,
+                EdgeKind::CompleteProducerTail,
+                "producer tail must complete through its exact CompletedTail once",
+            )?;
+            if self
+                .edges
+                .iter()
+                .filter(|edge| edge.to == wrapper.id)
+                .count()
+                != 1
+            {
+                return Err(planner_error(
+                    "producer wrapper has another incoming callable edge",
+                ));
+            }
+            if self.entries.contains(&wrapper.id) {
+                return Err(planner_error(
+                    "producer wrapper cannot be a pre-source graph entry",
+                ));
+            }
+            if self
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.to == completed.id && edge.kind == EdgeKind::CompleteProducerTail
+                })
+                .count()
+                != 1
+            {
+                return Err(planner_error(
+                    "CompletedTail completion must originate from its exact producer tail",
+                ));
+            }
+            if self
+                .edges
+                .iter()
+                .filter(|edge| edge.from == completed.id)
+                .count()
+                != 1
+            {
+                return Err(planner_error(
+                    "CompletedTail must have exactly one normal successor",
+                ));
+            }
+        }
+        for edge in self
+            .edges
+            .iter()
+            .filter(|edge| edge.kind == EdgeKind::SourceReturnOwnedResume)
+        {
+            let from = &self.nodes[edge.from.0 as usize];
+            let to = &self.nodes[edge.to.0 as usize];
+            let edge_descriptor = if from.transition == TransitionKind::CompletedTail {
+                let descriptor_index =
+                    from.frame.source_return.0.checked_sub(1).ok_or_else(|| {
+                        planner_error(
+                            "CompletedTail source return does not name a closed parent descriptor",
+                        )
+                    })? as usize;
+                self.stores
+                    .get(descriptor_index)
+                    .filter(|descriptor| descriptor.kind == StoreKind::SourceReturn)
+                    .map(|descriptor| descriptor.child)
+                    .ok_or_else(|| {
+                        planner_error(
+                            "CompletedTail source return does not name a closed parent descriptor",
+                        )
+                    })?
+            } else {
+                from.frame.source_return
+            };
+            if to.transition != TransitionKind::SourceReturnResume
+                || edge_descriptor.0 == 0
+                || edge_descriptor != to.frame.source_return
+            {
+                return Err(planner_error(
+                    "source-return-owned edge targets a resume from another descriptor",
+                ));
+            }
+        }
+        for edge in self
+            .edges
+            .iter()
+            .filter(|edge| edge.kind == EdgeKind::CompleteProducerTail)
+        {
+            let from = &self.nodes[edge.from.0 as usize];
+            let to = &self.nodes[edge.to.0 as usize];
+            if from.transition != TransitionKind::ProducerTail
+                || to.transition != TransitionKind::CompletedTail
+                || from.owner != to.owner
+            {
+                return Err(planner_error(
+                    "producer completion is not owned by one computational source",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn require_exact_edge(
+        &self,
+        from: StaticNodeId,
+        to: StaticNodeId,
+        kind: EdgeKind,
+        error: &'static str,
+    ) -> Result<(), CraneliftBackendError> {
+        let matching = self
+            .edges
+            .iter()
+            .filter(|edge| edge.from == from && edge.to == to && edge.kind == kind)
+            .count();
+        let same_kind_from = self
+            .edges
+            .iter()
+            .filter(|edge| edge.from == from && edge.kind == kind)
+            .count();
+        if matching != 1 || same_kind_from != 1 {
+            return Err(planner_error(error));
+        }
+        Ok(())
+    }
+
     #[cfg(test)]
     fn census(&self) -> BoundaryACensus {
         let max_depth = |kind| {
@@ -750,22 +1065,24 @@ impl StaticTransitionPlan {
                 .unwrap_or(0)
         };
         let mut helpers = BTreeMap::<StaticSourceId, usize>::new();
-        for node in &self.nodes {
-            *helpers.entry(node.owner).or_default() += 1;
-        }
-        for edge in &self.edges {
-            *helpers
-                .entry(self.nodes[edge.from.0 as usize].owner)
-                .or_default() += 1;
+        for helper in &self.planned_helpers {
+            let owner = match *helper {
+                PlannedHelperKey::Node(_, id) => self.nodes[id.0 as usize].owner,
+                PlannedHelperKey::Edge(_, id) => {
+                    let edge = self.edges[id.0 as usize];
+                    self.nodes[edge.from.0 as usize].owner
+                }
+            };
+            *helpers.entry(owner).or_default() += 1;
         }
         BoundaryACensus {
             static_nodes: self.nodes.len(),
             edges: self.edges.len(),
-            planned_helpers: self.nodes.len() + self.edges.len(),
+            planned_helpers: self.planned_helpers.len(),
             persistent_store_nodes: self.stores.len(),
             out_of_line_evidence_records: self.evidence.len(),
             max_helpers_per_static_source: helpers.values().copied().max().unwrap_or(0),
-            helper_key_bytes: std::mem::size_of::<StaticHelperKey>(),
+            helper_key_bytes: std::mem::size_of::<PlannedHelperKey>(),
             activation_frame_bytes: std::mem::size_of::<DynamicActivationFrame>(),
             store_node_bytes: std::mem::size_of::<PersistentStoreNode>(),
             helper_key_schemas: 1,
@@ -780,7 +1097,7 @@ impl StaticTransitionPlan {
             source_return_resume_nodes: self
                 .nodes
                 .iter()
-                .filter(|node| node.key.transition == TransitionKind::SourceReturnResume)
+                .filter(|node| node.transition == TransitionKind::SourceReturnResume)
                 .count(),
         }
     }
@@ -951,6 +1268,56 @@ mod tests {
         (first, second)
     }
 
+    fn index_of_edge_helper(plan: &StaticTransitionPlan, edge: StaticEdgeId) -> usize {
+        plan.planned_helpers
+            .iter()
+            .position(|helper| matches!(helper, PlannedHelperKey::Edge(_, id) if *id == edge))
+            .expect("edge has a planned helper")
+    }
+
+    fn rewrite_edge(
+        plan: &mut StaticTransitionPlan,
+        edge: StaticEdgeId,
+        from: StaticNodeId,
+        to: StaticNodeId,
+        kind: EdgeKind,
+    ) {
+        let index = edge.0 as usize;
+        plan.edges[index] = StaticEdge {
+            id: edge,
+            from,
+            to,
+            kind,
+        };
+        plan.evidence[index] = EdgeEvidence {
+            edge: edge.0,
+            owner: plan.nodes[from.0 as usize].owner,
+            from,
+            to,
+            kind,
+        };
+        let helper = index_of_edge_helper(plan, edge);
+        plan.planned_helpers[helper] = PlannedHelperKey::edge(kind, edge);
+    }
+
+    fn append_edge(
+        plan: &mut StaticTransitionPlan,
+        from: StaticNodeId,
+        to: StaticNodeId,
+        kind: EdgeKind,
+    ) {
+        let id = StaticEdgeId(plan.edges.len() as u32);
+        plan.edges.push(StaticEdge { id, from, to, kind });
+        plan.evidence.push(EdgeEvidence {
+            edge: id.0,
+            owner: plan.nodes[from.0 as usize].owner,
+            from,
+            to,
+            kind,
+        });
+        plan.planned_helpers.push(PlannedHelperKey::edge(kind, id));
+    }
+
     #[test]
     fn boundary_a_nested_resource_brackets_n3_through_n7_are_closed_and_affine() {
         // Promise class: durable invariant. Counts remain relational; this
@@ -1078,75 +1445,248 @@ mod tests {
     }
 
     #[test]
-    fn helper_identity_excludes_dynamic_activation_and_source_return_is_not_terminal() {
+    fn distinct_activations_share_one_helper_key_and_source_return_is_not_terminal() {
         // Promise class: durable invariant.
         let plan =
             plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
         let wrapper = plan
             .nodes
             .iter()
-            .find(|node| node.key.transition == TransitionKind::ProducerWrapper)
+            .find(|node| node.transition == TransitionKind::ProducerWrapper)
             .unwrap();
-        let mut changed = wrapper.frame;
-        changed.environment = PersistentNodeId(u32::MAX);
-        changed.path = PersistentNodeId(u32::MAX - 1);
-        assert_eq!(wrapper.key, wrapper.key);
-        assert_ne!(wrapper.frame, changed);
+        let other_activation = plan
+            .nodes
+            .iter()
+            .map(|node| node.frame)
+            .find(|frame| {
+                frame.environment != wrapper.frame.environment && frame.path != wrapper.frame.path
+            })
+            .expect("nested bracket plan has a distinct valid activation");
+        assert_ne!(wrapper.frame, other_activation);
+        let helpers_before = plan.census().planned_helpers;
+        let first = plan
+            .helper_key_for_activation(wrapper.id, wrapper.frame)
+            .unwrap();
+        let second = plan
+            .helper_key_for_activation(wrapper.id, other_activation)
+            .unwrap();
+        assert_eq!(
+            BTreeSet::from([first, second]).len(),
+            1,
+            "distinct dynamic activations multiplied one static helper"
+        );
+        assert_eq!(
+            plan.census().planned_helpers,
+            helpers_before,
+            "flowing another activation through a static node grew planned code"
+        );
         assert!(plan
             .edges
             .iter()
             .filter(|edge| edge.kind == EdgeKind::SourceReturnOwnedResume)
             .all(|edge| {
-                plan.nodes[edge.to.0 as usize].key.transition == TransitionKind::SourceReturnResume
+                plan.nodes[edge.to.0 as usize].transition == TransitionKind::SourceReturnResume
                     && edge.to != plan.terminal_id()
             }));
     }
 
     #[test]
-    fn source_return_and_single_wrapper_guards_fail_closed_on_exact_mutations() {
+    fn source_return_ownership_guards_fail_closed_on_exact_cross_wires() {
         // Promise class: durable invariant.
         let plan =
             plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
-        let wrapper = plan
+        let wrappers = plan
             .nodes
             .iter()
-            .find(|node| node.key.transition == TransitionKind::ProducerWrapper)
-            .unwrap()
-            .key
-            .node;
-        let direct = *plan
+            .filter(|node| node.transition == TransitionKind::ProducerWrapper)
+            .collect::<Vec<_>>();
+        let first_wrapper = wrappers[0];
+        let second_wrapper = wrappers[1];
+        let node_for = |owner, transition| {
+            plan.nodes
+                .iter()
+                .find(|node| node.owner == owner && node.transition == transition)
+                .unwrap()
+                .id
+        };
+        let first_resume = node_for(first_wrapper.owner, TransitionKind::SourceReturnResume);
+        let second_resume = node_for(second_wrapper.owner, TransitionKind::SourceReturnResume);
+        let first_tail = node_for(first_wrapper.owner, TransitionKind::ProducerTail);
+        let second_tail = node_for(second_wrapper.owner, TransitionKind::ProducerTail);
+
+        let source_return_edge = *plan
             .edges
             .iter()
-            .find(|edge| edge.from == wrapper && edge.kind == EdgeKind::InvokeProducerWrapper)
+            .find(|edge| edge.to == first_resume && edge.kind == EdgeKind::SourceReturnOwnedResume)
             .unwrap();
-        let mut duplicate = plan.clone();
-        let wrapper_owner = duplicate.nodes[wrapper.0 as usize].owner;
-        let replacement = duplicate
-            .edges
-            .iter_mut()
-            .find(|edge| {
-                edge.from != wrapper && duplicate.nodes[edge.from.0 as usize].owner == wrapper_owner
-            })
-            .unwrap();
-        replacement.from = direct.from;
-        replacement.to = direct.to;
-        replacement.kind = EdgeKind::InvokeProducerWrapper;
+        let mut crossed_resume = plan.clone();
+        rewrite_edge(
+            &mut crossed_resume,
+            source_return_edge.id,
+            source_return_edge.from,
+            second_resume,
+            source_return_edge.kind,
+        );
         assert_eq!(
-            duplicate.validate().unwrap_err(),
-            planner_error("producer wrapper must have exactly one direct invocation edge")
+            crossed_resume.validate().unwrap_err(),
+            planner_error("source-return-owned edge targets a resume from another descriptor")
         );
 
-        let mut terminal = plan.clone();
-        let terminal_id = terminal.terminal_id();
-        terminal
+        let resume_edge = *plan
             .edges
-            .iter_mut()
-            .find(|edge| edge.kind == EdgeKind::SourceReturnOwnedResume)
-            .unwrap()
-            .to = terminal_id;
+            .iter()
+            .find(|edge| edge.from == first_resume && edge.kind == EdgeKind::InvokeProducerWrapper)
+            .unwrap();
+        let mut crossed_wrapper = plan.clone();
+        rewrite_edge(
+            &mut crossed_wrapper,
+            resume_edge.id,
+            resume_edge.from,
+            second_wrapper.id,
+            resume_edge.kind,
+        );
         assert_eq!(
-            terminal.validate().unwrap_err(),
-            planner_error("source-return-owned edge does not target its explicit resume node")
+            crossed_wrapper.validate().unwrap_err(),
+            planner_error("source-return resume must invoke its exact producer wrapper once")
+        );
+
+        let wrapper_edge = *plan
+            .edges
+            .iter()
+            .find(|edge| edge.from == first_wrapper.id && edge.kind == EdgeKind::InvokeProducerTail)
+            .unwrap();
+        let mut crossed_tail = plan.clone();
+        rewrite_edge(
+            &mut crossed_tail,
+            wrapper_edge.id,
+            wrapper_edge.from,
+            second_tail,
+            wrapper_edge.kind,
+        );
+        assert_eq!(
+            crossed_tail.validate().unwrap_err(),
+            planner_error("producer wrapper must invoke its exact live producer tail once")
+        );
+
+        let descriptor = first_wrapper.frame.source_return.0 as usize - 1;
+        let mut crossed_descriptor_wrapper = plan.clone();
+        crossed_descriptor_wrapper.stores[descriptor].local = second_wrapper.id.0;
+        assert_eq!(
+            crossed_descriptor_wrapper.validate().unwrap_err(),
+            planner_error("source-return descriptor does not name its exact W and T")
+        );
+
+        let mut crossed_descriptor_tail = plan.clone();
+        crossed_descriptor_tail.stores[descriptor].aux = second_tail.0;
+        assert_eq!(
+            crossed_descriptor_tail.validate().unwrap_err(),
+            planner_error("source-return descriptor does not name its exact W and T")
+        );
+
+        let tail_edge = *plan
+            .edges
+            .iter()
+            .find(|edge| edge.from == first_tail && edge.kind == EdgeKind::CompleteProducerTail)
+            .unwrap();
+        let mut duplicate_wrapper = plan.clone();
+        rewrite_edge(
+            &mut duplicate_wrapper,
+            tail_edge.id,
+            first_resume,
+            first_wrapper.id,
+            EdgeKind::InvokeProducerWrapper,
+        );
+        assert_eq!(
+            duplicate_wrapper.validate().unwrap_err(),
+            planner_error("source-return resume must invoke its exact producer wrapper once")
+        );
+
+        let mut terminal_resume = plan.clone();
+        rewrite_edge(
+            &mut terminal_resume,
+            source_return_edge.id,
+            source_return_edge.from,
+            plan.terminal_id(),
+            source_return_edge.kind,
+        );
+        assert_eq!(
+            terminal_resume.validate().unwrap_err(),
+            planner_error("source-return-owned edge targets a resume from another descriptor")
+        );
+
+        let mut wrapper_entry = plan.clone();
+        wrapper_entry.entries[0] = first_wrapper.id;
+        assert_eq!(
+            wrapper_entry.validate().unwrap_err(),
+            planner_error("producer wrapper cannot be a pre-source graph entry")
+        );
+    }
+
+    #[test]
+    fn closed_identity_terminal_and_store_guards_reject_exact_mutations() {
+        // Promise class: durable invariant.
+        let plan =
+            plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
+
+        let mut wrong_node_identity = plan.clone();
+        let evaluate = wrong_node_identity
+            .nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| node.transition == TransitionKind::Evaluate)
+            .map(|(index, node)| (index, node.id))
+            .take(2)
+            .collect::<Vec<_>>();
+        wrong_node_identity.nodes[evaluate[0].0].id = evaluate[1].1;
+        assert_eq!(
+            wrong_node_identity.validate().unwrap_err(),
+            planner_error("static node identity does not match its closed position")
+        );
+
+        let mut terminal_outgoing = plan.clone();
+        let resume = terminal_outgoing
+            .nodes
+            .iter()
+            .find(|node| node.transition == TransitionKind::SourceReturnResume)
+            .unwrap()
+            .id;
+        append_edge(
+            &mut terminal_outgoing,
+            plan.terminal_id(),
+            resume,
+            EdgeKind::Continue,
+        );
+        assert_eq!(
+            terminal_outgoing.validate().unwrap_err(),
+            planner_error("Terminal and TrapTerminal must have no outgoing edges")
+        );
+
+        let mut unclosed_store = plan.clone();
+        unclosed_store.stores[0].child = PersistentNodeId(unclosed_store.stores.len() as u32 + 1);
+        assert_eq!(
+            unclosed_store.validate().unwrap_err(),
+            planner_error("persistent store child is not an earlier closed node")
+        );
+
+        let mut wrong_depth = plan.clone();
+        wrong_depth.store_depths[0] += 1;
+        assert_eq!(
+            wrong_depth.validate().unwrap_err(),
+            planner_error("persistent store depth does not match its child chain")
+        );
+
+        let mut duplicate_store = plan.clone();
+        duplicate_store.stores[1] = duplicate_store.stores[0];
+        assert_eq!(
+            duplicate_store.validate().unwrap_err(),
+            planner_error("persistent store contains a duplicate node")
+        );
+
+        let mut missing_helper = plan.clone();
+        missing_helper.planned_helpers.pop();
+        assert_eq!(
+            missing_helper.validate().unwrap_err(),
+            planner_error("planned helper inventory is not exact for the closed graph")
         );
     }
 
@@ -1154,10 +1694,9 @@ mod tests {
         fn terminal_id(&self) -> StaticNodeId {
             self.nodes
                 .iter()
-                .find(|node| node.key.transition == TransitionKind::Terminal)
+                .find(|node| node.transition == TransitionKind::Terminal)
                 .expect("closed graph has Terminal")
-                .key
-                .node
+                .id
         }
     }
 }
