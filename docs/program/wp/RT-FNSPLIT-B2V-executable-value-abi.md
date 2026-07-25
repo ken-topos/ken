@@ -77,11 +77,17 @@ finding.**
 
 | what | where |
 |---|---|
-| the `Lowered` specialization lattice — **21 variants** | `cranelift_backend/lowering/mod.rs:415` |
-| `Store` · `intern` · `slot_id` — the value substrate to **subsume** | `store.rs:343`, `:360`, `:400` |
+| the `Lowered` specialization lattice — **21 variants** | `cranelift_backend/lowering/mod.rs:417` (`:415` is the `#[derive]`) |
+| `Store` · `intern` · `slot_id` — the **encode half only**; see the `D2` amendment | `store.rs:343`, `:360`, `:400` |
 | `AbiCarrier::ValueWord` · `GroundValueCarrier` · `ResultWord` | `planning/static_transition/abi.rs:64`, `:74`, `:76` |
 | declared ownership per carrier (`OwnedByFrame` / `BorrowedForActivation` / `TransferredToCaller`) | `abi.rs:126`–`:131` |
-| the Rust-side decode path that **does not count** | `lowering/mod.rs:290`, `:5824` |
+| the Rust-side decode path that **does not count** | `lowering/mod.rs:290` (`result_table`), `emit_result` at `:5820` |
+
+⚠ **Two locators were off by a line or two and are corrected above** — the ring
+re-derived them rather than silently adjusting, which is the right call: *a
+locator one reader silently corrects is a locator the next reader re-derives.*
+⛔ **`store.rs`'s row no longer says "subsume" — read the `D2` amendment before
+you use it.**
 
 ## Deliverables
 
@@ -98,11 +104,64 @@ into runtime-owned value storage.
 caller depth.** That is the `B2R` seed-environment lesson: a representation
 chosen by inspecting a value describes a program that cannot be written.
 
-### `D2` — subsume the existing runtime machinery
+### `D2` — subsume **and complete** the existing runtime machinery
 
-**Reuse the existing runtime value/store substrate** (`store.rs`) for
-persistable Ken values. Add only the **invocation-scoped** storage needed for
-**borrowed ingress** such as `HostResult`.
+> ## ⛔ AMENDED 2026-07-25 — THE ORIGINAL WORDING WAS A FALSE FIXED INPUT
+>
+> This deliverable said *"reuse the existing runtime value/store substrate,"*
+> and the landed-surface table called `store.rs` *"the value substrate to
+> **subsume**."* **The ring re-derived the anchors at `aecdb001` and the
+> substrate does not have the half `D2` needs** (`evt_7vxre2rsm7xhk`, routed
+> `evt_1npjzv3pt1976`). The Steward wrote that premise; the correction is the
+> Steward's, and the ring was right to report it.
+>
+> | claim | measured at `aecdb001` |
+> |---|---|
+> | `Store` `:343`, `intern` `:360`, `slot_id` `:400` exist | ✅ true — anchors live |
+> | it interns a value and returns a stable `SlotId`, with dedup | ✅ true |
+> | **a `SlotId` can be resolved back to a value** | ❌ **no such path exists, for anyone** |
+>
+> There is **no `slot_id → value` lookup and no reverse index** — `slot_id` is a
+> monotonic counter and the index is keyed by *hash of canonical bytes*. There
+> is **no canonical decoder**: `canonical.rs` declares `encode_canonical` and
+> nothing else. `Arena::get` is **private** and keyed by
+> `(page_idx, offset, len)`, not by slot id.
+>
+> Three facts in the same direction:
+> - `intern` **asserts `value.is_compound()`** — scalars panic, by design.
+> - It types over `values::Value`, **not** `RuntimeGroundValue`:
+>   `Value::Constructor { constructor_id: u32 }` vs
+>   `RuntimeGroundValue::Constructor { constructor: RuntimeSymbol }`, and **no
+>   symbol↔id interner exists in `ken-runtime`** (every workspace-wide
+>   `constructor_id` hit is `ken_kernel::GlobalId`, a different namespace).
+> - **`ken_runtime::store` has ZERO consumers workspace-wide** — established by
+>   a field probe across all of `crates/`, not a narrow grep.
+>
+> ⇒ ★ **A handle whose payload is a `SlotId` is unprojectable by construction.
+> The store is a one-way id-assignment index: it has the encode half and no
+> decode half — precisely the half a handle needs.**
+>
+> ### ✅ This is a FRAME CORRECTION, not hard-stop `#11` — the ring's call, affirmed
+>
+> `D2` is **bigger than its wording, not unsatisfiable.** The missing piece is
+> small, local to `ken-runtime`, and **is exactly `D2`'s stated work** — the
+> inverse of an operation that already exists. Building it is the **opposite**
+> of the parallel permanent heap `D2` forbids: it makes the store the single
+> owner of record instead of routing around it. Nothing about it is a
+> prerequisite another node must supply.
+>
+> ⭐ **The ring applied its own `#10` standard against its own interest and
+> declined to stop.** After two consecutive nodes ending in hard-stops, the
+> cheap move was a third; it measured instead. That discrimination — *missing
+> prerequisite* vs *under-described in-scope work* — is the judgment the
+> escalation path depends on, and it went the right way here.
+
+**Reuse AND COMPLETE the existing runtime value/store substrate** (`store.rs`)
+for persistable Ken values — the read-back path (slot-keyed residency plus the
+decode inverse) and the `RuntimeGroundValue ↔ Value` bridge with a store-owned
+symbol interner are **in scope and required**. Add only the
+**invocation-scoped** storage needed for **borrowed ingress** such as
+`HostResult`.
 
 ⛔ **Do not create a parallel permanent heap by default.**
 
@@ -237,6 +296,39 @@ unchanged; helper declaration delta **predicted, stated, then re-baselined**.
 
 **AC-9 — helper population is Θ(1) per module.** Demonstrated over ≥2 module
 sizes, not asserted.
+
+> ### ⛔ AMENDED 2026-07-25 — `AC-8`/`AC-9` HAD NO STANDING ORACLE
+>
+> The frame told the ring it would trip the declaration-count pin. **That
+> premise is false for the proposed placement, measured before building**
+> (`evt_7vxre2rsm7xhk`).
+>
+> Every landed backend census is scoped to `cranelift_backend/**`:
+> `BACKEND_PRODUCTION_SOURCES` enumerates 13 files, and
+> `correspondence_adds_no_emitted_unit_to_the_production_census` counts
+> `FunctionBuilder::new(` / `.define_function(` / `.declare_function(`
+> **per listed file**. `native_int_clif.rs` already declares **8** functions and
+> appears in **neither** — it is a *sibling* of `cranelift_backend/`, not inside
+> it. Sibling-placed value-ABI helpers are therefore **invisible to all three
+> pins**, and the ring predicted, before measuring, that every existing row
+> stays unchanged.
+>
+> ⇒ ★★ **That is a problem, not a relief. If no census counts the helpers,
+> `AC-8` has nothing to re-baseline and `AC-9`'s Θ(1) claim has no standing
+> oracle — a green that measures nothing.** A pin whose silence is scoped to a
+> directory it does not cover is not evidence about a helper outside it.
+>
+> **⇒ REQUIRED, promoted from the ring's own proposal into an AC:** add a
+> **boundary-helper census** pinning the **exact permitted SET of helper
+> names**, so *any* addition reddens — **including one nobody imagined**.
+> ⛔ **Pin the allowed inventory, not a forbidden list**; a forbidden list is
+> open at the top and grows silently. `AC-9`'s Θ(1) demonstration must run
+> against **that** census, not against the `cranelift_backend/**` rows.
+>
+> ⚠ `D4`'s disposition lands in `lowering/mod.rs` (`Lowered` is module-private)
+> — an existing census row at `0/0/0`, which it **keeps**, since a `match`
+> declares and defines nothing. Predict that row explicitly rather than
+> assuming it.
 
 > ### ⛔ PER-PIN EVASION ATTEMPT — AN AC, NOT A HAZARDS NOTE
 >
