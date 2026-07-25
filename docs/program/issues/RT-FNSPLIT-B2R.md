@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2R
 title: "representation and call-ABI contract — a stable executable contract for every value that crosses a generated-function boundary, inert"
-status: ready
+status: active
 owner: runtime
 size: L
 gate: none
@@ -11,7 +11,7 @@ github: null
 origin: Architect ruling evt_842spc7t6js1 on RT-FNSPLIT-B2F hard-stop #9 (2026-07-25), items 1-4 plus the edge-agreement half of item 6, with the mechanical constraints of Architect addendum evt_t4fykh52ncb answering the Steward's four grounded facts (evt_34pvqr0vte0pr); gated behind research advisory evt_531c4k52mshrn per the armed #9 pull. Steward-filed under the ruling's grant of re-slicing and sequencing ownership; Steward owns the frame, scope, and AC/control placement.
 ---
 
-> ## ✅ `ready` — FRAME IS WRITTEN (Steward, 2026-07-25)
+> ## ✅ `active` — FRAMED AND KICKED (Steward, 2026-07-25, `evt_dne0g38kmg4c`)
 >
 > The shovel-ready frame is
 > **`docs/program/wp/RT-FNSPLIT-B2R-representation-abi.md`**. The **second** of
@@ -32,7 +32,8 @@ origin: Architect ruling evt_842spc7t6js1 on RT-FNSPLIT-B2F hard-stop #9 (2026-0
 > cites**. ⇒ `C1` is pinned as a **post-condition on the descriptor**, which is
 > mechanism-independent and still holds at the 45th site.
 >
-> Construction authority is live once the Steward posts the kickoff.
+> **Construction authority is LIVE** — kicked at `origin/main` = `c5edea8b`;
+> §2c gate run (retros in, all three seats compact-verified) before the mention.
 
 ## Why this node exists, and what it is NOT
 

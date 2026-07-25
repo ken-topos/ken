@@ -21,25 +21,57 @@
 > and collectively they turned the resume anchor into a trap. **The only live
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
-> ## ⛔⛔ LIVE STATE — 2026-07-25 T17:20Z. `B2O` IS **APPROVED, RESOLVED, AND
-> ## PUBLISHING AS PR #963.** All review folds are CLOSED. **I owe the post-merge
-> ## tail and nothing else.**
+> ## ✅✅ LIVE STATE — 2026-07-25 T17:45Z. **`B2O` IS CLOSED. `B2R` IS FRAMED,
+> ## KICKED, AND ACTIVE.** The Runtime ring is **working**. **I owe nothing.**
 >
-> **`origin/main` = `d78d586d`** (will move when #963 lands). Landed this pass,
-> all blob-verified: **#961** (§14a fails closed + doc-ring retro harvest) ·
-> **#962** (`AC-12`'s `not attempted` ruling). Earlier: #957, #958, #959
-> (doc-only), #960 (respin route).
+> **`origin/main` = `c5edea8b`.** Landed this pass, all blob-verified: **#961**
+> (§14a fails closed) · **#962** (`AC-12` ruling) · **#963** (`RT-FNSPLIT-B2O`,
+> `e470ab65`) · **#964** (the `B2R` frame + tracker + briefing repair,
+> `c5edea8b`).
 >
-> ### ⇢ WHERE THE B2O LOOP ACTUALLY IS
+> ### ✅ `RT-FNSPLIT-B2O` — MERGED AND CLOSED
 >
-> | | |
+> `e470ab65`, PR #963, reviewed SHA `61d01a28`, landed tree `22cd7cd8` —
+> **exactly** the tree predicted and verified **four times**. Verified on `main`
+> by **blob identity per file**: all 5 candidate blobs identical, all 8
+> main-side blobs intact (the deliberately-stale base `0e0821c1` reverted
+> nothing). Decision `dec_1km0f2r57r80f` `resolved_by: architect`, checked
+> **fresh from the object**. **Retros 3/3 in** (17:27). Adversary notified.
+> `status: merged`, `github: 963`, body-text tail flipped.
+>
+> Closed on the **fourth** candidate; every fold found something real.
+> **`AC-12`: 4 REDDENS · ⭐ 3 CANNOT COMPILE · ⚠ 1 GREEN-finding.**
+>
+> ### ▶ `RT-FNSPLIT-B2R` — ACTIVE, kicked `evt_dne0g38kmg4c`
+>
+> Frame **`docs/program/wp/RT-FNSPLIT-B2R-representation-abi.md`**, on
+> `origin/main`. §2c gate run in full: retros in → quiescence → all three seats
+> compact-**verified** → mention → `runtime-leader` confirmed **`Working`** →
+> tracker flipped `active`.
+>
+> ⛔ **Two corrections I made to the inherited material — do not let them be
+> re-litigated back:**
+>
+> 1. **Every anchor in `issues/RT-FNSPLIT-B2R.md` was stale and two named the
+>    wrong file.** Re-derived at `e470ab65`; the **frame's** table is
+>    authoritative.
+> 2. ⛔⛔ **`C1` cannot be discharged by auditing call sites.** Measured: the
+>    caller-env append pattern is at **44 sites** across **two spellings**
+>    (`.extend_from_slice` ×29, `.extend` ×15) — and **the site `C1` names is in
+>    the second**, so a sweep of the first *excludes the very site the
+>    constraint cites*. It is now a **post-condition on the descriptor**, which
+>    is mechanism-independent and holds at the 45th site.
+>
+> ### ⇢ MY QUEUE (nothing blocks the ring)
+>
+> | # | item |
 > |---|---|
-> | candidate (**on `origin`**) | `wp/RT-FNSPLIT-B2O-body-ownership` = **`61d01a28`** |
-> | its base | `0e0821c1` — **two merges behind `main`, and that is FINE** |
-> | ⛔ **do NOT ask for a rebase** | base currency is **mine**; merge result built + verified **FOUR times**, post-condition pre-predicted each time (13 files = 5 + 8, empty intersection, every blob on its own side, tree `22cd7cd8`) |
-> | Decision | **`dec_1km0f2r57r80f` — `resolved`, `resolved_by: architect`, `17:05:18Z`, on exact `61d01a28`.** Verified **fresh from the object**, not from the message that announced it. |
-> | reviews | Runtime QA **APPROVED** exact `61d01a28`; Architect **APPROVED** same SHA after blocking `cb1505f8`. No CV vote, no Librarian — diff has no `spec/`, `conformance/`, or `library/` path. |
-> | ⇢ **what I still owe** | CI → merge → **verify on `main` by blob identity per file** → notify adversary → **drive retros (3)** → flip `merged` → `git log` the tail |
+> | 38 | frame the inline-`mod` blind spot in the production-surface pin (2nd hole in that enumerator; needs **structural** closure, not a 3rd spelling) |
+> | 12 | harvest the `B2O` + `B1R` retros into the playbook corpus — **batch, do not publish singly** (§10⁻ rule 2) |
+> | 37 | `agent/memory/roles/librarian/` does not exist though CLAUDE.md routes there; also sweep the scope table for other phantom scopes |
+> | 5 | frame `ABI-S3` |
+> | 8 | on FNSPLIT close, release `KW-THEOREM` to the spec enclave (compact it first) |
+> | 11 | `DOC-GATE-NEEDLE` — operator-held |
 >
 > ### ⇢ THE FOLD SEQUENCE THAT CLOSED IT — four SHAs, each a real finding
 >
