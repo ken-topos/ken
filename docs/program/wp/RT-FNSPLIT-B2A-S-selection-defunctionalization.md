@@ -102,6 +102,23 @@ reintroduces the #8 category error, because nested `ComputationalMatch`
 occurrences **share a scheduling entry**. Occurrences are safe as keys —
 B1R enforces the `origin.0 == planned_node.0` bijection.
 
+> ### ⛔ D3 SUPERSEDED 2026-07-25 — Architect's authoritative text, `evt_41gxmbnre2a4h`
+>
+> Transcribed **verbatim**; this paragraph governs over the one above where they
+> differ. (Steward transcribes; the Architect authored.)
+>
+> > **D3 — retained-body selection is keyed by `.occurrence`, never by `.entry`.**
+> > The concrete scheduling-entry carriers (`StaticNodeId`, `PlannedExpr`) remain
+> > module-private. On the sole split fixture, the occurrence and scheduling entry
+> > must differ; the occurrence resolves the match body and the entry does not.
+> > Re-keying the sanctioned occurrence table at the `ComputationalMatch` seam
+> > from the resume occurrence to the scrutinee entry must fail loudly. The
+> > residual is review-enforced, not mechanically claimed: within the two planner
+> > files, no independent entry-keyed source-term store may be introduced; and the
+> > planner's exported surface may not expose a scheduling-entry value, an
+> > opaque/inferred entry key, or a derived entry ordinal to another backend
+> > module.
+
 **D4 — retire N3 and install the sole-dispatcher pin in its place.** B2A-C's N3
 asserted no `origin -> expr` lookup exists. Delete that assertion and replace it
 with a pin asserting **exactly one** such lookup, reachable from **exactly one**
@@ -151,18 +168,23 @@ least the product's headroom."* ⛔ Not worth a commit of its own.
 - **AC-4 — the `origin -> expr` lookup count is exactly 1** — ✅ **CLOSED at
   `3c273a38` by TOKENIZATION, not by more spellings.** Stands as framed; the
   defect was the needle, not the property. See the correction below.
-- **AC-5′ — narrowed to the three statements a mechanism can enforce, with the
-  residual recorded as a REVIEW property.** (Supersedes AC-5.)
-  1. **An entry is not nameable outside the planner** — compiler-enforced
-     (`PlannedExpr`/`StaticNodeId` carry no `pub`; re-export is `E0364`).
-  2. **Entry-keying resolves the WRONG body** — behavioural, with a
-     non-vacuity guard.
-  3. **The sanctioned selection table REFUSES re-keying onto entries** —
-     mechanical.
-  ⛔ **Residual, stated not hidden:** an independently maintained entry-keyed
-  collection *inside* the two planner files is a **review** property, not a
-  mechanical one. Inside the planner, entry-keying is the planner's own job and
-  is **not** prohibited.
+- **AC-5 — selection-entry separation.** ⛔ **ARCHITECT'S AUTHORITATIVE TEXT,
+  transcribed verbatim from `evt_41gxmbnre2a4h`.** This supersedes both the
+  original AC-5 *and* my intermediate three-statement draft, whose first
+  statement **overclaimed** (see the correction block below).
+
+  > **AC-5 — selection-entry separation.** (a) A structural pin keeps the
+  > concrete entry-carrying types module-private. (b) A non-vacuous split fixture
+  > proves entry-keying selects the wrong body. (c) A compile-preserving mutation
+  > that re-keys the sanctioned selection table onto the scheduling entry reddens
+  > at the collision/invariant controls. (d) Architect review of the closed
+  > two-file planner surface and its exports confirms the stated residual. Do
+  > **not** claim that an arbitrary independently maintained entry-keyed
+  > collection is mechanically detected.
+
+  ⛔ **Both residual arms must be recorded, not one:** the *internal independent
+  store*, **and** *exported/inferred/ordinal entry exposure*. Inside the planner,
+  entry-keying is the planner's own job and is **not** prohibited.
 - **AC-6 — the population is stated per variant** (D5), with the declaration
   asymmetry decided and justified.
 - **AC-7 — inventory honesty: this claims entry 1 ONLY.** ⛔ Not entry 2 (waits
@@ -238,13 +260,34 @@ and is not an emptiness test).
 > inside one module.** That is a real result, not a concession.
 >
 > **The boundary half was genuinely missing and is now pinned.** Measured: the
-> entry types carry **no `pub`**, so no consumer can *name* an entry, hence none
-> can key on one — surface **12 backend files → 2**. ⭐ **And the reduction is the
-> compiler's, not the test's:** widening the declaration reddens the pin, while
-> re-exporting the type **does not compile** — `E0364: StaticNodeId is private,
-> and cannot be re-exported`. ⚠ That is *stronger* than the export-inventory pin I
-> had drafted, which is why my version is dropped: **I proposed a test for
-> something the compiler already refuses.**
+> entry types carry **no `pub`** — surface **12 backend files → 2**. ⭐ **And the
+> reduction is the compiler's, not the test's:** widening the declaration reddens
+> the pin, while re-exporting the type **does not compile** — `E0364:
+> StaticNodeId is private, and cannot be re-exported`. ⚠ That is *stronger* than
+> the export-inventory pin I had drafted, which is why my version is dropped:
+> **I proposed a test for something the compiler already refuses.**
+>
+> ### ⛔⛔ AND MY NARROWING ITSELF OVERCLAIMED — Architect's catch, `evt_41gxmbnre2a4h`
+>
+> My statement 1 read *"an entry is not nameable outside the planner, **hence none
+> can key on one**."* **The inference is invalid, and the Architect caught it.**
+> Module privacy proves the concrete `StaticNodeId` / `PlannedExpr` types cannot be
+> **named** outside `planning::static_transition`. It does **not** prove no outside
+> consumer can *key on* an entry: Rust can expose an **opaque/inferred** entry
+> value (`impl Ord` — and `StaticNodeId` already derives `Ord`) or a **derived
+> `u32` ordinal** through a future method, with the consumer naming neither private
+> type. ⇒ **Every "hence none can key on one" / "surface on which entry-keying is
+> spellable" inference is struck from the frame and must be struck from the
+> candidate's comments and assertion text.**
+>
+> ⭐⭐ **The class, and it is the one I have now recorded four times: a MEASURED
+> PROPERTY CAN BE TRUE AND NOT ENTAIL WHAT THE MECHANISM NEEDS.** The privacy
+> measurement is *exactly true*; the closure claim resting on it is *false*. ⛔ And
+> note where it happened — **inside the correction whose whole subject is pins that
+> claim more than their mechanism can see.** Diagnosing the class did not stop me
+> committing it one paragraph later. ⇒ **After narrowing a pin, state the gap
+> between what was measured and what is claimed, explicitly, as its own sentence.**
+> That is the only step that would have caught this.
 >
 > ⚠ **And the scan could never be made sound:** `.entry(` is `BTreeMap`'s std API.
 > **Every** non-planner `.entry` hit in the whole backend is a std map call
