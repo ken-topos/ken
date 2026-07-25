@@ -93,10 +93,21 @@ attest my target?").
 ⇒ **Current status: `ABI-R1` is the one genuinely releasable ABI node.**
 `ABI-S3` remains Runtime-owned and held behind the `RT-NATIVE-FNSPLIT` priority.
 
-⚠ **Release still requires a slot.** This is `owner: foundation` and
-documentation-shaped, but it touches `catalog/` and `library/`, so it is **not**
-covered by the doc-track exception to the fleet's single-threaded build posture.
-Widening concurrency is the operator's call, not the Steward's.
+## ⛔ OPERATOR RULING 2026-07-25 — HELD. Fleet stays FNSPLIT-only. SETTLED.
+
+Release requires a slot, and the operator has ruled there is none: **the fleet
+remains strictly single-threaded on `RT-NATIVE-FNSPLIT`.** I raised this WP and
+`DOC-GATE-NEEDLE` together, with idle rings and verified-disjoint file sets, and
+the ruling was **hold both**.
+
+★ **The durable part — the doc-track exception is DOC-ONLY.** Its stated basis
+(contention-free-ness) explains *why doc received the exception*; it is **not** a
+general rule that any contention-free WP may run concurrently. ⇒ **Demonstrating
+disjoint file sets does not earn a slot.** This resolves an ambiguity I had been
+reading the other way.
+
+⛔ **Do not re-ask.** A settled operator ruling is a fixed input. This node stays
+`ready`, fully framed, until the FNSPLIT chain closes.
 
 ⚠ **Documentation-only and `S`, but it is not busywork:** prose that contradicts
 landed behavior is actively misleading, and this is the class of defect the

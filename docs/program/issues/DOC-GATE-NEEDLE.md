@@ -11,6 +11,26 @@ github: null
 origin: adversary finding L1+L2 on DOC-W2 (d3b9f36c), side thread thr_2seh2bm1kr5mh evt_2sk7s27prrhdn, 2026-07-25. Steward-filed (agents cannot create tracked work per COORDINATION §2); Steward triage = CONFIRMED DEFECT, independently re-grounded at the two cited lines. The under-scoped blast-radius claim in the merge notification is a Steward defect, recorded below.
 ---
 
+> ## ⛔ OPERATOR RULING 2026-07-25 — HELD. Fleet stays FNSPLIT-only. SETTLED.
+>
+> I put the concurrency fork to the operator with this WP as the strongest case
+> for widening (a **live** false-green in a shipped gate, an **idle** Verify ring
+> with retros already in, and file sets verified disjoint from everything in
+> flight). **Ruling: hold. The fleet remains strictly single-threaded on
+> `RT-NATIVE-FNSPLIT`.**
+>
+> ★ **This also settles the standing ambiguity, and that is the durable part:**
+> the doc-track concurrency exception is **DOC-ONLY**. Its stated basis —
+> contention-free-ness — explains *why doc got the exception*; it is **not** a
+> general licence for any contention-free WP to run concurrently. ⇒ **Proving
+> your file sets disjoint does NOT earn a slot.**
+>
+> ⛔ **Do not re-ask.** A settled operator ruling is a fixed input. This WP stays
+> `ready` until the FNSPLIT chain closes and a slot genuinely opens.
+>
+> ⚠ **The frame below is complete and shovel-ready** — nothing about it is
+> pending. The only thing missing is a slot.
+
 > ## The assertion cannot fail, because the needle is the label the test passed in
 >
 > `DOC-W2` shipped a schema gate whose headline claim is that **a

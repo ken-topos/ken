@@ -82,6 +82,30 @@
 >   native Codex, **no** seat runs sonnet-5, and no claudex route remains. Live
 >   file and the batch now agree.
 >
+> ### 0-NOW-a. ⛔ OPERATOR RULING 2026-07-25 — FNSPLIT-ONLY. SETTLED, do not re-ask.
+>
+> I put the concurrency fork to the operator: **two** framed shovel-ready WPs,
+> **two idle rings** with retros in, file sets **verified disjoint** pairwise and
+> against everything in flight. **Ruling: HOLD BOTH. The fleet remains strictly
+> single-threaded on `RT-NATIVE-FNSPLIT`.**
+>
+> | WP | owner | status | why it is not running |
+> |---|---|---|---|
+> | `DOC-GATE-NEEDLE` | verify | `ready` | operator hold — **not** for lack of a frame |
+> | `ABI-R1` | foundation | `ready` | operator hold — **not** for lack of a frame |
+>
+> ★★ **THE DURABLE RULE, and it corrects how I had been reading this:** the
+> doc-track concurrency exception is **DOC-ONLY**. Its stated basis —
+> contention-free-ness — explains *why doc got the exception*; it is **NOT** a
+> general licence for any contention-free WP to run in parallel.
+> ⇒ **Proving disjoint file sets does not earn a slot.** Only the operator widens
+> concurrency, and the answer here was no.
+>
+> ⛔ **Do not re-ask, and do not re-derive the contention analysis** hoping for a
+> different answer — a settled operator ruling is a fixed input. Both frames are
+> **complete**; the only missing thing is a slot. Release them when the FNSPLIT
+> chain closes.
+>
 > ### 0-NOW-b. TWO defects of mine, on the record
 >
 > - **I called the gate test file "NEW at 4007 lines" in the merge notification.
