@@ -91,7 +91,43 @@
 > ⇒ **Next time, compact the CODEX seats FIRST in a mixed ring** — they are the
 > ones that can fail.
 >
-> ### ✅ `RT-FNSPLIT-B2A-S` IS `merge_ready` AND PUSHED — in QA + Architect review
+> ### ⛔ ARCHITECT BLOCKED `ee0803aa`; FOLD PUSHED AT `d99d223d` — re-review pending
+>
+> **`origin/wp/RT-FNSPLIT-B2A-S-selection` = `d99d223d`** ("Close the three pins the
+> Architect found open, and fix D7's recipe"), linear on `ee0803aa`, no attested
+> source touched. ⛔ **`dec_2kert96q644bc` is REJECTED and dead** — it named
+> `ee0803aa`. **A fresh Decision must name exact `d99d223d`.** Routed
+> `evt_5z8t1x51xbgcg`. **Not hard-stop #9** (Architect concurs): a review fold on
+> committed controls, not a stop on an ungroundable deliverable. **Count stays 8.**
+>
+> ### ⭐⭐ THE BLOCK'S THREE FINDINGS ARE ONE DEFECT CLASS — carry into every frame
+>
+> **Each pin enumerated the FORMS of the violation its author imagined, so any
+> un-enumerated form passes GREEN:** AC-4 scanned two files and argued closure from
+> a *private field* while the resolver is `pub(in crate::cranelift_backend)` and
+> `planning.rs` re-exports the plan (a call from `artifact/**` or any backend
+> sibling stays green); AC-1 recognized three exact `body:` spellings
+> (`cached_body: RuntimeExpr` evades); AC-5 recognized four container spellings (a
+> `Vec` indexed by `planned.entry.0` evades).
+>
+> ⛔ **STANDING REQUIREMENT for B2F and every later frame: state each pin as a
+> PROPERTY and require a COMPILE-PRESERVING EVASION to be attempted AGAINST IT.**
+> If none can be built, say why the surface is closed — **closure is a claim about
+> the reachable surface, not the files you scanned.** ⚠ **Visibility, not field
+> privacy, bounds who can call a function.**
+> ★ This ring had already avoided the same defect twice (AC-12 counting declaration
+> lines; B2A-C's D5 reddening on a NEWLY ADDED field) ⇒ **the instinct existed and
+> was not applied uniformly. Demand the evasion attempt PER PIN**, because a
+> per-candidate reminder gets satisfied by the most salient control.
+>
+> ⚠ **My own omission, fixed in the fold:** D7 said "the … test invocation" without
+> naming `ken-cargo`, so the committed recipe used raw `cargo test`, which
+> federation law forbids. ⇒ **When requiring a committed recipe, specify the
+> sanctioned invocation VERBATIM.** A recipe that cannot be re-run is not evidence;
+> one that can be run only by breaking the build rule is the same failure one layer
+> up.
+>
+> ### ✅ (history) `merge_ready` at `ee0803aa` — mechanism review carries where bytes are unchanged
 >
 > **`origin/wp/RT-FNSPLIT-B2A-S-selection` = `ee0803aa`** (I pushed it; ⚠ the LIVE
 > ref, not the abandoned `…-defunctionalization` at `5c7eae26`). Clean rebase onto
