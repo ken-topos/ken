@@ -32,8 +32,8 @@ removed the pin greens.
 
 | pin | evasion attempted | compiles? | verdict |
 |---|---|---|---|
-| `AC-1` tag set closed | mint a word with tag byte `11`..`255` | ✅ | 🟢 refused — `from_bits` is a closed `match` with `_ => None`, and the test sweeps **all 256 bytes** rather than a sample |
-| `AC-1` list/enum drift | add a `BoundaryTag` variant, leave `ALL` alone | ✅ | 🟢 `ALL`'s declared length `11` reddens; the sweep's `byte < ALL.len()` boundary reddens too |
+| `AC-1` tag set closed | mint a word with tag byte `9`..`255` | ✅ | 🟢 refused — `from_bits` is a closed `match` with `_ => None`, and the test sweeps **all 256 bytes** rather than a sample |
+| `AC-1` list/enum drift | add a `BoundaryTag` variant, leave `ALL` alone | ✅ | 🟢 `ALL`'s declared length `9` reddens; the sweep's `byte < ALL.len()` boundary reddens too |
 | `AC-2` no value-specialization | pass a seed value into the construction site | ❌ **does not compile** | 🟢 **strongest row — the surface is closed, not merely unwatched.** `boundary_value` imports no `NativeSeedEnvironment` and no environment vector, so there is nothing in scope to specialize from |
 | `AC-2` magnitude boundary | claim the immediate range one value wider | ✅ | 🟢 reddens — the case list tests `MAX`, `MAX+1`, `MIN`, `MIN-1`, not typical magnitudes |
 | `AC-3` no wildcard | `_ =>` / `unhandled =>` | ✅ | 🔴 **defeated in first form; repaired — see above** |
@@ -47,6 +47,7 @@ removed the pin greens.
 | `AC-7` vacuity | — | — | 🟢 positive control on the permitted side: persistent and immediate words must return `OK`, so "everything refused" cannot pass |
 | `AC-9` inventory | add a 14th helper | ✅ | 🟢 reddens — the count is derived from `BOUNDARY_LOCAL_HELPERS`, so the list and the emission must move together |
 | `AC-9` name swap | rename a helper, keep the population size | ✅ | 🟢 reddens — the pin is the permitted **set of names**, not a count |
+| `AC-1` unreachable tag | keep a tag no disposition produces | ✅ | 🔴 **found by inspection, not by a pin** — `ImmediateCapability` / `ImmediateResource` were in the closed set and unreachable. Fixed by removing them (`f934d233`); ⚠ **recorded as a residual: no mechanical check enforces tag reachability**, so a future unreachable tag is review-caught, not CI-caught |
 
 ## Mutation provenance
 
