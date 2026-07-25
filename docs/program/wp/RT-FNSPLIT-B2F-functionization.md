@@ -1,112 +1,115 @@
 # `RT-FNSPLIT-B2F` — functionization and authority switch-over
 
-**Owner:** Team Runtime · **Size:** L · **Depends on:** `RT-FNSPLIT-B2A-S`
-(merged, `origin/main` = `145fe915`) · **Closes:** `RT-NATIVE-FNSPLIT`
+**Owner:** Team Runtime · **Size:** L · **Closes:** `RT-NATIVE-FNSPLIT`
 symptom-inventory **entry 2** — the last open entry.
 
-**Every anchor below was re-derived on `origin/main` = `0aa9e53f`** (the tree
-that carries `B2A-C` + `B2A-S`). ⛔ Do not trust a line number from the retired
-`RT-FNSPLIT-B2A` frame or from the `B2F` issue file's draft prose — `lower_expr`
-alone has moved `:3847 → :4255 → :4333` across three re-frames.
+**Depends on — all three merged and verified on `main`:**
+
+| dependency | landed | PR | what it supplies to this node |
+|---|---|---|---|
+| `RT-FNSPLIT-B2A-S` | `origin/main` = `145fe915` | #944 | retained-body **selection** by static origin, one closed consumer |
+| `RT-FNSPLIT-B2O` | `origin/main` = `e470ab65` | #963 | the validated **`SemanticOwner` partition** — which occurrences belong to which function unit |
+| `RT-FNSPLIT-B2R` | `origin/main` = `c986d0a3` | #967 | the **representation and call-ABI contract** — `abi.rs`, inert |
+
+**Every anchor below was re-derived on `origin/main` = `bd24422b`**, the tree
+carrying `B2A-C` + `B2A-S` + `B2O` + `B2R`. ⛔ Do not trust a line number from
+the retired `RT-FNSPLIT-B2A` frame, from the `B2F` issue file's draft prose, or
+**from an earlier revision of this file** — this frame's own anchors were
+previously stated at `0aa9e53f`, four merges back, and several had moved.
+`lower_expr` alone has moved `:3847 → :4255 → :4333` across three re-frames.
 
 ---
 
-## ⛔⛔ HELD AT HARD-STOP #9 — 2026-07-25, `evt_197xpdavdyrn0`. COUNT = 9
+## ✅ THE #9 HOLD IS DISCHARGED — the re-slice landed. COUNT OF RECORD = 9
 
-**`D1`/`D2`/`D4`/`D6` are jointly unsatisfiable inside this frame's boundary.**
-Raised by `runtime-implementer` **before writing any code** — tree clean at
-`3891b7aa`, nothing committed, nothing to unwind on a re-slice. ⭐ *That is the
-cheapest possible form of a frame-boundary defect; compare `#7`, which cost a
-re-slice after `D1–D3` had landed.*
+**This block used to read `⛔⛔ HELD AT HARD-STOP #9`. It is retained as the
+reason the two prerequisites exist, rewritten to the state on `bd24422b`.**
 
-**The obstruction, measured and line-anchored (not inferred from a failed
-build):**
+⛔ **Read this before anything else in the file:** if you are looking for the
+"missing and unowned prerequisite" this frame used to describe, **it is
+`RT-FNSPLIT-B2R` and it merged.** A stale *"what's broken"* is worse than a
+stale *"what's done"* — it sends a ring to rebuild what just landed.
 
-`Lowered` (`lowering/mod.rs:415-507`) is a **compile-time specialization
-lattice, not a value representation.** Only scalar variants hold `ir::Value`;
-`String`, `Bytes`, `Constructor { args: Vec<Lowered> }`, `Record { fields }`, and
-`Closure { captures: Vec<Lowered>, … }` carry **host Rust data with no emitted
-representation at all**. A capture is an arbitrary `lower_expr` result
-(`core.rs:4783`), so it may be any aggregate, including a nested closure. The
-emitted signature is `(pointer) -> i64` (`core.rs:44-46`).
-`CaptureSlot { ordinal: u32 }` carries no type or width; `PredeclaredFunction`
-(`semantic_ir.rs:449`) carries **no signature**. Retained-body lowering is
-**fused with its call site** (`core.rs:626-643`): the body's environment is
-`captures ++ producer_env` — the *call site's* whole env — and the strategy is
-chosen by inspecting the body's **syntax** and the argument's **shape**.
+### What #9 said, and what answered it
 
-⇒ **One closed function per static origin requires configuration-independent
-compilation of that body.** Specialization erases aggregates, so two call sites
-applying the same origin in different configurations legitimately require
-different code. Compiling once per origin therefore requires a **uniform runtime
-representation** — layout, ownership, lifetime for constructors, records,
-strings, bytes, closure environments — plus a call ABI wider than
-`(ptr) -> i64`. ⛔ **Constructing that is not among `D1`–`D8`, and is unowned.**
+`runtime-implementer` raised `#9` at `evt_197xpdavdyrn0` **before writing any
+code** — tree clean at `3891b7aa`, nothing to unwind. `D1`/`D2`/`D4`/`D6` were
+jointly unsatisfiable inside the frame's then-boundary, because one closed
+function per static origin requires **configuration-independent compilation**,
+and at that base:
 
-**Robust across both readings of shape (a):** aggregates cross the ABI at runtime
-⇒ needs the object model outright; or specialization still erases them ⇒ one
-function per origin serves only **one** configuration, giving per-*specialization
--instance* units, which is neither "one per origin" nor `D8`'s Θ(n).
+- `Lowered` was (and still is) a **compile-time specialization lattice, not a
+  value representation** — only scalar variants hold `ir::Value`;
+- the emitted signature was (and still is) `(pointer) -> i64`;
+- `CaptureSlot` carried no type or width, and `PredeclaredFunction` carried
+  **no signature**.
 
-⭐ **Why atomicity converts "hard" into "unsatisfiable as framed":** the
-increment that *is* buildable — functionize the origins whose parameters are all
-scalars, keep specialization for the rest — is **precisely what `AC-1` and `D6`
-forbid**, because it leaves two live emission strategies. **The
-sound-subset-with-a-conservative-guard idiom is unavailable here by
-construction.** ⚠ This is **not** a defect in atomicity (which exists to prevent
-two live authorities — a real hazard) and **not** a defect in the increment. It
-is a **genuine tension between two correct requirements**, which is what makes
-it a ruling rather than an adjudication.
+⇒ Compiling once per origin needed a **stable executable representation
+contract** — layout, ownership, lifetime, and a call ABI — that did not exist.
 
-**⛔ NOT CLAIMED, and the distinction is the whole point:** shape (a) is **not**
-asserted wrong, `b077eb7a` is **not** to be revisited, and the goal is **not**
-unreachable. The claim is narrower: **the prerequisite is missing and unowned.**
-The construction was **not attempted** — so per `pin-a-property` §7 (a strong
-negative must be demonstrated, not tallied) the stop ships **falsifiers**, any
-one of which dissolves it:
+✅ **RULED `evt_842spc7t6js1`, addendum `evt_t4fykh52ncb`, gated behind research
+advisory `evt_531c4k52mshrn` as the armed `#9` pull required: option (i),
+PREREQUISITE-FIRST.** Bounded coexistence (option ii) was **rejected**;
+**`AC-1` and `D6` are NOT amended.** The advisory supplied the framing that was
+adopted — the prerequisite is a stable **executable representation contract for
+every value crossing a generated-function boundary**, ⭐ *not* one universal
+boxed `Value`.
 
-1. A uniform runtime encoding for `Lowered`'s aggregate variants somewhere
-   unexamined ⇒ Reading 1 is buildable.
-2. A corpus measurement showing **every reachable retained body has only scalar
-   params/captures** ⇒ one-function-per-origin is configuration-independent for
-   the whole population and `D6` is satisfiable as written.
-3. A ruling that shape (a) admits **per-specialization units** ⇒ a different
-   scaling claim, and `D8` changes shape.
+### The prerequisites are landed code, not a plan
 
-### The two options — Architect authority, not the Steward's
+| the #9 obstruction | what closed it | where it lives now |
+|---|---|---|
+| "which occurrences belong to one function unit?" | **`B2O`** | `SemanticDescriptor.owner: SemanticOwner` + `validate_function_units`, `…/planning/static_transition/semantic_ir.rs` |
+| "what layout/ownership/convention does a value cross the boundary in?" | **`B2R`** | `…/planning/static_transition/abi.rs` — `AbiDescriptor`, `AbiSlot`, `AbiFrameHeader`, `AbiCarrier`, `AbiOwnership`, `AbiStorageOwner` |
 
-- **(i) A prerequisite unit** constructing the native value representation +
-  calling convention, with `B2F`-proper rebased on it.
-- **(ii) Bounded coexistence** — a mechanically pinned boundary between
-  functionized and specialized origins. ⛔ **This requires `AC-1` and `D6`
-  AMENDED**, since as written they forbid exactly that.
+**Ownership preceded representation** because the ownership mapping *defines the
+cut*, and "every value that crosses a generated-function boundary" cannot be
+enumerated before the boundary is known.
 
-### ⛔ Sequencing: RESEARCH FIRST, RULING SECOND
+⛔ **Both prerequisites are INERT.** Neither emits. `abi.rs` measures **0
+builders / 0 definitions / 0 declarations**, and `build_abi_plane` is called
+once during planning (`planning/static_transition.rs:1010`). **This node is
+where the contract first becomes executable**, which is exactly why it is the
+atomic boundary.
 
-**Research dispatched `evt_63wjmry61vd89` BEFORE routing to the Architect** —
-that is what the armed `#9` trigger means on this chain, and it is why the count
-was armed at 9 specifically. The advisory is an **input** to the ruling, not a
-review of it; asking for the ruling first is how `#6` got re-litigated. The
-deciding question is prior-art: **is a permanently-bounded two-strategy backend
-known-sound with a pin that cannot silently widen, or a known trap?**
+### The two Steward rulings issued at the stop — both still binding
 
-### Steward rulings issued at the stop — these did NOT wait for the Architect
+- ✅ **The `D5`/`D6` narrow reading is CORRECT.** Remove the **cross-owner
+  whole-configuration re-emission**; keep ordinary traversal within one
+  function's own body. The operative words are *"the recursive
+  **whole-configuration body-emission** authority"* — the target is
+  whole-configuration re-emission, not recursion as a code shape.
+  ⭐ **The settling test:** converting traversal to a worklist would remove
+  "recursion" while doing **nothing** for entry 2, and a reading under which the
+  deliverable is satisfiable without touching the defect is the wrong reading.
+  **Re-measured on `bd24422b`: 7 of the 59 sites consume a retained body —
+  `core.rs:327, 605, 620, 764, 4817, 4829, 4954` — unchanged from `0aa9e53f`.**
+  ⚠ `grep -c 'self.retained_body_occurrence('` returns **eight**; the eighth is
+  `:4208`, the internal composition by `machine_body_occurrence`, which is a
+  *caller* of the lookup rather than a further consumer. `core.rs:4160-4170`
+  states that window in-source. **Do not report 8 consumption sites.**
+- ✅ **`AC-G0`'s denominator is ANSWERED** — see the `AC-G0` block below. The
+  answer is **6 definitions / 8 declarations per native module**, Θ(1), and the
+  `6` is *already pinned* as `LOCAL_HELPER_COUNT`. Do not re-derive it.
 
-- ✅ **The `D5`/`D6` narrow reading is CORRECT.** Remove the **inlining across
-  the retained-body boundary**; keep ordinary traversal within one function's own
-  body. The operative words are *"the recursive **whole-configuration
-  body-emission** authority"* — the target is whole-configuration re-emission,
-  not recursion as a code shape. ⭐ **The settling test:** converting traversal to
-  a worklist would remove "recursion" while doing **nothing** for entry 2, and a
-  reading under which the deliverable is satisfiable without touching the defect
-  is the wrong reading. **Population that matters: 7 of the 59 sites consume a
-  retained body — `core.rs:327, 605, 620, 764, 4817, 4829, 4954`; the rest derive
-  from `child_occurrence`, i.e. ordinary sub-expression traversal.**
-- ✅ **Two ruling-independent deliverables proceed while held** (facts about the
-  current tree, surviving any re-slice): `AC-G0`'s denominator — measure and pin
-  `native_int_clif`'s per-native-module constant — and the **full 59-site
-  disposition table**. ⛔ Nothing else: no representation design, no scaffold, no
-  speculative construction.
+### ⚠ The armed research trigger — unchanged by the re-slice
+
+**Count of record = 9. NEXT RESEARCH PULL = hard-stop `#12`.** The count of
+record lives in `docs/program/issues/RT-NATIVE-FNSPLIT.md` under
+*"ARMED §5a RESEARCH-CONSULT TRIGGER"*; **on any disagreement that line wins.**
+`B2O` and `B2R` both closed with **no hard-stop**, so the count did not move —
+a clean WP never advances it.
+
+```text
+SYMPTOM INVENTORY (Architect appends one line per hard-stop; never rewritten)
+NEXT PREDICATE CHECK = 6th entry   (3rd is CONSUMED — answered at entry 2)
+ENTRIES = 3   ← the live recut chain's inventory is held in
+              docs/program/issues/RT-NATIVE-FNSPLIT.md; append THERE, not here,
+              so one chain has one inventory.
+```
+
+⛔ **The pre-recut chain is FROZEN at 33 hard-stops — do not resume that count**,
+and do not read a `#36` anchor out of any older prose.
 
 ## ⛔ READ FIRST — THIS IS A CONSTRUCTION, NOT A PORT
 
@@ -121,6 +124,16 @@ port, nothing to re-key, and no prior implementation whose structure carries
 authority. If you find yourself asking "how did the old path do this?", the
 answer is: *there is no old path for this* — there is one monolithic function
 and you are constructing the population that replaces it.
+
+> ⚠ **Still true after `B2O` + `B2R`, and the distinction is easy to lose.**
+> Those two landed a **declared, validated description** of the units and of
+> the values crossing between them. They landed **no emitted unit** — the
+> production census is still 1 builder / 1 definition / 2 declarations. So the
+> *population* is now **derivable** rather than invented, and the *code* is
+> still entirely new. ⛔ **A descriptor is not a function.** Reading `abi.rs`'s
+> `AbiDescriptor` rows as an existing emitted-unit population is the same
+> "carrier exists ⇒ property holds" gloss that cost this chain hard-stops #5
+> and #8, one substrate later.
 
 ## The defect this closes — symptom-inventory entry 2, in one paragraph
 
@@ -243,11 +256,28 @@ invisible to a production build, and a production-only path is invisible to a
 test build. Whatever pins condition (4) must be verified in **both**
 configurations.
 
----
+> ### ⭐ THE ESCAPE HAS BEEN USED, AND IT IS SPENT
+>
+> **`B2O` and `B2R` ARE the preparatory merges this clause permits** — both
+> landed under exactly these four conditions, and both discharged them: the
+> production census never moved, and `abi.rs` measures 0/0/0 on all three
+> needles at `bd24422b`.
+>
+> ⇒ **There is nothing further to prepare, and no third inert node to reach
+> for.** `B2F` is the atomic live boundary. ⛔ If a deliverable here feels like
+> it wants its own preparatory merge, that is a **hard-stop to raise** (the
+> protocol below), **not** a fourth application of this clause — the clause
+> permits inert scaffold, and everything remaining in this node is by
+> construction the part that goes live.
 
-## The landed surface you are building on — measured, with anchors
+## The landed surface you are building on — re-measured at `bd24422b`
 
-### The production Cranelift surface today
+⚠ **This whole section was rewritten on 2026-07-25 after `B2O` and `B2R`
+landed.** The previous revision described a plane that *"already has what the
+bundle needs"* and closed by saying `B2O` **must establish** the population.
+`B2O` established it. Every table below is a re-measurement, not a carry.
+
+### The production Cranelift surface today — unchanged by both prerequisites
 
 | what | where (`crates/ken-runtime/src/cranelift_backend/`) | count |
 |---|---|---|
@@ -255,17 +285,108 @@ configurations.
 | root `define_function` | `lowering/core.rs:225` | **1** |
 | `declare_function` — entry point | `lowering/core.rs:53` | 1 |
 | `declare_function` — **imported** host dispatch (`ken_host_dispatch_v1`) | `lowering/core.rs:84` | 1 |
+| the emitted signature `(pointer) -> i64` | `lowering/core.rs:47-50` | — |
 
-⇒ **2 declarations, of which one is an import, not a definition.**
+⇒ **2 declarations, of which one is an import, not a definition.** ⭐ **`B2O`
+and `B2R` moved none of these, and that is the point of their inertness** —
+`abi.rs` itself measures **0 / 0 / 0** on the same three needles.
+
+### `B2O`'s owner partition — the function-unit population, landed
+
+| what | where (`…/planning/static_transition/`) |
+|---|---|
+| `SemanticOwner` — `Function(id)` · `Terminal` · `TrapTerminal`, **no `_` arm** | `semantic_ir.rs:62` |
+| `PredeclaredFunctionId` | `semantic_ir.rs:38` |
+| `PredeclaredFunction { id, planned_node, origin, program }` | `semantic_ir.rs:498` |
+| `SemanticDescriptor.owner: SemanticOwner` — **the owning unit** | `semantic_ir.rs:508`, field at `:520` |
+| `functions: Vec<PredeclaredFunction>` on `SemanticPlane` | `semantic_ir.rs:539` |
+| `validate_function_units` — the four edge laws as `return Err` arms | `semantic_ir.rs:987` |
+| `EdgeKind::StaticBody` | `static_transition.rs:105`, built at `:869`, `:895` |
+| `TransitionKind::ClosureBody` | `static_transition.rs:858`, `:875` |
+
+> ### ⛔⛔ THE SEED SET IS `plan.entries` ∪ EVERY `StaticBody` **TARGET**
+>
+> **The previous revision of this file said the unit set is "root ∪
+> `ClosureBody` heads." THAT IS WRONG and `B2O`'s own frame says so in those
+> words:** `TransitionKind::ClosureBody` is a body's **return successor**, not
+> its head. Deriving the population from `ClosureBody` nodes seeds the wrong
+> set.
+>
+> The landed, enforced equality is stated in-source at `semantic_ir.rs:997`:
+>
+> ```
+> functions.len() == entries.len() + count(StaticBody edges)
+> ```
+>
+> checked at `semantic_ir.rs:1006` (against both `functions` and the partition
+> seeds) and cross-asserted at `static_transition.rs:2302`. The doc comment for
+> the unit count is at `static_transition.rs:299`; `AC-4`'s statement of the
+> same set is at `static_transition.rs:4085`.
+>
+> ⇒ **`B2F` consumes this set. It does not re-derive it, and it must not
+> re-seed it from a transition kind.**
+
+⚠ **Two shared exit sentinels sit OUTSIDE the exclusive partition** —
+`SemanticOwner::Terminal` and `SemanticOwner::TrapTerminal`. They are **not**
+function units and must not receive target functions; `shared_exits`
+(`semantic_ir.rs:548`) locates them as a checked pair.
+
+### `B2R`'s representation contract — landed, inert, and this node's input
+
+Everything below is in `…/planning/static_transition/abi.rs` (1257 lines,
+registered in `BACKEND_PRODUCTION_SOURCES`), built once per plan by
+`build_abi_plane` at `planning/static_transition.rs:1010` into the
+`abi: AbiPlane` field at `:235`.
+
+| what | where (`…/planning/static_transition/abi.rs`) |
+|---|---|
+| `AbiCarrier` — the closed carrier language | `:60`, widths `:91`, alignments `:103` |
+| `AbiOwnership` — the transfer discipline | `:208`, per-carrier at `:122` |
+| `AbiStorageOwner` — **who owns the storage a carrier borrows from** | `:192`, per-carrier at `:168` |
+| `AbiSlotKind` · `AbiSlot` · `AbiFrameHeader` | `:226` · `:294` · `:319` |
+| `AbiDescriptor` / `AbiDescriptorShape` | `:354` / `:344` |
+| `AbiCaptureProvenance` — `Lexical` / seed, carrier at `:260` (**takes no value**) | `:244` |
+| `AbiUnitDefinition` | `:276` |
+| `AbiPlane` + `shape` / `shapes` / `validate` | `:368` · `:391` · `:409` · `:910` |
+| `build_abi_plane` | `:431` |
+| `result_carrier` — exhaustive, **no `_ =>` arm** | `:582` |
+| `unit_definitions` · `closure_provenance` · `declared_arity` | `:640` · `:711` · `:734` |
+| `validate_boundary_layouts` · `AbiBoundarySignature` · `boundary_signatures` | `:1022` · `:1124` · `:1134` |
+| the fixed convention slots | `CONVENTION_SLOTS` at `:381` |
+
+⛔ **`B2R` DECLARED the contract; NOTHING ENFORCES IT AT RUNTIME, because
+nothing runs.** Its own report states the limits, and two of them are directly
+this node's work — quoted rather than paraphrased
+(`docs/program/rt-fnsplit-b2r-abi-report.md`, *"Boundaries this node does not
+cross"*):
+
+> **6. Ownership modes are declared, not enforced.** … it does **not** verify
+> any emitted code obeys them, because nothing is emitted. Enforcement is
+> `B2F`'s.
+>
+> **7. Artifact-static seed material is DECLARED, not minted.** The seed carrier
+> borrows from material that must exist before execution begins; **creating that
+> material is `B2F`'s work and is deliberately absent here.**
+
+★ And the value-independence claim is likewise **about the descriptor only**:
+`build_abi_plane`'s inputs contain no `RuntimeGroundValue` and no `Lowered`, so
+a *layout* is not chosen by inspecting a value — but **whether `B2F`'s
+*emission* path stays value-independent is `B2F`'s obligation and is not
+inherited.**
 
 ### Entry 1's dispatcher — do not break it
 
 | what | where |
 |---|---|
 | sole `origin -> expression` consumer | `lowering/core.rs:4176` `retained_body_occurrence` |
-| the plan-side accessor | `planning/static_transition.rs:1009` `source_occurrence`, `pub(in crate::cranelift_backend)` |
-| the single write site | `planning/static_transition.rs:452` `record_source_occurrence` |
+| the plan-side accessor | `planning/static_transition.rs:1045` `source_occurrence`, `pub(in crate::cranelift_backend)` |
+| the single write site | `planning/static_transition.rs:476` `record_source_occurrence` |
 | the retained-closure carrier | `lowering/mod.rs` — `Lowered::Closure` / `DeclarationClosure` hold `body: StaticOriginId`, **no term** |
+| the `AC-4` pin itself | `lowering/core/tests/control.rs:3425` `exactly_one_plan_origin_to_expression_lookup_exists` |
+
+⚠ **Both plan-side anchors moved** — `source_occurrence` `:1009 → :1045` and
+`record_source_occurrence` `:452 → :476`, displaced by `B2R`'s
+`build_abi_plane` wiring. The lookup itself did not move.
 
 ⛔ **`B2A-S`'s AC-4 pins the `origin -> expression` lookup count at EXACTLY
 ONE.** If `B2F` adds a second consumer, that pin reddens **correctly** — it is
@@ -273,53 +394,15 @@ not a false positive. Either route the new consumer through
 `retained_body_occurrence`, or re-baseline AC-4 **explicitly in the frame
 amendment** with the new count stated and justified. Do not quietly bump it.
 
-### The plane already has what the bundle needs — evidence of FIT, not of existence
-
-`planning/static_transition/semantic_ir.rs` already carries
-`PredeclaredFunction` (`:449`), `PredeclaredFunctionId` (`:38`),
-`functions: Vec<PredeclaredFunction>` (`:483`), and keys them by planned node —
-`PredeclaredFunctionId(planned_node.0)` at `:536`, cross-checked at `:850-853`.
-
-⚠ **These records are NOT proof that functions already exist.** Nothing here
-declares or defines a Cranelift function. Do not read the plane's
-`PredeclaredFunction` rows as an existing emitted-unit population.
-
-> ### ⛔ CORRECTED 2026-07-25 (Steward) — "the *smaller* construction" was WRONG
->
-> This section originally added *"these records are evidence that the function
-> bundle is the **smaller** construction."* ⛔ **Strike that.** It is wrong in
-> **direction**, and it is the same "carrier exists ⇒ property holds" gloss that
-> cost this chain hard-stops #5 and #8.
->
-> The population is not merely *keyed* by planned node — it is **definitionally
-> equal to the node count, and that equality is ENFORCED**:
->
-> ```
-> semantic_ir.rs validate()   self.functions.len() != nodes.len()  -> planner error
->                             program.records.len  != 1            -> planner error
-> static_transition.rs:2239   assert_eq!(plan.semantic.functions.len(), plan.nodes.len())
-> ```
->
-> And `StaticNode.transition` is a `TransitionKind` — `Evaluate`, `Sequence`,
-> `Branch`, `CaseTest`, `ClosureBody`, `ProducerTail`, … — i.e. **abstract-machine
-> steps**. So a bundle keyed on this table is **one Cranelift function per
-> transition state: LARGER than the target population, not smaller** — and it
-> would read as literal compliance with `D1`. Every `SemanticProgram` also spans
-> **exactly one** record, so nothing in the plane groups a body's occurrences.
->
-> ⇒ **`RT-FNSPLIT-B2O` must establish the function population itself**; the
-> boundary is already marked in the plan graph (`TransitionKind::ClosureBody` at
-> `static_transition.rs:834,851`; `EdgeKind::StaticBody` at `:845,871`), so the
-> unit set is *derivable* — root ∪ `ClosureBody` heads — rather than invented.
-> Routed to the Architect as `evt_5vd31pvbrgdf3`.
-
 ---
 
 ## ⛔⛔ THE PIN YOU WILL BREAK FIRST — re-baseline it deliberately
 
-`lowering/core/tests/control.rs:3336`
+`lowering/core/tests/control.rs:3337`
 `correspondence_adds_no_emitted_unit_to_the_production_census` asserts an
-**exact** census over five production files:
+**exact** census over five production files (`:3363`–`:3423`); the three needles
+are `matches("FunctionBuilder::new(")`, `matches(".define_function(")`, and
+`matches(".declare_function(")`:
 
 ```
 lowering/core.rs                              builders 1  definitions 1  declarations 2
@@ -328,6 +411,26 @@ planning.rs                                   0  0  0
 planning/static_transition.rs                 0  0  0
 planning/static_transition/semantic_ir.rs     0  0  0
 ```
+
+> ### ⛔ THE CENSUS'S FIVE ROWS ARE NOW NARROWER THAN THE PRODUCTION SURFACE
+>
+> **New, measured at `bd24422b`, and it is a `B2F` decision rather than a
+> defect in `B2R`.** `B2R` added `planning/static_transition/abi.rs` to
+> **`BACKEND_PRODUCTION_SOURCES`** (`control.rs:3686`, now **13** files, was 12)
+> — but **not** to this five-row census, which `B2R` never touched.
+>
+> Today that is invisible, because `abi.rs` measures **0 / 0 / 0** on all three
+> needles (I re-measured it). **But `B2F` is the node that makes emission real**,
+> and a census whose population is a hand-listed subset of the file set that a
+> *sibling* pin closes is exactly the shape this chain keeps paying for: the
+> inventory pin says "13 files or redden", the census pin says "these 5", and
+> **nothing relates the two.**
+>
+> ⇒ **`AC-2` must state which population the census covers and why**, and either
+> add the missing production file(s) as explicit `0/0/0` rows or record the
+> exclusion with its reason. ⛔ **Do not leave it silent** — a row that is absent
+> and a row that is zero are indistinguishable to a reader and only one of them
+> is a claim.
 
 **`B2F`'s whole job is to add declarations and definitions, so this pin WILL go
 red — by design.** Two failure modes, and the frame forbids both:
@@ -347,6 +450,21 @@ post-hoc baseline is not a control.**
 
 ### ⚠ AND THE CENSUS POPULATION IS NARROWER THAN "THE BACKEND"
 
+> ## ✅ `AC-G0` IS ANSWERED — 6 definitions / 8 declarations, Θ(1). READ THIS FIRST.
+>
+> **The denominator question is settled and re-verified at `bd24422b`. Do not
+> re-derive it, and do not re-measure `native_int_clif` from scratch.** What
+> remains is a *pin*, not a *measurement*:
+>
+> | | state | action |
+> |---|---|---|
+> | definitions = **6** | **already pinned** — `LOCAL_HELPER_COUNT` at `…/cranelift_backend/artifact/tests.rs:56` | **cite it; do not duplicate** |
+> | declarations = **8** | genuinely unpinned | **pin it** — 2 `Linkage::Import` + 6 `Linkage::Local` |
+> | program-independence | **enforced by the signature** | **add no test** — record the signature |
+>
+> The narrative below is retained because it records *how* the number was got
+> wrong and why the wrong one was plausible. ⭐ It is the reason `AC-G0` exists.
+
 **Measured, and it matters for the growth verdict:**
 `crates/ken-runtime/src/native_int_clif.rs` is **production** — declared
 un-gated at `lib.rs:23` — and holds **5** `FunctionBuilder::new` **source sites**
@@ -362,7 +480,13 @@ helpers, emitting exact-`Int` support "into every native module."
 > **unconditionally**:
 >
 > - **8 declarations** — 2 `Linkage::Import` (`malloc` `:76`, `free` `:81`) plus
->   6 `Linkage::Local` (`ken_native_int_{resolve,intern,binop,compare,narrow,export}_local`, `:83-88`)
+>   6 `Linkage::Local`
+>   (`ken_native_int_{resolve,intern,binop,compare,narrow,export}_local`, `:84-89`
+>   — ⚠ re-measured at `bd24422b`; this frame previously said `:83-88`). All six
+>   route through the one `declare` helper, whose `declare_function(name,
+>   Linkage::Local, &sig)` is at `:148` — **so a source census of
+>   `.declare_function(` in that file returns 3, not 8.** The unit count and the
+>   spelling count differ here too.
 > - **6 definitions** — `define_{resolve,intern,compare,narrow,export,binop}`,
 >   each called exactly once from `emit_native_int_local_graph` (`:107-112`)
 > - **6 `FunctionBuilder::new` invocations from 5 source sites** —
@@ -410,7 +534,8 @@ helpers, emitting exact-`Int` support "into every native module."
 >   here; record the signature as the guarantee.**
 
 **It is NOT in the N1 census's five rows, and NOT in
-`BACKEND_PRODUCTION_SOURCES` (`control.rs:3580`, 12 files).**
+`BACKEND_PRODUCTION_SOURCES` (`control.rs:3686` — ⚠ **13** files as of `B2R`,
+which added `abi.rs`; this frame previously said `:3580`, 12).**
 
 This does **not** invalidate the landed pins — they are explicitly scoped to
 "the PRODUCTION lowering and planning sources" and say so. ⛔ **But `B2F` owns a
@@ -433,34 +558,118 @@ production Cranelift function in `ken-runtime`."
 
 ## Deliverables
 
-**D1 — the target code-unit population.** One closed Cranelift function per
-static planned function/origin. Forward-declare the whole bundle
-(`Module::declare_function` for every signature/ID first), then define each
-body. Derive the population from the plane's existing static origins — do not
-invent a parallel numbering.
+> ### ⭐⭐ WHAT THE PREREQUISITES SUBTRACTED — read this before `D1`
+>
+> **`D1`–`D3` were written when this node had to CONSTRUCT the population, the
+> frame layout, and the store contract. It no longer does.** `B2O` and `B2R`
+> landed all three as **declared, validated, inert** structure. This node's
+> obligation on those three axes changed from **construct** to **consume and
+> enforce**, and the wording below has been re-cut to say so.
+>
+> | axis | before the re-slice | on `bd24422b` |
+> |---|---|---|
+> | which occurrences form one unit | invent it | **`B2O` — consume `SemanticOwner`** |
+> | frame layout, carriers, widths, ownership modes | design it | **`B2R` — consume `AbiDescriptor` / `AbiSlot` / `AbiFrameHeader`** |
+> | store transport contract | state it | **`B2R` — consume `AbiStorageOwner` + `AbiOwnership`** |
+> | **emit** target units, **obey** those modes, **mint** the artifact-static seed material | — | ⛔ **all still this node's, and none of it is inherited** |
+>
+> ⛔ **The subtraction is of DESIGN work, not of PROOF work.** `B2R` declared
+> the modes and validated that each slot carries *its own carrier's*
+> declarations; **it verified no emitted code obeys them, because nothing is
+> emitted.** ★ A contract that is declared and validated is not thereby
+> honoured — that gap is exactly what this node closes, and an AC that reads
+> "the descriptor says so" discharges nothing.
 
-**D2 — the fixed explicit activation frame (the ABI).** One explicit frame
-layout through which dynamic environment/control/store state crosses into a
-target function. It is **fixed** and **explicit**: code identity is static,
-and every dynamic value travels through the frame, never through
-capture-by-construction. Document the layout where the layout lives, not in a
-comment far from it.
+**D1 — the target code-unit population, CONSUMED from `B2O`.** One closed
+Cranelift function per **`PredeclaredFunction` in the validated `SemanticOwner`
+partition**. Forward-declare the whole bundle (`Module::declare_function` for
+every signature/ID first) from `B2R`'s validated descriptors, then define each
+body.
 
-**D3 — persistent-store transport.** The store crosses the ABI. State the
-ownership and lifetime contract at the boundary.
+⛔ **Do not re-derive the unit set, and do not invent a parallel numbering.**
+The set is `plan.entries` ∪ every `EdgeKind::StaticBody` **target**; the
+equality `functions.len() == entries.len() + count(StaticBody edges)` is
+already a planner error at `semantic_ir.rs:1006`. ⛔ **The two shared exits
+(`Terminal`, `TrapTerminal`) are NOT units** and get no target function.
 
-**D4 — static dispatch / call edges.** Call sites reference target functions by
-their **static** identity. No indirect dispatch on a dynamic property, and no
-runtime lookup that re-derives which code to run from a value.
+**D2 — emit against `B2R`'s activation frame; do not redesign it.** Every
+dynamic environment/control/store value crosses into a target function through
+the **declared** `AbiFrameHeader` + `AbiSlot` layout for that unit, never
+through capture-by-construction. `AbiPlane::shape` / `shapes` is the accessor.
+
+⚠ **"Fixed frame" does not mean equal byte size across origins** — `B2R` states
+this explicitly, and reading it as one universal layout is the error that would
+reintroduce a boxed `Value` nobody asked for.
+
+⛔ **The value-independence obligation transfers but does not carry.** `B2R`
+proved *the descriptor* is not chosen by inspecting a runtime value
+(`build_abi_plane`'s inputs contain no `RuntimeGroundValue` and no `Lowered`).
+**Whether the EMISSION path stays value-independent is unproven and is `D2`'s
+to establish** — quoting `B2R`'s own limit statement: *"this says nothing about
+whether `B2F`'s emission path stays value-independent. That obligation is
+`B2F`'s."*
+
+**D3 — persistent-store transport, and MINT the artifact-static seed
+material.** The store crosses the ABI under `B2R`'s declared `AbiOwnership` /
+`AbiStorageOwner` contract; this node makes emitted code **obey** it.
+
+⛔ **The seed carrier borrows from artifact-static material that DOES NOT EXIST
+YET.** `B2R` declared it and deliberately did not mint it. ★ And the reason
+matters: `Lowering<'a>` holds `seed_env: &'a NativeSeedEnvironment` — a borrow
+that lives only during *compilation* — while `CompiledModule<M>` has no
+lifetime parameter, so **nothing borrowed can escape into the artifact** (the
+compiler refuses it, and
+`escaping_a_source_borrow_into_the_compiled_artifact_does_not_typecheck` pins
+exactly that). ⇒ **A runtime activation cannot borrow the seed environment.**
+Creating owned, artifact-static seed material that outlives every activation is
+**new work in this node**, and it is the one piece of `B2R`'s contract with no
+landed counterpart at all.
+
+**D4 — static dispatch / call edges, derived from the graph.** Call sites
+reference target functions by their **static** identity. No indirect dispatch on
+a dynamic property, and no runtime lookup that re-derives which code to run from
+a value.
+
+⛔ **The boundary disposition is DERIVED from validated graph facts, never
+hand-authored.** The classification and its load-bearing reject arm are ruled
+and live in `docs/program/issues/RT-FNSPLIT-B2F.md` (*"RE-HOMED FROM `B2O`"*):
+a `StaticBody` edge between **distinct** owners is a **cross-owner call**; a
+same-owner ordinary edge is **local traversal**; a function edge to a
+**terminal** owner is a **shared exit**; **anything else is a REJECT.**
+
+> ### ⛔⛔ THOSE FOUR ARE INVARIANTS THIS NODE RELIES ON — NOT ACs IT DISCHARGES
+>
+> **`validate_function_units` (`semantic_ir.rs:987`) already enforces all four
+> as `return Err` arms in the production bytes `B2O` landed** — I re-verified
+> the arms at `bd24422b`: the `match` over `SemanticOwner` has **no `_ =>`**
+> (so a new variant is a compile error), `Function(to_unit) if to_unit ==
+> from_unit => {}` is the accepting arm with `Function(_) =>` rejecting, and the
+> shared-exit rejects are explicit.
+>
+> ⇒ **Planning REFUSES TO CONSTRUCT a violating graph**, so a `B2F` control
+> asserting one of these laws is green on **every input that can reach `B2F`**.
+> **It would read as coverage and test nothing.** ⛔ Cite them to `B2O` as
+> inherited invariants; do **not** re-assert them here.
+>
+> ★ **What actually survives the re-home is one-for-one consumption** — that the
+> view is consumed without a second table — **which inert `B2O` could not check
+> and never could.** When a claim moves between nodes, the part that survives is
+> the part the source node was structurally unable to verify.
 
 **D5 — switch-over of EVERY live consumer.** All **59** production calls into
 `lower_expr` (`core.rs`, **`:188`**–`:6743`) are accounted for, **including the
 root call at `:188`.** ⛔ A count that does not reach 59 is an incomplete
 switch-over, not a partial success — enumerate, do not sample. ⛔ **Derive the
 population with a TOKENIZED census (`identifier_occurrences`,
-`control.rs:3529`), never `grep 'self.lower_expr('`** — that spelling misses the
+`control.rs:3635`), never `grep 'self.lower_expr('`** — that spelling misses the
 root, which is the one site that must become the call into the root target
 function.
+
+> ⚠ **Re-measured at `bd24422b`, and every number in this deliverable held:**
+> one definition at `core.rs:4333`, **59** calls spanning `:188`–`:6743`, the
+> root still at `:188`. `B2O` and `B2R` touched neither the definition nor any
+> call site. ⚠ The tokenizer's own anchor **did** move — `identifier_occurrences`
+> is at `control.rs:3635`, not `:3529`. **Re-derive it again on your own base.**
 
 > ## ⛔ D5/AC-5 AMENDED 2026-07-25 — THE TWO-WAY CLASSIFICATION WAS UNSOUND
 >
@@ -492,6 +701,17 @@ function.
 > | direct retained body | 1 | `:4878`, from `:4829` |
 >
 > **32 + 9 + 14 + 3 + 1 = 59** ✓
+>
+> ✅ **RE-MEASURED AT `bd24422b`, AND THE WHOLE TABLE HELD.** I re-derived the
+> call population after `B2O` and `B2R`: still **59**, still one definition at
+> `core.rs:4333`, still spanning `:188`–`:6743`, and **every line number named
+> in this amendment still resolves to a `lower_expr` call** — the 8
+> caller-dependent sites (`407, 410, 438, 1330, 1518, 1573, 6108, 6207`), the 6
+> untraced ones (`1669, 1793, 5920, 5990, 4538, 1892`), the 3 synthesized
+> (`188, 2288, 6291`), the direct retained body (`4878`), and the hand-resolved
+> `4454`. ⚠ **This is the exception, not the rule** — the plan-side anchors
+> beside them moved by tens of lines. **Re-derive on your own base anyway; the
+> fact that they held once is not a licence to trust them twice.**
 >
 > ⛔ **THE TOTAL WAS 58 IN THE FIRST CUT OF THIS AMENDMENT AND THAT WAS WRONG**
 > (crossed with Finding 4; corrected by `runtime-implementer` at
@@ -560,14 +780,32 @@ runtime branch, optional callback, function pointer, or alternate entry can
 reach a second body-emission path. Pinned structurally, verified in **both**
 `cfg(test)` configurations.
 
-**AC-2 — the emitted-unit census is re-baselined to a PREDICTED number.**
+**AC-2 — the emitted-unit census is re-baselined to a PREDICTED number, AND
+its population is stated.**
 `correspondence_adds_no_emitted_unit_to_the_production_census`
-(`control.rs:3336`) carries the new counts, the prediction, and the reason. The
+(`control.rs:3337`) carries the new counts, the prediction, and the reason. The
 pin still reddens on an unplanned declaration or definition.
+
+⛔ **AND it must say which files it covers and why.** Its five rows are a
+hand-listed subset of the **13**-file `BACKEND_PRODUCTION_SOURCES`
+(`control.rs:3686`); `B2R`'s `abi.rs` is in the second and not the first. Add
+the missing production file(s) as explicit `0/0/0` rows **or** record the
+exclusion with its reason in-source. ⛔ **Silence is not an answer here** — an
+absent row and a zero row read identically and only one of them is a claim.
 
 **AC-3 — the four D3 width invariants**, each independently falsifiable (old
 `AC-3`). Each gets its own assertion and its own positive control; a single
 composite assertion does not satisfy this.
+
+⚠ **`B2R` landed the widths as *declarations*, so an assertion that reads them
+back out of `AbiCarrier` is circular.** `AbiCarrier::width_bytes`
+(`abi.rs:91`) and `align_bytes` (`:103`) are `const fn`s over a closed enum;
+`AbiPlane::validate` already checks each slot carries its own carrier's
+declarations. ⇒ **`AC-3`'s subject is the EMITTED code's agreement with those
+declarations, not the declarations' internal consistency.** ★ Measured and
+worth knowing before you write the pin: **every `AbiCarrier` variant is
+currently 8/8**, so a width assertion that compares carriers to each other
+passes on a mechanism that carries no layout information at all.
 
 **AC-4 — the `origin -> expression` lookup count is stated.** Either it stays
 **exactly 1** through `retained_body_occurrence`, or the new count is
@@ -600,6 +838,14 @@ and that is exactly how `B2A-C` went red after a green targeted run.
 **AC-8 — `AC-G0`, the named denominator** (above). The growth verdict states its
 population and justifies every exclusion, `native_int_clif` included.
 
+⚠ **The measurement half is DONE — 6 definitions / 8 declarations, Θ(1) per
+native module.** What `AC-8` still owes is (a) **cite** `LOCAL_HELPER_COUNT`
+(`artifact/tests.rs:56`) rather than duplicating the 6, (b) **pin the 8
+declarations**, which are genuinely unpinned, and (c) **record the
+`emit_native_int_local_graph` signature as the program-independence
+guarantee** — it takes no program-derived parameter, so the compiler already
+forbids the growth mode. ⛔ **Add no test for (c).**
+
 **AC-9 — the differential's baseline recipe is IN THE TREE.** Record the base
 SHA, the probe function names, and the `git worktree add --detach <sha>` +
 test invocation. ★ **The deep reason this is required:** the asserted property is
@@ -612,11 +858,89 @@ it.
 **entry 2**. Entries 1 and 3 closed with `B2A-S` and `B2A-C`. State what is
 **not** claimed as its own sentence.
 
+**AC-11 — every boundary slot this node emits carries a REPRESENTABLE value,
+established by this node and NOT inherited from `C4`.** For each slot kind
+(`Capture`, `Result`, and the four `CONVENTION_SLOTS` at `abi.rs:381`), show
+that the value reaching it has a carrier `result_carrier` can supply.
+
+> ### ⛔⛔ WHY THIS IS AN AC AND NOT AN INHERITED GUARANTEE — the P1 hazard
+>
+> **Adversary report on the landed `B2R` merge (`c986d0a3`), and I re-read the
+> code at `bd24422b` before writing this AC.** `abi.rs:500-503` states that
+> `C4` *"excludes the position where an imported value would have to cross a
+> frame boundary and be given a carrier."* **The implementation does not
+> establish that.**
+>
+> `reject_imported_capture_edges` (`abi.rs:514`) iterates a lexical closure's
+> **direct capture children** and calls `result_carrier(seed.source)` on each —
+> which answers *"is this capture expression's own top-level shape
+> `ImportedDeclarationRef`?"*, **not** *"can an imported value reach this frame
+> slot?"* Two consequences follow from the code shape, and the Adversary
+> measured both as plans that **planned green**:
+>
+> | | |
+> |---|---|
+> | **Hole A** | any wrapper defeats it — `If { Bool(true), imported, imported }` is **binder-free**, so no de Bruijn reading makes its result anything but the imported value, and it receives a full `Capture / ValueWord / OwnedByFrame` slot |
+> | **Hole B** | needs no wrapper at all — `LexicalClosure { captures: [], body: ImportedDeclarationRef }`; the function iterates **capture children only**, so the unit's own **result** slot is never carrier-checked |
+>
+> ⚠ **Grounding, stated precisely (`pin-a-property` §4).** **I verified the code
+> shape myself** — the capture-children iteration, the `result_carrier` call on
+> each child's own `SemanticSourceKind`, and that no path carrier-checks the
+> body. **I did NOT rebuild the Adversary's fixtures**, so "planned green, 2
+> descriptors, 10 slots" is **their measurement, relayed**. ⛔ The ring
+> re-measures before acting; this frame is not their corroboration.
+>
+> ⭐ **The shape is what makes it worth an AC.** `abi.rs:494-503` records that
+> the first implementation rejected *every* occurrence with an unrepresentable
+> result carrier, that this was strictly stronger than `C4`, and that a
+> pre-existing property test caught it. The repair moved from *"any occurrence
+> anywhere"* to *"the capture child's own node"* — **and skipped the correct
+> middle: the set of occurrences whose value can reach a boundary slot.**
+> Corrected past the target, on the same axis, and documented with more care
+> than the original error was — **which is exactly why it reads as settled.**
+>
+> ### Steward disposition — and what it does NOT do to this node's scope
+>
+> 1. **`B2F` must not treat `C4` as a tight exclusion.** `AC-11` is discharged
+>    by establishing representability **at the slots this node emits**, which is
+>    a property of the emission boundary and therefore genuinely this node's.
+> 2. **The repair of `C4` itself rides `RT-FNSPLIT-B2O-CHECK`, widened to
+>    `abi.rs`** — together with the Adversary's `P2` (`AbiPlane::validate:922`
+>    asserts `descriptors.len() == functions.len()`, after which the `:934`
+>    orphan check can never be `None`, so the "both directions are asserted"
+>    note at `:931-933` describes one direction and a restatement). **Both are
+>    the same advertised-vs-enforced defect that node already owns.**
+>    ⛔ **`B2F` does not absorb it.** This is an `L` node on an atomic boundary;
+>    adding a checking-layer repair to it is how an `L` becomes unlandable.
+> 3. ⚠ **Not claimed:** that either hole is reachable from a real Ken program.
+>    That depends on front-end constraints nobody has traced. **The claim is
+>    bounded to the layer measured** — at the plan layer these are buildable
+>    plans that `C4` says it excludes and does not.
+>
+> ⚠ **`B2R` is not being re-opened and this is not a merge-blocking finding.**
+> Nothing emits today, so nothing is wrong on `main`. It becomes live **the
+> moment this node emits**, which is the reason it is written into this frame
+> rather than filed and forgotten.
+
+**AC-12 — the declared ownership modes are OBEYED by emitted code, with a
+positive control.** `B2R` validated that each slot carries **its own carrier's**
+declarations; it verified nothing about behaviour, because nothing ran. State
+per `AbiOwnership` mode what the emitted code does, and give **at least one
+control that reddens if the emission ignores the declaration.**
+
+⛔ **An assertion that reads the mode back out of `AbiCarrier::ownership`
+(`abi.rs:122`) discharges nothing** — it re-measures a `const fn` over a closed
+enum. ★ *`pin-a-property`:* the needle must not be supplied by the thing under
+test.
+
 ---
 
-## ⭐ Pin discipline — this chain has spent 8 hard-stops on exactly this
+## ⭐ Pin discipline — this chain has spent 9 hard-stops on exactly this
 
 **Load `agent/playbooks/tools/pin-a-property.md` before writing any assertion.**
+⚠ It has grown since this frame was first written: **§2a** (a predicted
+population must include registration-driven fan-out) and the **§6a witness-axis**
+subsection both came out of `B2R`'s retro and both bind this node.
 It exists because of this WP chain. The four failures it encodes, all committed
 here:
 
@@ -628,7 +952,7 @@ here:
 2. **Enumerating what you FORBID.** Three `body:` spellings, four container
    spellings — any form the author had not imagined passed green.
    ⇒ **Pin the ALLOWED inventory** and redden on anything else, the way
-   `the_backend_production_surface_inventory_is_closed` (`control.rs:3605`)
+   `the_backend_production_surface_inventory_is_closed` (`control.rs:3715`)
    derives its population from the `mod` declarations themselves.
 3. **Bounding a closure on an incidental privacy.** *Field privacy bounds
    nothing; item visibility bounds callers.*
@@ -644,10 +968,11 @@ not a cosmetic issue.
 
 ## Hard-stop protocol — ✅ #9 HAS FIRED; ITS RESEARCH PULL IS CONSUMED
 
-**Count of record: 9** — `#9` raised 2026-07-25 (`evt_197xpdavdyrn0`), see the
-**HELD** block at the top of this file. ✅ **Its research pull is CONSUMED:
-dispatched `evt_63wjmry61vd89`, before the Architect ruled**, as the armed
-trigger required.
+**Count of record: 9** — `#9` raised 2026-07-25 (`evt_197xpdavdyrn0`); see the
+**discharged-hold** block at the top of this file. ✅ **Its research pull is
+CONSUMED: dispatched `evt_63wjmry61vd89`, before the Architect ruled**, as the
+armed trigger required. **`B2O` and `B2R` both closed with no hard-stop, so the
+count did not move** — a clean WP never advances it.
 
 ⚠ **The next armed pull is `#12`.** Raise a hard-stop the moment a deliverable is
 unsatisfiable **inside this frame's own boundary** — that is what `#7` and `#9`
@@ -668,7 +993,24 @@ correction. **Applying one verdict to both would have retired an enforceable AC
 or papered over an unenforceable one.** Route the **authority boundary** before
 spending another test round (`agent/playbooks/build/leader.md`).
 
-## Carried in from the adversary's post-merge hunt on `145fe915`
+## Carried in from the adversary's hunts — two, on different merges
+
+⚠ **Read the SHA on each.** These are two separate reports and only the second
+concerns code this node builds on.
+
+### From the hunt on `c986d0a3` (`B2R`) — **`P1` is live and it is `AC-11`**
+
+`C4`'s imported-edge exclusion is narrower than `abi.rs` says it is, and `B2F`
+would inherit it as its calling convention. **The full disposition, the two
+holes, my own grounding boundary, and the routing of the repair to
+`RT-FNSPLIT-B2O-CHECK` are written into `AC-11` above — that is the durable
+home, not this section.** ⛔ Do not read this heading as the whole treatment.
+
+`P2` from that same hunt (`AbiPlane::validate`'s one-direction-plus-restatement)
+is **routed to `RT-FNSPLIT-B2O-CHECK`**, widened to `abi.rs`. It does not ride
+this node.
+
+### From the hunt on `145fe915` (`B2A-S`)
 
 **P2 — a CANDIDATE, for the Architect to rule at framing review. Not adopted.**
 `B2A-S`'s AC-5 leaves residual **arm 1** — "no independently maintained
