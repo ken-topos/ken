@@ -34,7 +34,37 @@
 > ONLY, not on `main`.** The next publish carries it. ⛔ Before publishing, check
 > the merge-base INTERSECTION — `main` has moved twice today.
 >
-> ### ⇢ THE NEXT ACT — ALL RULINGS ARE IN. AUTHOR TWO FRAMES, THEN KICK.
+> ### ✅ `RT-FNSPLIT-B2A-S` IS FRAMED, KICKED, AND `active`. THE FLEET IS WORKING.
+>
+> **Kicked at `evt_3wmhpdq7dm8d8`**, frame at
+> `docs/program/wp/RT-FNSPLIT-B2A-S-selection-defunctionalization.md`, ring
+> compaction verified on the **completion marker** for all three seats
+> (implementer reached `ctx 0%`) before the mention went out.
+>
+> ### ⇢ THE NEXT ACT — WAIT, then act on whichever lands first
+>
+> 1. **A fold or hard-stop from `runtime-leader` on B2A-S.** ⚠ **The #6 pull is
+>    CONSUMED; next pull = #9** — so a hard-stop here goes **straight to the
+>    Architect**, no research gate. Watch specifically for **D4** ("cloned
+>    `RuntimeExpr` bodies leave the covered population in the same diff") coming
+>    back as a hard-stop — I told the ring that a member it cannot cover is a
+>    hard-stop, not a partial landing, so **do not accept an identity-only
+>    landing.**
+> 2. **Publish the accumulated `steward/work`.** ⚠ `main` = `70bd2c74` but
+>    `steward/work` is well ahead and carries **`DOC-ATTEST-LIVING`**, the whole
+>    re-slice, and the corrected hard-stop counter. ⛔ Check the merge-base
+>    INTERSECTION first — `main` moved twice today. ⛔ And re-run
+>    `gen-doc-status.sh --check` on the candidate: **editing an attested issue
+>    file reddens CI**, which is exactly what cost PR #938 its first attempt.
+>
+> ⛔ **Still operator-held, do not release:** `DOC-GATE-NEEDLE`, `ABI-R1`,
+> `DOC-ATTEST-LIVING`. Fleet is single-threaded; B2A-S is the one active build WP.
+>
+> ⚠ **Owed but NOT blocking:** the `RT-FNSPLIT-B2F` frame (sequenced behind
+> B2A-S, so it can wait), and `RT-FNSPLIT-B2B` needs re-deriving or subsuming
+> because its growth verdict moved into B2F.
+>
+> ### ✅ (done) All rulings in; both frames authored where needed
 >
 > **B2a hard-stopped at #6, the old frame is RETIRED, and the Architect has ruled
 > on all three questions** (`evt_6h5gw5c503n5z` + amendment `evt_25ynt8615r9sk`),
