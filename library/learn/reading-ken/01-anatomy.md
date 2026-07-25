@@ -25,13 +25,14 @@ outside reader-facing package documentation
 The order is useful before you know anything about the package. Motivation
 states the problem. Definition contains the canonical code. Using it supplies
 checked examples, while Laws & proofs states the machine-checked contract.
-Design notes explains important choices, and Trust & derivation records the
-assumptions and derivation path.
+The Design notes section explains important choices, and Trust & derivation
+records the assumptions and derivation path.
 
 This curriculum draws from a fixed [fragment
-set](fragments.md#why-these-seven-and-what-each-is-for). Each selected entry is
-checked as a pure library with `ken check`; the selection therefore teaches
-from registered package sources rather than invented snippets.
+set](fragments.md#why-these-seven-and-what-each-is-for). The fragment set
+records a successful `ken check` for each selected pure-library entry; the
+selection therefore teaches from registered package sources rather than
+invented snippets.
 
 ## Empty and Dec
 
@@ -56,16 +57,16 @@ then states the computation facts for `decide`: the `Yes` case produces
 `True`, and the `No` case produces `False`. The proof clauses close with
 `Proved` because the closed terms reduce to the same `Bool` constructor.
 
-Design notes explains why proposition-level disjunction and a homogeneous sum
-do not provide the required mixed payloads. It also includes a checked rejection
-for the reserved name `absurd`. Trust & derivation reports a zero
-`trusted_base()` delta and maps the package back to its sources. By the time you
-reach that section, the earlier narrative has already told you what each
+The Design notes section explains why proposition-level disjunction and a
+homogeneous sum do not provide the required mixed payloads. It also includes a
+checked rejection for the reserved name `absurd`. Trust & derivation reports a
+zero `trusted_base()` delta and maps the package back to its sources. By the time
+you reach that section, the earlier narrative has already told you what each
 checked region is meant to establish.
 
 ## Declaration Keywords
 
-Definitions in those checked fences begin with keywords that declare static
+Ken's four definition keywords `const`, `fn`, `proc`, and `def` declare static
 purity and arity ([§1](../../../spec/30-surface/33-declarations.md#1-definitions)).
 `const` introduces a pure value with no explicit value parameters, and `fn`
 introduces a pure function with at least one. `proc … visits ρ` introduces a
@@ -77,11 +78,11 @@ disagrees with the signature or inferred effects is rejected. In particular,
 an effectful body cannot hide behind `fn`, and an effect row belongs only on
 `proc`.
 
-The authored definitions in `EmptyDec.ken.md` are `fn` declarations. Each
-accepts explicit values and remains pure: `absurd_empty` eliminates an
-`Empty`, `yes` and `no` construct decisions, and `dec_eq_decides` converts a
-`DecEq` result into a proof-carrying decision. Their keyword gives you that
-first classification before you inspect any body.
+The four functions named above are `fn` declarations. Each accepts explicit
+values and remains pure: `absurd_empty` eliminates an `Empty`, `yes` and `no`
+construct decisions, and `dec_eq_decides` converts a `DecEq` result into a
+proof-carrying decision. Their keyword gives you that first classification
+before you inspect any body.
 
 ## Reading a Signature
 
