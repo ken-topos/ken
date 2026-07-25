@@ -280,10 +280,38 @@ amendment** with the new count stated and justified. Do not quietly bump it.
 `functions: Vec<PredeclaredFunction>` (`:483`), and keys them by planned node —
 `PredeclaredFunctionId(planned_node.0)` at `:536`, cross-checked at `:850-853`.
 
-⚠ **These records are evidence that the function bundle is the *smaller*
-construction. They are NOT proof that functions already exist.** Nothing here
+⚠ **These records are NOT proof that functions already exist.** Nothing here
 declares or defines a Cranelift function. Do not read the plane's
 `PredeclaredFunction` rows as an existing emitted-unit population.
+
+> ### ⛔ CORRECTED 2026-07-25 (Steward) — "the *smaller* construction" was WRONG
+>
+> This section originally added *"these records are evidence that the function
+> bundle is the **smaller** construction."* ⛔ **Strike that.** It is wrong in
+> **direction**, and it is the same "carrier exists ⇒ property holds" gloss that
+> cost this chain hard-stops #5 and #8.
+>
+> The population is not merely *keyed* by planned node — it is **definitionally
+> equal to the node count, and that equality is ENFORCED**:
+>
+> ```
+> semantic_ir.rs validate()   self.functions.len() != nodes.len()  -> planner error
+>                             program.records.len  != 1            -> planner error
+> static_transition.rs:2239   assert_eq!(plan.semantic.functions.len(), plan.nodes.len())
+> ```
+>
+> And `StaticNode.transition` is a `TransitionKind` — `Evaluate`, `Sequence`,
+> `Branch`, `CaseTest`, `ClosureBody`, `ProducerTail`, … — i.e. **abstract-machine
+> steps**. So a bundle keyed on this table is **one Cranelift function per
+> transition state: LARGER than the target population, not smaller** — and it
+> would read as literal compliance with `D1`. Every `SemanticProgram` also spans
+> **exactly one** record, so nothing in the plane groups a body's occurrences.
+>
+> ⇒ **`RT-FNSPLIT-B2O` must establish the function population itself**; the
+> boundary is already marked in the plan graph (`TransitionKind::ClosureBody` at
+> `static_transition.rs:834,851`; `EdgeKind::StaticBody` at `:845,871`), so the
+> unit set is *derivable* — root ∪ `ClosureBody` heads — rather than invented.
+> Routed to the Architect as `evt_5vd31pvbrgdf3`.
 
 ---
 
