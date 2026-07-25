@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2A-C
 title: "plan↔lowering occurrence correspondence — transport the preallocated StaticOriginId to the site where it is out of scope"
-status: draft
+status: ready
 owner: runtime
 size: M
 gate: none
@@ -10,6 +10,22 @@ blocks: [RT-FNSPLIT-B2A-S]
 github: null
 origin: Architect ruling evt_1jdh8pn8y96z on RT-NATIVE-FNSPLIT hard-stop #7 (2026-07-25), deciding on the runtime-implementer's TOTAL + injective census evt_4tqj93ctj24z2, which the Steward gated the ruling behind (evt_3ne9d2wkee0mx, evt_3qtyhp53v5g7x). Steward-filed; Steward owns the frame, scope, and AC/control placement.
 ---
+
+> ## ✅ FRAMED — 2026-07-25
+>
+> **The shovel-ready frame is
+> `docs/program/wp/RT-FNSPLIT-B2A-C-plan-lowering-correspondence.md`.**
+> Read that, not this file. It carries the six ruled mechanism requirements as
+> D1–D8, the four negative-boundary pins N1–N4, ten ACs, and anchors pinned on
+> `origin/main` = `70bd2c74`.
+>
+> ⭐ **D3 is the deliverable the ruling only implies: the per-variant ORDINAL
+> CORRESPONDENCE between the planner's child ordinals and the lowering's
+> traversal order.** D2's positional derivation silently presupposes it, nothing
+> in the type system enforces it, and it is written down nowhere. ⭐ **D5 is the
+> longest-lived: a coverage guard that must redden on a NEWLY ADDED expression
+> field, not merely enumerate today's variants** — that is what stops entry 3
+> recurring when `RuntimeExpr` grows.
 
 > ## ⭐ WHY THIS NODE EXISTS — it is the CAUSE the chain kept working around
 >
