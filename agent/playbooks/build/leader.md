@@ -271,6 +271,36 @@ When a WP merges, run the retro collection before the ring fully moves on
 This is the producer half of the promotion ladder — skip it and the Steward has
 nothing to promote, and lessons stay trapped in your team.
 
+## ⭐ Route the AUTHORITY BOUNDARY before spending another test round
+
+When an acceptance criterion keeps being defeated, you have two very different
+situations and they are easy to confuse:
+
+| the defeats share a cause you can name | ⇒ **detector defect** — one repair fixes the class; keep it in your ring |
+|---|---|
+| the defeats share nothing repairable | ⇒ **the AC asks for more than a local test can see** — that is a **frame** question, and it goes up |
+
+⛔ **Do not spend a third round on the second case.** An AC demanding a global
+negative over arbitrary code — *"nothing anywhere is keyed by X"* — needs
+whole-program dataflow; no scan discharges it, and each new scan looks more
+thorough while enforcing no more. Route it: **soundness/mechanism → Architect,
+frame/acceptance → Steward.** ⛔ And do not let your ring narrow an AC on its
+own authority — a narrowing is a frame amendment, and an amendment that is not
+on a fetchable ref has not happened.
+
+⚠ **The failure to avoid is the opposite one, though — it is more expensive.**
+"Repeatedly defeated" does **not** license *"the property is unenforceable"*;
+that conclusion **weakens a gate**, so it must be demonstrated by building the
+candidate mechanism and showing it cannot work, never inferred from a tally.
+Ask what the defeats **share** first — a granularity error (matching lines where
+the language has tokens) is cheap to test and common.
+
+**And state four things together in every handoff, in one place:** the exact
+**measurable fact**, the **claimed boundary** (what it does and does not
+entail), the **residual owner** (who guards what the mechanism cannot), and the
+**current SHA**. Splitting them across messages is how a measured fact gets read
+as the broader claim.
+
 ## Stay in your lane
 
 Escalate design judgment (→ Architect) and scope (→ Steward); do not improvise

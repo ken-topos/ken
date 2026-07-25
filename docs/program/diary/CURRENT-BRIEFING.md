@@ -25,45 +25,125 @@
 >   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
 >   the AC rather than gaming it.
 >
-> ## ⇢ RESUME HERE FIRST — 2026-07-25 T12:05Z (Steward self-compacted here)
+> ## ⇢ RESUME HERE FIRST — 2026-07-25 T13:10Z
 >
-> **`origin/main` = `2e84db78`** · **`origin/steward/work` = pushed, see git** ·
-> **`origin/wp/RT-FNSPLIT-B2A-S-selection` = `d99d223d`** (pushed by me).
+> **`origin/main` = `145fe915`.** ✅ **`RT-FNSPLIT-B2A-S` IS MERGED AND CLOSED**
+> — PR #944, CI green, **retros 3/3 in** (implementer `evt_24ky17mzmreth`, QA
+> `evt_wp6z5fyxx851`, leader `evt_4m72j0fcpfyb4`), flipped `merged`.
 >
-> ### ⛔ OPERATOR CORRECTION — I BLEW THE 33% SELF-COMPACT RULE
+> ⚠ **STANDING OPERATOR CORRECTION (2026-07-25): SELF-COMPACT AT 33%.** Held under
+> Opus 4.8, broke down under 5.0 — I ran to 60% through ~10 watchdog sweeps. ⛔ A
+> watchdog firing, a ring hand-off, or an in-flight review is **never** a reason to
+> defer, because they recur, so "after this one" never arrives.
 >
-> **The operator stopped me at 60% ctx** and noted this discipline held under Opus
-> 4.8 and has broken down under 5.0. **True: the hook fired at 25% and 33% and I
-> kept going through ~10 watchdog sweeps.** ⇒ **Compact at 33%. Do not treat a
-> watchdog sweep, a ring hand-off, or an in-flight review as a reason to defer —
-> those recur indefinitely, so "after this one" never arrives.** The publisher and
-> the ring both run independently of my context; nothing here requires me resident.
+> ### ⇢ THE NEXT ACT, IN ORDER
 >
-> ### ⇢ THE ONE THING GATING THE MERGE
+> 1. **Publish `steward/work` doc-only** — owed, and it carries the
+>    `pin-a-property` skill (`56cc2d19`), the two retro promotions from this WP,
+>    the `merged` flip, and this briefing. ⛔ Route it as a **corpus branch cut
+>    from current `origin/main`** (§6a step 2), *not* by publishing `steward/work`
+>    itself: `steward/work`'s merge-base is `2e84db78` and its intersection with
+>    `main` is **non-empty** (`CURRENT-BRIEFING.md`). Verified safe to take from
+>    `steward/work`: `main` has **not** touched `agent/` or `.claude/` since that
+>    base, and the frame doc is byte-identical on both sides.
+> 2. **Frame `RT-FNSPLIT-B2F` shovel-ready** — entry 2, **atomic**
+>    (functionization *and* switch-over together), **anchored on `145fe915`**.
+>    Its Architect rulings are already durable in `issues/RT-FNSPLIT-B2F.md`
+>    (Q1 shape (a) with four transcribed merits); what is owed is the frame +
+>    AC/control placement. ⛔ **It is a CONSTRUCTION, not a port** — the retired
+>    `B2A` frame's `Retain` list described `b077eb7a`, which never landed.
+> 3. **Re-derive or subsume `RT-FNSPLIT-B2B`** — its growth verdict moved into
+>    B2F, so it may no longer be a distinct unit.
+> 4. **Then the §2c handoff gate → kick Runtime on B2F.** The ring is quiescent,
+>    holds no branch, and is explicitly awaiting an explicit kickoff. ⛔ Compact
+>    **all three** seats unconditionally, ctx unread, and verify each drop on the
+>    **`Context compacted` marker** — not the lagging ctx% footer.
 >
-> **`RT-FNSPLIT-B2A-S` is `active`; live candidate is `3c273a38` (fold 2), pushed
-> by me to `origin/wp/RT-FNSPLIT-B2A-S-selection`.** ⛔ **`dec_2kert96q644bc` AND
-> `dec_4fd1frngvbmh0` are BOTH REJECTED AND DEAD** (they named `ee0803aa` and
-> `d99d223d`). **A fresh Decision must name exact `3c273a38`.**
-> ⇒ **RESUME: check for that Decision. Verify with the POSITIVE test — query
-> `list_decisions(status="resolved")` and confirm the id is PRESENT with non-null
-> `resolved_by`.** ⛔ Never "absent from proposed" (that view is stale/cached), and
-> never on prose. ⚠ `list_decisions` returns ~770 KB — query it with `jq`/python,
-> never by reading it.
+> ⚠⚠ **#9 IS THE NEXT HARD-STOP AND IT FIRES A RESEARCH PULL** — dispatch
+> research **before** the Architect rules, not after. **Count of record stays 8**;
+> `NEXT RESEARCH PULL = #9` is armed as a line in `issues/RT-NATIVE-FNSPLIT.md`.
 >
-> ### ✅ AC-5 RULED, AC-4 CLOSED — 2026-07-25 T12:3xZ
+> ### ⛔ WHAT CLOSED, AND WHAT DID NOT — the scope trap on this chain
 >
-> **I ruled the implementer's AC-5 narrowing authoritative and published the
-> corrected frame.** AC-4 closed at `3c273a38` by **tokenization** — all three
-> defeats shared **one** cause, a *line-oriented needle* (`.source_occurrence(`
-> split across lines matched nothing). ⛔ **My own first draft of that correction
-> concluded the census was unenforceable and is WITHDRAWN — it is on the record in
-> the frame.** Lesson: "three defeats ⇒ the default branch is wrong" says *stop
-> repairing the detector*; it does **not** license concluding the property is
-> unenforceable. **Ask what the failures SHARE first.**
-> ⇒ Remaining path: QA binds `3c273a38` → Architect votes → fresh Decision.
+> **B2A-S closed symptom-inventory entry 1 ONLY.** Entry 3 closed with `B2A-C`
+> (`2db29abe`). **Entry 2 is OPEN and assigned to `B2F`.** ⇒ **`RT-NATIVE-FNSPLIT`
+> stays `active`.** There is now a **CLOSURE LEDGER** block in the parent issue
+> recording exactly this, because the inventory itself is append-only and is never
+> rewritten as entries close — so the inventory alone cannot tell you what is done.
 >
-> **Then:** publish `3c273a38` with CI (**code change — no `--doc-only`**) →
+> ⛔ **No per-function / scaling claim is established yet.** Neither B2A-C nor
+> B2A-S installs a target function, calling convention, dispatch, or emitted-code
+> authority. Entry 2 is the one carrying the growth verdict, so the operator's
+> per-function growth gate is untouched until B2F lands. All three ring seats and
+> the Architect stated this independently — do not let the two closures read as
+> progress on it.
+>
+> ### ⭐ METHOD LESSON FROM THE LANDING VERIFICATION — mine, and cheap to repeat
+>
+> I baselined the post-merge content predicates on the candidate *before* the
+> merge so I would compare against a prediction rather than an impression. **Two
+> of five needles were still wrong** and both reported **FAIL on a correct
+> artifact**: `independent entry-keyed` (the source says "independently
+> **maintained** entry-keyed") and `MEASURED` (the source says "measured" — my
+> baseline used `-i`, my verification did not).
+>
+> ⇒ **A baselined post-condition only discriminates if the baseline and the
+> verification run the IDENTICAL command** — otherwise you are measuring your own
+> command drift, not the artifact. And the check with no needle to get wrong is
+> the one to lead with:
+>
+> ```sh
+> git diff --quiet <approved-sha> origin/main   # 0 ⇒ landed tree IDENTICAL
+> ```
+>
+> That returned **0** here, which settles every per-pin predicate at once. A
+> squash lands under a **new SHA**, so `is-ancestor` is never the test — but
+> *tree equality* is available and is stronger than any grep.
+>
+> ### ⛔⛔ NEVER ADD A TRACKER COMMIT TO A CODE CANDIDATE — worked as intended
+>
+> §2a says bundle a tracker-sync commit into every Steward publish. **That must
+> NOT be applied to a code candidate approved at an exact SHA** — it would change
+> the object the Decision names. #944 was published as `82356022` **alone**, which
+> is why the landed tree is byte-identical to the approved one. The tracker rides
+> the **separate doc-only publish** (item 1 above).
+>
+> ### ✅ THIS ROUND — AC-4 CLOSED, AC-5 RULED AND PUBLISHED
+>
+> **Three review rounds, all on AC-4/AC-5, all MY defects.** The Architect
+> affirmed each time that the production mechanism was coherent and the folds
+> changed **zero production bytes**.
+> - **AC-4 closed by TOKENIZATION.** All three defeats shared **one** cause: a
+>   *line-oriented needle* (`.source_occurrence(` split across lines matched
+>   nothing), so the census was testing **layout**. ⛔ **My first draft concluded
+>   the property was unenforceable and is WITHDRAWN on the record.** ⭐ The
+>   implementer's discriminator, now adopted: *"three defeats ⇒ stop repairing the
+>   detector" is NOT "the property is unenforceable" — the discriminator is whether
+>   the failures have a common cause you can name.*
+> - **AC-5 narrowed and published** (PR #943), carrying the Architect's verbatim
+>   `D3`/`AC-5` replacement text. No test can close a global negative over
+>   arbitrary code; the ring *demonstrated* that by building the candidate
+>   `SchedulingEntry` newtype and showing `edge()` must read the raw ordinal.
+> - ⛔ **My narrowing then overclaimed too:** *"not nameable ⇒ hence none can key
+>   on one"* is invalid — privacy bounds **naming**, not keying (`StaticNodeId`
+>   derives `Ord`; a method could hand out an opaque or derived ordinal). **Fourth
+>   recorded instance of measured-true-not-entailing, committed one paragraph after
+>   diagnosing the class.** ⇒ The pin was renamed to
+>   `the_entry_carrying_types_are_module_private` and the gap is now its own
+>   sentence.
+>
+> ### ✅ INDEPENDENTLY VERIFIED ON `82356022` — do not redo
+>
+> - **Fold scope is `control.rs` ALONE** (`git diff --numstat 951f1760 82356022`).
+> - **The rebase changed NO CODE** — `3c273a38 → 951f1760` differs *only* in the
+>   two frame docs, i.e. my published correction. ⭐ Only checkable because the
+>   implementer recorded the SHA mapping (`ee0803aa → 13a5946d`,
+>   `d99d223d → 3f2c75fa`, `3c273a38 → 951f1760`). ⛔ **Without it a rebase
+>   silently invalidates every SHA-anchored review finding in the thread.**
+> - **`cranelift_backend.rs` (the one attested source here) is NOT in the changed
+>   set** — `registered_record_validation_gates_run` is not implicated.
+>
+> **Then:** publish `82356022` with CI (**code change — no `--doc-only`**) →
 > content-verify the LANDED tree (squash ⇒ new SHA, so ancestry is not the test) →
 > ⚠ **NOTIFY THE ADVERSARY** (code merge, §10⁻a report-only: notify, then **never
 > reply, ever**) → chase all three retros → flip `RT-FNSPLIT-B2A-S` `merged`.

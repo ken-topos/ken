@@ -387,6 +387,24 @@ reference):**
     nonzero test count, inspect the message; **never the workspace locally** —
     full-workspace consumer surprises stay CI's job.
 
+## ⭐ Verifying a mechanical pin — load the `pin-a-property` skill
+
+Running a pin proves it passes. It does **not** prove it guards its claim. Load
+the **`pin-a-property`** skill (`agent/playbooks/tools/pin-a-property.md`) and
+hold each pin to it **individually**.
+
+Your highest-value moves as the ring's verifier:
+
+- **Evade it, don't just run it.** Construct a **compile-preserving** mutation
+  that violates the stated property and check the pin reddens. A pin that only
+  ever sees the happy path is untested.
+- **Check the default branch.** If input the pin cannot parse falls through to
+  pass, every gap is a silent green.
+- **Demand non-vacuity.** On the fixture, the right key and the wrong key must
+  actually differ, or a passing control proves nothing.
+- **Read the pin's NAME as a claim** — a name asserting more than the body
+  proves is an overclaim that outlives the review.
+
 ## Verdict discipline
 
 Your verdict is **binary: Approved or Blocked** — never "looks good." A Blocked

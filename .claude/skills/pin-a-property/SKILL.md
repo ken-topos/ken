@@ -1,0 +1,1 @@
+../../../agent/playbooks/tools/pin-a-property.md

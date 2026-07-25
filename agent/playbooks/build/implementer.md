@@ -178,6 +178,31 @@ merge_ready: <WP-ID> <one-line what>
 ```
 Mention only the next actor; do not wait for an ack.
 
+## ⭐ Rebasing a branch that is UNDER REVIEW — publish the SHA mapping
+
+⛔ **A rebase silently invalidates every SHA-anchored finding in the thread.**
+Reviewers name exact SHAs — a block, an approval, a QA verdict all cite the tip
+they read. After a rewrite those SHAs still resolve, still look authoritative,
+and describe objects nobody will merge. Nothing goes red.
+
+**So a rebase of a branch under review is not finished until you have posted:**
+
+1. **The old → new mapping, commit by commit** — `ee0803aa → 13a5946d`,
+   `d99d223d → 3f2c75fa`, `3c273a38 → 951f1760`. One line each.
+2. **A diff isolating what the rebase ITSELF changed** —
+   `git diff <old-tip> <rebased-twin>`. State the result in words: *"differs in
+   nothing but the two frame docs; zero code delta."*
+
+★ **Why (2) is the load-bearing half:** the mapping tells a reader which object
+a finding was about; the diff is what makes a **carried-forward approval
+auditable instead of asserted.** A region-scoped approval can then be
+*re-attached* rather than re-earned — which is the whole reason not to make
+reviewers repeat a pass they already did. **Prove the rebase preserved content;
+do not testify that it did.**
+
+⚠ And say plainly that the branch moved. A reviewer who fetches by branch name
+gets the new tip while quoting the old SHA, and will not notice.
+
 ## Retro (closes the WP — do not skip)
 
 When your leader signals the WP merged, post a short `retro` in its thread
@@ -187,6 +212,23 @@ worked), **carry** (a rule worth promoting). Tag each node-internal or
 topology-touching. This is the grain the Steward's promotion ladder runs on
 (COORDINATION §10); skipping it starves the only mechanism that propagates your
 lessons to the other teams.
+
+## ⭐ Authoring a mechanical pin — load the `pin-a-property` skill
+
+Any acceptance criterion you discharge with a test, a source scan, or a
+structural assertion is a **pin**, and a pin that is real, committed and green
+can still be **green for the wrong reason**. Before you write one, load the
+**`pin-a-property`** skill (`agent/playbooks/tools/pin-a-property.md`) and apply
+it **per pin**, not once per candidate.
+
+The two steps most often skipped, both of which have blocked candidates here:
+
+- **Attempt a compile-preserving evasion of your own pin.** If you cannot build
+  one, say why the reachable surface is closed — grounded on **item
+  visibility**, never on the files you happened to scan.
+- **Write MEASURED / CLAIMED / THE GAP as its own sentence.** A measured
+  property can be entirely true and about something else; the implication is
+  only checked if it is written down.
 
 ## Discipline
 

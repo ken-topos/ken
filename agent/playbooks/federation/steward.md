@@ -1155,6 +1155,38 @@ had the gate been publishing, it would have blocked its own landing forever.
 **No rule inside the script could have known which checker was authoritative.**
 It required someone to look at both and decide. Build for that.
 
+## 2e. ⭐ AUTHORING ACCEPTANCE CRITERIA — load the `pin-a-property` skill
+
+You write the ACs the ring must discharge mechanically, so **an AC you phrase
+badly costs a review round at build-team scale.** Before writing or amending
+one, load **`pin-a-property`** (`agent/playbooks/tools/pin-a-property.md`).
+
+⛔ **Three of this project's framing defects were mine and were one shape: I
+stated a requirement in terms of the artifact I had most recently looked at** — a
+*population* requirement as a struct change, an *authority* requirement as a call
+count, a *module-boundary* requirement as a spelling class. **Name the property
+first; the artifact is downstream of it.**
+
+Frame-author obligations that follow:
+
+- **Require the per-pin evasion attempt in the frame itself.** A
+  per-*candidate* reminder gets satisfied by the most salient control and
+  silently skips the rest.
+- **Ask which mechanism already enforces the property** before demanding a
+  detector. **The compiler is a legitimate answer and usually the strongest**;
+  never specify a test for something the language already refuses.
+- **Give the honest answer a cell.** If an AC list has nowhere to record
+  *"guarded by review, not by CI,"* it will be recorded as *"guarded."* State
+  **every** residual arm.
+- ⚠ **When an AC is defeated repeatedly, diagnose before narrowing.** Ask what
+  the defeats **share** — a granularity error (lines where the language has
+  tokens) is cheap to test and common. ⛔ **A defeat count never licenses
+  "unenforceable"**: that conclusion *weakens a gate*, so it must be
+  demonstrated by building the candidate mechanism and showing it cannot work.
+- **Narrowing an AC is a frame amendment, and it is yours to author and
+  PUBLISH.** An amendment that is not on a fetchable ref has not happened —
+  the ring reads the frame, not your message.
+
 ## 3. The promotion ladder (your core mechanism)
 
 The tooling provisions skills as **per-team copies with no inheritance**, so
