@@ -560,6 +560,34 @@ NEXT RESEARCH PULL = hard-stop #12, …
          crates/ken-backend-native/ do not exist (line numbers are accurate);
          real roots are crates/ken-runtime/src/cranelift_backend/{lowering/
          core.rs, lowering/mod.rs, planning/static_transition/semantic_ir.rs}.
+   ⛔ #10 OPEN — raised 2026-07-25 on RT-FNSPLIT-B2F by runtime-implementer
+      (evt_71d2jg83z2yt4), leader escalation evt_r7797bd7bzk3.
+      COUNT OF RECORD = 10. NOT a research-pull stop: #9 consumed its pull and
+      the next is #12, unchanged and armed. The Architect rules #10 unaided.
+      Evidence 49e24b59 PUSHED by Steward to origin
+      wp/RT-FNSPLIT-B2F-functionization (was ONE local ref); one doc only,
+      crates/ byte-identical to 1e09a30a, nothing to unwind.
+      Obstruction as reported by the ring, RELAYED NOT VERIFIED by Steward:
+      D1+D2+D6+D7 jointly unsatisfiable inside B2F's boundary. The missing
+      prerequisite is NOT B2R's frame shape (caller-env suffix probe green with
+      a capture-withholding positive control) but an EXECUTABLE runtime-value
+      representation plus emitted-code interface: measured Constructor (29
+      Parameter transfers) and HostResult (4) cannot be represented by the
+      declared 8-byte ValueWord, and lowering only constant-folds ground values
+      with no dynamic aggregate projection. A fail-closed guard would reject
+      ~33 of 41 measured source-valued transfers, incompatible with D6
+      old-authority removal and D7 equivalence.
+      ⭐ SURFACED BY THE AC-11 WIDENING (Architect evt_7ggqdk61pxzzf): 29 of the
+      33 are PARAMETER transfers, the position the Steward's original AC-11
+      omitted. The correction paid for itself within the hour.
+      ⭐⭐ PREDICATE QUESTION IS LIVE — #9's obstruction was already "needs a
+      uniform runtime value representation that does not exist", and B2R was
+      the prerequisite ruled to supply it. B2R delivered a DECLARED and
+      VALIDATED contract that verifies nothing about behaviour because nothing
+      is emitted. Whether #9 and #10 are one predicate or two instances is the
+      ARCHITECT's call to name (steward §5a-ii forbids the Steward naming it).
+      If named, the RECUT FRAME IS THE STEWARD'S to author — retaining B2A-S,
+      B2O, B2R, replacing only what the predicate names.
 
 ⛔ **B2a runs one stop away from a research pull.** The #3 pull is CONSUMED
    (advisory evt_rwqb8ear89wx — Danvy/Nielsen defunctionalization granularity;

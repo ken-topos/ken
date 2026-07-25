@@ -20,7 +20,7 @@ previously stated at `0aa9e53f`, four merges back, and several had moved.
 
 ---
 
-## ✅ THE #9 HOLD IS DISCHARGED — the re-slice landed. COUNT OF RECORD = 9
+## ✅ THE #9 HOLD IS DISCHARGED — the re-slice landed. ⛔ BUT #10 IS NOW OPEN
 
 **This block used to read `⛔⛔ HELD AT HARD-STOP #9`. It is retained as the
 reason the two prerequisites exist, rewritten to the state on `bd24422b`.**
@@ -94,7 +94,9 @@ atomic boundary.
 
 ### ⚠ The armed research trigger — unchanged by the re-slice
 
-**Count of record = 9. NEXT RESEARCH PULL = hard-stop `#12`.** The count of
+**Count of record = 10 — `#10` raised 2026-07-25 and is OPEN with the
+Architect. NEXT RESEARCH PULL = hard-stop `#12`, unchanged and armed; `#10` is
+not a pull stop.** The count of
 record lives in `docs/program/issues/RT-NATIVE-FNSPLIT.md` under
 *"ARMED §5a RESEARCH-CONSULT TRIGGER"*; **on any disagreement that line wins.**
 `B2O` and `B2R` both closed with **no hard-stop**, so the count did not move —
@@ -1011,9 +1013,16 @@ not a cosmetic issue.
 
 ---
 
-## Hard-stop protocol — ✅ #9 HAS FIRED; ITS RESEARCH PULL IS CONSUMED
+## Hard-stop protocol — ✅ #9 CONSUMED ITS PULL · ⛔ #10 IS OPEN
 
-**Count of record: 9** — `#9` raised 2026-07-25 (`evt_197xpdavdyrn0`); see the
+**Count of record: 10.** ⛔ **`#10` was raised 2026-07-25
+(`evt_71d2jg83z2yt4`, leader escalation `evt_r7797bd7bzk3`) and is with the
+Architect** — the ring reports `D1`+`D2`+`D6`+`D7` jointly unsatisfiable inside
+this frame's boundary, on an executable runtime-value representation gap.
+Evidence `49e24b59` is pushed to `origin`; `crates/` is byte-identical to
+`1e09a30a`. **`#10` is not a research-pull stop** — the next is `#12`.
+
+**`#9`** — raised 2026-07-25 (`evt_197xpdavdyrn0`); see the
 **discharged-hold** block at the top of this file. ✅ **Its research pull is
 CONSUMED: dispatched `evt_63wjmry61vd89`, before the Architect ruled**, as the
 armed trigger required. **`B2O` and `B2R` both closed with no hard-stop, so the
