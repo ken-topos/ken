@@ -22,77 +22,109 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ✅ LIVE — 2026-07-25. `origin/main` = **`1e09a30a`**. **`B2F` IS KICKED.**
+## ⛔ LIVE — 2026-07-25. `origin/main` = **`164afa8a`**. **`B2F` IS AT HARD-STOP #10, WITH THE ARCHITECT.**
 
-**Tasks #43 and #44 both DONE.** The Runtime ring is building
-`RT-FNSPLIT-B2F`. I owe nothing and nothing blocks the ring.
+**`steward/work` = `164afa8a` + this briefing only. I owe nothing. The ring owes
+nothing. Everything below is durable on `main` or on `origin` refs.**
+
+### ⛔⛔ THE #10 RULING HAS LANDED — READ IT FIRST, THEN AUTHOR THE FRAME
+
+**Architect ruling `evt_28cnmxf6ncghn`, 2026-07-25.** Headline as received:
+
+> *"hard-stop #10 is VALID and structural. HOLD B2F construction and insert one
+> inert executable-value prerequisite."*
+
+⇒ **This is a re-slice, so the frame is MINE to author (task #46).** `B2O`/`B2R`
+give static code ownership, unit population, slot order/width, and declared
+ownership. They do **not** define what the bits of `ValueWord`/`ResultWord`
+*mean*, nor how compiled code inspects a dynamic aggregate.
+
+**Do this on resume, in order:**
+
+1. `get_recent_context` the **full** ruling — the notification truncated it, and
+   a truncated notification is not a message.
+2. Author the new prerequisite node + shovel-ready frame. **RETAIN** `B2A-S`,
+   `B2O`, `B2R` — a valid hard-stop is not a licence to restart. **REPLACE**
+   only what the ruling names.
+3. `B2F` stays `active` but **held**; re-sequence it behind the new node.
+4. Transcribe durably — **an in-thread ruling is not a deliverable.**
+5. `RT-FNSPLIT-B2O-CHECK` is framed and blocked behind `B2F`; re-check that
+   sequencing once the new node exists.
+
+### ▶ The stop that produced it
+
+**`RT-FNSPLIT-B2F` was kicked, ran ~25 minutes, and hard-stopped at #10 before
+writing any production code.** The ring reports `D1`+`D2`+`D6`+`D7` **jointly
+unsatisfiable** inside the frame's boundary. **The Architect is ruling. Do not
+re-kick, do not rule the mechanism yourself, and do not treat the node as
+buildable until the ruling lands** (`evt_1wzqz69n7xc3c` is my routing).
+
+⛔ **COUNT OF RECORD = 10.** Durable in `docs/program/issues/RT-NATIVE-FNSPLIT.md`
+(the line that wins on disagreement) and in the `B2F` frame in all four places
+it stated the old count. **`#10` is NOT a research-pull stop** — `#9` consumed
+its pull; **next pull = `#12`**, unchanged and armed. Symptom inventory sits at
+**3 entries**, predicate check consumed at entry 2, next due at the **6th**.
+
+### What the ring measured — RELAYED, not Steward-verified
+
+The missing prerequisite is **not** `B2R`'s frame shape (the caller-env suffix
+probe is green with a capture-withholding positive control). It is an
+**executable** runtime-value representation plus emitted-code interface:
+
+| class | measured | representable by the declared 8-byte `ValueWord`? |
+|---|---|---|
+| `Constructor` | 29 `Parameter` transfers | **no** |
+| `HostResult` | 4 | **no** |
+| aggregate results at root | 26 of 154 (`Constructor` 22, `Record` 2, `String` 1, `Bytes` 1) | **no** |
+
+A fail-closed guard would reject **~33 of 41** source-valued transfers —
+incompatible with `D6` old-authority removal and `D7` equivalence.
+
+### ⭐⭐ THE PREDICATE QUESTION IS LIVE — and it is NOT mine to name
+
+`#9`'s obstruction was **already** *"needs a uniform runtime value
+representation that does not exist"*, and `B2R` was the prerequisite ruled to
+supply it. `B2R` delivered a **declared and validated** contract that verifies
+nothing about behaviour **because nothing is emitted** — which my own re-anchored
+frame states in those words.
+
+⛔ **Whether `#9` and `#10` are one predicate or two instances is the
+ARCHITECT's call** (§5a-ii forbids me naming it — naming it makes me the
+de-facto designer). **If it names one, the recut frame is MINE to author** —
+task #46. Shape is fixed: **RETAIN** `B2A-S`/`B2O`/`B2R`, **REPLACE** only what
+the predicate names, **FREEZE** the old count and open a fresh one.
+
+### ✅ Landed this window
 
 | | |
 |---|---|
-| kickoff | `evt_3q00bkdra1vca` → `runtime-leader`, confirmed `Working (32s)` |
-| Architect question | `evt_1s1qjm52r3jzj`, confirmed `Working (6s)` — **not a hold** |
-| node | `ready` → **`active`**, tracker regenerated |
-| branch-name collision | **resolved losslessly** — see below |
+| **#970** | `B2F` released, node `active`, `AC-11` amended per Architect `evt_7ggqdk61pxzzf` |
+| **#971** | hard-stop `#10` recorded (9 → 10) + `RT-FNSPLIT-B2O-CHECK` frame |
+| evidence | `49e24b59..1b789817` pushed to `origin wp/RT-FNSPLIT-B2F-functionization` — was **one local ref** |
 
-### ✅ The `wp/` branch-name collision is RESOLVED
+⛔ **`AC-11` WIDENED; I told the ring it could only relax.** My enumeration
+omitted `Parameter`; `push_slots` lays it **first**. ⭐ **29 of the 33
+unrepresentable transfers are `Parameter` transfers — the Architect's correction
+is what made this wall measurable, one hour after I got it wrong.** Recorded in
+the frame and in
+`~/.claude/…/memory/safe-to-start-against-is-a-claim-about-an-answer-you-do-not-have.md`.
 
-`wp/RT-FNSPLIT-B2F-functionization` existed on `origin` at `fbe206a7` and would
-have **rejected the ring's first push**. It was *not* a build branch: it was the
-durability push of the implementer's hard-stop-#9 evidence commit (task #27),
-which happened to take the build branch's name. Resolved in this order:
+### ▶ Queue
 
-- `fbe206a7` pushed to `refs/heads/preserved/rt-fnsplit-b2f-hardstop-9-evidence`,
-  and **verified present at that exact SHA *before* anything was deleted**;
-- `refs/heads/wp/RT-FNSPLIT-B2F-functionization` deleted on `origin` and locally;
-- post-condition predicted before measuring, then measured: `wp/` → 0 refs,
-  `preserved/` → `fbe206a7`. Matched.
-
-⛔ **That evidence doc is NOT a build input, and it was deliberately NOT landed
-on `main`.** It is measured at `3891b7aa` and its §2 provenance partition is
-explicitly superseded by `B2O`'s owner map. Putting a document whose numbers are
-six merges stale into the ring's reading path is the *exact* hazard task #43
-existed to remove — landing it would have re-created that hazard under a new
-name.
-
-### §2c gate — ran clean; recorded so the audit trail is checkable
-
-1. **Retros in** — `B2R` 3/3 posted (leader, QA, implementer).
-2. **No in-flight obligation** — `list_decisions(proposed)` = `[]`,
-   `list_questions(open)` = `[]`.
-3. **Quiescent** — all three seats idle.
-4/5. **Compacted, drops verified** — executed at the `B2R` close-out seam:
-  `runtime-implementer` **ctx 0%**; `runtime-leader` and `runtime-qa` both
-  `• Context compacted`. Their `› …` lines are **ghost text, not state**.
-7. **Pickup confirmed** — I saw both seats go `Working`; a returned `event_id`
-  is not evidence anyone read it.
-7b. **Contention: none.** The only other `active` node is the
-  `RT-NATIVE-FNSPLIT` parent umbrella — same ring, not a competing WP.
-8. **Flipped `active`** — **both** carriers, frontmatter *and* body-text tail.
-
-### ▶ NEXT — publish, then the queue
-
-**Unpublished on `steward/work`:** the `active` flip, the tracker regen, and
-this briefing. Publish doc-only — `main` still advertises `B2F` as `ready`,
-which is precisely the stale-frontier hazard §2c step 8 exists to prevent.
-
-Then, in order:
-
-- Task **#38** — frame `RT-FNSPLIT-B2O-CHECK`. ⭐ **Its scope grew:** the
-  adversary's `P1` **and** `P2` on `abi.rs` both route here, and I have told the
-  Runtime ring so in the `B2F` kickoff. This node now owes the `C4` repair.
-- **#12** B1R retros (batch, never publish singly) · **#5** `ABI-S3` ·
-  **#8** `KW-THEOREM` on FNSPLIT close · **#11** `DOC-GATE-NEEDLE`
-  (⛔ operator-held — do not release, do not re-ask).
-- **Archive pass on this file.** Everything below this block is history from
-  `B2O`/`B2R` and earlier, and the block immediately below still asserts
-  *"`B2R` IS ACTIVE AND BUILDING"* and *"retros 3/3 are not IN yet"* — both
-  false. Marked superseded in place; the real archive move is filed as a task.
+- **#46** — author the recut **IF** the Architect names a shared predicate;
+  otherwise transcribe the ruling and re-kick.
+- **#12** B1R retros (batch, never singly) · **#5** `ABI-S3` · **#8**
+  `KW-THEOREM` on FNSPLIT close · **#11** `DOC-GATE-NEEDLE` ⛔ **operator-held,
+  do not release, do not re-ask** · **#45** briefing archive (~1600 stale lines
+  below, marked superseded in place).
+- `RT-FNSPLIT-B2O-CHECK` is framed and `M`, **blocked behind `B2F` on
+  CONTENTION not logic** — it rewrites the same four files. Do not release it
+  while `B2F` is unresolved.
 
 ### ⚠ Watchdog
 
-Re-arm at 900s with `main = 1e09a30a` and `B2F active`. Interval state does
-**not** survive a compaction, and I self-compacted at the top of this window —
-assume it is dead until `list_subscriptions` says otherwise.
+Re-armed at 900s. **Interval state does not survive a compaction** — re-arm on
+every resume and `list_subscriptions` if unsure.
 
 > ## ⛔ SUPERSEDED — HISTORY ONLY. `B2R` MERGED (#967) AND ITS RETROS ARE 3/3 IN.
 > ## Everything from here down is the `B2O`/`B2R` window and earlier.

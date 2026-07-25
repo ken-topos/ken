@@ -182,11 +182,17 @@ this line wins.** Re-read this line on every hard-stop.
 >             a retained closure carries no term.
 > entry 2  lower_expr re-lowers each retained body PER CALL SITE in that call
 >          site's whole configuration
->          ⛔ OPEN — assigned to RT-FNSPLIT-B2F, which is now BLOCKED behind two
->             inert prerequisites (see the re-slice block below). Untouched by
->             B2A-S and B2A-C; all three ring seats and the Architect said so
->             independently. ⛔ This entry now takes THREE nodes, not one:
->             RT-FNSPLIT-B2O -> RT-FNSPLIT-B2R -> RT-FNSPLIT-B2F.
+>          ⛔ OPEN — assigned to RT-FNSPLIT-B2F, which is BLOCKED behind THREE
+>             inert prerequisites. Untouched by B2A-S and B2A-C; all three ring
+>             seats and the Architect said so independently.
+>          ⛔ This entry now takes FOUR nodes, not one:
+>             RT-FNSPLIT-B2O -> RT-FNSPLIT-B2R -> RT-FNSPLIT-B2V -> B2F.
+>          ⭐ B2V was inserted 2026-07-25 by Architect ruling evt_28cnmxf6ncghn
+>             on hard-stop #10. ⛔ #10 IS NOT A FOURTH SYMPTOM-INVENTORY ENTRY —
+>             the ruling classified it explicitly as ANOTHER MISSING PREREQUISITE
+>             UNDER THIS ENTRY, the same functionization obstruction ONE
+>             REPRESENTATION LAYER BELOW #9. Do not widen the headline inventory;
+>             ENTRIES stays 3 and the next predicate check stays the 6th.
 > entry 3  THE CAUSE — no static key in scope at the construction site
 >          ✅ CLOSED by RT-FNSPLIT-B2A-C — merged 2db29abe (2026-07-25).
 >             plan↔lowering occurrence correspondence now exists.
@@ -556,6 +562,16 @@ NEXT RESEARCH PULL = hard-stop #12, …
          REPRESENTATION CONTRACT for every value crossing a generated-function
          boundary — NOT necessarily one universal boxed Value. B2F re-sliced
          into RT-FNSPLIT-B2O -> RT-FNSPLIT-B2R -> RT-FNSPLIT-B2F.
+      ⛔ CORRECTED 2026-07-25 BY THE #10 RULING (evt_28cnmxf6ncghn) — THIS
+         DISCHARGE OVER-CREDITED B2R. B2O+B2R delivered the STATIC half only:
+         code ownership, unit population, slot order/width, declared ownership.
+         They never defined what the bits of ValueWord/ResultWord MEAN, nor how
+         compiled code inspects a dynamic aggregate. The word EXECUTABLE above
+         was therefore NOT satisfied by B2R, and #10 is #9 recurring one
+         representation layer down. The executable half is RT-FNSPLIT-B2V.
+         ⭐ B2R is NOT defective within its declared slot-shape scope — the
+         defect is in this discharge text, which credited it with a half it
+         never claimed.
          ⚠ Advisory erratum evt_3k9xam3ws9pgz: its cited paths under
          crates/ken-backend-native/ do not exist (line numbers are accurate);
          real roots are crates/ken-runtime/src/cranelift_backend/{lowering/
