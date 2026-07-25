@@ -136,3 +136,29 @@ the fold by hand. The recipe that worked on PR #938: `comm` the changed paths
 against the ledger's path column to find *every* affected row, diff each
 manifest-cited anchor across both blobs, then install `.proposed` and record the
 per-anchor verdict in the commit message.
+
+### ★ The hold is also right on the merits — this WP is NOT doc-only concurrent
+
+Re-checked 2026-07-25 while triaging the idle doc ring against this node. **The
+doc-track concurrency exception could not cover this WP even if the hold were
+lifted**, and that is a property of the deliverables, not of the operator's
+sequencing call:
+
+**`D2` changes a CI gate that every other WP's merge depends on.** `AC-4` names
+`-p ken-cli --test library_documentation_gates`, and `D2` changes what
+`gen-doc-status.sh` *reports*. ⛔ **The scripted publisher POLLS that exact gate
+before it merges anything.** So releasing this concurrently puts a
+gate-modifying WP in flight against candidates whose landing is gated on the
+unmodified predicate — a red gate on the live candidate, caused by a WP that
+never touched its files.
+
+⇒ **A file-set disjointness argument is the wrong instrument here.** This WP's
+blast radius is *the gate*, and every publish crosses it. Same family as the
+ledger axis (§7b) — contention through a shared consumer, not a shared path —
+and the reason `SRC-ATTEST` needed a human to decide which checker was
+authoritative (`ken-steward` §2d): **a WP that replaces a predicate always looks
+red under the predicate it replaces.**
+
+⇒ **Sequence it into a genuine quiet slot** — no candidate publishing, no
+candidate about to. It is size `S`; it does not need a concurrent window, it
+needs an empty one.

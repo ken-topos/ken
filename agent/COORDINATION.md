@@ -901,10 +901,44 @@ Steward a code author, and does not replace the mootup review/Decision record
 diff-scope check.** No Architect vote. The Steward resolves the merge Decision
 and publishes.
 
-**The Architect's vote is still required** when a documentation change touches
-**`agent/` law**, makes a **normative claim about the language** (`spec/` is the
-sole authority — `library/` is explanatory/derived), or reaches outside
-`library/` into `crates/`, `spec/`, `conformance/`, or `catalog/`.
+**The Architect's vote is still required** when a documentation change makes a
+**normative claim about the language** (`spec/` is the sole authority —
+`library/` is explanatory/derived), **or when its diff reaches outside
+`library/` at all** — with only the named exceptions below.
+
+> ### ⛔ THE ESCALATION PREDICATE FAILS CLOSED. Do not restate it as a list of
+> ### directories, because a list has no cell for the path nobody enumerated.
+>
+> This rule used to read *"…or reaches outside `library/` into `crates/`,
+> `spec/`, `conformance/`, or `catalog/`."* **That enumeration silently defaults
+> to NO-Architect for any path absent from it**, which is the wrong direction
+> for a gate to fail.
+>
+> **It fired live on PR #959 (2026-07-25).** A doc-ring candidate touched
+> `docs/program/07-catalog-style-guide.md` — outside `library/`, and in **none**
+> of the four enumerated buckets. **A taxonomy with no cell for the actual case
+> reads as complete**, so the routing looked settled when it was undefined. The
+> Steward ruled it in-route on substance and recorded the gap rather than
+> letting that ruling stand in for the law. This is the repair.
+>
+> ⇒ **Confined to `library/`** ⇒ QA + diff-scope, Steward resolves, no
+> Architect. **Anything else escalates**, unless it is one of these:
+>
+> | exception | route | condition |
+> |---|---|---|
+> | **`docs/program/`** — Steward-owned program docs (trackers, issue files, WP frames, program guides) | Steward resolves, no Architect | the change is **currency or editorial**, and the Steward **authorized the expansion when routing the WP**. A change that alters *program law* or a WP's **acceptance criteria** is not editorial — it is a frame amendment, and it is the Steward's to author, not a ring's to fold in. |
+> | **the Steward's own §6a corpus route** — `agent/**`, `docs/program/IMPLEMENTATION-PROGRESS.md` | Steward publishes directly (`ken-steward` §6a) | Not a doc-ring WP at all, so §14a never governed it. Process law is the Steward's lane (§4); routing it through the Architect would **add a review cycle to the workflow graph**, which §4 forbids without operator consent. ⚠ The Architect's vote **is** still required where an `agent/` edit changes a **soundness or design gate** rather than process. |
+>
+> ⚠ **LEDGER RIDER — the exception that bites, and it is not about voting.**
+> Some `docs/program/` files are **attested `library/` sources**: as of
+> 2026-07-25, `07-catalog-style-guide.md`, `12-documentation-program.md`, and
+> the issue files `CAT-CAPEX.md`, `DOC-W1.md`, `DOC-W2.md`. **Editing one moves
+> its blob OID and reddens the currency gate — a locator-only edit does it
+> too.** So a `docs/program/` change that skips the Architect **still owes the
+> `library/SOURCE-ATTESTATIONS` fold in the same candidate**, and it contends
+> on the ledger axis with any WP holding it (§7b). ⛔ Never bump the row
+> without diffing the **cited anchors** — the recurring case is benign, which
+> is exactly what trains the rubber stamp (`DOC-ATTEST-LIVING`).
 
 > **Why this is a structural fix, not a convenience.** The doc track runs
 > **concurrently** with the build track on the basis that it is
