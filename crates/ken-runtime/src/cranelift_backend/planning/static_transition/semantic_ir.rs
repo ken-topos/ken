@@ -8,7 +8,10 @@ use super::{
     planner_capacity_error, planner_error, CraneliftBackendError, StaticEdge, StaticEdgeId,
     StaticNode, StaticNodeId, TransitionKind,
 };
-use crate::{RuntimeExpr, RuntimeValue};
+use crate::{
+    RuntimeExpr, RuntimeIntV1, RuntimePartiality, RuntimePrimitive, RuntimeTrap, RuntimeTrapCode,
+    RuntimeValue, Sign,
+};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
@@ -132,9 +135,14 @@ pub(super) enum SemanticSourceKind {
 
 /// Fixed-width occurrence registered during the planner's source walk. Its
 /// origin is allocated with the planned node, before the semantic plane or any
-/// later activation exists. Variable source material is counted once here; the
-/// builder flattens exactly that many positional elements into its operand
-/// arena.
+/// later activation exists.
+///
+/// `source_material_elements` is the occurrence's **total** one-visit material
+/// budget, and it is partitioned exactly: `material` spans this occurrence's
+/// non-child atoms and `children` spans its positional syntax-child origins,
+/// with `material.len + children.len == source_material_elements`. Both ranges
+/// point into the walk's `SemanticMaterialArena`, so the seed itself stays
+/// fixed-width and `Copy`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
 pub(super) struct SemanticSourceSeed {
@@ -143,18 +151,51 @@ pub(super) struct SemanticSourceSeed {
     pub(super) source: SemanticSourceKind,
     pub(super) source_material_elements: u32,
     pub(super) capture_slots: u32,
+    pub(super) material: DenseRange,
+    pub(super) children: DenseRange,
 }
 
 impl SemanticSourceSeed {
+    /// Registers one expression occurrence and emits its material in the same
+    /// visit. `children` are the occurrence's syntax children in **source
+    /// position order**, already planned by the walk; their origins are the
+    /// children's own preallocated positional identities, never minted here.
     pub(super) fn expression(
         planned_node: StaticNodeId,
         expr: &RuntimeExpr,
+        children: &[StaticNodeId],
+        arena: &mut SemanticMaterialArena,
     ) -> Result<Self, CraneliftBackendError> {
+        let atom_start = arena.atoms.len();
+        let child_start = arena.child_origins.len();
+        emit_expression_atoms(expr, arena)?;
+        for child in children {
+            arena.child_origins.push(StaticOriginId(child.0));
+        }
+        let material = arena.atoms_since(atom_start)?;
+        let child_range = arena.children_since(child_start)?;
+
+        // The emitted partition must exhaust exactly the same one-visit budget
+        // the walk has always counted. A disagreement is a compiler bug in the
+        // emitter or the budget, never an input condition.
+        let budget = source_material_elements(expr)?;
+        let emitted = material
+            .len
+            .checked_add(child_range.len)
+            .ok_or_else(|| planner_capacity_error("semantic source material exhausted"))?;
+        if emitted != budget {
+            return Err(planner_error(
+                "emitted semantic material does not exhaust its one-visit source-material budget",
+            ));
+        }
+
         Ok(Self {
             planned_node,
             origin: StaticOriginId(planned_node.0),
             source: SemanticSourceKind::Expression(RuntimeExprShape::of(expr)),
-            source_material_elements: source_material_elements(expr)?,
+            source_material_elements: budget,
+            material,
+            children: child_range,
             capture_slots: match expr {
                 RuntimeExpr::Closure { captures, .. } => checked_len(captures.len())?,
                 RuntimeExpr::LexicalClosure { captures, .. } => checked_len(captures.len())?,
@@ -182,6 +223,8 @@ impl SemanticSourceSeed {
         })
     }
 
+    /// A generated outer control occurrence. It has no source material and no
+    /// syntax children: its transfer topology is the ruled-children graph.
     pub(super) const fn control(planned_node: StaticNodeId, transition: TransitionKind) -> Self {
         Self {
             planned_node,
@@ -189,14 +232,164 @@ impl SemanticSourceSeed {
             source: SemanticSourceKind::Control(transition),
             source_material_elements: 0,
             capture_slots: 0,
+            material: DenseRange { start: 0, len: 0 },
+            children: DenseRange { start: 0, len: 0 },
         }
     }
 }
 
+/// One occurrence-local **non-child** semantic atom.
+///
+/// Fixed width: the atom names its own kind, an out-of-line content span (empty
+/// when the atom is purely numeric), and a numeric payload. Atoms are
+/// self-describing, so a consumer recovers the occurrence's material by walking
+/// the record's atom range in position order.
+///
+/// ⛔ A syntax child is **not** an atom. Child positions live in the record's
+/// positional child-origin range, so child *k* is recoverable as child *k* —
+/// never by search, shape-matching, pointer, or clone order.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
 pub(super) struct SemanticOperandElement {
-    pub(super) source_ordinal: u32,
+    pub(super) kind: SemanticAtomKind,
+    pub(super) content: DenseRange,
+    pub(super) payload: u64,
+}
+
+/// The closed vocabulary of non-child semantic atoms. There is deliberately no
+/// wildcard consumer of this enum: a new atom kind must be handled explicitly
+/// wherever material is interpreted.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(u8)]
+pub(super) enum SemanticAtomKind {
+    /// Checked compiler-private site/frame identity.
+    CheckedSiteId,
+    CheckedFrameId,
+    /// Reusable static call-template identity, and one checked occurrence-path
+    /// step of the path that selects it.
+    CallTemplateId,
+    OccurrencePathLen,
+    OccurrencePathStep,
+    SlotTemplateId,
+    /// De Bruijn local index of a `Var` occurrence.
+    LocalIndex,
+    /// One complete primitive: `content` spans an injective tagged encoding of
+    /// the symbol **and** its `RuntimePartiality`, including every variant field.
+    /// Partiality changes what lowering emits, so a symbol-only atom would let
+    /// two same-shaped occurrences share one body while lowering differently.
+    PrimitiveDescriptor,
+    /// Symbol atoms: `content` spans the interned name bytes.
+    ConstructorSymbol,
+    DeclarationSymbol,
+    DependencySymbol,
+    DependencyHash,
+    RecordFieldName,
+    ProjectField,
+    CaptureSymbol,
+    ParamName,
+    EffectFamily,
+    EffectOperation,
+    /// Eliminator material: the default trap, then per case its constructor,
+    /// its binder count, one atom per binder, and one per recursive position.
+    MatchDefault,
+    CaseConstructor,
+    CaseBinders,
+    CaseBinder,
+    CaseRecursivePosition,
+    /// Trap material.
+    TrapCode,
+    TrapMessage,
+    /// Flattened `RuntimeValue` material, emitted in source pre-order.
+    ValueBool,
+    ValueIntSmall,
+    ValueIntBig,
+    ValueBytes,
+    ValueString,
+    ValueConstructor,
+    ValueRecord,
+    ValueClosureRef,
+    ValueUnknown,
+    /// One literal byte of a `Bytes`/`String` value.
+    ByteLiteral,
+}
+
+/// Out-of-line material accumulated by the planner's single source walk.
+///
+/// The walk that allocates a planned node and its origin also emits that
+/// occurrence's atoms and child origins here, in one visit. `build_semantic_plane`
+/// re-lays this material positionally into the plane; it never re-derives it.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(super) struct SemanticMaterialArena {
+    atoms: Vec<SemanticOperandElement>,
+    child_origins: Vec<StaticOriginId>,
+    names: Vec<u8>,
+}
+
+impl SemanticMaterialArena {
+    fn intern(&mut self, bytes: &[u8]) -> Result<DenseRange, CraneliftBackendError> {
+        let span = DenseRange::at_end(&self.names, bytes.len(), "semantic name")?;
+        self.names.extend_from_slice(bytes);
+        Ok(span)
+    }
+
+    fn push_atom(
+        &mut self,
+        kind: SemanticAtomKind,
+        content: DenseRange,
+        payload: u64,
+    ) -> Result<(), CraneliftBackendError> {
+        if self.atoms.len() == u32::MAX as usize {
+            return Err(planner_capacity_error("semantic atom identity exhausted"));
+        }
+        self.atoms.push(SemanticOperandElement {
+            kind,
+            content,
+            payload,
+        });
+        Ok(())
+    }
+
+    fn push_numeric(
+        &mut self,
+        kind: SemanticAtomKind,
+        payload: u64,
+    ) -> Result<(), CraneliftBackendError> {
+        self.push_atom(kind, DenseRange { start: 0, len: 0 }, payload)
+    }
+
+    fn push_named(
+        &mut self,
+        kind: SemanticAtomKind,
+        name: &str,
+        payload: u64,
+    ) -> Result<(), CraneliftBackendError> {
+        let span = self.intern(name.as_bytes())?;
+        self.push_atom(kind, span, payload)
+    }
+
+    fn atoms_since(&self, start: usize) -> Result<DenseRange, CraneliftBackendError> {
+        range_since(start, self.atoms.len(), "semantic operand")
+    }
+
+    fn children_since(&self, start: usize) -> Result<DenseRange, CraneliftBackendError> {
+        range_since(start, self.child_origins.len(), "semantic child origin")
+    }
+}
+
+fn range_since(
+    start: usize,
+    end: usize,
+    what: &'static str,
+) -> Result<DenseRange, CraneliftBackendError> {
+    let len = end
+        .checked_sub(start)
+        .ok_or_else(|| planner_error("semantic material range moved backwards"))?;
+    Ok(DenseRange {
+        start: u32::try_from(start)
+            .map_err(|_| planner_capacity_error(format!("{what} identity exhausted")))?,
+        len: u32::try_from(len)
+            .map_err(|_| planner_capacity_error(format!("{what} range exhausted")))?,
+    })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -212,12 +405,16 @@ pub(super) struct RuledChild {
     pub(super) edge: StaticEdgeId,
 }
 
+/// One canonical occurrence-local material record, exactly one per
+/// `StaticOriginId`. `operands` spans this occurrence's non-child atoms;
+/// `child_origins` is its **positional** dense range of syntax-child origins.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
 pub(super) struct SemanticRecord {
     pub(super) opcode: SemanticOpcode,
     pub(super) origin: StaticOriginId,
     pub(super) operands: DenseRange,
+    pub(super) child_origins: DenseRange,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -260,7 +457,13 @@ pub(super) struct SemanticPlane {
     pub(super) descriptors: Vec<SemanticDescriptor>,
     pub(super) programs: Vec<SemanticProgram>,
     pub(super) records: Vec<SemanticRecord>,
+    /// This plane's non-child semantic atoms, laid out positionally per record.
     pub(super) operands: Vec<SemanticOperandElement>,
+    /// Positional syntax-child origins, laid out per record. Distinct from
+    /// `ruled_children`, which is the transfer graph and not a source-child map.
+    pub(super) child_origins: Vec<StaticOriginId>,
+    /// Interned atom content (symbols, literal bytes, big-integer limbs).
+    pub(super) names: Vec<u8>,
     pub(super) capture_layouts: Vec<CaptureLayout>,
     pub(super) capture_slots: Vec<CaptureSlot>,
     pub(super) ruled_children: Vec<RuledChild>,
@@ -274,6 +477,7 @@ pub(super) fn build_semantic_plane(
     nodes: &[StaticNode],
     edges: &[StaticEdge],
     sources: &[SemanticSourceSeed],
+    arena: &SemanticMaterialArena,
 ) -> Result<SemanticPlane, CraneliftBackendError> {
     let mut positioned = vec![None; nodes.len()];
     for source in sources {
@@ -304,6 +508,9 @@ pub(super) fn build_semantic_plane(
     }
 
     let mut plane = SemanticPlane::default();
+    // Atom content is referenced by absolute span, so the interned bytes move
+    // across whole; only the atom and child-origin arenas are re-laid per record.
+    plane.names.extend_from_slice(&arena.names);
     for (position, source) in positioned.into_iter().enumerate() {
         let source = source.expect("all source positions checked above");
         let planned_node = StaticNodeId(
@@ -315,15 +522,24 @@ pub(super) fn build_semantic_plane(
         let capture_layout = CaptureLayoutId(planned_node.0);
         let function = PredeclaredFunctionId(planned_node.0);
 
-        let operand_range = DenseRange::at_end(
-            &plane.operands,
-            source.source_material_elements as usize,
-            "semantic operand",
+        // Positional re-lay of the material the source walk already emitted for
+        // this origin. Nothing is re-derived here, and no placeholder is minted.
+        let operand_range =
+            DenseRange::at_end(&plane.operands, source.material.len as usize, "semantic operand")?;
+        plane
+            .operands
+            .extend_from_slice(arena_slice(&arena.atoms, source.material, "semantic operand")?);
+
+        let child_origin_range = DenseRange::at_end(
+            &plane.child_origins,
+            source.children.len as usize,
+            "semantic child origin",
         )?;
-        plane.operands.extend(
-            (0..source.source_material_elements)
-                .map(|source_ordinal| SemanticOperandElement { source_ordinal }),
-        );
+        plane.child_origins.extend_from_slice(arena_slice(
+            &arena.child_origins,
+            source.children,
+            "semantic child origin",
+        )?);
 
         let slot_range = DenseRange::at_end(
             &plane.capture_slots,
@@ -343,6 +559,7 @@ pub(super) fn build_semantic_plane(
             opcode: opcode_for_source(source.source),
             origin,
             operands: operand_range,
+            child_origins: child_origin_range,
         });
         plane.programs.push(SemanticProgram {
             id: program,
@@ -369,7 +586,7 @@ pub(super) fn build_semantic_plane(
             ruled_children: child_range,
         });
     }
-    plane.validate(nodes, edges, sources)?;
+    plane.validate(nodes, edges, sources, arena)?;
     Ok(plane)
 }
 
@@ -423,6 +640,7 @@ impl SemanticPlane {
         nodes: &[StaticNode],
         edges: &[StaticEdge],
         sources: &[SemanticSourceSeed],
+        arena: &SemanticMaterialArena,
     ) -> Result<(), CraneliftBackendError> {
         let mut seen_nodes = vec![false; nodes.len()];
         let mut seen_origins = vec![false; nodes.len()];
@@ -480,9 +698,53 @@ impl SemanticPlane {
                 .checked_add(source.source_material_elements as usize)
                 .ok_or_else(|| planner_capacity_error("semantic operand count exhausted"))
         })?;
-        if self.operands.len() != expected_operands {
+        // D4.4 — one-visit affine bound over the WHOLE material: this
+        // occurrence's atoms plus its child references. The budget is unchanged
+        // by the atom/child partition, so a superlinear arena still fails here.
+        let expected_child_origins = source_by_node.iter().try_fold(0usize, |total, source| {
+            total
+                .checked_add(source.children.len as usize)
+                .ok_or_else(|| planner_capacity_error("semantic child origin count exhausted"))
+        })?;
+        let expected_atoms = expected_operands
+            .checked_sub(expected_child_origins)
+            .ok_or_else(|| {
+                planner_error("semantic child references exceed the source-material budget")
+            })?;
+        if self.operands.len() != expected_atoms {
             return Err(planner_error(
                 "semantic operand arena exceeds the one-visit source-material budget",
+            ));
+        }
+        if self.child_origins.len() != expected_child_origins {
+            return Err(planner_error(
+                "semantic child-origin arena is not exact for its positional source children",
+            ));
+        }
+        // Atom content is what B2a will decode. A structurally well-formed atom
+        // whose span escapes the closed name arena, or whose bytes are not the
+        // ones the walk interned, is undecodable material — reject both.
+        if self.names != arena.names {
+            return Err(planner_error(
+                "semantic atom content arena is not the material the source walk interned",
+            ));
+        }
+        for atom in &self.operands {
+            validate_range(
+                atom.content,
+                self.names.len(),
+                "semantic atom content range is outside its closed name arena",
+            )?;
+        }
+        if self
+            .operands
+            .len()
+            .checked_add(self.child_origins.len())
+            .ok_or_else(|| planner_capacity_error("semantic material count exhausted"))?
+            != expected_operands
+        {
+            return Err(planner_error(
+                "semantic material does not partition the one-visit source-material budget",
             ));
         }
         let expected_capture_slots = source_by_node.iter().try_fold(0usize, |total, source| {
@@ -547,10 +809,64 @@ impl SemanticPlane {
                 self.operands.len(),
                 "semantic operand range is outside its closed arena",
             )?;
-            if record.operands.len != source.source_material_elements {
+            // D4.2 — the record's shape/opcode and its operand range agree with
+            // the occurrence: exactly this occurrence's non-child atom count.
+            if record.operands.len != source.material.len
+                || record
+                    .operands
+                    .len
+                    .checked_add(record.child_origins.len)
+                    .ok_or_else(|| planner_capacity_error("semantic material count exhausted"))?
+                    != source.source_material_elements
+            {
                 return Err(planner_error(
                     "semantic record does not own its exact source-material range",
                 ));
+            }
+            // D4.1 — one canonical material record per origin, and it carries
+            // THIS occurrence's atoms. Equal-shaped occurrences agree on shape
+            // and counts, so only content comparison discriminates them.
+            let record_atoms = plane_slice(
+                &self.operands,
+                record.operands,
+                "semantic operand range is outside its closed arena",
+            )?;
+            let expected_atoms = arena_slice(&arena.atoms, source.material, "semantic operand")?;
+            if record_atoms != expected_atoms {
+                return Err(planner_error(
+                    "semantic material record is not occurrence-exact for its origin",
+                ));
+            }
+            // D4.3 — child-origin range is in bounds AND occurrence-exact:
+            // positional child k is this occurrence's syntax child k.
+            validate_range(
+                record.child_origins,
+                self.child_origins.len(),
+                "semantic child-origin range is outside its closed arena",
+            )?;
+            if record.child_origins.len != source.children.len {
+                return Err(planner_error(
+                    "semantic record does not own its exact positional child-origin range",
+                ));
+            }
+            let record_child_origins = plane_slice(
+                &self.child_origins,
+                record.child_origins,
+                "semantic child-origin range is outside its closed arena",
+            )?;
+            let expected_child_origins =
+                arena_slice(&arena.child_origins, source.children, "semantic child origin")?;
+            if record_child_origins != expected_child_origins {
+                return Err(planner_error(
+                    "semantic child origins are not occurrence-exact for their source positions",
+                ));
+            }
+            for child in record_child_origins {
+                if child.0 as usize >= nodes.len() {
+                    return Err(planner_error(
+                        "semantic child origin is outside the planned occurrences",
+                    ));
+                }
             }
             validate_range(
                 layout.slots,
@@ -599,10 +915,40 @@ impl SemanticPlane {
         Ok(())
     }
 
+    /// Every out-of-line material element the plane holds. The atom/child-origin
+    /// partition is a refinement of one budget, so this total is exactly the
+    /// occurrence material plus captures and transfer edges.
     #[cfg(test)]
     pub(super) fn all_out_of_line_operand_elements(&self) -> usize {
-        self.operands.len() + self.capture_slots.len() + self.ruled_children.len()
+        self.operands.len()
+            + self.child_origins.len()
+            + self.capture_slots.len()
+            + self.ruled_children.len()
     }
+}
+
+fn arena_slice<'a, T>(
+    arena: &'a [T],
+    range: DenseRange,
+    what: &'static str,
+) -> Result<&'a [T], CraneliftBackendError> {
+    let start = range.start as usize;
+    let end = range
+        .end()
+        .ok_or_else(|| planner_capacity_error(format!("{what} range exhausted")))?;
+    arena
+        .get(start..end)
+        .ok_or_else(|| planner_error("semantic material range is outside its closed arena"))
+}
+
+fn plane_slice<'a, T>(
+    arena: &'a [T],
+    range: DenseRange,
+    error: &'static str,
+) -> Result<&'a [T], CraneliftBackendError> {
+    let start = range.start as usize;
+    let end = range.end().ok_or_else(|| planner_error(error))?;
+    arena.get(start..end).ok_or_else(|| planner_error(error))
 }
 
 fn positioned_sources(
@@ -677,6 +1023,342 @@ fn runtime_value_material_elements(value: &RuntimeValue) -> Result<usize, Cranel
         }
     }
     Ok(total)
+}
+
+/// Emits one occurrence's **non-child** atoms, in source position order.
+///
+/// There is intentionally no wildcard arm: a new `RuntimeExpr` shape must state
+/// its own atoms here. A shape whose material is entirely syntax children (`Let`,
+/// `If`, `Call`) correctly emits none — its positions live in the child-origin
+/// range, and emitting a placeholder for them is what B1 did wrong.
+fn emit_expression_atoms(
+    expr: &RuntimeExpr,
+    arena: &mut SemanticMaterialArena,
+) -> Result<(), CraneliftBackendError> {
+    match expr {
+        RuntimeExpr::CheckedJoinSite { site_id, .. } => {
+            arena.push_numeric(SemanticAtomKind::CheckedSiteId, *site_id)?;
+        }
+        RuntimeExpr::CheckedSubcontinuationFrame { frame_id, .. } => {
+            arena.push_numeric(SemanticAtomKind::CheckedFrameId, *frame_id)?;
+        }
+        RuntimeExpr::CheckedRecursiveInvocation {
+            call_template_id,
+            checked_occurrence_path,
+            ..
+        }
+        | RuntimeExpr::CheckedComputationalIHInvocation {
+            call_template_id,
+            checked_occurrence_path,
+            ..
+        } => {
+            arena.push_numeric(SemanticAtomKind::CallTemplateId, *call_template_id)?;
+            for step in checked_occurrence_path {
+                arena.push_numeric(SemanticAtomKind::OccurrencePathStep, *step)?;
+            }
+        }
+        RuntimeExpr::CheckedComputationalIHSlots {
+            slot_template_ids,
+            checked_occurrence_paths,
+            ..
+        } => {
+            for id in slot_template_ids {
+                arena.push_numeric(SemanticAtomKind::SlotTemplateId, *id)?;
+            }
+            for path in checked_occurrence_paths {
+                arena.push_numeric(
+                    SemanticAtomKind::OccurrencePathLen,
+                    checked_u64(path.len())?,
+                )?;
+                for step in path {
+                    arena.push_numeric(SemanticAtomKind::OccurrencePathStep, *step)?;
+                }
+            }
+        }
+        RuntimeExpr::Value(value) => emit_value_atoms(value, arena)?,
+        RuntimeExpr::Var(index) => {
+            arena.push_numeric(SemanticAtomKind::LocalIndex, u64::from(*index))?;
+        }
+        // `Let`, `If` and `Call` are entirely positional: value/body,
+        // scrutinee/then/else, and callee/args are syntax children.
+        RuntimeExpr::Let { .. } | RuntimeExpr::If { .. } | RuntimeExpr::Call { .. } => {}
+        RuntimeExpr::PrimitiveCall { primitive, .. } => {
+            // One budgeted element, widened content: the whole primitive, not
+            // just its symbol.
+            let descriptor = primitive_descriptor_bytes(primitive)?;
+            let span = arena.intern(&descriptor)?;
+            arena.push_atom(SemanticAtomKind::PrimitiveDescriptor, span, 0)?;
+        }
+        RuntimeExpr::Construct { constructor, .. } => {
+            arena.push_named(SemanticAtomKind::ConstructorSymbol, constructor, 0)?;
+        }
+        RuntimeExpr::Match { cases, default, .. } => {
+            emit_trap_default(default, arena)?;
+            for case in cases {
+                arena.push_named(SemanticAtomKind::CaseConstructor, &case.constructor, 0)?;
+                arena.push_numeric(SemanticAtomKind::CaseBinders, checked_u64(case.binders)?)?;
+                for binder in 0..case.binders {
+                    arena.push_numeric(SemanticAtomKind::CaseBinder, checked_u64(binder)?)?;
+                }
+            }
+        }
+        RuntimeExpr::ComputationalMatch { cases, default, .. } => {
+            emit_trap_default(default, arena)?;
+            for case in cases {
+                arena.push_named(SemanticAtomKind::CaseConstructor, &case.constructor, 0)?;
+                arena.push_numeric(
+                    SemanticAtomKind::CaseBinders,
+                    checked_u64(case.argument_binders)?,
+                )?;
+                for binder in 0..case.argument_binders {
+                    arena.push_numeric(SemanticAtomKind::CaseBinder, checked_u64(binder)?)?;
+                }
+                for position in &case.recursive_positions {
+                    arena.push_numeric(
+                        SemanticAtomKind::CaseRecursivePosition,
+                        checked_u64(*position)?,
+                    )?;
+                }
+            }
+        }
+        RuntimeExpr::Record { fields } => {
+            for (name, _) in fields {
+                arena.push_named(SemanticAtomKind::RecordFieldName, name, 0)?;
+            }
+        }
+        RuntimeExpr::Project { field, .. } => {
+            arena.push_named(SemanticAtomKind::ProjectField, field, 0)?;
+        }
+        RuntimeExpr::Closure {
+            captures, params, ..
+        } => {
+            for capture in captures {
+                arena.push_named(SemanticAtomKind::CaptureSymbol, capture, 0)?;
+            }
+            for param in params {
+                arena.push_named(SemanticAtomKind::ParamName, param, 0)?;
+            }
+        }
+        // A lexical closure's captures are evaluated, so they are syntax
+        // children; only its parameter names are atoms.
+        RuntimeExpr::LexicalClosure { params, .. } => {
+            for param in params {
+                arena.push_named(SemanticAtomKind::ParamName, param, 0)?;
+            }
+        }
+        RuntimeExpr::DeclarationRef { symbol } => {
+            arena.push_named(SemanticAtomKind::DeclarationSymbol, symbol, 0)?;
+        }
+        RuntimeExpr::ImportedDeclarationRef {
+            symbol,
+            dependency,
+            dependency_semantic_hash,
+        } => {
+            arena.push_named(SemanticAtomKind::DeclarationSymbol, symbol, 0)?;
+            arena.push_named(SemanticAtomKind::DependencySymbol, dependency, 0)?;
+            arena.push_named(
+                SemanticAtomKind::DependencyHash,
+                dependency_semantic_hash,
+                0,
+            )?;
+        }
+        RuntimeExpr::Effect {
+            family,
+            operation,
+            capability,
+            ..
+        } => {
+            // The capability, when present, is child 0; record its presence so
+            // the positional child range stays interpretable.
+            arena.push_named(
+                SemanticAtomKind::EffectFamily,
+                family,
+                u64::from(capability.is_some()),
+            )?;
+            arena.push_numeric(SemanticAtomKind::EffectOperation, *operation as u64)?;
+        }
+        RuntimeExpr::Trap(trap) => {
+            arena.push_numeric(SemanticAtomKind::TrapCode, trap_code_ordinal(&trap.code))?;
+            arena.push_named(SemanticAtomKind::TrapMessage, &trap.message, 0)?;
+        }
+    }
+    Ok(())
+}
+
+/// Length-prefixed field, so a concatenation of fields is injective: `"ab"+"c"`
+/// and `"a"+"bc"` encode differently.
+fn push_encoded_field(bytes: &mut Vec<u8>, value: &str) -> Result<(), CraneliftBackendError> {
+    bytes.extend_from_slice(&checked_u32(value.len())?.to_le_bytes());
+    bytes.extend_from_slice(value.as_bytes());
+    Ok(())
+}
+
+/// Injective tagged encoding of one complete `RuntimePrimitive`: the
+/// length-prefixed symbol, an explicit `RuntimePartiality` variant tag, and
+/// every field of that variant.
+///
+/// ⛔ Deliberately hand-written and exhaustive with no wildcard arm: a new
+/// `RuntimePartiality` variant must choose its own tag and fields here. It is
+/// **not** derived from `Debug`, a hash, a pointer, or clone order, and it costs
+/// no extra material element — the primitive's single budgeted atom simply
+/// carries wider content.
+fn primitive_descriptor_bytes(
+    primitive: &RuntimePrimitive,
+) -> Result<Vec<u8>, CraneliftBackendError> {
+    let mut bytes = Vec::new();
+    push_encoded_field(&mut bytes, &primitive.symbol)?;
+    match &primitive.partiality {
+        RuntimePartiality::Total => bytes.push(0),
+        RuntimePartiality::SafeOption {
+            none,
+            some,
+            obligation,
+        } => {
+            bytes.push(1);
+            push_encoded_field(&mut bytes, none)?;
+            push_encoded_field(&mut bytes, some)?;
+            match obligation {
+                Some(obligation) => {
+                    bytes.push(1);
+                    push_encoded_field(&mut bytes, obligation)?;
+                }
+                None => bytes.push(0),
+            }
+        }
+        RuntimePartiality::SafeResult { err, ok, error } => {
+            bytes.push(2);
+            push_encoded_field(&mut bytes, err)?;
+            push_encoded_field(&mut bytes, ok)?;
+            push_encoded_field(&mut bytes, error)?;
+        }
+        RuntimePartiality::CheckedTrap { obligation } => {
+            bytes.push(3);
+            push_encoded_field(&mut bytes, obligation)?;
+        }
+        RuntimePartiality::TrustedTrap { assumption } => {
+            bytes.push(4);
+            push_encoded_field(&mut bytes, assumption)?;
+        }
+    }
+    Ok(bytes)
+}
+
+/// One eliminator's default trap collapses to a single atom: its code, with the
+/// message interned out of line.
+fn emit_trap_default(
+    trap: &RuntimeTrap,
+    arena: &mut SemanticMaterialArena,
+) -> Result<(), CraneliftBackendError> {
+    let span = arena.intern(trap.message.as_bytes())?;
+    arena.push_atom(
+        SemanticAtomKind::MatchDefault,
+        span,
+        trap_code_ordinal(&trap.code),
+    )
+}
+
+fn trap_code_ordinal(code: &RuntimeTrapCode) -> u64 {
+    match code {
+        RuntimeTrapCode::UnsupportedErasure => 0,
+        RuntimeTrapCode::UnsupportedPrimitivePartiality => 1,
+        RuntimeTrapCode::MissingRuntimeMetadata => 2,
+        RuntimeTrapCode::PatternMatchFailure => 3,
+        RuntimeTrapCode::ExplicitTrap => 4,
+    }
+}
+
+/// Flattens one `RuntimeValue` into atoms in source pre-order, emitting exactly
+/// one atom per element the material budget counts.
+fn emit_value_atoms(
+    value: &RuntimeValue,
+    arena: &mut SemanticMaterialArena,
+) -> Result<(), CraneliftBackendError> {
+    match value {
+        RuntimeValue::Bool(flag) => arena.push_numeric(SemanticAtomKind::ValueBool, u64::from(*flag)),
+        RuntimeValue::Int(int) => match int {
+            RuntimeIntV1::Small(value) => {
+                arena.push_numeric(SemanticAtomKind::ValueIntSmall, *value as u64)
+            }
+            // A big integer is one budgeted element, so its sign and limbs are
+            // interned out of line rather than spread over extra atoms.
+            RuntimeIntV1::Big { sign, limbs } => {
+                let mut bytes = Vec::with_capacity(1 + limbs.len() * 8);
+                bytes.push(match sign {
+                    Sign::NonNegative => 0,
+                    Sign::Negative => 1,
+                });
+                for limb in limbs {
+                    bytes.extend_from_slice(&limb.to_le_bytes());
+                }
+                let span = arena.intern(&bytes)?;
+                arena.push_atom(SemanticAtomKind::ValueIntBig, span, checked_u64(limbs.len())?)
+            }
+        },
+        RuntimeValue::Bytes(bytes) => {
+            arena.push_numeric(SemanticAtomKind::ValueBytes, checked_u64(bytes.len())?)?;
+            for byte in bytes {
+                arena.push_numeric(SemanticAtomKind::ByteLiteral, u64::from(*byte))?;
+            }
+            Ok(())
+        }
+        RuntimeValue::String(text) => {
+            arena.push_numeric(SemanticAtomKind::ValueString, checked_u64(text.len())?)?;
+            for byte in text.as_bytes() {
+                arena.push_numeric(SemanticAtomKind::ByteLiteral, u64::from(*byte))?;
+            }
+            Ok(())
+        }
+        RuntimeValue::Constructor { constructor, args } => {
+            arena.push_named(
+                SemanticAtomKind::ValueConstructor,
+                constructor,
+                checked_u64(args.len())?,
+            )?;
+            for arg in args {
+                emit_value_atoms(arg, arena)?;
+            }
+            Ok(())
+        }
+        RuntimeValue::Record { fields } => {
+            // Field names are length-prefixed so the concatenation is injective:
+            // `["ab","c"]` and `["a","bc"]` intern to different spans.
+            let mut names = Vec::new();
+            for (name, _) in fields {
+                names.extend_from_slice(&checked_u32(name.len())?.to_le_bytes());
+                names.extend_from_slice(name.as_bytes());
+            }
+            let span = arena.intern(&names)?;
+            arena.push_atom(
+                SemanticAtomKind::ValueRecord,
+                span,
+                checked_u64(fields.len())?,
+            )?;
+            for (_, field) in fields {
+                emit_value_atoms(field, arena)?;
+            }
+            Ok(())
+        }
+        RuntimeValue::ClosureRef { symbol, captured } => {
+            arena.push_named(
+                SemanticAtomKind::ValueClosureRef,
+                symbol,
+                checked_u64(captured.len())?,
+            )?;
+            for capture in captured {
+                emit_value_atoms(capture, arena)?;
+            }
+            Ok(())
+        }
+        RuntimeValue::Unknown => arena.push_numeric(SemanticAtomKind::ValueUnknown, 0),
+    }
+}
+
+fn checked_u64(value: usize) -> Result<u64, CraneliftBackendError> {
+    u64::try_from(value).map_err(|_| planner_capacity_error("semantic source material exhausted"))
+}
+
+fn checked_u32(value: usize) -> Result<u32, CraneliftBackendError> {
+    u32::try_from(value).map_err(|_| planner_capacity_error("semantic source material exhausted"))
 }
 
 fn source_material_elements(expr: &RuntimeExpr) -> Result<u32, CraneliftBackendError> {
