@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2A-S
 title: "defunctionalize retained body selection — static-origin tag plus one closed consumer, replacing cloned-RuntimeExpr identity"
-status: active
+status: draft
 owner: runtime
 size: M
 gate: none
@@ -11,7 +11,33 @@ github: null
 origin: Architect ruling evt_6h5gw5c503n5z on RT-FNSPLIT-B2A hard-stop #6 (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the retired RT-FNSPLIT-B2A frame, whose Retain/Replace lists were inherited from the never-landed b077eb7a. Steward-filed; Steward owns the replacement frame and the full AC/control re-walk.
 ---
 
-> ## ✅ ACTIVE — kicked to the Runtime ring 2026-07-25 (`evt_3wmhpdq7dm8d8`)
+> ## ⛔ HALTED AT HARD-STOP #7 — 2026-07-25. DO NOT BUILD FROM THIS FRAME.
+>
+> **D4 is unsatisfiable inside this frame's own boundary.** Raised by
+> `runtime-leader` at `evt_2fvxkmfw8m1k8` after D1–D3 landed clean at
+> `5c7eae26`; Steward re-verified the measurement on `origin/main` = `70bd2c74`.
+> `lower_expr` (`core.rs:3847`) has **no origin in scope**, the only two
+> production `Lowered::Closure` constructions are its `:4211`/`:4226` arms
+> (`body: (**body).clone()`), and every non-threaded key is prohibited by this
+> frame's own D6. Threading is the excluded source-machine scope. ⇒ **This
+> frame requires its own prerequisite.**
+>
+> ⛔ **`5c7eae26` IS NOT MERGEABLE AS A STANDALONE UNIT.** The Architect's Q2
+> permission (`evt_25ynt8615r9sk`) is **conditional** — "provided the complete
+> tag-plus-sole-dispatch conditions hold." D4 *is* the sole-dispatch condition,
+> so the proviso is unmet and the standalone-checkpoint permission never fires.
+> This is the Architect's own conditional evaluating false on measured ground,
+> not the Steward overriding it. The branch is retained as **durable input** to
+> the successor, at `origin/wp/RT-FNSPLIT-B2A-S-selection-defunctionalization`.
+>
+> **The re-slice is gated on one measurement** — whether the planned-origin
+> population is *total* over the closure occurrences reachable in `lower_expr`
+> including the source-machine fallback. Totality ⇒ the correspondence is
+> mechanical threading and becomes its own production unit sized by the
+> **producer**; partiality ⇒ it drags static-authority scope and collapses into
+> `RT-FNSPLIT-B2F`. See `RT-NATIVE-FNSPLIT` hard-stop #7 + inventory entry 3.
+>
+> ## ⛔ SUPERSEDED HISTORY BELOW — kicked to the Runtime ring 2026-07-25 (`evt_3wmhpdq7dm8d8`)
 >
 > Ring compaction verified on the **completion marker** for all three seats
 > (implementer reached `ctx 0%`) before the mention went out. Fresh branch from

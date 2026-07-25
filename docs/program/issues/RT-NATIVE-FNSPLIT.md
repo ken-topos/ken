@@ -86,13 +86,37 @@ this line wins.** Re-read this line on every hard-stop.
 > ```text
 > SYMPTOM INVENTORY (append only; never rewritten)
 > NEXT PREDICATE CHECK = 3rd entry, then 6th, 9th, …
-> ENTRIES = 2  ← ⛔ BUT THE PREDICATE QUESTION IS ALREADY ANSWERED. See below.
+> ENTRIES = 3  ← ANSWERED AT ENTRY 2; entry 3 gives the CAUSE. See below.
 > 1. retained body selection — keyed on cloned RuntimeExpr pointer identity
 > 2. lower_expr re-lowers each retained closure body AT EVERY CALL SITE, in
 >    that call site's whole configuration (core.rs:4214/4229 clone the body
 >    into Lowered::Closure; :4302 lowers the clone against
 >    args ++ captures ++ env)  — keyed on runtime configuration
+> 3. ⭐ THE CAUSE, not another instance: there is NO static key in scope at the
+>    construction site to key on. lower_expr (core.rs:3847) takes only
+>    (builder, expr: &RuntimeExpr, env: &[Lowered]); its RuntimeExpr::Closure /
+>    LexicalClosure arms (:4211/:4226) build Lowered::Closure with
+>    body: (**body).clone(). The planner walk preallocates StaticOriginId
+>    (semantic_ir.rs:194/:231) but the LOWERING walk is an INDEPENDENT
+>    traversal of the same source with NO carried correspondence — so the
+>    occurrence being lowered has no static name. Every prior attempt reached
+>    for a dynamic surrogate (pointer, then configuration) BECAUSE the static
+>    one is absent, not because it was mis-chosen.
 > ```
+>
+> ## ⭐ ENTRY 3 IS WHY THE PREDICATE KEEPS BEING VIOLATED
+>
+> Entries 1 and 2 are two *surrogates*; entry 3 is the *vacancy* that forces a
+> surrogate. Hard-stop #5 ruled the origin **carrier** onto planner records and
+> both the Architect and the Steward treated "the carrier exists" as sufficient.
+> It is not: a field on a planner record does not put a value in `lower_expr`'s
+> scope. ⇒ **The chain's next real deliverable is the plan↔lowering occurrence
+> CORRESPONDENCE, not another consumer of an origin nothing produces.**
+>
+> ★ Steward frame defect, stated plainly: `RT-FNSPLIT-B2A-S` was sized by what
+> **consumes** the tag (the selection table) and never by what must **produce**
+> it at the construction site. Same class as
+> `a-required-deliverable-can-transitively-require-the-frames-excluded-scope`.
 >
 > ## ⛔ DO NOT WAIT FOR THE 3rd ENTRY. Entries 1 and 2 ARE THE SAME PREDICATE.
 >
@@ -139,7 +163,8 @@ this line wins.** Re-read this line on every hard-stop.
 
 ```text
 RECUT CHAIN (live, from kickoff evt_2kgfmmeeh2x7w, 2026-07-24)
-hard-stop count    = 6   ← ⛔ PULL FIRED 2026-07-25. NEXT PULL = #9.
+hard-stop count    = 7   ← #6's PULL FIRED AND WAS CONSUMED. NEXT PULL = #9.
+                            #7 goes STRAIGHT TO THE ARCHITECT, no research gate.
   ⚠ THIS LINE READ "3" UNTIL 2026-07-25 AND WAS STALE BY TWO STOPS. Stops #4
     and #5 both happened and neither was posted here, so the authoritative
     count silently disagreed with reality in the one place designated to win
@@ -219,6 +244,35 @@ hard-stop count    = 6   ← ⛔ PULL FIRED 2026-07-25. NEXT PULL = #9.
        and refused to reinterpret the deliverables to fit what was buildable.
        ⇒ RESEARCH PULL FIRED. Architect ruling was GATED BEHIND the advisory.
        ✅ ADVISORY DELIVERED evt_4w1rf45d4fkv3 (2026-07-25). GATE LIFTED.
+  #7 = B2A-S hard-stopped AFTER D1-D3 landed, on grounding D4. Raised by
+       runtime-leader at evt_2fvxkmfw8m1k8 (2026-07-25); implementer stopped
+       clean at durable checkpoint 5c7eae26 with NO tag beside a retained body
+       and no D5/D6/test work. Steward independently re-verified on origin/main
+       = 70bd2c74 and CONFIRMS the measurement:
+         - lower_expr (core.rs:3847) takes only (&mut self, builder,
+           expr: &RuntimeExpr, env: &[Lowered]). No origin parameter; nothing
+           origin-derivable in scope.
+         - the ONLY two production Lowered::Closure constructions are its
+           RuntimeExpr::Closure (:4211) and ::LexicalClosure (:4226) arms, both
+           body: (**body).clone() — the exact carrier D4 orders removed.
+           :532/:3551/:4261 are destructures, not constructions.
+         - lower_expr is re-entered from source_call_state (:3542) via
+           SourceMachineState::Eval (mod.rs:1962), so a threaded origin must
+           also live in the state enum and both continuation enums.
+       ⇒ With pointer identity, content, clone AND visit-order all prohibited by
+       the frame's own D6 controls, NOTHING remains but a threaded parameter —
+       which is the source-machine/static-authority scope B2A-S EXCLUDES.
+       D4 is UNSATISFIABLE inside its own frame. The ring did not weaken it.
+       ⛔ STEWARD FRAMING DEFECT (second in this chain, same author, DIFFERENT
+       class from #6): #6 was a false premise inherited from a held tree; #7 is
+       a boundary that excludes its own prerequisite. B2A-S was sized by what
+       CONSUMES the tag and never by what must PRODUCE it. ⇒ Inventory entry 3.
+       NO research pull due (count 7 < 9; #6's pull fired and was consumed).
+       ROUTED TO ARCHITECT, gated behind ONE ring measurement: is the planned-
+       origin population TOTAL over the closure occurrences reachable in
+       lower_expr, including via the source-machine fallback? Totality decides
+       whether the correspondence is mechanical threading (its own production
+       unit) or drags in static-authority scope (collapse into B2F).
           Independently grounded the stop on exact 7151ae58 and confirmed it
           "correct and structural". Three findings that bind the re-slice:
           (i)  A `static_origin` carrier CAN be an independent checkpoint, but
