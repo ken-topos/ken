@@ -637,6 +637,39 @@ false negative has fired twice in this WP's history. The evasion column
 discharges `AC-5`'s per-pin evasion requirement **as an enumeration you close**,
 not as a quantifier the reader resolves.
 
+> ### ⛔ THE EVASION COLUMN — `not attempted` IS NOT AN OUTCOME
+> ### (Steward ruling, 2026-07-25, on QA's block of `e8c757f3`)
+>
+> **`EVERY` includes the pins this WP did not author.** The first candidate
+> recorded **eight** retained declaration rows as `not attempted`, on the
+> reasoning that touching pre-existing pins would widen a subtraction WP's diff.
+> **That is refuted by the ring's own pre-build analysis:** a mutation proof is
+> **restored byte-identically**, which is precisely why `AC-10a`/`10b` coexist
+> with `AC-11`'s empty production diff. A byte-identically-restored evasion
+> **cannot** widen the candidate diff.
+>
+> ★ **And the requirement is load-bearing here specifically.** Three
+> source-text pins survive removal **because the Steward ruled them sound by the
+> discriminator in the Respin Route.** ⛔ **A ruling is not a demonstration** —
+> exempting them would repeat this WP's own root defect, a ruling standing in
+> for a check.
+>
+> **⇒ It is BOUNDED. Three outcomes, all valid recordings.** Introduce the thing
+> the pin claims to detect, compile-preserving, then restore byte-identically
+> (`git diff --quiet`, never `--stat`, which always exits 0):
+>
+> | outcome | meaning | verdict |
+> |---|---|---|
+> | evasion applies, pin **REDDENS** | the pin detects the property | ✅ discharged |
+> | evasion applies, pin stays **GREEN** | the pin is **spelling-keyed** and does not detect what it claims | ⚠ **a FINDING — report it, do NOT widen scope to fix it** |
+> | evasion **cannot compile** | **the compiler enforces the property** | ⭐ the **strongest** outcome — record it as such |
+>
+> The third row is what makes this proportionate rather than expensive: where
+> the language already refuses, a recorded failure-to-compile is better evidence
+> than any test and is cheap to obtain. **Ask which mechanism already enforces
+> the property before building a detector for it — the compiler is a legitimate
+> answer, and usually the strongest.**
+
 ## ⚠ Anchors — RE-DERIVE ON YOUR OWN BASE BEFORE YOU TRUST ONE
 
 Every anchor in this chain has moved at least once; `lower_expr` alone went
