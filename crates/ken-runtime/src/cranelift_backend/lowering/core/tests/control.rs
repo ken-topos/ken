@@ -3526,6 +3526,53 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
 /// source. There is no such macro in the backend, and one would be visible in the
 /// same review; this is a stated limit, not a silent one.
 #[cfg(test)]
+/// **Every production source carrying an `impl Lowering` block.**
+///
+/// ⛔ `core.rs` alone is NOT the routing surface, and assuming it was is the
+/// defect this constant exists to prevent: `lowering/mod.rs:2473` carries a
+/// **second** `impl<'a> Lowering<'a>` block. A retained-body route added there
+/// would have sat entirely outside a `core.rs`-scoped inventory.
+///
+/// ⚠ Today `mod.rs` cannot reach `retained_body_occurrence` — the helper is
+/// private to module `core` and `mod.rs` is `core`'s **parent**, so the compiler
+/// refuses. That privacy is therefore load-bearing and is pinned directly by
+/// `retained_body_helper_is_private`; this list is what makes the inventory
+/// still correct **after** a deliberate widening.
+const LOWERING_IMPL_SOURCES: &[(&str, &str)] = &[
+    ("lowering/core.rs", include_str!("../../core.rs")),
+    ("lowering/mod.rs", include_str!("../../mod.rs")),
+];
+
+/// Is the retained-body helper still declared private to module `core`?
+///
+/// Matched as the exact unqualified form, so **any** visibility qualifier is a
+/// miss. That is intentional and is not a spelling list: the property is "no
+/// qualifier at all", which has exactly one spelling.
+fn retained_body_helper_is_private(core: &str) -> bool {
+    core.lines()
+        .any(|line| line.trim() == "fn retained_body_occurrence(")
+}
+
+/// The routing inventory across every `impl Lowering` source, as
+/// `"<file>::<fn>"` in source order.
+///
+/// ⚠ **Honest limit.** `mod.rs` holds **seven** top-level `impl` blocks and a
+/// nested `impl Drop` inside a function body, so unlike `core.rs` the enclosing
+/// *type* is ambiguous there. The enclosing **function name** is still exact,
+/// and that is what this inventory claims — "which functions can reach a
+/// retained body", never "on which type". The drift question only needs the
+/// former.
+fn routing_inventory(needle: &str) -> Vec<String> {
+    LOWERING_IMPL_SOURCES
+        .iter()
+        .flat_map(|(file, source)| {
+            enclosing_functions_mentioning(source, needle)
+                .into_iter()
+                .map(move |name| format!("{file}::{name}"))
+        })
+        .collect()
+}
+
 /// Sentinel recorded when an `impl`-level line carries a whole `fn` token whose
 /// header this oracle cannot parse. ⛔ Its presence in an inventory is a
 /// FAILURE, never a shrug — see `UNATTRIBUTED`.
@@ -4382,34 +4429,92 @@ fn the_retained_body_routes_are_a_closed_inventory_of_named_functions() {
     // only when a deliberate new route is added, and then it must be reviewed.
     let core = include_str!("../../core.rs");
 
-    // (a) Definitions counted SEPARATELY from consumers, so "a definition moved"
-    //     and "a consumer was added" are different failures.
+    // ⛔ (a) FIRST, and deliberately BEFORE the arithmetic: the helper must stay
+    //        declared PRIVATE to module `core`.
+    //
+    // This ordering is the whole repair. Widening the helper used to be caught
+    // only as a side effect — the exact-string definition matcher stopped
+    // matching, and the failure read "the definition count moved, so
+    // `tokens - definitions` no longer counts consumers." ⭐ That message
+    // recommends the EVASION: the natural repair is to make the matcher accept
+    // `pub(super) fn`, which silences the red and opens the cross-file route.
+    // A pin whose failure message recruits the next maintainer into opening the
+    // hole is worse than one that says nothing.
+    assert!(
+        retained_body_helper_is_private(core),
+        "⛔ `retained_body_occurrence` is no longer declared as an unqualified \
+         private `fn` in `core.rs`.\n\n\
+         THE HAZARD: `lowering/mod.rs` carries a SECOND `impl Lowering` block. \
+         It cannot reach this helper today only because the helper is private to \
+         module `core` and `mod.rs` is `core`'s PARENT. Widening the helper makes \
+         a retained-body route in `mod.rs` legal, and such a route changes the \
+         boundary disposition.\n\n\
+         IF YOU WIDENED IT DELIBERATELY: extend `LOWERING_IMPL_SOURCES` and the \
+         inventory below so the new call site is covered. ⛔ Do NOT relax this \
+         assertion to accept the new visibility spelling -- that is the evasion, \
+         not the fix."
+    );
+
+    // (b) Definitions counted SEPARATELY from consumers, ACROSS BOTH `impl
+    //     Lowering` files, so "a definition moved" and "a consumer was added"
+    //     are different failures and neither is scoped to one file.
     for (needle, definitions, consumers) in [
         // 7 direct consumers + 1 delegation from `machine_body_occurrence`.
         ("retained_body_occurrence", 1usize, 8usize),
         // 3 wrapper consumers.
         ("machine_body_occurrence", 1usize, 3usize),
     ] {
-        let tokens = identifier_occurrences(core, needle);
-        let declared = core
-            .lines()
+        let tokens = LOWERING_IMPL_SOURCES
+            .iter()
+            .map(|(_, source)| identifier_occurrences(source, needle))
+            .sum::<usize>();
+        let declared = LOWERING_IMPL_SOURCES
+            .iter()
+            .flat_map(|(_, source)| source.lines())
             .filter(|line| line.trim() == format!("fn {needle}("))
             .count();
         assert_eq!(
             declared, definitions,
-            "{needle}: the definition count moved, so `tokens - definitions` no \
-             longer counts consumers"
+            "{needle}: the definition count moved across the `impl Lowering` \
+             sources, so `tokens - definitions` no longer counts consumers"
         );
         assert_eq!(
             tokens - declared,
             consumers,
-            "{needle}: the consumer population moved"
+            "{needle}: the consumer population moved across the `impl Lowering` \
+             sources"
         );
     }
 
-    // (b) The ALLOWED INVENTORY of functions that can reach a retained body.
+    // (c) The ALLOWED INVENTORY of functions that can reach a retained body,
+    //     over EVERY `impl Lowering` source rather than `core.rs` alone.
     //     ⛔ Asserted as the exact permitted set, not as a forbidden-name scan:
-    //     a route added under ANY name appears here and reddens.
+    //     a route added under ANY name, in EITHER file, appears here and reddens.
+    assert_eq!(
+        routing_inventory("retained_body_occurrence"),
+        vec![
+            "lowering/core.rs::lower_recursor_residual_call",
+            "lowering/core.rs::lower_computational_producer_expr",
+            "lowering/core.rs::retained_body_occurrence",
+            "lowering/core.rs::machine_body_occurrence",
+            "lowering/core.rs::lower_expr",
+        ],
+        "D6: the set of functions that can reach a retained body changed. Every \
+         one is a boundary-crossing route under B2O's ownership mapping, so a \
+         new entry -- in EITHER `impl Lowering` file -- changes the call \
+         disposition and must be reviewed rather than absorbed silently"
+    );
+    assert_eq!(
+        routing_inventory("machine_body_occurrence"),
+        vec![
+            "lowering/core.rs::source_call_state",
+            "lowering/core.rs::machine_body_occurrence",
+        ],
+        "D6: the machine-body wrapper's route set changed"
+    );
+
+    // (d) The legacy single-file inventories, retained so a `core.rs`-local
+    //     regression still names `core.rs` directly.
     assert_eq!(
         enclosing_functions_mentioning(core, "retained_body_occurrence"),
         vec![
@@ -4679,4 +4784,112 @@ fn the_method_boundary_oracle_enforces_its_impl_shape_premise() {
              located -- the two disagree, so one of them is wrong"
         );
     }
+}
+
+/// **The cross-file discriminator: a `pub(super)` widening plus a `mod.rs` route
+/// must redden FOR THE CROSS-FILE REASON, not as a count-arithmetic accident.**
+///
+/// ⛔ This is the control for the residual I found in my own pin. Before this
+/// repair the evasion *was* caught, but only because `pub(super) fn …` stopped
+/// matching an exact-string definition matcher — so the failure read *"the
+/// definition count moved"*, whose obvious repair is to accept the new spelling
+/// and thereby open the route. **Caught-for-the-wrong-reason is a latent false
+/// green**, because the message decides what the next maintainer does.
+///
+/// The live form of this mutation was run against the real tree and verified to
+/// compile: widening the helper and adding a `cross_file_route` method to
+/// `mod.rs`'s `impl Lowering` block builds with warnings only. It is asserted
+/// here synthetically so it runs on every CI pass rather than once by hand.
+#[test]
+fn a_cross_file_route_reddens_for_the_cross_file_reason() {
+    // Promise class: durable mutation proof.
+
+    // 1. The private-form predicate is what fires first, and it is the clause
+    //    that names the hazard.
+    let widened = "impl<'a> Lowering<'a> {\n    pub(super) fn retained_body_occurrence(\n        &self,\n    ) {}\n}\n";
+    let private = "impl<'a> Lowering<'a> {\n    fn retained_body_occurrence(\n        &self,\n    ) {}\n}\n";
+    assert!(
+        retained_body_helper_is_private(private),
+        "the private fixture must satisfy the predicate, or the pair below \
+         proves nothing"
+    );
+    assert!(
+        !retained_body_helper_is_private(widened),
+        "a `pub(super)` widening must be visible to the predicate that guards \
+         the cross-file route"
+    );
+
+    // 2. ⭐ Non-degeneracy: the two fixtures have the SAME mention count, so the
+    //    count arithmetic cannot tell them apart. Only the private-form clause
+    //    can, which is why it is asserted first and separately.
+    assert_eq!(
+        identifier_occurrences(private, "retained_body_occurrence"),
+        identifier_occurrences(widened, "retained_body_occurrence"),
+        "if the widening changed the mention count, this control would not \
+         isolate the visibility axis"
+    );
+
+    // 3. And once widened, a route in the OTHER `impl Lowering` file is real
+    //    code the inventory must see -- not prose, which the tokenizer strips.
+    //    ⚠ `mod.rs` mentions `retained_body_occurrence` twice TODAY, both in doc
+    //    comments; that is exactly why the inventory tokenizes rather than greps.
+    let mod_with_route = "impl<'a> Lowering<'a> {\n    fn cross_file_route(&self) {\n        self.retained_body_occurrence(o);\n    }\n}\n";
+    assert_eq!(
+        enclosing_functions_mentioning(mod_with_route, "retained_body_occurrence"),
+        vec!["cross_file_route"],
+        "a route in the second impl file must be attributed to its own method"
+    );
+    let mod_prose_only = "/// see `Lowering::retained_body_occurrence` for the selector\nimpl<'a> Lowering<'a> {\n    fn unrelated(&self) {}\n}\n";
+    assert!(
+        enclosing_functions_mentioning(mod_prose_only, "retained_body_occurrence").is_empty(),
+        "a doc-comment mention must NOT enter the inventory; mod.rs has two of \
+         them today and a grep-based oracle would report phantom routes"
+    );
+
+    // 4. The real `mod.rs` is in scope and currently contributes NO route --
+    //    asserted, so "the second file is covered" is a checked fact rather than
+    //    a claim about a constant nobody reads.
+    let mod_source = LOWERING_IMPL_SOURCES
+        .iter()
+        .find(|(file, _)| *file == "lowering/mod.rs")
+        .expect("mod.rs must be in the routing scope")
+        .1;
+    assert!(
+        enclosing_functions_mentioning(mod_source, "retained_body_occurrence").is_empty(),
+        "mod.rs has acquired a retained-body route; the inventory above must \
+         name it explicitly"
+    );
+}
+
+/// `mod.rs`'s `impl`-shape premise, which is **different** from `core.rs`'s.
+///
+/// ⛔ Do not copy `core.rs`'s single-`impl` clause here: `mod.rs` legitimately
+/// has **seven** top-level `impl` blocks and a nested `impl Drop` inside a
+/// function body. Asserting one `impl` would be a false premise that reddens on
+/// correct code. What must hold for attribution to be sound is narrower: no
+/// unparsable `impl`-level header, and the parser actually recognizing methods.
+#[test]
+fn the_method_boundary_oracle_holds_on_the_second_impl_file() {
+    // Promise class: durable invariant.
+    let mod_source = include_str!("../../mod.rs");
+
+    let unparsable = mod_source
+        .lines()
+        .filter(|line| classify_impl_level_header(line) == MethodHeader::Unrecognized)
+        .collect::<Vec<_>>();
+    assert!(
+        unparsable.is_empty(),
+        "mod.rs carries impl-level `fn` tokens this oracle cannot parse: \
+         {unparsable:?}. Extend `classify_impl_level_header` -- do NOT relax it"
+    );
+
+    let recognized = mod_source
+        .lines()
+        .filter(|line| matches!(classify_impl_level_header(line), MethodHeader::Named(_)))
+        .count();
+    assert!(
+        recognized > 30,
+        "the oracle recognized only {recognized} impl-level methods in mod.rs, \
+         which is too few for it to be parsing the file it is pointed at"
+    );
 }

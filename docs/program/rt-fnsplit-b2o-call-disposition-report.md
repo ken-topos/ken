@@ -140,6 +140,43 @@ the moment anyone declared a route `pub`.
 call site **compiles**, **reddens the inventory pin**, and leaves the 59-call
 census, the `source_occurrence` pin, and the impl-shape premise **green**.
 
+### ⛔ THIRD CORRECTION — the file scope was wrong, and the red message
+### recommended the evasion
+
+`lowering/mod.rs:2473` carries a **second `impl<'a> Lowering<'a>` block**, and the
+inventory scanned `core.rs` alone. A retained-body route added there sat entirely
+outside the pin's scope.
+
+Rust privacy is what actually blocked it: `retained_body_occurrence` is private to
+module `core`, and `mod.rs` is `core`'s **parent**, so the compiler refuses. **A
+cross-file route therefore requires widening the helper first.** Tested, not
+reasoned: widening to `pub(super)` and adding a `cross_file_route` method to
+`mod.rs` **compiles** (warnings only).
+
+⚠ **The pin did catch it — for the wrong reason.** The assertion that fired was
+the *definition count* (`1 → 0`), because `pub(super) fn …` no longer matched an
+exact-string matcher. The failure read *"the definition count moved, so `tokens −
+definitions` no longer counts consumers"* — and **the obvious repair to that
+message is to accept the new spelling, which opens the route.** ⭐ A pin whose
+failure message recruits the next maintainer into the evasion is worse than one
+that stays silent. *Caught* and *caught for the right reason* are different
+properties, and only the second survives contact with a maintainer.
+
+**Repaired:** the inventory now spans `LOWERING_IMPL_SOURCES` (both `impl
+Lowering` files), and the private-form of the helper is asserted **first and
+separately**, with a message that names the cross-file hazard and says *extend the
+scope, do not relax this pin*. Re-run live, the same mutation now reddens on that
+clause instead of the arithmetic.
+
+⚠ **`mod.rs` needs different premises from `core.rs`** and asserting the same ones
+would be a false premise reddening on correct code: it legitimately has **seven**
+top-level `impl` blocks plus a nested `impl Drop` inside a function body. So the
+enclosing **type** is ambiguous there while the enclosing **function name** stays
+exact — which is all the drift question needs, and is stated as a limit rather
+than papered over. `mod.rs` also mentions `retained_body_occurrence` twice
+**in doc comments today**, which is precisely why the inventory tokenizes rather
+than greps.
+
 The routing inventory, asserted exactly: `lower_recursor_residual_call`,
 `lower_computational_producer_expr`, `retained_body_occurrence`,
 `machine_body_occurrence`, `lower_expr` — and for the machine wrapper,
