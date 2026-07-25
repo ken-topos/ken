@@ -99,12 +99,12 @@ known-sound with a pin that cannot silently widen, or a known trap?**
   not recursion as a code shape. ⭐ **The settling test:** converting traversal to
   a worklist would remove "recursion" while doing **nothing** for entry 2, and a
   reading under which the deliverable is satisfiable without touching the defect
-  is the wrong reading. **Population that matters: 7 of the 58 sites consume a
+  is the wrong reading. **Population that matters: 7 of the 59 sites consume a
   retained body — `core.rs:327, 605, 620, 764, 4817, 4829, 4954`; the rest derive
   from `child_occurrence`, i.e. ordinary sub-expression traversal.**
 - ✅ **Two ruling-independent deliverables proceed while held** (facts about the
   current tree, surviving any re-slice): `AC-G0`'s denominator — measure and pin
-  `native_int_clif`'s per-native-module constant — and the **full 58-site
+  `native_int_clif`'s per-native-module constant — and the **full 59-site
   disposition table**. ⛔ Nothing else: no representation design, no scaffold, no
   speculative construction.
 
@@ -512,7 +512,7 @@ function.
 inliner goes. ⚠ **Re-scoped and this is the load-bearing warning:** the
 "whole-configuration emission path" is **not a separable path you can delete** —
 it is `lower_expr`'s entire recursive-descent structure at `core.rs:4333`, reached
-from 58 sites. Removal means the recursion is gone, not flag-disabled, not
+from 59 sites. Removal means the recursion is gone, not flag-disabled, not
 `#[allow(dead_code)]`, not retained "for the differential."
 
 **D7 — behaviour-equivalence evidence.** The five-category differential suite

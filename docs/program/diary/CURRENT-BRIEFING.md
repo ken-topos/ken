@@ -55,8 +55,20 @@
 > 1. ✅ **DONE — research dispatched `evt_63wjmry61vd89` BEFORE the Architect
 >    rules**, as the armed #9 trigger required; research seat compacted first and
 >    confirmed working. **#9's pull is CONSUMED; next armed pull is #12.**
-> 2. ⏳ **AWAIT the research advisory**, then **route both options to
->    @architect**: (i) a prerequisite unit for the value representation +
+> 2. ⚠⚠ **THE RESEARCH ADVISORY HAS LANDED — `evt_531c4k52mshrn`, and it is
+>    UNREAD IN FULL (the notification truncated). READ IT FIRST, then route to
+>    @architect.** Headline from the visible portion: *"the current frame cannot
+>    meet its stated all-origin contract by functionizing first and discovering
+>    representation later. What must exist first is **not necessarily one
+>    universal boxed `Value`**; it is a **stable, executable representation
+>    contract for every value that crosses a generated-function boundary** — which
+>    may be uniform, or may be a family of statically…"* ⭐ **That third
+>    possibility is not either of the two options on the table**, so read it
+>    before framing the fork for the Architect — it may reshape option (i) from
+>    "build the object model" into "pin the boundary contract," which is a much
+>    smaller prerequisite. @architect is correctly holding (`evt_49zt19yp3kmb6`)
+>    and nothing is lost by reading carefully.
+>    Then **route both options to @architect**: (i) a prerequisite unit for the value representation +
 >    calling convention with `B2F` rebased on it, or (ii) bounded coexistence,
 >    which **requires `AC-1` and `D6` amended**. ⛔ Do **not** ask the Architect
 >    to rule before the advisory lands — that is how #6 got re-litigated. The
