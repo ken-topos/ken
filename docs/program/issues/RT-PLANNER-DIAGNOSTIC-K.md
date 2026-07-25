@@ -7,7 +7,7 @@ size: S
 gate: none
 depends_on: []
 blocks: []
-github: https://github.com/ken-topos/ken/pull/929
+github: https://github.com/swe-toolkit/ken/pull/929
 origin: adversary findings H2 + H3 on landed RT-NATIVE-FNSPLIT Boundary A (647a2e5b), side thread thr_2seh2bm1kr5mh evt_4pb2t6ve1ysfr, 2026-07-24. Steward-filed (agents cannot create tracked work per COORDINATION §2); Steward triage = both CONFIRMED against landed code. H1 (zero K headroom) is NOT in this WP — it was routed to the Architect as an input to the hard-stop-#3 ruling.
 ---
 

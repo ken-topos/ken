@@ -327,10 +327,20 @@ brief** — the implementer should execute mostly mechanically, not design
 >
 >    ```sh
 >    T="$(.devcontainer/mint-gh-token.sh)"   # PRINTS the token — never `source` it
->    git push "https://x-access-token:${T}@github.com/ken-topos/ken.git" \
->      <sha>:refs/heads/<branch> 2>&1 | sed 's/x-access-token:[^@]*@/x-access-token:***@/g'
->    unset T
+>    U="$(git remote get-url origin | sed "s|https://|https://x-access-token:${T}@|")"
+>    git push "$U" <sha>:refs/heads/<branch> 2>&1 \
+>      | sed 's/x-access-token:[^@]*@/x-access-token:***@/g'
+>    unset T U
 >    ```
+>
+>    ⛔ **DERIVE the URL from `origin`; never hardcode the org/repo.** This recipe
+>    used to spell `github.com/<org>/ken.git` literally, and the org was renamed on
+>    **2026-07-25** (`ken-topos` → `swe-toolkit`). The hardcoded form **kept
+>    working**, because GitHub silently redirects a renamed org — so the recipe was
+>    wrong and *nothing failed*, which is the worst version of wrong. That
+>    redirect is a courtesy, not a guarantee: it lapses the moment anyone claims
+>    the abandoned org name. ⇒ **Any org/repo/URL literal in a runbook is a latent
+>    breakage whose alarm is disabled by a redirect. Read it from the repo.**
 >
 >    Re-anchor first (`git cat-file -t <sha>`; parent an ancestor of `main`),
 >    then `ls-remote` to confirm, and report the exact remote SHA back.

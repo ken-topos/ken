@@ -370,7 +370,7 @@ The gate must compare against the base the merge will actually land on."
   #
   #    This repository configures user.email PER-REPO, not globally, so a gate
   #    that inherits ambient identity is silently environment-sensitive.
-  git -C "$gate_wt" config user.email 'publisher-gate@ken-topos.local' >/dev/null 2>&1 || true
+  git -C "$gate_wt" config user.email 'publisher-gate@swe-toolkit.local' >/dev/null 2>&1 || true
   git -C "$gate_wt" config user.name  'ken publisher gate'             >/dev/null 2>&1 || true
 
   # ⛔ `git merge --squash` STAGES without COMMITTING, so HEAD would still be

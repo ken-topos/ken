@@ -42,6 +42,6 @@ lawful, each entry with its ES1 derivation path — comprehensive ≠ kitchen-si
 When F3b is scheduled, encode the contrib→standard upstreaming governance + the
 tier distinction. Captured in `docs/program/everyday-surface-program.md`
 (*Package-ecosystem strategy* section). **Open design Q for ES4/F3b design
-time:** is "contrib" a ken-topos-hosted curated area vs. the open third-party
+time:** is "contrib" a swe-toolkit-hosted curated area vs. the open third-party
 universe? — Steward lean: a curated reviewed staging tier that feeds standard,
 arbitrary third-party possible but deliberately a small minority.

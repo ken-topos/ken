@@ -67,7 +67,7 @@ never in this repo). They fall in two tiers:
 - **★ FIRST-PARTY SIBLINGS — `ward/` and `keep/` — are NOT references at all,
   and are freely readable by every role.** `local/refs/ward` (and its sibling
   `keep`) are **Ken's own projects**: same operator, same author, **MIT**, part of
-  the same program (`ken-topos/ward`, `ken-topos/keep`; Ken's `G-Ward-seam` gate
+  the same program (`swe-toolkit/ward`, `swe-toolkit/keep`; Ken's `G-Ward-seam` gate
   is *their* seam). They live under `local/refs/` **only because that is where
   sibling checkouts are mounted** — a **directory accident, not a policy
   classification.**

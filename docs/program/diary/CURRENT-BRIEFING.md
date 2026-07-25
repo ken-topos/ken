@@ -21,8 +21,85 @@
 > and collectively they turned the resume anchor into a trap. **The only live
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
-> ## ✅✅ LIVE STATE — 2026-07-25 T17:45Z. **`B2O` IS CLOSED. `B2R` IS FRAMED,
-> ## KICKED, AND ACTIVE.** The Runtime ring is **working**. **I owe nothing.**
+> ## ✅✅ LIVE STATE — 2026-07-25 T18:10Z. **`B2O` IS CLOSED. `B2R` IS ACTIVE AND
+> ## BUILDING, WITH `AC-11` AMENDED IN MID-FLIGHT.** **I owe nothing.**
+>
+> ### ▶ IN FLIGHT RIGHT NOW — read this before acting
+>
+> - **`B2R` CANDIDATE 1 IS WITH THE RING: exact
+>   `37d06ef8ba2c5022e27805fadf763f2c18994d05`.** ✅ **Pushed to
+>   `origin/wp/RT-FNSPLIT-B2R-representation-abi`** — it had **zero off-box
+>   copies** when I found it (`ls-remote` empty, one local ref). Base `c5edea8b`,
+>   **one merge behind**; 6 files, +2249 −5 (`abi.rs` new at 1026 lines,
+>   `static_transition.rs` +737).
+>   - **§14(5) merge verified, PREDICTED BEFORE MEASURING:** intersection with the
+>     main-side set **EMPTY**; merge tree `ce8631ad`, rc 0; **12 files, all 12
+>     own-side, 0 foreign.** ⇒ The stale base reverts nothing. **Do not rebase it.**
+>   - `runtime-qa` and `architect` are reviewing. **Nothing is owed by me** — no
+>     mention to me since my amendment. The leader owns the merge Decision.
+> - ✅ **PR #965 MERGED — `origin/main` = `3c4f9107`.** All five files
+>   blob-identical to `14da2a78`. `steward/work` reset onto it and the three
+>   carried commits re-applied with **all four blobs verified identical** to their
+>   pre-reset record.
+> - **`runtime-implementer` is IDLE at ctx 36%**, awaiting the retro call. ⚠ Its
+>   compaction seam is **after retros, before the next WP** — retros are not called
+>   until the WP merges. **Do not compact it now**; a compaction eats an un-posted
+>   retro.
+>
+> ### ⭐⭐ `AC-11` FIRED, INSIDE TEN MINUTES, AND THIS IS THE RESULT WORTH KEEPING
+>
+> The implementer's own report: of `D5`'s **six** advertised rejection classes,
+> **two were subsumed by an earlier detector — both living in a
+> `validate_edge_agreement` function that advertised six laws and enforced NONE.**
+> It tried **two independent witnesses** before concluding the arm was dead, then
+> deleted the function (commit `b50aed81`), citing the composition that makes it
+> redundant: `B2O` proves the callee's seed is the edge target, this plane proves
+> the descriptor is positional for its unit, and together they give exactly what
+> the deleted arm asserted. ⇒ **The property is enforced; what was deleted is a
+> restatement.**
+>
+> ★ **Caught pre-review rather than in a fold**, and the amendment had said
+> applying it while writing `D5` would be the cheaper order. It was.
+>
+> **Three more from that report, all self-reported:**
+>
+> 1. ⛔ **A FALSE NEGATIVE in the provenance instrument** — the check certifying
+>    "this mutation applied" reported `applied=False` for two mutations that **had**
+>    landed, because it counted the anchor *after* replacement and **the
+>    replacement string contains the anchor.** It would have discarded two sound
+>    results as unproven. ⇒ **This refines my own `pin-a-property` §10 text, which
+>    only guards the false-positive direction.** Fold it in.
+> 2. **`AC-9` predicted 0, measured 13 — missed by the whole population.** Adding a
+>    file to `BACKEND_PRODUCTION_SOURCES` changes the input to **every** pin
+>    iterating that list; one registration produced the entire miss.
+> 3. **`E4` came back CANNOT COMPILE where REDDENS was predicted**, and rather than
+>    bank the stronger result it ran `E4b` on the route that *does* compile — so
+>    both layers are real. That is §1's compiler-first rule applied correctly.
+>
+> ⚠ **The inline-`mod` enumerator hole appeared in a THIRD substrate** and was
+> correctly deferred to `RT-FNSPLIT-B2O-CHECK` rather than repaired in-scope.
+>
+> ### ⇢ `AC-11` — the amendment I made to a frame already in flight
+>
+> Posted `evt_402k03g5afxnh`, delivery-verified on both seats; `runtime-leader`
+> folded it into its assignment 22s later (`evt_23d9vzmkb5d3b`) and did **not**
+> mention me, so nothing is owed back.
+>
+> **`D5` is a six-class validator, and I found the analogous validator one node
+> down advertising 12 laws with 5 live detectors.** `validate_function_units`
+> (`semantic_ir.rs:987`) opens at `:993` by calling `partition_function_units`,
+> which at `:657` rejects the identical condition that the arm at `:1121` tests —
+> so that arm **cannot fire**, and it is also the **only quadratic check**
+> (`Vec::contains` over all edges). I re-measured both call sites and both error
+> strings myself; `B3`'s vacuous conjunct at `:1006` and the enumerator filter at
+> `control.rs:3722` too. The six witness-less arms and the zero-instance capture
+> class are the Adversary's, **relayed unverified and labelled as such.**
+>
+> ⭐ **Why it had to reach the ring mid-build rather than wait:** the gap is
+> **inherited silently.** Every law is *stated*, the validator *is* fail-closed on
+> the paths that do fire, and no test measures which arm caught what — so `B2R`
+> would have counted twelve and gotten five with nothing reddening. `AC-11` adds
+> **evidence obligations only**, no mechanism, no scope growth.
 >
 > **`origin/main` = `c5edea8b`.** Landed this pass, all blob-verified: **#961**
 > (§14a fails closed) · **#962** (`AC-12` ruling) · **#963** (`RT-FNSPLIT-B2O`,
@@ -66,12 +143,13 @@
 >
 > | # | item |
 > |---|---|
-> | 38 | frame the inline-`mod` blind spot in the production-surface pin (2nd hole in that enumerator; needs **structural** closure, not a 3rd spelling) |
-> | 12 | harvest the `B2O` + `B1R` retros into the playbook corpus — **batch, do not publish singly** (§10⁻ rule 2) |
-> | 37 | `agent/memory/roles/librarian/` does not exist though CLAUDE.md routes there; also sweep the scope table for other phantom scopes |
+> | 40 | **verify #965 merged**, blob-check per file, post the fetchable ref into `thr_7c9rh0bb9sj0r`, reset `steward/work`, **carry `2b931911` + `68bf9012`** |
+> | 38 | frame **`RT-FNSPLIT-B2O-CHECK`** shovel-ready — the node is filed (`ready`/`S`), the frame is not. Needs structural **item-head** closure + a reachability row per advertised law |
+> | 12 | `B2O` harvested at `2b931911`; **`B1R` retros still owed** — batch, do not publish singly (§10⁻ rule 2) |
+> | ~~37~~ | ✅ done at `68bf9012` — the gap was wider than `librarian`: `teams/runtime` was missing too, on the team building right now |
 > | 5 | frame `ABI-S3` |
 > | 8 | on FNSPLIT close, release `KW-THEOREM` to the spec enclave (compact it first) |
-> | 11 | `DOC-GATE-NEEDLE` — operator-held |
+> | 11 | `DOC-GATE-NEEDLE` — operator-held. ⛔ `DOC-ATTEST-LIVING` likewise: **do not release, do not re-ask** (frontmatter reads `ready`; the hold lives in body text) |
 >
 > ### ⇢ THE FOLD SEQUENCE THAT CLOSED IT — four SHAs, each a real finding
 >
@@ -2925,8 +3003,10 @@ git ls-remote origin refs/heads/<branch>   # MUST equal the requested SHA
 ```
 
 If it does not match, **push it yourself** — mint via
-`.devcontainer/mint-gh-token.sh`, then
-`git push https://x-access-token:$TOKEN@github.com/ken-topos/ken.git <sha>:refs/heads/<branch>`,
+`.devcontainer/mint-gh-token.sh`, then push to a URL **derived from `origin`**
+(`git remote get-url origin | sed "s|https://|https://x-access-token:${T}@|"`) —
+⛔ **never a hardcoded org**, which the 2026-07-25 `ken-topos` → `swe-toolkit`
+rename would have silently broken behind GitHub's redirect —
 and **re-verify with `ls-remote` after**. Often a clean fast-forward (the stale
 head is an ancestor) — check before assuming a force is needed.
 

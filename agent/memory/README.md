@@ -61,8 +61,23 @@ An agent loads **its path + ancestors**. Examples:
 
 | Role | Loads |
 |---|---|
-| `kernel-qa` | `fleet` + `build` + `build/qa` + `teams/kernel` + `roles/kernel-qa` |
+| `kernel-qa` | `fleet` + `build` + `build/qa` + `teams/kernel` |
 | `steward` | `fleet` + `enclave` + `roles/steward` |
+| `librarian` | `fleet` + `roles/librarian` + **`teams/doc`** (it is the doc team's QA) |
+
+⚠ **Build-team seats have no `roles/<team>-<seat>` scope** — a build seat's
+identity is covered by the function scope (`build/qa`) crossed with the team
+scope (`teams/kernel`), which is the whole point of the two parallel branches.
+`roles/` is for the **singleton** roles that no function scope describes.
+**`CLAUDE.md`'s routing table is the authority** if this document and it ever
+disagree.
+
+★ **An absent or empty scope is a normal state, not a defect or a missing
+read.** It means that scope has not yet paid for a lesson. Every scope named in
+the tree above exists as a folder with a `README.md` stating its charter, so a
+role that follows its routing never lands on a path that isn't there — but
+finding only the `README.md` is the expected outcome for a young scope, and it
+is not a signal to go looking elsewhere.
 
 Function is the primary axis; `teams/` is a parallel branch a role also pulls,
 so "all leaders" (`build/leaders`) and "all kernel" (`teams/kernel`) coexist
