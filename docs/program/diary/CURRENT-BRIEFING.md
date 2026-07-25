@@ -21,6 +21,73 @@
 > and collectively they turned the resume anchor into a trap. **The only live
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
+
+## ✅ LIVE — 19:35Z. `origin/main` = **`1e09a30a`** (PR **#969**). TASK #43 DONE.
+
+**`steward/work` = `1e09a30a`, clean, nothing unpublished. Publish queue empty.
+I owe nothing.**
+
+### What just landed — the `B2F` frame re-anchor
+
+PR #969, doc-only, three files, **all blob-identical on `main`**:
+`docs/program/wp/RT-FNSPLIT-B2F-functionization.md`,
+`docs/program/issues/RT-FNSPLIT-B2F.md`, `IMPLEMENTATION-PROGRESS.md`.
+Node **flipped `draft` → `ready`**; tracker row confirmed `ready` on `main`.
+
+The frame is re-anchored at `bd24422b`. The stale-premise hazard is **gone**:
+the discharged-hold block replaces `HELD AT HARD-STOP #9`, and the *"prerequisite
+missing and unowned"* language now names `B2O` (#963) and `B2R` (#967). ⚠ One
+`missing and unowned` string survives **by design** — it is the signpost at
+frame `:28-30` telling a reader looking for it that it merged.
+
+Also folded in: `D1`–`D3` re-cut construct → consume-and-enforce; the corrected
+seed set (`plan.entries` ∪ `StaticBody` **targets**, *not* `ClosureBody` heads);
+new **`AC-11`** (boundary-slot representability — the adversary's `C4` finding on
+`abi.rs`) and **`AC-12`** (ownership modes obeyed, not re-read); `AC-G0` recorded
+answered (6 defs / 8 decls, Θ(1)).
+
+---
+
+### ▶ NEXT ACTION — §2c gate, then kick Runtime on `B2F`. Four things to carry:
+
+**1. ⛔⛔ `wp/RT-FNSPLIT-B2F-functionization` ALREADY EXISTS ON `origin` at
+`fbe206a7`** — the pre-#9 held branch, from the kickoff that hard-stopped. No
+worktree holds it (all three Runtime seats are on `<role>/work`), so nothing is
+blocked — **but the ring must cut its build branch FRESH from current
+`origin/main`, and a fresh branch of that name will REJECT the push against the
+stale remote ref.** Decide before kicking: delete the remote ref, or name the
+kickoff's branch explicitly. Do **not** let the ring discover this at push time.
+
+**2. Ring state, measured 19:33Z.** All three IDLE, sweep clear.
+`runtime-implementer` = **Claude Code, Opus 5, ctx 0%**. `runtime-leader` and
+`runtime-qa` are **Codex/terra** panes (`gpt-5.6-terra medium`) idle at
+ghost-text (`› Write tests for @filename` / `› Explain this codebase` — **that is
+a suggestion, not state**). All three were compacted at the `B2R` close-out seam
+with drops verified. ⚠ Codex panes need the **`-l` literal** send and a
+**post-compaction rouse**; a mention alone will not wake them.
+
+**3. Route ONE question to the Architect** (§2 scope-checkpoint = Steward ruling
++ exactly one confirming gate, ring notified-and-proceeds). My ruling, already
+written into `AC-11`: the adversary's `P1` repair to `abi.rs`'s `C4` exclusion
+**rides `RT-FNSPLIT-B2O-CHECK` (widened to `abi.rs`, with `P2`), not `B2F`** —
+`B2F` instead establishes representability at the slots it emits. The Architect
+confirms the soundness axis. ⭐ **This is safe to kick against:** the ruling can
+only be *relaxed* by the answer, never invalidated, and the ring's first work
+(`D1`/`D2`) does not touch it.
+
+**4. On kickoff, flip the node `ready` → `active`** (§2c step 8) and bundle the
+tracker regen into the next publish. This step is a *repeated* miss — three in
+one session on 2026-07-22.
+
+### Also owed
+
+- **Re-arm the watchdog** — its STATE block is stale (says `main = c986d0a3`,
+  and says `steward/work` is ahead and unpublished; both were true two publishes
+  ago). Re-arm at 900s with `main = 1e09a30a`.
+- Task **#38** — frame `RT-FNSPLIT-B2O-CHECK`. ⭐ **Its scope just grew:** the
+  adversary's `P1` + `P2` on `abi.rs` route here.
+- Tasks **#12** (B1R retros, batch), **#5** (`ABI-S3`), **#8** (`KW-THEOREM` on
+  FNSPLIT close), **#11** (`DOC-GATE-NEEDLE` — ⛔ operator-held, do not re-ask).
 > ## ✅✅ LIVE STATE — 2026-07-25 T18:10Z. **`B2O` IS CLOSED. `B2R` IS ACTIVE AND
 > ## BUILDING, WITH `AC-11` AMENDED IN MID-FLIGHT.** **I owe nothing.**
 >
