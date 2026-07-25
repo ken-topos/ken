@@ -1,0 +1,9 @@
+Classify each observation by the earliest failing layer and give the next
+narrow check. Do not rewrite the program.
+
+A. `unexpected character '#'` at byte 0 while reading a plain `.ken` file.
+B. `unknown name Missing` while elaborating a parsed declaration.
+C. `Refl expects an Eq-shaped goal` for an equality whose concrete endpoints
+   both reduce to `True`.
+D. `ken check` succeeds, then `ken run` reports a missing `Console`
+   capability at the entrypoint.

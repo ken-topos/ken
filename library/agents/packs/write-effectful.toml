@@ -1,0 +1,9 @@
+schema_version = 1
+id = "write-effectful"
+purpose = "Add an effectful boundary with an explicit row and authority supply."
+triggers = ["write an effectful procedure", "add a capability boundary", "use a handler"]
+exclusions = ["FFI declaration", "unsupported host capability", "platform ABI work"]
+dependencies = ["write-pure"]
+includes = [
+  "tasks/effects-and-capabilities",
+]

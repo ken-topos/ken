@@ -1,0 +1,3 @@
+Write a pure Boolean conjunction named `both` and a checked law showing that
+`both True True` is `True`. Return the complete Ken source and the exact
+commands that validate and format it. Do not add an assumption or primitive.

@@ -4,7 +4,7 @@
 is this file's one job: it is anchored to two DISTINCT values, never a
 typed date (docs/program/12-documentation-program.md §2).
 
-**Provenance revision:** `dd715950869502241a1577838e75ef50fc3d341d`
+**Provenance revision:** `a9860e9c1617e98799ac408fad8ef1e9c7085443`
 
 Recorded explicitly in `library/REVISION`, not derived from `git
 rev-parse HEAD` at generation time. A live-HEAD anchor is self-
@@ -16,7 +16,7 @@ proves `library/` already existed at some point on `main`'s history.
 **It does not, by itself, certify any cited source's bytes** (SRC-ATTEST
 Part 1) — that claim is the attested source-set digest below.
 
-**Attested source-set digest:** `7a40ae881102655e8f50232cd9fb7ed8f9469de6c7b1bdf5055d2e3349e6cf46`
+**Attested source-set digest:** `f591df46c10dcbd8872b3e5c0b17b044f267b37a058c48eb25296c6a54107251`
 
 The SHA-256 of `library/SOURCE-ATTESTATIONS`, the ledger binding every
 manifest-cited source to its exact blob OID at the commit the Librarian
@@ -34,6 +34,18 @@ A document with no row here has no manifest entry and fails gate 1.
 | Path | Kind | Authority | Availability |
 |---|---|---|---|
 | `library/README.md` | portal | explanatory | current |
+| `library/agents/README.md` | portal | explanatory | current |
+| `library/agents/core/read-ken.md` | reference | derived-reference | current |
+| `library/agents/core/write-ken.md` | reference | how-to | current |
+| `library/agents/core/proof-and-trust.md` | reference | derived-reference | current |
+| `library/agents/core/toolchain.md` | reference | derived-reference | current |
+| `library/agents/tasks/read-review.md` | reference | how-to | current |
+| `library/agents/tasks/write-program.md` | reference | how-to | current |
+| `library/agents/tasks/author-package.md` | reference | how-to | current |
+| `library/agents/tasks/prove-or-repair.md` | reference | how-to | current |
+| `library/agents/tasks/diagnose.md` | reference | how-to | current |
+| `library/agents/tasks/effects-and-capabilities.md` | reference | how-to | current |
+| `library/agents/evaluations/README.md` | reference | how-to | current |
 | `library/introduction.md` | explanatory | explanatory | current |
 | `library/learn/reading-ken/fragments.md` | reference | derived-reference | current |
 | `library/learn/reading-ken/01-anatomy.md` | explanatory | explanatory | current |
@@ -48,7 +60,7 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/quickstart.md` | tutorial | tutorial | current |
 | `library/STATUS.md` | status | status | current |
 
-**Total:** 14 registered document(s).
+**Total:** 26 registered document(s).
 
 ## Regenerating
 

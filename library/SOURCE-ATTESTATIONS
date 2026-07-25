@@ -3,6 +3,8 @@
 996ca2137ff8141755ba7cf31157ef1212ba606e	README.md
 ba72396b7fac154fdb333017840100d26e25f961	catalog/examples/CommandLine/Forge.ken.md
 8ece24e734baf90ea149c11326229202eaeca404	catalog/guide/decomposition-abstraction.ken.md
+29a5d54225f16a3116fae93cc57c00941ef04424	catalog/guide/proof-techniques.ken.md
+003d91630e6cbd8646fb319e3a9e42d7d40c44b6	catalog/guide/surface-reference.ken.md
 0266a7a7ffb3e9464e783daf6565d50f2f73e2d7	catalog/packages/Capability/Console/Text.ken.md
 59fbe76dde61a9ab3a1d4599088c60f04502ea89	catalog/packages/Capability/Filesystem/Errors.ken.md
 573e67eb6f7745ac4902149ac892717aaee2655e	catalog/packages/Capability/System/IO.ken.md
@@ -32,6 +34,7 @@ ef2c5db706589ff37dbf0f87e0a71602b66c75db	crates/ken-interp/src/eval.rs
 a188061aa4440c0e6e1a0500e15ab4816a736c88	docs/program/12-documentation-program.md
 fe4962a1f008b08a1d4ba2c049bc84e665e1eaed	docs/program/issues/CAT-CAPEX.md
 286e23e0c7c362227ff555528b759722d9798930	docs/program/issues/DOC-W1.md
+5ffe02bd6938e15a49639dcd76c8276762d32287	docs/program/issues/DOC-W2.md
 54dbbe361511149369364e4efbf083fb1a82238e	library/learn/reading-ken/fragments.md
 44e3a9cbe2aa5c1a135cf5b920b65ccbdcb8fede	spec/00-overview.md
 28f25ae1bff01aaa438777e5085adb2a7ac9a53e	spec/20-verification/21-spec-syntax.md

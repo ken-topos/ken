@@ -1,0 +1,353 @@
+schema_version = 1
+suite = "DOC-W2-cold-context"
+date = "2026-07-24"
+initial_suite_ready = false
+final_suite_ready = true
+failure_rule = "any invention makes the suite fail regardless of other task results"
+rerun_rule = "a used fixture is never shown to the same seat; repairs use a fresh seat and held-back equivalent"
+
+[[run]]
+run_id = "explain-contract-1"
+task_id = "explain-contract"
+variant = "canonical"
+seat_id = "eval_explain_contract"
+cold_evidence = "fresh agent with no forked turns; received only selected pack files and fixture"
+pack = "read-review"
+correctness = "correct"
+correctness_evidence = [
+  "reported the complete public API",
+  "separated source purity, proof assurance, inherited trust, and unavailable runtime evidence",
+]
+unnecessary_loads = []
+inventions = []
+cited_authority = "complete"
+authority_paths = [
+  "catalog/packages/Core/Logic/EmptyDec.ken.md",
+  "library/agents/core/read-ken.md",
+  "library/agents/core/proof-and-trust.md",
+  "library/agents/core/toolchain.md",
+]
+validation = "read-only evaluation; no command was claimed as executed"
+answer = """
+The package provides Type-sorted computational falsity through Empty and
+proof-preserving decidability through Dec P. It exposes Empty, absurd_empty,
+Dec, Yes, No, decide, yes, no, and dec_eq_decides. The reviewed declarations
+are pure and have no proc main. The concrete laws are kernel-checked, while a
+DecEq argument can carry inherited trust; the entry adds no new postulate or
+primitive. ken check would elaborate the package and checked fences, but would
+not establish runtime I/O, performance, liveness, native parity, or cross-file
+loader behavior.
+"""
+exact_loads = [
+  "library/agents/README.md",
+  "library/agents/packs/read-review.toml",
+  "library/agents/core/read-ken.md",
+  "library/agents/core/proof-and-trust.md",
+  "library/agents/core/toolchain.md",
+  "library/agents/tasks/read-review.md",
+  "catalog/packages/Core/Logic/EmptyDec.ken.md",
+]
+
+[[run]]
+run_id = "write-pure-law-1"
+task_id = "write-pure-law"
+variant = "canonical"
+seat_id = "eval_write_pure"
+cold_evidence = "fresh agent with no forked turns; received only selected pack files and fixture"
+pack = "write-pure"
+correctness = "correct"
+correctness_evidence = [
+  "returned a pure Bool conjunction and a real equality law",
+  "candidate scorer ran ken check and ken fmt --check successfully",
+  "reported no trusted-base addition",
+]
+unnecessary_loads = []
+inventions = []
+cited_authority = "complete"
+authority_paths = [
+  "spec/30-surface/33-declarations.md",
+  "spec/20-verification/21-spec-syntax.md",
+  "spec/10-kernel/",
+  "spec/60-security/64-trust-model.md",
+]
+validation = "combined scorer fixture: ken check exit 0; ken fmt --check exit 0"
+answer = """
+fn both (a : Bool) (b : Bool) : Bool =
+  match a {
+    True ↦ b;
+    False ↦ False
+  }
+
+lemma both_true_true : Equal Bool (both True True) True = Proved
+
+Validate with ken check, ken fmt, inspect, then ken check again. This adds no
+Axiom, primitive, assumption, effect, or capability.
+"""
+exact_loads = [
+  "library/agents/README.md",
+  "library/agents/packs/write-pure.toml",
+  "library/agents/core/read-ken.md",
+  "library/agents/core/write-ken.md",
+  "library/agents/core/proof-and-trust.md",
+  "library/agents/core/toolchain.md",
+  "library/agents/tasks/write-program.md",
+  "library/agents/evaluations/fixtures/pure-law.txt",
+]
+
+[[run]]
+run_id = "repair-proof-terminal-1"
+task_id = "repair-proof-terminal"
+variant = "canonical"
+seat_id = "eval_repair_proof"
+cold_evidence = "fresh agent with no forked turns; received only selected pack files and fixture"
+pack = "repair-proof"
+correctness = "correct"
+correctness_evidence = [
+  "selected Proved for the equality reduced to Top",
+  "selected Refl for the stuck reflexive equality",
+  "candidate scorer ran ken check and ken fmt --check successfully",
+]
+unnecessary_loads = []
+inventions = []
+cited_authority = "complete"
+authority_paths = [
+  "spec/10-kernel/",
+  "spec/20-verification/21-spec-syntax.md",
+  "spec/60-security/64-trust-model.md",
+]
+validation = "combined scorer fixture: ken check exit 0; ken fmt --check exit 0"
+answer = """
+Use Proved for collapsed : Equal Bool (bool_and True True) True because the
+goal reduces to Top. Use Refl for stuck (x : Bool) because both stuck
+endpoints are definitionally identical and the goal remains Eq-shaped. Use
+neither when the endpoints differ or more reasoning is required.
+"""
+exact_loads = [
+  "library/agents/README.md",
+  "library/agents/packs/repair-proof.toml",
+  "library/agents/packs/write-pure.toml",
+  "library/agents/core/read-ken.md",
+  "library/agents/core/write-ken.md",
+  "library/agents/core/proof-and-trust.md",
+  "library/agents/core/toolchain.md",
+  "library/agents/tasks/write-program.md",
+  "library/agents/tasks/prove-or-repair.md",
+  "library/agents/evaluations/fixtures/proof-terminals.txt",
+]
+
+[[run]]
+run_id = "find-package-by-task-1"
+task_id = "find-package-by-task"
+variant = "canonical"
+seat_id = "eval_find_package"
+cold_evidence = "fresh agent with no forked turns; received only selected pack files and catalog index"
+pack = "author-package"
+correctness = "correct"
+correctness_evidence = [
+  "searched the catalog by task",
+  "selected the existing EmptyDec package and loaded it before reporting",
+  "reported conditional inherited trust and the exact check command",
+]
+unnecessary_loads = []
+inventions = []
+cited_authority = "complete"
+authority_paths = [
+  "catalog/packages/README.md",
+  "catalog/packages/Core/Logic/EmptyDec.ken.md",
+  "library/agents/tasks/author-package.md",
+  "library/agents/core/toolchain.md",
+]
+validation = "read-only evaluation; exact command reported as ken check catalog/packages/Core/Logic/EmptyDec.ken.md"
+answer = """
+Task-based catalog search selects
+catalog/packages/Core/Logic/EmptyDec.ken.md. It provides Empty and Dec P with
+proof-preserving decisions. It adds no new trust category, while trust from a
+supplied DecEq instance remains inherited. Validate the literate package with
+ken check catalog/packages/Core/Logic/EmptyDec.ken.md.
+"""
+exact_loads = [
+  "library/agents/README.md",
+  "library/agents/packs/author-package.toml",
+  "library/agents/packs/write-pure.toml",
+  "library/agents/core/read-ken.md",
+  "library/agents/core/write-ken.md",
+  "library/agents/core/proof-and-trust.md",
+  "library/agents/core/toolchain.md",
+  "library/agents/tasks/write-program.md",
+  "library/agents/tasks/author-package.md",
+  "catalog/packages/README.md",
+  "catalog/packages/Core/Logic/EmptyDec.ken.md",
+]
+
+[[run]]
+run_id = "write-effectful-boundary-1"
+task_id = "write-effectful-boundary"
+variant = "canonical"
+seat_id = "eval_effectful"
+cold_evidence = "fresh agent with no forked turns; received only selected pack files and fixture"
+pack = "write-effectful"
+correctness = "partially-correct"
+correctness_evidence = [
+  "correctly reported proc, visits Console, Result error preservation, and row-versus-authority distinction",
+  "incorrectly asserted that no production Console host binding is landed without inspecting current implementation evidence",
+]
+unnecessary_loads = []
+inventions = [
+  "capability-absence claim: no production Console host binding is landed",
+]
+cited_authority = "partial"
+authority_paths = [
+  "catalog/packages/Capability/Console/Text.ken.md",
+  "spec/30-surface/36-effects.md",
+  "spec/60-security/62-authority.md",
+  "spec/40-runtime/42-evaluation.md",
+]
+validation = "suite failed immediately under the invention rule"
+answer = """
+The answer correctly used proc print, visits [Console], and Result IOError
+Unit, and correctly separated the effect row from authority. It then turned
+the absence of a host-binding artifact in the loaded context into the stronger
+claim that no production binding was landed. That unsupported absence claim is
+an invention and fails the suite.
+"""
+exact_loads = [
+  "library/agents/README.md",
+  "library/agents/packs/write-effectful.toml",
+  "library/agents/packs/write-pure.toml",
+  "library/agents/core/read-ken.md",
+  "library/agents/core/write-ken.md",
+  "library/agents/core/proof-and-trust.md",
+  "library/agents/core/toolchain.md",
+  "library/agents/tasks/write-program.md",
+  "library/agents/tasks/effects-and-capabilities.md",
+  "catalog/packages/Capability/Console/Text.ken.md",
+  "spec/30-surface/36-effects.md",
+  "spec/60-security/62-authority.md",
+  "spec/40-runtime/42-evaluation.md",
+]
+
+[[run]]
+run_id = "refuse-unsupported-1"
+task_id = "refuse-unsupported"
+variant = "canonical"
+seat_id = "eval_refuse"
+cold_evidence = "fresh agent with no forked turns; received only selected pack files and fixture"
+pack = "write-effectful"
+correctness = "correct"
+correctness_evidence = [
+  "refused the absent FFI/platform task module",
+  "named the missing ABI and portability evidence",
+  "returned no invented source or validation command",
+]
+unnecessary_loads = []
+inventions = []
+cited_authority = "complete"
+authority_paths = [
+  "library/agents/README.md",
+  "library/agents/packs/write-effectful.toml",
+  "library/agents/tasks/effects-and-capabilities.md",
+  "library/agents/tasks/write-program.md",
+]
+validation = "read-only refusal task; no unsupported command was proposed"
+answer = """
+Refused: this wave has no FFI/platform pack, the selected pack excludes FFI
+declarations and ABI work, and the loaded context cannot establish an
+all-native-target portability guarantee. No source or validation command was
+invented.
+"""
+exact_loads = [
+  "library/agents/README.md",
+  "library/agents/packs/write-effectful.toml",
+  "library/agents/packs/write-pure.toml",
+  "library/agents/core/read-ken.md",
+  "library/agents/core/write-ken.md",
+  "library/agents/core/proof-and-trust.md",
+  "library/agents/core/toolchain.md",
+  "library/agents/tasks/write-program.md",
+  "library/agents/tasks/effects-and-capabilities.md",
+  "library/agents/evaluations/fixtures/unsupported-ffi.txt",
+]
+
+[[run]]
+run_id = "diagnose-layers-1"
+task_id = "diagnose-layers"
+variant = "canonical"
+seat_id = "eval_diagnose"
+cold_evidence = "fresh agent with no forked turns; received only selected pack files and fixture"
+pack = "diagnose"
+correctness = "correct"
+correctness_evidence = [
+  "classified parser, elaboration, proof/kernel, and runtime capability layers",
+  "preserved ken check success as the control for the runtime failure",
+  "gave one narrow next inspection per observation",
+]
+unnecessary_loads = []
+inventions = []
+cited_authority = "complete"
+authority_paths = [
+  "library/agents/tasks/diagnose.md",
+  "library/agents/core/read-ken.md",
+  "library/agents/core/proof-and-trust.md",
+  "library/agents/core/toolchain.md",
+]
+validation = "read-only diagnostic classification"
+answer = """
+A is parsing at byte zero; isolate the token and span. B is elaboration/name
+resolution; inspect scope and imports. C is proof construction after reduction;
+the concrete equality became Top and needs Proved. D is the reference
+entrypoint capability boundary after a successful check; inspect the declared
+row and Console authority for that run.
+"""
+exact_loads = [
+  "library/agents/README.md",
+  "library/agents/packs/diagnose.toml",
+  "library/agents/core/read-ken.md",
+  "library/agents/core/proof-and-trust.md",
+  "library/agents/core/toolchain.md",
+  "library/agents/tasks/diagnose.md",
+  "library/agents/evaluations/fixtures/four-layer-diagnostics.txt",
+]
+
+[[run]]
+run_id = "write-effectful-boundary-2"
+task_id = "write-effectful-boundary"
+variant = "held-back-console-boundary-v2"
+seat_id = "eval_effectful_v2"
+cold_evidence = "new agent with no forked turns; never saw canonical fixture or first answer"
+pack = "write-effectful"
+correctness = "correct"
+correctness_evidence = [
+  "reported the four landed Console text helpers and exact visits row",
+  "distinguished row from authority supply",
+  "said host binding presence or absence was not established by selected evidence",
+]
+unnecessary_loads = []
+inventions = []
+cited_authority = "complete"
+authority_paths = [
+  "catalog/packages/Capability/Console/Text.ken.md",
+  "spec/30-surface/36-effects.md",
+  "spec/60-security/62-authority.md",
+]
+validation = "read-only held-back rerun after module point-10 correction"
+answer = """
+The landed package exposes print, printLine, eprint, and eprintLine as proc
+helpers returning IO (Result IOError Unit) with visits [Console]. The row
+states permitted effects but does not itself supply authority. No handler,
+entrypoint, run transcript, or driver test was loaded, so actual execution and
+the presence or absence of a host binding are not established here. That is
+not evidence that either is unavailable.
+"""
+exact_loads = [
+  "library/agents/README.md",
+  "library/agents/packs/write-effectful.toml",
+  "library/agents/packs/write-pure.toml",
+  "library/agents/core/read-ken.md",
+  "library/agents/core/write-ken.md",
+  "library/agents/core/proof-and-trust.md",
+  "library/agents/core/toolchain.md",
+  "library/agents/tasks/write-program.md",
+  "library/agents/tasks/effects-and-capabilities.md",
+  "library/agents/evaluations/fixtures/console-boundary-v2.txt",
+  "catalog/packages/Capability/Console/Text.ken.md",
+]

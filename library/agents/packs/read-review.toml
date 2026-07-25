@@ -1,0 +1,12 @@
+schema_version = 1
+id = "read-review"
+purpose = "Explain an existing Ken artifact and report its contract and trust posture."
+triggers = ["review Ken source", "explain a declaration", "report trust posture"]
+exclusions = ["editing source", "proving a new theorem", "platform or FFI work"]
+dependencies = []
+includes = [
+  "core/read-ken",
+  "core/proof-and-trust",
+  "core/toolchain",
+  "tasks/read-review",
+]

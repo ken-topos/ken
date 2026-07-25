@@ -1,0 +1,12 @@
+schema_version = 1
+id = "diagnose"
+purpose = "Locate the earliest failing layer from parsing through native execution."
+triggers = ["diagnose a Ken failure", "minimize a diagnostic", "compare reference and native"]
+exclusions = ["unsupported host reproduction", "unbounded performance study"]
+dependencies = []
+includes = [
+  "core/read-ken",
+  "core/proof-and-trust",
+  "core/toolchain",
+  "tasks/diagnose",
+]
