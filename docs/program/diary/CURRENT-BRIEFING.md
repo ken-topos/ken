@@ -34,9 +34,33 @@
 > ✅ **ADVERSARY TRIAGE DONE. ✅ `B2F` FRAME WRITTEN AND `ready`. ✅ `B2B`
 > RE-DERIVED.** All three committed on `steward/work` (`8ce48a64`, `208989fd`).
 >
-> ## ⛔⛔ LIVE STATE T14:35Z — #9 IS **RULED**. `B2F` RE-SLICED INTO THREE NODES.
+> ## ⛔⛔ LIVE STATE — #9 RULED, `B2F` RE-SLICED, **`B2O` KICKED AND BUILDING**
 >
-> **`origin/main` = `52ded173`** (PRs #946/#947/#948). `B2F` was framed,
+> **`origin/main` = `6af1279b`.** Current act: the Runtime ring is executing
+> `RT-FNSPLIT-B2O`. See the ✅✅ block below for the landed gate + kickoff.
+>
+> ### ⚠ MY CONVO MCP CLIENT LINK IS DOWN — use the direct-API fallback
+>
+> **I killed it myself** with an unbounded `get_transcript(limit=1)`: the server
+> answered `200` with **`Content-Length: 31239188`** (31 MB) and the MCP client
+> link died on the oversized payload. ⛔ **`limit` did NOT bound that response.**
+> The **server is healthy** — every seat but mine is posting fine, and my own
+> `mcp-steward.log` shows clean `→ 200`s. This is not the 10k-event cap
+> ([[convo-space-not-active-is-really-the-10k-event-cap]]): that one is a `409` on
+> **append** with reads still working; this is the inverse.
+>
+> **Fallback that works, and it is my own seat's identity — not impersonation:**
+> `.moot/actors.json` holds `actors.steward.{api_key,actor_id}` (the same lookup
+> `.devcontainer/run-moot-mcp.sh` does). Poster:
+> `scratchpad/convo-post.py {status|post <type> <mentions-csv> <body-file>}` →
+> `POST /api/spaces/<id>/response`, verified `200` with a real `event_id`.
+> ⛔ **Never read another seat's key** — that posts as them.
+> ⇒ **Ask the operator to `/mcp` reconnect when convenient; do not restart the
+> session for it.** Reads are the loss, not writes.
+>
+> ### The #9 ruling
+>
+> Framed at `origin/main` = `52ded173` (PRs #946/#947/#948). `B2F` was framed,
 > published, kicked (`evt_70zv3m1er8ta8`), flipped `active` — the Runtime
 > implementer raised **#9 before writing any code** (`evt_197xpdavdyrn0`), tree
 > clean — and the Architect has now **ruled**. **COUNT OF RECORD = 9; its pull is
@@ -80,30 +104,46 @@
 > both cfg configurations pin the unchanged production census. ⛔ **No
 > encoder/decoder that creates a second live body-emission authority lands early.**
 >
-> ### ⇢⇢ NEXT ACT — ONE THING: §2c GATE, THEN KICK `B2O`. Nothing else is open.
+> ### ✅✅ `B2O` IS KICKED AND RUNNING — gate complete, ring `Working` (T14:4xZ)
 >
-> **`origin/main` = `3d5919cb`** (PRs #949/#950/#951, each content-verified and
-> tree-equal). `steward/work` re-rooted and clean.
+> **`origin/main` = `6af1279b`** (PRs #949–#953, each content-verified and
+> tree-equal). The §2c gate ran clean and **`RT-FNSPLIT-B2O` is `active`**.
 >
 > ✅ **DONE:** #9 transcribed and re-sliced · `B2O`+`B2R` issue files on `main` ·
 > `B2F` → `draft` with all three deps · parent ledger + armed trigger updated ·
-> evidence `fbe206a7` pushed off-box · **`B2O` frame written, Architect-reviewed,
-> amended, and FETCHABLE** at
-> `docs/program/wp/RT-FNSPLIT-B2O-body-ownership.md` (514 lines, **`D1` no longer
-> held**).
+> evidence `fbe206a7` pushed off-box · `B2O` frame written, Architect-reviewed,
+> amended, FETCHABLE (518 lines, `D1` released) · **all three Runtime seats
+> compacted and drop-verified on the `Context compacted` marker** · **kickoff
+> posted `evt_1qatsz7n0e80q`, all three seats confirmed `Working`** · issue
+> flipped `active` and the false `⛔ draft — FRAME NOT YET WRITTEN` header
+> replaced.
 >
-> ⇢ **THE ONLY REMAINING ACT: run the §2c gate on all three Runtime seats
-> (`moot-runtime-leader`, `-implementer`, `-qa`), verify each drop on the
-> `Context compacted` marker — NOT the lagging ctx% footer — then post ONE
-> mention-led kickoff naming the frame path and `origin/main = 3d5919cb`, confirm
-> each seat goes `Working`, and flip `RT-FNSPLIT-B2O` to `active` AS PART OF THE
-> KICKOFF (`scripts/gen-progress.sh`, bundle into the next publish).** All three
-> seats are Claude, so no Codex-first ordering applies; the ring is home and idle
-> **by my instruction** (`evt_21rbc9r82kz8s`), so an idle pane is expected and is
-> **not** a stall.
+> ⇢ **NEXT ACT: the ring is BUILDING. Do not interrupt it.** Wait for the
+> leader's progress posts or a hard-stop. Runtime WPs legitimately run **hours**
+> (`MODELS.md`) — an idle-looking pane on that ring is not a stall.
 >
-> ⚠ **Tell them the anchors moved:** the frame is authoritative, and the seed
-> population in any older prose ("root ∪ `ClosureBody` heads") is **wrong**.
+> ### ⛔ TWO PREMISES THAT WERE WRONG IN MY OWN CARRIED-FORWARD NOTES
+>
+> **1. "All three Runtime seats are Claude" was FALSE.** `runtime-leader` and
+> `runtime-qa` are **`gpt-5.6-terra`** (Codex, T2); only `runtime-implementer` is
+> Opus. So **Codex-first compaction ordering DID apply** and I nearly skipped it
+> on the strength of my own note. ⇒ **`MODELS.md` is explicit: a seat's tier is an
+> OBSERVATION — `capture-pane` and read the footer. Never carry a seat's model
+> forward in prose.** Codex seats show compaction as `Working`, then
+> `• Context compacted`; the Claude seat shows `Compacting conversation…` then
+> `Compacted` + ctx 0%.
+>
+> **2. The `B2O` issue file still said `⛔ draft — FRAME NOT YET WRITTEN. Do not
+> start.`** — false since PR #950, and **it was addressed to the exact ring I was
+> about to kick.** The tracker-flip step (§2c step 8) says flip `status:`; it does
+> **not** say sweep the prose the old status justified. ⇒ **A status flip has a
+> BODY-TEXT tail: grep the file for the gate the old status was enforcing.**
+>
+> ⚠ **The anchors moved and older prose is wrong:** the frame is authoritative,
+> and any description of the seeds as "root ∪ `ClosureBody` heads" is **wrong** —
+> including **the GitHub description of PR #950**, which I wrote pre-correction and
+> which no reviewer reads
+> ([[the-publish-description-is-the-one-artifact-no-reviewer-reviews]]).
 >
 > ### ⚠ Carry into the eventual `B2F` re-cut — not now
 >
