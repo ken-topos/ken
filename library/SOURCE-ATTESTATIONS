@@ -34,7 +34,7 @@ ef2c5db706589ff37dbf0f87e0a71602b66c75db	crates/ken-interp/src/eval.rs
 a188061aa4440c0e6e1a0500e15ab4816a736c88	docs/program/12-documentation-program.md
 fe4962a1f008b08a1d4ba2c049bc84e665e1eaed	docs/program/issues/CAT-CAPEX.md
 286e23e0c7c362227ff555528b759722d9798930	docs/program/issues/DOC-W1.md
-bb9a7d3a8f233ef6ed9db109c78d61a010d9040a	docs/program/issues/DOC-W2.md
+5ffe02bd6938e15a49639dcd76c8276762d32287	docs/program/issues/DOC-W2.md
 54dbbe361511149369364e4efbf083fb1a82238e	library/learn/reading-ken/fragments.md
 44e3a9cbe2aa5c1a135cf5b920b65ccbdcb8fede	spec/00-overview.md
 28f25ae1bff01aaa438777e5085adb2a7ac9a53e	spec/20-verification/21-spec-syntax.md
