@@ -4203,7 +4203,9 @@ fn no_collection_is_keyed_by_a_scheduling_entry() {
 /// and still been wrong. For the 14 caller-dependent sites the answer genuinely
 /// *is* a function of the reaching path — the same parameter carries both a
 /// retained body and ordinary sub-expressions — and no per-site row can say that.
-/// A route with one pinned consumer can.
+/// The **validated owner partition** can: an occurrence's `StaticOriginId`, its
+/// `SemanticOwner`, and the planned edge kind answer it per occurrence, which is
+/// the only authority here.
 #[test]
 fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
     // Promise class: durable invariant — a relation over the production source,
@@ -4345,8 +4347,12 @@ fn the_owner_classification_is_named_in_production_only_by_the_module_that_defin
     );
 
     // The allowed inventory of widened visibility in the plane. ⛔ Asserted as
-    // the exact permitted set, not as a scan for a forbidden spelling: widening
-    // the owner surface is the only way to make an emission edge representable.
+    // the exact permitted set, not as a scan for a forbidden spelling, so that
+    // ANY new widening reddens -- including one nobody imagined.
+    //
+    // ⚠ This is a DECLARATION inventory. It records which items are widened; it
+    // does not entail anything about what is representable or reachable, because
+    // visibility bounds NAMING, not reaching.
     let plane = include_str!("../../../planning/static_transition/semantic_ir.rs");
     let widened = plane
         .lines()
@@ -4359,8 +4365,12 @@ fn the_owner_classification_is_named_in_production_only_by_the_module_that_defin
         vec!["pub(in crate::cranelift_backend) struct StaticOriginId(pub(super) u32);"],
         "D7: the plane's widened-visibility inventory changed. `StaticOriginId` \
          is widened deliberately so the lowering can carry an occurrence's \
-         static name; widening the OWNER surface would make an emission edge \
-         representable, which is what inertness forbids"
+         static name.\n\
+         ⚠ This is a DECLARATION inventory, not a proof of inertness: a \
+         widening of the OWNER surface is a DELIBERATE REVIEW EVENT that must \
+         be argued here, not absorbed. It entails nothing by itself about what \
+         is representable or reachable -- inertness is pinned behaviorally by \
+         `correspondence_adds_no_emitted_unit_to_the_production_census`"
     );
 
     // Non-vacuity: the needle must occur somewhere, or both assertions above are
