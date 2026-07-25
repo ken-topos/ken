@@ -5,8 +5,8 @@ status: draft
 owner: runtime
 size: TBD
 gate: none
-depends_on: []
-blocks: []
+depends_on: [ABI-R3]
+blocks: [ABI-A1, ABI-A2, ABI-A3, PX9]
 github: null
 origin: docs/program/09-posix-linux-abi-campaign.md §5 (charter gap); split out per operator directive 2026-07-22; was absent from docs/program/10-linux-abi-completion.md, added to its graph and coverage count in 835ce1c4
 ---

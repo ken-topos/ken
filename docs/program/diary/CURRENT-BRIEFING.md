@@ -5,30 +5,527 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-24 ~21:0xZ. OPERATOR IS PRESENT.**
+**As of 2026-07-24 ~22:20Z. OPERATOR IS PRESENT.**
 
 > ## ⇢ RESUME HERE — the frontier
 >
-> **`origin/main = f0ceb702`.** Merged today, all verified by content:
+> **`origin/main = bf8036c0`.** Merged today, all verified by content:
 > `DOC-GATE-RECORD-AXIS` `64b0811f` · **RT-NATIVE-FNSPLIT Boundary A**
-> `647a2e5b` · `DOC-GATE-CONTROL-BINDING` `f0ceb702` (tests 22→24 — the metric
-> that was **0** when I falsely claimed a positive control). All closed except
-> the last, whose retros are pending.
+> `647a2e5b` · `DOC-GATE-CONTROL-BINDING` `f0ceb702` · `RT-PLANNER-DIAGNOSTIC-K`
+> `36dd61f6`, plus steward publishes through #932.
 >
-> **IN FLIGHT: `RT-PLANNER-DIAGNOSTIC-K` — PR #929 at approved `913aded3`**, CI
-> running. Then **Boundary B1**.
+> ### ✅ BOTH LANDED. `origin/main = 5554b33f`.
 >
-> **Hard-stop #3 is RULED — fork (b)**, a closed semantic-IR arena
-> (`evt_49bnspfb74tne` + addendum `evt_3b2a75fcaegja`). I recut Boundary B into
-> **B1** (representation checkpoint, own review gate —
-> `wp/RT-NATIVE-FNSPLIT-recut-B1-semantic-ir.md`) **+ B2** (body port). ⛔ B1 is
-> NOT cut from `415b5aa7`; B2 does not start until B1 lands.
-> **Cadence = 3, pull consumed, next #6.**
+> - ✅ **`RT-NATIVE-FNSPLIT` Boundary B1 — `5554b33f`, PR #934. THE OPERATOR
+>   PRIORITY, DELIVERED.** Closed on the **first candidate** — no review folds, no
+>   re-anchor, no hard-stop. Verified by content: `semantic_ir.rs` present,
+>   **zero wildcard arms**, `build_semantic_plane` at 5 sites, `fixed_k`
+>   assertion intact, sibling `document-kind` row survived. **Retros IN.**
+> - ✅ **`DOC-GATE-WIRE-BINDING` — `a9860e9c`, PR #933.** Closes adversary I1.
+>   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
+>   the AC rather than gaming it.
 >
-> ⚠ **`steward/work` is re-anchored and ready to publish** (playbook gate step
-> 8b + tracker). ⚠ **FOUR single-ref exposures today**, three of them
-> reviewer-approved — gate step **8b** now makes `ls-remote` + Steward-side push
-> a step, not a reminder. Build seats have **no** credential by design.
+> ## ⇢ RESUME HERE FIRST — 2026-07-25 T02:30Z
+>
+> **`origin/main = 7151ae58`** · **`origin/steward/work = 9901cca5`** (pushed) ·
+> `wp/steward-process-batch` = `1f9bb4bf` (**PR #938, in CI**).
+>
+> ### ✅ B2A IS KICKED AND THE RING IS WORKING. THE FLEET IS NOT IDLE.
+>
+> **`RT-FNSPLIT-B2A` kicked at `evt_7j6ax916zks4b`** (2026-07-25 T02:2xZ),
+> `runtime-leader` **confirmed `Working`** and announced it would read the carried
+> frame and cut fresh from landed main. Status flipped **`active`**, tracker
+> regenerated. Full §2c gate ran: retros in · no in-flight obligation · quiescent
+> · all three seats compacted and **drops verified on the `Context compacted`
+> marker** (implementer reached `ctx 0%`) · contention checked on **both** axes.
+>
+> ### ⇢ THE NEXT ACT — WAIT ON TWO THINGS, then act on whichever lands first
+>
+> 1. **PR #938** — publisher is polling CI (log `$SCRATCH/batch-publish.log`; it
+>    block-buffers through a grep pipe, so `tail` the file, don't watch the pipe).
+>    On merge: **verify by content** —
+>    `git show origin/main:docs/program/wp/RT-NATIVE-FNSPLIT-recut-B2a-emission-port.md`
+>    — then flip nothing (it carries no WP of its own) and clear task #7.
+>    ⚠ **Measured before kicking: the merge-base intersection is EMPTY** (39
+>    branch paths, 0 under `crates/`; the 2 paths `main` moved are exactly B1R's).
+>    ⇒ **#938 will NOT revert B1R.** ★ I briefly thought it would, off a
+>    `main`-vs-branch diff that showed B1R content as "deleted" — **that is the
+>    wrong probe.** The detector is the *merge-base intersection*, always.
+> 2. **B2a hard-stop or fold** from `runtime-leader`. ⛔ **The next hard-stop on
+>    this chain is #6 and FIRES A RESEARCH PULL** — the Architect's ruling is
+>    gated *behind* the advisory. Dispatch `research` first; do not let the
+>    Architect rule ahead of it.
+>
+> ⛔ **HELD — do NOT release, operator-ruled (see §0-NOW-a):** `DOC-GATE-NEEDLE`
+> (verify) and `ABI-R1` (foundation). Both fully framed. **Fleet is FNSPLIT-only.**
+> ⇒ When a slot finally opens, **compact the receiving ring first** —
+> `verify-leader` and `verify-qa` have been sitting on "awaiting Steward
+> compaction" since 22:42, and `DOC-GATE-NEEDLE` is *verify-owned*, so that
+> compaction is the first half of that kickoff.
+>
+> ### ⚠ THE COUNT OF RECORD WAS STALE BY TWO STOPS — fixed, and it is a pattern
+>
+> `RT-NATIVE-FNSPLIT.md`'s armed counter read **`hard-stop count = 3`** while
+> stops **#4** (B2a pre-code; representation defect in landed B1) and **#5** (B1R
+> could not add the carrier without editing `lowering/core.rs`) had both happened
+> **and been ruled**. That is the exact line the file designates as *winning any
+> disagreement* with the Architect's re-derived count — so a stale value there is
+> worse than none: it would have deferred the research pull by three stops.
+> Corrected to **5**, both stops recorded with their ruling events.
+>
+> ★ **The lesson is structural, and it is the same one as the tracker-flip
+> defect: a counter is only authoritative if it is written AT the stop.** Writing
+> it "at the next seam that re-reads it" is how it silently drifts. ⚠ The B2a
+> **frame** still says "count is 3" — the issue file now states explicitly that
+> it wins, and the kickoff told the leader so.
+>
+> ⚠ **Also stale and NOT yet fixed:** `PX8` and `PX8-F-CAP-41` both read
+> `active` while nobody is working them (both are blocked, and the fleet is
+> FNSPLIT-only). They are program/parent nodes using `active` to mean "open",
+> which collides with `active` meaning "in flight with a seat" — and the frontier
+> pass reads that field. **Decide a spelling for open-but-unassigned program
+> roots rather than leaving two meanings on one value.**
+>
+> ### 0-NOW. What changed this session (supersedes the §0 below where they differ)
+>
+> - **`DOC-W2` MERGED** — PR #936, squash of frozen `e1524de1`, `main = d3b9f36c`.
+>   Acceptance re-verified **by content**, retros in from all three seats, status
+>   flipped `merged`. **Closed under §10.**
+> - **`RT-FNSPLIT-B1R` is DONE and PUBLISHING.** Fold `e58b3fa6`: QA PASS
+>   `evt_44jkp6x9hs9ch`, Architect APPROVE `evt_2gfbba92ka46`, Decision
+>   `dec_4mq4fwgp3pq7x` **verified `resolved` from the object**. **AC-3a
+>   discharged by me**: exactly 2 files, both `planning/**`. The re-slice held.
+> - **I pushed `e58b3fa6` myself — it was on ONE local ref, ZERO off-box copies.**
+>   Third session running. Build seats have **no** GitHub credential *by design*;
+>   this is a Steward primitive (`mint-gh-token.sh`), **not** an operator
+>   escalation. Tell rings to **report an unpushed ref and keep going**.
+> - **`DOC-GATE-NEEDLE` filed** (`ready`, owner `verify`) from adversary L1/L2 on
+>   DOC-W2. ⇒ **A confirmed live false-green**, re-grounded by me at
+>   `library_documentation_gates.rs:3589`/`:3617`: the assertion is
+>   `contains(constraint)` while `:3587` passes that same `constraint` as the
+>   **`location`**, and every message is `"{location}: …"` — **the needle is the
+>   haystack the caller supplied.** Measured pair: deleting `type` enforcement
+>   leaves **31 passed / 0 failed**; deleting `const` correctly FAILS.
+>   ⚠ **HELD, not released** — it touches `crates/ken-cli`, so it is **outside**
+>   the doc-track exception to the fleet's single-threaded build posture.
+>   **Widening that is the operator's call.** Frame is shovel-ready.
+> - **`ABI-R1` is UNBLOCKED.** Its ledger collision is discharged: the
+>   attestation row is **re-derived** — `Errors.ken.md` is now **row 9**, OID
+>   `59fbe76d` (was row 7). It is the one genuinely releasable ABI node;
+>   `ABI-S3` is Runtime-owned and still held behind FNSPLIT.
+> - **`moot.toml` header rewritten** — it claimed every seat ran direct on
+>   Anthropic with one claudex-proxy exception. **False:** 25 of 28 seats are
+>   native Codex, **no** seat runs sonnet-5, and no claudex route remains. Live
+>   file and the batch now agree.
+>
+> ### 0-NOW-a. ⛔ OPERATOR RULING 2026-07-25 — FNSPLIT-ONLY. SETTLED, do not re-ask.
+>
+> I put the concurrency fork to the operator: **two** framed shovel-ready WPs,
+> **two idle rings** with retros in, file sets **verified disjoint** pairwise and
+> against everything in flight. **Ruling: HOLD BOTH. The fleet remains strictly
+> single-threaded on `RT-NATIVE-FNSPLIT`.**
+>
+> | WP | owner | status | why it is not running |
+> |---|---|---|---|
+> | `DOC-GATE-NEEDLE` | verify | `ready` | operator hold — **not** for lack of a frame |
+> | `ABI-R1` | foundation | `ready` | operator hold — **not** for lack of a frame |
+>
+> ★★ **THE DURABLE RULE, and it corrects how I had been reading this:** the
+> doc-track concurrency exception is **DOC-ONLY**. Its stated basis —
+> contention-free-ness — explains *why doc got the exception*; it is **NOT** a
+> general licence for any contention-free WP to run in parallel.
+> ⇒ **Proving disjoint file sets does not earn a slot.** Only the operator widens
+> concurrency, and the answer here was no.
+>
+> ⛔ **Do not re-ask, and do not re-derive the contention analysis** hoping for a
+> different answer — a settled operator ruling is a fixed input. Both frames are
+> **complete**; the only missing thing is a slot. Release them when the FNSPLIT
+> chain closes.
+>
+> ### 0-NOW-b. TWO defects of mine, on the record
+>
+> - **I called the gate test file "NEW at 4007 lines" in the merge notification.
+>   It is MODIFIED, +1356/−1 (2652 → 4007)** — caught by the adversary, verified
+>   by me. That **under-scoped the blast radius** I handed the red team: 24
+>   pre-existing tests and four merged `DOC-GATE-*` WPs live in that file.
+>   ★ `wc -l` on a merged blob answers *how big is it now*, **never** *is it new*
+>   — I reported a derived measurement as a provenance claim.
+> - **My first DOC-W2 review pass reported 4 missing rules; 3 were FALSE**, from
+>   phrase-matching rules the fold had legitimately reworded. Re-ran by concept
+>   with a positive control before casting. **On a fold that rewords, text-matching
+>   manufactures gaps.**
+>
+> ### 0-NOW-c. Chain counters — ARMED, re-read these every hard-stop
+>
+> - **FNSPLIT hard-stop count = 5. NEXT RESEARCH PULL = #6.** ⚠ `research`'s own
+>   status says "#4, next pull #6" and is **stale**; **this tracker is the count
+>   of record.** Catch-up rule is in force (the chain once ran to 10 with the
+>   trigger never firing): if a stop passes un-pulled, fire at the **very next**
+>   one, do not wait for a clean multiple.
+> - **SYMPTOM INVENTORY: entry 1 only. NEXT PREDICATE CHECK = 3rd entry.** The
+>   Architect appends; I backstop the *question*, **never the answer**.
+>
+> ### 0. HISTORICAL — how `RT-FNSPLIT-B1R` was cut (kept for the reasoning; the
+> ### state above supersedes it)
+>
+> **B2a hard-stopped before any code** (hard-stop **#4**; next Research pull is
+> **#6**). The Architect ruled option **(B)** and correctly **stopped**, calling it
+> a representation recut rather than an in-slice ruling (`evt_7d5v99mh8n9cc`).
+>
+> ★ **Landed B1 contradicts B1's own frame.** `build_semantic_plane` manufactures
+> `0..source_material_elements` ordinal **placeholders** and stores no occurrence
+> atoms and no source-child origins — violating B1 D3 (out-of-line material) and
+> B1 D4 (no emission-time body reconstruction). **The Architect stated on the
+> record that the B1 review conclusion was wrong:** *"I approved B1 while reading
+> the counted placeholder arena as the material arena."*
+>
+> ⇒ **`RT-FNSPLIT-B1R` is B1's unfinished second half**, framed at
+> `docs/program/wp/RT-NATIVE-FNSPLIT-recut-B1R-semantic-material.md`, `active`,
+> **kicked and Working** on `wp/RT-FNSPLIT-B1R-semantic-material`.
+> `RT-FNSPLIT-B2A` is flipped `active` → `ready` behind it and re-anchors after.
+>
+> ### ⛔ RE-SLICED at hard-stop #5 — my slice boundary was WRONG
+>
+> **`evt_3sx56kzx7z9q`, Architect confirmed `evt_37sc5gv2yfxr8`. Amended frame is
+> on `origin/steward/work` = `a278e2c4`.** My D3 ("retained records carry the
+> fixed-width origin") **could not close without editing `lowering/core.rs`** —
+> the frame's own named stop condition. Measured, not argued: one `u32` on all
+> nine carriers, compiler enumerated **29 `core.rs` sites (13 construction / 16
+> pattern)**, restored byte-identically with the blob OID checked both sides.
+>
+> ★ **AC-3 was UNSATISFIABLE as I framed it.** D5 controls 2 and 5 are defined
+> *on* D3's carrier, so no plane-only candidate could ever discharge its own
+> acceptance. The implementer **refused to reinterpret controls I had marked
+> "specified, not a menu"** — correctly.
+>
+> **THE RE-SLICE:** B1R is now **`planning/**` ONLY** (new **AC-3a** makes that a
+> grep, not prose). **D3 + controls 2/5 moved to B2a as D0**, where the `core.rs`
+> edit is licensed. ⇒ Strictly better than my two-step: the carrier now lands in
+> the **same diff** as the removal of the old authority.
+>
+> ⚠ **My boundary contradicted the Architect's own restatement** (`evt_533hqd0c27atd`
+> said "inside the existing plane"); the ring spotted that the two authorities
+> disagreed and named it instead of picking one. **Fourth framing defect of the
+> day, second where the ring's measurement corrected my scope.**
+>
+> **Three findings now in B2a's frame:** `core.rs:204` unconditionally
+> `drop`s the plan so `:35` is the *only* point an origin is obtainable ·
+> `StaticOriginId` is `pub(super)` ⇒ a lowering-side carrier is a
+> **visibility/boundary change** · ⛔ **`origin:` already means
+> `RecursorProducerOriginId`** there (86 `mod.rs` + 44 `core.rs`) — a same-word
+> trap on a chain whose predicate *is* identity provenance, so **do not name the
+> carrier `origin`**.
+>
+> **Verified enablers (so nobody re-derives them):** every syntax child already
+> has an origin; `source_material_elements` decomposes exactly across all 22
+> shapes ⇒ affine one-visit bound unchanged, **no subtree clone needed**.
+>
+> **Hard-stop count = 5. Next Research pull = #6** (the next stop triggers it).
+> ⛔ **No inventory entry for #5** — it is a scope boundary, not the predicate.
+> **Inventory stays at entry 1; the "second entry ⇒ mis-shaped" tripwire is NOT
+> tripped.**
+>
+> ### ⛔ TRANSPORT DEFECT — the leader's address book has DEAD placeholders
+>
+> The B1R kickoff never reached the implementer because `evt_8e651wkz2b7t` was
+> routed to **`agt_37rekz81gsc00`** — the `moot init` template placeholder
+> `Implementation`, `agent_adapter: null`, **wakes nobody**. Live seat is
+> **`agt_37reqg3nync00`**. `Implementation`/`QA`/`Leader`/`Spec`/`Product`/
+> `Librarian` are all template rows. **`list_participants` distinguishes them:
+> `agent_adapter: "mcp"` = live.** ⇒ **Verify participant IDs before mentioning**
+> (COORDINATION §2 live-participant trap). A silent no-op here stalls a ring with
+> nothing watching.
+>
+> **Chain to close:** B1R → B2a → B2b → flip `RT-NATIVE-FNSPLIT` `merged` →
+> release `KW-THEOREM` **to the spec enclave** (owner is `spec`, not runtime).
+>
+> ### 0a. ⭐ `runtime-implementer` IS NOW OPUS 5
+>
+> **Operator, 2026-07-25:** Opus 5 beats `gpt-5.6-sol` on coding; reseat the seat.
+> Done — `moot.toml` now has `model = "claude-opus-5[1m]"` + `effort = "high"`,
+> **no `harness` key** (that is the Claude-seat idiom; `effort`, not
+> `model_reasoning_effort`). Verified `Opus 5 (1M context)` on the pane.
+> Approved to do it **before** the B1R kick because the §2c gate compacts the seat
+> anyway, making the "after retros-in" condition vacuous.
+>
+> ⚠ **It is a Claude-harness seat now**, so the Codex failure classes (strands on
+> a convo mention, silent capacity-banner turn-end, safety-modal tier downgrade)
+> no longer apply to it. **But its kickoff STILL failed to reach its turn** — I
+> repaired it by sending a *pointer* to the leader's `evt_8e651wkz2b7t`, never a
+> rewrite. ⛔ And note: `❯ check for a kickoff…` on that pane was the **suggestion
+> placeholder**, not typed text — a bare Enter did nothing, because the composer
+> was genuinely empty and the message had never arrived.
+>
+> ⚠ **`moot.toml` is TRACKED and its live seat-wiring diff is UNCOMMITTED on
+> `main`** (Opus 5 rollout for enclave/steward, librarian effort bump, doc-leader
+> → terra, plus my reseat). That whole config still needs to reach `main` via the
+> publisher path.
+>
+> ### 0b. ✅ ABI-COMPLETION PROGRAM NOW FULLY TRACKED — 19 of 19
+>
+> **Operator, 2026-07-25** asked to verify PX9–12 and frame the remainder.
+> **17 of 19 WPs had NO tracked issue file.** All now exist, with §5's graph as
+> real `depends_on`/`blocks` so `gen-progress.sh` derives the blocking.
+>
+> ⛔ **CORRECTION the operator should have:** `RT-NATIVE-FNSPLIT` is **UPSTREAM of
+> PX8**, not a follow-on after it —
+> `RT-NATIVE-FNSPLIT → NATIVE-HANDLE-CARRIER → PX8-F-CAP-41 → PX8 → {ABI-R3, PX9}`.
+> PX8 makes **15 of 19** items unblock, so FNSPLIT sits at the **head of the whole
+> program's critical path.**
+>
+> ⭐ **Only `ABI-R1` (S, Foundation, doc-only) and `ABI-S3` (M, Runtime, gates
+> PX12) are startable before PX8 closes.** Everything else descends from PX8 ⇒ the
+> fleet's single-threading is largely **DAG-forced**, not a sequencing failure.
+> **Those two are unframed and are the only parallel ABI work available.**
+>
+> ### 0b-ii. ⏳ DOC-W2 IS PUBLISHING — PR #936, branch FROZEN
+>
+> **PR #936 open at exact `e1524de173a5709ef15e732fb4f307110a648025`.** Decision
+> **`dec_7qywmfc5k8834` RESOLVED**, verified fresh from the object
+> (`resolved_at 2026-07-25T01:02:52Z`), three-lane gate satisfied (Librarian
+> `library/` · Architect `crates/` · Steward `agent/`).
+>
+> **Publisher log:** `$SCRATCH/docw2-publish.log`. It is in its **CI pre-poll
+> wait (~567s)** — ⚠ **waiting on CI is NORMAL (ADR 0002), not a stall.** Check
+> the log and `pgrep -f scripted-pr-automerge` before concluding anything.
+> ⚠ **NOT doc-only** (touches `crates/ken-cli/tests`, `Cargo.toml`, `Cargo.lock`)
+> ⇒ the full CI gate runs, including workspace + `--locked`.
+>
+> **ON MERGE:** verify landed `origin/main` by **CONTENT** → request retros from
+> `doc-leader` → **notify the adversary (report-only, never reply)** → then
+> re-derive the `SOURCE-ATTESTATIONS` row before releasing `ABI-R1`.
+>
+> ⛔ **I deliberately did NOT add the playbook's tracker-sync commit to the
+> candidate** — it would have made the merged SHA differ from the SHA three
+> reviewers approved, and expanded reviewed scope past the three lanes.
+> **Exact-SHA integrity beats tracker convenience; the tracker rides my own
+> process publish instead.** Record this as the standing resolution of that
+> conflict.
+>
+> ✅ **Closed a stale-Decision hazard:** `dec_5cb9mvk1tx0k2` was still `proposed`,
+> proposing a merge of B1 candidate `3d04293a` — **not reachable from `main`**,
+> while B1 actually landed as `5554b33f`. Under §14 the publisher merges on a
+> *resolved* Decision, so an open Decision naming a superseded SHA is a live
+> mis-merge hazard. **Rejected as SUPERSEDED.** ★ Lesson: close a Decision when
+> its candidate is re-cut — a stale `proposed` is indistinguishable from a
+> pending one.
+>
+> ### 0c. OWED BY ME
+>
+> 1. **DOC-W2 agent-surface review on exact `e1524de1`** (published by me).
+>    Librarian PASS + Architect crates PASS both bind that SHA; my lane is the
+>    last one, then doc-leader opens the Decision. ⚠ Touches `agent/` ⇒ §14a does
+>    **not** exempt it; the Architect vote IS required.
+> 2. **Publish the process batch** (playbooks §1b/§5a-ii, frames, tracker,
+>    briefing, ABI nodes). ⛔ Never bundle onto a WP candidate.
+> 3. **Frame `ABI-R1` + `ABI-S3`** shovel-ready if parallel work is wanted.
+>
+> ⚠ **`steward/work` was 5 behind `main` with a 6-file INTERSECTION** — publishing
+> it as-is would have silently reverted landed state on squash. **Fixed: merged
+> `origin/main` in at `7fd79cfa`** (merge, not rebase, to avoid force-pushing the
+> ref the runtime ring was kicked against). **Re-check the intersection before
+> every publish.**
+>
+> ### 1. THE PRIORITY: close `RT-NATIVE-FNSPLIT`. One team stays on it.
+>
+> **Operator, 2026-07-25:** *"closing out RT-NATIVE-FNSPLIT is the priority.
+> We've been working toward that for about 36 hours now… keep one team active on
+> that effort until it closes."*
+>
+> - ⏳ **`RT-FNSPLIT-B2A` (L) is ACTIVE — runtime ring, kicked and `Working`.**
+>   Frame: `docs/program/wp/RT-NATIVE-FNSPLIT-recut-B2a-emission-port.md`, and it
+>   is **on `origin/steward/work`** (pushed *before* the kickoff). Branch
+>   `wp/RT-FNSPLIT-B2A-emission-port` from `5015bc71`.
+> - 📋 **`RT-FNSPLIT-B2B` (M) is FRAMED and `draft`** — `depends_on: [B2A]`. **It
+>   is the slice that CLOSES `RT-NATIVE-FNSPLIT`** and answers the operator's
+>   scaling gate `evt_4btfhwqhah1ye`.
+> - ⇒ **On B2a landing: compact the runtime ring and hand it B2B immediately.**
+>   Do not look for other work for that ring — the operator asked for one team
+>   held on this until it closes, and B2b is already framed so there is no gap.
+> - ⇒ **On B2b landing: flip `RT-NATIVE-FNSPLIT` `active` → `merged`.** That
+>   unblocks `NATIVE-HANDLE-CARRIER` → `PX8-F-CAP-41`.
+>
+> ### 2. ⭐ THEN `KW-THEOREM` — operator-ordered 2026-07-25
+>
+> *"after RT-NATIVE-FNSPLIT closes, run kw-theorem."* **This supersedes the
+> 07-22 "queue position LAST" directive.** Owner is **`spec`** ⇒ the receiving
+> unit is the **spec enclave**, not the runtime ring. Compact it first.
+> ⛔ **Do not promote it early to fill idle enclave time** — idle there is
+> expected until FNSPLIT closes.
+>
+> ### 3. Owed by me, neither touching runtime's path
+>
+> - **Re-review `DOC-W2`'s `agent/` surface on exact `fd73f417`** (I pushed it
+>   for them; doc-leader + doc-author both asked). My prior verdict was **FAIL**
+>   on F1 (let-convention fragment), F2 (`C_instance_T` teaching site), F3
+>   (Findings-routing in the retained trigger). ⚠ DOC-W2 touches `agent/`, so
+>   §14a does **not** exempt it — **the Architect's vote IS required**, parallel
+>   with the Librarian.
+> - **Publish the process batch** on `steward/work` (tracker, briefing, the
+>   architect §1b + steward §5a-ii symptom-inventory mechanism, DOC-W2 frame
+>   rulings, B2a/B2b frames). Nothing is held finished-and-unmerged now, so
+>   §10⁻ permits it. ⛔ Do **not** bundle it onto a WP candidate — that expands a
+>   reviewed diff past §14a.
+>
+> ### 4. New law as of 2026-07-24, applies to every hard-stopping WP
+>
+> **SYMPTOM INVENTORY** — architect §1b appends one line per hard-stop *in the
+> tracked file* (what was special-cased, keyed on what property); at the **3rd
+> entry** it must answer *"do these share a predicate?"* Steward §5a-ii seeds it
+> at release and backstops the check **framing only, never the answer**; a named
+> predicate is a **recut**, which is mine to author. Armed on the FNSPLIT issue
+> file and both B2 frames, seeded with the held chain's four entries and their
+> shared predicate — *a dynamic property must not name static code*.
+>
+> ---
+>
+> ### ⏳ `RT-PLANNER-ATTRIB-K` — MERGED `5015bc71`, PR #935 (history)
+>
+> **Ring closed it in ~20 minutes.** Decision `dec_2ef4dcemsersr` **resolved**,
+> verified from the object: `status: resolved`, `resolved_by:
+> agt_37reqftfe6g00` (**the Architect**, not the proposing leader), naming exact
+> `23412242dd3a15a493721bccf56dd12d0bf882cd`. One rejection round preceded it
+> (`dec_f1hrzgphn8j1`, superseded). Scope = one file, +17/−12,
+> `planning/static_transition.rs`; no `semantic_ir.rs`, no spec/conformance ⇒ no
+> Spec vote.
+>
+> **⚠ The branch was NOT on origin** when the `git_request` arrived — I pushed
+> `23412242` via the mint path first, and verified local ref == target SHA and
+> the branch checked out nowhere (the publisher force-pushes the *local* branch,
+> not your target).
+>
+> ⛔ **I did NOT bundle** the tracker/briefing/playbook commits onto the
+> candidate. The Architect approved a **crates-only** diff; adding `agent/` or
+> `docs/` would silently expand a reviewed scope past §14a. **Publish the
+> process batch separately, after this lands** — once it lands, no ring holds
+> finished unmerged work, so §10⁻ permits it.
+>
+> **On merge:** verify on `main` by content (the K site on `planner_error`, six
+> `u32` sites still on capacity, `semantic_ir.rs` untouched, `fixed_k` = 8), then
+> request retros from runtime-leader, then notify the adversary.
+>
+> ### ✅ NEW MECHANISM LANDED LOCALLY — the symptom inventory (operator-directed)
+>
+> Operator, 2026-07-24, on why FNSPLIT ran to 33: *"The iterations didn't
+> accumulate the defects and failed to track the global picture, hindering the
+> decision-making abilities of the architect."*
+>
+> - **architect §1b** — append one inventory line per hard-stop **in the tracked
+>   file**; at the **3rd entry** answer *"do these share a predicate?"* Name it
+>   (⇒ structural closure, hand the Steward a recut) or rule them independent.
+> - **steward §5a-ii** — seed the armed section at release, backstop the check
+>   (framing only, never the answer), and own the recut when a predicate is named.
+> - **Armed on the live FNSPLIT chain**, seeded with the held chain's four
+>   entries and the predicate they shared.
+>
+> ⚠ **Two traps encoded, because both are TRUE and both defeat the check:**
+> *"each ruling was locally correct"* (that is what makes the shared predicate
+> invisible) and *"the architecture is still viable"* (FNSPLIT's review correctly
+> affirmed viability — the **representation** insight beside it is what
+> unblocked the work; a viability verdict is **not** an answer to §1b).
+>
+> ⛔ **Distinct from the §5a research cadence, which is NOT a substitute:** that
+> imports external prior art for the *current* fork; this accumulates *our own*
+> forks. On FNSPLIT the advisories fired at #24/27/30/33 and were useful — and
+> the chain still ran to 33.
+>
+> ### ✅ `RT-PLANNER-ATTRIB-K` was kicked at ~23:0xZ (history)
+>
+> Full handoff gate run: retros in → quiescent → all three panes verified
+> `Context compacted` at worktree `5554b33f` → contention checked on **both**
+> axes → tracker flipped `active` → kicked → **implementer confirmed `Working`**.
+> Runtime ring is turning; leader idle-after-dispatch (no capacity banner).
+>
+> ⛔ **B2 is NOT next and is not framed for release.** Honor the ring's own B1
+> carry: *gate the sole exhaustive builder before allowing downstream body work.*
+>
+> **⚠ THE AMENDED FRAME IS NOT ON `main`.** It is on **`origin/steward/work` =
+> `77fb493b`** (pushed for exactly this reason). `origin/main`'s copy carries the
+> **stale** anchors and will until this rides a publish. The runtime leader hit
+> this and blocked — see the defect note below.
+>
+> **What I changed in the frame before kicking** (all verified against
+> `5554b33f`, none of it optional):
+>
+> - **Re-anchored every line number** — B1 renumbered the file to 2495 lines.
+>   D1 `:860-863`→**`:923-926`** · D2 `:1523-1591`→**`:2033-2102`** · six `u32`
+>   sites →**`:276,:287,:336,:375,:389,:783`** · census →**`:1994/:2014/:2019`**.
+> - **AC-1's window is now TWO files.** B1 added the submodule
+>   `planning/static_transition/semantic_ir.rs` with **7 capacity + 27 invariant
+>   sites of its own**, all of which stay put. Enumerating one file would be
+>   *correct about the wrong universe*.
+> - **⭐ D4 — folded in adversary finding K1** (preventive). B1's frame-rotation
+>   independence control is **vacuous if frames ever go uniform** (a rotation is
+>   a no-op when all elements are equal) — nothing rules that out. Verified
+>   myself: unguarded, and live today. Folded here rather than filed separately
+>   because it is the **same file** and would otherwise contend.
+>
+> **Verify ring:** retros in, **no WP queued** — leave idle.
+> **Doc ring:** authoring `DOC-W2` on `wp/DOC-W2-agent-core-packs`, origin tip
+> `720f3d33`. Four Steward frame rulings in `docs/program/issues/DOC-W2.md` §6a.
+> **I returned a `FAIL` Steward-surface review on `720f3d33`** (`agent/` domain
+> only): F1 the local-binding convention migrated as a **fragment** (a caveat
+> without its rule or LET2's required counter-rule), F2 the `C_instance_T`
+> gotcha lost its only teaching site, F3 the Findings loop was deleted though
+> the migration ledger contracts the skill to *keep its workflow trigger*.
+> ⚠ **And it touches `agent/`, so §14a does NOT exempt it — the Architect's vote
+> IS required**, in parallel with the Librarian.
+>
+> ### ⛔ MY DEFECT THIS SESSION — a frame amendment nobody could read
+>
+> I amended the ATTRIB-K frame **locally**, committed to `steward/work`, and
+> kicked the ring **without publishing it**. The leader did the right thing —
+> `git show origin/main:<frame>` — and correctly found the **stale** anchors, so
+> the frame and the kickoff disagreed and the ring blocked. Fixed by pushing
+> `steward/work` to origin.
+>
+> ★ **A frame amendment that is not on a fetchable ref has not happened.** The
+> kickoff message scrolls away; the frame is what persists. Publish the frame
+> **before** the mention, or say explicitly in the mention which ref carries it.
+>
+> ### Boundary A / B — the concepts, for a cold resume
+>
+> **A = the PLANNER** (static code identity factored from dynamic activation;
+> nodes/edges/planned helpers/fixed K) — **landed `647a2e5b`**, census
+> PROVISIONAL for the outer planner only. **B = making that plan load-bearing**;
+> split at an Architect-required review gate into **B1** (closed semantic-IR
+> plane + sole exhaustive builder + strengthened census) and **B2** (retained
+> body port + full emission). ⛔ B2 does not start until B1 lands. B1 is NOT cut
+> from `415b5aa7` — that is a preserved semantic ORACLE, not an acceptance path.
+>
+> B1 QA verdict: six opcodes, exhaustive, **no wildcard**; census linear in n
+> (origins Δ28, edges Δ34, operands Δ84); `fixed_k 8,8,8,8,8` against cap 8; five
+> named negative controls each red **at a named artifact**; `316 passed`.
+>
+> ### Queued
+>
+> - **`RT-PLANNER-ATTRIB-K`** (XS, filed, `ready`) — Architect J1 ruling; moves
+>   the K-exceeded rejection off the `unsupported` channel. ⛔ CONTENDS with B1 on
+>   `static_transition.rs` — dispatch only after B1 lands.
+> - **`DOC-W2`** (L) — doc ring ACTIVE, branch `wp/DOC-W2-agent-core-packs`.
+>   ⛔ Manifest records LAST, after `document-kind` lands. **THREE frame rulings,
+>   all folded into `docs/program/issues/DOC-W2.md` §6a and committed** —
+>   `evt_24cne5pvpva1y` (R1, R2) + `evt_3sg3ep69atxcb` (R3), thread
+>   `thr_2bzhq9q6gsee1`:
+>   **R1** pack-integrity checks **extend `library_documentation_gates.rs`**
+>   (accept `crates/` scope + Architect vote — an unwired script re-opens the hole
+>   two WPs just closed); a graph invariant takes a standalone test, not a
+>   registry row. **R2** pack/schema population closed by **predicate** — each §5
+>   task performable by exactly ONE pack, no pack no task needs; a schema exists
+>   iff the checker validates against it. ⛔ no "refusal pack". **R3** AC-5 had
+>   **no fence oracle at all** (verified: nothing invokes `ken check` over
+>   `library/` fences) ⇒ register `checked-examples` as a per-record gate row;
+>   R1's "nothing else" delta limit is amended to admit it.
+>   ★ All three gaps were MINE, found by the Librarian's preflight **before a
+>   candidate existed**.
+> - **`STR-BIJ`** — held pending a re-derived `library/` ledger consumer set.
+>
+> ⚠ **FIVE single-ref exposures today** (incl. B1 itself — a full slice on one
+> local ref). Gate step **8b** makes `ls-remote` + Steward-side push a step, not
+> a reminder. Build seats have **no** credential by design.
+>
+> ⚠ **Unpublished tracker commits on `steward/work`** (`708bc70c`, `2722f442`).
+> Bundle into the next product publish; never publish alone (§10⁻).
 
 > ## ⚡ OPERATOR PRIORITY (2026-07-24): **LAND RT-NATIVE-FNSPLIT.**
 > *"I did not mean to abandon the RT-NATIVE-FNSPLIT effort. Continue that work.

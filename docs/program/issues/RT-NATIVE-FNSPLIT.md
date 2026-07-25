@@ -6,7 +6,7 @@ owner: runtime
 size: TBD
 gate: none
 depends_on: []
-blocks: []
+blocks: [NATIVE-HANDLE-CARRIER]
 github: null
 origin: PX8-SPAN-PROV Phase 2 native reachability wall (runtime-implementer measured repro evt_7qhtk8w489am4; CV option-(c) ruling evt_77q2tc5dh1kzj; Steward scope ruling evt_7c160ej3bwz4; Architect means/layer ruling evt_7gkn3g4tsvgb9, 2026-07-23). Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
@@ -76,9 +76,46 @@ Gates the [[NATIVE-HANDLE-CARRIER]] fast-follow + [[PX8-F-CAP-41]] too.
 Architect re-derives its own count across compactions; **on any disagreement
 this line wins.** Re-read this line on every hard-stop.
 
+> ### ⭐ SYMPTOM INVENTORY — armed 2026-07-24 (operator-directed)
+>
+> **The Architect appends one line per hard-stop, before it rules; at the 3rd
+> entry it must answer whether the entries share a predicate** (architect
+> playbook §1b, steward §5a-ii). This exists because *this* chain ran to 33
+> hard-stops with nothing holding the pattern across them.
+>
+> ```text
+> SYMPTOM INVENTORY (append only; never rewritten)
+> NEXT PREDICATE CHECK = 3rd entry, then 6th, 9th, …
+> ENTRIES = 1  (2 more before the predicate question is due)
+> 1. retained body selection — keyed on cloned RuntimeExpr pointer identity
+> ```
+>
+> ⛔ **Seeded, not empty of history.** The *held* chain's four entries are
+> already known and were the input to the recut — keep them visible so a new
+> entry can be compared against them rather than discovered fresh:
+>
+> ```text
+> HELD CHAIN (closed, retained as the worked example)
+> 1. whole-configuration specialization        — keyed on runtime configuration
+> 2. vector-shaped / flattened residual keys   — keyed on residual contents
+> 3. recursive Debug serialization as identity — keyed on serialized state
+> 4. helper identity coupled to env/control/layout contents — keyed on contents
+> PREDICATE (named at the recut) = a dynamic property must not name static code
+> ```
+>
+> ★ **A recut-chain entry that reduces to the SAME predicate is not a new
+> defect — it is evidence the recut is incomplete.** Say so rather than ruling
+> it.
+
 ```text
 RECUT CHAIN (live, from kickoff evt_2kgfmmeeh2x7w, 2026-07-24)
-hard-stop count    = 3   ← PULL FIRED AND CONSUMED (advisory evt_rwqb8ear89wx)
+hard-stop count    = 5   ← ⛔ NEXT STOP (#6) FIRES A RESEARCH PULL
+  ⚠ THIS LINE READ "3" UNTIL 2026-07-25 AND WAS STALE BY TWO STOPS. Stops #4
+    and #5 both happened and neither was posted here, so the authoritative
+    count silently disagreed with reality in the one place designated to win
+    that disagreement. Corrected by the Steward at the B2a kickoff.
+    ★ The count is only authoritative if it is written at the stop, not at the
+    next seam that happens to re-read it.
   #1 = Architect amendment ruling evt_6dpb96kn1583f (2026-07-24) — Phase 1's
        held-checkpoint premise is FALSE; census returns could_not_determine;
        empirical gate moves to the recut in two closed boundaries. Frame
@@ -112,12 +149,31 @@ hard-stop count    = 3   ← PULL FIRED AND CONSUMED (advisory evt_rwqb8ear89wx)
        selection.
        ⇒ RESEARCH PULL FIRED (§5a). Architect ruling is gated BEHIND the
        advisory, at the implementer's own request.
-NEXT RESEARCH PULL = hard-stop #6, then #9, #12, …
+  #4 = B2a hard-stopped BEFORE ANY CODE, raised by the Runtime ring at
+       evt_6fm274bx4q6hb (2026-07-25). The Architect classified the cause as a
+       REPRESENTATION DEFECT IN LANDED B1 rather than B2a plumbing
+       (evt_7d5v99mh8n9cc) and ruled a RECUT AHEAD OF B2a — B1 counted
+       occurrence-local semantic material it never stored. ⇒ RT-FNSPLIT-B1R was
+       framed and B2a was flipped `active` → `ready` behind it.
+       NO research pull due (< #6).
+  #5 = B1R could not add the origin CARRIER without editing lowering/core.rs,
+       raised at evt_3sx56kzx7z9q, Architect confirmed evt_37sc5gv2yfxr8
+       (2026-07-25). Ruling: the carrier moves to B2a as D0 so one authority
+       replaces another in a single reviewable diff, rather than two
+       authorities coexisting across two WPs. Architect also settled the seam
+       (widen StaticOriginId only to pub(in crate::cranelift_backend); field
+       named static_origin; no mod.rs-only partial carrier).
+       NO research pull due (< #6).
+NEXT RESEARCH PULL = hard-stop #6 ← ⛔ THE VERY NEXT STOP. then #9, #12, …
 
-⚠ The count is at 3; the pull FIRED and is CONSUMED. Advisory delivered at
-   evt_rwqb8ear89wx (Danvy/Nielsen defunctionalization granularity; Agda
-   TTerm / Lean FnBody / Cranelift IR as closed-IR precedent; Maranget on why
-   small-n affine tables mislead). Re-arm: the next pull is #6.
+⛔ **B2a runs one stop away from a research pull.** The #3 pull is CONSUMED
+   (advisory evt_rwqb8ear89wx — Danvy/Nielsen defunctionalization granularity;
+   Agda TTerm / Lean FnBody / Cranelift IR as closed-IR precedent; Maranget on
+   why small-n affine tables mislead). The next stop on this chain does NOT get
+   an immediate ruling: it fires a research pull first, and the Architect's
+   ruling is gated behind the advisory.
+   ⚠ The B2a FRAME states "hard-stop count is 3; next pull is #6" — the count
+   half is STALE (it is 5), the pull half is right by accident. This line wins.
 
 ⚠ BOUNDARY B1 KICKED 2026-07-24 (evt_784nkjqzzbxn) under the fork-(b) ruling;
    ring compacted, drops verified. RT-PLANNER-DIAGNOSTIC-K closed at 36dd61f6.
