@@ -123,8 +123,8 @@ runtime behavior
    silent drop, exactly what the MUST forbids. The
    [interpreter store](../../../crates/ken-interp/src/eval.rs)
    records the error (`EvalStore::capacity_error`,
-   `take_capacity_error`) rather than only collapsing to the null slot, and a
-   an in-crate test drives a store to its limit and asserts the error is
+   `take_capacity_error`) rather than only collapsing to the null slot, and an
+   in-crate test drives a store to its limit and asserts the error is
    recorded, not dropped, at exactly the point of overflow, while a repeated
    value at the same limit correctly does not trip it
    ([capacity producer](../../../crates/ken-interp/src/eval.rs), `capacity_tests::
