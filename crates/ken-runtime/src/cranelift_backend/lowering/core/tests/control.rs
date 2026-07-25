@@ -3232,3 +3232,214 @@ fn every_expression_typed_field_is_a_reachable_positional_child_origin() {
         "every expression-typed field must be a reachable positional child origin: {unreachable:#?}"
     );
 }
+
+// ─── RT-FNSPLIT-B2A-C AC-4/AC-6 — the positional-derivation controls ──────
+//
+// ★ AC-4's second control is the chain's own predicate as an executable test:
+// if identity moves when only the ADDRESS moved, the tag is not authoritative.
+
+/// Two same-shaped children distinguishable **only** by how many children they
+/// themselves have — so which one a position resolves to is observable through
+/// the positional accessor alone, with no origin→expression lookup (N3).
+#[cfg(test)]
+fn one_child_record() -> RuntimeExpr {
+    RuntimeExpr::Record {
+        fields: vec![("l".to_string(), RuntimeExpr::Value(RuntimeValue::Bool(true)))],
+    }
+}
+
+#[cfg(test)]
+fn two_child_record() -> RuntimeExpr {
+    RuntimeExpr::Record {
+        fields: vec![
+            ("l".to_string(), RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            ("r".to_string(), RuntimeExpr::Value(RuntimeValue::Bool(false))),
+        ],
+    }
+}
+
+#[test]
+fn swapping_two_same_shaped_children_swaps_their_derived_origins() {
+    let branch = |then_expr: RuntimeExpr, else_expr: RuntimeExpr| RuntimeExpr::If {
+        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        then_expr: Box::new(then_expr),
+        else_expr: Box::new(else_expr),
+    };
+    // `arity_at(position)` reads how many children the occurrence at that
+    // position has, using nothing but the positional accessor.
+    let arity_at = |expr: &RuntimeExpr, position: usize| {
+        let (plan, root) = planned_root_occurrence(expr);
+        let child = plan
+            .child_static_origin(root, position)
+            .expect("If has three positional children");
+        (0..)
+            .take_while(|inner| plan.child_static_origin(child, *inner).is_ok())
+            .count()
+    };
+
+    let straight = branch(one_child_record(), two_child_record());
+    let swapped = branch(two_child_record(), one_child_record());
+
+    assert_eq!(arity_at(&straight, 1), 1, "then_expr is the one-child record");
+    assert_eq!(arity_at(&straight, 2), 2, "else_expr is the two-child record");
+    // The children swapped in the source; the derived origins swapped with them.
+    assert_eq!(arity_at(&swapped, 1), 2, "then_expr is now the two-child record");
+    assert_eq!(arity_at(&swapped, 2), 1, "else_expr is now the one-child record");
+}
+
+#[test]
+fn perturbing_a_borrowed_address_does_not_move_any_derived_origin() {
+    let expr = RuntimeExpr::If {
+        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        then_expr: Box::new(one_child_record()),
+        else_expr: Box::new(two_child_record()),
+    };
+    // A clone is the same syntax at different addresses, and boxing it again
+    // moves every interior node. No ordinal changes.
+    let relocated = Box::new(expr.clone());
+
+    let derive = |expr: &RuntimeExpr| {
+        let (plan, root) = planned_root_occurrence(expr);
+        (0..3)
+            .map(|position| {
+                plan.child_static_origin(root, position)
+                    .expect("If has three positional children")
+            })
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+        derive(&expr),
+        derive(relocated.as_ref()),
+        "identity must not move when only the address moved"
+    );
+}
+
+#[test]
+fn an_out_of_range_child_position_is_a_loud_planner_invariant() {
+    let (plan, root) = planned_root_occurrence(&one_child_record());
+    let error = plan
+        .child_static_origin(root, 7)
+        .expect_err("a record with one field has no child at position 7");
+    // AC-6: an invariant violation is a compiler bug, never a capacity limit --
+    // so the specific variant is asserted, not `is_err()`.
+    match error {
+        CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref reason)) => {
+            assert_eq!(reason, "static origin has no child at that source position");
+        }
+        other => panic!("expected a loud PlannerInvariant, got {other:?}"),
+    }
+}
+
+// ─── RT-FNSPLIT-B2A-C N1/N2 — the emission census, pinned mechanically ────
+//
+// AC-7 wants each negative-boundary pin discharged by a committed check rather
+// than by review reading. N1 and N2 are counting properties over the PRODUCTION
+// lowering and planning sources, so they are pinned by counting call
+// expressions in those exact files. The test sources live in a sibling
+// directory, so no `#[cfg(test)]` region has to be parsed out: the partition is
+// at file level.
+
+#[test]
+fn correspondence_adds_no_emitted_unit_to_the_production_census() {
+    struct Census {
+        file: &'static str,
+        source: &'static str,
+        builders: usize,
+        definitions: usize,
+        declarations: usize,
+    }
+    let census = [
+        Census {
+            file: "lowering/core.rs",
+            source: include_str!("../../core.rs"),
+            // N1: exactly one root `FunctionBuilder::new` and one root
+            // `define_function`. The two declarations are the entry point and
+            // the IMPORTED host-dispatch symbol -- an import, not a definition.
+            builders: 1,
+            definitions: 1,
+            declarations: 2,
+        },
+        Census {
+            file: "lowering/mod.rs",
+            source: include_str!("../../mod.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+        },
+        Census {
+            file: "planning.rs",
+            source: include_str!("../../../planning.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+        },
+        Census {
+            file: "planning/static_transition.rs",
+            source: include_str!("../../../planning/static_transition.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+        },
+        Census {
+            file: "planning/static_transition/semantic_ir.rs",
+            source: include_str!("../../../planning/static_transition/semantic_ir.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+        },
+    ];
+    for row in census {
+        assert_eq!(
+            row.source.matches("FunctionBuilder::new(").count(),
+            row.builders,
+            "{}: N1 -- the production root builder census moved",
+            row.file
+        );
+        assert_eq!(
+            row.source.matches(".define_function(").count(),
+            row.definitions,
+            "{}: N1/N2 -- a definition was added or removed",
+            row.file
+        );
+        assert_eq!(
+            row.source.matches(".declare_function(").count(),
+            row.declarations,
+            "{}: N2 -- a function declaration was added or removed",
+            row.file
+        );
+    }
+}
+
+/// N3 — **no plan `origin -> expr` lookup from a lowering consumer.**
+///
+/// Pinned at the producing end rather than by searching for callers: the plan
+/// exposes exactly three origin accessors to the rest of the backend, and none
+/// of them returns an expression. `RT-FNSPLIT-B2A-S`'s occurrence table was
+/// deliberately NOT folded in for this reason (D8), so the lookup this pin
+/// forbids does not exist to be called.
+#[test]
+fn the_plan_exposes_no_origin_to_expression_lookup() {
+    let source = include_str!("../../../planning/static_transition.rs");
+    let exported: Vec<&str> = source
+        .lines()
+        .filter(|line| line.trim_start().starts_with("pub(in crate::cranelift_backend) fn "))
+        .map(|line| line.trim())
+        .collect();
+    assert_eq!(
+        exported,
+        vec![
+            "pub(in crate::cranelift_backend) fn child_static_origin(",
+            "pub(in crate::cranelift_backend) fn root_static_origin(",
+            "pub(in crate::cranelift_backend) fn declaration_entry_origin(",
+            "pub(in crate::cranelift_backend) fn plan_static_transition_graph(",
+        ],
+        "N3 -- the planner's exported surface changed; an origin->expression \
+         accessor here would let a lowering consumer select a body by tag, \
+         which is RT-FNSPLIT-B2A-S and not this unit"
+    );
+    assert!(
+        !source.contains("-> Result<&'src RuntimeExpr"),
+        "N3 -- no accessor may return a borrowed source expression"
+    );
+}
