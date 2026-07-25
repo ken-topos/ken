@@ -1172,6 +1172,36 @@ Frame-author obligations that follow:
 - **Require the per-pin evasion attempt in the frame itself.** A
   per-*candidate* reminder gets satisfied by the most salient control and
   silently skips the rest.
+
+  > ### ⛔ AND IT MUST LAND AS AN **AC**, NOT AS A HAZARDS NOTE. I got this
+  > ### wrong on `RT-FNSPLIT-B2O` while the rule was already written here.
+  >
+  > I wrote the requirement into the issue file — *"pin the property, and
+  > attempt a compile-preserving evasion of each pin"* — under a heading reading
+  > **"Standing hazards for whoever builds this."** The implementer read it and
+  > ran **one** evasion attempt of several. It ran the rest only after I
+  > repeated the same sentence in a **message**, and they immediately found a
+  > real overclaim: two `D3` comments overstating what the edge law detects.
+  > **Two of that WP's three review folds were then in exactly the family the
+  > paragraph named** (the second: attribution keyed to a method *qualifier*).
+  >
+  > ⛔ **The paragraph was not wrong, not unread, and not unclear. It was in a
+  > section whose grammatical mood is *advice*.** ACs get discharged because
+  > something checks them; hazards get *noted*. Having the rule in this playbook
+  > did not save me, because I satisfied it in the wrong **carrier**.
+  >
+  > ⇒ **Mechanically: a sentence in a frame that tells someone to DO something
+  > is an AC.** Give it (i) a **per-pin enumeration** — never "each pin" as a
+  > quantifier the reader resolves, (ii) a **named positive control that would
+  > fire if the work were skipped**, and (iii) a **place to record the result
+  > per pin.** If you cannot name the control, you have not stated a requirement
+  > yet — you have stated a hope.
+  >
+  > ★ **Audit your own frames for this before release:** read every advisory
+  > section and ask which sentences are actually obligations. **Those are the
+  > unguarded ones by construction** — nothing checks a hazards paragraph, so
+  > every real requirement that drifted into one is invisible to the gate.
+  > General form: [[a-requirement-in-an-advisory-section-is-never-discharged]].
 - **Ask which mechanism already enforces the property** before demanding a
   detector. **The compiler is a legitimate answer and usually the strongest**;
   never specify a test for something the language already refuses.
