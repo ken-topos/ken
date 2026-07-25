@@ -1431,7 +1431,7 @@ mod tests {
         }
         assert_eq!(
             BoundaryTag::ALL.len(),
-            11,
+            9,
             "AC-1: the published tag list and the enum have drifted apart"
         );
         // Everything outside the set is refused, across the whole byte range —

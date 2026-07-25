@@ -90,26 +90,32 @@ pub enum BoundaryTag {
     ImmediateInt = 1,
     /// A process exit status scalar.
     ImmediateExitStatus = 2,
-    /// An opaque capability token scalar.
-    ImmediateCapability = 3,
-    /// An opaque resource token scalar.
-    ImmediateResource = 4,
     /// A host-reply-validated bounded `Nat`.
-    ImmediateBoundedNat = 5,
+    ImmediateBoundedNat = 3,
     /// A structural `Nat` deforested to one native scalar.
-    ImmediateStructuralNat = 6,
+    ImmediateStructuralNat = 4,
     /// Handle to a persistable Ken value. Payload is an arena node index; the
     /// node names the [`SlotId`] that is the referent's **owner of record**.
-    PersistentGround = 7,
+    PersistentGround = 5,
     /// Handle to a retained closure: static origin plus captured words.
-    PersistentClosure = 8,
+    PersistentClosure = 6,
     /// Handle to borrowed ingress — a host-owned buffer or option that is valid
     /// only for this native invocation.
-    InvocationBorrowed = 9,
+    InvocationBorrowed = 7,
     /// Handle to a `HostResult`: a runtime success discriminant plus the two
     /// payload words it selects between.
-    InvocationHostResult = 10,
+    InvocationHostResult = 8,
 }
+
+// ⛔ There is deliberately NO `ImmediateCapability` and no `ImmediateResource`.
+//
+// An earlier draft had both, and `Lowered::boundary_disposition` produced
+// neither: a capability or resource token is an opaque 64-bit identity, and the
+// immediate field is 56 bits, so both route to `InvocationBorrowed` handles
+// whose node payload holds the full word. Tags that no disposition can produce
+// are unreachable representation surface, and unreachable surface reads as
+// "supported" to the next person who greps for it. The closed set is therefore
+// exactly the set the disposition yields.
 
 impl BoundaryTag {
     /// Every tag, in declaration order.
@@ -118,12 +124,10 @@ impl BoundaryTag {
     /// this list cannot drift from the enum: adding a variant without extending
     /// the `match` is a compile error, and the array length is checked against
     /// it in this module's tests.
-    pub const ALL: [BoundaryTag; 11] = [
+    pub const ALL: [BoundaryTag; 9] = [
         BoundaryTag::ImmediateBool,
         BoundaryTag::ImmediateInt,
         BoundaryTag::ImmediateExitStatus,
-        BoundaryTag::ImmediateCapability,
-        BoundaryTag::ImmediateResource,
         BoundaryTag::ImmediateBoundedNat,
         BoundaryTag::ImmediateStructuralNat,
         BoundaryTag::PersistentGround,
@@ -139,14 +143,12 @@ impl BoundaryTag {
             0 => BoundaryTag::ImmediateBool,
             1 => BoundaryTag::ImmediateInt,
             2 => BoundaryTag::ImmediateExitStatus,
-            3 => BoundaryTag::ImmediateCapability,
-            4 => BoundaryTag::ImmediateResource,
-            5 => BoundaryTag::ImmediateBoundedNat,
-            6 => BoundaryTag::ImmediateStructuralNat,
-            7 => BoundaryTag::PersistentGround,
-            8 => BoundaryTag::PersistentClosure,
-            9 => BoundaryTag::InvocationBorrowed,
-            10 => BoundaryTag::InvocationHostResult,
+            3 => BoundaryTag::ImmediateBoundedNat,
+            4 => BoundaryTag::ImmediateStructuralNat,
+            5 => BoundaryTag::PersistentGround,
+            6 => BoundaryTag::PersistentClosure,
+            7 => BoundaryTag::InvocationBorrowed,
+            8 => BoundaryTag::InvocationHostResult,
             _ => return None,
         })
     }
@@ -158,8 +160,6 @@ impl BoundaryTag {
             BoundaryTag::ImmediateBool
             | BoundaryTag::ImmediateInt
             | BoundaryTag::ImmediateExitStatus
-            | BoundaryTag::ImmediateCapability
-            | BoundaryTag::ImmediateResource
             | BoundaryTag::ImmediateBoundedNat
             | BoundaryTag::ImmediateStructuralNat => BoundaryReferentOwner::NoReferent,
             BoundaryTag::PersistentGround | BoundaryTag::PersistentClosure => {
