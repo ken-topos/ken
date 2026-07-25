@@ -4335,10 +4335,18 @@ mod tests {
     /// mutation can produce one without producing the other. Both are constructed
     /// below and both redden; what cannot be claimed is that they exercise two
     /// independent checks. The `D3` edge laws are still checked, because they
-    /// constrain the **algorithm**: a traversal edited to cross `StaticBody` would
-    /// yield a self-consistent partition that only the "crosses to a *distinct*
-    /// unit" law rejects. The genuinely independent edge-law control is the
-    /// sentinel one (control 5b).
+    /// constrain the **algorithm** — but as **defense in depth behind overlap,
+    /// not as the primary detector.** Measured: a traversal edited to cross
+    /// `StaticBody` reddens at **overlap** (mutation M1), because the callee's
+    /// seed is claimed by the caller; the "crosses to a *distinct* unit" law is
+    /// the sole detector only once overlap is **also** disabled (mutation M2).
+    /// The genuinely independent edge-law control is the sentinel one (5b).
+    ///
+    /// ⭐ Note the shape of my own error here, since it is the reusable part: I
+    /// identified this exact detector-collapse for the *data*-mutation route in
+    /// the paragraph above, then asserted the opposite for the *code*-mutation
+    /// route one sentence later. Having found one collapse, sweep every route to
+    /// the property before writing prose about any of them.
     #[test]
     fn b2o_ac5_each_ownership_law_reddens_on_its_own() {
         // Promise class: durable mutation proof.

@@ -3526,6 +3526,47 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
 /// source. There is no such macro in the backend, and one would be visible in the
 /// same review; this is a stated limit, not a silent one.
 #[cfg(test)]
+/// The `impl`-level `fn` enclosing each whole-identifier mention of `needle`, in
+/// source order, deduplicated.
+///
+/// ⛔ **"Cannot determine" is a third outcome that FAILS.** A mention found
+/// before any `impl`-level `fn` is attributed to an explicit sentinel name
+/// rather than dropped, so a parsing gap reddens the inventory instead of
+/// silently shrinking it.
+///
+/// ⚠ The item boundary is `fn` at **indent 4**, which is exact for `core.rs`:
+/// it has a single top-level `impl` block, and an enumerator that missed the
+/// `impl` structure would misattribute. That premise is asserted, not assumed —
+/// see `the_routing_function_enumerator_sees_a_relocated_call`.
+fn enclosing_functions_mentioning(source: &str, needle: &str) -> Vec<String> {
+    let mut current = "<outside any impl-level fn>".to_string();
+    let mut owners: Vec<String> = Vec::new();
+    for line in source.lines() {
+        if let Some(rest) = line.strip_prefix("    ") {
+            let rest = rest.strip_prefix("pub").map_or(rest, |after| {
+                after.split_once(") ").map_or(after, |(_, tail)| tail)
+            });
+            if let Some(name) = rest.strip_prefix("fn ") {
+                let name = name
+                    .split(|c: char| !c.is_alphanumeric() && c != '_')
+                    .next()
+                    .unwrap_or_default();
+                if !name.is_empty() {
+                    current = name.to_string();
+                }
+            }
+        }
+        let code = line.split_once("//").map_or(line, |(code, _)| code);
+        let mentions = code
+            .split(|c: char| !c.is_alphanumeric() && c != '_')
+            .any(|token| token == needle);
+        if mentions && !owners.contains(&current) {
+            owners.push(current.clone());
+        }
+    }
+    owners
+}
+
 fn identifier_occurrences(source: &str, identifier: &str) -> usize {
     source
         .lines()
@@ -4232,4 +4273,160 @@ fn the_ownership_classification_has_no_reach_into_any_emission_path() {
         "the owner classification is not in the plane at all, so this pin is \
          measuring nothing"
     );
+}
+
+/// **`RT-FNSPLIT-B2O` `D6` closure — the retained-body ROUTES are a closed
+/// inventory of named functions.** Architect finding, `evt_5984e30gv9f0k`.
+///
+/// ⛔ **The defect this closes was mine, and it was a false closure claim.** The
+/// `D6` report asserted the boundary-crossing population is "one route with a
+/// pinned consumer count" and that a tenth consumer "cannot appear without
+/// reddening the lookup-count pin". **Both were false on `97db6f0b`.**
+/// `exactly_one_plan_origin_to_expression_lookup_exists` pins the identifier
+/// `source_occurrence` — its definition plus its single call inside
+/// `retained_body_occurrence`. It says **nothing** about who calls
+/// *`retained_body_occurrence`*.
+///
+/// ⭐ **And a COUNT cannot close it, which is why this pin is an inventory.**
+/// Introduce a delegating wrapper —
+/// `fn alternate(&self, o) { self.retained_body_occurrence(o) }` — and route one
+/// existing call site through it. Then:
+///
+/// | pin | effect |
+/// |---|---|
+/// | the 59 `lower_expr` call count | **green** — the call site still calls it once |
+/// | the `source_occurrence` count | **green** — still one call, still inside the same helper |
+/// | a naive `retained_body_occurrence` **count** | **green** — a mention moved, it did not appear |
+///
+/// **The count is invariant under adding a wrapper.** So the property is not
+/// "how many mentions" but **"which functions can reach a retained body"**, and
+/// the mechanism has to be the *allowed inventory* of those functions — so that
+/// any new route reddens, **whatever it is named**. A pin keyed on a name pattern
+/// like `*_body_occurrence` would be spelling-scoped and evaded by calling the
+/// new helper anything else.
+#[test]
+fn the_retained_body_routes_are_a_closed_inventory_of_named_functions() {
+    // Promise class: durable invariant. The inventory is the contract; it changes
+    // only when a deliberate new route is added, and then it must be reviewed.
+    let core = include_str!("../../core.rs");
+
+    // (a) Definitions counted SEPARATELY from consumers, so "a definition moved"
+    //     and "a consumer was added" are different failures.
+    for (needle, definitions, consumers) in [
+        // 7 direct consumers + 1 delegation from `machine_body_occurrence`.
+        ("retained_body_occurrence", 1usize, 8usize),
+        // 3 wrapper consumers.
+        ("machine_body_occurrence", 1usize, 3usize),
+    ] {
+        let tokens = identifier_occurrences(core, needle);
+        let declared = core
+            .lines()
+            .filter(|line| line.trim() == format!("fn {needle}("))
+            .count();
+        assert_eq!(
+            declared, definitions,
+            "{needle}: the definition count moved, so `tokens - definitions` no \
+             longer counts consumers"
+        );
+        assert_eq!(
+            tokens - declared,
+            consumers,
+            "{needle}: the consumer population moved"
+        );
+    }
+
+    // (b) The ALLOWED INVENTORY of functions that can reach a retained body.
+    //     ⛔ Asserted as the exact permitted set, not as a forbidden-name scan:
+    //     a route added under ANY name appears here and reddens.
+    assert_eq!(
+        enclosing_functions_mentioning(core, "retained_body_occurrence"),
+        vec![
+            "lower_recursor_residual_call",
+            "lower_computational_producer_expr",
+            "retained_body_occurrence",
+            "machine_body_occurrence",
+            "lower_expr",
+        ],
+        "D6: the set of functions that can reach a retained body changed. Every \
+         one of these is a boundary-crossing route under B2O's ownership \
+         mapping, so a new entry changes the call disposition and must be \
+         reviewed -- it cannot be absorbed silently"
+    );
+    assert_eq!(
+        enclosing_functions_mentioning(core, "machine_body_occurrence"),
+        vec!["source_call_state", "machine_body_occurrence"],
+        "D6: the machine-body wrapper's route set changed"
+    );
+}
+
+/// The **positive control** for the inventory pin above.
+///
+/// ⚠ Without this, the inventory is a negative check — and a negative check
+/// passes for any reason, including an enumerator that attributes every mention
+/// to the wrong function or to nothing at all. This feeds the enumerator the
+/// exact evasion the Architect described, in a form the pin was **not** written
+/// against, and requires that it be seen.
+#[test]
+fn the_routing_function_enumerator_sees_a_relocated_call() {
+    // A delegating wrapper under a name that matches NO helper naming pattern,
+    // which is the evasion a `*_body_occurrence` scan would miss entirely.
+    let with_new_route = "\
+impl<'a> Lowering<'a> {
+    fn existing(&mut self) -> usize {
+        self.retained_body_occurrence(body)
+    }
+
+    fn sneaky(&mut self) -> usize {
+        self.retained_body_occurrence(body)
+    }
+}
+";
+    assert_eq!(
+        enclosing_functions_mentioning(with_new_route, "retained_body_occurrence"),
+        vec!["existing", "sneaky"],
+        "the enumerator must attribute a relocated call to its own enclosing fn, \
+         whatever that fn is named"
+    );
+
+    // Non-degenerate pair on a SHARED input: the count cannot discriminate what
+    // the inventory can. Both sources have the same number of mentions; only the
+    // owning-function set differs.
+    let one_route = "\
+impl<'a> Lowering<'a> {
+    fn existing(&mut self) -> usize {
+        self.retained_body_occurrence(a);
+        self.retained_body_occurrence(b)
+    }
+}
+";
+    assert_eq!(
+        identifier_occurrences(one_route, "retained_body_occurrence"),
+        identifier_occurrences(with_new_route, "retained_body_occurrence"),
+        "if the two fixtures had different mention counts this pair would not \
+         discriminate, and the count pin would have sufficed"
+    );
+    assert_ne!(
+        enclosing_functions_mentioning(one_route, "retained_body_occurrence"),
+        enclosing_functions_mentioning(with_new_route, "retained_body_occurrence"),
+        "the inventory must separate what the count cannot"
+    );
+
+    // ⛔ Undetermined FAILS rather than silently dropping: a mention outside any
+    // impl-level fn is attributed to an explicit sentinel, so a parsing gap
+    // reddens the inventory instead of shrinking it.
+    assert_eq!(
+        enclosing_functions_mentioning(
+            "const X: () = retained_body_occurrence;\n",
+            "retained_body_occurrence"
+        ),
+        vec!["<outside any impl-level fn>"],
+        "an unattributable mention must be visible, not dropped"
+    );
+
+    // The enumerator must not be fooled by prose, matching the tokenizer.
+    assert!(enclosing_functions_mentioning(
+        "    fn f() {\n        // calls retained_body_occurrence here\n    }\n",
+        "retained_body_occurrence"
+    )
+    .is_empty());
 }

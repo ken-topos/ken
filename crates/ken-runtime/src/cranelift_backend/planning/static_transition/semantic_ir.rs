@@ -969,11 +969,21 @@ impl SemanticPlane {
     ///
     /// The partition is **recomputed from the graph** here and compared against
     /// what the plane recorded. That is what makes a corrupted owner field a
-    /// planner error rather than a plausible wrong answer — and the edge laws are
-    /// checked *on top of* the comparison, because they constrain the
-    /// **algorithm** and not just the record: a traversal that wrongly crossed
-    /// `StaticBody` would produce a self-consistent partition, and only the
-    /// "a `StaticBody` edge crosses to a **distinct** unit" law catches it.
+    /// planner error rather than a plausible wrong answer.
+    ///
+    /// The edge laws are checked *on top of* that comparison because they
+    /// constrain the **algorithm** and not just the record. ⚠ But they are
+    /// **defense in depth behind the overlap check, not the primary detector** —
+    /// measured, not assumed: a traversal edited to cross `StaticBody` is caught
+    /// by **overlap** first, because the callee's seed gets claimed by the caller
+    /// (mutation M1). The `StaticBody` law becomes the *sole* detector only once
+    /// the overlap check is **also** disabled (mutation M2).
+    ///
+    /// ⛔ An earlier revision of this comment said such a traversal "would
+    /// produce a self-consistent partition, and only the distinct-unit law
+    /// catches it." That was wrong, and wrong in the direction that matters: it
+    /// credited this law with work the overlap check is doing, and a reader who
+    /// believed it might weaken overlap thinking the edge law still covered them.
     fn validate_function_units(
         &self,
         nodes: &[StaticNode],
