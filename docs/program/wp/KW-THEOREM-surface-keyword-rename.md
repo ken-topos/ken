@@ -77,18 +77,56 @@ is `lemma` **as Ken syntax**, and identifiers/anchors derived from that spelling
 3. **The formatter keyword list** (`kenfmt_c_capstone.rs:208`) is a **string
    list** — a canonicalization oracle that fails in **CI**, not in a targeted
    build.
-4. **`catalog/**` sources are literate `.ken.md`** — all 698 declarations must
+4. **`catalog/**` sources are literate `.ken.md`** — every declaration must
    still `ken check`, and the catalog is a **dependency-ordered** corpus.
 5. **`RDeclKind::Lemma` is a surface enum variant** — renaming it breaks
    exhaustive matches in every consumer. That is a *feature* (the compiler
    enumerates them), but it means the change is not confined to the elaborator.
 6. **Conformance seeds pin exact surface text** and run in CI.
 
+> ## ⛔⛔ EVERY COUNT IN THIS FRAME IS NON-AUTHORITATIVE — DERIVE, DO NOT READ
+>
+> **Amended 2026-07-25, third correction.** Three separate counts I published
+> here were wrong, each caught by a ring re-deriving instead of trusting me:
+>
+> | count | I said | actual | caught by |
+> |---|---|---|---|
+> | `library/` occurrence files | 3, then **10** | **11** | `doc-leader` `evt_ksfe2xjyp0q1` |
+> | `AC-1` Ken source roots | hand list | wrong 3 ways | `spec-leader` `evt_6zkdcmsrrxy9k` |
+> | `catalog/` declarations | 697, then **698** | **696 / 22 files** | `spec-leader` `evt_4vw8nb08s7nz1` |
+>
+> ★ **The third one is the tell, and it is damning.** The file I missed is
+> `library/learn/reading-ken/06-execution.md`, which says *"the five **lemmas**
+> above"*. My regex was `\blemma\b` — **which cannot match `lemmas`**, because
+> the trailing `s` is not a word boundary. **That is coupling #2 in this very
+> frame:** *"Pluralisation … a `\blemma\b` regex misses the possessive/plural
+> forms."* **I wrote the warning and then measured with the exact regex the
+> warning names.**
+>
+> ⇒ **The defect is not any one number — it is that I published derived
+> measurements at all.** A count in a frame reads as settled and suppresses the
+> re-derivation that would catch it. **State the property and the derivation;
+> let the ring measure.**
+>
+> **The authoritative derivations, against the exact candidate:**
+>
+> ```sh
+> # every tracked Ken source, literate and not
+> git ls-tree -r --name-only <sha> | grep -E '\.ken(\.md)?$'
+> # every occurrence file, case-insensitive, plural-safe
+> git grep -il -E 'lemma|lemmas' <sha> -- <path>
+> ```
+>
+> ⛔ **Use `-i` and cover the plural/possessive.** The numbers below are a
+> snapshot of `c2c1ba9f` that has **already been proven unreliable three times**
+> — they are context for sizing, **never** an input to a completeness check.
+
 ## ⚠ Two triage counts were WRONG — both widen the work
 
 Re-measured at `aecdb001` while framing:
 
-1. **`library/` is 10 files, not 3**, and three are **not prose**:
+1. **`library/` occurrence files: I said 3, then 10; it is 11.** Three are
+   **not prose**:
    `library/manifest.toml`,
    `library/agents/evaluations/results-2026-07-24.toml`, and
    `library/agents/evaluations/fixtures/proof-terminals.txt`. **An
@@ -98,12 +136,22 @@ Re-measured at `aecdb001` while framing:
    `conformance/challenge/C6-lawful-ord-vs-stub/sound-ord-proved.ken` — not only
    literate `.ken.md`. **A glob written for `*.ken.md` misses it.**
 
-Also re-counted: `catalog/` keyword-leading declarations are **698** (not 697)
-plus 36 prose occurrences; `crates/` is **44** files (not 48), **all in
-`ken-elaborator`**; `spec/` is 100 occurrences across 23 files.
+3. ⛔ **A keyword-leading count in a literate `.ken.md` MUST be fence-scoped.**
+   My "698 keyword-leading declarations" was an unscoped line population and is
+   **not a Ken-syntax population at all** — it admits Markdown prose that merely
+   begins a line with the word, e.g.
+   `Data/Numeric/Nat/Order.ken.md:309` (*"lemma is unavoidable…"*). Toggling on
+   fences and counting `^lemma[[:space:]]` **only inside a fence** gives **696
+   across 22 files** (`spec-leader`, `evt_4vw8nb08s7nz1`).
 
-⇒ **Do not trust these numbers either.** They measure `aecdb001`. Re-derive at
-pickup and **escalate a discrepancy rather than building around it.**
+   ⭐ **This is a hazard for YOUR sweep, not just for my count.** In literate
+   Ken, prose and source share a file, so *any* population you derive over
+   `.ken.md` must know whether it is inside a fence. An unscoped `^lemma` sweep
+   will rename English.
+
+⇒ **Do not trust any number in this frame.** Re-derive at pickup — fence-scoped
+where the file is literate — and **escalate a discrepancy rather than building
+around it.**
 
 ## Definition sites — the mechanical core, re-derived at `aecdb001`
 
@@ -129,8 +177,8 @@ authority, so a catalog edit ahead of it would be unanchored.
    it.
 2. **`crates/ken-elaborator`** — lexer token, `RDeclKind` variant, formatter
    keyword list (**language ring**). The compiler enumerates consumers.
-3. **`catalog/` + `library/`** — the 698 mechanical declarations plus the prose
-   classification (**doc ring; the librarian holds the anchor gate**).
+3. **`catalog/` + `library/`** — the fence-scoped mechanical
+   declarations plus the prose classification (**doc ring; the librarian holds the anchor gate**).
 4. **`conformance/`** — seed suites, CI-gated.
 5. **`docs/` + `agent/`** — prose; largest file count, lowest risk, and where
    the leave-it-in-English class dominates.
@@ -138,12 +186,54 @@ authority, so a catalog edit ahead of it would be unanchored.
 ## Acceptance criteria
 
 **AC-1 — emit the fixed-base occurrence set.** `lemma` / `lemmas` / possessive
-and plural forms, **plus** surface-derived identifiers and anchors. ⛔ **One glob
-definition covering every Ken source root** — `catalog/**/*.ken.md`,
-`conformance/**/*.ken`, `conformance/**/*.ken.md`, `examples/`, and the
-evaluation fixtures. **Positive control: a deliberately planted `lemma`
-declaration in each root class is SEEN by the sweep.** A sweep that grew one arm
-per missed file has reproduced the bug it exists to prevent.
+and plural forms, **plus** surface-derived identifiers and anchors.
+
+> ## ⛔ AMENDED 2026-07-25 — MY HAND-ENUMERATED ROOT LIST WAS WRONG THREE WAYS
+>
+> Reported by `spec-leader` (`evt_6zkdcmsrrxy9k`) and **re-derived independently
+> by the Steward** against `c2c1ba9f`. The original AC listed
+> `catalog/**/*.ken.md`, `conformance/**/*.ken`, `conformance/**/*.ken.md`,
+> `examples/`, and the evaluation fixtures. Measured, that list:
+>
+> 1. **Missed `catalog/packages/Tooling/Verification/ProofErasureBoundaryChecker.ken`**
+>    — `catalog/` is **42 × `.ken.md` + 1 × `.ken`**, and that one file is
+>    live and consumed: `include_str!`'d at
+>    `crates/ken-interp/src/proof_erasure_checker.rs:15` and enumerated by the
+>    formatter corpus gate at `crates/ken-cli/tests/ken_fmt.rs:101`.
+> 2. **Named `conformance/**/*.ken.md`, which matches ZERO files.** Conformance
+>    holds **15 × `.ken`** and plain `.md` seed docs — no literate Ken at all.
+> 3. **Omitted `tooling/highlight-js/sample.ken` entirely** — a tracked Ken
+>    source in a root I never listed.
+>
+> ⇒ **Repo-wide there are 33 non-literate `.ken` sources** (catalog 1,
+> conformance 15, examples 16, tooling 1) **and 42 literate `.ken.md`**, all in
+> `catalog/`.
+>
+> ⚠ **The missed catalog file carries ZERO `lemma` occurrences**, so no rename is
+> missed *today*. **That is exactly why it is dangerous:** the AC would have gone
+> green on an unclosed population and the defect would have surfaced on the next
+> corpus-wide migration instead.
+>
+> ★ **The failure is mine and it is the one this AC exists to prevent.** I wrote
+> *"enumerate every Ken source root"* as the rule — and then **hand-enumerated
+> the roots.** A hand list is the thing that is never closed. I even flagged the
+> `.ken`-vs-`.ken.md` split for `conformance/` and did not re-check `catalog/`.
+
+⛔ **DERIVE the population structurally from the tracked tree — never hand-list
+roots:**
+
+```sh
+git ls-tree -r --name-only <candidate-sha> | grep -E '\.ken(\.md)?$'
+```
+
+**One expression, evaluated against the exact candidate.** Plus the non-source
+oracles that are not `.ken` at all — the conformance seed `.md` docs and
+`library/agents/evaluations/{results-*.toml,fixtures/proof-terminals.txt}`.
+
+**Positive control: a deliberately planted `lemma` declaration in EACH class —
+literate `.ken.md`, non-literate `.ken`, and each non-source oracle — is SEEN by
+the sweep.** A sweep that grew one arm per missed file has reproduced the bug it
+exists to prevent.
 
 **AC-2 — classify every row** as (a) keyword-contract rename, (b) derived
 identifier/anchor rename **with its consumers**, or (c) **intentional

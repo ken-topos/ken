@@ -1,7 +1,7 @@
 ---
 id: KW-THEOREM
 title: "rename the surface keyword `lemma` to `theorem`"
-status: ready
+status: active
 owner: language
 size: M
 gate: none
