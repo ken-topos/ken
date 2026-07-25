@@ -55,8 +55,12 @@ ordinary sub-expressions, so one row cannot answer for both. A per-site table
 could have been filled in *completely* and still been wrong — a taxonomy with no
 cell for the honest answer reads as complete.
 
-**The repair is not a better table. It is a closed inventory of the functions
-that can reach a retained body.**
+**The repair is not a better table, and — corrected under the ruling — it is not
+a closed inventory of Rust functions either.** An earlier revision said exactly
+that, and it is the claim this respin withdraws. ⇒ **The repair is to disposition
+by the plan graph**: an occurrence's `SemanticOwner` and the planned edge kind,
+which is what `validate_function_units` already enforces and what no Rust
+refactor can move.
 
 ## The disposition, derived from the mapping
 
@@ -83,120 +87,81 @@ StaticTransitionPlan::source_occurrence        1 production call  core.rs:4183
 | retained-body occurrences, via the machine wrapper | 3 sites | **yes** — same route, one delegation deeper |
 | everything else | the remaining calls | **no** — `child_occurrence` traversal, intra-owner by `D3` |
 
-### ⛔ CORRECTED — the closure claim this section originally made was FALSE
+### ⛔⛔ WITHDRAWN — the route oracle is out, and the claim it defended
+### was never required
 
-An earlier revision of this section said the population is *"characterised by ONE
-route with a pinned consumer count"* and that *"a tenth consumer cannot appear
-without reddening the lookup-count pin."* **Both were false on `97db6f0b`**
-(Architect, `evt_5984e30gv9f0k`), and the reason is worth keeping:
+**Architect ruling 2026-07-25 (`evt_5yxjd1zqnyvcq`, durable at `architect/work`
+`8bff7b7a`).** Three revisions of this section carried a mechanized closure claim
+over the *Rust route set*. The mechanism is withdrawn and the claim is narrowed.
 
-`exactly_one_plan_origin_to_expression_lookup_exists` pins the identifier
-**`source_occurrence`** — its definition plus its single call *inside*
-`retained_body_occurrence`. It says **nothing about who calls
-`retained_body_occurrence`.** So a new route could be added with that pin, and
-the 59-call census, both staying green.
+⛔ **The authority is the plan graph** — an occurrence's `StaticOriginId`, its
+validated `SemanticOwner`, and the planned edge kind. **Rust syntax cannot prove
+reachability**: it has no name resolution, no macro expansion, and no
+indirect-call semantics. More fundamentally, **a Rust wrapper or a same-named
+method in another `impl` creates no Ken function-unit boundary** — so a pin that
+reddened when one was added was measuring implementation topology and reporting
+success.
 
-⭐ **And a COUNT cannot close it either.** Add a delegating wrapper and route one
-existing call site through it: the `lower_expr` count is unchanged (the site
-still calls it once), the `source_occurrence` count is unchanged, and even a
-`retained_body_occurrence` **mention count** is unchanged — a mention *moved*, it
-did not appear. **The count is invariant under adding a wrapper.**
+### The reachability claims removed, and the sentence that replaced each
 
-⇒ The property is not "how many mentions" but **"which functions can reach a
-retained body"**, so the mechanism is the **allowed inventory** of those
-functions — reddening on a new route *whatever it is named*. A pin keyed on a
-name pattern such as `*_body_occurrence` would be spelling-scoped and evaded by
-naming the new helper anything else.
-
-**The actual pins, on this SHA:**
-
-| pin | what it closes |
+| removed claim | replaced by |
 |---|---|
-| `the_retained_body_routes_are_a_closed_inventory_of_named_functions` | definitions counted separately from consumers (`retained_body_occurrence` 1 + 8; `machine_body_occurrence` 1 + 3), **plus** the exact permitted set of enclosing functions for each |
-| `the_routing_function_enumerator_sees_a_relocated_call` | its positive control — the evasion under a non-matching name, the `pub fn` qualifier discriminator, nine qualifier forms, and a non-degenerate pair where the count cannot discriminate but the inventory can |
-| `the_method_boundary_oracle_enforces_its_impl_shape_premise` | the premise the attribution rests on, asserted against the real `core.rs`: one top-level `impl`, no nested `impl`, **no unparsable header**, and non-vacuity |
+| *"the inventory **cannot grow silently**"* | *"the routing-function inventory is **not mechanized**; a new Rust route is a review boundary."* |
+| *"one route with a pinned consumer count"* / *"a tenth consumer cannot appear without reddening the lookup-count pin"* | *"the `source_occurrence` pin constrains that identifier only, and says nothing about who calls `retained_body_occurrence`."* (This correction was itself correct and is retained as history.) |
+| *"the inventory closes **DRIFT**, not reachability"* | *"nothing here closes drift; drift in the Rust route set is unobserved by any pin in this WP."* |
+| *"`retained_body_helper_is_private` ⇒ `mod.rs` cannot reach the helper, so the inventory is still correct"* | *"the helper is declared with no visibility qualifier"* — the declaration survives; the entailment does not. |
+| the pin name *`..._has_no_reach_into_any_emission_path`* | renamed to *`..._is_named_in_production_only_by_the_module_that_defines_it`*, because a type is reachable without being named. |
 
-### ⛔ SECOND CORRECTION — the first oracle was itself a false green
+### ⛔ Rust-route closure is UNMECHANIZED
 
-The method-boundary oracle initially stripped a literal `"pub"` and then required
-`") "`, so a legal plain **`pub fn`** header was not recognized at all (Architect,
-`evt_4etegbq0xyaqq`). A new retained-body route declared `pub fn` was therefore
-**invisible to the inventory while every count stayed green** — the exact
-property this pin exists to close, defeated by a visibility modifier.
+**No pin in this work package establishes that the set of Rust functions able to
+reach a retained body cannot grow.** That is guarded by **review, not by CI**,
+and this sentence is the honest cell rather than a gap.
 
-⭐ **The repair is qualifier *independence*, not a longer list.** Adding `pub fn`
-to a spelling list would have left `const fn`, `async fn`, `unsafe fn`, and the
-next modifier open. The oracle now locates the **`fn` token** and the identifier
-after it, so every legal qualifier attributes identically, and it **fails closed**
-— an `impl`-level line carrying a `fn` token it cannot parse poisons the
-inventory rather than being skipped.
+The residuals, named rather than hidden:
 
-⚠ The committed inventory was **not** wrong at the time: `core.rs` contains only
-bare `fn` at indent 4 (36 of them, zero `pub fn`), so the recorded routes were
-accurate. The defect was a **latent** false green — a gap that would have opened
-the moment anyone declared a route `pub`.
+1. a call relocated into a **nested `fn`**;
+2. **equal-named methods across `impl` blocks** (legal across distinct types);
+3. **macro-generated routes** — invisible to any source scan, and to `syn`,
+   which parses invocations rather than expansions;
+4. **same-named nested `fn`s in sibling blocks** of one method.
 
-**Mutation-verified on real `core.rs`:** adding `pub fn sneaky` and relocating one
-call site **compiles**, **reddens the inventory pin**, and leaves the 59-call
-census, the `source_occurrence` pin, and the impl-shape premise **green**.
+⚠ There is **no test that greps this report for a forbidden phrase**, and there
+must not be: such an oracle fires on the prose *denying* the claim, so it would
+redden on the very sentences above. The discharge is this table plus review.
 
-### ⛔ THIRD CORRECTION — the file scope was wrong, and the red message
-### recommended the evasion
+### Frozen review evidence
 
-`lowering/mod.rs:2473` carries a **second `impl<'a> Lowering<'a>` block**, and the
-inventory scanned `core.rs` alone. A retained-body route added there sat entirely
-outside the pin's scope.
+Everything below is **evidence for a reader, never authority for a gate**, and
+nothing downstream may key on it:
 
-Rust privacy is what actually blocked it: `retained_body_occurrence` is private to
-module `core`, and `mod.rs` is `core`'s **parent**, so the compiler refuses. **A
-cross-file route therefore requires widening the helper first.** Tested, not
-reasoned: widening to `pub(super)` and adding a `cross_file_route` method to
-`mod.rs` **compiles** (warnings only).
+| frozen observation | value on this SHA |
+|---|---|
+| tokenized production calls into `lower_expr` | **59** |
+| `source_occurrence` identifier occurrences | definition + 1 call inside `retained_body_occurrence` |
+| `retained_body_occurrence` consumer mentions | 8 |
+| `machine_body_occurrence` consumer mentions | 3 |
+| files declaring the retained-body helper | `lowering/core.rs` only |
+| helper's declared visibility | no qualifier |
 
-⚠ **The pin did catch it — for the wrong reason.** The assertion that fired was
-the *definition count* (`1 → 0`), because `pub(super) fn …` no longer matched an
-exact-string matcher. The failure read *"the definition count moved, so `tokens −
-definitions` no longer counts consumers"* — and **the obvious repair to that
-message is to accept the new spelling, which opens the route.** ⭐ A pin whose
-failure message recruits the next maintainer into the evasion is worse than one
-that stays silent. *Caught* and *caught for the right reason* are different
-properties, and only the second survives contact with a maintainer.
-
-**Repaired:** the inventory now spans `LOWERING_IMPL_SOURCES` (both `impl
-Lowering` files), and the private-form of the helper is asserted **first and
-separately**, with a message that names the cross-file hazard and says *extend the
-scope, do not relax this pin*. Re-run live, the same mutation now reddens on that
-clause instead of the arithmetic.
-
-⚠ **`mod.rs` needs different premises from `core.rs`** and asserting the same ones
-would be a false premise reddening on correct code: it legitimately has **seven**
-top-level `impl` blocks plus a nested `impl Drop` inside a function body. So the
-enclosing **type** is ambiguous there while the enclosing **function name** stays
-exact — which is all the drift question needs, and is stated as a limit rather
-than papered over. `mod.rs` also mentions `retained_body_occurrence` twice
-**in doc comments today**, which is precisely why the inventory tokenizes rather
-than greps.
-
-The routing inventory, asserted exactly: `lower_recursor_residual_call`,
-`lower_computational_producer_expr`, `retained_body_occurrence`,
-`machine_body_occurrence`, `lower_expr` — and for the machine wrapper,
-`source_call_state`, `machine_body_occurrence`.
-
-**Mutation-verified, not argued:** adding a `resolve_tag` wrapper and relocating
-one call site **compiles**, **reddens the inventory pin**, and leaves the 59-call
-census and the `source_occurrence` pin **green**. That is the discrimination the
-closure claim requires, and it did not exist before this pin.
-
+⭐ **And the part that cost four candidate SHAs.** The phrase *"cannot grow
+silently"* appears **zero** times in the WP frame and **zero** times in this
+report at `97db6f0b`, the first QA-approved tree. It was introduced **by a fold**,
+and then four folds were spent defending it. A claim that outruns its evidence
+has two repairs — strengthen the evidence, or **narrow the claim** — and nobody
+asked whether the claim was required. It was not. ⇒ **Before hardening a
+mechanism to support a claim, check whether the claim is required at all.**
 ## What this does NOT say
 
 - **It does not partition the 59 calls into two disjoint sets of source sites.**
   It cannot, and that is the finding: for the caller-dependent sites the answer
   is per `(site × reaching path)`. What is closed is the **routing-function
   inventory**, not the call-site list.
-- **The inventory closes DRIFT, not reachability.** It guarantees that a new
-  function able to reach a retained body cannot be added silently. It does **not**
-  prove that the five listed functions reach one on every path through them —
-  that is per reaching path, and it is exactly what no static inventory can say.
+- **It does not close DRIFT either.** An earlier revision said the inventory
+  guaranteed that a new function able to reach a retained body could not be added
+  silently. ⛔ **That guarantee is withdrawn and nothing replaces it in this WP.**
+  A new Rust route can be added and no pin here will observe it; see the
+  UNMECHANIZED section above for the four named residuals.
 - **The five provenance classes** (32 `child_occurrence` + 9
   `case_body_occurrence` + 14 caller-dependent + 2 synthesized + 1 direct) remain
   **evidence inputs**, never the authority partition. They are not restated here
@@ -205,20 +170,23 @@ closure claim requires, and it did not exist before this pin.
 
 ## MEASURED / CLAIMED / THE GAP
 
-- **MEASURED:** 59 tokenized production calls into `lower_expr`; one
-  `origin → expression` route; 8 + 3 consumer mentions downstream of it; the
-  **exact set of enclosing functions** that mention either retained-body helper;
-  a validated ownership partition in which `StaticBody` is the only cross-owner
-  edge.
-- **CLAIMED:** the boundary-crossing subset of those calls is reached only
-  through functions in that inventory, and the inventory **cannot grow
-  silently** — mutation-verified, since the wrapper evasion reddens it while the
-  two count pins stay green.
-- ⚠ **NOT CLAIMED:** that every path through those five functions reaches a
-  retained body, or that the *count* of boundary crossings is pinned. A wrapper
-  keeps every count invariant, which is why the mechanism is an inventory; and
-  the per-path question is the one Finding 3 established no static keying can
-  answer.
+- **MEASURED:** a **validated ownership partition** of the plan graph — every
+  planned node carries exactly one `SemanticOwner`, and `StaticBody` is the only
+  cross-owner edge kind, both enforced as planner errors before emission.
+  Separately and as **frozen evidence only**: 59 tokenized production calls into
+  `lower_expr`, one `origin → expression` route, and 8 + 3 consumer mentions.
+- **CLAIMED:** that the plan graph carries a total, exclusive, validated
+  occurrence → function-unit ownership mapping, and that **semantic disposition
+  is a function of that graph alone** — mutation-verified in both directions:
+  a Rust wrapper relocation and an equal-named method in a second `impl` each
+  leave it **unchanged** (`AC-10a`/`10b`), while repointing a `StaticBody` edge
+  is **refused by planning** (`AC-10c`).
+- ⚠ **NOT CLAIMED — and this is the claim that was withdrawn:** that the set of
+  Rust functions able to reach a retained body is closed, bounded, or observable.
+  **It is none of those here.** No count, no inventory, and no source scan in
+  this WP constrains it; that is a review boundary, stated in its own section
+  above. The frozen 59-call census is evidence a reader may consult and **not**
+  something any gate may key on.
 - **THE GAP:** this says **where** the boundaries are and **which calls** cross
   one. It says nothing about **what may cross** — no signature, no slot layout,
   no calling convention, no lifetime or ownership rule. ⛔ Hard-stop #9's missing
@@ -226,3 +194,73 @@ closure claim requires, and it did not exist before this pin.
   this report; that is `RT-FNSPLIT-B2R`. Reading "the boundary population is
   closed" as evidence that functionization is now buildable is the same inference
   #5 and #8 were defeated on.
+
+---
+
+# `AC-12` — every source-text-reading pin, classified
+
+**The population was closed by a sweep I ran, not by the frame's table** — the
+frame gives the *discriminator*, not the *population*, and a hand list covers
+only the cases someone thought of.
+
+**Discriminator, fixed before counting:** a pin is *source-text-reading* iff its
+assertion consumes the **text of a `.rs` file** (`include_str!` / a path read)
+rather than a value the compiler or planner produced. A pin that reads a plan,
+a descriptor, an owner, or an edge is **not** in this population.
+
+## ⚠ The count, and the two misses
+
+**PREDICTED 11 (committed at `4160c70a` before any sweep). MEASURED 14.**
+
+⛔ **And the first sweep said 16, which was wrong.** Its brace counter did not
+skip string literals, so `{}` inside `assert!` format strings ran each function's
+extent past its real end and swallowed downstream `include_str!` calls —
+producing bodies of 900–1400 lines, which is impossible for these tests. **The
+implausible magnitude is what exposed it**, not a failing assertion. Rebuilt with
+a literal-aware lexer and cross-checked against an independent needle count over
+independently-derived extents; the two agree at 14.
+
+Two distinct prediction errors, recorded rather than smoothed:
+
+1. **I named two pins that are not in the population** —
+   `the_routing_function_enumerator_sees_a_relocated_call` and
+   `the_field_inventory_extractor_sees_an_added_term_field` run on **synthetic
+   strings**, not on real source files.
+2. **I missed five that are**, including
+   `the_semantic_seed_api_accepts_only_occurrence_origins` in
+   `static_transition.rs` — a file where I predicted **zero**.
+
+⇒ Net −3, but the composition error is larger than the net, and that is the
+point of closing the enumeration by sweep.
+
+## The rows
+
+| pin | claim it makes | class | disposition | evasion attempted → outcome |
+|---|---|---|---|---|
+| `the_retained_body_routes_are_a_closed_inventory_of_named_functions` | which Rust functions can reach a retained body | **REACHABILITY** | **REMOVED** | nested-`fn` relocation → **defeated it** (Architect, `evt_7keypnnsrr0cd`); withdrawn rather than re-patched |
+| `the_method_boundary_oracle_enforces_its_impl_shape_premise` | the attribution's impl-shape premise holds | **REACHABILITY** (supports the above) | **REMOVED** | premise itself invalidated by the ancestry rewrite; removed with its mechanism |
+| `a_cross_file_route_reddens_for_the_cross_file_reason` | a route added in `mod.rs` reddens | **REACHABILITY** | **REMOVED** | reddened at the *definition-count* assertion whose message recommended the evasion |
+| `the_method_boundary_oracle_holds_on_the_second_impl_file` | the oracle's premise holds on `mod.rs` | **REACHABILITY** | **REMOVED** | `mod.rs` has 7 top-level `impl`s + a nested `impl Drop`; the single-impl premise was false |
+| `the_routing_function_enumerator_sees_a_relocated_call` | the enumerator sees a moved call | REACHABILITY (synthetic input — **not** in the 14) | **REMOVED** | it certified the indent-8 blind spot as *intended*; the control pinned a defect as the specification |
+| `retained_body_helper_is_private` (+ its new pin) | the helper carries no visibility qualifier | **DECLARATION** — entailment struck | **SPLIT / RETAINED** | widened the declaration to `pub fn` → **reddens**; the *reachability* entailment it used to carry is deleted, not defended |
+| `..._is_named_in_production_only_by_the_module_that_defines_it` | which production files name `SemanticOwner` | **DECLARATION** — renamed | **SPLIT / RETAINED** | a type reachable *without* being named is the known gap; recorded, and inertness is pinned behaviorally instead |
+| `the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site` | 59 tokenized calls exist | **DECLARATION** | **RETAINED**, relabelled frozen evidence | line-split + path-form + `source_occurrences` conflation → all held (tokenizer) |
+| `correspondence_adds_no_emitted_unit_to_the_production_census` | the emitted-unit census is unchanged | **DECLARATION** | RETAINED, unmodified | not attempted — pre-existing pin from an earlier WP, outside this respin's diff |
+| `every_source_term_carrier_holds_an_occurrence_and_never_a_bare_expression` | carrier fields hold occurrences | **DECLARATION** | RETAINED, unmodified | not attempted — as above |
+| `exactly_one_plan_origin_to_expression_lookup_exists` | one `origin → expression` route | **DECLARATION** | RETAINED, unmodified | already corrected once (it constrains `source_occurrence` only); no further evasion run |
+| `no_collection_is_keyed_by_a_scheduling_entry` | no collection keys on an entry | **DECLARATION** | RETAINED, unmodified | not attempted — pre-existing |
+| `retained_closures_carry_a_static_origin_and_no_body_term` | closures carry origins | **DECLARATION** | RETAINED, unmodified | not attempted — pre-existing |
+| `the_backend_production_surface_inventory_is_closed` | the production surface inventory | **DECLARATION** | RETAINED, unmodified | not attempted — pre-existing |
+| `the_entry_carrying_types_are_module_private` | entry types are module-private | **DECLARATION** | RETAINED, unmodified | not attempted — pre-existing |
+| `the_semantic_seed_api_accepts_only_occurrence_origins` | the seed API's accepted origins | **DECLARATION** | RETAINED, unmodified | not attempted — pre-existing; **this is the pin I predicted did not exist** |
+
+⚠ **The "not attempted" cells are honest, not oversights.** Those eight pins are
+pre-existing declaration pins from earlier work packages; this respin is a
+**subtraction** and does not touch them, so running evasions against them would
+widen the diff beyond the WP without a criterion asking for it. **They are
+classified, which is what `AC-12` requires; they are not re-verified.** If the
+ring wants them evasion-tested, that is a separate pass and should be said so
+rather than assumed from this table.
+
+⛔ **No pin in this table is REACHABILITY and RETAINED.** That combination is
+exactly what the ruling forbids, and its absence is the table's main claim.
