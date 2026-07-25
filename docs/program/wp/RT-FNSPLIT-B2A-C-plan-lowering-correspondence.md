@@ -214,6 +214,29 @@ Each mutation applied at its **natural production site**, restored
 **byte-identically**, verified with `git diff --quiet` (⚠ `--stat` always
 exits 0 and is not an emptiness test).
 
+## ⚠ ONE ATTESTED SOURCE SITS IN YOUR SUBSYSTEM — Steward contention finding
+
+**`crates/ken-runtime/src/cranelift_backend.rs` is cited in
+`library/SOURCE-ATTESTATIONS`**, at blob OID `8508a01c`, which is **exactly its
+current OID**. Nothing else in `crates/ken-runtime/**` is attested.
+
+⇒ **If you edit that file — even a locator-only change like adding a `mod` line
+or a re-export — its OID moves, the ledger row goes stale, and
+`registered_record_validation_gates_run` REDDENS IN CI** for reasons that will
+look unrelated to your change. This exact class cost a Steward PR its first
+attempt on 2026-07-24.
+
+**Your scope should not need it:** the widening is to
+`pub(in crate::cranelift_backend)`, and the files in play are
+`lowering/core.rs`, `lowering/mod.rs`, `planning/static_transition.rs`, and
+`planning/static_transition/semantic_ir.rs` — all **submodules**, none attested.
+
+⇒ **Prefer not touching `cranelift_backend.rs`.** If D1's threading genuinely
+requires it, **say so in your handoff** and do **not** silently re-attest:
+`scripts/gen-source-attestations.sh` writes a `.proposed` and **refuses to
+install it**, because re-attesting *asserts* the currency claim. Re-attestation
+is the Steward's call and requires diffing each cited anchor across both OIDs.
+
 ## Build discipline
 
 ⛔ **Targeted builds only — NEVER `--workspace`** (operator hard rule,
