@@ -3648,9 +3648,14 @@ mod tests {
     /// #   `b2ac_topology_digest`    (nodes, edges, entries -- it reads nothing
     /// #                              that postdates the base, which is why it
     /// #                              compiles there at all)
-    /// cd /tmp/b2ac-base && cargo test -p ken-runtime --lib -- b2ac_topology
+    /// cd /tmp/b2ac-base
+    /// scripts/ken-cargo test -p ken-runtime --lib -- b2ac_topology
     /// git worktree remove /tmp/b2ac-base
     /// ```
+    ///
+    /// ⛔ `scripts/ken-cargo`, never raw `cargo` — `COORDINATION §12`, and it binds
+    /// inside a copied recipe exactly as it binds anywhere else. A recipe that
+    /// spells the raw command teaches the next reader to bypass the build lock.
     ///
     /// Verified this way by the adversary on `2db29abe`: **all seven rows
     /// reproduce byte-for-byte** from `70bd2c74`, including
@@ -3756,6 +3761,115 @@ mod tests {
         // root entry is a scrutinee chain node, not either occurrence.
         let entry = *plan.entries.first().expect("a root entry");
         assert_ne!(origin_of(entry), outer, "the entry is not the occurrence");
+    }
+
+    /// **`RT-FNSPLIT-B2A-S` AC-5 — keying selection by the scheduling ENTRY
+    /// resolves to the WRONG body. Demonstrated, not forbidden by a grep.**
+    ///
+    /// ⛔ The first candidate discharged AC-5 by scanning for four container
+    /// spellings keyed by `StaticNodeId`. The Architect rejected that
+    /// (`evt_6sq2tq3v9jcd0`) and was right: a `Vec` indexed by `planned.entry.0`, a
+    /// type alias, or a bespoke collection all violate the ruled property while
+    /// such a scan stays green. **The property is about which value selects a body,
+    /// so the control has to be about that too.**
+    #[test]
+    fn keying_selection_by_the_scheduling_entry_does_not_resolve_the_body() {
+        // Promise class: durable invariant.
+        let (_, computational) = b2ac_topology_fixtures()
+            .into_iter()
+            .find(|(name, _)| *name == "computational")
+            .expect("the computational fixture");
+        let plan =
+            plan_static_transition_graph(&computational, &BTreeMap::new()).expect("plannable");
+
+        let occurrence = plan.root_static_origin().expect("root occurrence");
+        let entry = *plan.entries.first().expect("a root entry");
+        assert_ne!(
+            occurrence,
+            origin_of(entry),
+            "AC-5: the fixture must actually exhibit the split, or this test is vacuous"
+        );
+
+        // What the TAG resolves to: this match.
+        let by_tag = plan
+            .source_occurrence(occurrence)
+            .expect("the occurrence resolves its own body");
+        assert!(
+            matches!(by_tag, RuntimeExpr::ComputationalMatch { .. }),
+            "AC-5: the occurrence must resolve to the match itself"
+        );
+
+        // What an ENTRY-keyed lookup would resolve to: anything but this body. It
+        // is either a different term or no source occurrence at all -- both are
+        // wrong answers for "the body of this match", which is the point.
+        let by_entry = plan.source_occurrence(origin_of(entry));
+        assert!(
+            !matches!(by_entry, Ok(term) if std::ptr::eq(term, by_tag)),
+            "AC-5: the scheduling entry must not resolve to the occurrence's body; \
+             if it does, entry and occurrence have been conflated again and \
+             hard-stop #8 is back"
+        );
+    }
+
+    /// **`RT-FNSPLIT-B2A-S` AC-5 — and entry-keying cannot be introduced QUIETLY,
+    /// because filing two occurrences under one origin is refused.**
+    ///
+    /// ⭐ This is the mechanism that makes the property enforceable rather than
+    /// merely stated. A `ComputationalMatch` shares its scheduling entry with its
+    /// scrutinee chain, so a table keyed by `.entry` files two terms under one
+    /// index — and `record_source_occurrence` rejects that outright.
+    ///
+    /// **Measured, not assumed:** replacing `expression_seed(resume, …)` with
+    /// `expression_seed(scrutinee.entry, …)` — a compile-preserving mutation, and
+    /// exactly the "key selection by `.entry`" change the Architect asked for —
+    /// reddens **48** tests, **36** of them naming this invariant.
+    #[test]
+    fn filing_two_occurrences_under_one_origin_is_refused() {
+        // Promise class: durable mutation proof.
+        let (_, computational) = b2ac_topology_fixtures()
+            .into_iter()
+            .find(|(name, _)| *name == "computational")
+            .expect("the computational fixture");
+
+        let mut planner = Planner::new().expect("planner");
+        let empty = PersistentNodeId(0);
+        let context = PlanContext {
+            environment: empty,
+            continuation: empty,
+            path: empty,
+            cleanup: empty,
+            affine: empty,
+            source_return: empty,
+        };
+        planner
+            .plan_expr(
+                &computational,
+                context,
+                planner.terminal,
+                EdgeKind::Continue,
+                0,
+            )
+            .expect("plannable");
+
+        // Any node that already owns an occurrence: re-filing it is the collision
+        // an entry-keyed table would produce.
+        let taken = planner
+            .plan
+            .semantic_sources
+            .iter()
+            .find_map(|seed| {
+                matches!(seed.source, SemanticSourceKind::Expression(_))
+                    .then_some(seed.planned_node)
+            })
+            .expect("the fixture plans at least one expression occurrence");
+        assert_eq!(
+            planner
+                .record_source_occurrence(taken, &computational)
+                .unwrap_err(),
+            planner_error("static origin was given more than one source occurrence"),
+            "AC-5: a second occurrence under one origin must be a loud planner \
+             invariant, since that is what silently merges two bodies"
+        );
     }
 
     /// **AC-15 — a root or transparent-declaration `ComputationalMatch` body

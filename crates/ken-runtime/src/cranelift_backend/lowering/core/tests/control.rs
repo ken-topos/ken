@@ -3458,44 +3458,130 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
          (B2A-C's N3 required zero; B2A-S requires one)"
     );
 
-    // The CONSUMING end. Comment lines are excluded because this very file and the
-    // resolver's own doc comment name the function -- an oracle that greps a name
-    // otherwise fires on the prose describing it.
-    let call_sites = |source: &str| {
-        source
+    // The CONSUMING end, over the WHOLE backend production surface.
+    //
+    // ⛔ The first candidate scanned only `lowering/core.rs` and `lowering/mod.rs`
+    // and argued closure from `Lowering::static_transition_plan` being private.
+    // The Architect rejected that (`evt_6sq2tq3v9jcd0`) and was right: the
+    // resolver is `pub(in crate::cranelift_backend)` and `planning.rs` re-exports
+    // `plan_static_transition_graph` to the backend parent, so ANY backend sibling
+    // can build its own plan and call the resolver without owning a `Lowering` at
+    // all. A second call in `artifact/**`, `compiled.rs` or `planning.rs` would
+    // have stayed green. Privacy of one field was never the closure.
+    let mut calls = Vec::new();
+    for (file, source) in BACKEND_PRODUCTION_SOURCES {
+        // `static_transition.rs` carries its tests inline; the census is about the
+        // production surface, and the planner's own tests legitimately call the
+        // resolver to exercise it.
+        let production = source
+            .split_once("\n#[cfg(test)]\nmod tests {")
+            .map_or(*source, |(before, _)| before);
+        let n = production
             .lines()
+            // Comment lines are excluded because this file, the resolver's doc
+            // comment and the module docs all NAME the function -- an oracle that
+            // greps a name otherwise fires on the prose describing it.
             .filter(|line| !line.trim_start().starts_with("//"))
             .filter(|line| line.contains(".source_occurrence("))
-            .count()
-    };
+            .count();
+        if n > 0 {
+            calls.push((*file, n));
+        }
+    }
     assert_eq!(
-        call_sites(include_str!("../../core.rs")),
-        1,
-        "AC-4 -- `retained_body_occurrence` is the only caller of the plan resolver"
+        calls,
+        vec![("lowering/core.rs", 1)],
+        "AC-4 -- exactly one production call to the plan resolver may exist, and it \
+         must be `retained_body_occurrence` in the lowering SCC"
     );
-    assert_eq!(
-        call_sites(include_str!("../../mod.rs")),
-        0,
-        "AC-4 -- the resolver is called from the SCC, not from the lowering root"
-    );
+}
 
-    // ⭐ The closure that makes those two counts a complete census rather than two
-    // spot checks: `static_transition_plan` is a private field of `Lowering`, so
-    // only code in `lowering/` can reach the resolver at all -- and `lowering/`
-    // declares exactly one submodule, whose own contents are tests. Adding
-    // `lowering/anything.rs` requires a `mod` line here, which reddens this.
-    let lowering_root = include_str!("../../mod.rs");
-    let submodules: Vec<&str> = lowering_root
-        .lines()
-        .map(|line| line.trim())
-        .filter(|line| line.contains(" mod ") || line.starts_with("mod "))
-        .filter(|line| !line.starts_with("//"))
-        .collect();
+/// The backend's complete production source surface — the census's **closure
+/// proof**, not a convenience list.
+///
+/// ⭐ Why this is a proof rather than an enumeration someone must remember: a Rust
+/// file is compiled only if an ancestor module declares it with `mod`. So pinning
+/// every production `mod` declaration across the backend pins the *file set*, and
+/// a thirteenth backend file cannot be compiled without reddening
+/// `the_backend_production_surface_inventory_is_closed` below — which is what
+/// forces whoever adds it to extend this list.
+#[cfg(test)]
+const BACKEND_PRODUCTION_SOURCES: &[(&str, &str)] = &[
+    (
+        "cranelift_backend.rs",
+        include_str!("../../../../cranelift_backend.rs"),
+    ),
+    ("artifact/api.rs", include_str!("../../../artifact/api.rs")),
+    ("artifact/mod.rs", include_str!("../../../artifact/mod.rs")),
+    ("compiled.rs", include_str!("../../../compiled.rs")),
+    ("lowering/core.rs", include_str!("../../core.rs")),
+    ("lowering/mod.rs", include_str!("../../mod.rs")),
+    ("planning.rs", include_str!("../../../planning.rs")),
+    (
+        "planning/static_transition.rs",
+        include_str!("../../../planning/static_transition.rs"),
+    ),
+    (
+        "planning/static_transition/semantic_ir.rs",
+        include_str!("../../../planning/static_transition/semantic_ir.rs"),
+    ),
+    ("surface.rs", include_str!("../../../surface.rs")),
+    ("test_objects.rs", include_str!("../../../test_objects.rs")),
+    ("test_support.rs", include_str!("../../../test_support.rs")),
+];
+
+#[test]
+fn the_backend_production_surface_inventory_is_closed() {
+    // Every production `mod` declaration reachable in the backend, paired with the
+    // file that declares it. `mod tests;` is excluded: a sibling test module is not
+    // production surface, and its absence from the census is the point.
+    let mut declared = Vec::new();
+    for (file, source) in BACKEND_PRODUCTION_SOURCES {
+        let production = source
+            .split_once("\n#[cfg(test)]\nmod tests {")
+            .map_or(*source, |(before, _)| before);
+        for line in production.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("//") || !trimmed.ends_with(';') {
+                continue;
+            }
+            let Some(rest) = trimmed.strip_suffix(';') else {
+                continue;
+            };
+            let Some(name) = rest.rsplit_once("mod ").map(|(_, name)| name) else {
+                continue;
+            };
+            if name == "tests" || name.contains(' ') {
+                continue;
+            }
+            declared.push((*file, name));
+        }
+    }
     assert_eq!(
-        submodules,
-        vec!["pub(in crate::cranelift_backend) mod core;"],
-        "AC-4 -- a new lowering submodule could call the resolver without this \
-         test noticing; enumerate it above when one is added"
+        declared,
+        vec![
+            ("cranelift_backend.rs", "artifact"),
+            ("cranelift_backend.rs", "compiled"),
+            ("cranelift_backend.rs", "lowering"),
+            ("cranelift_backend.rs", "planning"),
+            ("cranelift_backend.rs", "surface"),
+            ("cranelift_backend.rs", "test_objects"),
+            ("cranelift_backend.rs", "test_support"),
+            ("artifact/mod.rs", "api"),
+            ("lowering/mod.rs", "core"),
+            ("planning.rs", "static_transition"),
+            ("planning/static_transition.rs", "semantic_ir"),
+        ],
+        "AC-4 -- the backend's module inventory changed, so \
+         BACKEND_PRODUCTION_SOURCES is no longer the whole production surface and \
+         the sole-consumer census above has stopped being closed. Add the new \
+         file to that list."
+    );
+    assert_eq!(
+        declared.len() + 1,
+        BACKEND_PRODUCTION_SOURCES.len(),
+        "AC-4 -- every declared module must appear in the census list exactly once \
+         (+1 for `cranelift_backend.rs`, the root, which no `mod` line declares)"
     );
 }
 
@@ -3613,65 +3699,87 @@ fn every_source_term_carrier_holds_an_occurrence_and_never_a_bare_expression() {
 // comment can neither satisfy nor break it, and it states the covered population
 // (AC-6) per variant in the assertions themselves.
 
-/// The retained-body-term predicate, factored out so it can be given a positive
-/// control. ⚠ Without one this pin would pass for the trivial reason that it finds
-/// nothing — a negative check passes for any reason at all.
+/// Every field a variant declares, in order.
+///
+/// ⛔ The **whole inventory**, not a search for known-bad spellings. The first
+/// candidate matched three exact `body:` spellings, and the Architect rejected it
+/// (`evt_6sq2tq3v9jcd0`): a compile-preserving `cached_body: RuntimeExpr` or
+/// `retained: Box<RuntimeExpr>` beside `body: StaticOriginId` evaded it entirely
+/// once the construction and pattern sites were updated. A detector enumerating
+/// what it forbids can only ever be as complete as the enumeration; pinning what
+/// is **allowed** rejects every added field regardless of name or type.
 #[cfg(test)]
-fn is_retained_body_term_field(line: &str) -> bool {
-    let field = line.trim();
-    field == "body: RuntimeExpr,"
-        || field == "body: OwnedSourceOccurrence,"
-        || field == "body: Box<RuntimeExpr>,"
+fn declared_fields(source: &'static str, header: &str) -> Vec<&'static str> {
+    declaration_span(source, header)
+        .into_iter()
+        .skip(1)
+        .take_while(|line| !line.trim_start().starts_with('}'))
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty() && !line.starts_with("//") && !line.starts_with("///"))
+        .collect()
 }
 
 #[test]
-fn the_retained_body_term_detector_catches_the_shape_it_is_looking_for() {
-    // The pre-B2A-S declaration and the pre-B2A-C one before it, verbatim. If the
-    // detector cannot see these, it asserts nothing about what is there now.
-    assert!(is_retained_body_term_field(
-        "        body: OwnedSourceOccurrence,"
-    ));
-    assert!(is_retained_body_term_field("        body: RuntimeExpr,"));
-    assert!(!is_retained_body_term_field(
-        "        body: StaticOriginId,"
-    ));
-    assert!(!is_retained_body_term_field(
-        "    /// body: OwnedSourceOccurrence, named in a comment"
-    ));
+fn the_field_inventory_extractor_sees_an_added_term_field() {
+    // Positive control on the extractor, using the exact evasion the Architect
+    // named. If the extractor cannot see this field, the equality assertion below
+    // is not actually closed over "no additional term carrier".
+    let synthetic =
+        "    Evasion {\n        body: StaticOriginId,\n        cached_body: RuntimeExpr,\n    },\n";
+    let fields = declared_fields(
+        Box::leak(synthetic.to_string().into_boxed_str()),
+        "    Evasion {",
+    );
+    assert_eq!(
+        fields,
+        vec!["body: StaticOriginId,", "cached_body: RuntimeExpr,"],
+        "the extractor must report EVERY declared field, so an added one breaks \
+         the inventory equality"
+    );
 }
 
 #[test]
 fn retained_closures_carry_a_static_origin_and_no_body_term() {
     let source = include_str!("../../mod.rs");
 
-    // AC-6, the COVERED population: both variants that retained a body.
-    for header in ["    Closure {", "    DeclarationClosure {"] {
-        let span = declaration_span(source, header);
-        let carried: Vec<&str> = span
-            .iter()
-            .copied()
-            .filter(|line| is_retained_body_term_field(line))
-            .collect();
-        assert!(
-            carried.is_empty(),
-            "AC-1: {header} still carries a body term {carried:?}; the origin would \
-             be decoration beside a second authority rather than the selector"
-        );
-        assert!(
-            span.iter()
-                .any(|line| line.trim() == "body: StaticOriginId,"),
-            "AC-1: {header} must name its body by the planner's static origin"
-        );
-    }
+    // AC-6, the COVERED population: both variants that retained a body. Pinned as
+    // a complete field inventory, so ANY added field -- term-bearing or not --
+    // reddens and has to be justified here.
+    assert_eq!(
+        declared_fields(source, "    Closure {"),
+        vec![
+            "captures: Vec<Lowered>,",
+            "params: Vec<String>,",
+            "body: StaticOriginId,",
+        ],
+        "AC-1: `Lowered::Closure`'s field inventory changed. A second body \
+         authority beside the tag is exactly what this WP removed, so an added \
+         field must be argued, not absorbed"
+    );
+    assert_eq!(
+        declared_fields(source, "    DeclarationClosure {"),
+        vec![
+            "symbol: RuntimeSymbol,",
+            "captures: Vec<Lowered>,",
+            "params: Vec<String>,",
+            "body: StaticOriginId,",
+        ],
+        "AC-1: `Lowered::DeclarationClosure`'s field inventory changed"
+    );
 
     // AC-6, the EXCLUDED variant, and why — a fact about the declaration rather
-    // than a judgement call: it has no body field to remove.
-    let recursor = declaration_span(source, "    ComputationalRecursorClosure {");
-    assert!(
-        !recursor.iter().any(|line| line.trim().starts_with("body:")),
+    // than a judgement call: it carries no source term at all. Pinned as an
+    // inventory for the same reason as above, so it cannot quietly acquire one.
+    assert_eq!(
+        declared_fields(source, "    ComputationalRecursorClosure {"),
+        vec![
+            "residual: Box<Lowered>,",
+            "activation: ContinuationActivationId,",
+            "invocation: RecursorInvocationSegment,",
+        ],
         "AC-6: ComputationalRecursorClosure is out of the covered population \
-         because it declares no body carrier; if one is added, it joins the \
-         population and this test must say so"
+         because it declares no body carrier. If it acquires one it JOINS the \
+         population, and this test is where that has to be said"
     );
 }
 
@@ -3695,17 +3803,26 @@ fn escaping_a_source_borrow_into_the_compiled_artifact_does_not_typecheck() {
 
 // ─── RT-FNSPLIT-B2A-S AC-5 — nothing is KEYED by a scheduling entry ───────────
 //
-// ⭐ Why this needs its own pin even though the resolver takes a `StaticOriginId`:
+// ⭐ Why this needs a pin even though the resolver takes a `StaticOriginId`:
 // hard-stop #8 was a category error in which a scheduling entry stood in for a
-// source occurrence, and nested `ComputationalMatch` occurrences SHARE a
-// scheduling entry. So a collection keyed by an entry looks perfectly injective on
-// every fixture without one — the wrong key still looks unique — and then silently
-// merges two occurrences on the fixture that has one.
+// source occurrence, and a `ComputationalMatch` SHARES its scheduling entry with
+// its scrutinee chain. So a collection keyed by an entry looks perfectly injective
+// on every fixture without one — the wrong key still looks unique — and then
+// silently merges two occurrences on the fixture that has one.
 //
-// Pinned at the DECLARATION of the key type rather than at `.entry` read sites:
-// every production read of `.entry` today is an edge endpoint, a `next =`, or an
-// `entries.push`, and none of those is a key. What must never appear is a keyed
-// collection whose key type is the node id.
+// ⛔ **This scan is a secondary net, NOT the closure**, and the first candidate
+// wrongly presented it as the whole discharge. The Architect's rejection
+// (`evt_6sq2tq3v9jcd0`) is exact: a `Vec` indexed by `planned.entry.0`, a type
+// alias, or a bespoke collection all violate the ruled property while a scan for
+// four container spellings stays green. **AC-5 is discharged in the planner**, by
+// two behavioural controls that do not depend on how anything is spelled:
+//
+//   `keying_selection_by_the_scheduling_entry_does_not_resolve_the_body`
+//   `filing_two_occurrences_under_one_origin_is_refused`
+//
+// What remains here is a cheap declaration-level tripwire over the *closed*
+// backend production surface — worth keeping because it fires early and names the
+// file, not because it is sufficient on its own.
 
 /// ⚠ Positive control for the AC-5 detector: it must actually recognise the shape
 /// it claims nothing matches, or "no matches" means nothing.
@@ -3738,28 +3855,30 @@ fn the_entry_keyed_collection_detector_catches_the_shape_it_is_looking_for() {
 
 #[test]
 fn no_collection_is_keyed_by_a_scheduling_entry() {
-    for (file, source) in [
-        (
-            "planning/static_transition.rs",
-            include_str!("../../../planning/static_transition.rs"),
-        ),
-        (
-            "planning/static_transition/semantic_ir.rs",
-            include_str!("../../../planning/static_transition/semantic_ir.rs"),
-        ),
-        ("lowering/mod.rs", include_str!("../../mod.rs")),
-        ("lowering/core.rs", include_str!("../../core.rs")),
-    ] {
-        let keyed: Vec<&str> = source
+    // Over the CLOSED backend surface, not a hand-picked four files: the resolver
+    // and the plan are reachable from every backend sibling, so a tripwire scoped
+    // to `lowering/` and `planning/` would miss `artifact/**` and `compiled.rs`.
+    for (file, source) in BACKEND_PRODUCTION_SOURCES {
+        let production = source
+            .split_once("\n#[cfg(test)]\nmod tests {")
+            .map_or(*source, |(before, _)| before);
+        let keyed: Vec<&str> = production
             .lines()
             .filter(|line| !line.trim_start().starts_with("//"))
-            .filter(|line| declares_collection_keyed_by_node_id(line))
+            .filter(|line| {
+                declares_collection_keyed_by_node_id(line)
+                    // The index form the Architect named: a positional table
+                    // subscripted by a scheduling entry rather than an occurrence.
+                    || line.contains(".entry.0 as usize")
+                    || line.contains("[entry.0 as usize]")
+            })
             .collect();
         assert!(
             keyed.is_empty(),
-            "AC-5: {file} keys a collection by a scheduling entry {keyed:?}; nested \
-             ComputationalMatch occurrences share one, so this merges two \
-             occurrences on exactly the fixture that has one"
+            "AC-5: {file} keys or indexes by a scheduling entry {keyed:?}; a \
+             ComputationalMatch shares its entry with its scrutinee chain, so this \
+             merges two occurrences on exactly the fixture that has one. \
+             ⚠ This tripwire is not the discharge -- see the two planner controls"
         );
     }
 }
