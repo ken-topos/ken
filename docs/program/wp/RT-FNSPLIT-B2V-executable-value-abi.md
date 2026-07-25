@@ -342,6 +342,43 @@ sizes, not asserted.
 > **Failing to find a witness is evidence about the witnesses you could think
 > of, never about the property.**
 
+> ### ⛔ AMENDED 2026-07-25 (second) — EVERY QA VERDICT CARRIES AN `AC` → CONTROL MAP
+>
+> The Architect blocked `78a57d90` (`evt_2c6f3natxvwcm`), and its second finding
+> is **`AC-4` verbatim, undischarged.** `make_immediate` is the only constructor
+> the emitted interface exposes; every live `PersistentGround` /
+> `PersistentClosure` / `InvocationBorrowed` / `InvocationHostResult` word is
+> materialized **Rust-side** by `BoundaryArenaBuilder::push_node` /
+> `materialize_*` before `publish`, and the emitted probes never call
+> `make_immediate` at all. What was demonstrated is that emitted code can
+> **inspect a Rust-built fixture** — never that it can **construct** one.
+>
+> ⚠ **`AC-4` is not amended. It was right, and it said exactly this.**
+>
+> **That candidate cleared QA.** ⛔ Not through inattention: QA verified every
+> control the candidate shipped and independently reproduced both false-green
+> mutations, and its verdict is sound on the properties it asks. The gap is
+> structural — **nothing in the loop ever asked which `AC` each control
+> discharges, or whether an `AC` had a control at all.**
+>
+> ★★ **An `AC` with zero controls is invisible to a review that examines
+> controls.** It yields no red, no gap, and no anomaly; it is simply not in the
+> frame of view. This is the sibling of the `AC-8`/`AC-9` amendment above, one
+> layer out — that one was *an `AC` whose oracle could not see the deliverable*;
+> this is *an `AC` with no oracle at all*. **Both are green-compatible with the
+> deliverable not existing.**
+>
+> **⇒ REQUIRED of every QA verdict on this node:** a table with **one row per
+> `AC` in this frame**, naming the **control** that discharges it and the
+> evidence. An `AC` whose row cannot name a control is recorded as
+> **`NO CONTROL — open residual`**, in the verdict, in that spelling.
+> ⛔ **Omitting the row is the defect this exists to stop** — a verdict that
+> lists only what it checked cannot distinguish *discharged* from *never
+> asked*, and the two read identically.
+>
+> ⚠ **This is content added to a message QA already sends** — no new party, no
+> new hop, no new gate, no change to the reviewer set.
+
 ## Do-not-reopen guardrails
 
 1. ⛔ **Do not split this node** (see the box above). This is the ruling's
