@@ -38,14 +38,27 @@
 >
 > ### ⇢ THE NEXT ACT, IN ORDER
 >
-> 1. **Publish `steward/work` doc-only** — owed, and it carries the
->    `pin-a-property` skill (`56cc2d19`), the two retro promotions from this WP,
->    the `merged` flip, and this briefing. ⛔ Route it as a **corpus branch cut
->    from current `origin/main`** (§6a step 2), *not* by publishing `steward/work`
->    itself: `steward/work`'s merge-base is `2e84db78` and its intersection with
->    `main` is **non-empty** (`CURRENT-BRIEFING.md`). Verified safe to take from
->    `steward/work`: `main` has **not** touched `agent/` or `.claude/` since that
->    base, and the frame doc is byte-identical on both sides.
+> 0. ✅ **DONE — the doc batch is published and verified.** PR #945 merged,
+>    **`origin/main` = `0aa9e53f`**; `steward/work` is reset onto it and clean.
+>    Verified on `main`: `pin-a-property.md` + its skill registration, `B2A-S`
+>    `status: merged`, the parent's `CLOSURE LEDGER`, both playbook promotions —
+>    **and sibling survival**, `git diff --quiet 82356022 origin/main -- crates/`
+>    → identical, so the doc-only publish reverted no code. ⚠ It was cut from a
+>    branch that **lacked** the B2A-S code, which is exactly why that last check
+>    is not optional.
+>
+> ⇒ **START HERE:**
+>
+> 1. ⚠ **TRIAGE THE ADVERSARY'S TWO FINDINGS on `145fe915`**
+>    (`evt_372ftnaz8gjk1`, side thread `thr_2seh2bm1kr5mh`) — **unread in full;
+>    the notification truncated.** Headline: *neither is a defect in the
+>    mechanism*; **P1 = "the admissibility premise `B2A-C` was ruled on has now
+>    been deliberately falsified"**, P2 = a residual with a cheaper form than the
+>    one chosen. ⛔ **P1 is potentially material to the `B2F` frame — read it
+>    BEFORE framing.** §10⁻a: I may receive and act, and must **never reply,
+>    acknowledge, or correct its framing — no message of any kind, ever.**
+>    Disposition goes into product work silently (fold into the B2F frame, a
+>    follow-up WP, or a recorded accepted limitation).
 > 2. **Frame `RT-FNSPLIT-B2F` shovel-ready** — entry 2, **atomic**
 >    (functionization *and* switch-over together), **anchored on `145fe915`**.
 >    Its Architect rulings are already durable in `issues/RT-FNSPLIT-B2F.md`
