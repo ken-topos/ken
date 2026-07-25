@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-25 01:01:03Z — from 68 issue file(s) in `docs/program/issues/`.
+2026-07-25 01:32:59Z — from 68 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -66,7 +66,7 @@ the committed file matches the generator's output.
 | `DOC-VALIDATION-BINDING` | validation vocabulary claims a 1:1 binding to the gates; nothing binds it | merged | verify | S | none | — |
 | `DOC-W0` | documentation Wave 0 — library/ charter and currency substrate | closed | doc | M | none | 830 |
 | `DOC-W1` | documentation Wave 1 — the read-Ken spine, taught from checked fragments | closed | doc | L | none | — |
-| `DOC-W2` | documentation Wave 2 — agent core modules, task packs, and cold-context evals | active | doc | L | none | — |
+| `DOC-W2` | documentation Wave 2 — agent core modules, task packs, and cold-context evals | merged | doc | L | none | 936 |
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
 | `F3-39` | F3 [task-list #39] — reducer: degrade-not-wrap + retire legacy arms | draft | runtime | TBD | none | — |
 | `F4` | content-addressing + value-model design (aka PX8-F-PROOF) | draft | foundation+spec-enclave | M | none | — |
@@ -128,7 +128,6 @@ is itself not yet `merged`/`closed`:
 - `ABI-A3` blocked by `ABI-R3` (status: draft)
 - `ABI-M1` blocked by `ABI-R3` (status: draft)
 - `ABI-M2` blocked by `ABI-M1` (status: draft)
-- `ABI-R1` blocked by `DOC-W2` (status: active)
 - `ABI-R3` blocked by `PX8` (status: active)
 - `ABI-REVOKE` blocked by `ABI-R3` (status: draft)
 - `ABI-S1` blocked by `PX9` (status: draft)

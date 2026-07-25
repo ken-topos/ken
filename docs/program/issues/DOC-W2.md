@@ -1,15 +1,47 @@
 ---
 id: DOC-W2
 title: "documentation Wave 2 — agent core modules, task packs, and cold-context evals"
-status: active
+status: merged
 owner: doc
 size: L
 gate: none
 depends_on: [DOC-W1, DOC-GATE-WIRE-BINDING]
 blocks: []
-github: null
+github: 936
 origin: research/librarian-documentation-program-proposal.md Wave 2; framed 2026-07-22 per operator directive (frame Waves 1-2 only)
 ---
+
+> ## ✅ MERGED 2026-07-25 — PR #936, `origin/main` = `d3b9f36c`
+>
+> Squash of the frozen exact reviewed SHA `e1524de1`; landed tree `5991be63`
+> matches the tree the publisher gate checked, and `gen-doc-status --check` is
+> green on `origin/main`. **Three-reviewer gate satisfied on the exact
+> candidate** (Librarian → `library/`, Architect → `crates/`, Steward →
+> `agent/`); the doc-only path did not apply because the work reaches `agent/`.
+> Decision `dec_7qywmfc5k8834` resolved before publication. **Retros in** from
+> doc-leader (`evt_5jzsdh8zy1r40`), doc-author (`evt_6ze9cjh11nyk9`), and the
+> Librarian (`evt_4pze4n15yv18g`) — so the WP is closed under §10, not merely
+> merged.
+>
+> **Acceptance verified by CONTENT on `origin/main`, not by the publisher's
+> report:** `agent/playbooks/tools/write-ken.md` at 47 lines (from 240), the
+> anti-metric guard present in `library/agents/core/write-ken.md`, the Findings
+> routing present, `library_documentation_gates.rs` at 4007 lines,
+> `library/agents/**` at 28 files, and the retired cross-package-`import`
+> premise **absent** rather than migrated forward.
+>
+> ⚠ **Ledger consequence, for anything sequenced behind this:**
+> `library/SOURCE-ATTESTATIONS` gained **3 rows**, so
+> `catalog/packages/Capability/Filesystem/Errors.ken.md` moved from row 7 to
+> **row 9** (OID `59fbe76d`). `ABI-R1` was sequenced behind this WP precisely
+> because it mutates that attested source — re-derive the row from `origin/main`
+> before releasing it, never from a pre-merge read.
+>
+> **Steward judgment call, recorded because it contradicts a playbook step:** the
+> §2a tracker-sync commit was **deliberately NOT appended** to this candidate. It
+> would have made the merged SHA differ from the SHA three reviewers approved and
+> silently widened reviewed scope. Exact-SHA integrity wins over tracker
+> convenience; the tracker rides the Steward's own process batch instead.
 
 > ## ✅ UNBLOCKED 2026-07-24 — `DOC-W1`'s dependency is DISCHARGED
 >
