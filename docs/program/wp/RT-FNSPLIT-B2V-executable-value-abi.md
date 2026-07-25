@@ -190,16 +190,28 @@ the defect the parent node is closing.)
 
 ### `D4` — close the transfer population STRUCTURALLY
 
-**One exhaustive, no-wildcard disposition over every `Lowered` variant that can
-reach `Parameter`, `Capture`, or `Result`.** Four dispositions, and every
-variant gets exactly one:
+**One exhaustive, no-wildcard match over every `Lowered` variant that can reach
+`Parameter`, `Capture`, or `Result`, assigning each variant exactly one STATIC
+ENCODING POLICY.** Five policies; every variant gets exactly one:
 
-| disposition | meaning |
+| static policy | what it declares about EVERY value of the variant |
 |---|---|
-| **represented immediate** | payload fits the tagged word directly |
-| **represented handle** | opaque handle, **with explicit lifetime and referent owner** |
+| **represented — immediate-only** | every value encodes in the tagged word; **no spill arm exists** |
+| **represented — handle-only** | every value encodes as an opaque handle, **with explicit lifetime and referent owner** |
+| **represented — immediate-with-declared-handle-spill** | values encode immediate **or**, on a declared closed condition, as a handle; the handle arm carries the **same** lifetime/referent-owner obligations as handle-only |
 | **protocol-only** | never a source value at a boundary |
 | **fail-closed forbidden** | rejected before emission, with an exact error |
+
+⛔ **A policy is a claim about the whole variant, never about one sampled
+value.** *Immediate-only* is the strong claim that **no** value of the variant
+spills; do not assign it to a variant that has a spill arm. `Lowered::Int` →
+`RepresentedImmediate { tag: ImmediateInt, spill: Some(Int) }` is the **third**
+row, not the first — a small `Int` yields an immediate word and a wide one
+yields a persistent handle, under **one** static policy.
+
+⚠ **The runtime OUTCOME per input is a separate, finer classification** — that is
+`AC-10`, and it is entailed by the policy rather than replacing it. Neither level
+may absorb the other; see the `D4`/`AC-3` clarification in the RECUT.
 
 ⛔ **The 41-transfer histogram is corroboration, NOT the population proof.** The
 proof is the exhaustive match over the **21 landed variants** at
@@ -283,9 +295,13 @@ assertion. State which mechanism enforces it. (`B2R` did exactly this for the
 seed environment and it was the strongest thing in that node.)
 
 **AC-3 — the `Lowered` disposition is exhaustive with no wildcard.** All 21
-variants, one disposition each, no `_` arm. `Constructor` and `HostResult` are
-**live represented arms**. Assert the **exact** error for every fail-closed arm
-— never `is_err`.
+variants, **exactly one of `D4`'s five static encoding policies each**
+(immediate-only · handle-only · immediate-with-declared-handle-spill ·
+protocol-only · fail-closed forbidden), no `_` arm. `Constructor` and
+`HostResult` are **live represented arms**. Assert the **exact** error for every
+fail-closed arm — never `is_err`. ⛔ **A variant carrying a declared spill must
+be assigned the spill policy, not immediate-only** — that misassignment is the
+vacuity route `AC-10` exists to close.
 
 **AC-4 — emitted code can construct, discriminate, and project.** Each `D3`
 operation exercised **from emitted code**, not from Rust.
@@ -430,10 +446,29 @@ inheritance from `C4`.
   > not a bar on asking sooner. `#12` is wrong under one reading, so `#11` wins.
 - ### ⛔ ARMED — consecutive Architect PRODUCTION blocks on this node
   ```text
-  CONSECUTIVE ARCHITECT PRODUCTION BLOCKS = 3   (78a57d90, 657f60a0, ddff2fae)
+  CONSECUTIVE ARCHITECT PRODUCTION BLOCKS = 4
+    #1 78a57d90  #2 657f60a0  #3 ddff2fae  #4 fd4e7f08 (dec_7sd3enk81maws
+                                              REJECTED on the object, evt_4bs6scfmt5ax0)
   PREDICATE CHECK AT 3 -> FIRED 2026-07-25, ANSWERED YES. See the RECUT below.
-  NEXT CHECK = 3 more consecutive production blocks on this node.
+  NEXT CHECK = block #6 on this node.
   ```
+  ⚠ **Block #4 arrived on a candidate QA had APPROVED with a complete
+  AC→control map and a passing mutation proof.** Read that before treating a
+  green QA map as coverage: the map was honest and its residual accounting was
+  honest, and three production defects still sat outside it.
+
+  ⭐ **All three of block #4's defects have one shape — the Rust side states the
+  law and the emitted side does not enforce it.** (1) `BOUNDARY_REGION_HEADER_BYTES`
+  declares a layout no consumer checks, against an 18-word publish; (2) the
+  emitted `store_int_limbs` admits `len=0` / leading-zero / negative-zero
+  magnitudes that `RuntimeIntV1::canonical_sign_and_limbs` forbids; (3) the
+  emitted reader wraps `at + region_len` where the Rust oracle uses
+  `checked_add`. ⛔ **That is this node's own founding diagnosis one layer down**
+  — `B2V` exists because the aggregate-result path was *a Rust-side decode, not a
+  value representation*. **The recut predicate reaches defects (2) and (3)**
+  (construct a *valid* word; keep it *resolvable*); **it does not obviously reach
+  (1)**, which is a declared-constant-without-consumer. Do not read that as the
+  recut being validated — read it as one uncovered face still to answer.
   ⭐ **This counter exists because §5a-ii's could not see this.** §5a-ii counts
   **hard-stops**, and a review block is correctly **not** a hard-stop — so three
   Architect production blocks moved neither the hard-stop count nor the symptom
@@ -448,6 +483,22 @@ inheritance from `C4`.
 
 ⛔ **Read this before reading the acceptance criteria above.** The `AC` set above
 is the thing this recut acts on.
+
+> ### ⛔ HOW THIS RECUT AMENDS — edit the OPERATIVE text, never append a correction
+>
+> **A later note saying an earlier deliverable is false does not replace the
+> deliverable.** `D4` is the construction authority an implementer reads *first*;
+> a clarification 300 lines below it is read *second, if at all*. Two consecutive
+> Architect blocks on this recut were caused by exactly this — folding a
+> correction in as a new paragraph while the contradicted `D`/`AC`/RETAIN text
+> stayed operative and unedited. Both readings then live in the frame, and the
+> **wrong one is the one positioned to be obeyed.**
+>
+> ⇒ Every fold in this recut **edits the operative deliverable in place**, and
+> the clarification blocks below **explain** that text rather than contradicting
+> it. ⛔ Before returning any folded ref, re-read `D1`–`D6`, `AC-1`–`AC-10`, and
+> RETAIN **as a whole** and confirm none of them still states the superseded
+> contract. A whole-frame reconcile is the fold, not a step after it.
 
 ### The predicate — the Architect's words, `evt_2zxt6m9bg43r2`
 
@@ -475,7 +526,24 @@ it, do not let a recut become a restart.**
 
 - the tag × class relation, closed over the whole product
 - region selection / threshold agreement with referent owner
-- the native-int dependency and the 64/112 layout change
+- the native exact-`Int` **normalization dependency** — the canonical
+  sign/limb contract is authoritative wherever a word is built, including from
+  emitted code
+- **one derived layout** (a single authority computes node/header extents; no
+  second hand-maintained copy) and a **distinct content table**
+- ⛔ **NOT the byte counts.** The earlier "64/112 layout change" is
+  **superseded** and is *not* retained. The recut promotes persistent
+  arbitrary-precision `Int` into scope, and region-owned magnitude storage
+  necessarily widens node/header extents; **a sound persistent-wide-`Int`
+  representation cannot both satisfy that promoted `AC-10` obligation and hold
+  64/112 unchanged.** (Nor is the successor "80/136" retained: the exact-SHA
+  review of `fd4e7f08` found the declared 136 was actually a 144-byte publish
+  with no consumer — which is why the *pin*, not the *number*, is the retained
+  property.)
+- ⭐ **A reviewed layout delta required by an `AC-10` outcome is PREDICATE DELTA,
+  NOT RESTART.** Do not read a changed byte count as the recut having reopened
+  proved architecture; read it as the promoted obligation doing exactly what it
+  was promoted to do.
 - removal of the caller-supplied store-identity writer
 - the emitted String/Bytes reachability controls and their causal mutation
   (`M14`, exact `BOUNDARY_ERR_CLASS = -4`)
