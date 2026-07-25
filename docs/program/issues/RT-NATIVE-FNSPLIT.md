@@ -70,6 +70,42 @@ ruled that unacceptable without understanding the scaling law. RT-NATIVE-FNSPLIT
 
 Gates the [[NATIVE-HANDLE-CARRIER]] fast-follow + [[PX8-F-CAP-41]] too.
 
+> ### ⛔ DESIGN CONSTRAINT ON GATE REQUIREMENT 1 — added 2026-07-25
+>
+> **The n=3..7 harness MUST run its workers on the PRODUCT's stack (8 MiB /
+> `ulimit -s`), NOT on the `crates/ken-cli/tests/` convention of
+> `stack_size(256 * 1024 * 1024)`.**
+>
+> **Why, measured:** B2A-C's correspondence threading added ~128 KiB per
+> recursive lowering frame, and CI went red on
+> `ken-cli::px8ta_oriented_subcontinuation
+> public_two_three_level_brackets_finish_and_release_lifo` with
+> `fatal runtime error: stack overflow` (PR #940). Bisected at 64 KiB resolution:
+>
+> | commit | minimum passing stack |
+> |---|---|
+> | `70bd2c74` (base) | **> 1984 KiB, ≤ 2048 KiB** — cleared libtest's 2 MiB default by **< 64 KiB** |
+> | `08633b3c` (candidate) | **> 2112 KiB, ≤ 2176 KiB** — did not fit; SIGABRT |
+>
+> ⇒ The remedy (`bb2242e8`) wrapped that one test at the repo's conventional
+> **256 MiB** — correct and in-scope, but it means **that test can never detect
+> stack growth again**, and every other `ken-cli` test was already blind for the
+> same reason (5 pre-existing 256 MiB sites).
+>
+> ★ **The fleet spent its only accidental sentinel on the stack-growth axis, on
+> the WP chain chartered to bound growth on that axis.** Acceptable there; ⛔ NOT
+> acceptable in the harness that DISCHARGES the gate.
+>
+> ⚠ **A 256 MiB harness would report wall-time, RSS and internal counts while
+> silently tolerating stack growth that kills the product at 8 MiB — i.e. it
+> would measure the wrong machine and pass.** Same shape as
+> `verify-the-mechanism-not-a-proxy`: the numbers would be real and the
+> conclusion wrong.
+>
+> ⇒ **Stack exhaustion is a THIRD growth axis** alongside compile wall-time and
+> peak RSS, and it is the one the current test convention hides. The harness
+> should report it explicitly per n.
+
 ## ⛔ ARMED §5a RESEARCH-CONSULT TRIGGER — the count of record
 
 **Steward holds the authoritative count** (steward playbook §5a duty 1). The

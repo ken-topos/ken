@@ -118,7 +118,44 @@
 > in a **`ken-cli`** integration test in another shard. Targeted builds are
 > STRUCTURALLY blind to it. Nobody erred locally — that is the gate's job.
 >
-> ### ⚠ PROVISIONAL (read off the implementer's PANE, not yet posted — reconfirm)
+> ### ✅ REMEDY FOLDED — `bb2242e8` pushed. AWAITING QA + A FRESH DECISION.
+>
+> **`origin/wp/RT-FNSPLIT-B2A-C-correspondence` = `bb2242e8`** (local-only again;
+> I pushed it). Leader authorized option A at `evt_1q092rpjrfv2c`; I verified the
+> fold independently: **1 commit, 1 file, +31/−3, ZERO production files** — inside
+> the leader's "no production/D9 changes, no widening beyond this one test" bound.
+> Reviewed at `evt_2pdbcz4swrsms`. **No hard-stop counted** — the remedy preserved
+> D9 and needed no mechanism change, so **#9 is still armed.**
+>
+> ⭐ **CONFIRMED thresholds (now committed in the test's comment):**
+> base `70bd2c74` **>1984 ≤2048 KiB** (cleared libtest's 2 MiB default by
+> **<64 KiB**) · candidate `08633b3c` **>2112 ≤2176 KiB** (SIGABRT).
+> ⇒ B2A-C added ~128 KiB/frame and consumed headroom that was already <64 KiB.
+>
+> ✅ **I checked the convention before second-guessing the 256 MiB number:** it is
+> the **established repo-wide pattern** (5 sites in `crates/ken-cli/tests/`,
+> incl. the sibling in that file). ⇒ **I explicitly did NOT demand an 8 MiB
+> one-off** — that would break consistency and be scope creep.
+> ⚠ **Prose nit only, NO respin:** the comment says the wrapper "makes the harness
+> match the product (8 MiB)" while granting **256 MiB, 32×** that. Fix only if the
+> file is touched anyway.
+>
+> ⭐ **RECORDED AGAINST THE PARENT'S SCALING GATE** (`RT-NATIVE-FNSPLIT`, gate
+> req. 1): **the n=3..7 harness MUST run on the product's 8 MiB stack, not the
+> 256 MiB test convention** — otherwise it reports wall-time/RSS while silently
+> tolerating stack growth that kills the product. **Stack exhaustion is a THIRD
+> growth axis** and the test convention hides it. This fold spent the fleet's only
+> accidental sentinel on that axis; acceptable here, ⛔ not in the gate harness.
+>
+> ### ⇢ NEXT: QA reviews `bb2242e8` → FRESH Decision → publisher
+>
+> ⛔ **`dec_603f046v0rjqg` authorized `08633b3c` and is STALE** — not merge
+> authority for `bb2242e8`. **A new Decision must name exact `bb2242e8`** (4th SHA
+> on this candidate). Then I re-run the publisher and let the **full shard matrix**
+> decide. ⚠ **454 of 533 tests never ran** in the red run — it does not tell us the
+> rest is clean.
+>
+> ### ⚠ (superseded) provisional pane-read
 >
 > Frame-growth thresholds it had drafted:
 > **base `70bd2c74`: >1984 ≤2048 KiB · candidate `08633b3c`: >2112 ≤2176 KiB.**
