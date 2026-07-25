@@ -3431,7 +3431,7 @@ fn the_plan_exposes_no_origin_to_expression_lookup() {
         vec![
             "pub(in crate::cranelift_backend) fn child_static_origin(",
             "pub(in crate::cranelift_backend) fn root_static_origin(",
-            "pub(in crate::cranelift_backend) fn declaration_entry_origin(",
+            "pub(in crate::cranelift_backend) fn declaration_occurrence_origin(",
             "pub(in crate::cranelift_backend) fn plan_static_transition_graph(",
         ],
         "N3 -- the planner's exported surface changed; an origin->expression \

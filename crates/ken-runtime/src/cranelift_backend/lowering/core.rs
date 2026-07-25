@@ -6162,7 +6162,7 @@ impl<'a> Lowering<'a> {
         // survives the rejection above, so a missing entry is a planner bug.
         let declaration_origin = self
             .static_transition_plan
-            .declaration_entry_origin(symbol.as_str())
+            .declaration_occurrence_origin(symbol.as_str())
             .ok_or_else(|| {
                 // A planner invariant, not a capacity limit: this declaration is
                 // transparent, so the planner planned it (`RT-PLANNER-ATTRIB-K`).

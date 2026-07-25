@@ -168,18 +168,22 @@ impl SemanticSourceSeed {
     /// visit. `children` are the occurrence's syntax children in **source
     /// position order**, already planned by the walk; their origins are the
     /// children's own preallocated positional identities, never minted here.
+    /// ⭐ `children` are the children's **occurrence** origins, never their
+    /// scheduling entries (`RT-FNSPLIT-B2A-C` D9). The parameter is
+    /// `&[StaticOriginId]` rather than `&[StaticNodeId]` so the type prevents
+    /// that conflation instead of the call sites having to remember it: for a
+    /// `ComputationalMatch` child the two are deliberately different nodes, and
+    /// passing the entry here was hard-stop #8.
     pub(super) fn expression(
         planned_node: StaticNodeId,
         expr: &RuntimeExpr,
-        children: &[StaticNodeId],
+        children: &[StaticOriginId],
         arena: &mut SemanticMaterialArena,
     ) -> Result<Self, CraneliftBackendError> {
         let atom_start = arena.atoms.len();
         let child_start = arena.child_origins.len();
         emit_expression_atoms(expr, arena)?;
-        for child in children {
-            arena.child_origins.push(StaticOriginId(child.0));
-        }
+        arena.child_origins.extend_from_slice(children);
         let material = arena.atoms_since(atom_start)?;
         let child_range = arena.children_since(child_start)?;
 
