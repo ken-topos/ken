@@ -209,6 +209,128 @@ easily be described as giving both. It gives the first. The control asserts
 
 ---
 
+# ⛔ SECOND ARCHITECT BLOCK of `657f60a0` — three more production defects
+
+## 1. The admitted representation was lossy **to emitted code**
+
+A spilled `Int` wrote `NODE_PAYLOAD = 0`; `Bytes`/`String` kept only a length.
+A separately compiled consumer saw every wide integer as **zero** and could not
+tell two equal-length strings apart. The paths that *could* — the typed
+residency map, the canonical decoder — are **Rust**.
+
+⭐ **That is hard-stop `#10` reproduced one layer along, inside the node built to
+close it.** `#10` said: the aggregate path works only because the consumer is
+Rust. The candidate said: the *content* path works only because the consumer is
+Rust. Same sentence, smaller noun — and every control was green, because they
+all asked about structure and none asked about **content**.
+
+## 2. The producer interface could forge store identity
+
+`ken_boundary_store_slot_local` took a **caller-supplied** `SlotId`, and the
+frozen guard expressly permits writes to a *newly allocated* node. So emitted
+code could replace the allocator's `NULL_SLOT` with any slot it liked.
+
+⛔ **I wrote the residual that this contradicts, and I pinned it.** The control
+constructed a node and read back `NULL_SLOT` — **without ever calling
+`store_slot`.** It asserted a property of a field nothing had written to. A
+green there was compatible with the field being writable by anyone.
+
+⚠ **The general form: a pin that never exercises the mechanism which would
+violate it is not evidence about that mechanism.** It is not a spelling problem
+and not a granularity problem — the assertion was true, about a path that did
+not include the risk. *Ask which call sequence would break the property, and put
+that sequence in the control.*
+
+Closed by **removal**, not by a guard: assigning store identity is not an
+emitted-code operation at all.
+
+## 3. `alloc` admitted the Cartesian product of tag × class
+
+Both sets were closed. Their **product** contained pairs no disposition can
+produce — `PersistentClosure + HostResult`, `InvocationHostResult +
+Constructor` — which minted successfully and failed much later at an unrelated
+projection, reporting the wrong defect in the wrong place.
+
+⚠ **Two closed sets do not make a closed relation.** Every previous control
+checked membership of each set independently, which is exactly what made the
+gap invisible: both halves passed.
+
+## The mutations on the new mechanisms
+
+| # | mutation (compile-preserving) | reddens | collateral |
+|---|---|---|---|
+| **M9** | `alloc` treats the relation mask as always-admitting | the whole-product relation sweep | **none — 1 test** |
+| **M10b** | `int_limb` perturbs the limb the native decoder returned | the spilled-`Int` content control | **none — 1 test** |
+| **M11** | byte access ignores the index within the node's span | both `Bytes` and `String` content controls | 2 tests |
+| **M12** | `store_int_tag` admits a persistent `Big` | the `Big`-refusal control, and the content producer | 2 tests |
+| **M13b** | a `NODE_SLOT` setter is re-wired at its emission site | **every test that emits the graph**, at emission: *"emitted code may not set node offset 16"* | by design |
+
+### ⚠ M13 was a no-op, and its green is reported as one
+
+The first form of M13 widened the guard's *predicate*
+(`… || offset == NODE_SLOT`) and **all 28 tests stayed green** — with the anchor
+verified as matched, so this was not the formatting no-op from the last round.
+
+⭐ **It is green because the assertion is a latch, not a detector.** Nothing
+calls `define_store_node_word` with `NODE_SLOT` any more, so widening what the
+guard *would* admit changes nothing observable. The latch fires on the event it
+exists to prevent — **re-wiring the setter** — which is what M13b does, and it
+panics at emission in every test that builds the graph.
+
+⛔ **Reporting this distinction matters more than the redden.** "The guard is
+mechanically enforced" is true of M13b and false of M13; a table that showed
+only M13b would imply the predicate itself is defended, and it is not. What
+defends the *inventory* is the allowed-writer list in
+`b2v_emitted_code_cannot_assign_store_identity`.
+
+### ⚠ And one bad pin of my own, caught by its own control
+
+That control first asserted `!BOUNDARY_LOCAL_HELPERS.iter().any(|n|
+n.contains("slot"))`. It **failed immediately** — on `ken_boundary_slot_local`,
+the *reader*, which is meant to exist because reading a node's slot is how
+`AC-6` is observable at all. A forbidden-substring needle colliding with
+unrelated surface, and it would also have missed a writer that spelled the field
+differently. Replaced with the **allowed writer inventory**, so any new writer
+reddens including one nobody imagined.
+
+### ⚠ `rustfmt <file>` reformatted a module tree, and the first commit carried it
+
+Formatting `lowering/core.rs` also reformatted `lowering/core/tests/control.rs`
+and ~68 unrelated lines of `core.rs` itself — `rustfmt` follows `mod`
+declarations, and this repo's committed formatting was not produced by a bare
+`rustfmt --edition 2021`. My real change to that file is **one line**. Caught by
+a `git diff --stat` audit against the base before handoff, restored, and the
+commit amended. The narrower sibling of the crate-wide-`fmt` churn rule: *the
+unit `rustfmt` formats is the module tree, not the file you named.*
+
+### Evasions attempted against the new pins
+
+| pin | evasion attempted | compiles? | verdict |
+|---|---|---|---|
+| `AC-4` `Int` content | return the node's payload directly instead of decoding | ✅ | 🟢 reddens — the control reconstructs the magnitude from sign+limb and the payload alone is not it |
+| `AC-4` `Int` content vacuity | pass values that fit the immediate range | — | 🟢 guarded: each case asserts `!int_fits_immediate(value)` first, so the control cannot silently test the wrong arm |
+| `AC-4` `Bytes`/`String` | discriminate by length | ✅ | 🟢 every case is the **same length**; the control also asserts the results are mutually distinct |
+| `AC-4` content by identity | return the store slot or a hash | ✅ | 🟢 the `String` cases include two that differ by one interior byte; identity would collapse them only if the store interned them together, and the control compares **bytes** |
+| `AC-1` relation | admit a superset | ✅ | 🟢 **M9** — the sweep covers the whole 81-pair product with **both** counts asserted, so neither arm can pass vacuously |
+| `AC-1` relation drift | change the CLIF mask without the table | ❌ **cannot** | 🟢 the mask is *computed* by `boundary_class_mask` from the one table; there is no second place to edit |
+| `AC-6` identity | re-add a slot writer under another name | ✅ | 🟢 the allowed-**writer** inventory reddens on any new `ken_boundary_store_*` |
+| `AC-6` identity | re-wire the generic setter to `NODE_SLOT` | ✅ | 🟢 **M13b** — panics at emission, in every test |
+
+### ⚠ One more residual — `NativeIntV1::Big` is out of reach at a persistent boundary
+
+Not a scoping choice: it is the **same rule** that made persistent words safe to
+escape. A `Big`'s limbs live in an entry `ken_native_int_intern_local` mallocs
+into the *invocation's* native arena, so a persistent node naming one is a
+surviving parent pointing at storage that dies first — `store_field`'s refusal,
+one representation down. `store_int_tag` returns `ERR_ESCAPE` for it, and
+`materialize` returns `None` rather than the previous silent zero.
+
+⭐ **Failing closed is strictly better than what shipped**, which admitted the
+`Big` and rendered it as `0`. Making `Big` cross persistently needs store-backed
+limb storage — a representation decision for the store/spec, not for `B2V`.
+
+---
+
 # AC → discharging control
 
 Required by the frame's second amendment (`origin/main` = `fdda953f`): one row
@@ -222,6 +344,7 @@ because a taxonomy with nowhere to put the honest answer records it as covered.
 | **AC-1** region bands | `b2v_the_region_thresholds_agree_with_referent_owner` | the CLIF's numeric bands classify every tag exactly as `referent_owner()`; both bands asserted non-empty |
 | **AC-2** no value-specialization | **the compiler** + `b2v_the_immediate_handle_choice_tracks_magnitude_only` | `boundary_value` imports no `NativeSeedEnvironment` and no environment vector — passing one **does not compile**. Magnitude cases test `MAX`, `MAX±1`, `MIN`, `MIN±1` |
 | **AC-3** exhaustive, no wildcard | `b2v_ac3_the_lowered_boundary_disposition_has_no_wildcard_arm` | arm-*head* enumeration (every `=>` line starts `Lowered::` or `\|`), 21 variants named, `Constructor`/`HostResult` checked **positionally** outside the fail-closed block, single-dispatch assertion. ⚠ first form was **defeated** by a binding catch-all |
+| **AC-4** **content** | `b2v_a_separately_compiled_consumer_reads_a_spilled_int_by_content`; `…distinguishes_equal_length_bytes`; `…distinguishes_equal_length_strings` | a spilled `Int` is a `NativeIntV1` pair decoded by `ken_native_int_resolve_local`; `Bytes`/`String` are read byte-by-byte from the region's data span. Every case in each control is **equal length** or **asserted to spill**, and the results are asserted mutually distinct |
 | **AC-4** **construct** | `b2v_emitted_code_constructs_a_nonconstant_constructor_and_a_consumer_reads_it`; `…constructs_both_host_result_arms`; `…constructs_a_record_readable_by_name`; `b2v_construction_fails_closed_at_each_ceiling` | a separately compiled **producer** mints each live class from `alloc` + `store_*`; one compiled body, three runtime heads; every ceiling and closed-set refusal asserted at its **exact** status |
 | **AC-4** **discriminate** | `b2v_emitted_code_selects_the_host_result_arm_at_runtime`; `…constructs_both_host_result_arms` | both arms, runtime discriminant, same compiled body |
 | **AC-4** **project** | `b2v_emitted_code_projects_a_non_constant_constructor_field`; `…projects_a_nested_aggregate` | separately compiled consumer; no step runs in Rust |
@@ -230,7 +353,10 @@ because a taxonomy with nowhere to put the honest answer records it as covered.
 | **AC-6** owner distinguishable | `b2v_referent_owner_distinguishes_persistent_from_borrowed` | `BoundaryReferentOwner` is a **distinct type** from `AbiStorageOwner`; the pair is non-degenerate (`left: 1, right: 2`) |
 | **AC-6** persistent identity | `b2v_a_constructed_persistent_word_survives_the_invocation_arena`; `b2v_the_frozen_prefix_refuses_emitted_mutation`; `b2v_equal_values_share_one_persistent_referent` | the arena is **dropped** and a second invocation resolves the same word; orphan-arena positive control returns `ERR_BOUNDS`; one slot ⇒ one word, byte-identical across invocations |
 | **AC-7** escape, exact error | `b2v_borrowed_ingress_fails_closed_on_escape_with_an_exact_error`; `b2v_a_persistent_node_refuses_an_invocation_owned_child` | exact `ERR_ESCAPE`; malformed ⇒ `ERR_TAG`, not `ERR_ESCAPE`; the construction-time invariant the Θ(1) check rests on is itself pinned, with both mirrors as positive controls |
-| **AC-8** INERT | `correspondence_adds_no_emitted_unit_to_the_production_census`; `the_backend_production_surface_inventory_is_closed`; `px8i_…identical_local_helper_clif` | all three **unchanged and re-run**; `lowering/mod.rs` census stays `0`/`0`/`0`. ⚠ **Helper delta re-baselined: 13 → 19** — `alloc`, `store_slot`, `store_tag_id`, `store_scalar`, `store_field`, `store_name`. Stated here before the verdict, not discovered in it |
+| **AC-8** INERT | `correspondence_adds_no_emitted_unit_to_the_production_census`; `the_backend_production_surface_inventory_is_closed`; `px8i_…identical_local_helper_clif` | all three **unchanged and re-run**; `lowering/mod.rs` census stays `0`/`0`/`0`. ⚠ **Helper delta re-baselined: 13 → 19 → 25** — `alloc`, `store_tag_id`, `store_scalar`, `store_field`, `store_name`. Stated here before the verdict, not discovered in it |
 | **AC-9** Θ(1) per module | `b2v_helper_population_does_not_grow_with_the_value_population`; `b2v_the_helper_inventory_is_closed_and_named` | two module emissions compared, and the value population varied ×1024 with the helper count fixed; the inventory pin reads the **module's actually declared** `ken_boundary_*` symbols against the permitted set. ⚠ first form was **defeated** — it only read the list |
+| **AC-1** tag × class relation | `b2v_the_tag_class_relation_is_closed_over_the_whole_product` | all 81 `tag × class` pairs through the emitted allocator, expectations from `boundary_relation_admits`; admitted **and** rejected counts asserted; the CLIF's mask re-checked against the table per pair |
+| **AC-6** no forged identity | `b2v_emitted_code_cannot_assign_store_identity`; `b2v_a_persistent_int_refuses_an_invocation_scoped_big` | `store_slot` **removed**; the allowed-writer inventory is pinned; every writer is exercised on a fresh node and the slot still reads `NULL_SLOT`, with the written fields checked as the positive control. ⚠ The emission latch is proved by **M13b**, not by the predicate |
 | **AC-1** tag *reachability* | **`NO CONTROL — open residual`** | a tag no disposition can produce is caught by review, not by CI. Found by inspection at `f934d233`; nothing mechanical enforces it |
+| **AC-4** `Big` at a persistent boundary | **`NO CONTROL — open residual`** — the *refusal* is pinned (`b2v_a_persistent_int_refuses_an_invocation_scoped_big`), the capability is not delivered | a `Big`'s limbs live in invocation-scoped storage; a persistent node naming one is the ephemeral-locator defect again. Needs store-backed limbs — a representation decision beyond `B2V` |
 | **AC-6** persistent *content-addressing* | **`NO CONTROL — open residual`** | an emitted-constructed node carries `NULL_SLOT`. The **limit** is pinned (the survival control asserts it); the property is not delivered. Closing it is a `B2F` lifecycle decision |
