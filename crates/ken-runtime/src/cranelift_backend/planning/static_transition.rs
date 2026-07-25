@@ -1796,8 +1796,8 @@ fn runtime_expr_tag(expr: &RuntimeExpr) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::semantic_ir::{
-        build_semantic_plane, DenseRange, RuntimeExprShape, SemanticAtomKind,
-        SemanticOperandElement, SemanticSourceKind, StaticOriginId,
+        build_semantic_plane, DenseRange, PredeclaredFunctionId, RuntimeExprShape, SemanticAtomKind,
+        SemanticOperandElement, SemanticOwner, SemanticSourceKind, StaticOriginId,
     };
     use super::*;
     use crate::{
@@ -4010,6 +4010,585 @@ mod tests {
                 .lines()
                 .any(|line| line.trim() == "children: &[StaticNodeId],"),
             "AC-12: no semantic child list may be typed as scheduling nodes"
+        );
+    }
+
+    // ---- RT-FNSPLIT-B2O — static body ownership -----------------------------
+
+    fn b2o_transparent_declaration(body: RuntimeExpr) -> RuntimeDeclaration {
+        RuntimeDeclaration {
+            symbol: "decl:fixture::b2o".to_string(),
+            kind: RuntimeDeclarationKind::Transparent { body },
+            metadata: crate::RuntimeSymbolMetadata {
+                obligations: Default::default(),
+                obligation_metadata: Default::default(),
+                assumptions: Default::default(),
+                assumption_trust_metadata: Default::default(),
+                trusted_base_delta: Default::default(),
+                lowerability: None,
+                unsupported: None,
+                runtime_checks: Default::default(),
+                capabilities: Default::default(),
+                effects: Default::default(),
+            },
+        }
+    }
+
+    fn b2o_retained_closure(body: RuntimeExpr) -> RuntimeExpr {
+        RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(body),
+        }
+    }
+
+    fn b2o_units(expr: &RuntimeExpr, declarations: &BTreeMap<&str, &RuntimeDeclaration>) -> usize {
+        plan_static_transition_graph(expr, declarations)
+            .expect("plannable")
+            .semantic
+            .functions
+            .len()
+    }
+
+    /// `AC-4` — the unit set is exactly `plan.entries` ∪ `StaticBody` targets,
+    /// with **three positive** controls.
+    ///
+    /// ⚠ A negative check ("no extra units") passes for any reason, including
+    /// because nothing reached the checker. Each control here asserts a **delta**
+    /// against a base fixture differing in exactly one way, so the count is
+    /// attributable and no absolute number is frozen.
+    #[test]
+    fn b2o_ac4_each_seed_class_adds_exactly_one_function_unit() {
+        // Promise class: durable invariant — a relation between fixtures.
+        let base = unit();
+        let none = BTreeMap::new();
+        let base_units = b2o_units(&base, &none);
+        // Non-vacuity: the base must already carry the root unit, or every "+1"
+        // below could be measuring the root's arrival instead of the new seed.
+        assert_eq!(base_units, 1, "the base fixture is the root unit alone");
+
+        // Control 1 — one retained closure adds exactly one unit.
+        assert_eq!(
+            b2o_units(&b2o_retained_closure(unit()), &none),
+            base_units + 1,
+            "AC-4: one retained closure must add exactly one function unit"
+        );
+
+        // Control 2 — one transparent declaration adds exactly one unit.
+        //
+        // ⚠ This is the row an obvious test set omits. A closure/non-closure pair
+        // does not exercise the **second top-level seed class** at all, so a
+        // declaration-entry bug would pass every other control here. Two seed
+        // classes require two positive controls.
+        let declaration = b2o_transparent_declaration(unit());
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::b2o", &declaration);
+        assert_eq!(
+            b2o_units(&base, &declarations),
+            base_units + 1,
+            "AC-4: one transparent declaration must add exactly one function unit"
+        );
+
+        // Control 3 — a non-closure expression inside an existing unit adds zero.
+        let interior = RuntimeExpr::Let {
+            value: Box::new(unit()),
+            body: Box::new(unit()),
+        };
+        assert_eq!(
+            b2o_units(&interior, &none),
+            base_units,
+            "AC-4: an expression inside an existing unit must add no unit"
+        );
+        // ...and it genuinely added planned nodes, so control 3 is not vacuous.
+        let interior_nodes = plan_static_transition_graph(&interior, &none)
+            .expect("plannable")
+            .nodes
+            .len();
+        let base_nodes = plan_static_transition_graph(&base, &none)
+            .expect("plannable")
+            .nodes
+            .len();
+        assert!(
+            interior_nodes > base_nodes,
+            "control 3 proves nothing unless the interior expression added nodes"
+        );
+    }
+
+    /// `AC-2` — totality and exclusivity are **pinned**, not merely structural.
+    ///
+    /// ⭐ "It is total by construction" is exactly the claim hard-stop #5 was
+    /// defeated on: the carrier existed and the property did not follow. A
+    /// structural guarantee still needs a check that *fires* if the construction
+    /// changes.
+    #[test]
+    fn b2o_ac2_every_non_sentinel_node_has_exactly_one_in_range_function_owner() {
+        // Promise class: durable invariant.
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).expect("plannable");
+
+        let mut owned = 0usize;
+        let mut terminals = 0usize;
+        let mut trap_terminals = 0usize;
+        for descriptor in &plan.semantic.descriptors {
+            match descriptor.owner {
+                SemanticOwner::Function(id) => {
+                    assert!(
+                        (id.0 as usize) < plan.semantic.functions.len(),
+                        "an owner names a function unit outside the closed table"
+                    );
+                    owned += 1;
+                }
+                SemanticOwner::Terminal => terminals += 1,
+                SemanticOwner::TrapTerminal => trap_terminals += 1,
+            }
+        }
+        // The shared-exit population is EXACTLY the two sentinels — not "at
+        // least", and not "whichever nodes ended up unowned".
+        assert_eq!(
+            (terminals, trap_terminals),
+            (1, 1),
+            "AC-2: the shared-exit population must be exactly one Terminal and \
+             one TrapTerminal"
+        );
+        assert_eq!(
+            owned,
+            plan.nodes.len() - 2,
+            "AC-2: every non-sentinel node must resolve to one Function owner"
+        );
+        // Non-vacuity: a single-unit fixture satisfies every line above while
+        // proving nothing about exclusivity.
+        assert!(
+            plan.semantic.functions.len() >= 2,
+            "this fixture has one unit, so exclusivity is untested here"
+        );
+    }
+
+    /// `AC-3` — composition, **bidirectionally**, per `SemanticOpcode` variant.
+    ///
+    /// ⛔ Hard-stop #8 was predictable from the question its frame asked: the
+    /// census answered `TOTAL` and was *true*, but the mechanism needed **closure
+    /// under parent→child reachability**, a different property.
+    /// `ComputationalMatch` files its occurrence on a different node from the
+    /// entry its parent points at, so totality held while composition failed.
+    /// This composes the child accessor with the owner map instead of measuring
+    /// totality a second time.
+    #[test]
+    fn b2o_ac3_ownership_composes_down_and_up_for_every_opcode_variant() {
+        // Promise class: durable invariant.
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).expect("plannable");
+        let owner_of = |origin: StaticOriginId| plan.semantic.descriptors[origin.0 as usize].owner;
+
+        // The retained-body boundaries, read off the graph rather than assumed.
+        let static_body = plan
+            .edges
+            .iter()
+            .filter(|edge| edge.kind == EdgeKind::StaticBody)
+            .map(|edge| (edge.from, edge.to))
+            .collect::<BTreeMap<_, _>>();
+
+        let mut variants = BTreeSet::new();
+        let mut boundary_children = 0usize;
+        let mut interior_children = 0usize;
+        for (position, record) in plan.semantic.records.iter().enumerate() {
+            let parent = StaticOriginId(position as u32);
+            variants.insert(record.opcode);
+            let parent_owner = owner_of(parent);
+            let crossing = static_body.get(&StaticNodeId(parent.0)).copied();
+            for index in 0..record.child_origins.len as usize {
+                let child = plan
+                    .child_static_origin(parent, index)
+                    .expect("a positional child origin");
+                let child_owner = owner_of(child);
+                match crossing {
+                    // Child 0 of a closure occurrence IS its retained body. ⚠ Its
+                    // *occurrence* may sit on a different node from the entry the
+                    // StaticBody edge targets — that is the #8 shape — so this
+                    // asserts the OWNER agrees, not that the nodes are equal.
+                    Some(callee_seed) if index == 0 => {
+                        let callee = match owner_of(StaticOriginId(callee_seed.0)) {
+                            SemanticOwner::Function(id) => id,
+                            other => panic!("a callee seed cannot be a shared exit: {other:?}"),
+                        };
+                        assert_eq!(
+                            child_owner,
+                            SemanticOwner::Function(callee),
+                            "the retained body child must be owned by the callee unit"
+                        );
+                        assert_ne!(
+                            child_owner, parent_owner,
+                            "the retained body child must not stay in the caller's unit"
+                        );
+                        boundary_children += 1;
+                    }
+                    // Every other child — a capture, or any child of a
+                    // non-closure — stays inside the parent's own unit.
+                    _ => {
+                        assert_eq!(
+                            child_owner, parent_owner,
+                            "descending to a non-boundary child left the parent's unit"
+                        );
+                        interior_children += 1;
+                    }
+                }
+            }
+        }
+
+        // ⭐ The "up" half. The boundary crossed on descent is represented by the
+        // **callee seed**, and the body's return node stays inside the
+        // **callee's** owner rather than being handed back to the caller. This is
+        // AC-5 control 8's property stated positively.
+        //
+        // ⛔ `B2O` invents no static edge back to the caller — `B2R` carries the
+        // dynamic return continuation — so "up" is checked as *the return node is
+        // callee-owned and exits only through a shared exit*, never as a
+        // cross-owner edge this node manufactured.
+        let mut returns = 0usize;
+        for node in &plan.nodes {
+            if node.transition != TransitionKind::ClosureBody {
+                continue;
+            }
+            returns += 1;
+            let SemanticOwner::Function(unit) =
+                plan.semantic.descriptors[node.id.0 as usize].owner
+            else {
+                panic!("a ClosureBody return successor must be owned by a function unit");
+            };
+            let seed = plan.semantic.functions[unit.0 as usize].planned_node;
+            assert!(
+                static_body.values().any(|target| *target == seed),
+                "the ClosureBody return successor is owned by a unit that is not a callee"
+            );
+            let exits = plan
+                .edges
+                .iter()
+                .filter(|edge| edge.from == node.id)
+                .collect::<Vec<_>>();
+            assert!(
+                !exits.is_empty(),
+                "a return successor with no exit proves nothing"
+            );
+            for edge in exits {
+                assert!(
+                    matches!(
+                        plan.semantic.descriptors[edge.to.0 as usize].owner,
+                        SemanticOwner::Terminal | SemanticOwner::TrapTerminal
+                    ),
+                    "a ClosureBody return successor must exit only through a shared exit"
+                );
+            }
+        }
+
+        // ⛔ No silent caps. Say what was exercised and fail if a class never
+        // appeared — an assertion nothing reached is green for the wrong reason.
+        assert_eq!(
+            variants.len(),
+            6,
+            "AC-3 requires EVERY SemanticOpcode variant, not a sampled few; this \
+             fixture exercised {variants:?}"
+        );
+        assert!(boundary_children > 0, "no boundary child was exercised");
+        assert!(interior_children > 0, "no interior child was exercised");
+        assert!(returns > 0, "no ClosureBody return successor was exercised");
+    }
+
+    /// A fixture with two retained closures **and** a transparent declaration, so
+    /// every seed class and both `AC-5` duplicate/overlap shapes are constructible.
+    fn b2o_two_closure_fixture() -> RuntimeExpr {
+        RuntimeExpr::Let {
+            value: Box::new(b2o_retained_closure(unit())),
+            body: Box::new(b2o_retained_closure(RuntimeExpr::Var(0))),
+        }
+    }
+
+    fn b2o_err(
+        plane: &SemanticPlane,
+        nodes: &[StaticNode],
+        edges: &[StaticEdge],
+        entries: &[StaticNodeId],
+        plan: &StaticTransitionPlan,
+    ) -> CraneliftBackendError {
+        plane
+            .validate(
+                nodes,
+                edges,
+                entries,
+                &plan.semantic_sources,
+                &plan.semantic_material,
+            )
+            .expect_err("the control must redden")
+    }
+
+    /// `AC-5` — every ownership law is enforced, each with its own **independent**
+    /// redden control, constructed and confirmed to error **before emission**.
+    ///
+    /// ⛔ A pin that enumerates spellings is not a proof of the property. Each
+    /// control below mutates the *graph, the seeds, or the recorded owner* — never
+    /// a string — and every mutation keeps the code compiling.
+    ///
+    /// ⚠ **Honest residual, and it is a finding about the AC rather than a gap in
+    /// the mechanism.** Rows 5 and 6 of `AC-5` land on the **same** detector, and
+    /// they must: because ownership is *derived* by traversal from seeds over
+    /// non-`StaticBody` edges and then compared against the record, any ordinary
+    /// cross-owner edge necessarily makes some node reachable from two seeds. So
+    /// "a non-`StaticBody` cross-owner edge" **is** an overlap, and no data
+    /// mutation can produce one without producing the other. Both are constructed
+    /// below and both redden; what cannot be claimed is that they exercise two
+    /// independent checks. The `D3` edge laws are still checked, because they
+    /// constrain the **algorithm**: a traversal edited to cross `StaticBody` would
+    /// yield a self-consistent partition that only the "crosses to a *distinct*
+    /// unit" law rejects. The genuinely independent edge-law control is the
+    /// sentinel one (control 5b).
+    #[test]
+    fn b2o_ac5_each_ownership_law_reddens_on_its_own() {
+        // Promise class: durable mutation proof.
+        let declaration = b2o_transparent_declaration(unit());
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::b2o", &declaration);
+        let expr = b2o_two_closure_fixture();
+        let plan = plan_static_transition_graph(&expr, &declarations).expect("plannable");
+
+        // Non-vacuity of the fixture itself, before any control runs.
+        assert!(
+            plan.entries.len() >= 2,
+            "controls 1 and 2 need a root AND a declaration entry"
+        );
+        let static_body = plan
+            .edges
+            .iter()
+            .filter(|edge| edge.kind == EdgeKind::StaticBody)
+            .map(|edge| (edge.from, edge.to))
+            .collect::<Vec<_>>();
+        assert!(
+            static_body.len() >= 2,
+            "control 4 needs two static body edges to alias"
+        );
+        plan.semantic
+            .validate(
+                &plan.nodes,
+                &plan.edges,
+                &plan.entries,
+                &plan.semantic_sources,
+                &plan.semantic_material,
+            )
+            .expect("the unmutated plane must validate, or every control below is vacuous");
+
+        let unowned = planner_error("planned node has no function unit owner");
+        let population = planner_error(
+            "function unit population is not the scheduling entries and static body targets",
+        );
+
+        // 1 — a missing ROOT entry. The root's subgraph is then reachable from no
+        //     seed at all.
+        assert_eq!(
+            b2o_err(
+                &plan.semantic,
+                &plan.nodes,
+                &plan.edges,
+                &plan.entries[1..],
+                &plan
+            ),
+            unowned,
+            "AC-5.1: dropping the root entry must redden"
+        );
+
+        // 2 — a missing TRANSPARENT DECLARATION entry. ⚠ Independent of control 1:
+        //     a checker that only knew about the root would pass 1 and fail here.
+        assert_eq!(
+            b2o_err(
+                &plan.semantic,
+                &plan.nodes,
+                &plan.edges,
+                &plan.entries[..1],
+                &plan
+            ),
+            unowned,
+            "AC-5.2: dropping a transparent declaration entry must redden"
+        );
+
+        // 3 — a missing StaticBody TARGET: demote one StaticBody edge to an
+        //     ordinary transfer, so its body stops being a seed.
+        let mut demoted = plan.clone();
+        let victim = demoted
+            .edges
+            .iter()
+            .find(|edge| edge.kind == EdgeKind::StaticBody)
+            .copied()
+            .expect("a static body edge");
+        rewrite_edge(
+            &mut demoted,
+            victim.id,
+            victim.from,
+            victim.to,
+            EdgeKind::Continue,
+        );
+        assert_eq!(
+            b2o_err(
+                &plan.semantic,
+                &plan.nodes,
+                &demoted.edges,
+                &plan.entries,
+                &plan
+            ),
+            population,
+            "AC-5.3: dropping a static body target must redden"
+        );
+
+        // 4 — a DUPLICATE StaticBody target: point the second boundary edge at
+        //     the first one's body.
+        let mut aliased = plan.clone();
+        let second = aliased
+            .edges
+            .iter()
+            .filter(|edge| edge.kind == EdgeKind::StaticBody)
+            .nth(1)
+            .copied()
+            .expect("a second static body edge");
+        rewrite_edge(
+            &mut aliased,
+            second.id,
+            second.from,
+            static_body[0].1,
+            EdgeKind::StaticBody,
+        );
+        assert_eq!(
+            b2o_err(
+                &plan.semantic,
+                &plan.nodes,
+                &aliased.edges,
+                &plan.entries,
+                &plan
+            ),
+            planner_error("static body target has more than one incoming static body edge"),
+            "AC-5.4: a duplicate static body target must redden, not be deduplicated"
+        );
+
+        // 5 — a non-StaticBody CROSS-OWNER edge: reach from the root's unit
+        //     straight into a body-owned node. See the honest residual above —
+        //     this reddens at the overlap detector, by construction.
+        let mut crossed = plan.clone();
+        let root_entry = plan.entries[0];
+        append_edge(&mut crossed, root_entry, static_body[0].1, EdgeKind::Continue);
+        assert_eq!(
+            b2o_err(
+                &plan.semantic,
+                &plan.nodes,
+                &crossed.edges,
+                &plan.entries,
+                &plan
+            ),
+            planner_error("planned node is owned by more than one function unit"),
+            "AC-5.5: a non-static-body cross-owner edge must redden"
+        );
+
+        // 5b — the genuinely independent EDGE-LAW control: an outgoing edge from
+        //      a shared exit. A sentinel is never traversed from, so this creates
+        //      no overlap and reaches the edge law itself.
+        let mut exiting = plan.clone();
+        let terminal = plan
+            .nodes
+            .iter()
+            .find(|node| node.transition == TransitionKind::Terminal)
+            .expect("the shared terminal")
+            .id;
+        append_edge(&mut exiting, terminal, root_entry, EdgeKind::Continue);
+        assert_eq!(
+            b2o_err(
+                &plan.semantic,
+                &plan.nodes,
+                &exiting.edges,
+                &plan.entries,
+                &plan
+            ),
+            planner_error("shared exit has an outgoing transfer edge"),
+            "AC-5.5b: the edge law must reject an edge leaving a shared exit"
+        );
+
+        // 6 — OVERLAP by a spurious extra seed: name an already-owned interior
+        //     node as a scheduling entry. ⚠ A different construction from control
+        //     5 — a bad seed rather than a bad edge.
+        //
+        // ⚠ Select it by its OWNER, not by excluding the node kinds I happen to
+        // think of. Picking "not the terminal, not an entry, not a static body
+        // target" selected the **trap** terminal, which is never traversed from,
+        // so the control created no overlap and reddened at the population check
+        // instead — green-for-the-wrong-reason, caught only because this control
+        // asserts the exact error rather than merely `is_err`.
+        let root_unit = SemanticOwner::Function(PredeclaredFunctionId(0));
+        let interior = plan
+            .nodes
+            .iter()
+            .map(|node| node.id)
+            .find(|id| {
+                *id != root_entry
+                    && plan.semantic.descriptors[id.0 as usize].owner == root_unit
+            })
+            .expect("an interior node inside the root unit");
+        assert!(
+            !plan.entries.contains(&interior)
+                && !static_body.iter().any(|(_, target)| *target == interior),
+            "control 6 needs a node that is not already a seed"
+        );
+        let mut extra_entries = plan.entries.clone();
+        extra_entries.push(interior);
+        assert_eq!(
+            b2o_err(
+                &plan.semantic,
+                &plan.nodes,
+                &plan.edges,
+                &extra_entries,
+                &plan
+            ),
+            planner_error("planned node is owned by more than one function unit"),
+            "AC-5.6: an ordinary node owned by two seeds must redden"
+        );
+
+        // 7 — a SENTINEL misclassified as a Function.
+        let mut misclassified = plan.semantic.clone();
+        misclassified.descriptors[terminal.0 as usize].owner =
+            SemanticOwner::Function(PredeclaredFunctionId(0));
+        assert_eq!(
+            b2o_err(
+                &misclassified,
+                &plan.nodes,
+                &plan.edges,
+                &plan.entries,
+                &plan
+            ),
+            planner_error("semantic descriptor owner is not the node's derived function unit"),
+            "AC-5.7: a shared exit recorded as a function unit must redden"
+        );
+
+        // 8 — a `ClosureBody` return successor assigned to the CALLER.
+        //
+        // ⚠ This is the one that would otherwise ship green: assigning the return
+        // node to the caller is the *intuitive* reading of "the caller resumes
+        // here", it produces a coherent-looking partition, and only the down/up
+        // invariant catches it.
+        let return_node = plan
+            .nodes
+            .iter()
+            .find(|node| node.transition == TransitionKind::ClosureBody)
+            .expect("a ClosureBody return successor")
+            .id;
+        let caller_owner = plan.semantic.descriptors[static_body[0].0 .0 as usize].owner;
+        let callee_owner = plan.semantic.descriptors[return_node.0 as usize].owner;
+        assert_ne!(
+            caller_owner, callee_owner,
+            "control 8 proves nothing unless the caller and callee units differ"
+        );
+        let mut handed_back = plan.semantic.clone();
+        handed_back.descriptors[return_node.0 as usize].owner = caller_owner;
+        assert_eq!(
+            b2o_err(
+                &handed_back,
+                &plan.nodes,
+                &plan.edges,
+                &plan.entries,
+                &plan
+            ),
+            planner_error("semantic descriptor owner is not the node's derived function unit"),
+            "AC-5.8: a return successor assigned to the caller must redden"
         );
     }
 }
