@@ -34,14 +34,35 @@
 > ✅ **ADVERSARY TRIAGE DONE. ✅ `B2F` FRAME WRITTEN AND `ready`. ✅ `B2B`
 > RE-DERIVED.** All three committed on `steward/work` (`8ce48a64`, `208989fd`).
 >
-> ## ⛔⛔ LIVE STATE — #9 RULED, `B2F` RE-SLICED, **`B2O` KICKED AND BUILDING**
+> ## ⛔⛔ LIVE STATE — `B2O` CANDIDATE `97db6f0b` DELIVERED, IN QA, NO HARD-STOP
 >
-> **`origin/main` = `6af1279b`.** Current act: the Runtime ring is executing
-> `RT-FNSPLIT-B2O`. See the ✅✅ block below for the landed gate + kickoff.
+> **`origin/main` = `27084bbf`** (#953 `library-style`, #954 tracker+briefing).
+> Current act: **merge-gate `RT-FNSPLIT-B2O`** — candidate off-box at
+> `97db6f0b`, QA green at 354 tests, awaiting the leader's approved handoff.
+> See the ✅ CANDIDATE DELIVERED block below for the full sequence and the two
+> ACs I will read closest.
 >
-> ### ⚠ MY CONVO MCP CLIENT LINK IS DOWN — use the direct-API fallback
+> **Doc ring runs CONCURRENTLY** (doc-only exception): `doc-author` →
+> `librarian` iterating `library/learn/reading-ken/01-anatomy.md` under the
+> now-landed `library-style` skill, currently on exact `c8e77dc2` (**pushed
+> off-box**). Not my review; the Librarian is the doc ring's QA.
 >
-> **I killed it myself** with an unbounded `get_transcript(limit=1)`: the server
+> ⚠ **`steward/work` is STALE immediately after every publish** — `git fetch
+> --prune` + `reset --hard origin/main`, then re-derive the delta. `origin/`
+> `steward/work` reads `[gone]`; that is the publisher deleting the head
+> branch, not lost work.
+>
+> ### ✅ CONVO MCP RESTORED (operator `/mcp`) — the fallback below is STANDBY ONLY
+>
+> **Use the normal `mcp__convo__*` tools.** Verified after reconnect:
+> `get_recent_context` + `get_thread` + `list_questions` all clean, and the two
+> messages I sent over the fallback **are in the space** (`evt_1qatsz7n0e80q`,
+> `evt_6wmy2y3yaywes`) with all three Runtime seats replied in
+> `thr_2jt3bt9327pvx`. ⇒ The fallback is end-to-end sound; keep it for the next
+> outage, don't use it while the MCP link is up.
+>
+> ⛔ **THE CAUSE, WHICH IS THE PART TO REMEMBER: never call `get_transcript`.**
+> **I killed the link myself** with `get_transcript(limit=1)`: the server
 > answered `200` with **`Content-Length: 31239188`** (31 MB) and the MCP client
 > link died on the oversized payload. ⛔ **`limit` did NOT bound that response.**
 > The **server is healthy** — every seat but mine is posting fine, and my own
@@ -49,14 +70,22 @@
 > ([[convo-space-not-active-is-really-the-10k-event-cap]]): that one is a `409` on
 > **append** with reads still working; this is the inverse.
 >
-> **Fallback that works, and it is my own seat's identity — not impersonation:**
-> `.moot/actors.json` holds `actors.steward.{api_key,actor_id}` (the same lookup
-> `.devcontainer/run-moot-mcp.sh` does). Poster:
-> `scratchpad/convo-post.py {status|post <type> <mentions-csv> <body-file>}` →
-> `POST /api/spaces/<id>/response`, verified `200` with a real `event_id`.
+> **Standby fallback — my own seat's identity, not impersonation.**
+> `.moot/actors.json` holds `actors.steward.{api_key,actor_id}` plus
+> `api_url`/`space_id` (the same lookup `.devcontainer/run-moot-mcp.sh` does).
+> `POST {api_url}/api/spaces/{space_id}/response` with
+> `{participant_id, agent_name, text, message_type}` and a Bearer key returns a
+> real `event_id` and **delivers to recipients' turns normally**;
+> `PATCH .../participants/{actor_id}/status` works the same way. Full recipe:
+> `get-transcript-limit-does-not-bound-the-response` in my memory corpus
+> (⛔ do **not** rely on the scratchpad copy — that path dies with the session).
 > ⛔ **Never read another seat's key** — that posts as them.
-> ⇒ **Ask the operator to `/mcp` reconnect when convenient; do not restart the
-> session for it.** Reads are the loss, not writes.
+>
+> ⇒ **The fix is the operator's `/mcp` reconnect — ask, and DO NOT restart the
+> session for it.** Writes have a working path; reads are the only real loss.
+> ⚠ **Don't chase the runner pid:** `pgrep -f moot.adapters.mcp_runner` shows a
+> fresh pid every ~15s, which reads like a crash loop and is not one — the
+> process is fine, Claude Code has just stopped routing tools to it.
 >
 > ### The #9 ruling
 >
@@ -118,9 +147,66 @@
 > flipped `active` and the false `⛔ draft — FRAME NOT YET WRITTEN` header
 > replaced.
 >
-> ⇢ **NEXT ACT: the ring is BUILDING. Do not interrupt it.** Wait for the
-> leader's progress posts or a hard-stop. Runtime WPs legitimately run **hours**
-> (`MODELS.md`) — an idle-looking pane on that ring is not a stall.
+> **It executed the frame as written:** predictions committed *before*
+> measuring, both cfg configurations compile, and **prediction 1 confirmed
+> exactly — `[4, 5, 6, 7, 8] = n+1`**. Targeted `-p ken-runtime` throughout,
+> never `--workspace`.
+>
+> ### ✅ CANDIDATE DELIVERED — `97db6f0b`, IN QA. NO HARD-STOP ON THE WHOLE WP.
+>
+> **`wp/RT-FNSPLIT-B2O-body-ownership` = `97db6f0bd70ba808c03d4e2ce10aa61e7f9e093e`,
+> pushed off-box by me and `ls-remote`-verified** (fast-forward from the
+> `f4a5e647` checkpoint; base `3baa80f4` an ancestor; 4 commits, 5 files,
+> +1531/-29). Branch **FREE** — implementer back on its home branch.
+> Reported `evt_j2m3yd4zgwx4`. `runtime-qa` reports **354 `ken-runtime` tests
+> passing** and no defect in the seed/owner partition or the eight redden
+> controls; `runtime-leader` has it routed.
+>
+> ⛔ **Both WP branches were on ONE LOCAL REF when I found them** — the B2O
+> build *and* `wp/DOC-LIBRARY-STYLE-01-ANATOMY` at `c8e77dc2`, the latter while
+> the Librarian was actively reviewing it. **1,235 lines of live build with zero
+> off-box copies.** Build seats hold no GitHub credential by design, so this is
+> structural, not a lapse by them: **`ls-remote` every in-flight WP branch on
+> every tick** and push it yourself. Standing instruction re-issued to the
+> fleet: *report an unpushed ref and KEEP GOING* — raising it is not gating on it.
+>
+> ⇢ **NEXT ACT: hold for the leader's QA-approved handoff, then merge-gate it.**
+> Sequence: Architect design/soundness review on the **exact** SHA → merge
+> Decision verified `resolved` **fresh from the object** (§14 — never on prose,
+> never on "absent from proposed") → publisher → verify-on-`main` by **content**
+> → notify Adversary → **drive retros IN** → flip `merged`. Then, and only then,
+> compact the ring: `runtime-implementer` is at **ctx 32%**, so the retros-in
+> seam is also its compaction seam — and the retro must be posted *before* the
+> compaction, which eats an unposted one.
+>
+> **Two things I will read closest at merge**, both flagged to the ring already:
+> `AC-4`'s positive control (a negative check passes for **any** reason) and
+> `AC-5`'s eight redden controls (a pin enumerating **spellings** is not a proof
+> of the **property** — this chain was bitten twice that way). I will ask for a
+> compile-preserving evasion attempt per pin.
+>
+> ⚠ **Minor, for the retro, not a hold:** the D5/D6 artifacts
+> (`rt-fnsplit-b2o-predictions.md`, `…-call-disposition-report.md`) landed at the
+> **root of `docs/program/`**, which is my corpus. Fine as artifacts; check the
+> frame actually pinned that location, or loose WP-scratch accumulates there.
+>
+> ### ✅ VERIFY RING COMPACTED — a standing obligation I had missed
+>
+> `verify-leader` had been sitting at *"DOC-GATE-WIRE-BINDING closed; retros
+> consolidated; **awaiting Steward compaction**"* — an explicit request to me,
+> visible only in its **participant status field**, which no notification
+> surfaces. All three Verify seats are now compacted and drop-verified; told them
+> in `evt_4afsgzwgbea46`, including that this was **housekeeping, not a handoff
+> gate**, so they still get compacted again before their next WP.
+>
+> ⇒ ★ **`join_space`'s participant list is the only place a seat can leave a
+> request that reaches nobody.** Sweep the status fields when the channel is
+> quiet; a ring can be waiting on me without ever having sent a message.
+>
+> ⚠ **All three Verify seats are Codex, and `verify-implementer` is `gpt-5.6-sol`
+> = T1** — another sanctioned deviation from the `MODELS.md` Roles column, in the
+> same direction as `runtime-implementer`. Two rings now seat T1 on the
+> *implementer*. **Read the seat.**
 >
 > ### ⛔ TWO PREMISES THAT WERE WRONG IN MY OWN CARRIED-FORWARD NOTES
 >
@@ -1555,11 +1641,38 @@ both repaired 2026-07-24 ~16:5xZ:**
 indistinguishable from a healthy idle seat.** Neither posts, neither pushes.
 Only a **wide** `capture-pane` shows the `at capacity` line above the composer.
 
-- **§5a research trigger is now ARMED in the issue file** (it was not — that is
-  why this chain ran **10 hard-stops dry**): `docs/program/issues/`
-  `RT-NATIVE-FNSPLIT.md` carries `hard-stop count = 33` /
-  `NEXT RESEARCH PULL = #36`, cadence every 3rd. **My tracker is the count of
-  record**; the Architect re-derives its own across compactions and loses.
+- **§5a research trigger is ARMED in the issue file** (it was not — that is why
+  this chain ran **10 hard-stops dry**). **My tracker is the count of record**;
+  the Architect re-derives its own across compactions and loses.
+
+  > ### ⛔ CORRECTED 2026-07-25 — THIS LINE ITSELF WENT STALE. Two chains, and
+  > ### the numbers below are NOT interchangeable.
+  >
+  > This bullet used to read *"the issue file carries `hard-stop count = 33` /
+  > `NEXT RESEARCH PULL = #36`"*. **MEASURED:** `issues/RT-NATIVE-FNSPLIT.md`
+  > carries exactly one `NEXT RESEARCH PULL` line and it says **`#12`**, with
+  > `COUNT OF RECORD = 9` and `#9 CONSUMED`. **THE GAP:** `33`/`#36` described
+  > the **original pre-recut chain**, which was **frozen at the recut**; the
+  > **live** chain is the recut one (`wp/RT-NATIVE-FNSPLIT-recut.md` opened it
+  > at `1` on 2026-07-24, cadence `#3, #6, #9, #12, …`).
+  >
+  > ```text
+  > ORIGINAL chain  — FROZEN at 33 hard-stops. Do NOT resume this count.
+  > LIVE recut chain — COUNT OF RECORD = 9 · #3/#6/#9 consumed
+  >                    NEXT RESEARCH PULL = hard-stop #12
+  > SYMPTOM INVENTORY — ENTRIES = 3, answered at entry 2 (entry 3 = the CAUSE)
+  >                    NEXT PREDICATE CHECK = 6th entry
+  > ```
+  >
+  > ⛔ **Why this mattered more than a wrong number:** a `#36` anchor on a chain
+  > standing at **9** makes the trigger **unreachable** — 27 hard-stops of
+  > headroom on a mechanism that exists to fire every 3rd. The armed line was
+  > *present*, so every "is it armed?" check passed. **An armed trigger with a
+  > stale anchor reads exactly like a working one**, which is the same defect
+  > class as the `10-hard-stops-dry` run it was written to prevent, one level up.
+  >
+  > ★ **`RT-FNSPLIT-B2O` produced NO hard-stop, so the count did not move.** A
+  > clean WP never advances it — do not "catch up" the number for elapsed work.
 - **⛔ RT-NATIVE-FNSPLIT DOES NOT MERGE ON "the tests pass"** — the operator's
   scaling gate (`evt_4btfhwqhah1ye`) binds: empirical n=3..7 harness +
   research-grounded analytical growth order + a verdict. **SP-A is

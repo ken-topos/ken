@@ -51,6 +51,7 @@ some roles need belongs in a narrower scope.
 | [mootup-posting-from-agent](mootup-posting-from-agent.md) | How a build-tier agent posts to mootup |
 | [multi-worktree-cwd-drift-phantom-diff](multi-worktree-cwd-drift-phantom-diff.md) | Multi-worktree cwd drift produces a phantom diff |
 | [never-pin-a-shape-that-cannot-state-its-own-contract](never-pin-a-shape-that-cannot-state-its-own-contract.md) | Never pin a shape that cannot state its own contract — the expressibility audit (PRINCIPLES #14, widened) |
+| [no-error-in-the-output-passes-when-there-is-no-output](no-error-in-the-output-passes-when-there-is-no-output.md) | A build that never RAN emits no failure token, so a filter grepping error/failed/test-result reports CLEAN — measured: a relative-path `ken-cargo` from a subdirectory exits **127** with a message containing none of those words. Assert the POSITIVE token and its predicted count (`test result: ok. N passed`) plus `$?`, never the absence of a negative one; and suspect the PROBE before the mechanism |
 | [orphaned-background-task-loops-leak-cpu](orphaned-background-task-loops-leak-cpu.md) | Hand-rolled background bash loops can orphan and leak CPU |
 | [pane-suggestion-text-is-not-agent-state](pane-suggestion-text-is-not-agent-state.md) | The tmux pane's gray suggestion text is not agent state |
 | [primitive-ops-do-not-reduce-under-conversion](primitive-ops-do-not-reduce-under-conversion.md) | Primitive ops compute at RUNTIME and are OPAQUE to conversion — Refl cannot discharge a prim-op equation |
