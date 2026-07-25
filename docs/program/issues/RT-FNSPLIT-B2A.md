@@ -1,12 +1,12 @@
 ---
 id: RT-FNSPLIT-B2A
 title: "RT-NATIVE-FNSPLIT Boundary B2a — make the semantic plane load-bearing for emission (behaviour-preserving port)"
-status: active
+status: draft
 owner: runtime
 size: L
 gate: none
 depends_on: [RT-FNSPLIT-B1R]
-blocks: [RT-FNSPLIT-B2B]
+blocks: []
 github: null
 origin: recut frame docs/program/wp/RT-NATIVE-FNSPLIT-recut.md; Boundary B split at an Architect review gate (evt_49bnspfb74tne, addendum evt_3b2a75fcaegja). B2 further split into B2a/B2b by the Steward 2026-07-25 on the runtime ring's own B1 retro carry — "keep representation checkpoints separate from a retained emission port".
 ---
@@ -16,7 +16,69 @@ origin: recut frame docs/program/wp/RT-NATIVE-FNSPLIT-recut.md; Boundary B split
 > Read that, not this file. This entry exists so the tracker and the dependency
 > graph see the work.
 
-> ## ✅ HOLD RELEASED — `ready` → `active`, kicked to the Runtime ring 2026-07-25
+> ## ⛔ RETIRED 2026-07-25 — SUPERSEDED BY `RT-FNSPLIT-B2A-S` + `RT-FNSPLIT-B2F`
+>
+> **The Architect retired this frame outright** (`evt_6h5gw5c503n5z`, amendment
+> `evt_25ynt8615r9sk`). It is kept for lineage; ⛔ **do not build from it.**
+>
+> - **`RT-FNSPLIT-B2A-S`** — defunctionalize retained body selection (the
+>   static-origin tag + one closed consumer). Retires inventory entry 1.
+> - **`RT-FNSPLIT-B2F`** — per-static-origin Cranelift target functions, atomic
+>   with switch-over, differential equivalence, and old-authority removal.
+>
+> ⚠ Its ACs were **re-walked and placed deliberately**, not copied: see each
+> successor node. `AC-4`/`AC-5` → `B2A-S`; `AC-1`/`AC-2`/`AC-3`/`AC-7`/`AC-8` →
+> `B2F`.
+
+> ## ⛔ HARD-STOPPED PRE-CODE (#6) — 2026-07-25 (the stop that retired this frame)
+>
+> **Kicked, audited, and stopped before a single edit** (`evt_3xzv4xn77na0d`;
+> leader confirmed `evt_34y9pnbs8r330`). ⇒ **`status: draft`, not `ready`** — the
+> frame below is *known wrong*, and `ready` would invite releasing it again.
+>
+> ### The defect is MINE, and it is a class of framing error worth naming
+>
+> **B2a's `Retain` and `Replace` lists were inherited from the HELD tree** and
+> describe artifacts that are **not in B2a's base**. I re-verified all three
+> deciding measurements independently rather than on report:
+>
+> | claim | verdict on `7151ae58` |
+> |---|---|
+> | `partition.rs` / `PartitionWorkItem` / `work_?item` | **absent; 0; 0** — live only on `preserved/wp-…-b077eb7a`, **not an ancestor of `main`** (merge-base `8ebe370a`) |
+> | "bounded deferred Cranelift functions" to retain | **none** — production `lowering/` has exactly **one** `FunctionBuilder::new` (`core.rs:140`) and **one** `define_function` (`core.rs:202`); all other sites are under `core/tests/` |
+> | planner↔emitter coupling | **one symbol** — `plan_static_transition_graph`, built `core.rs:35`, dropped `:204`, zero refs to the plane types outside `planning/` |
+>
+> ⇒ **The emitted units D2 would re-key do not exist.** Creating them means
+> per-transition function declaration, a real calling convention for the 8-field
+> `DynamicActivationFrame`, and a persistent-store runtime — then proving
+> behaviour preservation across the whole 6201-line SCC. **That is a
+> construction, not the behaviour-preserving port this frame asserts**, and
+> `AC-2`'s "removed whole-configuration emission path" is not a separable path
+> at all: it is `lower_expr`'s entire recursive-descent inliner
+> (`core.rs:3847`, 60 call sites).
+>
+> ★ **The ring did exactly what the frame told it to** — invoked the
+> unreviewable-diff stop, and explicitly refused to reinterpret the deliverables
+> to fit what was buildable. **That refusal is the valuable output of this
+> kickoff.** ⛔ Nothing was edited or committed; the WP ref is free at exactly
+> `7151ae58`.
+>
+> ### ⛔ Re-slice is pending and is the STEWARD's, gated behind two inputs
+>
+> 1. **The #6 research advisory** — the pull fired; the Architect's ruling is
+>    gated *behind* it, not delivered instead of it.
+> 2. **One Architect design call the implementer correctly refused to make
+>    itself:** in the proposed first slice, resolving `static_origin →
+>    &RuntimeExpr` needs the plan to retain occurrence references (a lifetime on
+>    `StaticTransitionPlan`). Is a *derived* reference compatible with "never
+>    from pointer, content, clone order, or activation" when the identity is the
+>    positional ordinal? ⛔ **Not the Steward's call.**
+>
+> ⚠ **When the re-slice lands, re-walk every AC and control** — several are
+> defined on deliverables that will move, and scoping a deliverable out strands
+> the ACs defined on it.
+>
+> ## ✅ (superseded) HOLD RELEASED — `ready` → `active`, kicked 2026-07-25
 >
 > **`RT-FNSPLIT-B1R` merged as PR #937** and is content-verified on `origin/main`
 > = `7151ae58` (a squash lands under a new SHA, so ancestry of the approved

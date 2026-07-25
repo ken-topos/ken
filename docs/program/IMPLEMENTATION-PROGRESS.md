@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-25 02:16:15Z — from 69 issue file(s) in `docs/program/issues/`.
+2026-07-25 03:49:19Z — from 72 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -59,6 +59,7 @@ the committed file matches the generator's output.
 | `CB-HYGIENE` | cranelift_backend facade: strip WP-token narration, separate test material from implementation | merged | runtime | S | none | — |
 | `CI-SKIPPED-NATIVE-TESTS` | Restore rt_parity_native — dedicated CI job, outlier not fixed | merged | verify | S | none | — |
 | `CI-TRACKER-GATE` | Wire the issue-tracker schema + regeneration gate into CI | closed | operator | S | none | 804 |
+| `DOC-ATTEST-LIVING` | attesting living tracker files makes every routine WP status flip redden the currency gate | ready | doc | S | none | — |
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | closed | doc | S | none | — |
 | `DOC-GATE-CONTROL-BINDING` | validation-gate registry: make the two DOC-GATE-RECORD-AXIS checks orphan-proof by lifting them to pure detectors with committed controls | merged | verify | S | none | https://github.com/ken-topos/ken/pull/928 |
 | `DOC-GATE-NEEDLE` | schema-gate controls assert on a needle the test itself supplied, so one constraint class is fully vacuous | ready | verify | S | none | — |
@@ -93,8 +94,10 @@ the committed file matches the generator's output.
 | `RT-AGG-COMPOSE` | escaping two Resources into one aggregate (Prod (Resource _) (Resource _)) fails at erasure — checked endpoints do not compose | draft | runtime | TBD | none | — |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | merged | runtime | M | none | PR #911 @ 238a5c5d (origin/main 4ac9141e, CI green) |
 | `RT-FNSPLIT-B1R` | RT-NATIVE-FNSPLIT Boundary B1R — encode the occurrence-local semantic material B1 counted but never stored (repair of landed B1) | merged | runtime | L | none | 937 |
-| `RT-FNSPLIT-B2A` | RT-NATIVE-FNSPLIT Boundary B2a — make the semantic plane load-bearing for emission (behaviour-preserving port) | active | runtime | L | none | — |
+| `RT-FNSPLIT-B2A-S` | defunctionalize retained body selection — static-origin tag plus one closed consumer, replacing cloned-RuntimeExpr identity | draft | runtime | M | none | — |
+| `RT-FNSPLIT-B2A` | RT-NATIVE-FNSPLIT Boundary B2a — make the semantic plane load-bearing for emission (behaviour-preserving port) | draft | runtime | L | none | — |
 | `RT-FNSPLIT-B2B` | RT-NATIVE-FNSPLIT Boundary B2b — full emission census, finite differences, and the explicit growth verdict | draft | runtime | M | none | — |
+| `RT-FNSPLIT-B2F` | functionization and authority switch — per-static-origin Cranelift target functions, atomic with switch-over, equivalence evidence, and old-path removal | draft | runtime | L | none | — |
 | `RT-NATIVE-FNSPLIT` | Native backend: bound per-function lowering growth to O(n) — helper identity is a variable-width whole-configuration key (orig. single-Function VReg::MAX, since fixed) | active | runtime | TBD | none | — |
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
 | `RT-PLANNER-ATTRIB-K` | Boundary A planner: fixed K is a design invariant — move the K-exceeded rejection off the capacity channel | merged | runtime | XS | none | https://github.com/ken-topos/ken/pull/935 |
@@ -114,6 +117,7 @@ Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
 - `ABI-R1` — correct stale filesystem capability prose — scoped roots, rights, symlink policy and no-follow resolution have landed
+- `DOC-ATTEST-LIVING` — attesting living tracker files makes every routine WP status flip redden the currency gate
 - `DOC-GATE-NEEDLE` — schema-gate controls assert on a needle the test itself supplied, so one constraint class is fully vacuous
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `KW-THEOREM` — rename the surface keyword `lemma` to `theorem`
@@ -153,7 +157,8 @@ is itself not yet `merged`/`closed`:
 - `PX8` blocked by `PX8-WROTE-ABS` (status: draft)
 - `PX9` blocked by `PX8` (status: active)
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
-- `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2A` (status: active)
+- `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2A` (status: draft)
+- `RT-FNSPLIT-B2F` blocked by `RT-FNSPLIT-B2A-S` (status: draft)
 
 ## Gate progress
 

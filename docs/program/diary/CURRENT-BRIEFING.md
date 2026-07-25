@@ -25,12 +25,129 @@
 >   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
 >   the AC rather than gaming it.
 >
-> ## ⇢ RESUME HERE FIRST — 2026-07-25 T02:30Z
+> ## ⇢ RESUME HERE FIRST — 2026-07-25 T04:05Z
 >
-> **`origin/main = 7151ae58`** · **`origin/steward/work = 9901cca5`** (pushed) ·
-> `wp/steward-process-batch` = `1f9bb4bf` (**PR #938, in CI**).
+> **`origin/main` = see below** · `steward/work` published this pass (8 doc
+> files; base brought forward by a real merge of `origin/main`).
 >
-> ### ✅ B2A IS KICKED AND THE RING IS WORKING. THE FLEET IS NOT IDLE.
+> ### ⛔ HARD-STOP #7 ON `RT-FNSPLIT-B2A-S`. THE COUNT OF RECORD IS NOW **7**.
+>
+> **D4 is unsatisfiable inside its own frame, and that is MY framing defect —
+> the second in this chain, a different class from #6.** #6 was a false premise
+> inherited from a held tree; **#7 is a boundary that excludes its own
+> prerequisite.** Raised by `runtime-leader` at `evt_2fvxkmfw8m1k8`; ruled at
+> `evt_3pw2n9z0me7xr`; routed to the Architect at `evt_3ne9d2wkee0mx`.
+>
+> I re-verified the ring's measurement myself on `origin/main` = `70bd2c74`:
+> `lower_expr` (`core.rs:3847`) takes only `(builder, expr: &RuntimeExpr,
+> env: &[Lowered])` — **no origin in scope**; the only two production
+> `Lowered::Closure` *constructions* are its `:4211`/`:4226` arms, both
+> `body: (**body).clone()`; and `lower_expr` is re-entered from
+> `source_call_state` (`:3542`) via `SourceMachineState::Eval` (`mod.rs:1962`).
+> With pointer/content/clone/visit-order all barred by the frame's own D6,
+> only a threaded parameter remains — the scope B2A-S excludes.
+>
+> ⭐ **Symptom inventory entry 3 is the CAUSE, not another instance.** Entries 1
+> (pointer identity) and 2 (whole-configuration) are two dynamic *surrogates*;
+> entry 3 is the *vacancy* forcing a surrogate — **the planner walk and the
+> lowering walk are independent traversals of the same source with no carried
+> correspondence**, so the occurrence being lowered has no static name.
+> Hard-stop #5 put the origin **carrier** on planner records and the Architect
+> and I *both* treated "the carrier exists" as sufficient. It is not.
+> ⇒ **The chain's next real deliverable is plan↔lowering CORRESPONDENCE, not
+> another consumer of an origin nothing produces.**
+>
+> ### ⇢ THE NEXT ACT — the re-slice, gated on ONE ring census
+>
+> ⛔ **`5c7eae26` IS NOT MERGEABLE AS A STANDALONE UNIT.** The Architect's Q2
+> permission is *conditional* — "provided the complete tag-plus-sole-dispatch
+> conditions hold" — and D4 **is** the sole-dispatch condition, so it never
+> fires. That is the Architect's own conditional evaluating false, not me
+> overriding a ruling. The branch is retained as durable input at
+> `origin/wp/RT-FNSPLIT-B2A-S-selection-defunctionalization`.
+>
+> **I refused the leader's two options (collapse into B2F / reframe as
+> preparatory) because there is a third and the choice is MEASURABLE:**
+>
+> > Is the planned-origin population **total** over the closure occurrences
+> > reachable in `lower_expr`, including via the source-machine fallback?
+>
+> - **Total** ⇒ correspondence is mechanical threading ⇒ **its own production
+>   unit, sized by the PRODUCER**, adding zero function-emission surface and
+>   leaving the Architect's Q3 atomic boundary intact.
+> - **Partial** ⇒ the partiality is itself a static-authority question ⇒
+>   **collapse into B2F** and the leader's convergence read was right.
+>
+> ⇢ **When the census lands:** the Architect rules the mechanism (gated behind
+> it, status confirms "no polling"), then **I own the re-slice and AC/control
+> placement.** ⭐ **Size the successor frame by what PRODUCES the origin.** If
+> the census says `could_not_determine`, that is a real answer — do not
+> estimate past it.
+>
+> ⚠ **Ring state:** all three seats woke only after **transport repair** —
+> mentions stranded on all three (bare `Enter` for the two Codex seats, a
+> content pointer for the Claude seat, whose buffer held an unsubmitted stale
+> `wait for the steward's ruling`). Confirmed `Working` on all four seats
+> including the Architect. **Retros are owed on this slice from all three.**
+>
+> ⛔ **Still operator-held, do not release:** `DOC-GATE-NEEDLE`, `ABI-R1`,
+> `DOC-ATTEST-LIVING`. Fleet single-threaded; **no build WP is `active`** —
+> B2A-S is back to `draft`, so the ring is idle-by-design after its census and
+> retros, and the critical path is MINE (frame the successor).
+>
+> ⚠ **Owed but NOT blocking:** `RT-FNSPLIT-B2F` frame, and `RT-FNSPLIT-B2B`
+> needs re-deriving or subsuming (its growth verdict moved into B2F).
+>
+> ### ⭐ PUBLISH LESSON FROM THIS PASS — the base was STALE, not disjoint
+>
+> The briefing told me to "expect disjoint, but verify." **It was NOT disjoint:
+> merge-base was `5015bc71`, 50 commits back, and the intersection was 38
+> paths.** Publishing as-is would have silently reverted everything `main`
+> landed since — including my own PR #938. ⛔ **Fix is a real
+> `git merge origin/main` into the candidate, then assert
+> `git merge-base --is-ancestor origin/main HEAD`** before publishing. The
+> merge also dropped `DOC-W2.md` out of the candidate diff, which is what
+> cleared the attestation precondition.
+>
+> ### ✅ (done) All rulings in; both frames authored where needed
+>
+> **B2a hard-stopped at #6, the old frame is RETIRED, and the Architect has ruled
+> on all three questions** (`evt_6h5gw5c503n5z` + amendment `evt_25ynt8615r9sk`),
+> gated behind research advisory `evt_4w1rf45d4fkv3`. ⛔ **Nothing is blocked on
+> anyone else. The next act is MINE and it is authoring.**
+>
+> **The re-slice is DECIDED and the two nodes already exist as `draft`, with every
+> ruled constraint transcribed into them** (a ruling that lives only in a channel
+> thread is not a deliverable — these files are the durable copy):
+>
+> 1. **`docs/program/issues/RT-FNSPLIT-B2A-S.md`** — *defunctionalize retained
+>    body selection.* Carries the **seven ruled admissibility requirements**.
+>    Retires inventory entry 1; leaves entry 2 **explicitly open**.
+> 2. **`docs/program/issues/RT-FNSPLIT-B2F.md`** — *per-static-origin Cranelift
+>    target functions*, **atomic** with switch-over + differential equivalence +
+>    old-authority removal. Carries Q1's four merits and Q3's **four checkable
+>    scaffolding conditions**.
+>
+> **⇢ DO THIS, in order:**
+>
+> 1. **Author `docs/program/wp/` frames for B2A-S and B2F** from the transcribed
+>    rulings in those two issue files. ⚠ **B2A-S only needs to be shovel-ready to
+>    kick** — B2F is sequenced behind it and can be framed later.
+> 2. **Flip `RT-FNSPLIT-B2A-S` → `ready`**, run `scripts/gen-progress.sh`.
+> 3. **COMPACT THE RUNTIME RING** — all three seats, unconditionally, ctx unread.
+>    It is the **first half of the kickoff**, not a separate step. The implementer
+>    has explicitly said it is ready for compaction and has recorded its own
+>    corrections to the channel so they do not die with its context.
+> 4. **Kick B2A-S** mentioning `runtime-leader` only (`agt_37reqrd72cg00`); fresh
+>    branch from `origin/main`; confirm `Working`.
+> 5. **Flip → `active`** as part of the kickoff, not later.
+>
+> ⛔ **DO NOT re-derive the rulings from the channel and do not re-ask the ring** —
+> both seats have already read and accepted them. ⛔ **The ring's original
+> three-slice proposal is REFUTED; its `ii`/`iii` split was rejected outright.**
+> The implementer itself recorded that it will not resume as if it survived.
+>
+> ### ✅ (done) B2A was kicked and the ring worked it to a clean pre-code stop
 >
 > **`RT-FNSPLIT-B2A` kicked at `evt_7j6ax916zks4b`** (2026-07-25 T02:2xZ),
 > `runtime-leader` **confirmed `Working`** and announced it would read the carried
@@ -41,8 +158,18 @@
 >
 > ### ⇢ THE NEXT ACT — WAIT ON TWO THINGS, then act on whichever lands first
 >
-> 1. **PR #938** — publisher is polling CI (log `$SCRATCH/batch-publish.log`; it
->    block-buffers through a grep pipe, so `tail` the file, don't watch the pipe).
+> 1. **PR #938 — now at `5bacb8a1`, RELAUNCHED after a CI RED.** Log is
+>    `$SCRATCH/batch-publish2.log` (the first run's is `batch-publish.log`).
+>    **What failed and why it will recur:** `test shard 1/4` reddened on
+>    `registered_record_validation_gates_run` because the batch edits
+>    `docs/program/issues/DOC-W2.md` — and **DOC-W2 made its own issue file an
+>    attested source**, so flipping it to `merged` moved its blob OID out from
+>    under the library's currency claim. Fixed by re-attesting, **with the
+>    revalidation recorded per anchor** rather than bumped: `#1-objective`
+>    byte-identical, `#5-exit-property…` genuinely **changed** (`tt` → `Proved`,
+>    my own spelling fix, inside a cited section I assumed I hadn't touched). The
+>    citing corpus already said `Proved`, so the row is honest — but *checking is
+>    what made it honest.* ⇒ Filed as `DOC-ATTEST-LIVING` (§below).
 >    On merge: **verify by content** —
 >    `git show origin/main:docs/program/wp/RT-NATIVE-FNSPLIT-recut-B2a-emission-port.md`
 >    — then flip nothing (it carries no WP of its own) and clear task #7.

@@ -86,9 +86,63 @@ this line wins.** Re-read this line on every hard-stop.
 > ```text
 > SYMPTOM INVENTORY (append only; never rewritten)
 > NEXT PREDICATE CHECK = 3rd entry, then 6th, 9th, …
-> ENTRIES = 1  (2 more before the predicate question is due)
+> ENTRIES = 3  ← ANSWERED AT ENTRY 2; entry 3 gives the CAUSE. See below.
 > 1. retained body selection — keyed on cloned RuntimeExpr pointer identity
+> 2. lower_expr re-lowers each retained closure body AT EVERY CALL SITE, in
+>    that call site's whole configuration (core.rs:4214/4229 clone the body
+>    into Lowered::Closure; :4302 lowers the clone against
+>    args ++ captures ++ env)  — keyed on runtime configuration
+> 3. ⭐ THE CAUSE, not another instance: there is NO static key in scope at the
+>    construction site to key on. lower_expr (core.rs:3847) takes only
+>    (builder, expr: &RuntimeExpr, env: &[Lowered]); its RuntimeExpr::Closure /
+>    LexicalClosure arms (:4211/:4226) build Lowered::Closure with
+>    body: (**body).clone(). The planner walk preallocates StaticOriginId
+>    (semantic_ir.rs:194/:231) but the LOWERING walk is an INDEPENDENT
+>    traversal of the same source with NO carried correspondence — so the
+>    occurrence being lowered has no static name. Every prior attempt reached
+>    for a dynamic surrogate (pointer, then configuration) BECAUSE the static
+>    one is absent, not because it was mis-chosen.
 > ```
+>
+> ## ⭐ ENTRY 3 IS WHY THE PREDICATE KEEPS BEING VIOLATED
+>
+> Entries 1 and 2 are two *surrogates*; entry 3 is the *vacancy* that forces a
+> surrogate. Hard-stop #5 ruled the origin **carrier** onto planner records and
+> both the Architect and the Steward treated "the carrier exists" as sufficient.
+> It is not: a field on a planner record does not put a value in `lower_expr`'s
+> scope. ⇒ **The chain's next real deliverable is the plan↔lowering occurrence
+> CORRESPONDENCE, not another consumer of an origin nothing produces.**
+>
+> ★ Steward frame defect, stated plainly: `RT-FNSPLIT-B2A-S` was sized by what
+> **consumes** the tag (the selection table) and never by what must **produce**
+> it at the construction site. Same class as
+> `a-required-deliverable-can-transitively-require-the-frames-excluded-scope`.
+>
+> ## ⛔ DO NOT WAIT FOR THE 3rd ENTRY. Entries 1 and 2 ARE THE SAME PREDICATE.
+>
+> Entry 2 is *"a dynamic property naming static code"* — the chain's predicate,
+> verbatim — and it is **also identical to HELD-CHAIN entry 1** (whole-
+> configuration specialization). The runtime-implementer said so itself:
+> `lower_expr`'s per-call-site re-lowering *"is simultaneously symptom-inventory
+> entry #1 and whole-configuration specialization itself."*
+>
+> ★ **So the mechanism has already produced its answer at entry 2, and holding
+> the question until a 3rd entry would be mechanical compliance defeating the
+> mechanism's purpose.** The inventory exists to detect a shared predicate across
+> stops, not to reach a count. **Two entries that reduce to one predicate is the
+> finding.** "Check at the 3rd" is a *floor on when to ask*, never a *bar on
+> answering early*.
+>
+> ⇒ **The recut did NOT eliminate whole-configuration specialization; it built a
+> closed plane BESIDE it and never connected them.** Boundary A closed the plane,
+> B1/B1R filled in its semantic material — and `core.rs:204` still drops the
+> whole thing on the floor, leaving the original specializing inliner as the only
+> live emission path. **That is why B2a is a construction and not a port**, and
+> it is the same defect the recut was chartered to remove, one level up.
+>
+> ⚠ **This also means the frozen held-chain count of 33 was never as separable
+> from the recut as the re-arm assumed.** The recut replaced the *plan*, not the
+> *emitter* — and the emitter is where the predicate lives.
 >
 > ⛔ **Seeded, not empty of history.** The *held* chain's four entries are
 > already known and were the input to the recut — keep them visible so a new
@@ -109,7 +163,8 @@ this line wins.** Re-read this line on every hard-stop.
 
 ```text
 RECUT CHAIN (live, from kickoff evt_2kgfmmeeh2x7w, 2026-07-24)
-hard-stop count    = 5   ← ⛔ NEXT STOP (#6) FIRES A RESEARCH PULL
+hard-stop count    = 7   ← #6's PULL FIRED AND WAS CONSUMED. NEXT PULL = #9.
+                            #7 goes STRAIGHT TO THE ARCHITECT, no research gate.
   ⚠ THIS LINE READ "3" UNTIL 2026-07-25 AND WAS STALE BY TWO STOPS. Stops #4
     and #5 both happened and neither was posted here, so the authoritative
     count silently disagreed with reality in the one place designated to win
@@ -164,7 +219,100 @@ hard-stop count    = 5   ← ⛔ NEXT STOP (#6) FIRES A RESEARCH PULL
        (widen StaticOriginId only to pub(in crate::cranelift_backend); field
        named static_origin; no mod.rs-only partial carrier).
        NO research pull due (< #6).
-NEXT RESEARCH PULL = hard-stop #6 ← ⛔ THE VERY NEXT STOP. then #9, #12, …
+  #6 = B2a hard-stopped BEFORE ANY EDIT on a full fixed-input audit, raised by
+       runtime-implementer at evt_3xzv4xn77na0d, leader confirmed
+       evt_34y9pnbs8r330 (2026-07-25). 8 of 9 anchors held; the Retain line
+       "exported root + bounded deferred Cranelift functions" is FALSE OF THE
+       BASE. Steward independently re-verified all three deciding measurements:
+         - partition.rs ABSENT from main; PartitionWorkItem = 0; work_?item = 0.
+           They exist only on preserved/wp-...-b077eb7a, which is NOT an
+           ancestor of main (merge-base 8ebe370a).
+         - production lowering/ has exactly ONE FunctionBuilder::new
+           (core.rs:140) and ONE define_function (core.rs:202); every other
+           site is under core/tests/.
+         - planner<->emitter coupling is one symbol: plan_static_transition_graph,
+           built at core.rs:35, dropped at :204, zero refs to the plane types
+           outside planning/.
+       ⇒ B2a's Retain/Replace lists were INHERITED FROM THE HELD TREE and
+       describe artifacts absent from B2a's base. The emitted units D2 would
+       re-key DO NOT EXIST, so D1/D2 is a CONSTRUCTION (per-transition units, a
+       real calling convention for the 8-field DynamicActivationFrame, and a
+       persistent-store runtime, proven behaviour-preserving across the whole
+       6201-line SCC) — not the behaviour-preserving port the frame asserts.
+       ⛔ THIS IS A STEWARD FRAMING DEFECT, not an execution failure. The ring
+       invoked the frame's own unreviewable-diff stop, exactly as instructed,
+       and refused to reinterpret the deliverables to fit what was buildable.
+       ⇒ RESEARCH PULL FIRED. Architect ruling was GATED BEHIND the advisory.
+       ✅ ADVISORY DELIVERED evt_4w1rf45d4fkv3 (2026-07-25). GATE LIFTED.
+  #7 = B2A-S hard-stopped AFTER D1-D3 landed, on grounding D4. Raised by
+       runtime-leader at evt_2fvxkmfw8m1k8 (2026-07-25); implementer stopped
+       clean at durable checkpoint 5c7eae26 with NO tag beside a retained body
+       and no D5/D6/test work. Steward independently re-verified on origin/main
+       = 70bd2c74 and CONFIRMS the measurement:
+         - lower_expr (core.rs:3847) takes only (&mut self, builder,
+           expr: &RuntimeExpr, env: &[Lowered]). No origin parameter; nothing
+           origin-derivable in scope.
+         - the ONLY two production Lowered::Closure constructions are its
+           RuntimeExpr::Closure (:4211) and ::LexicalClosure (:4226) arms, both
+           body: (**body).clone() — the exact carrier D4 orders removed.
+           :532/:3551/:4261 are destructures, not constructions.
+         - lower_expr is re-entered from source_call_state (:3542) via
+           SourceMachineState::Eval (mod.rs:1962), so a threaded origin must
+           also live in the state enum and both continuation enums.
+       ⇒ With pointer identity, content, clone AND visit-order all prohibited by
+       the frame's own D6 controls, NOTHING remains but a threaded parameter —
+       which is the source-machine/static-authority scope B2A-S EXCLUDES.
+       D4 is UNSATISFIABLE inside its own frame. The ring did not weaken it.
+       ⛔ STEWARD FRAMING DEFECT (second in this chain, same author, DIFFERENT
+       class from #6): #6 was a false premise inherited from a held tree; #7 is
+       a boundary that excludes its own prerequisite. B2A-S was sized by what
+       CONSUMES the tag and never by what must PRODUCE it. ⇒ Inventory entry 3.
+       NO research pull due (count 7 < 9; #6's pull fired and was consumed).
+       ROUTED TO ARCHITECT, gated behind ONE ring measurement: is the planned-
+       origin population TOTAL over the closure occurrences reachable in
+       lower_expr, including via the source-machine fallback? Totality decides
+       whether the correspondence is mechanical threading (its own production
+       unit) or drags in static-authority scope (collapse into B2F).
+          Independently grounded the stop on exact 7151ae58 and confirmed it
+          "correct and structural". Three findings that bind the re-slice:
+          (i)  A `static_origin` carrier CAN be an independent checkpoint, but
+               ONLY as a COMPLETE tag-plus-SOLE-dispatch defunctionalization
+               (Danvy/Millikin recognition criterion: the apply function is the
+               sole point of consumption). Requires: every retained closure/work
+               item carries the static tag + its dynamic env/state; raw cloned
+               bodies/pointers ABSENT from that population; all applications go
+               through ONE closed origin consumer; tag population = the closed
+               static occurrence population, never inferred backward.
+               ⇒ Honest milestone name is "DEFUNCTIONALIZE RETAINED BODY
+               SELECTION", ⛔ NOT "the plane is load-bearing".
+          (ii) StaticOriginId -> &RuntimeExpr is IDENTITY-CLEAN (a table indexed
+               solely by preallocated id, with the borrow as payload only, does
+               not use the pointer as identity) but is NOT PLANE-AUTHORITATIVE:
+               it leaves RuntimeExpr owning semantics, i.e. an abstract machine
+               over source terms rather than a virtual machine over compiled
+               units (Ager et al.). ⇒ It closes SELECTION identity while
+               deliberately leaving source-recursive semantics in authority.
+               ⛔ Claiming it makes B1R's material load-bearing OVERCLAIMS.
+         (iii) ⛔ Landing functionization as a LIVE SECOND PRODUCTION PATH with
+               authority-removal postponed to a later slice has NO PRIOR-ART
+               SUPPORT — it recreates two authorities. Functionization,
+               switch-over, equivalence evidence, and old-path removal form ONE
+               review boundary, unless the new path is mechanically unreachable
+               non-authoritative scaffolding.
+          ⚠ Prior art supports TWO coherent target shapes and does NOT choose:
+             (a) closed target functions with explicit environment/frame
+                 arguments (CertiCoq: after closure conversion + hoisting, all
+                 functions closed in one bundle, forward-declare all, then one
+                 target function per source function);
+             (b) a compiled instruction/CFG machine with static labels and
+                 explicit state.
+          ★ The frame's "bounded deferred Cranelift functions" wording picked
+            (a) BY INHERITANCE FROM A BRANCH THAT NEVER LANDED. The base
+            implements NEITHER, so this is a genuinely OPEN Architect call to be
+            made on merits, not carried forward.
+          No local/refs/ or excluded-prototype material consulted; the held Ken
+          branch was used only as repository-owned scale evidence.
+NEXT RESEARCH PULL = hard-stop #9, then #12, …
 
 ⛔ **B2a runs one stop away from a research pull.** The #3 pull is CONSUMED
    (advisory evt_rwqb8ear89wx — Danvy/Nielsen defunctionalization granularity;
