@@ -25,98 +25,66 @@
 >   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
 >   the AC rather than gaming it.
 >
-> ## ⇢ RESUME HERE FIRST — 2026-07-25 T04:30Z
+> ## ⇢ RESUME HERE FIRST — 2026-07-25 T05:05Z
 >
-> **`origin/main` = `39714258`** — ✅ **PR #939 MERGED and content-verified**:
-> `DOC-ATTEST-LIVING`, the B2A/B2A-S/B2F re-slice, the B2A-S frame, corrected
-> counter `= 7`, `ENTRIES = 3`; ledger 51 rows; B1R intact. Doc-only ⇒ **no
-> adversary notification due** and every `crates/` anchor is unchanged, so the
-> ring's base (`70bd2c74`) is now simply an ancestor of `main`.
-> **`origin/steward/work` = `48bc2f14`** — carries the **B2A-C issue + frame**
-> and this block, none of which is on `main` yet. ⇒ **Next publish carries them.**
+> **`origin/main` = `39714258`** (PR #939 merged, content-verified) ·
+> **`origin/steward/work` = `81e77fa0`** · **`origin/wp/RT-FNSPLIT-B2A-C-correspondence`
+> = `17a07b09`** (pushed by me; the ring cannot push).
 >
-> ### ✅ HARD-STOP #7 RULED AND THE RE-SLICE IS DONE. COUNT OF RECORD = **7**.
+> ### ⛔ HARD-STOP #8 CONFIRMED. COUNT OF RECORD = **8**. ⚠ #9 FIRES A RESEARCH PULL.
 >
-> The chain is now four nodes, and **each closes a different inventory entry —
-> state them separately, by ruling:**
+> ⭐ **THE NEXT STOP IS #9 AND IT FIRES A PULL — dispatch research BEFORE the
+> Architect rules on it.** #6's pull was consumed; #7 and #8 both went straight
+> to the Architect, correctly.
 >
-> ```
-> B1R → RT-FNSPLIT-B2A-C → RT-FNSPLIT-B2A-S → RT-FNSPLIT-B2F
->       correspondence      selection          functionization
->       (entry 3, CAUSE)    (entry 1, atomic)  (entry 2, atomic Q3)
-> ```
+> **`RT-FNSPLIT-B2A-C` was AMENDED IN PLACE — my call, not a re-slice.** The
+> Architect ruled the mechanism (`evt_308azmr4cszd7`) and **explicitly left WP
+> scope and the count to me**. I amended because the finding repairs **this
+> unit's own producer** and stays inside **entry 3** — entries 1 and 2 remain
+> open, Q3 boundary untouched. Routed at `evt_79mv3a9rqsd6b`; ring resumed on
+> the SAME branch. **Size raised M → L in the open** (the #7 lesson: a unit that
+> grows silently is how a frame becomes unsatisfiable).
 >
-> **Architect ruled the third option CONFIRMED** (`evt_1jdh8pn8y96z`) on the
-> ring's **`TOTAL` + injective** census (`evt_4tqj93ctj24z2`): correspondence
-> *"transports an already-settled fact to a site where it is currently out of
-> scope"* ⇒ **production plumbing, NOT Q3 functionization authority**, so the
-> atomic boundary stays intact. It also **CONFIRMED** my reading that Q2's
-> permission does not fire for `5c7eae26` (durable input only, never merged
-> alone).
+> **The finding — a CATEGORY ERROR, not an ordinal disagreement.** One
+> `StaticNodeId` means two things. Re-verified by me on exact `96e66c9f`:
+> `:628` pushes the `SourceReturnResume`; `:672` registers the occurrence **on
+> `resume`**; `:673` returns **`scrutinee`**. ⇒ New **D9**:
+> `PlannedExpr { entry: StaticNodeId, occurrence: StaticOriginId }` with
+> **disjoint consumers** — transfer topology takes only `.entry` (Boundary-A
+> graph unchanged), source correspondence only `.occurrence`.
 >
-> ⭐ **`RT-FNSPLIT-B2A-C` IS FRAMED, `ready`, AND DURABLE** —
-> `docs/program/wp/RT-FNSPLIT-B2A-C-plan-lowering-correspondence.md`, D1–D8 +
-> N1–N4 + 10 ACs, anchors on `70bd2c74`. **`RT-FNSPLIT-B2A-S` is NOT retired** —
-> re-cut as the *selection* unit (D1–D3 out, D4/D5 in and now satisfiable);
-> ⛔ its `wp/` frame is **STALE** against that re-cut and must not be built from.
+> ★ **D3's probe FOUND it; D3's vocabulary MIS-NAMED it.** That mis-naming is
+> the tell that my frame had **one axis where it needed two**. A probe can be
+> right while the frame describing its findings is wrong.
 >
-> ### ⇢ WHERE I AM IN THE §2c GATE — resume mid-gate, do not restart it
+> ⚠ **One place I went beyond the ruling, deliberately and flagged as mine:** the
+> Architect *prefers* changing `expression_node`/`expression_seed` to take
+> `&[StaticOriginId]`; **I made it a requirement**, so the type prevents the
+> conflation instead of call-site discipline. If the ring reports a concrete
+> obstruction, **relax it to the preference** — that promise is on the record.
 >
-> 1. ✅ **Retros in** — all three (`evt_2yhvm45nah3qk` impl, `evt_7erx5cwdfcsja`
->    qa, leader posted after a nudge).
-> 2. ✅ **No in-flight obligation**; ✅ **quiescent** before the batch.
-> 3. ✅ **Contention checked, BOTH axes.** File axis: PR #939 is `docs/` only,
->    B2A-C is `crates/ken-runtime/**` — disjoint. **Ledger axis: ⚠
->    `crates/ken-runtime/src/cranelift_backend.rs` IS attested** (row OID
->    `8508a01c` = its current OID). It is the module ROOT; B2A-C's files are
->    submodules and none are attested. **The frame warns the ring explicitly** —
->    an edit there reddens `registered_record_validation_gates_run` for reasons
->    that look unrelated.
-> 4. ✅ **All three compactions verified on the `Context compacted` marker.**
->    ⚠ The implementer's footer read `ctx 33%` *while compacting* and `ctx 0%`
->    after — **the footer lags; the marker does not.** A `-30` capture window
->    also raced the marker once. Capture ≥`-120` when in doubt.
-> 5. ✅ **KICKED `evt_3cka2t192dx10`**; all three confirmed `Working` — they woke
->    on the mention directly this time, no repair round needed. **Flipped
->    `active`**, tracker regenerated, pushed.
+> ### ⇢ THE NEXT ACT — watch, then review the fold
 >
-> ### ⇢ THE NEXT ACT — watch B2A-C; nothing is blocked on anyone else
+> **Ring is working.** `/compact` is **queued** on the implementer (it hit
+> `ctx 60%`, over the mid-flight ceiling) and will fire when its turn ends —
+> **verify it on the `Compacted (ctrl+o` marker, not the ctx% footer.**
 >
-> ⭐ **Sweep `git ls-remote origin refs/heads/wp/RT-FNSPLIT-B2A-C-correspondence`
-> against the ring's local ref EVERY time you check in.** Build seats cannot
-> push, by design.
+> **Progress already off-box at `17a07b09`:** D5's added-field coverage guard,
+> the AC-4/AC-6 controls with N1–N3 pins, and the D3 table stating the
+> `ComputationalMatch` stop.
 >
-> ✅ **FIRST CHECKPOINT PUSHED — `96e66c9f`** ("transport each occurrence's
-> preallocated static origin", 9 files, +1267/−291, touching `lowering/core.rs`,
-> `lowering/mod.rs`, `planning.rs`, `static_transition.rs`, `semantic_ir.rs` and
-> four test modules). Notified at `evt_34k0hbc5gk92f`. **It was on one local ref
-> with ZERO off-box copies — the FIFTH consecutive session.** ⇒ The recurring
-> defect is not the missing credential; it is only looking when prompted.
+> ⛔ **When the fold arrives, refuse it unless:** `AC-3` — D5's guard reddens on a
+> **newly added** expression field, not merely enumerates today's variants;
+> `AC-14` — nested computational matches stay **injective when multiple
+> occurrences share a scheduling entry** (a shared entry is exactly when a wrong
+> key still looks unique); `AC-16` — the two swap controls redden in **OPPOSITE**
+> places (same place ⇒ the two axes aren't distinguished, which is D9's point);
+> `AC-15` — root/declaration `ComputationalMatch` bodies get the **resume**
+> occurrence; `AC-9` — the landing claims **entry 3 ONLY**.
 >
-> **Two things verified before that push, and both are reusable answers:**
-> - **No attested source touched.** ⚠ They are in `cranelift_backend/planning.rs`,
->   which differs from the attested `cranelift_backend.rs` by one directory level.
->   Check the ledger against the *touched* list, never against the subsystem name.
-> - ⛔ **Their base `70bd2c74` being behind `main` = `39714258` is IMMATERIAL and
->   they must NOT rebase.** The intersection of their changed paths with what
->   `main` changed since is **EMPTY** (theirs all `crates/`, mine all `docs/`).
->   `merge-base --is-ancestor origin/main <wp-sha>` returns FALSE here and that is
->   *expected* — that test is for a publish candidate, not for a WP branch whose
->   base merely aged. Do not "rescue" a branch from a problem it does not have.
->
-> **Watch specifically for D3** — the per-variant ordinal correspondence. If it
-> reports a planner/lowering ordinal **disagreement**, that is a finding to route
-> (planner ordinals are authoritative; renumbering the planner is forbidden), and
-> if adapting the lowering is not behaviour-preserving it is a **hard-stop → #8,
-> straight to the Architect** (next research pull is #9). ⛔ **And do not accept a
-> landing whose D5 guard merely enumerates today's variants** — AC-3 requires it
-> to redden on a NEWLY ADDED expression field.
->
-> ⚠ **Transport failed on ALL THREE runtime seats this pass.** Bare `Enter` woke
-> neither Codex seat; both needed a **content pointer**. The Claude seat's buffer
-> held an unsubmitted stale `wait for the steward's ruling` — clear with `C-u`
-> first or you submit the stale text. ⇒ **Budget a repair round into every
-> kickoff; `post_response` returning an `event_id` proves nothing about delivery.**
+> ⭐ **Sweep `git ls-remote` against the ring's local ref EVERY check-in.** It has
+> needed a Steward push **three times in this WP alone** (`5c7eae26`, `96e66c9f`,
+> `17a07b09`); the defect is only looking when prompted, not the credential.
 >
 > ⛔ **Still operator-held, do not release:** `DOC-GATE-NEEDLE`, `ABI-R1`,
 > `DOC-ATTEST-LIVING`. Fleet single-threaded.
