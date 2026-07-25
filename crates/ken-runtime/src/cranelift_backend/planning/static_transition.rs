@@ -286,7 +286,20 @@ struct BoundaryB1Census {
     distinct_origins: usize,
     ir_records: usize,
     semantic_edges: usize,
-    helper_definitions: usize,
+    /// The number of **function units** — `entries.len() + count(StaticBody
+    /// edges)`. Renamed from `helper_definitions` by `RT-FNSPLIT-B2O` `AC-6`.
+    ///
+    /// ⚠ **This field is the one re-baselined quantity that cannot fail
+    /// loudly, which is why the rename is an acceptance criterion and not
+    /// tidiness.** It is a *reported metric*: its only consumer asserts that the
+    /// second finite difference across `n = 3..7` is zero — affine scaling — and
+    /// asserts **no absolute value**. `RT-FNSPLIT-B2O` changed this quantity from
+    /// "one definition per planned node" to "one per function unit"; both are
+    /// affine in `n`, so that assertion passed before and after. Nothing failed
+    /// and nothing warned. A name still reporting `helper_definitions` for a
+    /// number whose meaning had changed underneath it would be worse than a
+    /// rename precisely because there is no red to notice.
+    function_units: usize,
     definitions_per_origin: usize,
     all_out_of_line_operand_elements: usize,
     duplicate_origin_definitions: usize,
@@ -975,6 +988,7 @@ impl<'src> Planner<'src> {
         self.plan.semantic = build_semantic_plane(
             &self.plan.nodes,
             &self.plan.edges,
+            &self.plan.entries,
             &self.plan.semantic_sources,
             &self.plan.semantic_material,
         )?;
@@ -1293,6 +1307,7 @@ impl<'src> StaticTransitionPlan<'src> {
         self.semantic.validate(
             &self.nodes,
             &self.edges,
+            &self.entries,
             &self.semantic_sources,
             &self.semantic_material,
         )?;
@@ -1684,7 +1699,7 @@ impl<'src> StaticTransitionPlan<'src> {
             distinct_origins,
             ir_records: self.semantic.records.len(),
             semantic_edges: self.semantic.ruled_children.len(),
-            helper_definitions: self.semantic.functions.len(),
+            function_units: self.semantic.functions.len(),
             definitions_per_origin,
             all_out_of_line_operand_elements: self.semantic.all_out_of_line_operand_elements(),
             duplicate_origin_definitions,
@@ -1978,7 +1993,7 @@ mod tests {
         for (depth, (outer, row)) in (3..=7).zip(&rows) {
             eprintln!(
                 "RT_NATIVE_FNSPLIT_B1 n={depth} opcode_vocabulary={} origins={} \
-                 ir_records={} semantic_edges={} helper_definitions={} \
+                 ir_records={} semantic_edges={} function_units={} \
                  definitions_per_origin={} operand_elements={} duplicate_origins={} \
                  clone_count={} max_definitions_per_origin={} fixed_k={} \
                  descriptor_bytes={} program_bytes={} record_bytes={} \
@@ -1988,7 +2003,7 @@ mod tests {
                 row.distinct_origins,
                 row.ir_records,
                 row.semantic_edges,
-                row.helper_definitions,
+                row.function_units,
                 row.definitions_per_origin,
                 row.all_out_of_line_operand_elements,
                 row.duplicate_origin_definitions,
@@ -2020,8 +2035,8 @@ mod tests {
                 semantic_values(&semantic, |row| row.semantic_edges),
             ),
             (
-                "helper_definitions",
-                semantic_values(&semantic, |row| row.helper_definitions),
+                "function_units",
+                semantic_values(&semantic, |row| row.function_units),
             ),
             (
                 "all_out_of_line_operand_elements",
@@ -2209,6 +2224,7 @@ mod tests {
         let reordered = build_semantic_plane(
             &plan.nodes,
             &plan.edges,
+            &plan.entries,
             &reversed_sources,
             &plan.semantic_material,
         )
@@ -2227,6 +2243,7 @@ mod tests {
         let changed = build_semantic_plane(
             &changed_frames,
             &plan.edges,
+            &plan.entries,
             &reversed_sources,
             &plan.semantic_material,
         )
@@ -2236,7 +2253,28 @@ mod tests {
             "dynamic activation state changed semantic programs or bodies"
         );
         assert_eq!(plan.semantic.descriptors.len(), plan.nodes.len());
-        assert_eq!(plan.semantic.functions.len(), plan.nodes.len());
+        // RT-FNSPLIT-B2O, re-baselined 2026-07-25 from `plan.nodes.len()`.
+        //
+        // PREDICTED FROM THE DESIGN BEFORE MEASURING, and this is the reason:
+        // the function table is no longer a positional alias of the node table,
+        // so it is seed-exact rather than node-exact. The unit set is
+        // `plan.entries` (root plus each transparent declaration) union every
+        // `EdgeKind::StaticBody` target (each retained closure-body entry), and
+        // those two classes are disjoint, so the count is their sum.
+        //
+        // ⛔ Asserted RELATIONALLY against the two seed classes, never against
+        // the observed number. A count re-fit to whatever the code now emits
+        // measures nothing; this form goes red if either seed class stops being
+        // enumerated, which is the property `D1` actually claims.
+        assert_eq!(
+            plan.semantic.functions.len(),
+            plan.entries.len()
+                + plan
+                    .edges
+                    .iter()
+                    .filter(|edge| edge.kind == EdgeKind::StaticBody)
+                    .count()
+        );
         assert_eq!(plan.semantic.ruled_children.len(), plan.edges.len());
     }
 
@@ -2265,6 +2303,7 @@ mod tests {
                 .validate(
                     &plan.nodes,
                     &plan.edges,
+                    &plan.entries,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -2295,6 +2334,7 @@ mod tests {
                 .validate(
                     &equal_plan.nodes,
                     &equal_plan.edges,
+                    &equal_plan.entries,
                     &equal_plan.semantic_sources,
                     &equal_plan.semantic_material,
                 )
@@ -2311,6 +2351,7 @@ mod tests {
                 .validate(
                     &plan.nodes,
                     &plan.edges,
+                    &plan.entries,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -2327,6 +2368,7 @@ mod tests {
                 .validate(
                     &plan.nodes,
                     &plan.edges,
+                    &plan.entries,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -2355,6 +2397,7 @@ mod tests {
                 .validate(
                     &plan.nodes,
                     &plan.edges,
+                    &plan.entries,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -2649,6 +2692,7 @@ mod tests {
                 .validate(
                     &plan.nodes,
                     &plan.edges,
+                    &plan.entries,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -2681,6 +2725,7 @@ mod tests {
                 .validate(
                     &child_plan.nodes,
                     &child_plan.edges,
+                    &child_plan.entries,
                     &child_plan.semantic_sources,
                     &child_plan.semantic_material,
                 )
@@ -2763,6 +2808,7 @@ mod tests {
                 .validate(
                     &plan.nodes,
                     &plan.edges,
+                    &plan.entries,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -2844,6 +2890,7 @@ mod tests {
                 .validate(
                     &plan.nodes,
                     &plan.edges,
+                    &plan.entries,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -2858,6 +2905,7 @@ mod tests {
                 .validate(
                     &plan.nodes,
                     &plan.edges,
+                    &plan.entries,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -2898,6 +2946,7 @@ mod tests {
                 .validate(
                     &plan.nodes,
                     &plan.edges,
+                    &plan.entries,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -2918,6 +2967,7 @@ mod tests {
                 .validate(
                     &plan.nodes,
                     &plan.edges,
+                    &plan.entries,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
