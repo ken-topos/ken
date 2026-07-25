@@ -1,15 +1,47 @@
 ---
 id: DOC-W2
 title: "documentation Wave 2 — agent core modules, task packs, and cold-context evals"
-status: ready
+status: merged
 owner: doc
 size: L
 gate: none
-depends_on: [DOC-W1]
+depends_on: [DOC-W1, DOC-GATE-WIRE-BINDING]
 blocks: []
-github: null
+github: 936
 origin: research/librarian-documentation-program-proposal.md Wave 2; framed 2026-07-22 per operator directive (frame Waves 1-2 only)
 ---
+
+> ## ✅ MERGED 2026-07-25 — PR #936, `origin/main` = `d3b9f36c`
+>
+> Squash of the frozen exact reviewed SHA `e1524de1`; landed tree `5991be63`
+> matches the tree the publisher gate checked, and `gen-doc-status --check` is
+> green on `origin/main`. **Three-reviewer gate satisfied on the exact
+> candidate** (Librarian → `library/`, Architect → `crates/`, Steward →
+> `agent/`); the doc-only path did not apply because the work reaches `agent/`.
+> Decision `dec_7qywmfc5k8834` resolved before publication. **Retros in** from
+> doc-leader (`evt_5jzsdh8zy1r40`), doc-author (`evt_6ze9cjh11nyk9`), and the
+> Librarian (`evt_4pze4n15yv18g`) — so the WP is closed under §10, not merely
+> merged.
+>
+> **Acceptance verified by CONTENT on `origin/main`, not by the publisher's
+> report:** `agent/playbooks/tools/write-ken.md` at 47 lines (from 240), the
+> anti-metric guard present in `library/agents/core/write-ken.md`, the Findings
+> routing present, `library_documentation_gates.rs` at 4007 lines,
+> `library/agents/**` at 28 files, and the retired cross-package-`import`
+> premise **absent** rather than migrated forward.
+>
+> ⚠ **Ledger consequence, for anything sequenced behind this:**
+> `library/SOURCE-ATTESTATIONS` gained **3 rows**, so
+> `catalog/packages/Capability/Filesystem/Errors.ken.md` moved from row 7 to
+> **row 9** (OID `59fbe76d`). `ABI-R1` was sequenced behind this WP precisely
+> because it mutates that attested source — re-derive the row from `origin/main`
+> before releasing it, never from a pre-merge read.
+>
+> **Steward judgment call, recorded because it contradicts a playbook step:** the
+> §2a tracker-sync commit was **deliberately NOT appended** to this candidate. It
+> would have made the merged SHA differ from the SHA three reviewers approved and
+> silently widened reviewed scope. Exact-SHA integrity wins over tracker
+> convenience; the tracker rides the Steward's own process batch instead.
 
 > ## ✅ UNBLOCKED 2026-07-24 — `DOC-W1`'s dependency is DISCHARGED
 >
@@ -22,6 +54,39 @@ origin: research/librarian-documentation-program-proposal.md Wave 2; framed 2026
 >
 > ⇒ This brief was already complete and shovel-ready; only the gate was
 > outstanding. Status flipped `draft` → `ready`.
+
+> ## ⛔ SEQUENCED AFTER `DOC-GATE-WIRE-BINDING` — a silent-union collision
+>
+> Both WPs write `library/manifest.toml`, and **git will merge them cleanly and
+> wrongly.** `DOC-GATE-WIRE-BINDING` adds a `document-kind` row to
+> `VALIDATION_GATES` with `applies_to_every_record`; this wave appends ~12 new
+> records. The hunks are disjoint — token lines inside 14 existing records
+> versus new records at the end — so **nothing conflicts.**
+>
+> ★ The break is not textual, it is the gate:
+> `library_documentation_gates.rs:667` tests `declared != required` as **exact
+> set equality per record**. New records authored against today's 8-token
+> requirement would land declaring 8 where 9 are required, and
+> `gate_validation_tokens_are_closed_and_match_applicable_checks` reddens
+> `main` **after** both merged clean.
+>
+> ⇒ Land the XS first, then author this wave's records against the 9-token
+> requirement. **This is recorded as a `depends_on`, not a prose note, so the
+> generator derives the block** — a sequencing constraint that lives only in
+> prose is one I have already failed to apply.
+>
+> ### ⚠ The dependency binds the MERGE and the manifest step — NOT the start
+>
+> This wave is `L` and almost all of it — twelve modules against the §3
+> ten-point contract, the pack schema, the evaluation suite — **touches nothing
+> `DOC-GATE-WIRE-BINDING` touches.** Idling the whole wave behind an `XS` would
+> trade hours of critical path for a collision confined to the last step.
+>
+> ⇒ **Authoring starts now.** Write the modules first and the
+> `library/manifest.toml` records **last**, rebasing onto the landed
+> `document-kind` row before you write them. ⛔ Do not author manifest records
+> against the 8-token requirement "to be updated later" — that is the exact
+> silent-union artifact this note exists to prevent.
 
 **(historical) ⛔ BLOCKED on `DOC-W1`.** Waves run sequentially (operator, 2026-07-22:
 three seats, no fan-out). The agent modules describe the same product
@@ -115,7 +180,7 @@ cards follow Wave 5's D4 re-check.
 > An agent module's characteristic harm is not being incomplete — it is being
 > **confidently silent** about a boundary, which reads to the consuming agent
 > as permission. The **negative knowledge** is the part that pays: unsupported
-> forms, misleading near-syntax, `tt` versus `Refl`, and the exact point at
+> forms, misleading near-syntax, `Proved` versus `Refl`, and the exact point at
 > which an agent must **stop** instead of inventing a proof, primitive,
 > capability, or package.
 
@@ -145,7 +210,7 @@ start** — a mid-session edit does not reach a running seat.
 
 1. explain a small Ken program's contract and trust posture;
 2. write and check a pure function with one real law;
-3. distinguish and repair `tt` versus `Refl` proof endpoints;
+3. distinguish and repair `Proved` versus `Refl` proof endpoints;
 4. find and use a catalog package **by task rather than guessed name**;
 5. author an effectful boundary without omitting its capability or row;
 6. **refuse an unsupported or unproved request honestly**;
@@ -184,6 +249,94 @@ used.**
    be able to check this cheaply.
 7. **The `write-ken` refactor re-points both consumers** (§4), and the in-fleet
    seat path is verified, not assumed.
+
+## 6a. ⚖ STEWARD RULINGS 2026-07-24 — two frame gaps the Librarian's QA preflight found
+
+Both were genuine gaps in §2/AC-1 and AC-3. Ruled in `thr_2bzhq9q6gsee1`
+(`evt_24cne5pvpva1y`); this section is authoritative.
+
+### R1 — pack-integrity checks EXTEND `crates/ken-cli/tests/library_documentation_gates.rs`
+
+AC-3 says the checks must *reject*; the proposal says *"the build should
+reject."* The only CI-running documentation-gate home is that `ken-cli` test
+file. ⇒ **Extend it. Accept the `crates/` scope and the Architect vote.**
+
+⛔ **A standalone unwired script does not satisfy AC-3.** Shipping one would
+re-open, in a new file, exactly the hole `DOC-GATE-CONTROL-BINDING` and
+`DOC-GATE-WIRE-BINDING` were spent closing: a rule bound to a test but not to a
+gate is silent when its invocation is deleted.
+
+Consequences, stated rather than absorbed:
+
+- **Architect vote required.** §14a's doc-only exemption does **not** apply.
+- ⚠ The concurrency exception's real content is **contention-freeness**, not the
+  path list. `DOC-W2` still does not contend with Runtime (`ken-cli/tests` vs
+  `ken-runtime`) — the *review* couples, the *files* do not.
+- ⛔ Keep the `crates/` delta **minimal and mechanical**: the integrity checks and
+  their registration only. No surrounding refactor, no `repo_root()` change, no
+  touching the `document-kind` row.
+- ⭐ **Do not force the registry mechanism where it does not fit.** A genuine
+  per-record validation claim gets a `VALIDATION_GATES` row; a **global invariant
+  over the pack graph** — which "no missing module" and "no cycle" almost
+  certainly are — is a standalone committed test, and a row would be a **category
+  error**. Same call that excluded the status-population rule from
+  `DOC-GATE-WIRE-BINDING`. **State which shape each check is, and why.**
+
+### R2 — pack and schema population close by PREDICATE, not by a list
+
+§2 names directories; the proposal's pack list is explicitly *"such as"* — a
+sample. A hand-picked cardinality would be the rejected
+one-kind-per-responsibility taxonomy in another costume. So:
+
+> **Packs.** Each of the **seven §5 evaluation tasks must be performable by
+> loading exactly ONE pack**, and **no pack may exist that no §5 task requires.**
+
+Both halves bind: the first forbids assembling three packs for one task, the
+second forbids speculative packs. Completeness is tied to acceptance criteria
+that already exist and are load-bearing, and it is **verified by the suite you
+already run**. The proposal's `read-review` / `write-pure` / `write-effectful` /
+`author-package` / `repair-proof` stay a *sample* — adopt, split, or merge as the
+predicate requires. ⛔ `ffi-platform` remains deferred.
+
+⚠ **§5 task 6 — "refuse an unsupported or unproved request honestly" — is a
+cross-cutting property, not a task with its own pack.** It is satisfied by point
+10 of every module. ⛔ **Do not mint a "refusal pack."**
+
+> **Schemas.** A schema exists for **exactly those manifest formats the
+> pack-integrity checker validates.** If the checker does not read it, it does
+> not ship.
+
+★ A schema nothing validates against is documentation of an intention, not a
+constraint.
+
+### R3 — AC-5's fence oracle: a `checked-examples` VALIDATION_GATES row
+
+**Verified on `bf8036c0`:** `library_documentation_gates.rs` is the *only*
+`ken-cli` test that walks a real repository corpus (`repo_root()` ×19); every
+other one that touches `check` uses synthetic fixtures. **Nothing invokes
+`ken check` over `library/` fences.** AC-5 therefore had no persistent oracle.
+
+⇒ **Register `checked-examples` as a `VALIDATION_GATES` row**, applying to
+records that declare checked examples, with a runner that invokes `ken check` on
+each extracted fence. ⛔ **Not** `ken_check_mode.rs` — that proves the *binary's*
+behaviour on fixtures it builds; AC-5 is a claim about a **corpus**, and the
+walker, `repo_root()`, and registry already live in the gate file.
+
+★ Unlike pack-integrity, this **is** a per-record claim — *"this document's
+checked examples check"* is true or false *of a document* — so it takes a
+registry row where pack-integrity takes a standalone test. **That contrast is R1's
+shape test working, not an inconsistency.**
+
+⚠ **R1's delta limit is AMENDED.** It said *"the integrity checks and their
+registration, nothing else"*, which foreclosed this fix. The `crates/` delta is
+now **(a)** pack-integrity checks, **(b)** the `checked-examples` gate and
+runner, **(c)** their registration — **and still nothing else.**
+
+⚠ **Cost, chosen rather than discovered:** `ken check` per fence is far more
+expensive than any existing gate here. **Scope the row to records that declare
+checked examples.** If CI runtime proves unacceptable, **stop and escalate** —
+⛔ do not silently narrow what the gate checks, which leaves the AC nominally
+satisfied and actually hollow.
 
 ## 7. Framing traps
 

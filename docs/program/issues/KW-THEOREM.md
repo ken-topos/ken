@@ -170,7 +170,26 @@ authority (D1), so a catalog edit ahead of it would be unanchored.
 5. **`docs/` + `agent/`** — prose; **largest file count, lowest risk**, and the
    place where the leave-it-in-English class dominates.
 
-## 📍 QUEUE POSITION — LAST (operator directive, 2026-07-22)
+## 📍 QUEUE POSITION — ✅ NEXT AFTER `RT-NATIVE-FNSPLIT` CLOSES (operator, 2026-07-25)
+
+> **Operator directive, 2026-07-25: *"after RT-NATIVE-FNSPLIT closes, run
+> kw-theorem."*** This **supersedes the 2026-07-22 "LAST" placement below.
+>
+> **Trigger:** `RT-FNSPLIT-B2B` lands ⇒ Steward flips `RT-NATIVE-FNSPLIT` to
+> `merged` ⇒ **this is the next WP released.** No further priority check needed;
+> the call is made and is a fixed input.
+>
+> ⚠ **Owner is `spec` — so the receiving unit is the spec enclave** (spec-leader
+> + spec-author + conformance-validator), **not** the runtime ring that will
+> just have closed FNSPLIT. Compact the enclave unconditionally before the
+> kickoff (§2c); it was already compacted once on 2026-07-25 while idle, so
+> re-verify rather than assume.
+>
+> ⛔ **Do not release it early to fill idle enclave time.** The directive is
+> ordered *after* FNSPLIT, and FNSPLIT is the standing priority. If the enclave
+> is idle in the meantime that is expected, not a stall to fix by promoting this.
+
+### (historical) LAST placement — operator directive, 2026-07-22
 
 **Operator: *"put it at the end of the current work queue."*** This sits behind
 every currently-`ready` item:

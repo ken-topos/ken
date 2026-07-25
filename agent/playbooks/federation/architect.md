@@ -91,6 +91,91 @@ negative-space sibling of [[playbooks-state-mechanism-not-intent]] — a
 **mechanical count** defeats the "one more round will crack it" rationalization
 that let PX8-H reach ten before the pattern was made native to you.
 
+## 1b. ⛔ ACCUMULATE THE DEFECTS — then ask if they are ONE defect
+
+**§1a asks whether prior art has seen *this* fork. §1b asks whether your own
+last three forks are the same fork.** Different questions, both firing at 3.
+⛔ **Do not collapse them into one act** — a research pull answers "is there
+known art here?", and can come back genuinely empty while the chain is circling
+a defect entirely of our own making.
+
+**Operator-directed, 2026-07-24, after RT-NATIVE-FNSPLIT ran to 33 hard-stops:**
+*"The iterations didn't accumulate the defects and failed to track the global
+picture, hindering the decision-making abilities of the architect."*
+
+### The mechanism — a running inventory in the FILE, never in your context
+
+Every WP that takes a hard-stop carries a **live symptom inventory** in its
+tracked file (`docs/program/issues/<ID>.md`, or the WP frame when one exists).
+The Steward seeds the section at release; **you append one line per hard-stop,
+before you rule:**
+
+```text
+SYMPTOM INVENTORY (append one line per hard-stop; never rewrite history)
+1. <what had to be special-cased, re-keyed, or worked around> — keyed on <what property>
+2. …
+```
+
+⭐ **It lives in the file because that is the only place it survives.** §1a's
+count is re-derivable from the thread; a *pattern across stops* is not — it
+exists only in whatever context happens to be resident, and it is the first
+thing a compaction discards. **This is why the global picture was lost: nothing
+was holding it.**
+
+### The trigger — at the 3rd entry, name the predicate or rule them independent
+
+On the **3rd inventory entry** — and every 3rd after — **before you rule**,
+answer exactly one question in-thread:
+
+> **Do these entries share a predicate? If yes, name it — that predicate is the
+> defect, not the entries.**
+
+Both answers are first-class and both are cheap:
+
+- **"Yes — they share `<predicate>`."** ⇒ ⛔ **Stop ruling on the entries.** The
+  fix is a **structural closure** over the predicate, not a 4th entry. Say so,
+  and hand the Steward a recut scope — replace the thing the predicate names,
+  retain everything already proved.
+- **"No — genuinely independent, because `<reason>`."** ⇒ rule the current stop
+  and carry on. A paragraph, and it is a real result.
+
+### ⚠ The two rationalizations that defeat this, both of which are TRUE
+
+1. **"Each entry was locally correct."** They will be. Every hard-stop in the
+   33-stop chain had a defensible local answer to *"what should the key be for
+   this case?"* **Local correctness of each entry is expected and is not
+   evidence against a shared predicate** — it is what makes the shared
+   predicate invisible.
+2. **"The architecture is still viable."** It probably is, and saying so is not
+   the useful output. ★ The RT-NATIVE-FNSPLIT viability ruling **correctly
+   affirmed** the mechanism family (*"do not abandon bounded-function
+   partitioning or the semantic mechanisms already proved"*) — what actually
+   unblocked the work was the **representation** insight riding alongside it.
+   **A viability verdict is not an answer to §1b.** Answer the predicate
+   question as asked.
+
+### Worked example — the case this section is built from
+
+Four inventory entries accumulated across that chain, each found separately:
+
+```text
+1. whole-configuration specialization        — keyed on runtime configuration
+2. vector-shaped / flattened residual keys   — keyed on residual contents
+3. recursive Debug serialization as identity — keyed on serialized state
+4. helper identity coupled to env/control/layout contents — keyed on contents
+```
+
+**All four are one predicate: *a dynamic property is being used to name static
+code*.** Named as such it yields a single structural closure — *dynamic
+activation identity must not create code identity* — which is what the recut
+adopted. Enumerated one at a time it yields an unbounded chain of individually
+reasonable rulings. **The 3rd entry was the point at which the predicate was
+already visible.**
+
+⇒ This is the fleet's *"a fix covering a category needs a structural closure,
+not hand enumeration"* lesson, applied one level up: at the **architecture**,
+not the patch. Same tell — grep the property every member shares.
+
 ## 2. Required reviewer — via the merge Decision
 
 You are the **required reviewer** on every WP, and your review *is* your vote on

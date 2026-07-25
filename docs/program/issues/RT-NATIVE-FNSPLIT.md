@@ -6,7 +6,7 @@ owner: runtime
 size: TBD
 gate: none
 depends_on: []
-blocks: []
+blocks: [NATIVE-HANDLE-CARRIER]
 github: null
 origin: PX8-SPAN-PROV Phase 2 native reachability wall (runtime-implementer measured repro evt_7qhtk8w489am4; CV option-(c) ruling evt_77q2tc5dh1kzj; Steward scope ruling evt_7c160ej3bwz4; Architect means/layer ruling evt_7gkn3g4tsvgb9, 2026-07-23). Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
@@ -75,6 +75,36 @@ Gates the [[NATIVE-HANDLE-CARRIER]] fast-follow + [[PX8-F-CAP-41]] too.
 **Steward holds the authoritative count** (steward playbook §5a duty 1). The
 Architect re-derives its own count across compactions; **on any disagreement
 this line wins.** Re-read this line on every hard-stop.
+
+> ### ⭐ SYMPTOM INVENTORY — armed 2026-07-24 (operator-directed)
+>
+> **The Architect appends one line per hard-stop, before it rules; at the 3rd
+> entry it must answer whether the entries share a predicate** (architect
+> playbook §1b, steward §5a-ii). This exists because *this* chain ran to 33
+> hard-stops with nothing holding the pattern across them.
+>
+> ```text
+> SYMPTOM INVENTORY (append only; never rewritten)
+> NEXT PREDICATE CHECK = 3rd entry, then 6th, 9th, …
+> (empty — the recut chain's entries start here; the held chain's four are below)
+> ```
+>
+> ⛔ **Seeded, not empty of history.** The *held* chain's four entries are
+> already known and were the input to the recut — keep them visible so a new
+> entry can be compared against them rather than discovered fresh:
+>
+> ```text
+> HELD CHAIN (closed, retained as the worked example)
+> 1. whole-configuration specialization        — keyed on runtime configuration
+> 2. vector-shaped / flattened residual keys   — keyed on residual contents
+> 3. recursive Debug serialization as identity — keyed on serialized state
+> 4. helper identity coupled to env/control/layout contents — keyed on contents
+> PREDICATE (named at the recut) = a dynamic property must not name static code
+> ```
+>
+> ★ **A recut-chain entry that reduces to the SAME predicate is not a new
+> defect — it is evidence the recut is incomplete.** Say so rather than ruling
+> it.
 
 ```text
 RECUT CHAIN (live, from kickoff evt_2kgfmmeeh2x7w, 2026-07-24)

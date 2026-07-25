@@ -32,14 +32,27 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-24 22:07:52Z — from 48 issue file(s) in `docs/program/issues/`.
+2026-07-25 01:32:59Z — from 68 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
 | ID | Title | Status | Owner | Size | Gate | GitHub |
 |---|---|---|---|---|---|---|
 | `A3` | catalog-coverage walker | draft | TBD | TBD | none | — |
+| `ABI-A1` | promote ConsoleRead and ClockWallNow to NativeTested with differential evidence | draft | runtime | M | none | — |
+| `ABI-A2` | promote FsAppendFile, FsMetadata, FsRename to NativeTested | draft | runtime | M | none | — |
+| `ABI-A3` | promote FsReadDirectory, FsCreateDirectory, FsRemoveFile, FsRemoveDirectory to NativeTested | draft | runtime | M | none | — |
+| `ABI-M1` | manifest v2 — family-scoped, versioned, generated from family schemas | draft | runtime | L | none | — |
+| `ABI-M2` | runtime facility/operation probes, distinct from build-time facts | draft | runtime | M | none | — |
+| `ABI-R1` | correct stale filesystem capability prose — scoped roots, rights, symlink policy and no-follow resolution have landed | draft | foundation | S | none | — |
+| `ABI-R3` | generated operation inventory derived from catalog structure — a new operation must be a build break | draft | runtime | M | none | — |
 | `ABI-REVOKE` | runtime revocation membrane — the deferred runtime face of 62 §4 | draft | runtime | TBD | none | — |
+| `ABI-S1` | descriptor completion — seek, truncate, sync/data-sync, flags, duplication under explicit inheritance policy | draft | runtime | M | none | — |
+| `ABI-S2` | directory streaming — supersedes whole-directory read where streaming is the honest shape | draft | runtime | M | none | — |
+| `ABI-S3` | monotonic clocks, sleep/deadlines, and secure kernel entropy | draft | runtime | M | none | — |
+| `ABI-S4` | statx-shaped metadata with field-availability bits | draft | runtime | M | none | — |
+| `ABI-S5` | terminal basics and process signal disposition at the executable edge | draft | runtime | M | none | — |
+| `ABI-S6` | ordinary anonymous and file-backed mappings as opaque runtime-owned regions and bounded byte views | draft | runtime | L | none | — |
 | `BUDGET-EFF` | TransferCount.remaining must be bounded by the effective request | merged | verify | M | none | — |
 | `BUDGET-EXHAUST` | transfer-budget bound checks are fail-open on variant extension | merged | verify | S | none | — |
 | `CAT-CAPEX` | catalog exhibits no checked capability/authority exemplar | draft | steward | TBD | none | — |
@@ -49,11 +62,11 @@ the committed file matches the generator's output.
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | closed | doc | S | none | — |
 | `DOC-GATE-CONTROL-BINDING` | validation-gate registry: make the two DOC-GATE-RECORD-AXIS checks orphan-proof by lifting them to pure detectors with committed controls | merged | verify | S | none | https://github.com/ken-topos/ken/pull/928 |
 | `DOC-GATE-RECORD-AXIS` | validation-gate registry: bind token→runner COVERAGE on the record axis, and close the `kind` vocabulary | merged | verify | S | none | https://github.com/ken-topos/ken/pull/922 |
-| `DOC-GATE-WIRE-BINDING` | validation-gate registry: give the kind vocabulary one registered production runner | ready | verify | XS | none | — |
+| `DOC-GATE-WIRE-BINDING` | validation-gate registry: bind the kind-vocabulary RULE to its GATE by registering it as a VALIDATION_GATES row | merged | verify | XS | none | https://github.com/ken-topos/ken/pull/933 |
 | `DOC-VALIDATION-BINDING` | validation vocabulary claims a 1:1 binding to the gates; nothing binds it | merged | verify | S | none | — |
 | `DOC-W0` | documentation Wave 0 — library/ charter and currency substrate | closed | doc | M | none | 830 |
 | `DOC-W1` | documentation Wave 1 — the read-Ken spine, taught from checked fragments | closed | doc | L | none | — |
-| `DOC-W2` | documentation Wave 2 — agent core modules, task packs, and cold-context evals | ready | doc | L | none | — |
+| `DOC-W2` | documentation Wave 2 — agent core modules, task packs, and cold-context evals | merged | doc | L | none | 936 |
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
 | `F3-39` | F3 [task-list #39] — reducer: degrade-not-wrap + retire legacy arms | draft | runtime | TBD | none | — |
 | `F4` | content-addressing + value-model design (aka PX8-F-PROOF) | draft | foundation+spec-enclave | M | none | — |
@@ -65,18 +78,25 @@ the committed file matches the generator's output.
 | `ORACLE-VIS-CHECK` | replace the text-pin oracle in px4b_native_production.rs with a real visibility check | merged | runtime | S | none | — |
 | `ORACLE-VIS-PACKAGING` | replace the text-pin visibility oracle on build_process_starter_executable_artifact | merged | runtime | XS | none | — |
 | `PUB-VERIFY` | scripted-pr-automerge.sh exits 0 on a failed push | closed | steward | S | none | — |
+| `PX10` | processes — declarative spawn plan, deny-by-default inheritance, pidfd identity, typed child-exit observation | draft | runtime | L | none | — |
+| `PX11` | sockets — typed addresses, bounded send/receive, explicit option families, injected resolver capability | draft | runtime | L | none | — |
+| `PX12` | readiness — nonblocking transitions, epoll/eventfd/timerfd/signalfd, cancellation and timeout IN THE OPERATION TYPE | draft | runtime | L | none | — |
 | `PX8-F-CAP-41` | PX8 clause-(a) behavior blocker — closed buffer endpoint (start==capacity) must derive zero-effective ReadEof, not host-reject | active | foundation | M | none | 41 |
 | `PX8-SPAN-PROV` | PX8 clause-(b) gap — BufferSpan carries no originating-buffer identity; freeze accepts a same-shape span from a different buffer | merged | spec-enclave | M | none | 914 |
 | `PX8-WROTE-ABS` | PX8 clause-(a) evidence gap — interpreter capped-short Wrote lacks an absolute oracle; PR-C error identities unreached | draft | TBD | TBD | none | — |
 | `PX8` | partial/positioned IO — the completion program's root; closure condition | active | runtime | L | none | — |
+| `PX9` | cross-domain System.Error — semantic identity, raw errno, operation, resource, safe context, and honest retry classification | draft | foundation | L | none | — |
 | `Q-CLAIM-CLOSURE` | Q-RESIDUE adversary findings — claim-loss in multi-claim test blocks, plus R1/R2/R3 | merged | runtime | S | none | — |
 | `Q-CLAIM-COMPARE-ORD` | claim-loss in list_instance_routes... (compare_ord) — both routing claims dropped, replacement only instantiates Bool | merged | runtime | XS | none | — |
 | `Q-RESIDUE` | the Track Q rework residue — 10 tests, folded from Q3-Q7 | closed | runtime | S | none | 818 |
 | `RT-AGG-COMPOSE` | escaping two Resources into one aggregate (Prod (Resource _) (Resource _)) fails at erasure — checked endpoints do not compose | draft | runtime | TBD | none | — |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | merged | runtime | M | none | PR #911 @ 238a5c5d (origin/main 4ac9141e, CI green) |
+| `RT-FNSPLIT-B1R` | RT-NATIVE-FNSPLIT Boundary B1R — encode the occurrence-local semantic material B1 counted but never stored (repair of landed B1) | active | runtime | L | none | — |
+| `RT-FNSPLIT-B2A` | RT-NATIVE-FNSPLIT Boundary B2a — make the semantic plane load-bearing for emission (behaviour-preserving port) | ready | runtime | L | none | — |
+| `RT-FNSPLIT-B2B` | RT-NATIVE-FNSPLIT Boundary B2b — full emission census, finite differences, and the explicit growth verdict | draft | runtime | M | none | — |
 | `RT-NATIVE-FNSPLIT` | Native backend: bound per-function lowering growth to O(n) — helper identity is a variable-width whole-configuration key (orig. single-Function VReg::MAX, since fixed) | active | runtime | TBD | none | — |
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
-| `RT-PLANNER-ATTRIB-K` | Boundary A planner: fixed K is a design invariant — move the K-exceeded rejection off the capacity channel | ready | runtime | XS | none | — |
+| `RT-PLANNER-ATTRIB-K` | Boundary A planner: fixed K is a design invariant — move the K-exceeded rejection off the capacity channel | merged | runtime | XS | none | https://github.com/ken-topos/ken/pull/935 |
 | `RT-PLANNER-DIAGNOSTIC-K` | Boundary A planner: report planner-invariant failures as planner defects, and assert fixed_k CONSTANT rather than merely affine | merged | runtime | S | none | https://github.com/ken-topos/ken/pull/929 |
 | `RT-SPLIT` | decompose cranelift_backend.rs | merged | runtime | L | none | — |
 | `RT-SRC-DISPATCH-COVER` | close the source-machine scrutinee-dispatch coverage tier surfaced by RT-SPLIT slice 4 | draft | runtime | TBD | none | — |
@@ -92,8 +112,6 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
-- `DOC-GATE-WIRE-BINDING` — validation-gate registry: give the kind vocabulary one registered production runner
-- `DOC-W2` — documentation Wave 2 — agent core modules, task packs, and cold-context evals
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `KW-THEOREM` — rename the surface keyword `lemma` to `theorem`
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
@@ -104,10 +122,36 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 Items not yet `merged`/`closed` whose `depends_on` names an id that
 is itself not yet `merged`/`closed`:
 
+- `ABI-A1` blocked by `ABI-REVOKE` (status: draft)
+- `ABI-A2` blocked by `ABI-REVOKE` (status: draft)
+- `ABI-A3` blocked by `ABI-REVOKE` (status: draft)
+- `ABI-A3` blocked by `ABI-R3` (status: draft)
+- `ABI-M1` blocked by `ABI-R3` (status: draft)
+- `ABI-M2` blocked by `ABI-M1` (status: draft)
+- `ABI-R3` blocked by `PX8` (status: active)
+- `ABI-REVOKE` blocked by `ABI-R3` (status: draft)
+- `ABI-S1` blocked by `PX9` (status: draft)
+- `ABI-S2` blocked by `ABI-A3` (status: draft)
+- `ABI-S4` blocked by `ABI-M1` (status: draft)
+- `ABI-S5` blocked by `PX9` (status: draft)
+- `ABI-S6` blocked by `ABI-S1` (status: draft)
 - `F4` blocked by `A3` (status: draft)
 - `NATIVE-HANDLE-CARRIER` blocked by `RT-NATIVE-FNSPLIT` (status: active)
+- `PX10` blocked by `PX9` (status: draft)
+- `PX10` blocked by `ABI-M1` (status: draft)
+- `PX10` blocked by `ABI-S5` (status: draft)
+- `PX11` blocked by `PX9` (status: draft)
+- `PX11` blocked by `ABI-M1` (status: draft)
+- `PX12` blocked by `PX10` (status: draft)
+- `PX12` blocked by `PX11` (status: draft)
+- `PX12` blocked by `ABI-S3` (status: draft)
 - `PX8-F-CAP-41` blocked by `NATIVE-HANDLE-CARRIER` (status: draft)
-- `RT-PLANNER-ATTRIB-K` blocked by `RT-NATIVE-FNSPLIT` (status: active)
+- `PX8` blocked by `PX8-F-CAP-41` (status: active)
+- `PX8` blocked by `PX8-WROTE-ABS` (status: draft)
+- `PX9` blocked by `PX8` (status: active)
+- `PX9` blocked by `ABI-REVOKE` (status: draft)
+- `RT-FNSPLIT-B2A` blocked by `RT-FNSPLIT-B1R` (status: active)
+- `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2A` (status: ready)
 
 ## Gate progress
 

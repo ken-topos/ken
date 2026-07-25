@@ -1292,6 +1292,71 @@ the tell that **both** the self-trigger and the backstop have silently lapsed �
 when you notice it, apply the catch-up rule (duty 2) immediately, don't wait for
 the next clean multiple. Arm the trigger the moment a chain opens.
 
+### 5a-ii. ⛔ SEED AND CARRY THE SYMPTOM INVENTORY
+
+**Operator-directed, 2026-07-24, after RT-NATIVE-FNSPLIT ran to 33 hard-stops:**
+*"The iterations didn't accumulate the defects and failed to track the global
+picture, hindering the decision-making abilities of the architect."*
+
+★ **The research cadence above and this are answers to DIFFERENT failures, and
+the cadence cannot substitute for this one.** §5a imports *external* prior art
+for the current fork. This accumulates *our own* forks so the Architect can see
+whether they are one fork wearing different clothes. On FNSPLIT the advisories
+fired (#24, #27, #30, #33) and were genuinely useful — **and the chain still ran
+to 33**, because nothing anywhere was holding the pattern across stops.
+
+#### Your duties — three, all mechanical
+
+1. **SEED the section when you frame or release any WP** (§2c). It goes in the
+   tracked file — `docs/program/issues/<ID>.md`, or the WP frame if one exists:
+
+   ```text
+   SYMPTOM INVENTORY (Architect appends one line per hard-stop; never rewritten)
+   NEXT PREDICATE CHECK = 3rd entry, then 6th, 9th, …
+   (empty)
+   ```
+
+   ⭐ **Armed as a line, exactly like the research count** — for exactly the
+   reason §5a's ⚠ note gives. An unarmed trigger is not a trigger.
+
+2. **BACKSTOP the predicate check.** The Architect appends the entries and owns
+   the check (its playbook §1b). If a 3rd entry lands and no predicate answer
+   appears in-thread before the next ruling, hold the Architect the old way and
+   ask the one question — **transport and framing only, never the answer.**
+   ⛔ Naming the predicate yourself makes you the de-facto designer (same line
+   as §5a duty 2).
+
+3. **ACT on a named predicate — it is a recut, and recuts are yours.** *"Yes,
+   these share `<predicate>`"* is not another ruling to log: it is the Architect
+   telling you the **representation** is the defect. You author the recut frame,
+   and the frame's shape is fixed:
+   - **RETAIN** everything already proved — a named predicate is *not* a licence
+     to restart. FNSPLIT's viability ruling was explicit: *"do not abandon
+     bounded-function partitioning or the semantic mechanisms already proved."*
+   - **REPLACE** only what the predicate names.
+   - **FREEZE** the old chain's count and open a fresh one; carry the last clean
+     checkpoint forward as a semantic oracle, not an acceptance path.
+
+#### ⚠ Two things that will make you skip this
+
+- **"The architecture is still viable."** It usually is, and a viability verdict
+  is **not** an answer to the predicate question. FNSPLIT's review correctly
+  affirmed viability; what unblocked the work was the representation insight
+  beside it. Do not accept the affirmation as the deliverable.
+- **"Every ruling so far was correct."** They were. Local correctness of each
+  entry is what makes a shared predicate invisible — it is the symptom, not the
+  refutation.
+
+★ **The measured case, so the shape is recognizable:** four entries accumulated
+separately — whole-configuration specialization, flattened residual keys,
+`Debug` serialization as identity, helper identity coupled to env/control/layout
+contents. **All four are one predicate — a dynamic property naming static
+code.** Named, it yields one structural closure. Enumerated, it yields an
+unbounded chain of individually reasonable rulings. **The predicate was already
+visible at the 3rd entry, and the step-back that finally came was
+operator-initiated — the fleet had no endogenous mechanism to produce it.** This
+section is that mechanism.
+
 ### 5b. The Adversary — triage its findings, sequence the fixes
 
 The **Adversary** (`ken-adversary`, a T1 standing red-team; see its playbook) is
