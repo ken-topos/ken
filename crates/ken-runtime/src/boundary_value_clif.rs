@@ -37,12 +37,14 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{FuncId, Linkage, Module};
 
 use crate::boundary_value::{
-    BoundaryClass, BoundaryReferentOwner, BoundaryTag, ARENA_FROZEN, ARENA_NAMES, ARENA_NODES,
-    ARENA_NODE_CAPACITY, ARENA_NODE_COUNT, ARENA_PERSISTENT, ARENA_WORDS, ARENA_WORD_CAPACITY,
-    ARENA_WORD_COUNT, BOUNDARY_ERR_BOUNDS, BOUNDARY_ERR_CAPACITY, BOUNDARY_ERR_CLASS,
-    BOUNDARY_ERR_ESCAPE, BOUNDARY_ERR_FROZEN, BOUNDARY_ERR_SHAPE, BOUNDARY_ERR_TAG,
-    BOUNDARY_NODE_STRIDE, BOUNDARY_OK, BOUNDARY_TAG_BITS, BOUNDARY_TAG_MASK, NODE_CLASS,
-    NODE_FIELDS_AT, NODE_FIELD_COUNT, NODE_OWNER, NODE_PAYLOAD, NODE_SLOT, NODE_TAG_ID,
+    boundary_class_mask, BoundaryClass, BoundaryReferentOwner, BoundaryTag, ARENA_DATA,
+    ARENA_DATA_CAPACITY, ARENA_DATA_COUNT, ARENA_FROZEN, ARENA_NAMES, ARENA_NATIVE_INT,
+    ARENA_NODES, ARENA_NODE_CAPACITY, ARENA_NODE_COUNT, ARENA_PERSISTENT, ARENA_WORDS,
+    ARENA_WORD_CAPACITY, ARENA_WORD_COUNT, BOUNDARY_ERR_BOUNDS, BOUNDARY_ERR_CAPACITY,
+    BOUNDARY_ERR_CLASS, BOUNDARY_ERR_ESCAPE, BOUNDARY_ERR_FROZEN, BOUNDARY_ERR_RELATION,
+    BOUNDARY_ERR_SHAPE, BOUNDARY_ERR_TAG, BOUNDARY_NODE_STRIDE, BOUNDARY_OK, BOUNDARY_TAG_BITS,
+    BOUNDARY_TAG_CLASS_RELATION, BOUNDARY_TAG_MASK, NODE_CLASS, NODE_EXTENT, NODE_FIELDS_AT,
+    NODE_FIELD_COUNT, NODE_OWNER, NODE_PAYLOAD, NODE_SLOT, NODE_TAG_ID,
 };
 use crate::cranelift_backend::{backend_module, CraneliftBackendError};
 
@@ -75,12 +77,47 @@ pub const BOUNDARY_LOCAL_HELPERS: &[&str] = &[
     "ken_boundary_escape_check_local",
     // ── construction: the producer half of the interface ──────────────────
     "ken_boundary_alloc_local",
-    "ken_boundary_store_slot_local",
     "ken_boundary_store_tag_id_local",
     "ken_boundary_store_scalar_local",
     "ken_boundary_store_field_local",
     "ken_boundary_store_name_local",
+    "ken_boundary_store_int_tag_local",
+    "ken_boundary_store_bytes_len_local",
+    "ken_boundary_store_byte_local",
+    // ── content access: the value's BITS, not its identity or its length ──
+    "ken_boundary_byte_local",
+    "ken_boundary_int_sign_local",
+    "ken_boundary_int_len_local",
+    "ken_boundary_int_limb_local",
 ];
+
+// ⛔ There is deliberately NO `ken_boundary_store_slot_local`.
+//
+// It existed, it took a **caller-supplied** `SlotId`, and the frozen-prefix
+// guard expressly permits writes to a newly allocated node — so emitted code
+// could replace the allocator's `NULL_SLOT` with any slot it chose. That
+// contradicted the load-bearing claim that only the store mints persistent
+// identity, and it contradicted this node's own recorded residual, which says
+// emitted-created nodes stay `NULL_SLOT`.
+//
+// ⚠ **The residual was pinned on a path that never exercised the helper that
+// broke it.** The control constructed a node and read back `NULL_SLOT` without
+// ever calling `store_slot`, so it asserted a property of a field nothing had
+// written to. Assigning store identity is not an emitted-code operation at all;
+// the closure is to remove the capability, not to guard it.
+//
+// `EMITTED_WRITABLE_NODE_OFFSETS` below is what keeps it removed: the generic
+// node-word setter refuses to be emitted for any other offset.
+
+/// ⛔ **The only node words emitted code may set** (`AC-6`).
+///
+/// Everything absent is identity or layout: `NODE_SLOT` is the store's,
+/// `NODE_CLASS`/`NODE_OWNER` are the allocator's and must agree with the tag,
+/// and `NODE_FIELD_COUNT`/`NODE_FIELDS_AT`/`NODE_EXTENT` are spans whose bounds
+/// were checked when they were claimed. `define_store_node_word` asserts
+/// membership at **emission** time, so a setter for a forbidden offset cannot
+/// be built — the surface is closed rather than watched.
+const EMITTED_WRITABLE_NODE_OFFSETS: &[i32] = &[NODE_TAG_ID, NODE_PAYLOAD];
 
 /// The emitted-code interface, as `FuncId`s to call.
 ///
@@ -120,8 +157,6 @@ pub(crate) struct BoundaryLocalFuncs {
     /// `(arena, tag, class, field_count, out) -> status` — allocate a handle
     /// node **in the region the tag selects** and write its word to `*out`.
     pub alloc: FuncId,
-    /// `(arena, word, slot) -> status` — record the owning `SlotId`.
-    pub store_slot: FuncId,
     /// `(arena, word, tag_id) -> status` — record constructor/record identity.
     pub store_tag_id: FuncId,
     /// `(arena, word, payload) -> status` — record the scalar payload, which for
@@ -131,6 +166,22 @@ pub(crate) struct BoundaryLocalFuncs {
     pub store_field: FuncId,
     /// `(arena, word, index, name_id) -> status` — write one field name.
     pub store_name: FuncId,
+    /// `(arena, word, native_tag) -> status` — record a spilled `Int`'s
+    /// `NativeIntV1` tag. Class-guarded to `Int`.
+    pub store_int_tag: FuncId,
+    /// `(arena, word, len, out) -> status` — claim `len` data bytes for a
+    /// `Bytes`/`String` node and write the span's start to `*out`.
+    pub store_bytes_len: FuncId,
+    /// `(arena, word, index, byte) -> status` — write one content byte.
+    pub store_byte: FuncId,
+    /// `(arena, word, index, out) -> status` — read one content byte.
+    pub byte: FuncId,
+    /// `(arena, word, out) -> status` — a spilled `Int`'s sign.
+    pub int_sign: FuncId,
+    /// `(arena, word, out) -> status` — a spilled `Int`'s limb count.
+    pub int_len: FuncId,
+    /// `(arena, word, index, out) -> status` — a spilled `Int`'s limb.
+    pub int_limb: FuncId,
 }
 
 #[derive(Clone, Copy)]
@@ -149,11 +200,20 @@ struct Graph {
     make_immediate: FuncId,
     escape_check: FuncId,
     alloc: FuncId,
-    store_slot: FuncId,
     store_tag_id: FuncId,
     store_scalar: FuncId,
     store_field: FuncId,
     store_name: FuncId,
+    store_int_tag: FuncId,
+    store_bytes_len: FuncId,
+    store_byte: FuncId,
+    byte: FuncId,
+    int_sign: FuncId,
+    int_len: FuncId,
+    int_limb: FuncId,
+    /// `ken_native_int_resolve_local`, declared into this module by the
+    /// native-`Int` graph that is emitted before this one.
+    native_int_resolve: FuncId,
 }
 
 /// Emit the boundary-value helper graph into `module`.
@@ -164,6 +224,7 @@ struct Graph {
 /// performs the switch-over that calls these.
 pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     module: &mut M,
+    native_int: &crate::native_int_clif::NativeIntLocalFuncs,
 ) -> Result<BoundaryLocalFuncs, CraneliftBackendError> {
     let resolve = declare(module, "ken_boundary_resolve_local", 3)?;
     let class = declare(module, "ken_boundary_class_local", 3)?;
@@ -179,11 +240,17 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     let make_immediate = declare(module, "ken_boundary_make_immediate_local", 3)?;
     let escape_check = declare(module, "ken_boundary_escape_check_local", 2)?;
     let alloc = declare(module, "ken_boundary_alloc_local", 5)?;
-    let store_slot = declare(module, "ken_boundary_store_slot_local", 3)?;
     let store_tag_id = declare(module, "ken_boundary_store_tag_id_local", 3)?;
     let store_scalar = declare(module, "ken_boundary_store_scalar_local", 3)?;
     let store_field = declare(module, "ken_boundary_store_field_local", 4)?;
     let store_name = declare(module, "ken_boundary_store_name_local", 4)?;
+    let store_int_tag = declare(module, "ken_boundary_store_int_tag_local", 3)?;
+    let store_bytes_len = declare(module, "ken_boundary_store_bytes_len_local", 4)?;
+    let store_byte = declare(module, "ken_boundary_store_byte_local", 4)?;
+    let byte = declare(module, "ken_boundary_byte_local", 4)?;
+    let int_sign = declare(module, "ken_boundary_int_sign_local", 3)?;
+    let int_len = declare(module, "ken_boundary_int_len_local", 3)?;
+    let int_limb = declare(module, "ken_boundary_int_limb_local", 4)?;
     let graph = Graph {
         resolve,
         class,
@@ -199,11 +266,18 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
         make_immediate,
         escape_check,
         alloc,
-        store_slot,
         store_tag_id,
         store_scalar,
         store_field,
         store_name,
+        store_int_tag,
+        store_bytes_len,
+        store_byte,
+        byte,
+        int_sign,
+        int_len,
+        int_limb,
+        native_int_resolve: native_int.resolve,
     };
 
     define_resolve(module, graph)?;
@@ -220,11 +294,17 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     define_make_immediate(module, graph)?;
     define_escape_check(module, graph)?;
     define_alloc(module, graph)?;
-    define_store_node_word(module, graph, graph.store_slot, NODE_SLOT)?;
     define_store_node_word(module, graph, graph.store_tag_id, NODE_TAG_ID)?;
     define_store_node_word(module, graph, graph.store_scalar, NODE_PAYLOAD)?;
     define_store_field(module, graph)?;
     define_store_name(module, graph)?;
+    define_store_int_tag(module, graph)?;
+    define_store_bytes_len(module, graph)?;
+    define_byte_access(module, graph, graph.store_byte, true)?;
+    define_byte_access(module, graph, graph.byte, false)?;
+    define_int_part(module, graph, graph.int_sign, IntPart::Sign)?;
+    define_int_part(module, graph, graph.int_len, IntPart::Len)?;
+    define_int_part(module, graph, graph.int_limb, IntPart::Limb)?;
 
     Ok(BoundaryLocalFuncs {
         class,
@@ -240,11 +320,17 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
         make_immediate,
         escape_check,
         alloc,
-        store_slot,
         store_tag_id,
         store_scalar,
         store_field,
         store_name,
+        store_int_tag,
+        store_bytes_len,
+        store_byte,
+        byte,
+        int_sign,
+        int_len,
+        int_limb,
     })
 }
 
@@ -254,8 +340,9 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
 pub(crate) fn capture_boundary_value_local_graph<M: Module>(
     module: &mut M,
 ) -> Result<String, CraneliftBackendError> {
+    let native = crate::native_int_clif::emit_native_int_local_graph(module, false)?;
     BOUNDARY_CLIF_CAPTURE.with(|capture| *capture.borrow_mut() = Some(Vec::new()));
-    emit_boundary_value_local_graph(module)?;
+    emit_boundary_value_local_graph(module, &native)?;
     Ok(BOUNDARY_CLIF_CAPTURE.with(|capture| {
         capture
             .borrow_mut()
@@ -1104,6 +1191,38 @@ fn select_region_by_tag(
     b.block_params(selected)[0]
 }
 
+fn one_i64(b: &mut FunctionBuilder<'_>) -> cranelift_codegen::ir::Value {
+    b.ins().iconst(types::I64, 1)
+}
+
+/// Select the class bitmask the ABI relation admits for `tag`.
+///
+/// ⭐ Θ(1): four comparisons and a chain of selects, no table walk and no data
+/// section. Every constant is computed by [`boundary_class_mask`] from the one
+/// authoritative relation, so this cannot say something the table does not.
+fn relation_mask(
+    b: &mut FunctionBuilder<'_>,
+    tag: cranelift_codegen::ir::Value,
+) -> cranelift_codegen::ir::Value {
+    // Fold from the *last* handle tag backwards, so the innermost value is a
+    // real mask rather than a zero default: an unlisted tag can never reach
+    // here, because `select_region_by_tag` has already refused it.
+    let mut chain: Option<cranelift_codegen::ir::Value> = None;
+    for (tag_value, _) in BOUNDARY_TAG_CLASS_RELATION.iter().rev() {
+        let mask = b
+            .ins()
+            .iconst(types::I64, boundary_class_mask(*tag_value) as i64);
+        chain = Some(match chain {
+            None => mask,
+            Some(rest) => {
+                let hit = b.ins().icmp_imm(IntCC::Equal, tag, *tag_value as i64);
+                b.ins().select(hit, mask, rest)
+            }
+        });
+    }
+    chain.expect("the relation is non-empty")
+}
+
 /// `(arena, tag, class, field_count, out) -> status` — allocate a handle node in
 /// the region the tag selects and write its word to `*out`.
 ///
@@ -1139,6 +1258,30 @@ fn define_alloc<M: Module>(module: &mut M, graph: Graph) -> Result<(), Cranelift
 
         b.switch_to_block(classed);
         let region = select_region_by_tag(&mut b, ptr, arena, tag);
+
+        // ── ⛔ the RELATION, not the two sets ────────────────────────────────
+        //
+        // Both sets are closed and their product still contains pairs no
+        // disposition can produce — `PersistentClosure + HostResult`,
+        // `InvocationHostResult + Constructor`. Minting one succeeds and then
+        // fails much later at an unrelated projection, reporting the wrong
+        // defect in the wrong place. The mask comes from
+        // `BOUNDARY_TAG_CLASS_RELATION`, so there is one table and the CLIF
+        // cannot drift from it.
+        let mask = relation_mask(&mut b, tag);
+        let one = one_i64(&mut b);
+        let bit = b.ins().ishl(one, class);
+        let admitted = b.ins().band(mask, bit);
+        let related = b.ins().icmp_imm(IntCC::NotEqual, admitted, 0);
+        let lawful = b.create_block();
+        let unrelated = b.create_block();
+        b.ins().brif(related, lawful, &[], unrelated, &[]);
+
+        b.switch_to_block(unrelated);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_RELATION);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(lawful);
 
         // ── node capacity ───────────────────────────────────────────────────
         let count = b
@@ -1271,6 +1414,14 @@ fn define_store_node_word<M: Module>(
     id: FuncId,
     offset: i32,
 ) -> Result<(), CraneliftBackendError> {
+    // ⛔ Emitting a setter for any other offset is a **panic at emission**,
+    // which every test that emits the graph exercises. This is the mechanism
+    // that keeps `NODE_SLOT` out of emitted code's reach: not a review rule and
+    // not a scan, but a refusal to build the helper at all.
+    assert!(
+        EMITTED_WRITABLE_NODE_OFFSETS.contains(&offset),
+        "emitted code may not set node offset {offset}"
+    );
     let ptr = module.target_config().pointer_type();
     let mut func = begin(module, id, 3);
     let resolve = module.declare_func_in_func(graph.resolve, &mut func);
@@ -1437,12 +1588,397 @@ fn define_store_name<M: Module>(module: &mut M, graph: Graph) -> Result<(), Cran
     finish(module, graph.store_name, func)
 }
 
+// ---------------------------------------------------------------------------
+// Content — the value's BITS, not its identity or its length
+// ---------------------------------------------------------------------------
+//
+// ⛔ **Why an identity and a length were not enough.** A spilled `Int` node
+// carried `NODE_PAYLOAD = 0`, and `Bytes`/`String` carried only a byte count, so
+// a separately compiled consumer saw every wide integer as zero and could not
+// tell two equal-length strings apart. The typed residency map and the canonical
+// decoder that *could* tell them apart are **Rust** paths — which is precisely
+// what hard-stop `#10` rejected. A representation whose content only Rust can
+// read is not one executable representation.
+
+/// Return early with [`BOUNDARY_ERR_CLASS`] unless the node's class is one of
+/// `classes`.
+fn class_guard(
+    b: &mut FunctionBuilder<'_>,
+    node: cranelift_codegen::ir::Value,
+    classes: &[BoundaryClass],
+) {
+    let class = b
+        .ins()
+        .load(types::I64, MemFlags::trusted(), node, NODE_CLASS);
+    let ok = b.create_block();
+    let bad = b.create_block();
+    let mut admitted: Option<cranelift_codegen::ir::Value> = None;
+    for candidate in classes {
+        let hit = b.ins().icmp_imm(IntCC::Equal, class, *candidate as i64);
+        admitted = Some(match admitted {
+            None => hit,
+            Some(prev) => b.ins().bor(prev, hit),
+        });
+    }
+    let admitted = admitted.expect("a class guard names at least one class");
+    b.ins().brif(admitted, ok, &[], bad, &[]);
+
+    b.switch_to_block(bad);
+    let err = b.ins().iconst(types::I64, BOUNDARY_ERR_CLASS);
+    b.ins().return_(&[err]);
+
+    b.switch_to_block(ok);
+}
+
+/// `(arena, word, len, out) -> status` — claim `len` data bytes for a
+/// `Bytes`/`String` node and write the span's start index to `*out`.
+///
+/// The third ceiling: the data table is reserved before publication exactly as
+/// the node and word tables are, and running out is [`BOUNDARY_ERR_CAPACITY`].
+fn define_store_bytes_len<M: Module>(
+    module: &mut M,
+    graph: Graph,
+) -> Result<(), CraneliftBackendError> {
+    let ptr = module.target_config().pointer_type();
+    let mut func = begin(module, graph.store_bytes_len, 4);
+    let resolve = module.declare_func_in_func(graph.resolve, &mut func);
+    let mut fctx = FunctionBuilderContext::new();
+    {
+        let mut b = FunctionBuilder::new(&mut func, &mut fctx);
+        let entry = b.create_block();
+        b.append_block_params_for_function_params(entry);
+        b.switch_to_block(entry);
+        let p = b.block_params(entry).to_vec();
+        let (arena, word, len, out) = (p[0], p[1], p[2], p[3]);
+        let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
+        mutable_guard(&mut b, word, region);
+        class_guard(&mut b, node, &[BoundaryClass::Bytes, BoundaryClass::String]);
+
+        let live = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), region, ARENA_DATA_COUNT);
+        let cap = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), region, ARENA_DATA_CAPACITY);
+        // Bound the addend before the sum, so a caller-supplied length cannot
+        // wrap into a spuriously small "fits".
+        let addend_ok = b.ins().icmp(IntCC::UnsignedLessThanOrEqual, len, cap);
+        let sum_check = b.create_block();
+        let no_room = b.create_block();
+        b.ins().brif(addend_ok, sum_check, &[], no_room, &[]);
+
+        b.switch_to_block(no_room);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_CAPACITY);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(sum_check);
+        let need = b.ins().iadd(live, len);
+        let fits = b.ins().icmp(IntCC::UnsignedLessThanOrEqual, need, cap);
+        let ok = b.create_block();
+        b.ins().brif(fits, ok, &[], no_room, &[]);
+
+        b.switch_to_block(ok);
+        b.ins().store(MemFlags::trusted(), len, node, NODE_PAYLOAD);
+        b.ins().store(MemFlags::trusted(), live, node, NODE_EXTENT);
+        b.ins()
+            .store(MemFlags::trusted(), need, region, ARENA_DATA_COUNT);
+        b.ins().store(MemFlags::trusted(), live, out, 0);
+        let z = b.ins().iconst(types::I64, BOUNDARY_OK);
+        b.ins().return_(&[z]);
+
+        b.seal_all_blocks();
+        b.finalize();
+    }
+    finish(module, graph.store_bytes_len, func)
+}
+
+/// `(arena, word, index, byte_or_out) -> status` — one content byte, written
+/// when `write` and read otherwise.
+///
+/// One definition serves both directions because they share every check that
+/// matters: the class guard, the bound against the node's own length, and the
+/// span arithmetic. Two bodies would be two chances for the reader and the
+/// writer to disagree about which byte index `i` names.
+fn define_byte_access<M: Module>(
+    module: &mut M,
+    graph: Graph,
+    id: FuncId,
+    write: bool,
+) -> Result<(), CraneliftBackendError> {
+    let ptr = module.target_config().pointer_type();
+    let mut func = begin(module, id, 4);
+    let resolve = module.declare_func_in_func(graph.resolve, &mut func);
+    let mut fctx = FunctionBuilderContext::new();
+    {
+        let mut b = FunctionBuilder::new(&mut func, &mut fctx);
+        let entry = b.create_block();
+        b.append_block_params_for_function_params(entry);
+        b.switch_to_block(entry);
+        let p = b.block_params(entry).to_vec();
+        let (arena, word, index, last) = (p[0], p[1], p[2], p[3]);
+        let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
+        if write {
+            mutable_guard(&mut b, word, region);
+        }
+        class_guard(&mut b, node, &[BoundaryClass::Bytes, BoundaryClass::String]);
+
+        let len = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_PAYLOAD);
+        let within = b.ins().icmp(IntCC::UnsignedLessThan, index, len);
+        let ok = b.create_block();
+        let oob = b.create_block();
+        b.ins().brif(within, ok, &[], oob, &[]);
+
+        b.switch_to_block(oob);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_BOUNDS);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(ok);
+        let at = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_EXTENT);
+        let data = b.ins().load(ptr, MemFlags::trusted(), region, ARENA_DATA);
+        let absolute = b.ins().iadd(at, index);
+        let address = b.ins().iadd(data, absolute);
+        if write {
+            let narrow = b.ins().ireduce(types::I8, last);
+            b.ins().store(MemFlags::trusted(), narrow, address, 0);
+        } else {
+            let value = b.ins().load(types::I8, MemFlags::trusted(), address, 0);
+            let widened = b.ins().uextend(types::I64, value);
+            b.ins().store(MemFlags::trusted(), widened, last, 0);
+        }
+        let z = b.ins().iconst(types::I64, BOUNDARY_OK);
+        b.ins().return_(&[z]);
+
+        b.seal_all_blocks();
+        b.finalize();
+    }
+    finish(module, id, func)
+}
+
+/// `(arena, word, native_tag) -> status` — record a spilled `Int`'s
+/// `NativeIntV1` tag.
+///
+/// Class-guarded and range-guarded: the native tag space is `{Small, Big}` and
+/// anything else would be handed to `ken_native_int_resolve_local`, whose own
+/// contract it would violate.
+fn define_store_int_tag<M: Module>(
+    module: &mut M,
+    graph: Graph,
+) -> Result<(), CraneliftBackendError> {
+    let ptr = module.target_config().pointer_type();
+    let mut func = begin(module, graph.store_int_tag, 3);
+    let resolve = module.declare_func_in_func(graph.resolve, &mut func);
+    let mut fctx = FunctionBuilderContext::new();
+    {
+        let mut b = FunctionBuilder::new(&mut func, &mut fctx);
+        let entry = b.create_block();
+        b.append_block_params_for_function_params(entry);
+        b.switch_to_block(entry);
+        let p = b.block_params(entry).to_vec();
+        let (arena, word, native_tag) = (p[0], p[1], p[2]);
+        let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
+        mutable_guard(&mut b, word, region);
+        class_guard(&mut b, node, &[BoundaryClass::Int]);
+
+        let known = b.ins().icmp_imm(
+            IntCC::UnsignedLessThanOrEqual,
+            native_tag,
+            crate::native_int::NATIVE_INT_BIG_TAG_V1 as i64,
+        );
+        let ok = b.create_block();
+        let bad = b.create_block();
+        b.ins().brif(known, ok, &[], bad, &[]);
+
+        b.switch_to_block(bad);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_SHAPE);
+        b.ins().return_(&[err]);
+
+        // ⛔ **A persistent `Int` may not be `Big`, and that is the SAME rule
+        // that made persistent words safe to escape.** A `Big`'s limbs live in
+        // an entry `ken_native_int_intern_local` mallocs into the *invocation's*
+        // native arena, which dies with the invocation. A persistent node naming
+        // one is a surviving parent pointing at storage that dies first —
+        // exactly `store_field`'s refusal, one representation down. Reported as
+        // `ERR_ESCAPE` because it is the same defect, not a shape error.
+        b.switch_to_block(ok);
+        let owner = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_OWNER);
+        let persists = b.ins().icmp_imm(
+            IntCC::Equal,
+            owner,
+            BoundaryReferentOwner::PersistentStore as i64,
+        );
+        let is_big = b.ins().icmp_imm(
+            IntCC::Equal,
+            native_tag,
+            crate::native_int::NATIVE_INT_BIG_TAG_V1 as i64,
+        );
+        let dangling = b.ins().band(persists, is_big);
+        let escapes = b.create_block();
+        let sound = b.create_block();
+        b.ins().brif(dangling, escapes, &[], sound, &[]);
+
+        b.switch_to_block(escapes);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_ESCAPE);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(sound);
+        b.ins()
+            .store(MemFlags::trusted(), native_tag, node, NODE_EXTENT);
+        let z = b.ins().iconst(types::I64, BOUNDARY_OK);
+        b.ins().return_(&[z]);
+
+        b.seal_all_blocks();
+        b.finalize();
+    }
+    finish(module, graph.store_int_tag, func)
+}
+
+/// Which part of a decoded exact integer a helper returns.
+#[derive(Clone, Copy)]
+enum IntPart {
+    Sign,
+    Len,
+    Limb,
+}
+
+/// `(arena, word, [index,] out) -> status` — one part of a spilled `Int`.
+///
+/// ⭐ **The decode is `ken_native_int_resolve_local`'s, not ours.** The node
+/// carries a `NativeIntV1` `(tag, payload)` pair and this helper hands that pair
+/// to the landed exact-`Int` decoder, then reads the view it writes. Deriving
+/// sign and limbs here would be a second exact-integer representation living
+/// beside the first — the proliferation `docs/PRINCIPLES.md` forbids, and the
+/// thing that would make "one executable value representation" false again.
+fn define_int_part<M: Module>(
+    module: &mut M,
+    graph: Graph,
+    id: FuncId,
+    part: IntPart,
+) -> Result<(), CraneliftBackendError> {
+    use crate::native_int_clif::{VIEW_LEN, VIEW_LIMBS, VIEW_SIGN};
+
+    let ptr = module.target_config().pointer_type();
+    let arity = if matches!(part, IntPart::Limb) { 4 } else { 3 };
+    let mut func = begin(module, id, arity);
+    let resolve = module.declare_func_in_func(graph.resolve, &mut func);
+    let native = module.declare_func_in_func(graph.native_int_resolve, &mut func);
+    let mut fctx = FunctionBuilderContext::new();
+    {
+        let mut b = FunctionBuilder::new(&mut func, &mut fctx);
+        let entry = b.create_block();
+        b.append_block_params_for_function_params(entry);
+        b.switch_to_block(entry);
+        let p = b.block_params(entry).to_vec();
+        let arena = p[0];
+        let word = p[1];
+        let (index, out) = if matches!(part, IntPart::Limb) {
+            (Some(p[2]), p[3])
+        } else {
+            (None, p[2])
+        };
+        let Resolved { node, .. } = resolve_prologue(&mut b, ptr, resolve, arena, word);
+        class_guard(&mut b, node, &[BoundaryClass::Int]);
+
+        // ⛔ Undecodable is a THIRD OUTCOME THAT FAILS. An invocation bound to
+        // no native-`Int` arena cannot decode a `Big`, and returning zero is
+        // exactly the defect this helper exists to close.
+        let native_arena = b
+            .ins()
+            .load(ptr, MemFlags::trusted(), arena, ARENA_NATIVE_INT);
+        let bound = b.ins().icmp_imm(IntCC::NotEqual, native_arena, 0);
+        let have = b.create_block();
+        let unbound = b.create_block();
+        b.ins().brif(bound, have, &[], unbound, &[]);
+
+        b.switch_to_block(unbound);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_BOUNDS);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(have);
+        let native_tag = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_EXTENT);
+        let native_payload = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_PAYLOAD);
+        let view_slot = b.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            32,
+            3,
+        ));
+        let view = b.ins().stack_addr(ptr, view_slot, 0);
+        let call = b
+            .ins()
+            .call(native, &[native_arena, native_tag, native_payload, view]);
+        let status = b.inst_results(call)[0];
+        let decoded = b.ins().icmp_imm(IntCC::Equal, status, 0);
+        let good = b.create_block();
+        let bad = b.create_block();
+        b.ins().brif(decoded, good, &[], bad, &[]);
+
+        b.switch_to_block(bad);
+        // The native decoder's own refusal, reported as a shape error rather
+        // than passed through: its status space is not this ABI's.
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_SHAPE);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(good);
+        match part {
+            IntPart::Sign => {
+                let sign = b
+                    .ins()
+                    .load(types::I64, MemFlags::trusted(), view, VIEW_SIGN);
+                b.ins().store(MemFlags::trusted(), sign, out, 0);
+            }
+            IntPart::Len => {
+                let len = b
+                    .ins()
+                    .load(types::I64, MemFlags::trusted(), view, VIEW_LEN);
+                b.ins().store(MemFlags::trusted(), len, out, 0);
+            }
+            IntPart::Limb => {
+                let index = index.expect("the limb arm takes an index");
+                let len = b
+                    .ins()
+                    .load(types::I64, MemFlags::trusted(), view, VIEW_LEN);
+                let within = b.ins().icmp(IntCC::UnsignedLessThan, index, len);
+                let ok = b.create_block();
+                let oob = b.create_block();
+                b.ins().brif(within, ok, &[], oob, &[]);
+
+                b.switch_to_block(oob);
+                let err = b.ins().iconst(types::I64, BOUNDARY_ERR_BOUNDS);
+                b.ins().return_(&[err]);
+
+                b.switch_to_block(ok);
+                let limbs = b.ins().load(ptr, MemFlags::trusted(), view, VIEW_LIMBS);
+                let offset = b.ins().imul_imm(index, 8);
+                let address = b.ins().iadd(limbs, offset);
+                let limb = b.ins().load(types::I64, MemFlags::trusted(), address, 0);
+                b.ins().store(MemFlags::trusted(), limb, out, 0);
+            }
+        }
+        let z = b.ins().iconst(types::I64, BOUNDARY_OK);
+        b.ins().return_(&[z]);
+
+        b.seal_all_blocks();
+        b.finalize();
+    }
+    finish(module, id, func)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::boundary_value::{
-        materialize_borrowed, materialize_ground, materialize_host_result, BoundaryArenaBuilder,
-        BoundaryArenaV1, BoundaryValueStore, BoundaryWord,
+        boundary_relation_admits, materialize_borrowed, materialize_ground,
+        materialize_host_result, BoundaryArenaBuilder, BoundaryArenaV1, BoundaryValueStore,
+        BoundaryWord, BOUNDARY_IMMEDIATE_INT_MAX,
     };
     use crate::ir::RuntimeGroundValue;
     use crate::native_int::RuntimeIntV1;
@@ -1486,7 +2022,9 @@ mod tests {
     /// handed to it at run time.
     fn compile_probe(probe: Probe) -> (JITModule, *const u8) {
         let mut module = jit();
-        let helpers = emit_boundary_value_local_graph(&mut module).expect("graph emits");
+        let native = crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
+            .expect("native-int graph emits");
+        let helpers = emit_boundary_value_local_graph(&mut module, &native).expect("graph emits");
         let ptr = module.target_config().pointer_type();
 
         let arity = match probe {
@@ -1574,20 +2112,20 @@ mod tests {
     }
 
     fn bind(store: &mut BoundaryValueStore, builder: BoundaryArenaBuilder) -> Bound {
-        bind_with(store, builder, (0, 0), (0, 0))
+        bind_with(store, builder, (0, 0, 0), (0, 0, 0))
     }
 
     /// Bind with an explicit construction reservation for each region.
     fn bind_with(
         store: &mut BoundaryValueStore,
         builder: BoundaryArenaBuilder,
-        persistent_room: (usize, usize),
-        arena_room: (usize, usize),
+        persistent_room: (usize, usize, usize),
+        arena_room: (usize, usize, usize),
     ) -> Bound {
-        store.reserve_persistent(persistent_room.0, persistent_room.1);
+        store.reserve_persistent(persistent_room.0, persistent_room.1, persistent_room.2);
         let persistent = store.publish_persistent();
         let mut arena = builder.finish();
-        arena.reserve(arena_room.0, arena_room.1);
+        arena.reserve(arena_room.0, arena_room.1, arena_room.2);
         arena.bind_persistent(Some(persistent));
         let base = arena.publish();
         Bound {
@@ -1996,7 +2534,7 @@ mod tests {
             );
             assert_eq!(
                 BOUNDARY_LOCAL_HELPERS.len(),
-                19,
+                25,
                 "the helper population must not move with the value population"
             );
         }
@@ -2268,6 +2806,9 @@ mod tests {
         store_field: cranelift_codegen::ir::FuncRef,
         store_name: cranelift_codegen::ir::FuncRef,
         make_immediate: cranelift_codegen::ir::FuncRef,
+        store_int_tag: cranelift_codegen::ir::FuncRef,
+        store_bytes_len: cranelift_codegen::ir::FuncRef,
+        store_byte: cranelift_codegen::ir::FuncRef,
     }
 
     /// Call a helper and return its status immediately unless it is `OK`.
@@ -2303,7 +2844,9 @@ mod tests {
         ),
     ) -> (JITModule, *const u8) {
         let mut module = jit();
-        let helpers = emit_boundary_value_local_graph(&mut module).expect("graph emits");
+        let native = crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
+            .expect("native-int graph emits");
+        let helpers = emit_boundary_value_local_graph(&mut module, &native).expect("graph emits");
         let ptr = module.target_config().pointer_type();
 
         let mut sig = module.make_signature();
@@ -2323,6 +2866,9 @@ mod tests {
             store_field: module.declare_func_in_func(helpers.store_field, &mut ctx.func),
             store_name: module.declare_func_in_func(helpers.store_name, &mut ctx.func),
             make_immediate: module.declare_func_in_func(helpers.make_immediate, &mut ctx.func),
+            store_int_tag: module.declare_func_in_func(helpers.store_int_tag, &mut ctx.func),
+            store_bytes_len: module.declare_func_in_func(helpers.store_bytes_len, &mut ctx.func),
+            store_byte: module.declare_func_in_func(helpers.store_byte, &mut ctx.func),
         };
         let mut fctx = FunctionBuilderContext::new();
         {
@@ -2476,6 +3022,18 @@ mod tests {
         b.ins().return_(&[status]);
     }
 
+    /// `(base, word, tag_id) -> status` — `store_tag_id` on its own.
+    fn emit_store_tag_id_probe(
+        b: &mut FunctionBuilder<'_>,
+        refs: &Refs,
+        p: &[cranelift_codegen::ir::Value],
+        _ptr: cranelift_codegen::ir::Type,
+    ) {
+        let call = b.ins().call(refs.store_tag_id, &[p[0], p[1], p[2]]);
+        let status = b.inst_results(call)[0];
+        b.ins().return_(&[status]);
+    }
+
     /// `(base, word, payload) -> status` — `store_scalar` on its own.
     fn emit_store_scalar_probe(
         b: &mut FunctionBuilder<'_>,
@@ -2516,7 +3074,12 @@ mod tests {
             )
             .expect("nil materializes");
             let cons_id = store.intern_symbol("ctor:fixture::List::Cons");
-            let f = bind_with(&mut store, BoundaryArenaBuilder::new(), (4, 8), (0, 0));
+            let f = bind_with(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (4, 8, 0),
+                (0, 0, 0),
+            );
 
             let word = BoundaryWord(run4(produce, f.base, head as u64, nil.0, cons_id) as u64);
             assert_eq!(
@@ -2557,7 +3120,12 @@ mod tests {
 
         for (success, expected) in [(1u64, 11i64), (0, 22)] {
             let mut store = BoundaryValueStore::new();
-            let f = bind_with(&mut store, BoundaryArenaBuilder::new(), (0, 0), (4, 8));
+            let f = bind_with(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (0, 0, 0),
+                (4, 8, 0),
+            );
             let ok = BoundaryWord::immediate(BoundaryTag::ImmediateInt, 11);
             let err = BoundaryWord::immediate(BoundaryTag::ImmediateInt, 22);
 
@@ -2595,7 +3163,12 @@ mod tests {
 
         let mut store = BoundaryValueStore::new();
         let name = store.intern_symbol("field:amount");
-        let f = bind_with(&mut store, BoundaryArenaBuilder::new(), (2, 4), (0, 0));
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (2, 4, 0),
+            (0, 0, 0),
+        );
         let child = BoundaryWord::immediate(BoundaryTag::ImmediateInt, 41);
 
         let word = BoundaryWord(run3(produce, f.base, BoundaryWord(name), child.0) as u64);
@@ -2647,7 +3220,12 @@ mod tests {
         .expect("nil materializes");
         let cons_id = store.intern_symbol("ctor:fixture::List::Cons");
         let persistent = {
-            let first = bind_with(&mut store, BoundaryArenaBuilder::new(), (4, 8), (2, 2));
+            let first = bind_with(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (4, 8, 0),
+                (2, 2, 0),
+            );
             let word = BoundaryWord(run4(produce, first.base, 88, nil.0, cons_id) as u64);
             assert_eq!(
                 run2(
@@ -2712,7 +3290,7 @@ mod tests {
         let mut store = BoundaryValueStore::new();
         let mut builder = BoundaryArenaBuilder::new();
         let borrowed = materialize_borrowed(&mut builder, 0xBEEF);
-        let f = bind_with(&mut store, builder, (2, 4), (2, 4));
+        let f = bind_with(&mut store, builder, (2, 4, 0), (2, 4, 0));
 
         let parent = BoundaryWord(run4(
             alloc_code,
@@ -2766,7 +3344,12 @@ mod tests {
         // Node ceiling: room for exactly one.
         {
             let mut store = BoundaryValueStore::new();
-            let f = bind_with(&mut store, BoundaryArenaBuilder::new(), (1, 4), (0, 0));
+            let f = bind_with(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (1, 4, 0),
+                (0, 0, 0),
+            );
             assert!(
                 run4(alloc_code, f.base, persistent, ctor, 0) >= 0,
                 "the first allocation is inside the reservation"
@@ -2780,7 +3363,12 @@ mod tests {
         // Word ceiling: room for two nodes but only one child word.
         {
             let mut store = BoundaryValueStore::new();
-            let f = bind_with(&mut store, BoundaryArenaBuilder::new(), (2, 1), (0, 0));
+            let f = bind_with(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (2, 1, 0),
+                (0, 0, 0),
+            );
             assert_eq!(
                 run4(alloc_code, f.base, persistent, ctor, 2),
                 BOUNDARY_ERR_CAPACITY,
@@ -2797,7 +3385,12 @@ mod tests {
         // The closed sets bound construction too.
         {
             let mut store = BoundaryValueStore::new();
-            let f = bind_with(&mut store, BoundaryArenaBuilder::new(), (2, 4), (2, 4));
+            let f = bind_with(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (2, 4, 0),
+                (2, 4, 0),
+            );
             assert_eq!(
                 run4(alloc_code, f.base, 200, ctor, 0),
                 BOUNDARY_ERR_TAG,
@@ -2823,7 +3416,7 @@ mod tests {
         // Persistent construction with no persistent region bound.
         {
             let mut arena = BoundaryArenaBuilder::new().finish();
-            arena.reserve(2, 4);
+            arena.reserve(2, 4, 0);
             arena.bind_persistent(None);
             let base = arena.publish();
             assert_eq!(
@@ -2846,7 +3439,12 @@ mod tests {
 
         let mut store = BoundaryValueStore::new();
         let materialized = materialize_ground(&mut store, &cons(5)).expect("materializes");
-        let f = bind_with(&mut store, BoundaryArenaBuilder::new(), (2, 4), (0, 0));
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (2, 4, 0),
+            (0, 0, 0),
+        );
 
         assert_eq!(
             run3(scalar_store, f.base, materialized, 99),
@@ -2868,6 +3466,500 @@ mod tests {
             run3(scalar_store, f.base, fresh, 99),
             BOUNDARY_OK,
             "AC-6: a node emitted code built is emitted code's to fill in"
+        );
+    }
+
+    // ── `AC-4` fidelity — CONTENT, not identity and not length ──────────────
+
+    /// `(base, native_arena, value, out_is_unused) -> word` — build a spilled
+    /// `Int` whose magnitude arrives at run time.
+    fn emit_spilled_int_producer(
+        b: &mut FunctionBuilder<'_>,
+        refs: &Refs,
+        p: &[cranelift_codegen::ir::Value],
+        ptr: cranelift_codegen::ir::Type,
+    ) {
+        let (base, value) = (p[0], p[1]);
+        let out = cell(b, ptr);
+        let tag = b
+            .ins()
+            .iconst(types::I64, BoundaryTag::PersistentGround as i64);
+        let class = b.ins().iconst(types::I64, BoundaryClass::Int as i64);
+        let zero = b.ins().iconst(types::I64, 0);
+        guard(b, refs.alloc, &[base, tag, class, zero, out]);
+        let word = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
+        // The `NativeIntV1` pair: payload is the run-time magnitude word, tag
+        // says how to read it. Nothing about the value is known here.
+        guard(b, refs.store_scalar, &[base, word, value]);
+        let small = b.ins().iconst(
+            types::I64,
+            crate::native_int::NATIVE_INT_SMALL_TAG_V1 as i64,
+        );
+        guard(b, refs.store_int_tag, &[base, word, small]);
+        b.ins().return_(&[word]);
+    }
+
+    /// `(base, len, seed) -> word` — build a `Bytes` whose CONTENT is derived
+    /// from a run-time seed, at a run-time length.
+    fn emit_bytes_producer(
+        b: &mut FunctionBuilder<'_>,
+        refs: &Refs,
+        p: &[cranelift_codegen::ir::Value],
+        ptr: cranelift_codegen::ir::Type,
+    ) {
+        let (base, len, seed) = (p[0], p[1], p[2]);
+        let out = cell(b, ptr);
+        let tag = b
+            .ins()
+            .iconst(types::I64, BoundaryTag::PersistentGround as i64);
+        let class = b.ins().iconst(types::I64, BoundaryClass::Bytes as i64);
+        let zero = b.ins().iconst(types::I64, 0);
+        guard(b, refs.alloc, &[base, tag, class, zero, out]);
+        let word = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
+        let span = cell(b, ptr);
+        guard(b, refs.store_bytes_len, &[base, word, len, span]);
+
+        // Write `seed + i` at every index — a loop over run-time bounds, so no
+        // byte of the result is known when this body is compiled.
+        let loop_head = b.create_block();
+        b.append_block_param(loop_head, types::I64);
+        b.ins().jump(loop_head, &[zero.into()]);
+        b.switch_to_block(loop_head);
+        let i = b.block_params(loop_head)[0];
+        let more = b.ins().icmp(IntCC::UnsignedLessThan, i, len);
+        let body = b.create_block();
+        let done = b.create_block();
+        b.ins().brif(more, body, &[], done, &[]);
+
+        b.switch_to_block(body);
+        let byte = b.ins().iadd(seed, i);
+        guard(b, refs.store_byte, &[base, word, i, byte]);
+        let next = b.ins().iadd_imm(i, 1);
+        b.ins().jump(loop_head, &[next.into()]);
+
+        b.switch_to_block(done);
+        b.ins().return_(&[word]);
+    }
+
+    /// `(base, word, native_tag) -> status` — `store_int_tag` on its own.
+    fn emit_store_int_tag_probe(
+        b: &mut FunctionBuilder<'_>,
+        refs: &Refs,
+        p: &[cranelift_codegen::ir::Value],
+        _ptr: cranelift_codegen::ir::Type,
+    ) {
+        let call = b.ins().call(refs.store_int_tag, &[p[0], p[1], p[2]]);
+        let status = b.inst_results(call)[0];
+        b.ins().return_(&[status]);
+    }
+
+    /// A published invocation that also binds a native-`Int` arena.
+    fn with_native_int(f: &mut Bound, native: &crate::native_int::NativeIntArenaV1) {
+        f.arena
+            .bind_native_int(Some(native as *const _ as *const u64));
+        f.base = f.arena.publish();
+    }
+
+    /// **`AC-4` — a separately compiled consumer reads a spilled `Int`'s
+    /// CONTENT.**
+    ///
+    /// ⛔ The previous candidate wrote `NODE_PAYLOAD = 0` for every spilled
+    /// `Int`, so emitted code saw every wide integer as zero. Identity lived in
+    /// the store and content lived in a Rust decoder — which is exactly the
+    /// arrangement hard-stop `#10` rejected.
+    ///
+    /// ⭐ The decode is `ken_native_int_resolve_local`'s. This control passes
+    /// only if the boundary node really carries a `NativeIntV1` pair the landed
+    /// decoder accepts, so it pins the *connection*, not a lookalike.
+    #[test]
+    fn b2v_a_separately_compiled_consumer_reads_a_spilled_int_by_content() {
+        let (_pm, produce) = compile_producer(3, emit_spilled_int_producer);
+        let (_c1, sign_code) = compile_probe(Probe::Unary(|h| h.int_sign));
+        let (_c2, len_code) = compile_probe(Probe::Unary(|h| h.int_len));
+        let (_c3, limb_code) = compile_probe(Probe::Binary(|h| h.int_limb));
+
+        // Every value is outside the immediate range, and no two share a limb.
+        let cases = [
+            (1i64 << 60) + 7,
+            (1i64 << 60) + 8,
+            -((1i64 << 58) + 3),
+            BOUNDARY_IMMEDIATE_INT_MAX + 1,
+        ];
+        let mut seen = Vec::new();
+        for value in cases {
+            assert!(
+                !BoundaryWord::int_fits_immediate(value),
+                "the case must actually spill, or this control tests the wrong arm"
+            );
+            let mut store = BoundaryValueStore::new();
+            let native = crate::native_int::NativeIntArenaV1::default();
+            let mut f = bind_with(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (2, 0, 0),
+                (0, 0, 0),
+            );
+            with_native_int(&mut f, &native);
+
+            let word = BoundaryWord(run3(produce, f.base, BoundaryWord(value as u64), 0) as u64);
+            assert_eq!(
+                word.tag(),
+                Some(BoundaryTag::PersistentGround),
+                "AC-4: the producer minted a spilled Int ({})",
+                word.0 as i64
+            );
+            let sign = run2(sign_code, f.base, word);
+            let len = run2(len_code, f.base, word);
+            assert_eq!(len, 1, "a native Small decodes to one limb");
+            let limb = run3(limb_code, f.base, word, 0);
+            let observed = if sign == 1 { -limb } else { limb };
+            assert_eq!(
+                observed, value,
+                "AC-4: emitted code must recover the RUNTIME magnitude, not zero"
+            );
+            seen.push(observed);
+        }
+        // ⚠ POSITIVE CONTROL. Two of the cases differ by one; if the consumer
+        // were reading identity or length they would be indistinguishable.
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(seen.len(), 4, "AC-4: every case must be distinguishable");
+    }
+
+    /// **`AC-4` — equal-length, different-content `Bytes` are distinguishable
+    /// by a separately compiled consumer.**
+    #[test]
+    fn b2v_a_separately_compiled_consumer_distinguishes_equal_length_bytes() {
+        let (_pm, produce) = compile_producer(3, emit_bytes_producer);
+        let (_c1, byte_code) = compile_probe(Probe::Binary(|h| h.byte));
+        let (_c2, scalar_code) = compile_probe(Probe::Unary(|h| h.scalar));
+
+        let len = 6u64;
+        let mut contents = Vec::new();
+        for seed in [10u64, 11, 200] {
+            let mut store = BoundaryValueStore::new();
+            let mut f = bind_with(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (2, 0, 32),
+                (0, 0, 0),
+            );
+            let _ = &mut f;
+            let word = BoundaryWord(run3(produce, f.base, BoundaryWord(len), seed) as u64);
+            assert_eq!(
+                word.tag(),
+                Some(BoundaryTag::PersistentGround),
+                "AC-4: the producer minted a Bytes handle ({})",
+                word.0 as i64
+            );
+            assert_eq!(
+                run2(scalar_code, f.base, word),
+                len as i64,
+                "the length is still readable"
+            );
+            let read: Vec<i64> = (0..len).map(|i| run3(byte_code, f.base, word, i)).collect();
+            assert_eq!(
+                read,
+                (0..len)
+                    .map(|i| ((seed + i) & 0xff) as i64)
+                    .collect::<Vec<_>>(),
+                "AC-4: emitted code must read the RUNTIME bytes"
+            );
+            contents.push(read);
+        }
+        // ⚠ POSITIVE CONTROL — all three are the SAME length, so anything that
+        // discriminated by length would collapse them.
+        contents.dedup();
+        assert_eq!(
+            contents.len(),
+            3,
+            "AC-4: equal-length values must differ by CONTENT"
+        );
+    }
+
+    /// **`AC-4` — equal-length, different-content `String`s are distinguishable
+    /// through Rust materialization and an emitted consumer.**
+    ///
+    /// The producer arm is covered by the `Bytes` control above, which shares
+    /// every code path but the class. This one closes the *materialization*
+    /// side: a `String` the store built must be readable byte-by-byte too.
+    #[test]
+    fn b2v_a_separately_compiled_consumer_distinguishes_equal_length_strings() {
+        let (_c1, byte_code) = compile_probe(Probe::Binary(|h| h.byte));
+        let (_c2, class_code) = compile_probe(Probe::Unary(|h| h.class));
+
+        let mut store = BoundaryValueStore::new();
+        let words: Vec<BoundaryWord> = ["alpha", "alpaa", "bravo"]
+            .iter()
+            .map(|text| {
+                materialize_ground(&mut store, &RuntimeGroundValue::String(text.to_string()))
+                    .expect("a String materializes")
+            })
+            .collect();
+        let f = bind(&mut store, BoundaryArenaBuilder::new());
+
+        let mut contents = Vec::new();
+        for (word, expected) in words.iter().zip(["alpha", "alpaa", "bravo"]) {
+            assert_eq!(
+                run2(class_code, f.base, *word),
+                BoundaryClass::String as i64,
+                "AC-4: the class survives materialization"
+            );
+            let read: Vec<u8> = (0..expected.len() as u64)
+                .map(|i| run3(byte_code, f.base, *word, i) as u8)
+                .collect();
+            assert_eq!(
+                read,
+                expected.as_bytes(),
+                "AC-4: emitted code must read the String's bytes"
+            );
+            contents.push(read);
+        }
+        // ⚠ POSITIVE CONTROL — the first two are equal-length and differ by one
+        // byte in the middle; equal length must not mean equal value.
+        assert_eq!(contents[0].len(), contents[1].len());
+        assert_ne!(contents[0], contents[1]);
+        assert_eq!(
+            contents
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len(),
+            3,
+            "AC-4: every String must be distinguishable by content"
+        );
+    }
+
+    /// **`AC-6` — the emitted interface cannot assign store identity.**
+    ///
+    /// ⛔ `ken_boundary_store_slot_local` took a caller-supplied `SlotId` and
+    /// the frozen guard expressly permits writes to a **new** node, so emitted
+    /// code could overwrite the allocator's `NULL_SLOT` with any slot. The old
+    /// control read back `NULL_SLOT` on a node it had never called `store_slot`
+    /// on — **it asserted a property of a field nothing had written to.**
+    ///
+    /// The closure is removal, not a guard: `EMITTED_WRITABLE_NODE_OFFSETS`
+    /// makes emitting a setter for `NODE_SLOT` a panic, so the capability
+    /// cannot be rebuilt by accident.
+    #[test]
+    fn b2v_emitted_code_cannot_assign_store_identity() {
+        // The allowed inventory, not a forbidden list: any node word outside
+        // this set is unsettable, including ones nobody has thought of.
+        assert_eq!(
+            EMITTED_WRITABLE_NODE_OFFSETS,
+            &[NODE_TAG_ID, NODE_PAYLOAD],
+            "AC-6: the writable node-word set has moved"
+        );
+        for forbidden in [
+            NODE_SLOT,
+            NODE_CLASS,
+            NODE_OWNER,
+            NODE_FIELD_COUNT,
+            NODE_FIELDS_AT,
+            NODE_EXTENT,
+        ] {
+            assert!(
+                !EMITTED_WRITABLE_NODE_OFFSETS.contains(&forbidden),
+                "AC-6: emitted code must not be able to set node offset {forbidden}"
+            );
+        }
+        // ⚠ The **allowed inventory of writers**, not a forbidden needle. A
+        // `name.contains("slot")` scan looked right and was wrong twice over:
+        // it fires on `ken_boundary_slot_local`, which is a *reader* and is
+        // meant to exist — reading a node's slot is how `AC-6` is observable at
+        // all — and it would miss a writer that spelled the field differently.
+        // Pinning the permitted set makes ANY new writer redden, including one
+        // nobody imagined.
+        let writers: Vec<&str> = BOUNDARY_LOCAL_HELPERS
+            .iter()
+            .filter(|name| name.starts_with("ken_boundary_store_"))
+            .copied()
+            .collect();
+        assert_eq!(
+            writers,
+            vec![
+                "ken_boundary_store_tag_id_local",
+                "ken_boundary_store_scalar_local",
+                "ken_boundary_store_field_local",
+                "ken_boundary_store_name_local",
+                "ken_boundary_store_int_tag_local",
+                "ken_boundary_store_bytes_len_local",
+                "ken_boundary_store_byte_local",
+            ],
+            "AC-6: the emitted writer inventory has moved — a new writer needs \
+             its own account of what it may set"
+        );
+
+        // ⚠ And behaviourally, over the whole writable inventory: exercise
+        // EVERY store helper on a freshly constructed node and the store's
+        // identity field must still be NULL_SLOT.
+        let (_am, alloc_code) = compile_producer(4, emit_alloc_probe);
+        let (_tm, tag_store) = compile_producer(3, emit_store_tag_id_probe);
+        let (_sm, scalar_store) = compile_producer(3, emit_store_scalar_probe);
+        let (_c1, slot_code) = compile_probe(Probe::Unary(|h| h.slot));
+
+        let mut store = BoundaryValueStore::new();
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (2, 4, 0),
+            (0, 0, 0),
+        );
+        let word = BoundaryWord(run4(
+            alloc_code,
+            f.base,
+            BoundaryTag::PersistentGround as u64,
+            BoundaryClass::Constructor as u64,
+            0,
+        ) as u64);
+        assert_eq!(run3(tag_store, f.base, word, 77), BOUNDARY_OK);
+        assert_eq!(run3(scalar_store, f.base, word, 88), BOUNDARY_OK);
+        assert_eq!(
+            run2(slot_code, f.base, word),
+            crate::store::NULL_SLOT as i64,
+            "AC-6: no sequence of emitted stores can give a node a store slot"
+        );
+        // Positive control: the writable fields DID move, so the NULL_SLOT
+        // above is not "nothing was written anywhere".
+        let (_c2, tag_read) = compile_probe(Probe::Unary(|h| h.tag));
+        let (_c3, scalar_read) = compile_probe(Probe::Unary(|h| h.scalar));
+        assert_eq!(run2(tag_read, f.base, word), 77);
+        assert_eq!(run2(scalar_read, f.base, word), 88);
+    }
+
+    /// **`AC-1` — the `(tag, class)` RELATION is closed, positively and
+    /// negatively, over the whole product.**
+    ///
+    /// ⚠ MEASURED: every one of the `BoundaryTag::ALL × BoundaryClass::ALL`
+    /// pairs is put through the emitted allocator. CLAIMED: the ABI admits
+    /// exactly the relation the disposition yields. THE GAP: that
+    /// `BOUNDARY_TAG_CLASS_RELATION` *is* that disposition's relation — which
+    /// `b2v_ac3_…` pins on the disposition side.
+    #[test]
+    fn b2v_the_tag_class_relation_is_closed_over_the_whole_product() {
+        let (_pm, alloc_code) = compile_producer(4, emit_alloc_probe);
+        let mut store = BoundaryValueStore::new();
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (64, 8, 0),
+            (64, 8, 0),
+        );
+
+        let (mut admitted, mut rejected) = (0usize, 0usize);
+        for tag in BoundaryTag::ALL {
+            for class in BoundaryClass::ALL {
+                let status = run4(alloc_code, f.base, tag as u64, class as u64, 0);
+                if tag.is_immediate() {
+                    // An immediate has no node, so it never reaches the
+                    // relation at all — a distinct, earlier refusal.
+                    assert_eq!(
+                        status, BOUNDARY_ERR_SHAPE,
+                        "AC-4: {tag:?} has no node to allocate"
+                    );
+                    continue;
+                }
+                if boundary_relation_admits(tag, class) {
+                    assert!(
+                        status >= 0,
+                        "AC-1: the ABI must admit {tag:?} + {class:?} (got {status})"
+                    );
+                    admitted += 1;
+                } else {
+                    assert_eq!(
+                        status, BOUNDARY_ERR_RELATION,
+                        "AC-1: the ABI must reject {tag:?} + {class:?} at ALLOCATION"
+                    );
+                    rejected += 1;
+                }
+            }
+        }
+        // ⚠ POSITIVE CONTROL on both arms: a relation that admitted everything
+        // or nothing would satisfy one arm vacuously.
+        let handles = BoundaryTag::ALL
+            .iter()
+            .filter(|t| !t.is_immediate())
+            .count();
+        let expected_admitted: usize = BOUNDARY_TAG_CLASS_RELATION
+            .iter()
+            .map(|(_, classes)| classes.len())
+            .sum();
+        assert_eq!(admitted, expected_admitted, "AC-1: admitted count");
+        assert_eq!(
+            rejected,
+            handles * BoundaryClass::ALL.len() - expected_admitted,
+            "AC-1: rejected count"
+        );
+        assert!(
+            admitted > 0 && rejected > 0,
+            "AC-1: neither arm may be empty"
+        );
+
+        // The mask the CLIF consumes must agree with the table, per pair.
+        for tag in BoundaryTag::ALL {
+            for class in BoundaryClass::ALL {
+                let by_mask = boundary_class_mask(tag) & (1u64 << (class as u64)) != 0;
+                assert_eq!(
+                    by_mask,
+                    boundary_relation_admits(tag, class),
+                    "the emitted mask disagrees with the relation for {tag:?} + {class:?}"
+                );
+            }
+        }
+    }
+
+    /// **`AC-6` — a persistent `Int` may not name invocation-scoped limbs.**
+    ///
+    /// ⭐ The same rule that made persistent words safe to escape, one
+    /// representation down: a `Big`'s limbs live in an entry the native arena
+    /// owns for the invocation, so a persistent node naming one would be a
+    /// surviving parent pointing at storage that dies first.
+    #[test]
+    fn b2v_a_persistent_int_refuses_an_invocation_scoped_big() {
+        let (_am, alloc_code) = compile_producer(4, emit_alloc_probe);
+        let (_tm, tag_probe) = compile_producer(3, emit_store_int_tag_probe);
+
+        let mut store = BoundaryValueStore::new();
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (2, 0, 0),
+            (0, 0, 0),
+        );
+        let word = BoundaryWord(run4(
+            alloc_code,
+            f.base,
+            BoundaryTag::PersistentGround as u64,
+            BoundaryClass::Int as u64,
+            0,
+        ) as u64);
+
+        assert_eq!(
+            run3(
+                tag_probe,
+                f.base,
+                word,
+                crate::native_int::NATIVE_INT_BIG_TAG_V1
+            ),
+            BOUNDARY_ERR_ESCAPE,
+            "AC-6: a persistent Int must not name invocation-scoped limbs"
+        );
+        // ⚠ POSITIVE CONTROL — the Small arm is admitted, so the refusal is
+        // about the ARM and not about `store_int_tag` refusing everything.
+        assert_eq!(
+            run3(
+                tag_probe,
+                f.base,
+                word,
+                crate::native_int::NATIVE_INT_SMALL_TAG_V1
+            ),
+            BOUNDARY_OK,
+            "AC-6: the self-contained arm is admitted"
+        );
+        // And an out-of-set native tag is a shape error, not silently stored.
+        assert_eq!(
+            run3(tag_probe, f.base, word, 99),
+            BOUNDARY_ERR_SHAPE,
+            "AC-1: the native tag space is closed too"
         );
     }
 

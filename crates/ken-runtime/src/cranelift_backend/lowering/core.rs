@@ -77,9 +77,8 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     // authority — `RT-FNSPLIT-B2F` performs the switch-over that consumes them.
     // The population is emitted unconditionally so that B2F's switch-over is a
     // change of caller, never a change of what a module contains.
-    let _boundary_value_abi = crate::boundary_value_clif::emit_boundary_value_local_graph(
-        &mut module,
-    )?;
+    let _boundary_value_abi =
+        crate::boundary_value_clif::emit_boundary_value_local_graph(&mut module, &native_int)?;
     let host_dispatch = if process_mode {
         let mut host_sig = module.make_signature();
         host_sig

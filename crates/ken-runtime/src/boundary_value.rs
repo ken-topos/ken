@@ -297,8 +297,88 @@ pub enum BoundaryClass {
     BorrowedOpaque = 8,
 }
 
+impl BoundaryClass {
+    /// Every class, in declaration order.
+    pub const ALL: [BoundaryClass; 9] = [
+        BoundaryClass::Bool,
+        BoundaryClass::Int,
+        BoundaryClass::Bytes,
+        BoundaryClass::String,
+        BoundaryClass::Constructor,
+        BoundaryClass::Record,
+        BoundaryClass::HostResult,
+        BoundaryClass::Closure,
+        BoundaryClass::BorrowedOpaque,
+    ];
+}
+
+// ---------------------------------------------------------------------------
+// The tag × class relation
+// ---------------------------------------------------------------------------
+
+/// ⛔ **The valid `(tag, class)` pairs — one authoritative relation.**
+///
+/// A closed set of tags and a closed set of classes do **not** make a closed
+/// ABI: the tag decides *lifetime and region*, the class decides
+/// *interpretation*, and their product contains pairs no disposition can ever
+/// produce. `PersistentClosure + HostResult` and `InvocationHostResult +
+/// Constructor` are representable in the product and meaningless in the ABI —
+/// minting one succeeds and then fails much later at an unrelated projection,
+/// which reports the wrong defect at the wrong place.
+///
+/// This table is derived from `Lowered::boundary_disposition` and is the single
+/// source both the Rust builders and the emitted allocator check against:
+/// [`boundary_class_mask`] compiles it to the bitmask the CLIF tests.
+///
+/// Immediate tags are absent by construction — they have no node, so they have
+/// no class.
+pub const BOUNDARY_TAG_CLASS_RELATION: &[(BoundaryTag, &[BoundaryClass])] = &[
+    (
+        BoundaryTag::PersistentGround,
+        // The ground classes plus the spill arm: an `Int` too wide for the
+        // immediate field becomes a persistent ground handle.
+        &[
+            BoundaryClass::Int,
+            BoundaryClass::Bytes,
+            BoundaryClass::String,
+            BoundaryClass::Constructor,
+            BoundaryClass::Record,
+        ],
+    ),
+    (BoundaryTag::PersistentClosure, &[BoundaryClass::Closure]),
+    (
+        BoundaryTag::InvocationBorrowed,
+        &[BoundaryClass::BorrowedOpaque],
+    ),
+    (
+        BoundaryTag::InvocationHostResult,
+        &[BoundaryClass::HostResult],
+    ),
+];
+
+/// Whether the ABI admits this `(tag, class)` pair.
+pub fn boundary_relation_admits(tag: BoundaryTag, class: BoundaryClass) -> bool {
+    BOUNDARY_TAG_CLASS_RELATION
+        .iter()
+        .any(|(t, classes)| *t == tag && classes.contains(&class))
+}
+
+/// The relation for one tag, as a bitmask over [`BoundaryClass`] discriminants.
+///
+/// ⭐ This is what makes the emitted check Θ(1): the allocator selects one mask
+/// with four comparisons and tests one bit, rather than walking a table. The
+/// mask is *computed from* the relation above, so the CLIF cannot drift from
+/// the declaration — there is one table and one derivation.
+pub fn boundary_class_mask(tag: BoundaryTag) -> u64 {
+    BOUNDARY_TAG_CLASS_RELATION
+        .iter()
+        .filter(|(t, _)| *t == tag)
+        .flat_map(|(_, classes)| classes.iter())
+        .fold(0u64, |mask, class| mask | (1u64 << (*class as u64)))
+}
+
 /// Byte stride of one arena node.
-pub const BOUNDARY_NODE_STRIDE: i32 = 56;
+pub const BOUNDARY_NODE_STRIDE: i32 = 64;
 
 /// `BoundaryClass` of this node.
 pub const NODE_CLASS: i32 = 0;
@@ -317,6 +397,19 @@ pub const NODE_FIELD_COUNT: i32 = 40;
 /// Index into the word table of this node's first child word. Field *names*
 /// live at the same index in the name table.
 pub const NODE_FIELDS_AT: i32 = 48;
+/// A second scalar whose meaning the **class** determines, exactly as
+/// [`NODE_PAYLOAD`]'s already does:
+///
+/// | class | `NODE_PAYLOAD` | `NODE_EXTENT` |
+/// |---|---|---|
+/// | `Int` | the [`crate::native_int::NativeIntV1`] payload | its `tag` |
+/// | `Bytes` / `String` | byte length | start index in the region's data table |
+/// | everything else | as documented on `NODE_PAYLOAD` | `0`, unread |
+///
+/// ⚠ Every reader of this field is **class-guarded**, so a caller cannot read
+/// one class's meaning out of another's node. A single un-guarded reader would
+/// make the two meanings collide, which is why there is no generic accessor.
+pub const NODE_EXTENT: i32 = 56;
 
 /// Byte size of a **region header**.
 ///
@@ -324,7 +417,7 @@ pub const NODE_FIELDS_AT: i32 = 48;
 /// image publish the *same* header shape, which is what lets a single
 /// `resolve` select a region at run time and then read it with one set of
 /// offsets. A second layout would be a second place for the offsets to drift.
-pub const BOUNDARY_REGION_HEADER_BYTES: i32 = 80;
+pub const BOUNDARY_REGION_HEADER_BYTES: i32 = 112;
 
 /// Pointer to the node table.
 pub const ARENA_NODES: i32 = 0;
@@ -353,6 +446,24 @@ pub const ARENA_PERSISTENT: i32 = 64;
 /// it forge persistent identity — the store must remain the sole identity
 /// authority, so the boundary is a bounds check rather than a convention.
 pub const ARENA_FROZEN: i32 = 72;
+/// Pointer to the region's **data table** — the byte span backing `Bytes` and
+/// `String` contents.
+pub const ARENA_DATA: i32 = 80;
+/// Number of **live** data bytes. ⚠ Mutable: the emitted allocator bumps it.
+pub const ARENA_DATA_COUNT: i32 = 88;
+/// Data-table capacity — the third ceiling construction fails closed against.
+pub const ARENA_DATA_CAPACITY: i32 = 96;
+/// Pointer to the invocation's [`crate::native_int::NativeIntArenaV1`] header,
+/// or `0`.
+///
+/// ⭐ **The connection to the landed exact-`Int` representation.** A spilled
+/// `Int` node carries a native `(tag, payload)` pair and nothing else; emitted
+/// code decodes it by calling `ken_native_int_resolve_local`, the *existing*
+/// executable decoder. Re-deriving sign and limbs here would be a second exact
+/// integer representation, which is the thing `docs/PRINCIPLES.md` calls
+/// subsume-don't-proliferate. Read from the *arena* header only — the native
+/// arena is invocation state.
+pub const ARENA_NATIVE_INT: i32 = 104;
 
 /// Status returned by every emitted-code helper on success.
 pub const BOUNDARY_OK: i64 = 0;
@@ -372,6 +483,9 @@ pub const BOUNDARY_ERR_ESCAPE: i64 = -5;
 /// never grows a region, because growth would move it under a published
 /// pointer.
 pub const BOUNDARY_ERR_CAPACITY: i64 = -6;
+/// ⛔ The `(tag, class)` pair is outside the ABI's valid relation — a closed set
+/// of tags and a closed set of classes do not make a closed relation.
+pub const BOUNDARY_ERR_RELATION: i64 = -8;
 /// ⛔ Construction targeted a node in the region's frozen prefix — a node the
 /// Rust side materialized and whose store identity is not emitted code's to
 /// rewrite.
@@ -393,11 +507,16 @@ pub struct BoundaryRegion {
     nodes: Vec<u64>,
     words: Vec<u64>,
     names: Vec<u64>,
+    /// Backing bytes for `Bytes` / `String` contents.
+    data: Vec<u8>,
     live_nodes: usize,
     live_words: usize,
+    live_data: usize,
     header: Vec<u64>,
     /// Address of the persistent region's header, or `0`.
     persistent: u64,
+    /// Address of the invocation's native-`Int` arena header, or `0`.
+    native_int: u64,
 }
 
 const NODE_WORDS: usize = BOUNDARY_NODE_STRIDE as usize / 8;
@@ -424,9 +543,33 @@ impl BoundaryRegion {
         }
     }
 
+    /// Number of live data bytes, on the same published-header rule.
+    pub fn data_count(&self) -> usize {
+        match self.header.first() {
+            None => self.live_data,
+            Some(_) => self.header[(ARENA_DATA_COUNT / 8) as usize] as usize,
+        }
+    }
+
     /// Nodes this region can still hold beyond the live count.
     pub fn node_capacity(&self) -> usize {
         self.nodes.len() / NODE_WORDS
+    }
+
+    /// The live data bytes of one node's span, or `None` when the node is not
+    /// a `Bytes`/`String` or its span leaves the table.
+    ///
+    /// The Rust-side mirror of the CLIF bounds checks, used by tests as an
+    /// independent oracle rather than by re-reading the CLIF's own answer.
+    pub fn node_data(&self, index: u64) -> Option<&[u8]> {
+        let class = self.node_field(index, NODE_CLASS)?;
+        if class != BoundaryClass::Bytes as u64 && class != BoundaryClass::String as u64 {
+            return None;
+        }
+        let at = self.node_field(index, NODE_EXTENT)? as usize;
+        let len = self.node_field(index, NODE_PAYLOAD)? as usize;
+        let end = at.checked_add(len)?;
+        (end <= self.data_count()).then(|| &self.data[at..end])
     }
 
     /// Read one field of one live node. `None` when the index or offset is out
@@ -461,7 +604,7 @@ impl BoundaryRegion {
     /// growing one would move it out from under the published pointer. Reserving
     /// is therefore the caller's explicit, auditable decision about how much
     /// storage an invocation may take.
-    pub fn reserve(&mut self, nodes: usize, words: usize) {
+    pub fn reserve(&mut self, nodes: usize, words: usize, data: usize) {
         debug_assert!(
             self.header.is_empty(),
             "reserve before publish: growing a table moves it under the pointer"
@@ -470,6 +613,19 @@ impl BoundaryRegion {
         self.nodes.resize(node_words, 0);
         self.words.resize(self.live_words + words, 0);
         self.names.resize(self.live_words + words, 0);
+        self.data.resize(self.live_data + data, 0);
+    }
+
+    /// Append `bytes` to the data table, returning its start index.
+    fn push_data(&mut self, bytes: &[u8]) -> u64 {
+        let at = self.live_data as u64;
+        let end = self.live_data + bytes.len();
+        if self.data.len() < end {
+            self.data.resize(end, 0);
+        }
+        self.data[self.live_data..end].copy_from_slice(bytes);
+        self.live_data = end;
+        at
     }
 
     /// Append one node and return the handle word naming it.
@@ -481,9 +637,17 @@ impl BoundaryRegion {
         slot: SlotId,
         tag_id: u64,
         payload: u64,
+        extent: u64,
         children: &[BoundaryWord],
         names: &[u64],
     ) -> BoundaryWord {
+        // ⛔ The Rust builders check the SAME relation the emitted allocator
+        // does. One table, two enforcement points — a pair no disposition can
+        // produce must be unbuildable from either side.
+        assert!(
+            boundary_relation_admits(tag, class),
+            "the ABI does not admit {tag:?} + {class:?}"
+        );
         debug_assert!(
             names.is_empty() || names.len() == children.len(),
             "a name table, when present, is parallel to the word table"
@@ -520,6 +684,7 @@ impl BoundaryRegion {
             payload,
             children.len() as u64,
             fields_at,
+            extent,
         ]);
         self.live_nodes = index as usize + 1;
         BoundaryWord::handle(tag, index)
@@ -548,6 +713,11 @@ impl BoundaryRegion {
             // Everything materialized before publication is frozen; emitted code
             // constructs strictly beyond it.
             self.live_nodes as u64,
+            self.data.as_ptr() as u64,
+            self.live_data as u64,
+            self.data.len() as u64,
+            self.native_int,
+            0,
         ];
         self.header.as_mut_ptr()
     }
@@ -572,6 +742,13 @@ impl BoundaryArenaV1 {
         self.0.persistent = region.map_or(0, |p| p as u64);
     }
 
+    /// Bind the invocation's native-`Int` arena, through which emitted code
+    /// decodes a spilled `Int`'s `(tag, payload)` pair. `None` leaves spilled
+    /// integers undecodable, failing closed rather than reading zero.
+    pub fn bind_native_int(&mut self, arena: Option<*const u64>) {
+        self.0.native_int = arena.map_or(0, |p| p as u64);
+    }
+
     /// Number of live invocation nodes.
     pub fn node_count(&self) -> usize {
         self.0.node_count()
@@ -593,8 +770,8 @@ impl BoundaryArenaV1 {
     }
 
     /// Grant emitted code room to construct invocation-owned nodes.
-    pub fn reserve(&mut self, nodes: usize, words: usize) {
-        self.0.reserve(nodes, words);
+    pub fn reserve(&mut self, nodes: usize, words: usize, data: usize) {
+        self.0.reserve(nodes, words, data);
     }
 
     /// Publish the arena header. See [`BoundaryRegion::publish`].
@@ -656,8 +833,13 @@ impl BoundaryPersistentImage {
     }
 
     /// Grant emitted code room to construct persistent nodes.
-    pub fn reserve(&mut self, nodes: usize, words: usize) {
-        self.0.reserve(nodes, words);
+    pub fn reserve(&mut self, nodes: usize, words: usize, data: usize) {
+        self.0.reserve(nodes, words, data);
+    }
+
+    /// The live data bytes of one node's span.
+    pub fn node_data(&self, index: u64) -> Option<&[u8]> {
+        self.0.node_data(index)
     }
 
     /// Publish the persistent header. See [`BoundaryRegion::publish`].
@@ -707,7 +889,7 @@ impl BoundaryArenaBuilder {
         );
         self.arena
             .0
-            .push_node(tag, class, NULL_SLOT, 0, payload, children, &[])
+            .push_node(tag, class, NULL_SLOT, 0, payload, 0, children, &[])
     }
 
     /// Finish, yielding the arena.
@@ -792,8 +974,8 @@ impl BoundaryValueStore {
     /// writes.** There is no path by which emitted code takes persistent space
     /// the store did not grant, which is what keeps this from being a second,
     /// unaccountable heap.
-    pub fn reserve_persistent(&mut self, nodes: usize, words: usize) {
-        self.image.reserve(nodes, words);
+    pub fn reserve_persistent(&mut self, nodes: usize, words: usize, data: usize) {
+        self.image.reserve(nodes, words, data);
     }
 
     /// Publish the persistent header emitted code resolves persistent words
@@ -984,32 +1166,69 @@ impl BoundaryValueStore {
             return Some(BoundaryWord::handle(BoundaryTag::PersistentGround, *index));
         }
 
-        let (class, tag_id, payload, children, names) = match value {
-            // Both handled above; listed so this match stays exhaustive over the
+        let (class, tag_id, payload, extent, children, names) = match value {
+            // Handled above; listed so this match stays exhaustive over the
             // value's own structure rather than falling through a wildcard.
             RuntimeGroundValue::Bool(_) => return None,
-            RuntimeGroundValue::Int(_) => (BoundaryClass::Int, 0, 0, Vec::new(), Vec::new()),
-            RuntimeGroundValue::Bytes(bytes) => (
-                BoundaryClass::Bytes,
-                0,
-                bytes.len() as u64,
-                Vec::new(),
-                Vec::new(),
-            ),
-            RuntimeGroundValue::String(text) => (
-                BoundaryClass::String,
-                0,
-                text.len() as u64,
-                Vec::new(),
-                Vec::new(),
-            ),
+            RuntimeGroundValue::Int(int) => {
+                // ⭐ The spilled `Int` IS a `NativeIntV1` pair — the landed
+                // exact-`Int` representation, not a second one. Emitted code
+                // decodes it with `ken_native_int_resolve_local`.
+                //
+                // ⛔ **Only the `Small` arm is materializable from Rust, and
+                // that is a lifetime consequence rather than an omission.** A
+                // `Big`'s limbs live in an entry that only emitted code can
+                // intern (`ken_native_int_intern_local` mallocs it), and that
+                // entry dies with the invocation — so a *persistent* node
+                // naming one would be exactly the ephemeral-locator defect the
+                // region split closed. Fail closed; emitted producers mint the
+                // `Big` arm themselves, where its lifetime is the invocation's.
+                let small = int.as_small()?;
+                (
+                    BoundaryClass::Int,
+                    0,
+                    small as u64,
+                    crate::native_int::NATIVE_INT_SMALL_TAG_V1,
+                    Vec::new(),
+                    Vec::new(),
+                )
+            }
+            RuntimeGroundValue::Bytes(bytes) => {
+                let at = self.image.0.push_data(bytes);
+                (
+                    BoundaryClass::Bytes,
+                    0,
+                    bytes.len() as u64,
+                    at,
+                    Vec::new(),
+                    Vec::new(),
+                )
+            }
+            RuntimeGroundValue::String(text) => {
+                let at = self.image.0.push_data(text.as_bytes());
+                (
+                    BoundaryClass::String,
+                    0,
+                    text.len() as u64,
+                    at,
+                    Vec::new(),
+                    Vec::new(),
+                )
+            }
             RuntimeGroundValue::Constructor { constructor, args } => {
                 let tag_id = self.intern_symbol(constructor);
                 let mut children = Vec::with_capacity(args.len());
                 for arg in args {
                     children.push(self.materialize(arg)?);
                 }
-                (BoundaryClass::Constructor, tag_id, 0, children, Vec::new())
+                (
+                    BoundaryClass::Constructor,
+                    tag_id,
+                    0,
+                    0,
+                    children,
+                    Vec::new(),
+                )
             }
             RuntimeGroundValue::Record { fields } => {
                 let mut children = Vec::with_capacity(fields.len());
@@ -1018,7 +1237,7 @@ impl BoundaryValueStore {
                     names.push(self.intern_symbol(name));
                     children.push(self.materialize(field)?);
                 }
-                (BoundaryClass::Record, 0, 0, children, names)
+                (BoundaryClass::Record, 0, 0, 0, children, names)
             }
         };
 
@@ -1040,6 +1259,7 @@ impl BoundaryValueStore {
             slot,
             tag_id,
             payload,
+            extent,
             &children,
             &names,
         );
