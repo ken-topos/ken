@@ -84,7 +84,25 @@
 >
 > ⭐ **Sweep `git ls-remote origin refs/heads/wp/RT-FNSPLIT-B2A-C-correspondence`
 > against the ring's local ref EVERY time you check in.** Build seats cannot
-> push, by design; that has needed a Steward push four sessions running.
+> push, by design.
+>
+> ✅ **FIRST CHECKPOINT PUSHED — `96e66c9f`** ("transport each occurrence's
+> preallocated static origin", 9 files, +1267/−291, touching `lowering/core.rs`,
+> `lowering/mod.rs`, `planning.rs`, `static_transition.rs`, `semantic_ir.rs` and
+> four test modules). Notified at `evt_34k0hbc5gk92f`. **It was on one local ref
+> with ZERO off-box copies — the FIFTH consecutive session.** ⇒ The recurring
+> defect is not the missing credential; it is only looking when prompted.
+>
+> **Two things verified before that push, and both are reusable answers:**
+> - **No attested source touched.** ⚠ They are in `cranelift_backend/planning.rs`,
+>   which differs from the attested `cranelift_backend.rs` by one directory level.
+>   Check the ledger against the *touched* list, never against the subsystem name.
+> - ⛔ **Their base `70bd2c74` being behind `main` = `39714258` is IMMATERIAL and
+>   they must NOT rebase.** The intersection of their changed paths with what
+>   `main` changed since is **EMPTY** (theirs all `crates/`, mine all `docs/`).
+>   `merge-base --is-ancestor origin/main <wp-sha>` returns FALSE here and that is
+>   *expected* — that test is for a publish candidate, not for a WP branch whose
+>   base merely aged. Do not "rescue" a branch from a problem it does not have.
 >
 > **Watch specifically for D3** — the per-variant ordinal correspondence. If it
 > reports a planner/lowering ordinal **disagreement**, that is a finding to route
