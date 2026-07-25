@@ -4599,4 +4599,181 @@ mod tests {
             "AC-5.8: a return successor assigned to the caller must redden"
         );
     }
+
+    /// The semantic disposition of a plan, as the ruling's four classification
+    /// laws project it. **This is the authority** — an occurrence's owner and the
+    /// planned edge kind — and it is deliberately computed from nothing else.
+    ///
+    /// ⚠ There is no Rust identifier, file name, method name or source offset
+    /// anywhere in this function, and that absence is the point: it is why a Rust
+    /// wrapper cannot move the result.
+    fn b2o_disposition(plan: &StaticTransitionPlan) -> (usize, usize, usize, usize) {
+        let owner_of = |node: StaticNodeId| plan.semantic.descriptors[node.0 as usize].owner;
+        let (mut cross_owner, mut intra_owner, mut shared_exit, mut other) = (0, 0, 0, 0);
+        for edge in &plan.edges {
+            match (owner_of(edge.from), owner_of(edge.to), edge.kind) {
+                // Law 1 — a `StaticBody` edge between DISTINCT function owners is
+                // a cross-owner call boundary.
+                (SemanticOwner::Function(a), SemanticOwner::Function(b), EdgeKind::StaticBody)
+                    if a != b =>
+                {
+                    cross_owner += 1
+                }
+                // Law 3 — a function edge to either shared exit is the validated
+                // return/trap, never a call.
+                (
+                    SemanticOwner::Function(_),
+                    SemanticOwner::Terminal | SemanticOwner::TrapTerminal,
+                    _,
+                ) => shared_exit += 1,
+                // Law 2 — an ordinary edge inside one owner is local traversal.
+                (SemanticOwner::Function(a), SemanticOwner::Function(b), _) if a == b => {
+                    intra_owner += 1
+                }
+                // Law 4 — everything else is a graph planning refuses to build.
+                _ => other += 1,
+            }
+        }
+        (plan.semantic.functions.len(), cross_owner, intra_owner, shared_exit + other)
+    }
+
+    /// `AC-10a` / `AC-10b` — **the harness that must stay GREEN under a Rust
+    /// refactor.** Architect ruling `evt_5yxjd1zqnyvcq`.
+    ///
+    /// ⛔ **The verdict here is INVERTED from the four withdrawn folds.** Those
+    /// spent four candidate SHAs making a relocation redden. A Rust wrapper, a
+    /// nested `fn`, or a same-named method in a second `impl` creates **no Ken
+    /// function-unit boundary**, so a pin that reddens on one is measuring
+    /// implementation topology and reporting success.
+    ///
+    /// - **MEASURED:** the unit count and the three edge-classification counts,
+    ///   derived from owners and edge kinds alone.
+    /// - **CLAIMED:** that semantic disposition is a function of the plan graph,
+    ///   so no source-level reorganisation can move it.
+    /// - **THE GAP:** ⚠ a green here proves invariance only for mutations that
+    ///   were actually *applied*. That is why `AC-10a`/`10b` are recorded
+    ///   **mutation proofs against this pin**, and why `AC-10c` exists at all —
+    ///   without it, deleting the assertion below would leave this green forever.
+    ///
+    /// Promise class: **transition sentinel** — the four numbers are a frozen
+    /// snapshot of *this fixture*; the durable claim is their **invariance under
+    /// source refactoring**, which only the recorded mutation proofs discharge.
+    #[test]
+    fn b2o_ac10_semantic_disposition_is_a_function_of_the_plan_graph_alone() {
+        let declaration = b2o_transparent_declaration(unit());
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::b2o", &declaration);
+        let expr = b2o_two_closure_fixture();
+        let plan = plan_static_transition_graph(&expr, &declarations).expect("plannable");
+
+        let (units, cross_owner, intra_owner, exits) = b2o_disposition(&plan);
+
+        // Non-vacuity before the snapshot: a fixture with no boundary would make
+        // every claim below true for the wrong reason.
+        assert!(
+            cross_owner > 0,
+            "the fixture has no cross-owner boundary, so 10a/10b would be green \
+             on a harness that observes nothing"
+        );
+        assert_eq!(
+            units,
+            plan.entries.len()
+                + plan
+                    .edges
+                    .iter()
+                    .filter(|edge| edge.kind == EdgeKind::StaticBody)
+                    .count(),
+            "the unit population is the ruled seed set"
+        );
+        // ⚠ PREDICTED (2, 6, 3) before running; MEASURED (2, 4, 4). The
+        // cross-owner count was right and the intra/exit split was not — I had
+        // both retained-closure bodies reaching the terminal through one more
+        // ordinary hop than they do. Recorded as a miss rather than silently
+        // re-fitted, because a number edited to match an observation measures
+        // nothing (`AC-11`, and the `D5` predictions before it).
+        assert_eq!(
+            (cross_owner, intra_owner, exits),
+            (2, 4, 4),
+            "AC-10: the semantic disposition of this fixture moved.\n\
+             ⚠ If you reached this by RELOCATING A RUST CALL, adding a wrapper, \
+             or adding a same-named method in another `impl`, the pin is not the \
+             thing that is wrong -- the ruling is explicit that such a refactor \
+             creates no Ken function-unit boundary and this MUST stay green. \
+             Investigate why the plan graph moved.\n\
+             If you reached it by changing the planner's edges or seeds, that IS \
+             a semantic change and belongs in review."
+        );
+    }
+
+    /// `AC-10c` — **the RED twin that makes `AC-10a`/`10b` mean something.**
+    ///
+    /// ⭐ Without this, `b2o_ac10_...` is green on a harness that observes
+    /// nothing at all: delete its assertion body and the relocation proofs stay
+    /// green forever. This control mutates the **one axis that IS authority** —
+    /// the planned edge's owner endpoints — and requires both that the projection
+    /// moves and that validation refuses the graph.
+    #[test]
+    fn b2o_ac10c_repointing_a_static_body_edge_changes_the_disposition() {
+        let declaration = b2o_transparent_declaration(unit());
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::b2o", &declaration);
+        let expr = b2o_two_closure_fixture();
+        let plan = plan_static_transition_graph(&expr, &declarations).expect("plannable");
+
+        let before = b2o_disposition(&plan);
+
+        // Repoint one `StaticBody` edge at a node owned by the SAME unit as its
+        // source. Compile-preserving, and it is exactly the "moved boundary" a
+        // source-text oracle could never see.
+        let (index, edge) = plan
+            .edges
+            .iter()
+            .enumerate()
+            .find(|(_, edge)| edge.kind == EdgeKind::StaticBody)
+            .map(|(i, e)| (i, *e))
+            .expect("the fixture must carry a static body edge");
+        let source_owner = plan.semantic.descriptors[edge.from.0 as usize].owner;
+        let same_unit_target = plan
+            .nodes
+            .iter()
+            .map(|node| node.id)
+            .find(|id| {
+                plan.semantic.descriptors[id.0 as usize].owner == source_owner && *id != edge.to
+            })
+            .expect("the caller unit must hold a second node to repoint at");
+
+        let mut edges = plan.edges.clone();
+        edges[index].to = same_unit_target;
+
+        let after = {
+            let mut repointed = plan.clone();
+            repointed.edges = edges.clone();
+            b2o_disposition(&repointed)
+        };
+        assert_ne!(
+            before, after,
+            "AC-10c: repointing a static body edge left the projection unchanged, \
+             so the harness does not observe semantic disposition and 10a/10b are \
+             vacuous"
+        );
+
+        // ⭐ I named the WRONG detector here and the exact-error assertion caught
+        // it. I predicted `"static body edge does not cross a function unit
+        // boundary"` -- the edge law. It reddens at **overlap** instead, and that
+        // is correct and already documented: repointing the edge inside one unit
+        // makes the target reachable from the caller's seed *while still being a
+        // seed itself*, so the partition sees two owners before any edge law is
+        // consulted. This independently re-confirms the corrected `D3` note that
+        // overlap is the primary detector and the edge law is defense in depth.
+        //
+        // ⚠ `expect_err` would have been GREEN here and would have taught the
+        // next reader that the edge law is load-bearing. Asserting the exact
+        // error is the only reason this was visible.
+        assert_eq!(
+            b2o_err(&plan.semantic, &plan.nodes, &edges, &plan.entries, &plan),
+            planner_error("planned node is owned by more than one function unit"),
+            "AC-10c: a static body edge repointed inside one unit must be REFUSED \
+             by planning, not merely reclassified"
+        );
+    }
 }

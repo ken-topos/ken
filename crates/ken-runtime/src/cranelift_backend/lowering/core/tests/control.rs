@@ -3553,138 +3553,78 @@ fn retained_body_helper_is_private(core: &str) -> bool {
         .any(|line| line.trim() == "fn retained_body_occurrence(")
 }
 
-/// The routing inventory across every `impl Lowering` source, as
-/// `"<file>::<fn>"` in source order.
+/// **`RT-FNSPLIT-B2O` `AC-12` split row — the DECLARATION survives, the
+/// REACHABILITY entailment does not.** Architect ruling `evt_5yxjd1zqnyvcq`.
 ///
-/// ⚠ **Honest limit.** `mod.rs` holds **seven** top-level `impl` blocks and a
-/// nested `impl Drop` inside a function body, so unlike `core.rs` the enclosing
-/// *type* is ambiguous there. The enclosing **function name** is still exact,
-/// and that is what this inventory claims — "which functions can reach a
-/// retained body", never "on which type". The drift question only needs the
-/// former.
-fn routing_inventory(needle: &str) -> Vec<String> {
-    LOWERING_IMPL_SOURCES
+/// This pin is what remains of the withdrawn route oracle, and the boundary is
+/// the point of it:
+///
+/// - **MEASURED:** `retained_body_occurrence` is declared in `lowering/core.rs`
+///   with **no visibility qualifier**. Source text is authoritative for its own
+///   declarations, so this is a fact the scan can settle.
+/// - **CLAIMED:** exactly that, and nothing further.
+/// - **THE GAP:** ⛔ this does **not** establish which functions can *reach* the
+///   helper. The withdrawn oracle made that inference — *"`mod.rs` therefore
+///   cannot reach it, so the route inventory is still correct"* — and
+///   reachability is not a property of declaration text. Name resolution, macro
+///   expansion, and indirect calls all sit outside what any source scan sees.
+///
+/// ⇒ **The authority for boundaries is the plan graph** — an occurrence's
+/// `StaticOriginId`, its validated `SemanticOwner`, and the planned edge kind —
+/// **not this file's text.** A Rust wrapper or a same-named method in another
+/// `impl` creates no Ken function-unit boundary, so no pin here should redden
+/// when one is added; see `b2o_ac10c_repointing_a_static_body_edge_changes_the_
+/// disposition` for the axis that *is* authority.
+///
+/// Promise class: **normative compatibility vector** — the unqualified spelling
+/// is the contract, and widening it is a deliberate review event.
+#[test]
+fn the_retained_body_helper_carries_no_visibility_qualifier() {
+    let core = LOWERING_IMPL_SOURCES
         .iter()
-        .flat_map(|(file, source)| {
-            enclosing_functions_mentioning(source, needle)
-                .into_iter()
-                .map(move |name| format!("{file}::{name}"))
-        })
-        .collect()
-}
+        .find(|(file, _)| *file == "lowering/core.rs")
+        .map(|(_, source)| *source)
+        .expect("the impl-source list must carry core.rs");
+    assert!(
+        retained_body_helper_is_private(core),
+        "`retained_body_occurrence` no longer declares as the exact unqualified \
+         form in `lowering/core.rs`.\n\
+         ⛔ DO NOT 'fix' this by accepting the new spelling -- that is the \
+         evasion this WP paid five review folds to learn. A visibility \
+         qualifier here is a DELIBERATE widening and belongs in review, with \
+         the frozen evidence in the D6 report updated to match.\n\
+         ⚠ This pin makes NO claim about who can reach the helper; that is the \
+         plan graph's to answer, not this file's."
+    );
 
-/// Sentinel recorded when an `impl`-level line carries a whole `fn` token whose
-/// header this oracle cannot parse. ⛔ Its presence in an inventory is a
-/// FAILURE, never a shrug — see `UNATTRIBUTED`.
-const UNRECOGNIZED_HEADER: &str = "<unrecognized method header>";
+    // The helper is declared in exactly one of the `impl Lowering` sources. This
+    // is a DECLARATION inventory over both files -- it says where the helper is
+    // written, never who can call it.
+    let declaring = LOWERING_IMPL_SOURCES
+        .iter()
+        .filter(|(_, source)| retained_body_helper_is_private(source))
+        .map(|(file, _)| *file)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        declaring,
+        vec!["lowering/core.rs"],
+        "the retained-body helper's DECLARING file set changed. ⚠ A declaration \
+         in a second `impl Lowering` source is a review event; this pin reports \
+         it and draws no conclusion about reachability."
+    );
 
-/// Sentinel for a mention that precedes any `impl`-level method.
-const UNATTRIBUTED: &str = "<outside any impl-level fn>";
-
-/// What one source line is, as an `impl`-level item boundary.
-#[derive(Debug, Eq, PartialEq)]
-enum MethodHeader {
-    /// Not an `impl`-level item line.
-    NotAHeader,
-    /// A recognized method header, with its name.
-    Named(String),
-    /// ⛔ An `impl`-level line carrying a whole `fn` token that this oracle could
-    /// not parse. **Fails closed** rather than being skipped.
-    Unrecognized,
-}
-
-/// Classifies one line as an `impl`-level method boundary.
-///
-/// ⛔ **Attribution is by the `fn` TOKEN and the identifier that follows it,
-/// located independently of any legal qualifier** — never by matching a list of
-/// visibility spellings. `pub fn`, `pub(super) fn`, `pub(in crate::x) fn`,
-/// `const fn`, `async fn`, `unsafe fn`, `pub unsafe extern "C" fn` all attribute
-/// identically, because none of them is enumerated: the scanner finds `fn` as a
-/// whole word and reads the next identifier.
-///
-/// ⭐ **This replaces a visibility-spelling parser that was a false green**
-/// (Architect, `evt_4etegbq0xyaqq`). The prior version stripped a literal
-/// `"pub"` and then required `") "`, so a legal plain **`pub fn`** header was not
-/// recognized at all — and a new retained-body route declared `pub fn` was
-/// therefore invisible to the inventory while every count stayed green. That is
-/// precisely the property the pin claims to close. ⛔ The lesson is in the
-/// mechanism, not a longer list: **adding `pub fn` to a spelling list would have
-/// left `const fn` and the next modifier open.**
-///
-/// ⛔ **Fails closed.** An `impl`-level line with a `fn` token but no parsable
-/// `identifier` + `(`/`<` after it returns `Unrecognized`, which poisons the
-/// inventory and reddens the assertion. "I could not tell" and "it is fine" are
-/// different answers.
-fn classify_impl_level_header(line: &str) -> MethodHeader {
-    let code = line.split_once("//").map_or(line, |(code, _)| code);
-    let trimmed = code.trim_start();
-    // The item boundary is exactly four spaces of indent: the sole `impl` block
-    // in `core.rs` is at column 0, so its methods sit at 4. A deeper `fn` is a
-    // nested helper and correctly does NOT move attribution.
-    if code.len() - trimmed.len() != 4 {
-        return MethodHeader::NotAHeader;
+    // Non-vacuity: the needles must be real files, or both assertions above are
+    // satisfied by an empty read.
+    for (file, source) in LOWERING_IMPL_SOURCES {
+        assert!(
+            source.len() > 10_000,
+            "`{file}` did not load; the assertions above would pass vacuously"
+        );
     }
-    let bytes = trimmed.as_bytes();
-    let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
-    let mut index = 0;
-    while let Some(found) = trimmed[index..].find("fn") {
-        let start = index + found;
-        let end = start + 2;
-        let before_is_boundary = start == 0 || !is_ident(bytes[start - 1]);
-        let after_is_boundary = end >= bytes.len() || !is_ident(bytes[end]);
-        index = end;
-        if !(before_is_boundary && after_is_boundary) {
-            continue;
-        }
-        // A whole `fn` token. Everything after it must be ` <ident>` then `(`/`<`.
-        let mut cursor = end;
-        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
-            cursor += 1;
-        }
-        let name_start = cursor;
-        while cursor < bytes.len() && is_ident(bytes[cursor]) {
-            cursor += 1;
-        }
-        let name = &trimmed[name_start..cursor];
-        let follows = bytes.get(cursor).copied();
-        if name.is_empty()
-            || name.as_bytes()[0].is_ascii_digit()
-            || !matches!(follows, Some(b'(') | Some(b'<'))
-        {
-            return MethodHeader::Unrecognized;
-        }
-        return MethodHeader::Named(name.to_string());
-    }
-    MethodHeader::NotAHeader
 }
 
-/// The `impl`-level method enclosing each whole-identifier mention of `needle`,
-/// in source order, deduplicated.
-///
-/// ⚠ The `impl`-shape premise this relies on — one top-level `impl`, no nested
-/// `impl`, no unparsable header — is **asserted against the real `core.rs`** in
-/// `the_method_boundary_oracle_enforces_its_impl_shape_premise`. It is not
-/// merely claimed in this comment; an earlier revision of this doc said
-/// "asserted, not assumed" when no such assertion existed.
-fn enclosing_functions_mentioning(source: &str, needle: &str) -> Vec<String> {
-    let mut current = UNATTRIBUTED.to_string();
-    let mut owners: Vec<String> = Vec::new();
-    for line in source.lines() {
-        match classify_impl_level_header(line) {
-            MethodHeader::Named(name) => current = name,
-            MethodHeader::Unrecognized => current = UNRECOGNIZED_HEADER.to_string(),
-            MethodHeader::NotAHeader => {}
-        }
-        let code = line.split_once("//").map_or(line, |(code, _)| code);
-        let mentions = code
-            .split(|c: char| !c.is_alphanumeric() && c != '_')
-            .any(|token| token == needle);
-        if mentions && !owners.contains(&current) {
-            owners.push(current.clone());
-        }
-    }
-    owners
-}
+
+
 
 fn identifier_occurrences(source: &str, identifier: &str) -> usize {
     source
@@ -4343,9 +4283,16 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
 /// 2. **Reach.** `SemanticOwner` appears **zero** times in the production region
 ///    of every backend source except the file that defines it.
 #[test]
-fn the_ownership_classification_has_no_reach_into_any_emission_path() {
-    // Promise class: durable invariant.
-    let mut reaching = Vec::new();
+fn the_owner_classification_is_named_in_production_only_by_the_module_that_defines_it() {
+    // Promise class: durable invariant — a DECLARATION inventory.
+    //
+    // ⚠ RENAMED under the Architect ruling (`evt_5yxjd1zqnyvcq`). This pin was
+    // called `..._has_no_reach_into_any_emission_path`, and that name asserted an
+    // inference the mechanism cannot make: a type can be *reached* without being
+    // *named* — through a method that returns it, an `impl Trait`, a re-export,
+    // or a derived ordinal. Naming is not capability. The name now states what
+    // is actually measured, because the name is the part future readers quote.
+    let mut naming = Vec::new();
     for (file, source) in BACKEND_PRODUCTION_SOURCES {
         // `static_transition.rs` carries its tests inline, and those tests
         // legitimately name the owner classification to exercise it.
@@ -4354,16 +4301,21 @@ fn the_ownership_classification_has_no_reach_into_any_emission_path() {
             .map_or(*source, |(before, _)| before);
         let n = identifier_occurrences(production, "SemanticOwner");
         if n > 0 {
-            reaching.push(*file);
+            naming.push(*file);
         }
     }
     assert_eq!(
-        reaching,
+        naming,
         vec!["planning/static_transition/semantic_ir.rs"],
-        "D7: the owner classification may be named in production ONLY by the \
-         module that defines it. A mention anywhere else -- above all under \
-         `lowering/` -- is an executable edge into functionized emission, which \
-         this node must not create"
+        "D7: the owner classification is NAMED in production only by the module \
+         that defines it, and that inventory changed.\n\
+         ⚠ MEASURED: which production files mention the identifier. CLAIMED: \
+         exactly that. THE GAP: a mention is not an executable edge and the \
+         absence of one is not proof there is none -- a type can be reached \
+         without being named. Inertness itself is pinned behaviorally by \
+         `correspondence_adds_no_emitted_unit_to_the_production_census`; this \
+         pin is a declaration inventory that makes a new mention VISIBLE to \
+         review, not a proof of unreachability."
     );
 
     // The allowed inventory of widened visibility in the plane. ⛔ Asserted as
@@ -4394,502 +4346,7 @@ fn the_ownership_classification_has_no_reach_into_any_emission_path() {
     );
 }
 
-/// **`RT-FNSPLIT-B2O` `D6` closure — the retained-body ROUTES are a closed
-/// inventory of named functions.** Architect finding, `evt_5984e30gv9f0k`.
-///
-/// ⛔ **The defect this closes was mine, and it was a false closure claim.** The
-/// `D6` report asserted the boundary-crossing population is "one route with a
-/// pinned consumer count" and that a tenth consumer "cannot appear without
-/// reddening the lookup-count pin". **Both were false on `97db6f0b`.**
-/// `exactly_one_plan_origin_to_expression_lookup_exists` pins the identifier
-/// `source_occurrence` — its definition plus its single call inside
-/// `retained_body_occurrence`. It says **nothing** about who calls
-/// *`retained_body_occurrence`*.
-///
-/// ⭐ **And a COUNT cannot close it, which is why this pin is an inventory.**
-/// Introduce a delegating wrapper —
-/// `fn alternate(&self, o) { self.retained_body_occurrence(o) }` — and route one
-/// existing call site through it. Then:
-///
-/// | pin | effect |
-/// |---|---|
-/// | the 59 `lower_expr` call count | **green** — the call site still calls it once |
-/// | the `source_occurrence` count | **green** — still one call, still inside the same helper |
-/// | a naive `retained_body_occurrence` **count** | **green** — a mention moved, it did not appear |
-///
-/// **The count is invariant under adding a wrapper.** So the property is not
-/// "how many mentions" but **"which functions can reach a retained body"**, and
-/// the mechanism has to be the *allowed inventory* of those functions — so that
-/// any new route reddens, **whatever it is named**. A pin keyed on a name pattern
-/// like `*_body_occurrence` would be spelling-scoped and evaded by calling the
-/// new helper anything else.
-#[test]
-fn the_retained_body_routes_are_a_closed_inventory_of_named_functions() {
-    // Promise class: durable invariant. The inventory is the contract; it changes
-    // only when a deliberate new route is added, and then it must be reviewed.
-    let core = include_str!("../../core.rs");
 
-    // ⛔ (a) FIRST, and deliberately BEFORE the arithmetic: the helper must stay
-    //        declared PRIVATE to module `core`.
-    //
-    // This ordering is the whole repair. Widening the helper used to be caught
-    // only as a side effect — the exact-string definition matcher stopped
-    // matching, and the failure read "the definition count moved, so
-    // `tokens - definitions` no longer counts consumers." ⭐ That message
-    // recommends the EVASION: the natural repair is to make the matcher accept
-    // `pub(super) fn`, which silences the red and opens the cross-file route.
-    // A pin whose failure message recruits the next maintainer into opening the
-    // hole is worse than one that says nothing.
-    assert!(
-        retained_body_helper_is_private(core),
-        "⛔ `retained_body_occurrence` is no longer declared as an unqualified \
-         private `fn` in `core.rs`.\n\n\
-         THE HAZARD: `lowering/mod.rs` carries a SECOND `impl Lowering` block. \
-         It cannot reach this helper today only because the helper is private to \
-         module `core` and `mod.rs` is `core`'s PARENT. Widening the helper makes \
-         a retained-body route in `mod.rs` legal, and such a route changes the \
-         boundary disposition.\n\n\
-         IF YOU WIDENED IT DELIBERATELY: extend `LOWERING_IMPL_SOURCES` and the \
-         inventory below so the new call site is covered. ⛔ Do NOT relax this \
-         assertion to accept the new visibility spelling -- that is the evasion, \
-         not the fix."
-    );
 
-    // (b) Definitions counted SEPARATELY from consumers, ACROSS BOTH `impl
-    //     Lowering` files, so "a definition moved" and "a consumer was added"
-    //     are different failures and neither is scoped to one file.
-    for (needle, definitions, consumers) in [
-        // 7 direct consumers + 1 delegation from `machine_body_occurrence`.
-        ("retained_body_occurrence", 1usize, 8usize),
-        // 3 wrapper consumers.
-        ("machine_body_occurrence", 1usize, 3usize),
-    ] {
-        let tokens = LOWERING_IMPL_SOURCES
-            .iter()
-            .map(|(_, source)| identifier_occurrences(source, needle))
-            .sum::<usize>();
-        let declared = LOWERING_IMPL_SOURCES
-            .iter()
-            .flat_map(|(_, source)| source.lines())
-            .filter(|line| line.trim() == format!("fn {needle}("))
-            .count();
-        assert_eq!(
-            declared, definitions,
-            "{needle}: the definition count moved across the `impl Lowering` \
-             sources, so `tokens - definitions` no longer counts consumers"
-        );
-        assert_eq!(
-            tokens - declared,
-            consumers,
-            "{needle}: the consumer population moved across the `impl Lowering` \
-             sources"
-        );
-    }
 
-    // (c) The ALLOWED INVENTORY of functions that can reach a retained body,
-    //     over EVERY `impl Lowering` source rather than `core.rs` alone.
-    //     ⛔ Asserted as the exact permitted set, not as a forbidden-name scan:
-    //     a route added under ANY name, in EITHER file, appears here and reddens.
-    assert_eq!(
-        routing_inventory("retained_body_occurrence"),
-        vec![
-            "lowering/core.rs::lower_recursor_residual_call",
-            "lowering/core.rs::lower_computational_producer_expr",
-            "lowering/core.rs::retained_body_occurrence",
-            "lowering/core.rs::machine_body_occurrence",
-            "lowering/core.rs::lower_expr",
-        ],
-        "D6: the set of functions that can reach a retained body changed. Every \
-         one is a boundary-crossing route under B2O's ownership mapping, so a \
-         new entry -- in EITHER `impl Lowering` file -- changes the call \
-         disposition and must be reviewed rather than absorbed silently"
-    );
-    assert_eq!(
-        routing_inventory("machine_body_occurrence"),
-        vec![
-            "lowering/core.rs::source_call_state",
-            "lowering/core.rs::machine_body_occurrence",
-        ],
-        "D6: the machine-body wrapper's route set changed"
-    );
 
-    // (d) The legacy single-file inventories, retained so a `core.rs`-local
-    //     regression still names `core.rs` directly.
-    assert_eq!(
-        enclosing_functions_mentioning(core, "retained_body_occurrence"),
-        vec![
-            "lower_recursor_residual_call",
-            "lower_computational_producer_expr",
-            "retained_body_occurrence",
-            "machine_body_occurrence",
-            "lower_expr",
-        ],
-        "D6: the set of functions that can reach a retained body changed. Every \
-         one of these is a boundary-crossing route under B2O's ownership \
-         mapping, so a new entry changes the call disposition and must be \
-         reviewed -- it cannot be absorbed silently"
-    );
-    assert_eq!(
-        enclosing_functions_mentioning(core, "machine_body_occurrence"),
-        vec!["source_call_state", "machine_body_occurrence"],
-        "D6: the machine-body wrapper's route set changed"
-    );
-}
-
-/// The **positive control** for the inventory pin above.
-///
-/// ⚠ Without this, the inventory is a negative check — and a negative check
-/// passes for any reason, including an enumerator that attributes every mention
-/// to the wrong function or to nothing at all. This feeds the enumerator the
-/// exact evasion the Architect described, in a form the pin was **not** written
-/// against, and requires that it be seen.
-#[test]
-fn the_routing_function_enumerator_sees_a_relocated_call() {
-    // ⭐ THE QUALIFIER DISCRIMINATOR — Architect `evt_4etegbq0xyaqq`.
-    //
-    // The prior oracle stripped a literal "pub" and then required ") ", so a
-    // legal plain `pub fn` header was not recognized and a new route declared
-    // that way was invisible while every count stayed green. This is a
-    // same-count relocation in the `pub fn` form specifically: both sources
-    // mention the needle exactly once, so the count cannot discriminate, and the
-    // inventory MUST.
-    let private_route = "\
-impl<'a> Lowering<'a> {
-    fn existing(&self) {
-        self.retained_body_occurrence(body);
-    }
-}
-";
-    let public_route = "\
-impl<'a> Lowering<'a> {
-    fn existing(&self) {}
-
-    pub fn sneaky(&self) {
-        self.retained_body_occurrence(body);
-    }
-}
-";
-    assert_eq!(
-        identifier_occurrences(private_route, "retained_body_occurrence"),
-        identifier_occurrences(public_route, "retained_body_occurrence"),
-        "the two qualifier fixtures must have EQUAL mention counts, or this pair \
-         does not isolate the qualifier form"
-    );
-    assert_eq!(
-        enclosing_functions_mentioning(private_route, "retained_body_occurrence"),
-        vec!["existing"]
-    );
-    assert_eq!(
-        enclosing_functions_mentioning(public_route, "retained_body_occurrence"),
-        vec!["sneaky"],
-        "a `pub fn` route must be attributed to itself. The prior oracle returned \
-         [\"existing\"] for BOTH of these -- a new route hidden behind a legal \
-         visibility modifier, with the 59 census, the `source_occurrence` census \
-         and the helper mention count all green"
-    );
-
-    // ⛔ Qualifier independence, not a longer spelling list. Adding `pub fn` to a
-    // list would have left every one of these open.
-    for (header, expected) in [
-        ("    fn plain(&self) {", "plain"),
-        ("    pub fn public(&self) {", "public"),
-        ("    pub(super) fn scoped(&self) {", "scoped"),
-        ("    pub(in crate::cranelift_backend) fn deep(&self) {", "deep"),
-        ("    const fn constant() -> u32 {", "constant"),
-        ("    async fn eventual(&self) {", "eventual"),
-        ("    unsafe fn raw(&self) {", "raw"),
-        ("    pub unsafe extern \"C\" fn abi(&self) {", "abi"),
-        ("    fn generic<T>(&self, t: T) {", "generic"),
-    ] {
-        assert_eq!(
-            classify_impl_level_header(header),
-            MethodHeader::Named(expected.to_string()),
-            "qualifier form {header:?} must attribute to {expected:?}"
-        );
-    }
-
-    // Indentation discipline: a nested `fn` must NOT move attribution, and a
-    // top-level `fn` is not an impl-level method.
-    assert_eq!(
-        classify_impl_level_header("        fn nested() {"),
-        MethodHeader::NotAHeader
-    );
-    assert_eq!(
-        classify_impl_level_header("fn free() {"),
-        MethodHeader::NotAHeader
-    );
-    // `fn` inside a larger identifier is not the `fn` token.
-    assert_eq!(
-        classify_impl_level_header("    fnord(&self);"),
-        MethodHeader::NotAHeader
-    );
-
-    // ⛔ FAILS CLOSED on a legal-but-unparsable impl-level `fn` token.
-    assert_eq!(
-        classify_impl_level_header("    callback: fn(u32) -> u32,"),
-        MethodHeader::Unrecognized,
-        "an impl-level `fn` token whose header cannot be parsed must fail closed, \
-         not be silently skipped"
-    );
-    assert_eq!(
-        enclosing_functions_mentioning(
-            "    callback: fn(u32) -> u32,\n    retained_body_occurrence\n",
-            "retained_body_occurrence"
-        ),
-        vec![UNRECOGNIZED_HEADER],
-        "an unparsable header must POISON the inventory so the assertion reddens"
-    );
-
-    // A delegating wrapper under a name that matches NO helper naming pattern,
-    // which is the evasion a `*_body_occurrence` scan would miss entirely.
-    let with_new_route = "\
-impl<'a> Lowering<'a> {
-    fn existing(&mut self) -> usize {
-        self.retained_body_occurrence(body)
-    }
-
-    fn sneaky(&mut self) -> usize {
-        self.retained_body_occurrence(body)
-    }
-}
-";
-    assert_eq!(
-        enclosing_functions_mentioning(with_new_route, "retained_body_occurrence"),
-        vec!["existing", "sneaky"],
-        "the enumerator must attribute a relocated call to its own enclosing fn, \
-         whatever that fn is named"
-    );
-
-    // Non-degenerate pair on a SHARED input: the count cannot discriminate what
-    // the inventory can. Both sources have the same number of mentions; only the
-    // owning-function set differs.
-    let one_route = "\
-impl<'a> Lowering<'a> {
-    fn existing(&mut self) -> usize {
-        self.retained_body_occurrence(a);
-        self.retained_body_occurrence(b)
-    }
-}
-";
-    assert_eq!(
-        identifier_occurrences(one_route, "retained_body_occurrence"),
-        identifier_occurrences(with_new_route, "retained_body_occurrence"),
-        "if the two fixtures had different mention counts this pair would not \
-         discriminate, and the count pin would have sufficed"
-    );
-    assert_ne!(
-        enclosing_functions_mentioning(one_route, "retained_body_occurrence"),
-        enclosing_functions_mentioning(with_new_route, "retained_body_occurrence"),
-        "the inventory must separate what the count cannot"
-    );
-
-    // ⛔ Undetermined FAILS rather than silently dropping: a mention outside any
-    // impl-level fn is attributed to an explicit sentinel, so a parsing gap
-    // reddens the inventory instead of shrinking it.
-    assert_eq!(
-        enclosing_functions_mentioning(
-            "const X: () = retained_body_occurrence;\n",
-            "retained_body_occurrence"
-        ),
-        vec!["<outside any impl-level fn>"],
-        "an unattributable mention must be visible, not dropped"
-    );
-
-    // The enumerator must not be fooled by prose, matching the tokenizer.
-    assert!(enclosing_functions_mentioning(
-        "    fn f() {\n        // calls retained_body_occurrence here\n    }\n",
-        "retained_body_occurrence"
-    )
-    .is_empty());
-}
-
-/// **The `impl`-shape premise the method-boundary oracle relies on, asserted
-/// against the real `core.rs` rather than claimed in a comment.**
-///
-/// ⛔ An earlier revision of `enclosing_functions_mentioning`'s doc comment said
-/// the single-`impl` / indent-4 shape was "asserted, not assumed" **when no such
-/// assertion existed** (Architect, `evt_4etegbq0xyaqq`). The synthetic fixtures
-/// exercised the parser; nothing checked that the file it is pointed at actually
-/// has the shape the parser presumes. That is this test.
-#[test]
-fn the_method_boundary_oracle_enforces_its_impl_shape_premise() {
-    // Promise class: durable invariant. Each clause is a premise the attribution
-    // depends on; if `core.rs` stops satisfying one, the oracle must redden here
-    // rather than silently misattribute.
-    let core = include_str!("../../core.rs");
-
-    // 1. Exactly ONE top-level `impl`, so indent 4 is unambiguously its methods.
-    let top_level_impls = core
-        .lines()
-        .filter(|line| line.starts_with("impl"))
-        .count();
-    assert_eq!(
-        top_level_impls, 1,
-        "attribution assumes a single top-level impl block; with two, indent-4 \
-         methods would belong to whichever came last and the inventory would be \
-         silently wrong"
-    );
-
-    // 2. NO nested `impl`, which would put unrelated methods at a deeper indent
-    //    and could reintroduce indent-4 items under a different type.
-    let nested_impls = core
-        .lines()
-        .filter(|line| line.starts_with(char::is_whitespace) && line.trim_start().starts_with("impl"))
-        .count();
-    assert_eq!(
-        nested_impls, 0,
-        "a nested impl breaks the indent-4 item-boundary premise"
-    );
-
-    // 3. ⛔ NO unparsable impl-level header. This is the fail-closed clause: if
-    //    one appears, the oracle poisons every inventory rather than skipping it,
-    //    and this names the reason directly instead of leaving a confusing
-    //    sentinel in an unrelated assertion.
-    let unparsable = core
-        .lines()
-        .filter(|line| classify_impl_level_header(line) == MethodHeader::Unrecognized)
-        .collect::<Vec<_>>();
-    assert!(
-        unparsable.is_empty(),
-        "impl-level lines carry a `fn` token this oracle cannot parse: \
-         {unparsable:?}. Extend `classify_impl_level_header` -- do NOT relax it"
-    );
-
-    // 4. Non-vacuity: the parser must actually be recognizing methods. A file it
-    //    silently found zero methods in would satisfy every clause above while
-    //    attributing every mention to the `UNATTRIBUTED` sentinel.
-    let recognized = core
-        .lines()
-        .filter(|line| matches!(classify_impl_level_header(line), MethodHeader::Named(_)))
-        .count();
-    assert!(
-        recognized > 30,
-        "the oracle recognized only {recognized} impl-level methods in core.rs, \
-         which is too few for it to be parsing the file it is pointed at"
-    );
-
-    // 5. And every routing function the inventory names is one the parser really
-    //    found -- closing the loop between the premise and the claim.
-    let names = core
-        .lines()
-        .filter_map(|line| match classify_impl_level_header(line) {
-            MethodHeader::Named(name) => Some(name),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    for route in enclosing_functions_mentioning(core, "retained_body_occurrence") {
-        assert!(
-            names.contains(&route),
-            "the inventory names {route:?}, which is not a method the parser \
-             located -- the two disagree, so one of them is wrong"
-        );
-    }
-}
-
-/// **The cross-file discriminator: a `pub(super)` widening plus a `mod.rs` route
-/// must redden FOR THE CROSS-FILE REASON, not as a count-arithmetic accident.**
-///
-/// ⛔ This is the control for the residual I found in my own pin. Before this
-/// repair the evasion *was* caught, but only because `pub(super) fn …` stopped
-/// matching an exact-string definition matcher — so the failure read *"the
-/// definition count moved"*, whose obvious repair is to accept the new spelling
-/// and thereby open the route. **Caught-for-the-wrong-reason is a latent false
-/// green**, because the message decides what the next maintainer does.
-///
-/// The live form of this mutation was run against the real tree and verified to
-/// compile: widening the helper and adding a `cross_file_route` method to
-/// `mod.rs`'s `impl Lowering` block builds with warnings only. It is asserted
-/// here synthetically so it runs on every CI pass rather than once by hand.
-#[test]
-fn a_cross_file_route_reddens_for_the_cross_file_reason() {
-    // Promise class: durable mutation proof.
-
-    // 1. The private-form predicate is what fires first, and it is the clause
-    //    that names the hazard.
-    let widened = "impl<'a> Lowering<'a> {\n    pub(super) fn retained_body_occurrence(\n        &self,\n    ) {}\n}\n";
-    let private = "impl<'a> Lowering<'a> {\n    fn retained_body_occurrence(\n        &self,\n    ) {}\n}\n";
-    assert!(
-        retained_body_helper_is_private(private),
-        "the private fixture must satisfy the predicate, or the pair below \
-         proves nothing"
-    );
-    assert!(
-        !retained_body_helper_is_private(widened),
-        "a `pub(super)` widening must be visible to the predicate that guards \
-         the cross-file route"
-    );
-
-    // 2. ⭐ Non-degeneracy: the two fixtures have the SAME mention count, so the
-    //    count arithmetic cannot tell them apart. Only the private-form clause
-    //    can, which is why it is asserted first and separately.
-    assert_eq!(
-        identifier_occurrences(private, "retained_body_occurrence"),
-        identifier_occurrences(widened, "retained_body_occurrence"),
-        "if the widening changed the mention count, this control would not \
-         isolate the visibility axis"
-    );
-
-    // 3. And once widened, a route in the OTHER `impl Lowering` file is real
-    //    code the inventory must see -- not prose, which the tokenizer strips.
-    //    ⚠ `mod.rs` mentions `retained_body_occurrence` twice TODAY, both in doc
-    //    comments; that is exactly why the inventory tokenizes rather than greps.
-    let mod_with_route = "impl<'a> Lowering<'a> {\n    fn cross_file_route(&self) {\n        self.retained_body_occurrence(o);\n    }\n}\n";
-    assert_eq!(
-        enclosing_functions_mentioning(mod_with_route, "retained_body_occurrence"),
-        vec!["cross_file_route"],
-        "a route in the second impl file must be attributed to its own method"
-    );
-    let mod_prose_only = "/// see `Lowering::retained_body_occurrence` for the selector\nimpl<'a> Lowering<'a> {\n    fn unrelated(&self) {}\n}\n";
-    assert!(
-        enclosing_functions_mentioning(mod_prose_only, "retained_body_occurrence").is_empty(),
-        "a doc-comment mention must NOT enter the inventory; mod.rs has two of \
-         them today and a grep-based oracle would report phantom routes"
-    );
-
-    // 4. The real `mod.rs` is in scope and currently contributes NO route --
-    //    asserted, so "the second file is covered" is a checked fact rather than
-    //    a claim about a constant nobody reads.
-    let mod_source = LOWERING_IMPL_SOURCES
-        .iter()
-        .find(|(file, _)| *file == "lowering/mod.rs")
-        .expect("mod.rs must be in the routing scope")
-        .1;
-    assert!(
-        enclosing_functions_mentioning(mod_source, "retained_body_occurrence").is_empty(),
-        "mod.rs has acquired a retained-body route; the inventory above must \
-         name it explicitly"
-    );
-}
-
-/// `mod.rs`'s `impl`-shape premise, which is **different** from `core.rs`'s.
-///
-/// ⛔ Do not copy `core.rs`'s single-`impl` clause here: `mod.rs` legitimately
-/// has **seven** top-level `impl` blocks and a nested `impl Drop` inside a
-/// function body. Asserting one `impl` would be a false premise that reddens on
-/// correct code. What must hold for attribution to be sound is narrower: no
-/// unparsable `impl`-level header, and the parser actually recognizing methods.
-#[test]
-fn the_method_boundary_oracle_holds_on_the_second_impl_file() {
-    // Promise class: durable invariant.
-    let mod_source = include_str!("../../mod.rs");
-
-    let unparsable = mod_source
-        .lines()
-        .filter(|line| classify_impl_level_header(line) == MethodHeader::Unrecognized)
-        .collect::<Vec<_>>();
-    assert!(
-        unparsable.is_empty(),
-        "mod.rs carries impl-level `fn` tokens this oracle cannot parse: \
-         {unparsable:?}. Extend `classify_impl_level_header` -- do NOT relax it"
-    );
-
-    let recognized = mod_source
-        .lines()
-        .filter(|line| matches!(classify_impl_level_header(line), MethodHeader::Named(_)))
-        .count();
-    assert!(
-        recognized > 30,
-        "the oracle recognized only {recognized} impl-level methods in mod.rs, \
-         which is too few for it to be parsing the file it is pointed at"
-    );
-}
