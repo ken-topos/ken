@@ -34,12 +34,61 @@
 > ✅ **ADVERSARY TRIAGE DONE. ✅ `B2F` FRAME WRITTEN AND `ready`. ✅ `B2B`
 > RE-DERIVED.** All three committed on `steward/work` (`8ce48a64`, `208989fd`).
 >
-> ## ⛔⛔ LIVE STATE — `B2O` RESPIN LOOP STOPPED AT FOLD 5, **ARCHITECT RULED,
-> ## RE-SLICE LANDED, FRAME RESPUN. RUNTIME IS KICKED ON THE RESPIN.**
+> ## ⛔⛔ LIVE STATE — 2026-07-25 T17:05Z. `B2O` RESPIN IS **IN ITS SECOND REVIEW
+> ## FOLD**: QA blocked, I ruled, the ring is folding. **NOTHING IS OWED BY ME.**
 >
-> **`origin/main` = `72da8b8f`** — #957 (fold-5 record + DS-1 status), #958 (the
-> re-slice: `D6` ruling transcribed, obligations re-homed into `B2R`/`B2F` by ID),
-> #959 (`DOC-LIBRARY-STYLE-01-ANATOMY`, doc-only). All blob-verified on `main`.
+> **`origin/main` = `d78d586d`.** Landed this pass, all blob-verified: **#961**
+> (§14a fails closed + doc-ring retro harvest) · **#962** (`AC-12`'s
+> `not attempted` ruling). Earlier: #957, #958, #959 (doc-only), #960 (respin
+> route).
+>
+> ### ⇢ WHERE THE B2O LOOP ACTUALLY IS — read this before touching anything
+>
+> | | |
+> |---|---|
+> | candidate branch (**off-box**) | `wp/RT-FNSPLIT-B2O-body-ownership` = **`e8837fed`** |
+> | its base | `0e0821c1` — **two merges behind `main`, and that is FINE** |
+> | ⛔ **do NOT ask for a rebase** | base currency is **mine**; merge result built + verified **twice**, post-condition pre-predicted both times (12 files = 5 + 7, every blob on its own side) |
+> | who owes what | **implementer owes finding 2**; QA + Architect await the fresh SHA; **I owe nothing** |
+>
+> **QA blocked `e8c757f3` on three items** (`evt_11st13yy38eq4`) — all three
+> independently grounded by me, all three correct:
+>
+> 1. ⭐ **`control.rs:~3536-3540` still asserted the reachability entailment**
+>    (*"`mod.rs` cannot reach … that privacy is load-bearing"*) **while the report
+>    withdrew it.** The exact split row I flagged. ⇒ **A withdrawn claim that
+>    survives in a second carrier is not withdrawn.** ✅ folded at `e8837fed`.
+> 2. **Eight `AC-12` rows recorded `not attempted`** — the fork QA routed to me.
+>    **I ruled AC-12 stands, and published the ruling as a frame amendment
+>    (#962).** ⏳ **this is the open item.**
+> 3. **`git diff --check` failure** (blank line at EOF). ✅ folded.
+>
+> ### ★ The AC-12 ruling, in case it is re-litigated
+>
+> **`EVERY` includes pins this WP did not author.** The ring's cost objection
+> (*"touching pre-existing pins widens a subtraction WP's diff"*) is **refuted by
+> its own pre-build analysis** — a mutation proof is **restored byte-identically**,
+> which is exactly why `AC-10a`/`10b` coexist with `AC-11`'s empty production
+> diff. And it is load-bearing *here*: three source-text pins survive removal
+> **because I ruled them sound by a discriminator I wrote** — ⛔ **a ruling is not
+> a demonstration**, so exempting them repeats this WP's root defect inside the
+> criterion written to prevent it.
+>
+> **Bounded by three outcomes, which is what keeps it cheap:** pin **reddens** ⇒
+> discharged · pin stays **green** ⇒ the pin is spelling-keyed, **a FINDING to
+> report, not to fix** · evasion **cannot compile** ⇒ **the compiler enforces it,
+> the strongest outcome.** `not attempted` is none of the three.
+>
+> ### ⚠ Two live cautions
+>
+> - **`runtime-implementer` is at ctx 32%** and mid-fold. **Do not compact it
+>   until the retros seam** — its 14-pin `AC-12` enumeration would have to be
+>   re-derived. It is a **no-poll seat**: it went idle holding for the amended
+>   frame and a convo mention did **not** wake it; a `send-keys` rouse did.
+> - **`DOC-ATTEST-LIVING` is operator-HELD — ⛔ do not release, do not re-ask.**
+>   Diagnosed this pass: it is *also* not doc-only-concurrent on the merits,
+>   because `D2` changes the very CI gate the publisher polls before every merge.
+>   **The idle doc ring is INSTRUCTED, not stalled.**
 >
 > ### ✅ THE FORK IS CLOSED — Architect chose (c) + (b), rejected (a)
 >
