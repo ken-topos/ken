@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-25 13:57:36Z — from 73 issue file(s) in `docs/program/issues/`.
+2026-07-25 14:15:16Z — from 75 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -98,7 +98,9 @@ the committed file matches the generator's output.
 | `RT-FNSPLIT-B2A-S` | defunctionalize retained body selection — static-origin tag plus one closed consumer, replacing cloned-RuntimeExpr identity | merged | runtime | M | none | 944 |
 | `RT-FNSPLIT-B2A` | RT-NATIVE-FNSPLIT Boundary B2a — make the semantic plane load-bearing for emission (behaviour-preserving port) | draft | runtime | L | none | — |
 | `RT-FNSPLIT-B2B` | RT-NATIVE-FNSPLIT Boundary B2b — full emission census, finite differences, and the explicit growth verdict | draft | runtime | M | none | — |
-| `RT-FNSPLIT-B2F` | functionization and authority switch — per-static-origin Cranelift target functions, atomic with switch-over, equivalence evidence, and old-path removal | active | runtime | L | none | — |
+| `RT-FNSPLIT-B2F` | functionization and authority switch — per-static-origin Cranelift target functions, atomic with switch-over, equivalence evidence, and old-path removal | draft | runtime | L | none | — |
+| `RT-FNSPLIT-B2O` | static body ownership — a total, validated occurrence → PredeclaredFunction mapping in the semantic plane, inert | draft | runtime | M | none | — |
+| `RT-FNSPLIT-B2R` | representation and call-ABI contract — a stable executable contract for every value that crosses a generated-function boundary, inert | draft | runtime | L | none | — |
 | `RT-NATIVE-FNSPLIT` | Native backend: bound per-function lowering growth to O(n) — helper identity is a variable-width whole-configuration key (orig. single-Function VReg::MAX, since fixed) | active | runtime | TBD | none | — |
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
 | `RT-PLANNER-ATTRIB-K` | Boundary A planner: fixed K is a design invariant — move the K-exceeded rejection off the capacity channel | merged | runtime | XS | none | https://github.com/ken-topos/ken/pull/935 |
@@ -158,7 +160,10 @@ is itself not yet `merged`/`closed`:
 - `PX8` blocked by `PX8-WROTE-ABS` (status: draft)
 - `PX9` blocked by `PX8` (status: draft)
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
-- `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2F` (status: active)
+- `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2F` (status: draft)
+- `RT-FNSPLIT-B2F` blocked by `RT-FNSPLIT-B2O` (status: draft)
+- `RT-FNSPLIT-B2F` blocked by `RT-FNSPLIT-B2R` (status: draft)
+- `RT-FNSPLIT-B2R` blocked by `RT-FNSPLIT-B2O` (status: draft)
 
 ## Gate progress
 

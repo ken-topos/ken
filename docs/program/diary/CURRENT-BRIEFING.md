@@ -34,47 +34,73 @@
 > ✅ **ADVERSARY TRIAGE DONE. ✅ `B2F` FRAME WRITTEN AND `ready`. ✅ `B2B`
 > RE-DERIVED.** All three committed on `steward/work` (`8ce48a64`, `208989fd`).
 >
-> ## ⛔⛔ LIVE STATE T14:55Z — `RT-FNSPLIT-B2F` IS HELD AT HARD-STOP #9
+> ## ⛔⛔ LIVE STATE T14:35Z — #9 IS **RULED**. `B2F` RE-SLICED INTO THREE NODES.
 >
-> **`origin/main` = `3891b7aa`** (PR #946). `B2F` was framed, published, kicked
-> (`evt_70zv3m1er8ta8`), flipped `active` — and the Runtime implementer then
-> raised **#9 before writing any code** (`evt_197xpdavdyrn0`), tree clean,
-> nothing to unwind. **COUNT OF RECORD = 9.**
+> **`origin/main` = `52ded173`** (PRs #946/#947/#948). `B2F` was framed,
+> published, kicked (`evt_70zv3m1er8ta8`), flipped `active` — the Runtime
+> implementer raised **#9 before writing any code** (`evt_197xpdavdyrn0`), tree
+> clean — and the Architect has now **ruled**. **COUNT OF RECORD = 9; its pull is
+> CONSUMED; next armed pull is #12.**
 >
-> **Obstruction:** one-function-per-origin needs a **uniform runtime value
-> representation that does not exist** — `Lowered` is a compile-time
-> specialization lattice, aggregates carry host Rust data with no emitted
-> representation, signature is `(ptr) -> i64` — **and building it is not among
-> `D1`–`D8`.** Atomicity (`AC-1`, `D6`) forbids the one buildable increment
-> (functionize scalar-param origins, keep specialization for the rest), so
-> **sound-subset-with-a-guard is unavailable by construction.** Full detail and
-> both options are recorded in the frame's **HELD** block — not only in-thread.
+> ### ✅ THE RULING — `evt_842spc7t6js1`, addendum `evt_t4fykh52ncb`
+>
+> **PREREQUISITE-FIRST. Bounded coexistence REJECTED. `AC-1`/`D6` NOT amended.**
+> `RT-FNSPLIT-B2F` is **not buildable as one unit** and is back to `draft`
+> (the schema has no `blocked` spelling; the tracker renders the dependency).
+>
+> ⭐ **The advisory (`evt_531c4k52mshrn`) supplied a THIRD framing that was
+> adopted, and it is materially smaller than the option I routed:** the
+> prerequisite is **not** "build one universal boxed `Value`" — it is *a stable
+> executable representation contract for every value that crosses a
+> generated-function boundary*, satisfiable by a family of statically typed
+> per-origin layouts. ⇒ **Reading the advisory in full before framing the fork was
+> worth it; the truncated notification would have had me frame the wrong option.**
+>
+> **Coexistence was rejected on merits, not on soundness:** retaining
+> whole-configuration specialization for the aggregate complement **preserves the
+> exact super-linear authority this chain exists to remove**, and "scalar on this
+> walk" is an observation about current values, not a static theorem. The
+> authority is **path-dependent and diffused** through producer/eliminator-frame
+> machinery, so no call-site allowlist can bound it honestly.
+>
+> ### ⇢ THE RE-SLICE (mine, per the ruling's explicit grant)
+>
+> ```text
+> RT-FNSPLIT-B2O  static body ownership — total validated
+>                 occurrence -> PredeclaredFunction mapping     (INERT)  draft
+> RT-FNSPLIT-B2R  representation + call-ABI contract             (INERT)  draft
+> RT-FNSPLIT-B2F  the atomic live switch, shape unchanged        (LIVE)   draft
+> ```
+>
+> **Ownership precedes representation** — the ownership mapping *defines the cut*,
+> and the cross-cut value population cannot be enumerated before the boundary is
+> known. Both prerequisites land under the **inert-scaffold escape**: descriptors,
+> tables, constructors, validators may be production; **zero** new callable unit,
+> call edge, dispatch edge, callback, flag, or alternate entry; probes test-only;
+> both cfg configurations pin the unchanged production census. ⛔ **No
+> encoder/decoder that creates a second live body-emission authority lands early.**
 >
 > ### ⇢ NEXT ACT
 >
-> 1. ✅ **DONE — research dispatched `evt_63wjmry61vd89` BEFORE the Architect
->    rules**, as the armed #9 trigger required; research seat compacted first and
->    confirmed working. **#9's pull is CONSUMED; next armed pull is #12.**
-> 2. ⚠⚠ **THE RESEARCH ADVISORY HAS LANDED — `evt_531c4k52mshrn`, and it is
->    UNREAD IN FULL (the notification truncated). READ IT FIRST, then route to
->    @architect.** Headline from the visible portion: *"the current frame cannot
->    meet its stated all-origin contract by functionizing first and discovering
->    representation later. What must exist first is **not necessarily one
->    universal boxed `Value`**; it is a **stable, executable representation
->    contract for every value that crosses a generated-function boundary** — which
->    may be uniform, or may be a family of statically…"* ⭐ **That third
->    possibility is not either of the two options on the table**, so read it
->    before framing the fork for the Architect — it may reshape option (i) from
->    "build the object model" into "pin the boundary contract," which is a much
->    smaller prerequisite. @architect is correctly holding (`evt_49zt19yp3kmb6`)
->    and nothing is lost by reading carefully.
->    Then **route both options to @architect**: (i) a prerequisite unit for the value representation +
->    calling convention with `B2F` rebased on it, or (ii) bounded coexistence,
->    which **requires `AC-1` and `D6` amended**. ⛔ Do **not** ask the Architect
->    to rule before the advisory lands — that is how #6 got re-litigated. The
->    deciding question is prior-art: *is a permanently-bounded two-strategy
->    backend known-sound with a pin that cannot silently widen, or a known trap?*
-> 3. **Publish this batch** (frame HELD block, parent trigger line, briefing).
+> 1. **Publish this batch** — `B2O` + `B2R` issue files (new), `B2F` re-scoped to
+>    `draft`, parent closure ledger + armed-trigger line, tracker, briefing.
+> 2. **Push the implementer's #9 evidence commit off-box.** They are making **one
+>    doc-only evidence commit** on `wp/RT-FNSPLIT-B2F-functionization` and will
+>    report the SHA (leader confirmed `evt_2ab0cnr2hxtw6`). ⛔ It is uncommitted
+>    with **zero off-box copies** until I push it — mint via
+>    `.devcontainer/mint-gh-token.sh` (it **PRINTS**; command-substitute, never
+>    `source`), mask with `sed`, `unset T`, verify with `ls-remote`.
+>    ⚠ **This reverses my earlier no-commit hold** (`evt_765cfz3pmxzhw`), which was
+>    correct while the ruling could still re-slice scope and is now stale.
+> 3. **Frame `RT-FNSPLIT-B2O` shovel-ready**, then §2c gate → kick Runtime.
+>    The Architect explicitly cleared `B2O` to proceed with **no hold**; its four
+>    mechanical constraints (`C1`–`C4`) are already transcribed into `B2R`'s issue
+>    file and bind that frame, not this one.
+> 4. **Fold `D6`'s structural exhibit into the eventual `B2F` re-cut:**
+>    `lower_source_declaration_call` (`core.rs:4034-4050`) emits **no call** — it
+>    builds `call_env = args ++ captures ++ env` and continues with `expr: body`.
+>    ⭐ **That is the authority being removed, in four lines. A census is
+>    supporting evidence, never the mechanism.**
 >
 > **Steward rulings already issued at the stop, so the ring is not blocked on
 > them:** the `D5`/`D6` **narrow reading is correct** (remove inlining across the
@@ -122,9 +148,20 @@
 > ⇒ **`AC-5` now specifies the census MECHANISM (tokenized), not just the number**,
 > or the next reader re-derives 58 and loses the root again.
 >
-> ⚠ `RT-NATIVE-FNSPLIT` stays `active` — **entry 2 still open, still `B2F`'s**.
-> **No scaling claim is established.** Ring holds `wp/RT-FNSPLIT-B2F-functionization`
-> at `3891b7aa`, **0 dirty, 0 commits** — a re-slice costs nothing.
+> ⚠ `RT-NATIVE-FNSPLIT` stays `active` — **entry 2 still open, and it now takes
+> THREE nodes: `B2O` → `B2R` → `B2F`.** **No scaling claim is established.**
+>
+> ✅ **The #9 evidence is off-box.** `wp/RT-FNSPLIT-B2F-functionization` =
+> **`fbe206a7`** on origin, verified by `ls-remote` — one doc-only commit
+> (`docs/program/rt-fnsplit-b2f-hardstop-9-evidence.md`), **0 files under
+> `crates/`**, parent `3891b7aa`. Before the push it existed on **one local ref
+> with zero off-box copies**. Branch is free; implementer is home.
+>
+> ⛔ **Its base is `3891b7aa`, not `origin/main = 52ded173`, and that is FINE —
+> DO NOT merge, squash, or rebase it.** It is a droppable evidence ref, not a
+> candidate. Both Runtime seats flagged the stale base unprompted
+> (`evt_22p14q23zn077`, `evt_13gfmvc14w2rk`), which is the right instinct — the
+> stale-base hazard applies to publishing to `main`, never to a durability push.
 >
 > ### ⇢ SUPERSEDED — the publish/gate/kick sequence below is DONE
 >
