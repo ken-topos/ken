@@ -1453,11 +1453,55 @@ via the scripted publisher path (§2c). The mechanism, exactly:
    routes otherwise:
    `scripts/scripted-pr-automerge.sh --target wp/steward-<slug> --title ...`.
 5. **SWEEP only after the script or publisher confirms the merge:** `git fetch
-   origin`; verify `origin/main` with a PLAIN-TEXT grep — `git grep -c "<plain
-   phrase>" origin/main -- <file>` — and the phrase must **not** span `**bold**`
-   or `` `code` `` markers, or it false-negatives (hit twice). The repository
-   deletes remote head branches automatically; local cleanup is optional and
-   must not delete a branch before `origin/main` is verified.
+   origin`; then verify `origin/main` — **by BLOB IDENTITY, one line per
+   published file, not by a phrase grep:**
+
+   ```sh
+   for f in <every file the PR touched>; do
+     r=$(git rev-parse "origin/main:$f"); l=$(git hash-object "$f")
+     [ "$r" = "$l" ] && echo "MATCH  $f" || echo "DIFFER $f  ($r vs $l)"
+   done
+   ```
+
+   The repository deletes remote head branches automatically; local cleanup is
+   optional and must **not** delete a branch before `origin/main` is verified.
+
+   > ### ⛔ A VERIFICATION PHRASE GREP HAS TWO FALSE-NEGATIVE MODES, AND THE
+   > ### OBVIOUS ONE IS THE LESS LIKELY ONE
+   >
+   > This step used to read *"verify with a PLAIN-TEXT grep, and the phrase must
+   > not span `**bold**` or `` `code` `` markers."* That warning is real (it hit
+   > twice) but **incomplete**, and the mode it omits is the one that fires
+   > **every time**: a phrase must also not span a **LINE BREAK** — and in a
+   > corpus hard-wrapped at 80 columns, **any phrase long enough to be
+   > distinctive is long enough to wrap.** The two requirements are in direct
+   > tension: distinctive enough to prove identity ⇒ long ⇒ wrapped ⇒ unfindable.
+   >
+   > **Measured on PR #955 (2026-07-25):** four verification greps, **two came
+   > back empty on content that was byte-identical on `origin/main`.** One
+   > phrase began on the line above its match; the other spanned a wrap *and* a
+   > `**` close *and* I had mistyped a word of it. Three independent ways for the
+   > same probe to lie, on a publish that was completely correct.
+   >
+   > ⚠ **The dangerous direction is the false NEGATIVE becoming a false
+   > POSITIVE.** An empty grep says "not landed", which is *alarming* and
+   > self-correcting — you go look. But the instinct it trains is to **shorten
+   > the phrase until it matches**, and a phrase short enough to never wrap is
+   > usually short enough to appear in prose that *predates* your change. At that
+   > point the probe passes on the old content and proves nothing. ⇒ **Never
+   > weaken a probe to make it pass. Replace the instrument.**
+   >
+   > ★ Blob identity verifies the **whole artifact**, is immune to wrapping,
+   > markup, and typos alike, and cannot pass on stale content. This is step 5b's
+   > own principle applied to step 5: **prefer a post-condition on the result
+   > over a guard keyed to a mechanism** — and here the "mechanism" was a story
+   > about which characters happen to sit next to each other.
+   >
+   > ⛔ **Blob identity is necessary, not sufficient — it proves the file landed,
+   > never that the file is RIGHT.** Keep step 5b's index post-condition
+   > (rows-vs-files, both orphan directions, count predicted **before**
+   > measuring): a wholesale `git checkout <ref> -- <path>` lands a
+   > byte-identical blob and still silently drops the other branch's rows.
 
 This is COORDINATION §14 landing-integrity applied to your *own* edits: a
 "shipped" notification proves nothing; only verify-on-main does. A multi-piece
