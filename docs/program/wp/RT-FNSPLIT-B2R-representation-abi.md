@@ -133,7 +133,9 @@ discharge the prerequisite.**
 any implicit caller-environment tail. Every dynamic edge agrees on caller/callee
 layout; every recursive bundle member is forward-declared; every cross-owner
 value is representable. Failure is a **planner error before emission** — never a
-fallback to the old specializer after partial emission.
+fallback to the old specializer after partial emission. ⛔ **Each rejection class
+needs a witness that reaches its own arm — see `AC-11`.** The analogous validator
+one node down advertises twelve laws and enforces five.
 
 **D6 — the evidence report**, `docs/program/rt-fnsplit-b2r-abi-report.md`:
 predictions written **before** measurement, the pin classification of `AC-9`, and
@@ -214,6 +216,38 @@ an evasion. `B2O` produced all four kinds.
 
 **AC-10 — predictions before measurement.** Write predicted values down first,
 then measure. A count re-fit to what you observe measures nothing.
+
+**AC-11 — every rejection class `D5` advertises has a witness that reaches THAT
+arm.** `D5` names six of them. For each, assert the **exact** planner error —
+never `is_err`/`expect_err` — and record which arm actually fired. An arm with no
+witness that reaches it is **reported as such**, not counted as a law.
+
+⚠ **This is not `AC-4`'s positive control, and `AC-4` does not cover it.** `AC-4`
+proves *the checker was reached*; this proves *which arm rejected*. In the failure
+mode the input **is** constructed, the validator **does** reject, and the test
+**is** green — while an **earlier arm** returned the error and the arm you meant
+to exercise is unreachable code.
+
+⛔ **Measured, in the validator this node consumes.** `validate_function_units`
+(`semantic_ir.rs:987`) advertises **12 laws** and has **5 live detectors**. Its
+arm at `:1121` — *"scheduling entry has an incoming static body edge"* — **cannot
+fire**: the function's own first statement (`:993`) calls
+`partition_function_units`, which at `:657` rejects the identical condition as
+*"scheduling entry is also a static body target"*. It is also the **only
+quadratic check** in the validator (`Vec::contains` inside a loop over all edges,
+both operands scaling with program size), so the cost is paid on every
+`validate()` for a law that never runs. Six further arms had no witness.
+
+⇒ **Order your arms deliberately and prove each one's reachability. A
+validator's law count is a claim, not a guarantee** — and a downstream node that
+reads it as a guarantee inherits the gap silently, because every one of those
+twelve laws is *stated* and the suite is green. ⭐ `B2O`'s `AC-5` asserted the
+exact error string rather than `is_err`, and that single choice is the only
+reason any of this was measurable.
+
+⛔ **Do not repair `B2O`'s validator here.** It is out of scope for an inert
+representation node and is tracked separately. Inherit the **discipline**, not
+the diff.
 
 ## Risks
 
