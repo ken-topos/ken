@@ -90,7 +90,42 @@
 > CONSUMED?"** N3 settles it: three origin accessors, none returning an
 > expression. A tag beside a body becomes two authorities in **B2A-S**, not here.
 >
-> ### ⛔ HOLDING — CANDIDATE RE-ANCHORED TO `08633b3c`; DECISION NAMES THE OLD SHA
+> ### ⛔ HOLDING ON ONE THING: `dec_603f046v0rjqg` NEVER ACTUALLY RESOLVED
+>
+> ⛔ **RESUME ACTION: re-read `dec_603f046v0rjqg` fresh via `list_decisions`. If
+> it reads `resolved` naming exact `08633b3c` → RUN THE PUBLISHER. If it still
+> reads `proposed` → chase the resolve; do NOT publish.**
+>
+> **The Architect posted "ARCHITECT APPROVE … resolving `dec_603f046v0rjqg` on
+> cast" (`evt_30r0fp8rs7kw2`) — but the OBJECT read `status: proposed`,
+> `resolved_by: null`.** Reported at `evt_53vqysbaxhf0k`.
+> ★ **This is exactly why §14 says verify fresh from the object: had I published
+> on the message, I'd have merged on an unresolved Decision.** Approval can read
+> as complete in the channel while the object never transitioned.
+>
+> ⚠ **CORRECTION TO MY OWN EARLIER RECORD:** `dec_4z8f55g9jv1ad` is **`rejected`**
+> — the first Architect review was a **BLOCK** on `2e96f83c`. ⇒ **`08633b3c` was
+> the REMEDY for that block, not polish**, and I mischaracterized it as a wording
+> sweep at `evt_5gpcpcbb51ttc`. My mechanical verification stands (it *is*
+> comment/message-only); its **status** was the discharge of a block.
+>
+> ✅ **Both carried soundness questions answered affirmative:**
+> `OwnedSourceOccurrence` admissible (provenance-only; no origin→expression
+> lookup, no selection/dispatch authority — N3 is the pin, confirming my
+> `evt_4jexyt1nfr449` ruling); **AC-11's digests sufficient for a better reason
+> than I asked** — the probe depends only on pre-D9 plan-graph fields and the
+> planner entry point, so the base result is **independently re-derivable**
+> despite the scratch worktree being gone.
+> ✅ **AC-6 nit CLOSED, no respin** — the immediately preceding line already
+> states "A planner invariant, not a capacity limit."
+>
+> ✅ **PUBLISH-SIDE VERIFICATION DONE against exact `08633b3c`** (redo only if
+> `main` moves): merge-base `70bd2c74`; **intersection EMPTY**; `merge-tree`
+> **clean**; **`cranelift_backend.rs` untouched**; delta filtered for any changed
+> line that is neither comment nor quoted string → **empty**. `08633b3c` is on
+> `origin`. QA approved this exact SHA (`evt_52bkdg7nsqftq`), 334/334.
+>
+> ### ⚠ (superseded) re-anchor detail
 >
 > **`origin/wp/RT-FNSPLIT-B2A-C-correspondence` = `08633b3c`** (pushed by me).
 > ⚠ **`dec_4z8f55g9jv1ad` still names `2e96f83c`.** ⛔ **DO NOT PUBLISH on it** —
