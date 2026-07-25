@@ -93,7 +93,53 @@ key you write is checked against it.**
 
 ## Deliverables
 
-### D1 — emission consumes the plane
+> ### ⭐ D0 — THE ORIGIN CARRIER, MOVED HERE FROM B1R (re-slice, 2026-07-25)
+>
+> **B1R hard-stopped (#5, `evt_3sx56kzx7z9q`; Architect confirmed
+> `evt_37sc5gv2yfxr8`) because the carrier cannot be added without editing
+> `lowering/core.rs`.** That edit is licensed *here* and nowhere else, so the
+> carrier lands in the same diff as the removal of the old authority — which is
+> better than the two-step I originally framed: **one authority replaces another
+> in one reviewable change, instead of two authorities coexisting across two WPs.**
+>
+> **Retained closures, declaration bodies, source-machine work items, and
+> deferred emission records carry the fixed-width origin** for static body
+> identity, alongside the already-ruled dynamic environment/store handles.
+>
+> **Measured blast radius — nine carriers, compiler-enumerated, not grepped:**
+>
+> | file | construction (E0063) | pattern (E0027) | total |
+> |---|---|---|---|
+> | `lowering/core.rs` | 13 | 16 | **29** |
+> | `lowering/mod.rs` | 14 | 14 | **28** |
+>
+> `core.rs` **construction** sites: `1983 2009 2028 2041 2059 2283 2327 2366 2802
+> 2834 4211 4226 5626` · **pattern** sites: `265 517 532 638 2195 2346 2380 2500
+> 2783 2816 3551 3575 3691 4246 4261 4343`
+>
+> ★ **The 13 constructions are the expensive half** — a pattern absorbs a field
+> with `..`, a construction must *produce* a real origin. ✅ **`SourcePrefixTemplate`
+> (all 14 deferred-emission variants) is `mod.rs`-only, zero `core.rs` sites** — the
+> cheap end, if you want a first increment.
+>
+> ### ⚠ THREE FINDINGS THAT WERE IN NEITHER FRAME — each changes the work
+>
+> 1. **There is NO existing seam to thread an origin through.** `core.rs:35`
+>    builds the plan; **`core.rs:204` unconditionally `drop(static_transition_plan)`**;
+>    nothing between them consumes it. ⇒ `core.rs:35` is the **only** point where
+>    an origin is obtainable. "Built and dropped" is a **mechanism**, not a
+>    characterization.
+> 2. **`StaticOriginId` is `pub(super)` in `semantic_ir` and re-exported
+>    nowhere** (`semantic_ir.rs:15`). ⇒ A lowering-side carrier **requires widening
+>    a planning-internal identity out to `crate::cranelift_backend`** — a
+>    **visibility/boundary change**, not a field addition. Treat it as such and
+>    say what the new boundary is.
+> 3. ⛔ **`lowering` ALREADY has a different `origin`.** `RecursorProducerOriginId`
+>    is spelled `origin:` on records in these same families — **86 occurrences in
+>    `mod.rs`, 44 in `core.rs`.** A second `origin` on the same records is a
+>    **same-word/two-concepts trap on a chain whose entire predicate is about
+>    identity provenance.** ⇒ **Give the carrier an unambiguous name.** Do not
+>    call it `origin`.
 
 Body emission walks `static_transition_plan.semantic`. The old
 whole-configuration path is **removed, not left dormant beside the new one** —
@@ -134,6 +180,16 @@ reversible mutations, each failing at its **exact named invariant**, each
 restored **byte-identically** and verified with `git diff --quiet`. Cover at
 minimum: a mis-keyed emitted unit, a dropped source-return resume edge, a body
 emitted from the old path, and an identity that reads dynamic content.
+
+⭐ **PLUS the two carrier controls moved here from B1R with D0** — they are
+defined *on* the carrier, so they were not constructible in a plane-only slice:
+
+- **Cross-wire one retained closure body origin.**
+- **Replace a fixed-width origin carrier with a `RuntimeExpr`/pointer lookup.**
+
+⛔ **The second one is the chain's whole predicate as an executable test** — it
+asserts that recovering static identity from a runtime pointer *fails loudly*
+rather than working. If it does not redden, the carrier is not authoritative.
 
 ## Acceptance criteria
 

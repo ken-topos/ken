@@ -91,32 +91,65 @@ by shape-matching.
 The existing source walk that allocates `planned_node`/`origin` also populates
 material and child-origin mapping, in the same visit. One visit, affine material.
 
-### D3 — retained records carry the fixed-width origin
+> ### ✅ BOTH ENABLERS VERIFIED ON `5015bc71` — D1/D2 are known-possible
+>
+> Established by the ring at hard-stop #5, so you are not re-deriving them:
+>
+> 1. **Every syntax child ALREADY has an origin.** `plan_expr` recurses into each
+>    child; each child gets its own `expression_node` → planned node →
+>    `StaticOriginId(planned_node.0)`. The parent's positional children are
+>    already in hand as **locals** at each `expression_node` call site (`Let`'s
+>    `value`/`body`, `If`'s `scrutinee`/`then_entry`/`else_entry`, …). ⇒ **No
+>    pointer, hash, clone order, or activation is needed** — fixed input 1 holds
+>    constructively, not just aspirationally.
+> 2. **The existing count decomposes EXACTLY, across all 22 shapes.**
+>    `source_material_elements(expr)` == (children `plan_expr` plans) + (non-child
+>    atoms). Verified: `Let` 2 = 2+0 · `If` 3 = 3+0 · `PrimitiveCall`/`Construct`
+>    1+args = args+1 · `Record` 2·fields = fields+fields · `Project` 2 = 1+1 ·
+>    `LexicalClosure` 1+captures+params = (1+captures)+params · `Call` 1+args =
+>    (callee+args)+0 · `Value` = all atoms, 0 children.
+>
+> ⇒ ★ **Encode as atoms arena + positional child-origin range with the total
+> preserved**, so `operands.len() + child_origins.len()` equals today's
+> `operands.len()`. **The one-visit affine bound is unchanged and the census
+> affine row need not move** — and no subtree clone is required.
 
-Retained closures, declaration bodies, source-machine work items, and deferred
-emission records **carry the fixed-width origin** for static body identity,
-alongside the already-ruled dynamic environment/store handles.
+### ~~D3 — retained records carry the fixed-width origin~~ ⛔ MOVED TO B2a
 
-> ### ⚠ SCOPE BOUNDARY — the one place I have drawn a line the Architect did not
+> ## ⛔ RE-SLICED 2026-07-25 — D3 IS NO LONGER IN THIS WP. DO NOT BUILD IT.
 >
-> The Architect's point 4 says these records "do not retain a `RuntimeExpr` body
-> as a second authority," and point 5 requires an origin-driven emission seam
-> where an internal routine "must not be callable with an arbitrary
-> `RuntimeExpr`."
+> **Hard-stop #5** (`evt_3sx56kzx7z9q`) proved D3 **cannot** close without
+> editing `lowering/core.rs`, which this frame named as a stop condition. The
+> implementer measured it instead of arguing it: added one `u32` to all **nine**
+> D3 carriers, let the compiler enumerate, restored byte-identically (blob
+> `4a5efce2…` before and after, `git diff --quiet` clean).
 >
-> **I am scoping the REMOVAL of the old authority to B2a, not to B1R.** B1R
-> **adds** the origin carrier; B2a **removes** the `RuntimeExpr` body and closes
-> the seam. Rationale: the removal is what forces the 6201-line
-> `lowering/core.rs` edit, and that surface's known failure mode is an
-> unreviewable diff — it is exactly why B2 was split. Carrying both authorities
-> transitionally is the status quo (B1's plane is already built-and-dropped), so
-> this preserves behaviour and keeps each diff reviewable.
+> | file | construction (E0063) | pattern (E0027) | total |
+> |---|---|---|---|
+> | **`lowering/core.rs`** ⛔ | **13** | **16** | **29** |
+> | `lowering/mod.rs` (in scope) | 14 | 14 | 28 |
 >
-> ⇒ **B1R must make point 5 POSSIBLE. It must not build it.**
+> ★ **The 13 construction sites are the expensive half.** A pattern absorbs a
+> field with `..`; a construction must *produce* a real `StaticOriginId` — which
+> means threading plan/origin context through the source machine, i.e. exactly
+> the 6201-line surface whose failure mode is an unreviewable diff.
 >
-> ⭐ **@architect — confirm or correct this boundary at the review gate, not
-> mid-build.** It is my slice call, and if it is wrong I would rather own it
-> before code than discover it in a diff.
+> ⇒ **D3 and D5 controls 2 and 5 move to `RT-FNSPLIT-B2A`**, where the `core.rs`
+> edit is already licensed and the carrier lands in the same diff as the removal
+> of the old authority.
+>
+> ### ✅ THE BOUNDARY IS NOW MECHANICALLY CHECKABLE
+>
+> **B1R touches `crates/ken-runtime/src/cranelift_backend/planning/**` and
+> nothing else.** If your diff touches any file outside `planning/`, you are out
+> of scope — that is a grep, not a judgement call.
+>
+> ⚠ **My boundary was wrong, and the Architect's restatement was right.**
+> `evt_533hqd0c27atd` put B1R's work *"inside the existing plane"*; my D3 reached
+> into lowering-side records, and D3 is precisely the part that hits `core.rs`.
+> The implementer spotted that tension and named it. **Fourth framing defect I
+> have put in front of this ring** — and the second where the ring's measurement
+> corrected my scope rather than my intent.
 
 ### D4 — exact positional closure, validated
 
@@ -133,15 +166,20 @@ duplicate, cross-wired, or out-of-range material is **`planner_error` /
 `PlannerInvariant`** — those are compiler bugs. **Only genuine ID/range
 exhaustion is capacity.**
 
-### D5 — five negative controls, each red at a NAMED artifact
+### D5 — THREE negative controls, each red at a NAMED artifact
 
-The Architect specified these; they are not negotiable and not a menu:
+⛔ **Re-sliced 2026-07-25 — controls 2 and 5 MOVED TO B2a with D3.** They are
+defined *on D3's carrier* (control 2 cross-wires a retained closure body origin;
+control 5 replaces a fixed-width carrier with a pointer lookup), so neither is
+constructible without the carrier. **That is what made the old AC-3
+unsatisfiable, and the implementer was right to refuse to reinterpret two
+controls I had marked "specified, not a menu."**
+
+The three that are plane-side and remain **mandatory here**:
 
 1. **Swap two equal-shaped occurrence records.**
-2. **Cross-wire one retained closure body origin.**
-3. **Drop one material record.**
-4. **Duplicate an origin.**
-5. **Replace a fixed-width origin carrier with a `RuntimeExpr`/pointer lookup.**
+2. **Drop one material record.**
+3. **Duplicate an origin.**
 
 Each must fail **at its own named structural artifact**, and each must be
 restored **byte-identically** (`git diff --quiet`).
@@ -158,8 +196,12 @@ finding, not a test to adjust.**
   arena shapes and where the positional child range lives.
 - **AC-2 — all four D4 assertions present, each independently falsifiable.** ⛔ A
   single composite check discharges none of them.
-- **AC-3 — all five D5 controls reddened at their named artifacts,** each
-  restored byte-identically. Report which artifact each fired at.
+- **AC-3 — all THREE D5 controls reddened at their named artifacts,** each
+  restored byte-identically. Report which artifact each fired at. ⛔ **Controls 2
+  and 5 are NOT required here** — they moved to B2a with D3, because they are
+  defined on the carrier.
+- **AC-3a — the diff touches `planning/**` and nothing else.** State the file
+  list. This replaces the prose scope boundary with a mechanical one.
 - **AC-4 — `fixed_k` is still `8,8,8,8,8` against cap `8`;**
   `MAX_HELPERS_PER_STATIC_SOURCE` unchanged; the pairwise-equal census row
   survives.
