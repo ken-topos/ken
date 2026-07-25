@@ -2905,3 +2905,330 @@ fn self_consistent_join_site(
         answer_kind: crate::NativeJoinAnswerKindV1::Int,
     }
 }
+
+// ─── RT-FNSPLIT-B2A-C D5 — the coverage guard ─────────────────────────────
+//
+// ⭐ This is the deliverable with the longest half-life in the chain: it is what
+// stops inventory entry 3 recurring the next time `RuntimeExpr` grows a field.
+// It has TWO independent failure modes, and the first is a COMPILE error rather
+// than an assertion, which is strictly stronger:
+//
+//  1. `expression_children` below matches every `RuntimeExpr` variant with its
+//     fields spelled out and **no `..` and no `_ =>` arm**. Add a field to any
+//     variant and this stops compiling (E0027 "pattern does not mention field");
+//     add a variant and it stops compiling (E0004). A wildcard here is what
+//     would let a new expression-typed field become silently originless, so the
+//     absence of one is the mechanism, not a style preference.
+//  2. Even with the pattern updated, the guard asserts that the plane holds
+//     **exactly** the enumerated children for a planned instance of every
+//     variant — no more, no fewer — so a field that is enumerated here but not
+//     planned, or planned but not enumerated, is still red.
+//
+// ⛔ A test that merely enumerates today's variants and passes is NOT this
+// guard (AC-3). The demonstration that it reddens on an *added* field is in the
+// handoff.
+
+/// Every expression-typed field of one occurrence, **in the planner's child
+/// order** — the order of the `children` slice handed to `expression_node` /
+/// `expression_seed`, which is what the positional child-origin range is laid
+/// out against.
+///
+/// ⚠ Two variants order their children differently from their declaration:
+/// `LexicalClosure` plans **body first** (position 0) with capture *i* at
+/// `1 + i`, and `Effect` gives position 0 to `capability.value` **only when it
+/// is present**, shifting every argument by one.
+#[cfg(test)]
+fn expression_children(expr: &RuntimeExpr) -> Vec<&RuntimeExpr> {
+    match expr {
+        RuntimeExpr::CheckedJoinSite { site_id: _, body } => vec![body],
+        RuntimeExpr::CheckedSubcontinuationFrame { frame_id: _, body } => vec![body],
+        RuntimeExpr::CheckedRecursiveInvocation {
+            call_template_id: _,
+            checked_occurrence_path: _,
+            body,
+        } => vec![body],
+        RuntimeExpr::CheckedComputationalIHSlots {
+            slot_template_ids: _,
+            checked_occurrence_paths: _,
+            body,
+        } => vec![body],
+        RuntimeExpr::CheckedComputationalIHInvocation {
+            call_template_id: _,
+            checked_occurrence_path: _,
+            body,
+        } => vec![body],
+        RuntimeExpr::Value(_) => Vec::new(),
+        RuntimeExpr::Var(_) => Vec::new(),
+        RuntimeExpr::Let { value, body } => vec![value, body],
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => vec![scrutinee, then_expr, else_expr],
+        RuntimeExpr::PrimitiveCall { primitive: _, args } => args.iter().collect(),
+        RuntimeExpr::Construct {
+            constructor: _,
+            args,
+        } => args.iter().collect(),
+        RuntimeExpr::Match {
+            scrutinee,
+            cases,
+            default: _,
+        } => std::iter::once(scrutinee.as_ref())
+            .chain(cases.iter().map(|case| &case.body))
+            .collect(),
+        RuntimeExpr::ComputationalMatch {
+            scrutinee,
+            cases,
+            default: _,
+        } => std::iter::once(scrutinee.as_ref())
+            .chain(cases.iter().map(|case| &case.body))
+            .collect(),
+        RuntimeExpr::Record { fields } => fields.iter().map(|(_, value)| value).collect(),
+        RuntimeExpr::Project { record, field: _ } => vec![record],
+        RuntimeExpr::Closure {
+            captures: _,
+            params: _,
+            body,
+        } => vec![body],
+        RuntimeExpr::LexicalClosure {
+            captures,
+            params: _,
+            body,
+        } => std::iter::once(body.as_ref()).chain(captures.iter()).collect(),
+        RuntimeExpr::DeclarationRef { symbol: _ } => Vec::new(),
+        RuntimeExpr::ImportedDeclarationRef {
+            symbol: _,
+            dependency: _,
+            dependency_semantic_hash: _,
+        } => Vec::new(),
+        RuntimeExpr::Call { callee, args } => std::iter::once(callee.as_ref())
+            .chain(args.iter())
+            .collect(),
+        RuntimeExpr::Effect {
+            family: _,
+            operation: _,
+            capability,
+            args,
+        } => capability
+            .iter()
+            .map(|capability| capability.value.as_ref())
+            .chain(args.iter())
+            .collect(),
+        RuntimeExpr::Trap(_) => Vec::new(),
+    }
+}
+
+/// One planned instance of **every** `RuntimeExpr` variant, each carrying at
+/// least one expression-typed field where the variant has any, so a dropped
+/// position cannot hide behind an empty list.
+#[cfg(test)]
+fn every_variant_occurrence() -> Vec<(&'static str, RuntimeExpr)> {
+    let leaf = || RuntimeExpr::Value(RuntimeValue::Bool(true));
+    let trap = || RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "b2ac coverage guard".to_string(),
+    };
+    vec![
+        (
+            "CheckedJoinSite",
+            RuntimeExpr::CheckedJoinSite {
+                site_id: 1,
+                body: Box::new(leaf()),
+            },
+        ),
+        (
+            "CheckedSubcontinuationFrame",
+            RuntimeExpr::CheckedSubcontinuationFrame {
+                frame_id: 2,
+                body: Box::new(leaf()),
+            },
+        ),
+        (
+            "CheckedRecursiveInvocation",
+            RuntimeExpr::CheckedRecursiveInvocation {
+                call_template_id: 3,
+                checked_occurrence_path: vec![1],
+                body: Box::new(leaf()),
+            },
+        ),
+        (
+            "CheckedComputationalIHSlots",
+            RuntimeExpr::CheckedComputationalIHSlots {
+                slot_template_ids: vec![4],
+                checked_occurrence_paths: vec![vec![1]],
+                body: Box::new(leaf()),
+            },
+        ),
+        (
+            "CheckedComputationalIHInvocation",
+            RuntimeExpr::CheckedComputationalIHInvocation {
+                call_template_id: 5,
+                checked_occurrence_path: vec![1],
+                body: Box::new(leaf()),
+            },
+        ),
+        ("Value", leaf()),
+        ("Var", RuntimeExpr::Var(0)),
+        (
+            "Let",
+            RuntimeExpr::Let {
+                value: Box::new(leaf()),
+                body: Box::new(RuntimeExpr::Var(0)),
+            },
+        ),
+        (
+            "If",
+            RuntimeExpr::If {
+                scrutinee: Box::new(leaf()),
+                then_expr: Box::new(leaf()),
+                else_expr: Box::new(leaf()),
+            },
+        ),
+        (
+            "PrimitiveCall",
+            total_primitive("prim:fixture::b2ac", vec![leaf(), leaf()]),
+        ),
+        (
+            "Construct",
+            RuntimeExpr::Construct {
+                constructor: "ctor:fixture::B2AC::Pair".to_string(),
+                args: vec![leaf(), leaf()],
+            },
+        ),
+        (
+            "Match",
+            RuntimeExpr::Match {
+                scrutinee: Box::new(leaf()),
+                cases: vec![
+                    RuntimeMatchCase {
+                        constructor: "ctor:fixture::B2AC::A".to_string(),
+                        binders: 0,
+                        body: leaf(),
+                    },
+                    RuntimeMatchCase {
+                        constructor: "ctor:fixture::B2AC::B".to_string(),
+                        binders: 0,
+                        body: leaf(),
+                    },
+                ],
+                default: trap(),
+            },
+        ),
+        (
+            "ComputationalMatch",
+            RuntimeExpr::ComputationalMatch {
+                scrutinee: Box::new(leaf()),
+                cases: vec![crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::B2AC::A".to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: leaf(),
+                }],
+                default: trap(),
+            },
+        ),
+        (
+            "Record",
+            RuntimeExpr::Record {
+                fields: vec![("l".to_string(), leaf()), ("r".to_string(), leaf())],
+            },
+        ),
+        (
+            "Project",
+            RuntimeExpr::Project {
+                record: Box::new(RuntimeExpr::Record {
+                    fields: vec![("l".to_string(), leaf())],
+                }),
+                field: "l".to_string(),
+            },
+        ),
+        (
+            "Closure",
+            RuntimeExpr::Closure {
+                captures: Vec::new(),
+                params: vec!["x".to_string()],
+                body: Box::new(leaf()),
+            },
+        ),
+        (
+            "LexicalClosure",
+            RuntimeExpr::LexicalClosure {
+                captures: vec![leaf(), leaf()],
+                params: vec!["x".to_string()],
+                body: Box::new(leaf()),
+            },
+        ),
+        (
+            "DeclarationRef",
+            RuntimeExpr::DeclarationRef {
+                symbol: "decl:fixture::b2ac".to_string(),
+            },
+        ),
+        (
+            "ImportedDeclarationRef",
+            RuntimeExpr::ImportedDeclarationRef {
+                symbol: "decl:fixture::b2ac".to_string(),
+                dependency: "pkg:fixture".to_string(),
+                dependency_semantic_hash: "hash".to_string(),
+            },
+        ),
+        (
+            "Call",
+            RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Var(0)),
+                args: vec![leaf(), leaf()],
+            },
+        ),
+        (
+            "Effect (capability present)",
+            RuntimeExpr::Effect {
+                family: "Fs".to_string(),
+                operation: ken_host::HostOpV1::FsReadFile,
+                capability: Some(crate::RuntimeCapabilityUse {
+                    identity: "cap:fixture::fs".to_string(),
+                    value: Box::new(RuntimeExpr::Var(0)),
+                }),
+                args: vec![leaf()],
+            },
+        ),
+        (
+            "Effect (capability absent)",
+            RuntimeExpr::Effect {
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleWrite,
+                capability: None,
+                args: vec![leaf(), leaf()],
+            },
+        ),
+        ("Trap", RuntimeExpr::Trap(trap())),
+    ]
+}
+
+#[test]
+fn every_expression_typed_field_is_a_reachable_positional_child_origin() {
+    let mut unreachable = Vec::new();
+    for (name, occurrence) in every_variant_occurrence() {
+        let (plan, origin) = planned_root_occurrence(&occurrence);
+        let children = expression_children(&occurrence);
+
+        // Every enumerated position resolves to a real preallocated origin.
+        for position in 0..children.len() {
+            if plan.child_static_origin(origin, position).is_err() {
+                unreachable.push(format!("{name}: position {position} does not resolve"));
+            }
+        }
+        // And there is no position beyond them: the plane holds exactly the
+        // enumerated children, so an unenumerated field is red too.
+        if plan.child_static_origin(origin, children.len()).is_ok() {
+            unreachable.push(format!(
+                "{name}: the plane holds a child at position {} that no field enumerates",
+                children.len()
+            ));
+        }
+    }
+    assert!(
+        unreachable.is_empty(),
+        "every expression-typed field must be a reachable positional child origin: {unreachable:#?}"
+    );
+}
