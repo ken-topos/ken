@@ -4216,7 +4216,8 @@ impl<'a> Lowering<'a> {
     /// | `PrimitiveCall` / `Construct` | `i` = `args[i]` |
     /// | `Record` | `i` = `fields[i]`'s value |
     /// | `Project` | `0` = record |
-    /// | `Match` / `ComputationalMatch` | `0` = scrutinee, `1 + i` = `cases[i].body` |
+    /// | `Match` | `0` = scrutinee, `1 + i` = `cases[i].body` |
+    /// | `ComputationalMatch` | ⛔ `0` = scrutinee, `1 + i` = `cases[i].body` **on the occurrence's own record — which is seeded on its `SourceReturnResume` node, so a parent's child entry names the SCRUTINEE and the record is not positionally reachable. Hard-stop #8; do not assume this row works.** |
     /// | `Closure` | `0` = body |
     /// | `LexicalClosure` | ⚠ `0` = **body**, `1 + i` = `captures[i]` |
     /// | `Call` | `0` = callee, `1 + i` = `args[i]` |
@@ -4231,6 +4232,15 @@ impl<'a> Lowering<'a> {
     ///    first**, because the body is planned before the capture sequence.
     /// 2. `Effect`'s capability takes position `0` **only when present**, so the
     ///    argument base is a conditional offset rather than a constant.
+    ///
+    /// ⛔ And one variant does NOT agree, which is `RT-FNSPLIT-B2A-C`'s
+    /// hard-stop #8: `plan_expr` returns a `ComputationalMatch`'s **scrutinee**
+    /// as its entry node while seeding the occurrence's own record on the
+    /// `SourceReturnResume` node, so every parent records the scrutinee's origin
+    /// as its child and the record holding the match's children is reachable
+    /// from no positional entry. Its scrutinee is still exact — the carried
+    /// origin simply *is* the scrutinee's — but its case bodies are not
+    /// derivable, and every recovery route is one D2 forbids.
     ///
     /// ⛔ Where the two orders could ever disagree the **planner's** position
     /// wins: the plane's records are already laid out against it.
