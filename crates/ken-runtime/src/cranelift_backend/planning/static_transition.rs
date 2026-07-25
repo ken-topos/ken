@@ -5504,16 +5504,31 @@ mod tests {
             .iter()
             .map(|(class, arm)| format!("{class} => {arm}"))
             .collect::<Vec<_>>();
-        // ⭐ MEASURED, not predicted-then-fitted. Four classes reach an arm of
-        // this validator's own; **two are enforced by an EARLIER arm** and are
-        // recorded as such rather than counted as laws of their own. The arm
-        // named on each row is the one that actually returned.
+        // ⭐ MEASURED, not predicted-then-fitted. The arm named on each row is
+        // the one that actually returned. **Five of the six classes reach an arm
+        // of this validator's own; exactly ONE is enforced by an earlier arm**
+        // and is recorded as such rather than counted as a law of its own.
         //
-        // ⛔ Rows 4 and 5 are the `AC-11` failure mode caught in this node: an
-        // earlier detector subsumes the arm the class claims to exercise. The
-        // subsumed code has been DELETED (see `abi.rs`, the edge-agreement
-        // block) rather than left advertising a law that never runs -- `B2F`
-        // reads this validator as its guarantee and must count only live laws.
+        // ⚠ **Row 5 — recursive-bundle forward declaration — is the subsumed
+        // one.** Descriptors are dense and complete over the partition before any
+        // edge resolves, which *is* forward-declaration, so the dense population
+        // check sees a gap first and the class never reaches an arm of its own.
+        // It is reported as subsumed, not counted.
+        //
+        // ⭐ **Row 4 — edge-layout disagreement — reaches its OWN arm**,
+        // `"boundary signature ... transferred capture count"`, supplied by
+        // `AbiBoundarySignature` / `validate_boundary_layouts` in `abi.rs`.
+        //
+        // ⛔ **This paragraph previously said rows 4 AND 5 were subsumed and that
+        // the edge-agreement code had been deleted. That was true of an earlier
+        // revision and false of this one**, and the assertion directly below
+        // proved it false while the comment still said it. The deletion was
+        // reverted once the Architect established that the composition I cited
+        // proves target IDENTITY and never layout AGREEMENT; a real caller-side
+        // boundary check now exists. `B2F` is told to read this validator as its
+        // guarantee, so a stale count of live laws here is exactly the
+        // silently-inherited defect `AC-11` exists to prevent -- which makes a
+        // stale governing comment the same defect one layer up from the code.
         assert_eq!(
             report,
             vec![
