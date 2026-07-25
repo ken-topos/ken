@@ -63,7 +63,49 @@
 > conflation instead of call-site discipline. If the ring reports a concrete
 > obstruction, **relax it to the preference** — that promise is on the record.
 >
-> ### ⇢ THE NEXT ACT — watch, then review the fold
+> ### ✅ CANDIDATE READY — `2e96f83c`, IN QA REVIEW
+>
+> **`origin/wp/RT-FNSPLIT-B2A-C-correspondence` = `2e96f83c`** (I pushed all
+> seven commits, in three sweeps). Implementer reports `-p ken-runtime` 334/334
+> and `-p ken-interp` green; branch free, base `70bd2c74`, 0 dirty.
+> **D9 is built and closes #8**; the `&[StaticOriginId]` signature change had **no
+> obstruction**, so my raising it from preference to requirement stands — it
+> **deleted the exact line that laundered an entry into an origin**
+> (`StaticOriginId(child.0)` inside the seed).
+>
+> ⚠ **DURABILITY WINDOW, worth remembering:** freeing the branch for handoff moved
+> the implementer's worktree to `7151ae58` **off four unpushed commits** — HEAD
+> read like a reset. Nothing was lost, but recovery rested on the **reflog**, not
+> on any guarantee. ⇒ Sweep `ls-remote` BEFORE a handoff frees a branch.
+>
+> ### ✅ RULED THIS PASS — `Lowered::Closure` carrying `OwnedSourceOccurrence`
+>
+> The implementer flagged it as past the letter of D7. **I ruled it ADMISSIBLE**
+> (`evt_4jexyt1nfr449`): D7 says "need not", which is not "must not"; the
+> Architect's requirement 3 *requires* carrying the origin when an owned
+> `RuntimeExpr` is cloned; and the Architect pre-answered the two-authorities
+> objection verbatim — *"only the source term is consumed; the origin is not yet
+> a selector."*
+> ⇒ ⭐ **The discriminating question is not "is the origin present?" but "is it
+> CONSUMED?"** N3 settles it: three origin accessors, none returning an
+> expression. A tag beside a body becomes two authorities in **B2A-S**, not here.
+>
+> ### ⇢ THE NEXT ACT — QA's vote, then route the merge Decision
+>
+> ⛔ **Refuse the fold if `AC-16`'s two controls redden in the SAME place** —
+> `.occurrence`→`.entry` must redden the split test + D5 guard + the 28
+> computational tests **while topology stays GREEN**; transfer `.entry`→resume
+> must redden topology. Same place ⇒ D9 did not separate the axes, suite-green or
+> not. ⚠ `AC-11`'s scratch worktree was **removed**, so re-derivability rests on
+> the committed digests — confirm the `computational-under-let` row shows the
+> parent edging to the **scrutinee**.
+>
+> ⚠ **Frame anchor drift, mine to carry:** root builder / `define_function` are
+> now `core.rs:144`/`:216` (frame cites `:140`/`:202`). **N1 unaffected — the
+> census pins COUNTS, not lines**, which is why it was written that way.
+> ⇒ **Re-derive anchors when cutting the B2A-S and B2F frames; do not copy them.**
+>
+> ### ⇢ (superseded) earlier next-act block
 >
 > **Ring is working.** `/compact` is **queued** on the implementer (it hit
 > `ctx 60%`, over the mid-flight ceiling) and will fire when its turn ends —
