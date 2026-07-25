@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2F
 title: "functionization and authority switch — per-static-origin Cranelift target functions, atomic with switch-over, equivalence evidence, and old-path removal"
-status: draft
+status: ready
 owner: runtime
 size: L
 gate: none
@@ -11,7 +11,40 @@ github: null
 origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answering Steward Q1-Q3 on merits (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the D1/D2 half of the retired RT-FNSPLIT-B2A frame. RE-SLICED 2026-07-25 by Architect ruling evt_842spc7t6js1 on hard-stop #9 (research advisory evt_531c4k52mshrn) plus addendum evt_t4fykh52ncb: this node is NOT buildable as one unit and now depends on two inert prerequisites. Steward-filed; Steward owns the replacement frame and AC/control placement.
 ---
 
-> ## ⛔⛔ BACK TO `draft` — RULED **NOT BUILDABLE AS ONE UNIT** AT #9, 2026-07-25
+> ## ✅ `ready` — BOTH PREREQUISITES MERGED; THE FRAME IS RE-ANCHORED AT `bd24422b`
+>
+> **Steward, 2026-07-25.** The #9 re-slice is complete on `main`:
+>
+> | | landed | PR |
+> |---|---|---|
+> | `RT-FNSPLIT-B2O` — the validated `SemanticOwner` partition | `origin/main` = `e470ab65` | **#963** |
+> | `RT-FNSPLIT-B2R` — the representation and call-ABI contract | `origin/main` = `c986d0a3` | **#967** |
+>
+> **The shovel-ready frame is `docs/program/wp/RT-FNSPLIT-B2F-functionization.md`,
+> re-anchored at `origin/main` = `bd24422b`.** ⛔ **Read the frame, not the prose
+> below it in this file** — everything under *"Superseded header"* was written
+> against a base four merges stale and several of its anchors have moved.
+>
+> **What the re-anchor changed, so a reader can tell what is new:**
+>
+> - the `HELD AT HARD-STOP #9` block became a **discharged-hold** block; the
+>   "prerequisite is missing and unowned" language is gone and names `B2O`/`B2R`;
+> - the landed-surface tables were **re-measured**, including the correction that
+>   the unit seed set is `plan.entries` ∪ every `StaticBody` **target** — the
+>   frame previously said "root ∪ `ClosureBody` heads", which is wrong;
+> - `D1`–`D3` were re-cut from **construct** to **consume-and-enforce**, with the
+>   one genuinely new obligation named: **minting the artifact-static seed
+>   material**, which `B2R` declared and deliberately did not create;
+> - new **`AC-11`** (boundary-slot representability — the Adversary's `C4` finding
+>   on `abi.rs`, which `B2F` would otherwise inherit as its calling convention)
+>   and **`AC-12`** (the declared ownership modes are *obeyed*, not re-read);
+> - `AC-G0` is recorded as **answered** — 6 definitions / 8 declarations, Θ(1).
+>
+> ⚠ **Not yet released.** Run the §2c handoff gate before kicking Runtime.
+>
+> ---
+>
+> ## Historical — the #9 ruling that produced the re-slice (2026-07-25)
 >
 > **Architect ruling `evt_842spc7t6js1`, addendum `evt_t4fykh52ncb`.** The
 > implementer raised #9 **before writing any code**; the branch
@@ -104,11 +137,12 @@ origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answ
 > ## Superseded header — retained for lineage (was `ready`, 2026-07-25)
 >
 > **The frame is
-> `docs/program/wp/RT-FNSPLIT-B2F-functionization.md`.** ⚠ It is now the frame of
-> a **`draft`** node and omits the prerequisite above; it must be re-cut after
-> `B2O` and `B2R` land. This file remains the durable home of the Architect's
-> mechanism rulings (a ruling that lives only in a channel thread is not a
-> deliverable).
+> `docs/program/wp/RT-FNSPLIT-B2F-functionization.md`.** ⚠ ~~It is now the frame
+> of a **`draft`** node and omits the prerequisite above; it must be re-cut after
+> `B2O` and `B2R` land.~~ ✅ **DONE — both landed and the frame was re-cut and
+> re-anchored at `bd24422b`; see the `ready` block at the top of this file.**
+> This file remains the durable home of the Architect's mechanism rulings (a
+> ruling that lives only in a channel thread is not a deliverable).
 >
 > **The predecessor is clear:** `RT-FNSPLIT-B2A-S` merged at `origin/main` =
 > `145fe915`, tree byte-identical to the approved `82356022`. This node closes
@@ -127,20 +161,28 @@ origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answ
 >
 > 1. **The pin `B2F` breaks first is already committed** —
 >    `correspondence_adds_no_emitted_unit_to_the_production_census`
->    (`lowering/core/tests/control.rs:3336`) asserts an *exact* emitted-unit
+>    (`lowering/core/tests/control.rs:3336` → ⚠ **`:3337`** at `bd24422b`) asserts
+>    an *exact* emitted-unit
 >    census (`core.rs` 1 builder / 1 definition / 2 declarations; four other
 >    files all zero). `B2F` must **re-baseline it to a PREDICTED number, not to
 >    the observed output**, and must not weaken it — escape-clause condition (1)
 >    rests on it.
 > 2. ⭐ **The census population is narrower than "the backend."**
 >    `crates/ken-runtime/src/native_int_clif.rs` is **production** (un-gated at
->    `lib.rs:23`) and holds **5** `FunctionBuilder::new` sites with its own
->    declare/define helpers, yet is in **neither** the N1 census nor
+>    `lib.rs:23`) and holds ~~**5** `FunctionBuilder::new` sites~~ — ⛔ **that 5
+>    is a SOURCE-SITE count and was the wrong population; the emitted-unit
+>    constant is 6 definitions / 8 declarations** — with its own declare/define
+>    helpers, yet is in **neither** the N1 census nor
 >    `BACKEND_PRODUCTION_SOURCES`. The landed pins are correctly scoped and say
 >    so — **but this node owns a scaling verdict, and a verdict whose denominator
 >    silently excludes a sibling production emitter measures the wrong
->    population.** New **AC-G0** requires the denominator be named and every
->    exclusion justified.
+>    population.** **AC-G0** requires the denominator be named and every
+>    exclusion justified. ✅ **It is ANSWERED — Θ(1) per native module, the 6
+>    already pinned as `LOCAL_HELPER_COUNT`; see the frame.**
+> 3. ⚠ **`BACKEND_PRODUCTION_SOURCES` is now 13 files, not 12** — `B2R` added
+>    `planning/static_transition/abi.rs`. The five-row N1 census did **not**
+>    grow with it, so the two populations have diverged; `AC-2` now requires the
+>    census to state which files it covers and why.
 > 3. **`B2A-S`'s AC-4 pins the `origin -> expression` lookup count at exactly
 >    one.** A second consumer reddens it **correctly**; route through
 >    `retained_body_occurrence` or re-baseline explicitly.
