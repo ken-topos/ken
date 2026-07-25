@@ -3,7 +3,7 @@ id: RT-FNSPLIT-B2A-C
 title: "plan↔lowering occurrence correspondence — transport the preallocated StaticOriginId to the site where it is out of scope"
 status: active
 owner: runtime
-size: M
+size: L
 gate: none
 depends_on: [RT-FNSPLIT-B1R]
 blocks: [RT-FNSPLIT-B2A-S]
@@ -11,6 +11,19 @@ github: null
 origin: Architect ruling evt_1jdh8pn8y96z on RT-NATIVE-FNSPLIT hard-stop #7 (2026-07-25), deciding on the runtime-implementer's TOTAL + injective census evt_4tqj93ctj24z2, which the Steward gated the ruling behind (evt_3ne9d2wkee0mx, evt_3qtyhp53v5g7x). Steward-filed; Steward owns the frame, scope, and AC/control placement.
 ---
 
+> ## ⛔ AMENDED AT HARD-STOP #8 — 2026-07-25. Still `active`; ring HELD pending routing.
+>
+> **Amended in place, not re-sliced** (Steward's call — the Architect ruled the
+> mechanism at `evt_308azmr4cszd7` and explicitly left WP scope and the count to
+> me). `plan_expr` returns a *scheduling entry*, which for `ComputationalMatch`
+> is a **different node** from the one carrying the occurrence record — a
+> **category error**, not an ordinal disagreement. New **D9** (the
+> `PlannedExpr { entry, occurrence }` dual result), **D2**'s premise corrected,
+> **D3** given a second axis, **AC-11–AC-17** added, **size M → L**.
+>
+> ★ **D3's probe found the defect and D3's vocabulary mis-named it** — the tell
+> that the frame had one axis where it needed two.
+>
 > ## ✅ ACTIVE — kicked to the Runtime ring 2026-07-25 (`evt_3cka2t192dx10`)
 >
 > Full §2c gate ran: retros in from all three seats, quiescent, **both**

@@ -198,8 +198,9 @@ this line wins.** Re-read this line on every hard-stop.
 
 ```text
 RECUT CHAIN (live, from kickoff evt_2kgfmmeeh2x7w, 2026-07-24)
-hard-stop count    = 7   ← #6's PULL FIRED AND WAS CONSUMED. NEXT PULL = #9.
-                            #7 goes STRAIGHT TO THE ARCHITECT, no research gate.
+hard-stop count    = 8   ← #6's PULL FIRED AND WAS CONSUMED. NEXT PULL = #9.
+                            ⛔ #9 IS THE VERY NEXT STOP AND IT FIRES A PULL.
+                            #7 and #8 both went straight to the Architect.
   ⚠ THIS LINE READ "3" UNTIL 2026-07-25 AND WAS STALE BY TWO STOPS. Stops #4
     and #5 both happened and neither was posted here, so the authoritative
     count silently disagreed with reality in the one place designated to win
@@ -308,6 +309,36 @@ hard-stop count    = 7   ← #6's PULL FIRED AND WAS CONSUMED. NEXT PULL = #9.
        lower_expr, including via the source-machine fallback? Totality decides
        whether the correspondence is mechanical threading (its own production
        unit) or drags in static-authority scope (collapse into B2F).
+  #8 = B2A-C hard-stopped ON D3's OWN PROBE, at checkpoint 96e66c9f. Architect
+       ruled evt_308azmr4cszd7 (2026-07-25); Steward CONFIRMED #8 and ruled the
+       disposition = AMEND B2A-C IN PLACE (not a re-slice).
+       ⭐ THE FINDING IS A CATEGORY ERROR, NOT AN ORDINAL DISAGREEMENT: one
+       StaticNodeId is being made to mean two different things.
+         - plan_expr's ENTRY = the first node the transfer graph schedules;
+         - the expression's OCCURRENCE = the node on which
+           SemanticSourceSeed::expression registered that RuntimeExpr, and from
+           which its positional child-origin record is read.
+       They coincide for ordinary forms and DELIBERATELY DO NOT for
+       ComputationalMatch. Steward re-verified on exact 96e66c9f:
+         :628  let resume = push_node(TransitionKind::SourceReturnResume, ...)
+         :667  let scrutinee = self.plan_expr(scrutinee, ..., 0)?
+         :672  self.expression_seed(resume, expr, &children)?   <- occurrence
+         :673  Ok(scrutinee)                                    <- entry
+       ⇒ Passing the scrutinee entry as the parent's child origin is a category
+       error. ★ D3 FOUND IT BUT NAMED IT WRONGLY, which is the tell that the
+       frame had ONE axis where it needed TWO.
+       ⇒ Mechanism: plan_expr returns PlannedExpr { entry: StaticNodeId,
+       occurrence: StaticOriginId } with DISJOINT consumers - transfer topology
+       consumes only .entry (Boundary-A graph unchanged), source correspondence
+       consumes only .occurrence. NO new node, origin, search, or arithmetic.
+       ⇒ Classification (Architect): repairs the PRODUCER of correspondence, so
+       it is inside B2A-C / entry 3. Entries 1 and 2 stay OPEN and the Q3 atomic
+       boundary is unchanged. Architect explicitly did NOT authorize WP scope or
+       the count - "Steward owns that formal call."
+       ⇒ SIZE RAISED M -> L by the Steward, deliberately and in the open, rather
+       than letting the unit grow silently (the #7 lesson).
+       NO research pull due (count 8 < 9). ⛔ BUT #9 IS THE NEXT STOP AND FIRES
+       ONE - dispatch research BEFORE the Architect rules on it.
           Independently grounded the stop on exact 7151ae58 and confirmed it
           "correct and structural". Three findings that bind the re-slice:
           (i)  A `static_origin` carrier CAN be an independent checkpoint, but
