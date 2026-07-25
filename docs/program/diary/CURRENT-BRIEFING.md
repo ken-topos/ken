@@ -38,15 +38,26 @@ below.
 
 | | |
 |---|---|
-| branch on origin | `wp/RT-FNSPLIT-B2V-executable-value-abi` = **`ea8d9824`** |
-| base / merge-base | `aecdb001` — 10 files, `+6181/−4`, `diff --check` clean |
+| branch on origin | `wp/RT-FNSPLIT-B2V-executable-value-abi` = **`ddff2fae`** |
+| base / merge-base | `aecdb001` — 10 files, `+6339/−4`, `diff --check` clean |
 | intersection vs `fdda953f` | **empty** — ⚠ re-derive if `main` moves |
 | state | QA running a full production re-review with the complete `AC`→control map |
 
 ⛔ **DEAD, NEVER PUBLISHABLE:** `78a57d90` (`dec_58gv9rmjqy49g` rejected) and
 `657f60a0` (`dec_1wpa1y2b3g7cn` rejected). Both stay on origin as durable
-checkpoints — `ea8d9824` is a **fast-forward** over them, so nothing was
-orphaned. **Do not force-push this branch.**
+checkpoints — every candidate since has been a **fast-forward**, so `ea8d9824`
+and both rejects remain reachable. **Do not force-push this branch.**
+
+⭐ **`ddff2fae`'s increment is test-layer only, VERIFIED not taken:** all hunks
+fall in `3502–3803`, inside `mod tests` (`1976`–EOF) of
+`boundary_value_clif.rs`, and only test fns/helpers are added or removed. That
+is what lets `ea8d9824`'s production review carry. ⛔ **My first check of this
+was vacuous** — it compared against the *first* `#[cfg(test)]` at line **51**,
+a bar any change clears. The real boundary is the `mod tests` block.
+⚠ Open for QA: the increment renames
+`b2v_a_separately_compiled_consumer_distinguishes_…` to
+`…constructs_…_by_content`, dropping the phrase the Architect's finding #1
+turned on. Confirm separate compilation survived; bind it to an `AC` row.
 
 The three Architect findings `ea8d9824` folds: a handle ABI lossy to emitted
 code (spilled `Int` read as `0`; `Bytes`/`String` indistinguishable at equal
@@ -86,8 +97,27 @@ crates/ken-cli/tests/ken_fmt.rs:111 — frozen corpus is not canonical:
 `.ken.md`, **all 18 passing files have a longest `theorem` line ≤ 95 columns;
 all 4 failing files are ≥ 97.** Perfect separation, boundary 96. `theorem` is
 two characters longer than `lemma`, and every file's diff is an exact N-for-N
-line swap. ⛔ **That is a measurement, not a diagnosis** — the formatter was
-never read, and the ring owns the cause.
+line swap.
+
+⭐ **CONFIRMED from the source side (operator pointed at `kenfmt`):**
+
+```
+crates/ken-elaborator/src/layout.rs:12
+pub const CANONICAL_WIDTH: usize = 96;
+```
+
+⛔ **This is corroboration, not an echo** — the empirical boundary was derived
+from file contents *before* the formatter was opened, and the constant was read
+from source. **No shared premise.** (Contrast the scanner-reproduces-the-
+documented-count trap, where both sides used the same naive match.)
+
+⇒ **Reads as the formatter being RIGHT and the corpus being STALE**: the
+migration swapped the keyword line-for-line without re-emitting through
+`ken fmt`, so lines that fit at `lemma` no longer fit at `theorem`. Remedy is
+re-canonicalization, **which the ring must confirm by RUNNING the formatter** —
+reading a constant is not observing output. ⚠ And validate against the whole
+frozen corpus, not the four filenames in the failure message; CI stops at the
+first failure, so four is a symptom count, not a scope.
 
 ⛔ **A fresh descendant SHA needs a FRESH Decision.** The Architect's, CV's and
 spec-author's approvals were all **explicitly exact-SHA** and do not carry;
