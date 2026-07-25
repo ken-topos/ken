@@ -1,7 +1,7 @@
 ---
 id: KW-THEOREM
 title: "rename the surface keyword `lemma` to `theorem`"
-status: active
+status: merged
 owner: language
 size: M
 gate: none
@@ -268,7 +268,44 @@ PUB-VERIFY · MODELS-TIER · CI-SKIPPED-NATIVE-TESTS (steward)
 ```
 …and behind the in-flight `active` set (PX8, RT-SPLIT, DOC-W1, BUDGET-EFF).
 
-✅ **Now `ready`** — the (A)/(B) fork is ruled (`dec_5bb4zsfafgkm5`) and nothing
-else gates it. **Queue position is unchanged: LAST**, per both the operator and
-the Architect. Ready means *releasable when it reaches the front*, not *start
-now*.
+~~✅ **Now `ready`**~~ — superseded. The (A)/(B) fork was ruled
+(`dec_5bb4zsfafgkm5`); the node was released as the fleet's second lane and has
+since **merged**.
+
+## ✅ MERGED 2026-07-25 — `origin/main` = `c72be0b0`, PR #977
+
+Landed on exact **`305dc6d5`**, a corrective descendant of CI-red `963d36ac`.
+
+| | |
+|---|---|
+| Decision | `dec_74fwejgv6hda0` — `resolved`, read **off the object** |
+| authorities | Librarian PASS `evt_524fj8c43q7jg` · CV APPROVE `evt_11tsr3hhmxfbj` · Architect APPROVE `evt_6hk6m7x8xmsn4` — all **fresh exact-SHA** |
+| landed tree | **`6f7cf51c`** — identical to the tree asserted **before** publishing |
+| void | `dec_286hqjak5kjq8` and every approval on dead `963d36ac` |
+
+⭐ **The lesson this node bought, and it is the one worth keeping.** The first
+candidate passed **four independent exact-SHA reviews** and every targeted local
+run, then went **red in CI** on `ken_fmt strict_frozen_corpus_gate_is_green`.
+⛔ **This very file predicted it by name** — *couplings* item: the formatter
+keyword list *"is a canonicalization oracle that fails in CI, not in a targeted
+build."* It still happened, because the couplings section is read **once, at
+kickoff**, and nothing at candidate-assembly time re-read it. **Presence of a
+warning is not evidence it is operative.**
+
+Root cause was layout, not semantics: `layout.rs` `CANONICAL_WIDTH = 96` governs
+**declaration-signature** layout, and `theorem` is two characters longer than
+`lemma`, so exactly one signature per affected file crossed the boundary while
+the migration swapped lines without re-emitting through `ken fmt`.
+
+✅ **Operator directive (2026-07-25): `lemma` is retired from the language
+entirely; it may remain in comments and documentation.** Verified satisfied on
+landed `main` by **positive control**, not by absence: `Lexer::lex("theorem
+lemma")` yields `Token::Ident("lemma")` (an ordinary identifier, not a keyword),
+a `lemma` declaration head is rejected, the normative `31-lexical.md` /
+`32-grammar.md` have zero occurrences, and a corpus-wide source oracle permits
+prose while forbidding Ken source. ⚠ **One residue, deliberately left:**
+`provide_lemma` remains a normative **protocol enum value**
+(`25-protocol.md`, `SuggestedAction::ProvideLemma`) — an API token, not a
+language construct; the mathematical concept *lemma* is not retired.
+
+**Retros owed:** language ring, doc ring, spec enclave.
