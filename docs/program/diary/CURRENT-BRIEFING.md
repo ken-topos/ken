@@ -41,8 +41,29 @@
 > compaction verified on the **completion marker** for all three seats
 > (implementer reached `ctx 0%`) before the mention went out.
 >
+> **B2A-S IS IN FLIGHT AND DURABLE.** `runtime-implementer` holds
+> `wp/RT-FNSPLIT-B2A-S-selection-defunctionalization`, first checkpoint
+> `5c7eae26` ("dense occurrence table on a compile-local plan") — **I pushed it
+> to `origin`; it was on one local ref with zero off-box copies, the FOURTH
+> session running.** ⇒ **Sweep `git ls-remote origin refs/heads/wp/…` against the
+> local ref EVERY time you check on a ring.** Build seats cannot push, by design;
+> this is a Steward primitive, not an escalation. Told the ring at
+> `evt_1t5w3z9gtj177` to report the SHA and keep going.
+>
 > ### ⇢ THE NEXT ACT — WAIT, then act on whichever lands first
 >
+> 0. **⭐ THE PUBLISH IS THE ONE UNSTARTED PIECE OF MY OWN WORK.**
+>    `steward/work` is **many commits ahead** of `main` = `70bd2c74` and carries
+>    `DOC-ATTEST-LIVING`, the whole B2A/B2A-S/B2F re-slice, the B2A-S frame, and
+>    the corrected hard-stop counter. ⛔ **Before publishing:** (a) check the
+>    merge-base **INTERSECTION** (`main` moved twice on 2026-07-25, and B2A-S is
+>    live in `crates/ken-runtime/**` — my changes are `docs/program/**` so expect
+>    disjoint, but *verify*); (b) run `gen-doc-status.sh --check` on the candidate
+>    — **editing an attested issue file reddens CI**, which is exactly what cost
+>    PR #938 its first attempt. ⚠ Attested issue files are **`CAT-CAPEX.md`,
+>    `DOC-W1.md`, `DOC-W2.md`** — confirm none of my commits touched them.
+>    ⚠ I deferred this at the 33% threshold as too large to start; it is not
+>    blocked on anyone.
 > 1. **A fold or hard-stop from `runtime-leader` on B2A-S.** ⚠ **The #6 pull is
 >    CONSUMED; next pull = #9** — so a hard-stop here goes **straight to the
 >    Architect**, no research gate. Watch specifically for **D4** ("cloned
