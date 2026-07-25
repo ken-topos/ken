@@ -43,7 +43,39 @@
 > ✅ **Adversary notified** (`evt_1axyemv8kyj2y`) — code merge, §10⁻a report-only.
 > ⛔ **Never reply to or acknowledge that channel, ever.**
 >
-> ### ⇢ THE ONLY THING OWED: THREE RETROS, then flip `merged`
+> ### ✅ CLOSED — retros in 3/3, `RT-FNSPLIT-B2A-C` flipped `merged`
+>
+> leader `evt_4w03bgrftv3nz` · QA `evt_4kq3s08q5hg6v` · implementer
+> `evt_3g9vt4edd1ce4`. Tracker regenerated. **The WP is done.**
+>
+> ### ⭐⭐ THE STEWARD LESSON — my #7 census question was UNDER-SPECIFIED
+>
+> I gated the Architect's #7 ruling on **totality**. The census answered `TOTAL`
+> and was **true**. But the mechanism needed **closure under parent→child
+> reachability** — a different property. `ComputationalMatch` filed its occurrence
+> on a *different node* from the entry its parent points at, so totality held
+> while composition failed. ⇒ **#8 was predictable from the question I asked.**
+> **Rigour does not supply relevance.** When gating a ruling on a measured
+> property, write down the mechanism obligation it must discharge and check the
+> implication. Cheap probe: **compose the accessor with itself, per variant, on a
+> real instance** before threading it through N call sites.
+>
+> ⚠ **Two ring carries I should apply, not just file:**
+> (a) **a cliff failure needs the BASE's MARGIN, not just pass/fail** — base
+> cleared 2 MiB by <64 KiB, so "the WP caused it" was true *and* misleading;
+> **fixing a cliff by raising a limit SPENDS A DETECTOR — name which, and where
+> its replacement belongs** (I did: the n=3..7 harness note);
+> (b) ⛔ **never select a build artifact from an accumulating dir by name/mtime,
+> and never pipe a gate through `tail`** — it discards the evidence *and* replaces
+> the exit code. The implementer had **three** self-inflicted measurement failures
+> this session from exactly this class, each producing a confident wrong answer.
+>
+> ⚠ **Queued, not fixed** (belongs to whoever next opens the file, likely in B2F):
+> the wrapper comment says it "makes the harness match the product" when 256 MiB
+> is **32×** the product's 8 MiB; correct wording is "at least the product's
+> headroom." **Not worth respinning a merged candidate.**
+>
+> ### ⇢ (superseded) retros-owed block
 >
 > Requested at `evt_7qvmrqr3hk213`; all three seats confirmed `Working`.
 > ⛔ **A merged WP with no retro is not done** — do not flip

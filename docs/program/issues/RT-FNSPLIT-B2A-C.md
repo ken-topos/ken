@@ -1,17 +1,45 @@
 ---
 id: RT-FNSPLIT-B2A-C
 title: "plan↔lowering occurrence correspondence — transport the preallocated StaticOriginId to the site where it is out of scope"
-status: active
+status: merged
 owner: runtime
 size: L
 gate: none
 depends_on: [RT-FNSPLIT-B1R]
 blocks: [RT-FNSPLIT-B2A-S]
-github: null
+github: 940
 origin: Architect ruling evt_1jdh8pn8y96z on RT-NATIVE-FNSPLIT hard-stop #7 (2026-07-25), deciding on the runtime-implementer's TOTAL + injective census evt_4tqj93ctj24z2, which the Steward gated the ruling behind (evt_3ne9d2wkee0mx, evt_3qtyhp53v5g7x). Steward-filed; Steward owns the frame, scope, and AC/control placement.
 ---
 
-> ## ⛔ AMENDED AT HARD-STOP #8 — 2026-07-25. Still `active`; ring HELD pending routing.
+> ## ✅ MERGED — `origin/main` = `2db29abe` (PR #940), 2026-07-25. RETROS IN (3/3).
+>
+> Content-verified on the **landed tree** (a squash lands under a new SHA):
+> `struct PlannedExpr` ✅ · `occurrence: StaticOriginId` ✅ ·
+> `declaration_occurrence_origin` ✅ · **`declaration_entry_origin` = 0 hits** ·
+> seed API `children: &[StaticOriginId]` ✅ · attested `cranelift_backend.rs` OID
+> == ledger row ⇒ gate green. Adversary notified `evt_1axyemv8kyj2y`.
+> Retros: leader `evt_4w03bgrftv3nz`, QA `evt_4kq3s08q5hg6v`, implementer
+> `evt_3g9vt4edd1ce4`.
+>
+> **Closes inventory entry 3 ONLY** — the recoverability vacancy, which was the
+> *cause* of this chain's repeated defeats. ⛔ Entry 1 waits for
+> `RT-FNSPLIT-B2A-S`; entry 2 for `RT-FNSPLIT-B2F`; `RT-NATIVE-FNSPLIT` stays
+> `active`.
+>
+> ### ⭐ THE STEWARD LESSON FROM #8 — my census question was UNDER-SPECIFIED
+>
+> I gated the Architect's #7 ruling on **totality** ("every reachable occurrence
+> has exactly one origin"). The census answered `TOTAL` and was **true**. But the
+> mechanism needed **closure under parent→child reachability** — a different
+> property. `ComputationalMatch` filed its occurrence on a *different node* from
+> the entry its parent points at, so totality held while composition failed, and
+> **#8 was predictable from the question I asked.**
+> ⇒ **When gating a ruling on a measured property, write down the mechanism
+> obligation it is meant to discharge and check the implication.** Rigour does not
+> supply relevance. The cheap probe: **compose the accessor with itself, per
+> variant, on a real instance** before threading it through N call sites.
+>
+> ## ⛔ (history) AMENDED AT HARD-STOP #8 — 2026-07-25. Still `active`; ring HELD pending routing.
 >
 > **Amended in place, not re-sliced** (Steward's call — the Architect ruled the
 > mechanism at `evt_308azmr4cszd7` and explicitly left WP scope and the count to
