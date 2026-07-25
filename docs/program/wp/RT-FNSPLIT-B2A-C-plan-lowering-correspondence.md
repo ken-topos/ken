@@ -74,9 +74,17 @@ positions have different origins, and **a clone cannot distinguish them.**
 
 **D1 — thread uniformly over the WHOLE traversal.** Carry `StaticOriginId`
 through `lower_expr`, `SourceMachineState` (`mod.rs:1962`), **every**
-pending-expression frame, `SourceContinuation`, and `SourcePrefixTemplate`,
-**uniformly over direct descent and the source-machine fallback**
-(`source_call_state`, `core.rs:3542`). ⛔ **No guessed "machine-only" subset.**
+pending-expression frame, `SourceContinuation`, and the **cloneable**
+`SourcePrefixTemplate`, **uniformly over direct descent and the source-machine
+fallback** (`source_call_state`, `core.rs:3542`). ⛔ **No guessed "machine-only"
+subset.**
+
+⭐ **The delegation point is `core.rs:2078`** — `other => …lower_expr(builder,
+&other, &env)`. That fallback arm hands `lower_expr` **every form the machine's
+own 11-arm dispatcher does not handle, closures included**, which is exactly why
+a subset-based threading cannot be sound. ⚠ `SourcePrefixTemplate` being
+**cloneable** is the D4 pressure point: a clone that drops the origin
+reintroduces the vacancy silently.
 
 **D2 — derive child origins ONLY from the checked positional table + the
 source-field ordinal.** At structural descent, a child's origin comes from the
@@ -130,6 +138,12 @@ The current occurrence's origin is in scope at `RuntimeExpr::Closure`
 (`core.rs:4211`) and `::LexicalClosure` (`:4226`); the **declaration-entry**
 origin is in scope for `DeclarationClosure`. ⛔ **This unit need NOT store the
 tag in `Lowered::Closure`** — and per the negative boundary it must not *use* it.
+
+⚠ **The three sites are not symmetric, and the asymmetry is load-bearing:**
+`DeclarationClosure` is built in `lower_declaration_ref`, where the origin **is
+already reachable by symbol** — so it needs no threading, only the seeding in D6.
+The two `lower_expr` arms are the ones with nothing in scope. ⇒ Do not let the
+easy third site suggest the other two are close to done.
 
 **D8 — fold `5c7eae26`.** D1–D3 of the halted B2A-S slice (the dense
 compile-local table, its lifetime on `StaticTransitionPlan<'src>`, the
