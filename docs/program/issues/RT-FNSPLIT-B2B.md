@@ -5,16 +5,55 @@ status: draft
 owner: runtime
 size: M
 gate: none
-depends_on: [RT-FNSPLIT-B2A]
+depends_on: [RT-FNSPLIT-B2F]
 blocks: []
 github: null
 origin: recut frame docs/program/wp/RT-NATIVE-FNSPLIT-recut.md (Boundary B's metric list, unchanged); operator scaling gate evt_4btfhwqhah1ye. Split from B2 by the Steward 2026-07-25.
 ---
 
-> ## ⛔ THIS IS THE SLICE THAT CLOSES `RT-NATIVE-FNSPLIT`
+> ## ⚠ RE-DERIVED 2026-07-25 — NOT the slice that closes `RT-NATIVE-FNSPLIT`
 >
-> It answers the operator's scaling gate. **`draft` until B2a lands** — the
-> census cannot measure an emitter that is still being ported.
+> **Steward re-derivation, resolving the "re-derive or subsume" question the
+> `B2F` rulings opened. This node SURVIVES, with a narrowed purpose and a
+> corrected predecessor.**
+>
+> ⛔ **`RT-FNSPLIT-B2F` is the node that closes `RT-NATIVE-FNSPLIT`** — it closes
+> symptom-inventory entry 2, the last open entry. This node no longer does.
+>
+> ⛔ **`depends_on` corrected `RT-FNSPLIT-B2A` → `RT-FNSPLIT-B2F`.** `B2A` was
+> **retired** and re-sliced into `B2A-C` / `B2A-S` / `B2F`; a dependency on a
+> retired node would never become satisfiable.
+>
+> ### Why re-derived rather than subsumed
+>
+> The Architect ruled the **scaling verdict** onto `B2F`'s atomic boundary (old
+> `AC-8` superseded there), which appears to empty this node. It does not — the
+> two carry **different claims**, and collapsing them would weaken both:
+>
+> | node | claim | kind |
+> |---|---|---|
+> | `B2F` | *total units may be Θ(n) while each function is bounded by its own static body/transition contract* | **structural invariant**, mechanically pinned |
+> | `B2B` | the measured emission census and finite differences on the landed tree | **empirical quantity**, answering the operator's gate |
+>
+> ⇒ `B2F` proves the invariant holds; `B2B` reports what the numbers actually
+> are. **A structural assertion is not a measurement, and the operator's scaling
+> gate asked for a measurement.**
+>
+> ⚠ **This is NOT the live `ii`/`iii` split Q3 rejected.** That rejection was
+> about leaving two live production **authorities**. This node changes **no
+> production code** — it measures a tree whose authority is already single and
+> already landed. If a reviewer reads it as a re-litigation of Q3, that reading
+> is wrong and this paragraph is the answer.
+>
+> **Its original premise still holds and is why it is sequenced after, not
+> merged in:** *a census taken while the emitter is still moving measures a
+> moving target.* What changed is only which node the verdict attaches to.
+>
+> ⚠ **Re-frame owed before release** — the current frame below is written against
+> the retired `B2A` and its anchors are stale. It must also inherit `B2F`'s new
+> **AC-G0**: name the denominator, and justify excluding any production Cranelift
+> emitter (`native_int_clif.rs` is production and emits 5 functions outside the
+> backend census). **`draft` until `B2F` lands.**
 
 ## Objective
 
