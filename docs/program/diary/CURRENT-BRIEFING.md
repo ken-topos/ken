@@ -41,15 +41,29 @@
 >
 > ### ⇢ THE ONE THING GATING THE MERGE
 >
-> **`RT-FNSPLIT-B2A-S` is `active`, candidate `d99d223d`, in QA + Architect
-> re-review.** ⛔ **`dec_2kert96q644bc` is REJECTED and DEAD** (it named the earlier
-> `ee0803aa`). **A fresh Decision must name exact `d99d223d`.**
+> **`RT-FNSPLIT-B2A-S` is `active`; live candidate is `3c273a38` (fold 2), pushed
+> by me to `origin/wp/RT-FNSPLIT-B2A-S-selection`.** ⛔ **`dec_2kert96q644bc` AND
+> `dec_4fd1frngvbmh0` are BOTH REJECTED AND DEAD** (they named `ee0803aa` and
+> `d99d223d`). **A fresh Decision must name exact `3c273a38`.**
 > ⇒ **RESUME: check for that Decision. Verify with the POSITIVE test — query
 > `list_decisions(status="resolved")` and confirm the id is PRESENT with non-null
 > `resolved_by`.** ⛔ Never "absent from proposed" (that view is stale/cached), and
-> never on prose.
+> never on prose. ⚠ `list_decisions` returns ~770 KB — query it with `jq`/python,
+> never by reading it.
 >
-> **Then:** publish `d99d223d` with CI (**code change — no `--doc-only`**) →
+> ### ✅ AC-5 RULED, AC-4 CLOSED — 2026-07-25 T12:3xZ
+>
+> **I ruled the implementer's AC-5 narrowing authoritative and published the
+> corrected frame.** AC-4 closed at `3c273a38` by **tokenization** — all three
+> defeats shared **one** cause, a *line-oriented needle* (`.source_occurrence(`
+> split across lines matched nothing). ⛔ **My own first draft of that correction
+> concluded the census was unenforceable and is WITHDRAWN — it is on the record in
+> the frame.** Lesson: "three defeats ⇒ the default branch is wrong" says *stop
+> repairing the detector*; it does **not** license concluding the property is
+> unenforceable. **Ask what the failures SHARE first.**
+> ⇒ Remaining path: QA binds `3c273a38` → Architect votes → fresh Decision.
+>
+> **Then:** publish `3c273a38` with CI (**code change — no `--doc-only`**) →
 > content-verify the LANDED tree (squash ⇒ new SHA, so ancestry is not the test) →
 > ⚠ **NOTIFY THE ADVERSARY** (code merge, §10⁻a report-only: notify, then **never
 > reply, ever**) → chase all three retros → flip `RT-FNSPLIT-B2A-S` `merged`.

@@ -148,11 +148,21 @@ least the product's headroom."* ⛔ Not worth a commit of its own.
 - **AC-2 — the resolver is the SOLE consumption point.** D6's second-path control
   reddens. ⛔ A grep is not sufficient — pin it at a named artifact.
 - **AC-3 — identity is the ordinal, provably.** D6's address-perturbation control.
-- **AC-4 — the `origin -> expr` lookup count is exactly 1**, replacing B2A-C's
-  zero-count pin. State both the old and new assertion so the transition is
-  auditable.
-- **AC-5 — no collection is keyed by `.entry`**; a mutation introducing one
-  reddens.
+- **AC-4 — the `origin -> expr` lookup count is exactly 1** — ✅ **CLOSED at
+  `3c273a38` by TOKENIZATION, not by more spellings.** Stands as framed; the
+  defect was the needle, not the property. See the correction below.
+- **AC-5′ — narrowed to the three statements a mechanism can enforce, with the
+  residual recorded as a REVIEW property.** (Supersedes AC-5.)
+  1. **An entry is not nameable outside the planner** — compiler-enforced
+     (`PlannedExpr`/`StaticNodeId` carry no `pub`; re-export is `E0364`).
+  2. **Entry-keying resolves the WRONG body** — behavioural, with a
+     non-vacuity guard.
+  3. **The sanctioned selection table REFUSES re-keying onto entries** —
+     mechanical.
+  ⛔ **Residual, stated not hidden:** an independently maintained entry-keyed
+  collection *inside* the two planner files is a **review** property, not a
+  mechanical one. Inside the planner, entry-keying is the planner's own job and
+  is **not** prohibited.
 - **AC-6 — the population is stated per variant** (D5), with the declaration
   asymmetry decided and justified.
 - **AC-7 — inventory honesty: this claims entry 1 ONLY.** ⛔ Not entry 2 (waits
@@ -164,6 +174,100 @@ least the product's headroom."* ⛔ Not worth a commit of its own.
 Each mutation applied at its **natural production site**, restored
 **byte-identically**, verified with `git diff --quiet` (⚠ `--stat` always exits 0
 and is not an emptiness test).
+
+> ## ⛔ AC CORRECTION 2026-07-25 — AC-4 AND AC-5 WERE STEWARD DEFECTS
+>
+> **Authority: Steward, frame author.** The Architect blocked `d99d223d`
+> (`evt_1p11krxny4wny`) on AC-4 and AC-5 for the **third consecutive round**,
+> each time by a compile-preserving evasion, while affirming both times that
+> *the production mechanism is coherent and the fold changes no production
+> bytes*. ⭐ **Three defeats of the same two pins is not a ring failure — it is
+> the tell that the pins ask for something unenforceable.** The Architect named
+> the alternative explicitly: *"route a frame correction that narrows AC-4/AC-5
+> to properties the mechanism can enforce. Do not add spellings to the scans."*
+> This is that correction. ⚠ It is **not** a hard-stop — count of record stays
+> **8**, and the Architect's own call (*"another review fold, not #9"*) governs.
+>
+> ### ⚠ AC-4 — MY OWN FIRST DRAFT OF THIS CORRECTION WAS WRONG, AND IS WITHDRAWN
+>
+> At `12:2xZ` I drafted this correction concluding *"the census is neither
+> necessary nor sufficient ⇒ retire it."* **The implementer's fold 2
+> (`evt_2ve8wt25s24bk`), authored in parallel, falsifies that.** Recorded here
+> rather than quietly replaced, because the mistake is the instructive part.
+>
+> **The actual cause of all three AC-4 defeats was a LAYOUT-SCOPED NEEDLE.**
+> `line.contains(".source_occurrence(")` is a claim about *formatting*: the
+> Architect's mutation split the token across lines, so **no line contained the
+> string**. ⇒ ⭐ **The property was enforceable all along; the needle was
+> line-oriented.** Fold 2 replaces the mechanism with **tokenization** — strip
+> line comments, split on every non-identifier character, match **whole tokens**,
+> count the *identifier* rather than a call shape. By construction: no formatting
+> can hide a mention, `source_occurrences` is not conflated with
+> `source_occurrence`, and path-form/aliased calls are caught because *a method
+> cannot be called without naming it*. Verified reddening on **both** demonstrated
+> evasions. ⇒ **AC-4 stands as framed and is CLOSED.**
+>
+> ⛔ **The lesson against myself: I inferred "unenforceable property" from three
+> failures of one mechanism, when the mechanism had a single shared defect.**
+> "Three defeats ⇒ the default branch is wrong" correctly says *stop repairing the
+> detector* — it does **not** license concluding the property cannot be enforced.
+> **Ask what all the failures share first.** Here they shared a line boundary.
+>
+> ⚠ **Residual, NON-BLOCKING** (do not open a fourth fold for it): the exported
+> inventory pins each item only up to `(`, so an *existing* accessor changed to
+> return `SourceOccurrence<'src>` — which contains a term — keeps both the name
+> list and the `-> Result<&'src RuntimeExpr` count green. That is an undemonstrated
+> hole in a neighbouring property (AC-1/AC-2 territory, and AC-1 is closed).
+> **Record it; do not chase it.** Fold 2's stated macro-synthesis limit is
+> likewise accepted as a recorded limit.
+>
+> ### AC-5′ — RULED: adopt the implementer's narrowing. The scan was chasing a ghost
+>
+> **Ruled authoritative** (`evt_2ve8wt25s24bk`, and it is the branch I had reached
+> independently — this is corroboration, not inheritance, since we measured
+> different things). The three enforceable statements above are AC-5's discharge;
+> the in-planner residual is a **review** property.
+>
+> **Why no test can close the global negative.** ⭐ The implementer did the thing
+> the frame demands and *checked whether a mechanism could enforce it* rather than
+> assuming: a `SchedulingEntry` newtype without `Ord`/`Hash` and with a private
+> field. **It fails**, because `edge()` must read the raw ordinal
+> (`self.plan.nodes[from.0 as usize].owner`) to index the node table — so any
+> wrapper must expose the ordinal to code in **the same module as the mutation
+> site**. ⇒ **The property is enforceable exactly at module boundaries and nowhere
+> inside one module.** That is a real result, not a concession.
+>
+> **The boundary half was genuinely missing and is now pinned.** Measured: the
+> entry types carry **no `pub`**, so no consumer can *name* an entry, hence none
+> can key on one — surface **12 backend files → 2**. ⭐ **And the reduction is the
+> compiler's, not the test's:** widening the declaration reddens the pin, while
+> re-exporting the type **does not compile** — `E0364: StaticNodeId is private,
+> and cannot be re-exported`. ⚠ That is *stronger* than the export-inventory pin I
+> had drafted, which is why my version is dropped: **I proposed a test for
+> something the compiler already refuses.**
+>
+> ⚠ **And the scan could never be made sound:** `.entry(` is `BTreeMap`'s std API.
+> **Every** non-planner `.entry` hit in the whole backend is a std map call
+> (`lowering/mod.rs:1297`, `planning.rs:373/379/385/406/435/456`). Tightening the
+> needle buys false positives, not closure.
+>
+> ### ⭐ The class of MY defect, so the next frame does not repeat it
+>
+> Both surviving blocks came from **a pin claiming more than its mechanism could
+> see** — the implementer's own summary, and it is exact. My share, across this
+> chain, is one shape repeated three times: **I stated a requirement in terms of
+> the artifact I had most recently looked at.** D1 named a struct when the
+> requirement was a population; AC-4 named a *line-matchable call shape* when the
+> requirement was an identifier count; AC-5 named a global spelling class when the
+> requirement was a module boundary.
+>
+> ⇒ **Write the pin as the PROPERTY, then ask which mechanism already enforces it
+> — the compiler is a legitimate answer and often the strongest one** (`E0364`
+> here did more than any test I could have specified). ⇒ **And when a pin must be
+> narrowed, narrow it to what is enforceable AND record the residual in the
+> source next to the enforced statements**, so the next reader inherits the limit
+> instead of the overclaim. **An AC taxonomy with no cell for the honest answer
+> reads as complete.**
 
 ## ⚠ Cost and measurement discipline, learned the hard way in `B2A-C`
 
