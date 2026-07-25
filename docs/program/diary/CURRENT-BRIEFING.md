@@ -27,9 +27,13 @@
 >
 > ## ⇢ RESUME HERE FIRST — 2026-07-25 T04:30Z
 >
-> **`origin/main` = `70bd2c74`** (PR #939 open, doc-only, publisher polling
-> checks — log `$SCRATCH/publish.log`; `tail` the FILE, the pipe block-buffers) ·
-> **`origin/steward/work` = `4ca303d7`.**
+> **`origin/main` = `39714258`** — ✅ **PR #939 MERGED and content-verified**:
+> `DOC-ATTEST-LIVING`, the B2A/B2A-S/B2F re-slice, the B2A-S frame, corrected
+> counter `= 7`, `ENTRIES = 3`; ledger 51 rows; B1R intact. Doc-only ⇒ **no
+> adversary notification due** and every `crates/` anchor is unchanged, so the
+> ring's base (`70bd2c74`) is now simply an ancestor of `main`.
+> **`origin/steward/work` = `48bc2f14`** — carries the **B2A-C issue + frame**
+> and this block, none of which is on `main` yet. ⇒ **Next publish carries them.**
 >
 > ### ✅ HARD-STOP #7 RULED AND THE RE-SLICE IS DONE. COUNT OF RECORD = **7**.
 >
@@ -68,14 +72,27 @@
 >    submodules and none are attested. **The frame warns the ring explicitly** —
 >    an edit there reddens `registered_record_validation_gates_run` for reasons
 >    that look unrelated.
-> 4. ⏳ **Compactions started on all three seats**; verifying on the
->    **`Context compacted` marker** (poller `byf0ea69p`). QA ✅ confirmed;
->    implementer was mid-`Compacting`; leader's `/compact` **queued behind its
->    retro turn** — recheck it.
-> 5. ⬜ **NEXT: post the B2A-C kickoff**, confirm all three go `Working`, then
->    **flip `RT-FNSPLIT-B2A-C` to `active`** + `gen-progress.sh` (step 8 — the
->    flip is PART of the kickoff, not "later"), and `ls-remote` the WP branch on
->    the first checkpoint.
+> 4. ✅ **All three compactions verified on the `Context compacted` marker.**
+>    ⚠ The implementer's footer read `ctx 33%` *while compacting* and `ctx 0%`
+>    after — **the footer lags; the marker does not.** A `-30` capture window
+>    also raced the marker once. Capture ≥`-120` when in doubt.
+> 5. ✅ **KICKED `evt_3cka2t192dx10`**; all three confirmed `Working` — they woke
+>    on the mention directly this time, no repair round needed. **Flipped
+>    `active`**, tracker regenerated, pushed.
+>
+> ### ⇢ THE NEXT ACT — watch B2A-C; nothing is blocked on anyone else
+>
+> ⭐ **Sweep `git ls-remote origin refs/heads/wp/RT-FNSPLIT-B2A-C-correspondence`
+> against the ring's local ref EVERY time you check in.** Build seats cannot
+> push, by design; that has needed a Steward push four sessions running.
+>
+> **Watch specifically for D3** — the per-variant ordinal correspondence. If it
+> reports a planner/lowering ordinal **disagreement**, that is a finding to route
+> (planner ordinals are authoritative; renumbering the planner is forbidden), and
+> if adapting the lowering is not behaviour-preserving it is a **hard-stop → #8,
+> straight to the Architect** (next research pull is #9). ⛔ **And do not accept a
+> landing whose D5 guard merely enumerates today's variants** — AC-3 requires it
+> to redden on a NEWLY ADDED expression field.
 >
 > ⚠ **Transport failed on ALL THREE runtime seats this pass.** Bare `Enter` woke
 > neither Codex seat; both needed a **content pointer**. The Claude seat's buffer
