@@ -90,7 +90,54 @@
 > CONSUMED?"** N3 settles it: three origin accessors, none returning an
 > expression. A tag beside a body becomes two authorities in **B2A-S**, not here.
 >
-> ### ⇢ THE NEXT ACT — QA's vote, then route the merge Decision
+> ### ⛔ HOLDING THE PUBLISHER — Decision `dec_4z8f55g9jv1ad` is `proposed`
+>
+> **✅ QA APPROVED `2e96f83c`** (`evt_2sd9ftpz4tnx7`). ⛔ **DO NOT PUBLISH:** §14
+> requires the Decision **`resolved`, verified fresh from the object** — it reads
+> **`proposed`**, and it names an **Architect soundness review** as required.
+> ⛔ A `crates/` trusted-base change is **not** gated QA-only. Review requested at
+> `evt_aqz6qpn1e6v7`; Architect confirmed `Working`.
+>
+> **⇢ ON RESUME: re-read the Decision object (`list_decisions`), and publish ONLY
+> if it reads `resolved`.** Never on prose, never on a recalled status.
+>
+> ✅ **My publish-side verification is DONE and clean** (no need to redo unless
+> `main` moves): merge-base `70bd2c74`; **intersection EMPTY**; `git merge-tree`
+> **clean**; **`cranelift_backend.rs` untouched**; D9 confirmed by content
+> (`PlannedExpr`, `declaration_occurrence_origin`). Suites `-p ken-runtime`
+> **334/334**, `-p ken-interp` green. ⇒ **Publish is a doc-free CODE merge** —
+> so ⚠ **NOTIFY THE ADVERSARY after it lands** (report-only channel: notify, then
+> never reply, ever).
+>
+> ⭐ **AC-16 has TWO-SEAT corroboration with DISTINCT evidence** — QA ran its own
+> mutations and got different failure sites than the implementer:
+> `occurrence := origin_of(scrutinee.entry)` → named AC-13 (`left: []`);
+> `entry := resume` → named AC-11 topology via
+> `PlannerInvariant("closed graph contains unreachable transitions")`.
+> **Opposite axes, independently reproduced** — not agreement on an inherited
+> premise.
+>
+> ⚠ **Two open caveats I flagged to the Architect, unresolved until it votes:**
+> (a) `Lowered::Closure` carrying `OwnedSourceOccurrence` goes past D7's letter —
+> **I ruled it admissible** (`evt_4jexyt1nfr449`) and asked the Architect to
+> correct me *before* a merge if it reads differently; (b) **`AC-11`'s baseline no
+> longer exists** — its scratch worktree was removed, so re-derivability rests
+> entirely on the committed digests.
+>
+> ### ⇢ AFTER THE MERGE, in order
+>
+> 1. **Content-verify the landed `main`** (a squash lands under a NEW SHA, so
+>    ancestry of the approved commit is not the test).
+> 2. **Notify the adversary** (code merge).
+> 3. **Chase all three retros**, then flip `RT-FNSPLIT-B2A-C` → `merged`.
+> 4. **Cut the `RT-FNSPLIT-B2A-S` frame** (task 19) — ⭐ **re-derive anchors, do
+>    NOT copy them**: root builder / `define_function` moved to `core.rs:144`/
+>    `:216`. B2A-S is where a tag beside a body BECOMES two authorities, so D4's
+>    atomicity (tag as selector + remove body carrier + sole dispatcher, one diff)
+>    is now satisfiable and must stay atomic.
+> 5. ⛔ **`RT-NATIVE-FNSPLIT` stays `active`** — entries 1 and 2 remain open.
+>
+> ### ⇢ (superseded) earlier next-act block
 >
 > ⛔ **Refuse the fold if `AC-16`'s two controls redden in the SAME place** —
 > `.occurrence`→`.entry` must redden the split test + D5 guard + the 28
