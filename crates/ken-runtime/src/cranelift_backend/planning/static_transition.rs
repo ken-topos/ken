@@ -3165,4 +3165,296 @@ mod tests {
                 .id
         }
     }
+    #[cfg(test)]
+    fn b2ac_topology_fixtures() -> Vec<(&'static str, RuntimeExpr)> {
+        let leaf = || RuntimeExpr::Value(RuntimeValue::Bool(true));
+        let trap = || RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "b2ac topology".to_string(),
+        };
+        let computational = |body: RuntimeExpr| RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::B2AC::Node".to_string(),
+                args: vec![leaf()],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::B2AC::Node".to_string(),
+                argument_binders: 1,
+                recursive_positions: Vec::new(),
+                body,
+            }],
+            default: trap(),
+        };
+        vec![
+            ("leaf", leaf()),
+            (
+                "let-if",
+                RuntimeExpr::Let {
+                    value: Box::new(RuntimeExpr::If {
+                        scrutinee: Box::new(leaf()),
+                        then_expr: Box::new(leaf()),
+                        else_expr: Box::new(leaf()),
+                    }),
+                    body: Box::new(RuntimeExpr::Var(0)),
+                },
+            ),
+            (
+                "match",
+                RuntimeExpr::Match {
+                    scrutinee: Box::new(leaf()),
+                    cases: vec![RuntimeMatchCase {
+                        constructor: "ctor:fixture::B2AC::A".to_string(),
+                        binders: 0,
+                        body: leaf(),
+                    }],
+                    default: trap(),
+                },
+            ),
+            (
+                "lexical-closure-call",
+                RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::LexicalClosure {
+                        captures: vec![leaf()],
+                        params: vec!["x".to_string()],
+                        body: Box::new(RuntimeExpr::Var(0)),
+                    }),
+                    args: vec![leaf()],
+                },
+            ),
+            ("computational", computational(RuntimeExpr::Var(0))),
+            (
+                "computational-nested",
+                computational(computational(RuntimeExpr::Var(0))),
+            ),
+            (
+                "computational-under-let",
+                RuntimeExpr::Let {
+                    value: Box::new(computational(RuntimeExpr::Var(0))),
+                    body: Box::new(RuntimeExpr::Var(0)),
+                },
+            ),
+        ]
+    }
+
+    /// A canonical digest of the Boundary-A transfer graph: node transitions in
+    /// order, then every edge as `(from, to, kind)` in order.
+    #[cfg(test)]
+    fn b2ac_topology_digest(expr: &RuntimeExpr) -> String {
+        let plan = plan_static_transition_graph(expr, &BTreeMap::new()).expect("plannable");
+        let mut digest = String::new();
+        digest.push_str(&format!("nodes={} edges={}", plan.nodes.len(), plan.edges.len()));
+        for node in &plan.nodes {
+            digest.push_str(&format!("|n{}:{:?}", node.id.0, node.transition));
+        }
+        for edge in &plan.edges {
+            digest.push_str(&format!(
+                "|e{}:{}->{}:{:?}",
+                edge.id.0, edge.from.0, edge.to.0, edge.kind
+            ));
+        }
+        digest.push_str(&format!("|entries={:?}", plan.entries));
+        digest
+    }
+
+    /// **AC-11 — every transfer edge is unchanged and consumes `.entry`.**
+    ///
+    /// These digests were captured by running the identical probe against the
+    /// WP's base commit `70bd2c74` — before `PlannedExpr` existed — in a scratch
+    /// worktree, and are asserted here against the post-D9 planner. Equality is
+    /// the mechanical proof that the Boundary-A graph is topologically
+    /// identical: same nodes in the same order, same edges with the same
+    /// `(from, to, kind)`, same scheduling entries.
+    ///
+    /// ⭐ Read `computational-under-let`: the parent `Sequence` (n12) edges to
+    /// **n11**, the computational match's scrutinee, and *not* to the
+    /// `SourceReturnResume` (n6). That is D9's promise — the occurrence moved to
+    /// the resume while the schedule stayed on the scrutinee — and this row is
+    /// what would redden if a future change returned the resume as the entry.
+    #[cfg(test)]
+    const B2AC_BASE_TOPOLOGY: &[(&str, &str)] = &[
+        ("leaf", "nodes=3 edges=1|n0:Terminal|n1:TrapTerminal|n2:Evaluate|e0:2->0:Continue|entries=[StaticNodeId(2)]"),
+        ("let-if", "nodes=9 edges=8|n0:Terminal|n1:TrapTerminal|n2:Evaluate|n3:Evaluate|n4:Evaluate|n5:Branch|n6:Evaluate|n7:Evaluate|n8:Sequence|e0:2->0:Continue|e1:3->2:Continue|e2:4->2:Continue|e3:5->3:Select|e4:5->4:Reject|e5:6->5:Continue|e6:7->6:Continue|e7:8->7:Continue|entries=[StaticNodeId(8)]"),
+        ("match", "nodes=7 edges=6|n0:Terminal|n1:TrapTerminal|n2:Evaluate|n3:Evaluate|n4:CaseTest|n5:Evaluate|n6:Evaluate|e0:2->1:Trap|e1:3->0:Continue|e2:4->3:Select|e3:4->2:Reject|e4:5->4:Continue|e5:6->5:Continue|entries=[StaticNodeId(6)]"),
+        ("lexical-closure-call", "nodes=8 edges=7|n0:Terminal|n1:TrapTerminal|n2:Evaluate|n3:ClosureBody|n4:Evaluate|n5:Evaluate|n6:Evaluate|n7:Sequence|e0:2->0:Continue|e1:3->0:Continue|e2:4->3:Continue|e3:5->2:Continue|e4:6->5:Continue|e5:6->4:StaticBody|e6:7->6:Continue|entries=[StaticNodeId(7)]"),
+        ("computational", "nodes=11 edges=10|n0:Terminal|n1:TrapTerminal|n2:CompletedTail|n3:ProducerTail|n4:ProducerWrapper|n5:SourceReturnResume|n6:Evaluate|n7:Evaluate|n8:CaseTest|n9:Evaluate|n10:Sequence|e0:5->4:InvokeProducerWrapper|e1:4->3:InvokeProducerTail|e2:3->2:CompleteProducerTail|e3:2->0:Continue|e4:6->1:Trap|e5:7->5:SourceReturnOwnedResume|e6:8->7:Select|e7:8->6:Reject|e8:9->8:Continue|e9:10->9:Continue|entries=[StaticNodeId(10)]"),
+        ("computational-nested", "nodes=19 edges=19|n0:Terminal|n1:TrapTerminal|n2:CompletedTail|n3:ProducerTail|n4:ProducerWrapper|n5:SourceReturnResume|n6:Evaluate|n7:CompletedTail|n8:ProducerTail|n9:ProducerWrapper|n10:SourceReturnResume|n11:Evaluate|n12:Evaluate|n13:CaseTest|n14:Evaluate|n15:Sequence|n16:CaseTest|n17:Evaluate|n18:Sequence|e0:5->4:InvokeProducerWrapper|e1:4->3:InvokeProducerTail|e2:3->2:CompleteProducerTail|e3:2->0:Continue|e4:6->1:Trap|e5:10->9:InvokeProducerWrapper|e6:9->8:InvokeProducerTail|e7:8->7:CompleteProducerTail|e8:7->5:SourceReturnOwnedResume|e9:11->1:Trap|e10:12->10:SourceReturnOwnedResume|e11:13->12:Select|e12:13->11:Reject|e13:14->13:Continue|e14:15->14:Continue|e15:16->15:Select|e16:16->6:Reject|e17:17->16:Continue|e18:18->17:Continue|entries=[StaticNodeId(18)]"),
+        ("computational-under-let", "nodes=13 edges=12|n0:Terminal|n1:TrapTerminal|n2:Evaluate|n3:CompletedTail|n4:ProducerTail|n5:ProducerWrapper|n6:SourceReturnResume|n7:Evaluate|n8:Evaluate|n9:CaseTest|n10:Evaluate|n11:Sequence|n12:Sequence|e0:2->0:Continue|e1:6->5:InvokeProducerWrapper|e2:5->4:InvokeProducerTail|e3:4->3:CompleteProducerTail|e4:3->2:Continue|e5:7->1:Trap|e6:8->6:SourceReturnOwnedResume|e7:9->8:Select|e8:9->7:Reject|e9:10->9:Continue|e10:11->10:Continue|e11:12->11:Continue|entries=[StaticNodeId(12)]"),
+    ];
+
+    #[test]
+    fn boundary_a_topology_is_identical_to_the_pre_d9_planner() {
+        let expected: BTreeMap<&str, &str> = B2AC_BASE_TOPOLOGY.iter().copied().collect();
+        for (name, expr) in b2ac_topology_fixtures() {
+            let digest = b2ac_topology_digest(&expr);
+            let base = expected
+                .get(name)
+                .expect("every fixture has a recorded base digest");
+            assert_eq!(
+                &digest.as_str(),
+                base,
+                "AC-11: `{name}` changed the Boundary-A transfer graph. D9 must move \
+                 only which identity is RECORDED at a source position, never which \
+                 node is SCHEDULED."
+            );
+        }
+    }
+
+    /// **AC-13 — the split is exactly one variant.**
+    #[test]
+    fn computational_match_is_the_sole_entry_occurrence_split() {
+        let mut split = Vec::new();
+        for (name, expr) in b2ac_topology_fixtures() {
+            let mut planner = Planner::new().expect("planner");
+            let empty = PersistentNodeId(0);
+            let context = PlanContext {
+                environment: empty,
+                continuation: empty,
+                path: empty,
+                cleanup: empty,
+                affine: empty,
+                source_return: empty,
+            };
+            let planned = planner
+                .plan_expr(&expr, context, planner.terminal, EdgeKind::Continue, 0)
+                .expect("plannable");
+            if planned.occurrence != origin_of(planned.entry) {
+                split.push(name);
+            }
+        }
+        assert_eq!(
+            split,
+            vec!["computational", "computational-nested"],
+            "AC-13: only a `ComputationalMatch` result may split entry from \
+             occurrence, and every such result must. `computational-under-let` is \
+             a `Let` at the root, so its own result does not split."
+        );
+    }
+
+    /// **AC-14 — nested computational matches stay INJECTIVE even when several
+    /// occurrences share a scheduling entry.**
+    ///
+    /// ⭐ This is the row a shallow test omits. In `computational-nested` the
+    /// outer and inner matches are scheduled through the same chain, so a key
+    /// taken from the *entry* would look unique while naming the wrong
+    /// occurrence. The occurrences must differ, and each must resolve its own
+    /// children.
+    #[test]
+    fn nested_computational_occurrences_stay_injective_under_a_shared_entry() {
+        let (_, nested) = b2ac_topology_fixtures()
+            .into_iter()
+            .find(|(name, _)| *name == "computational-nested")
+            .expect("the nested computational fixture");
+        let plan = plan_static_transition_graph(&nested, &BTreeMap::new()).expect("plannable");
+        let outer = plan.root_static_origin().expect("root occurrence");
+        // The outer match's case body IS the inner match: child `1 + 0`.
+        let inner = plan
+            .child_static_origin(outer, 1)
+            .expect("the outer match's case body resolves");
+        assert_ne!(
+            outer, inner,
+            "AC-14: two computational occurrences must not share an origin"
+        );
+        // Each resolves its OWN children -- scrutinee at 0, case body at 1.
+        for occurrence in [outer, inner] {
+            plan.child_static_origin(occurrence, 0)
+                .expect("scrutinee position resolves");
+            plan.child_static_origin(occurrence, 1)
+                .expect("case-body position resolves");
+        }
+        // And the shared scheduling entry is genuinely shared: the plan's single
+        // root entry is a scrutinee chain node, not either occurrence.
+        let entry = *plan.entries.first().expect("a root entry");
+        assert_ne!(origin_of(entry), outer, "the entry is not the occurrence");
+    }
+
+    /// **AC-15 — a root or transparent-declaration `ComputationalMatch` body
+    /// receives the RESUME occurrence, not the scrutinee origin.**
+    #[test]
+    fn root_and_declaration_computational_bodies_take_the_resume_occurrence() {
+        let (_, computational) = b2ac_topology_fixtures()
+            .into_iter()
+            .find(|(name, _)| *name == "computational")
+            .expect("the computational fixture");
+
+        // Root: the stored occurrence is the resume seed, and the scheduling
+        // entry is the scrutinee -- so they must differ, and the occurrence must
+        // resolve its own positional children.
+        let plan = plan_static_transition_graph(&computational, &BTreeMap::new())
+            .expect("plannable");
+        let root = plan.root_static_origin().expect("root occurrence");
+        let entry = *plan.entries.first().expect("a root entry");
+        assert_ne!(
+            root,
+            origin_of(entry),
+            "AC-15: a root computational match must not take its scrutinee's origin"
+        );
+        plan.child_static_origin(root, 0)
+            .expect("the root occurrence resolves its scrutinee position");
+
+        // Transparent declaration: same discriminator, by symbol.
+        let declaration = RuntimeDeclaration {
+            symbol: "decl:fixture::b2ac".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: computational.clone(),
+            },
+            metadata: crate::RuntimeSymbolMetadata {
+                obligations: Default::default(),
+                obligation_metadata: Default::default(),
+                assumptions: Default::default(),
+                assumption_trust_metadata: Default::default(),
+                trusted_base_delta: Default::default(),
+                lowerability: None,
+                unsupported: None,
+                runtime_checks: Default::default(),
+                capabilities: Default::default(),
+                effects: Default::default(),
+            },
+        };
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::b2ac", &declaration);
+        let plan = plan_static_transition_graph(&RuntimeExpr::Var(0), &declarations)
+            .expect("plannable");
+        let occurrence = plan
+            .declaration_occurrence_origin("decl:fixture::b2ac")
+            .expect("the transparent declaration has an occurrence origin");
+        let declaration_entry = plan.entries[1];
+        assert_ne!(
+            occurrence,
+            origin_of(declaration_entry),
+            "AC-15: a declaration whose body is a computational match must not \
+             take its scrutinee's origin"
+        );
+        plan.child_static_origin(occurrence, 0)
+            .expect("the declaration occurrence resolves its scrutinee position");
+    }
+
+    /// **AC-12 — every semantic child position consumes `.occurrence`.**
+    ///
+    /// Pinned at the type rather than by auditing call sites: both seed entry
+    /// points take `&[StaticOriginId]`, and `StaticOriginId` can only be formed
+    /// by `origin_of` inside this module, so a `StaticNodeId` cannot reach a
+    /// child position at all.
+    #[test]
+    fn the_semantic_seed_api_accepts_only_occurrence_origins() {
+        let source = include_str!("static_transition.rs");
+        // ⚠ Count DECLARATION lines, not substring hits: this test's own
+        // assertion text mentions both spellings, and a substring oracle would
+        // fire on the prose that denies them.
+        let declarations = source
+            .lines()
+            .filter(|line| line.trim() == "children: &[StaticOriginId],")
+            .count();
+        assert_eq!(
+            declarations, 2,
+            "AC-12: `expression_node` and `expression_seed` must both take \
+             occurrence origins; a `&[StaticNodeId]` parameter here is the exact \
+             conflation that caused hard-stop #8"
+        );
+        assert!(
+            !source
+                .lines()
+                .any(|line| line.trim() == "children: &[StaticNodeId],"),
+            "AC-12: no semantic child list may be typed as scheduling nodes"
+        );
+    }
 }
