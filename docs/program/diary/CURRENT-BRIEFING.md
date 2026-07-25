@@ -114,8 +114,44 @@ mechanism** — that is the Architect's call, not the frame's.
 >    narrowing** — self-contradictory. Now retains the sealed no-wildcard
 >    *mechanism* plus classifications outside `AC-10`'s implicated domain.
 >
-> ⚠ **Still owed:** Architect re-read of `cfe05e37`, then a fresh QA
+> ### ⛔ BLOCKED A SECOND TIME — folded again at `8f4f0d06`
+>
+> `wp/steward-b2v-recut-3` = **`8f4f0d06`**. The whole-frame reconcile found
+> `D4`/`AC-3` classify per **variant** (static policy) while my `AC-10` classified
+> per **value** (runtime outcome). ⭐ **`Lowered::Int` proves both levels are
+> real:** `RepresentedImmediate { spill: Some(Int) }` is **one static
+> variant-level policy** — a small runtime `Int` yields an immediate word, a wide
+> one a persistent handle. ⛔ **Calling the whole `Int` population *immediate*
+> would let a proof attach handle evidence to ONE SAMPLED SPILL and never
+> establish that EVERY spill partition carries the handle obligations** — a live
+> vacuity route. Forcing the value-level `AC` to say *handle* contradicts `AC-3`.
+> **Neither level may absorb the other.** Now: variants get a static policy
+> (immediate-only / handle-only / **immediate-with-declared-handle-spill**);
+> inputs get an outcome **entailed** by it; and a handle outcome **including a
+> spill arm** must discharge class/owner/identity/lifetime.
+>
+> ⚠ **FOUR distinct defects were found in this one document by three readers**
+> (vacuous domain · unachievable oracle · RETAIN contradiction · policy/outcome).
+> ⇒ **A recut needs a review LOOP, not a single authoring pass.** Treat the next
+> one that way from the start.
+>
+> ⚠ **Still owed:** Architect re-read of `8f4f0d06`; then a fresh QA
 > `AC`→control map covering `AC-10`.
+
+### ▶ B2V candidate — `fd4e7f08` is on origin, measured not taken
+
+| claim | verified |
+|---|---|
+| base / merge-base `aecdb001` · 11 files `+7472/−4` · `diff --check` clean | ✅ |
+| intersection vs `c72be0b0` | ✅ **empty** |
+| fast-forward over blocked `ddff2fae` | ✅ — all four prior candidates stay reachable |
+
+⚠ QA records `AC-10` as **`NO CONTROL — open residual`** — correct, since the
+recut does not bind yet. ⛔ **Keep that row even while the `AC` is unbound:** an
+`AC` with zero controls is invisible to a review that examines controls, so
+*discharged* and *never asked* read identically. ⚠ **The last three residuals
+were honest, correct — and turned out to be the predicate's uncovered faces.
+A standing residual is a debt, not a disposition.**
 
 ⛔ **DEAD, NEVER PUBLISHABLE:** `78a57d90` (`dec_58gv9rmjqy49g` rejected),
 `657f60a0` (`dec_1wpa1y2b3g7cn` rejected), and now `ddff2fae`. All stay on origin
