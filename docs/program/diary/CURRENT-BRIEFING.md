@@ -25,109 +25,110 @@
 >   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
 >   the AC rather than gaming it.
 >
-> ## ⇢ RESUME HERE FIRST — 2026-07-25 T07:50Z
+> ## ⇢ RESUME HERE FIRST — 2026-07-25 T09:10Z
 >
-> **`origin/main` = `2db29abe`** · **`origin/steward/work` = see git** ·
-> `origin/wp/RT-FNSPLIT-B2A-C-correspondence` = `bb2242e8` (merged, squashed).
+> **`origin/main` = `4c5afda6`** (PR #941 merged, content-verified: B2A-C node +
+> frame, counter `= 8`, `ENTRIES = 3`, N2 correction, tripwires).
+> **`RT-FNSPLIT-B2A-C` = `merged`** at `2db29abe`, retros in 3/3, adversary
+> notified. **Entry 3 CLOSED.**
 >
-> ### ✅✅ `RT-FNSPLIT-B2A-C` IS MERGED — CI green, CONTENT-VERIFIED on `2db29abe`
+> ### ⛔⛔ ESCALATED TO THE OPERATOR — `evt_6wpxydjj299ba`. HOLDING B2A-S.
 >
-> PR #940. Verified on the **landed tree**, not the publisher's report (a squash
-> lands under a NEW SHA, so `bb2242e8`'s ancestry is not the test):
-> `struct PlannedExpr` ✅ · `occurrence: StaticOriginId` ✅ ·
-> `declaration_occurrence_origin` ✅ · ⭐ **`declaration_entry_origin` = 0 hits**
-> (the name that described the conflation is GONE from main) ·
-> seed API `children: &[StaticOriginId]` ✅ · threshold comment ✅ ·
-> ⚠ **attested `cranelift_backend.rs` OID == ledger row `8508a01c`** ⇒ gate green.
+> **The decision requested: may B2A-S be released with `runtime-leader` and
+> `runtime-qa` UNCOMPACTED, for this one kickoff?** ⛔ **I did NOT self-authorize
+> it** — §2c admits no before-work exception and was hardened by three operator
+> corrections, each starting from exactly the reasoning available here.
+> ⇒ **ON RESUME: check the channel for the operator's ruling. If none, KEEP
+> HOLDING and keep retrying `/compact`. Do not waive it yourself.**
 >
-> ✅ **Adversary notified** (`evt_1axyemv8kyj2y`) — code merge, §10⁻a report-only.
-> ⛔ **Never reply to or acknowledge that channel, ever.**
+> ⭐ **The fact that shapes the request, and I verified it rather than assuming:**
+> a liveness-only prompt to `runtime-leader` **SUCCEEDED** (`evt_1x4ggwf73b08x`,
+> self-reported `ctx ≈ 7%`). ⇒ **Normal turns work; ONLY the remote-compact task
+> is 503.** The ring is *capable of the work* and *incapable of being compacted*.
+> `runtime-implementer` (Claude harness) **is** compacted at `ctx 0%`.
 >
-> ### ✅ CLOSED — retros in 3/3, `RT-FNSPLIT-B2A-C` flipped `merged`
+> ⇒ **The rule's PURPOSE (no stale-context elaboration) appears already met while
+> its MECHANISM is unavailable** — that narrow shape is why it is an operator call
+> and not mine. My recommendation to them: **waive for this single kickoff.**
+> ⚠ **`ctx ≈ 7%` is reported as an INPUT TO THEIR DECISION, never as my licence** —
+> "they're only at N%" is the exact inversion the rule forbids.
 >
-> leader `evt_4w03bgrftv3nz` · QA `evt_4kq3s08q5hg6v` · implementer
-> `evt_3g9vt4edd1ce4`. Tracker regenerated. **The WP is done.**
+> ### ⛔ THE OUTAGE ITSELF — 4 retries over ~45 min, all 503
 >
-> ### ⭐⭐ THE STEWARD LESSON — my #7 census question was UNDER-SPECIFIED
+> ```
+> 503 Service Unavailable · chatgpt.com/backend-api/codex/responses
+> auth error code: biscuit_baker_service_me_circuit_open
+> ```
 >
-> I gated the Architect's #7 ruling on **totality**. The census answered `TOTAL`
-> and was **true**. But the mechanism needed **closure under parent→child
-> reachability** — a different property. `ComputationalMatch` filed its occurrence
-> on a *different node* from the entry its parent points at, so totality held
-> while composition failed. ⇒ **#8 was predictable from the question I asked.**
-> **Rigour does not supply relevance.** When gating a ruling on a measured
-> property, write down the mechanism obligation it must discharge and check the
-> implication. Cheap probe: **compose the accessor with itself, per variant, on a
-> real instance** before threading it through N call sites.
+> A circuit breaker is deliberate load-shedding, so retries inside the open window
+> fail by design. ⚠ **Poll for success OR the 503 — never success alone**, or a
+> poller spins forever. ⇒ **Next mixed-ring gate: compact the CODEX seats FIRST**;
+> they are the ones that can fail, and finding out after compacting the Claude seat
+> spends its fresh context on a wait of unknown length.
+> ⚠ **Do NOT reseat or downgrade a tier over a provider blip** — that is operator
+> territory and I explicitly did not ask for it.
 >
-> ⚠ **Two ring carries I should apply, not just file:**
-> (a) **a cliff failure needs the BASE's MARGIN, not just pass/fail** — base
-> cleared 2 MiB by <64 KiB, so "the WP caused it" was true *and* misleading;
-> **fixing a cliff by raising a limit SPENDS A DETECTOR — name which, and where
-> its replacement belongs** (I did: the n=3..7 harness note);
-> (b) ⛔ **never select a build artifact from an accumulating dir by name/mtime,
-> and never pipe a gate through `tail`** — it discards the evidence *and* replaces
-> the exit code. The implementer had **three** self-inflicted measurement failures
-> this session from exactly this class, each producing a confident wrong answer.
+> **`/compact` FAILS on BOTH Codex seats** (`runtime-leader`, `runtime-qa`):
 >
-> ⚠ **Queued, not fixed** (belongs to whoever next opens the file, likely in B2F):
-> the wrapper comment says it "makes the harness match the product" when 256 MiB
-> is **32×** the product's 8 MiB; correct wording is "at least the product's
-> headroom." **Not worth respinning a merged candidate.**
+> ```
+> 503 Service Unavailable · chatgpt.com/backend-api/codex/responses
+> auth error code: biscuit_baker_service_me_circuit_open
+> ```
 >
-> ### ⇢ (superseded) retros-owed block
+> Retried once, same error. ⭐ **Codex compaction is a REMOTE service call**, so it
+> has an availability dependency Claude-harness compaction does not; the circuit
+> breaker is deliberate load-shedding, so retries inside the open window fail by
+> design. `runtime-implementer` (Claude) compacted fine → **`ctx 0%`, leave it
+> idle so it does not drift back up.**
 >
-> Requested at `evt_7qvmrqr3hk213`; all three seats confirmed `Working`.
-> ⛔ **A merged WP with no retro is not done** — do not flip
-> `RT-FNSPLIT-B2A-C` → `merged` until all three are posted, then
-> `scripts/gen-progress.sh` and bundle into the next publish.
+> ⛔ **THE §2c GATE HAS NO EXCEPTION — do NOT kick with two uncompacted seats.**
+> Not on "they're only at N%": that inversion was closed by the operator three
+> times. ⇒ **RESUME ACTION: retry `/compact` on those two seats; when BOTH show
+> `Context compacted`, finish the gate** (post kickoff → confirm all three
+> `Working` → flip `RT-FNSPLIT-B2A-S` `ready` → `active` + `gen-progress.sh`).
+> ⚠ **Poll for success OR the 503 — never success alone**, or the poller spins
+> forever against an open circuit.
+> ⇒ **Next time, compact the CODEX seats FIRST in a mixed ring** — they are the
+> ones that can fail.
 >
-> ⛔ **`RT-NATIVE-FNSPLIT` STAYS `active`.** **Entry 3 CLOSED** (the recoverability
-> vacancy — the CAUSE). **Entry 1** waits for `RT-FNSPLIT-B2A-S`; **entry 2** for
-> `RT-FNSPLIT-B2F`. Q3 atomic boundary untouched.
+> ### ✅ `RT-FNSPLIT-B2A-S` IS FRAMED AND `ready` — anchors re-derived on `4c5afda6`
 >
-> ### ⇢ NEXT UNIT — `RT-FNSPLIT-B2A-S` (selection). DO NOT release yet.
+> **Frame REWRITTEN, not amended:** `docs/program/wp/RT-FNSPLIT-B2A-S-selection-defunctionalization.md`.
+> ⛔ Every anchor in the old draft was stale (`lower_expr` `:3847`→`:4255`;
+> `define_function` `:202`→`:217`; builder `:140`→`:144`).
 >
-> ⚠ **Its `wp/` frame is STALE against the re-cut** (still carries D1–D3 and
-> assumes the origin is unavailable). **Task 19: re-cut it.**
-> ⭐ **RE-DERIVE every anchor — do NOT copy.** `core.rs` has already drifted
-> (`:144`/`:216`, frame cites `:140`/`:202`), and `main` has moved twice more.
-> **B2A-S is where a tag beside a body BECOMES two authorities**, so D4 must stay
-> atomic: tag as selector + remove the retained-body carrier + install the sole
-> dispatcher, **one diff**. The `OwnedSourceOccurrence` now on
-> `Lowered::Closure` is provenance today and becomes the **selector** there —
-> that transition is the whole point of the unit.
+> ⭐ **D1 is now ONE FIELD:** `OwnedSourceOccurrence` drops `expr: RuntimeExpr`
+> (`mod.rs:238-241`), leaving `static_origin` as the sole identity. That single
+> removal is what turns provenance into a selector.
+> ⛔ **The unit DELIBERATELY RETIRES B2A-C's landed N3 pin** (no `origin -> expr`
+> lookup) and replaces it with a sole-dispatcher pin counting **exactly 1**. A
+> reviewer checking the new lookup against B2A-C's ACs without this **will reject a
+> correct diff** — the frame leads with it.
+> ⚠ **Do NOT size the WP from `core.rs`'s 165 `static_origin` mentions** — that is a
+> consumer count, and sizing by consumers was the #7 defect.
 >
-> ⚠ **HARD-STOP COUNT OF RECORD = 8. #9 IS THE VERY NEXT STOP AND IT FIRES A
-> RESEARCH PULL** — dispatch research BEFORE the Architect rules on it.
+> ### ⭐ DETECTOR FIX FROM THIS PASS — first-ever FALSE BUSY
 >
-> ### ⭐⭐ §14 PROCEDURE FIX from this pass — the check must be POSITIVE
+> I held the gate ~25 min waiting on a seat that was **already idle**.
+> `✻ Cogitated for 1m 39s` is the **completed** form; my disjunction's bare
+> `Cogitat` arm matched it. ⇒ **An ACTIVE spinner always carries a parenthesised
+> elapsed counter, an interrupt hint, or an explicit wait state; a finished turn
+> carries a bare duration with NO parens.** Corrected pattern:
+> `\([0-9]+m [0-9]+s|\([0-9]+s|esc to interrupt|Compacting conversation|[0-9]+ shells? still running|Waiting for [0-9]+ background`
+> ⚠ **A false BUSY is SILENT** — it makes you wait, and over-caution is
+> indistinguishable from patience. ⇒ **When a wait exceeds what the work plausibly
+> needs, re-examine the DETECTOR, not the seat.**
 >
-> The two filtered decision views **disagreed within one minute** on the same id:
-> `status="proposed"` showed `proposed`/`resolved_by: null` while
-> `status="resolved"` showed it `resolved` with a persisted `resolved_at`.
-> ⛔ **Never test resolution by absence from the proposed queue** — an absence test
-> over an eventually-consistent view. ⇒ **Query `status="resolved"`, confirm the id
-> IS PRESENT with non-null `resolved_by` and the exact SHA.**
+> ### ⇢ UNBLOCKED WORK TO DO WHILE WAITING (§2b: keep the rest moving)
 >
-> ### ⭐ THE PARENT-GATE FINDING WORTH CARRYING
+> All mine, none needs the ring: **frame `RT-FNSPLIT-B2F`** (task 17, the atomic Q3
+> boundary — Q1's four merits and Q3's four scaffolding conditions are already
+> transcribed on its node) · **re-derive or subsume `RT-FNSPLIT-B2B`** (16) ·
+> **`ABI-S3` frame** (5) · **harvest B1R retros** (12) · **status spelling for
+> `PX8`/`PX8-F-CAP-41`** (14, both read `active` with no seat).
 >
-> Recorded on `RT-NATIVE-FNSPLIT` gate req. 1: **the n=3..7 harness MUST run on the
-> product's 8 MiB stack, not the `ken-cli` 256 MiB test convention**, or it reports
-> wall-time/RSS while silently tolerating stack growth that kills the product.
-> **Stack exhaustion is a THIRD growth axis.** ⛔ **CORRECTED (adversary N2,
-> `evt_7mve56d192pv6`): I wrongly wrote "~128 KiB PER RECURSIVE FRAME."** The
-> bisect measured a **~128 KiB shift in the TOTAL minimum stack** over an
-> **unmeasured** number of frames `k`; per-frame is ≈`128/k` and is **UNKNOWN**.
-> ⚠ Do not claim it "errs safe" — that presumes `k > 1`, also unmeasured.
-> ⭐ **`k` is the operand a scaling projection needs; instrument it in the n=3..7
-> harness.** The remedy wrapped the one test that noticed, blinding it permanently.
->
-> ### ⇢ ALSO OWED (not blocking)
->
-> Frame `RT-FNSPLIT-B2F` (17) · re-derive/subsume `RT-FNSPLIT-B2B` (16) ·
-> `ABI-S3` frame (5) · harvest B1R retros (12) · status spelling for
-> `PX8`/`PX8-F-CAP-41` (14) · on FNSPLIT close, release `KW-THEOREM` (8).
+> ⚠ **HARD-STOP COUNT OF RECORD = 8. #9 FIRES A RESEARCH PULL** — dispatch research
+> BEFORE the Architect rules.
 >
 > ⛔ **Still operator-held, do not release:** `DOC-GATE-NEEDLE`, `ABI-R1`,
 > `DOC-ATTEST-LIVING`. Fleet single-threaded.

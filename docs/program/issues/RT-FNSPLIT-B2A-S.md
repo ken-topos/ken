@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2A-S
 title: "defunctionalize retained body selection — static-origin tag plus one closed consumer, replacing cloned-RuntimeExpr identity"
-status: draft
+status: active
 owner: runtime
 size: M
 gate: none
@@ -11,6 +11,51 @@ github: null
 origin: Architect ruling evt_6h5gw5c503n5z on RT-FNSPLIT-B2A hard-stop #6 (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the retired RT-FNSPLIT-B2A frame, whose Retain/Replace lists were inherited from the never-landed b077eb7a. Steward-filed; Steward owns the replacement frame and the full AC/control re-walk.
 ---
 
+> ## ⛔ SCOPE RULED (a) — 2026-07-25, `evt_2eap269sgnavm`
+>
+> **Covered population = `Lowered::Closure` + `Lowered::DeclarationClosure`.**
+> ⛔ NOT the whole `OwnedSourceOccurrence` struct (17 sites, incl. source-machine
+> frames). `ComputationalRecursorClosure` is out **structurally** — it carries no
+> `OwnedSourceOccurrence`. Source-machine frames are entry-2 / `B2F` territory.
+> ★ **D1's struct-level phrasing was a Steward defect and contradicted D5/AC-6**,
+> which delegates the population decision; D5 was the correct half. Frame text
+> corrected.
+>
+> ⚠ **AND A PROCESS DEFECT: the rewritten frame was never on `main`** — only on
+> `steward/work` (`350f7b2d`), while the ring's base `4c5afda6` held the
+> pre-rewrite draft **reusing the same identifiers for different deliverables.**
+> ⇒ ★ **A kickoff must verify the frame is FETCHABLE AT THE RING'S BASE, not
+> merely written.** "Written" and "readable by the ring" are different facts.
+>
+> ## ✅ ACTIVE — kicked to the Runtime ring 2026-07-25 (`evt_5jzpy3dgs8s67`)
+>
+> Full §2c gate ran: retros in 3/3, quiescent, **both** contention axes checked
+> (no build WP contends; `px8ta` — which D8 touches — is not in the attestation
+> ledger), and **each drop verified on the `Context compacted` marker.**
+> ⚠ **Held ~70 minutes first:** Codex remote-compact returned 503
+> (`circuit_open`) on both Codex seats across five retries. I escalated a waiver
+> to the operator rather than self-authorize an exception to §2c; **the circuit
+> recovered before they ruled, so the request was withdrawn as moot.**
+>
+> ## ✅ RE-FRAMED AND `ready` — 2026-07-25, anchors re-derived on `4c5afda6`
+>
+> **The frame is `docs/program/wp/RT-FNSPLIT-B2A-S-selection-defunctionalization.md`
+> — REWRITTEN, not amended.** ⛔ Every anchor in the old draft was stale
+> (`lower_expr` moved `:3847` → `:4255`; `define_function` `:202` → `:217`;
+> builder `:140` → `:144`). D1–D3 are gone (they were `B2A-C`'s).
+>
+> ⭐ **D1 is now a ONE-FIELD statement, because `B2A-C` co-located the pair:
+> `OwnedSourceOccurrence` drops `expr: RuntimeExpr`, leaving `static_origin` as
+> the sole identity.** That is what turns provenance into a selector.
+>
+> ⛔ **THIS UNIT DELIBERATELY RETIRES A LANDED PIN.** `B2A-C`'s **N3** asserted *no*
+> `origin -> expr` lookup from a lowering consumer. **B2A-S introduces exactly
+> that lookup**, so N3 is deleted and replaced by a sole-dispatcher pin: the count
+> goes **0 → 1**, never 0 → unbounded (frame AC-4). A reviewer checking the new
+> lookup against `B2A-C`'s AC list without this will reject a correct diff.
+>
+> ⚠ **Not yet released.** Fleet is single-threaded; run the §2c gate before kicking.
+>
 > ## ⭐⭐ ADVERSARY-SUPPLIED TRIPWIRES — THIS UNIT DELIBERATELY CROSSES BOTH
 >
 > The adversary discharged both surfaces I flagged on B2A-C (`evt_7mve56d192pv6`)

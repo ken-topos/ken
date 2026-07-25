@@ -1,226 +1,218 @@
-# `RT-FNSPLIT-B2A-S` — defunctionalize retained body selection
+# RT-FNSPLIT-B2A-S — retained-body selection defunctionalization
 
-**WP frame (Steward). Owning team: Runtime. Size: M. One branch, one merge
-Decision.** Parent: `docs/program/wp/RT-NATIVE-FNSPLIT-recut.md`.
-Predecessor: `RT-FNSPLIT-B1R` (**landed `7151ae58`**).
-Authority: Architect ruling `evt_6h5gw5c503n5z` + amendment `evt_25ynt8615r9sk`,
-gated behind research advisory `evt_4w1rf45d4fkv3`.
+**Owner:** Runtime · **Size:** M
+**Depends on:** `RT-FNSPLIT-B2A-C` (merged, `2db29abe`)
+**Blocks:** `RT-FNSPLIT-B2F`
+**Anchors re-derived on `origin/main` = `4c5afda6`.** ⛔ They are **not** copied
+from the pre-`B2A-C` frame — every line number in the old draft was stale.
+If an anchor does not hold on your base, that is a **hard-stop**.
 
-> ## ⛔ WHAT THIS WP IS NOT. Read this before the objective.
+> ## ⛔ READ FIRST — THIS UNIT DELIBERATELY CROSSES A LANDED NEGATIVE PIN
 >
-> The frame this replaces (`RT-NATIVE-FNSPLIT-recut-B2a-emission-port.md`) is
-> **RETIRED** — its `Retain`/`Replace` lists were inherited from `b077eb7a`, a
-> branch that **never landed**, so it called a construction a port. ⛔ **Do not
-> read it, and do not carry its vocabulary forward.** That vocabulary *is* the
-> defect.
+> `RT-FNSPLIT-B2A-C` landed **N3: no plan `origin -> expr` lookup from a
+> lowering/selection consumer.** ⭐ **B2A-S's entire job is to introduce exactly
+> that lookup.** So N3 is **not** a constraint you inherit — it is a pin you
+> **delete and replace** with the sole-dispatcher pin (AC-4 below).
 >
-> **This WP is a deliberately narrow intermediate representation.** It:
+> ⛔ **Do not treat the crossing as a violation, and do not preserve N3.** Say in
+> your handoff that N3 is retired by design, and name what replaces it. A reviewer
+> who reads the new lookup against B2A-C's AC list without this will reject a
+> correct diff.
 >
-> | DOES | does **NOT** |
-> |---|---|
-> | close retained-body **selection identity** | make B1R's semantic plane the emission source of truth |
-> | retire symptom-inventory **entry 1** | create target functions |
-> | install one closed consumer | remove whole-configuration specialization |
-> | — | constitute scaling / O(n) evidence |
->
-> ⛔ **Do not name or describe this as a semantic-plane emission port.** The
-> milestone is *"defunctionalize retained body selection."* Bundling selection
-> identity together with semantic authority under one name is the **same
-> overclaim shape that cost B1R a round trip** — and the ring itself accepted
-> that correction at `evt_2t9jdvmrtmhmf`.
->
-> ★ **Symptom-inventory entry 2 — `lower_expr` re-lowering each retained body per
-> call site in that call site's whole configuration — STAYS OPEN, deliberately.**
-> Say so in the retro. It is the *same already-named predicate*, not a new
-> defect, and it belongs to `RT-FNSPLIT-B2F`.
+> Equally, the adversary's verified tripwire on `2db29abe` was: *"the first read
+> of the origin's **value** in a decision."* **That read is this unit's D2.**
 
 ## Objective
 
-Retained closure / work-item body selection currently keys on a **cloned
-`RuntimeExpr`** — a dynamic property naming static code, which is the chain's
-predicate. Replace that with a **static tag plus one closed consumer**: identity
-is the preallocated `StaticOriginId`; the source occurrence is a **payload that
-the tag selects**, never the thing that establishes identity.
-
-## Fixed inputs — RULED, do not reopen
-
-⚠ Every current-state claim below was verified on **`origin/main` = `70bd2c74`**
-and is **perishable**. Re-verify at pickup; **if one is false, say so and
-escalate — do not build around it.** (That clause is what produced this WP.)
-
-1. **`StaticOriginId` is `pub(super)`** at `semantic_ir.rs:18`, re-exported
-   nowhere; zero references outside `planning/`.
-2. **`StaticTransitionPlan`** is `pub(in crate::cranelift_backend)` at
-   `static_transition.rs:158`; built by `plan_static_transition_graph`
-   (`:1396`), called once at `lowering/core.rs:35`, and **`drop`ped at
-   `core.rs:204`**.
-3. **`compile_expr_into_module`** (`lowering/core.rs:14`) is the compile entry
-   and the **non-escape boundary** — the plan is consumed entirely inside it.
-4. **`CompiledModule`** is at `compiled.rs:19`. ⛔ Nothing from the reference
-   table may reach it or any runtime state.
-5. **`Lowered::Closure { body, … }`** carries the cloned body; construction at
-   `core.rs:532` / `:3551`, destructuring at `:265` / `:638`. Siblings
-   `Lowered::DeclarationClosure` (`:517`, `:3575`) and
-   `Lowered::ComputationalRecursorClosure` (`:441`, `:583`) are in the same
-   family — **decide explicitly whether each is in the covered population, and
-   say which.**
-6. **The origin population is already preallocated** — `StaticOriginId` values
-   are derived from planned node ordinals (`semantic_ir.rs:194`, `:231`).
-   ⇒ You are **not** minting a new identity space; you are giving the existing
-   one a resolvable payload.
-
-⚠ **`static_transition.rs:1924` contains
-`StaticOriginId(((index + 1) % plan.nodes.len()) as u32)`** — a rotate-by-one that
-looks like an existing cross-wire control. **Determine what it is before writing
-D6**; if it is already the swap discriminator, extend it rather than adding a
-second one.
-
-## Deliverables
-
-**D1 — the dense table, allocated in the same walk.** Allocate the occurrence
-reference in the **same planner source walk, at the same moment** as its
-already-preallocated `StaticOriginId`. Store an exact **dense, compile-local**
-table keyed by that ID. It must be **total and one-to-one** with the planned
-occurrence population. **Lookup is range-checked and verifies the entry's stored
-origin equals the index.**
-
-**D2 — the lifetime, and the non-escape property that licenses it.** Keep the
-table on a compile-local **`StaticTransitionPlan<'src>`** (or an equivalent
-private companion owned by that plan). References **may** borrow the
-root/declaration source trees **because the plan cannot escape
-`compile_expr_into_module`**. ⭐ **Make that non-escape checkable, not asserted** —
-it is the entire justification for introducing a lifetime here.
-
-**D3 — visibility and naming.** Widen `StaticOriginId` **only** to
-`pub(in crate::cranelift_backend)`. Spell the carrier field **`static_origin`**.
-⛔ Never bare `origin` — `RecursorProducerOriginId` already spells that word on
-these same records.
-
-**D4 — ⭐ REMOVE THE OLD BODY CARRIER IN THE SAME DIFF.** Raw/cloned
-`RuntimeExpr` bodies leave **every** retained closure/work-item representation the
-slice covers. In particular **`Lowered::Closure { body: RuntimeExpr, … }` cannot
-survive for that population beside the new tag.**
-
-⛔ **Replacing identity while retaining the old body carrier preserves two
-authorities and FAILS the slice.** This is the requirement most likely to be
-softened under pressure, and it is the one that must not be. If D4 cannot be
-completed for some member of the population, that is a **hard-stop**, not a
-partial landing.
-
-**D5 — one closed consumer.** Install `lower_static_origin(static_origin,
-dynamic_env)` (name it as you like; the shape is ruled). It range-checks the
-table, selects the borrowed occurrence **solely by the tag**, then invokes the
-existing recursive lowering as **temporary payload semantics**. **Every** retained
-closure application / resume in scope routes through it; **none** selects a body
-directly.
+**Make the static origin the sole authority for selecting a retained closure
+body, and remove the body carrier in the same diff.**
 
 ★ **The recognition criterion is that the consumer is the SOLE point of
 consumption.** A tag with a second consumption path is not a defunctionalization;
 it is a tag with a leak.
 
-**D6 — controls, each red at a named artifact.** Carry D0's two carrier controls
-(they were defined *on* the carrier and so were not constructible in a plane-only
-slice), plus the discriminators that matter at *this* boundary:
+## What B2A-C already did for you — do NOT rebuild it
 
-- **swap two equal-shaped origin entries** → wrong-body/reject control **reddens**;
+1. **The origin is in scope at every construction site.** `plan_expr` returns
+   `PlannedExpr { entry, occurrence }`; correspondence is threaded through
+   `lower_expr` (`core.rs:4255`), `SourceMachineState`, the pending-expression
+   frames, `SourceContinuation` and `SourcePrefixTemplate`.
+2. ⭐ **The body and its origin are ALREADY CO-LOCATED** —
+   `OwnedSourceOccurrence { expr: RuntimeExpr, static_origin: StaticOriginId }`
+   at `mod.rs:238-241`, and both closure variants carry it:
+   `Lowered::Closure { captures, params, body: OwnedSourceOccurrence }`
+   (`mod.rs:460-464`) and `Lowered::DeclarationClosure { symbol, captures,
+   params, body: OwnedSourceOccurrence }` (`mod.rs:465-470`).
+3. **Three origin accessors exist, all planner-side and positional:**
+   `child_static_origin` (`static_transition.rs:945`), `root_static_origin`
+   (`:958`), `declaration_occurrence_origin` (`:971`). ⛔ `origin_of` is
+   planner-private; no consumer may mint an origin.
+4. **The origin is currently provenance only** — verified by the adversary on
+   `2db29abe`: `static_origin` is **never compared, never a map key, never
+   branched on** in production `lowering/`.
+
+## Deliverables
+
+**D1 — ⭐ THE RETAINED-CLOSURE CARRIER LOSES ITS BODY.**
+
+> **For the covered population only, the retained body ceases to be carried and
+> `static_origin` becomes the sole identity.**
+
+> ### ⛔ CORRECTED 2026-07-25 — D1's original phrasing was a STEWARD DEFECT
+>
+> It read *"`OwnedSourceOccurrence` drops `expr: RuntimeExpr`"* — a **struct-level**
+> statement for a **population-level** requirement. **That struct backs 17
+> construction sites**, not just the closure family: it also carries the source
+> machine's in-flight frames (`SourceContinuation` / `SourcePrefixTemplate` /
+> pending-expression, `mod.rs:1799–2077`).
+>
+> ⛔ **And one site provably cannot resolve from a tag:** `core.rs:3529` builds
+> `OwnedSourceOccurrence { expr: RuntimeExpr::Trap(default.clone()), static_origin }`
+> — the **one synthesized term in the whole lowering**, whose tag resolves to the
+> **match**, not the trap. Dropping `expr` there substitutes a match for a trap —
+> exactly the wrong-body defect **D6's swap control exists to redden** — and
+> minting an origin is barred (`origin_of` is planner-private).
+> ⚠ The adversary independently reached the same placement on `2db29abe`
+> (`evt_7mve56d192pv6`): a **lowering-internal leaf**, *not* a planned source
+> occurrence, which "does not justify broadening the planned-origin population."
+>
+> ⇒ **Ruled (a) at `evt_2eap269sgnavm`: the population is the retained-closure
+> variants.** Under (a), D1 clears **every** member with no softening — all
+> retained closure bodies are `cloned(<planned occurrence>)` and resolve by tag.
+> ★ **D1's original phrasing also contradicted D5/AC-6**, which delegates the
+> population decision. **D5 was the correct half.**
+
+⛔ **In the same diff.** A struct retaining `expr` beside the origin preserves two
+authorities and **fails the slice** — that is what makes the origin a *selector*
+rather than provenance. ⚠ This is the requirement most likely to be softened
+under pressure and the one that must not be. **If it cannot be completed for some
+member of the population, that is a hard-stop, not a partial landing.**
+
+**D2 — one closed consumer, and it is the FIRST read of the origin's value in a
+decision.** Install a single resolver — `lower_static_origin(static_origin,
+dynamic_env)` or as you prefer; the *shape* is ruled, not the name. It resolves
+the occurrence **from the plan, solely by the tag**, then invokes the existing
+recursive lowering. **Every** retained closure application / resume in scope
+routes through it; **none** selects a body directly.
+
+**D3 — key on `.occurrence`, NEVER on `.entry`.** The adversary's second verified
+tripwire: every production use of `.entry` today is an **edge endpoint** or
+`next = planned.entry`, never a key. ⛔ A collection keyed by `.entry`
+reintroduces the #8 category error, because nested `ComputationalMatch`
+occurrences **share a scheduling entry**. Occurrences are safe as keys —
+B1R enforces the `origin.0 == planned_node.0` bijection.
+
+**D4 — retire N3 and install the sole-dispatcher pin in its place.** B2A-C's N3
+asserted no `origin -> expr` lookup exists. Delete that assertion and replace it
+with a pin asserting **exactly one** such lookup, reachable from **exactly one**
+consumer. ⇒ The count goes `0 -> 1`, not `0 -> unbounded`.
+
+**D5 — decide the population EXPLICITLY and say which.** `Lowered::Closure`,
+`Lowered::DeclarationClosure`, and `Lowered::ComputationalRecursorClosure` are one
+family. **State for each whether it is in the covered population.** ⚠ The
+declaration case is asymmetric: its origin is reachable **by symbol**
+(`declaration_occurrence_origin`), so it may not need the same treatment — decide
+and justify, do not assume.
+
+**D6 — controls, each red at a named artifact.**
+
+- **swap two equal-shaped origin entries** → wrong-body / reject control
+  **reddens**;
+- **perturb a borrowed address without changing any ordinal** → **no identity
+  change** (⭐ the chain's predicate as an executable test);
+- **replace a tag lookup with a pointer or content lookup** → **fails loudly**;
 - **duplicate / missing / out-of-range origin** → **loud planner failure**
   (`PlannerInvariant`, per `RT-PLANNER-ATTRIB-K` — an invariant violation is a
   compiler bug, not a capacity limit);
-- **perturb the borrowed address without changing the ordinal mapping** → **no
-  identity change.** ⭐ This is the predicate as an executable test: if identity
-  moves when only the address moved, the tag is not authoritative;
-- **replace a tag lookup with a pointer/content lookup** → **fails loudly.**
+- ⭐ **a second consumption path** → **reddens.** This is D2's recognition
+  criterion as a control, and it is the one a happy-path suite omits.
 
-Each mutation applied at its **natural production site**, restored
-**byte-identically**, verified with `git diff --quiet`.
+**D7 — carry the adversary's N1 recipe deliverable (≈3 lines, cheap).** The AC-11
+topology differential's provenance is **verified** (7/7 rows reproduce from
+`70bd2c74`) but **the recipe is not in the tree**. ★ The asserted property is
+*equality against committed constants*, so **a post-change re-capture would have
+produced byte-identical values — nothing distinguishes a genuine baseline from a
+re-recording.** ⇒ Record in the comment: the base SHA, the probe function names
+(`b2ac_topology_digest`, `b2ac_topology_fixtures`), and the
+`git worktree add --detach <path> <base>` + test invocation. **Demonstrate the
+binding; do not testify to it.**
 
-**D7 — re-enumerate the carrier sites.** ⛔ The inherited **29/28** census
-(`core.rs` 13 `E0063` + 16 `E0027`; `mod.rs` 14 + 14) is **evidence, not
-authority** — the consumer boundary has changed. Re-derive it with a compiler
-probe against the new consumer population and **state your window** (which files;
-whether it includes `cfg(test)` and definitions).
+**D8 — fix the queued wording nit** *only because you are already in that file*:
+`px8ta_oriented_subcontinuation.rs` says the wrapper "makes the harness match the
+product" while granting **256 MiB, 32×** the product's 8 MiB. Correct to *"at
+least the product's headroom."* ⛔ Not worth a commit of its own.
 
 ## Acceptance criteria
 
-- **AC-1 — identity is the ordinal, provably.** D6's address-perturbation control
-  passes and the pointer/content-lookup control **reddens**. ⛔ A review that only
-  reads the code does not discharge this; it needs the executed controls.
-- **AC-2 — the table is total, injective, and range-checked.** Show the totality
-  and one-to-one properties as **assertions in the tree**, each independently
-  falsifiable. ⛔ A single composite check discharges none of them.
-- **AC-3 — ⭐ ZERO cloned `RuntimeExpr` bodies remain in the covered
-  population.** Grep-checkable, and **state the population explicitly** —
-  including which of `Closure` / `DeclarationClosure` /
-  `ComputationalRecursorClosure` are in scope and why. *A boundary you can grep
-  is worth more than one you can argue.*
-- **AC-4 — the consumer is the sole consumption path.** Enumerate every retained
-  closure application/resume site and show each routes through D5. ⚠ **Name your
-  window** — two of my own counts on `ATTRIB-K` were wrong because the window
-  silently included a `fn` definition and a doc file.
-- **AC-5 — the plan does not escape.** Mechanically show no reference reaches
-  `CompiledModule` (`compiled.rs:19`) or runtime state. A committed structural
-  test is worth more than prose here.
-- **AC-6 — `fixed_k` unchanged:** still `8,8,8,8,8` against cap `8`, the
-  pairwise-equal census row survives, `MAX_HELPERS_PER_STATIC_SOURCE` unchanged.
-  *(carried from the retired frame's AC-4)*
-- **AC-7 — no new opcode, no wildcard arm.** `semantic_ir.rs`'s six-opcode
-  grammar unchanged and still exhaustive; show it. *(carried, retired AC-5)*
-- **AC-8 — D6's controls each reddened at a named artifact**, each restored
-  byte-identically.
-- **AC-9 — no regression.** **Full** `scripts/ken-cargo test -p ken-runtime`, **no
-  filter** — a reifier/minted-shape change ripples to sibling observation tests a
-  targeted run cannot see. ⛔ Workspace, `--locked`, and conformance are **CI's**,
-  never local (COORDINATION §12).
-- **AC-10 — the claim in the retro is the narrow one.** The retro states that
-  selection identity is closed **and that entry 2 / whole-configuration
-  specialization remains open.** ⛔ An accurate diff with an overclaiming
-  summary does not pass.
+- **AC-1 — `expr` is GONE from the carrier**, shown structurally, not asserted.
+- **AC-2 — the resolver is the SOLE consumption point.** D6's second-path control
+  reddens. ⛔ A grep is not sufficient — pin it at a named artifact.
+- **AC-3 — identity is the ordinal, provably.** D6's address-perturbation control.
+- **AC-4 — the `origin -> expr` lookup count is exactly 1**, replacing B2A-C's
+  zero-count pin. State both the old and new assertion so the transition is
+  auditable.
+- **AC-5 — no collection is keyed by `.entry`**; a mutation introducing one
+  reddens.
+- **AC-6 — the population is stated per variant** (D5), with the declaration
+  asymmetry decided and justified.
+- **AC-7 — inventory honesty: this claims entry 1 ONLY.** ⛔ Not entry 2 (waits
+  for `RT-FNSPLIT-B2F`); entry 3 was closed by `B2A-C`. State them separately —
+  this is a standing ruling, not a formality.
+- **AC-8 — no regression, GREEN IN CI.** ⛔ Never a local `--workspace` run.
+- **AC-9 — D7's recipe is in the tree.**
 
-## Do-not-reopen guardrails
+Each mutation applied at its **natural production site**, restored
+**byte-identically**, verified with `git diff --quiet` (⚠ `--stat` always exits 0
+and is not an emptiness test).
 
-- ⛔ **No target functions, no calling convention, no persistent-store runtime.**
-  All of that is `RT-FNSPLIT-B2F`, and it is **atomic** with switch-over and
-  old-path removal. If you find yourself declaring a Cranelift function, you have
-  left this WP.
-- ⛔ **Do not report growth metrics as an acceptance argument** and do not tune for
-  them. The scaling verdict belongs to B2F.
-- ⛔ **Do not extend the six-opcode grammar** to make selection easier. A new
-  opcode is a hard-stop.
-- ⛔ **Do not re-litigate** the `pub(in crate::cranelift_backend)` visibility or
-  the `static_origin` spelling. Ruled.
+## ⚠ Cost and measurement discipline, learned the hard way in `B2A-C`
 
-## Cadence — the chain is ONE STOP PAST a research pull
+- ⭐ **Before threading or removing a derived identity across N sites, compose the
+  accessor with itself, per variant, on a real instance.** `B2A-C` threaded ~60
+  call sites before checking that the identity a parent hands down owns the next
+  level's entries; it did not, and that was hard-stop #8. **Totality of a table
+  says nothing about composition.**
+- ⚠ **`core.rs` mentions `static_origin` 165 times.** That is a *consumer* count.
+  ⛔ **Do not size this WP from it** — the #7 defect was sizing by consumers. Size
+  by what must be **true at each construction site** after `expr` is gone.
+- ⛔ **Never select a build artifact from an accumulating directory by name or
+  mtime**, and **never pipe a gate through `tail`** — it discards the evidence
+  *and* replaces the exit code. Three confident-wrong measurements came from this
+  in one session.
+- ⚠ **If a resource cliff (stack, RSS, timeout) fires, measure the BASE's MARGIN,
+  not just pass/fail.** Attribution needs the margin. And **fixing a cliff by
+  raising a limit spends a detector — name which one and where its replacement
+  belongs.**
 
-**Hard-stop count of record = 6** (the Steward holds it;
-`docs/program/issues/RT-NATIVE-FNSPLIT.md` is the authoritative line and **wins
-any disagreement**). The #6 pull **fired and is consumed**. **Next pull = #9.**
-A review fold is not a hard-stop.
+## Build discipline
 
-**Symptom inventory = 2 entries**, and ⛔ **the predicate question is already
-answered** — entries 1 and 2 reduce to *a dynamic property must not name static
-code*, so a third entry that also reduces to it is **evidence this chain's
-emitter work is incomplete, not a new defect.** Say that rather than ruling it.
+⛔ **Targeted builds only — NEVER `--workspace`** (operator hard rule,
+`COORDINATION §12`): `-p ken-runtime`, or `--test <name>`. Workspace, `--locked`
+and conformance run **in CI**. ⚠ Changes reaching the reifier need the full
+`-p ken-interp` suite. ⚠ **`ken-cli` integration tests live in another shard and
+are invisible to `-p ken-runtime`** — that is how `B2A-C` went red after a green
+targeted run.
 
-## Contention
+⚠ **`crates/ken-runtime/src/cranelift_backend.rs` is cited in
+`library/SOURCE-ATTESTATIONS`.** It is the module **root**; your files are
+submodules and none are attested. An edit there reddens
+`registered_record_validation_gates_run` for reasons that look unrelated. Prefer
+not touching it; if you must, **say so** and ⛔ do not re-attest.
 
-**Scope is `crates/ken-runtime/**` only.** Verified at framing: the ledger
-(`library/SOURCE-ATTESTATIONS`) attests
-`crates/ken-runtime/src/cranelift_backend.rs` — **not** the `planning/` or
-`lowering/` files this WP touches. ⚠ **If this slice edits
-`cranelift_backend.rs` itself, tell me before you land** — that crosses the
-ledger axis and I re-derive the consumer population first.
+## Hard-stop
 
-## Escalation — hard-stop rather than improvise
+**Count of record is 8** (`RT-NATIVE-FNSPLIT` holds it; that line wins any
+disagreement).
+⚠⚠ **#9 IS THE VERY NEXT STOP AND IT FIRES A RESEARCH PULL** — the Steward
+dispatches research **before** the Architect rules. Do not soften a
+deliverable to avoid a stop; **the last two stops were Steward framing defects
+that the ring caught by stopping.**
 
-**Stop and tell me** if: **D4 cannot be completed** for any member of the covered
-population · the table cannot be made total/one-to-one without inferring an ID
-from pointer, content, clone order, or activation · a **fixed input above is
-false** against the landed code · the non-escape property cannot be shown
-mechanically · you need a **new opcode** or a **9th outer helper**.
+Stop and escalate if: an anchor fails; **D1 cannot be completed for some member**;
+the sole-consumption property cannot be pinned mechanically; or removing `expr`
+forces functionization work (that is `B2F`'s atomic boundary and must not leak
+here).
 
-⛔ **Do not resolve any of those by widening the tag with dynamic content.** That
-is the predicate this whole chain exists to remove.
-
-⚠ **My framing is the thing most likely to be wrong here** — it was on the WP
-this one replaces. If the slice boundary does not survive contact with the code,
-that is a finding, not a failure; splitting again is cheap.
+⭐ **Report the measurement and name the discriminating property — do not infer a
+boundary from a size.** That was the ring's own #7/#8 lesson, and it is the one
+that keeps costing this chain.
