@@ -4,6 +4,7 @@
 ba72396b7fac154fdb333017840100d26e25f961	catalog/examples/CommandLine/Forge.ken.md
 8ece24e734baf90ea149c11326229202eaeca404	catalog/guide/decomposition-abstraction.ken.md
 29a5d54225f16a3116fae93cc57c00941ef04424	catalog/guide/proof-techniques.ken.md
+003d91630e6cbd8646fb319e3a9e42d7d40c44b6	catalog/guide/surface-reference.ken.md
 0266a7a7ffb3e9464e783daf6565d50f2f73e2d7	catalog/packages/Capability/Console/Text.ken.md
 59fbe76dde61a9ab3a1d4599088c60f04502ea89	catalog/packages/Capability/Filesystem/Errors.ken.md
 573e67eb6f7745ac4902149ac892717aaee2655e	catalog/packages/Capability/System/IO.ken.md

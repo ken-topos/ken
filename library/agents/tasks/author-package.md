@@ -15,8 +15,9 @@ nearest existing package entries in the same catalog domain.
 ## 3. Current capability
 
 A package is a `.ken.md` literate source whose checked fences tangle to its
-implementation. Current entries carry identity, purpose, API, laws, trust and
-derivation, examples, validation, and references.
+implementation. Current entries carry an index, named reading paths,
+motivation, definition, usage, laws and proofs, design notes, references, and
+trust and derivation.
 
 ## 4. Canonical forms
 
@@ -24,17 +25,23 @@ Use this order:
 
 ```text
 front matter and title
-purpose
-public API
-laws and proof terms
-trust and derivation
-examples
-validation
+index
+named reading paths
+Motivation
+Definition
+Using it
+Laws & proofs
+Design notes
 references
+Trust & derivation
 ```
 
-Choose the catalog path by task/domain. The path and declared module identity
-must agree with the catalog convention.
+The index links to every required section. Named paths route newcomers,
+practitioners, researchers, and readers porting from another language to the
+depth they need. `Findings` is deliberately absent: style-guide §5 retired it
+from reader-facing entries in favor of live gap routing. Choose the catalog
+path by task/domain. The path and declared module identity must agree with the
+catalog convention.
 
 ## 5. Invariants and prohibitions
 
@@ -71,9 +78,9 @@ Run only the package's targeted acceptance tests.
 ## 9. Authority and sources
 
 Package structure and naming come from
-`docs/program/07-catalog-style-guide.md`; language rules from `spec/`; checked
-practice from `catalog/guide/` and neighboring entries. Revision:
-`library/agents/manifest.toml`.
+`docs/program/07-catalog-style-guide.md` §2, with `Findings` omitted per §5;
+language rules come from `spec/`; checked practice comes from `catalog/guide/`
+and neighboring entries. Revision: `library/agents/manifest.toml`.
 
 ## 10. Known unavailable or partial behavior
 

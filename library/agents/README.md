@@ -65,13 +65,17 @@ facts while preserving the repository's own workflow.
 only schemas, because those are the two manifest formats consumed by the
 targeted agent-library gate. The gate checks:
 
+- both manifest formats against every constraint class declared by their
+  shipped schemas, failing if a schema introduces an unsupported constraint;
 - every manifest module and pack path exists;
+- every module and pack source path and heading anchor exists;
 - pack includes resolve to declared modules;
 - pack dependencies resolve and are acyclic;
 - measured sizes match current file bytes under the declared measurement;
 - all ten modules carry the ten contract sections in order, with non-empty
   point 10; and
-- planted missing-module and circular-dependency fixtures are rejected.
+- planted schema, missing-module, circular-dependency, duplicate-ID, and
+  escaping-path fixtures are rejected.
 
 `evaluations/README.md` defines the seven cold-context tasks. Results report
 correctness, unnecessary loads, invented syntax or capabilities, and cited

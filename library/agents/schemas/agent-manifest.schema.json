@@ -43,7 +43,7 @@
       "type": "object",
       "required": [
         "id", "path", "purpose", "triggers", "exclusions", "includes",
-        "dependencies", "revision", "validation", "measured_tokens"
+        "dependencies", "sources", "revision", "validation", "measured_tokens"
       ],
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z0-9-]+$"},
@@ -53,6 +53,7 @@
         "exclusions": {"type": "array", "items": {"type": "string"}, "minItems": 1},
         "includes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
         "dependencies": {"type": "array", "items": {"type": "string"}},
+        "sources": {"type": "array", "items": {"type": "string"}, "minItems": 1},
         "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
         "validation": {"type": "array", "items": {"type": "string"}, "minItems": 1},
         "measured_tokens": {"type": "integer", "minimum": 1}

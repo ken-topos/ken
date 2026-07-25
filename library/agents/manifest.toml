@@ -31,13 +31,15 @@ purpose = "Author checked Ken using probes, formatting, and exact validation."
 triggers = ["write Ken", "edit Ken", "author proof"]
 prerequisites = ["core/read-ken"]
 sources = [
-  "spec/30-surface/",
-  "catalog/guide/",
-  "docs/program/07-catalog-style-guide.md",
+  "docs/program/07-catalog-style-guide.md#61-local-bindings-as-exposition",
+  "spec/30-surface/33-declarations.md#52-class-declaration--a-record-type",
+  "spec/30-surface/33-declarations.md#53-instance-declaration--a-record-value--the-orphan-check",
+  "catalog/guide/surface-reference.ken.md#5-class-and-instance",
+  "catalog/guide/proof-techniques.ken.md#1-proved-vs-refl-the-two-way-discriminator",
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["contract-order", "sources-exist", "token-measurement"]
-measured_tokens = 715
+measured_tokens = 730
 
 [[module]]
 id = "core/proof-and-trust"
@@ -106,13 +108,13 @@ purpose = "Author a canonical checked literate catalog package."
 triggers = ["author package", "revise package", "design package API"]
 prerequisites = ["core/write-ken", "core/proof-and-trust", "core/toolchain"]
 sources = [
-  "docs/program/07-catalog-style-guide.md",
-  "catalog/guide/",
+  "docs/program/07-catalog-style-guide.md#2-the-standard-entry-format",
+  "docs/program/07-catalog-style-guide.md#5-findings--retired-from-the-catalog-entry-2026-07-11",
   "catalog/packages/",
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["contract-order", "sources-exist", "token-measurement"]
-measured_tokens = 420
+measured_tokens = 480
 
 [[module]]
 id = "tasks/prove-or-repair"
@@ -173,6 +175,11 @@ includes = [
   "tasks/read-review",
 ]
 dependencies = []
+sources = [
+  "docs/program/07-catalog-style-guide.md#2-the-standard-entry-format",
+  "spec/20-verification/21-spec-syntax.md#5-the-verification-status-model",
+  "spec/60-security/64-trust-model.md#1-the-trusted-computing-base-tcb-precisely",
+]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
 measured_tokens = 2074
@@ -191,9 +198,14 @@ includes = [
   "tasks/write-program",
 ]
 dependencies = []
+sources = [
+  "spec/30-surface/33-declarations.md#1-definitions",
+  "catalog/guide/proof-techniques.ken.md#1-proved-vs-refl-the-two-way-discriminator",
+  "docs/program/07-catalog-style-guide.md#61-local-bindings-as-exposition",
+]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 2792
+measured_tokens = 2807
 
 [[pack]]
 id = "write-effectful"
@@ -203,9 +215,13 @@ triggers = ["write an effectful procedure", "add a capability boundary", "use a 
 exclusions = ["FFI declaration", "unsupported host capability", "platform ABI work"]
 includes = ["tasks/effects-and-capabilities"]
 dependencies = ["write-pure"]
+sources = [
+  "spec/30-surface/36-effects.md#1-effects-as-a-static-row",
+  "spec/60-security/62-authority.md#1-no-ambient-authority",
+]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 3323
+measured_tokens = 3338
 
 [[pack]]
 id = "author-package"
@@ -215,9 +231,13 @@ triggers = ["find a package by task", "author a catalog package", "revise a lite
 exclusions = ["generated package card", "ordinary application", "speculative package"]
 includes = ["tasks/author-package"]
 dependencies = ["write-pure"]
+sources = [
+  "docs/program/07-catalog-style-guide.md#2-the-standard-entry-format",
+  "docs/program/07-catalog-style-guide.md#5-findings--retired-from-the-catalog-entry-2026-07-11",
+]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 3212
+measured_tokens = 3287
 
 [[pack]]
 id = "repair-proof"
@@ -227,9 +247,13 @@ triggers = ["repair a proof", "choose Proved or Refl", "close a checked law"]
 exclusions = ["change the proposition", "add an assumption", "replace proof with testing"]
 includes = ["tasks/prove-or-repair"]
 dependencies = ["write-pure"]
+sources = [
+  "catalog/guide/proof-techniques.ken.md#1-proved-vs-refl-the-two-way-discriminator",
+  "spec/20-verification/21-spec-syntax.md#5-the-verification-status-model",
+]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 3197
+measured_tokens = 3212
 
 [[pack]]
 id = "diagnose"
@@ -244,6 +268,10 @@ includes = [
   "tasks/diagnose",
 ]
 dependencies = []
+sources = [
+  "spec/40-runtime/42-evaluation.md#1-relationship-to-the-kernels-reduction",
+  "crates/ken-cli/src/main.rs",
+]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
 measured_tokens = 2101

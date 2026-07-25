@@ -2673,10 +2673,40 @@ fn slugify_matches_the_proposals_own_worked_anchor() {
 // existence, a pack dependency DAG, and evaluation-to-pack coverage are
 // properties of the complete agent-library graph.
 
+#[derive(Debug, Clone, Copy)]
+enum ControlledScalarKind {
+    String,
+    Integer,
+    Other,
+}
+
 #[derive(Debug, Clone, Default)]
 struct ControlledRecord {
     scalars: BTreeMap<String, String>,
+    scalar_kinds: BTreeMap<String, ControlledScalarKind>,
     arrays: BTreeMap<String, Vec<String>>,
+    arrays_are_strings: BTreeMap<String, bool>,
+}
+
+fn array_contains_only_strings(src: &str) -> bool {
+    let mut quoted = false;
+    let mut escaped = false;
+    for ch in src.chars() {
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                quoted = false;
+            }
+        } else if ch == '"' {
+            quoted = true;
+        } else if !matches!(ch, '[' | ']' | ',' | ' ' | '\t' | '\r' | '\n') {
+            return false;
+        }
+    }
+    !quoted
 }
 
 fn parse_controlled_records(src: &str, header: &str) -> Vec<ControlledRecord> {
@@ -2725,11 +2755,22 @@ fn parse_controlled_records(src: &str, header: &str) -> Vec<ControlledRecord> {
             value = array_text.trim();
         }
         if value.starts_with('[') {
+            record
+                .arrays_are_strings
+                .insert(key.clone(), array_contains_only_strings(value));
             record.arrays.insert(key, extract_quoted_strings(value));
         } else {
-            let scalar = extract_quoted_strings(value)
-                .pop()
-                .unwrap_or_else(|| value.trim().to_string());
+            let (scalar, kind) = if value.starts_with('"') {
+                (
+                    extract_quoted_strings(value).pop().unwrap_or_default(),
+                    ControlledScalarKind::String,
+                )
+            } else if value.parse::<i64>().is_ok() {
+                (value.to_string(), ControlledScalarKind::Integer)
+            } else {
+                (value.to_string(), ControlledScalarKind::Other)
+            };
+            record.scalar_kinds.insert(key.clone(), kind);
             record.scalars.insert(key, scalar);
         }
     }
@@ -2746,31 +2787,265 @@ fn parse_pack_file(src: &str) -> ControlledRecord {
         .expect("pack file parsed to no record")
 }
 
-fn required_fields(schema: &serde_json::Value, path: &[&str]) -> BTreeSet<String> {
-    let mut value = schema;
-    for component in path {
-        value = &value[*component];
+fn controlled_record_value(record: &ControlledRecord) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    for (key, value) in &record.scalars {
+        let json = match record.scalar_kinds.get(key) {
+            Some(ControlledScalarKind::String) => serde_json::Value::String(value.clone()),
+            Some(ControlledScalarKind::Integer) => value
+                .parse::<i64>()
+                .map(serde_json::Value::from)
+                .unwrap_or(serde_json::Value::Null),
+            _ => serde_json::Value::Null,
+        };
+        object.insert(key.clone(), json);
     }
-    value["required"]
-        .as_array()
-        .expect("schema `required` must be an array")
-        .iter()
-        .map(|field| {
-            field
-                .as_str()
-                .expect("schema required field must be a string")
-                .to_string()
-        })
-        .collect()
+    for (key, values) in &record.arrays {
+        let mut items: Vec<_> = values
+            .iter()
+            .cloned()
+            .map(serde_json::Value::String)
+            .collect();
+        if !record.arrays_are_strings.get(key).copied().unwrap_or(false) {
+            items.push(serde_json::Value::Null);
+        }
+        object.insert(key.clone(), serde_json::Value::Array(items));
+    }
+    serde_json::Value::Object(object)
 }
 
-fn record_field_names(record: &ControlledRecord) -> BTreeSet<String> {
-    record
-        .scalars
-        .keys()
-        .chain(record.arrays.keys())
-        .cloned()
-        .collect()
+fn controlled_manifest_value(src: &str) -> serde_json::Value {
+    let wrapped = format!("[[manifest-root]]\n{src}");
+    let root = parse_controlled_records(&wrapped, "manifest-root")
+        .into_iter()
+        .next()
+        .expect("agent manifest has no root fields");
+    let mut value = controlled_record_value(&root);
+    let object = value.as_object_mut().expect("controlled root is an object");
+    object.insert(
+        "module".to_string(),
+        serde_json::Value::Array(
+            parse_controlled_records(src, "module")
+                .iter()
+                .map(controlled_record_value)
+                .collect(),
+        ),
+    );
+    object.insert(
+        "pack".to_string(),
+        serde_json::Value::Array(
+            parse_controlled_records(src, "pack")
+                .iter()
+                .map(controlled_record_value)
+                .collect(),
+        ),
+    );
+    value
+}
+
+fn is_kebab(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
+fn matches_shipped_pattern(value: &str, pattern: &str) -> Result<bool, String> {
+    let matched = match pattern {
+        "^[0-9a-f]{40}$" => {
+            value.len() == 40
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        }
+        "^[a-z0-9-]+$" => is_kebab(value),
+        "^(core|tasks)/[a-z0-9-]+$" => value
+            .split_once('/')
+            .is_some_and(|(prefix, rest)| matches!(prefix, "core" | "tasks") && is_kebab(rest)),
+        "^library/agents/(core|tasks)/.*\\.md$" => {
+            value
+                .strip_prefix("library/agents/")
+                .and_then(|rest| rest.split_once('/'))
+                .is_some_and(|(area, file)| {
+                    matches!(area, "core" | "tasks")
+                        && !file.is_empty()
+                        && file.ends_with(".md")
+                })
+        }
+        "^library/agents/packs/.*\\.toml$" => value
+            .strip_prefix("library/agents/packs/")
+            .is_some_and(|file| !file.is_empty() && file.ends_with(".toml")),
+        other => return Err(format!("unsupported declared schema pattern {other:?}")),
+    };
+    Ok(matched)
+}
+
+fn schema_violations(
+    schema: &serde_json::Value,
+    instance: &serde_json::Value,
+    schema_root: &serde_json::Value,
+    location: &str,
+) -> Vec<String> {
+    let mut bad = Vec::new();
+    if let Some(reference) = schema.get("$ref").and_then(serde_json::Value::as_str) {
+        let mut target = schema_root;
+        let Some(pointer) = reference.strip_prefix("#/") else {
+            return vec![format!("{location}: unsupported schema reference {reference:?}")];
+        };
+        for component in pointer.split('/') {
+            target = &target[component];
+        }
+        return schema_violations(target, instance, schema_root, location);
+    }
+
+    if let Some(expected) = schema.get("const") {
+        if instance != expected {
+            bad.push(format!(
+                "{location}: const violation: expected {expected}, found {instance}"
+            ));
+        }
+    }
+
+    if let Some(expected_type) = schema.get("type").and_then(serde_json::Value::as_str) {
+        let type_matches = match expected_type {
+            "object" => instance.is_object(),
+            "array" => instance.is_array(),
+            "string" => instance.is_string(),
+            "integer" => instance.as_i64().is_some(),
+            other => {
+                bad.push(format!("{location}: unsupported declared type {other:?}"));
+                false
+            }
+        };
+        if !type_matches {
+            bad.push(format!(
+                "{location}: type violation: expected {expected_type}, found {instance}"
+            ));
+            return bad;
+        }
+    }
+
+    if let Some(minimum) = schema.get("minimum").and_then(serde_json::Value::as_i64) {
+        if instance.as_i64().is_some_and(|value| value < minimum) {
+            bad.push(format!("{location}: minimum violation: expected at least {minimum}"));
+        }
+    }
+    if let Some(minimum) = schema.get("minLength").and_then(serde_json::Value::as_u64) {
+        if instance
+            .as_str()
+            .is_some_and(|value| value.chars().count() < minimum as usize)
+        {
+            bad.push(format!("{location}: minLength violation: expected at least {minimum}"));
+        }
+    }
+    if let Some(pattern) = schema.get("pattern").and_then(serde_json::Value::as_str) {
+        if let Some(value) = instance.as_str() {
+            match matches_shipped_pattern(value, pattern) {
+                Ok(true) => {}
+                Ok(false) => bad.push(format!(
+                    "{location}: pattern violation: {value:?} does not match {pattern:?}"
+                )),
+                Err(message) => bad.push(format!("{location}: {message}")),
+            }
+        }
+    }
+    if let Some(minimum) = schema.get("minItems").and_then(serde_json::Value::as_u64) {
+        if instance
+            .as_array()
+            .is_some_and(|values| values.len() < minimum as usize)
+        {
+            bad.push(format!("{location}: minItems violation: expected at least {minimum}"));
+        }
+    }
+    if let (Some(items_schema), Some(items)) = (schema.get("items"), instance.as_array()) {
+        for (index, item) in items.iter().enumerate() {
+            bad.extend(schema_violations(
+                items_schema,
+                item,
+                schema_root,
+                &format!("{location}[{index}]"),
+            ));
+        }
+    }
+
+    if let Some(object) = instance.as_object() {
+        if let Some(required) = schema.get("required").and_then(serde_json::Value::as_array) {
+            for field in required {
+                let field = field.as_str().expect("schema required field is a string");
+                if !object.contains_key(field) {
+                    bad.push(format!("{location}: required field {field:?} is missing"));
+                }
+            }
+        }
+        if let Some(properties) = schema.get("properties").and_then(serde_json::Value::as_object) {
+            for (field, field_schema) in properties {
+                if let Some(value) = object.get(field) {
+                    bad.extend(schema_violations(
+                        field_schema,
+                        value,
+                        schema_root,
+                        &format!("{location}.{field}"),
+                    ));
+                }
+            }
+            if schema.get("additionalProperties") == Some(&serde_json::Value::Bool(false)) {
+                for field in object.keys() {
+                    if !properties.contains_key(field) {
+                        bad.push(format!(
+                            "{location}: additionalProperties violation: unknown field {field:?}"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    bad
+}
+
+fn unsupported_schema_keywords(schema: &serde_json::Value, location: &str) -> Vec<String> {
+    const SUPPORTED: &[&str] = &[
+        "$schema",
+        "$id",
+        "$ref",
+        "$defs",
+        "title",
+        "type",
+        "required",
+        "properties",
+        "const",
+        "pattern",
+        "minLength",
+        "minimum",
+        "items",
+        "minItems",
+        "additionalProperties",
+    ];
+    let Some(object) = schema.as_object() else {
+        return Vec::new();
+    };
+    let mut bad = Vec::new();
+    for key in object.keys() {
+        if !SUPPORTED.contains(&key.as_str()) {
+            bad.push(format!("{location}: unsupported schema keyword {key:?}"));
+        }
+    }
+    for container in ["properties", "$defs"] {
+        if let Some(children) = object.get(container).and_then(serde_json::Value::as_object) {
+            for (name, child) in children {
+                bad.extend(unsupported_schema_keywords(
+                    child,
+                    &format!("{location}.{container}.{name}"),
+                ));
+            }
+        }
+    }
+    if let Some(items) = object.get("items") {
+        bad.extend(unsupported_schema_keywords(
+            items,
+            &format!("{location}.items"),
+        ));
+    }
+    bad
 }
 
 fn record_scalar<'a>(record: &'a ControlledRecord, field: &str) -> &'a str {
@@ -2791,6 +3066,31 @@ fn duplicate_record_ids(records: &[ControlledRecord]) -> BTreeSet<String> {
         }
     }
     duplicates
+}
+
+fn controlled_source_violations(root: &Path, owner: &str, source: &str) -> Vec<String> {
+    let (path, anchor) = split_source(source);
+    let Some(resolved) = resolve_confined(root, path, root) else {
+        return vec![format!("{owner}: source {source:?} escapes the repository")];
+    };
+    if !resolved.exists() {
+        return vec![format!("{owner}: source {source:?} does not exist")];
+    }
+    if let Some(anchor) = anchor {
+        if !resolved.is_file() {
+            return vec![format!(
+                "{owner}: source anchor {anchor:?} requires a file, but {path:?} is not one"
+            )];
+        }
+        let contents = std::fs::read_to_string(&resolved)
+            .unwrap_or_else(|e| panic!("read {}: {e}", resolved.display()));
+        if !heading_anchors(&contents).contains(anchor) {
+            return vec![format!(
+                "{owner}: source anchor {anchor:?} does not exist in {path:?}"
+            )];
+        }
+    }
+    Vec::new()
 }
 
 fn unicode_whitespace_tokens(path: &Path) -> usize {
@@ -2955,12 +3255,26 @@ fn agent_library_manifest_schema_contract_and_measurements_hold() {
             .expect("read pack schema"),
     )
     .expect("parse pack schema");
-    let module_required = required_fields(&manifest_schema, &["$defs", "module"]);
-    let pack_required = required_fields(&manifest_schema, &["$defs", "pack"]);
-    let pack_file_required = required_fields(&pack_schema, &[]);
-
+    let mut unsupported = unsupported_schema_keywords(&manifest_schema, "agent manifest schema");
+    unsupported.extend(unsupported_schema_keywords(&pack_schema, "pack schema"));
+    assert!(
+        unsupported.is_empty(),
+        "shipped schemas declare unsupported constraints:\n{}",
+        unsupported.join("\n")
+    );
     let manifest_src =
         std::fs::read_to_string(agent_root.join("manifest.toml")).expect("read agent manifest");
+    let manifest_bad = schema_violations(
+        &manifest_schema,
+        &controlled_manifest_value(&manifest_src),
+        &manifest_schema,
+        "agent manifest",
+    );
+    assert!(
+        manifest_bad.is_empty(),
+        "agent manifest schema violations:\n{}",
+        manifest_bad.join("\n")
+    );
     let modules = parse_controlled_records(&manifest_src, "module");
     let manifest_packs = parse_controlled_records(&manifest_src, "pack");
     assert_eq!(modules.len(), 10, "Wave 2 requires four core and six task modules");
@@ -2980,22 +3294,12 @@ fn agent_library_manifest_schema_contract_and_measurements_hold() {
         if !module_ids.insert(id.to_string()) {
             bad.push(format!("duplicate module id {id:?}"));
         }
-        let missing: Vec<_> = module_required
-            .difference(&record_field_names(module))
-            .cloned()
-            .collect();
-        if !missing.is_empty() {
-            bad.push(format!("{id}: missing schema fields {missing:?}"));
-        }
         let full_path = resolve_controlled_path(&root, path, id);
         let src = std::fs::read_to_string(&full_path)
             .unwrap_or_else(|e| panic!("read {}: {e}", full_path.display()));
         bad.extend(module_contract_violations(&full_path, &src));
         for source in module.arrays.get("sources").into_iter().flatten() {
-            let source_path = resolve_controlled_path(&root, source, id);
-            if !source_path.exists() {
-                bad.push(format!("{id}: source {source:?} does not exist"));
-            }
+            bad.extend(controlled_source_violations(&root, id, source));
         }
         let measured = unicode_whitespace_tokens(&full_path);
         let declared = record_scalar(module, "measured_tokens")
@@ -3015,20 +3319,29 @@ fn agent_library_manifest_schema_contract_and_measurements_hold() {
         let id = record_scalar(manifest_pack, "id");
         let path =
             resolve_controlled_path(&root, record_scalar(manifest_pack, "path"), id);
-        let missing: Vec<_> = pack_required
-            .difference(&record_field_names(manifest_pack))
-            .cloned()
-            .collect();
-        assert!(missing.is_empty(), "{id}: missing manifest pack fields {missing:?}");
         let pack = parse_pack_file(
             &std::fs::read_to_string(&path)
                 .unwrap_or_else(|e| panic!("read {}: {e}", path.display())),
         );
-        let file_missing: Vec<_> = pack_file_required
-            .difference(&record_field_names(&pack))
-            .cloned()
-            .collect();
-        assert!(file_missing.is_empty(), "{id}: missing pack fields {file_missing:?}");
+        let pack_bad = schema_violations(
+            &pack_schema,
+            &controlled_record_value(&pack),
+            &pack_schema,
+            id,
+        );
+        assert!(
+            pack_bad.is_empty(),
+            "{id}: pack schema violations:\n{}",
+            pack_bad.join("\n")
+        );
+        for source in manifest_pack.arrays.get("sources").into_iter().flatten() {
+            let source_bad = controlled_source_violations(&root, id, source);
+            assert!(
+                source_bad.is_empty(),
+                "{id}: pack source violations:\n{}",
+                source_bad.join("\n")
+            );
+        }
         assert_eq!(record_scalar(&pack, "id"), id, "{id}: pack-file id drift");
         for field in ["purpose"] {
             assert_eq!(
@@ -3124,6 +3437,93 @@ fn agent_key_space_detectors_reject_duplicate_pack_and_task_ids() {
         duplicate_record_ids(&duplicate_tasks),
         BTreeSet::from(["write-pure".to_string()]),
         "planted duplicate task ID was not rejected at the named key-space detector"
+    );
+}
+
+// Durable invariant: every constraint class declared by the shipped schemas
+// is executable, not decorative metadata.
+#[test]
+fn agent_schema_contract_rejects_each_declared_constraint_class() {
+    let root = repo_root();
+    let schema_dir = root.join("library/agents/schemas");
+    let pack_schema: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(schema_dir.join("pack.schema.json"))
+            .expect("read pack schema"),
+    )
+    .expect("parse pack schema");
+    let clean = "schema_version = 1\n\
+                 id = \"write-pure\"\n\
+                 purpose = \"Write Ken\"\n\
+                 triggers = [\"write\"]\n\
+                 exclusions = [\"effects\"]\n\
+                 dependencies = []\n\
+                 includes = [\"core/write-ken\"]\n";
+    assert!(
+        schema_violations(
+            &pack_schema,
+            &controlled_record_value(&parse_pack_file(clean)),
+            &pack_schema,
+            "clean pack",
+        )
+        .is_empty(),
+        "positive-control pack does not satisfy the shipped schema"
+    );
+
+    let mutations = [
+        (
+            "const",
+            clean.replace("schema_version = 1", "schema_version = 999"),
+        ),
+        (
+            "type",
+            clean.replace("schema_version = 1", "schema_version = \"1\""),
+        ),
+        ("pattern", clean.replace("id = \"write-pure\"", "id = \"WritePure\"")),
+        ("minItems", clean.replace("triggers = [\"write\"]", "triggers = []")),
+        ("minLength", clean.replace("purpose = \"Write Ken\"", "purpose = \"\"")),
+        (
+            "additionalProperties",
+            format!("{clean}unknown_field = \"must reject\"\n"),
+        ),
+    ];
+    for (constraint, source) in mutations {
+        let violations = schema_violations(
+            &pack_schema,
+            &controlled_record_value(&parse_pack_file(&source)),
+            &pack_schema,
+            constraint,
+        );
+        assert!(
+            violations.iter().any(|message| message.contains(constraint)),
+            "planted {constraint} violation did not fail at that constraint: {violations:?}"
+        );
+    }
+
+    let manifest_schema: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(schema_dir.join("agent-manifest.schema.json"))
+            .expect("read agent manifest schema"),
+    )
+    .expect("parse agent manifest schema");
+    let module = serde_json::json!({
+        "id": "core/write-ken",
+        "path": "library/agents/core/write-ken.md",
+        "purpose": "Write Ken",
+        "triggers": ["write"],
+        "prerequisites": [],
+        "sources": ["spec/30-surface/33-declarations.md"],
+        "revision": "a9860e9c1617e98799ac408fad8ef1e9c7085443",
+        "validation": ["schema"],
+        "measured_tokens": 0
+    });
+    let minimum = schema_violations(
+        &manifest_schema["$defs"]["module"],
+        &module,
+        &manifest_schema,
+        "module minimum",
+    );
+    assert!(
+        minimum.iter().any(|message| message.contains("minimum")),
+        "planted minimum violation did not fail at that constraint: {minimum:?}"
     );
 }
 

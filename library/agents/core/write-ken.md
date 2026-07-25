@@ -97,10 +97,13 @@ after formatting.
 
 ## 9. Authority and sources
 
-Exact language rules come from `spec/30-surface/`. Checked authoring practice
-comes from `catalog/guide/` and
-`docs/program/07-catalog-style-guide.md`. The verified revision is recorded in
-`library/agents/manifest.toml`.
+Local-binding guidance comes from
+`docs/program/07-catalog-style-guide.md` §6.1. The class-record and
+instance-value distinction comes from `spec/30-surface/33-declarations.md`
+§5.2–5.3 and the checked example in
+`catalog/guide/surface-reference.ken.md` lines 243–253. Proof-terminal guidance
+comes from `catalog/guide/proof-techniques.ken.md` §1. The verified revision is
+recorded in `library/agents/manifest.toml`.
 
 ## 10. Known unavailable or partial behavior
 
