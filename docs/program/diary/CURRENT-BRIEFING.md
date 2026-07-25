@@ -25,406 +25,73 @@
 >   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
 >   the AC rather than gaming it.
 >
-> ## ⇢ RESUME HERE FIRST — 2026-07-25 T05:05Z
->
-> **`origin/main` = `39714258`** (PR #939 merged, content-verified) ·
-> **`origin/steward/work` = `81e77fa0`** · **`origin/wp/RT-FNSPLIT-B2A-C-correspondence`
-> = `17a07b09`** (pushed by me; the ring cannot push).
->
-> ### ⛔ HARD-STOP #8 CONFIRMED. COUNT OF RECORD = **8**. ⚠ #9 FIRES A RESEARCH PULL.
->
-> ⭐ **THE NEXT STOP IS #9 AND IT FIRES A PULL — dispatch research BEFORE the
-> Architect rules on it.** #6's pull was consumed; #7 and #8 both went straight
-> to the Architect, correctly.
->
-> **`RT-FNSPLIT-B2A-C` was AMENDED IN PLACE — my call, not a re-slice.** The
-> Architect ruled the mechanism (`evt_308azmr4cszd7`) and **explicitly left WP
-> scope and the count to me**. I amended because the finding repairs **this
-> unit's own producer** and stays inside **entry 3** — entries 1 and 2 remain
-> open, Q3 boundary untouched. Routed at `evt_79mv3a9rqsd6b`; ring resumed on
-> the SAME branch. **Size raised M → L in the open** (the #7 lesson: a unit that
-> grows silently is how a frame becomes unsatisfiable).
->
-> **The finding — a CATEGORY ERROR, not an ordinal disagreement.** One
-> `StaticNodeId` means two things. Re-verified by me on exact `96e66c9f`:
-> `:628` pushes the `SourceReturnResume`; `:672` registers the occurrence **on
-> `resume`**; `:673` returns **`scrutinee`**. ⇒ New **D9**:
-> `PlannedExpr { entry: StaticNodeId, occurrence: StaticOriginId }` with
-> **disjoint consumers** — transfer topology takes only `.entry` (Boundary-A
-> graph unchanged), source correspondence only `.occurrence`.
->
-> ★ **D3's probe FOUND it; D3's vocabulary MIS-NAMED it.** That mis-naming is
-> the tell that my frame had **one axis where it needed two**. A probe can be
-> right while the frame describing its findings is wrong.
->
-> ⚠ **One place I went beyond the ruling, deliberately and flagged as mine:** the
-> Architect *prefers* changing `expression_node`/`expression_seed` to take
-> `&[StaticOriginId]`; **I made it a requirement**, so the type prevents the
-> conflation instead of call-site discipline. If the ring reports a concrete
-> obstruction, **relax it to the preference** — that promise is on the record.
->
-> ### ✅ CANDIDATE READY — `2e96f83c`, IN QA REVIEW
->
-> **`origin/wp/RT-FNSPLIT-B2A-C-correspondence` = `2e96f83c`** (I pushed all
-> seven commits, in three sweeps). Implementer reports `-p ken-runtime` 334/334
-> and `-p ken-interp` green; branch free, base `70bd2c74`, 0 dirty.
-> **D9 is built and closes #8**; the `&[StaticOriginId]` signature change had **no
-> obstruction**, so my raising it from preference to requirement stands — it
-> **deleted the exact line that laundered an entry into an origin**
-> (`StaticOriginId(child.0)` inside the seed).
->
-> ⚠ **DURABILITY WINDOW, worth remembering:** freeing the branch for handoff moved
-> the implementer's worktree to `7151ae58` **off four unpushed commits** — HEAD
-> read like a reset. Nothing was lost, but recovery rested on the **reflog**, not
-> on any guarantee. ⇒ Sweep `ls-remote` BEFORE a handoff frees a branch.
->
-> ### ✅ RULED THIS PASS — `Lowered::Closure` carrying `OwnedSourceOccurrence`
->
-> The implementer flagged it as past the letter of D7. **I ruled it ADMISSIBLE**
-> (`evt_4jexyt1nfr449`): D7 says "need not", which is not "must not"; the
-> Architect's requirement 3 *requires* carrying the origin when an owned
-> `RuntimeExpr` is cloned; and the Architect pre-answered the two-authorities
-> objection verbatim — *"only the source term is consumed; the origin is not yet
-> a selector."*
-> ⇒ ⭐ **The discriminating question is not "is the origin present?" but "is it
-> CONSUMED?"** N3 settles it: three origin accessors, none returning an
-> expression. A tag beside a body becomes two authorities in **B2A-S**, not here.
->
-> ### ⛔ CI IS RED ON PR #940 — `08633b3c` DID NOT MERGE. Nothing landed.
->
-> ```
-> ken-cli::px8ta_oriented_subcontinuation
->     public_two_three_level_brackets_finish_and_release_lifo
->   SIGABRT [65.254s] — thread has overflowed its stack
-> ```
-> `test shard 2/4` failed; `build + test` is the aggregate gate. Publisher stopped
-> correctly and merged nothing. Routed at `evt_1xxzgar9c4htr`; all three seats
-> confirmed `Working`. Log: `gh run view 30145934014` → `test shard 2/4`.
->
-> ⚠ **454 of 533 tests DID NOT RUN** (fail-fast cancelled the shard). ⇒ **one
-> failure is a FLOOR, not a count.**
->
-> ### ⛔ THIS IS A MECHANISM FINDING, NOT A FLAKE
->
-> **The failing test is a two/three-level NESTED RESOURCE BRACKET** — nested-bracket
-> depth is *the* scaling axis `RT-NATIVE-FNSPLIT` exists to bound (original wall:
-> "four nested brackets fails to compile"; operator gate demands n=3..7).
-> **B2A-C added a parameter to every recursive lowering frame.** Wider frames ×
-> deep recursion = less depth before the stack dies. ⇒ **Correspondence threading
-> plausibly regressed the very axis the parent WP must improve.**
->
-> ★ **Cleanest possible demonstration of why AC-8 says "green in CI."**
-> `-p ken-runtime` 334/334 and `-p ken-interp` green, while the regression lives
-> in a **`ken-cli`** integration test in another shard. Targeted builds are
-> STRUCTURALLY blind to it. Nobody erred locally — that is the gate's job.
->
-> ### ✅ PUBLISHER RUNNING ON `bb2242e8` — full CI. Decision verified resolved.
->
-> **`dec_6fhmv6hdtz1km` = `resolved`**, `resolved_by: agt_37reqftfe6g00`,
-> `resolved_at: 07:27:21`, naming exact `bb2242e8`. QA `evt_3g5p1ae7w9t90`,
-> Architect `evt_14ayax794drn6`. §14 satisfied; publisher launched (NO
-> `--doc-only`). Log: `$SCRATCH/publish3.log` — ⚠ **`tail` the FILE.**
-> Pre-flight re-verified: tip **IS** the authorized SHA · intersection **EMPTY** ·
-> `merge-tree` **clean**.
->
-> ### ⭐⭐ §14 PROCEDURE FIX — the two filtered views DISAGREE
->
-> Within one minute, the SAME decision appeared in BOTH lists with contradictory
-> status: `list_decisions(status="proposed")` showed it `proposed`/`resolved_by:
-> null`, while `list_decisions(status="resolved")` showed it `resolved` with the
-> persisted `resolved_at`. **The `proposed` view is stale/cached.**
->
-> ⛔ **NEVER test resolution by absence from the proposed queue** — that is an
-> absence test over an eventually-consistent view. ⇒ **The check is POSITIVE:
-> query `status="resolved"`, confirm the id IS THERE with non-null `resolved_by`
-> and the exact SHA in text/resolution.** I had been running the NEGATIVE form of
-> the §14 check without noticing it was negative.
-> ⚠ This also means my earlier "the resolve did not land" was imprecise — the
-> honest statement was *"the resolved view does not yet show it."* **Right refusal
-> to publish, wrong stated reason.**
->
-> ### ⇢ WHEN THE PUBLISHER RETURNS
->
-> 1. ⚠ **454 of 533 tests never ran** in the earlier red shard — the full matrix
->    is genuinely unproven. If red again, read the failing check before touching
->    anything, and expect a **fifth** SHA + a **fresh** Decision.
-> 2. If green: **content-verify the landed `main`** (squash ⇒ NEW SHA, so
->    `bb2242e8`'s ancestry is NOT the test) — grep `PlannedExpr` and
->    `declaration_occurrence_origin` in `planning/static_transition.rs`.
-> 3. ⚠ **NOTIFY THE ADVERSARY** — code merge. §10⁻a: notify, then **never reply.**
-> 4. **Chase all three retros**, then flip `RT-FNSPLIT-B2A-C` → `merged`.
-> 5. ⛔ **`RT-NATIVE-FNSPLIT` STAYS `active`** — **entry 3 ONLY** closes here.
-> 6. **Task 19: cut the B2A-S frame** — ⭐ **RE-DERIVE anchors** (`core.rs:144`/
->    `:216`, not `:140`/`:202`).
->
-> ### ✅ (history) the remedy fold
->
-> **`origin/wp/RT-FNSPLIT-B2A-C-correspondence` = `bb2242e8`** (local-only again;
-> I pushed it). Leader authorized option A at `evt_1q092rpjrfv2c`; I verified the
-> fold independently: **1 commit, 1 file, +31/−3, ZERO production files** — inside
-> the leader's "no production/D9 changes, no widening beyond this one test" bound.
-> Reviewed at `evt_2pdbcz4swrsms`. **No hard-stop counted** — the remedy preserved
-> D9 and needed no mechanism change, so **#9 is still armed.**
->
-> ⭐ **CONFIRMED thresholds (now committed in the test's comment):**
-> base `70bd2c74` **>1984 ≤2048 KiB** (cleared libtest's 2 MiB default by
-> **<64 KiB**) · candidate `08633b3c` **>2112 ≤2176 KiB** (SIGABRT).
-> ⇒ B2A-C added ~128 KiB/frame and consumed headroom that was already <64 KiB.
->
-> ✅ **I checked the convention before second-guessing the 256 MiB number:** it is
-> the **established repo-wide pattern** (5 sites in `crates/ken-cli/tests/`,
-> incl. the sibling in that file). ⇒ **I explicitly did NOT demand an 8 MiB
-> one-off** — that would break consistency and be scope creep.
-> ⚠ **Prose nit only, NO respin:** the comment says the wrapper "makes the harness
-> match the product (8 MiB)" while granting **256 MiB, 32×** that. Fix only if the
-> file is touched anyway.
->
-> ⭐ **RECORDED AGAINST THE PARENT'S SCALING GATE** (`RT-NATIVE-FNSPLIT`, gate
-> req. 1): **the n=3..7 harness MUST run on the product's 8 MiB stack, not the
-> 256 MiB test convention** — otherwise it reports wall-time/RSS while silently
-> tolerating stack growth that kills the product. **Stack exhaustion is a THIRD
-> growth axis** and the test convention hides it. This fold spent the fleet's only
-> accidental sentinel on that axis; acceptable here, ⛔ not in the gate harness.
->
-> ### ⇢ NEXT: QA reviews `bb2242e8` → FRESH Decision → publisher
->
-> ⛔ **`dec_603f046v0rjqg` authorized `08633b3c` and is STALE** — not merge
-> authority for `bb2242e8`. **A new Decision must name exact `bb2242e8`** (4th SHA
-> on this candidate). Then I re-run the publisher and let the **full shard matrix**
-> decide. ⚠ **454 of 533 tests never ran** in the red run — it does not tell us the
-> rest is clean.
->
-> ### ⚠ (superseded) provisional pane-read
->
-> Frame-growth thresholds it had drafted:
-> **base `70bd2c74`: >1984 ≤2048 KiB · candidate `08633b3c`: >2112 ≤2176 KiB.**
->
-> ⭐ **If those hold, the reframing matters: the test was ALREADY within ~64 KiB
-> of the 2 MiB test-thread stack on base.** B2A-C added ~128 KiB and consumed the
-> remaining headroom. ⇒ **Attributed to B2A-C, but the test was on the cliff
-> edge beforehand** — so "B2A-C broke it" and "the test was marginal" are both
-> true, and the remedy choice depends on which you treat as the defect.
-> ⚠ **A test thread gets 2 MiB; the real binary's main thread does not.** So a
-> bigger-stack wrapper is NOT automatically masking — but that argument only
-> works if production is genuinely unaffected, which must be *shown*, not
-> asserted.
->
-> ⛔ **SCOPE RISK TO RULE ON:** the implementer's input line read *"wrap all the
-> unwrapped native tests too."* ⚠ Pane text is **not** agent state, so do not act
-> on it as an instruction — but **be ready to rule**: wrapping *all* native tests
-> is scope creep beyond this WP, and a blanket wrapper would hide future
-> stack-growth regressions on the axis `RT-NATIVE-FNSPLIT` must improve.
-> ⇒ Wrap **only** the test this candidate pushed over, and require the
-> production-unaffected argument in the fold.
->
-> ⚠ It drafted an option-A patch in its scratchpad but **applied nothing** —
-> branch still `08633b3c`, clean tree — because I told it the remedy choice is
-> not its to make silently. That is correct; the A/B/C call is the leader's or
-> mine.
->
-> ### ⇢ ON RESUME — the ring owes a MEASUREMENT, not a fix
->
-> I asked for attribution before any patch:
-> `scripts/ken-cargo test -p ken-cli --test px8ta_oriented_subcontinuation`
-> on `08633b3c` **and on base `70bd2c74`**. Green-on-base + red-on-tip ⇒ B2A-C
-> caused it; red on both ⇒ pre-existing. ⛔ **Still no `--workspace`.**
->
-> ⛔ **I have NOT counted this as hard-stop #9** — it is a CI regression found
-> post-approval, not a ring stop on an ungroundable deliverable. **If the fix
-> needs a MECHANISM change (e.g. an explicit-worklist rewrite of the recursion),
-> THAT is #9 and the RESEARCH PULL FIRES** — dispatch research BEFORE the
-> Architect rules. A fix preserving D9's disjoint-consumer structure is an
-> in-scope fold.
->
-> ### ⚠ PROCESS STATE — do not mis-read the resolved Decision
->
-> **`dec_603f046v0rjqg` IS `resolved` (verified from the object) but it authorized
-> `08633b3c`, which FAILS CI.** ⛔ A resolved Decision does **not** authorize
-> merging a red candidate — CI is a separate gate. ⇒ **Any fix is a NEW SHA and
-> needs a NEW Decision naming it exactly** (that will be the candidate's 4th SHA).
-> `RT-FNSPLIT-B2A-C` stays `active`; **no retros yet**; nothing flips to `merged`.
->
-> ### ✅ (history) verification that still stands
->
-> **Verified FROM THE OBJECT** (not on the two prose reports): `dec_603f046v0rjqg`
-> = `status: resolved`, `resolved_by: agt_37reqftfe6g00` (architect),
-> `resolved_at: 2026-07-25T05:29:37Z`, naming exact
-> `08633b3cef0d81af12f7f05faf732f1145fb5fdf`. §14 satisfied.
-> **Publisher launched — CODE change, so NO `--doc-only`; CI must pass.**
-> Log: `$SCRATCH/publish2.log` — ⚠ **`tail` the FILE; the pipe block-buffers.**
->
-> ⚠ **My earlier read of `proposed` was real, not a mistake** — the Architect
-> reports the resolve became visible after my read (`resolved_at` 05:29:37
-> precedes it). ⇒ **Eventual consistency on the Decision object is a thing here.**
-> The rule still held correctly: I refused to publish on prose, and re-read
-> instead of trusting either report.
->
-> ### ⇢ ON RESUME — post-merge sequence, IN ORDER
->
-> 1. **Check `$SCRATCH/publish2.log` + `git ls-remote origin main`.** If CI went
->    red, read the failing check before touching anything.
-> 2. **Content-verify the landed `main`** — a squash lands under a **NEW** SHA, so
->    ancestry of `08633b3c` is NOT the test. Grep for `PlannedExpr` and
->    `declaration_occurrence_origin` in
->    `planning/static_transition.rs` on the landed SHA.
-> 3. ⚠ **NOTIFY THE ADVERSARY** — this is a **code** merge. §10⁻a: notify only,
->    then **never reply or acknowledge, ever.**
-> 4. **Chase all three retros**, then flip `RT-FNSPLIT-B2A-C` → `merged`.
-> 5. ⛔ **`RT-NATIVE-FNSPLIT` STAYS `active`.** This closes **inventory entry 3
->    ONLY** — entry 1 waits for `RT-FNSPLIT-B2A-S`, entry 2 for `RT-FNSPLIT-B2F`.
->    Do not let the landing claim more.
-> 6. **Cut the `RT-FNSPLIT-B2A-S` frame** (task 19) — ⭐ **RE-DERIVE anchors, do
->    NOT copy**: root builder / `define_function` are now `core.rs:144`/`:216`.
->    B2A-S is where a tag beside a body **becomes** two authorities, so D4 stays
->    atomic: tag as selector + remove body carrier + sole dispatcher, one diff.
->
-> ### ✅ (history) the hold that preceded this
->
-> ⛔ **RESUME ACTION: re-read `dec_603f046v0rjqg` fresh via `list_decisions`. If
-> it reads `resolved` naming exact `08633b3c` → RUN THE PUBLISHER. If it still
-> reads `proposed` → chase the resolve; do NOT publish.**
->
-> **The Architect posted "ARCHITECT APPROVE … resolving `dec_603f046v0rjqg` on
-> cast" (`evt_30r0fp8rs7kw2`) — but the OBJECT read `status: proposed`,
-> `resolved_by: null`.** Reported at `evt_53vqysbaxhf0k`.
-> ★ **This is exactly why §14 says verify fresh from the object: had I published
-> on the message, I'd have merged on an unresolved Decision.** Approval can read
-> as complete in the channel while the object never transitioned.
->
-> ⚠ **CORRECTION TO MY OWN EARLIER RECORD:** `dec_4z8f55g9jv1ad` is **`rejected`**
-> — the first Architect review was a **BLOCK** on `2e96f83c`. ⇒ **`08633b3c` was
-> the REMEDY for that block, not polish**, and I mischaracterized it as a wording
-> sweep at `evt_5gpcpcbb51ttc`. My mechanical verification stands (it *is*
-> comment/message-only); its **status** was the discharge of a block.
->
-> ✅ **Both carried soundness questions answered affirmative:**
-> `OwnedSourceOccurrence` admissible (provenance-only; no origin→expression
-> lookup, no selection/dispatch authority — N3 is the pin, confirming my
-> `evt_4jexyt1nfr449` ruling); **AC-11's digests sufficient for a better reason
-> than I asked** — the probe depends only on pre-D9 plan-graph fields and the
-> planner entry point, so the base result is **independently re-derivable**
-> despite the scratch worktree being gone.
-> ✅ **AC-6 nit CLOSED, no respin** — the immediately preceding line already
-> states "A planner invariant, not a capacity limit."
->
-> ✅ **PUBLISH-SIDE VERIFICATION DONE against exact `08633b3c`** (redo only if
-> `main` moves): merge-base `70bd2c74`; **intersection EMPTY**; `merge-tree`
-> **clean**; **`cranelift_backend.rs` untouched**; delta filtered for any changed
-> line that is neither comment nor quoted string → **empty**. `08633b3c` is on
-> `origin`. QA approved this exact SHA (`evt_52bkdg7nsqftq`), 334/334.
->
-> ### ⚠ (superseded) re-anchor detail
->
-> **`origin/wp/RT-FNSPLIT-B2A-C-correspondence` = `08633b3c`** (pushed by me).
-> ⚠ **`dec_4z8f55g9jv1ad` still names `2e96f83c`.** ⛔ **DO NOT PUBLISH on it** —
-> resolving it would point the publisher at a commit nobody approved as final.
-> Re-anchor requested from `runtime-leader` at `evt_5gpcpcbb51ttc`.
->
-> ⚠ **THIRD SHA IN UNDER AN HOUR** (`17a07b09` → `2e96f83c` → `08633b3c`).
-> ⇒ **Every vote and Decision must name an EXACT SHA, never "the tip."** A live
-> candidate going stale between vote and merge is a real failure mode here.
->
-> ✅ **`08633b3c` is comment-and-message text ONLY — I proved it mechanically**,
-> not on QA's report: parent is exactly `2e96f83c` (linear, no rebase), 3 files
-> +11/−10, and filtering the diff for any changed line that is neither a comment
-> nor a quoted string returns **empty**. No identifier, signature, expression, or
-> assertion *predicate* moved. ⇒ The Architect's `2e96f83c` review carries; it
-> only needs to *say so* for the Decision to resolve.
->
-> ⭐ **A design choice paid off:** several changed strings are **assertion
-> messages**, which is exactly what would perturb a text-matching oracle — but
-> **AC-12 counts declaration lines, not substring hits**, precisely because the
-> assertion's own message names both spellings. Immune by construction.
->
-> ⚠ **Open nit, non-blocking, do NOT respin for it:** the sweep dropped
-> `(a planner invariant, not a capacity limit)` from a comment — that clause
-> carried the **AC-6** distinction. Restore only if those lines are touched
-> anyway; otherwise note it against `RT-PLANNER-ATTRIB-K`.
->
-> ### ⛔ THE TWO SUBSTANTIVE QUESTIONS STILL OPEN WITH THE ARCHITECT
->
-> **✅ QA APPROVED both `2e96f83c` (`evt_2sd9ftpz4tnx7`) and the `08633b3c`
-> rewording (`evt_52bkdg7nsqftq`).** ⛔ **§14 still binds: publish ONLY on a
-> Decision verified `resolved` fresh from the object** — never on prose. It reads
-> **`proposed`** and names an **Architect soundness review**; ⛔ a `crates/`
-> trusted-base change is **not** gated QA-only. Requested at `evt_aqz6qpn1e6v7`.
->
-> **⇢ ON RESUME: re-read the Decision object (`list_decisions`), and publish ONLY
-> if it reads `resolved`.** Never on prose, never on a recalled status.
->
-> ✅ **My publish-side verification is DONE and clean** (no need to redo unless
-> `main` moves): merge-base `70bd2c74`; **intersection EMPTY**; `git merge-tree`
-> **clean**; **`cranelift_backend.rs` untouched**; D9 confirmed by content
-> (`PlannedExpr`, `declaration_occurrence_origin`). Suites `-p ken-runtime`
-> **334/334**, `-p ken-interp` green. ⇒ **Publish is a doc-free CODE merge** —
-> so ⚠ **NOTIFY THE ADVERSARY after it lands** (report-only channel: notify, then
-> never reply, ever).
->
-> ⭐ **AC-16 has TWO-SEAT corroboration with DISTINCT evidence** — QA ran its own
-> mutations and got different failure sites than the implementer:
-> `occurrence := origin_of(scrutinee.entry)` → named AC-13 (`left: []`);
-> `entry := resume` → named AC-11 topology via
-> `PlannerInvariant("closed graph contains unreachable transitions")`.
-> **Opposite axes, independently reproduced** — not agreement on an inherited
-> premise.
->
-> ⚠ **Two open caveats I flagged to the Architect, unresolved until it votes:**
-> (a) `Lowered::Closure` carrying `OwnedSourceOccurrence` goes past D7's letter —
-> **I ruled it admissible** (`evt_4jexyt1nfr449`) and asked the Architect to
-> correct me *before* a merge if it reads differently; (b) **`AC-11`'s baseline no
-> longer exists** — its scratch worktree was removed, so re-derivability rests
-> entirely on the committed digests.
->
-> ### ⇢ AFTER THE MERGE, in order
->
-> 1. **Content-verify the landed `main`** (a squash lands under a NEW SHA, so
->    ancestry of the approved commit is not the test).
-> 2. **Notify the adversary** (code merge).
-> 3. **Chase all three retros**, then flip `RT-FNSPLIT-B2A-C` → `merged`.
-> 4. **Cut the `RT-FNSPLIT-B2A-S` frame** (task 19) — ⭐ **re-derive anchors, do
->    NOT copy them**: root builder / `define_function` moved to `core.rs:144`/
->    `:216`. B2A-S is where a tag beside a body BECOMES two authorities, so D4's
->    atomicity (tag as selector + remove body carrier + sole dispatcher, one diff)
->    is now satisfiable and must stay atomic.
-> 5. ⛔ **`RT-NATIVE-FNSPLIT` stays `active`** — entries 1 and 2 remain open.
->
-> ### ⇢ (superseded) earlier next-act block
->
-> ⛔ **Refuse the fold if `AC-16`'s two controls redden in the SAME place** —
-> `.occurrence`→`.entry` must redden the split test + D5 guard + the 28
-> computational tests **while topology stays GREEN**; transfer `.entry`→resume
-> must redden topology. Same place ⇒ D9 did not separate the axes, suite-green or
-> not. ⚠ `AC-11`'s scratch worktree was **removed**, so re-derivability rests on
-> the committed digests — confirm the `computational-under-let` row shows the
-> parent edging to the **scrutinee**.
->
-> ⚠ **Frame anchor drift, mine to carry:** root builder / `define_function` are
-> now `core.rs:144`/`:216` (frame cites `:140`/`:202`). **N1 unaffected — the
-> census pins COUNTS, not lines**, which is why it was written that way.
-> ⇒ **Re-derive anchors when cutting the B2A-S and B2F frames; do not copy them.**
->
-> ### ⇢ (superseded) earlier next-act block
->
-> **Ring is working.** `/compact` is **queued** on the implementer (it hit
-> `ctx 60%`, over the mid-flight ceiling) and will fire when its turn ends —
-> **verify it on the `Compacted (ctrl+o` marker, not the ctx% footer.**
->
-> **Progress already off-box at `17a07b09`:** D5's added-field coverage guard,
-> the AC-4/AC-6 controls with N1–N3 pins, and the D3 table stating the
-> `ComputationalMatch` stop.
->
-> ⛔ **When the fold arrives, refuse it unless:** `AC-3` — D5's guard reddens on a
-> **newly added** expression field, not merely enumerates today's variants;
-> `AC-14` — nested computational matches stay **injective when multiple
-> occurrences share a scheduling entry** (a shared entry is exactly when a wrong
-> key still looks unique); `AC-16` — the two swap controls redden in **OPPOSITE**
-> places (same place ⇒ the two axes aren't distinguished, which is D9's point);
-> `AC-15` — root/declaration `ComputationalMatch` bodies get the **resume**
-> occurrence; `AC-9` — the landing claims **entry 3 ONLY**.
->
-> ⭐ **Sweep `git ls-remote` against the ring's local ref EVERY check-in.** It has
-> needed a Steward push **three times in this WP alone** (`5c7eae26`, `96e66c9f`,
-> `17a07b09`); the defect is only looking when prompted, not the credential.
+> ## ⇢ RESUME HERE FIRST — 2026-07-25 T07:50Z
+>
+> **`origin/main` = `2db29abe`** · **`origin/steward/work` = see git** ·
+> `origin/wp/RT-FNSPLIT-B2A-C-correspondence` = `bb2242e8` (merged, squashed).
+>
+> ### ✅✅ `RT-FNSPLIT-B2A-C` IS MERGED — CI green, CONTENT-VERIFIED on `2db29abe`
+>
+> PR #940. Verified on the **landed tree**, not the publisher's report (a squash
+> lands under a NEW SHA, so `bb2242e8`'s ancestry is not the test):
+> `struct PlannedExpr` ✅ · `occurrence: StaticOriginId` ✅ ·
+> `declaration_occurrence_origin` ✅ · ⭐ **`declaration_entry_origin` = 0 hits**
+> (the name that described the conflation is GONE from main) ·
+> seed API `children: &[StaticOriginId]` ✅ · threshold comment ✅ ·
+> ⚠ **attested `cranelift_backend.rs` OID == ledger row `8508a01c`** ⇒ gate green.
+>
+> ✅ **Adversary notified** (`evt_1axyemv8kyj2y`) — code merge, §10⁻a report-only.
+> ⛔ **Never reply to or acknowledge that channel, ever.**
+>
+> ### ⇢ THE ONLY THING OWED: THREE RETROS, then flip `merged`
+>
+> Requested at `evt_7qvmrqr3hk213`; all three seats confirmed `Working`.
+> ⛔ **A merged WP with no retro is not done** — do not flip
+> `RT-FNSPLIT-B2A-C` → `merged` until all three are posted, then
+> `scripts/gen-progress.sh` and bundle into the next publish.
+>
+> ⛔ **`RT-NATIVE-FNSPLIT` STAYS `active`.** **Entry 3 CLOSED** (the recoverability
+> vacancy — the CAUSE). **Entry 1** waits for `RT-FNSPLIT-B2A-S`; **entry 2** for
+> `RT-FNSPLIT-B2F`. Q3 atomic boundary untouched.
+>
+> ### ⇢ NEXT UNIT — `RT-FNSPLIT-B2A-S` (selection). DO NOT release yet.
+>
+> ⚠ **Its `wp/` frame is STALE against the re-cut** (still carries D1–D3 and
+> assumes the origin is unavailable). **Task 19: re-cut it.**
+> ⭐ **RE-DERIVE every anchor — do NOT copy.** `core.rs` has already drifted
+> (`:144`/`:216`, frame cites `:140`/`:202`), and `main` has moved twice more.
+> **B2A-S is where a tag beside a body BECOMES two authorities**, so D4 must stay
+> atomic: tag as selector + remove the retained-body carrier + install the sole
+> dispatcher, **one diff**. The `OwnedSourceOccurrence` now on
+> `Lowered::Closure` is provenance today and becomes the **selector** there —
+> that transition is the whole point of the unit.
+>
+> ⚠ **HARD-STOP COUNT OF RECORD = 8. #9 IS THE VERY NEXT STOP AND IT FIRES A
+> RESEARCH PULL** — dispatch research BEFORE the Architect rules on it.
+>
+> ### ⭐⭐ §14 PROCEDURE FIX from this pass — the check must be POSITIVE
+>
+> The two filtered decision views **disagreed within one minute** on the same id:
+> `status="proposed"` showed `proposed`/`resolved_by: null` while
+> `status="resolved"` showed it `resolved` with a persisted `resolved_at`.
+> ⛔ **Never test resolution by absence from the proposed queue** — an absence test
+> over an eventually-consistent view. ⇒ **Query `status="resolved"`, confirm the id
+> IS PRESENT with non-null `resolved_by` and the exact SHA.**
+>
+> ### ⭐ THE PARENT-GATE FINDING WORTH CARRYING
+>
+> Recorded on `RT-NATIVE-FNSPLIT` gate req. 1: **the n=3..7 harness MUST run on the
+> product's 8 MiB stack, not the `ken-cli` 256 MiB test convention**, or it reports
+> wall-time/RSS while silently tolerating stack growth that kills the product.
+> **Stack exhaustion is a THIRD growth axis.** B2A-C's threading cost ~128 KiB per
+> recursive frame against <64 KiB of headroom; the remedy wrapped the one test that
+> noticed, which also blinds it permanently.
+>
+> ### ⇢ ALSO OWED (not blocking)
+>
+> Frame `RT-FNSPLIT-B2F` (17) · re-derive/subsume `RT-FNSPLIT-B2B` (16) ·
+> `ABI-S3` frame (5) · harvest B1R retros (12) · status spelling for
+> `PX8`/`PX8-F-CAP-41` (14) · on FNSPLIT close, release `KW-THEOREM` (8).
 >
 > ⛔ **Still operator-held, do not release:** `DOC-GATE-NEEDLE`, `ABI-R1`,
 > `DOC-ATTEST-LIVING`. Fleet single-threaded.
