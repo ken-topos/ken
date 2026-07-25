@@ -27,6 +27,39 @@ origin: Architect ruling evt_842spc7t6js1 on RT-FNSPLIT-B2F hard-stop #9 (2026-0
 > `TransitionKind::ClosureBody` is a body's **return successor**, not its head.
 > The ruled seeds are `plan.entries` ∪ every `EdgeKind::StaticBody` **target**.
 
+> ## ⛔⛔ RESPUN 2026-07-25 — `D6`'s ROUTE ORACLE IS OUT. `status` STAYS `active`.
+>
+> Five review folds across four candidate SHAs were spent on one defect family: a
+> hand-written source-text parser asked to model Rust's grammar. Architect ruling
+> `evt_5yxjd1zqnyvcq` (durable at `architect/work` `8bff7b7a`) removes the oracle
+> and names the authority — **the occurrence's `StaticOriginId`, its validated
+> `SemanticOwner`, and the planned edge kind.**
+>
+> **The frame carries the route** (`RESPIN ROUTE`, plus `AC-9` … `AC-12`). Three
+> things about it that are load-bearing and easy to get backwards:
+>
+> 1. ⛔ **It is NOT a revert.** The production **executable** bytes never moved
+>    across any fold — measured, the only production delta from `97db6f0b` to
+>    `96627f2a` is `///` comment text. The respin **subtracts** from the test and
+>    report surface.
+> 2. ★ **The control INVERTS.** A Rust wrapper or nested-`fn` relocation must now
+>    stay **GREEN** — a pin that reddens on one is measuring implementation
+>    topology and reporting success.
+> 3. ⚠ **The removal boundary is DECLARATION vs REACHABILITY, not
+>    source-text-vs-not.** Three sound pins read source text and must survive.
+>
+> ★ **No AC in this frame ever required route-set closure** — verified: `cannot
+> grow silently` appears **0** times in the frame and **0** times in the report at
+> the first QA-approved tree, appearing only in the fold made in answer to the
+> finding. A claim that outruns its evidence has two repairs, and **narrowing was
+> free at fold 2 and was one deleted sentence.** The structural obligation that
+> genuinely survives is **one-for-one consumption**, re-homed by ID into
+> `RT-FNSPLIT-B2R` and `RT-FNSPLIT-B2F`, which inert `B2O` could never check.
+>
+> **Counters unmoved — a review fold is not a hard-stop.** Count of record **9**,
+> next armed research pull **#12**; symptom inventory `ENTRIES = 3`, next
+> predicate check **6th**.
+
 ## Why this node exists
 
 `RT-FNSPLIT-B2F` asks for **one closed callable unit per static origin**. The
