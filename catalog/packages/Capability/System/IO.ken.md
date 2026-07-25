@@ -15,18 +15,18 @@ The exact-prefix proposition observes the loop's private span transition without
 exposing a `BufferSpan` producer to source code.
 
 ```ken
-lemma write_all_terminates (fuel : Nat) : Equal Nat (write_all_call_bound fuel) fuel =
+theorem write_all_terminates (fuel : Nat) : Equal Nat (write_all_call_bound fuel) fuel =
   proof termination for write_all_call_bound fuel
 
-lemma write_all_preserves_exact_prefix
+theorem write_all_preserves_exact_prefix
       (span : BufferSpan) (count : TransferCount)
     : write_all_exact_prefix_prop span count =
   proof exact_prefix for write_all_exact_prefix_prop span count
 
-lemma write_all_success_is_complete : Equal Bool (write_all_complete Zero) True =
+theorem write_all_success_is_complete : Equal Bool (write_all_complete Zero) True =
   proof success_complete for write_all_complete
 
-lemma write_all_preserves_first_error
+theorem write_all_preserves_first_error
       (error : ResourceError)
     : Equal
         (Result ResourceError Unit)
@@ -34,6 +34,6 @@ lemma write_all_preserves_first_error
         (Err ResourceError Unit error) =
   proof first_error for write_all_first_error error
 
-lemma write_all_all_success (fuel : Nat) : Equal Bool (write_all_all_success fuel) True =
+theorem write_all_all_success (fuel : Nat) : Equal Bool (write_all_all_success fuel) True =
   proof all_success for write_all_all_success fuel
 ```

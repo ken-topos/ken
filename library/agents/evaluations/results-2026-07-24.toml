@@ -78,7 +78,7 @@ fn both (a : Bool) (b : Bool) : Bool =
     False ↦ False
   }
 
-lemma both_true_true : Equal Bool (both True True) True = Proved
+theorem both_true_true : Equal Bool (both True True) True = Proved
 
 Validate with ken check, ken fmt, inspect, then ken check again. This adds no
 Axiom, primitive, assumption, effect, or capability.

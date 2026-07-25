@@ -26,7 +26,7 @@ fn assert_bool_reduces(env: &mut ElabEnv, name: &str, expression: &str, expected
     env.elaborate_decl(&format!("const {name} : Bool = {expression}"))
         .unwrap_or_else(|e| panic!("{name} must elaborate: {e}"));
     env.elaborate_decl(&format!(
-        "lemma {name}_reduces : Equal Bool {name} {expected} = Proved"
+        "theorem {name}_reduces : Equal Bool {name} {expected} = Proved"
     ))
     .unwrap_or_else(|e| panic!("{name} must reduce to {expected}: {e}"));
 }
@@ -81,7 +81,7 @@ fn list_neutral_path_uses_case_eq_not_a_postulate() {
     let compact = code.split_whitespace().collect::<Vec<_>>().join(" ");
     for required in [
         "match list_deceq_head_eq a da x y eqn : h",
-        "lemma list_deceq_sound_cons",
+        "theorem list_deceq_sound_cons",
         "da.sound x y h",
         "da.complete x x Refl",
         "λp. absurd p",

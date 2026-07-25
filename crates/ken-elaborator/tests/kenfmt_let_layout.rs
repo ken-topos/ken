@@ -135,7 +135,7 @@ fn ac5_nested_bindings_in_a_match_arm_are_structurally_indented() {
 
 #[test]
 fn ac6_ac7_worked_six_binding_proof_has_an_exact_readable_fixed_point() {
-    let source = r#"lemma string_to_list_char_injective_with_lets
+    let source = r#"theorem string_to_list_char_injective_with_lets
       (left : String)
       (right : String)
       (same_chars : Equal (List Char) (string_to_list_char left) (string_to_list_char right))
@@ -165,7 +165,7 @@ fn ac6_ac7_worked_six_binding_proof_has_an_exact_readable_fixed_point() {
       (string_to_list_char_retraction right))
 "#;
     let expected = concat!(
-        "lemma string_to_list_char_injective_with_lets\n",
+        "theorem string_to_list_char_injective_with_lets\n",
         "      (left : String)\n",
         "      (right : String)\n",
         "      (same_chars : Equal (List Char) (string_to_list_char left) (string_to_list_char right))\n",

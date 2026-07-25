@@ -24,7 +24,7 @@ packages ended up carrying `Axiom`s.
    operation **awaiting** its registered reduction (K3)."* **K3 never landed.**
 3. **Ken's guide ships it as a REJECT** —
    `catalog/guide/proof-techniques.ken.md:133`:
-   `lemma prim_eq_refl : Equal Bool (eq_int five five) True = Refl` **fails**,
+   `theorem prim_eq_refl : Equal Bool (eq_int five five) True = Refl` **fails**,
    *"never reduces to `True` under conversion, even though `five` is concrete."*
 4. `prim_reduce` / `prim_reduce_elaborated` live in **`ken_interp::eval`** — the
    **interpreter**, not the kernel.

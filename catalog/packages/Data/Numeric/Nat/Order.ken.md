@@ -115,7 +115,7 @@ returns the corresponding tag. It is therefore a program and is declared as
 a `fn`. In contrast, `leq_nat::refl`, `leq_nat::trans`, and
 `leq_nat::antisym` conclude `Equal` or `IsTrue` propositions at `Omega`:
 proof-irrelevant facts, so they are declared as `proof`. The vocabulary
-follows the `Omega`/`Type` boundary: `lemma` and `proof` establish
+follows the `Omega`/`Type` boundary: `theorem` and `proof` establish
 irrelevant propositions; `const` and `fn` compute data.
 
 ```ken
@@ -258,7 +258,7 @@ presented as a checked lemma:
 ```ken example
 const ord_nat_leq : Bool = (Ord_instance_Nat).leq (Suc Zero) (Suc (Suc Zero))
 
-lemma ord_nat_total : IsTrue (bool_or (leq_nat (Suc Zero) Zero) (leq_nat Zero (Suc Zero))) =
+theorem ord_nat_total : IsTrue (bool_or (leq_nat (Suc Zero) Zero) (leq_nat Zero (Suc Zero))) =
   (Ord_instance_Nat).total (Suc Zero) Zero
 ```
 

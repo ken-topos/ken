@@ -46,14 +46,14 @@ proof definition for decode_utf8
     : Equal (Result Utf8Error String) (decode_utf8 bs) (bytes_decode bs) =
   Refl
 
-lemma codec_roundtrip_anchor (p : BytesRoundTripLaw) : BytesRoundTripLaw = p
+theorem codec_roundtrip_anchor (p : BytesRoundTripLaw) : BytesRoundTripLaw = p
 
-lemma ascii_view_none
+theorem ascii_view_none
       (bs : Bytes) (index : Int) (h : Equal (Option UInt8) (bytes_at bs index) (None UInt8))
     : Equal (Option Bool) (ascii_view bs index) (None Bool) =
   cong (Option UInt8) (Option Bool) (bytes_at bs index) (None UInt8) classify_ascii_result h
 
-lemma ascii_view_some
+theorem ascii_view_some
       (bs : Bytes)
       (index : Int)
       (byte : UInt8)

@@ -370,7 +370,7 @@ fn list_fold_map (a : Type) (m : Type) (mon : Monoid m) (g : a → m) (xs : List
 
 fn list_to_list (a : Type) (xs : List a) : List a = xs
 
-lemma list_foldr_to_list
+theorem list_foldr_to_list
       (a : Type) (xs : List a)
     : Equal (List a) (list_foldr a (List a) (Cons a) (Nil a) xs) (list_to_list a xs) =
   match xs {
@@ -385,7 +385,7 @@ lemma list_foldr_to_list
         (list_foldr_to_list a t)
   }
 
-lemma list_fold_map_coherence
+theorem list_fold_map_coherence
       (a : Type) (m : Type) (mon : Monoid m) (g : a → m) (xs : List a)
     : Equal m
         (list_fold_map a m mon g xs)
@@ -417,12 +417,12 @@ fn option_fold_map (a : Type) (m : Type) (mon : Monoid m) (g : a → m) (x : Opt
 fn option_to_list (a : Type) (x : Option a) : List a =
   option_foldr a (List a) (Cons a) (Nil a) x
 
-lemma option_foldr_to_list
+theorem option_foldr_to_list
       (a : Type) (x : Option a)
     : Equal (List a) (option_foldr a (List a) (Cons a) (Nil a) x) (option_to_list a x) =
   Refl
 
-lemma option_fold_map_coherence
+theorem option_fold_map_coherence
       (a : Type) (m : Type) (mon : Monoid m) (g : a → m) (x : Option a)
     : Equal m
         (option_fold_map a m mon g x)

@@ -1,4 +1,4 @@
-# WP — FOSSIL: migrate `lemma … = Axiom` fossils to the `axiom` keyword
+# WP — FOSSIL: migrate `theorem … = Axiom` fossils to the `axiom` keyword
 
 **Owner:** Foundation ring (catalog authorship).
 **Reviewer/Gate:** Foundation QA. **No Architect terminal gate** — this is a
@@ -12,17 +12,17 @@ frame sync + a formatter re-run; the weight is the trust-invariance
 verification, not the edit).
 **Branch:** `wp/axiom-fossil-sweep`, cut fresh from `origin/main` at kickoff.
 **CI:** ⛔ FULL CI — touches `catalog/` (never `--doc-only`).
-**Source:** operator decision 2026-07-14 (the `lemma = Axiom` → `axiom`
+**Source:** operator decision 2026-07-14 (the `theorem = Axiom` → `axiom`
 migration; the 4 `LawfulClasses` `= Axiom` are instance-method fields and are
 **explicitly out of scope** — the sugar does not cover them).
 
 ## Objective
 
 Ken now has a first-class `axiom name : T` declaration keyword. The pre-sugar
-spelling `lemma name : T = Axiom` — using the `Axiom` builtin as a lemma body —
+spelling `theorem name : T = Axiom` — using the `Axiom` builtin as a lemma body —
 is a **workaround fossil**: it is exactly the contortion the `axiom` keyword was
 added to retire. Migrate the three remaining fossil sites to the keyword. Per
-`spec/30-surface/32-grammar.md §…`: **`axiom N : T` ⇒ `lemma N : T = Axiom`** is
+`spec/30-surface/32-grammar.md §…`: **`axiom N : T` ⇒ `theorem N : T = Axiom`** is
 a mechanical expansion introducing no new kernel/semantics — so this migration
 **changes surface tokens at three sites and changes nothing else**: identical
 elaborated term, identical trusted base, zero trust delta.
@@ -33,9 +33,9 @@ elaborated term, identical trusted base, zero trust delta.
    re-derive the line numbers from current source before editing — they may
    drift):
    - `catalog/guide/proof-techniques.ken.md:159` (single-line):
-     `lemma prim_eq_axiom : Equal Bool (eq_int five five) True = Axiom`
+     `theorem prim_eq_axiom : Equal Bool (eq_int five five) True = Axiom`
    - `catalog/guide/proof-techniques.ken.md:~349` (wraps; `Axiom` on `:351`):
-     `lemma string_to_list_char_retraction : (text : String) → Equal String
+     `theorem string_to_list_char_retraction : (text : String) → Equal String
      (list_char_to_string (string_to_list_char text)) text = / Axiom`
    - `catalog/packages/Data/Text/StringBijection.ken.md:~13` (wraps;
      `Axiom` on `:15`): the **same** `string_to_list_char_retraction` lemma
@@ -43,12 +43,12 @@ elaborated term, identical trusted base, zero trust delta.
      `\`\`\`ken example` fence).
 2. **The 4 `Core/Classes/LawfulClasses.ken.md` `= Axiom` sites are OUT** (`refl`/
    `antisym`/`trans`/`total` on `Ord Int`). They are **instance-method fields**,
-   not top-level `lemma` declarations; the `axiom` keyword is a declaration form
+   not top-level `theorem` declarations; the `axiom` keyword is a declaration form
    and does not cover instance fields. Do not touch them. Do not touch any
    backtick-`\`Axiom\`` prose reference or any `Axiom` used as a match-arm /
    lambda body.
 3. **Zero trust delta is the invariant.** The migrated `axiom N : T` must
-   elaborate to the identical postulate as `lemma N : T = Axiom` — same trusted
+   elaborate to the identical postulate as `theorem N : T = Axiom` — same trusted
    base, same audit label, same `Axiom`/postulate count. This is what AC3 pins.
 4. **Layout is the formatter's job, not yours.** After the token edits, the
    catalog must stay formatter-canonical: run `ken fmt`, do not hand-lay-out the
@@ -61,13 +61,13 @@ elaborated term, identical trusted base, zero trust delta.
 At each of the three sites, rewrite the declaration head and drop the body:
 
 ```
-lemma NAME : T = Axiom        ⇒        axiom NAME : T
-lemma NAME                              axiom NAME
+theorem NAME : T = Axiom        ⇒        axiom NAME : T
+theorem NAME                              axiom NAME
     : T =                                   : T
   Axiom
 ```
 
-i.e. replace the `lemma` keyword with `axiom`, and delete the trailing
+i.e. replace the `theorem` keyword with `axiom`, and delete the trailing
 `= Axiom` (single-line) or the `=` at the end of the type line **and** the
 `Axiom` continuation line (wrapped form). The type `T` is unchanged verbatim.
 
@@ -75,9 +75,9 @@ Grounding already done for the frame (do not re-litigate, but re-verify against
 current source):
 - `axiom` is a real keyword: `lexer.rs` `KwAxiom` (`"axiom"`), `parser.rs`
   `parse_axiom_decl` builds `Decl::AxiomDecl { name, theorem, span }` — a
-  distinct AST node, **not** desugared to `LemmaDecl` at parse time.
+  distinct AST node, **not** desugared to `TheoremDecl` at parse time.
 - The formatter emits it as `axiom …` (token-preserving `print_decl_signature`,
-  `layout.rs:585`), so `ken fmt` will not normalize it back to `lemma … =
+  `layout.rs:585`), so `ken fmt` will not normalize it back to `theorem … =
   Axiom`. There is currently **no** `axiom` decl in the catalog, so this WP is
   also the first corpus exercise of `axiom` round-tripping — AC4 pins it.
 
@@ -87,10 +87,10 @@ current source):
    fixture, write `axiom foo : Top`, run it through `ken fmt` and the checker,
    and confirm: (a) it parses/checks (elaborates to a `Top` postulate); (b) the
    formatter re-emits it as `axiom foo : Top` and is a fixed point (not
-   normalized to `lemma foo : Top = Axiom`). If either fails, **STOP and surface
+   normalized to `theorem foo : Top = Axiom`). If either fails, **STOP and surface
    to the Steward** — the fossil sweep would then require a formatter/parser
    change and is a different WP. (Expected: both pass, per the grounding above.)
-2. **Edit the three sites** per §mechanism — `lemma → axiom`, drop `= Axiom`.
+2. **Edit the three sites** per §mechanism — `theorem → axiom`, drop `= Axiom`.
    Nothing else in either file changes by hand.
 3. **Re-format** — run `ken fmt` over the catalog (or at least the two edited
    files); commit the formatter's output. Only `proof-techniques.ken.md` and
@@ -110,7 +110,7 @@ current source):
 ## Acceptance criteria (testable)
 
 - **AC1** — the three fossil sites are `axiom NAME : T` declarations; **zero**
-  `lemma … = Axiom` top-level declarations remain in the catalog (`git grep`
+  `theorem … = Axiom` top-level declarations remain in the catalog (`git grep`
   for the single-line and wrapped forms both return empty). The 4 `LawfulClasses`
   instance-field `= Axiom` sites are unchanged.
 - **AC2** — both edited files still **check** green (each `\`\`\`ken` /

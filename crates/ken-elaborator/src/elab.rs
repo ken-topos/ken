@@ -3843,7 +3843,7 @@ pub fn elaborate_rdecl_v1_with_effect_rows(
         RDeclKind::Prop { intros } => {
             elaborate_prop_decl(env, globals, num_values, numeric_env, rdecl, intros)
         }
-        RDeclKind::Lemma => elaborate_checked_theorem(
+        RDeclKind::Theorem => elaborate_checked_theorem(
             env,
             globals,
             num_values,
@@ -5143,7 +5143,7 @@ pub fn elaborate_mutual_group(
                     keyword: DefKeyword::Fn | DefKeyword::Const,
                     ..
                 } => ensure_not_omega_type(env, &Context::new(), ty_core, &rdecl.span)?,
-                RDeclKind::Lemma => ensure_omega_type(env, &Context::new(), ty_core, &rdecl.span)?,
+                RDeclKind::Theorem => ensure_omega_type(env, &Context::new(), ty_core, &rdecl.span)?,
                 RDeclKind::AttachedProof { subject, .. } => {
                     ensure_omega_type(env, &Context::new(), ty_core, &rdecl.span)?;
                     validate_attached_subject_occurs_applied(
@@ -5670,7 +5670,7 @@ fn elaborate_prop_decl(
             requires: vec![],
             ensures: vec![],
             span: intro.span.clone(),
-            kind: RDeclKind::Lemma,
+            kind: RDeclKind::Theorem,
         };
         let helper = elaborate_checked_theorem(
             env,
@@ -5772,7 +5772,7 @@ fn ensure_omega_type(
 }
 
 /// `fn` and `const` are computational definitions. Their result type must
-/// classify at `Type`, leaving Ω-valued definitions to `lemma` and `proof`.
+/// classify at `Type`, leaving Ω-valued definitions to `theorem` and `proof`.
 fn ensure_not_omega_type(
     env: &GlobalEnv,
     ctx: &Context,
@@ -5787,7 +5787,7 @@ fn ensure_not_omega_type(
         Term::Type(_) => Ok(()),
         Term::Omega(_) => Err(ElabError::TypeMismatch {
             span: span.clone(),
-            reason: "`fn`/`const` compute; use `lemma`/`proof` for an Ω-valued definition"
+            reason: "`fn`/`const` compute; use `theorem`/`proof` for an Ω-valued definition"
                 .to_string(),
         }),
         other => Err(ElabError::TypeMismatch {

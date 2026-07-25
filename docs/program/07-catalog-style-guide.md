@@ -172,11 +172,11 @@ Use the proof keyword to record **membership**, not an informal proof role.
 When a named theorem belongs to one subject's public theory, write
 `proof name for S`; the declaration is bound and referenced as `S::name`,
 including recursive self-references. If exactly one owning subject can be
-named, attach the proof to it. Use `lemma` only when no single subject owns the
+named, attach the proof to it. Use `theorem` only when no single subject owns the
 theorem:
 for an interior step, or for a cross-cutting law about several definitions in
 interaction. Reuse is orthogonal to membership: citing a subject-owned law from
-another proof does not demote it to `lemma`. This convention refines which proof
+another proof does not demote it to `theorem`. This convention refines which proof
 keyword to use; it does not change the existing `fn` versus Ω-proof partition.
 
 ### 6.1 Local bindings as exposition
@@ -254,7 +254,7 @@ belongs in the entry's Ken proper, in the construct built to check it:
 
 - A **contract or invariant** — a `requires`/`ensures` clause, or a
   refinement type on the value it constrains.
-- A **proposition** — a `law`/`prop`/`lemma` declaration (or, as the catalog
+- A **proposition** — a `law`/`prop`/`theorem` declaration (or, as the catalog
   most often states one, an ordinary `fn`/`const` whose result type *is* the
   property and whose body *is* the checked proof term), discharged directly
   or via `prove`.
@@ -349,10 +349,10 @@ for that pass, not a defect to fix on sight.
   `proof name for subject` and refer to it as `subject::name` (`add::assoc`,
   `leq_nat::refl`). Do not encode this membership in a flat
   `name_subject`/`subject_name` identifier.
-- Ownerless interaction laws and interior proof steps: descriptive `lemma`
+- Ownerless interaction laws and interior proof steps: descriptive `theorem`
   names that make the several definitions or local role clear.
 - Private helpers: a role suffix, sitting near the proof family they serve.
-- Avoid opaque sequence names (`lemma1`, `helper2`, `d3_case`) and overclaiming
+- Avoid opaque sequence names (`theorem1`, `helper2`, `d3_case`) and overclaiming
   names (a tested function named as if it were a proof-carrying theorem).
 
 | Suffix | Use |

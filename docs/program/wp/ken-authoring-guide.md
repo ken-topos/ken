@@ -40,7 +40,7 @@ entries. Standing this up first also gives the campaign's retro loop a target:
 3. **Retro-action wiring** — a short section (in the guide or the overlay)
    recording exactly how a catalog WP's retro folds back: guide/skill edits,
    Findings routing (surface→Ergo/Language, elaborator→Ergo, kernel→Kernel), and
-   promotion of reusable `def`/`lemma`/`prop` into the Core Section.
+   promotion of reusable `def`/`theorem`/`prop` into the Core Section.
 
 The **Foundation catalog-authoring overlay** (charter next-action 2) may be
 bundled here or follow immediately — it is the same body of knowledge pointed at

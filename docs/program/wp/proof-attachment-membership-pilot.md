@@ -24,17 +24,17 @@ vs scaffolding"):
 - **`proof name for S`** = a **named theorem in S's public theory** — checked to
   be *about S* (S occurs applied in the proposition). Bound and referenced as
   **`S::name`** (e.g. `leq_nat::refl`, `resolve.rs:939`).
-- **`lemma`** = a theorem with **no single owning subject**: a genuinely
+- **`theorem`** = a theorem with **no single owning subject**: a genuinely
   interior step, or a cross-cutting law about the **interaction** of several
   definitions where no one subject owns it (e.g. `listApCmpIsNotJustRefl`).
 - **Decision procedure (the tie-breaker):** *can you name exactly **one** owning
-  subject?* → `proof name for S`. *Cannot?* → `lemma`.
+  subject?* → `proof name for S`. *Cannot?* → `theorem`.
 - **Membership is NOT a usage/exclusivity test.** A `proof name for S` law may
   be **freely cited from anywhere** — being reused by other subjects' proofs
   does **not** demote it (cross-namespace `S::name` citation is ordinary). Do
   **not** phrase the rule as "used only by S," and do **not** move a
-  subject-owned law to `lemma` merely because it is reused. (This overrides the
-  earlier "reused ⇒ lemma" instinct — reuse is orthogonal.)
+  subject-owned law to `theorem` merely because it is reused. (This overrides the
+  earlier "reused ⇒ theorem" instinct — reuse is orthogonal.)
 - **Reference form:** self- and cross-reference use the lightweight **`S::name`**
   form — the recursive arm reads `Suc x2 ⇒ leq_nat::refl x2`, no heavier than
   the old `refl_leq_nat x2`.
@@ -46,9 +46,9 @@ vs scaffolding"):
 
 **1. `docs/program/07-catalog-style-guide.md` — the standard.** Update §6 (Proof
 presentation) and §9 (Naming) to state the convention: the `proof name for S`
-vs `lemma` distinction, the single-owning-subject decision procedure,
+vs `theorem` distinction, the single-owning-subject decision procedure,
 membership-not-role (with the "don't demote a reused law" caveat), and the
-`S::name` bind/reference form. Retire the flat `X_subject` lemma naming (e.g.
+`S::name` bind/reference form. Retire the flat `X_subject` theorem naming (e.g.
 `refl_leq_nat`) for **subject-owned** laws in favour of `proof X for S` /
 `S::X`. Keep the existing Ω-partition rule (`proof-vocab-completion`) intact —
 this convention refines *which proof keyword*, not the fn⊥Ω line.
@@ -64,11 +64,11 @@ law to `proof name for S` (`S::name`):
 - **Judgment cases (apply the procedure, don't force):** an *interaction* law
   naming two owners with no single owner — e.g. distributivity
   `mul_add_distrib_*` (about `mul`×`add` together) — is a candidate to **stay
-  `lemma`** unless one definition genuinely owns it. Foundation decides per law
+  `theorem`** unless one definition genuinely owns it. Foundation decides per law
   via the single-owning-subject test; flag the calls for Architect review.
 
 **3. `catalog/packages/Data/Numeric/Nat/Order.ken.md`** — same: `leq`/order laws → their
-owning subject (`leq_nat::…` / the Ord subject), `lemma` only where no single
+owning subject (`leq_nat::…` / the Ord subject), `theorem` only where no single
 owner.
 
 **Preserve (fidelity, keyword/name change ONLY):** every law's exact
@@ -83,7 +83,7 @@ proof at all). `fn`/`const` computational defs are untouched.
    single-owning-subject procedure, membership-not-role (incl. the no-demote
    caveat), and the `S::name` form.
 2. In both packages, every subject-owned law is `proof name for S` bound
-   `S::name`; every genuinely-ownerless law is `lemma`; no `fn`/`const` changed;
+   `S::name`; every genuinely-ownerless law is `theorem`; no `fn`/`const` changed;
    the fn⊥Ω partition is preserved.
 3. Recursive/cross references use `S::name`; **both packages elaborate green**
    (full catalog acceptance net — `nat_arithmetic_laws_acceptance`,
@@ -98,7 +98,7 @@ proof at all). `fn`/`const` computational defs are untouched.
 ## Do-not-reopen guardrails
 
 - The convention is **ruled + operator-concurred**: membership not role. Don't
-  relitigate the axis; don't move a subject-owned law to `lemma` for being
+  relitigate the axis; don't move a subject-owned law to `theorem` for being
   reused.
 - Don't touch `fn total_leq_nat` (Type-valued) or the Ω-partition.
 - Don't invent a new reference syntax — use the landed `S::name`.

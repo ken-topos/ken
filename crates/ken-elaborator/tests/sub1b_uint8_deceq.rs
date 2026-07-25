@@ -161,14 +161,14 @@ fn ac4_deceq_bytes_decides_raw_bytes_non_vacuously() {
 fn ac5_postulate_is_usable_but_refl_remains_rejected() {
     let mut env = ElabEnv::new().expect("base env");
     env.elaborate_decl(
-        "lemma use_uint8_retract (x : UInt8) : \
+        "theorem use_uint8_retract (x : UInt8) : \
          Equal UInt8 (int_to_uint8_raw (uint8_to_int x)) x = \
          uint8_int_retract x",
     )
     .expect("the registered propositional retraction must be usable");
 
     let result = env.elaborate_decl(
-        "lemma false_refl_uint8_retract (x : UInt8) : \
+        "theorem false_refl_uint8_retract (x : UInt8) : \
          Equal UInt8 (int_to_uint8_raw (uint8_to_int x)) x = Refl",
     );
     assert!(

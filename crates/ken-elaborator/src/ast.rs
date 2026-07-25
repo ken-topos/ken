@@ -214,9 +214,9 @@ pub enum Decl {
         intros: Vec<PropIntro>,
         span: Span,
     },
-    /// `lemma name ... : φ = proof` — standalone checked proof theorem
+    /// `theorem name ... : φ = proof` — standalone checked proof theorem
     /// (`33 §8.3`), ordinary module namespace.
-    LemmaDecl {
+    TheoremDecl {
         name: String,
         params: Vec<Binder>,
         theorem: Type,
@@ -224,7 +224,7 @@ pub enum Decl {
         span: Span,
     },
     /// `axiom name : T` — mechanical sugar for
-    /// `lemma name : T = Axiom`.
+    /// `theorem name : T = Axiom`.
     AxiomDecl {
         name: String,
         theorem: Type,
@@ -443,7 +443,7 @@ impl Decl {
             | Decl::LetDecl { name, .. }
             | Decl::ProveDecl { name, .. }
             | Decl::PropDecl { name, .. }
-            | Decl::LemmaDecl { name, .. }
+            | Decl::TheoremDecl { name, .. }
             | Decl::AxiomDecl { name, .. }
             | Decl::LawDecl { name, .. }
             | Decl::DataDecl { name, .. }
@@ -465,7 +465,7 @@ impl Decl {
             | Decl::LetDecl { span, .. }
             | Decl::ProveDecl { span, .. }
             | Decl::PropDecl { span, .. }
-            | Decl::LemmaDecl { span, .. }
+            | Decl::TheoremDecl { span, .. }
             | Decl::AxiomDecl { span, .. }
             | Decl::AttachedProofDecl { span, .. }
             | Decl::LawDecl { span, .. }

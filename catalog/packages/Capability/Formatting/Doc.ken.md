@@ -168,7 +168,7 @@ fn render_content_mode (flat : Bool) (width : Nat) (doc : Doc) : List Char =
 
 fn render_content (width : Nat) (doc : Doc) : List Char = render_content_mode False width doc
 
-lemma pretty_list_append_cong
+theorem pretty_list_append_cong
       (left : List Char)
       (left2 : List Char)
       (right : List Char)
@@ -190,7 +190,7 @@ fn pretty_bool_cases (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
     False ↦ Inr (Equal Bool False True) (Equal Bool False False) Proved
   }
 
-lemma render_content_group_preserves
+theorem render_content_group_preserves
       (flat : Bool) (width : Nat) (body : Doc) (valid : DocContentInvariant body)
     : Equal
         (List Char)
@@ -223,7 +223,7 @@ lemma render_content_group_preserves
         (sym Bool (doc_fits width body) False h)
   }
 
-lemma render_content_alt_preserves
+theorem render_content_alt_preserves
       (flat : Bool)
       (width : Nat)
       (first : Doc)
@@ -268,7 +268,7 @@ lemma render_content_alt_preserves
         (sym Bool (doc_fits width first) False h)
   }
 
-lemma render_content_mode_preserves
+theorem render_content_mode_preserves
       (flat : Bool) (width : Nat) (doc : Doc)
     : (valid : DocContentInvariant doc)
       → Equal (List Char) (render_content_mode flat width doc) (doc_content doc) =

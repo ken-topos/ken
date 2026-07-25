@@ -52,12 +52,12 @@ fn j_elaborates_to_a_real_term_j_node() {
     let mut env = mk_env();
     let ids = env
         .elaborate_file(
-            "lemma refl_test (ty : Type) (a : ty) (q : Equal ty a a) : Equal ty a a = \
+            "theorem refl_test (ty : Type) (a : ty) (q : Equal ty a a) : Equal ty a a = \
                J (\\b' _. Equal ty a b') Refl q",
         )
         .expect("J on refl should elaborate and kernel-check");
     let id = ids[0];
-    let (_, body) = env.env.transparent_body(id).expect("lemma must be transparent");
+    let (_, body) = env.env.transparent_body(id).expect("theorem must be transparent");
     assert!(
         mentions_j(&body),
         "elaborated body must contain a real Term::J node, got {:?}",
@@ -71,7 +71,7 @@ fn ill_typed_transport_wrong_equation_is_kernel_rejected() {
     // `base` proves `Equal ty bogus bogus` (an unrelated free variable) but
     // the motive demands `base : Equal ty a a` — not convertible.
     let res = env.elaborate_file(
-        "lemma bad_transport (ty : Type) (a : ty) (b : ty) (q : Equal ty a b) \
+        "theorem bad_transport (ty : Type) (a : ty) (b : ty) (q : Equal ty a b) \
            (bogus : ty) (r : Equal ty bogus bogus) : Equal ty a b = \
            J (\\b' _. Equal ty a b') r q",
     );
@@ -101,7 +101,7 @@ fn ill_typed_transport_wrong_witness_type_is_kernel_rejected() {
 #[test]
 fn standalone_j_admits_a_base_through_an_enclosing_let_definition() {
     let mut env = mk_env();
-    env.elaborate_file("lemma bool_refl (x : Bool) : Equal Bool x x = Refl")
+    env.elaborate_file("theorem bool_refl (x : Bool) : Equal Bool x x = Refl")
         .expect("the closed base proof must elaborate");
 
     // Before the enclosing `let` is admitted, `alias` is only an assumption
@@ -127,7 +127,7 @@ fn standalone_j_admits_a_base_through_an_enclosing_let_definition() {
 #[test]
 fn standalone_malformed_j_is_rejected_by_the_final_kernel_check() {
     let mut env = mk_env();
-    env.elaborate_file("lemma bool_refl (x : Bool) : Equal Bool x x = Refl")
+    env.elaborate_file("theorem bool_refl (x : Bool) : Equal Bool x x = Refl")
         .expect("the closed base proof must elaborate");
 
     // The body actually has type `Equal Bool x True`, not `Bool`.  Surface
@@ -187,7 +187,7 @@ fn stuck_match_over_abstract_key_transports_via_hand_written_motive() {
     let ids = env
         .elaborate_file(
             "fn stuck_of (k : Bool) : Bool = match k { True |-> True ; False |-> False }\n\
-             lemma stuck_transport (k : Bool) (q : Equal Bool True k) \
+             theorem stuck_transport (k : Bool) (q : Equal Bool True k) \
                : Equal Bool (stuck_of k) True = \
                J (\\b' _. Equal Bool (stuck_of b') True) Proved q",
         )
@@ -196,7 +196,7 @@ fn stuck_match_over_abstract_key_transports_via_hand_written_motive() {
     let (_, body) = env
         .env
         .transparent_body(stuck_transport_id)
-        .expect("lemma must be transparent");
+        .expect("theorem must be transparent");
     assert!(mentions_j(&body), "the proof must be a real Term::J, got {:?}", body);
 }
 
@@ -213,12 +213,12 @@ fn stuck_match_transports_via_package_sym() {
     let ids = env
         .elaborate_file(
             "fn stuck_of2 (k : Bool) : Bool = match k { True |-> True ; False |-> False }\n\
-             lemma stuck_transport2 (k : Bool) (q : Equal Bool k True) \
+             theorem stuck_transport2 (k : Bool) (q : Equal Bool k True) \
                : Equal Bool (stuck_of2 k) True = \
                J (\\b' _. Equal Bool (stuck_of2 b') True) Proved (sym Bool k True q)",
         )
         .expect("J + package sym must transport a stuck match too");
     let id = ids[1];
-    let (_, body) = env.env.transparent_body(id).expect("lemma must be transparent");
+    let (_, body) = env.env.transparent_body(id).expect("theorem must be transparent");
     assert!(mentions_j(&body), "must bottom out in a real Term::J, got {:?}", body);
 }

@@ -17,7 +17,7 @@ kernel-checked Ken; no kernel rule, no primitive, no postulate.
    - `catalog/packages/Data/Collections/NonEmpty.ken.md`
    - `catalog/packages/Data/Sums/Validation.ken.md`
    Follow the landed catalog conventions (`catalog-style-guide.md`): top-down
-   `def`/`prop`/`lemma`/`proof`, membership form (`proof … for S`), literate
+   `def`/`prop`/`theorem`/`proof`, membership form (`proof … for S`), literate
    fence roles. Both files **must be `ken fmt`-clean** — the strict
    `ken fmt --check` gate is now live (kenfmt C, `origin/main @ 10e453aa`); run
    `ken fmt` before handoff or `cargo test --workspace --locked` fails.

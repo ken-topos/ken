@@ -571,7 +571,7 @@ fn lookup_empty_law_is_a_real_reducing_proof() {
     // This is a kernel CHECK (is the type inhabited), not an `eval` — the
     // Prop itself is a type, not a runtime data value.
     env.elaborate_decl(
-        "lemma orderedEmptyProof (k : Type) (v : Type) (leq : k -> k -> Bool) : \
+        "theorem orderedEmptyProof (k : Type) (v : Type) (leq : k -> k -> Bool) : \
          Ordered k v leq (empty k v) = Proved",
     )
     .expect("Ordered on an empty map must be provable by Proved");

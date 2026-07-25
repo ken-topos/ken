@@ -42,6 +42,6 @@ path.
 
 Route Findings instead of leaving them in task notes: gaps in authoring
 guidance go to the relevant `catalog/guide/` strand; recurring sugar candidates
-and confusing manual elaboration go to Ergo; reusable `def`/`lemma`/`prop`
+and confusing manual elaboration go to Ergo; reusable `def`/`theorem`/`prop`
 artifacts go into the catalog; kernel-reduction defects go to Kernel through
 the enclave.

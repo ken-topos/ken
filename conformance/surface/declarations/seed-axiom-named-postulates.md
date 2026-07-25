@@ -15,7 +15,7 @@ the identity.
   ```
 
 - expect: accepts and elaborates exactly as
-  `lemma assumed_top : Top = Axiom`; the trusted-base entry is labeled
+  `theorem assumed_top : Top = Axiom`; the trusted-base entry is labeled
   `assumed_top`.
 - why: `axiom` adds only declaration syntax. It introduces no new kernel term
   or elaboration rule.
@@ -27,8 +27,8 @@ the identity.
 - given:
 
   ```ken
-  lemma choose (x : Top) (y : Top) : Top = x
-  lemma shared : Top = choose Axiom Axiom
+  theorem choose (x : Top) (y : Top) : Top = x
+  theorem shared : Top = choose Axiom Axiom
   ```
 
 - expect: accepts and adds two trusted-base entries labeled `shared`, with two

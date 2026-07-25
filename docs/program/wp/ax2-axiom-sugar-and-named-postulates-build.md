@@ -12,7 +12,7 @@ label to kernel data is low risk. approved."*
 
 Build what AX-1 specified:
 
-1. **`axiom N : T`** — surface sugar for `lemma N : T = Axiom`. Mechanical.
+1. **`axiom N : T`** — surface sugar for `theorem N : T = Axiom`. Mechanical.
 2. **Named postulates** — every `Decl::Opaque` carries a **required** name, so
    `trusted_base()` becomes **readable**, not merely countable.
 
@@ -85,7 +85,7 @@ against the landed code, **say so and escalate — do not quietly build around i
 ### D1 — Parser: the `axiom` production
 
 Add `axiom N : T` per `spec/30-surface/32`. It desugars **mechanically** to
-`lemma N : T = Axiom`; there is **no new elaboration rule**.
+`theorem N : T = Axiom`; there is **no new elaboration rule**.
 
 **⚠ A new declaration form needs a FORMATTER arm.** A production the formatter
 cannot round-trip **reds the corpus fmt gate** — see AC6.
@@ -157,7 +157,7 @@ DS-suite's trust ratchet. (This is *why* no positional index — see §2.)
 
 `axiom N : T` **parses**, **elaborates**, and the postulate appears in
 `trusted_base()` **under its derived name**. Plus a test that
-`lemma foo : T = f Axiom Axiom` mints **two** postulates that **share a label**
+`theorem foo : T = f Axiom Axiom` mints **two** postulates that **share a label**
 and hold **distinct `GlobalId`s** (§2).
 
 ---
@@ -192,7 +192,7 @@ and hold **distinct `GlobalId`s** (§2).
   (COORDINATION §12, operator hard rule — it OOMs the box). Targeted `-p` locally;
   the publisher gates the merge on GitHub's full `--locked` run.
 - **AC8 — No corpus migration.** Do **NOT** rewrite existing
-  `lemma … = Axiom` sites to the new `axiom` form. The sugar is **additive**.
+  `theorem … = Axiom` sites to the new `axiom` form. The sugar is **additive**.
   A corpus migration is a separate WP if we want one.
 
 ---

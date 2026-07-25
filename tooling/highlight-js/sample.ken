@@ -72,7 +72,7 @@ instance Eq Bool {
   refl = λx. tt
 }
 
--- ── named proof claims: prop / lemma / proof ──────────────────────────────
+-- ── named proof claims: prop / theorem / proof ──────────────────────────────
 
 prop Trivial (a : Type) (x : a) : Ω where {
   triv : Trivial a x
@@ -82,7 +82,7 @@ fn doubleIt (x : Int) : Int = x + x
 
 proof trivial for doubleIt (x : Int) : Trivial Int x = Trivial.triv Int x
 
-lemma trivialAny (a : Type) (x : a) : Trivial a x = Trivial.triv a x
+theorem trivialAny (a : Type) (x : a) : Trivial a x = Trivial.triv a x
 
 -- ── requires / ensures / prove / law / old / space, foreign, temporal ───
 

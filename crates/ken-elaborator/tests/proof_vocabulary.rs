@@ -13,11 +13,11 @@ fn structural_and_forward_proof_definitions_elaborate() {
     let before = elab.env.trusted_base();
     elab.elaborate_file(
         r#"
-        lemma self_refl (x : Nat) : Equal Nat x x =
+        theorem self_refl (x : Nat) : Equal Nat x x =
           match x { Zero |-> Proved ; Suc x2 |-> self_refl x2 }
-        lemma use_later (x : Int) : Equal Int (later x) x = later_refl x
+        theorem use_later (x : Int) : Equal Int (later x) x = later_refl x
         fn later (x : Int) : Int = x
-        lemma later_refl (x : Int) : Equal Int (later x) x = Refl
+        theorem later_refl (x : Int) : Equal Int (later x) x = Refl
         "#,
     )
     .expect("structural proof and forward references elaborate");
@@ -34,9 +34,9 @@ fn public_module_definitions_receive_the_same_forward_admission() {
     elab.elaborate_file(
         r#"
         module M {
-          pub lemma use_later (x : Int) : Equal Int (later x) x = later_refl x
+          pub theorem use_later (x : Int) : Equal Int (later x) x = later_refl x
           pub fn later (x : Int) : Int = x
-          pub lemma later_refl (x : Int) : Equal Int (later x) x = Refl
+          pub theorem later_refl (x : Int) : Equal Int (later x) x = Refl
         }
         "#,
     )
@@ -67,16 +67,16 @@ fn homogeneous_mutual_proofs_admit_but_non_descending_proofs_fail_at_sct() {
     let mut elab = env();
     elab.elaborate_file(
         r#"
-        lemma left (n : Nat) : Equal Nat n n =
+        theorem left (n : Nat) : Equal Nat n n =
           match n { Zero |-> Proved ; Suc m |-> right m }
-        lemma right (n : Nat) : Equal Nat n n =
+        theorem right (n : Nat) : Equal Nat n n =
           match n { Zero |-> Proved ; Suc m |-> left m }
         "#,
     )
     .expect("homogeneous descending proof SCC must pass SCT");
 
     let err = env()
-        .elaborate_file("lemma bad (n : Nat) : Equal Nat n n = bad n")
+        .elaborate_file("theorem bad (n : Nat) : Equal Nat n n = bad n")
         .expect_err("non-descending proof self recursion must fail closed");
     assert!(matches!(
         err,
@@ -110,7 +110,7 @@ fn attached_proof_uses_occurs_applied_and_mixed_cycles_fail_closed() {
     let err = env()
         .elaborate_file(
             "fn computational (n : Nat) : Equal Nat n n = proof_member n\n\
-             lemma proof_member (n : Nat) : Equal Nat n n = computational n",
+             theorem proof_member (n : Nat) : Equal Nat n n = computational n",
         )
         .expect_err("mixed fn/proof recursive SCC stays explicitly deferred");
     assert!(matches!(err, ElabError::TypeMismatch { reason, .. } if reason.contains("mixed")));
@@ -118,7 +118,7 @@ fn attached_proof_uses_occurs_applied_and_mixed_cycles_fail_closed() {
 
 #[test]
 fn computational_keywords_reject_omega_results_and_proved_names_top() {
-    let diagnostic = "`fn`/`const` compute; use `lemma`/`proof` for an Ω-valued definition";
+    let diagnostic = "`fn`/`const` compute; use `theorem`/`proof` for an Ω-valued definition";
 
     for declaration in [
         "fn bad_fn (x : Nat) : Equal Nat x x = Refl",
@@ -138,10 +138,10 @@ fn computational_keywords_reject_omega_results_and_proved_names_top() {
     elab.elaborate_decl("const inferred_nat = Zero")
         .expect("an inferred computational result must remain accepted");
     elab.elaborate_file(
-        "lemma accepted (x : Nat) : Equal Nat x x = Refl\n\
-         lemma top_token : Top = Proved",
+        "theorem accepted (x : Nat) : Equal Nat x x = Refl\n\
+         theorem top_token : Top = Proved",
     )
-    .expect("lemma/proved must admit the Omega-valued proof vocabulary");
+    .expect("theorem/proved must admit the Omega-valued proof vocabulary");
     assert!(elab.globals.contains_key("Top"));
     assert!(elab.globals.contains_key("Proved"));
     assert!(!elab.globals.contains_key("tt"));

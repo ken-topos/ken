@@ -14,7 +14,7 @@ The `SURF-named-proof-claims` discussion settled a math-facing vocabulary for
 semantic claims:
 
 - `prop` names a proposition family / claim shape.
-- `lemma` names a reusable standalone proof theorem.
+- `theorem` names a reusable standalone proof theorem.
 - `proof <name> for <subject>` names a proof attached to a subject, referenced
   canonically as `subject::name`.
 
@@ -32,7 +32,7 @@ whether the existing vocabulary already covers the space:
 - `type` names transparent type aliases and refinement / Sigma / Pi type
   abbreviations.
 - `record` names bundled dependent data.
-- `prop`, `lemma`, and attached `proof` name checked propositions and proofs.
+- `prop`, `theorem`, and attached `proof` name checked propositions and proofs.
 
 ## D0 outcome
 
@@ -55,7 +55,7 @@ The preferred forms are:
    concept needs projections.
 3. **`prop`** for proposition families / claim shapes that are checked as proof
    surfaces.
-4. **`lemma`** for reusable standalone theorems.
+4. **`theorem`** for reusable standalone theorems.
 5. **Attached `proof`** for proof facts that belong to a specific subject and
    should remain under `subject::name`.
 6. **`const` / `fn` / `proc`** for computational definitions; do not use
@@ -73,7 +73,7 @@ codify the existing-form guidance for catalog authors:
 - When the name is a proposition family or claim shape, should the reader
   spell it as `prop` and keep the checked proof surface explicit?
 - When the name is a reusable theorem, should the reader spell it as a
-  `lemma` rather than attaching an unrelated computational definition?
+  `theorem` rather than attaching an unrelated computational definition?
 - Which catalog examples should the style guide point at, especially around
   `AppendsTo`, `list_append`, and attached proof claims?
 
@@ -86,7 +86,7 @@ codify the existing-form guidance for catalog authors:
 - Do not let `def` become an ambiguous replacement for every declaration form.
   If the chosen design cannot state a crisp elaboration target, prefer the
   "no new keyword" outcome.
-- Do not reopen `prop`, `lemma`, `proof`, `::`, or explicit attached-proof
+- Do not reopen `prop`, `theorem`, `proof`, `::`, or explicit attached-proof
   telescope decisions from `SURF-named-proof-claims`.
 - Keep any accepted syntax orthogonal to modules, imports, and visibility:
   exported names must behave like the declaration class they elaborate to.

@@ -435,10 +435,10 @@ authority = "explanatory"
 availability = "current"
 sources = [
   "spec/30-surface/36-effects.md#162-the-bidirectional-check--the-keyword-cannot-lie",
-  "spec/30-surface/33-declarations.md#8-named-proof-claims--prop-lemma-and-attached-proof",
+  "spec/30-surface/33-declarations.md#8-named-proof-claims--prop-theorem-and-attached-proof",
   "spec/30-surface/33-declarations.md#81-proposition-families--prop",
   "spec/30-surface/33-declarations.md#82-attached-proofs--proof",
-  "spec/30-surface/33-declarations.md#83-standalone-lemmas--lemma",
+  "spec/30-surface/33-declarations.md#83-standalone-theorems--theorem",
   "docs/program/07-catalog-style-guide.md#6-proof-presentation",
   "spec/50-stdlib/55-lawful-functors.md#32-the-proved-vs-refl-discrimination-a-load-bearing-k7-subtlety",
   "catalog/packages/Core/Logic/Transport.ken.md",

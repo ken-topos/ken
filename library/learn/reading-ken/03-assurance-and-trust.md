@@ -97,7 +97,7 @@ worked examples never build that instantiation.
 
 The [System IO fragment](../../../catalog/packages/Capability/System/IO.ken.md)
 states its boundary
-directly, in its opening paragraph: its five `lemma`s are kernel-
+directly, in its opening paragraph: its five `theorem`s are kernel-
 checked proof terms, but "exactly-once settlement and liveness remain
 runtime-enforced, delegated boundary properties." That sentence names, in
 the fragment's own words, exactly the shape `delegated` describes in the

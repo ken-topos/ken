@@ -37,7 +37,7 @@ decl ::=
   | "class" ConId binder* "{" class_field (";" class_field)* "}"  -- typeclass (33 §5, ADR 0008)
   | "instance" ConId atype* constraint_clause? "{" field_assign (";" field_assign)* "}"  -- instance (33 §5, §5.4)
   | "prop" ConId tyvar* binder* ":" type prop_block?  -- proposition family / claim shape
-  | "lemma" ident binder* ":" type "=" expr  -- standalone checked proof theorem
+  | "theorem" ident binder* ":" type "=" expr  -- standalone checked proof theorem
   | "axiom" ident ":" type  -- mechanical postulate-declaration sugar
   | "proof" ident "for" path binder* ":" type "=" expr  -- attached proof theorem
   | "foreign" ident ":" type foreign_spec  -- FFI (38)
@@ -101,21 +101,24 @@ keyword is `capabilities`: unlike `grants`, it does not imply that a program
 grants authority to itself; unlike `requires`, it cannot be confused with a
 logical precondition; and unlike `caps`, it is not abbreviated.
 
-**Proof-claim declarations are ordinary checked terms.** `prop`, `lemma`, and
+**Proof-claim declarations are ordinary checked terms.** `prop`, `theorem`, and
 attached `proof` all elaborate to existing checked terms only. `prop` requires
 an `Omega`-valued result and may carry an optional constructor-style
 `where` block whose intro helpers elaborate to ordinary proof terms under the
-family namespace. `lemma` is a checked theorem in the ordinary module
+family namespace. `theorem` is a checked theorem in the ordinary module
 namespace. `proof` attaches a checked theorem to a resolved subject path, and
 the canonical attached name is `subject::proof_name`. None of these forms adds
 a new kernel declaration class, a trusted proof table, or ambient proof search.
+`theorem` is the sole standalone checked-theorem declaration keyword. No alias
+or deprecated spelling is accepted; every other word lexes under the ordinary
+identifier rules.
 
 An `axiom` declaration is exactly the mechanical expansion
-`axiom N : T` ⇒ `lemma N : T = Axiom`. The production introduces no new
-elaboration rule: the expanded `lemma` retains its ordinary `Omega`-valued
+`axiom N : T` ⇒ `theorem N : T = Axiom`. The production introduces no new
+elaboration rule: the expanded `theorem` retains its ordinary `Omega`-valued
 claim check, and its `Axiom` body uses the checking-mode rule in `39 §5.4`.
 For example, `axiom assumed_top : Top` mechanically expands to
-`lemma assumed_top : Top = Axiom`; both forms satisfy the productions above.
+`theorem assumed_top : Top = Axiom`; both forms satisfy the productions above.
 The expression `Axiom` remains independently legal wherever a term is checked;
 this additive declaration sugar neither removes nor restricts it.
 

@@ -196,7 +196,7 @@ claim with no conformance case is a claim no one can rely on
   AC4 Type/Omega sort discriminant. Pins the `proc traverse` unblock for CAT-2
   D3 while keeping zero kernel/Cargo.lock/trusted-base delta.
 - `surface/declarations/seed-named-proof-claims.md` — `prop` families,
-  `lemma` theorems, attached `proof` canonicalization, explicit bare/grouped/
+  `theorem` declarations, attached `proof` canonicalization, explicit bare/grouped/
   canonical selector identity, and the bare-name-rejects/selector-resolves pair.
 - `surface/declarations/seed-def-refinement.md` — SURF-def-refinement: the
   `type` → `def` declaration-keyword rename (refinement + alias RHS forms),
@@ -215,7 +215,7 @@ claim with no conformance case is a claim no one can rely on
   re-export-site collision, MRES-4d instance carry, and abstract-constructor
   hiding. The Language namespace/export follow-on executes the producer arms.
 - `surface/declarations/seed-axiom-named-postulates.md` — additive `axiom N : T`
-  mechanical sugar for `lemma N : T = Axiom`, with readable derived
+  mechanical sugar for `theorem N : T = Axiom`, with readable derived
   provenance, plus the repeated-`Axiom` discriminator: one semantic owner label
   shared by distinct `GlobalId` identities.
 - `surface/formatting/seed-canonical-format.md` — WP S canonical formatter

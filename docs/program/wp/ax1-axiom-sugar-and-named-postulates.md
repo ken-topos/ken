@@ -12,7 +12,7 @@ label to kernel data is low risk. approved."*
 
 Pin the spec for two changes that travel together:
 
-1. **`axiom N : T`** — surface sugar for `lemma N : T = Axiom`. **Purely
+1. **`axiom N : T`** — surface sugar for `theorem N : T = Axiom`. **Purely
    mechanical.**
 2. **Named postulates** — every `Decl::Opaque` carries a **name**, so
    `trusted_base()` becomes **readable**, not merely countable.
@@ -27,7 +27,7 @@ in §2 is settled by the operator and must not be reopened.
 - **`Axiom` STAYS** as an expression. The sugar **adds** a declaration form; it
   **removes nothing**. `instance Ord Int { refl = Axiom; … }` remains legal and
   is **not** deprecated.
-- **The sugar is mechanical.** `axiom N : T` ≡ `lemma N : T = Axiom`. No new
+- **The sugar is mechanical.** `axiom N : T` ≡ `theorem N : T = Axiom`. No new
   elaboration semantics.
 - **Postulates get names.** The name is a **label on kernel data** — the
   operator has ruled this low-risk and approved it.
@@ -88,7 +88,7 @@ real `Axiom` is exactly one of two shapes:
 
 | shape | example | derived name |
 |---|---|---|
-| top-level declaration body | `lemma prim_eq_axiom : … = Axiom` | the declaration's own name |
+| top-level declaration body | `theorem prim_eq_axiom : … = Axiom` | the declaration's own name |
 | **instance method field** | `instance Ord Int { refl = Axiom; … }` | `Ord.Int.refl` |
 
 **There is no third shape.** *(Sites: `LawfulClasses.ken.md:213-216`,
@@ -111,8 +111,8 @@ ambiguous at every call site.
 ## 4 · Deliverables (spec only — AX-2 builds it)
 
 - **D1 — Grammar.** Add the `axiom` declaration production to
-  `spec/30-surface/32-grammar.md`, alongside `lemma`. State the desugaring:
-  `axiom N : T` ≡ `lemma N : T = Axiom`. **Mechanical; no new semantics.**
+  `spec/30-surface/32-grammar.md`, alongside `theorem`. State the desugaring:
+  `axiom N : T` ≡ `theorem N : T = Axiom`. **Mechanical; no new semantics.**
 - **D2 — `Axiom` is specified.** It is currently **absent from the grammar
   entirely** while being a load-bearing trust primitive. **Fix that**: specify
   `Axiom` as the checking-mode postulate intercept (§3.1), including that it

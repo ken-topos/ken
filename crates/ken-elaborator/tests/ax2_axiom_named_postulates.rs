@@ -33,7 +33,7 @@ fn axiom_surface_parses_formats_and_elaborates_as_a_named_postulate() {
 
     let mut env = ElabEnv::new().expect("base environment builds");
     env.elaborate_file(source)
-        .expect("axiom declaration elaborates through the lemma lane");
+        .expect("axiom declaration elaborates through the theorem lane");
     let entries = trusted_opaque_entries(&env);
     assert!(
         entries
@@ -47,8 +47,8 @@ fn axiom_surface_parses_formats_and_elaborates_as_a_named_postulate() {
 fn repeated_expression_axioms_share_the_owner_label_but_not_identity() {
     let mut env = ElabEnv::new().expect("base environment builds");
     env.elaborate_file(
-        "lemma choose (x : Top) (y : Top) : Top = x\n\
-         lemma shared : Top = choose Axiom Axiom",
+        "theorem choose (x : Top) (y : Top) : Top = x\n\
+         theorem shared : Top = choose Axiom Axiom",
     )
     .expect("both expression-position Axiom terms elaborate");
 
@@ -94,7 +94,7 @@ fn standalone_api_requires_and_preserves_its_caller_owner() {
             .any(|(_, name)| name == "standalone_assumption")
     );
 
-    env.elaborate_file("lemma choose_api (x : Top) (y : Top) : Top = x")
+    env.elaborate_file("theorem choose_api (x : Top) (y : Top) : Top = x")
         .expect("standalone fixture helper elaborates");
     env.elaborate_expr(
         "standalone_shared_owner",

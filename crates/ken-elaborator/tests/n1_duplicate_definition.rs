@@ -44,8 +44,8 @@ fn class_and_constructor_share_the_duplicate_definition_funnel() {
         "class Eq a { eq : a -> a -> Bool }\n\
          fn J (x : Bool) : Bool = x\n\
          data Marker = Eq\n\
-         lemma eq_sugar (a : Type) (x : a) : Eq a x x = Refl\n\
-         lemma j_sugar\n\
+         theorem eq_sugar (a : Type) (x : a) : Eq a x x = Refl\n\
+         theorem j_sugar\n\
            (ty : Type) (a : ty) (b : ty) (q : Equal ty a b)\n\
            : Equal ty a b = J (\\b' _. Equal ty a b') Refl q",
         "Eq",
@@ -60,8 +60,8 @@ fn lower_arity_eq_j_and_real_sugar_remain_jointly_live() {
             "class Eq a { eq : a -> a -> Bool }\n\
              fn J (x : Bool) : Bool = x\n\
              data Marker = Only\n\
-             lemma eq_sugar (a : Type) (x : a) : Eq a x x = Refl\n\
-             lemma j_sugar\n\
+             theorem eq_sugar (a : Type) (x : a) : Eq a x x = Refl\n\
+             theorem j_sugar\n\
                (ty : Type) (a : ty) (b : ty) (q : Equal ty a b)\n\
                : Equal ty a b = J (\\b' _. Equal ty a b') Refl q",
         )

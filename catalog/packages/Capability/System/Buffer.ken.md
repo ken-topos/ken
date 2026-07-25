@@ -22,10 +22,10 @@ fn span_attempt_budget (span : BufferSpan) : Nat = buffer_span_budget span
 
 fn transferred (count : TransferCount) : Int = transfer_count_int count
 
-lemma transfer_is_positive (count : TransferCount) : transfer_count_positive_prop count =
+theorem transfer_is_positive (count : TransferCount) : transfer_count_positive_prop count =
   transfer_count_positive count
 
-lemma transfer_is_bounded
+theorem transfer_is_bounded
       (count : TransferCount)
     : Equal Nat
         (transfer_count_request_budget count)

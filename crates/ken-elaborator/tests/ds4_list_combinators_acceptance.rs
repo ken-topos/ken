@@ -83,7 +83,7 @@ fn ac8_non_involutive_witness_rejected_for_reverse_involutive() {
     let mut env = base_env();
     let r = env.elaborate_decl(
         "fn bad_id_list (a : Type) (xs : List a) : List a = xs\n\
-         lemma badReverseInvolutive (a : Type) (xs : List a) : Equal (List a) (reverse a (reverse a xs)) xs = Proved",
+         theorem badReverseInvolutive (a : Type) (xs : List a) : Equal (List a) (reverse a (reverse a xs)) xs = Proved",
     );
     // The identity-function line elaborates fine on its own; the point is
     // that a `Proved`-forced proof of the GENERAL (abstract `xs`) involutive
@@ -108,7 +108,7 @@ fn ac8_non_involutive_witness_rejected_for_reverse_involutive() {
 fn ac8_off_by_one_range_length_rejected() {
     let mut env = base_env();
     let r = env.elaborate_decl(
-        "lemma bad_range_length_off_by_one (n : Nat) : Equal Nat (length Nat (range n)) (Suc n) = range_length n",
+        "theorem bad_range_length_off_by_one (n : Nat) : Equal Nat (length Nat (range n)) (Suc n) = range_length n",
     );
     match r {
         Ok(_) => panic!("range_length proves length(range n) = n, not Suc n — reusing it here must be rejected"),
@@ -152,7 +152,7 @@ fn ac8_zip_length_is_min_not_left_length() {
 fn zip_truncates_at_shorter_list_concrete_example() {
     let mut env = base_env();
     env.elaborate_decl(
-        "lemma zip3v2Length : Equal Nat \
+        "theorem zip3v2Length : Equal Nat \
            (length (Pair Nat Nat) (zip Nat Nat (Cons Nat Zero (Cons Nat (Suc Zero) (Cons Nat (Suc (Suc Zero)) (Nil Nat)))) (Cons Nat Zero (Cons Nat (Suc Zero) (Nil Nat))))) \
            (Suc (Suc Zero)) = zip_length Nat Nat (Cons Nat Zero (Cons Nat (Suc Zero) (Cons Nat (Suc (Suc Zero)) (Nil Nat)))) (Cons Nat Zero (Cons Nat (Suc Zero) (Nil Nat)))",
     )

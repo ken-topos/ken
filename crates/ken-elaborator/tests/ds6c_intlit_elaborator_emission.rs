@@ -25,8 +25,8 @@ use num_bigint::BigInt;
 /// referenced by name in the type position, `Equal Int five five`, rather
 /// than written directly as `Equal Int 5 5`: the surface type-annotation
 /// grammar doesn't accept a bare numeric-literal argument today — confirmed
-/// pre-existing and orthogonal to this WP, `lemma b : Equal Bool True True`
-/// parses fine, `lemma a : Equal Int 5 5` doesn't, `Equal Int x x` with a
+/// pre-existing and orthogonal to this WP, `theorem b : Equal Bool True True`
+/// parses fine, `theorem a : Equal Int 5 5` doesn't, `Equal Int x x` with a
 /// variable does. DS-6c is emission/wiring only, not a parser change, so
 /// this works within the existing grammar rather than extending it.)
 #[test]
@@ -48,7 +48,7 @@ fn real_int_literal_elaborates_to_intlit_and_tt_checks_end_to_end() {
     );
 
     let id = env
-        .elaborate_decl("lemma int_5_eq_5 : Equal Int five five = Proved")
+        .elaborate_decl("theorem int_5_eq_5 : Equal Int five five = Proved")
         .expect("Proved must check against the reduced Top goal");
     let (_, ty) = env.env.const_type(id).expect("declared type must be recorded");
     let ctx = Context::new();
@@ -73,7 +73,7 @@ fn real_distinct_int_literals_reduce_to_bottom_and_reject_tt_and_refl() {
     env.elaborate_decl("const six : Int = 6").expect("six");
 
     let err_tt = env
-        .elaborate_decl("lemma int_5_eq_6_tt : Equal Int five six = Proved")
+        .elaborate_decl("theorem int_5_eq_6_tt : Equal Int five six = Proved")
         .expect_err("Proved must not prove Equal Int five six");
     assert!(
         matches!(
@@ -97,7 +97,7 @@ fn real_distinct_int_literals_reduce_to_bottom_and_reject_tt_and_refl() {
     // Asserting the SPECIFIC variant each path actually produces, not
     // assuming both funnel through the same one.
     let err_refl = env
-        .elaborate_decl("lemma int_5_eq_6_refl : Equal Int five six = Refl")
+        .elaborate_decl("theorem int_5_eq_6_refl : Equal Int five six = Refl")
         .expect_err("Refl must not prove Equal Int five six");
     assert!(
         matches!(&err_refl, ken_elaborator::ElabError::TypeMismatch { .. }),
@@ -138,7 +138,7 @@ fn real_distinct_int_literals_reduce_to_bottom_and_reject_tt_and_refl() {
 #[test]
 fn refl_still_accepted_on_a_genuinely_abstract_eq_shaped_goal() {
     let mut env = ElabEnv::new().expect("base env");
-    env.elaborate_decl("lemma int_refl_abstract (x : Int) : Equal Int x x = Refl")
+    env.elaborate_decl("theorem int_refl_abstract (x : Int) : Equal Int x x = Refl")
         .expect("Refl must still check against a genuinely abstract (unreduced) Eq Int x x goal");
 }
 

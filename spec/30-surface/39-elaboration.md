@@ -53,7 +53,7 @@ is a core term the kernel `check`s (`../10-kernel/18 §4`). Consequences:
    **exhaustiveness + reachability** checking (`34 §4`).
 7. **Sugar expansion** — telescopes (`../10-kernel/13 §3`), records → Σ (`33
    §2`), `if` → `elim_Bool`, contracts/refinements → the obligation encoding
-   (`../20-verification/21 §6`, `22`), proof-claim forms (`prop` / `lemma` /
+   (`../20-verification/21 §6`, `22`), proof-claim forms (`prop` / `theorem` /
    attached `proof`) → ordinary checked proof terms over `Ω`, `do`/
    comprehensions (if any) → combinators, numeric literals →
    `fromInteger`/… (`35 §4`), layout → braces (`31 §6`); `@ct`-annotated
@@ -280,7 +280,7 @@ from `31`–`38`:
 
 **Explicitly out of V0** (each owned elsewhere, do not absorb): `data`/`match`
 (`34`, Team Language), `record`/modules (`33`), the proof-claim surface
-(`prop` / `lemma` / attached `proof`, `20` / `33`), effects (`36`), FFI (`38`),
+(`prop` / `theorem` / attached `proof`, `20` / `33`), effects (`36`), FFI (`38`),
 numeric and other literals (`35`), implicit arguments `{x : A}` and the
 unification that inserts them (`§2.2`–`§2.3`), instance resolution (`§2.5`),
 and `match` compilation (`§2.6`). All V0 arguments are **explicit**; V0
@@ -596,7 +596,7 @@ unrepresentable. The label is never inferred from the expression, source
 position, module, allocation order, session counter, gensym, or a generic
 sentinel such as `"standalone expression"` or `"test"`. The declaration sugar
 `axiom N : T` is only
-`lemma N : T = Axiom` (`32 §1`): it does not deprecate, remove, hoist, or
+`theorem N : T = Axiom` (`32 §1`): it does not deprecate, remove, hoist, or
 otherwise restrict expression-position `Axiom`. Multiple `Axiom` occurrences
 within one semantic owner legitimately receive the same owner label while
 `declare_postulate` gives each a distinct `GlobalId`.

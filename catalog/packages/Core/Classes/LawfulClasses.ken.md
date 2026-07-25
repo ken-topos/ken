@@ -545,7 +545,7 @@ fn compare_with (a : Type) (d : Ord a) (x : a) (y : a) : OrdResult = compare_raw
 
 fn compare (a : Type) (d : Ord a) (x : a) (y : a) : OrdResult = compare_with a d x y
 
-lemma compare_eq_sound_raw_second_true
+theorem compare_eq_sound_raw_second_true
       (a : Type)
       (leq : a → a → Bool)
       (antisym_law : (x : a)
@@ -569,12 +569,12 @@ lemma compare_eq_sound_raw_second_true
     : Equal OrdResult (compare_second_result (leq y x)) ord_eq → Equal a x y =
   λp. antisym_law x y hxy hyx
 
-lemma compare_eq_sound_raw_second_false
+theorem compare_eq_sound_raw_second_false
       (a : Type) (leq : a → a → Bool) (x : a) (y : a) (hyx : Equal Bool (leq y x) False)
     : Equal OrdResult (compare_second_result (leq y x)) ord_eq → Equal a x y =
   λp. absurd (J (λb _. Equal OrdResult (compare_second_result b) ord_eq) p hyx)
 
-lemma compare_eq_sound_raw_second_dispatch
+theorem compare_eq_sound_raw_second_dispatch
       (a : Type)
       (leq : a → a → Bool)
       (antisym_law : (x : a)
@@ -601,7 +601,7 @@ lemma compare_eq_sound_raw_second_dispatch
     Inr hyx ↦ compare_eq_sound_raw_second_false a leq x y hyx
   }
 
-lemma compare_eq_sound_raw_first_true
+theorem compare_eq_sound_raw_first_true
       (a : Type)
       (leq : a → a → Bool)
       (antisym_law : (x : a)
@@ -634,12 +634,12 @@ lemma compare_eq_sound_raw_first_true
       (compare_bool_cases (leq y x)))
     (sym Bool (leq x y) True hxy)
 
-lemma compare_eq_sound_raw_first_false
+theorem compare_eq_sound_raw_first_false
       (a : Type) (leq : a → a → Bool) (x : a) (y : a) (hxy : Equal Bool (leq x y) False)
     : Equal OrdResult (compare_result_of (leq x y) (leq y x)) ord_eq → Equal a x y =
   λp. absurd (J (λb _. Equal OrdResult (compare_result_of b (leq y x)) ord_eq) p hxy)
 
-lemma compare_eq_sound_raw_dispatch
+theorem compare_eq_sound_raw_dispatch
       (a : Type)
       (leq : a → a → Bool)
       (antisym_law : (x : a)
@@ -717,7 +717,7 @@ proof lt_sound for compare_raw
       λp. absurd (J (λb _. Equal OrdResult (compare_result_of b (leq y x)) ord_lt) p hxy)
   }
 
-lemma compare_lt_reverse_false_when_first_true
+theorem compare_lt_reverse_false_when_first_true
       (a : Type)
       (leq : a → a → Bool)
       (x : a)
@@ -748,7 +748,7 @@ proof left_false_elim for bool_or
     : Equal Bool b True =
   J (λw _. Equal Bool (bool_or w b) True) hor ha
 
-lemma compare_gt_sound_raw_first_true
+theorem compare_gt_sound_raw_first_true
       (a : Type)
       (leq : a → a → Bool)
       (x : a)
@@ -777,7 +777,7 @@ proof gt_sound for compare_raw
     Inr hxy ↦ λp. proof left_false_elim for bool_or (leq x y) (leq y x) hxy (total_law x y)
   }
 
-lemma compare_second_result_not_gt
+theorem compare_second_result_not_gt
       (b : Bool) (p : Equal OrdResult (compare_second_result b) ord_gt)
     : Bottom =
   match compare_bool_cases b {
@@ -785,7 +785,7 @@ lemma compare_second_result_not_gt
     Inr h ↦ absurd (J (λc _. Equal OrdResult (compare_second_result c) ord_gt) p h)
   }
 
-lemma compare_gt_forward_false_when_true
+theorem compare_gt_forward_false_when_true
       (a : Type) (leq : a → a → Bool) (x : a) (y : a)
     : Equal OrdResult (compare_result_of True (leq y x)) ord_gt → Equal Bool (leq x y) False =
   λp. absurd (compare_second_result_not_gt (leq y x) p)
@@ -812,7 +812,7 @@ proof leq_sound for compare_raw
       λp. absurd (J (λb _. IsTrue (ord_result_leq (compare_result_of b (leq y x)))) p hxy)
   }
 
-lemma compare_leq_complete_when_true
+theorem compare_leq_complete_when_true
       (a : Type)
       (leq : a → a → Bool)
       (x : a)
@@ -847,7 +847,7 @@ proof true_of_equal for ord_leq_at
     : Equal Bool (ord_leq_at a d x y) True =
   J (λy2 _. Equal Bool (ord_leq_at a d x y2) True) (d.refl x) p
 
-lemma bool_true_false_absurd
+theorem bool_true_false_absurd
       (z : Bool) (ht : Equal Bool z True) (hf : Equal Bool z False)
     : Bottom =
   absurd (J (λw _. Equal Bool w True) ht hf)
@@ -902,7 +902,7 @@ proof refl for pair_ord_leq
           (db.refl (pair_snd a b x))
           (db.refl (pair_snd a b x)))))
 
-lemma pair_ord_leq_transport_head
+theorem pair_ord_leq_transport_head
       (a : Type)
       (b : Type)
       (da : Ord a)
@@ -923,7 +923,7 @@ lemma pair_ord_leq_transport_head
     h
     p
 
-lemma pair_ord_leq_untransport_head
+theorem pair_ord_leq_untransport_head
       (a : Type)
       (b : Type)
       (da : Ord a)
@@ -944,7 +944,7 @@ lemma pair_ord_leq_untransport_head
     h
     (sym OrdResult (compare a da (pair_fst a b x) (pair_fst a b y)) r p)
 
-lemma pair_ord_head_sound
+theorem pair_ord_head_sound
       (a : Type)
       (b : Type)
       (da : Ord a)
@@ -969,7 +969,7 @@ lemma pair_ord_head_sound
     (λp. absurd (pair_ord_leq_transport_head a b da db x y ord_gt p h))
     Refl
 
-lemma pair_ord_tail_sound
+theorem pair_ord_tail_sound
       (a : Type)
       (b : Type)
       (da : Ord a)
@@ -1005,7 +1005,7 @@ lemma pair_ord_tail_sound
     (λp. absurd (pair_ord_leq_transport_head a b da db x y ord_gt p h))
     Refl
 
-lemma pair_ord_complete_head_strict
+theorem pair_ord_complete_head_strict
       (a : Type)
       (b : Type)
       (da : Ord a)
@@ -1049,7 +1049,7 @@ lemma pair_ord_complete_head_strict
             p)))
     Refl
 
-lemma pair_ord_complete_tail
+theorem pair_ord_complete_tail
       (a : Type)
       (b : Type)
       (da : Ord a)
@@ -1095,7 +1095,7 @@ fn pair_deceq_eq
     : Bool =
   bool_and (da.eq (pair_fst a b x) (pair_fst a b y)) (db.eq (pair_snd a b x) (pair_snd a b y))
 
-lemma pair_deceq_cong
+theorem pair_deceq_cong
       (a : Type)
       (b : Type)
       (x1 : a)
@@ -1110,7 +1110,7 @@ lemma pair_deceq_cong
     (cong b (Pair a b) y1 y2 (mk_pair a b x1) q)
     p
 
-lemma compare_lt_lt_absurd
+theorem compare_lt_lt_absurd
       (a : Type)
       (d : Ord a)
       (x : a)
@@ -1123,7 +1123,7 @@ lemma compare_lt_lt_absurd
     ((proof lt_sound for compare_raw) a d.leq x y hxy)
     ((proof lt_reverse_false for compare_raw) a d.leq y x hyx)
 
-lemma compare_lt_eq_absurd
+theorem compare_lt_eq_absurd
       (a : Type)
       (d : Ord a)
       (x : a)
@@ -1141,7 +1141,7 @@ lemma compare_lt_eq_absurd
       ((proof eq_sound for compare_with) a d y x hyx))
     ((proof lt_reverse_false for compare_raw) a d.leq x y hxy)
 
-lemma compare_eq_lt_absurd
+theorem compare_eq_lt_absurd
       (a : Type)
       (d : Ord a)
       (x : a)
@@ -1276,7 +1276,7 @@ proof antisym for pair_ord_leq
     Refl
     Refl
 
-lemma pair_ord_trans_with_heads
+theorem pair_ord_trans_with_heads
       (a : Type)
       (b : Type)
       (da : Ord a)
@@ -1356,7 +1356,7 @@ proof trans for pair_ord_leq
       (pair_ord_head_sound a b da db x y hxy)
       (pair_ord_head_sound a b da db y z hyz))
 
-lemma pair_ord_total_head_both
+theorem pair_ord_total_head_both
       (a : Type)
       (b : Type)
       (da : Ord a)
@@ -1392,7 +1392,7 @@ lemma pair_ord_total_head_both
             (db.total (pair_snd a b x) (pair_snd a b y))))
   }
 
-lemma pair_ord_total_head_forward
+theorem pair_ord_total_head_forward
       (a : Type)
       (b : Type)
       (da : Ord a)
@@ -1499,7 +1499,7 @@ instance DecEq (Pair a b) where DecEq a, DecEq b {
 fn lex_result_leq (tail : OrdResult) (head : OrdResult) : Bool =
   ord_result_leq (pair_compare_result_of tail head)
 
-lemma lex_transport_head
+theorem lex_transport_head
       (tail : OrdResult)
       (head : OrdResult)
       (r : OrdResult)
@@ -1508,7 +1508,7 @@ lemma lex_transport_head
     : IsTrue (lex_result_leq tail r) =
   J (λq _. IsTrue (lex_result_leq tail q)) h p
 
-lemma lex_untransport_head
+theorem lex_untransport_head
       (tail : OrdResult)
       (head : OrdResult)
       (r : OrdResult)
@@ -1517,7 +1517,7 @@ lemma lex_untransport_head
     : IsTrue (lex_result_leq tail head) =
   J (λq _. IsTrue (lex_result_leq tail q)) h (sym OrdResult head r p)
 
-lemma lex_head_sound
+theorem lex_head_sound
       (a : Type)
       (d : Ord a)
       (x : a)
@@ -1534,7 +1534,7 @@ lemma lex_head_sound
     (λp. absurd (lex_transport_head tail (compare a d x y) ord_gt p h))
     Refl
 
-lemma lex_tail_sound
+theorem lex_tail_sound
       (a : Type)
       (d : Ord a)
       (x : a)
@@ -1556,7 +1556,7 @@ lemma lex_tail_sound
     (λp. absurd (lex_transport_head tail (compare a d x y) ord_gt p h))
     Refl
 
-lemma lex_complete_head_strict
+theorem lex_complete_head_strict
       (a : Type)
       (d : Ord a)
       (x : a)
@@ -1588,7 +1588,7 @@ lemma lex_complete_head_strict
           ((proof gt_forward_false for compare_raw) a d.leq x y p)))
     Refl
 
-lemma lex_complete_tail
+theorem lex_complete_tail
       (a : Type)
       (d : Ord a)
       (x : a)
@@ -1631,7 +1631,7 @@ proof refl for list_ord_leq
         ((proof refl for list_ord_leq) a d xs2)
   }
 
-lemma list_ord_cons_cong
+theorem list_ord_cons_cong
       (a : Type)
       (x : a)
       (y : a)
@@ -1700,7 +1700,7 @@ proof antisym for list_ord_leq
         }
   }
 
-lemma list_ord_trans_cons
+theorem list_ord_trans_cons
       (a : Type)
       (d : Ord a)
       (x : a)
@@ -1805,7 +1805,7 @@ proof trans for list_ord_leq
         }
   }
 
-lemma list_ord_total_cons_head_both
+theorem list_ord_total_cons_head_both
       (a : Type)
       (d : Ord a)
       (x : a)
@@ -1844,7 +1844,7 @@ lemma list_ord_total_cons_head_both
             ih))
   }
 
-lemma list_ord_total_cons_head_forward
+theorem list_ord_total_cons_head_forward
       (a : Type)
       (d : Ord a)
       (x : a)
@@ -1866,7 +1866,7 @@ lemma list_ord_total_cons_head_forward
         (lex_complete_head_strict a d x y (list_compare a (compare a d) xs ys) hxy hyx)
   }
 
-lemma list_ord_total_cons
+theorem list_ord_total_cons
       (a : Type)
       (d : Ord a)
       (x : a)
@@ -1951,7 +1951,7 @@ fn list_deceq_cons_result
       False ↦ False
     })
 
-lemma list_deceq_sound_cons
+theorem list_deceq_sound_cons
       (a : Type)
       (da : DecEq a)
       (x : a)
@@ -1971,7 +1971,7 @@ lemma list_deceq_sound_cons
     False ↦ λp. absurd p
   }
 
-lemma list_deceq_complete_cons
+theorem list_deceq_complete_cons
       (a : Type)
       (da : DecEq a)
       (x : a)
@@ -2010,17 +2010,17 @@ proof sound for list_deceq_eq
         }
   }
 
-lemma list_deceq_complete_nil
+theorem list_deceq_complete_nil
       (a : Type) (da : DecEq a)
     : IsTrue (list_deceq_eq a da (Nil a) (Nil a)) =
   Proved
 
-lemma list_deceq_complete_refl_cons
+theorem list_deceq_complete_refl_cons
       (a : Type) (da : DecEq a) (x : a) (xs : List a) (ih : IsTrue (list_deceq_eq a da xs xs))
     : IsTrue (list_deceq_eq a da (Cons a x xs) (Cons a x xs)) =
   list_deceq_complete_cons a da x xs x xs (da.complete x x Refl) ih
 
-lemma list_deceq_complete_refl
+theorem list_deceq_complete_refl
       (a : Type) (da : DecEq a) (xs : List a)
     : IsTrue (list_deceq_eq a da xs xs) =
   match xs {

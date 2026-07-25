@@ -34,23 +34,23 @@ function, not folded into its type.
 Ken has three surface forms for stating and discharging that further
 contract, all of them surface/elaboration vocabulary over already-checked
 terms — none adds a new kernel declaration class or an ambient proof search
-([§8](../../../spec/30-surface/33-declarations.md#8-named-proof-claims--prop-lemma-and-attached-proof)):
+([§8](../../../spec/30-surface/33-declarations.md#8-named-proof-claims--prop-theorem-and-attached-proof)):
 
 - **`proof <name> for <subject>`** — a checked proof attached to an
   already-resolved subject, addressed afterward as `subject::name`. It
   names "a checked property *of* `subject`" — the subject must occur
   applied somewhere in the proof's claim
   ([§8.2](../../../spec/30-surface/33-declarations.md#82-attached-proofs--proof)).
-- **`lemma`** — a standalone checked proof theorem in the ordinary module
+- **`theorem`** — a standalone checked proof theorem in the ordinary module
   namespace, used when no single subject owns the theorem
-  ([§8.3](../../../spec/30-surface/33-declarations.md#83-standalone-lemmas--lemma)).
+  ([§8.3](../../../spec/30-surface/33-declarations.md#83-standalone-theorems--theorem)).
 - **`prop`** — names a proposition family / claim shape, not itself a proof
   [§8.1](../../../spec/30-surface/33-declarations.md#81-proposition-families--prop)).
 
 You can see both of the proof forms in the fragments this curriculum draws
 from. The [Transport fragment](../../../catalog/packages/Core/Logic/Transport.ken.md)
 states `cong`, `sym`,
-and `trans` as `lemma`s — none of them belongs to one specific subject,
+and `trans` as `theorem`s — none of them belongs to one specific subject,
 they are the general equality algebra later proofs build on. The same file
 also attaches a proof directly to a subject:
 
@@ -135,7 +135,7 @@ reduced to `Top` for `Proved`.
 
 **Sources:**
 [effect checking §1.6.2](../../../spec/30-surface/36-effects.md#162-the-bidirectional-check--the-keyword-cannot-lie);
-[proof claims §§8–8.3](../../../spec/30-surface/33-declarations.md#8-named-proof-claims--prop-lemma-and-attached-proof);
+[proof claims §§8–8.3](../../../spec/30-surface/33-declarations.md#8-named-proof-claims--prop-theorem-and-attached-proof);
 [proof presentation §6](../../../docs/program/07-catalog-style-guide.md#6-proof-presentation);
 [closing terms §3.2](../../../spec/50-stdlib/55-lawful-functors.md#32-the-proved-vs-refl-discrimination-a-load-bearing-k7-subtlety).
 This explanatory chapter orders those rules and the registered

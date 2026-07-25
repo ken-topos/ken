@@ -62,7 +62,7 @@ vs. free -- all of that requires the real elaborator.
         'temporal',
         'class', 'instance', 'derive', 'where',
         'module', 'import', 'use', 'pub',
-        'prop', 'lemma', 'proof'
+        'prop', 'theorem', 'proof'
       ]
     };
 

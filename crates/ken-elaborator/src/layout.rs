@@ -383,7 +383,7 @@ impl<'a> LayoutPrinter<'a> {
             | Decl::LetDecl {
                 val: body, span, ..
             }
-            | Decl::LemmaDecl { body, span, .. }
+            | Decl::TheoremDecl { body, span, .. }
             | Decl::AttachedProofDecl { body, span, .. } => {
                 self.print_decl_with_body(decl, span, body)
             }
@@ -949,7 +949,7 @@ impl<'a> LayoutPrinter<'a> {
         let spans: Vec<&Span> = match decl {
             Decl::ViewDecl { params, .. }
             | Decl::PropDecl { params, .. }
-            | Decl::LemmaDecl { params, .. }
+            | Decl::TheoremDecl { params, .. }
             | Decl::AttachedProofDecl { params, .. }
             | Decl::ExplicitDataDecl { params, .. } => {
                 params.iter().map(|binder| &binder.span).collect()
@@ -1683,7 +1683,7 @@ fn decl_owns_non_block_braces(decl: &Decl) -> bool {
         Decl::ViewDecl { .. }
         | Decl::LetDecl { .. }
         | Decl::ProveDecl { .. }
-        | Decl::LemmaDecl { .. }
+        | Decl::TheoremDecl { .. }
         | Decl::AxiomDecl { .. }
         | Decl::AttachedProofDecl { .. }
         | Decl::DataDecl { .. }

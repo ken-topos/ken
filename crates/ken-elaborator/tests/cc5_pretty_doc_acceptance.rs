@@ -153,14 +153,14 @@ fn add_render_probes(env: &mut ElabEnv) {
 fn add_law_probes(env: &mut ElabEnv) {
     env.elaborate_file(
         r#"
-        lemma cc5_group_valid : DocContentInvariant cc5_group_doc =
+        theorem cc5_group_valid : DocContentInvariant cc5_group_doc =
           and_intro
             Top
             (And Top Top)
             Proved
             (and_intro Top Top Proved Proved)
 
-        lemma cc5_group_tokens_preserved :
+        theorem cc5_group_tokens_preserved :
             Equal
               (List Char)
               (render_content (Suc (Suc (Suc (Suc Zero)))) cc5_group_doc)
@@ -170,7 +170,7 @@ fn add_law_probes(env: &mut ElabEnv) {
             cc5_group_doc
             cc5_group_valid
 
-        lemma cc5_group_width_independent :
+        theorem cc5_group_width_independent :
             Equal
               (List Char)
               (render_content (Suc (Suc (Suc (Suc Zero)))) cc5_group_doc)
@@ -181,7 +181,7 @@ fn add_law_probes(env: &mut ElabEnv) {
             cc5_group_doc
             cc5_group_valid
 
-        lemma cc5_group_render_fixed_point :
+        theorem cc5_group_render_fixed_point :
             Equal
               (List Char)
               (render

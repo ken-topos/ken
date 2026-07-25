@@ -50,11 +50,11 @@ fn is_even_is_odd_compute_correct_values() {
     // `catalog/packages/Core/Classes/LawfulClasses.ken`). Elaborating only
     // succeeds if the operand genuinely reduced to the SAME concrete
     // constructor as the right-hand side — a real correctness check.
-    env.elaborate_decl("lemma checkOdd3 : Equal Bool (isEven three) False = Proved")
+    env.elaborate_decl("theorem checkOdd3 : Equal Bool (isEven three) False = Proved")
         .expect("isEven 3 must reduce to False (3 is odd)");
-    env.elaborate_decl("lemma checkEven4 : Equal Bool (isEven four) True = Proved")
+    env.elaborate_decl("theorem checkEven4 : Equal Bool (isEven four) True = Proved")
         .expect("isEven 4 must reduce to True (4 is even)");
-    env.elaborate_decl("lemma checkOdd3b : Equal Bool (isOdd three) True = Proved")
+    env.elaborate_decl("theorem checkOdd3b : Equal Bool (isOdd three) True = Proved")
         .expect("isOdd 3 must reduce to True (3 is odd)");
 }
 

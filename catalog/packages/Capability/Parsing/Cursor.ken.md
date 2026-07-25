@@ -62,7 +62,7 @@ fn arg_location_origin (loc : ArgLocation) : Origin =
     MkArgLocation index start end ↦ ArgumentOrigin index (MkByteRange start end)
   }
 
-lemma arg_location_origin_index_faithful
+theorem arg_location_origin_index_faithful
       (index : Nat) (start : Nat) (end : Nat)
     : Equal
         (Option Nat)
@@ -70,7 +70,7 @@ lemma arg_location_origin_index_faithful
         (Some Nat index) =
   Refl
 
-lemma arg_location_origin_start_faithful
+theorem arg_location_origin_start_faithful
       (index : Nat) (start : Nat) (end : Nat)
     : Equal
         (Option Nat)
@@ -78,7 +78,7 @@ lemma arg_location_origin_start_faithful
         (Some Nat start) =
   Refl
 
-lemma arg_location_origin_end_faithful
+theorem arg_location_origin_end_faithful
       (index : Nat) (start : Nat) (end : Nat)
     : Equal
         (Option Nat)
