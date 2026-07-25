@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-25 08:36:04Z — from 73 issue file(s) in `docs/program/issues/`.
+2026-07-25 09:25:50Z — from 73 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -83,10 +83,10 @@ the committed file matches the generator's output.
 | `PX10` | processes — declarative spawn plan, deny-by-default inheritance, pidfd identity, typed child-exit observation | draft | runtime | L | none | — |
 | `PX11` | sockets — typed addresses, bounded send/receive, explicit option families, injected resolver capability | draft | runtime | L | none | — |
 | `PX12` | readiness — nonblocking transitions, epoll/eventfd/timerfd/signalfd, cancellation and timeout IN THE OPERATION TYPE | draft | runtime | L | none | — |
-| `PX8-F-CAP-41` | PX8 clause-(a) behavior blocker — closed buffer endpoint (start==capacity) must derive zero-effective ReadEof, not host-reject | active | foundation | M | none | 41 |
+| `PX8-F-CAP-41` | PX8 clause-(a) behavior blocker — closed buffer endpoint (start==capacity) must derive zero-effective ReadEof, not host-reject | draft | foundation | M | none | 41 |
 | `PX8-SPAN-PROV` | PX8 clause-(b) gap — BufferSpan carries no originating-buffer identity; freeze accepts a same-shape span from a different buffer | merged | spec-enclave | M | none | 914 |
 | `PX8-WROTE-ABS` | PX8 clause-(a) evidence gap — interpreter capped-short Wrote lacks an absolute oracle; PR-C error identities unreached | draft | TBD | TBD | none | — |
-| `PX8` | partial/positioned IO — the completion program's root; closure condition | active | runtime | L | none | — |
+| `PX8` | partial/positioned IO — the completion program's root; closure condition | draft | runtime | L | none | — |
 | `PX9` | cross-domain System.Error — semantic identity, raw errno, operation, resource, safe context, and honest retry classification | draft | foundation | L | none | — |
 | `Q-CLAIM-CLOSURE` | Q-RESIDUE adversary findings — claim-loss in multi-claim test blocks, plus R1/R2/R3 | merged | runtime | S | none | — |
 | `Q-CLAIM-COMPARE-ORD` | claim-loss in list_instance_routes... (compare_ord) — both routing claims dropped, replacement only instantiates Bool | merged | runtime | XS | none | — |
@@ -137,7 +137,7 @@ is itself not yet `merged`/`closed`:
 - `ABI-A3` blocked by `ABI-R3` (status: draft)
 - `ABI-M1` blocked by `ABI-R3` (status: draft)
 - `ABI-M2` blocked by `ABI-M1` (status: draft)
-- `ABI-R3` blocked by `PX8` (status: active)
+- `ABI-R3` blocked by `PX8` (status: draft)
 - `ABI-REVOKE` blocked by `ABI-R3` (status: draft)
 - `ABI-S1` blocked by `PX9` (status: draft)
 - `ABI-S2` blocked by `ABI-A3` (status: draft)
@@ -155,9 +155,9 @@ is itself not yet `merged`/`closed`:
 - `PX12` blocked by `PX11` (status: draft)
 - `PX12` blocked by `ABI-S3` (status: draft)
 - `PX8-F-CAP-41` blocked by `NATIVE-HANDLE-CARRIER` (status: draft)
-- `PX8` blocked by `PX8-F-CAP-41` (status: active)
+- `PX8` blocked by `PX8-F-CAP-41` (status: draft)
 - `PX8` blocked by `PX8-WROTE-ABS` (status: draft)
-- `PX9` blocked by `PX8` (status: active)
+- `PX9` blocked by `PX8` (status: draft)
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
 - `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2A` (status: draft)
 - `RT-FNSPLIT-B2F` blocked by `RT-FNSPLIT-B2A-S` (status: ready)

@@ -1,7 +1,7 @@
 ---
 id: PX8
 title: "partial/positioned IO — the completion program's root; closure condition"
-status: active
+status: draft
 owner: runtime
 size: L
 gate: none
@@ -10,6 +10,21 @@ blocks: [ABI-R3, PX9]
 github: null
 origin: docs/program/09-posix-linux-abi-campaign.md (charter, PX-C phase); closure condition added 2026-07-22 (operator-approved)
 ---
+
+> ## ⚠ STATUS CORRECTED `active` → `draft` — 2026-07-25 (Steward, tracker honesty)
+>
+> **Nothing is building this, and its `depends_on` is unmet** (PX8-F-CAP-41 (draft), PX8-WROTE-ABS (draft)). The tracker's own
+> legend defines `draft` = *not framed / **deps unmet***, `ready` = *deps met,
+> unassigned*, `active` = ***a team is building***. So `active` was a false claim
+> that a seat held this node, and it polluted the releasable-frontier read that the
+> next sequencing pass depends on.
+>
+> ⛔ **Blocked-ness is DERIVED, never spelled in `status`.** `gen-progress.sh`
+> computes the frontier as *`ready` **and** every `depends_on` merged*, and lists
+> blockers separately. ⇒ Do not invent a "blocked" status; fix `depends_on` and let
+> the generator say so.
+>
+> ⇒ **Flip to `ready` only when every `depends_on` entry is `merged`.**
 
 **This issue exists because PX8 had none.** `docs/program/10-linux-abi-completion.md`
 makes **15 of its 18 items** unblock on `PX8 --> ABI-R3` and `PX8 --> PX9`, and

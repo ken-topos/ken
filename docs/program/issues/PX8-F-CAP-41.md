@@ -1,7 +1,7 @@
 ---
 id: PX8-F-CAP-41
 title: "PX8 clause-(a) behavior blocker — closed buffer endpoint (start==capacity) must derive zero-effective ReadEof, not host-reject"
-status: active
+status: draft
 owner: foundation
 size: M
 gate: none
@@ -10,6 +10,21 @@ blocks: [PX8]
 github: 41
 origin: charter backlog (#41); RE-GROUNDED as a live PX8 clause-(a) blocker by architect verdict evt_163mfgjs7fkh8 (2026-07-23); RE-SCOPED spec-first by architect ruling evt_xnkrzjy1c8br (2026-07-23)
 ---
+
+> ## ⚠ STATUS CORRECTED `active` → `draft` — 2026-07-25 (Steward, tracker honesty)
+>
+> **Nothing is building this, and its `depends_on` is unmet** (NATIVE-HANDLE-CARRIER (draft)). The tracker's own
+> legend defines `draft` = *not framed / **deps unmet***, `ready` = *deps met,
+> unassigned*, `active` = ***a team is building***. So `active` was a false claim
+> that a seat held this node, and it polluted the releasable-frontier read that the
+> next sequencing pass depends on.
+>
+> ⛔ **Blocked-ness is DERIVED, never spelled in `status`.** `gen-progress.sh`
+> computes the frontier as *`ready` **and** every `depends_on` merged*, and lists
+> blockers separately. ⇒ Do not invent a "blocked" status; fix `depends_on` and let
+> the generator say so.
+>
+> ⇒ **Flip to `ready` only when every `depends_on` entry is `merged`.**
 
 ## ⚠ RE-SCOPED spec-first 2026-07-23 (two-phase, like [[PX8-SPAN-PROV]])
 
