@@ -236,8 +236,42 @@ the sweep.** A sweep that grew one arm per missed file has reproduced the bug it
 exists to prevent.
 
 **AC-2 — classify every row** as (a) keyword-contract rename, (b) derived
-identifier/anchor rename **with its consumers**, or (c) **intentional
-ordinary-English leave**. Changes *and* leaves are review-visible.
+identifier/anchor rename **with its consumers**, (c) **intentional
+ordinary-English leave**, or (d) **intentional RESIDUAL** (below). Changes *and*
+leaves are review-visible.
+
+> ### ⛔ AMENDED 2026-07-25 — CELL (d) WAS MISSING, AND ITS ABSENCE IS UNSAFE
+>
+> `doc-leader` (`evt_16nahb3tmybn1`), grounded from the doc-author's fixed-base
+> classification: the original three cells **cannot classify a deliberate
+> mention of the retired spelling kept for historical, diagnostic, or control
+> purposes.** Such a row is neither a rename target nor ordinary mathematical
+> English.
+>
+> **(d) intentional residual — RETAIN, and mark it so it is distinguishable
+> from a miss.** Known members:
+>
+> - `docs/program/IMPLEMENTATION-PROGRESS.md` and
+>   `docs/program/diary/CURRENT-BRIEFING.md` — status narrative *about* the
+>   rename.
+> - The `KW-THEOREM` issue file and **this frame**, whose entire subject is the
+>   old spelling. ⚠ **A sweep that renames its own frame has destroyed the
+>   record of what it did.**
+> - ⭐ **`AC-4`'s negative control, which MUST contain `lemma name …` by
+>   construction** — it exists to prove that spelling is *rejected*. **A sweep
+>   that renames it silently converts the negative control into a second
+>   positive one and `AC-4` then proves nothing.**
+>
+> ★ **This is the failure mode where a taxonomy with no cell for the honest
+> answer reads as complete.** With only three cells, every residual must be
+> mis-filed as (a) — destroying the control — or as (c), asserting that
+> `lemma name : P = pf` is ordinary English, which is false. **Neither
+> mis-filing is visible in a green run.**
+>
+> ⇒ Cell (d) rows are **enumerated explicitly in the classification**, not left
+> to survive as unexplained hits. The four old-slug locators in the issue and
+> frame are a **separate** class — they are derived-anchor consumers under
+> **(b)** and must move with their anchors.
 
 **AC-3 — re-emit against the exact merge candidate**, so no newly introduced or
 unclassified hit escapes.
