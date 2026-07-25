@@ -233,8 +233,28 @@ impl BoundaryWord {
     /// payload. No seed environment, no caller environment and no activation
     /// depth is in scope in this module, so a representation *cannot* be
     /// specialized from one — there is nothing to specialize it from.
+    ///
+    /// ⛔ **Panics on a payload outside the tag's domain**, because the shift
+    /// that builds the word is *total*: an out-of-range magnitude does not fail,
+    /// it becomes a **different value**. The Rust builder and the emitted
+    /// `ken_boundary_make_immediate_local` check the same
+    /// [`BOUNDARY_IMMEDIATE_DOMAIN`] table — one relation, two enforcement
+    /// points, exactly as `push_node` and the allocator share the tag × class
+    /// relation. Use [`BoundaryWord::try_immediate`] where the payload is
+    /// runtime data rather than a value you have already ranged.
     pub fn immediate(tag: BoundaryTag, payload: u64) -> Self {
+        assert!(
+            boundary_immediate_admits(tag, payload),
+            "the ABI does not admit {payload} as a {tag:?} payload"
+        );
         BoundaryWord((payload << BOUNDARY_TAG_BITS) | (tag as u64))
+    }
+
+    /// [`BoundaryWord::immediate`] as a fallible check — `None` for a payload
+    /// outside the tag's domain, and for every handle tag.
+    pub fn try_immediate(tag: BoundaryTag, payload: u64) -> Option<Self> {
+        boundary_immediate_admits(tag, payload)
+            .then(|| BoundaryWord((payload << BOUNDARY_TAG_BITS) | (tag as u64)))
     }
 
     /// Build a handle word naming a node **in the region its tag selects**.
@@ -377,8 +397,164 @@ pub fn boundary_class_mask(tag: BoundaryTag) -> u64 {
         .fold(0u64, |mask, class| mask | (1u64 << (*class as u64)))
 }
 
+// ---------------------------------------------------------------------------
+// The immediate payload domain
+// ---------------------------------------------------------------------------
+
+/// What an immediate tag's 56-bit payload field is allowed to hold.
+///
+/// ⛔ **A closed tag set does not close the immediate space either.** The tag
+/// says how to *read* the payload; nothing in the tag says which payloads are
+/// *values*. Without this, minting an immediate is a shift — and a shift is
+/// total, so an out-of-range magnitude silently becomes a **different value**
+/// and a `Bool` payload of `2` becomes a third boolean. Same defect shape as the
+/// Cartesian `tag × class` product, one field down.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u64)]
+pub enum BoundaryImmediateDomain {
+    /// Exactly `{0, 1}`.
+    Bit = 0,
+    /// Two's complement, representable in [`BOUNDARY_PAYLOAD_BITS`].
+    SignedPayload = 1,
+    /// Non-negative, representable in [`BOUNDARY_PAYLOAD_BITS`].
+    UnsignedPayload = 2,
+}
+
+/// ⛔ **The payload domain of every immediate tag — one authoritative table.**
+///
+/// Handle tags are absent by construction: their payload is a node index the
+/// allocator produced, and [`define_make_immediate`] refuses them outright
+/// rather than admitting them with a domain.
+///
+/// ⚠ The three `Nat`-ish tags carry **`UnsignedPayload`**, which is the
+/// *representational* bound and not a claim about their semantic range. A
+/// process exit status is small in practice; the ABI does not know how small,
+/// and inventing a tighter bound here would reject values the disposition
+/// admits. Narrowing one is a contract decision, not a repair.
+pub const BOUNDARY_IMMEDIATE_DOMAIN: &[(BoundaryTag, BoundaryImmediateDomain)] = &[
+    (BoundaryTag::ImmediateBool, BoundaryImmediateDomain::Bit),
+    (
+        BoundaryTag::ImmediateInt,
+        BoundaryImmediateDomain::SignedPayload,
+    ),
+    (
+        BoundaryTag::ImmediateExitStatus,
+        BoundaryImmediateDomain::UnsignedPayload,
+    ),
+    (
+        BoundaryTag::ImmediateBoundedNat,
+        BoundaryImmediateDomain::UnsignedPayload,
+    ),
+    (
+        BoundaryTag::ImmediateStructuralNat,
+        BoundaryImmediateDomain::UnsignedPayload,
+    ),
+];
+
+/// The domain of an immediate tag, or `None` for a handle tag.
+pub fn boundary_immediate_domain(tag: BoundaryTag) -> Option<BoundaryImmediateDomain> {
+    BOUNDARY_IMMEDIATE_DOMAIN
+        .iter()
+        .find(|(t, _)| *t == tag)
+        .map(|(_, domain)| *domain)
+}
+
+/// The tags in one domain, as a bitmask over [`BoundaryTag`] discriminants.
+///
+/// ⭐ What makes the emitted check Θ(1) and undriftable, exactly as
+/// [`boundary_class_mask`] does for the relation: the CLIF evaluates all three
+/// domain predicates and selects by a mask **computed from this table**, so
+/// there is no second place to edit.
+pub fn boundary_domain_mask(domain: BoundaryImmediateDomain) -> u64 {
+    BOUNDARY_IMMEDIATE_DOMAIN
+        .iter()
+        .filter(|(_, d)| *d == domain)
+        .fold(0u64, |mask, (tag, _)| mask | (1u64 << (*tag as u64)))
+}
+
+/// Whether `payload` is a value of `tag`'s immediate domain.
+///
+/// `false` for every handle tag — a handle's payload is an index the allocator
+/// mints, never a caller's number.
+pub fn boundary_immediate_admits(tag: BoundaryTag, payload: u64) -> bool {
+    match boundary_immediate_domain(tag) {
+        None => false,
+        Some(BoundaryImmediateDomain::Bit) => payload <= 1,
+        Some(BoundaryImmediateDomain::UnsignedPayload) => payload >> BOUNDARY_PAYLOAD_BITS == 0,
+        Some(BoundaryImmediateDomain::SignedPayload) => {
+            BoundaryWord::int_fits_immediate(payload as i64)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// How a spilled `Int` carries its magnitude
+// ---------------------------------------------------------------------------
+
+/// A spilled `Int` node's magnitude is in the **region's limb table**, at
+/// [`NODE_LIMBS_AT`] for [`NODE_LIMB_COUNT`] limbs, sign in [`NODE_PAYLOAD`].
+///
+/// ⭐ **This is what makes an arbitrary-precision `Int` genuinely persistable,
+/// and it is the SAME region-selection rule every other class already obeys.** A
+/// `Bytes`'s content is in its region's data table, a `Constructor`'s children
+/// are in its region's word table — a persistent value's content belongs to the
+/// persistent region, not to a table that dies with an invocation. A
+/// [`crate::native_int::NATIVE_INT_BIG_TAG_V1`] payload is a slot in the
+/// *invocation's* `NativeIntArenaV1`, so it is correct for an invocation-scoped
+/// result and can never be persistent; this marker is its persistent
+/// counterpart, and the two are not interchangeable.
+pub const BOUNDARY_INT_REGION_LIMBS: u64 = 2;
+
+/// The closed set of magnitude markers a spilled `Int` node's [`NODE_EXTENT`]
+/// may hold, with the region each one's storage lives in.
+///
+/// ⛔ Both enforcement points read this one table: the emitted
+/// `ken_boundary_store_int_tag_local` admits a marker only for a node whose
+/// referent owner matches, and the Rust builders assert the same. A marker with
+/// no row admits nothing.
+pub const BOUNDARY_INT_MARKER_OWNER: &[(u64, BoundaryReferentOwner)] = &[
+    (
+        crate::native_int::NATIVE_INT_SMALL_TAG_V1,
+        // A `Small`'s magnitude IS the payload word — no storage, so it is
+        // sound in either region.
+        BoundaryReferentOwner::NoReferent,
+    ),
+    (
+        crate::native_int::NATIVE_INT_BIG_TAG_V1,
+        BoundaryReferentOwner::InvocationArena,
+    ),
+    (
+        BOUNDARY_INT_REGION_LIMBS,
+        BoundaryReferentOwner::PersistentStore,
+    ),
+];
+
+/// Whether a node owned by `owner` may carry magnitude marker `marker`.
+///
+/// `NoReferent` in the table means "any region" — a `Small` carries its whole
+/// magnitude in the node and names no storage at all.
+pub fn boundary_int_marker_admits(marker: u64, owner: BoundaryReferentOwner) -> bool {
+    BOUNDARY_INT_MARKER_OWNER.iter().any(|(m, required)| {
+        *m == marker && (*required == BoundaryReferentOwner::NoReferent || *required == owner)
+    })
+}
+
+/// The markers admitted for one owner, as a bitmask over marker values.
+///
+/// ⭐ Θ(1) in the emitted check and computed from the table above, so the CLIF
+/// cannot drift from the declaration — the third instance of this pattern, after
+/// [`boundary_class_mask`] and [`boundary_domain_mask`].
+pub fn boundary_int_marker_mask(owner: BoundaryReferentOwner) -> u64 {
+    BOUNDARY_INT_MARKER_OWNER
+        .iter()
+        .filter(|(_, required)| {
+            *required == BoundaryReferentOwner::NoReferent || *required == owner
+        })
+        .fold(0u64, |mask, (marker, _)| mask | (1u64 << *marker))
+}
+
 /// Byte stride of one arena node.
-pub const BOUNDARY_NODE_STRIDE: i32 = 64;
+pub const BOUNDARY_NODE_STRIDE: i32 = 80;
 
 /// `BoundaryClass` of this node.
 pub const NODE_CLASS: i32 = 0;
@@ -410,6 +586,19 @@ pub const NODE_FIELDS_AT: i32 = 48;
 /// one class's meaning out of another's node. A single un-guarded reader would
 /// make the two meanings collide, which is why there is no generic accessor.
 pub const NODE_EXTENT: i32 = 56;
+/// Index into the region's **limb table** of a spilled `Int`'s first limb.
+///
+/// ⛔ A dedicated field and a dedicated table, deliberately — not a reuse of
+/// [`NODE_FIELDS_AT`] and the word table. `ken_boundary_field_local` and
+/// `ken_boundary_field_count_local` are **not** class-guarded, so limbs parked
+/// in the word table would be readable as child *words*: a raw magnitude limb
+/// returned where a tagged `BoundaryWord` is expected. Two meanings for one
+/// table is exactly the collision `NODE_EXTENT`'s note warns about, and the
+/// cheap fix is storage that cannot be reached by the wrong reader at all.
+pub const NODE_LIMBS_AT: i32 = 64;
+/// Number of limbs a spilled `Int` node's magnitude has. Zero for every other
+/// class and for a `Small`.
+pub const NODE_LIMB_COUNT: i32 = 72;
 
 /// Byte size of a **region header**.
 ///
@@ -417,7 +606,7 @@ pub const NODE_EXTENT: i32 = 56;
 /// image publish the *same* header shape, which is what lets a single
 /// `resolve` select a region at run time and then read it with one set of
 /// offsets. A second layout would be a second place for the offsets to drift.
-pub const BOUNDARY_REGION_HEADER_BYTES: i32 = 112;
+pub const BOUNDARY_REGION_HEADER_BYTES: i32 = 136;
 
 /// Pointer to the node table.
 pub const ARENA_NODES: i32 = 0;
@@ -464,6 +653,16 @@ pub const ARENA_DATA_CAPACITY: i32 = 96;
 /// subsume-don't-proliferate. Read from the *arena* header only — the native
 /// arena is invocation state.
 pub const ARENA_NATIVE_INT: i32 = 104;
+/// Pointer to the region's **limb table** — the `u64` magnitude storage backing
+/// a spilled `Int` whose marker is [`BOUNDARY_INT_REGION_LIMBS`].
+///
+/// ⭐ Region-owned, which is the whole point: a persistent `Int`'s limbs outlive
+/// every invocation because they live where the persistent nodes do.
+pub const ARENA_LIMBS: i32 = 112;
+/// Number of **live** limbs. ⚠ Mutable: the emitted allocator bumps it.
+pub const ARENA_LIMB_COUNT: i32 = 120;
+/// Limb-table capacity — the fourth ceiling construction fails closed against.
+pub const ARENA_LIMB_CAPACITY: i32 = 128;
 
 /// Status returned by every emitted-code helper on success.
 pub const BOUNDARY_OK: i64 = 0;
@@ -509,9 +708,12 @@ pub struct BoundaryRegion {
     names: Vec<u64>,
     /// Backing bytes for `Bytes` / `String` contents.
     data: Vec<u8>,
+    /// Backing `u64` magnitude limbs for spilled `Int` contents.
+    limbs: Vec<u64>,
     live_nodes: usize,
     live_words: usize,
     live_data: usize,
+    live_limbs: usize,
     header: Vec<u64>,
     /// Address of the persistent region's header, or `0`.
     persistent: u64,
@@ -548,6 +750,14 @@ impl BoundaryRegion {
         match self.header.first() {
             None => self.live_data,
             Some(_) => self.header[(ARENA_DATA_COUNT / 8) as usize] as usize,
+        }
+    }
+
+    /// Number of live magnitude limbs, on the same published-header rule.
+    pub fn limb_count(&self) -> usize {
+        match self.header.first() {
+            None => self.live_limbs,
+            Some(_) => self.header[(ARENA_LIMB_COUNT / 8) as usize] as usize,
         }
     }
 
@@ -604,7 +814,7 @@ impl BoundaryRegion {
     /// growing one would move it out from under the published pointer. Reserving
     /// is therefore the caller's explicit, auditable decision about how much
     /// storage an invocation may take.
-    pub fn reserve(&mut self, nodes: usize, words: usize, data: usize) {
+    pub fn reserve(&mut self, nodes: usize, words: usize, data: usize, limbs: usize) {
         debug_assert!(
             self.header.is_empty(),
             "reserve before publish: growing a table moves it under the pointer"
@@ -614,6 +824,36 @@ impl BoundaryRegion {
         self.words.resize(self.live_words + words, 0);
         self.names.resize(self.live_words + words, 0);
         self.data.resize(self.live_data + data, 0);
+        self.limbs.resize(self.live_limbs + limbs, 0);
+    }
+
+    /// The live magnitude limbs of one spilled `Int` node, or `None` when the
+    /// node is not a region-limbed `Int` or its span leaves the table.
+    ///
+    /// The Rust-side mirror of the CLIF bounds checks, used by tests as an
+    /// independent oracle rather than by re-reading the CLIF's own answer.
+    pub fn node_limbs(&self, index: u64) -> Option<&[u64]> {
+        if self.node_field(index, NODE_CLASS)? != BoundaryClass::Int as u64
+            || self.node_field(index, NODE_EXTENT)? != BOUNDARY_INT_REGION_LIMBS
+        {
+            return None;
+        }
+        let at = self.node_field(index, NODE_LIMBS_AT)? as usize;
+        let len = self.node_field(index, NODE_LIMB_COUNT)? as usize;
+        let end = at.checked_add(len)?;
+        (end <= self.limb_count()).then(|| &self.limbs[at..end])
+    }
+
+    /// Append `limbs` to the limb table, returning its start index.
+    fn push_limbs(&mut self, limbs: &[u64]) -> u64 {
+        let at = self.live_limbs as u64;
+        let end = self.live_limbs + limbs.len();
+        if self.limbs.len() < end {
+            self.limbs.resize(end, 0);
+        }
+        self.limbs[self.live_limbs..end].copy_from_slice(limbs);
+        self.live_limbs = end;
+        at
     }
 
     /// Append `bytes` to the data table, returning its start index.
@@ -640,6 +880,7 @@ impl BoundaryRegion {
         extent: u64,
         children: &[BoundaryWord],
         names: &[u64],
+        limbs: &[u64],
     ) -> BoundaryWord {
         // ⛔ The Rust builders check the SAME relation the emitted allocator
         // does. One table, two enforcement points — a pair no disposition can
@@ -647,6 +888,19 @@ impl BoundaryRegion {
         assert!(
             boundary_relation_admits(tag, class),
             "the ABI does not admit {tag:?} + {class:?}"
+        );
+        // ⛔ And the SAME magnitude-marker table, for the same reason: a marker
+        // whose storage the node's region does not own is the ephemeral-locator
+        // defect, and it must be unbuildable from Rust exactly as it is from
+        // emitted code.
+        debug_assert!(
+            class != BoundaryClass::Int || boundary_int_marker_admits(extent, tag.referent_owner()),
+            "a {:?} Int may not carry magnitude marker {extent}",
+            tag.referent_owner()
+        );
+        debug_assert!(
+            limbs.is_empty() || extent == BOUNDARY_INT_REGION_LIMBS,
+            "limbs belong only to a region-limbed Int"
         );
         debug_assert!(
             names.is_empty() || names.len() == children.len(),
@@ -671,6 +925,7 @@ impl BoundaryRegion {
             self.names[self.live_words + offset] = names.get(offset).copied().unwrap_or(0);
         }
         self.live_words = end;
+        let limbs_at = self.push_limbs(limbs);
 
         let base = index as usize * NODE_WORDS;
         if self.nodes.len() < base + NODE_WORDS {
@@ -685,6 +940,8 @@ impl BoundaryRegion {
             children.len() as u64,
             fields_at,
             extent,
+            limbs_at,
+            limbs.len() as u64,
         ]);
         self.live_nodes = index as usize + 1;
         BoundaryWord::handle(tag, index)
@@ -717,6 +974,9 @@ impl BoundaryRegion {
             self.live_data as u64,
             self.data.len() as u64,
             self.native_int,
+            self.limbs.as_ptr() as u64,
+            self.live_limbs as u64,
+            self.limbs.len() as u64,
             0,
         ];
         self.header.as_mut_ptr()
@@ -770,8 +1030,8 @@ impl BoundaryArenaV1 {
     }
 
     /// Grant emitted code room to construct invocation-owned nodes.
-    pub fn reserve(&mut self, nodes: usize, words: usize, data: usize) {
-        self.0.reserve(nodes, words, data);
+    pub fn reserve(&mut self, nodes: usize, words: usize, data: usize, limbs: usize) {
+        self.0.reserve(nodes, words, data, limbs);
     }
 
     /// Publish the arena header. See [`BoundaryRegion::publish`].
@@ -833,8 +1093,8 @@ impl BoundaryPersistentImage {
     }
 
     /// Grant emitted code room to construct persistent nodes.
-    pub fn reserve(&mut self, nodes: usize, words: usize, data: usize) {
-        self.0.reserve(nodes, words, data);
+    pub fn reserve(&mut self, nodes: usize, words: usize, data: usize, limbs: usize) {
+        self.0.reserve(nodes, words, data, limbs);
     }
 
     /// The live data bytes of one node's span.
@@ -889,7 +1149,7 @@ impl BoundaryArenaBuilder {
         );
         self.arena
             .0
-            .push_node(tag, class, NULL_SLOT, 0, payload, 0, children, &[])
+            .push_node(tag, class, NULL_SLOT, 0, payload, 0, children, &[], &[])
     }
 
     /// Finish, yielding the arena.
@@ -974,8 +1234,8 @@ impl BoundaryValueStore {
     /// writes.** There is no path by which emitted code takes persistent space
     /// the store did not grant, which is what keeps this from being a second,
     /// unaccountable heap.
-    pub fn reserve_persistent(&mut self, nodes: usize, words: usize, data: usize) {
-        self.image.reserve(nodes, words, data);
+    pub fn reserve_persistent(&mut self, nodes: usize, words: usize, data: usize, limbs: usize) {
+        self.image.reserve(nodes, words, data, limbs);
     }
 
     /// Publish the persistent header emitted code resolves persistent words
@@ -1166,33 +1426,45 @@ impl BoundaryValueStore {
             return Some(BoundaryWord::handle(BoundaryTag::PersistentGround, *index));
         }
 
-        let (class, tag_id, payload, extent, children, names) = match value {
+        let (class, tag_id, payload, extent, children, names, limbs) = match value {
             // Handled above; listed so this match stays exhaustive over the
             // value's own structure rather than falling through a wildcard.
             RuntimeGroundValue::Bool(_) => return None,
-            RuntimeGroundValue::Int(int) => {
-                // ⭐ The spilled `Int` IS a `NativeIntV1` pair — the landed
-                // exact-`Int` representation, not a second one. Emitted code
-                // decodes it with `ken_native_int_resolve_local`.
-                //
-                // ⛔ **Only the `Small` arm is materializable from Rust, and
-                // that is a lifetime consequence rather than an omission.** A
-                // `Big`'s limbs live in an entry that only emitted code can
-                // intern (`ken_native_int_intern_local` mallocs it), and that
-                // entry dies with the invocation — so a *persistent* node
-                // naming one would be exactly the ephemeral-locator defect the
-                // region split closed. Fail closed; emitted producers mint the
-                // `Big` arm themselves, where its lifetime is the invocation's.
-                let small = int.as_small()?;
-                (
+            RuntimeGroundValue::Int(int) => match int.as_small() {
+                // ⭐ A `Small`'s magnitude IS the node payload, and emitted
+                // code decodes it with `ken_native_int_resolve_local` — the
+                // landed exact-`Int` decoder, not a second one.
+                Some(small) => (
                     BoundaryClass::Int,
                     0,
                     small as u64,
                     crate::native_int::NATIVE_INT_SMALL_TAG_V1,
                     Vec::new(),
                     Vec::new(),
-                )
-            }
+                    Vec::new(),
+                ),
+                // ⛔ **A wide `Int`'s limbs go in the PERSISTENT REGION, not
+                // in the invocation's native arena.** The earlier candidate
+                // returned `None` here, which made `Lowered::Int`'s promised
+                // spill unreachable for exactly the values a bignum language
+                // exists to carry. The reason it could not use
+                // `NATIVE_INT_BIG_TAG_V1` still holds — that payload is a slot
+                // in an arena that dies with the invocation — but the fix is to
+                // put the magnitude where every other persistent content
+                // already lives, beside the node that names it.
+                None => {
+                    let (sign, magnitude) = int.canonical_sign_and_limbs();
+                    (
+                        BoundaryClass::Int,
+                        0,
+                        sign,
+                        BOUNDARY_INT_REGION_LIMBS,
+                        Vec::new(),
+                        Vec::new(),
+                        magnitude,
+                    )
+                }
+            },
             RuntimeGroundValue::Bytes(bytes) => {
                 let at = self.image.0.push_data(bytes);
                 (
@@ -1200,6 +1472,7 @@ impl BoundaryValueStore {
                     0,
                     bytes.len() as u64,
                     at,
+                    Vec::new(),
                     Vec::new(),
                     Vec::new(),
                 )
@@ -1211,6 +1484,7 @@ impl BoundaryValueStore {
                     0,
                     text.len() as u64,
                     at,
+                    Vec::new(),
                     Vec::new(),
                     Vec::new(),
                 )
@@ -1228,6 +1502,7 @@ impl BoundaryValueStore {
                     0,
                     children,
                     Vec::new(),
+                    Vec::new(),
                 )
             }
             RuntimeGroundValue::Record { fields } => {
@@ -1237,7 +1512,7 @@ impl BoundaryValueStore {
                     names.push(self.intern_symbol(name));
                     children.push(self.materialize(field)?);
                 }
-                (BoundaryClass::Record, 0, 0, 0, children, names)
+                (BoundaryClass::Record, 0, 0, 0, children, names, Vec::new())
             }
         };
 
@@ -1262,6 +1537,7 @@ impl BoundaryValueStore {
             extent,
             &children,
             &names,
+            &limbs,
         );
         self.placement.insert(slot, word.payload());
         Some(word)

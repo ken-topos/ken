@@ -37,14 +37,16 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{FuncId, Linkage, Module};
 
 use crate::boundary_value::{
-    boundary_class_mask, BoundaryClass, BoundaryReferentOwner, BoundaryTag, ARENA_DATA,
-    ARENA_DATA_CAPACITY, ARENA_DATA_COUNT, ARENA_FROZEN, ARENA_NAMES, ARENA_NATIVE_INT,
-    ARENA_NODES, ARENA_NODE_CAPACITY, ARENA_NODE_COUNT, ARENA_PERSISTENT, ARENA_WORDS,
-    ARENA_WORD_CAPACITY, ARENA_WORD_COUNT, BOUNDARY_ERR_BOUNDS, BOUNDARY_ERR_CAPACITY,
-    BOUNDARY_ERR_CLASS, BOUNDARY_ERR_ESCAPE, BOUNDARY_ERR_FROZEN, BOUNDARY_ERR_RELATION,
-    BOUNDARY_ERR_SHAPE, BOUNDARY_ERR_TAG, BOUNDARY_NODE_STRIDE, BOUNDARY_OK, BOUNDARY_TAG_BITS,
-    BOUNDARY_TAG_CLASS_RELATION, BOUNDARY_TAG_MASK, NODE_CLASS, NODE_EXTENT, NODE_FIELDS_AT,
-    NODE_FIELD_COUNT, NODE_OWNER, NODE_PAYLOAD, NODE_SLOT, NODE_TAG_ID,
+    boundary_class_mask, boundary_domain_mask, boundary_int_marker_mask, BoundaryClass,
+    BoundaryImmediateDomain, BoundaryReferentOwner, BoundaryTag, ARENA_DATA, ARENA_DATA_CAPACITY,
+    ARENA_DATA_COUNT, ARENA_FROZEN, ARENA_LIMBS, ARENA_LIMB_CAPACITY, ARENA_LIMB_COUNT,
+    ARENA_NAMES, ARENA_NATIVE_INT, ARENA_NODES, ARENA_NODE_CAPACITY, ARENA_NODE_COUNT,
+    ARENA_PERSISTENT, ARENA_WORDS, ARENA_WORD_CAPACITY, ARENA_WORD_COUNT, BOUNDARY_ERR_BOUNDS,
+    BOUNDARY_ERR_CAPACITY, BOUNDARY_ERR_CLASS, BOUNDARY_ERR_ESCAPE, BOUNDARY_ERR_FROZEN,
+    BOUNDARY_ERR_RELATION, BOUNDARY_ERR_SHAPE, BOUNDARY_ERR_TAG, BOUNDARY_INT_REGION_LIMBS,
+    BOUNDARY_NODE_STRIDE, BOUNDARY_OK, BOUNDARY_TAG_BITS, BOUNDARY_TAG_CLASS_RELATION,
+    BOUNDARY_TAG_MASK, NODE_CLASS, NODE_EXTENT, NODE_FIELDS_AT, NODE_FIELD_COUNT, NODE_LIMBS_AT,
+    NODE_LIMB_COUNT, NODE_OWNER, NODE_PAYLOAD, NODE_SLOT, NODE_TAG_ID,
 };
 use crate::cranelift_backend::{backend_module, CraneliftBackendError};
 
@@ -82,6 +84,8 @@ pub const BOUNDARY_LOCAL_HELPERS: &[&str] = &[
     "ken_boundary_store_field_local",
     "ken_boundary_store_name_local",
     "ken_boundary_store_int_tag_local",
+    "ken_boundary_store_int_limbs_local",
+    "ken_boundary_store_int_limb_local",
     "ken_boundary_store_bytes_len_local",
     "ken_boundary_store_byte_local",
     // ── content access: the value's BITS, not its identity or its length ──
@@ -169,6 +173,12 @@ pub(crate) struct BoundaryLocalFuncs {
     /// `(arena, word, native_tag) -> status` — record a spilled `Int`'s
     /// `NativeIntV1` tag. Class-guarded to `Int`.
     pub store_int_tag: FuncId,
+    /// `(arena, word, sign, len, out) -> status` — claim `len` magnitude limbs
+    /// in the node's OWN region for a spilled `Int` and write the span's start
+    /// to `*out`. The counterpart of `store_bytes_len` for `Int` content.
+    pub store_int_limbs: FuncId,
+    /// `(arena, word, index, limb) -> status` — write one magnitude limb.
+    pub store_int_limb: FuncId,
     /// `(arena, word, len, out) -> status` — claim `len` data bytes for a
     /// `Bytes`/`String` node and write the span's start to `*out`.
     pub store_bytes_len: FuncId,
@@ -205,6 +215,8 @@ struct Graph {
     store_field: FuncId,
     store_name: FuncId,
     store_int_tag: FuncId,
+    store_int_limbs: FuncId,
+    store_int_limb: FuncId,
     store_bytes_len: FuncId,
     store_byte: FuncId,
     byte: FuncId,
@@ -245,6 +257,8 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     let store_field = declare(module, "ken_boundary_store_field_local", 4)?;
     let store_name = declare(module, "ken_boundary_store_name_local", 4)?;
     let store_int_tag = declare(module, "ken_boundary_store_int_tag_local", 3)?;
+    let store_int_limbs = declare(module, "ken_boundary_store_int_limbs_local", 5)?;
+    let store_int_limb = declare(module, "ken_boundary_store_int_limb_local", 4)?;
     let store_bytes_len = declare(module, "ken_boundary_store_bytes_len_local", 4)?;
     let store_byte = declare(module, "ken_boundary_store_byte_local", 4)?;
     let byte = declare(module, "ken_boundary_byte_local", 4)?;
@@ -271,6 +285,8 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
         store_field,
         store_name,
         store_int_tag,
+        store_int_limbs,
+        store_int_limb,
         store_bytes_len,
         store_byte,
         byte,
@@ -299,6 +315,8 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     define_store_field(module, graph)?;
     define_store_name(module, graph)?;
     define_store_int_tag(module, graph)?;
+    define_store_int_limbs(module, graph)?;
+    define_store_int_limb(module, graph)?;
     define_store_bytes_len(module, graph)?;
     define_byte_access(module, graph, graph.store_byte, true)?;
     define_byte_access(module, graph, graph.byte, false)?;
@@ -325,6 +343,8 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
         store_field,
         store_name,
         store_int_tag,
+        store_int_limbs,
+        store_int_limb,
         store_bytes_len,
         store_byte,
         byte,
@@ -1030,7 +1050,72 @@ fn define_make_immediate<M: Module>(
         b.ins().return_(&[err]);
 
         b.switch_to_block(ok);
-        let shifted = b.ins().ishl_imm(payload, i64::from(BOUNDARY_TAG_BITS));
+        // ⛔ **And then it RANGE-CHECKS, which the earlier candidate did not.**
+        // The word is built by a left shift, and a shift is *total*: a payload
+        // wider than the field silently became a DIFFERENT VALUE, and a `Bool`
+        // payload of `2` became a third boolean. `boundary_value.rs` claimed
+        // emitted code performed the identical test; it did not.
+        //
+        // The three domain predicates are all evaluated, then selected by the
+        // tag's own bit in each domain's mask — Θ(1) and branch-free, the same
+        // shape the tag × class relation check uses, and computed from the one
+        // `BOUNDARY_IMMEDIATE_DOMAIN` table so the CLIF cannot drift from it.
+        let shift = i64::from(BOUNDARY_TAG_BITS);
+        let one = b.ins().iconst(types::I64, 1);
+        let tag_bit = b.ins().ishl(one, tag);
+
+        let is_bit = b.ins().icmp_imm(IntCC::UnsignedLessThanOrEqual, payload, 1);
+        let unsigned_round = {
+            let up = b.ins().ishl_imm(payload, shift);
+            b.ins().ushr_imm(up, shift)
+        };
+        let is_unsigned = b.ins().icmp(IntCC::Equal, unsigned_round, payload);
+        let signed_round = {
+            let up = b.ins().ishl_imm(payload, shift);
+            b.ins().sshr_imm(up, shift)
+        };
+        let is_signed = b.ins().icmp(IntCC::Equal, signed_round, payload);
+
+        let in_domain = |b: &mut FunctionBuilder<'_>,
+                         domain: BoundaryImmediateDomain,
+                         holds: cranelift_codegen::ir::Value| {
+            let mask = b
+                .ins()
+                .iconst(types::I64, boundary_domain_mask(domain) as i64);
+            let selected = b.ins().band(mask, tag_bit);
+            let applies = b.ins().icmp_imm(IntCC::NotEqual, selected, 0);
+            let held = b.ins().band(applies, holds);
+            (applies, held)
+        };
+        let (bit_applies, bit_ok) = in_domain(&mut b, BoundaryImmediateDomain::Bit, is_bit);
+        let (_, unsigned_ok) = in_domain(
+            &mut b,
+            BoundaryImmediateDomain::UnsignedPayload,
+            is_unsigned,
+        );
+        let (_, signed_ok) = in_domain(&mut b, BoundaryImmediateDomain::SignedPayload, is_signed);
+
+        // ⛔ Undomained is a THIRD OUTCOME THAT FAILS. An immediate tag with no
+        // row in the table admits nothing, so a new tag is rejected until it is
+        // dispositioned — never waved through by a default that never ran.
+        let some = b.ins().bor(bit_ok, unsigned_ok);
+        let admitted = b.ins().bor(some, signed_ok);
+        let good = b.ins().icmp_imm(IntCC::NotEqual, admitted, 0);
+        let build = b.create_block();
+        let refuse = b.create_block();
+        b.ins().brif(good, build, &[], refuse, &[]);
+
+        b.switch_to_block(refuse);
+        // A `Bool` that is not a bit is the wrong SHAPE; a magnitude past the
+        // field is out of BOUNDS. Distinct errors, so a control can tell which
+        // rule refused without reading the payload back.
+        let shape = b.ins().iconst(types::I64, BOUNDARY_ERR_SHAPE);
+        let bounds = b.ins().iconst(types::I64, BOUNDARY_ERR_BOUNDS);
+        let err = b.ins().select(bit_applies, shape, bounds);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(build);
+        let shifted = b.ins().ishl_imm(payload, shift);
         let word = b.ins().bor(shifted, tag);
         b.ins().store(MemFlags::trusted(), word, out, 0);
         let z = b.ins().iconst(types::I64, BOUNDARY_OK);
@@ -1121,6 +1206,9 @@ fn define_escape_check<M: Module>(
 const FIRST_INVOCATION_TAG: i64 = BoundaryTag::InvocationBorrowed as i64;
 /// The highest class in the closed [`BoundaryClass`] set.
 const LAST_CLASS: i64 = BoundaryClass::BorrowedOpaque as i64;
+/// The largest magnitude marker in `BOUNDARY_INT_MARKER_OWNER`. Derived, so a
+/// new marker cannot leave the emitted range guard behind.
+const LAST_INT_MARKER: i64 = BOUNDARY_INT_REGION_LIMBS as i64;
 
 /// Select the region a *tag* names, returning early on an unusable one.
 ///
@@ -1635,6 +1723,165 @@ fn class_guard(
 ///
 /// The third ceiling: the data table is reserved before publication exactly as
 /// the node and word tables are, and running out is [`BOUNDARY_ERR_CAPACITY`].
+/// Require that this node's magnitude marker is [`BOUNDARY_INT_REGION_LIMBS`],
+/// returning [`BOUNDARY_ERR_SHAPE`] otherwise.
+///
+/// ⭐ **This is what keeps the two magnitude representations from mixing.**
+/// `store_int_tag` is the sole writer of the marker and it enforces the
+/// region relation; every limb helper then refuses to touch a node whose marker
+/// says its magnitude lives somewhere else. Neither check subsumes the other:
+/// one says *which storage this node may name*, this says *that the storage it
+/// names is mine to write*.
+fn region_limbs_guard(b: &mut FunctionBuilder<'_>, node: cranelift_codegen::ir::Value) {
+    let marker = b
+        .ins()
+        .load(types::I64, MemFlags::trusted(), node, NODE_EXTENT);
+    let mine = b
+        .ins()
+        .icmp_imm(IntCC::Equal, marker, BOUNDARY_INT_REGION_LIMBS as i64);
+    let ok = b.create_block();
+    let bad = b.create_block();
+    b.ins().brif(mine, ok, &[], bad, &[]);
+
+    b.switch_to_block(bad);
+    let err = b.ins().iconst(types::I64, BOUNDARY_ERR_SHAPE);
+    b.ins().return_(&[err]);
+
+    b.switch_to_block(ok);
+}
+
+/// `(arena, word, sign, len, out) -> status` — claim `len` magnitude limbs in
+/// the node's own region and write the span's start to `*out`.
+///
+/// ⛔ **The counterpart of `store_bytes_len`, and it exists for the reason QA's
+/// last block taught.** A read path that works is not evidence that a producer
+/// path exists; a persistent wide `Int` that only Rust can build would leave
+/// emitted construction of the disposition's spill arm untested and unbuilt.
+fn define_store_int_limbs<M: Module>(
+    module: &mut M,
+    graph: Graph,
+) -> Result<(), CraneliftBackendError> {
+    let ptr = module.target_config().pointer_type();
+    let mut func = begin(module, graph.store_int_limbs, 5);
+    let resolve = module.declare_func_in_func(graph.resolve, &mut func);
+    let mut fctx = FunctionBuilderContext::new();
+    {
+        let mut b = FunctionBuilder::new(&mut func, &mut fctx);
+        let entry = b.create_block();
+        b.append_block_params_for_function_params(entry);
+        b.switch_to_block(entry);
+        let p = b.block_params(entry).to_vec();
+        let (arena, word, sign, len, out) = (p[0], p[1], p[2], p[3], p[4]);
+        let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
+        mutable_guard(&mut b, word, region);
+        class_guard(&mut b, node, &[BoundaryClass::Int]);
+        region_limbs_guard(&mut b, node);
+
+        // ⛔ The sign is a BIT, not a number. `decode_final_export` reads `0` or
+        // `1` and refuses anything else, so admitting a third value here would
+        // build a node the exact-`Int` decoder cannot read back.
+        let bit = b.ins().icmp_imm(IntCC::UnsignedLessThanOrEqual, sign, 1);
+        let shaped = b.create_block();
+        let unshaped = b.create_block();
+        b.ins().brif(bit, shaped, &[], unshaped, &[]);
+
+        b.switch_to_block(unshaped);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_SHAPE);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(shaped);
+        let live = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), region, ARENA_LIMB_COUNT);
+        let cap = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), region, ARENA_LIMB_CAPACITY);
+        // Bound the addend before the sum, so a caller-supplied length cannot
+        // wrap into a spuriously small "fits".
+        let addend_ok = b.ins().icmp(IntCC::UnsignedLessThanOrEqual, len, cap);
+        let sum_check = b.create_block();
+        let no_room = b.create_block();
+        b.ins().brif(addend_ok, sum_check, &[], no_room, &[]);
+
+        b.switch_to_block(no_room);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_CAPACITY);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(sum_check);
+        let need = b.ins().iadd(live, len);
+        let fits = b.ins().icmp(IntCC::UnsignedLessThanOrEqual, need, cap);
+        let ok = b.create_block();
+        b.ins().brif(fits, ok, &[], no_room, &[]);
+
+        b.switch_to_block(ok);
+        b.ins().store(MemFlags::trusted(), sign, node, NODE_PAYLOAD);
+        b.ins()
+            .store(MemFlags::trusted(), live, node, NODE_LIMBS_AT);
+        b.ins()
+            .store(MemFlags::trusted(), len, node, NODE_LIMB_COUNT);
+        b.ins()
+            .store(MemFlags::trusted(), need, region, ARENA_LIMB_COUNT);
+        b.ins().store(MemFlags::trusted(), live, out, 0);
+        let z = b.ins().iconst(types::I64, BOUNDARY_OK);
+        b.ins().return_(&[z]);
+
+        b.seal_all_blocks();
+        b.finalize();
+    }
+    finish(module, graph.store_int_limbs, func)
+}
+
+/// `(arena, word, index, limb) -> status` — write one magnitude limb.
+fn define_store_int_limb<M: Module>(
+    module: &mut M,
+    graph: Graph,
+) -> Result<(), CraneliftBackendError> {
+    let ptr = module.target_config().pointer_type();
+    let mut func = begin(module, graph.store_int_limb, 4);
+    let resolve = module.declare_func_in_func(graph.resolve, &mut func);
+    let mut fctx = FunctionBuilderContext::new();
+    {
+        let mut b = FunctionBuilder::new(&mut func, &mut fctx);
+        let entry = b.create_block();
+        b.append_block_params_for_function_params(entry);
+        b.switch_to_block(entry);
+        let p = b.block_params(entry).to_vec();
+        let (arena, word, index, limb) = (p[0], p[1], p[2], p[3]);
+        let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
+        mutable_guard(&mut b, word, region);
+        class_guard(&mut b, node, &[BoundaryClass::Int]);
+        region_limbs_guard(&mut b, node);
+
+        let len = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_LIMB_COUNT);
+        let within = b.ins().icmp(IntCC::UnsignedLessThan, index, len);
+        let ok = b.create_block();
+        let oob = b.create_block();
+        b.ins().brif(within, ok, &[], oob, &[]);
+
+        b.switch_to_block(oob);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_BOUNDS);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(ok);
+        let at = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_LIMBS_AT);
+        let absolute = b.ins().iadd(at, index);
+        let table = b.ins().load(ptr, MemFlags::trusted(), region, ARENA_LIMBS);
+        let offset = b.ins().imul_imm(absolute, 8);
+        let address = b.ins().iadd(table, offset);
+        b.ins().store(MemFlags::trusted(), limb, address, 0);
+        let z = b.ins().iconst(types::I64, BOUNDARY_OK);
+        b.ins().return_(&[z]);
+
+        b.seal_all_blocks();
+        b.finalize();
+    }
+    finish(module, graph.store_int_limb, func)
+}
+
 fn define_store_bytes_len<M: Module>(
     module: &mut M,
     graph: Graph,
@@ -1778,32 +2025,39 @@ fn define_store_int_tag<M: Module>(
         b.append_block_params_for_function_params(entry);
         b.switch_to_block(entry);
         let p = b.block_params(entry).to_vec();
-        let (arena, word, native_tag) = (p[0], p[1], p[2]);
+        let (arena, word, marker) = (p[0], p[1], p[2]);
         let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
         mutable_guard(&mut b, word, region);
         class_guard(&mut b, node, &[BoundaryClass::Int]);
 
-        let known = b.ins().icmp_imm(
-            IntCC::UnsignedLessThanOrEqual,
-            native_tag,
-            crate::native_int::NATIVE_INT_BIG_TAG_V1 as i64,
-        );
-        let ok = b.create_block();
-        let bad = b.create_block();
-        b.ins().brif(known, ok, &[], bad, &[]);
+        // ⛔ **The marker is REGION-BOUND, and that is the whole check.** A
+        // `Small` carries its magnitude in the node itself and is sound
+        // anywhere; a `NATIVE_INT_BIG_TAG_V1` payload is a slot in the
+        // *invocation's* native arena; `BOUNDARY_INT_REGION_LIMBS` names the
+        // region's own limb table. An invocation marker on a persistent node is
+        // the ephemeral-locator defect — a surviving parent naming storage that
+        // dies first — so it is `ERR_ESCAPE`, the same error `store_field`
+        // returns for the same defect one representation up. A marker outside
+        // the closed set is a *shape* error: a different question, a different
+        // answer.
+        //
+        // ⛔ Range-guard BEFORE forming `1 << marker`: a shift past the word
+        // width is not defined to produce zero, so an unguarded marker could
+        // alias a bit that IS admitted.
+        let known = b
+            .ins()
+            .icmp_imm(IntCC::UnsignedLessThanOrEqual, marker, LAST_INT_MARKER);
+        let ranged = b.create_block();
+        let unknown = b.create_block();
+        b.ins().brif(known, ranged, &[], unknown, &[]);
 
-        b.switch_to_block(bad);
+        b.switch_to_block(unknown);
         let err = b.ins().iconst(types::I64, BOUNDARY_ERR_SHAPE);
         b.ins().return_(&[err]);
 
-        // ⛔ **A persistent `Int` may not be `Big`, and that is the SAME rule
-        // that made persistent words safe to escape.** A `Big`'s limbs live in
-        // an entry `ken_native_int_intern_local` mallocs into the *invocation's*
-        // native arena, which dies with the invocation. A persistent node naming
-        // one is a surviving parent pointing at storage that dies first —
-        // exactly `store_field`'s refusal, one representation down. Reported as
-        // `ERR_ESCAPE` because it is the same defect, not a shape error.
-        b.switch_to_block(ok);
+        b.switch_to_block(ranged);
+        let one = b.ins().iconst(types::I64, 1);
+        let bit = b.ins().ishl(one, marker);
         let owner = b
             .ins()
             .load(types::I64, MemFlags::trusted(), node, NODE_OWNER);
@@ -1812,15 +2066,20 @@ fn define_store_int_tag<M: Module>(
             owner,
             BoundaryReferentOwner::PersistentStore as i64,
         );
-        let is_big = b.ins().icmp_imm(
-            IntCC::Equal,
-            native_tag,
-            crate::native_int::NATIVE_INT_BIG_TAG_V1 as i64,
+        let persistent_mask = b.ins().iconst(
+            types::I64,
+            boundary_int_marker_mask(BoundaryReferentOwner::PersistentStore) as i64,
         );
-        let dangling = b.ins().band(persists, is_big);
-        let escapes = b.create_block();
+        let invocation_mask = b.ins().iconst(
+            types::I64,
+            boundary_int_marker_mask(BoundaryReferentOwner::InvocationArena) as i64,
+        );
+        let mask = b.ins().select(persists, persistent_mask, invocation_mask);
+        let selected = b.ins().band(mask, bit);
+        let admitted = b.ins().icmp_imm(IntCC::NotEqual, selected, 0);
         let sound = b.create_block();
-        b.ins().brif(dangling, escapes, &[], sound, &[]);
+        let escapes = b.create_block();
+        b.ins().brif(admitted, sound, &[], escapes, &[]);
 
         b.switch_to_block(escapes);
         let err = b.ins().iconst(types::I64, BOUNDARY_ERR_ESCAPE);
@@ -1828,7 +2087,7 @@ fn define_store_int_tag<M: Module>(
 
         b.switch_to_block(sound);
         b.ins()
-            .store(MemFlags::trusted(), native_tag, node, NODE_EXTENT);
+            .store(MemFlags::trusted(), marker, node, NODE_EXTENT);
         let z = b.ins().iconst(types::I64, BOUNDARY_OK);
         b.ins().return_(&[z]);
 
@@ -1881,12 +2140,79 @@ fn define_int_part<M: Module>(
         } else {
             (None, p[2])
         };
-        let Resolved { node, .. } = resolve_prologue(&mut b, ptr, resolve, arena, word);
+        let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
         class_guard(&mut b, node, &[BoundaryClass::Int]);
 
+        let marker = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_EXTENT);
+
+        // The two magnitude sources converge here as one `(sign, len, limbs)`
+        // triple, so the projection below is written once and every caller
+        // downstream of this point is representation-blind.
+        let decoded = b.create_block();
+        b.append_block_param(decoded, types::I64);
+        b.append_block_param(decoded, types::I64);
+        b.append_block_param(decoded, ptr);
+
+        let persisted = b
+            .ins()
+            .icmp_imm(IntCC::Equal, marker, BOUNDARY_INT_REGION_LIMBS as i64);
+        let in_region = b.create_block();
+        let in_arena = b.create_block();
+        b.ins().brif(persisted, in_region, &[], in_arena, &[]);
+
+        // ── the region's own limb table ──────────────────────────────────
+        //
+        // ⛔ Not the native decoder's to answer. A persistent wide `Int`'s
+        // magnitude lives here precisely BECAUSE the invocation's native arena
+        // dies first; routing it through that arena would be asking the wrong
+        // region, which is the defect this marker exists to remove.
+        b.switch_to_block(in_region);
+        let region_sign = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_PAYLOAD);
+        let region_len = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_LIMB_COUNT);
+        let at = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_LIMBS_AT);
+        // The node's span is checked against the region's LIVE limb count
+        // before any address is formed, so a node carrying a stale span fails
+        // closed rather than reading past the table.
+        let live = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), region, ARENA_LIMB_COUNT);
+        let end = b.ins().iadd(at, region_len);
+        let fits = b.ins().icmp(IntCC::UnsignedLessThanOrEqual, end, live);
+        let spanned = b.create_block();
+        let unspanned = b.create_block();
+        b.ins().brif(fits, spanned, &[], unspanned, &[]);
+
+        b.switch_to_block(unspanned);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_BOUNDS);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(spanned);
+        let table = b.ins().load(ptr, MemFlags::trusted(), region, ARENA_LIMBS);
+        let byte_at = b.ins().imul_imm(at, 8);
+        let region_base = b.ins().iadd(table, byte_at);
+        b.ins().jump(
+            decoded,
+            &[region_sign.into(), region_len.into(), region_base.into()],
+        );
+
+        // ── the invocation's native-`Int` arena ──────────────────────────
+        //
+        // ⭐ The decode is `ken_native_int_resolve_local`'s, not ours. Deriving
+        // a `Small`'s or an invocation `Big`'s sign and limbs here would be a
+        // second exact-integer representation living beside the first.
+        //
         // ⛔ Undecodable is a THIRD OUTCOME THAT FAILS. An invocation bound to
-        // no native-`Int` arena cannot decode a `Big`, and returning zero is
-        // exactly the defect this helper exists to close.
+        // no native-`Int` arena cannot decode one, and returning zero is exactly
+        // the defect this helper exists to close.
+        b.switch_to_block(in_arena);
         let native_arena = b
             .ins()
             .load(ptr, MemFlags::trusted(), arena, ARENA_NATIVE_INT);
@@ -1900,9 +2226,6 @@ fn define_int_part<M: Module>(
         b.ins().return_(&[err]);
 
         b.switch_to_block(have);
-        let native_tag = b
-            .ins()
-            .load(types::I64, MemFlags::trusted(), node, NODE_EXTENT);
         let native_payload = b
             .ins()
             .load(types::I64, MemFlags::trusted(), node, NODE_PAYLOAD);
@@ -1914,12 +2237,12 @@ fn define_int_part<M: Module>(
         let view = b.ins().stack_addr(ptr, view_slot, 0);
         let call = b
             .ins()
-            .call(native, &[native_arena, native_tag, native_payload, view]);
+            .call(native, &[native_arena, marker, native_payload, view]);
         let status = b.inst_results(call)[0];
-        let decoded = b.ins().icmp_imm(IntCC::Equal, status, 0);
+        let ok_native = b.ins().icmp_imm(IntCC::Equal, status, 0);
         let good = b.create_block();
         let bad = b.create_block();
-        b.ins().brif(decoded, good, &[], bad, &[]);
+        b.ins().brif(ok_native, good, &[], bad, &[]);
 
         b.switch_to_block(bad);
         // The native decoder's own refusal, reported as a shape error rather
@@ -1928,24 +2251,32 @@ fn define_int_part<M: Module>(
         b.ins().return_(&[err]);
 
         b.switch_to_block(good);
+        let native_sign = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), view, VIEW_SIGN);
+        let native_len = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), view, VIEW_LEN);
+        let native_base = b.ins().load(ptr, MemFlags::trusted(), view, VIEW_LIMBS);
+        b.ins().jump(
+            decoded,
+            &[native_sign.into(), native_len.into(), native_base.into()],
+        );
+
+        // ── one projection, both representations ─────────────────────────
+        b.switch_to_block(decoded);
+        let sign = b.block_params(decoded)[0];
+        let len = b.block_params(decoded)[1];
+        let limbs = b.block_params(decoded)[2];
         match part {
             IntPart::Sign => {
-                let sign = b
-                    .ins()
-                    .load(types::I64, MemFlags::trusted(), view, VIEW_SIGN);
                 b.ins().store(MemFlags::trusted(), sign, out, 0);
             }
             IntPart::Len => {
-                let len = b
-                    .ins()
-                    .load(types::I64, MemFlags::trusted(), view, VIEW_LEN);
                 b.ins().store(MemFlags::trusted(), len, out, 0);
             }
             IntPart::Limb => {
                 let index = index.expect("the limb arm takes an index");
-                let len = b
-                    .ins()
-                    .load(types::I64, MemFlags::trusted(), view, VIEW_LEN);
                 let within = b.ins().icmp(IntCC::UnsignedLessThan, index, len);
                 let ok = b.create_block();
                 let oob = b.create_block();
@@ -1956,7 +2287,6 @@ fn define_int_part<M: Module>(
                 b.ins().return_(&[err]);
 
                 b.switch_to_block(ok);
-                let limbs = b.ins().load(ptr, MemFlags::trusted(), view, VIEW_LIMBS);
                 let offset = b.ins().imul_imm(index, 8);
                 let address = b.ins().iadd(limbs, offset);
                 let limb = b.ins().load(types::I64, MemFlags::trusted(), address, 0);
@@ -1976,9 +2306,11 @@ fn define_int_part<M: Module>(
 mod tests {
     use super::*;
     use crate::boundary_value::{
+        boundary_immediate_admits, boundary_immediate_domain, boundary_int_marker_admits,
         boundary_relation_admits, materialize_borrowed, materialize_ground,
         materialize_host_result, BoundaryArenaBuilder, BoundaryArenaV1, BoundaryValueStore,
-        BoundaryWord, BOUNDARY_IMMEDIATE_INT_MAX,
+        BoundaryWord, BOUNDARY_IMMEDIATE_INT_MAX, BOUNDARY_IMMEDIATE_INT_MIN,
+        BOUNDARY_PAYLOAD_BITS,
     };
     use crate::ir::RuntimeGroundValue;
     use crate::native_int::RuntimeIntV1;
@@ -2122,10 +2454,27 @@ mod tests {
         persistent_room: (usize, usize, usize),
         arena_room: (usize, usize, usize),
     ) -> Bound {
-        store.reserve_persistent(persistent_room.0, persistent_room.1, persistent_room.2);
+        bind_limbs(store, builder, persistent_room, arena_room, (0, 0))
+    }
+
+    /// [`bind_with`] plus an explicit `(persistent, arena)` magnitude-limb
+    /// reservation, for the controls that construct a wide `Int`.
+    fn bind_limbs(
+        store: &mut BoundaryValueStore,
+        builder: BoundaryArenaBuilder,
+        persistent_room: (usize, usize, usize),
+        arena_room: (usize, usize, usize),
+        limb_room: (usize, usize),
+    ) -> Bound {
+        store.reserve_persistent(
+            persistent_room.0,
+            persistent_room.1,
+            persistent_room.2,
+            limb_room.0,
+        );
         let persistent = store.publish_persistent();
         let mut arena = builder.finish();
-        arena.reserve(arena_room.0, arena_room.1, arena_room.2);
+        arena.reserve(arena_room.0, arena_room.1, arena_room.2, limb_room.1);
         arena.bind_persistent(Some(persistent));
         let base = arena.publish();
         Bound {
@@ -2534,7 +2883,7 @@ mod tests {
             );
             assert_eq!(
                 BOUNDARY_LOCAL_HELPERS.len(),
-                25,
+                27,
                 "the helper population must not move with the value population"
             );
         }
@@ -2807,6 +3156,8 @@ mod tests {
         store_name: cranelift_codegen::ir::FuncRef,
         make_immediate: cranelift_codegen::ir::FuncRef,
         store_int_tag: cranelift_codegen::ir::FuncRef,
+        store_int_limbs: cranelift_codegen::ir::FuncRef,
+        store_int_limb: cranelift_codegen::ir::FuncRef,
         store_bytes_len: cranelift_codegen::ir::FuncRef,
         store_byte: cranelift_codegen::ir::FuncRef,
     }
@@ -2867,6 +3218,8 @@ mod tests {
             store_name: module.declare_func_in_func(helpers.store_name, &mut ctx.func),
             make_immediate: module.declare_func_in_func(helpers.make_immediate, &mut ctx.func),
             store_int_tag: module.declare_func_in_func(helpers.store_int_tag, &mut ctx.func),
+            store_int_limbs: module.declare_func_in_func(helpers.store_int_limbs, &mut ctx.func),
+            store_int_limb: module.declare_func_in_func(helpers.store_int_limb, &mut ctx.func),
             store_bytes_len: module.declare_func_in_func(helpers.store_bytes_len, &mut ctx.func),
             store_byte: module.declare_func_in_func(helpers.store_byte, &mut ctx.func),
         };
@@ -3416,7 +3769,7 @@ mod tests {
         // Persistent construction with no persistent region bound.
         {
             let mut arena = BoundaryArenaBuilder::new().finish();
-            arena.reserve(2, 4, 0);
+            arena.reserve(2, 4, 0, 0);
             arena.bind_persistent(None);
             let base = arena.publish();
             assert_eq!(
@@ -3858,6 +4211,8 @@ mod tests {
                 "ken_boundary_store_field_local",
                 "ken_boundary_store_name_local",
                 "ken_boundary_store_int_tag_local",
+                "ken_boundary_store_int_limbs_local",
+                "ken_boundary_store_int_limb_local",
                 "ken_boundary_store_bytes_len_local",
                 "ken_boundary_store_byte_local",
             ],
@@ -3983,14 +4338,86 @@ mod tests {
         }
     }
 
-    /// **`AC-6` — a persistent `Int` may not name invocation-scoped limbs.**
+    /// `(base, sign, len, seed) -> word` — build a PERSISTENT wide `Int`
+    /// entirely from emitted code: allocate, mark the magnitude as region-owned,
+    /// claim the limb span, then write every limb at run-time bounds.
+    fn emit_wide_int_producer(
+        b: &mut FunctionBuilder<'_>,
+        refs: &Refs,
+        p: &[cranelift_codegen::ir::Value],
+        ptr: cranelift_codegen::ir::Type,
+    ) {
+        let (base, sign, len, seed) = (p[0], p[1], p[2], p[3]);
+        let out = cell(b, ptr);
+        let tag = b
+            .ins()
+            .iconst(types::I64, BoundaryTag::PersistentGround as i64);
+        let class = b.ins().iconst(types::I64, BoundaryClass::Int as i64);
+        let zero = b.ins().iconst(types::I64, 0);
+        guard(b, refs.alloc, &[base, tag, class, zero, out]);
+        let word = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
+        let marker = b.ins().iconst(types::I64, BOUNDARY_INT_REGION_LIMBS as i64);
+        guard(b, refs.store_int_tag, &[base, word, marker]);
+        let span = cell(b, ptr);
+        guard(b, refs.store_int_limbs, &[base, word, sign, len, span]);
+
+        // `seed + i` at every index, over run-time bounds, so no limb of the
+        // result is known when this body is compiled.
+        let loop_head = b.create_block();
+        b.append_block_param(loop_head, types::I64);
+        b.ins().jump(loop_head, &[zero.into()]);
+        b.switch_to_block(loop_head);
+        let i = b.block_params(loop_head)[0];
+        let more = b.ins().icmp(IntCC::UnsignedLessThan, i, len);
+        let body = b.create_block();
+        let done = b.create_block();
+        b.ins().brif(more, body, &[], done, &[]);
+
+        b.switch_to_block(body);
+        let limb = b.ins().iadd(seed, i);
+        guard(b, refs.store_int_limb, &[base, word, i, limb]);
+        let next = b.ins().iadd_imm(i, 1);
+        b.ins().jump(loop_head, &[next.into()]);
+
+        b.switch_to_block(done);
+        b.ins().return_(&[word]);
+    }
+
+    /// `(tag, payload, out) -> status` — `make_immediate` on its own, status
+    /// returned unmodified so a control can assert the EXACT refusal.
+    fn emit_make_immediate_probe(
+        b: &mut FunctionBuilder<'_>,
+        refs: &Refs,
+        p: &[cranelift_codegen::ir::Value],
+        _ptr: cranelift_codegen::ir::Type,
+    ) {
+        let call = b.ins().call(refs.make_immediate, &[p[0], p[1], p[2]]);
+        let status = b.inst_results(call)[0];
+        b.ins().return_(&[status]);
+    }
+
+    fn run_make_immediate(code: *const u8, tag: u64, payload: u64, out: &mut u64) -> i64 {
+        let f: extern "C" fn(u64, u64, *mut u64) -> i64 = unsafe { std::mem::transmute(code) };
+        f(tag, payload, out as *mut u64)
+    }
+
+    /// A wide `Int` built from the landed exact arithmetic, so its limbs are
+    /// whatever that code actually produces rather than a hand-written pattern.
+    fn wide_int(scale: i64) -> RuntimeIntV1 {
+        RuntimeIntV1::Small(i64::MAX)
+            .mul(&RuntimeIntV1::Small(1 << 20))
+            .add(&RuntimeIntV1::Small(scale))
+    }
+
+    /// **`AC-1`/`AC-6` — the magnitude-marker relation is closed over the
+    /// (owner, marker) product, not sampled.**
     ///
-    /// ⭐ The same rule that made persistent words safe to escape, one
-    /// representation down: a `Big`'s limbs live in an entry the native arena
-    /// owns for the invocation, so a persistent node naming one would be a
-    /// surviving parent pointing at storage that dies first.
+    /// ⛔ A closed set of markers is not a closed relation, for exactly the
+    /// reason a closed set of tags and classes was not: the marker says *where
+    /// the magnitude lives*, and putting an invocation-scoped one on a
+    /// persistent node is the ephemeral-locator defect one representation down.
     #[test]
-    fn b2v_a_persistent_int_refuses_an_invocation_scoped_big() {
+    fn b2v_the_magnitude_marker_relation_is_closed_over_owner_and_marker() {
         let (_am, alloc_code) = compile_producer(4, emit_alloc_probe);
         let (_tm, tag_probe) = compile_producer(3, emit_store_int_tag_probe);
 
@@ -4009,33 +4436,310 @@ mod tests {
             0,
         ) as u64);
 
+        // ⛔ **Every allocatable `Int` node is PERSISTENT**, and that is a
+        // consequence of the tag × class relation rather than a second rule:
+        // `Int` appears under `PersistentGround` and nowhere else. Asserted from
+        // the table, so admitting an invocation-owned `Int` later reddens here
+        // and forces the marker question to be re-answered rather than
+        // inherited.
+        let int_tags: Vec<BoundaryTag> = BoundaryTag::ALL
+            .iter()
+            .copied()
+            .filter(|t| boundary_relation_admits(*t, BoundaryClass::Int))
+            .collect();
         assert_eq!(
-            run3(
-                tag_probe,
-                f.base,
-                word,
-                crate::native_int::NATIVE_INT_BIG_TAG_V1
-            ),
-            BOUNDARY_ERR_ESCAPE,
-            "AC-6: a persistent Int must not name invocation-scoped limbs"
+            int_tags,
+            vec![BoundaryTag::PersistentGround],
+            "the marker sweep below covers every owner an Int node can have"
         );
-        // ⚠ POSITIVE CONTROL — the Small arm is admitted, so the refusal is
-        // about the ARM and not about `store_int_tag` refusing everything.
+
+        let mut admitted = 0;
+        let mut refused = 0;
+        // One past the closed set, so the range guard is exercised rather than
+        // assumed — a marker that shifts past the word width could otherwise
+        // alias an admitted bit.
+        for marker in 0..=(LAST_INT_MARKER as u64 + 1) {
+            let status = run3(tag_probe, f.base, word, marker);
+            if marker > LAST_INT_MARKER as u64 {
+                assert_eq!(
+                    status, BOUNDARY_ERR_SHAPE,
+                    "the marker set is closed: {marker} is outside it"
+                );
+                refused += 1;
+            } else if boundary_int_marker_admits(marker, BoundaryReferentOwner::PersistentStore) {
+                assert_eq!(
+                    status, BOUNDARY_OK,
+                    "a persistent Int must admit marker {marker}"
+                );
+                admitted += 1;
+            } else {
+                assert_eq!(
+                    status, BOUNDARY_ERR_ESCAPE,
+                    "marker {marker} names storage a persistent Int must not reach"
+                );
+                refused += 1;
+            }
+        }
+        // ⚠ POSITIVE CONTROL on both arms: a check that admitted everything or
+        // nothing would satisfy one arm vacuously.
+        assert_eq!(admitted, 2, "Small and region-limbed are both admitted");
+        assert_eq!(refused, 2, "the invocation Big and the out-of-set marker");
+
+        // The mask the CLIF consumes must agree with the table, per pair.
+        for owner in [
+            BoundaryReferentOwner::PersistentStore,
+            BoundaryReferentOwner::InvocationArena,
+        ] {
+            for marker in 0..=LAST_INT_MARKER as u64 {
+                assert_eq!(
+                    boundary_int_marker_mask(owner) & (1u64 << marker) != 0,
+                    boundary_int_marker_admits(marker, owner),
+                    "the emitted mask disagrees with the table for {owner:?} + {marker}"
+                );
+            }
+        }
+    }
+
+    /// **`D1`/`D3`/`D4` — the `Int` disposition's promised spill EXISTS for an
+    /// arbitrary-precision value.**
+    ///
+    /// ⛔ This is the pin the earlier candidate could not have passed.
+    /// `Lowered::Int` classifies **every** `Int` as an immediate with a
+    /// `PersistentGround`/`Int` spill, while materialization was `as_small()?`
+    /// — so the promised spill did not exist for exactly the values a bignum
+    /// language exists to carry, and the gap was recorded as a test residual
+    /// rather than the missing deliverable it was.
+    ///
+    /// ⚠ MEASURED: a value too wide for `i64` materializes, and a separately
+    /// compiled consumer recovers its sign and every limb. CLAIMED: the
+    /// disposition's spill arm is deliverable. THE GAP: that the consumer's
+    /// answer is the *value's* magnitude and not a re-reading of whatever the
+    /// producer stored — closed by comparing against
+    /// `RuntimeIntV1::canonical_sign_and_limbs`, which is the landed
+    /// normalization every other consumer uses.
+    #[test]
+    fn b2v_a_wide_persistent_int_materializes_and_reads_back_by_content() {
+        let (_c1, sign_code) = compile_probe(Probe::Unary(|h| h.int_sign));
+        let (_c2, len_code) = compile_probe(Probe::Unary(|h| h.int_len));
+        let (_c3, limb_code) = compile_probe(Probe::Binary(|h| h.int_limb));
+
+        let mut seen = Vec::new();
+        for scale in [0i64, 1, -1] {
+            let value = wide_int(scale);
+            let (sign, limbs) = value.canonical_sign_and_limbs();
+            assert!(
+                value.as_small().is_none() && limbs.len() > 1,
+                "the case must actually be wide, or this control tests the Small arm"
+            );
+
+            let mut store = BoundaryValueStore::new();
+            let word = materialize_ground(&mut store, &RuntimeGroundValue::Int(value.clone()))
+                .expect("D1: a wide Int must materialize — the disposition promises the spill");
+            assert_eq!(
+                word.tag(),
+                Some(BoundaryTag::PersistentGround),
+                "D3: the spill is a persistent ground handle"
+            );
+            // Independent Rust oracle: the region's own view of the node, not
+            // the emitted answer read back a second time.
+            assert_eq!(
+                store.image().0.node_limbs(word.payload()),
+                Some(limbs.as_slice()),
+                "the region must hold the canonical limbs"
+            );
+
+            let f = bind(&mut store, BoundaryArenaBuilder::new());
+            assert_eq!(run2(sign_code, f.base, word), sign as i64, "sign");
+            assert_eq!(
+                run2(len_code, f.base, word),
+                limbs.len() as i64,
+                "limb count"
+            );
+            let read: Vec<u64> = (0..limbs.len() as u64)
+                .map(|i| run3(limb_code, f.base, word, i) as u64)
+                .collect();
+            assert_eq!(read, limbs, "emitted code must recover every limb");
+
+            // ⚠ The magnitude must genuinely exceed one limb AND `i64`, or a
+            // Small-only implementation would pass this control.
+            assert!(
+                read.len() > 1,
+                "a one-limb magnitude does not exercise the wide path"
+            );
+            // ⛔ Reading one limb past the end is BOUNDS, not a zero.
+            assert_eq!(
+                run3(limb_code, f.base, word, limbs.len() as u64),
+                BOUNDARY_ERR_BOUNDS,
+                "the limb span is bounds-checked"
+            );
+            seen.push((sign, read));
+        }
+        // ⚠ POSITIVE CONTROL — the three cases differ only in their low limb, so
+        // anything reading identity, length or sign alone would collapse them.
+        seen.dedup();
+        assert_eq!(seen.len(), 3, "every wide case must be distinguishable");
+    }
+
+    /// **`AC-4`/`D4` — a wide persistent `Int` survives the invocation that read
+    /// it, and emitted code can CONSTRUCT one.**
+    ///
+    /// ⛔ The producer half exists because of what QA's last block taught: a
+    /// working read path is not evidence that the write path exists. The
+    /// survival half is what distinguishes region-owned limbs from the
+    /// invocation-scoped representation they replace — the arena is dropped
+    /// between the write and the read.
+    #[test]
+    fn b2v_emitted_code_constructs_a_wide_persistent_int_that_outlives_the_arena() {
+        let (_pm, produce) = compile_producer(4, emit_wide_int_producer);
+        let (_c1, sign_code) = compile_probe(Probe::Unary(|h| h.int_sign));
+        let (_c2, len_code) = compile_probe(Probe::Unary(|h| h.int_len));
+        let (_c3, limb_code) = compile_probe(Probe::Binary(|h| h.int_limb));
+
+        let len = 3u64;
+        let seed = 0x0123_4567_89ab_cdefu64;
+        let mut store = BoundaryValueStore::new();
+        let (word, persistent) = {
+            let f = bind_limbs(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (2, 0, 0),
+                (0, 0, 0),
+                (8, 0),
+            );
+            let produced = run4(produce, f.base, 1, len, seed);
+            assert!(
+                produced > 0,
+                "emitted wide-Int construction must succeed, got status {produced}"
+            );
+            (BoundaryWord(produced as u64), f.persistent)
+        };
+
+        // ⭐ A FRESH invocation over the same persistent image: new arena, new
+        // tables, sharing only the store's region. If the limbs had gone to
+        // invocation storage the word would now name freed memory.
+        let g = rebind(persistent);
+        assert_eq!(run2(sign_code, g.base, word), 1, "the sign survives");
         assert_eq!(
-            run3(
-                tag_probe,
-                f.base,
-                word,
-                crate::native_int::NATIVE_INT_SMALL_TAG_V1
-            ),
-            BOUNDARY_OK,
-            "AC-6: the self-contained arm is admitted"
+            run2(len_code, g.base, word),
+            len as i64,
+            "the length survives"
         );
-        // And an out-of-set native tag is a shape error, not silently stored.
+        let read: Vec<u64> = (0..len)
+            .map(|i| run3(limb_code, g.base, word, i) as u64)
+            .collect();
         assert_eq!(
-            run3(tag_probe, f.base, word, 99),
+            read,
+            (0..len).map(|i| seed + i).collect::<Vec<_>>(),
+            "every limb survives the invocation that wrote it"
+        );
+        // ⚠ POSITIVE CONTROL — the limbs are distinct, so a reader returning a
+        // constant or the first limb repeatedly would not pass.
+        assert_eq!(
+            read.iter().collect::<std::collections::BTreeSet<_>>().len(),
+            len as usize
+        );
+    }
+
+    /// **`AC-1`/`AC-2` — emitted immediate construction range-checks its payload
+    /// instead of truncating it.**
+    ///
+    /// ⛔ `ken_boundary_make_immediate_local` built its word with a left shift
+    /// and checked only that the tag was below the first handle tag. A shift is
+    /// **total**: a payload wider than the field silently became a *different
+    /// value*, and a `Bool` payload of `2` became a third boolean —
+    /// while `boundary_value.rs` said emitted code performed the identical
+    /// range test. The only magnitude control exercised Rust materialization,
+    /// which is a different producer entirely.
+    #[test]
+    fn b2v_emitted_immediate_construction_refuses_what_it_cannot_represent() {
+        let (_pm, mint) = compile_producer(3, emit_make_immediate_probe);
+        let mut out = 0u64;
+
+        let mut admitted = 0;
+        let mut refused = 0;
+        for tag in BoundaryTag::ALL {
+            // Payloads chosen to straddle every domain boundary at once, so one
+            // sweep exercises the bit, the signed field and the unsigned field.
+            for payload in [
+                0u64,
+                1,
+                2,
+                BOUNDARY_IMMEDIATE_INT_MAX as u64,
+                (BOUNDARY_IMMEDIATE_INT_MAX as u64) + 1,
+                BOUNDARY_IMMEDIATE_INT_MIN as u64,
+                (BOUNDARY_IMMEDIATE_INT_MIN as u64) - 1,
+                1u64 << BOUNDARY_PAYLOAD_BITS,
+                u64::MAX,
+            ] {
+                out = 0;
+                let status = run_make_immediate(mint, tag as u64, payload, &mut out);
+                if boundary_immediate_admits(tag, payload) {
+                    assert_eq!(
+                        status, BOUNDARY_OK,
+                        "{tag:?} must admit payload {payload:#x}"
+                    );
+                    // ⛔ **The word must round-trip.** This is what makes the
+                    // check about truncation rather than about a status code:
+                    // an admitted payload that came back different would be the
+                    // very defect being closed.
+                    let word = BoundaryWord(out);
+                    assert_eq!(word.tag(), Some(tag), "the tag round-trips");
+                    let back = if boundary_immediate_domain(tag)
+                        == Some(BoundaryImmediateDomain::SignedPayload)
+                    {
+                        word.signed_payload() as u64
+                    } else {
+                        word.payload()
+                    };
+                    assert_eq!(back, payload, "{tag:?} truncated payload {payload:#x}");
+                    assert_eq!(
+                        word,
+                        BoundaryWord::immediate(tag, payload),
+                        "the emitted word and the Rust builder's must be identical"
+                    );
+                    admitted += 1;
+                } else if !tag.is_immediate() {
+                    assert_eq!(
+                        status, BOUNDARY_ERR_SHAPE,
+                        "{tag:?} is a handle tag and has no immediate form"
+                    );
+                    assert_eq!(out, 0, "a refused mint must write no word");
+                    refused += 1;
+                } else {
+                    let expected = match boundary_immediate_domain(tag) {
+                        Some(BoundaryImmediateDomain::Bit) => BOUNDARY_ERR_SHAPE,
+                        _ => BOUNDARY_ERR_BOUNDS,
+                    };
+                    assert_eq!(
+                        status, expected,
+                        "{tag:?} must refuse payload {payload:#x} with an exact error"
+                    );
+                    assert_eq!(out, 0, "a refused mint must write no word");
+                    refused += 1;
+                }
+            }
+        }
+        // ⚠ POSITIVE CONTROL on both arms — a checker that admitted everything
+        // or refused everything satisfies one arm vacuously, and the earlier
+        // candidate admitted everything.
+        assert!(admitted > 0 && refused > 0, "neither arm may be empty");
+        // And the two refusal reasons are genuinely distinguished, not one error
+        // wearing two names.
+        out = 0;
+        assert_eq!(
+            run_make_immediate(mint, BoundaryTag::ImmediateBool as u64, 2, &mut out),
             BOUNDARY_ERR_SHAPE,
-            "AC-1: the native tag space is closed too"
+            "a Bool that is not a bit is the wrong SHAPE"
+        );
+        assert_eq!(
+            run_make_immediate(
+                mint,
+                BoundaryTag::ImmediateInt as u64,
+                1u64 << BOUNDARY_PAYLOAD_BITS,
+                &mut out
+            ),
+            BOUNDARY_ERR_BOUNDS,
+            "a magnitude past the field is out of BOUNDS"
         );
     }
 
