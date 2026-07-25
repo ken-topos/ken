@@ -3533,11 +3533,17 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
 /// **second** `impl<'a> Lowering<'a>` block. A retained-body route added there
 /// would have sat entirely outside a `core.rs`-scoped inventory.
 ///
-/// ⚠ Today `mod.rs` cannot reach `retained_body_occurrence` — the helper is
-/// private to module `core` and `mod.rs` is `core`'s **parent**, so the compiler
-/// refuses. That privacy is therefore load-bearing and is pinned directly by
-/// `retained_body_helper_is_private`; this list is what makes the inventory
-/// still correct **after** a deliberate widening.
+/// ⛔ **An earlier revision of this comment continued: *"today `mod.rs` cannot
+/// reach `retained_body_occurrence` … that privacy is therefore load-bearing …
+/// this list is what makes the inventory still correct after a deliberate
+/// widening."* That is the REACHABILITY entailment the Architect ruling
+/// (`evt_5yxjd1zqnyvcq`) struck, and it is withdrawn here too.**
+///
+/// The list is now a **declaration inventory only**: it names the files that
+/// carry an `impl Lowering` block, so a declaration appearing in a second one is
+/// *visible*. It supports no claim about who can **call** anything — that is the
+/// plan graph's to answer, via an occurrence's `SemanticOwner` and the planned
+/// edge kind.
 const LOWERING_IMPL_SOURCES: &[(&str, &str)] = &[
     ("lowering/core.rs", include_str!("../../core.rs")),
     ("lowering/mod.rs", include_str!("../../mod.rs")),
@@ -4345,8 +4351,3 @@ fn the_owner_classification_is_named_in_production_only_by_the_module_that_defin
          measuring nothing"
     );
 }
-
-
-
-
-
