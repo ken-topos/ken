@@ -173,7 +173,7 @@ entry it must answer whether the entries share a predicate** (architect playbook
 ```text
 SYMPTOM INVENTORY (append only; never rewritten)
 NEXT PREDICATE CHECK = 3rd entry, then 6th, 9th, …
-(empty)
+1. retained body selection — keyed on cloned RuntimeExpr pointer identity
 ```
 
 ⛔ **Seeded with the held chain's entries deliberately** — compare a new entry
