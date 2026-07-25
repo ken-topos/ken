@@ -91,6 +91,22 @@
 > ⇒ **Next time, compact the CODEX seats FIRST in a mixed ring** — they are the
 > ones that can fail.
 >
+> ### ✅ STALE-FRAME HAZARD CLOSED — authoritative frame is on `main` = `2e84db78`
+>
+> PR #942 merged, content-verified on the landed tree: corrected **D1**
+> (population-level), the **N3-retirement** banner, anchor `core.rs:4255`, the
+> `core.rs:3529` synthesized-`Trap` ruling — and ⭐ **the stale draft's old `D4`
+> heading is GONE (0 hits)**, which was the actual collision (old-D4 and new-D1
+> name the same requirement under different identifiers).
+> ⇒ **A fresh `main` checkout now yields the correct AC list**; the `350f7b2d`
+> pointer is retired. Told the ring at `evt_13jq78kafm4ts`.
+> Also on `main`: `RT-FNSPLIT-B2A-S` = `active`; `PX8`/`PX8-F-CAP-41` = `draft`.
+>
+> ⚠ **Ring state: 8 modified files, ZERO commits** on the live branch. Nothing to
+> push yet. **Uncommitted work has no reflog** — the four unpushed commits earlier
+> in this chain survived only because the reflog held them. I asked for WIP commits
+> (they do not threaten D1's atomicity; they can be squashed) and will push each.
+>
 > ### ⚠⚠ TWO SIMILAR WP BRANCH NAMES — PUSH TO THE RIGHT ONE
 >
 > | ref on `origin` | SHA | what it is |
