@@ -5,6 +5,7 @@
 //! continuation, cleanup, source, and affine state travels as constant-width
 //! IDs into hash-consed persistent stores.
 
+mod abi;
 mod semantic_ir;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -14,6 +15,7 @@ use super::{
     RuntimeDeclarationKind,
 };
 use crate::RuntimeExpr;
+use abi::{build_abi_plane, AbiPlane};
 use semantic_ir::{
     build_semantic_plane, SemanticMaterialArena, SemanticPlane, SemanticSourceKind,
     SemanticSourceSeed,
@@ -223,6 +225,14 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     semantic_sources: Vec<SemanticSourceSeed>,
     semantic_material: SemanticMaterialArena,
     semantic: SemanticPlane,
+    /// `RT-FNSPLIT-B2R` — one representation/call-ABI descriptor per function
+    /// unit in `semantic`'s validated owner partition.
+    ///
+    /// ⛔ **Inert.** This plane is *declared and validated*, never emitted from.
+    /// It carries no `FunctionBuilder`, no `define_function`, no call edge and no
+    /// encoder; `RT-FNSPLIT-B2F` performs the atomic switch-over that makes it
+    /// live.
+    abi: AbiPlane,
     /// The **occurrence** origin of the whole program's root, stored at planning
     /// time.
     ///
@@ -355,6 +365,7 @@ impl<'src> Planner<'src> {
                 planned_helpers: Vec::new(),
                 semantic_sources: Vec::new(),
                 semantic_material: SemanticMaterialArena::default(),
+                abi: AbiPlane::default(),
                 semantic: SemanticPlane::default(),
                 root_occurrence: None,
                 declaration_occurrences: BTreeMap::new(),
@@ -992,6 +1003,17 @@ impl<'src> Planner<'src> {
             &self.plan.semantic_sources,
             &self.plan.semantic_material,
         )?;
+        // `B2R` — the representation contract is built from the owner partition
+        // the line above just validated, and it fails **before** anything is
+        // emitted. It is deliberately not deferred to lowering: a contract that
+        // is only checked at emission time cannot be a *pre*-emission gate.
+        self.plan.abi = build_abi_plane(
+            &self.plan.semantic,
+            &self.plan.nodes,
+            &self.plan.semantic_sources,
+            &self.plan.edges,
+            &self.plan.entries,
+        )?;
         self.plan.validate()?;
         Ok(self.plan)
     }
@@ -1310,6 +1332,13 @@ impl<'src> StaticTransitionPlan<'src> {
             &self.entries,
             &self.semantic_sources,
             &self.semantic_material,
+        )?;
+        self.abi.validate(
+            &self.semantic,
+            &self.nodes,
+            &self.semantic_sources,
+            &self.edges,
+            &self.entries,
         )?;
         self.validate_source_occurrence_table()?;
         Ok(())

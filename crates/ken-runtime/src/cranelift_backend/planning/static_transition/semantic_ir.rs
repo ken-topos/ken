@@ -1441,7 +1441,14 @@ fn plane_slice<'a, T>(
     arena.get(start..end).ok_or_else(|| planner_error(error))
 }
 
-fn positioned_sources(
+/// Lays the planner's walk-ordered source seeds out **positionally by origin**.
+///
+/// ⚠ `semantic_sources` is pushed in **walk order**, not by node id — which is
+/// exactly why this function exists and why `build_semantic_plane` calls it
+/// before reading a seed by position. `pub(super)` so the `B2R` ABI plane reuses
+/// this one definition rather than re-deriving the positioning: two planes that
+/// disagree about "the seed for this origin" is a defect neither would detect.
+pub(super) fn positioned_sources(
     nodes: &[StaticNode],
     sources: &[SemanticSourceSeed],
 ) -> Result<Vec<SemanticSourceSeed>, CraneliftBackendError> {
