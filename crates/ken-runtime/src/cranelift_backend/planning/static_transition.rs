@@ -5302,4 +5302,73 @@ mod tests {
             .filter(|token| *token == needle)
             .count()
     }
+
+    /// `AC-10` — the **predicted** descriptor population, measured.
+    ///
+    /// ⭐ The numbers below were written into
+    /// `docs/program/rt-fnsplit-b2r-predictions.md` (`P1`) and committed at
+    /// `b7aacd03`, **before** `abi.rs` existed. A count re-fit to what the code
+    /// happens to produce measures nothing; the commit graph orders the
+    /// prediction ahead of the measurement so a miss stays legible as a miss.
+    ///
+    /// Promise class: **durable invariant** — the assertion is the RELATION
+    /// `descriptors == entries + StaticBody edges`, which survives any change
+    /// preserving the contract. The per-fixture table beside it is a
+    /// **transition sentinel**: it is a snapshot of these seven fixtures and is
+    /// retired when the fixture set changes.
+    #[test]
+    fn b2r_ac10_the_descriptor_population_matches_the_prediction_on_every_fixture() {
+        let mut measured = Vec::new();
+        for (name, expr) in b2ac_topology_fixtures() {
+            let declarations = BTreeMap::new();
+            let plan = plan_static_transition_graph(&expr, &declarations).expect("plannable");
+
+            // The durable relation, asserted per fixture.
+            let static_body = plan
+                .edges
+                .iter()
+                .filter(|edge| edge.kind == EdgeKind::StaticBody)
+                .count();
+            assert_eq!(
+                plan.abi.descriptors.len(),
+                plan.entries.len() + static_body,
+                "AC-10/AC-1: `{name}` -- descriptors are not the scheduling \
+                 entries plus the static body targets"
+            );
+            measured.push((name, plan.abi.descriptors.len()));
+        }
+
+        assert_eq!(
+            measured,
+            vec![
+                ("leaf", 1),
+                ("let-if", 1),
+                ("match", 1),
+                ("lexical-closure-call", 2),
+                ("computational", 1),
+                ("computational-nested", 1),
+                ("computational-under-let", 1),
+            ],
+            "AC-10: the measured descriptor population differs from the value \
+             predicted at `b7aacd03` before this module was written"
+        );
+        assert_eq!(
+            measured.iter().map(|(_, n)| n).sum::<usize>(),
+            8,
+            "AC-10: predicted 8 descriptors over the seven fixtures"
+        );
+
+        // And the richer B2O fixture: 2 scheduling entries (root + the
+        // transparent declaration) and 2 static body edges.
+        let declaration = b2o_transparent_declaration(unit());
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::b2o", &declaration);
+        let expr = b2o_two_closure_fixture();
+        let plan = plan_static_transition_graph(&expr, &declarations).expect("plannable");
+        assert_eq!(
+            plan.abi.descriptors.len(),
+            4,
+            "AC-10: predicted 4 descriptors on the two-closure fixture"
+        );
+    }
 }
