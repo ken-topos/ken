@@ -141,9 +141,16 @@ this line wins.** Re-read this line on every hard-stop.
 > playbook §1b, steward §5a-ii). This exists because *this* chain ran to 33
 > hard-stops with nothing holding the pattern across them.
 >
+> ⛔ **BOTH counts below are on the LIVE RECUT chain. The original pre-recut
+> chain is FROZEN at 33 hard-stops — do NOT resume that count**, and do not
+> read a `#36` anchor from any older prose (the briefing carried one until
+> 2026-07-25; an armed line with a stale anchor reads exactly like a working
+> one). `RT-FNSPLIT-B2O` closed with **no hard-stop**, so neither count moved:
+> a clean WP never advances them.
+>
 > ```text
 > SYMPTOM INVENTORY (append only; never rewritten)
-> NEXT PREDICATE CHECK = 3rd entry, then 6th, 9th, …
+> NEXT PREDICATE CHECK = 6th entry   (3rd is CONSUMED — answered at entry 2)
 > ENTRIES = 3  ← ANSWERED AT ENTRY 2; entry 3 gives the CAUSE. See below.
 > 1. retained body selection — keyed on cloned RuntimeExpr pointer identity
 > 2. lower_expr re-lowers each retained closure body AT EVERY CALL SITE, in
