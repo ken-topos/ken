@@ -547,7 +547,18 @@ hard-stop count    = 8   ← #6's PULL FIRED AND WAS CONSUMED. NEXT PULL = #9.
             made on merits, not carried forward.
           No local/refs/ or excluded-prototype material consulted; the held Ken
           branch was used only as repository-owned scale evidence.
-NEXT RESEARCH PULL = hard-stop #12, …
+NEXT RESEARCH PULL = hard-stop #11, then #15, #18, #21, …
+   ⛔ CORRECTED 2026-07-25 (Steward, count of record). This line read #12 — the
+      generic next-multiple-of-3 after the consumed #9. The steward playbook
+      carries an OPERATOR OVERRIDE dated 2026-07-24 spelling the catch-up as
+      "#11, then #15, #18, #21". The two cannot be reconciled from the dates, so
+      it is settled by DOMINANCE, not by guess: a pull at #11 is REQUIRED under
+      one reading and merely EARLY under the other, and early is explicitly fine
+      (a cadence threshold is a floor on when to ask, not a bar on asking
+      sooner). #12 is wrong under one reading; #11 is safe under both.
+      ⚠ Occurrences of "#12" BELOW this line are append-only HISTORY — they
+      record what was believed at the time and are deliberately NOT rewritten.
+      This line is the operative anchor.
    ✅ #9 CONSUMED — raised 2026-07-25 on RT-FNSPLIT-B2F (evt_197xpdavdyrn0);
       research dispatched evt_63wjmry61vd89 BEFORE the Architect ruled, as
       armed. COUNT OF RECORD = 9. Obstruction: one-function-per-origin needs a

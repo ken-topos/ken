@@ -264,6 +264,14 @@ constant helper declarations are **predicted before measuring** and
 
 ## Acceptance criteria
 
+> ⛔⛔ **RECUT 2026-07-25 — these `AC`s are AMENDED. Read `## RECUT` at the end
+> of this file BEFORE treating the list below as the bar.** The Architect named a
+> shared predicate across three production blocks: the defect is the **shape** of
+> this list — each `AC` below pins one **facet** of an emitted round trip, and
+> each block found a facet none of them named. `AC-10` (in the RECUT) closes it
+> structurally, and the three `NO CONTROL — open residual` rows are **promoted
+> into scope**, not carried as residuals.
+
 **AC-1 — the representation is closed and type-enforced.** One 64-bit tagged
 word serves `ValueWord` and `ResultWord`; its relation to `GroundValueCarrier`
 is stated. A new carrier or a new tag is a **compile error**, not a default.
@@ -409,7 +417,131 @@ inheritance from `C4`.
 - **Report an unpushed ref and KEEP GOING.** Build seats have no GitHub
   credential by design; the Steward pushes. Raising it is not gating on it.
 - **Hard-stop protocol.** Count of record is **10**; **next research pull =
-  `#12`**, armed. ⛔ **`#10` is recorded under symptom-inventory entry 2 / the
+  `#11`**, armed. ⛔ **`#10` is recorded under symptom-inventory entry 2 / the
   prerequisite chain — it is NOT a fourth entry.** Inventory stays at 3 entries;
   next predicate check at the **6th**.
+  > ⚠ **`#11`, not `#12` — corrected by the Steward 2026-07-25.** Three tracked
+  > files carried `#12` (the generic next-multiple-of-3 after the consumed `#9`);
+  > the steward playbook carries an **operator override** of *"catch-up set to
+  > `#11`, then `#15`, `#18`, `#21`"* (2026-07-24). The two cannot be reconciled
+  > from the dates, so it is settled by dominance rather than by guess: a pull at
+  > `#11` is **required** under one reading and merely **early** under the other,
+  > and early is explicitly fine — a cadence threshold is a floor on when to ask,
+  > not a bar on asking sooner. `#12` is wrong under one reading, so `#11` wins.
+- ### ⛔ ARMED — consecutive Architect PRODUCTION blocks on this node
+  ```text
+  CONSECUTIVE ARCHITECT PRODUCTION BLOCKS = 3   (78a57d90, 657f60a0, ddff2fae)
+  PREDICATE CHECK AT 3 -> FIRED 2026-07-25, ANSWERED YES. See the RECUT below.
+  NEXT CHECK = 3 more consecutive production blocks on this node.
+  ```
+  ⭐ **This counter exists because §5a-ii's could not see this.** §5a-ii counts
+  **hard-stops**, and a review block is correctly **not** a hard-stop — so three
+  Architect production blocks moved neither the hard-stop count nor the symptom
+  inventory, and the chain could have gone arbitrarily deep with every armed line
+  in the repo reading correct and current. The trigger fired only because the
+  Steward had armed it by hand in a watchdog payload. ⛔ **A backstop that depends
+  on someone remembering to look is not operative** — so it now lives here, at the
+  point of work, as a counted line the next block has to walk past.
 - Read `agent/playbooks/tools/pin-a-property.md` before writing any assertion.
+
+## ⛔⛔ RECUT — 2026-07-25. The Architect NAMED the shared predicate.
+
+⛔ **Read this before reading the acceptance criteria above.** The `AC` set above
+is the thing this recut acts on.
+
+### The predicate — the Architect's words, `evt_2zxt6m9bg43r2`
+
+> For every boundary-reachable `Lowered` value that the exhaustive disposition
+> admits, a generated producer must be able to construct a **valid, lossless,
+> ownership-correct** fixed-width boundary word; that word must remain resolvable
+> for its declared lifetime; and a separately compiled consumer must recover the
+> same value/identity through the emitted ABI, while malformed or unrepresentable
+> inputs fail **before** publication rather than truncate, alias, forge identity,
+> or defer failure to projection.
+
+> So these are **not independent defects**. They are successive exposed faces of
+> one incomplete claim: **the admitted disposition is not yet closed under
+> emitted producer → boundary word → separately compiled consumer round trip.**
+
+⭐ **All three blocks were individually correct.** Local correctness of each is
+precisely what made the shared predicate invisible — it is the symptom, not the
+refutation. Likewise, *"the architecture is still viable"* is true here and is
+**not** an answer to the predicate question; the answer above is.
+
+### RETAIN — a named predicate is NOT a licence to restart
+
+⛔ **Everything below is PROVED and stands. Do not rebuild it, do not re-review
+it, do not let a recut become a restart.**
+
+- the tag × class relation, closed over the whole product
+- region selection / threshold agreement with referent owner
+- the native-int dependency and the 64/112 layout change
+- removal of the caller-supplied store-identity writer
+- the emitted String/Bytes reachability controls and their causal mutation
+  (`M14`, exact `BOUNDARY_ERR_CLASS = -4`)
+- the exhaustive `Lowered` disposition with no wildcard arm
+
+The last clean checkpoint carries forward as a **semantic oracle, not an
+acceptance path** — it tells you what the answer looks like; it does not
+discharge anything.
+
+### REPLACE — only what the predicate names
+
+**What is defective is the SHAPE of the `AC` set, not any single `AC`.** `AC-1`,
+`AC-2`, `AC-4`, `AC-6` and `AC-7` each pin **one facet** of the round trip. Each
+block found a facet no `AC` had named. Enumerated, that yields an unbounded chain
+of individually-reasonable blocks; **named, it yields one closure.**
+
+**`AC-10` — the admitted disposition is CLOSED under the emitted round trip.**
+One control that is **total over the admitted disposition**, not over a list of
+cases. For every value the disposition admits, **either** an emitted producer
+constructs a boundary word that a **separately compiled** consumer recovers with
+value and identity intact for its declared lifetime, **or** construction fails
+closed **before publication** with an exact status. There is no third outcome,
+and "not currently reachable" is not one.
+
+⚠ **Three things about `AC-10`, each of which has already gone wrong once:**
+
+- ⛔ **It quantifies over the DISPOSITION, not over tags.** The predicate is
+  explicitly *stronger than "all tags are enumerated"* and *stronger than
+  Rust-side materialization*. A sweep over 21 arms is not a sweep over admitted
+  values: magnitude bands and lifetime bands are part of the domain. **Total over
+  nodes is not closed under parent → child reachability.**
+- ⛔ **The `AC` must not pin more than the predicate entails.** The disjunction
+  (`round trip` **or** `fail closed before publication`) is load-bearing — do not
+  strengthen it into *"everything must round-trip."* A post-condition stricter
+  than its mechanism does not catch defects, it manufactures them, and it trains
+  the ring to argue with the frame.
+- ⛔ **`AC-10` requires an `AC` → control row like every other.** An `AC` that
+  ships **zero** controls is invisible to a review that examines controls:
+  *discharged* and *never asked* read identically in a green verdict.
+
+**The three `NO CONTROL — open residual` rows are PROMOTED into `AC-10`'s scope.**
+QA recorded them honestly and they were correct to record; the Architect's third
+block says the first of them *"is not an optional test residual."* They are not
+residuals — **they are the predicate's uncovered faces**, and they are the recut:
+
+| promoted residual | why it is in scope |
+|---|---|
+| `AC-4` Big at the persistent boundary | the disposition promises a `PersistentGround` spill for every `Int`; only `Small` can materialize |
+| `AC-1` tag reachability | review-only reachability is not a sweep over the admitted domain |
+| `AC-6` persistent content addressing | the emitted node stays `NULL_SLOT`, so identity recovery is unproved |
+
+### FREEZE
+
+The enumerated-`AC` chain is **closed at three production blocks**. The counter
+in *Standing* opens fresh. ⛔ The three blocked candidates (`78a57d90`,
+`657f60a0`, `ddff2fae`) stay reachable on origin as durable checkpoints and are
+**never publishable**.
+
+### ⚠ What this recut does NOT do
+
+⛔ **It does not stop the Runtime ring, and it adds no new constraint to the fold
+in flight** — the Architect said so explicitly, and I am taking that at face
+value. @runtime-implementer keeps folding.
+
+⛔ **It does not choose a mechanism.** *How* the disposition is closed — a real
+persistent `Big` representation, a narrowed disposition, or a grounded
+frame-boundary impossibility — is the **Architect's** call, not the frame's. This
+frame states the property and where the control must be total; it does not pick
+the implementation, and the Steward must not.
