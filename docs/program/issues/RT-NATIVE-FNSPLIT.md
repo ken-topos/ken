@@ -182,6 +182,26 @@ this line wins.** Re-read this line on every hard-stop.
 >             plan↔lowering occurrence correspondence now exists.
 > ```
 >
+> ### Adversary triage on the entry-1 close — both findings dispositioned
+>
+> The adversary hunted landed `145fe915` and reported the **mechanism held**;
+> full disposition is in `RT-FNSPLIT-B2A-S.md`. Two carries for whoever frames
+> next:
+>
+> - **P1 (admissibility premise of `B2A-C` now falsified) — ✅ no action.** The
+>   ruling was re-derived on `B2A-S`'s own terms **before** the code, at framing
+>   (`evt_1jdh8pn8y96z`) and again by ruling (a) (`evt_2eap269sgnavm`). The
+>   replacement ground is **atomicity** — the retained-body carrier left in the
+>   same diff that made the origin a selector, so the two authorities never
+>   coexisted. ⭐ **A conditional ruling does not re-earn itself in the WP that
+>   falsifies its condition — check for the re-derivation, do not assume it.**
+> - **P2 (mechanize AC-5 residual arm 1) — ⚠ carried to `B2F` as an Architect
+>   ruling candidate, NOT as proposed.** Review-enforcement does decay and arm 1
+>   is the arm that matters, but the proposed container-spelling blacklist is the
+>   same forbidden-spelling class retired during `B2A-S`. Mechanize it as an
+>   **allowed inventory with a positive control**, or leave it review-enforced
+>   and say so.
+>
 > ⚠ **Entry 2 is the one that carries the growth verdict**, so no per-function
 > or scaling claim is established until B2F lands. Neither B2A-C nor B2A-S
 > installs a target function, calling convention, dispatch, or emitted-code
