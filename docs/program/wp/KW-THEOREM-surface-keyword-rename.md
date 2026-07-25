@@ -84,11 +84,48 @@ is `lemma` **as Ken syntax**, and identifiers/anchors derived from that spelling
    enumerates them), but it means the change is not confined to the elaborator.
 6. **Conformance seeds pin exact surface text** and run in CI.
 
+> ## ⛔⛔ EVERY COUNT IN THIS FRAME IS NON-AUTHORITATIVE — DERIVE, DO NOT READ
+>
+> **Amended 2026-07-25, third correction.** Three separate counts I published
+> here were wrong, each caught by a ring re-deriving instead of trusting me:
+>
+> | count | I said | actual | caught by |
+> |---|---|---|---|
+> | `library/` occurrence files | 3, then **10** | **11** | `doc-leader` `evt_ksfe2xjyp0q1` |
+> | `AC-1` Ken source roots | hand list | wrong 3 ways | `spec-leader` `evt_6zkdcmsrrxy9k` |
+> | `catalog/` declarations | 697 | 698 | Steward, framing |
+>
+> ★ **The third one is the tell, and it is damning.** The file I missed is
+> `library/learn/reading-ken/06-execution.md`, which says *"the five **lemmas**
+> above"*. My regex was `\blemma\b` — **which cannot match `lemmas`**, because
+> the trailing `s` is not a word boundary. **That is coupling #2 in this very
+> frame:** *"Pluralisation … a `\blemma\b` regex misses the possessive/plural
+> forms."* **I wrote the warning and then measured with the exact regex the
+> warning names.**
+>
+> ⇒ **The defect is not any one number — it is that I published derived
+> measurements at all.** A count in a frame reads as settled and suppresses the
+> re-derivation that would catch it. **State the property and the derivation;
+> let the ring measure.**
+>
+> **The authoritative derivations, against the exact candidate:**
+>
+> ```sh
+> # every tracked Ken source, literate and not
+> git ls-tree -r --name-only <sha> | grep -E '\.ken(\.md)?$'
+> # every occurrence file, case-insensitive, plural-safe
+> git grep -il -E 'lemma|lemmas' <sha> -- <path>
+> ```
+>
+> ⛔ **Use `-i` and cover the plural/possessive.** The numbers below are a
+> snapshot of `c2c1ba9f` that has **already been proven unreliable three times**
+> — they are context for sizing, **never** an input to a completeness check.
+
 ## ⚠ Two triage counts were WRONG — both widen the work
 
 Re-measured at `aecdb001` while framing:
 
-1. **`library/` is 10 files, not 3**, and three are **not prose**:
+1. **`library/` is 11 files, not 3** (I first said 10 — also wrong), and three are **not prose**:
    `library/manifest.toml`,
    `library/agents/evaluations/results-2026-07-24.toml`, and
    `library/agents/evaluations/fixtures/proof-terminals.txt`. **An
