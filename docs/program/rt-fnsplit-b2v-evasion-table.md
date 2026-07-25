@@ -310,6 +310,8 @@ unit `rustfmt` formats is the module tree, not the file you named.*
 | `AC-4` `Int` content | return the node's payload directly instead of decoding | ✅ | 🟢 reddens — the control reconstructs the magnitude from sign+limb and the payload alone is not it |
 | `AC-4` `Int` content vacuity | pass values that fit the immediate range | — | 🟢 guarded: each case asserts `!int_fits_immediate(value)` first, so the control cannot silently test the wrong arm |
 | `AC-4` `Bytes`/`String` | discriminate by length | ✅ | 🟢 every case is the **same length**; the control also asserts the results are mutually distinct |
+| `AC-4` `String` construction | break emitted `String` writes only, leaving reads intact | ✅ | 🔴 **DEFEATED on `ea8d9824`** — `M14`. Closed by making the class a run-time argument to one emitted producer; `M14` now reddens |
+| `AC-4` class axis | build the wrong class and let the content carry the test | ✅ | 🟢 **M16** — the sweep reads the class back per case, and the cross-class agreement control means content alone cannot stand in for it |
 | `AC-4` content by identity | return the store slot or a hash | ✅ | 🟢 the `String` cases include two that differ by one interior byte; identity would collapse them only if the store interned them together, and the control compares **bytes** |
 | `AC-1` relation | admit a superset | ✅ | 🟢 **M9** — the sweep covers the whole 81-pair product with **both** counts asserted, so neither arm can pass vacuously |
 | `AC-1` relation drift | change the CLIF mask without the table | ❌ **cannot** | 🟢 the mask is *computed* by `boundary_class_mask` from the one table; there is no second place to edit |
@@ -331,6 +333,84 @@ limb storage — a representation decision for the store/spec, not for `B2V`.
 
 ---
 
+# ⛔ QA BLOCK of `ea8d9824` — the `String` producer path was never walked
+
+QA defeated the `AC-4` content pin with a compile-preserving mutation confined
+to `define_store_bytes_len`:
+
+```rust
+class_guard(&mut b, node, &[BoundaryClass::Bytes, BoundaryClass::String]);
+→ class_guard(&mut b, node, &[BoundaryClass::Bytes]);
+```
+
+That makes emitted `String` **construction** impossible while leaving `Bytes`
+construction and `String` reading intact. **Every test stayed green**, including
+`b2v_a_separately_compiled_consumer_distinguishes_equal_length_strings` — because
+that control materialized its handles in Rust and only had emitted code *read*
+them. It proved emitted `String` **projection**, never the producer path.
+
+## ⭐ This is the third instance of one failure class in this candidate
+
+Round 2 closed the `store_slot` defect and I wrote the rule for it: *a pin that
+never exercises the mechanism which would violate it is not evidence about that
+mechanism.* **I then shipped another instance of it in the same file**, and my
+own doc comment states the false premise out loud:
+
+> *"The producer arm is covered by the `Bytes` control above, which shares every
+> code path but the class."*
+
+⛔ **The class is exactly the axis `store_bytes_len` and `store_byte` guard on**,
+so it is the one code path that is *not* shared. "Shares every code path but X"
+is never an argument that X is covered — X is the difference, and the difference
+is what needs the test. A special-cased branch does not inherit the invariants
+of the generic path, and neither does a *guarded* one.
+
+## The repair is reachability, not a stronger assertion
+
+`emit_bytes_producer` becomes `emit_span_producer` and takes the class as a
+**run-time argument**, so one separately compiled body drives
+`alloc(PersistentGround, class)` → `store_bytes_len(len)` →
+`store_byte(i, seed + i)` for **both** classes at run-time bounds. Both arms of
+every span-writing guard are now reached by emitted code, and the class cannot
+be baked in at compile time even in principle.
+
+| control | what it adds |
+|---|---|
+| `b2v_emitted_code_constructs_equal_length_bytes_and_strings_by_content` | both classes × three equal-length seeds, built and read entirely by emitted code |
+| `b2v_the_two_string_producers_agree_byte_for_byte` | a store-materialized `String` and an emitted-constructed `String` read **identically** through the same consumer — retains the coverage the removed control carried |
+
+⚠ The cross-class **positive control** is that the same seed yields the same
+bytes in either class. Without it the sweep could pass by inferring the class
+*from* the content, which would mean neither producer was really being varied.
+
+## The mutations
+
+| # | mutation (compile-preserving) | reddens | collateral |
+|---|---|---|---|
+| **M14** | **QA's exact mutation** — `define_store_bytes_len`'s `class_guard` narrowed to `Bytes` | **both new controls** | **none — 2 tests, 25 pass** |
+| **M15** | `define_byte_access`'s `class_guard` narrowed to `Bytes` | both new controls | **none — 2 tests** |
+| **M16** | *(test-side vacuity control)* `emit_span_producer` ignores the class argument and hard-codes `Bytes` | both new controls, on the class assertion | none — 2 tests |
+
+**M14 is the record.** It is the mutation that was green on `ea8d9824` and is
+red here, on the same production bytes — so the delta is the control, which is
+what a reachability repair has to demonstrate.
+
+**M15 answers the regression question** the replacement raises: the removed
+`String` control covered the *read* side, and M15 confirms the two new controls
+still redden when `String` reading breaks. Coverage retained, not traded.
+
+**M16 is labelled as what it is** — a mutation of the *test*, not of production,
+so it is evidence about the control's non-vacuity and nothing else. It exists
+because the sweep's class assertion would otherwise be the one thing in the
+repair with nothing behind it: without M16, "the producer built a `String`"
+rests on a `class_code` read that no mutation had ever falsified.
+
+Each restored byte-identically, verified with `git diff --quiet`. `-p
+ken-runtime` **395/0** at the fold; all three censuses re-run **unmoved** (no
+production bytes changed).
+
+---
+
 # AC → discharging control
 
 Required by the frame's second amendment (`origin/main` = `fdda953f`): one row
@@ -344,12 +424,14 @@ because a taxonomy with nowhere to put the honest answer records it as covered.
 | **AC-1** region bands | `b2v_the_region_thresholds_agree_with_referent_owner` | the CLIF's numeric bands classify every tag exactly as `referent_owner()`; both bands asserted non-empty |
 | **AC-2** no value-specialization | **the compiler** + `b2v_the_immediate_handle_choice_tracks_magnitude_only` | `boundary_value` imports no `NativeSeedEnvironment` and no environment vector — passing one **does not compile**. Magnitude cases test `MAX`, `MAX±1`, `MIN`, `MIN±1` |
 | **AC-3** exhaustive, no wildcard | `b2v_ac3_the_lowered_boundary_disposition_has_no_wildcard_arm` | arm-*head* enumeration (every `=>` line starts `Lowered::` or `\|`), 21 variants named, `Constructor`/`HostResult` checked **positionally** outside the fail-closed block, single-dispatch assertion. ⚠ first form was **defeated** by a binding catch-all |
-| **AC-4** **content** | `b2v_a_separately_compiled_consumer_reads_a_spilled_int_by_content`; `…distinguishes_equal_length_bytes`; `…distinguishes_equal_length_strings` | a spilled `Int` is a `NativeIntV1` pair decoded by `ken_native_int_resolve_local`; `Bytes`/`String` are read byte-by-byte from the region's data span. Every case in each control is **equal length** or **asserted to spill**, and the results are asserted mutually distinct |
+| **AC-4** **content** | `b2v_a_separately_compiled_consumer_reads_a_spilled_int_by_content`; `b2v_emitted_code_constructs_equal_length_bytes_and_strings_by_content`; `b2v_the_two_string_producers_agree_byte_for_byte` | a spilled `Int` is a `NativeIntV1` pair decoded by `ken_native_int_resolve_local`; `Bytes`/`String` are **built and read** byte-by-byte from the region's data span, by emitted code, with the class a run-time argument. Every case is **equal length** or **asserted to spill**, and the results are asserted mutually distinct. ⚠ The prior form was **defeated** — its `String` handles were Rust-materialized, so `M14` was green on `ea8d9824` |
 | **AC-4** **construct** | `b2v_emitted_code_constructs_a_nonconstant_constructor_and_a_consumer_reads_it`; `…constructs_both_host_result_arms`; `…constructs_a_record_readable_by_name`; `b2v_construction_fails_closed_at_each_ceiling` | a separately compiled **producer** mints each live class from `alloc` + `store_*`; one compiled body, three runtime heads; every ceiling and closed-set refusal asserted at its **exact** status |
 | **AC-4** **discriminate** | `b2v_emitted_code_selects_the_host_result_arm_at_runtime`; `…constructs_both_host_result_arms` | both arms, runtime discriminant, same compiled body |
 | **AC-4** **project** | `b2v_emitted_code_projects_a_non_constant_constructor_field`; `…projects_a_nested_aggregate` | separately compiled consumer; no step runs in Rust |
 | **AC-5** M1/M2/M3 | recorded in the mutation table above and in the prior candidate's rows | each names **which** detector fired and its `left`/`right` |
 | **AC-5** M4b/M5/M6/M7/M8 | the new mutation table | **M5, M6, M7 redden exactly one control each** — the detector is named by the redden itself |
+| **AC-5** M9–M13b | the second block's mutation table | ⚠ **M13's green is reported as a no-op**, not dropped: the emission `assert!` is a latch, so only **M13b** (re-wiring the setter) proves it |
+| **AC-5** M14/M15/M16 | the QA-block mutation table | **M14 is QA's own mutation** — green on `ea8d9824`, red here on unchanged production bytes. **M16 is labelled test-side**, so it is evidence about the control's non-vacuity only |
 | **AC-6** owner distinguishable | `b2v_referent_owner_distinguishes_persistent_from_borrowed` | `BoundaryReferentOwner` is a **distinct type** from `AbiStorageOwner`; the pair is non-degenerate (`left: 1, right: 2`) |
 | **AC-6** persistent identity | `b2v_a_constructed_persistent_word_survives_the_invocation_arena`; `b2v_the_frozen_prefix_refuses_emitted_mutation`; `b2v_equal_values_share_one_persistent_referent` | the arena is **dropped** and a second invocation resolves the same word; orphan-arena positive control returns `ERR_BOUNDS`; one slot ⇒ one word, byte-identical across invocations |
 | **AC-7** escape, exact error | `b2v_borrowed_ingress_fails_closed_on_escape_with_an_exact_error`; `b2v_a_persistent_node_refuses_an_invocation_owned_child` | exact `ERR_ESCAPE`; malformed ⇒ `ERR_TAG`, not `ERR_ESCAPE`; the construction-time invariant the Θ(1) check rests on is itself pinned, with both mirrors as positive controls |
