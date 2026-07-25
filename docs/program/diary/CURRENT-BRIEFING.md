@@ -47,11 +47,57 @@
 > **kicked and Working** on `wp/RT-FNSPLIT-B1R-semantic-material`.
 > `RT-FNSPLIT-B2A` is flipped `active` → `ready` behind it and re-anchors after.
 >
-> **My slice call, CONFIRMED by the Architect** (`evt_533hqd0c27atd`): B1R
-> **adds** the origin carrier + material; **B2a removes** the `RuntimeExpr` body
-> and closes the origin-driven seam (that removal is what forces the 6201-line
-> `lowering/core.rs` edit). ⛔ If B1R needs to edit `lowering/core.rs`, it
-> hard-stops to me and I re-slice.
+> ### ⛔ RE-SLICED at hard-stop #5 — my slice boundary was WRONG
+>
+> **`evt_3sx56kzx7z9q`, Architect confirmed `evt_37sc5gv2yfxr8`. Amended frame is
+> on `origin/steward/work` = `a278e2c4`.** My D3 ("retained records carry the
+> fixed-width origin") **could not close without editing `lowering/core.rs`** —
+> the frame's own named stop condition. Measured, not argued: one `u32` on all
+> nine carriers, compiler enumerated **29 `core.rs` sites (13 construction / 16
+> pattern)**, restored byte-identically with the blob OID checked both sides.
+>
+> ★ **AC-3 was UNSATISFIABLE as I framed it.** D5 controls 2 and 5 are defined
+> *on* D3's carrier, so no plane-only candidate could ever discharge its own
+> acceptance. The implementer **refused to reinterpret controls I had marked
+> "specified, not a menu"** — correctly.
+>
+> **THE RE-SLICE:** B1R is now **`planning/**` ONLY** (new **AC-3a** makes that a
+> grep, not prose). **D3 + controls 2/5 moved to B2a as D0**, where the `core.rs`
+> edit is licensed. ⇒ Strictly better than my two-step: the carrier now lands in
+> the **same diff** as the removal of the old authority.
+>
+> ⚠ **My boundary contradicted the Architect's own restatement** (`evt_533hqd0c27atd`
+> said "inside the existing plane"); the ring spotted that the two authorities
+> disagreed and named it instead of picking one. **Fourth framing defect of the
+> day, second where the ring's measurement corrected my scope.**
+>
+> **Three findings now in B2a's frame:** `core.rs:204` unconditionally
+> `drop`s the plan so `:35` is the *only* point an origin is obtainable ·
+> `StaticOriginId` is `pub(super)` ⇒ a lowering-side carrier is a
+> **visibility/boundary change** · ⛔ **`origin:` already means
+> `RecursorProducerOriginId`** there (86 `mod.rs` + 44 `core.rs`) — a same-word
+> trap on a chain whose predicate *is* identity provenance, so **do not name the
+> carrier `origin`**.
+>
+> **Verified enablers (so nobody re-derives them):** every syntax child already
+> has an origin; `source_material_elements` decomposes exactly across all 22
+> shapes ⇒ affine one-visit bound unchanged, **no subtree clone needed**.
+>
+> **Hard-stop count = 5. Next Research pull = #6** (the next stop triggers it).
+> ⛔ **No inventory entry for #5** — it is a scope boundary, not the predicate.
+> **Inventory stays at entry 1; the "second entry ⇒ mis-shaped" tripwire is NOT
+> tripped.**
+>
+> ### ⛔ TRANSPORT DEFECT — the leader's address book has DEAD placeholders
+>
+> The B1R kickoff never reached the implementer because `evt_8e651wkz2b7t` was
+> routed to **`agt_37rekz81gsc00`** — the `moot init` template placeholder
+> `Implementation`, `agent_adapter: null`, **wakes nobody**. Live seat is
+> **`agt_37reqg3nync00`**. `Implementation`/`QA`/`Leader`/`Spec`/`Product`/
+> `Librarian` are all template rows. **`list_participants` distinguishes them:
+> `agent_adapter: "mcp"` = live.** ⇒ **Verify participant IDs before mentioning**
+> (COORDINATION §2 live-participant trap). A silent no-op here stalls a ring with
+> nothing watching.
 >
 > **Chain to close:** B1R → B2a → B2b → flip `RT-NATIVE-FNSPLIT` `merged` →
 > release `KW-THEOREM` **to the spec enclave** (owner is `spec`, not runtime).
