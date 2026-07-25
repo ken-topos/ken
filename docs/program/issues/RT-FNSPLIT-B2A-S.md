@@ -11,6 +11,83 @@ github: 944
 origin: Architect ruling evt_6h5gw5c503n5z on RT-FNSPLIT-B2A hard-stop #6 (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the retired RT-FNSPLIT-B2A frame, whose Retain/Replace lists were inherited from the never-landed b077eb7a. Steward-filed; Steward owns the replacement frame and the full AC/control re-walk.
 ---
 
+> ## ✅ POST-MERGE ADVERSARY TRIAGE — 2026-07-25, both findings dispositioned
+>
+> The adversary hunted the landed `145fe915` and filed two findings to
+> `thr_2seh2bm1kr5mh` (`evt_372ftnaz8gjk1`), reporting the **mechanism held**.
+> Neither is a code defect. Steward disposition, so the next reader does not
+> re-litigate them:
+>
+> **P1 — "B2A-C's admissibility premise has been deliberately falsified; the
+> ruling should be re-derived rather than inherited." → ✅ ALREADY RE-DERIVED,
+> TWICE, BOTH TIMES EX ANTE. No action.**
+> `B2A-C`'s admissibility was conditional: *`OwnedSourceOccurrence` beside a
+> retained body is admissible **on the ground that the origin is not yet a
+> selector***. `B2A-S` makes it a selector, so the adversary is right that the
+> condition is consumed — and right that **a conditional ruling does not re-earn
+> itself in the WP that falsifies its condition.** It did not have to: the
+> re-derivation is on the record *before* the code was written.
+>
+> 1. **At framing** — the Architect's re-cut ruling `evt_1jdh8pn8y96z`, recorded
+>    in this file: the frame **names the crossing as this unit's purpose**
+>    ("THIS UNIT DELIBERATELY RETIRES A LANDED PIN … `B2A-C`'s **N3** … `B2A-S`
+>    introduces exactly that lookup"), retires N3 **by name**, and supplies the
+>    **replacement ground — atomicity**: the carrier leaves *in the same diff*,
+>    "because from then on two authorities really would coexist."
+> 2. **During execution** — **ruling (a)** (`evt_2eap269sgnavm`, below) narrowed
+>    the covered population, keeping the struct for the pending frames that
+>    legitimately own terms.
+>
+> ⇒ The adversary's own tripwire (*"the first read of the origin's VALUE in a
+> decision"*) **fired exactly as they specified it last hunt**, and the honest
+> answer is the cheap one they predicted. ⭐ **Their stated tripwire is why this
+> was checkable at all rather than surfacing three WPs later — that is the
+> mechanism working, and it is worth more than either finding.**
+>
+> **Verified in the landed tree, not taken from prose:** `Lowered::Closure` and
+> `DeclarationClosure` hold `body: StaticOriginId` — **no term**
+> (`lowering/mod.rs`); the surviving `OwnedSourceOccurrence` mentions are the
+> source machine's pending frames; and `control.rs:3769` **scopes the AC-1 pin to
+> the retained-closure variants**, so a surviving mention cannot hide a
+> regression.
+>
+> **P2 — "AC-5's entry-keyed-store residual (arm 1) is review-enforced, but a
+> type-shaped census would mechanize it for ~one `assert!`." → ⚠ RIGHT PROBLEM,
+> WRONG FORM. Carried to `RT-FNSPLIT-B2F` as a candidate for Architect ruling —
+> NOT adopted as proposed.**
+>
+> The premise is correct and I accept it: **review-enforcement decays**, arm 1 is
+> the arm that matters (it is the adversary's own prior tripwire, *"the first
+> collection keyed by `.entry`"*), and
+> `the_backend_production_surface_inventory_is_closed` really is the proven
+> closure that makes mechanization cheap. Their caveat is also correct — an
+> *identifier-count* form cannot work here, because `.entry` is legitimately read
+> a dozen times as an edge endpoint.
+>
+> ⛔ **But the proposed form — "no `BTreeMap`/`HashMap`/`BTreeSet`/`HashSet` keyed
+> by `StaticNodeId`" — is a FORBIDDEN-SPELLING CENSUS, which is the exact
+> mechanism class this WP spent three review rounds and a frame correction
+> retiring.** The implementer's own retro names it: *"AC-1 and AC-5 enumerated
+> what they forbade — three `body:` spellings, four container spellings — so any
+> form I had not imagined passed green."* Four container spellings is four
+> container spellings. `Vec<Option<_>>` indexed by ordinal, a boxed slice, a
+> newtype wrapper, or any third-party map evades it **and the census stays
+> green**. And the adversary notes it "passes as written" **because there are
+> none today** — a negative check that passes for any reason, with no positive
+> control, is precisely the shape that was withdrawn.
+>
+> ⇒ **The substance carries; the spelling list does not.** If arm 1 is
+> mechanized, it must take the **allowed-inventory** form the `pin-a-property`
+> skill requires (`agent/playbooks/tools/pin-a-property.md`) — enumerate what the
+> planner *may* hold and redden on anything else, the way the inventory closure
+> already derives its population from the `mod` declarations — plus a positive
+> control proving the pin reddens. **That is a mechanism-design call, so the
+> Architect rules it at `B2F` framing review, not the Steward.**
+>
+> ⚠ §10⁻a: the adversary channel is **report-only**. I act on this; **no reply,
+> acknowledgement, or correction of its framing is owed or permitted** — this
+> block is the disposition of record.
+>
 > ## ⛔ SCOPE RULED (a) — 2026-07-25, `evt_2eap269sgnavm`
 >
 > **Covered population = `Lowered::Closure` + `Lowered::DeclarationClosure`.**
@@ -45,8 +122,18 @@ origin: Architect ruling evt_6h5gw5c503n5z on RT-FNSPLIT-B2A hard-stop #6 (2026-
 > builder `:140` → `:144`). D1–D3 are gone (they were `B2A-C`'s).
 >
 > ⭐ **D1 is now a ONE-FIELD statement, because `B2A-C` co-located the pair:
-> `OwnedSourceOccurrence` drops `expr: RuntimeExpr`, leaving `static_origin` as
+> the retained-closure variants stop carrying a term, leaving `static_origin` as
 > the sole identity.** That is what turns provenance into a selector.
+>
+> ⛔ **SUPERSEDED PHRASING — do not quote the draft's struct-level form.** This
+> sentence originally read *"`OwnedSourceOccurrence` drops `expr: RuntimeExpr`"*,
+> which **ruling (a) (`evt_2eap269sgnavm`, block at the top of this file) struck
+> as a Steward defect.** The struct **survives on `main` holding both fields**
+> (`lowering/mod.rs:250-253`) because the source machine's *pending frames*
+> legitimately own their terms (`core.rs:4190`). What landed is narrower and
+> correct: `Lowered::Closure` / `Lowered::DeclarationClosure` now hold
+> `body: StaticOriginId` and no term. ⚠ A reader quoting the struck form would
+> conclude this WP under-delivered; it did not.
 >
 > ⛔ **THIS UNIT DELIBERATELY RETIRES A LANDED PIN.** `B2A-C`'s **N3** asserted *no*
 > `origin -> expr` lookup from a lowering consumer. **B2A-S introduces exactly

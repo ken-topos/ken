@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2F
 title: "functionization and authority switch — per-static-origin Cranelift target functions, atomic with switch-over, equivalence evidence, and old-path removal"
-status: draft
+status: ready
 owner: runtime
 size: L
 gate: none
@@ -11,13 +11,48 @@ github: null
 origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answering Steward Q1-Q3 on merits (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the D1/D2 half of the retired RT-FNSPLIT-B2A frame. Steward-filed; Steward owns the replacement frame and AC/control placement.
 ---
 
-> ## ⛔ STATUS `draft` — THE SHOVEL-READY FRAME IS NOT WRITTEN YET
+> ## ✅ `ready` — SHOVEL-READY FRAME WRITTEN 2026-07-25, anchors on `0aa9e53f`
 >
-> This file exists to make the Architect's mechanism rulings **durable**, since a
-> ruling that lives only in a channel thread is not a deliverable. The Steward
-> owes the frame plus AC/control placement before this flips to `ready`.
-> ⛔ **Do not release or start on this file alone.** It is also **sequenced behind
-> `RT-FNSPLIT-B2A-S`**.
+> **The frame is
+> `docs/program/wp/RT-FNSPLIT-B2F-functionization.md` — BUILD FROM IT.**
+> This file remains the durable home of the Architect's mechanism rulings (a
+> ruling that lives only in a channel thread is not a deliverable); the frame
+> carries the deliverables, ACs, and measured anchors.
+>
+> **The predecessor is clear:** `RT-FNSPLIT-B2A-S` merged at `origin/main` =
+> `145fe915`, tree byte-identical to the approved `82356022`. This node closes
+> symptom-inventory **entry 2 — the last open entry**, so it is the node that
+> closes `RT-NATIVE-FNSPLIT`.
+>
+> ⛔ **EVERY ANCHOR IN THE PROSE BELOW IS STALE — use the frame's.** Re-derived
+> on `0aa9e53f`: `lower_expr` is at `core.rs:4333` (**not** `:3847`; it has moved
+> `:3847 → :4255 → :4333` across three re-frames), and the real production call
+> count is **58** `self.lower_expr(` sites spanning `:310`–`:6743`, not "60".
+>
+> ⚠ **Three framing findings the draft below does not contain:**
+>
+> 1. **The pin `B2F` breaks first is already committed** —
+>    `correspondence_adds_no_emitted_unit_to_the_production_census`
+>    (`lowering/core/tests/control.rs:3336`) asserts an *exact* emitted-unit
+>    census (`core.rs` 1 builder / 1 definition / 2 declarations; four other
+>    files all zero). `B2F` must **re-baseline it to a PREDICTED number, not to
+>    the observed output**, and must not weaken it — escape-clause condition (1)
+>    rests on it.
+> 2. ⭐ **The census population is narrower than "the backend."**
+>    `crates/ken-runtime/src/native_int_clif.rs` is **production** (un-gated at
+>    `lib.rs:23`) and holds **5** `FunctionBuilder::new` sites with its own
+>    declare/define helpers, yet is in **neither** the N1 census nor
+>    `BACKEND_PRODUCTION_SOURCES`. The landed pins are correctly scoped and say
+>    so — **but this node owns a scaling verdict, and a verdict whose denominator
+>    silently excludes a sibling production emitter measures the wrong
+>    population.** New **AC-G0** requires the denominator be named and every
+>    exclusion justified.
+> 3. **`B2A-S`'s AC-4 pins the `origin -> expression` lookup count at exactly
+>    one.** A second consumer reddens it **correctly**; route through
+>    `retained_body_occurrence` or re-baseline explicitly.
+>
+> ⚠ **Not yet released.** Fleet is single-threaded; run the §2c gate before
+> kicking.
 
 ## This is a CONSTRUCTION. The frame must say so in those words.
 

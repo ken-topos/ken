@@ -25,39 +25,86 @@
 >   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
 >   the AC rather than gaming it.
 >
-> ## ⇢ RESUME HERE FIRST — 2026-07-25 T13:10Z
+> ## ⇢ RESUME HERE FIRST — 2026-07-25 T14:20Z
 >
-> **`origin/main` = `145fe915`.** ✅ **`RT-FNSPLIT-B2A-S` IS MERGED AND CLOSED**
+> **`origin/main` = `0aa9e53f`.** ✅ **`RT-FNSPLIT-B2A-S` IS MERGED AND CLOSED**
 > — PR #944, CI green, **retros 3/3 in** (implementer `evt_24ky17mzmreth`, QA
 > `evt_wp6z5fyxx851`, leader `evt_4m72j0fcpfyb4`), flipped `merged`.
+>
+> ✅ **ADVERSARY TRIAGE DONE. ✅ `B2F` FRAME WRITTEN AND `ready`. ✅ `B2B`
+> RE-DERIVED.** All three committed on `steward/work` (`8ce48a64`, `208989fd`).
+>
+> ### ⇢ THE NEXT ACT IS A PUBLISH, THEN THE GATE, THEN THE KICK
+>
+> **1. PUBLISH the doc batch (7 files, doc-only) — ⛔ BEFORE the kick, not
+> after.** The `B2F` frame is on `steward/work` **only**; `origin/main` does not
+> have it. ⛔ **`B2A-S` lost a whole round to exactly this** — a frame that
+> existed only on `steward/work` while the ring's base held a stale draft
+> **reusing the same identifiers for different deliverables.** *"Written" and
+> "fetchable by the ring" are different facts.* Verified ready to publish:
+> `git merge-base --is-ancestor origin/main HEAD` ✅, and the diff is doc-only
+> with **zero** `crates/` paths.
+>
+> **2. §2c GATE — compact all three Runtime seats** (leader, implementer, QA)
+> **unconditionally, ctx unread**, verify each drop on the **`Context compacted`
+> marker**, not the lagging ctx% footer. All three are quiescent, hold no branch,
+> and are explicitly awaiting an explicit kickoff. Both contention axes: fleet is
+> single-threaded on this chain, and no in-flight WP touches
+> `library/SOURCE-ATTESTATIONS`.
+>
+> **3. KICK Runtime on `RT-FNSPLIT-B2F`** — one standalone mention-led message
+> pointing at `docs/program/wp/RT-FNSPLIT-B2F-functionization.md`, then **flip
+> `status: active`** and confirm each seat actually went `Working`.
+>
+> ### What the triage and the framing established
+>
+> - **P1 → ✅ NO ACTION, and this is the useful half.** The adversary was right
+>   that `B2A-C`'s admissibility was **conditional** ("the origin is not yet a
+>   selector") and that `B2A-S` deliberately falsifies it — and right that **a
+>   conditional ruling does not re-earn itself in the WP that falsifies its
+>   condition.** It didn't have to: the re-derivation is on the record *twice,
+>   both ex ante* — at framing (`evt_1jdh8pn8y96z`, which names the crossing as
+>   the unit's purpose, retires `B2A-C`'s N3 **by name**, and supplies the
+>   replacement ground **atomicity**) and again in ruling (a)
+>   (`evt_2eap269sgnavm`). Verified in the landed tree, not from prose.
+> - **P2 → ⚠ carried to `B2F` as an Architect-ruled candidate, NOT adopted.**
+>   Their premise is right (review-enforcement decays; arm 1 is the arm that
+>   matters) but the proposed `BTreeMap|HashMap|BTreeSet|HashSet` census is a
+>   **forbidden-spelling list — the exact class this chain just retired.**
+> - ⭐ **THREE FRAMING FINDINGS THE DRAFT DID NOT HAVE**, all from re-deriving
+>   anchors instead of trusting them:
+>   1. `lower_expr` is at **`core.rs:4333`**, not `:3847` — it has moved
+>      `:3847 → :4255 → :4333` across three re-frames. Real call-site count is
+>      **58**, spanning `:310`–`:6743`.
+>   2. **The pin `B2F` breaks first already exists** —
+>      `correspondence_adds_no_emitted_unit_to_the_production_census`
+>      (`control.rs:3336`) asserts an exact emitted-unit census. `B2F` must
+>      **re-baseline it to a PREDICTED number, not the observed output**, and must
+>      not weaken it — the escape clause rests on it.
+>   3. ⭐ **`native_int_clif.rs` is PRODUCTION** (un-gated, `lib.rs:23`), emits
+>      **5** Cranelift functions, and is in **neither** the N1 census nor
+>      `BACKEND_PRODUCTION_SOURCES`. The landed pins are correctly scoped — but
+>      `B2F` owns a **scaling verdict**, and a verdict whose denominator silently
+>      excludes a sibling production emitter measures the wrong population. New
+>      **AC-G0** requires the denominator be named and exclusions justified.
+> - **`B2B` re-derived, not subsumed** — `B2F` proves the *structural* invariant
+>   (Θ(n) units, each bounded); `B2B` reports the *measured* census answering the
+>   operator's scaling gate. A structural assertion is not a measurement. Its
+>   `depends_on` was **pointing at the retired `RT-FNSPLIT-B2A`** and would never
+>   have become satisfiable; corrected to `RT-FNSPLIT-B2F`.
 >
 > ⚠ **STANDING OPERATOR CORRECTION (2026-07-25): SELF-COMPACT AT 33%.** Held under
 > Opus 4.8, broke down under 5.0 — I ran to 60% through ~10 watchdog sweeps. ⛔ A
 > watchdog firing, a ring hand-off, or an in-flight review is **never** a reason to
 > defer, because they recur, so "after this one" never arrives.
 >
-> ### ⇢ THE NEXT ACT, IN ORDER
+> ### ✅ Closed earlier this session — do not redo
 >
-> 1. **Publish `steward/work` doc-only** — owed, and it carries the
->    `pin-a-property` skill (`56cc2d19`), the two retro promotions from this WP,
->    the `merged` flip, and this briefing. ⛔ Route it as a **corpus branch cut
->    from current `origin/main`** (§6a step 2), *not* by publishing `steward/work`
->    itself: `steward/work`'s merge-base is `2e84db78` and its intersection with
->    `main` is **non-empty** (`CURRENT-BRIEFING.md`). Verified safe to take from
->    `steward/work`: `main` has **not** touched `agent/` or `.claude/` since that
->    base, and the frame doc is byte-identical on both sides.
-> 2. **Frame `RT-FNSPLIT-B2F` shovel-ready** — entry 2, **atomic**
->    (functionization *and* switch-over together), **anchored on `145fe915`**.
->    Its Architect rulings are already durable in `issues/RT-FNSPLIT-B2F.md`
->    (Q1 shape (a) with four transcribed merits); what is owed is the frame +
->    AC/control placement. ⛔ **It is a CONSTRUCTION, not a port** — the retired
->    `B2A` frame's `Retain` list described `b077eb7a`, which never landed.
-> 3. **Re-derive or subsume `RT-FNSPLIT-B2B`** — its growth verdict moved into
->    B2F, so it may no longer be a distinct unit.
-> 4. **Then the §2c handoff gate → kick Runtime on B2F.** The ring is quiescent,
->    holds no branch, and is explicitly awaiting an explicit kickoff. ⛔ Compact
->    **all three** seats unconditionally, ctx unread, and verify each drop on the
->    **`Context compacted` marker** — not the lagging ctx% footer.
+> The `B2A-S` code merge (PR #944) and the owed doc batch (PR #945,
+> `origin/main` = `0aa9e53f`) are both landed and verified on `main`, including
+> **sibling survival** (`git diff --quiet 82356022 origin/main -- crates/` →
+> identical). ⚠ That batch was cut from a branch that **lacked** the `B2A-S`
+> code, which is exactly why the sibling check is not optional.
 >
 > ⚠⚠ **#9 IS THE NEXT HARD-STOP AND IT FIRES A RESEARCH PULL** — dispatch
 > research **before** the Architect rules, not after. **Count of record stays 8**;
