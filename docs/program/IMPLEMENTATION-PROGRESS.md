@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-25 02:43:27Z — from 72 issue file(s) in `docs/program/issues/`.
+2026-07-25 03:11:40Z — from 72 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -94,7 +94,7 @@ the committed file matches the generator's output.
 | `RT-AGG-COMPOSE` | escaping two Resources into one aggregate (Prod (Resource _) (Resource _)) fails at erasure — checked endpoints do not compose | draft | runtime | TBD | none | — |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | merged | runtime | M | none | PR #911 @ 238a5c5d (origin/main 4ac9141e, CI green) |
 | `RT-FNSPLIT-B1R` | RT-NATIVE-FNSPLIT Boundary B1R — encode the occurrence-local semantic material B1 counted but never stored (repair of landed B1) | merged | runtime | L | none | 937 |
-| `RT-FNSPLIT-B2A-S` | defunctionalize retained body selection — static-origin tag plus one closed consumer, replacing cloned-RuntimeExpr identity | draft | runtime | M | none | — |
+| `RT-FNSPLIT-B2A-S` | defunctionalize retained body selection — static-origin tag plus one closed consumer, replacing cloned-RuntimeExpr identity | ready | runtime | M | none | — |
 | `RT-FNSPLIT-B2A` | RT-NATIVE-FNSPLIT Boundary B2a — make the semantic plane load-bearing for emission (behaviour-preserving port) | draft | runtime | L | none | — |
 | `RT-FNSPLIT-B2B` | RT-NATIVE-FNSPLIT Boundary B2b — full emission census, finite differences, and the explicit growth verdict | draft | runtime | M | none | — |
 | `RT-FNSPLIT-B2F` | functionization and authority switch — per-static-origin Cranelift target functions, atomic with switch-over, equivalence evidence, and old-path removal | draft | runtime | L | none | — |
@@ -122,6 +122,7 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `KW-THEOREM` — rename the surface keyword `lemma` to `theorem`
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
+- `RT-FNSPLIT-B2A-S` — defunctionalize retained body selection — static-origin tag plus one closed consumer, replacing cloned-RuntimeExpr identity
 - `STR-BIJ` — the String/List Char 'bijection' over-claim (adversary A1 + A2)
 
 ## Blockers
@@ -158,7 +159,7 @@ is itself not yet `merged`/`closed`:
 - `PX9` blocked by `PX8` (status: active)
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
 - `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2A` (status: draft)
-- `RT-FNSPLIT-B2F` blocked by `RT-FNSPLIT-B2A-S` (status: draft)
+- `RT-FNSPLIT-B2F` blocked by `RT-FNSPLIT-B2A-S` (status: ready)
 
 ## Gate progress
 

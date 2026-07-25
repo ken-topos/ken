@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2A-S
 title: "defunctionalize retained body selection — static-origin tag plus one closed consumer, replacing cloned-RuntimeExpr identity"
-status: draft
+status: ready
 owner: runtime
 size: M
 gate: none
@@ -11,12 +11,19 @@ github: null
 origin: Architect ruling evt_6h5gw5c503n5z on RT-FNSPLIT-B2A hard-stop #6 (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the retired RT-FNSPLIT-B2A frame, whose Retain/Replace lists were inherited from the never-landed b077eb7a. Steward-filed; Steward owns the replacement frame and the full AC/control re-walk.
 ---
 
-> ## ⛔ STATUS `draft` — THE SHOVEL-READY FRAME IS NOT WRITTEN YET
+> ## ✅ FRAMED AND READY — 2026-07-25
 >
-> **This file currently exists to make the Architect's ruling durable**, because a
-> ruling that lives only in a channel thread is not a deliverable. The Steward
-> owes the frame at `docs/program/wp/` plus a full AC/control re-walk before this
-> flips to `ready`. ⛔ **Do not release or start on this file alone.**
+> **The shovel-ready frame is
+> `docs/program/wp/RT-FNSPLIT-B2A-S-selection-defunctionalization.md`.**
+> Read that, not this file. It carries the Architect's seven ruled requirements as
+> D1–D7, the ten ACs (including the two carried from the retired frame), the
+> discriminating controls, and the anchors pinned on `origin/main` = `70bd2c74`.
+>
+> ⛔ **The single requirement most likely to be softened is D4:** cloned
+> `RuntimeExpr` bodies must leave the covered population **in the same diff**.
+> Replacing identity while keeping the old body carrier preserves two authorities
+> and fails the slice. If D4 cannot be completed for any member, that is a
+> **hard-stop, not a partial landing.**
 
 ## Why this node exists — the old B2a frame is RETIRED, not amended
 
