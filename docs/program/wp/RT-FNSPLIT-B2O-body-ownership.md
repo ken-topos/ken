@@ -316,6 +316,63 @@ because nothing fails. Inventory its consumers before you move it.
 
 ### D6 — the 59-call disposition, BY OWNER, as a derived report
 
+> ## ⛔⛔ ARCHITECT RULING 2026-07-25 (`evt_5yxjd1zqnyvcq`, durable at
+> ## `architect/work` `8bff7b7a`) — D6 IS A REPORT AND ITS ROUTE ORACLE IS OUT.
+>
+> **The authority is the occurrence's `StaticOriginId`, its validated
+> `SemanticOwner`, and the planned edge kind.** *"Rust syntax parsing cannot
+> prove reachability or authority: it lacks name resolution, macro expansion,
+> and indirect-call semantics, and it would freeze a transient lowering
+> topology. More fundamentally, **a Rust wrapper or same-named method does not
+> create a Ken function-unit boundary.**"*
+>
+> **Required of this deliverable:**
+>
+> 1. **Remove `cannot grow silently` and every equivalent reachability claim.**
+>    The report must state that **the owner graph is authoritative** and that
+>    **Rust-route closure is unmechanized.**
+> 2. The **59-call census and the helper observations survive only as
+>    explicitly frozen review evidence** — never as authority.
+> 3. **Do NOT add `syn`, any new dependency, or a lowering production change.**
+> 4. Respin from the **already-reviewed production bytes**. They have not moved
+>    since `97db6f0b`.
+>
+> ### ★★ THE CONTROL INVERTS — READ THIS BEFORE WRITING ANY PIN
+>
+> > *"A Rust wrapper or nested function relocation must remain **GREEN** for
+> > semantic boundary classification, proving source topology is not
+> > authority."*
+>
+> ⇒ **The mutation four folds fought to make RED must now stay GREEN.** A pin
+> that reddens when someone adds a Rust wrapper is **measuring the wrong thing
+> and reporting success.** Structured controls mutate **graph/owner axes**, not
+> source text.
+>
+> ### ⛔⛔ AND THE PART THAT COST FOUR CANDIDATE SHAs — VERIFIED, NOT ASSERTED
+>
+> **The claim that consumed folds 2–5 was never an obligation of this frame.**
+>
+> | where | occurrences of `cannot grow silently` |
+> |---|---|
+> | **this frame** | **0** — and no AC here has ever required route-set closure |
+> | report at `97db6f0b` (first QA-approved tree) | **0** |
+> | report at `c59d76ce`, `02afcc3f`, `96627f2a` | **1** — *introduced by the fold* |
+>
+> The original D6 finding was correct: **a count does not support that claim**,
+> because the count is invariant under adding a wrapper. But a claim that
+> outruns its evidence has **two** repairs — **strengthen the evidence, or
+> narrow the claim** — and *nobody checked whether the claim was required.* It
+> was not. **Narrowing was free and available at fold 2, and it was one deleted
+> sentence.** Instead the claim was mechanized, and the mechanization then had
+> to be defended against evasions no source-text oracle can close.
+>
+> ★ **This section already said the right thing** — *"⛔ This is a report, not
+> the authority"* — **and the folds drifted past it.** An unrequired claim
+> acquired the force of a requirement purely by sitting in a deliverable.
+> ⇒ **Before hardening any mechanism to support a claim, check whether the
+> claim is required at all.** Deleting an over-claim is always cheaper than
+> mechanizing it, and it is *always* the right move when no AC asked for it.
+
 Report each of the **59** tokenized production calls into `lower_expr` against
 the ownership mapping: for each call, the owner of the occurrence it lowers and
 whether that call crosses an owner boundary.
