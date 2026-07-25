@@ -118,7 +118,46 @@
 > in a **`ken-cli`** integration test in another shard. Targeted builds are
 > STRUCTURALLY blind to it. Nobody erred locally — that is the gate's job.
 >
-> ### ✅ REMEDY FOLDED — `bb2242e8` pushed. AWAITING QA + A FRESH DECISION.
+> ### ✅ PUBLISHER RUNNING ON `bb2242e8` — full CI. Decision verified resolved.
+>
+> **`dec_6fhmv6hdtz1km` = `resolved`**, `resolved_by: agt_37reqftfe6g00`,
+> `resolved_at: 07:27:21`, naming exact `bb2242e8`. QA `evt_3g5p1ae7w9t90`,
+> Architect `evt_14ayax794drn6`. §14 satisfied; publisher launched (NO
+> `--doc-only`). Log: `$SCRATCH/publish3.log` — ⚠ **`tail` the FILE.**
+> Pre-flight re-verified: tip **IS** the authorized SHA · intersection **EMPTY** ·
+> `merge-tree` **clean**.
+>
+> ### ⭐⭐ §14 PROCEDURE FIX — the two filtered views DISAGREE
+>
+> Within one minute, the SAME decision appeared in BOTH lists with contradictory
+> status: `list_decisions(status="proposed")` showed it `proposed`/`resolved_by:
+> null`, while `list_decisions(status="resolved")` showed it `resolved` with the
+> persisted `resolved_at`. **The `proposed` view is stale/cached.**
+>
+> ⛔ **NEVER test resolution by absence from the proposed queue** — that is an
+> absence test over an eventually-consistent view. ⇒ **The check is POSITIVE:
+> query `status="resolved"`, confirm the id IS THERE with non-null `resolved_by`
+> and the exact SHA in text/resolution.** I had been running the NEGATIVE form of
+> the §14 check without noticing it was negative.
+> ⚠ This also means my earlier "the resolve did not land" was imprecise — the
+> honest statement was *"the resolved view does not yet show it."* **Right refusal
+> to publish, wrong stated reason.**
+>
+> ### ⇢ WHEN THE PUBLISHER RETURNS
+>
+> 1. ⚠ **454 of 533 tests never ran** in the earlier red shard — the full matrix
+>    is genuinely unproven. If red again, read the failing check before touching
+>    anything, and expect a **fifth** SHA + a **fresh** Decision.
+> 2. If green: **content-verify the landed `main`** (squash ⇒ NEW SHA, so
+>    `bb2242e8`'s ancestry is NOT the test) — grep `PlannedExpr` and
+>    `declaration_occurrence_origin` in `planning/static_transition.rs`.
+> 3. ⚠ **NOTIFY THE ADVERSARY** — code merge. §10⁻a: notify, then **never reply.**
+> 4. **Chase all three retros**, then flip `RT-FNSPLIT-B2A-C` → `merged`.
+> 5. ⛔ **`RT-NATIVE-FNSPLIT` STAYS `active`** — **entry 3 ONLY** closes here.
+> 6. **Task 19: cut the B2A-S frame** — ⭐ **RE-DERIVE anchors** (`core.rs:144`/
+>    `:216`, not `:140`/`:202`).
+>
+> ### ✅ (history) the remedy fold
 >
 > **`origin/wp/RT-FNSPLIT-B2A-C-correspondence` = `bb2242e8`** (local-only again;
 > I pushed it). Leader authorized option A at `evt_1q092rpjrfv2c`; I verified the
