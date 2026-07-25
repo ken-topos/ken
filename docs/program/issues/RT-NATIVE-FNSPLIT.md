@@ -175,8 +175,11 @@ this line wins.** Re-read this line on every hard-stop.
 >             a retained closure carries no term.
 > entry 2  lower_expr re-lowers each retained body PER CALL SITE in that call
 >          site's whole configuration
->          ⛔ OPEN — assigned to RT-FNSPLIT-B2F. Untouched by B2A-S and B2A-C;
->             all three ring seats and the Architect said so independently.
+>          ⛔ OPEN — assigned to RT-FNSPLIT-B2F, which is now BLOCKED behind two
+>             inert prerequisites (see the re-slice block below). Untouched by
+>             B2A-S and B2A-C; all three ring seats and the Architect said so
+>             independently. ⛔ This entry now takes THREE nodes, not one:
+>             RT-FNSPLIT-B2O -> RT-FNSPLIT-B2R -> RT-FNSPLIT-B2F.
 > entry 3  THE CAUSE — no static key in scope at the construction site
 >          ✅ CLOSED by RT-FNSPLIT-B2A-C — merged 2db29abe (2026-07-25).
 >             plan↔lowering occurrence correspondence now exists.
@@ -207,6 +210,55 @@ this line wins.** Re-read this line on every hard-stop.
 > installs a target function, calling convention, dispatch, or emitted-code
 > authority — do not read their closure as progress on the operator's
 > per-function growth gate.
+>
+> ### ⛔⛔ ENTRY 2 WAS RE-SLICED AT HARD-STOP #9 — it now takes THREE nodes
+>
+> **Architect ruling `evt_842spc7t6js1`, addendum `evt_t4fykh52ncb`, on research
+> advisory `evt_531c4k52mshrn` (2026-07-25).** `RT-FNSPLIT-B2F` was ruled **not
+> buildable as one unit**: one closed callable unit per static origin requires a
+> **stable executable representation contract for every value crossing a
+> generated-function boundary**, and the current plane has none — emitted
+> signature `(pointer) -> i64`, `Lowered` a compile-time specialization lattice
+> rather than a value domain, `CaptureSlot` an ordinal, `PredeclaredFunction`
+> with no signature or convention.
+>
+> ```text
+> entry 2 now closes only after ALL THREE, in order:
+>   RT-FNSPLIT-B2O  static body ownership — total validated
+>                   occurrence -> PredeclaredFunction mapping        (INERT)
+>   RT-FNSPLIT-B2R  representation + call-ABI contract               (INERT)
+>   RT-FNSPLIT-B2F  the atomic live switch                          (LIVE)
+> ```
+>
+> **Ownership precedes representation** because the ownership mapping *defines
+> the cut*, and the cross-cut value population cannot be enumerated before the
+> boundary is known.
+>
+> ⭐ **The prerequisite is NOT "one universal boxed `Value`".** That framing came
+> from the two options the Steward routed; the advisory supplied a **third** that
+> the ruling adopted, and it is materially smaller: pin the boundary *contract*,
+> which may be satisfied by a family of statically typed per-origin layouts.
+>
+> ⛔ **Bounded coexistence was REJECTED and `AC-1`/`D6` are NOT amended.** Not
+> because it is unsound — it is a known-sound architecture — but because
+> retaining whole-configuration specialization for the aggregate complement
+> **preserves the exact super-linear authority this chain exists to remove**, and
+> because "scalar on this walk" is an observation about current values, not a
+> static classification theorem. The newly grounded authority is **path-dependent
+> and diffused through producer/eliminator-frame machinery**, so it cannot be
+> bounded honestly by a call-site allowlist.
+>
+> ⭐ **The atomicity is what converted "hard" into "unsatisfiable as framed":**
+> the one buildable increment — functionize scalar-parameter origins, keep
+> specialization for the rest — is *exactly* what `AC-1` and `D6` forbid. Two
+> correct requirements in tension, not a defect in either. The all-origin shape
+> and the atomic live switch **survive unchanged**; only their missing dependency
+> is made explicit.
+>
+> **P2 is now closed and NOT adopted** (superseding the carry above): the ruling
+> directs **no container-spelling blacklist**. That arm stays review-enforced
+> unless the prerequisites' closed ABI/body-owner structures admit an
+> allowed-inventory structural pin **with a positive control**.
 >
 > ## ⭐ ENTRY 3 IS WHY THE PREDICATE KEEPS BEING VIOLATED
 >
@@ -487,9 +539,20 @@ NEXT RESEARCH PULL = hard-stop #12, …
       research dispatched evt_63wjmry61vd89 BEFORE the Architect ruled, as
       armed. COUNT OF RECORD = 9. Obstruction: one-function-per-origin needs a
       uniform runtime value representation that does not exist, and building it
-      is not among B2F's D1-D8. Two options are with the Architect —
+      is not among B2F's D1-D8. Two options were routed to the Architect —
       (i) a prerequisite unit for the representation + calling convention, or
       (ii) bounded coexistence, which requires AC-1 and D6 AMENDED.
+      ✅ RULED evt_842spc7t6js1 + addendum evt_t4fykh52ncb: option (i),
+         PREREQUISITE-FIRST. Coexistence rejected; AC-1/D6 NOT amended. The
+         advisory (evt_531c4k52mshrn) supplied a THIRD framing that reshaped
+         option (i) and was adopted: the prerequisite is a stable EXECUTABLE
+         REPRESENTATION CONTRACT for every value crossing a generated-function
+         boundary — NOT necessarily one universal boxed Value. B2F re-sliced
+         into RT-FNSPLIT-B2O -> RT-FNSPLIT-B2R -> RT-FNSPLIT-B2F.
+         ⚠ Advisory erratum evt_3k9xam3ws9pgz: its cited paths under
+         crates/ken-backend-native/ do not exist (line numbers are accurate);
+         real roots are crates/ken-runtime/src/cranelift_backend/{lowering/
+         core.rs, lowering/mod.rs, planning/static_transition/semantic_ir.rs}.
 
 ⛔ **B2a runs one stop away from a research pull.** The #3 pull is CONSUMED
    (advisory evt_rwqb8ear89wx — Danvy/Nielsen defunctionalization granularity;

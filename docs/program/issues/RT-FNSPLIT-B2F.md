@@ -1,33 +1,127 @@
 ---
 id: RT-FNSPLIT-B2F
 title: "functionization and authority switch — per-static-origin Cranelift target functions, atomic with switch-over, equivalence evidence, and old-path removal"
-status: active
+status: draft
 owner: runtime
 size: L
 gate: none
-depends_on: [RT-FNSPLIT-B2A-S]
+depends_on: [RT-FNSPLIT-B2A-S, RT-FNSPLIT-B2O, RT-FNSPLIT-B2R]
 blocks: []
 github: null
-origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answering Steward Q1-Q3 on merits (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the D1/D2 half of the retired RT-FNSPLIT-B2A frame. Steward-filed; Steward owns the replacement frame and AC/control placement.
+origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answering Steward Q1-Q3 on merits (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the D1/D2 half of the retired RT-FNSPLIT-B2A frame. RE-SLICED 2026-07-25 by Architect ruling evt_842spc7t6js1 on hard-stop #9 (research advisory evt_531c4k52mshrn) plus addendum evt_t4fykh52ncb: this node is NOT buildable as one unit and now depends on two inert prerequisites. Steward-filed; Steward owns the replacement frame and AC/control placement.
 ---
 
-> ## ✅ `ready` — SHOVEL-READY FRAME WRITTEN 2026-07-25, anchors on `0aa9e53f`
+> ## ⛔⛔ BACK TO `draft` — RULED **NOT BUILDABLE AS ONE UNIT** AT #9, 2026-07-25
+>
+> **Architect ruling `evt_842spc7t6js1`, addendum `evt_t4fykh52ncb`.** The
+> implementer raised #9 **before writing any code**; the branch
+> `wp/RT-FNSPLIT-B2F-functionization` stayed clean at `3891b7aa` (0 commits, 0
+> dirty) apart from one doc-only evidence commit, so the re-slice cost nothing.
+>
+> **The obstruction:** one closed callable unit per static origin requires
+> configuration-independent compilation, but the emitted signature is
+> `(pointer) -> i64`, `Lowered` is a compile-time specialization lattice rather
+> than a value domain, `CaptureSlot` carries only an ordinal, and
+> `PredeclaredFunction` has no signature, slot layout, ownership or calling
+> convention. **What must exist first is a stable executable representation
+> contract for every value crossing a generated-function boundary — NOT
+> necessarily one universal boxed `Value`.**
+>
+> ⭐ **The frame's atomicity is what converted "hard" into "unsatisfiable as
+> framed":** the one buildable increment — functionize scalar-parameter origins,
+> keep specialization for the rest — is **exactly** what `AC-1` and `D6` forbid.
+> That is a tension between two correct requirements, not a defect in either.
+>
+> **`AC-1` and `D6` are NOT amended.** Bounded coexistence was rejected — not as
+> intrinsically unsound, but as the wrong *permanent* architecture for the ruled
+> all-origin/Θ(n) objective, because retaining whole-configuration specialization
+> for the aggregate complement **preserves the exact super-linear authority this
+> chain exists to remove**, and because "scalar on this walk" is an observation
+> about current values, not a static classification theorem. It would require
+> revising `D1`, `D8`, `AC-1`/`AC-6` and the parent's total-O(n) claim; it is not
+> an implementation of the current gate.
+>
+> ### Two inert prerequisites, then this node unchanged
+>
+> 1. **`RT-FNSPLIT-B2O`** — static body ownership: a total, validated
+>    occurrence → `PredeclaredFunction` mapping.
+> 2. **`RT-FNSPLIT-B2R`** — the representation and call-ABI contract.
+> 3. **This node** — same shape, same atomic live switch, now depending on both.
+>
+> **Ownership precedes representation** because the ownership mapping *defines
+> the cut*, and "every value that crosses a generated-function boundary" cannot
+> be enumerated before the boundary is known.
+>
+> ### What survives, unchanged
+>
+> **The all-origin shape and the atomic live switch remain intact; only their
+> missing dependency is made explicit.** After the substrate lands, this node is
+> still **one atomic candidate**: forward-declare the complete bundle from the
+> validated ABI descriptors; define one target per predeclared static function;
+> switch the synthesized root to the root target; switch every cross-owner edge
+> to a static direct call; transport frame/store state; prove the differential;
+> and remove all cross-body whole-configuration re-emission. **At every landed
+> point there is exactly one production authority.**
+>
+> ### ⭐ `D6`'s structural exhibit — use this, not the census
+>
+> `lower_source_declaration_call` (`…/lowering/core.rs:4034-4050`),
+> non-recursive branch: it emits **no call**. It builds
+> `call_env = args ++ captures ++ env` and continues the source machine with
+> `expr: body` in that environment. **That is the authority being removed, in
+> four lines.** The final pin must prove that cross-owner application emits a
+> static call with **only the declared frame**, while intra-owner syntax
+> traversal stays local. ⚠ **A census alone is supporting evidence, never the
+> mechanism.**
+>
+> ### Corrected accounting (ruling § "Corrected D5/D6 and accounting")
+>
+> - The population is **59 tokenized calls** into `lower_expr`, **not 58 `self.`
+>   spellings** — it includes the synthesized root `compiler.lower_expr` at
+>   `core.rs:188`, which *seeds* the descent and cannot be classified as
+>   traversal.
+> - **Disposition is per occurrence ownership and reaching path**, not one row
+>   per source site. ⛔ The five provenance classes are **evidence inputs, not
+>   the authority partition** — this is the Architect confirming the Steward's
+>   withdrawal of the site-keyed `AC-5`.
+> - `D6` removes **retained-body cross-owner re-emission**; ordinary recursive
+>   traversal within the current body owner remains.
+> - `AC-G0` is **6 definitions / 8 declarations** per native module, Θ(1), and
+>   accounted **separately** from the per-static-function population.
+> - Growth verdict unchanged: total target units may be Θ(n) while each function
+>   is bounded by its own static body/transition contract.
+>
+> ### Adversary P2 — closed, NOT adopted
+>
+> ⛔ **Do not add a container-spelling blacklist** for the entry-keyed-store
+> residual. That arm stays review-enforced unless the prerequisites' new closed
+> ABI/body-owner structures make an allowed-inventory structural pin possible
+> **with a positive control**. **`B2F` must not absorb another forbidden-spelling
+> scan.**
+>
+> ---
+>
+> ## Superseded header — retained for lineage (was `ready`, 2026-07-25)
 >
 > **The frame is
-> `docs/program/wp/RT-FNSPLIT-B2F-functionization.md` — BUILD FROM IT.**
-> This file remains the durable home of the Architect's mechanism rulings (a
-> ruling that lives only in a channel thread is not a deliverable); the frame
-> carries the deliverables, ACs, and measured anchors.
+> `docs/program/wp/RT-FNSPLIT-B2F-functionization.md`.** ⚠ It is now the frame of
+> a **`draft`** node and omits the prerequisite above; it must be re-cut after
+> `B2O` and `B2R` land. This file remains the durable home of the Architect's
+> mechanism rulings (a ruling that lives only in a channel thread is not a
+> deliverable).
 >
 > **The predecessor is clear:** `RT-FNSPLIT-B2A-S` merged at `origin/main` =
 > `145fe915`, tree byte-identical to the approved `82356022`. This node closes
-> symptom-inventory **entry 2 — the last open entry**, so it is the node that
-> closes `RT-NATIVE-FNSPLIT`.
+> symptom-inventory **entry 2 — the last open entry**, so it is still the node
+> that closes `RT-NATIVE-FNSPLIT` — now behind two prerequisites.
 >
 > ⛔ **EVERY ANCHOR IN THE PROSE BELOW IS STALE — use the frame's.** Re-derived
 > on `0aa9e53f`: `lower_expr` is at `core.rs:4333` (**not** `:3847`; it has moved
 > `:3847 → :4255 → :4333` across three re-frames), and the real production call
-> count is **58** `self.lower_expr(` sites spanning `:310`–`:6743`, not "60".
+> count is ~~**58** `self.lower_expr(` sites spanning `:310`–`:6743`~~ — ⛔ **that
+> 58 is ITSELF superseded: the count of record is 59 tokenized calls, and the
+> `:310` span start excluded the root at `:188` by construction.** See "Corrected
+> accounting" above.
 >
 > ⚠ **Three framing findings the draft below does not contain:**
 >
