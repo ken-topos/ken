@@ -34,10 +34,23 @@
 > ✅ **ADVERSARY TRIAGE DONE. ✅ `B2F` FRAME WRITTEN AND `ready`. ✅ `B2B`
 > RE-DERIVED.** All three committed on `steward/work` (`8ce48a64`, `208989fd`).
 >
-> ## ⛔⛔ LIVE STATE — #9 RULED, `B2F` RE-SLICED, **`B2O` KICKED AND BUILDING**
+> ## ⛔⛔ LIVE STATE — `B2O` CANDIDATE `97db6f0b` DELIVERED, IN QA, NO HARD-STOP
 >
-> **`origin/main` = `6af1279b`.** Current act: the Runtime ring is executing
-> `RT-FNSPLIT-B2O`. See the ✅✅ block below for the landed gate + kickoff.
+> **`origin/main` = `27084bbf`** (#953 `library-style`, #954 tracker+briefing).
+> Current act: **merge-gate `RT-FNSPLIT-B2O`** — candidate off-box at
+> `97db6f0b`, QA green at 354 tests, awaiting the leader's approved handoff.
+> See the ✅ CANDIDATE DELIVERED block below for the full sequence and the two
+> ACs I will read closest.
+>
+> **Doc ring runs CONCURRENTLY** (doc-only exception): `doc-author` →
+> `librarian` iterating `library/learn/reading-ken/01-anatomy.md` under the
+> now-landed `library-style` skill, currently on exact `c8e77dc2` (**pushed
+> off-box**). Not my review; the Librarian is the doc ring's QA.
+>
+> ⚠ **`steward/work` is STALE immediately after every publish** — `git fetch
+> --prune` + `reset --hard origin/main`, then re-derive the delta. `origin/`
+> `steward/work` reads `[gone]`; that is the publisher deleting the head
+> branch, not lost work.
 >
 > ### ✅ CONVO MCP RESTORED (operator `/mcp`) — the fallback below is STANDBY ONLY
 >
@@ -134,14 +147,48 @@
 > flipped `active` and the false `⛔ draft — FRAME NOT YET WRITTEN` header
 > replaced.
 >
-> ⇢ **NEXT ACT: the ring is BUILDING. Do not interrupt it.** Wait for the
-> leader's progress posts or a hard-stop. Runtime WPs legitimately run **hours**
-> (`MODELS.md`) — an idle-looking pane on that ring is not a stall.
+> **It executed the frame as written:** predictions committed *before*
+> measuring, both cfg configurations compile, and **prediction 1 confirmed
+> exactly — `[4, 5, 6, 7, 8] = n+1`**. Targeted `-p ken-runtime` throughout,
+> never `--workspace`.
 >
-> **Observed healthy at T15:0xZ, and it is executing the frame as written:**
-> predictions committed *before* measuring, both cfg configurations compile, 27
-> tests pass, and **prediction 1 confirmed exactly — `[4, 5, 6, 7, 8] = n+1`**.
-> Running the **targeted** `-p ken-runtime` suite (never `--workspace`).
+> ### ✅ CANDIDATE DELIVERED — `97db6f0b`, IN QA. NO HARD-STOP ON THE WHOLE WP.
+>
+> **`wp/RT-FNSPLIT-B2O-body-ownership` = `97db6f0bd70ba808c03d4e2ce10aa61e7f9e093e`,
+> pushed off-box by me and `ls-remote`-verified** (fast-forward from the
+> `f4a5e647` checkpoint; base `3baa80f4` an ancestor; 4 commits, 5 files,
+> +1531/-29). Branch **FREE** — implementer back on its home branch.
+> Reported `evt_j2m3yd4zgwx4`. `runtime-qa` reports **354 `ken-runtime` tests
+> passing** and no defect in the seed/owner partition or the eight redden
+> controls; `runtime-leader` has it routed.
+>
+> ⛔ **Both WP branches were on ONE LOCAL REF when I found them** — the B2O
+> build *and* `wp/DOC-LIBRARY-STYLE-01-ANATOMY` at `c8e77dc2`, the latter while
+> the Librarian was actively reviewing it. **1,235 lines of live build with zero
+> off-box copies.** Build seats hold no GitHub credential by design, so this is
+> structural, not a lapse by them: **`ls-remote` every in-flight WP branch on
+> every tick** and push it yourself. Standing instruction re-issued to the
+> fleet: *report an unpushed ref and KEEP GOING* — raising it is not gating on it.
+>
+> ⇢ **NEXT ACT: hold for the leader's QA-approved handoff, then merge-gate it.**
+> Sequence: Architect design/soundness review on the **exact** SHA → merge
+> Decision verified `resolved` **fresh from the object** (§14 — never on prose,
+> never on "absent from proposed") → publisher → verify-on-`main` by **content**
+> → notify Adversary → **drive retros IN** → flip `merged`. Then, and only then,
+> compact the ring: `runtime-implementer` is at **ctx 32%**, so the retros-in
+> seam is also its compaction seam — and the retro must be posted *before* the
+> compaction, which eats an unposted one.
+>
+> **Two things I will read closest at merge**, both flagged to the ring already:
+> `AC-4`'s positive control (a negative check passes for **any** reason) and
+> `AC-5`'s eight redden controls (a pin enumerating **spellings** is not a proof
+> of the **property** — this chain was bitten twice that way). I will ask for a
+> compile-preserving evasion attempt per pin.
+>
+> ⚠ **Minor, for the retro, not a hold:** the D5/D6 artifacts
+> (`rt-fnsplit-b2o-predictions.md`, `…-call-disposition-report.md`) landed at the
+> **root of `docs/program/`**, which is my corpus. Fine as artifacts; check the
+> frame actually pinned that location, or loose WP-scratch accumulates there.
 >
 > ### ✅ VERIFY RING COMPACTED — a standing obligation I had missed
 >
@@ -1594,11 +1641,38 @@ both repaired 2026-07-24 ~16:5xZ:**
 indistinguishable from a healthy idle seat.** Neither posts, neither pushes.
 Only a **wide** `capture-pane` shows the `at capacity` line above the composer.
 
-- **§5a research trigger is now ARMED in the issue file** (it was not — that is
-  why this chain ran **10 hard-stops dry**): `docs/program/issues/`
-  `RT-NATIVE-FNSPLIT.md` carries `hard-stop count = 33` /
-  `NEXT RESEARCH PULL = #36`, cadence every 3rd. **My tracker is the count of
-  record**; the Architect re-derives its own across compactions and loses.
+- **§5a research trigger is ARMED in the issue file** (it was not — that is why
+  this chain ran **10 hard-stops dry**). **My tracker is the count of record**;
+  the Architect re-derives its own across compactions and loses.
+
+  > ### ⛔ CORRECTED 2026-07-25 — THIS LINE ITSELF WENT STALE. Two chains, and
+  > ### the numbers below are NOT interchangeable.
+  >
+  > This bullet used to read *"the issue file carries `hard-stop count = 33` /
+  > `NEXT RESEARCH PULL = #36`"*. **MEASURED:** `issues/RT-NATIVE-FNSPLIT.md`
+  > carries exactly one `NEXT RESEARCH PULL` line and it says **`#12`**, with
+  > `COUNT OF RECORD = 9` and `#9 CONSUMED`. **THE GAP:** `33`/`#36` described
+  > the **original pre-recut chain**, which was **frozen at the recut**; the
+  > **live** chain is the recut one (`wp/RT-NATIVE-FNSPLIT-recut.md` opened it
+  > at `1` on 2026-07-24, cadence `#3, #6, #9, #12, …`).
+  >
+  > ```text
+  > ORIGINAL chain  — FROZEN at 33 hard-stops. Do NOT resume this count.
+  > LIVE recut chain — COUNT OF RECORD = 9 · #3/#6/#9 consumed
+  >                    NEXT RESEARCH PULL = hard-stop #12
+  > SYMPTOM INVENTORY — ENTRIES = 3, answered at entry 2 (entry 3 = the CAUSE)
+  >                    NEXT PREDICATE CHECK = 6th entry
+  > ```
+  >
+  > ⛔ **Why this mattered more than a wrong number:** a `#36` anchor on a chain
+  > standing at **9** makes the trigger **unreachable** — 27 hard-stops of
+  > headroom on a mechanism that exists to fire every 3rd. The armed line was
+  > *present*, so every "is it armed?" check passed. **An armed trigger with a
+  > stale anchor reads exactly like a working one**, which is the same defect
+  > class as the `10-hard-stops-dry` run it was written to prevent, one level up.
+  >
+  > ★ **`RT-FNSPLIT-B2O` produced NO hard-stop, so the count did not move.** A
+  > clean WP never advances it — do not "catch up" the number for elapsed work.
 - **⛔ RT-NATIVE-FNSPLIT DOES NOT MERGE ON "the tests pass"** — the operator's
   scaling gate (`evt_4btfhwqhah1ye`) binds: empirical n=3..7 harness +
   research-grounded analytical growth order + a verdict. **SP-A is
