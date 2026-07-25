@@ -479,7 +479,17 @@ it, do not let a recut become a restart.**
 - removal of the caller-supplied store-identity writer
 - the emitted String/Bytes reachability controls and their causal mutation
   (`M14`, exact `BOUNDARY_ERR_CLASS = -4`)
-- the exhaustive `Lowered` disposition with no wildcard arm
+- the **sealed exhaustive / no-wildcard disposition MECHANISM**, and every
+  already-proved **classification outside `AC-10`'s implicated domain**.
+  ⛔ **Not the classifications wholesale.** A classification or value-band that is
+  **narrowed or reclassified in order to close `AC-10`** is reviewed as **the
+  predicate delta**: it is neither prohibited nor a restart. `Constructor` and
+  `HostResult` remain **required live represented arms**.
+  > ⚠ **This item read *"the exhaustive `Lowered` disposition"* wholesale in the
+  > first draft — self-contradictory**, because the same recut names a *narrowed
+  > disposition* as a permissible mechanism, and narrowing necessarily changes at
+  > least one current classification. A RETAIN list that forbids the mechanism the
+  > frame leaves open is a trap for the implementer, not a protection.
 
 The last clean checkpoint carries forward as a **semantic oracle, not an
 acceptance path** — it tells you what the answer looks like; it does not
@@ -492,26 +502,63 @@ discharge anything.
 block found a facet no `AC` had named. Enumerated, that yields an unbounded chain
 of individually-reasonable blocks; **named, it yields one closure.**
 
-**`AC-10` — the admitted disposition is CLOSED under the emitted round trip.**
-One control that is **total over the admitted disposition**, not over a list of
-cases. For every value the disposition admits, **either** an emitted producer
-constructs a boundary word that a **separately compiled** consumer recovers with
-value and identity intact for its declared lifetime, **or** construction fails
-closed **before publication** with an exact status. There is no third outcome,
-and "not currently reachable" is not one.
+**`AC-10` — total classified-domain closure.** Every boundary-reachable
+value/input is assigned by the exhaustive disposition to **exactly one** of:
+*represented immediate*, *represented handle*, *protocol-only*, or *fail-closed
+forbidden*. The assigned behavior is **mandatory**:
 
-⚠ **Three things about `AC-10`, each of which has already gone wrong once:**
+1. every **represented** value is constructible by emitted code and is recovered
+   by a **separately compiled** consumer with content/value, identity, owner, and
+   declared lifetime intact;
+2. a **protocol-only** case cannot enter a source-valued boundary slot; and
+3. a **malformed, forbidden, or unrepresentable** input rejects **before
+   emission/publication** with its exact status.
+
+⛔ **No represented value may take the failure arm, and no boundary input may
+remain unclassified.**
+
+> ### ⛔ Why `AC-10` is phrased this way — the Steward got it wrong first
+>
+> My first draft read *"for every value the disposition admits, **either** round
+> trip **or** fail closed."* The Architect blocked it, correctly: that puts the
+> failure arm **inside the admitted subset**, which makes admission
+> **non-semantic** and is **satisfied vacuously by an implementation that rejects
+> every represented value.** ⭐ **Classification happens first; the behavior is
+> then *entailed by the class*.** The predicate's failure arm is load-bearing —
+> but it belongs to the *unrepresentable* class, not to the represented one.
+>
+> ⚠ **The instructive part:** I was guarding against the opposite error — the day
+> before, I over-strengthened a correct mechanism into a post-condition that
+> failed on correct work. Steering away from *too strong*, I landed on *vacuously
+> satisfiable*. **Both failures come from writing the predicate on the wrong
+> domain**, and neither is fixed by tuning strength. Fix the domain first.
+
+⚠ **Three further things about `AC-10`:**
 
 - ⛔ **It quantifies over the DISPOSITION, not over tags.** The predicate is
   explicitly *stronger than "all tags are enumerated"* and *stronger than
   Rust-side materialization*. A sweep over 21 arms is not a sweep over admitted
   values: magnitude bands and lifetime bands are part of the domain. **Total over
   nodes is not closed under parent → child reachability.**
-- ⛔ **The `AC` must not pin more than the predicate entails.** The disjunction
-  (`round trip` **or** `fail closed before publication`) is load-bearing — do not
-  strengthen it into *"everything must round-trip."* A post-condition stricter
-  than its mechanism does not catch defects, it manufactures them, and it trains
-  the ring to argue with the frame.
+- ⛔ **"One control total over every value" is NOT an executable oracle** — the
+  admitted domains include unbounded integers, byte/string contents,
+  lifetime/ownership states, and recursive parent → child reachability. **No
+  finite runtime test enumerates them.** Demanding one would produce either an
+  impossibility or *a finite case sweep wearing a universal name*, which is worse
+  than an honest sweep because it reads as total. **Totality is therefore proved
+  STRUCTURALLY:**
+  > a sealed exhaustive no-wildcard disposition, **plus** a closed finite
+  > partition of every value-dependent representation discriminator — at least
+  > **variant**, **magnitude/shape**, **lifetime/owner**, and **parent → child
+  > reachability / aggregate recursion**. Every partition maps to exactly one
+  > disposition class. Each partition **boundary** carries a **nondegenerate
+  > witness pair** and a **causal mutation** driven through an emitted producer
+  > and a separately compiled consumer.
+
+  ⭐ **The demanded unit is one property / one `AC` — not one test function.**
+  QA's `AC-10` row names the structural closure artifact **and the complete
+  control family**; it need not pretend one dynamic test enumerates an infinite
+  domain.
 - ⛔ **`AC-10` requires an `AC` → control row like every other.** An `AC` that
   ships **zero** controls is invisible to a review that examines controls:
   *discharged* and *never asked* read identically in a green verdict.
