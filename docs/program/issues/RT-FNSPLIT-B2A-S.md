@@ -11,6 +11,22 @@ github: null
 origin: Architect ruling evt_6h5gw5c503n5z on RT-FNSPLIT-B2A hard-stop #6 (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the retired RT-FNSPLIT-B2A frame, whose Retain/Replace lists were inherited from the never-landed b077eb7a. Steward-filed; Steward owns the replacement frame and the full AC/control re-walk.
 ---
 
+> ## ⛔ SCOPE RULED (a) — 2026-07-25, `evt_2eap269sgnavm`
+>
+> **Covered population = `Lowered::Closure` + `Lowered::DeclarationClosure`.**
+> ⛔ NOT the whole `OwnedSourceOccurrence` struct (17 sites, incl. source-machine
+> frames). `ComputationalRecursorClosure` is out **structurally** — it carries no
+> `OwnedSourceOccurrence`. Source-machine frames are entry-2 / `B2F` territory.
+> ★ **D1's struct-level phrasing was a Steward defect and contradicted D5/AC-6**,
+> which delegates the population decision; D5 was the correct half. Frame text
+> corrected.
+>
+> ⚠ **AND A PROCESS DEFECT: the rewritten frame was never on `main`** — only on
+> `steward/work` (`350f7b2d`), while the ring's base `4c5afda6` held the
+> pre-rewrite draft **reusing the same identifiers for different deliverables.**
+> ⇒ ★ **A kickoff must verify the frame is FETCHABLE AT THE RING'S BASE, not
+> merely written.** "Written" and "readable by the ring" are different facts.
+>
 > ## ✅ ACTIVE — kicked to the Runtime ring 2026-07-25 (`evt_5jzpy3dgs8s67`)
 >
 > Full §2c gate ran: retros in 3/3, quiescent, **both** contention axes checked

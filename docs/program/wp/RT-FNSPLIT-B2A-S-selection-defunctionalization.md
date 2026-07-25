@@ -53,11 +53,34 @@ it is a tag with a leak.
 
 ## Deliverables
 
-**D1 — ⭐ THE CARRIER LOSES ITS BODY. This is the whole slice, and it is now a
-one-field statement.** Because B2A-C co-located them, D1 is precisely:
+**D1 — ⭐ THE RETAINED-CLOSURE CARRIER LOSES ITS BODY.**
 
-> **`OwnedSourceOccurrence` drops `expr: RuntimeExpr`, leaving `static_origin`
-> as the sole identity.**
+> **For the covered population only, the retained body ceases to be carried and
+> `static_origin` becomes the sole identity.**
+
+> ### ⛔ CORRECTED 2026-07-25 — D1's original phrasing was a STEWARD DEFECT
+>
+> It read *"`OwnedSourceOccurrence` drops `expr: RuntimeExpr`"* — a **struct-level**
+> statement for a **population-level** requirement. **That struct backs 17
+> construction sites**, not just the closure family: it also carries the source
+> machine's in-flight frames (`SourceContinuation` / `SourcePrefixTemplate` /
+> pending-expression, `mod.rs:1799–2077`).
+>
+> ⛔ **And one site provably cannot resolve from a tag:** `core.rs:3529` builds
+> `OwnedSourceOccurrence { expr: RuntimeExpr::Trap(default.clone()), static_origin }`
+> — the **one synthesized term in the whole lowering**, whose tag resolves to the
+> **match**, not the trap. Dropping `expr` there substitutes a match for a trap —
+> exactly the wrong-body defect **D6's swap control exists to redden** — and
+> minting an origin is barred (`origin_of` is planner-private).
+> ⚠ The adversary independently reached the same placement on `2db29abe`
+> (`evt_7mve56d192pv6`): a **lowering-internal leaf**, *not* a planned source
+> occurrence, which "does not justify broadening the planned-origin population."
+>
+> ⇒ **Ruled (a) at `evt_2eap269sgnavm`: the population is the retained-closure
+> variants.** Under (a), D1 clears **every** member with no softening — all
+> retained closure bodies are `cloned(<planned occurrence>)` and resolve by tag.
+> ★ **D1's original phrasing also contradicted D5/AC-6**, which delegates the
+> population decision. **D5 was the correct half.**
 
 ⛔ **In the same diff.** A struct retaining `expr` beside the origin preserves two
 authorities and **fails the slice** — that is what makes the origin a *selector*
