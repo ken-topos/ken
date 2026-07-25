@@ -3468,7 +3468,7 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
     // can build its own plan and call the resolver without owning a `Lowering` at
     // all. A second call in `artifact/**`, `compiled.rs` or `planning.rs` would
     // have stayed green. Privacy of one field was never the closure.
-    let mut calls = Vec::new();
+    let mut mentions = Vec::new();
     for (file, source) in BACKEND_PRODUCTION_SOURCES {
         // `static_transition.rs` carries its tests inline; the census is about the
         // production surface, and the planner's own tests legitimately call the
@@ -3476,23 +3476,94 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
         let production = source
             .split_once("\n#[cfg(test)]\nmod tests {")
             .map_or(*source, |(before, _)| before);
-        let n = production
-            .lines()
-            // Comment lines are excluded because this file, the resolver's doc
-            // comment and the module docs all NAME the function -- an oracle that
-            // greps a name otherwise fires on the prose describing it.
-            .filter(|line| !line.trim_start().starts_with("//"))
-            .filter(|line| line.contains(".source_occurrence("))
-            .count();
+        let n = identifier_occurrences(production, "source_occurrence");
         if n > 0 {
-            calls.push((*file, n));
+            mentions.push((*file, n));
         }
     }
     assert_eq!(
-        calls,
-        vec![("lowering/core.rs", 1)],
-        "AC-4 -- exactly one production call to the plan resolver may exist, and it \
-         must be `retained_body_occurrence` in the lowering SCC"
+        mentions,
+        vec![
+            ("lowering/core.rs", 1),
+            ("planning/static_transition.rs", 1)
+        ],
+        "AC-4 -- the resolver may be NAMED exactly twice in production: its \
+         definition in the planner, and its single call from \
+         `retained_body_occurrence`. Any third mention is a second lookup"
+    );
+}
+
+/// Counts whole-identifier occurrences in production source, comments removed.
+///
+/// ⛔ **Neither a substring scan nor a line scan is sound, and the Architect proved
+/// both against me** (`evt_6sq2tq3v9jcd0`, `evt_1p11krxny4wny`). The first census
+/// tested `line.contains(".source_occurrence(")`, which a second lookup evaded by
+/// formatting alone:
+///
+/// ```text
+/// let _second = self
+///     .static_transition_plan
+///     .source_occurrence
+///     (static_origin)?;
+/// ```
+///
+/// No line contains `.source_occurrence(`, so the pin passed with two lookups
+/// present. ⇒ **A text pattern is a claim about layout; the property is about
+/// code.** Tokenizing is the fix, not a longer list of spellings:
+///
+/// - splitting on every non-identifier character makes newlines, dots and spaces
+///   all separators, so **no formatting can hide a mention**;
+/// - matching a **whole token** distinguishes `source_occurrence` from the
+///   `source_occurrences` field, which a substring scan would conflate;
+/// - counting the **identifier** rather than a call shape also catches a path-form
+///   or aliased call (`StaticTransitionPlan::source_occurrence(plan, o)`), because
+///   a method cannot be called without naming it;
+/// - comments are stripped per line **before** tokenizing, because the resolver's
+///   own doc comment and these very notes name it — an oracle that greps a name
+///   otherwise fires on the prose describing it.
+///
+/// ⚠ Residual: a call synthesized by a macro would not name the identifier in this
+/// source. There is no such macro in the backend, and one would be visible in the
+/// same review; this is a stated limit, not a silent one.
+#[cfg(test)]
+fn identifier_occurrences(source: &str, identifier: &str) -> usize {
+    source
+        .lines()
+        .map(|line| line.split_once("//").map_or(line, |(code, _)| code))
+        .flat_map(|code| code.split(|c: char| !c.is_alphanumeric() && c != '_'))
+        .filter(|token| *token == identifier)
+        .count()
+}
+
+#[test]
+fn the_identifier_census_survives_the_evasions_that_defeated_the_text_scan() {
+    // ⭐ Positive control built from the Architect's own two mutations. If the
+    // census cannot see these, the count above asserts nothing.
+    let split_across_lines = "let _second = self\n    .static_transition_plan\n    .source_occurrence\n    (static_origin)?;\n";
+    assert_eq!(
+        identifier_occurrences(split_across_lines, "source_occurrence"),
+        1,
+        "a mention split across lines must still be counted"
+    );
+    let path_form = "let _ = StaticTransitionPlan::source_occurrence(plan, origin)?;\n";
+    assert_eq!(identifier_occurrences(path_form, "source_occurrence"), 1);
+    // The plural FIELD must not be conflated with the resolver.
+    assert_eq!(
+        identifier_occurrences("self.plan.source_occurrences.len()\n", "source_occurrence"),
+        0,
+        "`source_occurrences` is a different identifier"
+    );
+    // Prose must not satisfy or inflate the census.
+    assert_eq!(
+        identifier_occurrences("// calls source_occurrence here\n", "source_occurrence"),
+        0
+    );
+    assert_eq!(
+        identifier_occurrences(
+            "/// `source_occurrence` is the sole route\n",
+            "source_occurrence"
+        ),
+        0
     );
 }
 
@@ -3810,19 +3881,31 @@ fn escaping_a_source_borrow_into_the_compiled_artifact_does_not_typecheck() {
 // on every fixture without one — the wrong key still looks unique — and then
 // silently merges two occurrences on the fixture that has one.
 //
-// ⛔ **This scan is a secondary net, NOT the closure**, and the first candidate
-// wrongly presented it as the whole discharge. The Architect's rejection
-// (`evt_6sq2tq3v9jcd0`) is exact: a `Vec` indexed by `planned.entry.0`, a type
-// alias, or a bespoke collection all violate the ruled property while a scan for
-// four container spellings stays green. **AC-5 is discharged in the planner**, by
-// two behavioural controls that do not depend on how anything is spelled:
+// ⛔ **This scan is a tripwire, not a discharge — and neither are the behavioural
+// controls, on their own.** Two Architect blocks established that, and the second
+// (`evt_1p11krxny4wny`) is the one that settles it: a real
+// `Vec<Option<&RuntimeExpr>>` indexed by `usize::try_from(scrutinee.entry.0)` at
+// the `ComputationalMatch` seam **compiles and passes all three nets**.
 //
-//   `keying_selection_by_the_scheduling_entry_does_not_resolve_the_body`
-//   `filing_two_occurrences_under_one_origin_is_refused`
+// ⇒ The framed property, *"no collection is keyed by `.entry`, and a mutation
+// introducing one reddens,"* is a **global negative over arbitrary code shapes**.
+// No test enforces that: detecting it needs dataflow, not a scan, and a scan can
+// always be spelled around. So the honest split is recorded here rather than
+// papered over with a longer list:
 //
-// What remains here is a cheap declaration-level tripwire over the *closed*
-// backend production surface — worth keeping because it fires early and names the
-// file, not because it is sufficient on its own.
+//   ENFORCED, by the compiler — `a_scheduling_entry_is_not_spellable_outside_the_planner`
+//     an entry cannot be named, hence cannot be keyed on, outside two files.
+//   ENFORCED, behaviourally — `keying_selection_by_the_scheduling_entry_does_not_resolve_the_body`
+//     entry-keying yields the WRONG body, with a non-vacuity guard.
+//   ENFORCED, mechanically — `filing_two_occurrences_under_one_origin_is_refused`
+//     the sanctioned selection table cannot be re-keyed onto entries quietly.
+//   NOT ENFORCED — an additional, independently maintained entry-keyed collection
+//     inside those two planner files. That is a REVIEW property, and it is how
+//     both of these blocks were actually found.
+//
+// ⚠ A frame correction narrowing AC-5 to the three enforceable statements is
+// routed to @steward/@architect; this comment is the in-tree record of the gap so
+// the next reader inherits the limit rather than the overclaim.
 
 /// ⚠ Positive control for the AC-5 detector: it must actually recognise the shape
 /// it claims nothing matches, or "no matches" means nothing.
@@ -3851,6 +3934,66 @@ fn the_entry_keyed_collection_detector_catches_the_shape_it_is_looking_for() {
     assert!(!declares_collection_keyed_by_node_id(
         "    occurrences: BTreeMap<StaticOriginId, RuntimeExpr>,"
     ));
+}
+
+/// **AC-5, the half that IS enforceable: a scheduling entry is not even
+/// SPELLABLE outside the planner.**
+///
+/// ⛔ Read with `no_collection_is_keyed_by_a_scheduling_entry` below and the two
+/// planner controls: the framed property — *no collection anywhere is keyed by
+/// `.entry`* — is a **global negative over arbitrary code shapes**, and the
+/// Architect demonstrated that no scan discharges it (`evt_1p11krxny4wny`: a real
+/// `Vec<Option<&RuntimeExpr>>` indexed by `usize::try_from(scrutinee.entry.0)`
+/// compiles and passes every net). ⇒ **What a test can enforce is the surface on
+/// which the hazard is expressible at all**, and that is a visibility fact:
+///
+/// `PlannedExpr` and `StaticNodeId` are declared with **no `pub` modifier**, so
+/// they are private to `planning::static_transition` (`StaticNodeId` reaching its
+/// own `semantic_ir` child through `use super::`). No consumer — not `lowering`,
+/// not `artifact`, not `compiled`, not `surface` — can name an entry, so none can
+/// key on one. That reduces "any of twelve backend files" to **exactly two**, and
+/// the compiler enforces the reduction.
+///
+/// ⚠ Inside those two files an independently maintained entry-keyed collection
+/// remains a **review** property, not a pinned one. Saying so is the point: the
+/// previous candidate claimed a discharge it did not have.
+#[test]
+fn a_scheduling_entry_is_not_spellable_outside_the_planner() {
+    let mut surface = Vec::new();
+    for (file, source) in BACKEND_PRODUCTION_SOURCES {
+        let production = source
+            .split_once("\n#[cfg(test)]\nmod tests {")
+            .map_or(*source, |(before, _)| before);
+        // Tokenized with comments stripped, so a doc comment MENTIONING the type
+        // (as `lowering/core.rs` does, twice, while being unable to name it) does
+        // not count as reach.
+        let reach = identifier_occurrences(production, "PlannedExpr")
+            + identifier_occurrences(production, "StaticNodeId");
+        if reach > 0 {
+            surface.push(*file);
+        }
+    }
+    assert_eq!(
+        surface,
+        vec![
+            "planning/static_transition.rs",
+            "planning/static_transition/semantic_ir.rs",
+        ],
+        "AC-5: the entry-carrying types became reachable from another backend \
+         file, so the surface on which entry-keying is spellable has grown"
+    );
+
+    // And the reduction holds because the declarations are module-private. A `pub`
+    // of any width here would widen the surface above without changing any call.
+    let planner = include_str!("../../../planning/static_transition.rs");
+    assert!(
+        planner.contains("\nstruct PlannedExpr {"),
+        "AC-5: `PlannedExpr` must stay module-private"
+    );
+    assert!(
+        planner.contains("\nstruct StaticNodeId(u32);"),
+        "AC-5: `StaticNodeId` must stay module-private"
+    );
 }
 
 #[test]
