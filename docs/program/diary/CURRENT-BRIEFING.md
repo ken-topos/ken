@@ -90,13 +90,41 @@
 > CONSUMED?"** N3 settles it: three origin accessors, none returning an
 > expression. A tag beside a body becomes two authorities in **B2A-S**, not here.
 >
-> ### ⛔ HOLDING THE PUBLISHER — Decision `dec_4z8f55g9jv1ad` is `proposed`
+> ### ⛔ HOLDING — CANDIDATE RE-ANCHORED TO `08633b3c`; DECISION NAMES THE OLD SHA
 >
-> **✅ QA APPROVED `2e96f83c`** (`evt_2sd9ftpz4tnx7`). ⛔ **DO NOT PUBLISH:** §14
-> requires the Decision **`resolved`, verified fresh from the object** — it reads
-> **`proposed`**, and it names an **Architect soundness review** as required.
-> ⛔ A `crates/` trusted-base change is **not** gated QA-only. Review requested at
-> `evt_aqz6qpn1e6v7`; Architect confirmed `Working`.
+> **`origin/wp/RT-FNSPLIT-B2A-C-correspondence` = `08633b3c`** (pushed by me).
+> ⚠ **`dec_4z8f55g9jv1ad` still names `2e96f83c`.** ⛔ **DO NOT PUBLISH on it** —
+> resolving it would point the publisher at a commit nobody approved as final.
+> Re-anchor requested from `runtime-leader` at `evt_5gpcpcbb51ttc`.
+>
+> ⚠ **THIRD SHA IN UNDER AN HOUR** (`17a07b09` → `2e96f83c` → `08633b3c`).
+> ⇒ **Every vote and Decision must name an EXACT SHA, never "the tip."** A live
+> candidate going stale between vote and merge is a real failure mode here.
+>
+> ✅ **`08633b3c` is comment-and-message text ONLY — I proved it mechanically**,
+> not on QA's report: parent is exactly `2e96f83c` (linear, no rebase), 3 files
+> +11/−10, and filtering the diff for any changed line that is neither a comment
+> nor a quoted string returns **empty**. No identifier, signature, expression, or
+> assertion *predicate* moved. ⇒ The Architect's `2e96f83c` review carries; it
+> only needs to *say so* for the Decision to resolve.
+>
+> ⭐ **A design choice paid off:** several changed strings are **assertion
+> messages**, which is exactly what would perturb a text-matching oracle — but
+> **AC-12 counts declaration lines, not substring hits**, precisely because the
+> assertion's own message names both spellings. Immune by construction.
+>
+> ⚠ **Open nit, non-blocking, do NOT respin for it:** the sweep dropped
+> `(a planner invariant, not a capacity limit)` from a comment — that clause
+> carried the **AC-6** distinction. Restore only if those lines are touched
+> anyway; otherwise note it against `RT-PLANNER-ATTRIB-K`.
+>
+> ### ⛔ THE TWO SUBSTANTIVE QUESTIONS STILL OPEN WITH THE ARCHITECT
+>
+> **✅ QA APPROVED both `2e96f83c` (`evt_2sd9ftpz4tnx7`) and the `08633b3c`
+> rewording (`evt_52bkdg7nsqftq`).** ⛔ **§14 still binds: publish ONLY on a
+> Decision verified `resolved` fresh from the object** — never on prose. It reads
+> **`proposed`** and names an **Architect soundness review**; ⛔ a `crates/`
+> trusted-base change is **not** gated QA-only. Requested at `evt_aqz6qpn1e6v7`.
 >
 > **⇢ ON RESUME: re-read the Decision object (`list_decisions`), and publish ONLY
 > if it reads `resolved`.** Never on prose, never on a recalled status.
