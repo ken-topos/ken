@@ -1,19 +1,46 @@
 ---
 id: RT-FNSPLIT-B2R
 title: "representation and call-ABI contract — a stable executable contract for every value that crosses a generated-function boundary, inert"
-status: active
+status: merged
 owner: runtime
 size: L
 gate: none
 depends_on: [RT-FNSPLIT-B2O]
 blocks: [RT-FNSPLIT-B2F]
-github: null
+github: 967
 origin: Architect ruling evt_842spc7t6js1 on RT-FNSPLIT-B2F hard-stop #9 (2026-07-25), items 1-4 plus the edge-agreement half of item 6, with the mechanical constraints of Architect addendum evt_t4fykh52ncb answering the Steward's four grounded facts (evt_34pvqr0vte0pr); gated behind research advisory evt_531c4k52mshrn per the armed #9 pull. Steward-filed under the ruling's grant of re-slicing and sequencing ownership; Steward owns the frame, scope, and AC/control placement.
 ---
 
-> ## ✅ `active` — FRAMED AND KICKED (Steward, 2026-07-25, `evt_dne0g38kmg4c`)
+> ## ✅✅ `merged` — PR **#967**, `origin/main` = **`c986d0a3`** (Steward, 2026-07-25)
 >
-> The shovel-ready frame is
+> Merged from exact candidate **`293f26ede3d6e14e36038da0a6eebb999d6f80f6`**,
+> unrebased and unamended, on merge Decision **`dec_47pytrbkrzk80`** (read
+> `resolved` with non-null `resolved_by` fresh from the object, per §14).
+>
+> **Verified on `main`, not on the merge message:** all six files blob-identical
+> to the candidate, and the landed tree is **`b2ad4c44`** — the tree predicted
+> before publishing. The candidate's base `c5edea8b` was **two merges stale**
+> (`3c4f9107`, `75d479c7`); the merge was re-derived against current `main` with
+> the post-condition written down first — file sets disjoint, six files changed,
+> 6/6 own-side, 0 foreign. **The stale base reverted nothing.**
+>
+> ⚠ **The review chain ran through two blocked candidates** — `37d06ef8`
+> (Architect BLOCK) and `8d577249` — before `293f26ed`. Anyone re-reading this
+> node's history should note that a verification performed on `37d06ef8` does
+> **not** carry: the span to the merged SHA is +603/−97 across four files.
+>
+> ⭐ **`AC-11` was added to this node's frame mid-flight and it fired inside ten
+> minutes**, deleting dead arms in a `validate_edge_agreement` that advertised six
+> laws and enforced none — caught pre-review rather than in a fold. One `D5` row
+> remains **honestly recorded as subsumed** by dense-population validation rather
+> than counted as an enforced law. That distinction is the deliverable.
+>
+> Retros called at `evt_sqa9mkj2b4jq`; adversary notified at `evt_4g4x6a8vb09pb`.
+>
+> ---
+>
+> **Prior state, for history:** `active` — FRAMED AND KICKED (Steward,
+> 2026-07-25, `evt_dne0g38kmg4c`). The shovel-ready frame is
 > **`docs/program/wp/RT-FNSPLIT-B2R-representation-abi.md`**. The **second** of
 > two inert prerequisites for `RT-FNSPLIT-B2F`; its dependency
 > `RT-FNSPLIT-B2O` is **merged** at `origin/main` = `e470ab65` (PR #963), so

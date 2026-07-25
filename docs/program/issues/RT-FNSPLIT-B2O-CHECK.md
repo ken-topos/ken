@@ -107,6 +107,32 @@ risk** — the cost to close it is one fixture plus a `capture_children > 0`
 counter. The test's own stated discipline (*"fail if a class never appeared"*) was
 applied on the boundary/interior axis and not on the class it names first.
 
+## ⚠ Every line number above is anchored on `e470ab65` — `B2R` moves two of them
+
+`RT-FNSPLIT-B2R` (candidate `293f26ed`, published as PR #967) edits **both** files
+this node cites — `semantic_ir.rs` (+9) and `tests/control.rs` (+51/−6). So the
+citations here were **stale before the frame was even written**, which is the
+perishable-current-state hazard in its ordinary form.
+
+**Measured against `293f26ed`, so the frame can anchor correctly:**
+
+| finding | anchor on `e470ab65` | anchor after `B2R` | still live? |
+|---|---|---|---|
+| A — `ends_with(';')` filter | `control.rs:3722` | **`:3726`** | ✅ unchanged text |
+| B1 — unreachable scheduling-entry arm | `semantic_ir.rs:1121` | `:1121` | ✅ unmoved |
+| B3 — vacuous `seeds.len()` conjunct | `semantic_ir.rs:1006` | `:1006` | ✅ unmoved |
+
+⭐ **`B2R` does not touch `validate_function_units` at all** — its `AC-11` work
+landed in `validate_edge_agreement` (deleted) and the `D5` surface. So none of
+Findings A/B/C is fixed, subsumed, or disturbed by it; they are live exactly as
+written.
+
+⛔ **The frame must still re-derive every anchor against `origin/main` at
+authoring time, not copy this table.** The table is a measurement of one
+candidate, and a further merge invalidates it the same way `B2R` invalidated the
+original. Treat *"verify against the landed code, not this line"* as binding on
+every citation in this file.
+
 ## What the frame must require
 
 1. **Structural closure, not a spelling.** Finding A keys on item heads, with a

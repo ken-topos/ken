@@ -24,27 +24,109 @@
 > ## ✅✅ LIVE STATE — 2026-07-25 T18:10Z. **`B2O` IS CLOSED. `B2R` IS ACTIVE AND
 > ## BUILDING, WITH `AC-11` AMENDED IN MID-FLIGHT.** **I owe nothing.**
 >
-> ### ▶ IN FLIGHT RIGHT NOW — read this before acting
+> ### ✅✅ 19:06Z — `B2R` IS **MERGED**. PR #967, `origin/main` = **`c986d0a3`**.
 >
-> - **`B2R` CANDIDATE 1 IS WITH THE RING: exact
->   `37d06ef8ba2c5022e27805fadf763f2c18994d05`.** ✅ **Pushed to
->   `origin/wp/RT-FNSPLIT-B2R-representation-abi`** — it had **zero off-box
->   copies** when I found it (`ls-remote` empty, one local ref). Base `c5edea8b`,
->   **one merge behind**; 6 files, +2249 −5 (`abi.rs` new at 1026 lines,
->   `static_transition.rs` +737).
->   - **§14(5) merge verified, PREDICTED BEFORE MEASURING:** intersection with the
->     main-side set **EMPTY**; merge tree `ce8631ad`, rc 0; **12 files, all 12
->     own-side, 0 foreign.** ⇒ The stale base reverts nothing. **Do not rebase it.**
->   - `runtime-qa` and `architect` are reviewing. **Nothing is owed by me** — no
->     mention to me since my amendment. The leader owns the merge Decision.
-> - ✅ **PR #965 MERGED — `origin/main` = `3c4f9107`.** All five files
->   blob-identical to `14da2a78`. `steward/work` reset onto it and the three
->   carried commits re-applied with **all four blobs verified identical** to their
->   pre-reset record.
-> - **`runtime-implementer` is IDLE at ctx 36%**, awaiting the retro call. ⚠ Its
->   compaction seam is **after retros, before the next WP** — retros are not called
->   until the WP merges. **Do not compact it now**; a compaction eats an un-posted
->   retro.
+> Merged from exact `293f26ede3d6e14e36038da0a6eebb999d6f80f6`, unrebased and
+> unamended. **All six files blob-identical on `main`; landed tree `b2ad4c44` —
+> the tree I predicted before publishing**, independently confirmed by the
+> publisher's own post-merge check. `steward/work` reset onto `c986d0a3` with the
+> briefing + `B2O-CHECK` node carried, **both blobs verified identical**.
+>
+> **✅ DONE:** publish · blob-verify · `steward/work` reset · adversary notified
+> (`evt_4g4x6a8vb09pb`) · **retros CALLED 3/3** (`evt_sqa9mkj2b4jq`) · node flipped
+> `merged` + `github: 967` + body-text tail · `gen-progress.sh` re-run.
+>
+> ### ⛔ THE ONLY THING BLOCKING THE RUNTIME SEAM: retros 3/3 are not IN yet
+>
+> I have **called** them; they are not **posted**. **Do not compact the Runtime
+> ring until all three land** — `runtime-implementer` is at **ctx 43%** and
+> climbing while idle, held there deliberately. The instant they post: compact the
+> ring, then re-anchor `B2F` (task #43) before any kickoff.
+>
+> **The gates below were discharged for #967 — kept as the record of HOW, not as
+> outstanding work:**
+>
+> - ✅ **§14, read fresh from the object:** `dec_47pytrbkrzk80` → `status:
+>   resolved`, `resolved_by: agt_37reqftfe6g00` (non-null), `resolved_at`
+>   18:37:21Z; its text binds the publisher handoff to this exact SHA and names
+>   the scope (four `ken-runtime` paths + report/predictions, no `spec/` or
+>   `conformance/`).
+> - ✅ **Merge re-derived against `75d479c7`, post-condition predicted first:**
+>   candidate 6 files vs main-side 28, **intersection empty**; `merge-tree` rc 0 →
+>   tree `b2ad4c44`; result-vs-`main` = **exactly 6 files, 6/6 own-side, 0
+>   foreign**. The two-merge-stale base reverts nothing. **Published unrebased and
+>   unamended** — the tracker was already blob-identical on `main`, so no
+>   tracker-sync commit was needed and the frozen SHA stayed intact.
+>
+> **★ HOW THE §14 STEP GOT UNBLOCKED — it had been deferred a whole session on a
+> false premise.** My own note said *"`list_decisions` returns ~779k chars, parse
+> the persisted file"* — but **there is no persisted decisions file on this box**
+> (the server is remote, `moot` has no decisions subcommand, the space exposes no
+> MCP resources). The workaround pointed at nothing. **An oversized MCP result is
+> written to a `tool-results/` file and the path is returned in the error** — so
+> the call is fine, you just read the overflow. Recorded as a memory; the same
+> trick makes any large convo query cheap.
+>
+> ⇒ **Tell the operator their local uncommitted `.github/CODEOWNERS` in
+> `/workspaces/ken` can be discarded** — identical content is on `main`. (Said
+> once already; repeat only if they ask.)
+>
+> ⛔⛔ **THE STALE-VERIFICATION TRAP THAT NEARLY LANDED — keep this.** I had
+> verified `37d06ef8` (empty intersection, tree `ce8631ad`, 12/12 own-side); the
+> Architect then **BLOCKED** it. `8d577249` + `293f26ed` sit on top, aggregating
+> **+603 −97 across four files** (`abi.rs` +331, `static_transition.rs` +205). The
+> leader's *"final fold is comment-only in `planning/static_transition.rs`"* is
+> **true of the last commit** and flatly false as *"the delta since the SHA you
+> verified."* **This is the trap in its most plausible dress: an accurate sentence
+> answering a narrower question than the one you are asking.** State a diff claim
+> against the anchor your reader holds.
+>
+> **Still owed by me:** (1) retros 3/3 IN → compact the Runtime ring; (2)
+> re-anchor the `B2F` frame (task #43); (3) publish this batch —
+> `steward/work` carries the briefing, the `B2O-CHECK` re-anchor, the `B2R`
+> node flip, and the regenerated tracker.
+>
+> ### ▶ ALSO IN FLIGHT — read this before acting
+>
+> - **The whole Runtime ring is HOLDING on #967 and owes me nothing.**
+>   `runtime-qa` approved the exact SHA; `runtime-leader` resolved the Decision;
+>   `architect` approved and awaits the publisher result; `runtime-implementer`
+>   independently reproduced the `37d06ef8..293f26ed` aggregate and is holding.
+> - **`runtime-implementer` sits at ctx ~42% and CLIMBS WHILE IDLE** (36→42% with
+>   no turn of its own — a subscribed seat accrues context from thread events). ⚠
+>   Its compaction seam is **after retros, before the next WP**, so **do not
+>   compact it until its B2R retro is posted** — a compaction eats an un-posted
+>   retro. ⇒ **But the calculus is softer than it looks:** its work is on
+>   `origin/wp/RT-FNSPLIT-B2R-representation-abi`, so it is git-recoverable, not
+>   context-only. Above ~55–60% compacting is viable *if* paired with "re-read your
+>   candidate from the branch before folding."
+> - ✅ **TRIAGED AND CLOSED — the `integrator` "PR #365 awaiting Steward routing"
+>   is a PHANTOM.** ⛔ **`list_participants` renders a status timestamp as bare
+>   `(15:08)` with NO DATE**, so a **seventeen-day-stale** line reads as
+>   hours-old and manufactures an open loop that is not there. Measured:
+>   `befc2dc4` is dated **2026-07-08**, no ref contains it, and its content landed
+>   as squash commit **`3859aaff`** — it *is* `scripts/scripted-pr-automerge.sh`,
+>   the script that published #967. The seat is retired
+>   (`agent/playbooks/federation/integrator.md` no longer exists on `main`, and it
+>   has no tmux session), but its participant record persists and will keep
+>   surfacing on every roster read. ⇒ **Treat any `integrator` status as a
+>   tombstone, not a request.** Same family as the squash-merge trap: branch-ahead
+>   ⇏ unmerged, and a stale status ⇏ a live obligation.
+> - ⛔ **DO NOT KICK RUNTIME ON `B2F` WITHOUT RE-ANCHORING ITS FRAME FIRST (task
+>   #43).** `B2F`'s deps (`B2A-S`, `B2O`, `B2R`) are all met the moment #967 lands,
+>   so it *looks* like the frontier — but its 707-line frame predates the
+>   hard-stop-#9 re-slice completing. It **never names `RT-FNSPLIT-B2R`**, and
+>   still calls the representation/call-ABI unit *"(i) A prerequisite unit"* that
+>   is *"missing and unowned"* (`:63`, `:78`). ★ **A stale "what's broken" is worse
+>   than a stale "what's done"** — it would send the ring to rebuild exactly what
+>   `B2R` just landed. Its top block also still reads `HELD AT HARD-STOP #9` (`:14`)
+>   though `:645` records the pull as consumed, so a cold reader hits the hold
+>   first. Node is still `draft`/`L`.
+>   ⇒ **Mechanical tell worth reusing: grep a parent frame for the carved-out
+>   child's node ID. Zero hits after a split is the defect.**
+> - ✅ Landed earlier today: **#965** (`3c4f9107`, B2R frame `AC-11` +
+>   `B2O-CHECK` + `pane-busy.sh`) and **#966** (`75d479c7`, org-rename sweep +
+>   `pin-a-property` §6a/§10 + four memory scopes), both blob-verified per file.
 >
 > ### ⭐⭐ `AC-11` FIRED, INSIDE TEN MINUTES, AND THIS IS THE RESULT WORTH KEEPING
 >

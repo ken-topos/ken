@@ -64,6 +64,45 @@ Worked examples that cost this project hard-stops:
 | two concrete types are module-private (**not nameable**) | no outside consumer can key on them | **naming ≠ capability**: derived `Ord`, an `impl Trait` return, or a derived ordinal leaks usable structure without leaking the name |
 | the budget balances | the encoding is complete | a balanced total says nothing about which rows exist |
 
+### 2a. ⭐ A predicted POPULATION must include registration-driven fan-out
+
+**Promoted from `RT-FNSPLIT-B2R` — named independently by the leader, QA, and the
+implementer, which is as strong a signal as this corpus produces.**
+
+An AC predicted **0** affected rows and measured **13**. Nothing was subtle: the
+WP added one production file and **registered** it in
+`BACKEND_PRODUCTION_SOURCES`. Every pin that *iterates* that list therefore took
+a new input. **One registration changed the population of every consumer of the
+list.**
+
+> ⛔ **When you predict what a change touches, enumerate its DERIVED consumers,
+> not the files the diff edits.** Registering a name in a list that pins iterate
+> is not an edit to those pins — it is an edit to **their input**, and a diff
+> viewer will never show it.
+
+**The mechanical check, before you write the number down:**
+
+```sh
+rg -n '<THE_REGISTRY_CONST>' crates/*/src crates/*/tests   # who ITERATES it
+```
+
+Each hit is a consumer whose population your registration just changed. The
+prediction is over *that* set ∪ the directly edited files.
+
+★★ **The part that makes this a routing lesson, not a knowledge one.** The
+implementer's own retro identified the governing rule and where it already lives
+— the fleet lesson
+[[adding-a-file-to-a-globbed-corpus-trips-oracles-you-did-not-enumerate]] — and
+said plainly: *"Not a new lesson — an unapplied one, and I didn't apply it when
+writing my own prediction either."*
+
+⇒ **The corpus already held the answer and nobody surfaced it at framing time.**
+That is a **frame-authoring duty on the Steward**, not a gap in the ring's
+knowledge: a frame that adds a file to any globbed or registered set must **cite
+that lesson by name** and make the fan-out enumeration an **AC**, not a hope.
+A lesson that exists but is not routed to the moment of use is, operationally,
+a lesson the fleet does not have.
+
 ## 3. Attempt a compile-preserving evasion — for EVERY pin
 
 **Try to defeat your own pin without breaking the build.** If you cannot
@@ -172,6 +211,43 @@ free.**
   load-bearing. This validator already carried a comment correcting exactly that
   mistake about one of its laws; the identical hazard applied to every arm below
   that comment.
+
+### ⛔⛔ THE WITNESS NEEDS ITS OWN AXIS DISCIPLINE
+
+*— or this rule reproduces the very bug it exists to catch.*
+
+**Promoted from `RT-FNSPLIT-B2R`, named independently by the implementer and by
+QA.** The rule above was applied, found two of six advertised classes subsumed,
+and the dead code was deleted pre-review. **One of those two deletions was
+wrong**, and the Architect caught it. The reason it looked right:
+
+> *"Both witnesses I tried mutated `planned_node`. Both landed on identity
+> detectors, and I read concordance as coverage."*
+
+The row was **green**, was **named** *"edge layout disagreement"*, asserted an
+**exact** error — and tested **identity**. The composition cited as subsuming it
+proved target *identity* and never layout *agreement*. ⇒ **The `AC-11` control
+itself contained precisely the defect `AC-11` exists to detect.** A mechanism
+that checks "advertised vs enforced" is not exempt from being advertised-but-not-
+enforced; see [[a-fix-can-reproduce-its-own-bug-one-layer-up]].
+
+**So the exact-error assertion is necessary and NOT sufficient. Add two rules:**
+
+- ⭐ **Vary the axis you claim, hold the neighbouring axes FIXED.** A witness for
+  a *layout* law must perturb layout while keeping identity intact. Perturb the
+  wrong axis and an earlier detector fires first — you observe a rejection, you
+  assert its exact message, and you have measured a different law. **Two witnesses
+  that mutate the same field are one witness.**
+- ⛔ **"No witness found" is evidence about the witnesses you could think of,
+  never about the property.** Record it as *"no witness via ⟨the routes tried⟩"*,
+  naming them, so the next reader can see the search was narrow. **A deletion
+  needs a positive account of what subsumes the arm — on the arm's own axis —
+  not a failure to construct an input.**
+
+⚠ **The tell that you are about to make this mistake:** your witnesses agree, and
+you read the agreement as coverage. Agreement between two probes down the same
+route is not corroboration — it is one probe run twice.
+[[agreement-is-not-corroboration-when-a-premise-was-inherited]].
 
 ★ **Why this is a pin-authoring lesson and not a code-review nicety: the gap is
 INHERITED SILENTLY.** A downstream consumer reads the validator as its guarantee

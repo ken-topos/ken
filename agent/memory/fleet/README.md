@@ -7,6 +7,7 @@ some roles need belongs in a narrower scope.
 
 | Lesson | One-line |
 |---|---|
+| [a-claim-accurate-about-something-narrower-than-its-reader-infers](a-claim-accurate-about-something-narrower-than-its-reader-infers.md) | The most plausible dress a false handoff wears is a TRUE sentence answering a narrower question than the reader is asking — name the anchor in the same sentence as the claim |
 | [a-deferral-is-honest-a-deferral-that-reads-as-delivery-is-not](a-deferral-is-honest-a-deferral-that-reads-as-delivery-is-not.md) | A WP can merge with its headline deferred and no test fails — ground GATE status in the gate's own text, never roll it up from WP status |
 | [a-dependency-is-met-when-you-can-write-the-obligation](a-dependency-is-met-when-you-can-write-the-obligation.md) | "Merged" ≠ "unblocked": a bridge gives you the SPINE, not the ELEMENTS — try to WRITE the obligation before you kick the dependent |
 | [a-frozen-api-is-frozen-at-its-type-not-its-behavior](a-frozen-api-is-frozen-at-its-type-not-its-behavior.md) | "All the old operations still work" is NOT signature compatibility — a spec-pinned API is frozen at its TYPE; a green suite is structurally blind because the same diff migrates every in-repo caller, so grow a frozen surface ADDITIVELY under a new name |
