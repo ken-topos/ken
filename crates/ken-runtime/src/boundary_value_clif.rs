@@ -3499,20 +3499,29 @@ mod tests {
         b.ins().return_(&[word]);
     }
 
-    /// `(base, len, seed) -> word` — build a `Bytes` whose CONTENT is derived
-    /// from a run-time seed, at a run-time length.
-    fn emit_bytes_producer(
+    /// `(base, len, seed, class) -> word` — build a span-carrying value whose
+    /// CONTENT is derived from a run-time seed, at a run-time length.
+    ///
+    /// ⛔ **The class is a run-time PARAMETER, not a baked constant, and that
+    /// is the point.** The previous candidate had a `Bytes`-only producer and
+    /// asserted the `String` arm was "covered, since it shares every code path
+    /// but the class" — but the class is exactly the axis `store_bytes_len`
+    /// and `store_byte` guard on, so it is the one path that is *not* shared.
+    /// QA defeated that by narrowing `store_bytes_len`'s `class_guard` to
+    /// `Bytes` alone: every test stayed green because no test had ever asked
+    /// emitted code to *build* a `String`. One body driven with both classes
+    /// makes the guard's second arm reachable.
+    fn emit_span_producer(
         b: &mut FunctionBuilder<'_>,
         refs: &Refs,
         p: &[cranelift_codegen::ir::Value],
         ptr: cranelift_codegen::ir::Type,
     ) {
-        let (base, len, seed) = (p[0], p[1], p[2]);
+        let (base, len, seed, class) = (p[0], p[1], p[2], p[3]);
         let out = cell(b, ptr);
         let tag = b
             .ins()
             .iconst(types::I64, BoundaryTag::PersistentGround as i64);
-        let class = b.ins().iconst(types::I64, BoundaryClass::Bytes as i64);
         let zero = b.ins().iconst(types::I64, 0);
         guard(b, refs.alloc, &[base, tag, class, zero, out]);
         let word = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
@@ -3626,106 +3635,173 @@ mod tests {
         assert_eq!(seen.len(), 4, "AC-4: every case must be distinguishable");
     }
 
-    /// **`AC-4` — equal-length, different-content `Bytes` are distinguishable
-    /// by a separately compiled consumer.**
-    #[test]
-    fn b2v_a_separately_compiled_consumer_distinguishes_equal_length_bytes() {
-        let (_pm, produce) = compile_producer(3, emit_bytes_producer);
-        let (_c1, byte_code) = compile_probe(Probe::Binary(|h| h.byte));
-        let (_c2, scalar_code) = compile_probe(Probe::Unary(|h| h.scalar));
-
-        let len = 6u64;
-        let mut contents = Vec::new();
-        for seed in [10u64, 11, 200] {
-            let mut store = BoundaryValueStore::new();
-            let mut f = bind_with(
-                &mut store,
-                BoundaryArenaBuilder::new(),
-                (2, 0, 32),
-                (0, 0, 0),
-            );
-            let _ = &mut f;
-            let word = BoundaryWord(run3(produce, f.base, BoundaryWord(len), seed) as u64);
-            assert_eq!(
-                word.tag(),
-                Some(BoundaryTag::PersistentGround),
-                "AC-4: the producer minted a Bytes handle ({})",
-                word.0 as i64
-            );
-            assert_eq!(
-                run2(scalar_code, f.base, word),
-                len as i64,
-                "the length is still readable"
-            );
-            let read: Vec<i64> = (0..len).map(|i| run3(byte_code, f.base, word, i)).collect();
-            assert_eq!(
-                read,
-                (0..len)
-                    .map(|i| ((seed + i) & 0xff) as i64)
-                    .collect::<Vec<_>>(),
-                "AC-4: emitted code must read the RUNTIME bytes"
-            );
-            contents.push(read);
-        }
-        // ⚠ POSITIVE CONTROL — all three are the SAME length, so anything that
-        // discriminated by length would collapse them.
-        contents.dedup();
-        assert_eq!(
-            contents.len(),
-            3,
-            "AC-4: equal-length values must differ by CONTENT"
+    /// Drive the emitted span producer once and read the result back
+    /// byte-by-byte with two more separately compiled bodies. Returns the
+    /// content emitted code recovered.
+    ///
+    /// The construction is `alloc(PersistentGround, class)` →
+    /// `store_bytes_len(len)` → `store_byte(i, seed + i)` for every `i`, all
+    /// from CLIF, at run-time bounds. Nothing about the result is known when
+    /// the producer body is compiled.
+    fn emitted_span_roundtrip(
+        produce: *const u8,
+        byte_code: *const u8,
+        scalar_code: *const u8,
+        class_code: *const u8,
+        class: BoundaryClass,
+        len: u64,
+        seed: u64,
+    ) -> Vec<i64> {
+        let mut store = BoundaryValueStore::new();
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (2, 0, 32),
+            (0, 0, 0),
         );
+        let produced = run4(produce, f.base, len, seed, class as u64);
+        assert!(
+            produced > 0,
+            "AC-4: emitted {class:?} construction must succeed, got status {produced}"
+        );
+        let word = BoundaryWord(produced as u64);
+        assert_eq!(
+            word.tag(),
+            Some(BoundaryTag::PersistentGround),
+            "AC-4: the producer minted a persistent handle ({})",
+            word.0 as i64
+        );
+        assert_eq!(
+            run2(class_code, f.base, word),
+            class as i64,
+            "AC-4: emitted code must build the class it was ASKED for"
+        );
+        assert_eq!(
+            run2(scalar_code, f.base, word),
+            len as i64,
+            "the length is still readable"
+        );
+        let read: Vec<i64> = (0..len).map(|i| run3(byte_code, f.base, word, i)).collect();
+        assert_eq!(
+            read,
+            (0..len)
+                .map(|i| ((seed + i) & 0xff) as i64)
+                .collect::<Vec<_>>(),
+            "AC-4: emitted code must read the RUNTIME bytes it wrote"
+        );
+        read
     }
 
-    /// **`AC-4` — equal-length, different-content `String`s are distinguishable
-    /// through Rust materialization and an emitted consumer.**
+    /// **`AC-4` — emitted code CONSTRUCTS equal-length, different-content
+    /// `Bytes` AND `String`s, and a separately compiled consumer tells them
+    /// apart.**
     ///
-    /// The producer arm is covered by the `Bytes` control above, which shares
-    /// every code path but the class. This one closes the *materialization*
-    /// side: a `String` the store built must be readable byte-by-byte too.
+    /// ⛔ This is the control QA defeated on `ea8d9824`, and the defeat is the
+    /// same failure class as the `store_slot` one this candidate already
+    /// closed: **the `String` arm asserted a property of a path the test never
+    /// walked.** Its handles were materialized in Rust, so narrowing
+    /// `store_bytes_len`'s `class_guard` to `Bytes` alone — which makes
+    /// emitted `String` construction impossible — left every test green.
+    ///
+    /// ⭐ The repair is reachability, not a stronger assertion: the class is a
+    /// **run-time argument** to one emitted body, so both arms of every
+    /// span-writing guard are exercised by emitted code.
     #[test]
-    fn b2v_a_separately_compiled_consumer_distinguishes_equal_length_strings() {
+    fn b2v_emitted_code_constructs_equal_length_bytes_and_strings_by_content() {
+        let (_pm, produce) = compile_producer(4, emit_span_producer);
         let (_c1, byte_code) = compile_probe(Probe::Binary(|h| h.byte));
-        let (_c2, class_code) = compile_probe(Probe::Unary(|h| h.class));
+        let (_c2, scalar_code) = compile_probe(Probe::Unary(|h| h.scalar));
+        let (_c3, class_code) = compile_probe(Probe::Unary(|h| h.class));
 
-        let mut store = BoundaryValueStore::new();
-        let words: Vec<BoundaryWord> = ["alpha", "alpaa", "bravo"]
-            .iter()
-            .map(|text| {
-                materialize_ground(&mut store, &RuntimeGroundValue::String(text.to_string()))
-                    .expect("a String materializes")
-            })
-            .collect();
-        let f = bind(&mut store, BoundaryArenaBuilder::new());
-
+        // ⚠ Every case is the SAME length, so anything discriminating by
+        // length — or by class — collapses them.
+        let len = 6u64;
         let mut contents = Vec::new();
-        for (word, expected) in words.iter().zip(["alpha", "alpaa", "bravo"]) {
-            assert_eq!(
-                run2(class_code, f.base, *word),
-                BoundaryClass::String as i64,
-                "AC-4: the class survives materialization"
-            );
-            let read: Vec<u8> = (0..expected.len() as u64)
-                .map(|i| run3(byte_code, f.base, *word, i) as u8)
-                .collect();
-            assert_eq!(
-                read,
-                expected.as_bytes(),
-                "AC-4: emitted code must read the String's bytes"
-            );
-            contents.push(read);
+        for class in [BoundaryClass::Bytes, BoundaryClass::String] {
+            for seed in [10u64, 11, 200] {
+                contents.push((
+                    class,
+                    emitted_span_roundtrip(
+                        produce,
+                        byte_code,
+                        scalar_code,
+                        class_code,
+                        class,
+                        len,
+                        seed,
+                    ),
+                ));
+            }
         }
-        // ⚠ POSITIVE CONTROL — the first two are equal-length and differ by one
-        // byte in the middle; equal length must not mean equal value.
-        assert_eq!(contents[0].len(), contents[1].len());
-        assert_ne!(contents[0], contents[1]);
         assert_eq!(
             contents
                 .iter()
+                .map(|(_, c)| c)
                 .collect::<std::collections::BTreeSet<_>>()
                 .len(),
             3,
-            "AC-4: every String must be distinguishable by content"
+            "AC-4: equal-length values must differ by CONTENT"
+        );
+        // ⚠ POSITIVE CONTROL for the class axis: the two classes agree on
+        // content for the same seed, so the class cannot be inferred FROM the
+        // content, and the sweep above is genuinely testing both producers.
+        for seed_index in 0..3 {
+            assert_eq!(
+                contents[seed_index].1,
+                contents[seed_index + 3].1,
+                "AC-4: the same seed must produce the same bytes in either class"
+            );
+        }
+    }
+
+    /// **`AC-4` — a `String` the STORE materialized and a `String` emitted code
+    /// CONSTRUCTED are read identically by the same consumer.**
+    ///
+    /// The two producers are the only ones that exist, and the boundary word is
+    /// supposed to be the whole interface between them. This is the pin that
+    /// they agree; without it each producer could carry its own private layout
+    /// and every single-producer control would still be green.
+    #[test]
+    fn b2v_the_two_string_producers_agree_byte_for_byte() {
+        let (_pm, produce) = compile_producer(4, emit_span_producer);
+        let (_c1, byte_code) = compile_probe(Probe::Binary(|h| h.byte));
+        let (_c2, class_code) = compile_probe(Probe::Unary(|h| h.class));
+
+        // Chosen so the emitted `seed + i` walk reproduces it exactly.
+        let text = "defghi";
+        let seed = u64::from(text.as_bytes()[0]);
+
+        let mut store = BoundaryValueStore::new();
+        let word = materialize_ground(&mut store, &RuntimeGroundValue::String(text.to_string()))
+            .expect("a String materializes");
+        let f = bind(&mut store, BoundaryArenaBuilder::new());
+        assert_eq!(
+            run2(class_code, f.base, word),
+            BoundaryClass::String as i64,
+            "AC-4: the class survives materialization"
+        );
+        let materialized: Vec<i64> = (0..text.len() as u64)
+            .map(|i| run3(byte_code, f.base, word, i))
+            .collect();
+        assert_eq!(
+            materialized,
+            text.bytes().map(i64::from).collect::<Vec<_>>(),
+            "AC-4: emitted code must read the store's String bytes"
+        );
+
+        let (_c3, scalar_code) = compile_probe(Probe::Unary(|h| h.scalar));
+        let constructed = emitted_span_roundtrip(
+            produce,
+            byte_code,
+            scalar_code,
+            class_code,
+            BoundaryClass::String,
+            text.len() as u64,
+            seed,
+        );
+        assert_eq!(
+            constructed, materialized,
+            "AC-4: the store's String and an emitted String must be the same bytes"
         );
     }
 
