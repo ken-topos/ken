@@ -1824,6 +1824,7 @@ fn runtime_expr_tag(expr: &RuntimeExpr) -> u32 {
 
 #[cfg(test)]
 mod tests {
+    use super::abi::{AbiCarrier, AbiSlot, AbiSlotKind};
     use super::semantic_ir::{
         build_semantic_plane, DenseRange, PredeclaredFunctionId, RuntimeExprShape, SemanticAtomKind,
         SemanticOperandElement, SemanticOwner, SemanticSourceKind, StaticOriginId,
@@ -4804,5 +4805,501 @@ mod tests {
             "AC-10c: a static body edge repointed inside one unit must be REFUSED \
              by planning, not merely reclassified"
         );
+    }
+
+    // ================================================================
+    // `RT-FNSPLIT-B2R` — the representation and call-ABI contract.
+    //
+    // ⛔ Every control below mutates the **graph, the owner partition, or the
+    // recorded descriptor** — never a Rust spelling. `AC-8` inverts the usual
+    // reflex: a rename, a wrapper, a visibility change, or a `fn` moved between
+    // files MUST leave these green, and a pin that reddens on one of those is a
+    // defect in the pin, reported as such rather than repaired into greenness.
+    // ================================================================
+
+    /// A closure whose captures arrive by the **seed** provenance: the captures
+    /// are symbols resolved against the seed environment at JIT time.
+    fn b2r_seed_closure(captures: &[&str], body: RuntimeExpr) -> RuntimeExpr {
+        RuntimeExpr::Closure {
+            captures: captures.iter().map(|c| (*c).to_string()).collect(),
+            params: vec!["x".to_string()],
+            body: Box::new(body),
+        }
+    }
+
+    /// A closure whose captures arrive by the **lexical** provenance: each
+    /// capture is an arbitrary source expression, planned as a syntax child.
+    fn b2r_lexical_closure(captures: Vec<RuntimeExpr>, body: RuntimeExpr) -> RuntimeExpr {
+        RuntimeExpr::LexicalClosure {
+            captures,
+            params: vec!["x".to_string()],
+            body: Box::new(body),
+        }
+    }
+
+    fn b2r_plan(expr: &RuntimeExpr) -> StaticTransitionPlan<'_> {
+        let declarations = BTreeMap::new();
+        plan_static_transition_graph(expr, &declarations).expect("plannable")
+    }
+
+    /// `AC-1` — descriptor totality over the owner partition, **both
+    /// directions**.
+    ///
+    /// ⚠ A one-directional check passes happily on an orphan, so both are
+    /// asserted: every unit has exactly one descriptor, and every descriptor
+    /// names a member of the partition.
+    ///
+    /// Promise class: **durable invariant** — a relation between two populations,
+    /// not a frozen count.
+    #[test]
+    fn b2r_ac1_every_function_unit_has_exactly_one_descriptor_and_conversely() {
+        let expr = b2r_lexical_closure(Vec::new(), RuntimeExpr::Var(0));
+        let plan = b2r_plan(&expr);
+
+
+        // Non-vacuity FIRST: a plane with one unit would make both directions
+        // true for the wrong reason, and every claim below would be green on a
+        // fixture that never exercised a boundary.
+        assert!(
+            plan.semantic.functions.len() > 1,
+            "the fixture has only one function unit, so totality is trivially \
+             true and this control observes nothing"
+        );
+
+        // Direction 1 — every unit is covered.
+        assert_eq!(
+            plan.abi.descriptors.len(),
+            plan.semantic.functions.len(),
+            "AC-1: the descriptor population is not exact for the function unit \
+             partition"
+        );
+        // Direction 2 — every descriptor names a member, positionally.
+        for (ordinal, descriptor) in plan.abi.descriptors.iter().enumerate() {
+            let function = &plan.semantic.functions[ordinal];
+            assert_eq!(descriptor.function, function.id, "AC-1: descriptor/unit id");
+            assert_eq!(
+                descriptor.planned_node, function.planned_node,
+                "AC-1: a descriptor names a node that is not its unit's seed"
+            );
+        }
+
+        // And an ORPHAN must be refused, so direction 2 is a real detector
+        // rather than a restatement of how the builder happens to loop.
+        let mut orphaned = plan.abi.clone();
+        orphaned.descriptors.pop();
+        let err = orphaned
+            .validate(
+                &plan.semantic,
+                &plan.nodes,
+                &plan.semantic_sources,
+                &plan.edges,
+                &plan.entries,
+            )
+            .expect_err("AC-1: dropping a descriptor must be refused");
+        // ⛔ The EXACT failure, not `is_err()`. A control that reddens does not
+        // confirm which detector caught it, and `is_err()` would stay green if
+        // some unrelated law started firing first.
+        assert!(
+            format!("{err:?}").contains("not exact for the function unit partition"),
+            "AC-1: the orphan was refused, but not by the totality law. Got: {err:?}"
+        );
+    }
+
+    /// `AC-2` / `C1` — **a descriptor post-condition, not a census of the 44
+    /// caller-environment append sites.**
+    ///
+    /// ⭐ The site census is a spelling standing in for a population: the frame
+    /// measured 44 sites across two spellings, and the site `C1` names is in the
+    /// spelling a sweep written against the other one **excludes**. This control
+    /// is mechanism-independent instead — it holds whether the environment is
+    /// appended, cloned, threaded or restructured, and it still holds at the
+    /// 45th site.
+    ///
+    /// Promise class: **durable invariant.**
+    #[test]
+    fn b2r_ac2_an_irrelevant_caller_binding_does_not_change_the_callee_descriptor() {
+        let inner = b2r_lexical_closure(Vec::new(), RuntimeExpr::Var(0));
+        let wrapped = RuntimeExpr::Let {
+            value: Box::new(unit()),
+            body: Box::new(b2r_lexical_closure(Vec::new(), RuntimeExpr::Var(0))),
+        };
+
+        let bare = b2r_plan(&inner);
+        let deeper = b2r_plan(&wrapped);
+
+        // ⚠ Non-vacuity: the extra binding must actually have changed the plan.
+        // Comparing two identical plans would pass for the wrong reason.
+        assert!(
+            deeper.nodes.len() > bare.nodes.len(),
+            "AC-2: the irrelevant binding did not change the plan, so descriptor \
+             invariance is being asserted against an unchanged input"
+        );
+
+        // The unit count is unchanged: an irrelevant binding adds no scheduling
+        // entry and no static body edge.
+        assert_eq!(
+            deeper.semantic.functions.len(),
+            bare.semantic.functions.len(),
+            "AC-2: an irrelevant caller binding changed the function unit count"
+        );
+
+        // ⭐ SHAPE, not identity. `planned_node`/`origin` are positional over the
+        // node table and legitimately move when the table grows; the LAYOUT must
+        // not. This narrowing was recorded in the predictions file (`P2`) BEFORE
+        // measuring, so it is a stated design choice rather than a red assertion
+        // trimmed until it passed.
+        assert_eq!(
+            deeper.abi.shapes().expect("shapes"),
+            bare.abi.shapes().expect("shapes"),
+            "AC-2/C1: adding an irrelevant caller binding changed a callee \
+             descriptor's slot count or layout, which is the caller-depth \
+             dependence this node exists to remove"
+        );
+    }
+
+    /// `AC-3` / `C2` — **both** capture provenances produce a declared slot with
+    /// a declared layout, and they are a **non-degenerate discriminator pair.**
+    ///
+    /// ⚠ A single positive case is green-vs-green under the exact swap it should
+    /// catch. The two provenances are exercised on the **same** closure shape,
+    /// differing only in how their captures arrive, so a collapse of the two into
+    /// one carrier fails **both** sides rather than neither.
+    ///
+    /// ⭐ **Where the real enforcement lives.** That a seed layout is not chosen
+    /// by inspecting the particular runtime value is enforced by the
+    /// **signature**: `AbiCaptureProvenance::carrier` takes no value, and
+    /// `build_abi_plane`'s inputs contain no `RuntimeGroundValue` and no
+    /// `Lowered`. There is nothing to inspect. This test is a positive control
+    /// that the mechanism is reachable and discriminating — not the enforcement.
+    ///
+    /// Promise class: **durable invariant.**
+    #[test]
+    fn b2r_ac3_both_capture_provenances_declare_slots_and_select_distinct_carriers() {
+        let seeded_expr = b2r_seed_closure(&["c"], RuntimeExpr::Var(0));
+        let lexical_expr = b2r_lexical_closure(vec![unit()], RuntimeExpr::Var(0));
+        let seeded = b2r_plan(&seeded_expr);
+        let lexical = b2r_plan(&lexical_expr);
+
+        let seed_capture = b2r_only_capture_slot(&seeded);
+        let lexical_capture = b2r_only_capture_slot(&lexical);
+
+        // Both declare a slot with a declared layout — kind, carrier, ownership,
+        // width and alignment, none of them absent or defaulted.
+        for (label, slot) in [("seed", seed_capture), ("lexical", lexical_capture)] {
+            assert_eq!(slot.kind, AbiSlotKind::Capture, "AC-3: {label} slot kind");
+            assert_eq!(slot.width_bytes, 8, "AC-3: {label} declared width");
+            assert_eq!(slot.align_bytes, 8, "AC-3: {label} declared alignment");
+        }
+
+        // ⭐ The discriminator: the two provenances select DIFFERENT carriers on
+        // the same closure shape. Collapsing them would fail this, and a swap of
+        // the two would fail it too.
+        assert_eq!(
+            seed_capture.carrier,
+            AbiCarrier::GroundValueCarrier,
+            "AC-3/C2: a seed capture must travel in the fixed closed carrier for \
+             the permitted ground-value family"
+        );
+        assert_eq!(
+            lexical_capture.carrier,
+            AbiCarrier::ValueWord,
+            "AC-3/C2: a lexical capture travels in the ordinary value carrier"
+        );
+        assert_ne!(
+            seed_capture.carrier, lexical_capture.carrier,
+            "AC-3/C2: the two provenances collapsed to one carrier, so a pin \
+             keyed to either one would be a spelling standing in for the \
+             population"
+        );
+    }
+
+    /// `AC-4` / `C3` — *the transported payload may change; the ABI may not.*
+    ///
+    /// Two required controls, plus the positive rejection control that stops the
+    /// negative half from passing because nothing reached the checker.
+    ///
+    /// Promise class: **durable invariant** for the invariance halves; **durable
+    /// mutation proof** for the rejection half.
+    #[test]
+    fn b2r_ac4_the_abi_is_invariant_under_payload_and_depth_and_rejects_an_implicit_tail() {
+        // Control 1 — caller DEPTH changes, per-origin descriptor is identical.
+        let shallow_expr = b2r_seed_closure(&["c"], RuntimeExpr::Var(0));
+        let deep_expr = RuntimeExpr::Let {
+            value: Box::new(unit()),
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(unit()),
+                body: Box::new(b2r_seed_closure(&["c"], RuntimeExpr::Var(0))),
+            }),
+        };
+        let shallow = b2r_plan(&shallow_expr);
+        let deep = b2r_plan(&deep_expr);
+        assert!(
+            deep.nodes.len() > shallow.nodes.len() + 1,
+            "AC-4: the depth control did not actually deepen the caller"
+        );
+        assert_eq!(
+            deep.abi.shapes().expect("shapes"),
+            shallow.abi.shapes().expect("shapes"),
+            "AC-4/C3: the per-origin descriptor varied with CALLER DEPTH"
+        );
+
+        // Control 2 — the seed capture's payload changes within its declared
+        // carrier class. ⭐ Renaming the captured symbol changes WHICH ground
+        // value the seed environment will supply at JIT time; the descriptor's
+        // shape must not move. The carrier cannot vary with the value because no
+        // value is in scope to vary it — this control observes that the arity and
+        // layout are likewise untouched.
+        let other_payload_expr = b2r_seed_closure(&["a-different-capture"], RuntimeExpr::Var(0));
+        let other_payload = b2r_plan(&other_payload_expr);
+        assert_eq!(
+            other_payload.abi.shapes().expect("shapes"),
+            shallow.abi.shapes().expect("shapes"),
+            "AC-4/C3: the descriptor shape moved when the transported payload did"
+        );
+
+        // ⚠ Control 3 — the POSITIVE control. "The validator rejects an implicit
+        // caller-env tail" passes for any reason, including that nothing ever
+        // reached the checker. So construct one and observe the rejection.
+        let mut tailed = shallow.abi.clone();
+        let last = tailed
+            .descriptors
+            .last_mut()
+            .expect("the fixture has at least one descriptor");
+        last.slots.len += 1;
+        let tail_slot = *tailed.slots.last().expect("the fixture has slots");
+        tailed.slots.push(tail_slot);
+        let err = tailed
+            .validate(
+                &shallow.semantic,
+                &shallow.nodes,
+                &shallow.semantic_sources,
+                &shallow.edges,
+                &shallow.entries,
+            )
+            .expect_err("AC-4/C3: an implicit caller-environment tail must be REFUSED");
+        assert!(
+            format!("{err:?}").contains("implicit caller-environment tail"),
+            "AC-4/C3: the tail was refused, but not by the tail law -- a control \
+             that reddens does not confirm WHICH detector caught it. Got: {err:?}"
+        );
+    }
+
+    /// `AC-5` / `C4` — cross-module linking is a **checked** exclusion, paired
+    /// with a positive intra-module control so the exclusion is distinguishable
+    /// from a gap.
+    ///
+    /// Promise class: **durable mutation proof** plus a positive control.
+    #[test]
+    fn b2r_ac5_an_imported_capture_edge_is_refused_and_intra_module_recursion_is_not() {
+        // The exclusion. A lexical closure's captures are arbitrary source
+        // expressions, so this is a real plan in which an imported value would
+        // have to cross into a frame and be given a carrier.
+        let imported = b2r_lexical_closure(
+            vec![RuntimeExpr::ImportedDeclarationRef {
+                symbol: "decl:other::thing".to_string(),
+                dependency: "other".to_string(),
+                dependency_semantic_hash: "hash".to_string(),
+            }],
+            RuntimeExpr::Var(0),
+        );
+        let declarations = BTreeMap::new();
+        let err = match plan_static_transition_graph(&imported, &declarations) {
+            Ok(_) => panic!(
+                "AC-5/C4: an imported capture edge must be REFUSED before emission, \
+                 and it planned green instead"
+            ),
+            Err(err) => err,
+        };
+        assert!(
+            matches!(err, CraneliftBackendError::Unsupported(ref u) if u.construct == "ImportedDeclarationRef"),
+            "AC-5/C4: the refusal must be the EXISTING dependency-linking \
+             unsupported result, not a generic planner error. Got: {err:?}"
+        );
+
+        // ⚠ The positive control. Without it, the assertion above is
+        // indistinguishable from a planner that refuses closures generally.
+        let intra = b2r_lexical_closure(
+            vec![RuntimeExpr::DeclarationRef {
+                symbol: "decl:fixture::b2o".to_string(),
+            }],
+            RuntimeExpr::Var(0),
+        );
+        let plan = plan_static_transition_graph(&intra, &declarations)
+            .expect("AC-5/C4: an INTRA-module declaration capture must plan green");
+        assert!(
+            plan.abi.descriptors.len() > 1,
+            "AC-5/C4: the positive control produced no boundary, so it does not \
+             discriminate"
+        );
+    }
+
+    /// `AC-6` — **inert.** The ABI plane declares and validates; it never emits.
+    ///
+    /// ⚠ MEASURED: the production region of `abi.rs` contains no emission
+    /// construct. CLAIMED: exactly that. THE GAP: a source census cannot see an
+    /// executable edge, and inertness is pinned BEHAVIOURALLY by
+    /// `correspondence_adds_no_emitted_unit_to_the_production_census`. This is a
+    /// declaration inventory that makes a new emission construct loud.
+    ///
+    /// Promise class: **durable invariant.**
+    #[test]
+    fn b2r_ac6_the_abi_plane_declares_no_emission_construct() {
+        let abi = include_str!("static_transition/abi.rs");
+        let production = abi
+            .split_once("\n#[cfg(test)]\nmod tests {")
+            .map_or(abi, |(before, _)| before);
+
+        // ⚠ POSITIVE CONTROL FIRST. Every assertion below is a NEGATIVE check,
+        // and a negative check passes for any reason -- including a broken
+        // comment-stripper that returns 0 for everything. So prove the
+        // instrument can SEE before trusting what it does not see.
+        assert!(
+            b2r_code_identifier_occurrences(production, "AbiCarrier") > 0,
+            "AC-6: the instrument reports zero occurrences of a token that is \
+             certainly present in the production region, so its zeros below mean \
+             nothing"
+        );
+        // And prove it reads CODE rather than comments: `FunctionBuilder` appears
+        // in this module's doc comments (denying that it emits one), so a
+        // stripper that failed to strip would report a non-zero count for it and
+        // the real assertion below would redden for the wrong reason.
+        assert!(
+            abi.contains("FunctionBuilder"),
+            "AC-6: the module no longer MENTIONS the construct it disclaims, so \
+             the comment-stripping half of this instrument is untested"
+        );
+
+        // Comment-stripped and tokenized, so the doc comments that DENY emitting
+        // (and must keep saying so) do not fire the oracle that checks it.
+        for forbidden in [
+            "FunctionBuilder",
+            "define_function",
+            "declare_function",
+            "ins",
+            "Signature",
+        ] {
+            assert_eq!(
+                b2r_code_identifier_occurrences(production, forbidden),
+                0,
+                "AC-6: `{forbidden}` appears in the ABI plane's production code. \
+                 This node is INERT: no new callable target unit, call edge, \
+                 dispatch edge, callback, flag, alternate entry, encoder or \
+                 decoder lands here -- `RT-FNSPLIT-B2F` performs the atomic \
+                 switch-over."
+            );
+        }
+    }
+
+    /// `AC-7` — no oracle, no dependency. The ABI plane parses no source text.
+    ///
+    /// Promise class: **durable invariant.**
+    #[test]
+    fn b2r_ac7_the_abi_plane_adds_no_parser_and_no_dependency_edge() {
+        let abi = include_str!("static_transition/abi.rs");
+        let production = abi
+            .split_once("\n#[cfg(test)]\nmod tests {")
+            .map_or(abi, |(before, _)| before);
+
+        // ⚠ POSITIVE CONTROL. Same reasoning as `AC-6`: without it, a broken
+        // instrument reports a clean bill of health it never measured.
+        assert!(
+            b2r_code_identifier_occurrences(production, "AbiPlane") > 0,
+            "AC-7: the instrument reports zero occurrences of a token that is \
+             certainly present, so its zeros below mean nothing"
+        );
+
+        for forbidden in ["syn", "proc_macro2", "quote", "include_str"] {
+            assert_eq!(
+                b2r_code_identifier_occurrences(production, forbidden),
+                0,
+                "AC-7: `{forbidden}` appears in the ABI plane. The population is \
+                 the owner partition consumed as DATA; a source-parsing oracle \
+                 is exactly the mechanism `B2O` spent four candidate SHAs ruling \
+                 out."
+            );
+        }
+    }
+
+    /// The single capture slot of the fixture's one closure unit.
+    fn b2r_only_capture_slot(plan: &StaticTransitionPlan<'_>) -> AbiSlot {
+        let mut found = Vec::new();
+        for descriptor in &plan.abi.descriptors {
+            let start = descriptor.slots.start as usize;
+            let end = start + descriptor.slots.len as usize;
+            for slot in &plan.abi.slots[start..end] {
+                if slot.kind == AbiSlotKind::Capture {
+                    found.push(*slot);
+                }
+            }
+        }
+        assert_eq!(
+            found.len(),
+            1,
+            "the fixture must declare exactly one capture slot, or this helper \
+             is silently picking one of several"
+        );
+        found[0]
+    }
+
+    /// Whole-token occurrences of `needle` in `source`'s **code**, with line and
+    /// block comments stripped.
+    ///
+    /// ⛔ Tokenized rather than substring-matched: `line.contains("ins")` is a
+    /// claim about formatting and fires on `instruction`, `against`, and every
+    /// other word containing those letters.
+    fn b2r_code_identifier_occurrences(source: &str, needle: &str) -> usize {
+        let mut code = String::with_capacity(source.len());
+        let mut rest = source;
+        let mut depth = 0usize;
+        while !rest.is_empty() {
+            if depth > 0 {
+                if let Some(open) = rest.find("/*") {
+                    if rest.find("*/").is_none_or(|close| open < close) {
+                        depth += 1;
+                        rest = &rest[open + 2..];
+                        continue;
+                    }
+                }
+                match rest.find("*/") {
+                    Some(close) => {
+                        depth -= 1;
+                        rest = &rest[close + 2..];
+                    }
+                    None => break,
+                }
+                continue;
+            }
+            let block = rest.find("/*");
+            let line = rest.find("//");
+            match (block, line) {
+                (Some(b), None) => {
+                    code.push_str(&rest[..b]);
+                    code.push(' ');
+                    depth = 1;
+                    rest = &rest[b + 2..];
+                }
+                (Some(b), l) if l.is_none_or(|l| b < l) => {
+                    code.push_str(&rest[..b]);
+                    code.push(' ');
+                    depth = 1;
+                    rest = &rest[b + 2..];
+                }
+                (_, Some(l)) => {
+                    code.push_str(&rest[..l]);
+                    code.push(' ');
+                    rest = match rest[l..].find('\n') {
+                        Some(nl) => &rest[l + nl..],
+                        None => "",
+                    };
+                }
+                (None, None) => {
+                    code.push_str(rest);
+                    rest = "";
+                }
+            }
+        }
+        code.split(|c: char| !c.is_alphanumeric() && c != '_')
+            .filter(|token| *token == needle)
+            .count()
     }
 }
