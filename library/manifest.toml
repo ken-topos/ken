@@ -42,6 +42,7 @@ sources = [
 validation = [
   "manifest-coverage",
   "manifest-completeness",
+  "document-kind",
   "links",
   "source-anchors",
   "availability-label",
@@ -69,6 +70,7 @@ sources = [
 validation = [
   "manifest-coverage",
   "manifest-completeness",
+  "document-kind",
   "links",
   "source-anchors",
   "availability-label",
@@ -105,6 +107,7 @@ sources = [
 validation = [
   "manifest-coverage",
   "manifest-completeness",
+  "document-kind",
   "links",
   "source-anchors",
   "availability-label",
@@ -132,6 +135,7 @@ sources = [
 validation = [
   "manifest-coverage",
   "manifest-completeness",
+  "document-kind",
   "links",
   "source-anchors",
   "availability-label",
@@ -163,6 +167,7 @@ sources = [
 validation = [
   "manifest-coverage",
   "manifest-completeness",
+  "document-kind",
   "links",
   "source-anchors",
   "availability-label",
@@ -200,6 +205,7 @@ sources = [
 validation = [
   "manifest-coverage",
   "manifest-completeness",
+  "document-kind",
   "links",
   "source-anchors",
   "availability-label",
@@ -233,6 +239,7 @@ sources = [
 validation = [
   "manifest-coverage",
   "manifest-completeness",
+  "document-kind",
   "links",
   "source-anchors",
   "availability-label",
@@ -272,6 +279,7 @@ sources = [
 validation = [
   "manifest-coverage",
   "manifest-completeness",
+  "document-kind",
   "links",
   "source-anchors",
   "availability-label",
@@ -323,6 +331,7 @@ sources = [
 validation = [
   "manifest-coverage",
   "manifest-completeness",
+  "document-kind",
   "links",
   "source-anchors",
   "availability-label",
@@ -344,6 +353,7 @@ sources = [
 validation = [
   "manifest-coverage",
   "manifest-completeness",
+  "document-kind",
   "links",
   "source-anchors",
   "availability-label",
@@ -370,6 +380,7 @@ sources = [
 validation = [
   "manifest-coverage",
   "manifest-completeness",
+  "document-kind",
   "links",
   "source-anchors",
   "availability-label",
@@ -412,6 +423,7 @@ sources = [
 validation = [
   "manifest-coverage",
   "manifest-completeness",
+  "document-kind",
   "links",
   "source-anchors",
   "availability-label",
@@ -439,6 +451,7 @@ sources = [
 validation = [
   "manifest-coverage",
   "manifest-completeness",
+  "document-kind",
   "links",
   "source-anchors",
   "availability-label",
@@ -458,6 +471,7 @@ sources = ["library/manifest.toml", "library/REVISION"]
 validation = [
   "manifest-coverage",
   "manifest-completeness",
+  "document-kind",
   "links",
   "source-anchors",
   "availability-label",

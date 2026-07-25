@@ -5,6 +5,8 @@
 //! continuation, cleanup, source, and affine state travels as constant-width
 //! IDs into hash-consed persistent stores.
 
+mod semantic_ir;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
@@ -12,6 +14,7 @@ use super::{
     RuntimeDeclarationKind,
 };
 use crate::RuntimeExpr;
+use semantic_ir::{build_semantic_plane, SemanticPlane, SemanticSourceSeed};
 
 pub(super) const MAX_HELPERS_PER_STATIC_SOURCE: usize = 8;
 
@@ -160,6 +163,8 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan {
     store_depths: Vec<u32>,
     evidence: Vec<EdgeEvidence>,
     planned_helpers: Vec<PlannedHelperKey>,
+    semantic_sources: Vec<SemanticSourceSeed>,
+    semantic: SemanticPlane,
 }
 
 #[cfg(test)]
@@ -184,6 +189,29 @@ struct BoundaryACensus {
     max_affine_depth: u32,
     max_source_return_depth: u32,
     source_return_resume_nodes: usize,
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct BoundaryB1Census {
+    opcode_vocabulary: usize,
+    distinct_origins: usize,
+    ir_records: usize,
+    semantic_edges: usize,
+    helper_definitions: usize,
+    definitions_per_origin: usize,
+    all_out_of_line_operand_elements: usize,
+    duplicate_origin_definitions: usize,
+    post_origin_clones: usize,
+    max_definitions_per_origin: usize,
+    descriptor_bytes: usize,
+    program_bytes: usize,
+    record_bytes: usize,
+    operand_element_bytes: usize,
+    capture_layout_bytes: usize,
+    capture_slot_bytes: usize,
+    ruled_child_bytes: usize,
+    function_bytes: usize,
 }
 
 struct Planner {
@@ -224,6 +252,8 @@ impl Planner {
                 store_depths: Vec::new(),
                 evidence: Vec::new(),
                 planned_helpers: Vec::new(),
+                semantic_sources: Vec::new(),
+                semantic: SemanticPlane::default(),
             },
             store_interner: BTreeMap::new(),
             next_source: 0,
@@ -231,9 +261,10 @@ impl Planner {
             trap_terminal: StaticNodeId(0),
         };
         let terminal_owner = planner.source()?;
-        planner.terminal = planner.node(TransitionKind::Terminal, terminal_owner, frame)?;
+        planner.terminal = planner.control_node(TransitionKind::Terminal, terminal_owner, frame)?;
         let trap_owner = planner.source()?;
-        planner.trap_terminal = planner.node(TransitionKind::TrapTerminal, trap_owner, frame)?;
+        planner.trap_terminal =
+            planner.control_node(TransitionKind::TrapTerminal, trap_owner, frame)?;
         Ok(planner)
     }
 
@@ -246,7 +277,7 @@ impl Planner {
         Ok(StaticSourceId(id))
     }
 
-    fn node(
+    fn push_node(
         &mut self,
         kind: TransitionKind,
         owner: StaticSourceId,
@@ -265,6 +296,33 @@ impl Planner {
             .planned_helpers
             .push(PlannedHelperKey::node(kind, id));
         Ok(id)
+    }
+
+    fn control_node(
+        &mut self,
+        kind: TransitionKind,
+        owner: StaticSourceId,
+        frame: DynamicActivationFrame,
+    ) -> Result<StaticNodeId, CraneliftBackendError> {
+        let node = self.push_node(kind, owner, frame)?;
+        self.plan
+            .semantic_sources
+            .push(SemanticSourceSeed::control(node, kind));
+        Ok(node)
+    }
+
+    fn expression_node(
+        &mut self,
+        kind: TransitionKind,
+        owner: StaticSourceId,
+        frame: DynamicActivationFrame,
+        expr: &RuntimeExpr,
+    ) -> Result<StaticNodeId, CraneliftBackendError> {
+        let node = self.push_node(kind, owner, frame)?;
+        self.plan
+            .semantic_sources
+            .push(SemanticSourceSeed::expression(node, expr)?);
+        Ok(node)
     }
 
     fn edge(
@@ -394,7 +452,7 @@ impl Planner {
             let entry = self.plan_expr(body, body_ctx, successor, exit_kind, ordinal as u32)?;
             let owner = self.source()?;
             let frame = self.frame(0x80, ordinal as u32, ctx, reject)?;
-            let test = self.node(TransitionKind::CaseTest, owner, frame)?;
+            let test = self.control_node(TransitionKind::CaseTest, owner, frame)?;
             self.edge(test, entry, EdgeKind::Select)?;
             self.edge(test, reject, EdgeKind::Reject)?;
             reject = test;
@@ -420,7 +478,7 @@ impl Planner {
         };
         match expr {
             RuntimeExpr::Trap(_) => {
-                let node = self.node(TransitionKind::Evaluate, owner, frame)?;
+                let node = self.expression_node(TransitionKind::Evaluate, owner, frame, expr)?;
                 self.edge(node, self.trap_terminal, EdgeKind::Trap)?;
                 Ok(node)
             }
@@ -428,7 +486,7 @@ impl Planner {
             | RuntimeExpr::Var(_)
             | RuntimeExpr::DeclarationRef { .. }
             | RuntimeExpr::ImportedDeclarationRef { .. } => {
-                let node = self.node(TransitionKind::Evaluate, owner, frame)?;
+                let node = self.expression_node(TransitionKind::Evaluate, owner, frame, expr)?;
                 self.edge(node, successor, exit_kind)?;
                 Ok(node)
             }
@@ -439,7 +497,7 @@ impl Planner {
             | RuntimeExpr::CheckedComputationalIHInvocation { body, .. }
             | RuntimeExpr::Project { record: body, .. } => {
                 let body = self.plan_expr(body, ctx, successor, exit_kind, 0)?;
-                let node = self.node(TransitionKind::Sequence, owner, frame)?;
+                let node = self.expression_node(TransitionKind::Sequence, owner, frame, expr)?;
                 self.edge(node, body, EdgeKind::Continue)?;
                 Ok(node)
             }
@@ -453,7 +511,7 @@ impl Planner {
                     1,
                 )?;
                 let value = self.plan_expr(value, ctx, body, EdgeKind::Continue, 0)?;
-                let node = self.node(TransitionKind::Sequence, owner, frame)?;
+                let node = self.expression_node(TransitionKind::Sequence, owner, frame, expr)?;
                 self.edge(node, value, EdgeKind::Continue)?;
                 Ok(node)
             }
@@ -465,11 +523,11 @@ impl Planner {
                 let then_entry = self.plan_expr(then_expr, ctx, successor, exit_kind, 1)?;
                 let else_entry = self.plan_expr(else_expr, ctx, successor, exit_kind, 2)?;
                 let branch_owner = self.source()?;
-                let branch = self.node(TransitionKind::Branch, branch_owner, frame)?;
+                let branch = self.control_node(TransitionKind::Branch, branch_owner, frame)?;
                 self.edge(branch, then_entry, EdgeKind::Select)?;
                 self.edge(branch, else_entry, EdgeKind::Reject)?;
                 let scrutinee = self.plan_expr(scrutinee, ctx, branch, EdgeKind::Continue, 0)?;
-                let node = self.node(TransitionKind::Evaluate, owner, frame)?;
+                let node = self.expression_node(TransitionKind::Evaluate, owner, frame, expr)?;
                 self.edge(node, scrutinee, EdgeKind::Continue)?;
                 Ok(node)
             }
@@ -477,7 +535,7 @@ impl Planner {
                 scrutinee, cases, ..
             } => {
                 let default_owner = self.source()?;
-                let default = self.node(TransitionKind::Evaluate, default_owner, frame)?;
+                let default = self.control_node(TransitionKind::Evaluate, default_owner, frame)?;
                 self.edge(default, self.trap_terminal, EdgeKind::Trap)?;
                 let bodies = cases
                     .iter()
@@ -485,7 +543,7 @@ impl Planner {
                     .collect::<Vec<_>>();
                 let dispatch = self.plan_cases(&bodies, ctx, successor, exit_kind, default)?;
                 let scrutinee = self.plan_expr(scrutinee, ctx, dispatch, EdgeKind::Continue, 0)?;
-                let node = self.node(TransitionKind::Evaluate, owner, frame)?;
+                let node = self.expression_node(TransitionKind::Evaluate, owner, frame, expr)?;
                 self.edge(node, scrutinee, EdgeKind::Continue)?;
                 Ok(node)
             }
@@ -499,10 +557,11 @@ impl Planner {
                     affine,
                     ..ctx
                 };
-                let completed = self.node(TransitionKind::CompletedTail, owner, frame)?;
-                let tail = self.node(TransitionKind::ProducerTail, owner, frame)?;
-                let wrapper = self.node(TransitionKind::ProducerWrapper, owner, frame)?;
-                let resume = self.node(TransitionKind::SourceReturnResume, owner, frame)?;
+                let completed = self.control_node(TransitionKind::CompletedTail, owner, frame)?;
+                let tail = self.control_node(TransitionKind::ProducerTail, owner, frame)?;
+                let wrapper = self.control_node(TransitionKind::ProducerWrapper, owner, frame)?;
+                let resume =
+                    self.expression_node(TransitionKind::SourceReturnResume, owner, frame, expr)?;
                 self.edge(resume, wrapper, EdgeKind::InvokeProducerWrapper)?;
                 self.edge(wrapper, tail, EdgeKind::InvokeProducerTail)?;
                 self.edge(tail, completed, EdgeKind::CompleteProducerTail)?;
@@ -523,7 +582,7 @@ impl Planner {
                     self.plan.nodes[id.0 as usize].frame.affine = affine;
                 }
                 let default_owner = self.source()?;
-                let default = self.node(TransitionKind::Evaluate, default_owner, frame)?;
+                let default = self.control_node(TransitionKind::Evaluate, default_owner, frame)?;
                 self.edge(default, self.trap_terminal, EdgeKind::Trap)?;
                 let bodies = cases
                     .iter()
@@ -548,10 +607,10 @@ impl Planner {
             RuntimeExpr::Closure { body, .. } => {
                 let body_return_owner = self.source()?;
                 let body_return =
-                    self.node(TransitionKind::ClosureBody, body_return_owner, frame)?;
+                    self.control_node(TransitionKind::ClosureBody, body_return_owner, frame)?;
                 self.edge(body_return, self.terminal, EdgeKind::Continue)?;
                 let body = self.plan_expr(body, ctx, body_return, EdgeKind::Continue, 0)?;
-                let node = self.node(TransitionKind::Evaluate, owner, frame)?;
+                let node = self.expression_node(TransitionKind::Evaluate, owner, frame, expr)?;
                 self.edge(node, successor, exit_kind)?;
                 self.edge(node, body, EdgeKind::StaticBody)?;
                 Ok(node)
@@ -559,12 +618,12 @@ impl Planner {
             RuntimeExpr::LexicalClosure { captures, body, .. } => {
                 let body_return_owner = self.source()?;
                 let body_return =
-                    self.node(TransitionKind::ClosureBody, body_return_owner, frame)?;
+                    self.control_node(TransitionKind::ClosureBody, body_return_owner, frame)?;
                 self.edge(body_return, self.terminal, EdgeKind::Continue)?;
                 let body = self.plan_expr(body, ctx, body_return, EdgeKind::Continue, 0)?;
                 let captures = captures.iter().collect::<Vec<_>>();
                 let capture_entry = self.plan_sequence(&captures, ctx, successor, exit_kind)?;
-                let node = self.node(TransitionKind::Evaluate, owner, frame)?;
+                let node = self.expression_node(TransitionKind::Evaluate, owner, frame, expr)?;
                 self.edge(
                     node,
                     capture_entry,
@@ -580,7 +639,7 @@ impl Planner {
             RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
                 let expressions = args.iter().collect::<Vec<_>>();
                 let first = self.plan_sequence(&expressions, ctx, successor, exit_kind)?;
-                let node = self.node(TransitionKind::Sequence, owner, frame)?;
+                let node = self.expression_node(TransitionKind::Sequence, owner, frame, expr)?;
                 self.edge(
                     node,
                     first,
@@ -595,7 +654,7 @@ impl Planner {
             RuntimeExpr::Record { fields } => {
                 let expressions = fields.iter().map(|(_, value)| value).collect::<Vec<_>>();
                 let first = self.plan_sequence(&expressions, ctx, successor, exit_kind)?;
-                let node = self.node(TransitionKind::Sequence, owner, frame)?;
+                let node = self.expression_node(TransitionKind::Sequence, owner, frame, expr)?;
                 self.edge(
                     node,
                     first,
@@ -612,7 +671,7 @@ impl Planner {
                 expressions.push(callee.as_ref());
                 expressions.extend(args);
                 let first = self.plan_sequence(&expressions, ctx, successor, exit_kind)?;
-                let node = self.node(TransitionKind::Sequence, owner, frame)?;
+                let node = self.expression_node(TransitionKind::Sequence, owner, frame, expr)?;
                 self.edge(
                     node,
                     first,
@@ -634,7 +693,7 @@ impl Planner {
                 }
                 expressions.extend(args);
                 let first = self.plan_sequence(&expressions, ctx, successor, exit_kind)?;
-                let node = self.node(TransitionKind::Sequence, owner, frame)?;
+                let node = self.expression_node(TransitionKind::Sequence, owner, frame, expr)?;
                 self.edge(
                     node,
                     first,
@@ -649,7 +708,12 @@ impl Planner {
         }
     }
 
-    fn finish(self) -> Result<StaticTransitionPlan, CraneliftBackendError> {
+    fn finish(mut self) -> Result<StaticTransitionPlan, CraneliftBackendError> {
+        self.plan.semantic = build_semantic_plane(
+            &self.plan.nodes,
+            &self.plan.edges,
+            &self.plan.semantic_sources,
+        )?;
         self.plan.validate()?;
         Ok(self.plan)
     }
@@ -693,7 +757,6 @@ impl StaticTransitionPlan {
         if self.evidence.len() != self.edges.len() {
             return Err(planner_error("edge evidence is incomplete"));
         }
-
         if self.store_depths.len() != self.stores.len() {
             return Err(planner_error(
                 "persistent store depth table does not match the store",
@@ -858,7 +921,7 @@ impl StaticTransitionPlan {
 
         self.validate_source_return_topology()?;
         if helpers.values().copied().max().unwrap_or(0) > MAX_HELPERS_PER_STATIC_SOURCE {
-            return Err(planner_capacity_error(
+            return Err(planner_error(
                 "fixed K helpers per static source was exceeded",
             ));
         }
@@ -881,6 +944,8 @@ impl StaticTransitionPlan {
                 "closed graph contains unreachable transitions",
             ));
         }
+        self.semantic
+            .validate(&self.nodes, &self.edges, &self.semantic_sources)?;
         Ok(())
     }
 
@@ -1167,6 +1232,65 @@ impl StaticTransitionPlan {
                 .count(),
         }
     }
+
+    #[cfg(test)]
+    fn semantic_census(&self) -> BoundaryB1Census {
+        use semantic_ir::{
+            CaptureLayout, CaptureSlot, PredeclaredFunction, RuledChild, SemanticDescriptor,
+            SemanticOperandElement, SemanticProgram, SemanticRecord,
+        };
+
+        let opcode_vocabulary = self
+            .semantic
+            .records
+            .iter()
+            .map(|record| record.opcode)
+            .collect::<BTreeSet<_>>()
+            .len();
+        let mut definitions = BTreeMap::new();
+        for descriptor in &self.semantic.descriptors {
+            *definitions.entry(descriptor.origin).or_insert(0usize) += 1;
+        }
+        let distinct_origins = definitions.len();
+        let duplicate_origin_definitions = definitions
+            .values()
+            .map(|count| count.saturating_sub(1))
+            .sum();
+        let max_definitions_per_origin = definitions.values().copied().max().unwrap_or(0);
+        let definitions_per_origin = if definitions
+            .values()
+            .all(|count| *count == max_definitions_per_origin)
+        {
+            max_definitions_per_origin
+        } else {
+            0
+        };
+
+        BoundaryB1Census {
+            opcode_vocabulary,
+            distinct_origins,
+            ir_records: self.semantic.records.len(),
+            semantic_edges: self.semantic.ruled_children.len(),
+            helper_definitions: self.semantic.functions.len(),
+            definitions_per_origin,
+            all_out_of_line_operand_elements: self.semantic.all_out_of_line_operand_elements(),
+            duplicate_origin_definitions,
+            post_origin_clones: self
+                .semantic
+                .programs
+                .len()
+                .saturating_sub(distinct_origins),
+            max_definitions_per_origin,
+            descriptor_bytes: std::mem::size_of::<SemanticDescriptor>(),
+            program_bytes: std::mem::size_of::<SemanticProgram>(),
+            record_bytes: std::mem::size_of::<SemanticRecord>(),
+            operand_element_bytes: std::mem::size_of::<SemanticOperandElement>(),
+            capture_layout_bytes: std::mem::size_of::<CaptureLayout>(),
+            capture_slot_bytes: std::mem::size_of::<CaptureSlot>(),
+            ruled_child_bytes: std::mem::size_of::<RuledChild>(),
+            function_bytes: std::mem::size_of::<PredeclaredFunction>(),
+        }
+    }
 }
 
 pub(in crate::cranelift_backend) fn plan_static_transition_graph(
@@ -1224,6 +1348,10 @@ fn runtime_expr_tag(expr: &RuntimeExpr) -> u32 {
 
 #[cfg(test)]
 mod tests {
+    use super::semantic_ir::{
+        build_semantic_plane, RuntimeExprShape, SemanticOperandElement, SemanticSourceKind,
+        StaticOriginId,
+    };
     use super::*;
     use crate::{
         RuntimeComputationalMatchCase, RuntimeMatchCase, RuntimeTrap, RuntimeTrapCode, RuntimeValue,
@@ -1334,6 +1462,22 @@ mod tests {
         (first, second)
     }
 
+    fn semantic_census(depth: usize) -> (BoundaryACensus, BoundaryB1Census) {
+        let expr = nested_resource_bracket(depth);
+        plan_static_transition_graph(&expr, &BTreeMap::new())
+            .map(|plan| (plan.census(), plan.semantic_census()))
+            .unwrap_or_else(|error| {
+                panic!("RT_NATIVE_FNSPLIT_B1 could_not_determine n={depth}: {error}")
+            })
+    }
+
+    fn semantic_values(
+        rows: &[BoundaryB1Census],
+        field: impl Fn(&BoundaryB1Census) -> usize,
+    ) -> Vec<isize> {
+        rows.iter().map(|row| field(row) as isize).collect()
+    }
+
     fn index_of_edge_helper(plan: &StaticTransitionPlan, edge: StaticEdgeId) -> usize {
         plan.planned_helpers
             .iter()
@@ -1382,6 +1526,375 @@ mod tests {
             kind,
         });
         plan.planned_helpers.push(PlannedHelperKey::edge(kind, id));
+    }
+
+    #[test]
+    fn boundary_b1_nested_resource_brackets_n3_through_n7_are_closed_and_affine() {
+        // Promise class: durable invariant. The finite differences corroborate
+        // the builder's structural one-node/one-edge/one-flattening traversal;
+        // they are not the asymptotic proof.
+        let rows = (3..=7).map(semantic_census).collect::<Vec<_>>();
+        let outer = rows
+            .iter()
+            .map(|(outer, _)| outer.clone())
+            .collect::<Vec<_>>();
+        let semantic = rows
+            .iter()
+            .map(|(_, semantic)| semantic.clone())
+            .collect::<Vec<_>>();
+
+        for (depth, (outer, row)) in (3..=7).zip(&rows) {
+            eprintln!(
+                "RT_NATIVE_FNSPLIT_B1 n={depth} opcode_vocabulary={} origins={} \
+                 ir_records={} semantic_edges={} helper_definitions={} \
+                 definitions_per_origin={} operand_elements={} duplicate_origins={} \
+                 clone_count={} max_definitions_per_origin={} fixed_k={} \
+                 descriptor_bytes={} program_bytes={} record_bytes={} \
+                 operand_element_bytes={} capture_layout_bytes={} capture_slot_bytes={} \
+                 ruled_child_bytes={} function_bytes={}",
+                row.opcode_vocabulary,
+                row.distinct_origins,
+                row.ir_records,
+                row.semantic_edges,
+                row.helper_definitions,
+                row.definitions_per_origin,
+                row.all_out_of_line_operand_elements,
+                row.duplicate_origin_definitions,
+                row.post_origin_clones,
+                row.max_definitions_per_origin,
+                outer.max_helpers_per_static_source,
+                row.descriptor_bytes,
+                row.program_bytes,
+                row.record_bytes,
+                row.operand_element_bytes,
+                row.capture_layout_bytes,
+                row.capture_slot_bytes,
+                row.ruled_child_bytes,
+                row.function_bytes,
+            );
+        }
+
+        for (name, metric) in [
+            (
+                "distinct_origins",
+                semantic_values(&semantic, |row| row.distinct_origins),
+            ),
+            (
+                "ir_records",
+                semantic_values(&semantic, |row| row.ir_records),
+            ),
+            (
+                "semantic_edges",
+                semantic_values(&semantic, |row| row.semantic_edges),
+            ),
+            (
+                "helper_definitions",
+                semantic_values(&semantic, |row| row.helper_definitions),
+            ),
+            (
+                "all_out_of_line_operand_elements",
+                semantic_values(&semantic, |row| row.all_out_of_line_operand_elements),
+            ),
+        ] {
+            let (first, second) = differences(&metric);
+            eprintln!(
+                "RT_NATIVE_FNSPLIT_B1_DIFF metric={name} values={metric:?} \
+                 first={first:?} second={second:?}"
+            );
+            assert!(
+                second.iter().all(|difference| *difference == 0),
+                "{name} is not affine across n=3..7"
+            );
+        }
+
+        for (name, metric) in [
+            (
+                "opcode_vocabulary",
+                semantic_values(&semantic, |row| row.opcode_vocabulary),
+            ),
+            (
+                "definitions_per_origin",
+                semantic_values(&semantic, |row| row.definitions_per_origin),
+            ),
+            (
+                "max_definitions_per_origin",
+                semantic_values(&semantic, |row| row.max_definitions_per_origin),
+            ),
+            (
+                "duplicate_origin_definitions",
+                semantic_values(&semantic, |row| row.duplicate_origin_definitions),
+            ),
+            (
+                "post_origin_clones",
+                semantic_values(&semantic, |row| row.post_origin_clones),
+            ),
+            (
+                "descriptor_bytes",
+                semantic_values(&semantic, |row| row.descriptor_bytes),
+            ),
+            (
+                "program_bytes",
+                semantic_values(&semantic, |row| row.program_bytes),
+            ),
+            (
+                "record_bytes",
+                semantic_values(&semantic, |row| row.record_bytes),
+            ),
+            (
+                "operand_element_bytes",
+                semantic_values(&semantic, |row| row.operand_element_bytes),
+            ),
+            (
+                "capture_layout_bytes",
+                semantic_values(&semantic, |row| row.capture_layout_bytes),
+            ),
+            (
+                "capture_slot_bytes",
+                semantic_values(&semantic, |row| row.capture_slot_bytes),
+            ),
+            (
+                "ruled_child_bytes",
+                semantic_values(&semantic, |row| row.ruled_child_bytes),
+            ),
+            (
+                "function_bytes",
+                semantic_values(&semantic, |row| row.function_bytes),
+            ),
+        ] {
+            let (first, second) = differences(&metric);
+            eprintln!(
+                "RT_NATIVE_FNSPLIT_B1_DIFF metric={name} values={metric:?} \
+                 first={first:?} second={second:?}"
+            );
+            assert!(
+                metric.windows(2).all(|pair| pair[0] == pair[1]),
+                "{name} is not pairwise constant across n=3..7"
+            );
+        }
+
+        let fixed_k = outer
+            .iter()
+            .map(|row| row.max_helpers_per_static_source as isize)
+            .collect::<Vec<_>>();
+        let (fixed_k_first, fixed_k_second) = differences(&fixed_k);
+        eprintln!(
+            "RT_NATIVE_FNSPLIT_B1_DIFF metric=fixed_k values={fixed_k:?} \
+             first={fixed_k_first:?} second={fixed_k_second:?}"
+        );
+        assert_eq!(
+            fixed_k,
+            vec![8, 8, 8, 8, 8],
+            "B1 grew or obscured the already-full outer helper inventory"
+        );
+        assert!(semantic.iter().all(|row| {
+            row.opcode_vocabulary == 6
+                && row.definitions_per_origin == 1
+                && row.max_definitions_per_origin == 1
+                && row.duplicate_origin_definitions == 0
+                && row.post_origin_clones == 0
+        }));
+    }
+
+    #[test]
+    fn boundary_b1_preserves_equal_occurrences_and_reuses_one_activation_program() {
+        // Promise class: durable invariant. Equal source text is the
+        // discriminating counterexample to semantic hash-consing.
+        let equal_occurrences = RuntimeExpr::If {
+            scrutinee: Box::new(unit()),
+            then_expr: Box::new(unit()),
+            else_expr: Box::new(unit()),
+        };
+        let plan = plan_static_transition_graph(&equal_occurrences, &BTreeMap::new()).unwrap();
+        let equal_nodes = plan
+            .semantic_sources
+            .iter()
+            .filter_map(|source| {
+                (source.source == SemanticSourceKind::Expression(RuntimeExprShape::Construct))
+                    .then_some(source.planned_node)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(equal_nodes.len(), 3);
+        let descriptors = equal_nodes
+            .iter()
+            .map(|node| plan.semantic.descriptors[node.0 as usize])
+            .collect::<Vec<_>>();
+        assert_eq!(
+            descriptors
+                .iter()
+                .map(|descriptor| descriptor.origin)
+                .collect::<BTreeSet<_>>()
+                .len(),
+            3,
+            "equal source occurrences were semantic-hash-consed"
+        );
+        assert_eq!(
+            descriptors
+                .iter()
+                .map(|descriptor| descriptor.program)
+                .collect::<BTreeSet<_>>()
+                .len(),
+            3,
+            "equal source occurrences lost positional programs"
+        );
+        let records = descriptors
+            .iter()
+            .map(|descriptor| plan.semantic.records[descriptor.program.0 as usize])
+            .collect::<Vec<_>>();
+        assert!(records.windows(2).all(|pair| {
+            pair[0].opcode == pair[1].opcode
+                && pair[0].operands.len == pair[1].operands.len
+                && pair[0].origin != pair[1].origin
+        }));
+
+        let node = equal_nodes[0];
+        let static_node = plan.nodes[node.0 as usize];
+        let other_activation = plan
+            .nodes
+            .iter()
+            .map(|candidate| candidate.frame)
+            .find(|frame| *frame != static_node.frame)
+            .expect("fixture has another closed activation frame");
+        let descriptor_before = plan.semantic.descriptors[node.0 as usize];
+        assert_eq!(
+            plan.helper_key_for_activation(node, static_node.frame)
+                .unwrap(),
+            plan.helper_key_for_activation(node, other_activation)
+                .unwrap()
+        );
+        assert_eq!(
+            plan.semantic.descriptors[node.0 as usize], descriptor_before,
+            "another activation minted a program or origin"
+        );
+    }
+
+    #[test]
+    fn boundary_b1_semantics_are_discovery_order_and_dynamic_state_independent() {
+        // Promise class: durable invariant.
+        let plan =
+            plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
+        let mut reversed_sources = plan.semantic_sources.clone();
+        reversed_sources.reverse();
+        let reordered = build_semantic_plane(&plan.nodes, &plan.edges, &reversed_sources).unwrap();
+        assert_eq!(reordered, plan.semantic);
+
+        let mut changed_frames = plan.nodes.clone();
+        let frames = plan.nodes.iter().map(|node| node.frame).collect::<Vec<_>>();
+        assert!(
+            frames.iter().any(|frame| *frame != frames[0]),
+            "frame rotation is a no-op: all frames are equal, so this control proves nothing"
+        );
+        for (index, node) in changed_frames.iter_mut().enumerate() {
+            node.frame = frames[(index + 1) % frames.len()];
+        }
+        let changed =
+            build_semantic_plane(&changed_frames, &plan.edges, &reversed_sources).unwrap();
+        assert_eq!(
+            changed, plan.semantic,
+            "dynamic activation state changed semantic programs or bodies"
+        );
+        assert_eq!(plan.semantic.descriptors.len(), plan.nodes.len());
+        assert_eq!(plan.semantic.functions.len(), plan.nodes.len());
+        assert_eq!(plan.semantic.ruled_children.len(), plan.edges.len());
+    }
+
+    #[test]
+    fn boundary_b1_negative_controls_fail_at_named_semantic_artifacts() {
+        // Promise class: durable mutation proof.
+        let plan =
+            plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
+
+        let pointer_origins = plan
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(index, node)| {
+                (
+                    std::ptr::from_ref(node) as usize,
+                    StaticOriginId(((index + 1) % plan.nodes.len()) as u32),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut pointer_recovery = plan.semantic.clone();
+        pointer_recovery.descriptors[0].origin =
+            pointer_origins[&(std::ptr::from_ref(&plan.nodes[0]) as usize)];
+        assert_eq!(
+            pointer_recovery
+                .validate(&plan.nodes, &plan.edges, &plan.semantic_sources)
+                .unwrap_err(),
+            planner_error("descriptor origin is not its preallocated positional identity")
+        );
+
+        let equal_occurrences = RuntimeExpr::If {
+            scrutinee: Box::new(unit()),
+            then_expr: Box::new(unit()),
+            else_expr: Box::new(unit()),
+        };
+        let equal_plan =
+            plan_static_transition_graph(&equal_occurrences, &BTreeMap::new()).unwrap();
+        let equal_nodes = equal_plan
+            .semantic_sources
+            .iter()
+            .filter_map(|source| {
+                (source.source == SemanticSourceKind::Expression(RuntimeExprShape::Construct))
+                    .then_some(source.planned_node)
+            })
+            .collect::<Vec<_>>();
+        let mut hash_cons = equal_plan.semantic.clone();
+        hash_cons.descriptors[equal_nodes[1].0 as usize].origin =
+            hash_cons.descriptors[equal_nodes[0].0 as usize].origin;
+        assert_eq!(
+            hash_cons
+                .validate(
+                    &equal_plan.nodes,
+                    &equal_plan.edges,
+                    &equal_plan.semantic_sources,
+                )
+                .unwrap_err(),
+            planner_error("semantic hash-consing merged distinct static origins")
+        );
+
+        let mut second_definition = plan.semantic.clone();
+        second_definition
+            .descriptors
+            .push(second_definition.descriptors[0]);
+        assert_eq!(
+            second_definition
+                .validate(&plan.nodes, &plan.edges, &plan.semantic_sources)
+                .unwrap_err(),
+            planner_error("planned node has more than one semantic definition")
+        );
+
+        let mut post_origin_clone = plan.semantic.clone();
+        post_origin_clone
+            .programs
+            .push(post_origin_clone.programs[0]);
+        assert_eq!(
+            post_origin_clone
+                .validate(&plan.nodes, &plan.edges, &plan.semantic_sources)
+                .unwrap_err(),
+            planner_error("semantic program arena contains a post-origin clone")
+        );
+
+        let mut superlinear_material = plan.semantic.clone();
+        let deliberate_square = plan.nodes.len().checked_mul(plan.nodes.len()).unwrap();
+        superlinear_material
+            .operands
+            .extend(
+                (0..deliberate_square).map(|source_ordinal| SemanticOperandElement {
+                    source_ordinal: source_ordinal as u32,
+                }),
+            );
+        superlinear_material.records[0].operands.len = superlinear_material.records[0]
+            .operands
+            .len
+            .checked_add(deliberate_square as u32)
+            .unwrap();
+        assert_eq!(
+            superlinear_material
+                .validate(&plan.nodes, &plan.edges, &plan.semantic_sources)
+                .unwrap_err(),
+            planner_error("semantic operand arena exceeds the one-visit source-material budget")
+        );
     }
 
     #[test]
@@ -1521,9 +2034,10 @@ mod tests {
     }
 
     #[test]
-    fn planner_invariants_and_input_capacity_have_distinct_attribution() {
-        // Promise class: durable invariant. Internal planner defects and
-        // input-capacity limits remain different error identities.
+    fn planner_invariant_failures_have_compiler_bug_attribution() {
+        // Promise class: durable invariant. These distinct planner
+        // self-consistency failures are compiler bugs. The former fixed-K capacity arm is
+        // not input-reachable because fixed K is a structural planner invariant.
         let plan =
             plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
 
@@ -1576,18 +2090,18 @@ mod tests {
             .planned_helpers
             .push(PlannedHelperKey::node(TransitionKind::Evaluate, id));
 
-        let capacity = over_capacity.validate().unwrap_err();
+        let fixed_k_invariant = over_capacity.validate().unwrap_err();
         assert!(matches!(
-            &capacity,
-            CraneliftBackendError::Unsupported(unsupported)
-                if unsupported.construct == "NativeStaticTransitionPlanner"
-                    && unsupported.reason == "fixed K helpers per static source was exceeded"
+            &fixed_k_invariant,
+            CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(detail))
+                if detail == "fixed K helpers per static source was exceeded"
         ));
         assert_eq!(
-            capacity.to_string(),
-            "unsupported runtime-IR lowering: NativeStaticTransitionPlanner: fixed K helpers per \
-             static source was exceeded"
+            fixed_k_invariant.to_string(),
+            "Cranelift backend failure: native static transition planner invariant failed; \
+             please report this compiler bug: fixed K helpers per static source was exceeded"
         );
+        assert!(!fixed_k_invariant.to_string().contains("unsupported"));
     }
 
     #[test]
