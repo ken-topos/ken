@@ -32,23 +32,51 @@
 > `e58b3fa6` (**PR #937, in CI**) · `wp/steward-process-batch` = `b3ea7d93`
 > (**pushed, NOT yet published**).
 >
-> ### ⇢ THE NEXT ACT, in order
+> ### ⇢ THE NEXT ACT — ONE THING: kick `RT-FNSPLIT-B2A`. Everything else is done.
 >
-> 1. **PR #937 (B1R).** Log: `$SCRATCH/b1r-publish.log`. ⚠ *Waiting on CI is
->    NORMAL, not a stall* — it is **not** doc-only, so the full gate runs.
->    **ON MERGE:** verify landed `origin/main` **by content** (both files under
->    `planning/**`, `lowering/core.rs` still untouched) → flip `RT-FNSPLIT-B1R`
->    to `merged` → request retros from `runtime-leader` → notify the adversary
->    (report-only; **never reply**).
-> 2. **THEN publish `wp/steward-process-batch` (`b3ea7d93`).** Already built off
->    `d3b9f36c`, intersection verified EMPTY, contains the ABI 19/19 spine, the
->    B1R/B2a/B2b frames, both playbook §-additions, `DOC-GATE-NEEDLE`, and the
->    corrected `moot.toml`. ⛔ **Re-check the intersection first** — #937 will
->    have moved `main` under it. Disjoint by construction (`docs/program/**` +
->    `moot.toml` vs `crates/ken-runtime/planning/**`), but *verify, don't assume*.
-> 3. **THEN, only after B1R retros are in and the ring is compacted**, release
->    `RT-FNSPLIT-B2A` (`ready`). It re-anchors onto landed B1R and receives **D0**
->    (the origin carrier) + controls 2/5.
+> ✅ **`DOC-W2` merged** (#936). ✅ **`RT-FNSPLIT-B1R` merged** (#937, `main =
+> 7151ae58`), **content-verified**, **retros IN** ⇒ closed under §10.
+> 🔄 **PR #938 in CI** = my process batch (`1f9bb4bf`) — log
+> `$SCRATCH/batch-publish.log`. ⚠ *CI wait is NORMAL.*
+> 🔄 **Runtime ring compaction launched** — log `$SCRATCH/rt-compact.log`.
+>
+> **DO THIS, in order:**
+>
+> 1. **VERIFY THE COMPACTION DROPS** (gate step 5) — `capture-pane` **WIDE**
+>    (`tail -20`) on `moot-runtime-{leader,implementer,qa}`; each must show
+>    `Context compacted` / `Compacting…` / a queued `❯ /compact`, **or ctx
+>    actually fell**. ⛔ **Verify on the `Context compacted` MARKER, not the ctx%
+>    footer — the footer LAGS.** A pane whose ctx did not move did not compact:
+>    resend that **one** pane. ⚠ `runtime-implementer` was at **ctx 41%** (over
+>    the 33% ceiling) and is the **Claude-Code/Opus-5** seat, where `moot compact`
+>    is no-op-prone — check it hardest.
+>    ⛔ **Do NOT run `postcompact-resume.sh` on these panes** — that is
+>    self-compact only; here the **kickoff is the resume trigger**.
+> 2. **CONFIRM PR #938 MERGED, and verify the B2a frame is ON `main` by content**
+>    — `git show origin/main:docs/program/wp/RT-NATIVE-FNSPLIT-recut-B2a-emission-port.md`.
+>    ⛔ **A frame not on a fetchable ref has not happened.** If #938 has not
+>    merged, either wait, **or** name the carrying ref in the kickoff
+>    (`origin/steward/work` and `origin/wp/steward-process-batch` both hold it).
+>    **Never mention an amended frame without one or the other.**
+> 3. **KICK `RT-FNSPLIT-B2A`** — mention **`runtime-leader` ONLY** (`agt_37reqrd72cg00`).
+>    The team cuts `wp/RT-FNSPLIT-B2A-<slug>` **FRESH from current `origin/main`**.
+>    B2a re-anchors onto landed B1R and receives **D0** (the origin carrier) plus
+>    controls **2 and 5**. Architect's settled seam specifics are already folded
+>    into the frame: widen `StaticOriginId` **only** to
+>    `pub(in crate::cranelift_backend)`; name the field **`static_origin`**, never
+>    bare `origin` (86 `mod.rs` + 44 `core.rs` occurrences of
+>    `RecursorProducerOriginId` already spelled `origin:`); ⛔ **no
+>    `mod.rs`-only partial carrier increment.**
+> 4. **THEN flip `RT-FNSPLIT-B2A` → `active`** in `docs/program/issues/` + run
+>    `scripts/gen-progress.sh`. ⭐ **This is a REPEATED defect — three kicked,
+>    zero flipped in one session.** The flip is part of the kickoff, not "later".
+> 5. **CONFIRM the leader went `Working`** (gate step 7). Codex seat ⇒ **strands
+>    on a convo mention**; repair with a **bare `Enter`**. Empty composer + no
+>    paste = never delivered ⇒ re-deliver a **POINTER to the `evt_`**, never a
+>    rewrite.
+>
+> ⛔ **HELD — do NOT release, operator-ruled (see §0-NOW-a):** `DOC-GATE-NEEDLE`
+> (verify) and `ABI-R1` (foundation). Both fully framed. **Fleet is FNSPLIT-only.**
 >
 > ### 0-NOW. What changed this session (supersedes the §0 below where they differ)
 >
