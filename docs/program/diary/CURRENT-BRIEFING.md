@@ -22,31 +22,63 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-25 ~23:0xZ · `origin/main` = **`fdda953f`**
-### **TWO LANES, BOTH BLOCKED ON THEIR RINGS. I OWE NOTHING.**
+## ▶ LIVE — 2026-07-25 ~23:35Z · `origin/main` = **`fdda953f`**
+### **LANE 2 IS PUBLISHING. LANE 1 IS RECUT — the predicate was NAMED.**
 
-**`steward/work` = `fdda953f` + this briefing commit.** Neither lane is waiting
-on me. My next action is **watchdog cadence** (1200s, armed) plus the queue
-below.
+> ### ⛔⛔ FIRST, TWO THINGS THAT CHANGE HOW YOU OPERATE THIS SESSION
+>
+> **1. My convo MCP connection DIED mid-session.** Every `mcp__convo__*` tool is
+> gone. ⛔ **`claude mcp list` reports `convo: ✔ Connected` — it LIES**, because
+> it health-checks by spawning a *fresh* process; it says nothing about this
+> session's stdio. **Fallback transport is live and verified:**
+> `python3 <scratchpad>/convo_post.py <body.md> <agt_id>…` posts over the HTTP
+> API with my own steward credential (endpoint `/api/spaces/{sid}/response`,
+> **singular**). Reads work the same way — that is how `dec_74fwejgv6hda0` was
+> verified off the object. ⚠ **I cannot SEE mentions arrive.** Anything
+> time-critical must be `tmux send-keys`-ed to `moot-steward`. ⭐ **Losing the
+> tool must not downgrade the §14 gate** — read the object, never the report.
+>
+> **2. PUBLISHER IS IN FLIGHT** — PR **#977**, head **`305dc6d5`**, full CI (⛔
+> **NOT** `--doc-only`; that flag merges with *no CI*, and CI is the only oracle
+> that caught the last failure). A background watch is armed on `origin/main`.
+> ⛔ **The publisher exits 0 on failure — verify the landed SHA BY CONTENT.**
 
 > ⛔ **THREE DEAD CANDIDATES ARE NAMED BELOW. None of them will ever be
 > published, and each has a *resolved or rejected* Decision attached — which is
 > exactly the shape that gets one published by accident.** Read the SHA, not
 > the Decision status.
 
-### ▶ LANE 1 — `RT-FNSPLIT-B2V` — ring folding, candidate durable
+### ▶ LANE 1 — `RT-FNSPLIT-B2V` — ⛔ RECUT. The Architect NAMED the predicate.
 
 | | |
 |---|---|
-| branch on origin | `wp/RT-FNSPLIT-B2V-executable-value-abi` = **`ddff2fae`** |
-| base / merge-base | `aecdb001` — 10 files, `+6339/−4`, `diff --check` clean |
-| intersection vs `fdda953f` | **empty** — ⚠ re-derive if `main` moves |
-| state | QA running a full production re-review with the complete `AC`→control map |
+| branch on origin | `wp/RT-FNSPLIT-B2V-executable-value-abi` = **`ddff2fae`** — ⛔ **BLOCKED** |
+| Decision | `dec_17vw679zkwdtc` **rejected** — Architect, on **production mechanism** |
+| state | implementer folding; **recut frame authored and committed `4d705465`** |
 
-⛔ **DEAD, NEVER PUBLISHABLE:** `78a57d90` (`dec_58gv9rmjqy49g` rejected) and
-`657f60a0` (`dec_1wpa1y2b3g7cn` rejected). Both stay on origin as durable
-checkpoints — every candidate since has been a **fast-forward**, so `ea8d9824`
-and both rejects remain reachable. **Do not force-push this branch.**
+⭐⭐ **THE §5a-ii PREDICATE CHECK FIRED AND WAS ANSWERED `YES`**
+(`evt_2zxt6m9bg43r2`). The three production blocks are **not** independent: they
+are successive exposed faces of one incomplete claim — **the admitted
+disposition is not closed under emitted producer → boundary word → separately
+compiled consumer round trip.**
+
+⛔ **The recut is authored** — read the `## RECUT` section of
+`docs/program/wp/RT-FNSPLIT-B2V-executable-value-abi.md`. RETAIN everything proved (a named predicate is **not** a licence to
+restart); REPLACE only the **shape** of the `AC` set with `AC-10`, total over the
+admitted **disposition** (not over tags — the predicate is explicitly stronger
+than *"all tags are enumerated"*); the three `NO CONTROL — open residual` rows
+are **promoted into scope** as the predicate's uncovered faces. ⛔ **It does NOT
+stop the ring** (Architect said so explicitly) and **does NOT choose a
+mechanism** — that is the Architect's call, not the frame's.
+
+⚠ **Still owed on it:** route the recut to the Architect for review before it
+binds, and get a fresh QA `AC`→control map covering `AC-10`.
+
+⛔ **DEAD, NEVER PUBLISHABLE:** `78a57d90` (`dec_58gv9rmjqy49g` rejected),
+`657f60a0` (`dec_1wpa1y2b3g7cn` rejected), and now `ddff2fae`. All stay on origin
+as durable checkpoints — every candidate has been a **fast-forward**, so
+`ea8d9824` and all three rejects remain reachable. **Do not force-push this
+branch.**
 
 ⭐ **`ddff2fae`'s increment is test-layer only, VERIFIED not taken:** all hunks
 fall in `3502–3803`, inside `mod tests` (`1976`–EOF) of
@@ -71,14 +103,33 @@ hard-stop #11.** The armed condition is a *production* path outside the fence.
 Do not fire the trigger on it; equally, do not let it become the precedent that
 lets production code sit outside.
 
-### ▶ LANE 2 — `KW-THEOREM` — ⛔ CI RED, candidate dead, ring folding
+### ▶ LANE 2 — `KW-THEOREM` — ▶ **PUBLISHING** on exact `305dc6d5`, PR #977
 
 | | |
 |---|---|
 | branch on origin | `wp/KW-THEOREM-surface-keyword-rename` = **`305dc6d5`** |
 | base | `c2c1ba9f` · 124 files, `+1613/−1234` + a 6-file `+16/−8` repair |
+| Decision `dec_74fwejgv6hda0` | ✅ **`resolved`**, `resolved_by=agt_37reqwresqc00` @ `23:21:22Z` — **read off the OBJECT** |
 | Decision `dec_286hqjak5kjq8` | ⛔ **VOID — resolved, but bound to DEAD `963d36ac`** |
-| state | awaiting fresh exact-SHA review, then a **fresh** Decision |
+
+⚠ **`proposed_by == resolved_by`** — a self-resolution, so the status field alone
+is not sufficient. Substance verified instead: three **fresh exact-SHA**
+authorities on `305dc6d5` — Librarian PASS `evt_524fj8c43q7jg`, CV APPROVE
+`evt_11tsr3hhmxfbj`, Architect APPROVE `evt_6hk6m7x8xmsn4`. Merge authority here
+is **Spec + Architect**; both present.
+
+⭐ **Integration asserted, not assumed.** ⛔ A conflict-free `merge-tree` is *not*
+evidence of preservation — disjoint hunks merge as a silent union, which is
+exactly how `SOURCE-ATTESTATIONS` merged clean **and wrong** on 07-22. So the
+post-condition was predicted first, then measured blob-by-blob over all **128**
+files: 122 candidate-only → candidate's blob; 6 main-only → main's blob; both
+intersecting files → merged blob differs from **both** sides (a real merge).
+**Violations: none.** merge-base `c2c1ba9f`, tree `6f7cf51c`, intersection
+exactly the two `docs/program/` files.
+
+⚠ **No §2a tracker-sync commit was added, deliberately** — it would move the SHA
+and void the exact-SHA Decision three authorities had just approved. Tracker
+syncs on the next batch.
 
 ⛔⛔ **THIS IS THE TRAP ON THIS BOARD: a RESOLVED Decision on a RED candidate.**
 `resolved` + non-null `resolved_by` is necessary, **never sufficient**. PR #977
@@ -139,12 +190,29 @@ once at kickoff.
 - **FNSPLIT hard-stop count of record = `10`. NEXT RESEARCH PULL = `#11`**
   (`runtime-leader` armed it in-fold: any closure needing a path outside
   `crates/ken-runtime` is #11).
+  > ⭐ **`#11` CONFIRMED and propagated 2026-07-25.** Three tracked files carried
+  > **`#12`** (the generic next-multiple-of-3 after the consumed `#9`) against
+  > this briefing's `#11`. The steward playbook carries an **operator override**
+  > (2026-07-24) spelling *"catch-up set to `#11`, then `#15`, `#18`, `#21`"*.
+  > The readings cannot be reconciled from the dates, so it was settled by
+  > **dominance, not guess**: `#11` is *required* under one reading and merely
+  > *early* under the other, and early is explicitly fine; `#12` is wrong under
+  > one. Operative anchors corrected in `RT-NATIVE-FNSPLIT.md` and
+  > `RT-FNSPLIT-B2V.md`; **append-only history deliberately still reads `#12`.**
 - **SYMPTOM INVENTORY = 3 entries. NEXT PREDICATE CHECK = the 6th entry.**
-- ⚠⚠ **ARMED §5a-ii:** `B2V` has produced three blocked candidates —
-  `c3f6da02` (QA), `78a57d90` + `657f60a0` (Architect, production). **IF THE
-  NEXT `B2V` CANDIDATE IS BLOCKED ON PRODUCTION MECHANISM, that is the THIRD
-  consecutive Architect production block on one node, and I ask the §5a-ii
-  predicate question AT THAT MOMENT** — not the one after.
+- ✅ **§5a-ii PREDICATE CHECK — FIRED 2026-07-25 AND ANSWERED `YES`.**
+  `evt_2zxt6m9bg43r2`. Three consecutive Architect production blocks
+  (`78a57d90`, `657f60a0`, `ddff2fae`) share one predicate; recut authored at
+  `4d705465`. **New armed counter now lives in the `B2V` WP frame's `Standing`
+  section: `CONSECUTIVE ARCHITECT PRODUCTION BLOCKS = 3` → next check at 3 more.**
+- ⛔⛔ **WHY THAT COUNTER HAD TO BE INVENTED — the lesson to carry.** §5a-ii
+  counts **hard-stops**, and a review block is correctly **not** a hard-stop. So
+  all three production blocks moved **neither** the hard-stop count **nor** the
+  symptom inventory, and **every armed line in the repo read correct and current
+  the whole time.** It fired only because it had been hand-armed here. ⇒ **A
+  counter keyed on ONE event class is blind to a different event class producing
+  the same failure.** The fix is never to loosen *"a review block is not a
+  hard-stop"* — it is a **second counter, beside the work.**
 - ⛔ **Ask the question ONLY. NEVER name a predicate** (§5a-ii) — that is the
   Architect's call, and naming one makes the Steward the de-facto designer of
   the recut. *"No, these are independent"* is a complete answer.
