@@ -5371,4 +5371,146 @@ mod tests {
             "AC-10: predicted 4 descriptors on the two-closure fixture"
         );
     }
+
+    /// `AC-11` — **every rejection class `D5` advertises has a witness that
+    /// reaches THAT arm.**
+    ///
+    /// ⛔ This is not `AC-4`'s positive control and `AC-4` does not cover it.
+    /// `AC-4` proves *the checker was reached*; `AC-11` proves *which arm
+    /// rejected*. In the failure mode the input **is** constructed, the validator
+    /// **does** reject, the test **is** green — and an **earlier** arm returned
+    /// the error while the arm you meant to exercise is unreachable code.
+    ///
+    /// ⭐ Asserting the **exact** message rather than `is_err`/`expect_err` is
+    /// the entire mechanism. With `expect_err` every row below reads green and
+    /// teaches nothing.
+    ///
+    /// Promise class: **durable mutation proof.** Each row names the arm that
+    /// actually fired, so a re-ordering of the validator reddens here rather than
+    /// silently changing which law is load-bearing.
+    #[test]
+    fn b2r_ac11_every_advertised_d5_rejection_class_names_the_arm_that_actually_fires() {
+        let expr = b2r_seed_closure(&["c"], RuntimeExpr::Var(0));
+        let plan = b2r_plan(&expr);
+        let base = &plan.abi;
+
+        let check = |abi: &super::abi::AbiPlane| -> String {
+            match abi.validate(
+                &plan.semantic,
+                &plan.nodes,
+                &plan.semantic_sources,
+                &plan.edges,
+                &plan.entries,
+            ) {
+                Ok(()) => "NO WITNESS -- the mutation was accepted".to_string(),
+                Err(err) => format!("{err:?}"),
+            }
+        };
+
+        let closure_unit = base
+            .descriptors
+            .iter()
+            .position(|d| d.header.captures == 1)
+            .expect("the fixture must have a unit with exactly one capture");
+
+        let mut measured = Vec::new();
+
+        // D5 class 1 -- a MISSING capture slot.
+        let mut missing = base.clone();
+        missing.descriptors[closure_unit].header.captures = 0;
+        measured.push(("missing capture slot", check(&missing)));
+
+        // D5 class 2 -- an EXTRA capture slot.
+        let mut extra = base.clone();
+        extra.descriptors[closure_unit].header.captures = 2;
+        measured.push(("extra capture slot", check(&extra)));
+
+        // D5 class 3 -- an implicit caller-environment TAIL.
+        let mut tailed = base.clone();
+        let tail = *tailed.slots.last().expect("slots");
+        tailed.descriptors.last_mut().expect("descriptors").slots.len += 1;
+        tailed.slots.push(tail);
+        measured.push(("implicit caller-env tail", check(&tailed)));
+
+        // D5 class 4 -- caller/callee dynamic-edge LAYOUT DISAGREEMENT: the
+        // boundary lands somewhere that is not the callee's frame entry.
+        let mut disagree = base.clone();
+        disagree.descriptors[closure_unit].planned_node = StaticNodeId(0);
+        measured.push(("edge layout disagreement", check(&disagree)));
+
+        // D5 class 5 -- a recursive-bundle member that is NOT forward-declared.
+        let mut unforward = base.clone();
+        unforward.descriptors.truncate(closure_unit);
+        measured.push(("callee not forward-declared", check(&unforward)));
+
+        // D5 class 6 -- representability / the imported-edge exclusion. This one
+        // is a GRAPH witness, not a plane mutation: it is checked during
+        // construction, before any descriptor is minted.
+        let imported = b2r_lexical_closure(
+            vec![RuntimeExpr::ImportedDeclarationRef {
+                symbol: "decl:other::thing".to_string(),
+                dependency: "other".to_string(),
+                dependency_semantic_hash: "hash".to_string(),
+            }],
+            RuntimeExpr::Var(0),
+        );
+        let declarations = BTreeMap::new();
+        let imported_arm = match plan_static_transition_graph(&imported, &declarations) {
+            Ok(_) => "NO WITNESS -- the imported capture edge planned green".to_string(),
+            Err(err) => format!("{err:?}"),
+        };
+        measured.push(("imported capture edge", imported_arm));
+
+        let report = measured
+            .iter()
+            .map(|(class, arm)| format!("{class} => {arm}"))
+            .collect::<Vec<_>>();
+        // ⭐ MEASURED, not predicted-then-fitted. Four classes reach an arm of
+        // this validator's own; **two are enforced by an EARLIER arm** and are
+        // recorded as such rather than counted as laws of their own. The arm
+        // named on each row is the one that actually returned.
+        //
+        // ⛔ Rows 4 and 5 are the `AC-11` failure mode caught in this node: an
+        // earlier detector subsumes the arm the class claims to exercise. The
+        // subsumed code has been DELETED (see `abi.rs`, the edge-agreement
+        // block) rather than left advertising a law that never runs -- `B2F`
+        // reads this validator as its guarantee and must count only live laws.
+        assert_eq!(
+            report,
+            vec![
+                // -- reach an arm of their own --
+                "missing capture slot => Backend(PlannerInvariant(\"abi descriptor \
+                 is missing a declared capture slot\"))"
+                    .to_string(),
+                "extra capture slot => Backend(PlannerInvariant(\"abi descriptor \
+                 declares a capture slot its origin does not have\"))"
+                    .to_string(),
+                "implicit caller-env tail => Backend(PlannerInvariant(\"abi frame \
+                 carries an implicit caller-environment tail\"))"
+                    .to_string(),
+                // -- SUBSUMED by an earlier arm; composed with B2O's edge law
+                //    (`semantic_ir.rs:1093`) this still enforces the class --
+                "edge layout disagreement => Backend(PlannerInvariant(\"abi \
+                 descriptor is not positional for its function unit\"))"
+                    .to_string(),
+                // -- SUBSUMED: descriptors are dense over the partition before
+                //    any edge resolves, which IS forward-declaration --
+                "callee not forward-declared => Backend(PlannerInvariant(\"abi \
+                 descriptor population is not exact for the function unit \
+                 partition\"))"
+                    .to_string(),
+                // -- reaches its own arm, with the EXISTING unsupported result --
+                "imported capture edge => Unsupported(UnsupportedLowering { \
+                 construct: \"ImportedDeclarationRef\", reason: \"imported \
+                 declaration requires dependency linking, so it receives no \
+                 callable descriptor in the intra-module representation \
+                 contract\" })"
+                    .to_string(),
+            ],
+            "AC-11: the arm that actually fired differs from the one recorded \
+             for this class. Either the validator was re-ordered -- in which \
+             case which law is load-bearing has changed and that is the point of \
+             this test -- or a previously subsumed arm became reachable."
+        );
+    }
 }

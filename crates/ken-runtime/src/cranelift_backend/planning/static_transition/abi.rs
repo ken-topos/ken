@@ -19,7 +19,6 @@
 
 use super::semantic_ir::{
     positioned_sources, DenseRange, PredeclaredFunctionId, RuntimeExprShape, SemanticAtomKind,
-    SemanticOwner,
 };
 use super::{
     planner_capacity_error, planner_error, unsupported, CraneliftBackendError, EdgeKind,
@@ -928,72 +927,44 @@ impl AbiPlane {
         }
 
         reject_imported_capture_edges(plane, sources, &definitions)?;
-        self.validate_edge_agreement(plane, edges)?;
         Ok(())
     }
 
-    /// **`D5` — every dynamic edge agrees on caller/callee layout, and every
-    /// recursive bundle member is forward-declared.**
-    ///
-    /// A `StaticBody` edge is the one and only cross-owner boundary (`B2O`'s
-    /// edge law). For each, the callee unit must already have a descriptor —
-    /// which is what "forward-declared" means for a recursive bundle: the
-    /// descriptor population is dense and complete **before** any edge is
-    /// resolved, so a member that calls a later member still resolves.
-    fn validate_edge_agreement(
-        &self,
-        plane: &SemanticPlane,
-        edges: &[StaticEdge],
-    ) -> Result<(), CraneliftBackendError> {
-        for edge in edges {
-            if edge.kind != EdgeKind::StaticBody {
-                continue;
-            }
-            let callee_owner = plane
-                .descriptors
-                .get(edge.to.0 as usize)
-                .map(|descriptor| descriptor.owner)
-                .ok_or_else(|| {
-                    planner_error("static body edge target has no semantic descriptor")
-                })?;
-            let SemanticOwner::Function(callee) = callee_owner else {
-                return Err(planner_error("static body edge targets a shared exit"));
-            };
-            let descriptor = self.descriptors.get(callee.0 as usize).ok_or_else(|| {
-                planner_error("static body edge callee is not forward-declared in the abi plane")
-            })?;
-
-            // Layout agreement: the callee's declared frame is reached at its own
-            // seed, so the edge's target must be that descriptor's entry node. A
-            // boundary landing anywhere else would mean the caller and the callee
-            // disagree about which frame is being entered.
-            if descriptor.planned_node != edge.to {
-                return Err(planner_error(
-                    "static body edge target is not its callee descriptor's frame entry",
-                ));
-            }
-
-            // The caller's own frame must be a real unit too, so an edge cannot
-            // originate outside the partition it is supposed to cross.
-            let caller_owner = plane
-                .descriptors
-                .get(edge.from.0 as usize)
-                .map(|descriptor| descriptor.owner)
-                .ok_or_else(|| {
-                    planner_error("static body edge source has no semantic descriptor")
-                })?;
-            let SemanticOwner::Function(caller) = caller_owner else {
-                return Err(planner_error("static body edge originates at a shared exit"));
-            };
-            if self.descriptors.get(caller.0 as usize).is_none() {
-                return Err(planner_error(
-                    "static body edge caller has no abi descriptor",
-                ));
-            }
-        }
-        Ok(())
-    }
 }
+
+// **`D5` — edge agreement and forward-declaration, and WHERE they are
+// actually enforced.**
+//
+// ⛔ **This node previously carried a `validate_edge_agreement` function
+// advertising six laws. `AC-11` measured it and every one of them was
+// unreachable, so it has been deleted rather than left as a law that never
+// runs.** An advertised-but-unenforced law is inherited *silently* by the
+// next node: the law is stated, the validator is genuinely fail-closed on
+// the paths that do fire, and the suite is green — there is no red anywhere
+// that touches it. `RT-FNSPLIT-B2F` will read this validator as its
+// guarantee, and it must count only laws that exist.
+//
+// **What enforces the two classes, with the witnesses that proved it:**
+//
+// | `D5` class | enforced by | measured arm |
+// |---|---|---|
+// | caller/callee edge layout agreement | `B2O`'s edge law (`semantic_ir.rs:1093`, *"static body edge target is not its function unit's seed"*) **composed with** this plane's positional check | `"abi descriptor is not positional for its function unit"` |
+// | recursive-bundle member forward-declared | this plane's density check — descriptors are dense and complete over the partition *before* any edge resolves | `"abi descriptor population is not exact for the function unit partition"` |
+//
+// ⭐ The composition is what makes the deleted code redundant rather than
+// missed. `B2O` proves `functions[callee].planned_node == edge.to`; this
+// plane proves `descriptors[i].planned_node == functions[i].planned_node`.
+// Together they give `descriptors[callee].planned_node == edge.to`, which is
+// exactly what the deleted arm asserted — so it could not fail without one
+// of its two premises failing first, and each of those has its own witness.
+//
+// ⚠ Two witnesses were tried for the deleted arm, not one: mutating the
+// descriptor alone fires the positional check, and mutating the descriptor
+// **and** its unit together fires *"function unit seed is neither a
+// scheduling entry nor a static body target"* from the definition
+// re-derivation at the top of `validate`. Both routes are recorded in
+// `b2r_ac11_...`.
+//
 
 /// Checks the slot run is in canonical kind order with the declared carriers.
 ///

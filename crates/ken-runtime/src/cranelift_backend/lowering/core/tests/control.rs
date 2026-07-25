@@ -4358,15 +4358,15 @@ fn the_owner_classification_has_a_closed_production_naming_inventory() {
     }
     assert_eq!(
         naming,
-        vec![
-            "planning/static_transition/abi.rs",
-            "planning/static_transition/semantic_ir.rs",
-        ],
+        vec!["planning/static_transition/semantic_ir.rs"],
         "D7: the owner classification's production naming inventory changed.\n\
-         The two permitted members are the module that DEFINES it (`semantic_ir`) \
-         and the `B2R` ABI plane that CONSUMES it as its population (`abi`). A \
-         third file is a review event: state why that consumer needs to name the \
-         classification rather than take a descriptor.\n\
+         ⭐ `RT-FNSPLIT-B2R` briefly joined this inventory and then LEFT it. Its \
+         ABI plane consumes the owner partition -- which is what its frame \
+         mandates -- but it does so through the seed table (`plane.functions`), \
+         never by naming the classification. The one place that named it was a \
+         redundant edge-agreement check that `AC-11` measured as unreachable and \
+         deleted. Consuming the partition and naming the type are different \
+         things, and only the second shows up here.\n\
          ⚠ MEASURED: which production files mention the identifier. CLAIMED: \
          exactly that. THE GAP: a mention is not an executable edge and the \
          absence of one is not proof there is none -- a type can be reached \
