@@ -13,7 +13,7 @@ The assumption is explicit and unique. It is not minted in a Text package.
 axiom string_to_list_char_retraction
     : (text : String) → Equal String (list_char_to_string (string_to_list_char text)) text
 
-lemma string_to_list_char_injective
+theorem string_to_list_char_injective
       (left : String)
       (right : String)
       (same_chars : Equal (List Char) (string_to_list_char left) (string_to_list_char right))

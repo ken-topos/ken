@@ -69,8 +69,8 @@ is `lemma` **as Ken syntax**, and identifiers/anchors derived from that spelling
 ## ⚠ Couplings a sweep will miss
 
 1. **Cross-doc anchors.** `library/learn/reading-ken/02-types-contracts-and-proofs.md`
-   links into `spec/.../33-declarations.md#8-named-proof-claims--prop-lemma-and-attached-proof`
-   and `#83-standalone-lemmas--lemma`. **Renaming a spec heading silently breaks
+   links into `spec/.../33-declarations.md#8-named-proof-claims--prop-theorem-and-attached-proof`
+   and `#83-standalone-theorems--theorem`. **Renaming a spec heading silently breaks
    every inbound link.** The librarian's stale-anchor mutation is the gate.
 2. **Pluralisation.** `lemma` / `lemmas` / `` `lemma`s ``. A `\blemma\b` regex
    misses possessive and plural forms; a naive `lemma→theorem` mangles them.

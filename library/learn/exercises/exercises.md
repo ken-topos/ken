@@ -86,7 +86,7 @@ correctly separate a corpus-usage gap from a genuine capability question.
    within this corpus?
 2. `catalog/packages/Capability/System/IO.ken.md` states that "exactly-once
    settlement and liveness remain runtime-enforced, delegated boundary
-   properties." Are the five `lemma`s directly above that sentence proofs
+   properties." Are the five `theorem`s directly above that sentence proofs
    of settlement and liveness themselves? If not, what are they proofs of?
 3. Can both of these be true without contradiction: the native backend's
    target/toolchain decision (`OQ-backend-target`) is recorded **open** in

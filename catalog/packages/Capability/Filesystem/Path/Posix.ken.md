@@ -141,20 +141,20 @@ fn path_valid (path : Path) : Bool =
     MkPath absolute segments ↦ path_segments_valid segments
   }
 
-lemma path_equal_sym (a : Type) (x : a) (y : a) (p : Eq a x y) : Eq a y x =
+theorem path_equal_sym (a : Type) (x : a) (y : a) (p : Eq a x y) : Eq a y x =
   J (λy' _. Eq a y' x) Refl p
 
-lemma path_equal_trans
+theorem path_equal_trans
       (a : Type) (x : a) (y : a) (z : a) (p : Eq a x y) (q : Eq a y z)
     : Eq a x z =
   J (λz' _. Eq a x z') p q
 
-lemma path_equal_cong
+theorem path_equal_cong
       (a : Type) (b : Type) (x : a) (y : a) (f : a → b) (p : Eq a x y)
     : Eq b (f x) (f y) =
   J (λy' _. Eq b (f x) (f y')) Refl p
 
-lemma path_cons_no_slash_tail
+theorem path_cons_no_slash_tail
       (byte : UInt8) (rest : List UInt8)
     : Eq Bool
         (path_segment_cons_has_no_slash
@@ -167,7 +167,7 @@ lemma path_cons_no_slash_tail
     False ↦ λno_slash. no_slash
   }
 
-lemma path_append_cons
+theorem path_append_cons
       (current : List UInt8) (byte : UInt8) (rest : List UInt8)
     : Eq
         (List UInt8)
@@ -175,7 +175,7 @@ lemma path_append_cons
         (list_append UInt8 current (Cons UInt8 byte rest)) =
   (proof assoc for list_append) UInt8 current (Cons UInt8 byte (Nil UInt8)) rest
 
-lemma path_split_no_slash_cons
+theorem path_split_no_slash_cons
       (byte : UInt8)
       (rest : List UInt8)
       (current : List UInt8)
@@ -209,7 +209,7 @@ lemma path_split_no_slash_cons
     False ↦ λno_slash. ih no_slash
   }
 
-lemma path_split_no_slash_end
+theorem path_split_no_slash_end
       (segment : List UInt8) (current : List UInt8) (segments : List (List UInt8))
     : Eq Bool (path_segment_has_no_slash segment) True
       → Eq
@@ -258,7 +258,7 @@ lemma path_split_no_slash_end
             (path_append_cons current byte rest))
   }
 
-lemma path_split_append_cons_unfold
+theorem path_split_append_cons_unfold
       (byte : UInt8)
       (rest : List UInt8)
       (suffix : List UInt8)
@@ -279,7 +279,7 @@ lemma path_split_append_cons_unfold
           (path_byte_is_slash byte)) =
   Refl
 
-lemma path_split_no_slash_prefix_cons
+theorem path_split_no_slash_prefix_cons
       (byte : UInt8)
       (rest : List UInt8)
       (suffix : List UInt8)
@@ -325,7 +325,7 @@ lemma path_split_no_slash_prefix_cons
     False ↦ λno_slash. ih no_slash
   }
 
-lemma path_split_no_slash_prefix
+theorem path_split_no_slash_prefix
       (segment : List UInt8)
       (suffix : List UInt8)
       (current : List UInt8)
@@ -404,7 +404,7 @@ lemma path_split_no_slash_prefix
               (path_append_cons current byte rest)))
   }
 
-lemma path_finish_valid_segment
+theorem path_finish_valid_segment
       (segment : List UInt8) (segments : List (List UInt8))
     : Eq Bool (path_segment_valid segment) True
       → Eq
@@ -416,7 +416,7 @@ lemma path_finish_valid_segment
     Cons byte rest ↦ λvalid. Refl
   }
 
-lemma path_segment_valid_no_slash
+theorem path_segment_valid_no_slash
       (segment : List UInt8)
     : Eq Bool (path_segment_valid segment) True
       → Eq Bool (path_segment_has_no_slash segment) True =
@@ -425,24 +425,24 @@ lemma path_segment_valid_no_slash
     Cons byte rest ↦ λvalid. valid
   }
 
-lemma path_segments_valid_head
+theorem path_segments_valid_head
       (segment : List UInt8) (rest : List (List UInt8))
     : Eq Bool (path_segments_valid (Cons (List UInt8) segment rest)) True
       → Eq Bool (path_segment_valid segment) True =
   λvalid.
     (proof left for bool_and) (path_segment_valid segment) (path_segments_valid rest) valid
 
-lemma path_segments_valid_tail
+theorem path_segments_valid_tail
       (segment : List UInt8) (rest : List (List UInt8))
     : Eq Bool (path_segments_valid (Cons (List UInt8) segment rest)) True
       → Eq Bool (path_segments_valid rest) True =
   λvalid.
     (proof right for bool_and) (path_segment_valid segment) (path_segments_valid rest) valid
 
-lemma path_slash_is_slash : Eq Bool (path_byte_is_slash path_slash_byte) True =
+theorem path_slash_is_slash : Eq Bool (path_byte_is_slash path_slash_byte) True =
   (DecEq_instance_UInt8).complete path_slash_byte path_slash_byte Refl
 
-lemma path_split_leading_slash
+theorem path_split_leading_slash
       (rest : List UInt8) (current : List UInt8) (segments : List (List UInt8))
     : Eq
         (List (List UInt8))
@@ -463,7 +463,7 @@ lemma path_split_leading_slash
         slash)
     path_slash_is_slash
 
-lemma path_append_nil_sym
+theorem path_append_nil_sym
       (a : Type) (items : List a)
     : Eq (List a) items (list_append a items (Nil a)) =
   match items {
@@ -478,7 +478,7 @@ lemma path_append_nil_sym
         (path_append_nil_sym a rest)
   }
 
-lemma path_append_assoc
+theorem path_append_assoc
       (a : Type) (left : List a) (middle : List a) (right : List a)
     : Eq
         (List a)
@@ -496,7 +496,7 @@ lemma path_append_assoc
         (path_append_assoc a rest middle right)
   }
 
-lemma path_split_render_single
+theorem path_split_render_single
       (segment : List UInt8) (segments : List (List UInt8))
     : Eq Bool (path_segment_valid segment) True
       → Eq
@@ -516,7 +516,7 @@ lemma path_split_render_single
         (path_segment_valid_no_slash segment valid))
       (path_finish_valid_segment segment segments valid)
 
-lemma path_split_render_nil
+theorem path_split_render_nil
       (segments : List (List UInt8))
     : Eq
         (List (List UInt8))
@@ -530,7 +530,7 @@ lemma path_split_render_nil
     Refl
     (path_append_nil_sym (List UInt8) segments)
 
-lemma path_split_render_single_case
+theorem path_split_render_single_case
       (segment : List UInt8) (segments : List (List UInt8))
     : Eq Bool (path_segment_valid segment) True
       → Eq
@@ -552,7 +552,7 @@ lemma path_split_render_single_case
       Refl
       (path_split_render_single segment segments valid)
 
-lemma path_split_render_cons_case
+theorem path_split_render_cons_case
       (segment : List UInt8)
       (next : List UInt8)
       (tail : List (List UInt8))
@@ -670,7 +670,7 @@ lemma path_split_render_cons_case
               (Cons (List UInt8) segment (Nil (List UInt8)))
               (Cons (List UInt8) next tail)))))
 
-lemma path_split_render_step
+theorem path_split_render_step
       (segment : List UInt8) (rest : List (List UInt8)) (segments : List (List UInt8))
     : (Eq
         Bool
@@ -702,7 +702,7 @@ lemma path_split_render_step
     Cons next tail ↦ λih. path_split_render_cons_case segment next tail segments ih
   }
 
-lemma path_split_render_segments
+theorem path_split_render_segments
       (rendered : List (List UInt8)) (segments : List (List UInt8))
     : Eq Bool (path_segments_valid rendered) True
       → Eq
@@ -719,7 +719,7 @@ lemma path_split_render_segments
         (path_split_render_segments rest (path_finish_segment segment segments))
   }
 
-lemma path_no_slash_head
+theorem path_no_slash_head
       (byte : UInt8) (rest : List UInt8)
     : Eq Bool (path_segment_has_no_slash (Cons UInt8 byte rest)) True
       → Eq Bool (path_byte_is_slash byte) False =
@@ -738,7 +738,7 @@ lemma path_no_slash_head
     False ↦ λno_slash. Proved
   }
 
-lemma path_render_cons_head_nil
+theorem path_render_cons_head_nil
       (byte : UInt8) (tail : List UInt8)
     : Eq
         (List UInt8)
@@ -746,7 +746,7 @@ lemma path_render_cons_head_nil
         (Cons UInt8 byte tail) =
   path_equal_cong (List UInt8) (List UInt8) tail tail (Cons UInt8 byte) Refl
 
-lemma path_render_cons_head_more
+theorem path_render_cons_head_more
       (byte : UInt8) (tail : List UInt8) (next : List UInt8) (remaining : List (List UInt8))
     : Eq
         (List UInt8)
@@ -776,7 +776,7 @@ lemma path_render_cons_head_more
     (Cons UInt8 byte)
     Refl
 
-lemma path_render_cons_is_relative
+theorem path_render_cons_is_relative
       (byte : UInt8) (tail : List UInt8) (rest : List (List UInt8))
     : Eq Bool (path_byte_is_slash byte) False
       → Eq Bool
@@ -830,7 +830,7 @@ lemma path_render_cons_is_relative
           head_not_slash
   }
 
-lemma path_render_relative_is_relative
+theorem path_render_relative_is_relative
       (segments : List (List UInt8))
     : Eq Bool (path_segments_valid segments) True
       → Eq Bool (path_input_is_absolute (path_render_segments segments)) False =
@@ -854,7 +854,7 @@ lemma path_render_relative_is_relative
       }
   }
 
-lemma path_split_render_absolute
+theorem path_split_render_absolute
       (segments : List (List UInt8))
     : Eq Bool (path_segments_valid segments) True
       → Eq
@@ -876,7 +876,7 @@ lemma path_split_render_absolute
       (path_split_leading_slash (path_render_segments segments) (Nil UInt8) (Nil (List UInt8)))
       (path_split_render_segments segments (Nil (List UInt8)) valid)
 
-lemma path_parse_list_to_bytes
+theorem path_parse_list_to_bytes
       (input : List UInt8)
     : Eq Path
         (path_parse (list_to_bytes input))
@@ -892,7 +892,7 @@ lemma path_parse_list_to_bytes
       MkPath (path_input_is_absolute actual) (path_split actual (Nil UInt8) (Nil (List UInt8))))
     (list_bytes_roundtrip input)
 
-lemma path_parse_render_relative
+theorem path_parse_render_relative
       (segments : List (List UInt8))
     : Eq Bool (path_segments_valid segments) True
       → Eq Path (path_parse (path_render (MkPath False segments))) (MkPath False segments) =
@@ -932,7 +932,7 @@ lemma path_parse_render_relative
           (MkPath False)
           (path_split_render_segments segments (Nil (List UInt8)) valid)))
 
-lemma path_parse_render_absolute
+theorem path_parse_render_absolute
       (segments : List (List UInt8))
     : Eq Bool (path_segments_valid segments) True
       → Eq Path (path_parse (path_render (MkPath True segments))) (MkPath True segments) =
@@ -987,7 +987,7 @@ lemma path_parse_render_absolute
           (MkPath True)
           (path_split_render_absolute segments valid)))
 
-lemma path_parse_render_valid
+theorem path_parse_render_valid
       (path : Path)
     : Eq Bool (path_valid path) True → Eq Path (path_parse (path_render path)) path =
   match path {
@@ -999,7 +999,7 @@ lemma path_parse_render_valid
         }
   }
 
-lemma path_bool_and_intro
+theorem path_bool_and_intro
       (left : Bool) (right : Bool)
     : Eq Bool left True → Eq Bool right True → Eq Bool (bool_and left right) True =
   match left {
@@ -1007,7 +1007,7 @@ lemma path_bool_and_intro
     False ↦ λleft_true. λright_true. absurd left_true
   }
 
-lemma path_no_slash_append_cons
+theorem path_no_slash_append_cons
       (byte : UInt8)
       (rest : List UInt8)
       (right : List UInt8)
@@ -1039,7 +1039,7 @@ lemma path_no_slash_append_cons
     False ↦ λleft_valid. λright_valid. ih left_valid right_valid
   }
 
-lemma path_no_slash_append
+theorem path_no_slash_append
       (left : List UInt8) (right : List UInt8)
     : Eq Bool (path_segment_has_no_slash left) True
       → Eq Bool (path_segment_has_no_slash right) True
@@ -1049,7 +1049,7 @@ lemma path_no_slash_append
     Cons byte rest ↦ path_no_slash_append_cons byte rest right (path_no_slash_append rest right)
   }
 
-lemma path_segments_valid_append_one
+theorem path_segments_valid_append_one
       (segments : List (List UInt8)) (segment : List UInt8)
     : Eq Bool (path_segments_valid segments) True
       → Eq Bool (path_segment_valid segment) True
@@ -1077,7 +1077,7 @@ lemma path_segments_valid_append_one
               segment_valid)
   }
 
-lemma path_finish_preserves_valid
+theorem path_finish_preserves_valid
       (current : List UInt8) (segments : List (List UInt8))
     : Eq Bool (path_segment_has_no_slash current) True
       → Eq Bool (path_segments_valid segments) True
@@ -1094,7 +1094,7 @@ lemma path_finish_preserves_valid
             current_valid
   }
 
-lemma path_non_slash_singleton
+theorem path_non_slash_singleton
       (byte : UInt8)
     : Eq Bool (path_byte_is_slash byte) False
       → Eq Bool (path_segment_has_no_slash (Cons UInt8 byte (Nil UInt8))) True =
@@ -1111,7 +1111,7 @@ lemma path_non_slash_singleton
           slash_case
   }
 
-lemma path_split_preserves_valid_cons
+theorem path_split_preserves_valid_cons
       (byte : UInt8)
       (rest : List UInt8)
       (current : List UInt8)
@@ -1170,7 +1170,7 @@ lemma path_split_preserves_valid_cons
             segments_valid
   }
 
-lemma path_split_preserves_valid
+theorem path_split_preserves_valid
       (input : List UInt8) (current : List UInt8) (segments : List (List UInt8))
     : Eq Bool (path_segment_has_no_slash current) True
       → Eq Bool (path_segments_valid segments) True
@@ -1193,10 +1193,10 @@ lemma path_split_preserves_valid
           segments)
   }
 
-lemma path_parse_valid (raw : Bytes) : Eq Bool (path_valid (path_parse raw)) True =
+theorem path_parse_valid (raw : Bytes) : Eq Bool (path_valid (path_parse raw)) True =
   path_split_preserves_valid (bytes_to_list raw) (Nil UInt8) (Nil (List UInt8)) Proved Proved
 
-lemma path_parse_render_parse
+theorem path_parse_render_parse
       (raw : Bytes)
     : Eq Path (path_parse (path_render (path_parse raw))) (path_parse raw) =
   path_parse_render_valid (path_parse raw) (path_parse_valid raw)
@@ -1394,7 +1394,7 @@ fn path_normalize_result (path : Path) (raw : Path) (already_normalized : Bool) 
 fn path_normalize (path : Path) : Path =
   path_normalize_result path (path_normalize_raw path) (path_normalized path)
 
-lemma path_no_dot_cons
+theorem path_no_dot_cons
       (segment : List UInt8) (rest : List (List UInt8))
     : Equal Bool (path_is_dot segment) False
       → Equal Bool (path_segments_no_dot rest) True
@@ -1406,7 +1406,7 @@ lemma path_no_dot_cons
     False ↦ λnot_dot. λtail_clean. tail_clean
   }
 
-lemma path_no_dotdot_cons
+theorem path_no_dotdot_cons
       (segment : List UInt8) (rest : List (List UInt8))
     : Equal Bool (path_is_dotdot segment) False
       → Equal Bool (path_segments_no_dotdot rest) True
@@ -1418,7 +1418,7 @@ lemma path_no_dotdot_cons
     False ↦ λnot_dotdot. λtail_clean. tail_clean
   }
 
-lemma path_ordinary_no_dot
+theorem path_ordinary_no_dot
       (segments : List PathOrdinarySegment)
     : Equal Bool (path_segments_no_dot (path_forget_ordinary segments)) True =
   match segments {
@@ -1431,7 +1431,7 @@ lemma path_ordinary_no_dot
         (path_ordinary_no_dot rest)
   }
 
-lemma path_ordinary_no_dotdot
+theorem path_ordinary_no_dotdot
       (segments : List PathOrdinarySegment)
     : Equal Bool (path_segments_no_dotdot (path_forget_ordinary segments)) True =
   match segments {
@@ -1444,7 +1444,7 @@ lemma path_ordinary_no_dotdot
         (path_ordinary_no_dotdot rest)
   }
 
-lemma path_no_dot_head
+theorem path_no_dot_head
       (segment : List UInt8) (rest : List (List UInt8))
     : Equal Bool
         (path_no_special_cons_result (path_segments_no_dot rest) (path_is_dot segment))
@@ -1455,7 +1455,7 @@ lemma path_no_dot_head
     False ↦ λclean. Proved
   }
 
-lemma path_no_dot_tail
+theorem path_no_dot_tail
       (segment : List UInt8) (rest : List (List UInt8))
     : Equal Bool
         (path_no_special_cons_result (path_segments_no_dot rest) (path_is_dot segment))
@@ -1466,7 +1466,7 @@ lemma path_no_dot_tail
     False ↦ λclean. clean
   }
 
-lemma path_no_dot_append
+theorem path_no_dot_append
       (left : List (List UInt8)) (right : List (List UInt8))
     : Equal Bool (path_segments_no_dot left) True
       → Equal Bool (path_segments_no_dot right) True
@@ -1487,7 +1487,7 @@ lemma path_no_dot_append
               right_clean)
   }
 
-lemma path_equal_cong0
+theorem path_equal_cong0
       (a : Type) (b : Type) (left : a) (right : a) (f : a → b) (same : Equal a left right)
     : Equal b (f left) (f right) =
   J (λright' _. Equal b (f left) (f right')) Refl same
@@ -1498,9 +1498,9 @@ fn path_list_tail (items : List UInt8) : List UInt8 =
     Cons item rest ↦ rest
   }
 
-lemma path_dotdot_not_dot : Equal Bool (path_is_dot path_dotdot_segment) False = Proved
+theorem path_dotdot_not_dot : Equal Bool (path_is_dot path_dotdot_segment) False = Proved
 
-lemma path_repeat_dotdot_no_dot
+theorem path_repeat_dotdot_no_dot
       (count : Nat)
     : Equal Bool (path_segments_no_dot (path_repeat_dotdot count)) True =
   match count {
@@ -1513,14 +1513,14 @@ lemma path_repeat_dotdot_no_dot
         (path_repeat_dotdot_no_dot rest)
   }
 
-lemma path_dotdot_is_dotdot : Equal Bool (path_is_dotdot path_dotdot_segment) True =
+theorem path_dotdot_is_dotdot : Equal Bool (path_is_dotdot path_dotdot_segment) True =
   (proof intro for bool_and)
     ((DecEq_instance_UInt8).eq path_dot_byte path_dot_byte)
     ((DecEq_instance_UInt8).eq path_dot_byte path_dot_byte)
     ((DecEq_instance_UInt8).complete path_dot_byte path_dot_byte Refl)
     ((DecEq_instance_UInt8).complete path_dot_byte path_dot_byte Refl)
 
-lemma path_ordered_ordinary_cons
+theorem path_ordered_ordinary_cons
       (ordinary_seen : Bool) (segment : List UInt8) (rest : List (List UInt8))
     : Equal Bool (path_is_dot segment) False
       → Equal Bool (path_is_dotdot segment) False
@@ -1543,7 +1543,7 @@ lemma path_ordered_ordinary_cons
         }
   }
 
-lemma path_ordinary_ordered
+theorem path_ordinary_ordered
       (ordinary_seen : Bool) (segments : List PathOrdinarySegment)
     : Equal Bool (path_relative_ordered ordinary_seen (path_forget_ordinary segments)) True =
   match segments {
@@ -1558,7 +1558,7 @@ lemma path_ordinary_ordered
         (path_ordinary_ordered True rest)
   }
 
-lemma path_ordered_dotdot_result
+theorem path_ordered_dotdot_result
       (segment : List UInt8) (rest : List (List UInt8))
     : Equal Bool (path_is_dot segment) False
       → Equal Bool (path_is_dotdot segment) True
@@ -1581,7 +1581,7 @@ lemma path_ordered_dotdot_result
         }
   }
 
-lemma path_ordered_dotdot_cons
+theorem path_ordered_dotdot_cons
       (rest : List (List UInt8))
     : Equal Bool (path_relative_ordered False rest) True
       → Equal Bool
@@ -1594,7 +1594,7 @@ lemma path_ordered_dotdot_cons
         True =
   path_ordered_dotdot_result path_dotdot_segment rest path_dotdot_not_dot path_dotdot_is_dotdot
 
-lemma path_relative_form_ordered
+theorem path_relative_form_ordered
       (parents : Nat) (ordinary : List PathOrdinarySegment)
     : Equal Bool
         (path_relative_ordered
@@ -1612,7 +1612,7 @@ lemma path_relative_form_ordered
         (path_relative_form_ordered rest ordinary)
   }
 
-lemma path_forget_relative_no_dot
+theorem path_forget_relative_no_dot
       (form : PathNormalForm)
     : Equal Bool (path_segments_no_dot (path_forget_relative form)) True =
   match form {
@@ -1624,21 +1624,21 @@ lemma path_forget_relative_no_dot
         (path_ordinary_no_dot ordinary)
   }
 
-lemma path_forget_absolute_no_dot
+theorem path_forget_absolute_no_dot
       (form : PathNormalForm)
     : Equal Bool (path_segments_no_dot (path_forget_absolute form)) True =
   match form {
     MkPathNormalForm parents ordinary ↦ path_ordinary_no_dot ordinary
   }
 
-lemma path_absolute_form_no_dotdot
+theorem path_absolute_form_no_dotdot
       (form : PathNormalForm)
     : Equal Bool (path_segments_no_dotdot (path_forget_absolute form)) True =
   match form {
     MkPathNormalForm parents ordinary ↦ path_ordinary_no_dotdot ordinary
   }
 
-lemma path_absolute_form_normalized
+theorem path_absolute_form_normalized
       (form : PathNormalForm)
     : Equal Bool
         (bool_and
@@ -1654,7 +1654,7 @@ lemma path_absolute_form_normalized
         (path_ordinary_no_dotdot ordinary)
   }
 
-lemma path_relative_form_normalized
+theorem path_relative_form_normalized
       (form : PathNormalForm)
     : Equal Bool
         (bool_and
@@ -1683,7 +1683,7 @@ lemma path_relative_form_normalized
         (path_relative_form_ordered parents ordinary)
   }
 
-lemma path_normalize_raw_normalized
+theorem path_normalize_raw_normalized
       (path : Path)
     : Equal Bool (path_normalized (path_normalize_raw path)) True =
   match path {
@@ -1694,7 +1694,7 @@ lemma path_normalize_raw_normalized
       }
   }
 
-lemma path_normalize_normalized_result
+theorem path_normalize_normalized_result
       (path : Path) (raw : Path) (already_normalized : Bool)
     : Equal Bool (path_normalized path) already_normalized
       → Equal Bool (path_normalized raw) True
@@ -1704,7 +1704,7 @@ lemma path_normalize_normalized_result
     False ↦ λpath_decision. λraw_normalized. raw_normalized
   }
 
-lemma path_normalize_normalized
+theorem path_normalize_normalized
       (path : Path)
     : Equal Bool (path_normalized (path_normalize path)) True =
   path_normalize_normalized_result
@@ -1714,7 +1714,7 @@ lemma path_normalize_normalized
     Refl
     (path_normalize_raw_normalized path)
 
-lemma path_normalize_idempotent_result
+theorem path_normalize_idempotent_result
       (path : Path) (raw : Path) (already_normalized : Bool)
     : Equal Bool already_normalized True
       → Eq Path (path_normalize_result path raw already_normalized) path =
@@ -1723,7 +1723,7 @@ lemma path_normalize_idempotent_result
     False ↦ λis_normalized. absurd is_normalized
   }
 
-lemma path_normalize_idempotent
+theorem path_normalize_idempotent
       (path : Path)
     : Eq Path (path_normalize (path_normalize path)) (path_normalize path) =
   path_normalize_idempotent_result
@@ -1743,7 +1743,7 @@ fn path_absolute_has_no_dotdot (path : Path) : Bool =
     MkPath False segments ↦ True
   }
 
-lemma path_normalized_has_no_dot
+theorem path_normalized_has_no_dot
       (path : Path)
     : Equal Bool (path_normalized path) True → Equal Bool (path_has_no_dot path) True =
   match path {
@@ -1760,7 +1760,7 @@ lemma path_normalized_has_no_dot
       }
   }
 
-lemma path_normalized_absolute_has_no_dotdot
+theorem path_normalized_absolute_has_no_dotdot
       (path : Path)
     : Equal Bool (path_normalized path) True
       → Equal Bool (path_absolute_has_no_dotdot path) True =
@@ -1775,12 +1775,12 @@ lemma path_normalized_absolute_has_no_dotdot
       }
   }
 
-lemma path_normalize_has_no_dot
+theorem path_normalize_has_no_dot
       (path : Path)
     : Equal Bool (path_has_no_dot (path_normalize path)) True =
   path_normalized_has_no_dot (path_normalize path) (path_normalize_normalized path)
 
-lemma path_normalize_absolute_has_no_dotdot
+theorem path_normalize_absolute_has_no_dotdot
       (path : Path)
     : Equal Bool (path_absolute_has_no_dotdot (path_normalize path)) True =
   path_normalized_absolute_has_no_dotdot (path_normalize path) (path_normalize_normalized path)

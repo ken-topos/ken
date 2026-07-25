@@ -58,7 +58,7 @@ function. The motive lands in `Omega` (proof-irrelevant), relying on `J`'s
 unconstrained codomain sort (`34 §3.4`).
 
 ```ken
-lemma cong
+theorem cong
       (ty : Type) (ty2 : Type) (x : ty) (y : ty) (f : ty → ty2) (p : Eq ty x y)
     : Eq ty2 (f x) (f y) =
   J (λy' _. Eq ty2 (f x) (f y')) Refl p
@@ -76,14 +76,14 @@ fn cast (ty : Type) (ty2 : Type) (e : Eq Type ty ty2) (t : ty) : ty2 = J (λx _.
 `sym` flips the direction of a propositional equality.
 
 ```ken
-lemma sym (ty : Type) (x : ty) (y : ty) (p : Eq ty x y) : Eq ty y x =
+theorem sym (ty : Type) (x : ty) (y : ty) (p : Eq ty x y) : Eq ty y x =
   J (λy' _. Eq ty y' x) Refl p
 ```
 
 `trans` composes two propositional equalities.
 
 ```ken
-lemma trans (ty : Type) (x : ty) (y : ty) (z : ty) (p : Eq ty x y) (q : Eq ty y z) : Eq ty x z =
+theorem trans (ty : Type) (x : ty) (y : ty) (z : ty) (p : Eq ty x y) (q : Eq ty y z) : Eq ty x z =
   J (λz' _. Eq ty x z') p q
 ```
 
@@ -127,7 +127,7 @@ by chaining two real hypotheses through both, over an abstract carrier
 reduction shortcut):
 
 ```ken example
-lemma sym_trans_compose
+theorem sym_trans_compose
       (ty : Type) (a : ty) (b : ty) (c : ty) (p : Eq ty a b) (q : Eq ty c b)
     : Eq ty a c =
   trans ty a b c p (sym ty c b q)

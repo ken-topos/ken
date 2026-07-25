@@ -21,7 +21,7 @@ actually in use instead.
 4. [Refinement types](#4-refinement-types)
 5. [`class` and `instance`](#5-class-and-instance)
 6. [Effect rows (`visits`)](#6-effect-rows-visits)
-7. [Named proof claims: `prop`, `lemma`, `proof`](#7-named-proof-claims-prop-lemma-proof)
+7. [Named proof claims: `prop`, `theorem`, `proof`](#7-named-proof-claims-prop-theorem-proof)
 8. [Local `let`: binding groups](#8-local-let-binding-groups)
 9. [The `.ken.md` literate format](#9-the-kenmd-literate-format)
 
@@ -289,7 +289,7 @@ committing it to one concrete row — write `[e]` as the row parameter
 whatever its caller's effect happens to be, rather than hard-coding
 `[Console]` into something that has nothing to do with the console.
 
-## 7. Named proof claims: `prop`, `lemma`, `proof`
+## 7. Named proof claims: `prop`, `theorem`, `proof`
 
 Three more declaration keywords name a proof at the surface, on top of the
 `Equal`/`IsTrue` goals §4's refinement obligations already build (`33 §8`).
@@ -300,7 +300,7 @@ they are elaboration vocabulary over ordinary checked terms:
   (§8.1).
 - **`proof <name> for <subject>`** names a checked proof term attached to an
   already-resolved subject (§8.2).
-- **`lemma`** names a standalone, reusable checked theorem in the ordinary
+- **`theorem`** names a standalone, reusable checked theorem in the ordinary
   module namespace (§8.3).
 
 A `prop` may carry an optional `where` block of constructor-style intro
@@ -310,7 +310,7 @@ its own bound parameters, in order — it cannot introduce extra premises or
 construct a new argument value (a real inductive relation like "list
 append" needs that). Know this going in: a `where` block is not yet a
 general way to define an inductive relation; for that, state the property
-as a `lemma`'s result type instead (the proof-techniques strand's induction
+as a `theorem`'s result type instead (the proof-techniques strand's induction
 and motive-construction section covers this) and prove it directly.
 
 Below, `triv`'s conclusion reapplies `Trivial` to exactly its own parameters
@@ -324,7 +324,7 @@ prop Trivial (a : Type) (x : a) : Ω where {
 
 const sample_int : Int = 42
 
-lemma trivial_sample : Trivial Int sample_int = Trivial.triv Int sample_int
+theorem trivial_sample : Trivial Int sample_int = Trivial.triv Int sample_int
 ```
 
 Outside the seed shape: below, `nil`'s conclusion applies `AppendsTo` to
@@ -349,37 +349,37 @@ fn double_it (x : Int) : Int = add_int x x
 proof trivial for double_it (x : Int) : Trivial Int (double_it x) =
   Trivial.triv Int (double_it x)
 
-lemma attached_sample : Trivial Int (double_it sample_int) = double_it::trivial sample_int
+theorem attached_sample : Trivial Int (double_it sample_int) = double_it::trivial sample_int
 ```
 
-`lemma` is the standalone form — parameterized like a function, instantiated
+`theorem` is the standalone form — parameterized like a function, instantiated
 by ordinary application, no attachment to a subject:
 
 ```ken example
-lemma trivial_any (a : Type) (x : a) : Trivial a x = Trivial.triv a x
+theorem trivial_any (a : Type) (x : a) : Trivial a x = Trivial.triv a x
 
-lemma lemma_sample : Trivial Int sample_int = trivial_any Int sample_int
+theorem theorem_sample : Trivial Int sample_int = trivial_any Int sample_int
 ```
 
-**A `lemma` or attached `proof` may recurse, including mutual recursion with
+**A `theorem` or attached `proof` may recurse, including mutual recursion with
 other proof declarations, only when the shared size-change termination gate
 accepts the proof component** (`33 §8.3–8.4`). A recursive proof component is
 signatures-first, kernel-checked, and committed only after SCT accepts; a
 non-decreasing proof loop fails closed. A recursive cycle that mixes a proof
 declaration with a computational `const`/`fn` is rejected in this round.
 
-Below, recursion is structurally descending on `ys`, so the recursive `lemma`
+Below, recursion is structurally descending on `ys`, so the recursive `theorem`
 is admitted. The second lemma is an optional non-recursive wrapper showing
 ordinary reuse, not a workaround required by the surface:
 
 ```ken example
-lemma trivial_by_list (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
+theorem trivial_by_list (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
   match ys {
     Nil ↦ Trivial.triv a x;
     Cons _ t ↦ trivial_by_list a x b t
   }
 
-lemma trivial_by_list_lemma (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
+theorem trivial_by_list_theorem (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
   trivial_by_list a x b ys
 ```
 
@@ -392,42 +392,42 @@ for the right keyword line by line. The rule of thumb:
 | ------------------------------------------------------- | ------------------ | --------------- |
 | a type abbreviation / refinement / `Σ`/`Π` shorthand    | `def` (§2)         | — (type-level)  |
 | the *statement* of a proposition family to reason about | `prop`             | `Omega`         |
-| a reusable, module-level checked theorem                | `lemma`            | `Omega`         |
+| a reusable, module-level checked theorem                | `theorem`            | `Omega`         |
 | a checked proof that belongs to one subject             | `proof … for`      | `Omega`         |
 | a value or computation (incl. a proof-relevant witness) | `const`/`fn` (§1)  | `Type`          |
 | a goal to hand the prover, no inline proof              | `prove` (`21 §3`)  | `Omega`         |
 
-**The load-bearing rule: `lemma` and `proof` require an `Omega` statement.**
+**The load-bearing rule: `theorem` and `proof` require an `Omega` statement.**
 Their elaboration checks that the stated `φ` classifies at `Omega`
 (proof-irrelevant); a term whose type lands in `Type` is rejected there, not
-silently accepted. So the choice between `lemma`/`proof` and `const`/`fn` is
+silently accepted. So the choice between `theorem`/`proof` and `const`/`fn` is
 not stylistic — it follows the `Omega`/`Type` line:
 
 - **`Equal`-typed and `IsTrue`-typed statements are `Omega`** (`Equal : Π(A :
   Type). A → A → Omega`; `IsTrue b` unfolds to `Equal Bool b True`), and so is
   an `And` of two `Omega`s. These are the bread-and-butter law statements —
   refl/antisym/trans/totality, reduction equations — and each goes in a
-  `lemma` or `proof` cleanly.
+  `theorem` or `proof` cleanly.
 - **Proof-*relevant* conclusions classify at `Type`** — `Or a b` (`Or : Omega
   → Omega → Type`), a `Σ` with a `Type` component, and the disjunction- or
   eliminator-helper terms that carry a chosen branch *as data*. These are
-  genuine computation, so they stay `const`/`fn`. Promoting one to a `lemma`
+  genuine computation, so they stay `const`/`fn`. Promoting one to a `theorem`
   is not fighting a bug — it is landing on the wrong side of the
   proof-irrelevance boundary; `ensure_omega_type` is doing its job.
 
-In one line: `lemma`/`proof` = irrelevant propositions you *prove*;
+In one line: `theorem`/`proof` = irrelevant propositions you *prove*;
 `const`/`fn` = data you *compute*. The vocabulary tracks the `Omega`/`Type`
 line on purpose.
 
-**`lemma` vs `proof … for <subject>`.** Same checked-theorem elaboration; the
-difference is *ownership*. A `lemma` lives in the ordinary module namespace
+**`theorem` vs `proof … for <subject>`.** Same checked-theorem elaboration; the
+difference is *ownership*. A `theorem` lives in the ordinary module namespace
 and is applied by name. A `proof p for s` is exported only as `s::p`, its
 telescope follows the theorem being stated, and its claim must mention `s`
 applied. Same-subject attached proofs are ordinary dependencies: an acyclic
 sibling reference resolves in dependency order, and a recursive sibling group
 is admitted only when SCT accepts it.
 Reach for `proof … for` when the fact is *about* one definition and should
-travel with it; reach for `lemma` when it is a reusable stepping-stone in its
+travel with it; reach for `theorem` when it is a reusable stepping-stone in its
 own right.
 
 **Declaration order is dependency-driven, with recursive groups checked
@@ -436,7 +436,7 @@ lede-first reads come from the prose, not the code order.** The elaborator
 forms a call graph and processes strongly connected components in dependency
 order (`33 §1`, §8.4), so an acyclic dependency may appear later in source and a
 recursive component is checked signatures-first. Recursive `const`/`fn` groups
-and recursive `lemma`/`proof` groups are SCT-gated; mixed computational/proof
+and recursive `theorem`/`proof` groups are SCT-gated; mixed computational/proof
 cycles reject. Prose should still introduce the result before the code when
 that gives the reader a clearer top-down path.
 
@@ -501,9 +501,9 @@ Proofs are values too. A proof-valued binding makes the evidence role explicit,
 and the rest of the body checks against its stated type:
 
 ```ken example
-lemma return_self_evidence (x : Bool) (evidence : Equal Bool x x) : Equal Bool x x = evidence
+theorem return_self_evidence (x : Bool) (evidence : Equal Bool x x) : Equal Bool x x = evidence
 
-lemma let_proof_value (x : Bool) : Equal Bool x x =
+theorem let_proof_value (x : Bool) : Equal Bool x x =
   let self_evidence : Equal Bool x x = Refl in return_self_evidence x self_evidence
 ```
 
@@ -610,7 +610,7 @@ type signature, a snippet missing its surrounding declarations).
   (`elab.rs::validate_seed_prop_shape`): an intro's conclusion must reapply
   the family to exactly its own bound parameters, so genuine inductive
   relations (list-append-shaped, order-shaped) can't be expressed as a
-  `prop where` block yet — §7 above teaches the `lemma`-with-explicit-goal
+  `prop where` block yet — §7 above teaches the `theorem`-with-explicit-goal
   workaround instead. Routed as a language-surface follow-on (retro-action
   wiring, `README.md`): widening the seed shape to accept fresh premise
   binders and constructor-applied arguments is Language's call, not a

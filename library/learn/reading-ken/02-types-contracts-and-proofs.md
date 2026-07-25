@@ -41,7 +41,7 @@ terms — none adds a new kernel declaration class or an ambient proof search
   names "a checked property *of* `subject`" — the subject must occur
   applied somewhere in the proof's claim
   ([§8.2](../../../spec/30-surface/33-declarations.md#82-attached-proofs--proof)).
-- **`lemma`** — a standalone checked proof theorem in the ordinary module
+- **`theorem`** — a standalone checked proof theorem in the ordinary module
   namespace, used when no single subject owns the theorem
   ([§8.3](../../../spec/30-surface/33-declarations.md#83-standalone-theorems--theorem)).
 - **`prop`** — names a proposition family / claim shape, not itself a proof
@@ -50,7 +50,7 @@ terms — none adds a new kernel declaration class or an ambient proof search
 You can see both of the proof forms in the fragments this curriculum draws
 from. The [Transport fragment](../../../catalog/packages/Core/Logic/Transport.ken.md)
 states `cong`, `sym`,
-and `trans` as `lemma`s — none of them belongs to one specific subject,
+and `trans` as `theorem`s — none of them belongs to one specific subject,
 they are the general equality algebra later proofs build on. The same file
 also attaches a proof directly to a subject:
 

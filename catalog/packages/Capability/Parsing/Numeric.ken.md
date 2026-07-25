@@ -53,7 +53,7 @@ fn numeric_diagnostic
 fn numeric_argument_origin (argument : Nat) (position : Nat) : Origin =
   ArgumentOrigin argument (MkByteRange position position)
 
-lemma numeric_argument_origin_index_faithful
+theorem numeric_argument_origin_index_faithful
       (argument : Nat) (position : Nat)
     : Equal
         (Option Nat)
@@ -61,7 +61,7 @@ lemma numeric_argument_origin_index_faithful
         (Some Nat argument) =
   Refl
 
-lemma numeric_argument_origin_start_faithful
+theorem numeric_argument_origin_start_faithful
       (argument : Nat) (position : Nat)
     : Equal
         (Option Nat)
@@ -69,7 +69,7 @@ lemma numeric_argument_origin_start_faithful
         (Some Nat position) =
   Refl
 
-lemma numeric_argument_origin_end_faithful
+theorem numeric_argument_origin_end_faithful
       (argument : Nat) (position : Nat)
     : Equal
         (Option Nat)
@@ -216,7 +216,7 @@ fn parse_formatted_digits (chars : List Char) : Option (List Int) =
 fn show_digits (digits : List DecimalDigit) : String =
   list_char_to_string (format_digits digits)
 
-lemma format_digits_roundtrip
+theorem format_digits_roundtrip
       (digits : List DecimalDigit)
     : Equal
         (Option (List Int))

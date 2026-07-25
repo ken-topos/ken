@@ -57,7 +57,7 @@ run once at startup — no per-fence configuration.
 | Token category | Highlighted? | How |
 |---|---|---|
 | `--` line comments | yes | `comment` scope, via `hljs.COMMENT('--', '$')` |
-| Keywords (`const fn proc let in Type requires ensures prove law old space data match def type foreign temporal class instance derive where module import use pub prop lemma proof`) | yes | `keyword` scope, via the `keywords` table |
+| Keywords (`const fn proc let in Type requires ensures prove law old space data match def type foreign temporal class instance derive where module import use pub prop theorem proof`) | yes | `keyword` scope, via the `keywords` table |
 | Uppercase-initial identifiers (`ConId` — types, data constructors, e.g. `Bool`, `Nat`, a user's `Shape`) | yes | `title.class` scope, via the single uppercase-initial rule (no hand-listed type names) |
 | `Ω`/`Σ`/`Π` (fold to `Omega`/`Sigma`/`Pi`) | yes | `title.class`, same rule as ConIds |
 | `∀`/`∃`/`¬`/`ℓ` (fold to ordinary lowercase identifiers `forall`/`exists`/`not`/`level`) | no (by design) | left as plain text — they're term-level identifiers, not a distinct category |

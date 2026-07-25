@@ -9,7 +9,7 @@ ordinary kernel-checked proof.
 ## 1. `UInt8` equality
 
 ```ken
-lemma uint8_to_int_injective
+theorem uint8_to_int_injective
       (left : UInt8)
       (right : UInt8)
       (same_ints : Equal Int (uint8_to_int left) (uint8_to_int right))
@@ -31,7 +31,7 @@ lemma uint8_to_int_injective
 fn uint8_deceq_eq (left : UInt8) (right : UInt8) : Bool =
   eq_int (uint8_to_int left) (uint8_to_int right)
 
-lemma uint8_deceq_sound
+theorem uint8_deceq_sound
       (left : UInt8)
       (right : UInt8)
       (is_equal : IsTrue (eq_int (uint8_to_int left) (uint8_to_int right)))
@@ -41,7 +41,7 @@ lemma uint8_deceq_sound
     right
     (int_eq_sound (uint8_to_int left) (uint8_to_int right) is_equal)
 
-lemma uint8_deceq_complete
+theorem uint8_deceq_complete
       (left : UInt8) (right : UInt8) (same : Equal UInt8 left right)
     : IsTrue (eq_int (uint8_to_int left) (uint8_to_int right)) =
   int_eq_complete
@@ -59,7 +59,7 @@ instance DecEq UInt8 {
 ## 2. `Bytes` equality
 
 ```ken
-lemma bytes_to_list_injective
+theorem bytes_to_list_injective
       (left : Bytes)
       (right : Bytes)
       (same_bytes : Equal (List UInt8) (bytes_to_list left) (bytes_to_list right))

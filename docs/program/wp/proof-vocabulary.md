@@ -8,14 +8,14 @@ admission path — soundness-bearing half).
 
 ## Objective
 
-Make `lemma`/`proof` first-class in Ken's declaration model by wiring them into
+Make `theorem`/`proof` first-class in Ken's declaration model by wiring them into
 the same **signature-first, dependency-ordered, SCC + SCT** elaboration that
 `fn`/`const` already use, and by relaxing the two incidental `proof … for`
 restrictions that make `proof` a near-dead keyword. Result: recursive and
 mutually-recursive proofs (under SCT), forward references, and a genuine
 subject-organized proof namespace — `leq_nat::refl/trans/antisym`,
 `add::comm/assoc/zero_l`. This is what lets the pedagogic-catalog initiative
-retire the `fn _ind` + synonym-wrapper idiom for a single recursive `lemma`, and
+retire the `fn _ind` + synonym-wrapper idiom for a single recursive `theorem`, and
 what makes `proof … for` usable for real laws.
 
 ## Settled design — FIXED inputs
@@ -24,8 +24,8 @@ Architect rulings: evt_2evdthp5fey6p, evt_3bvdpr3paf8t7, evt_3d8xkej5gkwv3.
 
 Three changes on **one elaboration seam**. Do not relitigate; cite the rulings.
 
-**(A) Recursive `lemma`/`proof` under SCT — soundness-bearing.**
-Wire `lemma`, `proof`, and attached-`proof` decls into the same
+**(A) Recursive `theorem`/`proof` under SCT — soundness-bearing.**
+Wire `theorem`, `proof`, and attached-`proof` decls into the same
 dependency-ordered **SCC + SCT** elaboration `fn`/`const` use today (that path is
 `ViewDecl`/`LetDecl`-only at `crates/ken-elaborator/src/modules.rs:879`).
 - The admission guard **keys on SCT-acceptance, NOT cyclicity**: a self-edge
@@ -33,8 +33,9 @@ dependency-ordered **SCC + SCT** elaboration `fn`/`const` use today (that path i
   induction) are **both admitted iff SCT accepts**; an SCT-rejected self-reference
   and any non-descending cycle **fail closed** — identical obligation to
   `fn`/`const`.
-- **Acyclic forward references** (`lemma`→later `fn`, `lemma`→later `lemma`) are
-  **delivered by the signatures-first generalization — NOT "for free"**
+- **Acyclic forward references**
+  (`theorem`→later `fn`, `theorem`→later `theorem`) are **delivered by the
+  signatures-first generalization — NOT "for free"**
   (Architect-corrected, probed on `origin/main`). The current `fn`/`const` seam
   (`modules.rs:879`) walks the SCC-condensation in *source order* and declares
   signatures-before-bodies only *within* one mutual-recursion SCC, so an acyclic
@@ -57,7 +58,7 @@ somewhere in the proof's type φ (hypotheses **or** conclusion). Broad reading:
 `proof p for s` = "a named property **of** s."
 - This has **zero soundness impact**: attachment is namespacing over an
   already-checked theorem (`elab.rs:3714` — `AttachedProof` elaborates via the
-  identical `elaborate_checked_theorem` path as `lemma`; the result is a plain
+  identical `elaborate_checked_theorem` path as `theorem`; the result is a plain
   `declare_def` named `subject::proof_name`; `RAttachedProofRef` at
   `elab.rs:2192/3452` resolves to `RCon("subject::proof_name")`). **Nothing is
   keyed on the telescope** — no coherence/auto-discharge/obligation/rewrite/
@@ -83,9 +84,9 @@ the v0 seed into full inductive Ω-relations (separate feature). Both stay OUT.
 
 - **§33 §1** (mutual recursion): extend "all top-level definitions are mutually
   recursive within a module if the SCT check accepts the group" to **explicitly
-  include `lemma`/`proof`** in the SCC/SCT grouping (today read as view/let-only).
-- **§33 §8.3 / §8.2** (lemma / proof): replace "body may not self-reference" with
-  "a `lemma`/`proof` body **may self-recurse and mutually recurse with other proof
+  include `theorem`/`proof`** in the SCC/SCT grouping (today read as view/let-only).
+- **§33 §8.3 / §8.2** (theorem / proof): replace "body may not self-reference" with
+  "a `theorem`/`proof` body **may self-recurse and mutually recurse with other proof
   decls iff the recursion passes SCT**; SCT-rejected proof recursion fails closed."
   Replace the §8.2 **telescope-repeat** rule with the **occurs-applied-in-φ**
   condition, and **remove** the §8.2 **no-sibling-dependency** rule.
@@ -98,7 +99,7 @@ the v0 seed into full inductive Ω-relations (separate feature). Both stay OUT.
 This is the Architect's trust-root read (every SCT branch, one rejection per
 guard) and the artifact the kernel/elaborator review walks. It **replaces the
 source-order SCC walk for the whole declaration scope** (fn/const AND
-lemma/proof/attached-proof).
+theorem/proof/attached-proof).
 
 ```
 elaborate_scope(decls):
@@ -106,7 +107,7 @@ elaborate_scope(decls):
   # sig-first step from per-SCC to the whole scope; THIS is what delivers forward refs).
   for d in decls:
     ty := elaborate_type(d.signature)          # resolves other decls via their SIGNATURE only
-    if is_proof_decl(d):                        # lemma | proof | attached-proof
+    if is_proof_decl(d):                        # theorem | proof | attached-proof
       ensure_omega_type(ty)                     # [Guard 1] existing proof gate — φ must classify at Ω
       if is_attached(d):
         require subject_is_resolved_def(d.subject)          # [Guard 2a] KEEP (elab.rs:5433 precondition)
@@ -138,7 +139,7 @@ elaborate_scope(decls):
 - **[Guard 4 / 4a] Self-recursive, structural descent** (`refl_leq_nat` recursing
   `Suc x2`→`x2`) → `sct_accepts` = true → **ADMIT**. Identical obligation to the
   merged `refl_leq_nat_ind` fn.
-- **[Guard 4 / 4b] Self-recursive, NON-descending** (`lemma bad : φ = bad`, no
+- **[Guard 4 / 4b] Self-recursive, NON-descending** (`theorem bad : φ = bad`, no
   decreasing arg) → `sct_accepts` = false → **REJECT (SCT diagnostic)**. The
   load-bearing fail-closed case that keeps a looping "proof" of a false Ω-prop out.
 - **[Guard 4 / 4c] Mutual proof cycle, common decreasing measure** (homogeneous
@@ -204,15 +205,15 @@ Author/land the WP so review effort lands where the risk is:
 
 ## Acceptance criteria (testable)
 
-1. **Recursion (A):** a self-recursive `lemma` elaborates green —
+1. **Recursion (A):** a self-recursive `theorem` elaborates green —
    ```
-   lemma refl_leq_nat (x : Nat) : Equal Bool (leq_nat x x) True =
+   theorem refl_leq_nat (x : Nat) : Equal Bool (leq_nat x x) True =
      match x { Zero ⇒ tt ; Suc x2 ⇒ refl_leq_nat x2 }
    ```
    and a homogeneous proof↔proof mutual pair that passes SCT elaborates, while an
    SCT-**rejected** proof recursion (non-descending self/mutual) **fails closed**
    with the SCT diagnostic (assert the specific error, not bare `is_err`).
-2. **Forward refs (A):** a `lemma` stated above the `fn`/`lemma` it invokes
+2. **Forward refs (A):** a `theorem` stated above the `fn`/`theorem` it invokes
    resolves (no `UnresolvedCon`).
 3. **Telescope (B):** `proof refl for leq_nat`, `proof trans for leq_nat`,
    `proof assoc for add`, `proof zero_l for add` all elaborate (subject occurs
@@ -239,8 +240,8 @@ Author/land the WP so review effort lands where the risk is:
 
 ## Notes
 
-This collapses the pedagogic prototype's `fn _ind` + synonym-`lemma` pair to a
-single recursive `lemma`, and makes `proof … for` the live subject-organizing
+This collapses the pedagogic prototype's `fn _ind` + synonym-`theorem` pair to a
+single recursive `theorem`, and makes `proof … for` the live subject-organizing
 form the initiative reached for — at the cost of one validation swap + wiring
 proof decls into the SCC+SCT seam `fn`/`const` already use. Sequenced by the
 operator; timing is the operator's call. The Architect will review this frame and

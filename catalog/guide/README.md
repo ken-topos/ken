@@ -115,7 +115,7 @@ five routes a retro's Findings take:
 | A clearer proof technique, a decomposition that worked, a pitfall worth naming | **This guide** — fold it into the relevant strand (or the `write-ken` skill's inlined technique) directly, or file a follow-on if the fold needs review |
 | A recurring shape the surface should sugar | Ergo (triage) → Language (implement) |
 | A confusing error or manual elaborator step | Ergo |
-| A reusable `def`/`lemma`/`prop` | Promoted into the catalog itself (typically the Core Section), not left local to one package |
+| A reusable `def`/`theorem`/`prop` | Promoted into the catalog itself (typically the Core Section), not left local to one package |
 | A kernel-reduction defect | Kernel, via the enclave — the highest-value Finding |
 
 A catalog WP is not closed until its retro's guide-directed actions are

@@ -47,7 +47,7 @@ CS students, entry-level programmers. One entry serves this whole range through
 way to surface what synthetic tests cannot: **kernel-reduction defects** (the
 first pass already caught several) and **elaborator ergonomics** — recurring
 implementation shapes that should be *sugared* into surface syntax, or that
-should become *general-purpose `def`s, `lemma`s, or `prop`s*. These **Findings**
+should become *general-purpose `def`s, `theorem`s, or `prop`s*. These **Findings**
 are a first-class output of every entry, not a side effect (routing below).
 
 ### Why one artifact serves all four
@@ -282,7 +282,7 @@ closeout, the retro must surface and route concrete actions:
   Language implements (the Findings routing above).
 - **Elaborator ergonomics.** A confusing error or a manual step the elaborator
   could do → Ergo.
-- **Useful `def`s / `lemma`s / `prop`s.** A helper or law that proved reusable is
+- **Useful `def`s / `theorem`s / `prop`s.** A helper or law that proved reusable is
   promoted into the catalog itself as a general-purpose entry (typically the Core
   Section), not left local to one package.
 - **Kernel-reduction defects** → Kernel via the enclave (the highest-value

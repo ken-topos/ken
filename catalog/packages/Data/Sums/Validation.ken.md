@@ -132,7 +132,7 @@ const checked_record : Validation (NonEmpty String) (Pair Bool Bool) =
 const expected_errors : Validation (NonEmpty String) (Pair Bool Bool) =
   Invalid (NonEmpty String) (Pair Bool Bool) (nonempty_append String name_failure age_failure)
 
-lemma same_invalid_example
+theorem same_invalid_example
       (errors : NonEmpty String)
     : Equal
         (Validation (NonEmpty String) (Pair Bool Bool))
@@ -146,7 +146,7 @@ lemma same_invalid_example
     (Invalid (NonEmpty String) (Pair Bool Bool))
     Refl
 
-lemma both_errors_accumulate
+theorem both_errors_accumulate
     : Equal (Validation (NonEmpty String) (Pair Bool Bool)) checked_record expected_errors =
   same_invalid_example (nonempty_append String name_failure age_failure)
 ```
@@ -194,7 +194,7 @@ all three inputs are invalid, the two sides contain
 lifted beneath `Invalid` to close exactly that branch.
 
 ```ken
-lemma validation_ap_id
+theorem validation_ap_id
       (e : Type) (sg : Semigroup e) (a : Type) (v : Validation e a)
     : Equal (Validation e a) (validation_ap e sg a a (validation_pure e (a → a) (idf a)) v) v =
   match v {
@@ -202,7 +202,7 @@ lemma validation_ap_id
     Valid value ↦ Refl
   }
 
-lemma validation_ap_hom
+theorem validation_ap_hom
       (e : Type) (sg : Semigroup e) (a : Type) (b : Type) (g : a → b) (x : a)
     : Equal
         (Validation e b)
@@ -210,7 +210,7 @@ lemma validation_ap_hom
         (validation_pure e b (g x)) =
   Refl
 
-lemma validation_ap_ich
+theorem validation_ap_ich
       (e : Type) (sg : Semigroup e) (a : Type) (b : Type) (u : Validation e (a → b)) (y : a)
     : Equal
         (Validation e b)
@@ -221,7 +221,7 @@ lemma validation_ap_ich
     Valid g ↦ Refl
   }
 
-lemma validation_ap_cmp
+theorem validation_ap_cmp
       (e : Type)
       (sg : Semigroup e)
       (a : Type)
@@ -288,7 +288,7 @@ lemma validation_ap_cmp
       }
   }
 
-lemma validation_map_coh
+theorem validation_map_coh
       (e : Type) (sg : Semigroup e) (a : Type) (b : Type) (g : a → b) (x : Validation e a)
     : Equal
         (Validation e b)

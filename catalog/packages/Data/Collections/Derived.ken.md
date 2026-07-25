@@ -122,7 +122,7 @@ fn ord_result_dispatch2
       }
   }
 
-lemma ord_result_elim
+theorem ord_result_elim
       (P : OrdResult → Prop) (r : OrdResult) (pLt : P Lt) (pEq : P Eq) (pGt : P Gt)
     : P r =
   match r {
@@ -131,7 +131,7 @@ lemma ord_result_elim
     Gt ↦ pGt
   }
 
-lemma ord_result_elim2
+theorem ord_result_elim2
       (P : OrdResult → OrdResult → Prop)
       (r : OrdResult)
       (s : OrdResult)
@@ -412,7 +412,7 @@ fn pair_compare_gt_cases
     Gt ↦ pair_compare_gt_cases_gt_at b cmpb (pair_snd a b x) (pair_snd a b y) Gt Proved
   }
 
-lemma pair_compare_eq_cases_eq_at
+theorem pair_compare_eq_cases_eq_at
       (b : Type)
       (cmpb : b → b → OrdResult)
       (sndx : b)
@@ -423,7 +423,7 @@ lemma pair_compare_eq_cases_eq_at
     : And (Equal OrdResult s ord_eq) (Equal OrdResult (cmpb sndx sndy) ord_eq) =
   and_intro (Equal OrdResult s ord_eq) (Equal OrdResult (cmpb sndx sndy) ord_eq) peq ptail
 
-lemma pair_compare_eq_cases_lt_at
+theorem pair_compare_eq_cases_lt_at
       (b : Type)
       (cmpb : b → b → OrdResult)
       (sndx : b)
@@ -434,7 +434,7 @@ lemma pair_compare_eq_cases_lt_at
     : And (Equal OrdResult s ord_eq) (Equal OrdResult (cmpb sndx sndy) ord_eq) =
   absurd (J (λr _. Equal OrdResult r ord_eq) peq plt)
 
-lemma pair_compare_eq_cases_gt_at
+theorem pair_compare_eq_cases_gt_at
       (b : Type)
       (cmpb : b → b → OrdResult)
       (sndx : b)
@@ -623,7 +623,7 @@ fn min (m : Nat) (n : Nat) : Nat =
       }
   }
 
-lemma take_drop_decomposition
+theorem take_drop_decomposition
       (a : Type) (n : Nat) (xs : List a)
     : Equal (List a) (list_append a (take a n xs) (drop a n xs)) xs =
   match n {
@@ -642,7 +642,7 @@ lemma take_drop_decomposition
       }
   }
 
-lemma map_length
+theorem map_length
       (a : Type) (b : Type) (f : a → b) (xs : List a)
     : Equal Nat (length b (map a b f xs)) (length a xs) =
   match xs {
@@ -650,7 +650,7 @@ lemma map_length
     Cons h t ↦ cong Nat Nat (length b (map a b f t)) (length a t) Suc (map_length a b f t)
   }
 
-lemma length_take_min
+theorem length_take_min
       (a : Type) (n : Nat) (xs : List a)
     : Equal Nat (length a (take a n xs)) (min n (length a xs)) =
   match n {
@@ -698,7 +698,7 @@ fn reverse (a : Type) (xs : List a) : List a =
     Cons h t ↦ list_append a (reverse a t) (Cons a h (Nil a))
   }
 
-lemma reverse_snoc
+theorem reverse_snoc
       (a : Type) (xs : List a) (y : a)
     : Equal
         (List a)
@@ -737,7 +737,7 @@ proof involutive for reverse
           ((proof involutive for reverse) a t))
   }
 
-lemma append_length_snoc
+theorem append_length_snoc
       (a : Type) (xs : List a) (y : a)
     : Equal Nat (length a (list_append a xs (Cons a y (Nil a)))) (Suc (length a xs)) =
   match xs {
@@ -752,7 +752,7 @@ lemma append_length_snoc
         (append_length_snoc a t y)
   }
 
-lemma reverse_length
+theorem reverse_length
       (a : Type) (xs : List a)
     : Equal Nat (length a (reverse a xs)) (length a xs) =
   match xs {
@@ -777,7 +777,7 @@ fn zip (a : Type) (b : Type) (xs : List a) (ys : List b) : List (Pair a b) =
       }
   }
 
-lemma zip_length
+theorem zip_length
       (a : Type) (b : Type) (xs : List a) (ys : List b)
     : Equal Nat (length (Pair a b) (zip a b xs ys)) (min (length a xs) (length b ys)) =
   match xs {
@@ -810,7 +810,7 @@ fn range_from (start : Nat) (n : Nat) : List Nat =
 
 fn range (n : Nat) : List Nat = range_from Zero n
 
-lemma range_from_length
+theorem range_from_length
       (start : Nat) (n : Nat)
     : Equal Nat (length Nat (range_from start n)) n =
   match n {
@@ -825,7 +825,7 @@ lemma range_from_length
         (range_from_length (Suc start) m)
   }
 
-lemma range_length (n : Nat) : Equal Nat (length Nat (range n)) n = range_from_length Zero n
+theorem range_length (n : Nat) : Equal Nat (length Nat (range n)) n = range_from_length Zero n
 
 fn foldl (a : Type) (b : Type) (f : b → a → b) (z : b) (xs : List a) : b =
   match xs {
@@ -905,7 +905,7 @@ proof false for bool_head_leq (xs : List Bool) : bool_head_leq False xs =
     Cons h t ↦ Proved
   }
 
-lemma bool_cons_sorted
+theorem bool_cons_sorted
       (x : Bool) (xs : List Bool)
     : is_sorted Bool bool_leq xs
       → bool_head_leq x xs
@@ -952,7 +952,7 @@ fn sort_bool (xs : List Bool) : List Bool =
       }
   }
 
-lemma sorted_insert_true_bool
+theorem sorted_insert_true_bool
       (xs : List Bool)
     : is_sorted Bool bool_leq xs → is_sorted Bool bool_leq (insert_true_bool xs) =
   match xs {
@@ -970,7 +970,7 @@ lemma sorted_insert_true_bool
       }
   }
 
-lemma sort_bool_sorted (xs : List Bool) : is_sorted Bool bool_leq (sort_bool xs) =
+theorem sort_bool_sorted (xs : List Bool) : is_sorted Bool bool_leq (sort_bool xs) =
   match xs {
     Nil ↦ Proved;
     Cons h t ↦
@@ -991,7 +991,7 @@ lemma sort_bool_sorted (xs : List Bool) : is_sorted Bool bool_leq (sort_bool xs)
       }
   }
 
-lemma insert_true_bool_count_false
+theorem insert_true_bool_count_false
       (xs : List Bool)
     : Equal Nat
         (count Bool (eq_from_ord Bool bool_leq) False (insert_true_bool xs))
@@ -1012,7 +1012,7 @@ lemma insert_true_bool_count_false
       }
   }
 
-lemma insert_true_bool_count_true
+theorem insert_true_bool_count_true
       (xs : List Bool)
     : Equal Nat
         (count Bool (eq_from_ord Bool bool_leq) True (insert_true_bool xs))
@@ -1026,7 +1026,7 @@ lemma insert_true_bool_count_true
       }
   }
 
-lemma sort_bool_count_false
+theorem sort_bool_count_false
       (xs : List Bool)
     : Equal Nat
         (count Bool (eq_from_ord Bool bool_leq) False xs)
@@ -1058,7 +1058,7 @@ lemma sort_bool_count_false
       }
   }
 
-lemma sort_bool_count_true
+theorem sort_bool_count_true
       (xs : List Bool)
     : Equal Nat
         (count Bool (eq_from_ord Bool bool_leq) True xs)
@@ -1089,7 +1089,7 @@ lemma sort_bool_count_true
       }
   }
 
-lemma sort_bool_perm
+theorem sort_bool_perm
       (xs : List Bool)
     : Perm Bool (eq_from_ord Bool bool_leq) xs (sort_bool xs) =
   match xs {
@@ -1168,12 +1168,12 @@ fn fst_pair_bool_bool (p : Pair Bool Bool) : Bool = pair_fst Bool Bool p
 fn set_fst_pair_bool_bool (a : Bool) (p : Pair Bool Bool) : Pair Bool Bool =
   mk_pair Bool Bool a (pair_snd Bool Bool p)
 
-lemma fst_lens_get_set
+theorem fst_lens_get_set
       (a : Bool) (s : Pair Bool Bool)
     : Equal Bool (fst_pair_bool_bool (set_fst_pair_bool_bool a s)) a =
   Refl
 
-lemma fst_lens_set_get
+theorem fst_lens_set_get
       (s : Pair Bool Bool)
     : Equal (Pair Bool Bool) (set_fst_pair_bool_bool (fst_pair_bool_bool s) s) s =
   Refl
@@ -1202,9 +1202,9 @@ fn bool_iso_to (x : Bool) : Bool = x
 
 fn bool_iso_from (x : Bool) : Bool = x
 
-lemma bool_iso_to_from (x : Bool) : Equal Bool (bool_iso_to (bool_iso_from x)) x = Refl
+theorem bool_iso_to_from (x : Bool) : Equal Bool (bool_iso_to (bool_iso_from x)) x = Refl
 
-lemma bool_iso_from_to (x : Bool) : Equal Bool (bool_iso_from (bool_iso_to x)) x = Refl
+theorem bool_iso_from_to (x : Bool) : Equal Bool (bool_iso_from (bool_iso_to x)) x = Refl
 
 instance Iso Unit {
   to = bool_iso_to;

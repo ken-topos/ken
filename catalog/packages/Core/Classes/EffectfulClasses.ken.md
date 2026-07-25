@@ -190,17 +190,17 @@ proves each branch as its own top-level, directly-ascribed lemma, then
 dispatches via a thin outer `match`:
 
 ```ken
-lemma option_ap_id_none
+theorem option_ap_id_none
       (a : Type)
     : Equal (Option a) (option_ap a a (option_pure (a → a) (idf a)) (None a)) (None a) =
   Proved
 
-lemma option_ap_id_some
+theorem option_ap_id_some
       (a : Type) (x : a)
     : Equal (Option a) (option_ap a a (option_pure (a → a) (idf a)) (Some a x)) (Some a x) =
   Refl
 
-lemma option_ap_id
+theorem option_ap_id
       (a : Type) (v : Option a)
     : Equal (Option a) (option_ap a a (option_pure (a → a) (idf a)) v) v =
   match v {
@@ -208,7 +208,7 @@ lemma option_ap_id
     Some x ↦ option_ap_id_some a x
   }
 
-lemma option_ap_hom
+theorem option_ap_hom
       (a : Type) (b : Type) (g : a → b) (x : a)
     : Equal
         (Option b)
@@ -216,7 +216,7 @@ lemma option_ap_hom
         (option_pure b (g x)) =
   Refl
 
-lemma option_ap_ich_none
+theorem option_ap_ich_none
       (a : Type) (b : Type) (y : a)
     : Equal
         (Option b)
@@ -224,7 +224,7 @@ lemma option_ap_ich_none
         (option_ap (a → b) b (option_pure ((a → b) → b) (apply_to a b y)) (None (a → b))) =
   Proved
 
-lemma option_ap_ich_some
+theorem option_ap_ich_some
       (a : Type) (b : Type) (g : a → b) (y : a)
     : Equal
         (Option b)
@@ -232,7 +232,7 @@ lemma option_ap_ich_some
         (option_ap (a → b) b (option_pure ((a → b) → b) (apply_to a b y)) (Some (a → b) g)) =
   Refl
 
-lemma option_ap_ich
+theorem option_ap_ich
       (a : Type) (b : Type) (u : Option (a → b)) (y : a)
     : Equal
         (Option b)
@@ -243,7 +243,7 @@ lemma option_ap_ich
     Some g ↦ option_ap_ich_some a b g y
   }
 
-lemma option_ap_cmp_none_u
+theorem option_ap_cmp_none_u
       (a : Type) (b : Type) (c : Type) (v : Option (a → b)) (w : Option a)
     : Equal
         (Option c)
@@ -263,7 +263,7 @@ lemma option_ap_cmp_none_u
         (option_ap b c (None (b → c)) (option_ap a b v w)) =
   Proved
 
-lemma option_ap_cmp_some_u_none_v
+theorem option_ap_cmp_some_u_none_v
       (a : Type) (b : Type) (c : Type) (g : b → c) (w : Option a)
     : Equal
         (Option c)
@@ -283,7 +283,7 @@ lemma option_ap_cmp_some_u_none_v
         (option_ap b c (Some (b → c) g) (option_ap a b (None (a → b)) w)) =
   Proved
 
-lemma option_ap_cmp_some_u_some_v_none_w
+theorem option_ap_cmp_some_u_some_v_none_w
       (a : Type) (b : Type) (c : Type) (g : b → c) (h : a → b)
     : Equal
         (Option c)
@@ -303,7 +303,7 @@ lemma option_ap_cmp_some_u_some_v_none_w
         (option_ap b c (Some (b → c) g) (option_ap a b (Some (a → b) h) (None a))) =
   Proved
 
-lemma option_ap_cmp_all_some
+theorem option_ap_cmp_all_some
       (a : Type) (b : Type) (c : Type) (g : b → c) (h : a → b) (x : a)
     : Equal
         (Option c)
@@ -323,7 +323,7 @@ lemma option_ap_cmp_all_some
         (option_ap b c (Some (b → c) g) (option_ap a b (Some (a → b) h) (Some a x))) =
   Refl
 
-lemma option_ap_cmp
+theorem option_ap_cmp
       (a : Type) (b : Type) (c : Type) (u : Option (b → c)) (v : Option (a → b)) (w : Option a)
     : Equal
         (Option c)
@@ -354,7 +354,7 @@ lemma option_ap_cmp
       }
   }
 
-lemma option_map_coh_none
+theorem option_map_coh_none
       (a : Type) (b : Type) (g : a → b)
     : Equal
         (Option b)
@@ -362,7 +362,7 @@ lemma option_map_coh_none
         (option_ap a b (option_pure (a → b) g) (None a)) =
   Proved
 
-lemma option_map_coh_some
+theorem option_map_coh_some
       (a : Type) (b : Type) (g : a → b) (v : a)
     : Equal
         (Option b)
@@ -370,7 +370,7 @@ lemma option_map_coh_some
         (option_ap a b (option_pure (a → b) g) (Some a v)) =
   Refl
 
-lemma option_map_coh
+theorem option_map_coh
       (a : Type) (b : Type) (g : a → b) (x : Option a)
     : Equal
         (Option b)
@@ -400,7 +400,7 @@ mechanism, `§2.1`) — every `instance C T { ... }` registers a real global
 `C_instance_T`, not just a `where`-resolved implicit dictionary.
 
 ```ken
-lemma option_bind_lid
+theorem option_bind_lid
       (a : Type) (b : Type) (x : a) (k : a → Option b)
     : Equal
         (Option b)
@@ -408,7 +408,7 @@ lemma option_bind_lid
         (k x) =
   Refl
 
-lemma option_bind_rid_none
+theorem option_bind_rid_none
       (a : Type)
     : Equal
         (Option a)
@@ -416,7 +416,7 @@ lemma option_bind_rid_none
         (None a) =
   Proved
 
-lemma option_bind_rid_some
+theorem option_bind_rid_some
       (a : Type) (x : a)
     : Equal
         (Option a)
@@ -424,7 +424,7 @@ lemma option_bind_rid_some
         (Some a x) =
   Refl
 
-lemma option_bind_rid
+theorem option_bind_rid
       (a : Type) (m : Option a)
     : Equal
         (Option a)
@@ -435,7 +435,7 @@ lemma option_bind_rid
     Some x ↦ option_bind_rid_some a x
   }
 
-lemma option_bind_asc_none
+theorem option_bind_asc_none
       (a : Type) (b : Type) (c : Type) (k : a → Option b) (h : b → Option c)
     : Equal
         (Option c)
@@ -443,7 +443,7 @@ lemma option_bind_asc_none
         (option_bind a c (None a) (compose_kleisli Option option_bind a b c k h)) =
   Proved
 
-lemma option_bind_asc_some
+theorem option_bind_asc_some
       (a : Type) (b : Type) (c : Type) (x : a) (k : a → Option b) (h : b → Option c)
     : Equal
         (Option c)
@@ -502,19 +502,19 @@ of `bind`'s field order (container first, per the chapter's own `bind m k
 `bind_lid`/`bind_rid`/`bind_asc` for `List`:
 
 ```ken
-lemma list_bind_lid
+theorem list_bind_lid
       (a : Type) (b : Type) (x : a) (k : a → List b)
     : Equal (List b) (list_bind a b (list_pure a x) k) (k x) =
   proof right_unit for list_append b (k x)
 
-lemma list_bind_rid (a : Type) (m : List a) : Equal (List a) (list_bind a a m (list_pure a)) m =
+theorem list_bind_rid (a : Type) (m : List a) : Equal (List a) (list_bind a a m (list_pure a)) m =
   match m {
     Nil ↦ Proved;
     Cons h t ↦
       cong (List a) (List a) (list_bind a a t (list_pure a)) t (Cons a h) (list_bind_rid a t)
   }
 
-lemma concat_map_append_distrib
+theorem concat_map_append_distrib
       (a : Type) (b : Type) (f : a → List b) (xs : List a) (ys : List a)
     : Equal
         (List b)
@@ -575,7 +575,7 @@ proof assoc for list_bind
 induction needed for any of the three:
 
 ```ken
-lemma list_ap_id
+theorem list_ap_id
       (a : Type) (v : List a)
     : Equal (List a) (list_ap a a (list_pure (a → a) (idf a)) v) v =
   trans
@@ -586,12 +586,12 @@ lemma list_ap_id
     ((proof right_unit for list_append) a (list_map a a (idf a) v))
     ((proof id for list_map) a v)
 
-lemma list_ap_hom
+theorem list_ap_hom
       (a : Type) (b : Type) (g : a → b) (x : a)
     : Equal (List b) (list_ap a b (list_pure (a → b) g) (list_pure a x)) (list_pure b (g x)) =
   proof right_unit for list_append b (Cons b (g x) (Nil b))
 
-lemma list_map_coh
+theorem list_map_coh
       (a : Type) (b : Type) (g : a → b) (x : List a)
     : Equal
         (List b)
@@ -616,7 +616,7 @@ content, phrased directly over `concat_map`/`list_map`, and the outer
 fn list_ap_inner (a : Type) (b : Type) (y : a) (g : a → b) : List b =
   list_map a b g (list_pure a y)
 
-lemma list_ap_ich_general
+theorem list_ap_ich_general
       (a : Type) (b : Type) (u : List (a → b)) (y : a)
     : Equal
         (List b)
@@ -634,7 +634,7 @@ lemma list_ap_ich_general
         (list_ap_ich_general a b t y)
   }
 
-lemma list_ap_ich
+theorem list_ap_ich
       (a : Type) (b : Type) (u : List (a → b)) (y : a)
     : Equal
         (List b)
@@ -662,12 +662,12 @@ composition, plus the already-proved `list_bind::assoc` for the one genuinely
 new inductive step (concat_map-after-concat_map):
 
 ```ken
-lemma list_ap_pure_left
+theorem list_ap_pure_left
       (a : Type) (b : Type) (g : a → b) (xs : List a)
     : Equal (List b) (list_ap a b (list_pure (a → b) g) xs) (list_map a b g xs) =
   proof right_unit for list_append b (list_map a b g xs)
 
-lemma list_map_append_distrib
+theorem list_map_append_distrib
       (a : Type) (b : Type) (g : a → b) (xs : List a) (ys : List a)
     : Equal
         (List b)
@@ -688,7 +688,7 @@ lemma list_map_append_distrib
 fn compose_f_g (a : Type) (b : Type) (c : Type) (f : b → List c) (g : a → b) (x : a) : List c =
   f (g x)
 
-lemma concat_map_map_fusion
+theorem concat_map_map_fusion
       (a : Type) (b : Type) (c : Type) (f : b → List c) (g : a → b) (xs : List a)
     : Equal
         (List c)
@@ -709,7 +709,7 @@ lemma concat_map_map_fusion
 fn map_after (a : Type) (b : Type) (c : Type) (g : b → c) (f : a → List b) (x : a) : List c =
   list_map b c g (f x)
 
-lemma list_map_concat_map_fusion
+theorem list_map_concat_map_fusion
       (a : Type) (b : Type) (c : Type) (g : b → c) (f : a → List b) (xs : List a)
     : Equal
         (List c)
@@ -776,7 +776,7 @@ fn ap_map_v (a : Type) (b : Type) (c : Type) (v : List (a → b)) (g1 : b → c)
 
 fn ap_map_w (a : Type) (c : Type) (w : List a) (h2 : a → c) : List c = list_map a c h2 w
 
-lemma list_ap_cmp_front
+theorem list_ap_cmp_front
       (a : Type) (b : Type) (c : Type) (u : List (b → c)) (v : List (a → b))
     : Equal
         (List (a → c))
@@ -836,7 +836,7 @@ fn ap_then_bind
     : List c =
   list_map b c g1 (concat_map (a → b) b (λh1. list_map a b h1 w) v)
 
-lemma pf_probe
+theorem pf_probe
       (a : Type) (b : Type) (c : Type) (v : List (a → b)) (w : List a) (g1 : b → c)
     : Equal (List c) (ap_comp_h1 a b c v w g1) (ap_then_bind a b c v w g1) =
   match v {
@@ -892,7 +892,7 @@ lemma pf_probe
             (concat_map (a → b) b (λh1. list_map a b h1 w) t)))
   }
 
-lemma list_ap_cmp_mid1
+theorem list_ap_cmp_mid1
       (a : Type) (b : Type) (c : Type) (u : List (b → c)) (v : List (a → b)) (w : List a)
     : Equal
         (List c)
@@ -945,7 +945,7 @@ lemma list_ap_cmp_mid1
         concat_map_map_fusion (a → b) (a → c) c (λh2. list_map a c h2 w) (compose a b c g1) v)
       u)
 
-lemma list_ap_cmp_mid2
+theorem list_ap_cmp_mid2
       (a : Type) (b : Type) (c : Type) (u : List (b → c)) (v : List (a → b)) (w : List a)
     : Equal
         (List c)
@@ -959,7 +959,7 @@ lemma list_ap_cmp_mid2
     (pf_probe a b c v w)
     u
 
-lemma list_ap_cmp_mid
+theorem list_ap_cmp_mid
       (a : Type) (b : Type) (c : Type) (u : List (b → c)) (v : List (a → b)) (w : List a)
     : Equal
         (List c)
@@ -977,7 +977,7 @@ lemma list_ap_cmp_mid
     (list_ap_cmp_mid1 a b c u v w)
     (list_ap_cmp_mid2 a b c u v w)
 
-lemma list_ap_cmp
+theorem list_ap_cmp
       (a : Type) (b : Type) (c : Type) (u : List (b → c)) (v : List (a → b)) (w : List a)
     : Equal
         (List c)
@@ -1116,7 +1116,7 @@ law-discharge mechanism. A handful of
 computation facts about the concrete instances round out the picture:
 
 ```ken example
-lemma list_bind_lid_at_zero
+theorem list_bind_lid_at_zero
     : Equal
         (List Nat)
         (list_bind Nat Nat (list_pure Nat Zero) (list_pure Nat))
@@ -1141,7 +1141,7 @@ sides.
 -- unlike the concrete examples above, the composition law's proof
 -- genuinely needs the induction this entry supplies (`§2.3`), not a bare
 -- reflexivity check.
-lemma listApCmpIsNotJustRefl
+theorem listApCmpIsNotJustRefl
       (a : Type) (b : Type) (c : Type) (u : List (b → c)) (v : List (a → b)) (w : List a)
     : Equal
         (List c)
@@ -1386,14 +1386,14 @@ proof fusion for identity_map
     MkIdentity v ↦ Refl
   }
 
-lemma identity_ap_id
+theorem identity_ap_id
       (a : Type) (v : Identity a)
     : Equal (Identity a) (identity_ap a a (identity_pure (a → a) (idf a)) v) v =
   match v {
     MkIdentity x ↦ Refl
   }
 
-lemma identity_ap_hom
+theorem identity_ap_hom
       (a : Type) (b : Type) (g : a → b) (x : a)
     : Equal
         (Identity b)
@@ -1401,7 +1401,7 @@ lemma identity_ap_hom
         (identity_pure b (g x)) =
   Refl
 
-lemma identity_ap_ich
+theorem identity_ap_ich
       (a : Type) (b : Type) (u : Identity (a → b)) (y : a)
     : Equal
         (Identity b)
@@ -1411,7 +1411,7 @@ lemma identity_ap_ich
     MkIdentity f ↦ Refl
   }
 
-lemma identity_ap_cmp
+theorem identity_ap_cmp
       (a : Type)
       (b : Type)
       (c : Type)
@@ -1444,7 +1444,7 @@ lemma identity_ap_cmp
       }
   }
 
-lemma identity_map_coh
+theorem identity_map_coh
       (a : Type) (b : Type) (g : a → b) (x : Identity a)
     : Equal (Identity b) (identity_map a b g x) (identity_ap a b (identity_pure (a → b) g) x) =
   match x {
@@ -1474,7 +1474,7 @@ The identity law itself, for both instances, by induction on the carrier
 case is a two-arm case-split, no induction):
 
 ```ken
-lemma list_traverse_identity_law
+theorem list_traverse_identity_law
       (a : Type) (xs : List a)
     : Equal
         (Identity (List a))
@@ -1492,7 +1492,7 @@ lemma list_traverse_identity_law
         (list_traverse_identity_law a u)
   }
 
-lemma option_traverse_identity_law
+theorem option_traverse_identity_law
       (a : Type) (mx : Option a)
     : Equal
         (Identity (Option a))
@@ -1541,7 +1541,7 @@ fn eta_natural_map_pure_term
     : h (a → b) =
   eta_map (a → b) (applicative_pure_of g apg (a → b) f)
 
-lemma eta_natural_map_eq1
+theorem eta_natural_map_eq1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -1562,7 +1562,7 @@ lemma eta_natural_map_eq1
         (applicative_pure_of h aph (a → b) f) =
   eta_pure (a → b) f
 
-lemma eta_natural_map
+theorem eta_natural_map
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -1647,7 +1647,7 @@ fn list_traverse_nat_action
     : h b =
   eta_map b (t x)
 
-lemma list_traverse_naturality
+theorem list_traverse_naturality
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -1748,7 +1748,7 @@ fn option_traverse_nat_action
     : h b =
   eta_map b (t x)
 
-lemma option_traverse_naturality
+theorem option_traverse_naturality
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -1910,7 +1910,7 @@ fn compose_ap_id_func
     : h a → h a =
   aph.ap a a (aph.pure (a → a) (idf a))
 
-lemma compose_ap_id_eq1p
+theorem compose_ap_id_eq1p
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -1929,7 +1929,7 @@ lemma compose_ap_id_eq1p
     (compose_ap_id_ctx g h apg a v)
     (apg.map_coh (h (a → a)) (h a → h a) (aph.ap a a) (compose_ap_id_pure_pure g h apg aph a))
 
-lemma compose_ap_id_eq2p
+theorem compose_ap_id_eq2p
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -1948,7 +1948,7 @@ lemma compose_ap_id_eq2p
     (compose_ap_id_ctx g h apg a v)
     (apg.ap_hom (h (a → a)) (h a → h a) (aph.ap a a) (aph.pure (a → a) (idf a)))
 
-lemma compose_ap_id_eq3
+theorem compose_ap_id_eq3
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -1965,7 +1965,7 @@ lemma compose_ap_id_eq3
     (compose_ap_id_ctx g h apg a v (compose_ap_id_pure_func g h apg aph a))
     (apg.map_coh (h a) (h a) (compose_ap_id_func g h aph a) v)
 
-lemma compose_ap_id_eq4
+theorem compose_ap_id_eq4
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -1984,7 +1984,7 @@ lemma compose_ap_id_eq4
     (compose_ap_id_fmap_ctx g h apg a v)
     (aph.ap_id a)
 
-lemma compose_ap_id
+theorem compose_ap_id
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2089,7 +2089,7 @@ fn compose_ap_hom_pure_term
     : g (h a → h b) =
   apg.pure (h a → h b) (compose_ap_hom_func g h aph a b f)
 
-lemma compose_ap_hom_eq1
+theorem compose_ap_hom_eq1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2114,7 +2114,7 @@ lemma compose_ap_hom_eq1
       (aph.ap a b)
       (apg.pure (h (a → b)) (aph.pure (a → b) f)))
 
-lemma compose_ap_hom_eq2
+theorem compose_ap_hom_eq2
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2145,7 +2145,7 @@ fn compose_ap_hom_singlewrap
     : Compose g h b =
   apg.pure (h b) y
 
-lemma compose_ap_hom_eq3
+theorem compose_ap_hom_eq3
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2165,7 +2165,7 @@ lemma compose_ap_hom_eq3
           (compose_ap_hom_func g h aph a b f (compose_ap_hom_purex g h aph a x))) =
   apg.ap_hom (h a) (h b) (compose_ap_hom_func g h aph a b f) (compose_ap_hom_purex g h aph a x)
 
-lemma compose_ap_hom_eq4
+theorem compose_ap_hom_eq4
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2191,7 +2191,7 @@ lemma compose_ap_hom_eq4
     (compose_ap_hom_singlewrap g h apg b)
     (aph.ap_hom a b f x)
 
-lemma compose_ap_hom
+theorem compose_ap_hom
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2287,7 +2287,7 @@ fn compose_map_aph_idmap
     : h a → h a =
   aph.functor.map a a (idf a)
 
-lemma compose_map_id_eq1
+theorem compose_map_id_eq1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2346,7 +2346,7 @@ fn compose_map_aph_mapcomp
     : h a → h c =
   comp (h a) (h b) (h c) (aph.functor.map b c p) (aph.functor.map a b q)
 
-lemma compose_map_fusion_eq1
+theorem compose_map_fusion_eq1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2454,7 +2454,7 @@ fn compose_ap_ich_mid1_ctx
     : Compose g h b =
   apg.ap (h a → h b) (h b) (apg.pure ((h a → h b) → h b) (apply_to (h a) (h b) w2)) w1
 
-lemma compose_ap_ich_eq1
+theorem compose_ap_ich_eq1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2479,7 +2479,7 @@ fn compose_ap_ich_mapctx1
     : Compose g h b =
   apg.functor.map (h a → h b) (h b) (apply_to (h a) (h b) w2) w1
 
-lemma compose_ap_ich_eq2
+theorem compose_ap_ich_eq2
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2524,7 +2524,7 @@ fn compose_ap_ich_mapctx3
     : Compose g h b =
   apg.functor.map (h (a → b)) (h b) (compose_ap_ich_compfuncfn g h aph a b y) mf
 
-lemma compose_ap_ich_eq3
+theorem compose_ap_ich_eq3
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2563,7 +2563,7 @@ lemma compose_ap_ich_eq3
       (aph.ap a b)
       mf)
 
-lemma compose_ap_ich_pointwise
+theorem compose_ap_ich_pointwise
       (g : Type → Type)
       (h : Type → Type)
       (aph : Applicative h)
@@ -2577,7 +2577,7 @@ lemma compose_ap_ich_pointwise
         (compose_ap_ich_func3fn g h aph a b y q) =
   aph.ap_ich a b q y
 
-lemma compose_ap_ich_funcs_eq
+theorem compose_ap_ich_funcs_eq
       (g : Type → Type) (h : Type → Type) (aph : Applicative h) (a : Type) (b : Type) (y : a)
     : Equal
         (h (a → b) → h b)
@@ -2596,7 +2596,7 @@ fn compose_ap_ich_fmapctx
     : Compose g h b =
   apg.functor.map (h (a → b)) (h b) w mf
 
-lemma compose_ap_ich_eq4
+theorem compose_ap_ich_eq4
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2658,7 +2658,7 @@ fn compose_ap_ich_innerpure
     : g (h (a → b) → h b) =
   apg.pure (h (a → b) → h b) (compose_ap_ich_func3fn g h aph a b y)
 
-lemma compose_ap_ich_eq_inner1
+theorem compose_ap_ich_eq_inner1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2676,7 +2676,7 @@ lemma compose_ap_ich_eq_inner1
     (aph.ap (a → b) b)
     (apg.pure (h ((a → b) → b)) (aph.pure ((a → b) → b) (apply_to a b y)))
 
-lemma compose_ap_ich_eq_inner2
+theorem compose_ap_ich_eq_inner2
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2705,7 +2705,7 @@ fn compose_ap_ich_target_ctx
     : Compose g h b =
   apg.ap (h (a → b)) (h b) w mf
 
-lemma compose_ap_ich_eq_target1
+theorem compose_ap_ich_eq_target1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2726,7 +2726,7 @@ lemma compose_ap_ich_eq_target1
     (compose_ap_ich_target_ctx g h apg a b mf)
     (compose_ap_ich_eq_inner1 g h apg aph a b y)
 
-lemma compose_ap_ich_eq_target2
+theorem compose_ap_ich_eq_target2
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2754,7 +2754,7 @@ lemma compose_ap_ich_eq_target2
     (compose_ap_ich_target_ctx g h apg a b mf)
     (compose_ap_ich_eq_inner2 g h apg aph a b y)
 
-lemma compose_ap_ich_eq_target3
+theorem compose_ap_ich_eq_target3
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -2773,7 +2773,7 @@ lemma compose_ap_ich_eq_target3
     (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerpure g h apg aph a b y))
     (apg.map_coh (h (a → b)) (h b) (compose_ap_ich_func3fn g h aph a b y) mf)
 
-lemma compose_ap_ich
+theorem compose_ap_ich
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -3011,7 +3011,7 @@ fn compose_map_coh_pure2
     : g (h a → h b) =
   apg.pure (h a → h b) (compose_map_coh_func2 g h aph a b f)
 
-lemma compose_map_coh_eq1
+theorem compose_map_coh_eq1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -3026,7 +3026,7 @@ lemma compose_map_coh_eq1
         (compose_map_coh_ctx g h apg a b x (compose_map_coh_pure1 g h apg aph a b f)) =
   apg.map_coh (h a) (h b) (compose_map_coh_aphmapf g h aph a b f) x
 
-lemma compose_map_coh_eq_inner
+theorem compose_map_coh_eq_inner
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -3046,7 +3046,7 @@ lemma compose_map_coh_eq_inner
     (apg.pure (h a → h b))
     (aph.map_coh a b f)
 
-lemma compose_map_coh_eq2
+theorem compose_map_coh_eq2
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -3067,7 +3067,7 @@ lemma compose_map_coh_eq2
     (compose_map_coh_ctx g h apg a b x)
     (compose_map_coh_eq_inner g h apg aph a b f)
 
-lemma compose_map_coh_eq3_inner
+theorem compose_map_coh_eq3_inner
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -3095,7 +3095,7 @@ lemma compose_map_coh_eq3_inner
         (apg.pure (h (a → b)) (aph.pure (a → b) f)))
       (apg.ap_hom (h (a → b)) (h a → h b) (aph.ap a b) (aph.pure (a → b) f)))
 
-lemma compose_map_coh_eq3
+theorem compose_map_coh_eq3
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -3116,7 +3116,7 @@ lemma compose_map_coh_eq3
     (compose_map_coh_ctx g h apg a b x)
     (compose_map_coh_eq3_inner g h apg aph a b f)
 
-lemma compose_map_coh
+theorem compose_map_coh
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -3204,7 +3204,7 @@ fn nat_aux_cmp_inner1
       (apg.pure (b → c) psi))
     u
 
-lemma nat_aux_eq_a
+theorem nat_aux_eq_a
       (g : Type → Type)
       (apg : Applicative g)
       (a : Type)
@@ -3227,7 +3227,7 @@ fn nat_aux_pure_composed_via_cmp
     (apg.pure ((b → c) → (a → b) → a → c) (compose a b c))
     (apg.pure (b → c) psi)
 
-lemma nat_aux_eq_b
+theorem nat_aux_eq_b
       (g : Type → Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (psi : b → c)
     : Equal
         (g ((a → b) → (a → c)))
@@ -3239,7 +3239,7 @@ lemma nat_aux_eq_b
     (nat_aux_pure_composed g apg a b c psi)
     (apg.ap_hom (b → c) ((a → b) → a → c) (compose a b c) psi)
 
-lemma nat_aux_eq_c
+theorem nat_aux_eq_c
       (g : Type → Type)
       (apg : Applicative g)
       (a : Type)
@@ -3259,7 +3259,7 @@ lemma nat_aux_eq_c
     (λw. apg.ap (a → b) (a → c) w u)
     (nat_aux_eq_b g apg a b c psi)
 
-lemma nat_aux_eq_lhs
+theorem nat_aux_eq_lhs
       (g : Type → Type)
       (apg : Applicative g)
       (a : Type)
@@ -3303,7 +3303,7 @@ fn nat_aux_ap_pure_ap
     : g c =
   apg.ap b c (apg.pure (b → c) psi) (apg.ap a b u v)
 
-lemma ap_naturality
+theorem ap_naturality
       (g : Type → Type)
       (apg : Applicative g)
       (a : Type)
@@ -3360,7 +3360,7 @@ fn nat2_map_compose
     : g ((a → b) → (a → c)) =
   apg.functor.map (b → c) ((a → b) → a → c) (compose a b c) u
 
-lemma nat2_map_compose_eq
+theorem nat2_map_compose_eq
       (g : Type → Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (u : g (b → c))
     : Equal
         (g ((a → b) → (a → c)))
@@ -3424,7 +3424,7 @@ fn nat2_rhs_inner
     : g (a → c) =
   apg.functor.map (b → c) (a → c) (nat2_rhs_func a b c phi) u
 
-lemma nat2_ich_eq
+theorem nat2_ich_eq
       (g : Type → Type)
       (apg : Applicative g)
       (a : Type)
@@ -3438,7 +3438,7 @@ lemma nat2_ich_eq
         (nat2_apply_map_ap_pure g apg a b c phi (nat2_pure_compose g apg a b c u)) =
   apg.ap_ich (a → b) (a → c) (nat2_pure_compose g apg a b c u) phi
 
-lemma nat2_outer_map_coh
+theorem nat2_outer_map_coh
       (g : Type → Type)
       (apg : Applicative g)
       (a : Type)
@@ -3456,7 +3456,7 @@ lemma nat2_outer_map_coh
     (apply_to (a → b) (a → c) phi)
     (nat2_pure_compose g apg a b c u)
 
-lemma nat2_step_ich_to_map
+theorem nat2_step_ich_to_map
       (g : Type → Type)
       (apg : Applicative g)
       (a : Type)
@@ -3480,7 +3480,7 @@ lemma nat2_step_ich_to_map
       (nat2_apply_map_ap_pure g apg a b c phi (nat2_pure_compose g apg a b c u))
       (nat2_outer_map_coh g apg a b c phi u))
 
-lemma nat2_step_map_pure_swap
+theorem nat2_step_map_pure_swap
       (g : Type → Type)
       (apg : Applicative g)
       (a : Type)
@@ -3504,7 +3504,7 @@ lemma nat2_step_map_pure_swap
       (nat2_pure_compose g apg a b c u)
       (nat2_map_compose_eq g apg a b c u))
 
-lemma nat2_step_fusion
+theorem nat2_step_fusion
       (g : Type → Type)
       (apg : Applicative g)
       (a : Type)
@@ -3528,7 +3528,7 @@ lemma nat2_step_fusion
       (compose a b c)
       u)
 
-lemma nat2_pure_compose_ap_eq
+theorem nat2_pure_compose_ap_eq
       (g : Type → Type)
       (apg : Applicative g)
       (a : Type)
@@ -3578,7 +3578,7 @@ fn nat2_rhs_apply
     : g c =
   apg.ap a c (nat2_rhs_inner g apg a b c phi u) v
 
-lemma nat2_canonical_lhs_eq
+theorem nat2_canonical_lhs_eq
       (g : Type → Type)
       (apg : Applicative g)
       (a : Type)
@@ -3616,7 +3616,7 @@ fn nat2_ap_u_pure_phi
     : g c =
   apg.ap b c u (nat2_pure_phi_ap g apg a b phi v)
 
-lemma nat2_ap_cmp_eq
+theorem nat2_ap_cmp_eq
       (g : Type → Type)
       (apg : Applicative g)
       (a : Type)
@@ -3648,12 +3648,12 @@ fn nat2_ap_u_map_phi
     : g c =
   apg.ap b c u (nat2_map_phi g apg a b phi v)
 
-lemma nat2_pure_phi_eq
+theorem nat2_pure_phi_eq
       (g : Type → Type) (apg : Applicative g) (a : Type) (b : Type) (phi : a → b) (v : g a)
     : Equal (g b) (nat2_map_phi g apg a b phi v) (nat2_pure_phi_ap g apg a b phi v) =
   apg.map_coh a b phi v
 
-lemma ap_naturality2
+theorem ap_naturality2
       (g : Type → Type)
       (apg : Applicative g)
       (a : Type)
@@ -3715,7 +3715,7 @@ fn cmp_level1
     (compose_pure g h apg aph ((b → c) → (a → b) → a → c) (compose a b c))
     u
 
-lemma cmp_level1_eq
+theorem cmp_level1_eq
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -3768,7 +3768,7 @@ fn cmp_level2_via_map
     (compose_map g h apg aph (b → c) ((a → b) → a → c) (compose a b c) u)
     v
 
-lemma cmp_level2_step1
+theorem cmp_level2_step1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -3845,7 +3845,7 @@ fn cmp_level2_fused_map
     : g (h (a → b) → h (a → c)) =
   apg.functor.map (h (b → c)) (h (a → b) → h (a → c)) (cmp_psi3 g h aph a b c) u
 
-lemma cmp_level2_step2a
+theorem cmp_level2_step2a
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -3861,7 +3861,7 @@ lemma cmp_level2_step2a
         (cmp_level2_raw_ctx g h apg a b c v (cmp_level2_double_map g h apg aph a b c u)) =
   Refl
 
-lemma cmp_level2_step2b
+theorem cmp_level2_step2b
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -3886,7 +3886,7 @@ lemma cmp_level2_step2b
       (cmp_psi1 g h aph a b c)
       u)
 
-lemma cmp_level2_step2
+theorem cmp_level2_step2
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -3908,7 +3908,7 @@ lemma cmp_level2_step2
     (cmp_level2_raw_ctx g h apg a b c v)
     (cmp_level2_step2b g h apg aph a b c u)
 
-lemma cmp_level2_reduced
+theorem cmp_level2_reduced
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -3982,7 +3982,7 @@ fn compose_cmp_inner_rhs
     : h c =
   aph.ap b c u (aph.ap a b v w)
 
-lemma compose_cmp_inner_eq
+theorem compose_cmp_inner_eq
       (g : Type → Type)
       (h : Type → Type)
       (aph : Applicative h)
@@ -4036,7 +4036,7 @@ fn compose_cmp_level3_mid
       v)
     w
 
-lemma compose_cmp_level3_map_coh
+theorem compose_cmp_level3_map_coh
       (g : Type → Type)
       (h : Type → Type)
       (aph : Applicative h)
@@ -4058,7 +4058,7 @@ lemma compose_cmp_level3_map_coh
     (λz. aph.ap a c (aph.ap (a → b) (a → c) z v) w)
     (aph.map_coh (b → c) ((a → b) → a → c) (compose a b c) u)
 
-lemma compose_cmp_level3_eq
+theorem compose_cmp_level3_eq
       (g : Type → Type)
       (h : Type → Type)
       (aph : Applicative h)
@@ -4137,7 +4137,7 @@ fn compose_cmp_outer_mid1
     (cmp_level2_raw_ctx g h apg a b c v (cmp_level2_fused_map g h apg aph a b c u))
     w
 
-lemma compose_cmp_outer_step1
+theorem compose_cmp_outer_step1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4198,7 +4198,7 @@ fn compose_cmp_outer_mid2
       v)
     w
 
-lemma compose_cmp_outer_step2
+theorem compose_cmp_outer_step2
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4267,7 +4267,7 @@ fn compose_cmp_outer_rhs_func
     : h (b → c) → h (a → b) → h a → h c =
   λu. λv. λw. aph.ap b c u (aph.ap a b v w)
 
-lemma compose_cmp_outer_func_eq
+theorem compose_cmp_outer_func_eq
       (g : Type → Type) (h : Type → Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type)
     : Equal
         (h (b → c) → h (a → b) → h a → h c)
@@ -4312,7 +4312,7 @@ fn compose_cmp_outer_unfused
     (compose_cmp_outer_psi g h aph a b c)
     (compose_cmp_outer_inner g h apg aph a b c u)
 
-lemma compose_cmp_outer_fusion_eq
+theorem compose_cmp_outer_fusion_eq
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4393,7 +4393,7 @@ fn compose_cmp_outer_mapped_rhs
     (compose_cmp_outer_rhs_func g h aph a b c)
     u
 
-lemma compose_cmp_outer_step3b
+theorem compose_cmp_outer_step3b
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4427,7 +4427,7 @@ fn compose_cmp_outer_apply_v
     : Compose g h c =
   apg.ap (h a) (h c) (apg.ap (h (a → b)) (h a → h c) x v) w
 
-lemma compose_cmp_outer_step3a
+theorem compose_cmp_outer_step3a
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4459,7 +4459,7 @@ lemma compose_cmp_outer_step3a
     (compose_cmp_outer_apply_v g h apg a b c v w)
     (compose_cmp_outer_fusion_eq g h apg aph a b c u)
 
-lemma compose_cmp_outer_step3
+theorem compose_cmp_outer_step3
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4545,7 +4545,7 @@ fn cmp_v_bridge_inner_raw
       (aph.ap b c))
     u
 
-lemma cmp_v_bridge_step1
+theorem cmp_v_bridge_step1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4611,7 +4611,7 @@ fn cmp_v_bridge_outer_raw
         (aph.ap b c)))
     u
 
-lemma cmp_v_bridge_step2
+theorem cmp_v_bridge_step2
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4644,7 +4644,7 @@ lemma cmp_v_bridge_step2
       (aph.ap b c))
     u
 
-lemma cmp_v_bridge_step2b
+theorem cmp_v_bridge_step2b
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4672,7 +4672,7 @@ lemma cmp_v_bridge_step2b
     (λy. nat2_rhs_inner g apg (h (a → b)) (h a → h b) (h a → h c) (aph.ap a b) y)
     (cmp_v_bridge_step1 g h apg aph a b c u)
 
-lemma cmp_v_bridge_defeq
+theorem cmp_v_bridge_defeq
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4687,7 +4687,7 @@ lemma cmp_v_bridge_defeq
         (cmp_v_bridge_outer_raw g h apg aph a b c u) =
   Refl
 
-lemma cmp_v_bridge_eq
+theorem cmp_v_bridge_eq
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4764,7 +4764,7 @@ fn cmp_v_bridge_apply_v_mid
     (cmp_v_bridge_mid g h apg aph a b c u)
     (compose_cmp_outer_rhs_v g h apg aph a b v)
 
-lemma cmp_v_bridge_mapped_apply_v_eq
+theorem cmp_v_bridge_mapped_apply_v_eq
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4786,7 +4786,7 @@ lemma cmp_v_bridge_mapped_apply_v_eq
     (λy. apg.ap (h (a → b)) (h a → h c) y v)
     (cmp_v_bridge_eq g h apg aph a b c u)
 
-lemma cmp_v_bridge_nat2
+theorem cmp_v_bridge_nat2
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4810,7 +4810,7 @@ lemma cmp_v_bridge_nat2
     (cmp_v_bridge_mid g h apg aph a b c u)
     v
 
-lemma cmp_v_bridge_full_v_eq
+theorem cmp_v_bridge_full_v_eq
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4892,7 +4892,7 @@ fn cmp_v_bridge_pure_form
     w
     (nat2_pure_compose g apg (h a) (h b) (h c) (compose_cmp_outer_rhs_u g h apg aph b c u))
 
-lemma cmp_v_bridge_map_pure_eq
+theorem cmp_v_bridge_map_pure_eq
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4915,7 +4915,7 @@ lemma cmp_v_bridge_map_pure_eq
     (λy. cmp_v_bridge_shape g h apg aph a b c v w y)
     (nat2_map_compose_eq g apg (h a) (h b) (h c) (compose_cmp_outer_rhs_u g h apg aph b c u))
 
-lemma cmp_v_bridge_ap_cmp
+theorem cmp_v_bridge_ap_cmp
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4938,7 +4938,7 @@ lemma cmp_v_bridge_ap_cmp
     (compose_cmp_outer_rhs_v g h apg aph a b v)
     w
 
-lemma cmp_v_bridge_outer_cong
+theorem cmp_v_bridge_outer_cong
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -4970,7 +4970,7 @@ lemma cmp_v_bridge_outer_cong
     (λy. apg.ap (h a) (h c) y w)
     (cmp_v_bridge_full_v_eq g h apg aph a b c u v)
 
-lemma compose_cmp_outer_rhs_stage1
+theorem compose_cmp_outer_rhs_stage1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5017,7 +5017,7 @@ lemma compose_cmp_outer_rhs_stage1
       (cmp_v_bridge_map_pure_eq g h apg aph a b c u v w)
       (cmp_v_bridge_ap_cmp g h apg aph a b c u v w))
 
-lemma compose_ap_cmp
+theorem compose_ap_cmp
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5192,7 +5192,7 @@ fn otc_none_ap_pure_form
     (apg.pure (Option b → h (Option c)) (option_traverse h aph b c t2))
     (apg.pure (Option b) (None b))
 
-lemma otc_none_step1
+theorem otc_none_step1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5212,7 +5212,7 @@ lemma otc_none_step1
     (option_traverse h aph b c t2)
     (apg.pure (Option b) (None b))
 
-lemma otc_none_step2
+theorem otc_none_step2
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5228,7 +5228,7 @@ lemma otc_none_step2
         (option_traverse_composed g h apg aph a b c t1 t2 (None a)) =
   apg.ap_hom (Option b) (h (Option c)) (option_traverse h aph b c t2) (None b)
 
-lemma option_traverse_composition_none
+theorem option_traverse_composition_none
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5264,7 +5264,7 @@ fn otc_some_ap_pure
     : g (Option b) =
   apg.ap b (Option b) (apg.pure (b → Option b) (Some b)) (t1 x)
 
-lemma otc_some_stepA
+theorem otc_some_stepA
       (g : Type → Type) (apg : Applicative g) (a : Type) (b : Type) (t1 : a → g b) (x : a)
     : Equal
         (g (Option b))
@@ -5312,7 +5312,7 @@ fn otc_some_mapped
     (option_traverse h aph b c t2)
     (otc_some_map_pure g apg a b t1 x)
 
-lemma otc_some_stepB
+theorem otc_some_stepB
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5353,7 +5353,7 @@ fn otc_some_fused
     (comp b (Option b) (h (Option c)) (option_traverse h aph b c t2) (Some b))
     (t1 x)
 
-lemma otc_some_stepC
+theorem otc_some_stepC
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5398,7 +5398,7 @@ fn otc_some_compose_map_form
     : Compose g h (Option c) =
   compose_map g h apg aph c (Option c) (Some c) (cmp_traverse_action g h apg a b c t1 t2 x)
 
-lemma otc_some_step0
+theorem otc_some_step0
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5445,7 +5445,7 @@ fn otc_some_raw_map
     (aph.functor.map c (Option c) (Some c))
     (cmp_traverse_action g h apg a b c t1 t2 x)
 
-lemma otc_some_step0b
+theorem otc_some_step0b
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5480,7 +5480,7 @@ fn otc_some_fused_raw
     (comp b (h c) (h (Option c)) (aph.functor.map c (Option c) (Some c)) t2)
     (t1 x)
 
-lemma otc_some_step1
+theorem otc_some_step1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5516,7 +5516,7 @@ fn otc_some_aph_map
     : h (Option c) =
   aph.functor.map c (Option c) (Some c) (t2 y)
 
-lemma otc_some_ptwise
+theorem otc_some_ptwise
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5531,7 +5531,7 @@ lemma otc_some_ptwise
         (option_traverse h aph b c t2 (Some b y)) =
   aph.map_coh c (Option c) (Some c) (t2 y)
 
-lemma otc_some_step2
+theorem otc_some_step2
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5554,7 +5554,7 @@ lemma otc_some_step2
     (λf. apg.functor.map b (h (Option c)) f (t1 x))
     (otc_some_ptwise g h apg aph b c t2)
 
-lemma option_traverse_composition_some
+theorem option_traverse_composition_some
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5609,7 +5609,7 @@ lemma option_traverse_composition_some
               (otc_some_step1 g h apg aph a b c t1 t2 x))
             (otc_some_step2 g h apg aph a b c t1 t2 x)))))
 
-lemma option_traverse_composition
+theorem option_traverse_composition
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5713,7 +5713,7 @@ fn ltc_nil_ap_pure_form
     (apg.pure (List b → h (List c)) (list_traverse h aph b c t2))
     (apg.pure (List b) (Nil b))
 
-lemma ltc_nil_step1
+theorem ltc_nil_step1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5729,7 +5729,7 @@ lemma ltc_nil_step1
         (ltc_nil_ap_pure_form g h apg aph a b c t1 t2) =
   apg.map_coh (List b) (h (List c)) (list_traverse h aph b c t2) (apg.pure (List b) (Nil b))
 
-lemma ltc_nil_step2
+theorem ltc_nil_step2
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5745,7 +5745,7 @@ lemma ltc_nil_step2
         (list_traverse_composed g h apg aph a b c t1 t2 (Nil a)) =
   apg.ap_hom (List b) (h (List c)) (list_traverse h aph b c t2) (Nil b)
 
-lemma list_traverse_composition_nil
+theorem list_traverse_composition_nil
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5811,7 +5811,7 @@ fn ltc_x_dbl
     (aph.functor.map c (List c → List c) (Cons c))
     (cmp_traverse_action g h apg a b c t1 t2 hd)
 
-lemma ltc_x_step0
+theorem ltc_x_step0
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5846,7 +5846,7 @@ fn ltc_x_raw
     (comp b (h c) (h (List c → List c)) (aph.functor.map c (List c → List c) (Cons c)) t2)
     (t1 hd)
 
-lemma ltc_x_step1
+theorem ltc_x_step1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5919,7 +5919,7 @@ fn ltc_xprime_fused
       (comp b (h c) (h (List c → List c)) (aph.functor.map c (List c → List c) (Cons c)) t2))
     (t1 hd)
 
-lemma ltc_xprime_step
+theorem ltc_xprime_step
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -5988,7 +5988,7 @@ fn ltc_cons_raw0
       (ltc_x g h apg aph a b c t1 t2 hd))
     (list_traverse_composed g h apg aph a b c t1 t2 u)
 
-lemma ltc_cons_step0
+theorem ltc_cons_step0
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -6006,7 +6006,7 @@ lemma ltc_cons_step0
         (ltc_cons_raw0 g h apg aph a b c t1 t2 hd u) =
   Refl
 
-lemma ltc_x_full_eq
+theorem ltc_x_full_eq
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -6029,7 +6029,7 @@ lemma ltc_x_full_eq
     (ltc_x_step0 g h apg aph a b c t1 t2 hd)
     (ltc_x_step1 g h apg aph a b c t1 t2 hd)
 
-lemma ltc_cons_step0b
+theorem ltc_cons_step0b
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -6077,7 +6077,7 @@ fn ltc_cons_mid
     : Compose g h (List c) =
   apg.ap (h (List c)) (h (List c)) (ltc_xprime_fused g h apg aph a b c t1 t2 hd) y
 
-lemma ltc_cons_step1
+theorem ltc_cons_step1
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -6112,7 +6112,7 @@ lemma ltc_cons_step1
     (λf. apg.ap (h (List c)) (h (List c)) f (list_traverse_composed g h apg aph a b c t1 t2 u))
     (ltc_xprime_step g h apg aph a b c t1 t2 hd)
 
-lemma ltc_cons_step2
+theorem ltc_cons_step2
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -6188,7 +6188,7 @@ fn ltc_step3_rhs
       (ltc_xprime_fused g h apg aph a b c t1 t2 hd))
     (list_traverse g apg a b t1 u)
 
-lemma ltc_step3
+theorem ltc_step3
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -6253,7 +6253,7 @@ fn ltc_nat2_fused
         (comp b (h c) (h (List c → List c)) (aph.functor.map c (List c → List c) (Cons c)) t2)))
     (t1 hd)
 
-lemma ltc_step4
+theorem ltc_step4
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -6318,7 +6318,7 @@ fn ltc_target_fused
     : g (List b → h (List c)) =
   apg.functor.map b (List b → h (List c)) (ltc_xi_func h aph b c t2) (t1 hd)
 
-lemma ltc_step5
+theorem ltc_step5
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -6390,7 +6390,7 @@ fn ltc_map_compose_u_raw
       (Cons b))
     (t1 hd)
 
-lemma ltc_step7
+theorem ltc_step7
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -6413,7 +6413,7 @@ lemma ltc_step7
     (Cons b)
     (t1 hd)
 
-lemma ltc_step8
+theorem ltc_step8
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -6430,7 +6430,7 @@ lemma ltc_step8
         (ltc_map_compose_u_raw g h apg aph a b c t1 t2 hd) =
   Refl
 
-lemma ltc_step9
+theorem ltc_step9
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -6468,7 +6468,7 @@ fn ltc_ap_over_v
     : Compose g h (List c) =
   apg.ap (List b) (h (List c)) f (list_traverse g apg a b t1 u)
 
-lemma ltc_step10
+theorem ltc_step10
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -6503,7 +6503,7 @@ lemma ltc_step10
     (λf. apg.ap (List b) (h (List c)) f (list_traverse g apg a b t1 u))
     (ltc_step9 g h apg aph a b c t1 t2 hd)
 
-lemma ltc_step11
+theorem ltc_step11
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -6529,7 +6529,7 @@ lemma ltc_step11
     (ltc_compose_u g h apg aph a b c t1 t2 hd)
     (list_traverse g apg a b t1 u)
 
-lemma list_traverse_composition_cons
+theorem list_traverse_composition_cons
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)
@@ -6680,7 +6680,7 @@ lemma list_traverse_composition_cons
                   (ltc_step10 g h apg aph a b c t1 t2 hd u)
                   (ltc_step11 g h apg aph a b c t1 t2 hd u))))))))
 
-lemma list_traverse_composition
+theorem list_traverse_composition
       (g : Type → Type)
       (h : Type → Type)
       (apg : Applicative g)

@@ -44,15 +44,15 @@ fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
     Cons x t ↦ Cons a x (list_append a t ys)
   }
 
-lemma cong
+theorem cong
       (ty : Type) (ty2 : Type) (x : ty) (y : ty) (f : ty → ty2) (p : Equal ty x y)
     : Equal ty2 (f x) (f y) =
   J (λy' _. Equal ty2 (f x) (f y')) Refl p
 
-lemma sym (ty : Type) (x : ty) (y : ty) (p : Equal ty x y) : Equal ty y x =
+theorem sym (ty : Type) (x : ty) (y : ty) (p : Equal ty x y) : Equal ty y x =
   J (λy' _. Equal ty y' x) Refl p
 
-lemma trans
+theorem trans
       (ty : Type) (x : ty) (y : ty) (z : ty) (p : Equal ty x y) (q : Equal ty y z)
     : Equal ty x z =
   J (λz' _. Equal ty x z') p q
@@ -98,27 +98,27 @@ covers the case where neither applies.
 True` collapses all the way to `Top`:
 
 ```ken example
-lemma with_tt : Equal Bool (bool_and True True) True = Proved
+theorem with_tt : Equal Bool (bool_and True True) True = Proved
 ```
 
 This fails with `"Refl expects an `Eq`-shaped goal"` — the goal already
 collapsed to `Top` before `Refl` was checked against it:
 
 ```ken reject
-lemma with_refl : Equal Bool (bool_and True True) True = Refl
+theorem with_refl : Equal Bool (bool_and True True) True = Refl
 ```
 
 An abstract (neutral) variable never collapses, so the same shape flips:
 
 ```ken example
-lemma self_eq_refl (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = Refl
+theorem self_eq_refl (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = Refl
 ```
 
 This fails: the goal never reduced to `Top` (`x` is abstract), so there is
 nothing for `Proved` (a `Top` introduction) to close:
 
 ```ken reject
-lemma self_eq_tt (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = Proved
+theorem self_eq_tt (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = Proved
 ```
 
 ### 1.1 When neither closes: opaque primitives don't reduce under conversion
@@ -142,13 +142,13 @@ This fails with `"Refl: the two sides of the goal are not convertible"` —
 `five` is concrete and the two arguments are literally the same value:
 
 ```ken reject
-lemma prim_eq_refl : Equal Bool (eq_int five five) True = Refl
+theorem prim_eq_refl : Equal Bool (eq_int five five) True = Refl
 ```
 
 This fails too, for the same reason: the goal never reduced to `Top` either:
 
 ```ken reject
-lemma prim_eq_tt : Equal Bool (eq_int five five) True = Proved
+theorem prim_eq_tt : Equal Bool (eq_int five five) True = Proved
 ```
 
 The honest closer is a VISIBLE postulate, the same audited-delta shape
@@ -188,7 +188,7 @@ for `list_append`: the base case has both sides reduce to the constructor
 result (the induction hypothesis) is lifted under `Cons x` by `cong`:
 
 ```ken example
-lemma list_right_unit (a : Type) (xs : List a) : Equal (List a) (list_append a xs (Nil a)) xs =
+theorem list_right_unit (a : Type) (xs : List a) : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
     Nil ↦ Proved;
     Cons x t ↦
@@ -224,7 +224,7 @@ constructor combinations with `Proved` (matching endpoints) or `absurd`
 between different nullary constructors, which collapses to `Bottom`, K5):
 
 ```ken example
-lemma bool_eq_sound (x : Bool) : (y : Bool) → IsTrue (bool_eq x y) → Equal Bool x y =
+theorem bool_eq_sound (x : Bool) : (y : Bool) → IsTrue (bool_eq x y) → Equal Bool x y =
   match x {
     True ↦
       λy.
@@ -240,7 +240,7 @@ lemma bool_eq_sound (x : Bool) : (y : Bool) → IsTrue (bool_eq x y) → Equal B
         }
   }
 
-lemma bool_eq_complete (x : Bool) : (y : Bool) → Equal Bool x y → IsTrue (bool_eq x y) =
+theorem bool_eq_complete (x : Bool) : (y : Bool) → Equal Bool x y → IsTrue (bool_eq x y) =
   match x {
     True ↦
       λy.
@@ -277,7 +277,7 @@ call, only a pointwise proof, because `Equal (Bool -> Bool) f g`
 whnf-reduces to exactly that pointwise Pi type:
 
 ```ken example
-lemma not_functions_equal : Equal (Bool → Bool) not_bool flip_bool =
+theorem not_functions_equal : Equal (Bool → Bool) not_bool flip_bool =
   λb.
     match b {
       True ↦ Proved;
@@ -308,7 +308,7 @@ This fails with `"SCT: idempotent self-loop has no strictly-decreasing
 parameter"`:
 
 ```ken reject
-lemma bad : Bottom = bad
+theorem bad : Bottom = bad
 ```
 
 **Every occurrence of a recursive definition inside its own body counts**,
@@ -349,7 +349,7 @@ The local aliases are definitionally equal to the original expressions, so
 axiom string_to_list_char_retraction
     : (text : String) → Equal String (list_char_to_string (string_to_list_char text)) text
 
-lemma string_to_list_char_injective_with_lets
+theorem string_to_list_char_injective_with_lets
       (left : String)
       (right : String)
       (same_chars : Equal (List Char) (string_to_list_char left) (string_to_list_char right))
@@ -389,7 +389,7 @@ and `value2` because they tell the reader what changed.
 ```ken example
 data GuideMap k v = GuideLeaf | GuideNode k v
 
-lemma guide_map_insert_bridge
+theorem guide_map_insert_bridge
       (k : Type)
       (v : Type)
       (inserted : GuideMap k v)
@@ -418,7 +418,7 @@ matches and direct structural recursion. Bind only when the name states a proof
 endpoint, evidence role, invariant, or stage the reader would otherwise have to
 reconstruct. There is no binding quota, depth threshold, or minimum count. When
 an intermediate is reusable or recursive, promote it to a
-top-level `lemma` instead; when many unrelated bindings accumulate, split the
+top-level `theorem` instead; when many unrelated bindings accumulate, split the
 proof rather than creating a local namespace.
 
 ## Design notes

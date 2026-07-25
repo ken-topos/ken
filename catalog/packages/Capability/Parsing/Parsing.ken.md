@@ -113,7 +113,7 @@ fn span_to_byte_range (sp : Span) : ByteRange = MkByteRange (span_start sp) (spa
 fn span_origin (source : SourceId) (sp : Span) : Origin =
   SourceOrigin source (span_to_byte_range sp)
 
-lemma span_to_byte_range_faithful
+theorem span_to_byte_range_faithful
       (sp : Span)
     : And
         (Equal Nat (byte_range_start (span_to_byte_range sp)) (span_start sp))
@@ -122,7 +122,7 @@ lemma span_to_byte_range_faithful
     MkSpan start end ↦ and_intro (Equal Nat start start) (Equal Nat end end) Refl Refl
   }
 
-lemma span_origin_source_faithful
+theorem span_origin_source_faithful
       (source : SourceId) (sp : Span)
     : Equal
         (Option SourceId)
@@ -189,7 +189,7 @@ proof zero_left for LessEqNat (n : Nat) : LessEqNat Zero n = Proved
 fn ValidSpan (s : Source) (sp : Span) : Prop =
   And (LessEqNat (span_start sp) (span_end sp)) (LessEqNat (span_end sp) (source_length s))
 
-lemma valid_zero_width_span
+theorem valid_zero_width_span
       (s : Source) (offset : Nat)
     : LessEqNat offset (source_length s) → ValidSpan s (MkSpan offset offset) =
   λh.

@@ -148,7 +148,7 @@ proof comm for mul (a : Nat) (b : Nat) : Equal Nat (mul a b) (mul b a) =
         (sym Nat (mul (Suc b2) a) (add (mul b2 a) a) ((proof suc_l for mul) b2 a))
   }
 
-lemma mul_add_distrib_r
+theorem mul_add_distrib_r
       (a : Nat) (b : Nat) (c : Nat)
     : Equal Nat (mul a (add b c)) (add (mul a b) (mul a c)) =
   match c {
@@ -173,7 +173,7 @@ lemma mul_add_distrib_r
           ((proof assoc for add) (mul a b) (mul a c2) a))
   }
 
-lemma mul_add_distrib_l
+theorem mul_add_distrib_l
       (a : Nat) (b : Nat) (c : Nat)
     : Equal Nat (mul (add a b) c) (add (mul a c) (mul b c)) =
   trans

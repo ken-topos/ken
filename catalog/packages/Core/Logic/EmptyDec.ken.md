@@ -141,10 +141,10 @@ and its branch constructor, so the equation can be used as a proof directly.
 uses for `cong`) for the No-branch contradiction below:
 
 ```ken
-lemma sym (ty : Type) (x : ty) (y : ty) (p : Equal ty x y) : Equal ty y x =
+theorem sym (ty : Type) (x : ty) (y : ty) (p : Equal ty x y) : Equal ty y x =
   J (λy' _. Equal ty y' x) Refl p
 
-lemma trans
+theorem trans
       (ty : Type) (x : ty) (y : ty) (z : ty) (p : Equal ty x y) (q : Equal ty y z)
     : Equal ty x z =
   J (λz' _. Equal ty x z') p q
@@ -223,7 +223,7 @@ fn contradiction_implies_anything (e : Empty) : Bool = absurd_empty Bool e
 
 `Dec`/`Empty` are containers and an eliminator, not a lawful structure with
 its own class — the "laws" here are the computation facts that justify
-calling `decide` an honest reflection of `Dec`'s tag, stated as `lemma`s
+calling `decide` an honest reflection of `Dec`'s tag, stated as `theorem`s
 over the concrete `DecEq Bool` instance from `§3` (the guide's `§7` named-
 proof-claims form):
 

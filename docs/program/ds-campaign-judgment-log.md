@@ -282,7 +282,7 @@ bar.
 > guidance** (`07-catalog-style-guide.md §9` + `write-ken.md`, PR #460). The bulk
 > rename of landed code has now LANDED in two arms:
 > - **Phase 1 — catalog rename** (Librarian, PR #463, `main @ f71abba`): all 594
->   camelCase `fn`/`const`/`lemma`/`proof`/class-field declarations across the 14
+>   camelCase `fn`/`const`/`theorem`/`proof`/class-field declarations across the 14
 >   catalog files → snake_case; symmetric 4049 ins/4049 del across 36 files, zero
 >   `crates/src`+kernel delta, 123/123 workspace parity, Architect fidelity gate.
 > - **Prelude arm — prelude Ken-names** (Steward-dispatched, PR #464,
@@ -1113,10 +1113,10 @@ product). State:
   **Librarian kicked** (`evt_6yhyfntc91jsn`), PROSE-ONLY, SKIP in-flight
   LawfulClasses+Collections, small-files-first, harvest-before-strip. On delivery:
   bundle rule+swept files → Architect fidelity gate → doc-only merge. Task #10.
-- **(2) Keyword adoption — PILOT.** ~2.5% adoption (fn 1032/const 50 vs lemma
+- **(2) Keyword adoption — PILOT.** ~2.5% adoption (fn 1032/const 50 vs theorem
   13/proof 10/def 2/prop 2). Pilot = `Data/Numeric/Nat/Arithmetic.ken.md` (small, all law
-  lemmas, stable). Prereq: pin def/lemma/proof/prop semantics (Architect/spec-author
-  consult). Folds into write-ken #9. Task #12.
+  lemmas, stable). Prereq: pin def/theorem/proof/prop semantics
+  (Architect/spec-author consult). Folds into write-ken #9. Task #12.
 - **(1) Presentation-order independence — SEQUENCED, NOT HANDED.** Operator: send
   the source-order question to the enclave. Decouple presentation from evaluation
   order (parse → reference DAG → elaborate leaf-to-root; SCT already does SCC
@@ -1139,11 +1139,11 @@ product). State:
 ### D12 · Pedagogic catalog rewrite = Foundation initiative + foundation-implementer→sol (operator, 2026-07-11 ~16:15 UTC)
 
 Operator **consolidated and re-owned** D11's items (1)+(2): presentation-order
-independence + def/prop/lemma/proof adoption are **one larger readability goal —
+independence + def/prop/theorem/proof adoption are **one larger readability goal —
 "characterize the catalog source as pedagogic documents"** — and it is
 **properly the Foundation team's**, *not* a Librarian task and *not* an
 enclave-only design question. Foundation's **next** task after compare-ord:
-*discover how to represent Ken code using def/prop/lemma/proof to structure,
+*discover how to represent Ken code using def/prop/theorem/proof to structure,
 document, and motivate; write top-down; on a few of the **simpler** `.ken.md`
 files but **not the simplest*** (little to do there). Exploratory ("discover
 how"), so scope it as a prototype/design WP, not a mechanical sweep. Task #11
@@ -1162,7 +1162,7 @@ orthogonal). Coverage edge: SCC grouping is **view/let-only** (fn/const/proc tru
 cycles + contract-bearing members explicitly scoped out, fail clearly). So
 handing this to the enclave as a fresh design question would **relitigate a
 decided point** — do NOT. OPEN sub-question for the eventual brief: are
-prop/lemma/proof **new** surface forms (keyword/sugar) or conventions over `def`?
+prop/theorem/proof **new** surface forms (keyword/sugar) or conventions over `def`?
 → Architect/spec-author consult when authoring.
 
 **Model: foundation-implementer terra→gpt-5.6-sol (high), operator-manual,
@@ -1215,7 +1215,7 @@ qa `evt_7rtjp70e8hn9p`, coord `evt_bkbn15dpv0hz`.
 
 **Next:** #11 pedagogic catalog rewrite. Foundation ring clear + quiescent (no
 new work started). Prereq before kicking: Architect consult on whether
-`def`/`prop`/`lemma`/`proof` are new surface forms or conventions over `def`.
+`def`/`prop`/`theorem`/`proof` are new surface forms or conventions over `def`.
 Handoff-Gate-compact the Foundation ring when the brief is ready (the ring is at
 a clean seam now, but compaction pairs with the kickoff, not before it).
 
@@ -1230,20 +1230,20 @@ buffered-resume race is closed. Operator's explicit fix request (#18) done.
 **Architect vocabulary ruling (evt_261s6784m3y48) — HYBRID, no prereq WP.**
 Grounded on a live `origin/main` read (lexer, parse fns, resolve.rs, elab.rs,
 prelude), not memory. The four forms are **distinct + kernel-backed today**:
-`def` (type alias/refinement) · `prop` (Ω-valued proposition family) · `lemma`
+`def` (type alias/refinement) · `prop` (Ω-valued proposition family) · `theorem`
 (module-level checked Ω-theorem) · `proof … for` (same, namespaced `subject::p`,
 telescope-validated, no sibling-proof dependency). **Load-bearing rule:**
-`lemma`/`proof` enforce Ω via `ensure_omega_type` — `Equal`/`IsTrue`-typed laws
+`theorem`/`proof` enforce Ω via `ensure_omega_type` — `Equal`/`IsTrue`-typed laws
 convert cleanly; proof-**relevant** conclusions (`Or : Ω→Ω→Type`, `Σ`-witness,
 eliminator helpers carrying a branch as data) stay `const`/`fn`. The vocabulary
-tracks the proof-irrelevance line on purpose. Low adoption (lemma 13 / proof 10)
+tracks the proof-irrelevance line on purpose. Low adoption (theorem 13 / proof 10)
 is under-USE not under-SPEC → nothing to build first. One flagged follow-up (NOT
-a blocker): no proof-relevant `lemma` form (Type-level checked theorem stays
+a blocker): no proof-relevant `theorem` form (Type-level checked theorem stays
 `const : φ = proof`) — watch during prototype, escalate only if it hurts.
 
 **§7.1 convention note MERGED** `origin/main @ 9a2cf746` (PR #518, doc-only).
 Architect-authored subsection "Choosing a form" in `surface-reference.ken.md`:
-decision table + the Ω-vs-Type rule + `lemma`-vs-`proof … for` ownership + the
+decision table + the Ω-vs-Type rule + `theorem`-vs-`proof … for` ownership + the
 top-down enabler. +56/−0, no ken fences (pure prose+table → nothing new
 elaborates). This is the ring's authoring contract.
 
@@ -1268,9 +1268,9 @@ Kickoff pairs with the compaction (drops verified → mention → send-keys rous
 
 **The initiative's founding premise was wrong, and the prototype caught it in
 minutes.** My brief (and §7.1) claimed "top-down elaboration is supported (§33
-mutual recursion + `expand_scope`)" so a `lemma` could be stated above the `fn`
+mutual recursion + `expand_scope`)" so a `theorem` could be stated above the `fn`
 it invokes. The foundation-implementer's first NatArith rewrite immediately
-falsified it: `lemma add_zero_l = add_zero_l_ind a` with the helper below →
+falsified it: `theorem add_zero_l = add_zero_l_ind a` with the helper below →
 `UnresolvedCon`. It committed WIP `77ebd1b3`, paused, and asked (a) local-order
 vs (b) hold-for-language-fix (evt_6xmatefj8cptx). Exactly the
 [[held-branch-scaffolding-is-load-bearing-evidence]] value of building the real
@@ -1326,7 +1326,7 @@ SCT unchanged, zero new TCB).
 
 **Pattern validated end-to-end.** NatArith + OrdNat now read top-down in the
 PROSE (lede → statement → checked code) with every Ω-typed law an original-name
-`lemma`, computation + proof-relevant `Or`-witnesses as `fn`, recursive proofs as
+`theorem`, computation + proof-relevant `Or`-witnesses as `fn`, recursive proofs as
 `_ind` helpers behind thin wrappers. Gate chain: implementer merge_ready
 `evt_4bg42af5zwmhc` → QA APPROVED `evt_5e5s721n5pt34` (folded a prose correction)
 → Architect terminal fidelity APPROVE `evt_2z83afphfersn` → Steward honesty gate +

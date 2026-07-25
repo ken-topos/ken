@@ -190,7 +190,7 @@ When a declaration header breaks:
 For example:
 
 ```ken ignore
-lemma list_traverse_composition_cons
+theorem list_traverse_composition_cons
   (g : Type -> Type)
   (h : Type -> Type)
   (apg : Applicative g)
@@ -424,7 +424,7 @@ The formatter must not:
 - reorder declarations or imports;
 - rename identifiers or change casing;
 - regroup binders;
-- switch between `lemma`, `proof`, `fn`, and `const`;
+- switch between `theorem`, `proof`, `fn`, and `const`;
 - switch between an attached-proof selector and another proof spelling;
 - desugar `if`, `match`, records, classes, effects, or refinements;
 - choose between bracketed and juxtaposed type application while that spelling

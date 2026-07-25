@@ -18,7 +18,7 @@ written into a frame, a guide, or a WP brief:
 2. **Backward reference** (the callee above the caller);
 3. **Genuine mutual-recursion cycle** (two decls referencing each other).
 
-Run each per decl kind you care about (`fn`/`const` *and* `lemma`/`prop`/`proof`
+Run each per decl kind you care about (`fn`/`const` *and* `theorem`/`prop`/`proof`
 — they differ). **Code inspection of the name pre-pass / SCC grouping is NOT
 sufficient:** name *registration*, name *resolution*, and *grouped elaboration*
 have **different boundaries**, and reading one (e.g. resolve-phase `RCon`

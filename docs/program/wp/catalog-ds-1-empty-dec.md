@@ -178,7 +178,7 @@ confirms the smoke-test result at the build gate.
    `elab.globals`, kernel-rechecked, `trusted_base()` delta accounted (an
    ordinary inductive admission, no new trust category).
 2. **Surface `.ken.md` catalog entry** (authored against `catalog/guide/`, using
-   `data`/`fn`/`const` and the `def`/`prop`/`lemma` surface as apt): `Empty` +
+   `data`/`fn`/`const` and the `def`/`prop`/`theorem` surface as apt): `Empty` +
    `absurd`; ergonomic `yes`/`no`/`decide` surface; the
    `DecEq a → (x y : a) → Dec (Equal a x y)` bridge — with worked, **checked**
    `` ```ken example `` fences and at least one `` ```ken reject `` where a

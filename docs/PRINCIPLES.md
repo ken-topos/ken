@@ -296,7 +296,7 @@ and in a literate `.ken.md` it belongs in the surrounding Markdown, not a `--`
 inside the fence.
 
 *In practice:* a contract/invariant is `requires`/`ensures` or a refinement type;
-a proposition is `law`/`prop`/`lemma` discharged by `prove`; a trust boundary is
+a proposition is `law`/`prop`/`theorem` discharged by `prove`; a trust boundary is
 `Axiom` recorded in `trusted_base_delta` (`63 §2`) — the checked construct *is*
 the record, and a comment restating it is redundant. When a required fact has no
 language-proper home, that is a signal to **extend the language** (or file the

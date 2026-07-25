@@ -44,7 +44,7 @@ is completely hollow             ⛔
 **The reaching lemma** — and it must be **proved**, not postulated:
 
 ```ken
-lemma path_parse_valid (raw : Bytes) : Eq Bool (path_valid (path_parse raw)) True
+theorem path_parse_valid (raw : Bytes) : Eq Bool (path_valid (path_parse raw)) True
   = path_split_preserves_valid (bytes_to_list raw) …   -- structural induction
 ```
 

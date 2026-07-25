@@ -48,7 +48,7 @@ because `def` here has exactly one meaning and it is not `const`/`fn`'s.
   declaration keyword; keep it **reserved** (rejected as an identifier) to avoid
   confusion and preserve future optionality. (Steward scope call.)
 - **Untouched — explicit guardrails (§5).** The `const`/`fn`/`proc` purity split
-  (SURF-1), `data`/`record` constructions, `prop`/`lemma`/attached-`proof`
+  (SURF-1), `data`/`record` constructions, `prop`/`theorem`/attached-`proof`
   (SURF-named-proof), the refinement type former `{ x : A | φ }` and its
   elaboration, and the **`Type` universe**. None of these change.
 - **No kernel delta.** No new `Term`/`Decl` variant, no `trusted_base` change,
@@ -97,7 +97,7 @@ Each deliverable ends in a concrete, checkable outcome.
    zero-condition case." Keep the inline refined-field examples
    (`{ n : Int | n ≥ 0 }`) as-is. **AC:** the chapter no longer references a
    `type` keyword; the lattice reads `def` / `data` / `record` / `const` `fn`
-   `proc` / `prop` `lemma` `proof` / `class` `instance`.
+   `proc` / `prop` `theorem` `proof` / `class` `instance`.
 5. **Formatter (L-fmt).** The mandated formatter canonicalizes any surviving
    `type` declaration to `def`; ASCII↔Unicode canonical form and the
    confusable-resistant (TR39) lexer both recognize `def`. **AC:** formatting a
@@ -129,7 +129,7 @@ not just the touched crate).
 ## 5. Do-not-reopen guardrails
 
 - Do **not** touch the `const`/`fn`/`proc` purity split, `data`/`record`,
-  `prop`/`lemma`/`proof`, the refinement type former, or the `Type` universe.
+  `prop`/`theorem`/`proof`, the refinement type former, or the `Type` universe.
 - Do **not** add a new kernel `Term`/`Decl` variant or change `trusted_base`.
   If any change appears to require a kernel edit, **stop and escalate to the
   Steward** — that means the rename isn't semantics-preserving, which it is.

@@ -109,7 +109,7 @@ the answer yourself rather than take it on this page's authority.
    (`crates/ken-cli/src/main.rs`, `check_file`/`run_file`/
    `native_build_file`; `library/learn/reading-ken/06-execution.md`
    §§2, 3, 5).
-2. No. The five `lemma`s are proofs about the *shape* of `writeAll`'s
+2. No. The five `theorem`s are proofs about the *shape* of `writeAll`'s
    recursion and its error handling — real, kernel-checked claims about
    the call-bound, the exact-prefix property, and first-error preservation.
    They are not proofs that a real write actually lands exactly once or

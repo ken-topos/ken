@@ -32,9 +32,9 @@ fn bool_and (a : Bool) (b : Bool) : Bool =
     False ↦ False
   }
 
-lemma collapsed : Equal Bool (bool_and True True) True = Proved
+theorem collapsed : Equal Bool (bool_and True True) True = Proved
 
-lemma stuck (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = Refl
+theorem stuck (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = Refl
 ```
 
 The ordinary loop is:

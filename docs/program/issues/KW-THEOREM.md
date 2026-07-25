@@ -124,8 +124,8 @@ surviving `lemma` is indistinguishable from a missed one.
 ## ⚠ Couplings that a sweep will miss
 
 1. **Cross-doc anchors.** `library/learn/reading-ken/02-types-contracts-and-proofs.md`
-   links to `spec/.../33-declarations.md#8-named-proof-claims--prop-lemma-and-attached-proof`
-   and `#83-standalone-lemmas--lemma`. **Renaming a spec heading silently breaks
+   links to `spec/.../33-declarations.md#8-named-proof-claims--prop-theorem-and-attached-proof`
+   and `#83-standalone-theorems--theorem`. **Renaming a spec heading silently breaks
    every inbound link.** The librarian's stale-anchor mutation is the gate.
 2. **Pluralisation.** `lemma`/`lemmas`/`lemma`s (`library/…:53` writes
    *"as `lemma`s"*). A `\blemma\b` regex misses the possessive/plural forms; a

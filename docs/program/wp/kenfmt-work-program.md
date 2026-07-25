@@ -46,7 +46,7 @@ Operator-ruled; the program implements them, it does not relitigate.
   literal spelling (numeric base/separators/suffixes, string delimiters/escapes),
   and every non-canonical choice. Never reorder/sort imports/constraints/rows/
   fields/instances; never desugar `if`/`match`/records/classes/effects; never
-  switch `lemma`↔`proof`↔`fn`↔`const` or an attached-proof selector for another
+  switch `theorem`↔`proof`↔`fn`↔`const` or an attached-proof selector for another
   spelling; never add/remove types/implicits/constraints.
 - **Break by syntactic boundary, never arbitrary token position:** argument
   boundaries for applications, domain boundaries for arrow chains (one binder

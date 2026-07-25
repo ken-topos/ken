@@ -131,7 +131,7 @@ checker, with **no cached-`Nat` carrier and no postulate at the call site.**
    **awaiting** its registered reduction (K3)."*
 3. **Ken's own guide ships the non-reduction as a REJECT:**
    `catalog/guide/proof-techniques.ken.md:133` —
-   `lemma prim_eq_refl : Equal Bool (eq_int five five) True = Refl` **fails**,
+   `theorem prim_eq_refl : Equal Bool (eq_int five five) True = Refl` **fails**,
    *"`eq_int five five` never reduces to `True` under conversion, even though
    `five` is concrete."*
 4. `prim_reduce` / `prim_reduce_elaborated` live in **`ken_interp::eval`** — the
