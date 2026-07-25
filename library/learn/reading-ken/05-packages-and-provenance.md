@@ -13,7 +13,8 @@ plainly which of those two it is.
 
 ## Package Paths
 
-`catalog/packages/` files at `<Section>/<Domain>/[<Subdomain>/]<Pkg>.ken.md`,
+Catalog package files follow
+`<Section>/<Domain>/[<Subdomain>/]<Pkg>.ken.md`,
 and a package's dotted import path is the *same* path spelled with dots
 instead of slashes — a mechanical, total identity: an `N`-component dotted
 path names the unique leaf file reached through `N − 1` directories
@@ -143,10 +144,10 @@ the underlying mechanism is supported and tested. That is a
 **corpus-and-tooling gap** — no fragment is written to exercise the
 mechanism, and the one CLI command used to check fragments doesn't invoke
 it — not a capability the language lacks. A whole-catalog search for these
-six forms as live code finds only prose hits:
-anywhere in the tree are prose — `README.md`'s own description of the
-path/import rule, and `Data/Sums/Combinators.ken.md`'s references section
-naming Haskell's `Data.Either` *module* as an external citation. Label the
+six forms as live code finds only prose hits. The only hits are prose:
+`README.md`'s own description of the path/import rule, and
+`Data/Sums/Combinators.ken.md`'s references section naming Haskell's
+`Data.Either` *module* as an external citation. Label the
 absence **unavailable** in checked-fragment form — the same labelling
 chapter [03](03-assurance-and-trust.md) used for `tested` and chapter
 [04](04-effects-capabilities-and-authority.md) used for capability
@@ -158,9 +159,10 @@ small lemmas it needs, and names exactly what it is doing right where it
 does it: "`sym`/`trans` are inlined from
 `catalog/packages/Core/Logic/Transport.ken` (self-containment, the same
 idiom `catalog/guide/proof-techniques.ken.md` uses for `cong`)." That
-sentence, and the two small lemma re-declarations beneath it, are checked
-code — the same `ken check`-passing file in which chapter
-[03](03-assurance-and-trust.md) grounded `proved`. Read it precisely,
+sentence is Markdown prose, not checked code. The two small `ken`-fenced lemma
+re-declarations beneath it are the checked code, in the same `ken
+check`-passing file in which chapter
+[03](03-assurance-and-trust.md) grounded `proved`. Read the prose precisely,
 against the import discussion: the fragment's own word is
 "self-containment," a style choice, not a claim that cross-file `import`
 failed or could not deliver

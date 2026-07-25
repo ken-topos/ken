@@ -60,7 +60,7 @@ non-runnable library as a failed program.
 |---|---|---|
 | unknown subcommand | CLI surface | `ken help` |
 | parse/elaboration error | source front end | source span and expected type |
-| last definition is not an IO tree | wrong command/file role | use `ken check` or add a real entrypoint |
+| pure library has no `main` entrypoint | wrong command/file role | use `ken check` or add a real entrypoint |
 | missing capability | entrypoint authority | program capability manifest |
 | native build failure after check succeeds | backend/toolchain | native diagnostic and parity test |
 

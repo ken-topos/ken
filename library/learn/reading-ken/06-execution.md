@@ -41,9 +41,9 @@ lowers through the native backend to an executable
 `elaborate_cli_file`, `run_file`, `native_build_file`). A pure-library entry
 (no `proc main`, the ordinary shape
 for a `catalog/packages/` component) is validated with `ken check` precisely
-because `ken run` on such an entry always fails — "last definition is not an
-IO tree" — which is not evidence against the entry, only evidence that it
-isn't a program
+because `ken run` rejects a pure library with no `main` entrypoint. That
+rejection is not evidence against the entry; it only shows that the file is
+not a runnable program
 ([§3](../../../docs/program/07-catalog-style-guide.md#3-code-block-roles-the-fence-taxonomy)).
 
 Read that against what `ken check` calls: `check_file`
@@ -124,7 +124,7 @@ runtime behavior
    [interpreter store](../../../crates/ken-interp/src/eval.rs)
    records the error (`EvalStore::capacity_error`,
    `take_capacity_error`) rather than only collapsing to the null slot, and a
-   in-crate test drives a store to its limit and asserts the error is
+   an in-crate test drives a store to its limit and asserts the error is
    recorded, not dropped, at exactly the point of overflow, while a repeated
    value at the same limit correctly does not trip it
    ([capacity producer](../../../crates/ken-interp/src/eval.rs), `capacity_tests::

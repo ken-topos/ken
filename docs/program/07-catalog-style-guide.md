@@ -98,9 +98,9 @@ first-token `ken` highlighting):
   entry (no `proc main` — the common shape for a catalog package) is validated
   with `ken check <file>` instead: it runs the identical elaboration and
   fence-role checking `ken run` does, then stops before the IO-drive step.
-  `ken run` on a pure-library entry always fails with `"last definition is not
-  an IO tree"` — that failure is not evidence against the entry; cite `ken
-  check`'s exit code as the entry's fence-validation evidence instead.
+  `ken run` rejects a pure-library entry because it has no `main` entrypoint.
+  That rejection is not evidence against the entry; cite `ken check`'s exit
+  code as the entry's fence-validation evidence instead.
 
 ## 4. References (required)
 

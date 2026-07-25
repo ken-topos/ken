@@ -44,7 +44,7 @@ terms — none adds a new kernel declaration class or an ambient proof search
 - **`lemma`** — a standalone checked proof theorem in the ordinary module
   namespace, used when no single subject owns the theorem
   ([§8.3](../../../spec/30-surface/33-declarations.md#83-standalone-lemmas--lemma)).
-- **`prop`** — names a proposition family / claim shape, not itself a proof (
+- **`prop`** — names a proposition family / claim shape, not itself a proof
   [§8.1](../../../spec/30-surface/33-declarations.md#81-proposition-families--prop)).
 
 You can see both of the proof forms in the fragments this curriculum draws
@@ -121,9 +121,9 @@ instead, exactly because both sides there reduce all the way to the same
 concrete `Bool` constructor. Reading which closing term a proof
 uses, and whether the terms it relates are still open or already fully
 closed, tells you something `ken check`'s bare exit code does not: this
-is the discipline chapter 03 builds on directly — a checked file tells
-you a stated claim was proved, not by itself which of Ken's several
-verification statuses that claim carries.
+is the discipline chapter 03 builds on directly. A checked proof tells
+you its stated equation was proved; it does not classify every other
+guarantee the file discusses, which may be tested, delegated, or unknown.
 
 You can now distinguish the effect promise in a signature from the
 equational claims beside it. You can also tell whether a claim belongs to a

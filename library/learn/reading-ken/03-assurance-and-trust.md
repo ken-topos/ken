@@ -1,11 +1,11 @@
 # Assurance and Trust
 
 Chapter [02](02-types-contracts-and-proofs.md) closed on a deliberate gap: a
-passing `ken check` tells you a stated claim was proved, but not, by itself,
-which of Ken's verification statuses that claim
-carries. This chapter closes that gap, and then asks the harder question a
-signature and a proof together still don't answer — what, exactly, are you
-trusting when you trust this file?
+passing `ken check` establishes the proof declarations it checked, but not the
+status of every guarantee the artifact discusses. Those other guarantees may
+be tested, delegated, or unknown. This chapter closes that gap, and then asks
+the harder question a signature and a proof together still don't answer —
+what, exactly, are you trusting when you trust this file?
 
 ## Verification Status
 
@@ -60,10 +60,13 @@ in the [acceptance producer](../../../crates/ken-elaborator/tests/ds1_empty_dec_
 exercises when
 it loads the entry standalone
 ([§5.3](../../../spec/20-verification/21-spec-syntax.md#53-how-the-verdict-and-the-status-relate-the-projection)).
-A `proved` verdict adds nothing to what a consumer must trust beyond the
-kernel itself — the certificate is a closed term `check` validates, and a
-wrong certificate simply fails to validate; it cannot manufacture a false
-`proved`.
+For these two `EmptyDec` claims, the `proved` certificates add no new trust
+category: each is a closed term that `check` validates, and a wrong certificate
+simply fails to validate. The producer separately establishes zero
+`declare_primitive`/`declare_postulate` delta for the two new inductives. That
+is the grounded boundary here; a `proved` certificate in another artifact may
+still inherit primitive or postulate entries already present in its
+environment.
 
 That per-claim fact is separate from what a file's **Trust &
 derivation** section reports about the assumptions the whole artifact
