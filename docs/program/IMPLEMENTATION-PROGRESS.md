@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-25 00:40:35Z — from 68 issue file(s) in `docs/program/issues/`.
+2026-07-25 01:01:03Z — from 68 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -128,6 +128,7 @@ is itself not yet `merged`/`closed`:
 - `ABI-A3` blocked by `ABI-R3` (status: draft)
 - `ABI-M1` blocked by `ABI-R3` (status: draft)
 - `ABI-M2` blocked by `ABI-M1` (status: draft)
+- `ABI-R1` blocked by `DOC-W2` (status: active)
 - `ABI-R3` blocked by `PX8` (status: active)
 - `ABI-REVOKE` blocked by `ABI-R3` (status: draft)
 - `ABI-S1` blocked by `PX9` (status: draft)
