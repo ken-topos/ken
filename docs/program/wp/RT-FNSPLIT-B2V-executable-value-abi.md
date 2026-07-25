@@ -502,20 +502,43 @@ discharge anything.
 block found a facet no `AC` had named. Enumerated, that yields an unbounded chain
 of individually-reasonable blocks; **named, it yields one closure.**
 
-**`AC-10` — total classified-domain closure.** Every boundary-reachable
-value/input is assigned by the exhaustive disposition to **exactly one** of:
-*represented immediate*, *represented handle*, *protocol-only*, or *fail-closed
-forbidden*. The assigned behavior is **mandatory**:
+> ### ⛔ `D4` / `AC-3` CLARIFICATION — static POLICY vs runtime OUTCOME
+>
+> The exhaustive no-wildcard match assigns every `Lowered` **variant** exactly one
+> **static disposition policy**. A *represented* policy declares a **closed
+> encoding policy**: **immediate-only**, **handle-only**, or
+> **immediate-with-declared-handle-spill**. The existing
+> `RepresentedImmediate { spill: Some(…) }` is the **third** of those — ⛔ **not a
+> claim that every runtime value of that variant is immediate.** `ProtocolOnly`
+> and `FailClosedForbidden` remain terminal static policies.
+>
+> ⚠ **Why this had to be said.** `Lowered::Int` maps to
+> `RepresentedImmediate { tag: ImmediateInt, spill: Some(Int) }` — **one static,
+> variant-level policy**. A small runtime `Int` yields an immediate word; a wide
+> one yields a **persistent handle**. `D4`'s old wording defined *represented
+> immediate* as *"payload fits the tagged word directly"*, which is **false for
+> that same arm whenever its declared spill fires**. ⛔ Calling the whole `Int`
+> population *immediate* lets a proof attach handle evidence to **one sampled
+> spill** while never establishing that **every** spill partition carries the
+> handle obligations. Forcing the value-level `AC` to say *handle* instead would
+> contradict `AC-3`'s one static disposition per variant. **Both levels are real;
+> neither may absorb the other.**
 
-1. every **represented** value is constructible by emitted code and is recovered
-   by a **separately compiled** consumer with content/value, identity, owner, and
-   declared lifetime intact;
-2. a **protocol-only** case cannot enter a source-valued boundary slot; and
-3. a **malformed, forbidden, or unrepresentable** input rejects **before
+**`AC-10` — total classified-domain closure.** The exhaustive disposition assigns
+every boundary-reachable **variant** one **static policy**, and the closed
+value-dependent partition assigns every boundary **input** exactly one **actual
+outcome entailed by that policy**: *immediate word*, *handle word with declared
+class/owner/lifetime*, *protocol-only*, or *fail-closed forbidden*.
+
+1. Every **well-formed value admitted by a represented policy** is constructible
+   by emitted code and recovered by a **separately compiled** consumer with
+   content/value, identity, owner, and lifetime intact.
+2. A **protocol-only** case cannot enter a source-valued slot.
+3. A **malformed, forbidden, or unrepresentable** input rejects **before
    emission/publication** with its exact status.
 
-⛔ **No represented value may take the failure arm, and no boundary input may
-remain unclassified.**
+⛔ **No admitted well-formed represented value may reject, and no input *or
+encoding outcome* may remain unclassified.**
 
 > ### ⛔ Why `AC-10` is phrased this way — the Steward got it wrong first
 >
@@ -550,10 +573,13 @@ remain unclassified.**
   > a sealed exhaustive no-wildcard disposition, **plus** a closed finite
   > partition of every value-dependent representation discriminator — at least
   > **variant**, **magnitude/shape**, **lifetime/owner**, and **parent → child
-  > reachability / aggregate recursion**. Every partition maps to exactly one
-  > disposition class. Each partition **boundary** carries a **nondegenerate
-  > witness pair** and a **causal mutation** driven through an emitted producer
-  > and a separately compiled consumer.
+  > reachability / aggregate recursion**. Every value-dependent partition maps to
+  > exactly one **actual outcome permitted by its static policy**. ⛔ **A handle
+  > outcome — including an immediate policy's SPILL ARM — must discharge the
+  > handle class, referent-owner, identity, and lifetime obligations.** Each
+  > partition **boundary** carries a **nondegenerate witness pair** and a
+  > **causal mutation** driven through an emitted producer and a separately
+  > compiled consumer.
 
   ⭐ **The demanded unit is one property / one `AC` — not one test function.**
   QA's `AC-10` row names the structural closure artifact **and the complete
