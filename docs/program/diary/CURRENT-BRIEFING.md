@@ -39,9 +39,17 @@
 > **`origin/main` = `6af1279b`.** Current act: the Runtime ring is executing
 > `RT-FNSPLIT-B2O`. See the ✅✅ block below for the landed gate + kickoff.
 >
-> ### ⚠ MY CONVO MCP CLIENT LINK IS DOWN — use the direct-API fallback
+> ### ✅ CONVO MCP RESTORED (operator `/mcp`) — the fallback below is STANDBY ONLY
 >
-> **I killed it myself** with an unbounded `get_transcript(limit=1)`: the server
+> **Use the normal `mcp__convo__*` tools.** Verified after reconnect:
+> `get_recent_context` + `get_thread` + `list_questions` all clean, and the two
+> messages I sent over the fallback **are in the space** (`evt_1qatsz7n0e80q`,
+> `evt_6wmy2y3yaywes`) with all three Runtime seats replied in
+> `thr_2jt3bt9327pvx`. ⇒ The fallback is end-to-end sound; keep it for the next
+> outage, don't use it while the MCP link is up.
+>
+> ⛔ **THE CAUSE, WHICH IS THE PART TO REMEMBER: never call `get_transcript`.**
+> **I killed the link myself** with `get_transcript(limit=1)`: the server
 > answered `200` with **`Content-Length: 31239188`** (31 MB) and the MCP client
 > link died on the oversized payload. ⛔ **`limit` did NOT bound that response.**
 > The **server is healthy** — every seat but mine is posting fine, and my own
@@ -49,14 +57,22 @@
 > ([[convo-space-not-active-is-really-the-10k-event-cap]]): that one is a `409` on
 > **append** with reads still working; this is the inverse.
 >
-> **Fallback that works, and it is my own seat's identity — not impersonation:**
-> `.moot/actors.json` holds `actors.steward.{api_key,actor_id}` (the same lookup
-> `.devcontainer/run-moot-mcp.sh` does). Poster:
-> `scratchpad/convo-post.py {status|post <type> <mentions-csv> <body-file>}` →
-> `POST /api/spaces/<id>/response`, verified `200` with a real `event_id`.
+> **Standby fallback — my own seat's identity, not impersonation.**
+> `.moot/actors.json` holds `actors.steward.{api_key,actor_id}` plus
+> `api_url`/`space_id` (the same lookup `.devcontainer/run-moot-mcp.sh` does).
+> `POST {api_url}/api/spaces/{space_id}/response` with
+> `{participant_id, agent_name, text, message_type}` and a Bearer key returns a
+> real `event_id` and **delivers to recipients' turns normally**;
+> `PATCH .../participants/{actor_id}/status` works the same way. Full recipe:
+> `get-transcript-limit-does-not-bound-the-response` in my memory corpus
+> (⛔ do **not** rely on the scratchpad copy — that path dies with the session).
 > ⛔ **Never read another seat's key** — that posts as them.
-> ⇒ **Ask the operator to `/mcp` reconnect when convenient; do not restart the
-> session for it.** Reads are the loss, not writes.
+>
+> ⇒ **The fix is the operator's `/mcp` reconnect — ask, and DO NOT restart the
+> session for it.** Writes have a working path; reads are the only real loss.
+> ⚠ **Don't chase the runner pid:** `pgrep -f moot.adapters.mcp_runner` shows a
+> fresh pid every ~15s, which reads like a crash loop and is not one — the
+> process is fine, Claude Code has just stopped routing tools to it.
 >
 > ### The #9 ruling
 >
