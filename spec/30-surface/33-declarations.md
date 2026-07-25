@@ -34,7 +34,7 @@ and arity:
   `type` is now reserved, not a declaration keyword.
 - All top-level definitions are **mutually recursive within a module** if the
   SCT check accepts the group; otherwise the offending recursion is reported
-  (`17`). This grouping **includes `lemma` and attached `proof`** declarations
+  (`17`). This grouping **includes `theorem` and attached `proof`** declarations
   (`§8`), not only `const`/`fn`: proof declarations enter the **same**
   signatures-first, dependency-ordered SCC + SCT admission run, so a recursive
   or mutually-recursive proof is admitted **iff SCT accepts** it, on identical
@@ -764,14 +764,14 @@ content-addressed lockfiles, visibility/abstraction, and the
 class/instance/constraint mechanism with **lawful** instances and `derive`.
 Conformance: `../../conformance/surface/declarations/`.
 
-## 8. Named proof claims — `prop`, `lemma`, and attached `proof`
+## 8. Named proof claims — `prop`, `theorem`, and attached `proof`
 
 These declarations are surface/elaboration vocabulary over existing checked
 terms only. They add no new kernel declaration class, no trusted proof table,
 and no ambient proof search. The proof-claim surface has three roles:
 
 - `prop` names a proposition family / claim shape.
-- `lemma` names a reusable standalone checked proof theorem.
+- `theorem` names a reusable standalone checked proof theorem.
 - `proof <name> for <subject>` names a checked proof term attached to a
   resolved subject API.
 
@@ -862,35 +862,35 @@ one **fails closed** with the SCT diagnostic. (The earlier blanket
 no-sibling-dependency rejection is **withdrawn**: under the SCC + SCT run it
 was both redundant and wrong.)
 
-### 8.3 Standalone lemmas — `lemma`
+### 8.3 Standalone theorems — `theorem`
 
-`lemma` is the standalone checked proof-definition form. It is a reusable proof
+`theorem` is the standalone checked proof-definition form. It is a reusable proof
 theorem in the ordinary module namespace, parameterized like a function and
 instantiated by ordinary application.
 
 ```ken
-lemma append_nil_right
+theorem append_nil_right
   (A : Type) (xs : List A)
   : AppendsTo A xs nil xs = ...
 ```
 
 The result annotation is required and must classify at `Omega`. The body is an
-ordinary checked proof term; `lemma` is not a bundled `prop + proof`, not an
+ordinary checked proof term; `theorem` is not a bundled `prop + proof`, not an
 attached proof, and not a new kernel concept. If authors want an open
 obligation, the existing `prove` path remains the status-bearing form.
 
-A `lemma` (or attached `proof`) body **may self-recurse** — structural
+A `theorem` (or attached `proof`) body **may self-recurse** — structural
 induction on an argument — **and may mutually recurse** with other proof
 declarations, **iff the recursion passes SCT** (`../10-kernel/17 §4`), on
 identical terms to a recursive `const`/`fn`. Recursion is admitted **iff SCT
 accepts**; an SCT-rejected proof recursion — a non-descending self-reference
-such as `lemma bad : φ = bad`, or a mutual proof cycle with no decreasing
+such as `theorem bad : φ = bad`, or a mutual proof cycle with no decreasing
 measure — **fails closed** with the SCT diagnostic, and no such body is ever
 declared. The admission run and its soundness are stated in `§8.4`.
 
-`lemma` obeys ordinary module visibility: private by default, `pub lemma` to
+`theorem` obeys ordinary module visibility: private by default, `pub theorem` to
 export, and imports/shadowing/ambiguity follow the `33 §3-4` module rules. A
-lemma is never addressed as `subject::name` unless it is separately declared as
+theorem is never addressed as `subject::name` unless it is separately declared as
 an attached proof, which is a distinct declaration.
 
 Caller use is ordinary application:
@@ -905,16 +905,16 @@ transport, rewrite, congruence, induction, or class-law fields.
 
 ### 8.4 Admission and soundness of recursive proof claims
 
-Wiring `lemma`/`proof` into the recursive-definition machinery is an
+Wiring `theorem`/`proof` into the recursive-definition machinery is an
 **elaborator admission** change only. It adds **no kernel rule, no trusted
 proof table, no ambient proof search, and no `trusted_base()` entry** —
-recursive `lemma`/`proof` declarations are admitted by the *same* checks a
+recursive `theorem`/`proof` declarations are admitted by the *same* checks a
 recursive `const`/`fn` already passes. This section states the soundness of
 that admission normatively; each claim is a property of the admission path, not
 of any test.
 
 **The admission path.** All top-level declarations in a scope — `const`/`fn`
-and `lemma`/`proof` alike — are admitted through one shared, dependency-ordered
+and `theorem`/`proof` alike — are admitted through one shared, dependency-ordered
 call-graph pass (`§1`):
 
 1. **Dependency-ordered components deliver forward references.** The scope's
@@ -926,7 +926,7 @@ call-graph pass (`§1`):
    mutual cycle is still ordered first). This ordering — not a scope-wide
    signature pre-pass — is what lets a declaration reference a sibling defined
    **later in source** (a **forward reference**): the sibling's component is
-   fully elaborated first. A `lemma`/attached-`proof` type is required to classify
+   fully elaborated first. A `theorem`/attached-`proof` type is required to classify
    at `Omega`, and an attached proof's subject must occur applied in its claim
    (`§8.2`); these gates run before that declaration's body in either branch
    below.
@@ -960,9 +960,9 @@ The four soundness properties this preserves:
   theory, the whole obligation on a recursive inhabitant of an `Omega`
   proposition is that it be **strongly normalizing**; SCT-acceptance is that
   guarantee. There is no additional burden from the `Omega` codomain, so an
-  SCT-accepted recursive `lemma`/`proof` is a sound proof of its proposition —
+  SCT-accepted recursive `theorem`/`proof` is a sound proof of its proposition —
   and, conversely, the fail-closed SCT rejection is what keeps a **looping
-  "proof"** of a false proposition (`lemma bad : φ = bad`) out.
+  "proof"** of a false proposition (`theorem bad : φ = bad`) out.
 - **(c) Proof-irrelevance is preserved — Ω proofs are never δ-unfolded in
   conversion.** Admitting recursive Ω-proofs imposes **no new conversion or
   reduction burden**, because the kernel's conversion check short-circuits on

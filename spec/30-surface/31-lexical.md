@@ -36,7 +36,7 @@ agents. Five principles (decided; the §2–§6 spellings are a starter under th
    read and agents write, **one canonical format** means the reader always sees
    consistent notation — no style variance to parse. (No formatting latitude.)
 4. **Keywords stay ASCII words.** `const fn proc data record match space visits
-   requires ensures prop proof lemma prove law` are *names* — legibility beats
+   requires ensures prop proof theorem prove law` are *names* — legibility beats
    symbol density, and they are already typeable. Notation is reserved for
    *operators*, where a symbol carries established meaning; Unicode-ifying
    keywords would be decoration. (So the purity keywords `const`/`fn`/`proc`,
@@ -402,7 +402,7 @@ determine the numeric story (`35`):
 
 ```
 const fn proc let def data record module import export space capabilities
-match if then else where requires ensures prop proof lemma prove law
+match if then else where requires ensures prop proof theorem prove law
 visits foreign forall exists in as mut class instance
 becomes declassify policy temporal assume test
 ```
