@@ -217,7 +217,47 @@ hard-stop count    = 6   ← ⛔ PULL FIRED 2026-07-25. NEXT PULL = #9.
        ⛔ THIS IS A STEWARD FRAMING DEFECT, not an execution failure. The ring
        invoked the frame's own unreviewable-diff stop, exactly as instructed,
        and refused to reinterpret the deliverables to fit what was buildable.
-       ⇒ RESEARCH PULL FIRED. Architect ruling is GATED BEHIND the advisory.
+       ⇒ RESEARCH PULL FIRED. Architect ruling was GATED BEHIND the advisory.
+       ✅ ADVISORY DELIVERED evt_4w1rf45d4fkv3 (2026-07-25). GATE LIFTED.
+          Independently grounded the stop on exact 7151ae58 and confirmed it
+          "correct and structural". Three findings that bind the re-slice:
+          (i)  A `static_origin` carrier CAN be an independent checkpoint, but
+               ONLY as a COMPLETE tag-plus-SOLE-dispatch defunctionalization
+               (Danvy/Millikin recognition criterion: the apply function is the
+               sole point of consumption). Requires: every retained closure/work
+               item carries the static tag + its dynamic env/state; raw cloned
+               bodies/pointers ABSENT from that population; all applications go
+               through ONE closed origin consumer; tag population = the closed
+               static occurrence population, never inferred backward.
+               ⇒ Honest milestone name is "DEFUNCTIONALIZE RETAINED BODY
+               SELECTION", ⛔ NOT "the plane is load-bearing".
+          (ii) StaticOriginId -> &RuntimeExpr is IDENTITY-CLEAN (a table indexed
+               solely by preallocated id, with the borrow as payload only, does
+               not use the pointer as identity) but is NOT PLANE-AUTHORITATIVE:
+               it leaves RuntimeExpr owning semantics, i.e. an abstract machine
+               over source terms rather than a virtual machine over compiled
+               units (Ager et al.). ⇒ It closes SELECTION identity while
+               deliberately leaving source-recursive semantics in authority.
+               ⛔ Claiming it makes B1R's material load-bearing OVERCLAIMS.
+         (iii) ⛔ Landing functionization as a LIVE SECOND PRODUCTION PATH with
+               authority-removal postponed to a later slice has NO PRIOR-ART
+               SUPPORT — it recreates two authorities. Functionization,
+               switch-over, equivalence evidence, and old-path removal form ONE
+               review boundary, unless the new path is mechanically unreachable
+               non-authoritative scaffolding.
+          ⚠ Prior art supports TWO coherent target shapes and does NOT choose:
+             (a) closed target functions with explicit environment/frame
+                 arguments (CertiCoq: after closure conversion + hoisting, all
+                 functions closed in one bundle, forward-declare all, then one
+                 target function per source function);
+             (b) a compiled instruction/CFG machine with static labels and
+                 explicit state.
+          ★ The frame's "bounded deferred Cranelift functions" wording picked
+            (a) BY INHERITANCE FROM A BRANCH THAT NEVER LANDED. The base
+            implements NEITHER, so this is a genuinely OPEN Architect call to be
+            made on merits, not carried forward.
+          No local/refs/ or excluded-prototype material consulted; the held Ken
+          branch was used only as repository-owned scale evidence.
 NEXT RESEARCH PULL = hard-stop #9, then #12, …
 
 ⛔ **B2a runs one stop away from a research pull.** The #3 pull is CONSUMED
