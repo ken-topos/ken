@@ -21,8 +21,91 @@
 > and collectively they turned the resume anchor into a trap. **The only live
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
-> ## ✅✅ LIVE STATE — 2026-07-25 T18:10Z. **`B2O` IS CLOSED. `B2R` IS ACTIVE AND
-> ## BUILDING, WITH `AC-11` AMENDED IN MID-FLIGHT.** **I owe nothing.**
+
+## ✅ LIVE — 2026-07-25. `origin/main` = **`1e09a30a`**. **`B2F` IS KICKED.**
+
+**Tasks #43 and #44 both DONE.** The Runtime ring is building
+`RT-FNSPLIT-B2F`. I owe nothing and nothing blocks the ring.
+
+| | |
+|---|---|
+| kickoff | `evt_3q00bkdra1vca` → `runtime-leader`, confirmed `Working (32s)` |
+| Architect question | `evt_1s1qjm52r3jzj`, confirmed `Working (6s)` — **not a hold** |
+| node | `ready` → **`active`**, tracker regenerated |
+| branch-name collision | **resolved losslessly** — see below |
+
+### ✅ The `wp/` branch-name collision is RESOLVED
+
+`wp/RT-FNSPLIT-B2F-functionization` existed on `origin` at `fbe206a7` and would
+have **rejected the ring's first push**. It was *not* a build branch: it was the
+durability push of the implementer's hard-stop-#9 evidence commit (task #27),
+which happened to take the build branch's name. Resolved in this order:
+
+- `fbe206a7` pushed to `refs/heads/preserved/rt-fnsplit-b2f-hardstop-9-evidence`,
+  and **verified present at that exact SHA *before* anything was deleted**;
+- `refs/heads/wp/RT-FNSPLIT-B2F-functionization` deleted on `origin` and locally;
+- post-condition predicted before measuring, then measured: `wp/` → 0 refs,
+  `preserved/` → `fbe206a7`. Matched.
+
+⛔ **That evidence doc is NOT a build input, and it was deliberately NOT landed
+on `main`.** It is measured at `3891b7aa` and its §2 provenance partition is
+explicitly superseded by `B2O`'s owner map. Putting a document whose numbers are
+six merges stale into the ring's reading path is the *exact* hazard task #43
+existed to remove — landing it would have re-created that hazard under a new
+name.
+
+### §2c gate — ran clean; recorded so the audit trail is checkable
+
+1. **Retros in** — `B2R` 3/3 posted (leader, QA, implementer).
+2. **No in-flight obligation** — `list_decisions(proposed)` = `[]`,
+   `list_questions(open)` = `[]`.
+3. **Quiescent** — all three seats idle.
+4/5. **Compacted, drops verified** — executed at the `B2R` close-out seam:
+  `runtime-implementer` **ctx 0%**; `runtime-leader` and `runtime-qa` both
+  `• Context compacted`. Their `› …` lines are **ghost text, not state**.
+7. **Pickup confirmed** — I saw both seats go `Working`; a returned `event_id`
+  is not evidence anyone read it.
+7b. **Contention: none.** The only other `active` node is the
+  `RT-NATIVE-FNSPLIT` parent umbrella — same ring, not a competing WP.
+8. **Flipped `active`** — **both** carriers, frontmatter *and* body-text tail.
+
+### ▶ NEXT — publish, then the queue
+
+**Unpublished on `steward/work`:** the `active` flip, the tracker regen, and
+this briefing. Publish doc-only — `main` still advertises `B2F` as `ready`,
+which is precisely the stale-frontier hazard §2c step 8 exists to prevent.
+
+Then, in order:
+
+- Task **#38** — frame `RT-FNSPLIT-B2O-CHECK`. ⭐ **Its scope grew:** the
+  adversary's `P1` **and** `P2` on `abi.rs` both route here, and I have told the
+  Runtime ring so in the `B2F` kickoff. This node now owes the `C4` repair.
+- **#12** B1R retros (batch, never publish singly) · **#5** `ABI-S3` ·
+  **#8** `KW-THEOREM` on FNSPLIT close · **#11** `DOC-GATE-NEEDLE`
+  (⛔ operator-held — do not release, do not re-ask).
+- **Archive pass on this file.** Everything below this block is history from
+  `B2O`/`B2R` and earlier, and the block immediately below still asserts
+  *"`B2R` IS ACTIVE AND BUILDING"* and *"retros 3/3 are not IN yet"* — both
+  false. Marked superseded in place; the real archive move is filed as a task.
+
+### ⚠ Watchdog
+
+Re-arm at 900s with `main = 1e09a30a` and `B2F active`. Interval state does
+**not** survive a compaction, and I self-compacted at the top of this window —
+assume it is dead until `list_subscriptions` says otherwise.
+
+> ## ⛔ SUPERSEDED — HISTORY ONLY. `B2R` MERGED (#967) AND ITS RETROS ARE 3/3 IN.
+> ## Everything from here down is the `B2O`/`B2R` window and earlier.
+>
+> **Do not resume from any block below this line.** Two of this block's own
+> headings are now false in the dangerous direction — it says `B2R` *"IS ACTIVE
+> AND BUILDING"* and that *"retros 3/3 are not IN yet"*. Both were true when
+> written and neither is true now. The live state is the block **above**.
+>
+> ### Original heading, kept so the block still reads in sequence
+>
+> ## ✅✅ LIVE STATE — 2026-07-25 T18:10Z. `B2O` IS CLOSED. `B2R` IS ACTIVE AND
+> ## BUILDING, WITH `AC-11` AMENDED IN MID-FLIGHT.
 >
 > ### ✅✅ 19:06Z — `B2R` IS **MERGED**. PR #967, `origin/main` = **`c986d0a3`**.
 >

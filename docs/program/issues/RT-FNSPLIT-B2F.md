@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2F
 title: "functionization and authority switch — per-static-origin Cranelift target functions, atomic with switch-over, equivalence evidence, and old-path removal"
-status: ready
+status: active
 owner: runtime
 size: L
 gate: none
@@ -11,7 +11,22 @@ github: null
 origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answering Steward Q1-Q3 on merits (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the D1/D2 half of the retired RT-FNSPLIT-B2A frame. RE-SLICED 2026-07-25 by Architect ruling evt_842spc7t6js1 on hard-stop #9 (research advisory evt_531c4k52mshrn) plus addendum evt_t4fykh52ncb: this node is NOT buildable as one unit and now depends on two inert prerequisites. Steward-filed; Steward owns the replacement frame and AC/control placement.
 ---
 
-> ## ✅ `ready` — BOTH PREREQUISITES MERGED; THE FRAME IS RE-ANCHORED AT `bd24422b`
+> ## ▶ `active` — RELEASED TO RUNTIME 2026-07-25, kickoff `evt_3q00bkdra1vca`
+>
+> **The frame is re-anchored and the ring is building against it.** Read
+> `docs/program/wp/RT-FNSPLIT-B2F-functionization.md` **as it stands on
+> `origin/main` = `1e09a30a` or later** — an earlier revision of that file
+> described `RT-FNSPLIT-B2R` as a prerequisite that is *"missing and unowned"*,
+> which is precisely what `B2R` landed.
+>
+> ⛔ **The build branch is `wp/RT-FNSPLIT-B2F-functionization`, cut fresh from
+> `origin/main`.** The stale ref that previously held that name (`fbe206a7` —
+> the hard-stop-#9 evidence commit, pushed for durability under the build
+> branch's name) was moved to
+> `refs/heads/preserved/rt-fnsplit-b2f-hardstop-9-evidence` and the `wp/` name
+> deleted, so the ring's first push cannot be rejected. **That evidence doc is
+> measured at `3891b7aa` and its §2 partition is superseded by `B2O`'s owner
+> map — it is not a build input.**
 >
 > **Steward, 2026-07-25.** The #9 re-slice is complete on `main`:
 >
@@ -40,7 +55,13 @@ origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answ
 >   and **`AC-12`** (the declared ownership modes are *obeyed*, not re-read);
 > - `AC-G0` is recorded as **answered** — 6 definitions / 8 declarations, Θ(1).
 >
-> ⚠ **Not yet released.** Run the §2c handoff gate before kicking Runtime.
+> ✅ **Released.** The §2c handoff gate ran clean before the kickoff: `B2R`
+> retros 3/3 posted, zero proposed Decisions and zero open questions across the
+> space, all three Runtime seats quiescent, and the ring compacted at the `B2R`
+> close-out seam with the drops verified (`runtime-implementer` ctx 0%;
+> `runtime-leader` and `runtime-qa` both showing `• Context compacted`).
+> Contention check: the only other `active` node is the `RT-NATIVE-FNSPLIT`
+> parent umbrella — same ring, not a competing WP.
 >
 > ---
 >
