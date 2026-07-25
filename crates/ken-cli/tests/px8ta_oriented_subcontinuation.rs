@@ -249,9 +249,37 @@ fn public_one_level_bracket_finishes_and_releases() {
 #[cfg(target_os = "linux")]
 #[test]
 fn public_two_three_level_brackets_finish_and_release_lifo() {
-    for depth in 2..=3 {
-        assert_depth_finishes_and_releases_lifo(depth);
-    }
+    // Lowering nested checked brackets is stack-hungry, and libtest hands a
+    // test a 2 MiB (2048 KiB) worker thread. Bisected minimum passing stack
+    // for this test, measured on both commits at 64 KiB resolution:
+    //
+    //   70bd2c74   > 1984 KiB, <= 2048 KiB   -- cleared the default by < 64 KiB
+    //   08633b3c   > 2112 KiB, <= 2176 KiB   -- does not fit; SIGABRT
+    //
+    // Production is unaffected: this test drives the lowering directly on the
+    // libtest worker, while a real build runs on the main thread (8 MiB by
+    // `ulimit -s`), so the product had ~3.7x the headroom this harness gave
+    // itself. The wrapper below makes the harness match the product, exactly
+    // as `px8ds_real_same_depth_path_rejects_flat_order_and_runs_exact_edges`
+    // in this file already does.
+    //
+    // ⛔ This is a harness fix and nothing more. It is NOT scaling evidence for
+    // per-static-origin target functions, and it does NOT discharge the n=3..7
+    // nesting-depth gate -- the fixture only defines depths 1/2/3 by hand, so
+    // n >= 4 is not even expressible here. The thresholds above are recorded so
+    // the next reader sees how little room there was instead of rediscovering
+    // it from a red shard.
+    std::thread::Builder::new()
+        .name("px8ta-nested-brackets".to_string())
+        .stack_size(256 * 1024 * 1024)
+        .spawn(|| {
+            for depth in 2..=3 {
+                assert_depth_finishes_and_releases_lifo(depth);
+            }
+        })
+        .expect("spawn large-stack nested-bracket control")
+        .join()
+        .expect("nested-bracket control thread");
 }
 
 #[cfg(target_os = "linux")]
