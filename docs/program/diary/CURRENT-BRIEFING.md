@@ -91,6 +91,38 @@
 > ⇒ **Next time, compact the CODEX seats FIRST in a mixed ring** — they are the
 > ones that can fail.
 >
+> ### ✅ `RT-FNSPLIT-B2A-S` IS `merge_ready` AND PUSHED — in QA + Architect review
+>
+> **`origin/wp/RT-FNSPLIT-B2A-S-selection` = `ee0803aa`** (I pushed it; ⚠ the LIVE
+> ref, not the abandoned `…-defunctionalization` at `5c7eae26`). Clean rebase onto
+> `main` = `2e84db78`; 8 files, +971/−232; **`cranelift_backend.rs` untouched.**
+> Routed at `evt_74x1njy1dxjvh`. ⛔ **Architect soundness review REQUIRED** — a
+> `crates/ken-runtime` trusted-base change is **not** gated QA-only.
+> ⛔ **Decision must name exact `ee0803aa`**; publish only on `resolved` verified
+> from the object — and remember **the `proposed` view is stale/cached, so query
+> `status="resolved"` and confirm PRESENCE** (positive test, not absence).
+>
+> **The deliberate crossing, in the tree:** `the_plan_exposes_no_origin_to_expression_lookup`
+> (count 0) is **retired**, replaced by `exactly_one_plan_origin_to_expression_lookup_exists`
+> (count exactly 1) — **both stated side by side in the test's doc comment** so the
+> transition is auditable in-tree. `0 -> 1`, never `0 -> unbounded`.
+>
+> ✅ **Disclosure 3 verified by me, not accepted:** of 582 changed lines in
+> `static_transition.rs`, only **7 vanish under `git diff -w`**, and **no file is
+> pure churn.** ⇒ Confined to a file the WP rewrites anyway; **not** the
+> crate-wide-fmt-drags-in-unrelated-files hazard. **Accepted.**
+>
+> ⚠ **Watch in review** (told QA): the two controls must **discriminate** — the
+> position-independent inversion reddened one test **while totality stayed GREEN**,
+> and that green is the load-bearing half. AC-1's detector rests on its **positive
+> control**, since the compile-time mutation proves the compiler layer, not the
+> assertion — the ring disclosed that limit itself. Non-escape is a **type-level**
+> pin (`CompiledModule<M>: 'static`); it must **stop compiling**, not merely redden.
+>
+> ⭐ **Durable design consequence for `B2F`:** `StaticTransitionPlan` gained `'src`
+> and now borrows its source, falsifying the old "holds no borrow" comment (rewritten).
+> **Any future consumer storing a plan inherits the non-escape obligation.**
+>
 > ### ✅ STALE-FRAME HAZARD CLOSED — authoritative frame is on `main` = `2e84db78`
 >
 > PR #942 merged, content-verified on the landed tree: corrected **D1**
