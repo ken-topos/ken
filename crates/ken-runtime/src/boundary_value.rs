@@ -533,6 +533,27 @@ impl BoundaryValueStore {
         self.resident.get(&slot)
     }
 
+    /// Resolve a slot through the **store's own** read-back path:
+    /// `slot -> canonical bytes -> Value`.
+    ///
+    /// ⭐ **Deliberately a second, independent path.** [`Self::resident`]
+    /// answers from the typed map this layer keeps; this answers from bytes the
+    /// store owns and a decoder that never saw the typed map. Two paths that
+    /// agree corroborate each other; one path read twice corroborates nothing,
+    /// which is the shape a residency-only design would have shipped.
+    pub fn decode_slot(&self, slot: SlotId) -> Option<Value> {
+        let bytes = self.store.canonical_bytes(slot)?;
+        let (value, used) = crate::canonical::decode_canonical(bytes)?;
+        // Trailing bytes mean encoder and decoder disagree about the shape.
+        // That is a failure, not a partial success.
+        (used == bytes.len()).then_some(value)
+    }
+
+    /// Number of slots the underlying store can resolve back to bytes.
+    pub fn store_resident_slots(&self) -> usize {
+        self.store.resident_slots()
+    }
+
     /// Number of distinct persistent referents.
     pub fn resident_count(&self) -> usize {
         self.resident.len()

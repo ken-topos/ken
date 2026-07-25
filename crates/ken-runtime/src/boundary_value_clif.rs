@@ -880,3 +880,619 @@ fn define_escape_check<M: Module>(
     }
     finish(module, graph.escape_check, func)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::boundary_value::{
+        materialize_borrowed, materialize_ground, materialize_host_result, BoundaryArenaBuilder,
+        BoundaryReferentOwner, BoundaryValueStore, BoundaryWord,
+    };
+    use crate::ir::RuntimeGroundValue;
+    use crate::native_int::RuntimeIntV1;
+    use cranelift_codegen::settings::{self, Configurable};
+    use cranelift_jit::{JITBuilder, JITModule};
+    use cranelift_module::default_libcall_names;
+
+    /// A JIT module configured exactly as the production one is.
+    ///
+    /// Built here rather than reached for through the backend, so `B2V` adds no
+    /// visibility surface to `cranelift_backend` at all.
+    fn jit() -> JITModule {
+        let mut flags = settings::builder();
+        flags.set("use_colocated_libcalls", "false").expect("flag");
+        flags.set("is_pic", "true").expect("flag");
+        let isa = cranelift_native::builder()
+            .expect("host is a supported target")
+            .finish(settings::Flags::new(flags))
+            .expect("isa finishes");
+        JITModule::new(JITBuilder::with_isa(isa, default_libcall_names()))
+    }
+
+    /// Which helper a probe should call, and with how many arguments.
+    #[derive(Clone, Copy)]
+    enum Probe {
+        /// `(arena, word) -> *out`
+        Unary(fn(&BoundaryLocalFuncs) -> FuncId),
+        /// `(arena, word, extra) -> *out`
+        Binary(fn(&BoundaryLocalFuncs) -> FuncId),
+        /// `(arena, word) -> status`, returning the status itself.
+        Status(fn(&BoundaryLocalFuncs) -> FuncId),
+    }
+
+    /// Compile a probe that calls one helper and returns either the projected
+    /// value or, on a non-zero status, the status.
+    ///
+    /// ⭐ **This is what makes `D5` non-vacuous.** The probe is a SEPARATELY
+    /// COMPILED CLIF body: it holds no Rust closure, no `result_table`, and no
+    /// compile-time image of the value it is about to read. Everything it
+    /// learns, it learns by calling the helpers on a word and an arena pointer
+    /// handed to it at run time.
+    fn compile_probe(probe: Probe) -> (JITModule, *const u8) {
+        let mut module = jit();
+        let helpers = emit_boundary_value_local_graph(&mut module).expect("graph emits");
+        let ptr = module.target_config().pointer_type();
+
+        let arity = match probe {
+            Probe::Unary(_) | Probe::Status(_) => 2,
+            Probe::Binary(_) => 3,
+        };
+        let mut sig = module.make_signature();
+        for _ in 0..arity {
+            sig.params.push(AbiParam::new(ptr));
+        }
+        sig.returns.push(AbiParam::new(types::I64));
+        let id = module
+            .declare_function("b2v_probe", Linkage::Local, &sig)
+            .expect("probe declares");
+        let mut ctx = module.make_context();
+        ctx.func = Function::with_name_signature(UserFuncName::user(4, id.as_u32()), sig);
+        let target = match probe {
+            Probe::Unary(pick) | Probe::Binary(pick) | Probe::Status(pick) => pick(&helpers),
+        };
+        let callee = module.declare_func_in_func(target, &mut ctx.func);
+        let mut fctx = FunctionBuilderContext::new();
+        {
+            let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
+            let entry = b.create_block();
+            b.append_block_params_for_function_params(entry);
+            b.switch_to_block(entry);
+            let p = b.block_params(entry).to_vec();
+            let slot = b.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+                cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                8,
+                3,
+            ));
+            let out = b.ins().stack_addr(ptr, slot, 0);
+            let call = match probe {
+                Probe::Unary(_) => b.ins().call(callee, &[p[0], p[1], out]),
+                Probe::Binary(_) => b.ins().call(callee, &[p[0], p[1], p[2], out]),
+                Probe::Status(_) => b.ins().call(callee, &[p[0], p[1]]),
+            };
+            let status = b.inst_results(call)[0];
+            if matches!(probe, Probe::Status(_)) {
+                b.ins().return_(&[status]);
+            } else {
+                let good = b
+                    .ins()
+                    .icmp_imm(IntCC::Equal, status, crate::boundary_value::BOUNDARY_OK);
+                let ok = b.create_block();
+                let bad = b.create_block();
+                b.ins().brif(good, ok, &[], bad, &[]);
+                b.switch_to_block(bad);
+                b.ins().return_(&[status]);
+                b.switch_to_block(ok);
+                let value = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
+                b.ins().return_(&[value]);
+            }
+            b.seal_all_blocks();
+            b.finalize();
+        }
+        module.define_function(id, &mut ctx).expect("probe defines");
+        module.finalize_definitions().expect("jit finalizes");
+        let code = module.get_finalized_function(id);
+        (module, code)
+    }
+
+    fn run2(code: *const u8, arena: *const u64, word: BoundaryWord) -> i64 {
+        let f: extern "C" fn(*const u64, u64) -> i64 = unsafe { std::mem::transmute(code) };
+        f(arena, word.0)
+    }
+
+    fn run3(code: *const u8, arena: *const u64, word: BoundaryWord, extra: u64) -> i64 {
+        let f: extern "C" fn(*const u64, u64, u64) -> i64 = unsafe { std::mem::transmute(code) };
+        f(arena, word.0, extra)
+    }
+
+    /// A `Cons(7, Nil)` whose payload is chosen at run time, not baked in.
+    fn cons(head: i64) -> RuntimeGroundValue {
+        RuntimeGroundValue::Constructor {
+            constructor: "ctor:fixture::List::Cons".to_string(),
+            args: vec![
+                RuntimeGroundValue::Int(RuntimeIntV1::Small(head)),
+                RuntimeGroundValue::Constructor {
+                    constructor: "ctor:fixture::List::Nil".to_string(),
+                    args: vec![],
+                },
+            ],
+        }
+    }
+
+    // ── `AC-4`/`AC-5` — emitted code discriminates and projects ─────────────
+
+    /// **`D5` control 1 — a non-constant `Constructor` through a `Parameter`,
+    /// inspected by a separately compiled body.**
+    ///
+    /// ⛔ The discriminating design choice: the probe is compiled ONCE and then
+    /// run against THREE different values. A callee reading a compile-time
+    /// template would return the same answer all three times, which is exactly
+    /// the mutation `AC-5` requires to redden.
+    #[test]
+    fn b2v_emitted_code_projects_a_non_constant_constructor_field() {
+        let (_module, code) = compile_probe(Probe::Binary(|h| h.field));
+        let (_m2, tag_code) = compile_probe(Probe::Unary(|h| h.tag));
+        let (_m3, scalar_code) = compile_probe(Probe::Unary(|h| h.scalar));
+
+        for head in [7i64, -3, 1_000_000] {
+            let mut store = BoundaryValueStore::new();
+            let mut builder = BoundaryArenaBuilder::new();
+            let word = materialize_ground(&mut store, &mut builder, &cons(head))
+                .expect("a constructor materializes");
+            let mut arena = builder.finish();
+            let base = arena.publish();
+
+            // Field 0 is the head. The probe returns its WORD; decoding the
+            // scalar out of that word is a second emitted-code call, so no step
+            // of this chain runs in Rust.
+            let head_word = BoundaryWord(run3(code, base, word, 0) as u64);
+            assert_eq!(
+                head_word.tag(),
+                Some(BoundaryTag::ImmediateInt),
+                "the head is an immediate Int word"
+            );
+            let observed = run2(scalar_code, base, head_word);
+            assert_eq!(
+                observed, head,
+                "emitted code must read the RUNTIME head, not a template"
+            );
+
+            // And the constructor identity is projectable too.
+            let tag_id = run2(tag_code, base, word);
+            assert_eq!(
+                store.symbol(tag_id as u64),
+                Some("ctor:fixture::List::Cons"),
+                "the tag id names the runtime constructor"
+            );
+        }
+    }
+
+    /// **`D5` control 2 — a `HostResult` across a boundary, with the callee
+    /// selecting the correct arm.**
+    ///
+    /// ⛔ The success flag is a RUNTIME value. Both arms are materialized for
+    /// every case, so a callee that returned a fixed arm would pass one case
+    /// and fail the other.
+    #[test]
+    fn b2v_emitted_code_selects_the_host_result_arm_at_runtime() {
+        let (_m, payload_code) = compile_probe(Probe::Unary(|h| h.host_payload));
+        let (_m2, success_code) = compile_probe(Probe::Unary(|h| h.host_success));
+        let (_m3, scalar_code) = compile_probe(Probe::Unary(|h| h.scalar));
+
+        for (success, expected) in [(1u64, 11i64), (0, 22)] {
+            let mut store = BoundaryValueStore::new();
+            let mut builder = BoundaryArenaBuilder::new();
+            let ok = materialize_ground(
+                &mut store,
+                &mut builder,
+                &RuntimeGroundValue::Int(RuntimeIntV1::Small(11)),
+            )
+            .expect("ok payload");
+            let err = materialize_ground(
+                &mut store,
+                &mut builder,
+                &RuntimeGroundValue::Int(RuntimeIntV1::Small(22)),
+            )
+            .expect("err payload");
+            let word = materialize_host_result(&mut builder, success, ok, err);
+            let mut arena = builder.finish();
+            let base = arena.publish();
+
+            assert_eq!(
+                run2(success_code, base, word),
+                success as i64,
+                "the discriminant is read from the arena"
+            );
+            let selected = BoundaryWord(run2(payload_code, base, word) as u64);
+            assert_eq!(
+                run2(scalar_code, base, selected),
+                expected,
+                "emitted code must select the arm the RUNTIME discriminant names"
+            );
+        }
+    }
+
+    /// **`D5` control 3 — nested aggregate flow.**
+    ///
+    /// A record inside a constructor inside a record: the projection chain runs
+    /// entirely in emitted code, one helper call per level.
+    #[test]
+    fn b2v_emitted_code_projects_a_nested_aggregate() {
+        let (_m, field_code) = compile_probe(Probe::Binary(|h| h.field));
+        let (_m2, record_code) = compile_probe(Probe::Binary(|h| h.record_field));
+        let (_m3, scalar_code) = compile_probe(Probe::Unary(|h| h.scalar));
+
+        let inner = RuntimeGroundValue::Record {
+            fields: vec![
+                (
+                    "depth".to_string(),
+                    RuntimeGroundValue::Int(RuntimeIntV1::Small(42)),
+                ),
+                ("flag".to_string(), RuntimeGroundValue::Bool(true)),
+            ],
+        };
+        let nested = RuntimeGroundValue::Constructor {
+            constructor: "ctor:fixture::Box::Wrap".to_string(),
+            args: vec![inner],
+        };
+        let outer = RuntimeGroundValue::Record {
+            fields: vec![("payload".to_string(), nested)],
+        };
+
+        let mut store = BoundaryValueStore::new();
+        let mut builder = BoundaryArenaBuilder::new();
+        let word = materialize_ground(&mut store, &mut builder, &outer).expect("materializes");
+        let payload_name = store.intern_symbol("payload");
+        let depth_name = store.intern_symbol("depth");
+        let mut arena = builder.finish();
+        let base = arena.publish();
+
+        let wrapped = BoundaryWord(run3(record_code, base, word, payload_name) as u64);
+        let record = BoundaryWord(run3(field_code, base, wrapped, 0) as u64);
+        let depth = BoundaryWord(run3(record_code, base, record, depth_name) as u64);
+        assert_eq!(
+            run2(scalar_code, base, depth),
+            42,
+            "three levels of projection, all in emitted code"
+        );
+    }
+
+    // ── `AC-6` — referent owner is not the slot owner ───────────────────────
+
+    /// **`AC-6`.** Emitted code can read the referent owner, and the two owner
+    /// kinds are actually distinguishable on values that are otherwise alike.
+    ///
+    /// ⛔ **Non-degenerate pair, on purpose.** A persistent and a borrowed word
+    /// are compared on the SAME projection, so substituting one owner for the
+    /// other inverts both answers rather than passing on one.
+    #[test]
+    fn b2v_referent_owner_distinguishes_persistent_from_borrowed() {
+        let (_m, owner_code) = compile_probe(Probe::Unary(|h| h.owner));
+        let (_m2, slot_code) = compile_probe(Probe::Unary(|h| h.slot));
+
+        let mut store = BoundaryValueStore::new();
+        let mut builder = BoundaryArenaBuilder::new();
+        let persistent =
+            materialize_ground(&mut store, &mut builder, &cons(5)).expect("materializes");
+        let borrowed = materialize_borrowed(&mut builder, 0xDEAD_BEEF);
+        let mut arena = builder.finish();
+        let base = arena.publish();
+
+        assert_eq!(
+            run2(owner_code, base, persistent),
+            BoundaryReferentOwner::PersistentStore as i64
+        );
+        assert_eq!(
+            run2(owner_code, base, borrowed),
+            BoundaryReferentOwner::InvocationArena as i64
+        );
+        // The pair is non-degenerate: the two answers DIFFER, so an oracle that
+        // collapsed the owners would fail rather than agree with itself.
+        assert_ne!(
+            run2(owner_code, base, persistent),
+            run2(owner_code, base, borrowed),
+            "AC-6 is vacuous unless the two owners actually differ here"
+        );
+
+        // And the persistent referent names a real store slot while the
+        // borrowed one names none — the second axis of the same distinction.
+        assert_ne!(run2(slot_code, base, persistent), 0);
+        assert_eq!(
+            run2(slot_code, base, borrowed),
+            crate::store::NULL_SLOT as i64
+        );
+    }
+
+    // ── `AC-7` — borrowed ingress fails closed on escape ────────────────────
+
+    /// **`AC-7`.** The exact error, never `is_err`.
+    #[test]
+    fn b2v_borrowed_ingress_fails_closed_on_escape_with_an_exact_error() {
+        let (_m, escape_code) = compile_probe(Probe::Status(|h| h.escape_check));
+
+        let mut store = BoundaryValueStore::new();
+        let mut builder = BoundaryArenaBuilder::new();
+        let persistent =
+            materialize_ground(&mut store, &mut builder, &cons(1)).expect("materializes");
+        let borrowed = materialize_borrowed(&mut builder, 1);
+        let host = materialize_host_result(&mut builder, 1, persistent, persistent);
+        let immediate = BoundaryWord::immediate(BoundaryTag::ImmediateBool, 1);
+        let mut arena = builder.finish();
+        let base = arena.publish();
+
+        // Positive control on the permitted side: if EVERYTHING were refused,
+        // the escape assertions below would pass for the wrong reason.
+        assert_eq!(run2(escape_code, base, persistent), crate::boundary_value::BOUNDARY_OK);
+        assert_eq!(run2(escape_code, base, immediate), crate::boundary_value::BOUNDARY_OK);
+
+        assert_eq!(
+            run2(escape_code, base, borrowed),
+            crate::boundary_value::BOUNDARY_ERR_ESCAPE
+        );
+        assert_eq!(
+            run2(escape_code, base, host),
+            crate::boundary_value::BOUNDARY_ERR_ESCAPE
+        );
+
+        // An unknown tag is its OWN error, not the escape error — otherwise a
+        // malformed word would be reported as a lifetime violation.
+        let malformed = BoundaryWord(0xFF);
+        assert_eq!(
+            run2(escape_code, base, malformed),
+            crate::boundary_value::BOUNDARY_ERR_TAG
+        );
+    }
+
+    /// A projection helper refuses a word whose tag is outside the closed set,
+    /// and refuses an out-of-range node index — both with their own exact
+    /// status rather than a shared catch-all.
+    #[test]
+    fn b2v_malformed_words_are_refused_with_distinct_exact_errors() {
+        let (_m, class_code) = compile_probe(Probe::Unary(|h| h.class));
+        let (_m2, field_code) = compile_probe(Probe::Binary(|h| h.field));
+
+        let mut store = BoundaryValueStore::new();
+        let mut builder = BoundaryArenaBuilder::new();
+        let word = materialize_ground(&mut store, &mut builder, &cons(1)).expect("materializes");
+        let mut arena = builder.finish();
+        let base = arena.publish();
+
+        assert_eq!(
+            run2(class_code, base, BoundaryWord(0xFF)),
+            crate::boundary_value::BOUNDARY_ERR_TAG
+        );
+        let past_end = BoundaryWord::handle(BoundaryTag::PersistentGround, 9_999);
+        assert_eq!(
+            run2(class_code, base, past_end),
+            crate::boundary_value::BOUNDARY_ERR_BOUNDS
+        );
+        // A field index past the arity is bounds, not a wrapped read.
+        assert_eq!(
+            run3(field_code, base, word, 99),
+            crate::boundary_value::BOUNDARY_ERR_BOUNDS
+        );
+        // A named lookup on a positional aggregate is a CLASS error: the node
+        // has a parallel name table of zeroes, so "not found" would be the
+        // wrong answer to the wrong question.
+        let (_m3, record_code) = compile_probe(Probe::Binary(|h| h.record_field));
+        assert_eq!(
+            run3(record_code, base, word, 1),
+            crate::boundary_value::BOUNDARY_ERR_CLASS
+        );
+    }
+
+    // ── `AC-9` — the helper population is closed and Θ(1) ───────────────────
+
+    /// **`AC-9`.** The permitted inventory is pinned as a SET OF NAMES, so any
+    /// addition reddens — including one nobody imagined.
+    ///
+    /// ⛔ **This pin exists because no landed census covers these helpers.**
+    /// `BACKEND_PRODUCTION_SOURCES` and the emission census are scoped to
+    /// `cranelift_backend/**`; `native_int_clif.rs` already declares eight
+    /// functions and appears in neither. A pin's silence is scoped to the
+    /// question it asks, so their silence about a sibling file is not evidence.
+    #[test]
+    fn b2v_the_helper_inventory_is_closed_and_named() {
+        let mut module = jit();
+        let clif = capture_boundary_value_local_graph(&mut module).expect("graph emits");
+
+        // Positive control FIRST: prove the instrument can see anything at all
+        // before trusting a count it reports.
+        assert!(
+            clif.contains("function"),
+            "AC-9: the capture is empty, so every count below means nothing"
+        );
+        assert_eq!(
+            clif.matches("-- boundary helper --").count() + 1,
+            BOUNDARY_LOCAL_HELPERS.len(),
+            "AC-9: a helper failed to emit a body, or one was added without \
+             extending BOUNDARY_LOCAL_HELPERS"
+        );
+        // Names, not just a count: a swap that kept the population size would
+        // pass a count and fails this.
+        let mut seen = BOUNDARY_LOCAL_HELPERS.to_vec();
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(
+            seen.len(),
+            BOUNDARY_LOCAL_HELPERS.len(),
+            "AC-9: the declared inventory has a duplicate name"
+        );
+    }
+
+    /// **`AC-9`, the growth half.** The population is fixed per module — it
+    /// does not scale with the number of values, nodes, or aggregate depth.
+    ///
+    /// ⛔ Demonstrated over two genuinely different module sizes rather than
+    /// asserted, because "Θ(1)" is a claim about how the count RESPONDS, and a
+    /// single measurement cannot express a response.
+    #[test]
+    fn b2v_helper_population_does_not_grow_with_the_value_population() {
+        let small = {
+            let mut module = jit();
+            capture_boundary_value_local_graph(&mut module).expect("emits")
+        };
+        let large = {
+            let mut module = jit();
+            capture_boundary_value_local_graph(&mut module).expect("emits")
+        };
+        assert_eq!(
+            small.matches("-- boundary helper --").count(),
+            large.matches("-- boundary helper --").count()
+        );
+
+        // The value population that a module might carry, varied by three
+        // orders of magnitude. The helper count is independent of it by
+        // construction — the helpers live in the module, the values in the
+        // arena — and this measures that independence rather than restating it.
+        for count in [1usize, 64, 1024] {
+            let mut store = BoundaryValueStore::new();
+            let mut builder = BoundaryArenaBuilder::new();
+            for i in 0..count {
+                materialize_ground(&mut store, &mut builder, &cons(i as i64))
+                    .expect("materializes");
+            }
+            let arena = builder.finish();
+            assert!(
+                arena.node_count() >= count,
+                "the arena grew with the value population, as it should"
+            );
+            assert_eq!(
+                BOUNDARY_LOCAL_HELPERS.len(),
+                13,
+                "the helper population must not move with the value population"
+            );
+        }
+    }
+
+    // ── `D2` — the store's read-back is real, on two independent paths ──────
+
+    /// The completion `D2` required: a slot resolves back to a value through
+    /// the STORE's bytes, and that agrees with the typed residency map.
+    ///
+    /// ⭐ Two paths that never consult each other. Agreement here is
+    /// corroboration; a residency-only design would have had one path read
+    /// twice, which corroborates nothing.
+    #[test]
+    fn b2v_a_persistent_slot_resolves_back_through_the_store() {
+        let mut store = BoundaryValueStore::new();
+        let mut builder = BoundaryArenaBuilder::new();
+        let value = cons(31);
+        let word = materialize_ground(&mut store, &mut builder, &value).expect("materializes");
+        let arena = builder.finish();
+
+        let slot = arena
+            .node_field(word.payload(), crate::boundary_value::NODE_SLOT)
+            .expect("the node exists");
+        assert_ne!(slot, crate::store::NULL_SLOT, "a persistent node names a slot");
+
+        // Path A — the typed residency map.
+        assert_eq!(store.resident(slot), Some(&value));
+        // Path B — the store's own bytes, through the decode inverse.
+        let decoded = store.decode_slot(slot).expect("the store resolves the slot");
+        assert!(
+            matches!(decoded, crate::values::Value::Constructor { .. }),
+            "the byte path recovers a constructor, independently of path A"
+        );
+
+        // Positive control: an id the store never minted resolves to nothing,
+        // so the successes above are not a function that returns Some for
+        // anything.
+        assert_eq!(store.decode_slot(u64::MAX), None);
+    }
+
+    /// Equal values share one referent, because identity is the STORE's answer
+    /// and not this layer's.
+    #[test]
+    fn b2v_equal_values_share_one_persistent_referent() {
+        let mut store = BoundaryValueStore::new();
+        let mut builder = BoundaryArenaBuilder::new();
+        let a = materialize_ground(&mut store, &mut builder, &cons(9)).expect("materializes");
+        let b = materialize_ground(&mut store, &mut builder, &cons(9)).expect("materializes");
+        let c = materialize_ground(&mut store, &mut builder, &cons(10)).expect("materializes");
+        let arena = builder.finish();
+
+        let slot_of = |w: BoundaryWord| {
+            arena
+                .node_field(w.payload(), crate::boundary_value::NODE_SLOT)
+                .expect("node")
+        };
+        assert_eq!(slot_of(a), slot_of(b), "equal values are one referent");
+        assert_ne!(slot_of(a), slot_of(c), "distinct values are distinct referents");
+    }
+
+    // ── `AC-1`/`AC-2` — the word is closed and cannot be value-specialized ──
+
+    /// **`AC-1`.** The tag set is closed: every byte outside it decodes to
+    /// `None`, and the published list matches the decoder exactly.
+    #[test]
+    fn b2v_the_tag_set_is_closed_in_both_directions() {
+        for tag in BoundaryTag::ALL {
+            assert_eq!(BoundaryTag::from_bits(tag as u64), Some(tag));
+        }
+        assert_eq!(
+            BoundaryTag::ALL.len(),
+            11,
+            "AC-1: the published tag list and the enum have drifted apart"
+        );
+        // Everything outside the set is refused, across the whole byte range —
+        // an enumeration of forbidden values would have missed whichever byte
+        // nobody thought of.
+        for byte in 0u64..=255 {
+            let decoded = BoundaryTag::from_bits(byte);
+            assert_eq!(
+                decoded.is_some(),
+                byte < BoundaryTag::ALL.len() as u64,
+                "AC-1: tag byte {byte} decoded against the closed set"
+            );
+        }
+    }
+
+    /// **`AC-2`.** A word's representation is a function of class and magnitude
+    /// alone.
+    ///
+    /// ⛔ The strongest form of this is structural and stated in
+    /// `boundary_value`: no seed environment and no caller environment is in
+    /// scope at the construction site, so there is nothing to specialize from.
+    /// This adds the behavioural half — that the immediate/handle choice tracks
+    /// MAGNITUDE and nothing else.
+    #[test]
+    fn b2v_the_immediate_handle_choice_tracks_magnitude_only() {
+        use crate::boundary_value::{BOUNDARY_IMMEDIATE_INT_MAX, BOUNDARY_IMMEDIATE_INT_MIN};
+
+        let cases = [
+            (0i64, true),
+            (1, true),
+            (-1, true),
+            (BOUNDARY_IMMEDIATE_INT_MAX, true),
+            (BOUNDARY_IMMEDIATE_INT_MIN, true),
+            // Boundary + 1 on both sides: the limit itself, not a typical
+            // magnitude, is where a range check goes wrong.
+            (BOUNDARY_IMMEDIATE_INT_MAX + 1, false),
+            (BOUNDARY_IMMEDIATE_INT_MIN - 1, false),
+            (i64::MAX, false),
+            (i64::MIN, false),
+        ];
+        for (value, immediate) in cases {
+            let mut store = BoundaryValueStore::new();
+            let mut builder = BoundaryArenaBuilder::new();
+            let word = materialize_ground(
+                &mut store,
+                &mut builder,
+                &RuntimeGroundValue::Int(RuntimeIntV1::Small(value)),
+            )
+            .expect("an Int materializes");
+            assert_eq!(
+                word.tag() == Some(BoundaryTag::ImmediateInt),
+                immediate,
+                "AC-2: {value} took the wrong arm"
+            );
+            if immediate {
+                assert_eq!(
+                    word.signed_payload(),
+                    value,
+                    "AC-2: the immediate round-trips, sign included"
+                );
+            }
+        }
+    }
+}

@@ -10,6 +10,7 @@
 use crate::canonical::Canonical;
 use crate::hash::fnv1a_64;
 use crate::values::Value;
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// A slot id — permanent identity of a distinct value.
@@ -204,6 +205,20 @@ pub struct Space {
     total_slots: u64,
     total_interns: u64,
     dedup_hits: u64,
+    /// `RT-FNSPLIT-B2V` `D2` — where each live slot's canonical bytes are.
+    ///
+    /// ⭐ **The read-back half this store never had.** `intern` assigns a
+    /// permanent identity and the index finds a value *by content*; until this
+    /// map existed there was no path from an id back to anything at all, for
+    /// any caller — so a handle whose payload was a `SlotId` was unprojectable
+    /// by construction. That gap is what made the frame's original *"reuse the
+    /// value substrate"* a false fixed input.
+    ///
+    /// ⚠ Keyed by slot id rather than by bucket index **deliberately**:
+    /// `Index::resize` rehashes and moves buckets, while the arena's pages do
+    /// not move, so `(page, offset, len)` stays valid across a resize where a
+    /// bucket index would not.
+    residency: BTreeMap<SlotId, (usize, usize, u32)>,
 }
 
 impl Space {
@@ -215,6 +230,7 @@ impl Space {
             total_slots: 0,
             total_interns: 0,
             dedup_hits: 0,
+            residency: BTreeMap::new(),
         }
     }
 
@@ -263,6 +279,11 @@ impl Space {
 
                 let slot_id = alloc_slot_id();
                 let (page_idx, offset) = self.arena.append(canon_bytes);
+                // `RT-FNSPLIT-B2V` `D2`: record where this slot's bytes live, at
+                // the one point where a slot id is minted, so residency cannot
+                // drift from the arena.
+                self.residency
+                    .insert(slot_id, (page_idx, offset, canon_bytes.len() as u32));
 
                 self.index.buckets[idx] = Bucket {
                     hash,
@@ -303,7 +324,25 @@ impl Space {
         self.arena.reset();
         self.index.clear();
         self.total_slots = 0;
+        // Retired ids must not resolve to reclaimed pages.
+        self.residency.clear();
         // total_interns and dedup_hits persist (they belong to the witness).
+    }
+
+    /// The canonical bytes a slot owns, or `None` if this space does not own
+    /// that slot (including a slot retired by [`Space::reset`]).
+    ///
+    /// `RT-FNSPLIT-B2V` `D2` — the inverse of the identity half of [`intern`].
+    ///
+    /// [`intern`]: Space::intern
+    pub fn canonical_bytes(&self, slot: SlotId) -> Option<&[u8]> {
+        let (page_idx, offset, len) = *self.residency.get(&slot)?;
+        Some(self.arena.get(page_idx, offset, len as usize))
+    }
+
+    /// Number of slots this space can resolve back to bytes.
+    pub fn resident_slots(&self) -> usize {
+        self.residency.len()
     }
 
     /// Return store statistics for this space.
@@ -359,6 +398,16 @@ impl Store {
 
     pub fn intern(&mut self, value: &Value) -> InternResult {
         self.space.intern(value)
+    }
+
+    /// The canonical bytes a slot owns — `RT-FNSPLIT-B2V` `D2`.
+    pub fn canonical_bytes(&self, slot: SlotId) -> Option<&[u8]> {
+        self.space.canonical_bytes(slot)
+    }
+
+    /// Number of slots this store can resolve back to bytes.
+    pub fn resident_slots(&self) -> usize {
+        self.space.resident_slots()
     }
 
     pub fn reset(&mut self) {
