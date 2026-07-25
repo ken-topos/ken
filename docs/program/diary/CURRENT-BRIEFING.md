@@ -34,13 +34,95 @@
 > ✅ **ADVERSARY TRIAGE DONE. ✅ `B2F` FRAME WRITTEN AND `ready`. ✅ `B2B`
 > RE-DERIVED.** All three committed on `steward/work` (`8ce48a64`, `208989fd`).
 >
-> ## ⛔⛔ LIVE STATE — `B2O` CANDIDATE `97db6f0b` DELIVERED, IN QA, NO HARD-STOP
+> ## ⛔⛔ LIVE STATE — `B2O` ON ITS **4th** CANDIDATE. THREE REJECTED, EACH ON A
+> ## REAL FINDING. **STEWARD HOLD PLACED AND THEN CONVERGED WITH THE LEADER.**
 >
-> **`origin/main` = `27084bbf`** (#953 `library-style`, #954 tracker+briefing).
-> Current act: **merge-gate `RT-FNSPLIT-B2O`** — candidate off-box at
-> `97db6f0b`, QA green at 354 tests, awaiting the leader's approved handoff.
-> See the ✅ CANDIDATE DELIVERED block below for the full sequence and the two
-> ACs I will read closest.
+> **`origin/main` = `12d9e412`** (#953 `library-style`, #954 tracker, #955 armed
+> anchor, #956 carrier lessons). `steward/work` clean, **0 ahead**.
+>
+> ### The three rejected candidates — all off-box, none lost
+>
+> | SHA | rejected because | found by |
+> |---|---|---|
+> | `97db6f0b` | two `D3` comments overstating what the edge law detects | implementer, self-caught |
+> | `c59d76ce` | `D6` route-inventory closure defect | Architect |
+> | `02afcc3f` | `D6` cross-file visibility-widening evasion reproduced | implementer, answering my question |
+>
+> ⇒ **This is a healthy review loop, NOT churn.** Every rejection was a real
+> defect, and the production mechanism was byte-identical across the last two
+> (`git diff --quiet` on `planning/` and `lowering/core.rs` — I verified it, not
+> the commit message). A narrow **test-only** respin is inbound with fresh
+> QA + Architect reviews and a fresh Decision.
+>
+> ### ⛔ THE ONE THING TO CARRY FORWARD: I HELD A FORMALLY VALID GATE
+>
+> Two messages crossed seconds apart. **@architect posted APPROVE on `02afcc3f`,
+> resolving on cast** (`evt_vsttnzpgzk4d`). **@runtime-implementer then measured
+> that `fail closed` is NOT structural** — it held by a **spelling coincidence**,
+> and its red message invited the wrong repair (`evt_3hjh46wwtt7kt`).
+>
+> **The approval was authored before the evidence existed, so it was not a
+> judgement on it.** My §14 gate *would have passed*. I refused it
+> (`evt_24tredzd7d8y0`) on the narrow ground that is actually mine: **I do not
+> publish while the design authority's approval is known to predate a measured
+> counter-example to the exact property it turned on.** `@runtime-leader`
+> independently rejected `dec_5rfw4gjtnsnbk` on the same evidence — verified
+> `[]` fresh from the object.
+>
+> **All three parties converged independently:** my hold, the leader's formal
+> rejection, and **@architect's explicit withdrawal** (`evt_q3hhaps2zgg8`) —
+> *"my approval of exact `02afcc3f` is superseded by this post-cast evidence …
+> I am retracting the resolved approval and require the fold."* It also owned
+> the verdict error precisely: **its approval had attributed the protection to a
+> closed routing-method inventory, and that inventory ranges only over
+> `core.rs` while `Lowering` also has an impl in `lowering/mod.rs`.**
+>
+> ★ **Three seats reaching the same conclusion from three different starting
+> points is the system working — but note that NONE of them was the gate.** The
+> gate said pass. What caught it was one seat testing its own pin after
+> approval, and that is not a mechanism — it is a disposition. The mechanism
+> that *would* have caught it is the per-pin evasion AC below.
+>
+> ★ **The gate certifies that a reviewer approved a SHA. It never certifies the
+> reviewer had seen everything known about it.** Arrival order is not authorship
+> order. Re-derive the *authorship* order whenever an approval and a finding
+> land close together.
+>
+> ⚠ **The sharper half:** a pin that fails closed *for the wrong reason* is worse
+> than one that fails open — the failure **looks like the guard working**, and
+> the diagnostic then steers the next person to fix the symptom.
+>
+> ### ⭐ TWICE TODAY, STATING AN EXPECTED CHECK PRODUCED A REAL FINDING
+>
+> I said I would ask for a per-pin compile-preserving evasion attempt at merge.
+> The implementer ran them **before being asked** (finding #1), and later
+> measured **against its own pin** with QA approval already in hand, reporting
+> *"not favourable to my own pin"* (finding #3). ⇒ **State the expected
+> merge-time check at HANDOFF time.** It is cheaper than enforcing it at the
+> gate and it is the behaviour to protect.
+>
+> ### ⛔ MY OWN DEFECT, NOW FIXED IN THE CORPUS: RIGHT CONTENT, WRONG CARRIER
+>
+> Four instances in one session — in each, **a check existed and answered a
+> NARROWER question than the one that mattered**, which is why none felt like a
+> gap:
+>
+> | content was right | carrier had no gate |
+> |---|---|
+> | issue body `⛔ FRAME NOT YET WRITTEN` | `check-issue-schema` validates the **frontmatter field** |
+> | briefing `NEXT RESEARCH PULL = #36` | the armed line's **presence** passed every check; its value was unreachable |
+> | frame "attempt an evasion per pin" | a **hazards paragraph** — nothing discharges advice |
+> | publish-verify phrase grep | answered *"are these bytes adjacent?"* |
+>
+> Landed in #956: `agent/memory/fleet/`
+> `a-requirement-in-an-advisory-section-is-never-discharged.md`, the §2e rule
+> that such a sentence **is an AC** (per-pin enumeration + a named positive
+> control that would fire if skipped + a place to record each result), and
+> step 5's replacement with a **blob-identity** check.
+>
+> ⇒ **For `B2R`: the per-pin evasion attempt is a HARD AC with a named positive
+> control.** `B2R` inherits this exact boundary and "what may cross an owner
+> boundary" is *maximally* easy to pin by spelling.
 >
 > **Doc ring runs CONCURRENTLY** (doc-only exception): `doc-author` →
 > `librarian` iterating `library/learn/reading-ken/01-anatomy.md` under the
