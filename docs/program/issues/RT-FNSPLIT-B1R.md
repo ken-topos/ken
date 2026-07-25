@@ -1,13 +1,13 @@
 ---
 id: RT-FNSPLIT-B1R
 title: "RT-NATIVE-FNSPLIT Boundary B1R — encode the occurrence-local semantic material B1 counted but never stored (repair of landed B1)"
-status: active
+status: merged
 owner: runtime
 size: L
 gate: none
 depends_on: []
 blocks: [RT-FNSPLIT-B2A]
-github: null
+github: 937
 origin: RT-FNSPLIT-B2A carrier hard-stop (runtime-implementer evt_6fm274bx4q6hb, hard-stop #4 on the recut chain); Architect classification evt_7d5v99mh8n9cc ruling option (B) as a REPRESENTATION RECUT ahead of B2a, with symptom-inventory entry 1 appended at a8eaba91. Slice cut by the Steward 2026-07-25.
 ---
 
