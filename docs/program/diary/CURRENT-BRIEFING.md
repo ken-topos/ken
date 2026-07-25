@@ -25,65 +25,89 @@
 >   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
 >   the AC rather than gaming it.
 >
-> ## ⇢ RESUME HERE FIRST — 2026-07-25 T02:45Z
+> ## ⇢ RESUME HERE FIRST — 2026-07-25 T04:05Z
 >
-> **`origin/main = 70bd2c74`** (PR #938 MERGED, content-verified) ·
-> **`origin/steward/work = 72a2fe87`** (pushed; re-slice checkpoint).
+> **`origin/main` = see below** · `steward/work` published this pass (8 doc
+> files; base brought forward by a real merge of `origin/main`).
 >
-> ⚠ **`DOC-ATTEST-LIVING` and everything after `70bd2c74` is on `steward/work`
-> ONLY, not on `main`.** The next publish carries it. ⛔ Before publishing, check
-> the merge-base INTERSECTION — `main` has moved twice today.
+> ### ⛔ HARD-STOP #7 ON `RT-FNSPLIT-B2A-S`. THE COUNT OF RECORD IS NOW **7**.
 >
-> ### ✅ `RT-FNSPLIT-B2A-S` IS FRAMED, KICKED, AND `active`. THE FLEET IS WORKING.
+> **D4 is unsatisfiable inside its own frame, and that is MY framing defect —
+> the second in this chain, a different class from #6.** #6 was a false premise
+> inherited from a held tree; **#7 is a boundary that excludes its own
+> prerequisite.** Raised by `runtime-leader` at `evt_2fvxkmfw8m1k8`; ruled at
+> `evt_3pw2n9z0me7xr`; routed to the Architect at `evt_3ne9d2wkee0mx`.
 >
-> **Kicked at `evt_3wmhpdq7dm8d8`**, frame at
-> `docs/program/wp/RT-FNSPLIT-B2A-S-selection-defunctionalization.md`, ring
-> compaction verified on the **completion marker** for all three seats
-> (implementer reached `ctx 0%`) before the mention went out.
+> I re-verified the ring's measurement myself on `origin/main` = `70bd2c74`:
+> `lower_expr` (`core.rs:3847`) takes only `(builder, expr: &RuntimeExpr,
+> env: &[Lowered])` — **no origin in scope**; the only two production
+> `Lowered::Closure` *constructions* are its `:4211`/`:4226` arms, both
+> `body: (**body).clone()`; and `lower_expr` is re-entered from
+> `source_call_state` (`:3542`) via `SourceMachineState::Eval` (`mod.rs:1962`).
+> With pointer/content/clone/visit-order all barred by the frame's own D6,
+> only a threaded parameter remains — the scope B2A-S excludes.
 >
-> **B2A-S IS IN FLIGHT AND DURABLE.** `runtime-implementer` holds
-> `wp/RT-FNSPLIT-B2A-S-selection-defunctionalization`, first checkpoint
-> `5c7eae26` ("dense occurrence table on a compile-local plan") — **I pushed it
-> to `origin`; it was on one local ref with zero off-box copies, the FOURTH
-> session running.** ⇒ **Sweep `git ls-remote origin refs/heads/wp/…` against the
-> local ref EVERY time you check on a ring.** Build seats cannot push, by design;
-> this is a Steward primitive, not an escalation. Told the ring at
-> `evt_1t5w3z9gtj177` to report the SHA and keep going.
+> ⭐ **Symptom inventory entry 3 is the CAUSE, not another instance.** Entries 1
+> (pointer identity) and 2 (whole-configuration) are two dynamic *surrogates*;
+> entry 3 is the *vacancy* forcing a surrogate — **the planner walk and the
+> lowering walk are independent traversals of the same source with no carried
+> correspondence**, so the occurrence being lowered has no static name.
+> Hard-stop #5 put the origin **carrier** on planner records and the Architect
+> and I *both* treated "the carrier exists" as sufficient. It is not.
+> ⇒ **The chain's next real deliverable is plan↔lowering CORRESPONDENCE, not
+> another consumer of an origin nothing produces.**
 >
-> ### ⇢ THE NEXT ACT — WAIT, then act on whichever lands first
+> ### ⇢ THE NEXT ACT — the re-slice, gated on ONE ring census
 >
-> 0. **⭐ THE PUBLISH IS THE ONE UNSTARTED PIECE OF MY OWN WORK.**
->    `steward/work` is **many commits ahead** of `main` = `70bd2c74` and carries
->    `DOC-ATTEST-LIVING`, the whole B2A/B2A-S/B2F re-slice, the B2A-S frame, and
->    the corrected hard-stop counter. ⛔ **Before publishing:** (a) check the
->    merge-base **INTERSECTION** (`main` moved twice on 2026-07-25, and B2A-S is
->    live in `crates/ken-runtime/**` — my changes are `docs/program/**` so expect
->    disjoint, but *verify*); (b) run `gen-doc-status.sh --check` on the candidate
->    — **editing an attested issue file reddens CI**, which is exactly what cost
->    PR #938 its first attempt. ⚠ Attested issue files are **`CAT-CAPEX.md`,
->    `DOC-W1.md`, `DOC-W2.md`** — confirm none of my commits touched them.
->    ⚠ I deferred this at the 33% threshold as too large to start; it is not
->    blocked on anyone.
-> 1. **A fold or hard-stop from `runtime-leader` on B2A-S.** ⚠ **The #6 pull is
->    CONSUMED; next pull = #9** — so a hard-stop here goes **straight to the
->    Architect**, no research gate. Watch specifically for **D4** ("cloned
->    `RuntimeExpr` bodies leave the covered population in the same diff") coming
->    back as a hard-stop — I told the ring that a member it cannot cover is a
->    hard-stop, not a partial landing, so **do not accept an identity-only
->    landing.**
-> 2. **Publish the accumulated `steward/work`.** ⚠ `main` = `70bd2c74` but
->    `steward/work` is well ahead and carries **`DOC-ATTEST-LIVING`**, the whole
->    re-slice, and the corrected hard-stop counter. ⛔ Check the merge-base
->    INTERSECTION first — `main` moved twice today. ⛔ And re-run
->    `gen-doc-status.sh --check` on the candidate: **editing an attested issue
->    file reddens CI**, which is exactly what cost PR #938 its first attempt.
+> ⛔ **`5c7eae26` IS NOT MERGEABLE AS A STANDALONE UNIT.** The Architect's Q2
+> permission is *conditional* — "provided the complete tag-plus-sole-dispatch
+> conditions hold" — and D4 **is** the sole-dispatch condition, so it never
+> fires. That is the Architect's own conditional evaluating false, not me
+> overriding a ruling. The branch is retained as durable input at
+> `origin/wp/RT-FNSPLIT-B2A-S-selection-defunctionalization`.
+>
+> **I refused the leader's two options (collapse into B2F / reframe as
+> preparatory) because there is a third and the choice is MEASURABLE:**
+>
+> > Is the planned-origin population **total** over the closure occurrences
+> > reachable in `lower_expr`, including via the source-machine fallback?
+>
+> - **Total** ⇒ correspondence is mechanical threading ⇒ **its own production
+>   unit, sized by the PRODUCER**, adding zero function-emission surface and
+>   leaving the Architect's Q3 atomic boundary intact.
+> - **Partial** ⇒ the partiality is itself a static-authority question ⇒
+>   **collapse into B2F** and the leader's convergence read was right.
+>
+> ⇢ **When the census lands:** the Architect rules the mechanism (gated behind
+> it, status confirms "no polling"), then **I own the re-slice and AC/control
+> placement.** ⭐ **Size the successor frame by what PRODUCES the origin.** If
+> the census says `could_not_determine`, that is a real answer — do not
+> estimate past it.
+>
+> ⚠ **Ring state:** all three seats woke only after **transport repair** —
+> mentions stranded on all three (bare `Enter` for the two Codex seats, a
+> content pointer for the Claude seat, whose buffer held an unsubmitted stale
+> `wait for the steward's ruling`). Confirmed `Working` on all four seats
+> including the Architect. **Retros are owed on this slice from all three.**
 >
 > ⛔ **Still operator-held, do not release:** `DOC-GATE-NEEDLE`, `ABI-R1`,
-> `DOC-ATTEST-LIVING`. Fleet is single-threaded; B2A-S is the one active build WP.
+> `DOC-ATTEST-LIVING`. Fleet single-threaded; **no build WP is `active`** —
+> B2A-S is back to `draft`, so the ring is idle-by-design after its census and
+> retros, and the critical path is MINE (frame the successor).
 >
-> ⚠ **Owed but NOT blocking:** the `RT-FNSPLIT-B2F` frame (sequenced behind
-> B2A-S, so it can wait), and `RT-FNSPLIT-B2B` needs re-deriving or subsuming
-> because its growth verdict moved into B2F.
+> ⚠ **Owed but NOT blocking:** `RT-FNSPLIT-B2F` frame, and `RT-FNSPLIT-B2B`
+> needs re-deriving or subsuming (its growth verdict moved into B2F).
+>
+> ### ⭐ PUBLISH LESSON FROM THIS PASS — the base was STALE, not disjoint
+>
+> The briefing told me to "expect disjoint, but verify." **It was NOT disjoint:
+> merge-base was `5015bc71`, 50 commits back, and the intersection was 38
+> paths.** Publishing as-is would have silently reverted everything `main`
+> landed since — including my own PR #938. ⛔ **Fix is a real
+> `git merge origin/main` into the candidate, then assert
+> `git merge-base --is-ancestor origin/main HEAD`** before publishing. The
+> merge also dropped `DOC-W2.md` out of the candidate diff, which is what
+> cleared the attestation precondition.
 >
 > ### ✅ (done) All rulings in; both frames authored where needed
 >

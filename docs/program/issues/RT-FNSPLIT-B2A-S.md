@@ -37,7 +37,9 @@ origin: Architect ruling evt_6h5gw5c503n5z on RT-FNSPLIT-B2A hard-stop #6 (2026-
 > **producer**; partiality ⇒ it drags static-authority scope and collapses into
 > `RT-FNSPLIT-B2F`. See `RT-NATIVE-FNSPLIT` hard-stop #7 + inventory entry 3.
 >
-> ## ⛔ SUPERSEDED HISTORY BELOW — kicked to the Runtime ring 2026-07-25 (`evt_3wmhpdq7dm8d8`)
+> ## ⛔ SUPERSEDED HISTORY BELOW
+>
+> Kicked to the Runtime ring 2026-07-25 (`evt_3wmhpdq7dm8d8`).
 >
 > Ring compaction verified on the **completion marker** for all three seats
 > (implementer reached `ctx 0%`) before the mention went out. Fresh branch from
