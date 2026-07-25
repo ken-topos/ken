@@ -70,6 +70,64 @@ ruled that unacceptable without understanding the scaling law. RT-NATIVE-FNSPLIT
 
 Gates the [[NATIVE-HANDLE-CARRIER]] fast-follow + [[PX8-F-CAP-41]] too.
 
+> ### ⛔ DESIGN CONSTRAINT ON GATE REQUIREMENT 1 — added 2026-07-25
+>
+> **The n=3..7 harness MUST run its workers on the PRODUCT's stack (8 MiB /
+> `ulimit -s`), NOT on the `crates/ken-cli/tests/` convention of
+> `stack_size(256 * 1024 * 1024)`.**
+>
+> ⛔ **CORRECTION 2026-07-25 (adversary N2, `evt_7mve56d192pv6`) — THE STEWARD'S
+> ORIGINAL WORDING HERE WAS WRONG AND IS FIXED BELOW.** I first wrote that
+> threading added *"~128 KiB per recursive lowering frame."* **That is not what
+> was measured.** The bisect measured a **~128 KiB shift in the TOTAL minimum
+> stack** for a test driving bracket depths 2–3, across an **unknown number of
+> recursive frames `k`**. Per-frame growth is ≈ `128/k` KiB and **`k` was never
+> measured** — the recursion is over the *expression tree*, not the bracket depth,
+> so `k` is not 2 or 3 either.
+> ⚠ **Do not launder a total into a per-frame figure**, and do not claim it "errs
+> safe": extrapolating at 128 KiB/frame is pessimistic only if `k > 1`, which is
+> itself a claim about an unmeasured quantity. ⇒ **The honest statement is that
+> per-frame growth is UNKNOWN.**
+> ⭐ **`k` IS THE THING TO MEASURE** before this axis carries any weight in the
+> analytical model — a per-frame number is exactly the operand a scaling
+> projection consumes.
+>
+> **Why, measured:** B2A-C's correspondence threading shifted the total minimum
+> stack by ~128 KiB, and CI went red on
+> `ken-cli::px8ta_oriented_subcontinuation
+> public_two_three_level_brackets_finish_and_release_lifo` with
+> `fatal runtime error: stack overflow` (PR #940). Bisected at 64 KiB resolution:
+>
+> | commit | minimum passing stack |
+> |---|---|
+> | `70bd2c74` (base) | **> 1984 KiB, ≤ 2048 KiB** — cleared libtest's 2 MiB default by **< 64 KiB** |
+> | `08633b3c` (candidate) | **> 2112 KiB, ≤ 2176 KiB** — did not fit; SIGABRT |
+>
+> ⇒ The remedy (`bb2242e8`) wrapped that one test at the repo's conventional
+> **256 MiB** — correct and in-scope, but it means **that test can never detect
+> stack growth again**, and every other `ken-cli` test was already blind for the
+> same reason (5 pre-existing 256 MiB sites).
+>
+> ★ **The fleet spent its only accidental sentinel on the stack-growth axis, on
+> the WP chain chartered to bound growth on that axis.** Acceptable there; ⛔ NOT
+> acceptable in the harness that DISCHARGES the gate.
+>
+> ⚠ **A 256 MiB harness would report wall-time, RSS and internal counts while
+> silently tolerating stack growth that kills the product at 8 MiB — i.e. it
+> would measure the wrong machine and pass.** Same shape as
+> `verify-the-mechanism-not-a-proxy`: the numbers would be real and the
+> conclusion wrong.
+>
+> ⇒ **Stack exhaustion is a THIRD growth axis** alongside compile wall-time and
+> peak RSS, and it is the one the current test convention hides. The harness
+> should report it explicitly per n.
+>
+> ⛔ **AND IT NEEDS `k`, NOT A TOTAL.** The axis is only usable if the harness
+> reports **recursion depth `k` alongside peak stack per n** — otherwise it
+> produces another total with no per-frame operand, which is the exact defect
+> corrected above. ⇒ Instrument `k` (max recursive depth reached in the lowering)
+> as a first-class output of the n=3..7 harness.
+
 ## ⛔ ARMED §5a RESEARCH-CONSULT TRIGGER — the count of record
 
 **Steward holds the authoritative count** (steward playbook §5a duty 1). The
@@ -118,6 +176,41 @@ this line wins.** Re-read this line on every hard-stop.
 > it at the construction site. Same class as
 > `a-required-deliverable-can-transitively-require-the-frames-excluded-scope`.
 >
+> ## ✅ RESOLVED 2026-07-25 — entry 3 has an owner, and the RE-SLICE IS RULED
+>
+> **Census `TOTAL` + injective** (`runtime-implementer`, `evt_4tqj93ctj24z2`,
+> type-driven over the `RuntimeExpr` declaration, not a grep) ⇒ **Architect
+> ruled the third option CONFIRMED** (`evt_1jdh8pn8y96z`): correspondence
+> **transports an already-settled fact to a site where it is out of scope** — it
+> does not choose static identity, invent an identity space, or define behaviour
+> for an unplanned occurrence. So it is **production plumbing, NOT Q3
+> functionization authority**, and the Q3 atomic boundary stays intact.
+>
+> ```
+> B1R → RT-FNSPLIT-B2A-C → RT-FNSPLIT-B2A-S → RT-FNSPLIT-B2F
+>       correspondence      selection           functionization
+>       (entry 3)           (entry 1, atomic)   (entry 2, atomic Q3)
+> ```
+>
+> ⛔ **STATE THE INVENTORY CLOSURES SEPARATELY (ruled).** Closing the cause's
+> transport seam is **not** closing either downstream symptom:
+>
+> | entry | closed by |
+> |---|---|
+> | **3** recoverability vacancy (the CAUSE) | `RT-FNSPLIT-B2A-C` |
+> | **1** cloned-body / pointer identity | `RT-FNSPLIT-B2A-S` (complete selection) |
+> | **2** whole-configuration specialization | `RT-FNSPLIT-B2F` (atomic switch) |
+>
+> ⚠ **The census carried a deliberate scoped `could_not_determine`:** the
+> *partition* (which occurrences are machine-only) is program-dependent and not
+> statically enumerable. **Totality is determined; the enumeration is not.**
+> ⛔ Do not read "TOTAL" as "and here is the partition", and do not let any frame
+> enumerate a guessed machine-only subset.
+>
+> ★ **The ring retracted its own convergence read, unprompted:** it had inferred
+> "collapses into B2F" from the **size** of the carrier when the deciding
+> property was its **totality**. **Size is not a boundary discriminator.**
+>
 > ## ⛔ DO NOT WAIT FOR THE 3rd ENTRY. Entries 1 and 2 ARE THE SAME PREDICATE.
 >
 > Entry 2 is *"a dynamic property naming static code"* — the chain's predicate,
@@ -163,8 +256,9 @@ this line wins.** Re-read this line on every hard-stop.
 
 ```text
 RECUT CHAIN (live, from kickoff evt_2kgfmmeeh2x7w, 2026-07-24)
-hard-stop count    = 7   ← #6's PULL FIRED AND WAS CONSUMED. NEXT PULL = #9.
-                            #7 goes STRAIGHT TO THE ARCHITECT, no research gate.
+hard-stop count    = 8   ← #6's PULL FIRED AND WAS CONSUMED. NEXT PULL = #9.
+                            ⛔ #9 IS THE VERY NEXT STOP AND IT FIRES A PULL.
+                            #7 and #8 both went straight to the Architect.
   ⚠ THIS LINE READ "3" UNTIL 2026-07-25 AND WAS STALE BY TWO STOPS. Stops #4
     and #5 both happened and neither was posted here, so the authoritative
     count silently disagreed with reality in the one place designated to win
@@ -273,6 +367,36 @@ hard-stop count    = 7   ← #6's PULL FIRED AND WAS CONSUMED. NEXT PULL = #9.
        lower_expr, including via the source-machine fallback? Totality decides
        whether the correspondence is mechanical threading (its own production
        unit) or drags in static-authority scope (collapse into B2F).
+  #8 = B2A-C hard-stopped ON D3's OWN PROBE, at checkpoint 96e66c9f. Architect
+       ruled evt_308azmr4cszd7 (2026-07-25); Steward CONFIRMED #8 and ruled the
+       disposition = AMEND B2A-C IN PLACE (not a re-slice).
+       ⭐ THE FINDING IS A CATEGORY ERROR, NOT AN ORDINAL DISAGREEMENT: one
+       StaticNodeId is being made to mean two different things.
+         - plan_expr's ENTRY = the first node the transfer graph schedules;
+         - the expression's OCCURRENCE = the node on which
+           SemanticSourceSeed::expression registered that RuntimeExpr, and from
+           which its positional child-origin record is read.
+       They coincide for ordinary forms and DELIBERATELY DO NOT for
+       ComputationalMatch. Steward re-verified on exact 96e66c9f:
+         :628  let resume = push_node(TransitionKind::SourceReturnResume, ...)
+         :667  let scrutinee = self.plan_expr(scrutinee, ..., 0)?
+         :672  self.expression_seed(resume, expr, &children)?   <- occurrence
+         :673  Ok(scrutinee)                                    <- entry
+       ⇒ Passing the scrutinee entry as the parent's child origin is a category
+       error. ★ D3 FOUND IT BUT NAMED IT WRONGLY, which is the tell that the
+       frame had ONE axis where it needed TWO.
+       ⇒ Mechanism: plan_expr returns PlannedExpr { entry: StaticNodeId,
+       occurrence: StaticOriginId } with DISJOINT consumers - transfer topology
+       consumes only .entry (Boundary-A graph unchanged), source correspondence
+       consumes only .occurrence. NO new node, origin, search, or arithmetic.
+       ⇒ Classification (Architect): repairs the PRODUCER of correspondence, so
+       it is inside B2A-C / entry 3. Entries 1 and 2 stay OPEN and the Q3 atomic
+       boundary is unchanged. Architect explicitly did NOT authorize WP scope or
+       the count - "Steward owns that formal call."
+       ⇒ SIZE RAISED M -> L by the Steward, deliberately and in the open, rather
+       than letting the unit grow silently (the #7 lesson).
+       NO research pull due (count 8 < 9). ⛔ BUT #9 IS THE NEXT STOP AND FIRES
+       ONE - dispatch research BEFORE the Architect rules on it.
           Independently grounded the stop on exact 7151ae58 and confirmed it
           "correct and structural". Three findings that bind the re-slice:
           (i)  A `static_origin` carrier CAN be an independent checkpoint, but

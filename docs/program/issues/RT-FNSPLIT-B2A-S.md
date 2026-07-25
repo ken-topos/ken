@@ -5,13 +5,80 @@ status: draft
 owner: runtime
 size: M
 gate: none
-depends_on: [RT-FNSPLIT-B1R]
+depends_on: [RT-FNSPLIT-B2A-C]
 blocks: [RT-FNSPLIT-B2F]
 github: null
 origin: Architect ruling evt_6h5gw5c503n5z on RT-FNSPLIT-B2A hard-stop #6 (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the retired RT-FNSPLIT-B2A frame, whose Retain/Replace lists were inherited from the never-landed b077eb7a. Steward-filed; Steward owns the replacement frame and the full AC/control re-walk.
 ---
 
-> ## ⛔ HALTED AT HARD-STOP #7 — 2026-07-25. DO NOT BUILD FROM THIS FRAME.
+> ## ⭐⭐ ADVERSARY-SUPPLIED TRIPWIRES — THIS UNIT DELIBERATELY CROSSES BOTH
+>
+> The adversary discharged both surfaces I flagged on B2A-C (`evt_7mve56d192pv6`)
+> and, better, gave the **exact tripwire** for each. ⛔ **B2A-S's whole job is to
+> cross tripwire 1 on purpose** — so the frame must say so explicitly rather than
+> letting a reviewer read the crossing as a regression.
+>
+> **1. `OwnedSourceOccurrence` is provenance TODAY.** Verified: `static_origin`
+> is **never compared, never a map key, never branched on** anywhere in production
+> `lowering/`. The struct (`lowering/mod.rs:238-243`) holds `expr` **and**
+> `static_origin` together, so the expression is *co-located*, not retrieved —
+> there is nothing to look one up *with*.
+> ⇒ **TRIPWIRE: the first read of the origin's VALUE in a decision.**
+> ⭐ **That read IS this unit's D4/D5.** When B2A-S makes the tag a selector it
+> crosses this line by design — and at that moment the retained-body carrier must
+> leave **in the same diff**, because from then on two authorities really would
+> coexist. **State the crossing in the frame and in the handoff.**
+>
+> **2. Nested `ComputationalMatch` sharing a scheduling entry is BENIGN today.**
+> Verified: every production use of `.entry` is an **edge endpoint**
+> (`self.edge(from, to, kind)`) or `next = planned.entry` for sequencing — never a
+> map key, never an identity, never compared.
+> ⇒ **TRIPWIRE: the first collection keyed by `.entry`.** Occurrences remain safe
+> as keys because B1R enforces the `origin.0 == planned_node.0` bijection.
+> ⛔ **So B2A-S must key its selector on `.occurrence`, NEVER on `.entry`** — and
+> an AC should redden if a collection keyed by `.entry` appears.
+>
+> ⚠ **Carry N1 into this unit as a deliverable** (adversary, cost ≈ 3 lines): the
+> AC-11 topology differential's provenance is **VERIFIED** — all 7 rows reproduce
+> byte-for-byte from `70bd2c74` — but **the recipe is not in the tree**, so nobody
+> else can re-verify it. ★ The deep reason it needed an outside check: **the
+> asserted property is EQUALITY against committed constants, so a post-change
+> re-capture would have produced byte-identical values — no observation
+> distinguishes a genuine pre-change baseline from a re-recorded one.**
+> ⇒ **Record the recipe in the comment**: base SHA, the two probe function names
+> (`b2ac_topology_digest`, `b2ac_topology_fixtures`), and the
+> `git worktree add --detach <path> 70bd2c74` + test invocation. Demonstrate the
+> binding; do not testify to it.
+>
+> ## ⇢ RE-CUT 2026-07-25 — THIS NODE IS THE **SELECTION** UNIT, NOT RETIRED.
+>
+> **The Architect ruled the re-slice at `evt_1jdh8pn8y96z`.** This node survives
+> with a **narrowed scope** and a **new predecessor**:
+>
+> ```
+> B1R → RT-FNSPLIT-B2A-C → RT-FNSPLIT-B2A-S → RT-FNSPLIT-B2F
+>       correspondence      THIS NODE          functionization
+>                           (selection)
+> ```
+>
+> - **D1–D3 LEAVE this node** — the dense table, its lifetime, and the visibility
+>   widening belong to **`RT-FNSPLIT-B2A-C`**, which transports the origin to the
+>   site. `5c7eae26` folds in *there*, not here.
+> - **D4 + D5 STAY, and are now satisfiable** — because correspondence puts the
+>   origin *in scope* at the two `lower_expr` closure arms. D4 was unsatisfiable
+>   only because this frame assumed an origin nothing produced.
+> - ⛔ **This unit remains ATOMIC, by ruling:** add the tag **as selector**,
+>   **remove the retained body carrier**, and **install the sole dispatcher** —
+>   *in the same diff*. That was always the right requirement; only its
+>   prerequisite was missing.
+>
+> ⚠ **The frame at `docs/program/wp/RT-FNSPLIT-B2A-S-selection-defunctionalization.md`
+> is STALE against this re-cut** — it still carries D1–D3 and still assumes the
+> origin is available. ⛔ Do not build from it until the Steward re-cuts it.
+> **Inventory:** this unit closes **entry 1**; entry 2 waits for `B2F`; entry 3 is
+> closed by `B2A-C`. State them separately.
+>
+> ## ⛔ HALTED AT HARD-STOP #7 — 2026-07-25 (the stop that forced the re-cut)
 >
 > **D4 is unsatisfiable inside this frame's own boundary.** Raised by
 > `runtime-leader` at `evt_2fvxkmfw8m1k8` after D1–D3 landed clean at
