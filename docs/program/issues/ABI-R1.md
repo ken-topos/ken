@@ -1,7 +1,7 @@
 ---
 id: ABI-R1
 title: "correct stale filesystem capability prose — scoped roots, rights, symlink policy and no-follow resolution have landed"
-status: draft
+status: ready
 owner: foundation
 size: S
 gate: none
@@ -11,14 +11,26 @@ github: null
 origin: docs/program/10-linux-abi-completion.md §4 (the ABI-completion program); node filed by the Steward 2026-07-25 on the operator's directive to frame the remaining program. Agents cannot create tracked work (COORDINATION §2).
 ---
 
-> ## Authority: `10-linux-abi-completion.md` §4 — read that, not this
+> ## ✅ FRAMED AND READY — 2026-07-25
 >
-> ⛔ **This is a tracker/DAG node, NOT a shovel-ready WP frame.** A
-> `docs/program/wp/` frame carrying deliverables, acceptance criteria, fixed
-> inputs, negative controls, and a contention check **must be authored before
-> release** (§2c front-load rule: the T1 enclave does the design judgment so the
-> build ring executes mechanically). **Do not release this on the strength of
-> this file.**
+> **The shovel-ready frame is
+> `docs/program/wp/ABI-R1-capability-prose-currency.md`.** Read that, not this
+> file. It pins the landed surface from `crates/ken-host/src/capability.rs`
+> clause by clause, and it carries the finding that makes this WP non-trivial:
+>
+> ★ **`check_fs_capability` enforces RIGHTS and AUTHORITY only.** It returns
+> `ScopeEscape` solely for an *empty* scope and **never returns `SymlinkDenied`
+> at all** — it hands the scope back to its caller. So confinement and symlink
+> policy are **carried** by the capability and **enforced at resolution**, not at
+> the gate. ⇒ "path-confined" is a claim about the resolver; citing the gate as
+> evidence for it is an overclaim.
+>
+> ★★ **And the `AFull` sentence conflates two axes.**
+> `rights_for_authority(AUTH_FULL) == RightSet::ALL`, so `Full` **still holds
+> `WRITE` and `DELETE`** — the rights axis is unchanged. Only the *reach* axis
+> changed. The correction must change **"anywhere"** and leave **"writes and
+> deletes"** alone. Getting this backwards is the likeliest way to ship a new
+> false statement.
 
 ## Objective
 
@@ -48,20 +60,43 @@ block.** ⚠ **After `DOC-W2` lands, RE-DERIVE the attestation row and the consu
 population before releasing this** — the ledger will have changed, which is the
 whole point.
 
-## ⚠ CORRECTION to "startable now"
+## ✅ THE LEDGER BLOCKER IS DISCHARGED — 2026-07-25
 
-I earlier reported this as one of two ABI nodes startable before PX8 closes.
-**That was true on the DAG axis and false on the ledger axis.** `ABI-S3` is the
-other, and it is owned by Runtime, which is held on the `RT-NATIVE-FNSPLIT`
-priority. ⇒ **There is currently NO releasable ABI work.** The DAG-freeness of a
-node is necessary, not sufficient.
+`DOC-W2` merged (`origin/main` = `d3b9f36c`) and the attestation row has been
+**re-derived**, which was the whole point of sequencing rather than trusting a
+pre-merge read:
 
-## ⭐ Why this one is special — it is startable NOW
+```
+library/SOURCE-ATTESTATIONS  row 9   (was row 7 — DOC-W2 added three rows)
+  59fbe76dde61a9ab3a1d4599088c60f04502ea89  catalog/packages/Capability/Filesystem/Errors.ken.md
+```
 
-**`ABI-R1` and `ABI-S3` are the ONLY two nodes in this program with no
-dependency on `PX8`.** Everything else in §5 descends from it. With the fleet
-single-threaded on `RT-NATIVE-FNSPLIT`, these two are the only available parallel
-ABI work.
+⚠ **Re-derive again at pickup.** The row number is a function of everything
+merged so far; treat the line above as evidence the *check* was run, not as a
+durable fact.
+
+## ⚠ SUPERSEDED: my two earlier "startable" claims, both wrong, in opposite ways
+
+Recorded rather than deleted, because the pair is the lesson:
+
+1. **"`ABI-R1` and `ABI-S3` are startable now."** True on the **DAG** axis, false
+   on the **LEDGER** axis — `SOURCE-ATTESTATIONS` attested this WP's only target
+   while `DOC-W2` was rewriting that ledger. Disjoint file lists, real collision.
+2. **"There is currently NO releasable ABI work."** Correct when written, **stale
+   the moment `DOC-W2` landed.**
+
+★ **DAG-freeness is necessary, not sufficient — and a blocker note goes stale as
+soon as its blocker clears.** Both errors came from writing a *conclusion*
+("startable") where the durable thing was the *check* ("does anything in flight
+attest my target?").
+
+⇒ **Current status: `ABI-R1` is the one genuinely releasable ABI node.**
+`ABI-S3` remains Runtime-owned and held behind the `RT-NATIVE-FNSPLIT` priority.
+
+⚠ **Release still requires a slot.** This is `owner: foundation` and
+documentation-shaped, but it touches `catalog/` and `library/`, so it is **not**
+covered by the doc-track exception to the fleet's single-threaded build posture.
+Widening concurrency is the operator's call, not the Steward's.
 
 ⚠ **Documentation-only and `S`, but it is not busywork:** prose that contradicts
 landed behavior is actively misleading, and this is the class of defect the
