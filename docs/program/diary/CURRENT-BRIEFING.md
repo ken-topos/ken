@@ -41,8 +41,18 @@
 >
 > ### ⇢ THE NEXT ACT — WAIT ON TWO THINGS, then act on whichever lands first
 >
-> 1. **PR #938** — publisher is polling CI (log `$SCRATCH/batch-publish.log`; it
->    block-buffers through a grep pipe, so `tail` the file, don't watch the pipe).
+> 1. **PR #938 — now at `5bacb8a1`, RELAUNCHED after a CI RED.** Log is
+>    `$SCRATCH/batch-publish2.log` (the first run's is `batch-publish.log`).
+>    **What failed and why it will recur:** `test shard 1/4` reddened on
+>    `registered_record_validation_gates_run` because the batch edits
+>    `docs/program/issues/DOC-W2.md` — and **DOC-W2 made its own issue file an
+>    attested source**, so flipping it to `merged` moved its blob OID out from
+>    under the library's currency claim. Fixed by re-attesting, **with the
+>    revalidation recorded per anchor** rather than bumped: `#1-objective`
+>    byte-identical, `#5-exit-property…` genuinely **changed** (`tt` → `Proved`,
+>    my own spelling fix, inside a cited section I assumed I hadn't touched). The
+>    citing corpus already said `Proved`, so the row is honest — but *checking is
+>    what made it honest.* ⇒ Filed as `DOC-ATTEST-LIVING` (§below).
 >    On merge: **verify by content** —
 >    `git show origin/main:docs/program/wp/RT-NATIVE-FNSPLIT-recut-B2a-emission-port.md`
 >    — then flip nothing (it carries no WP of its own) and clear task #7.
