@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2A-C
 title: "plan↔lowering occurrence correspondence — transport the preallocated StaticOriginId to the site where it is out of scope"
-status: ready
+status: active
 owner: runtime
 size: M
 gate: none
@@ -11,6 +11,16 @@ github: null
 origin: Architect ruling evt_1jdh8pn8y96z on RT-NATIVE-FNSPLIT hard-stop #7 (2026-07-25), deciding on the runtime-implementer's TOTAL + injective census evt_4tqj93ctj24z2, which the Steward gated the ruling behind (evt_3ne9d2wkee0mx, evt_3qtyhp53v5g7x). Steward-filed; Steward owns the frame, scope, and AC/control placement.
 ---
 
+> ## ✅ ACTIVE — kicked to the Runtime ring 2026-07-25 (`evt_3cka2t192dx10`)
+>
+> Full §2c gate ran: retros in from all three seats, quiescent, **both**
+> contention axes checked (file axis disjoint from the in-flight doc publish;
+> ledger axis found `cranelift_backend.rs` attested and the frame warns about
+> it), compactions started in one pass and **each drop verified on the
+> `Context compacted` marker** — implementer reached `ctx 0%` (its `ctx 33%`
+> footer was the lagging read mid-compaction, not a failed drop). All three
+> confirmed `Working` before this flip.
+>
 > ## ✅ FRAMED — 2026-07-25
 >
 > **The shovel-ready frame is
