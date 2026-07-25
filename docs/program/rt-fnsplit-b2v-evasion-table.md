@@ -411,6 +411,144 @@ production bytes changed).
 
 ---
 
+# ⛔ THIRD ARCHITECT BLOCK of `ddff2fae` — two production defects
+
+The test-only fold was sound on its own axis and production bytes carried
+unchanged. Two defects remained, and the Steward's armed line fired on this
+block: three consecutive production blocks on one node, so the Architect was
+asked whether they share a predicate. **They do** — *the admitted disposition is
+not closed under emitted producer → boundary word → separately compiled consumer
+round trip.* Both defects below are faces of it.
+
+## 1. The disposition promised a spill that did not exist
+
+`lowering/mod.rs` classifies **every** `Lowered::Int` as an immediate with a
+`PersistentGround`/`Int` spill. Materialization was `int.as_small()?` and
+`store_int_tag` refused a persistent `Big` — so the promised spill did not exist
+for **exactly the values a bignum language exists to carry**, and I had recorded
+that as a `NO CONTROL — open residual` rather than the missing deliverable it
+was.
+
+⚠ **The residual was honestly written and still wrong, and the reason is worth
+keeping.** My argument was: a `Big`'s limbs live in an entry the *invocation's*
+native arena mallocs, so a persistent node naming one is the ephemeral-locator
+defect. **That argument is correct.** What it establishes is that
+`NATIVE_INT_BIG_TAG_V1` cannot be persistent — **not** that a persistent wide
+`Int` cannot exist. I generalized from "this representation cannot" to "the
+value cannot," and the second does not follow.
+
+### The mechanism
+
+A wide `Int`'s magnitude goes in **the region's own limb table** — the same
+region-selection rule every other class already obeys. A `Bytes`'s content is in
+its region's data table; a `Constructor`'s children are in its region's word
+table; a persistent value's magnitude belongs to the persistent region, beside
+the node that names it.
+
+| marker | magnitude lives | admitted for |
+|---|---|---|
+| `NATIVE_INT_SMALL_TAG_V1` | the node's own payload word | any owner — it names no storage |
+| `NATIVE_INT_BIG_TAG_V1` | the invocation's `NativeIntArenaV1` | `InvocationArena` |
+| `BOUNDARY_INT_REGION_LIMBS` | the region's limb table | `PersistentStore` |
+
+`BOUNDARY_INT_MARKER_OWNER` is that table, and `boundary_int_marker_mask`
+compiles it to the bitmask the CLIF tests in Θ(1) — the third instance of the
+pattern, after the tag × class relation and the immediate domains.
+
+⭐ **A consequence, derived rather than decided:** `Int` appears under
+`PersistentGround` and nowhere else in the tag × class relation, so **every
+allocatable `Int` node is persistent** and the invocation `Big` marker is
+refused on every node the ABI can build. That is not a second rule — it falls
+out of the first table, and the sweep asserts the `Int`-admitting tag set is
+exactly `[PersistentGround]` so that admitting an invocation-owned `Int` later
+reddens here and forces the marker question to be re-answered rather than
+inherited.
+
+⚠ **A dedicated table and dedicated node fields, not a reuse of the word
+table.** `ken_boundary_field_local` and `ken_boundary_field_count_local` are
+**not class-guarded**, so limbs parked in the word table would be readable as
+child *words* — a raw magnitude limb returned where a tagged `BoundaryWord` is
+expected. Node stride 64 → 80, region header 112 → 136.
+
+**Emitted construction ships with the read path** (`store_int_limbs`,
+`store_int_limb`), because QA's block established that a working read path is
+not evidence the producer exists. Helpers 25 → 27.
+
+## 2. The emitted immediate mint truncated instead of checking
+
+`ken_boundary_make_immediate_local` built its word with a left shift and checked
+only that the tag was below the first handle tag. **A shift is total.** A payload
+wider than the 56-bit field silently became a *different value*; a `Bool` payload
+of `2` became a third boolean — while `boundary_value.rs:268` said emitted code
+performed the identical range test.
+
+⚠ **The only magnitude control exercised `materialize_ground`**, which is a
+different producer entirely. Same shape as the `String` defect QA found one
+round earlier: a property asserted about a path the control never walked.
+
+`BOUNDARY_IMMEDIATE_DOMAIN` is now the one authoritative payload domain per
+immediate tag. `BoundaryWord::immediate` asserts it — the shift is total in Rust
+too — and the CLIF evaluates all three domain predicates and selects by a mask
+computed from the same table. A `Bool` that is not a bit is `ERR_SHAPE`; a
+magnitude past the field is `ERR_BOUNDS`, so a control can tell which rule
+refused without reading the payload back.
+
+## The mutations
+
+| # | mutation (compile-preserving) | reddens | collateral |
+|---|---|---|---|
+| **M17b** | the signed-payload predicate always holds | the immediate sweep | **none — 1 test** |
+| **M18** | the CLIF's `Bit` domain lookup drifts to `UnsignedPayload` | the immediate sweep | **none — 1** |
+| **M19** | the region magnitude reads its length from `NODE_FIELD_COUNT` | both wide-`Int` controls | **none — 2** |
+| **M20** | claiming a limb span does not advance the region's live count | the emitted wide-`Int` producer | **none — 1** |
+| **M21** | a persistent `Int` is checked against the *invocation's* marker mask | the marker sweep **and** the producer | 2 |
+| **M22** | a materialized wide `Int` is marked as if its magnitude were a `Small` | the materialization control | **none — 1** |
+
+### ⚠ M17's first form reddened 142 tests and is reported as uninformative
+
+`let admitted = b.ins().bor(some, signed_ok);` → `bor(some, one)` looked like
+"stop range-checking." It reddened **142** tests across the whole backend —
+`object_linker_packaging`, `native_execution_differential`, every lowering
+suite. That breadth is the tell, and the captured message is the proof:
+
+```
+boundary-value local helper verification:
+  - inst26 (v27 = bor.i8 v26, v5): arg 1 (v5) has type i64, expected i8
+```
+
+⛔ **It never tested the range check.** `one` is an `i64` and the domain flags are
+`i8`, so the mutated graph is type-invalid and fails the CLIF verifier at
+**emission** — every consumer of the boundary graph dies before any value is
+minted. A wide redden reads like a strong result and here it establishes only
+that emission is verified. **M17b** mutates one typed-correct predicate and
+reddens exactly the sweep.
+
+⭐ Recorded rather than dropped, for the same reason M13's no-op was: a table
+showing only M17b would imply I had found the defect on the first try, and the
+first try measured something else. This is *"a mutation that reddens does not
+confirm which detector caught it"* with the detector being the **verifier**.
+
+## What this closes against the RECUT, and what it does not
+
+The recut promotes three `NO CONTROL — open residual` rows into `AC-10`'s scope.
+Stated exactly, so *discharged* and *never asked* cannot read alike:
+
+| promoted residual | status after this fold |
+|---|---|
+| `AC-4` `Big` at the persistent boundary | **CLOSED** — a real persistent representation, materialized, emitted-constructed, and read back across an arena drop |
+| `AC-1` tag *reachability* | **STILL OPEN** — the marker sweep asserts the `Int`-admitting tag set, which is one axis of it, not the sweep over the admitted domain `AC-10` asks for |
+| `AC-6` persistent *content-addressing* | **STILL OPEN** — an emitted-constructed node still carries `NULL_SLOT` |
+
+⛔ **`AC-10` itself — one control total over the admitted disposition — is NOT in
+this fold.** The recut is a review ref that has not bound, and the Architect
+stated the classification adds no new constraint to the fold in flight. The two
+defects here are faces of the predicate and are closed as such; the structural
+closure that would make further faces unreachable is the next fold's
+deliverable, and claiming otherwise would be the overclaim the recut exists to
+stop.
+
+---
+
 # AC → discharging control
 
 Required by the frame's second amendment (`origin/main` = `fdda953f`): one row
@@ -435,10 +573,13 @@ because a taxonomy with nowhere to put the honest answer records it as covered.
 | **AC-6** owner distinguishable | `b2v_referent_owner_distinguishes_persistent_from_borrowed` | `BoundaryReferentOwner` is a **distinct type** from `AbiStorageOwner`; the pair is non-degenerate (`left: 1, right: 2`) |
 | **AC-6** persistent identity | `b2v_a_constructed_persistent_word_survives_the_invocation_arena`; `b2v_the_frozen_prefix_refuses_emitted_mutation`; `b2v_equal_values_share_one_persistent_referent` | the arena is **dropped** and a second invocation resolves the same word; orphan-arena positive control returns `ERR_BOUNDS`; one slot ⇒ one word, byte-identical across invocations |
 | **AC-7** escape, exact error | `b2v_borrowed_ingress_fails_closed_on_escape_with_an_exact_error`; `b2v_a_persistent_node_refuses_an_invocation_owned_child` | exact `ERR_ESCAPE`; malformed ⇒ `ERR_TAG`, not `ERR_ESCAPE`; the construction-time invariant the Θ(1) check rests on is itself pinned, with both mirrors as positive controls |
-| **AC-8** INERT | `correspondence_adds_no_emitted_unit_to_the_production_census`; `the_backend_production_surface_inventory_is_closed`; `px8i_…identical_local_helper_clif` | all three **unchanged and re-run**; `lowering/mod.rs` census stays `0`/`0`/`0`. ⚠ **Helper delta re-baselined: 13 → 19 → 25** — `alloc`, `store_tag_id`, `store_scalar`, `store_field`, `store_name`. Stated here before the verdict, not discovered in it |
+| **AC-8** INERT | `correspondence_adds_no_emitted_unit_to_the_production_census`; `the_backend_production_surface_inventory_is_closed`; `px8i_…identical_local_helper_clif` | all three **unchanged and re-run**; `lowering/mod.rs` census stays `0`/`0`/`0`. ⚠ **Helper delta re-baselined: 13 → 19 → 25 → 27** (`store_int_limbs`, `store_int_limb`) — `alloc`, `store_tag_id`, `store_scalar`, `store_field`, `store_name`. Stated here before the verdict, not discovered in it |
 | **AC-9** Θ(1) per module | `b2v_helper_population_does_not_grow_with_the_value_population`; `b2v_the_helper_inventory_is_closed_and_named` | two module emissions compared, and the value population varied ×1024 with the helper count fixed; the inventory pin reads the **module's actually declared** `ken_boundary_*` symbols against the permitted set. ⚠ first form was **defeated** — it only read the list |
 | **AC-1** tag × class relation | `b2v_the_tag_class_relation_is_closed_over_the_whole_product` | all 81 `tag × class` pairs through the emitted allocator, expectations from `boundary_relation_admits`; admitted **and** rejected counts asserted; the CLIF's mask re-checked against the table per pair |
 | **AC-6** no forged identity | `b2v_emitted_code_cannot_assign_store_identity`; `b2v_a_persistent_int_refuses_an_invocation_scoped_big` | `store_slot` **removed**; the allowed-writer inventory is pinned; every writer is exercised on a fresh node and the slot still reads `NULL_SLOT`, with the written fields checked as the positive control. ⚠ The emission latch is proved by **M13b**, not by the predicate |
-| **AC-1** tag *reachability* | **`NO CONTROL — open residual`** | a tag no disposition can produce is caught by review, not by CI. Found by inspection at `f934d233`; nothing mechanical enforces it |
-| **AC-4** `Big` at a persistent boundary | **`NO CONTROL — open residual`** — the *refusal* is pinned (`b2v_a_persistent_int_refuses_an_invocation_scoped_big`), the capability is not delivered | a `Big`'s limbs live in invocation-scoped storage; a persistent node naming one is the ephemeral-locator defect again. Needs store-backed limbs — a representation decision beyond `B2V` |
-| **AC-6** persistent *content-addressing* | **`NO CONTROL — open residual`** | an emitted-constructed node carries `NULL_SLOT`. The **limit** is pinned (the survival control asserts it); the property is not delivered. Closing it is a `B2F` lifecycle decision |
+| **AC-1** tag *reachability* | **`NO CONTROL — open residual`** — ⛔ **promoted into `AC-10`'s scope by the RECUT** | a tag no disposition can produce is caught by review, not by CI. The marker sweep now pins the tag set that admits `Int`, which is **one axis** of reachability and not the sweep over the admitted domain `AC-10` asks for |
+| **AC-4** wide `Int` at a persistent boundary | `b2v_a_wide_persistent_int_materializes_and_reads_back_by_content`; `b2v_emitted_code_constructs_a_wide_persistent_int_that_outlives_the_arena`; `b2v_the_magnitude_marker_relation_is_closed_over_owner_and_marker` | **the residual is CLOSED, not carried.** The magnitude lives in the region's own limb table; the oracle is `RuntimeIntV1::canonical_sign_and_limbs`, not the emitted answer re-read. The producer is emitted CLIF and the read happens after the arena is **dropped**. The `(owner, marker)` product is swept with both counts asserted |
+| **AC-1**/**AC-2** emitted immediate construction | `b2v_emitted_immediate_construction_refuses_what_it_cannot_represent` | every immediate tag × nine boundary-straddling payloads, expectations from `BOUNDARY_IMMEDIATE_DOMAIN`; the **round-trip** is the positive control, so the pin is about truncation and not about a status code; `ERR_SHAPE` and `ERR_BOUNDS` asserted as *distinct* refusals. ⚠ The prior form was **absent** — the only magnitude control exercised Rust materialization |
+| **AC-5** M17b/M18/M19/M20/M21/M22 | the third block's mutation table | ⚠ **M17's first form is reported as uninformative**: it reddened 142 tests by making the graph type-invalid, so it measured the CLIF **verifier**, not the range check |
+| **AC-6** persistent *content-addressing* | **`NO CONTROL — open residual`** — ⛔ **promoted into `AC-10`'s scope by the RECUT** | an emitted-constructed node carries `NULL_SLOT`. The **limit** is pinned (the survival control asserts it); the property is not delivered. Identity minting is the store's alone, so closing this is a lifecycle decision, not a control I can add |
+| **AC-10** the disposition is closed under the emitted round trip | **`NO CONTROL — open residual`** | ⛔ **Not in this fold, and said so rather than implied.** The recut is a review ref that has not bound and the Architect stated it adds no constraint to the fold in flight. The two blocked defects are faces of the predicate and are closed as such; the structural closure that makes further faces unreachable is the next fold's deliverable |
