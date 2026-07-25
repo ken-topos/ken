@@ -140,6 +140,22 @@ key you write is checked against it.**
 >    **same-word/two-concepts trap on a chain whose entire predicate is about
 >    identity provenance.** ⇒ **Give the carrier an unambiguous name.** Do not
 >    call it `origin`.
+>
+> ### ✅ ARCHITECT-SPECIFIED at the B2a seam (`evt_37sc5gv2yfxr8`) — settled, do not re-decide
+>
+> - **Widen `StaticOriginId` ONLY to `pub(in crate::cranelift_backend)`** — not
+>   beyond the backend. A wider visibility is a hard-stop, not a convenience.
+> - **Name the field `static_origin`.** ⛔ Never bare `origin` beside
+>   `RecursorProducerOriginId`.
+> - **Each construction obtains the origin from the plane-driven source
+>   walk/seam** — ⛔ never from pointer, content, clone order, or activation.
+> - ⛔ **The 29 compiler-enumerated sites are a FINITE SURFACE INVENTORY, not
+>   permission to absorb unrelated lowering changes.** The unreviewable-diff stop
+>   still applies.
+> - ⛔ **Do NOT keep a `mod.rs`-only carrier subset as a first increment.** Ruled
+>   against explicitly: an unused partial carrier buys no representation closure,
+>   creates a transitional second-authority surface, and splits one invariant
+>   across two reviews. **Carrier and removal land together.**
 
 Body emission walks `static_transition_plan.semantic`. The old
 whole-configuration path is **removed, not left dormant beside the new one** —
