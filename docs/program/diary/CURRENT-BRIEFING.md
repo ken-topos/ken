@@ -25,9 +25,91 @@
 >   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
 >   the AC rather than gaming it.
 >
-> ## ⇢ RESUME HERE FIRST — 2026-07-25, post-compact
+> ## ⇢ RESUME HERE FIRST — 2026-07-25 T00:45Z
 >
-> **`origin/main = 5015bc71`. `origin/steward/work` = pushed and current.**
+> **`origin/main = 5015bc71`. `origin/steward/work = 91862414` (pushed).**
+>
+> ### 0. LIVE RIGHT NOW — `RT-FNSPLIT-B1R`, a REPRESENTATION RECUT
+>
+> **B2a hard-stopped before any code** (hard-stop **#4**; next Research pull is
+> **#6**). The Architect ruled option **(B)** and correctly **stopped**, calling it
+> a representation recut rather than an in-slice ruling (`evt_7d5v99mh8n9cc`).
+>
+> ★ **Landed B1 contradicts B1's own frame.** `build_semantic_plane` manufactures
+> `0..source_material_elements` ordinal **placeholders** and stores no occurrence
+> atoms and no source-child origins — violating B1 D3 (out-of-line material) and
+> B1 D4 (no emission-time body reconstruction). **The Architect stated on the
+> record that the B1 review conclusion was wrong:** *"I approved B1 while reading
+> the counted placeholder arena as the material arena."*
+>
+> ⇒ **`RT-FNSPLIT-B1R` is B1's unfinished second half**, framed at
+> `docs/program/wp/RT-NATIVE-FNSPLIT-recut-B1R-semantic-material.md`, `active`,
+> **kicked and Working** on `wp/RT-FNSPLIT-B1R-semantic-material`.
+> `RT-FNSPLIT-B2A` is flipped `active` → `ready` behind it and re-anchors after.
+>
+> **My slice call, CONFIRMED by the Architect** (`evt_533hqd0c27atd`): B1R
+> **adds** the origin carrier + material; **B2a removes** the `RuntimeExpr` body
+> and closes the origin-driven seam (that removal is what forces the 6201-line
+> `lowering/core.rs` edit). ⛔ If B1R needs to edit `lowering/core.rs`, it
+> hard-stops to me and I re-slice.
+>
+> **Chain to close:** B1R → B2a → B2b → flip `RT-NATIVE-FNSPLIT` `merged` →
+> release `KW-THEOREM` **to the spec enclave** (owner is `spec`, not runtime).
+>
+> ### 0a. ⭐ `runtime-implementer` IS NOW OPUS 5
+>
+> **Operator, 2026-07-25:** Opus 5 beats `gpt-5.6-sol` on coding; reseat the seat.
+> Done — `moot.toml` now has `model = "claude-opus-5[1m]"` + `effort = "high"`,
+> **no `harness` key** (that is the Claude-seat idiom; `effort`, not
+> `model_reasoning_effort`). Verified `Opus 5 (1M context)` on the pane.
+> Approved to do it **before** the B1R kick because the §2c gate compacts the seat
+> anyway, making the "after retros-in" condition vacuous.
+>
+> ⚠ **It is a Claude-harness seat now**, so the Codex failure classes (strands on
+> a convo mention, silent capacity-banner turn-end, safety-modal tier downgrade)
+> no longer apply to it. **But its kickoff STILL failed to reach its turn** — I
+> repaired it by sending a *pointer* to the leader's `evt_8e651wkz2b7t`, never a
+> rewrite. ⛔ And note: `❯ check for a kickoff…` on that pane was the **suggestion
+> placeholder**, not typed text — a bare Enter did nothing, because the composer
+> was genuinely empty and the message had never arrived.
+>
+> ⚠ **`moot.toml` is TRACKED and its live seat-wiring diff is UNCOMMITTED on
+> `main`** (Opus 5 rollout for enclave/steward, librarian effort bump, doc-leader
+> → terra, plus my reseat). That whole config still needs to reach `main` via the
+> publisher path.
+>
+> ### 0b. ✅ ABI-COMPLETION PROGRAM NOW FULLY TRACKED — 19 of 19
+>
+> **Operator, 2026-07-25** asked to verify PX9–12 and frame the remainder.
+> **17 of 19 WPs had NO tracked issue file.** All now exist, with §5's graph as
+> real `depends_on`/`blocks` so `gen-progress.sh` derives the blocking.
+>
+> ⛔ **CORRECTION the operator should have:** `RT-NATIVE-FNSPLIT` is **UPSTREAM of
+> PX8**, not a follow-on after it —
+> `RT-NATIVE-FNSPLIT → NATIVE-HANDLE-CARRIER → PX8-F-CAP-41 → PX8 → {ABI-R3, PX9}`.
+> PX8 makes **15 of 19** items unblock, so FNSPLIT sits at the **head of the whole
+> program's critical path.**
+>
+> ⭐ **Only `ABI-R1` (S, Foundation, doc-only) and `ABI-S3` (M, Runtime, gates
+> PX12) are startable before PX8 closes.** Everything else descends from PX8 ⇒ the
+> fleet's single-threading is largely **DAG-forced**, not a sequencing failure.
+> **Those two are unframed and are the only parallel ABI work available.**
+>
+> ### 0c. OWED BY ME
+>
+> 1. **DOC-W2 agent-surface review on exact `e1524de1`** (published by me).
+>    Librarian PASS + Architect crates PASS both bind that SHA; my lane is the
+>    last one, then doc-leader opens the Decision. ⚠ Touches `agent/` ⇒ §14a does
+>    **not** exempt it; the Architect vote IS required.
+> 2. **Publish the process batch** (playbooks §1b/§5a-ii, frames, tracker,
+>    briefing, ABI nodes). ⛔ Never bundle onto a WP candidate.
+> 3. **Frame `ABI-R1` + `ABI-S3`** shovel-ready if parallel work is wanted.
+>
+> ⚠ **`steward/work` was 5 behind `main` with a 6-file INTERSECTION** — publishing
+> it as-is would have silently reverted landed state on squash. **Fixed: merged
+> `origin/main` in at `7fd79cfa`** (merge, not rebase, to avoid force-pushing the
+> ref the runtime ring was kicked against). **Re-check the intersection before
+> every publish.**
 >
 > ### 1. THE PRIORITY: close `RT-NATIVE-FNSPLIT`. One team stays on it.
 >
