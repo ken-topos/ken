@@ -36,7 +36,7 @@ Governing rules (non-negotiable):
 
 This doc is realized by work package **F1** (workspace, worktrees, the publisher
 identity, branch protection) and depends on the GitHub repo existing — which it
-does (`ken-topos/ken`) — and the shared dev workspace being provisioned.
+does (`swe-toolkit/ken`) — and the shared dev workspace being provisioned.
 
 ---
 
@@ -321,7 +321,7 @@ The merge gate is where clean-room compliance is *mechanically* enforced:
 
 ## 8. Setup & graduation
 
-Decided: org/repo **`ken-topos/ken`** (public OSS); **GitHub Actions** CI;
+Decided: org/repo **`swe-toolkit/ken`** (public OSS); **GitHub Actions** CI;
 **squash** merges; **one publisher identity**. The single-publisher mechanics
 — the one account/App, branch protection (required checks + merge restricted to
 the publisher), and CI wiring — live in **`docs/ops/github-setup.md`**.

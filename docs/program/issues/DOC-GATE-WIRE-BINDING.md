@@ -7,7 +7,7 @@ size: XS
 gate: none
 depends_on: [DOC-GATE-CONTROL-BINDING]
 blocks: []
-github: https://github.com/ken-topos/ken/pull/933
+github: https://github.com/swe-toolkit/ken/pull/933
 origin: adversary finding I1 on DOC-GATE-CONTROL-BINDING (f0ceb702), side thread thr_2seh2bm1kr5mh evt_5ezj67aakm4he, 2026-07-24. Steward-filed (agents cannot create tracked work per COORDINATION §2); Steward triage = CONFIRMED by measurement, and the overclaim is a Steward defect for the THIRD time this session.
 ---
 

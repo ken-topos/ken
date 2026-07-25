@@ -22,21 +22,21 @@
 #
 # Authors are typically the `ken-ci` App (not a code owner → no self-approval
 # conflict). Reviewer/merger handles must be GitHub teams with member accounts.
-# PLACEHOLDER handles — create under the ken-topos org (docs/ops/github-setup.md).
+# PLACEHOLDER handles — create under the swe-toolkit org (docs/ops/github-setup.md).
 
 # Architect: required review everywhere.
-*                        @ken-topos/architect
+*                        @swe-toolkit/architect
 
 # Spec enclave (clean-room): its contract, plus Architect.
-/spec/                   @ken-topos/team-spec  @ken-topos/architect
-/conformance/            @ken-topos/team-spec  @ken-topos/architect
+/spec/                   @swe-toolkit/team-spec  @swe-toolkit/architect
+/conformance/            @swe-toolkit/team-spec  @swe-toolkit/architect
 
 # --- Optional, enable by uncommenting when the accounts exist ---
 # Force Spec (soundness) review on the trusted kernel / prover:
-# /crates/ken-kernel/    @ken-topos/team-spec  @ken-topos/architect
-# /crates/ken-prover/    @ken-topos/team-spec  @ken-topos/architect
+# /crates/ken-kernel/    @swe-toolkit/team-spec  @swe-toolkit/architect
+# /crates/ken-prover/    @swe-toolkit/team-spec  @swe-toolkit/architect
 # Steward owns the workflow corpus (Architect co-owns so Steward PRs aren't
 # self-approval-blocked):
-# /agent/                @ken-topos/steward    @ken-topos/architect
+# /agent/                @swe-toolkit/steward    @swe-toolkit/architect
 # Librarian owns product docs:
-# /docs/                 @ken-topos/librarian  @ken-topos/architect
+# /docs/                 @swe-toolkit/librarian  @swe-toolkit/architect

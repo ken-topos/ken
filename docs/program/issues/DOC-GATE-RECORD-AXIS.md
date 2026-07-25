@@ -7,7 +7,7 @@ size: S
 gate: none
 depends_on: []
 blocks: []
-github: https://github.com/ken-topos/ken/pull/922
+github: https://github.com/swe-toolkit/ken/pull/922
 origin: adversary findings F1 + F2 on DOC-VALIDATION-BINDING (96ab2b4b), side thread thr_2seh2bm1kr5mh evt_382156eh3xayn, 2026-07-24. Steward-filed (agents cannot create tracked work per COORDINATION §2); Steward triage = both CONFIRMED PREVENTIVE.
 ---
 

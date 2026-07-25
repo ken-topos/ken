@@ -17,7 +17,7 @@ version = "0.0.0"
 edition = "2021"
 license = "MIT"
 authors = ["Pat Lasswell"]
-repository = "https://github.com/ken-topos/ken" # PLACEHOLDER — set in WP F1
+repository = "https://github.com/swe-toolkit/ken" # PLACEHOLDER — set in WP F1
 rust-version = "1.79"
 
 # --- Compute/disk discipline (see docs/ops/compute-budget.md) ---

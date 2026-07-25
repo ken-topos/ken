@@ -28,7 +28,7 @@ Build teams **author via the App**, so they need no accounts.
 
 ## Phase 0 — Prereqs (5 min)
 
-- [ ] You are an **owner** of the `ken-topos` org.
+- [ ] You are an **owner** of the `swe-toolkit` org.
 - [ ] `gh` CLI installed and authed as your owner account: `gh auth status`.
 - [ ] A password manager with **TOTP support** (you'll create 2FA for ~4
       accounts) and a safe place for each account's **recovery codes**.
@@ -60,7 +60,7 @@ Gotchas:
 ## Phase 2 — Add the accounts to the org  [gh or manual] (~5 min)
 
 - [ ] Invite each as a **Member** (not Owner):
-      `gh api -X POST /orgs/ken-topos/invitations -f email='<you>+ken-<role>@gmail.com' -f role='direct_member'`
+      `gh api -X POST /orgs/swe-toolkit/invitations -f email='<you>+ken-<role>@gmail.com' -f role='direct_member'`
       (or org → People → Invite member).
 - [ ] From **each account's** browser session, accept the invitation.
 - [ ] Confirm each shows 2FA-enabled in org → People (if the org enforces 2FA).
@@ -76,20 +76,20 @@ grant write.
 - [ ] Create teams:
       ```
       for t in architect team-spec integration; do
-        gh api -X POST /orgs/ken-topos/teams -f name="$t" -f privacy=closed >/dev/null
+        gh api -X POST /orgs/swe-toolkit/teams -f name="$t" -f privacy=closed >/dev/null
       done
       ```
 - [ ] Add members:
       ```
-      gh api -X PUT /orgs/ken-topos/teams/architect/memberships/ken-architect
-      gh api -X PUT /orgs/ken-topos/teams/team-spec/memberships/ken-spec-author
-      gh api -X PUT /orgs/ken-topos/teams/team-spec/memberships/ken-spec-qa
-      gh api -X PUT /orgs/ken-topos/teams/integration/memberships/ken-publisher
+      gh api -X PUT /orgs/swe-toolkit/teams/architect/memberships/ken-architect
+      gh api -X PUT /orgs/swe-toolkit/teams/team-spec/memberships/ken-spec-author
+      gh api -X PUT /orgs/swe-toolkit/teams/team-spec/memberships/ken-spec-qa
+      gh api -X PUT /orgs/swe-toolkit/teams/integration/memberships/ken-publisher
       ```
 - [ ] Grant each team **write** on the repo (so CODEOWNERS requests them):
       ```
       for t in architect team-spec integration; do
-        gh api -X PUT /orgs/ken-topos/teams/$t/repos/ken-topos/ken -f permission=push
+        gh api -X PUT /orgs/swe-toolkit/teams/$t/repos/swe-toolkit/ken -f permission=push
       done
       ```
 - [ ] (Optional/future) create the build-team teams `team-kernel … team-foundation`
@@ -140,7 +140,7 @@ Org → **Settings → Developer settings → GitHub Apps → New GitHub App** (
 - [ ] Create the App. **Note the App ID.**
 - [ ] **Generate a private key** → download the `.pem`. Store it in your secret
       manager — it is a credential equal to all the App's powers; never commit it.
-- [ ] **Install App** → only `ken-topos/ken`. Note the **installation ID**
+- [ ] **Install App** → only `swe-toolkit/ken`. Note the **installation ID**
       (visible in the install URL / `gh api /app/installations` later).
 - [ ] Put App ID + installation ID + the `.pem` where the harness can read them
       (the harness mints short-lived installation tokens from these for the
@@ -153,7 +153,7 @@ Org → **Settings → Developer settings → GitHub Apps → New GitHub App** (
 The reviewer/merger agents act as their account via a PAT. From **each account's**
 Settings → Developer settings → **Fine-grained tokens** → Generate:
 
-- [ ] Resource owner = `ken-topos`; **Only select repositories** = `ken-topos/ken`.
+- [ ] Resource owner = `swe-toolkit`; **Only select repositories** = `swe-toolkit/ken`.
 - [ ] Permissions:
       - `ken-architect`, `ken-spec-author`, `ken-spec-qa`: **Pull requests: RW**,
         Contents: Read.
@@ -171,8 +171,8 @@ not a PAT.)
 
 - [ ] On github.com, edit `.github/CODEOWNERS` in the web editor (don't save) —
       GitHub shows a **"Owners" / syntax** check inline; confirm **no
-      "unknown owner / no write access"** warnings for `@ken-topos/architect` and
-      `@ken-topos/team-spec`. Fix team membership/access (Phase 3) if any appear.
+      "unknown owner / no write access"** warnings for `@swe-toolkit/architect` and
+      `@swe-toolkit/team-spec`. Fix team membership/access (Phase 3) if any appear.
 
 ---
 
@@ -208,7 +208,7 @@ Repo → Settings → Branches → add a rule for `main` (or use a ruleset). Set
 
 `gh` starting point (adjust; the protection payload is fiddly — UI is fine):
 ```
-gh api -X PUT /repos/ken-topos/ken/branches/main/protection --input protection.json
+gh api -X PUT /repos/swe-toolkit/ken/branches/main/protection --input protection.json
 ```
 where `protection.json` sets `required_status_checks.contexts` to the four check
 names above, `required_pull_request_reviews.require_code_owner_reviews=true` +

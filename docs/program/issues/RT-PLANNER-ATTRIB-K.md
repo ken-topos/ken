@@ -7,7 +7,7 @@ size: XS
 gate: none
 depends_on: []
 blocks: []
-github: https://github.com/ken-topos/ken/pull/935
+github: https://github.com/swe-toolkit/ken/pull/935
 origin: adversary finding J1 on RT-PLANNER-DIAGNOSTIC-K (36dd61f6), side thread thr_2seh2bm1kr5mh evt_3zcz8pz8hd8jp, 2026-07-24 — routed to the Architect as a representation fork; ruled (a) at evt_6091m3nhregch, which names the Steward as next mover. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 

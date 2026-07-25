@@ -1,6 +1,6 @@
 # GitHub setup
 
-How `ken-topos/ken` (public OSS) is wired for the **single-publisher** git model
+How `swe-toolkit/ken` (public OSS) is wired for the **single-publisher** git model
 (`../program/04-git-and-integration.md`,
 `../adr/0003-credential-free-publisher.md`). The whole fleet runs in one shared
 clone; **agents do local git only** and the scripted publisher path is the sole
@@ -60,7 +60,7 @@ before merge.
 ## Status checklist (do these to go live)
 
 - [ ] Create the publisher identity — either the `ken-ci` App (install on
-  `ken-topos/ken`) **or** a publisher machine-user (+tag, 2FA, PAT).
+  `swe-toolkit/ken`) **or** a publisher machine-user (+tag, 2FA, PAT).
 - [ ] Point the scripted publisher harness at the publisher token.
 - [ ] Configure branch protection / ruleset as above (required checks +
   push/merge restricted to the publisher + linear history + squash).

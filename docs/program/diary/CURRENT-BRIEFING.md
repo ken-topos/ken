@@ -3003,8 +3003,10 @@ git ls-remote origin refs/heads/<branch>   # MUST equal the requested SHA
 ```
 
 If it does not match, **push it yourself** — mint via
-`.devcontainer/mint-gh-token.sh`, then
-`git push https://x-access-token:$TOKEN@github.com/ken-topos/ken.git <sha>:refs/heads/<branch>`,
+`.devcontainer/mint-gh-token.sh`, then push to a URL **derived from `origin`**
+(`git remote get-url origin | sed "s|https://|https://x-access-token:${T}@|"`) —
+⛔ **never a hardcoded org**, which the 2026-07-25 `ken-topos` → `swe-toolkit`
+rename would have silently broken behind GitHub's redirect —
 and **re-verify with `ls-remote` after**. Often a clean fast-forward (the stale
 head is an ancestor) — check before assuming a force is needed.
 

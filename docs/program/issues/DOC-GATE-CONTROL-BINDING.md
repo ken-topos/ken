@@ -7,7 +7,7 @@ size: S
 gate: none
 depends_on: [DOC-GATE-RECORD-AXIS]
 blocks: []
-github: https://github.com/ken-topos/ken/pull/928
+github: https://github.com/swe-toolkit/ken/pull/928
 origin: adversary finding G1 on DOC-GATE-RECORD-AXIS (64b0811f), side thread thr_2seh2bm1kr5mh evt_4j8fschh7v4vx, 2026-07-24. Steward-filed (agents cannot create tracked work per COORDINATION §2); Steward triage = CONFIRMED, and the overclaim half is a Steward defect.
 ---
 

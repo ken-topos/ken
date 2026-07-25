@@ -1,4 +1,4 @@
-# Working in `ken-topos/ken`
+# Working in `swe-toolkit/ken`
 
 Guidance for any Claude Code session (and any agent) operating in this repo.
 
