@@ -32,7 +32,41 @@
 > **`RT-FNSPLIT-B2A-C` = `merged`** at `2db29abe`, retros in 3/3, adversary
 > notified. **Entry 3 CLOSED.**
 >
-> ### ⛔⛔ BLOCKED ON A PROVIDER OUTAGE — `RT-FNSPLIT-B2A-S` is `ready`, NOT released
+> ### ⛔⛔ ESCALATED TO THE OPERATOR — `evt_6wpxydjj299ba`. HOLDING B2A-S.
+>
+> **The decision requested: may B2A-S be released with `runtime-leader` and
+> `runtime-qa` UNCOMPACTED, for this one kickoff?** ⛔ **I did NOT self-authorize
+> it** — §2c admits no before-work exception and was hardened by three operator
+> corrections, each starting from exactly the reasoning available here.
+> ⇒ **ON RESUME: check the channel for the operator's ruling. If none, KEEP
+> HOLDING and keep retrying `/compact`. Do not waive it yourself.**
+>
+> ⭐ **The fact that shapes the request, and I verified it rather than assuming:**
+> a liveness-only prompt to `runtime-leader` **SUCCEEDED** (`evt_1x4ggwf73b08x`,
+> self-reported `ctx ≈ 7%`). ⇒ **Normal turns work; ONLY the remote-compact task
+> is 503.** The ring is *capable of the work* and *incapable of being compacted*.
+> `runtime-implementer` (Claude harness) **is** compacted at `ctx 0%`.
+>
+> ⇒ **The rule's PURPOSE (no stale-context elaboration) appears already met while
+> its MECHANISM is unavailable** — that narrow shape is why it is an operator call
+> and not mine. My recommendation to them: **waive for this single kickoff.**
+> ⚠ **`ctx ≈ 7%` is reported as an INPUT TO THEIR DECISION, never as my licence** —
+> "they're only at N%" is the exact inversion the rule forbids.
+>
+> ### ⛔ THE OUTAGE ITSELF — 4 retries over ~45 min, all 503
+>
+> ```
+> 503 Service Unavailable · chatgpt.com/backend-api/codex/responses
+> auth error code: biscuit_baker_service_me_circuit_open
+> ```
+>
+> A circuit breaker is deliberate load-shedding, so retries inside the open window
+> fail by design. ⚠ **Poll for success OR the 503 — never success alone**, or a
+> poller spins forever. ⇒ **Next mixed-ring gate: compact the CODEX seats FIRST**;
+> they are the ones that can fail, and finding out after compacting the Claude seat
+> spends its fresh context on a wait of unknown length.
+> ⚠ **Do NOT reseat or downgrade a tier over a provider blip** — that is operator
+> territory and I explicitly did not ask for it.
 >
 > **`/compact` FAILS on BOTH Codex seats** (`runtime-leader`, `runtime-qa`):
 >
