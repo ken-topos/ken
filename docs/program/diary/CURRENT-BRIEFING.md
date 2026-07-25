@@ -28,7 +28,11 @@
 > ## ⇢ RESUME HERE FIRST — 2026-07-25 T02:45Z
 >
 > **`origin/main = 70bd2c74`** (PR #938 MERGED, content-verified) ·
-> **`origin/steward/work = f70cdbdf`** (pushed).
+> **`origin/steward/work = 72a2fe87`** (pushed; re-slice checkpoint).
+>
+> ⚠ **`DOC-ATTEST-LIVING` and everything after `70bd2c74` is on `steward/work`
+> ONLY, not on `main`.** The next publish carries it. ⛔ Before publishing, check
+> the merge-base INTERSECTION — `main` has moved twice today.
 >
 > ### ⇢ THE NEXT ACT — ALL RULINGS ARE IN. AUTHOR TWO FRAMES, THEN KICK.
 >
