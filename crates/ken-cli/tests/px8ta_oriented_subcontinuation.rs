@@ -259,9 +259,12 @@ fn public_two_three_level_brackets_finish_and_release_lifo() {
     // Production is unaffected: this test drives the lowering directly on the
     // libtest worker, while a real build runs on the main thread (8 MiB by
     // `ulimit -s`), so the product had ~3.7x the headroom this harness gave
-    // itself. The wrapper below makes the harness match the product, exactly
-    // as `px8ds_real_same_depth_path_rejects_flat_order_and_runs_exact_edges`
-    // in this file already does.
+    // itself. The wrapper below gives the harness **at least** the product's
+    // headroom, exactly as
+    // `px8ds_real_same_depth_path_rejects_flat_order_and_runs_exact_edges` in
+    // this file already does. ⚠ Not "matches the product": 256 MiB is 32x the
+    // product's 8 MiB, and saying "matches" would understate by how much this
+    // stops being able to observe a stack regression at all.
     //
     // ⛔ This is a harness fix and nothing more. It is NOT scaling evidence for
     // per-static-origin target functions, and it does NOT discharge the n=3..7

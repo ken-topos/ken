@@ -109,8 +109,9 @@ fn run_px8j_malformed_recursor_consumer(
     };
     let lowered_fixture = match consumer {
         Px8jDirectRecursorConsumer::PendingLetProducer => &pending_let,
-        Px8jDirectRecursorConsumer::ProducerCall
-        | Px8jDirectRecursorConsumer::OrdinaryCall => &call,
+        Px8jDirectRecursorConsumer::ProducerCall | Px8jDirectRecursorConsumer::OrdinaryCall => {
+            &call
+        }
     };
     let (static_transition_plan, fixture_origin) = planned_root_occurrence(lowered_fixture);
     let mut compiler = Lowering {
@@ -220,15 +221,11 @@ fn run_px8j_malformed_recursor_consumer(
         residual: Box::new(Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
-            // A childless residual: `Construct` with no arguments derives no
-            // child origin, so an inert planned origin is honest here.
-            body: OwnedSourceOccurrence {
-                expr: RuntimeExpr::Construct {
-                    constructor: "ctor:fixture::PX8J::Done".to_string(),
-                    args: Vec::new(),
-                },
-                static_origin: inert_test_static_origin(),
-            },
+            // An inert residual body. This test drives the recursor-malformation
+            // validator and never lowers the body, so the inert planned origin is
+            // the whole of it — and since B2A-S the carrier *is* the origin, the
+            // fixture can no longer pair an arbitrary term with an unrelated tag.
+            body: inert_test_static_origin(),
         }),
         activation: ContinuationActivationId(8),
         invocation: RecursorInvocationSegment::new(
@@ -515,15 +512,9 @@ fn run_px8ds_edge_consumer(
         residual: Box::new(Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
-            // A childless residual: `Construct` with no arguments derives no
-            // child origin, so an inert planned origin is honest here.
-            body: OwnedSourceOccurrence {
-                expr: RuntimeExpr::Construct {
-                    constructor: "ctor:fixture::PX8DS::Done".to_string(),
-                    args: Vec::new(),
-                },
-                static_origin: inert_test_static_origin(),
-            },
+            // An inert residual body, as in the PX8J fixture above: the carrier is
+            // the origin, and this test never lowers the body.
+            body: inert_test_static_origin(),
         }),
         activation,
         invocation: segment,
@@ -555,8 +546,9 @@ fn run_px8ds_edge_consumer(
     // the compiler under test.
     let lowered_fixture = match consumer {
         Px8jDirectRecursorConsumer::PendingLetProducer => &pending_let,
-        Px8jDirectRecursorConsumer::ProducerCall
-        | Px8jDirectRecursorConsumer::OrdinaryCall => &call,
+        Px8jDirectRecursorConsumer::ProducerCall | Px8jDirectRecursorConsumer::OrdinaryCall => {
+            &call
+        }
     };
     let (static_transition_plan, fixture_origin) = planned_root_occurrence(lowered_fixture);
     compiler.static_transition_plan = static_transition_plan;
@@ -3317,7 +3309,8 @@ fn perturbing_a_borrowed_address_does_not_move_any_derived_origin() {
 
 #[test]
 fn an_out_of_range_child_position_is_a_loud_planner_invariant() {
-    let (plan, root) = planned_root_occurrence(&one_child_record());
+    let record = one_child_record();
+    let (plan, root) = planned_root_occurrence(&record);
     let error = plan
         .child_static_origin(root, 7)
         .expect_err("a record with one field has no child at position 7");
@@ -3411,36 +3404,98 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
     }
 }
 
-/// N3 — **no plan `origin -> expr` lookup from a lowering consumer.**
+/// **`RT-FNSPLIT-B2A-S` D4/AC-4 — the `origin -> expression` lookup count is
+/// EXACTLY ONE.** This pin *replaces* `RT-FNSPLIT-B2A-C`'s N3, and the transition
+/// is stated here rather than in a commit message so it stays auditable:
 ///
-/// Pinned at the producing end rather than by searching for callers: the plan
-/// exposes exactly three origin accessors to the rest of the backend, and none
-/// of them returns an expression. `RT-FNSPLIT-B2A-S`'s occurrence table was
-/// deliberately NOT folded in for this reason (D8), so the lookup this pin
-/// forbids does not exist to be called.
+/// | | B2A-C's N3 (retired) | this pin |
+/// |---|---|---|
+/// | lookups that exist | **0** — `!source.contains("-> Result<&'src RuntimeExpr")` | **1** |
+/// | consumers that call one | 0 (none existed to call) | **1** |
+///
+/// ⛔ N3 was **not** violated — it was **retired by design**. B2A-C asserted zero
+/// because at that point the origin was provenance, and any lookup would have been
+/// an unaudited second authority. B2A-S's whole job is to introduce the lookup so
+/// that a retained body is selected by its static name. ⭐ The count therefore goes
+/// `0 -> 1`, never `0 -> unbounded`: one producer, one consumer.
+///
+/// A reviewer reading the new lookup against B2A-C's AC list without this table
+/// would reject a correct diff.
 #[test]
-fn the_plan_exposes_no_origin_to_expression_lookup() {
-    let source = include_str!("../../../planning/static_transition.rs");
-    let exported: Vec<&str> = source
+fn exactly_one_plan_origin_to_expression_lookup_exists() {
+    let planner = include_str!("../../../planning/static_transition.rs");
+
+    // The PRODUCING end, pinned as a whole exported surface rather than by
+    // searching for one name: a second resolver added here would redden this even
+    // if it were never called.
+    let exported: Vec<&str> = planner
         .lines()
-        .filter(|line| line.trim_start().starts_with("pub(in crate::cranelift_backend) fn "))
+        .filter(|line| {
+            line.trim_start()
+                .starts_with("pub(in crate::cranelift_backend) fn ")
+        })
         .map(|line| line.trim())
         .collect();
     assert_eq!(
         exported,
         vec![
+            "pub(in crate::cranelift_backend) fn source_occurrence(",
             "pub(in crate::cranelift_backend) fn child_static_origin(",
             "pub(in crate::cranelift_backend) fn root_static_origin(",
             "pub(in crate::cranelift_backend) fn declaration_occurrence_origin(",
-            "pub(in crate::cranelift_backend) fn plan_static_transition_graph(",
+            "pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(",
         ],
-        "N3 -- the planner's exported surface changed; an origin->expression \
-         accessor here would let a lowering consumer select a body by tag, \
-         which is RT-FNSPLIT-B2A-S and not this unit"
+        "AC-4 -- the planner's exported surface changed; exactly one of these may \
+         return a source term"
     );
-    assert!(
-        !source.contains("-> Result<&'src RuntimeExpr"),
-        "N3 -- no accessor may return a borrowed source expression"
+    assert_eq!(
+        planner
+            .lines()
+            .filter(|line| line.contains("-> Result<&'src RuntimeExpr"))
+            .count(),
+        1,
+        "AC-4 -- exactly one accessor may return a borrowed source expression \
+         (B2A-C's N3 required zero; B2A-S requires one)"
+    );
+
+    // The CONSUMING end. Comment lines are excluded because this very file and the
+    // resolver's own doc comment name the function -- an oracle that greps a name
+    // otherwise fires on the prose describing it.
+    let call_sites = |source: &str| {
+        source
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .filter(|line| line.contains(".source_occurrence("))
+            .count()
+    };
+    assert_eq!(
+        call_sites(include_str!("../../core.rs")),
+        1,
+        "AC-4 -- `retained_body_occurrence` is the only caller of the plan resolver"
+    );
+    assert_eq!(
+        call_sites(include_str!("../../mod.rs")),
+        0,
+        "AC-4 -- the resolver is called from the SCC, not from the lowering root"
+    );
+
+    // ⭐ The closure that makes those two counts a complete census rather than two
+    // spot checks: `static_transition_plan` is a private field of `Lowering`, so
+    // only code in `lowering/` can reach the resolver at all -- and `lowering/`
+    // declares exactly one submodule, whose own contents are tests. Adding
+    // `lowering/anything.rs` requires a `mod` line here, which reddens this.
+    let lowering_root = include_str!("../../mod.rs");
+    let submodules: Vec<&str> = lowering_root
+        .lines()
+        .map(|line| line.trim())
+        .filter(|line| line.contains(" mod ") || line.starts_with("mod "))
+        .filter(|line| !line.starts_with("//"))
+        .collect();
+    assert_eq!(
+        submodules,
+        vec!["pub(in crate::cranelift_backend) mod core;"],
+        "AC-4 -- a new lowering submodule could call the resolver without this \
+         test noticing; enumerate it above when one is added"
     );
 }
 
@@ -3548,5 +3603,163 @@ fn every_source_term_carrier_holds_an_occurrence_and_never_a_bare_expression() {
             }
             index += 1;
         }
+    }
+}
+
+// ─── RT-FNSPLIT-B2A-S AC-1/AC-6 — the retained-body carrier holds a NAME ──────
+//
+// ⛔ AC-1 asks for this structurally, not asserted. It reads the DECLARATIONS of
+// the retained-closure variants, so a mention of `OwnedSourceOccurrence` in a
+// comment can neither satisfy nor break it, and it states the covered population
+// (AC-6) per variant in the assertions themselves.
+
+/// The retained-body-term predicate, factored out so it can be given a positive
+/// control. ⚠ Without one this pin would pass for the trivial reason that it finds
+/// nothing — a negative check passes for any reason at all.
+#[cfg(test)]
+fn is_retained_body_term_field(line: &str) -> bool {
+    let field = line.trim();
+    field == "body: RuntimeExpr,"
+        || field == "body: OwnedSourceOccurrence,"
+        || field == "body: Box<RuntimeExpr>,"
+}
+
+#[test]
+fn the_retained_body_term_detector_catches_the_shape_it_is_looking_for() {
+    // The pre-B2A-S declaration and the pre-B2A-C one before it, verbatim. If the
+    // detector cannot see these, it asserts nothing about what is there now.
+    assert!(is_retained_body_term_field(
+        "        body: OwnedSourceOccurrence,"
+    ));
+    assert!(is_retained_body_term_field("        body: RuntimeExpr,"));
+    assert!(!is_retained_body_term_field(
+        "        body: StaticOriginId,"
+    ));
+    assert!(!is_retained_body_term_field(
+        "    /// body: OwnedSourceOccurrence, named in a comment"
+    ));
+}
+
+#[test]
+fn retained_closures_carry_a_static_origin_and_no_body_term() {
+    let source = include_str!("../../mod.rs");
+
+    // AC-6, the COVERED population: both variants that retained a body.
+    for header in ["    Closure {", "    DeclarationClosure {"] {
+        let span = declaration_span(source, header);
+        let carried: Vec<&str> = span
+            .iter()
+            .copied()
+            .filter(|line| is_retained_body_term_field(line))
+            .collect();
+        assert!(
+            carried.is_empty(),
+            "AC-1: {header} still carries a body term {carried:?}; the origin would \
+             be decoration beside a second authority rather than the selector"
+        );
+        assert!(
+            span.iter()
+                .any(|line| line.trim() == "body: StaticOriginId,"),
+            "AC-1: {header} must name its body by the planner's static origin"
+        );
+    }
+
+    // AC-6, the EXCLUDED variant, and why — a fact about the declaration rather
+    // than a judgement call: it has no body field to remove.
+    let recursor = declaration_span(source, "    ComputationalRecursorClosure {");
+    assert!(
+        !recursor.iter().any(|line| line.trim().starts_with("body:")),
+        "AC-6: ComputationalRecursorClosure is out of the covered population \
+         because it declares no body carrier; if one is added, it joins the \
+         population and this test must say so"
+    );
+}
+
+/// **`RT-FNSPLIT-B2A-S` D2 — the plan cannot escape into the compiled artifact,
+/// shown by the type system rather than asserted in prose.**
+///
+/// The plan now **borrows** the source trees, so non-escape stopped being
+/// incidental and became load-bearing. `CompiledModule<M>` has no lifetime
+/// parameter, so it cannot store a borrow of them; requiring `'static` is exactly
+/// that claim, checked by the compiler.
+///
+/// ⭐ Falsifiable by mutation in the ordinary D6 way: give `CompiledModule` a
+/// `&'src RuntimeExpr` field and this test **stops compiling**. That is a stronger
+/// failure mode than a red assertion — the escape cannot be introduced and then
+/// argued about.
+#[test]
+fn escaping_a_source_borrow_into_the_compiled_artifact_does_not_typecheck() {
+    fn holds_no_borrowed_state<T: 'static>() {}
+    holds_no_borrowed_state::<CompiledModule<cranelift_jit::JITModule>>();
+}
+
+// ─── RT-FNSPLIT-B2A-S AC-5 — nothing is KEYED by a scheduling entry ───────────
+//
+// ⭐ Why this needs its own pin even though the resolver takes a `StaticOriginId`:
+// hard-stop #8 was a category error in which a scheduling entry stood in for a
+// source occurrence, and nested `ComputationalMatch` occurrences SHARE a
+// scheduling entry. So a collection keyed by an entry looks perfectly injective on
+// every fixture without one — the wrong key still looks unique — and then silently
+// merges two occurrences on the fixture that has one.
+//
+// Pinned at the DECLARATION of the key type rather than at `.entry` read sites:
+// every production read of `.entry` today is an edge endpoint, a `next =`, or an
+// `entries.push`, and none of those is a key. What must never appear is a keyed
+// collection whose key type is the node id.
+
+/// ⚠ Positive control for the AC-5 detector: it must actually recognise the shape
+/// it claims nothing matches, or "no matches" means nothing.
+#[cfg(test)]
+fn declares_collection_keyed_by_node_id(line: &str) -> bool {
+    [
+        "BTreeMap<StaticNodeId",
+        "BTreeSet<StaticNodeId",
+        "HashMap<StaticNodeId",
+        "HashSet<StaticNodeId",
+    ]
+    .iter()
+    .any(|shape| line.contains(shape))
+}
+
+#[test]
+fn the_entry_keyed_collection_detector_catches_the_shape_it_is_looking_for() {
+    assert!(declares_collection_keyed_by_node_id(
+        "    scheduled: BTreeMap<StaticNodeId, RuntimeExpr>,"
+    ));
+    assert!(declares_collection_keyed_by_node_id(
+        "    seen: BTreeSet<StaticNodeId>,"
+    ));
+    // The admissible neighbour: keyed by the OCCURRENCE, which B1R's
+    // `origin.0 == planned_node.0` bijection makes safe.
+    assert!(!declares_collection_keyed_by_node_id(
+        "    occurrences: BTreeMap<StaticOriginId, RuntimeExpr>,"
+    ));
+}
+
+#[test]
+fn no_collection_is_keyed_by_a_scheduling_entry() {
+    for (file, source) in [
+        (
+            "planning/static_transition.rs",
+            include_str!("../../../planning/static_transition.rs"),
+        ),
+        (
+            "planning/static_transition/semantic_ir.rs",
+            include_str!("../../../planning/static_transition/semantic_ir.rs"),
+        ),
+        ("lowering/mod.rs", include_str!("../../mod.rs")),
+        ("lowering/core.rs", include_str!("../../core.rs")),
+    ] {
+        let keyed: Vec<&str> = source
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .filter(|line| declares_collection_keyed_by_node_id(line))
+            .collect();
+        assert!(
+            keyed.is_empty(),
+            "AC-5: {file} keys a collection by a scheduling entry {keyed:?}; nested \
+             ComputationalMatch occurrences share one, so this merges two \
+             occurrences on exactly the fixture that has one"
+        );
     }
 }

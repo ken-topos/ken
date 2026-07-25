@@ -168,12 +168,20 @@ fn run_checked_bounded_nat_fixture(
                         },
                     ];
                     // Real origins: plan the match these cases belong to.
-                    let source_match = RuntimeExpr::Match {
-                        scrutinee: Box::new(RuntimeExpr::Var(0)),
-                        cases: cases.clone(),
-                        default: default.clone(),
-                    };
-                    let (plan, match_origin) = planned_root_occurrence(&source_match);
+                    //
+                    // ⚠ Leaked deliberately, and only in this fixture family: since
+                    // B2A-S the plan **borrows** the term it planned, and these
+                    // cases are built out of `compiler.process_symbols`, so the term
+                    // cannot be declared before the `Lowering` that holds the plan.
+                    // `'static` is the honest way out in a test; the alternative is
+                    // reshaping the fixture whose shape is the thing under test.
+                    let source_match: &'static RuntimeExpr =
+                        Box::leak(Box::new(RuntimeExpr::Match {
+                            scrutinee: Box::new(RuntimeExpr::Var(0)),
+                            cases: cases.clone(),
+                            default: default.clone(),
+                        }));
+                    let (plan, match_origin) = planned_root_occurrence(source_match);
                     compiler.static_transition_plan = plan;
                     compiler.lower_bounded_nat_match(
                         &mut builder,
@@ -240,12 +248,14 @@ fn run_checked_bounded_nat_fixture(
                             },
                         },
                     ];
-                    let source_match = RuntimeExpr::ComputationalMatch {
-                        scrutinee: Box::new(RuntimeExpr::Var(0)),
-                        cases: cases.clone(),
-                        default: default.clone(),
-                    };
-                    let (plan, match_origin) = planned_root_occurrence(&source_match);
+                    // Leaked for the same reason as the ordinary-match fixture above.
+                    let source_match: &'static RuntimeExpr =
+                        Box::leak(Box::new(RuntimeExpr::ComputationalMatch {
+                            scrutinee: Box::new(RuntimeExpr::Var(0)),
+                            cases: cases.clone(),
+                            default: default.clone(),
+                        }));
+                    let (plan, match_origin) = planned_root_occurrence(source_match);
                     compiler.static_transition_plan = plan;
                     let frames = [EliminatorFrame::Computational(
                         ComputationalEliminatorFrame {

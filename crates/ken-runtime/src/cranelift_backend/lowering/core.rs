@@ -15,7 +15,11 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     mut module: M,
     function_name: &str,
     linkage: Linkage,
-    expr: &RuntimeExpr,
+    // `'a`, not an anonymous borrow: the plan files each planned occurrence's term
+    // by reference, so the source tree must outlive the lowering that resolves
+    // tags against it. Nothing borrowed reaches `CompiledModule`, which has no
+    // lifetime parameter — see `Lowering::static_transition_plan`.
+    expr: &'a RuntimeExpr,
     seed_env: &'a NativeSeedEnvironment,
     declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
     staged_process_input: Option<&RuntimeValue>,
@@ -32,8 +36,12 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     // Boundary A of RT-NATIVE-FNSPLIT: close and validate the factored static
     // graph before Cranelift sees any semantic body. The plan's positional
     // child-origin table is reachable from the lowering, so
-    // every occurrence carries the static name the planner already gave it. The
-    // emitter is otherwise unchanged: the origin is provenance, never a selector.
+    // every occurrence carries the static name the planner already gave it.
+    //
+    // ⚠ The plan also outlives this call's borrow of `expr` and holds each planned
+    // occurrence BY REFERENCE, because a retained closure body is now selected by
+    // its origin rather than carried as a clone. The emitter is otherwise
+    // unchanged, and nothing borrowed reaches `CompiledModule`.
     let static_transition_plan = plan_static_transition_graph(expr, &declarations)?;
     let root_static_origin = static_transition_plan.root_static_origin()?;
     let mut sig = module.make_signature();
@@ -316,7 +324,7 @@ impl<'a> Lowering<'a> {
         call_env.extend_from_slice(saved_producer_env);
         self.lower_computational_producer_expr(
             builder,
-            body.borrowed(),
+            self.retained_body_occurrence(*body)?,
             &call_env,
             outer_eliminators,
         )
@@ -594,7 +602,7 @@ impl<'a> Lowering<'a> {
                         &symbol,
                         &captures,
                         &params,
-                        body.borrowed(),
+                        self.retained_body_occurrence(body)?,
                         args,
                         static_origin,
                         producer_env,
@@ -605,12 +613,16 @@ impl<'a> Lowering<'a> {
                         params,
                         body,
                     } => {
+                        // Resolve the tag once, here, and shadow it: everything
+                        // below reads the body's syntax or its origin, and both come
+                        // from the one resolution rather than from a term the
+                        // closure carried.
+                        let body = self.retained_body_occurrence(body)?;
                         if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
                             if let Some((cases, default)) =
-                                ordinary_match_continuation(&params, &body.expr)
+                                ordinary_match_continuation(&params, body.expr)
                             {
-                                let argument =
-                                    self.child_occurrence(static_origin, 1, &args[0])?;
+                                let argument = self.child_occurrence(static_origin, 1, &args[0])?;
                                 let mut frame_env = captures;
                                 frame_env.extend_from_slice(producer_env);
                                 let mut composed = Vec::with_capacity(eliminators.len() + 1);
@@ -654,7 +666,7 @@ impl<'a> Lowering<'a> {
                         call_env.extend_from_slice(producer_env);
                         self.lower_computational_producer_expr(
                             builder,
-                            body.borrowed(),
+                            body,
                             &call_env,
                             eliminators,
                         )
@@ -749,7 +761,7 @@ impl<'a> Lowering<'a> {
                         self.enter_oriented_semantic_region(installed.checked);
                         let returned = self.lower_computational_producer_expr(
                             builder,
-                            body.borrowed(),
+                            self.retained_body_occurrence(body)?,
                             &call_env,
                             &composed,
                         );
@@ -3854,7 +3866,7 @@ impl<'a> Lowering<'a> {
                 call_env.extend(captures);
                 call_env.extend(env);
                 Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
-                    expr: body,
+                    expr: self.machine_body_occurrence(body)?,
                     env: call_env,
                     control,
                 }))
@@ -3875,6 +3887,7 @@ impl<'a> Lowering<'a> {
                         ),
                     ));
                 }
+                let body = self.machine_body_occurrence(body)?;
                 self.lower_source_declaration_call(
                     builder, symbol, captures, body, args, env, control,
                 )
@@ -4007,7 +4020,7 @@ impl<'a> Lowering<'a> {
                         checked_ih_invocation,
                     )?;
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
-                        expr: body,
+                        expr: self.machine_body_occurrence(body)?,
                         env: call_env,
                         control: suspended,
                     }));
@@ -4129,6 +4142,71 @@ impl<'a> Lowering<'a> {
         let lowered = self.lower_source_machine_with_continuation(builder, body, call_env, control);
         self.active_recursive_declarations.pop();
         Ok(SourceCallOutcome::Complete(lowered?))
+    }
+
+    /// Resolves a retained closure body's static origin back to its source term.
+    ///
+    /// ⭐ **This is the only `origin -> expression` lookup in the backend, and the
+    /// only place `StaticTransitionPlan::source_occurrence` is called.**
+    /// `RT-FNSPLIT-B2A-C` shipped a pin (its N3) asserting that no such lookup
+    /// existed, because at that point the origin was provenance and a lookup would
+    /// have been an unaudited second authority. B2A-S **retires that pin on
+    /// purpose** and replaces it with the opposite one: exactly one lookup,
+    /// reachable from exactly one consumer. Zero to one, never zero to unbounded —
+    /// see `exactly_one_plan_origin_to_expression_lookup_exists`.
+    ///
+    /// ⛔ Do not call the plan's resolver anywhere else, and do not widen this to
+    /// take anything but an origin. The moment a caller can pass a term, a
+    /// pointer, or a hash alongside the tag, the tag has stopped being the
+    /// authority and this is decoration again.
+    ///
+    /// ⚠ Stated precisely, **with its window**, because the two counts differ and
+    /// conflating them would overclaim: there is **one** lookup (this function),
+    /// and `grep -c 'self.retained_body_occurrence('` in this file returns
+    /// **eight** — **seven** retained-closure consumption sites (application,
+    /// resume, declaration-call) plus **one** internal composition by
+    /// `machine_body_occurrence`, which is this function's own caller rather than
+    /// a further consumer.
+    ///
+    /// Those seven do not share a single lowering *entry point*, because a retained
+    /// body is lowered by whichever specialized path the call shape selects. What
+    /// makes selection closed is therefore not one caller but that
+    /// `Lowered::Closure`/`DeclarationClosure` carry only a tag — so this is the
+    /// *only* way any of them can reach a term at all.
+    fn retained_body_occurrence(
+        &self,
+        static_origin: StaticOriginId,
+    ) -> Result<SourceOccurrence<'a>, CraneliftBackendError> {
+        Ok(SourceOccurrence {
+            expr: self
+                .static_transition_plan
+                .source_occurrence(static_origin)?,
+            static_origin,
+        })
+    }
+
+    /// The source machine's **owned working copy** of a retained body.
+    ///
+    /// ⚠ The machine's pending frames own their terms (`OwnedSourceOccurrence`)
+    /// and must keep doing so — this is the population boundary of B2A-S, and it
+    /// is forced rather than chosen. `lower_source_forked_match` hands the machine
+    /// a **synthesized** `RuntimeExpr::Trap` that exists nowhere in the source
+    /// tree and therefore has no planned occurrence to be resolved from; a frame
+    /// that could only hold a borrowed view of a planned term could not represent
+    /// it. So the frames stay owned, and this is where a tag becomes one.
+    ///
+    /// ⛔ That is **not** a surviving retained-body carrier. The distinction is
+    /// which value is authoritative: a `Lowered::Closure` names its body by origin
+    /// and holds no term, and this copy is made *at the point of use* from that
+    /// name. Re-lowering the resolved term per call site is symptom-inventory
+    /// entry 2, which `RT-FNSPLIT-B2F` owns and this WP does not claim.
+    fn machine_body_occurrence(
+        &self,
+        static_origin: StaticOriginId,
+    ) -> Result<OwnedSourceOccurrence, CraneliftBackendError> {
+        Ok(OwnedSourceOccurrence::cloned(
+            self.retained_body_occurrence(static_origin)?,
+        ))
     }
 
     /// Derives one **positional** child occurrence of `parent`.
@@ -4662,11 +4740,12 @@ impl<'a> Lowering<'a> {
                     .find_map(|(name, value)| (name == *field).then_some(value))
                     .ok_or_else(|| unsupported("Project", format!("missing field {field}")))
             }
-            // D7, site 1 of 3. The occurrence's own origin is in scope here, so
-            // the body's origin is `child(_, 0)` — determined, not searched for.
-            // ⛔ The body clone is unchanged and is still the only thing any
-            // consumer reads; the origin rides along as provenance so that the
-            // call site which re-lowers this body has a static name for it.
+            // Site 1 of 3. The occurrence's own origin is in scope here, so the
+            // body's origin is `child(_, 0)` — determined, not searched for.
+            // ⭐ The origin is now the *whole* carrier: the body is not cloned into
+            // the closure at all, and the term is recovered from the plan by this
+            // name when a call site re-lowers it. The clone this site used to make
+            // was the second authority the chain exists to remove.
             RuntimeExpr::Closure {
                 captures,
                 params,
@@ -4680,7 +4759,7 @@ impl<'a> Lowering<'a> {
                 Ok(Lowered::Closure {
                     captures: lowered_captures,
                     params: params.clone(),
-                    body: OwnedSourceOccurrence::cloned(body),
+                    body: body.static_origin,
                 })
             }
             // D7, site 2 of 3.
@@ -4707,7 +4786,7 @@ impl<'a> Lowering<'a> {
                 Ok(Lowered::Closure {
                     captures,
                     params: params.clone(),
-                    body: OwnedSourceOccurrence::cloned(body),
+                    body: body.static_origin,
                 })
             }
             RuntimeExpr::DeclarationRef { symbol } => self.lower_declaration_ref(builder, symbol),
@@ -4735,7 +4814,7 @@ impl<'a> Lowering<'a> {
                         &symbol,
                         &captures,
                         &params,
-                        body.borrowed(),
+                        self.retained_body_occurrence(body)?,
                         args,
                         static_origin,
                         env,
@@ -4746,13 +4825,15 @@ impl<'a> Lowering<'a> {
                         params,
                         body,
                     } => {
+                        // Resolved once and shadowed, as in the producer arm above.
+                        let body = self.retained_body_occurrence(body)?;
                         if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
                             // The cases here belong to the closure BODY
                             // occurrence: `ordinary_match_continuation` matches
                             // only a body that *is* a `Match` (over `Var(0)`),
                             // so the body's own origin is their parent.
                             if let Some((cases, default)) =
-                                ordinary_match_continuation(&params, &body.expr)
+                                ordinary_match_continuation(&params, body.expr)
                             {
                                 let argument =
                                     self.child_occurrence(static_origin, 1, &args[0])?;
@@ -4794,7 +4875,7 @@ impl<'a> Lowering<'a> {
                         }
                         call_env.extend(captures);
                         call_env.extend_from_slice(env);
-                        self.lower_expr(builder, body.borrowed(), &call_env)
+                        self.lower_expr(builder, body, &call_env)
                     }
                     mut callee @ Lowered::ComputationalRecursorClosure { .. } => {
                         let checked_ih_invocation =
@@ -4870,7 +4951,7 @@ impl<'a> Lowering<'a> {
                         self.enter_oriented_semantic_region(installed.checked);
                         let result = self.lower_computational_producer_expr(
                             builder,
-                            body.borrowed(),
+                            self.retained_body_occurrence(body)?,
                             &call_env,
                             &frames,
                         );
@@ -6197,7 +6278,7 @@ impl<'a> Lowering<'a> {
                 symbol: symbol.clone(),
                 captures,
                 params: params.clone(),
-                body: OwnedSourceOccurrence::cloned(body),
+                body: body.static_origin,
             });
         }
         if self.declaration_stack.contains(symbol) {
