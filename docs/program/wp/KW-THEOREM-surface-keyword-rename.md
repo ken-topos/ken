@@ -3,82 +3,109 @@
 > **Operator directive, 2026-07-22.** Rename the Ken surface keyword `lemma` to
 > `theorem` across the elaborator, catalog, library, spec, and docs.
 >
-> **Released 2026-07-25 as the fleet's SECOND implementation lane**, running
-> concurrently with `RT-FNSPLIT-B2V` in `crates/ken-runtime`. See the contention
-> section — the concurrency is measured, not assumed.
+> **Triage:** `docs/program/issues/KW-THEOREM.md` — the measured footprint, the
+> per-area occurrence counts, and the fork history. This frame is the
+> shovel-ready brief; the node is the evidence behind it.
 
-## Why this is worth doing on intrinsic merits, not just on the directive
+## ✅ THE DESIGN FORK IS ALREADY RULED — do not re-open it
 
-★ **The rename closes a naming seam rather than opening one.** The surface said
-`lemma` while the implementation, the AST field, and the doc comments already
-said *theorem*:
+**Architect ruling `evt_5aem3ec5kmsg8`, Decision `dec_5bb4zsfafgkm5` RESOLVED:
+(A) HARD RENAME.** `theorem` becomes the **sole** standalone checked-theorem
+declaration keyword. **`lemma` is NOT retained as an accepted or deprecated
+alias.**
 
-```
-crates/ken-elaborator/src/lexer.rs:60   KwLemma, // "lemma" — standalone checked theorem
-crates/ken-elaborator/src/ast.rs:222    theorem: Type,          <- the AST field is ALREADY `theorem`
-crates/ken-elaborator/src/elab.rs:5691  fn elaborate_checked_theorem(
-```
+Rationale as ruled — cite it, do not re-derive it: the semantic object is
+already *theorem* in the AST field, in `elaborate_checked_theorem`, and in
+implementation prose; `theorem` is collision-free in Ken source; every known
+surface consumer is first-party and migrates in-repo. **An alias buys no
+compatibility beneficiary and creates two normative spellings for one
+construct.**
 
-`docs/PRINCIPLES.md` — *subsume-don't-proliferate*. One concept had two names
-across a boundary; this collapses them. **State that argument in the `D6` ADR**;
-do not rest the ADR on the directive alone.
+⛔ **No migration diagnostic is authorized either.** After the rename, `lemma`
+is an ordinary identifier. `AC-4` requires you to **measure and record** what a
+pre-rename source now does — **if that failure mode is actively misleading,
+hard-stop and route it. It is not an implementer design call.**
 
-✅ **`theorem` is free as a keyword — verified.** It occurs in 105 files today,
-**every occurrence prose, doc comment, or internal Rust naming** — never a Ken
-surface keyword, never an identifier in `catalog/**/*.ken.md` or `examples/`.
+## ⛔⛔ ONE WP, ONE ATOMIC MERGE CANDIDATE
 
-## ⛔ CONTENTION — measured at `aecdb001`, and it binds in ONE direction only
+The sequencing objection was acknowledged as **real but not sufficient to
+justify language proliferation.** Therefore:
 
-**Against `RT-FNSPLIT-B2V` (the other live lane): NONE.**
+- **Spec-first authoring may happen first on the integration branch.**
+- ⛔ **NO partial spec / lexer / corpus slice may land on `main`.**
+- The exact candidate must contain **all** of: normative grammar + heading
+  changes; lexer/parser/resolved-AST vocabulary (`KwTheorem`, `TheoremDecl`,
+  `RDeclKind::Theorem` **and consumers**); formatter keyword strings; catalog;
+  conformance; library / docs / agent / tooling surface references; **and every
+  changed anchor plus its inbound consumers.**
 
-| axis | measurement | verdict |
-|---|---|---|
-| crates carrying `lemma` | **44 files, ALL in `ken-elaborator`** | **zero in `ken-runtime`** ✅ |
-| active WP frames carrying `lemma` | `PX8-T`, `PX8-F` only — both `draft` | no live frame collides ✅ |
+⇒ **The flip is atomic at the only boundary users observe.** The authoring order
+below is *authoring* order on the branch, **not** a landing sequence.
 
-⛔ **Against the DOC TRACK: TOTAL, for this WP's whole duration.**
+## ⛔ THE SCOPING TRAP — `lemma` in prose is NOT always the keyword
 
-`library/SOURCE-ATTESTATIONS` carries **17 rows for `catalog/` sources**, and
-this WP rewrites **698 keyword-leading declarations** across 23 catalog files.
-**Every attested catalog source changes hash.** The doc track is the fleet's one
-standing concurrency exception and it lives in `library/` + `agent/` — the same
-ledger. ⇒ **The doc track is PARKED while this runs.** Two lanes, not three.
+★ **This is the whole judgment content of the WP, and a blind sweep gets it
+wrong in both directions.**
 
-★ **This is the ledger axis, not the file axis.** Two WPs contend when one
-mutates a source the other's domain attests, even with disjoint file scopes. A
-`SOURCE-ATTESTATIONS` collision **merges as a silent union** — different rows,
-no conflict, both halves independently correct and jointly wrong. Do not expect
-git to catch it.
+*Lemma* is also an ordinary English/mathematical word for a helper result. Prose
+like *"this lemma supports the main theorem"* is **correct English about
+mathematics** and must **NOT** become *"this theorem supports the main
+theorem."* Conversely `spec/30-surface/32-grammar.md`'s
+`axiom N : T ⇒ lemma N : T = Axiom` **is** the keyword and must change.
 
-## Measured footprint — re-derive every number at pickup
+| class | action |
+|---|---|
+| **keyword occurrence** (declaration, grammar production, keyword list, token) | rename |
+| **English word** (prose about a helper result) | **leave**, and say so |
+| **anchor / identifier derived from the keyword** (section slugs, test names) | rename **with its consumers** |
 
-| area | files | character |
-|---|---|---|
-| `catalog/` | 23 | **698 keyword-leading declarations** + 36 prose occurrences |
-| `docs/` | 67 | prose + historical WP frames |
-| `crates/` | **44, all `ken-elaborator`** | **the only place the keyword is DEFINED** |
-| `spec/` | 23 files / 100 occurrences | **normative grammar + section anchors** |
-| `conformance/` | 15 files / 41 occurrences | **14 `.md` + 1 raw `.ken`** — two oracle classes |
-| `agent/` | 17 | playbooks/memory — prose |
-| `library/` | **10** | ⚠ the node file says 3; **it is 10** — see below |
-| `tooling/` + `examples/` | 3 + 1 | — |
+⛔ **A count of replacements is not evidence.** Cite the classification, and make
+the **leave**-decisions as review-visible as the change-decisions — an
+unexplained surviving `lemma` is indistinguishable from a missed one.
 
-⚠ **Two triage corrections found while framing, both of which widen the work:**
+★ **Ordinary mathematical English remains ordinary English.** What must disappear
+is `lemma` **as Ken syntax**, and identifiers/anchors derived from that spelling.
 
-1. **`library/` is 10 files, not 3.** Three of them are not prose:
+## ⚠ Couplings a sweep will miss
+
+1. **Cross-doc anchors.** `library/learn/reading-ken/02-types-contracts-and-proofs.md`
+   links into `spec/.../33-declarations.md#8-named-proof-claims--prop-lemma-and-attached-proof`
+   and `#83-standalone-lemmas--lemma`. **Renaming a spec heading silently breaks
+   every inbound link.** The librarian's stale-anchor mutation is the gate.
+2. **Pluralisation.** `lemma` / `lemmas` / `` `lemma`s ``. A `\blemma\b` regex
+   misses possessive and plural forms; a naive `lemma→theorem` mangles them.
+3. **The formatter keyword list** (`kenfmt_c_capstone.rs:208`) is a **string
+   list** — a canonicalization oracle that fails in **CI**, not in a targeted
+   build.
+4. **`catalog/**` sources are literate `.ken.md`** — all 698 declarations must
+   still `ken check`, and the catalog is a **dependency-ordered** corpus.
+5. **`RDeclKind::Lemma` is a surface enum variant** — renaming it breaks
+   exhaustive matches in every consumer. That is a *feature* (the compiler
+   enumerates them), but it means the change is not confined to the elaborator.
+6. **Conformance seeds pin exact surface text** and run in CI.
+
+## ⚠ Two triage counts were WRONG — both widen the work
+
+Re-measured at `aecdb001` while framing:
+
+1. **`library/` is 10 files, not 3**, and three are **not prose**:
    `library/manifest.toml`,
    `library/agents/evaluations/results-2026-07-24.toml`, and
    `library/agents/evaluations/fixtures/proof-terminals.txt`. **An
    evaluation-results file and a fixture are oracles, not documentation** —
    changing them changes what a check compares against.
-2. **`conformance/` includes a raw `.ken` source**,
-   `conformance/challenge/C6-lawful-ord-vs-stub/sound-ord-proved.ken`, not only
-   literate `.ken.md`. A glob written for `*.ken.md` misses it.
+2. **`conformance/` includes a raw `.ken` source** —
+   `conformance/challenge/C6-lawful-ord-vs-stub/sound-ord-proved.ken` — not only
+   literate `.ken.md`. **A glob written for `*.ken.md` misses it.**
 
-⇒ **Do not trust this table either.** It is a measurement of `aecdb001`; re-derive
-at pickup and **escalate a discrepancy rather than building around it.**
+Also re-counted: `catalog/` keyword-leading declarations are **698** (not 697)
+plus 36 prose occurrences; `crates/` is **44** files (not 48), **all in
+`ken-elaborator`**; `spec/` is 100 occurrences across 23 files.
 
-## Definition sites — the mechanical core
+⇒ **Do not trust these numbers either.** They measure `aecdb001`. Re-derive at
+pickup and **escalate a discrepancy rather than building around it.**
+
+## Definition sites — the mechanical core, re-derived at `aecdb001`
 
 ```
 crates/ken-elaborator/src/lexer.rs:60     Token::KwLemma enum variant
@@ -92,108 +119,90 @@ spec/20-verification/21-spec-syntax.md:180, :403       lemma-decl ::= "lemma" ..
 spec/30-surface/32-grammar.md:40                       grammar production
 ```
 
-## Deliverables
+## Authoring order on the branch — NOT a landing sequence
 
-### `D1` — the keyword, at its definition sites
+**Normative first, then implementation, then corpus** — the spec is the sole
+authority, so a catalog edit ahead of it would be unanchored.
 
-Rename the token, the keyword map entry, the AST variant, the `RDeclKind`
-variant, every dispatch arm, and the **formatter's keyword string list**.
-Internal names already saying *theorem* stay as they are — they were right.
-
-### `D2` — the normative grammar
-
-Both `lemma-decl` productions in `spec/20-verification/21-spec-syntax.md` and
-the one in `spec/30-surface/32-grammar.md`, plus **section anchors and
-cross-document links into them**. ⚠ `library/` contains cross-doc anchors into
-`spec/`; a renamed anchor breaks them silently.
-
-### `D3` — the catalog corpus, and its attestations
-
-All 698 keyword-leading declarations, plus the 36 prose occurrences. **Then
-regenerate `library/SOURCE-ATTESTATIONS` and reconcile `library/STATUS.md`.**
-⛔ A migrated catalog with a stale ledger is a broken deliverable, not a
-follow-up.
-
-### `D4` — the oracle classes
-
-Conformance seed suites (14 `.md`) **and** the raw `.ken` challenge source, plus
-`library/agents/evaluations/results-2026-07-24.toml` and
-`library/agents/evaluations/fixtures/proof-terminals.txt`. ⛔ **A sweep glob must
-enumerate every Ken source root** — `*.ken.md`, `*.ken`, and the fixture files.
-
-### `D5` — prose currency
-
-`docs/` (67), `agent/` (17), `library/` prose, `tooling/`, `examples/`.
-⛔ **Do not rewrite history.** Closed WP frames, retros, and diary entries that
-describe what was true when written stay as written; ADRs are amended, not
-edited. Migrate *live* prose only, and say in the retro where you drew that line.
-
-### `D6` — the ADR
-
-Record the rename with the *subsume-don't-proliferate* argument above, the
-measured footprint, and the alias decision below.
-
-## ⛔ Settled inputs — these are NOT yours to re-open
-
-1. **No compatibility alias.** `lemma` is removed, not deprecated. The entire
-   corpus migrates atomically in-tree and Ken has no external consumers yet; an
-   alias would install two spellings for one concept permanently — the exact
-   thing this WP exists to remove.
-2. **No migration diagnostic is in scope.** After `D1`, `lemma` becomes an
-   ordinary identifier. ⭐ **`AC-4` requires you to MEASURE and RECORD what a
-   pre-rename source now does** — it does not authorize you to design a nicer
-   error for it. **If the measured failure mode is actively misleading, that is a
-   hard-stop to route, not an implementer design call.**
-3. The rename target is `theorem`. Settled by directive; the ADR justifies it,
-   it does not re-decide it.
+1. **`spec/`** — grammar productions, keyword lists, section headings
+   (**enclave**). Anchors change here, so inbound-link repair is scheduled with
+   it.
+2. **`crates/ken-elaborator`** — lexer token, `RDeclKind` variant, formatter
+   keyword list (**language ring**). The compiler enumerates consumers.
+3. **`catalog/` + `library/`** — the 698 mechanical declarations plus the prose
+   classification (**doc ring; the librarian holds the anchor gate**).
+4. **`conformance/`** — seed suites, CI-gated.
+5. **`docs/` + `agent/`** — prose; largest file count, lowest risk, and where
+   the leave-it-in-English class dominates.
 
 ## Acceptance criteria
 
-**AC-1 — the new spelling works, positively.** A catalog source declaring a
-`theorem` **elaborates and checks**. ⛔ Not a parse test — full elaboration.
+**AC-1 — emit the fixed-base occurrence set.** `lemma` / `lemmas` / possessive
+and plural forms, **plus** surface-derived identifiers and anchors. ⛔ **One glob
+definition covering every Ken source root** — `catalog/**/*.ken.md`,
+`conformance/**/*.ken`, `conformance/**/*.ken.md`, `examples/`, and the
+evaluation fixtures. **Positive control: a deliberately planted `lemma`
+declaration in each root class is SEEN by the sweep.** A sweep that grew one arm
+per missed file has reproduced the bug it exists to prevent.
 
-**AC-2 — the old spelling no longer declares a theorem.** ⚠ **A negative check
-passes for any reason**, so this AC is discharged only alongside `AC-1`'s
-positive control on the same harness. Assert the **exact** diagnostic, never
-`is_err`.
+**AC-2 — classify every row** as (a) keyword-contract rename, (b) derived
+identifier/anchor rename **with its consumers**, or (c) **intentional
+ordinary-English leave**. Changes *and* leaves are review-visible.
 
-**AC-3 — no surface `lemma` survives, by structural closure.** ⛔ **Not a grep
-for one spelling.** Enumerate every Ken source root (`catalog/**/*.ken.md`,
-`conformance/**/*.ken`, `conformance/**/*.ken.md`, `examples/`, the evaluation
-fixtures) from **one** glob definition, and assert the population is zero.
-**Positive control: a deliberately planted `lemma` declaration in each root
-class is SEEN by the sweep.** A sweep that grew one arm per missed file has
-reproduced the bug it was written to prevent.
+**AC-3 — re-emit against the exact merge candidate**, so no newly introduced or
+unclassified hit escapes.
 
-**AC-4 — the pre-rename failure mode is measured and recorded**, per settled
-input 2. Record the exact diagnostic in the retro; do not improve it.
+**AC-4 — positive and negative, on the same harness.** Positively prove
+`theorem` **parses, elaborates, and formats** (⛔ not a parse test — full
+elaboration). Negatively prove `lemma name …` is **rejected, not aliased**,
+asserting the **exact** diagnostic, never `is_err`. ⚠ **A negative check passes
+for any reason** — it is discharged only alongside the positive control. Record
+the measured pre-rename failure mode per the settled input above.
 
-**AC-5 — the attestation ledger is regenerated and consistent.** Every one of
-the 17 catalog rows in `library/SOURCE-ATTESTATIONS` reflects the migrated
-source, and `library/STATUS.md` agrees. ⭐ **Predict the row count before
-regenerating, then compare** — a silently-unioned ledger is the failure this
-lane's contention analysis exists to prevent.
+**AC-5 — exhaustive enum breakage is ONE detector, not the net.** Also run the
+catalog corpus, conformance/CI, the formatter oracle, and the stale-anchor
+detector.
 
-**AC-6 — spec anchors resolve.** Every cross-document link into a renamed
-`spec/` anchor still resolves. Assert it; do not eyeball it.
+**AC-6 — anchors resolve.** Every cross-document link into a renamed `spec/`
+anchor still resolves. Assert it; do not eyeball it.
 
-**AC-7 — the formatter round-trips.** `kenfmt` emits `theorem` and its capstone
-keyword list has no stale entry.
+**AC-7 — the attestation ledger is regenerated and consistent.** All 17
+`catalog/` rows in `library/SOURCE-ATTESTATIONS` reflect the migrated sources
+and `library/STATUS.md` agrees. ⭐ **Predict the row count before regenerating,
+then compare.** A ledger merges as a **silent union** — different rows, no
+conflict, both halves independently correct and jointly wrong.
 
-**AC-8 — no regression.** Green in **CI** — `--workspace` and `--locked` and the
+**AC-8 — no regression.** Green in **CI** — `--workspace`, `--locked`, and the
 conformance suite run on GitHub, never on this box.
+
+## Merge authority
+
+⛔ **The single merge Decision requires Spec/conformance AND Architect
+authority**, because normative grammar and implementation surface change
+together. **This is NOT a `§14a` doc-only path.**
+
+## Contention — measured at `aecdb001`
+
+**Against `RT-FNSPLIT-B2V` (the other live lane): NONE.** All 44 crate files
+carrying `lemma` are in `ken-elaborator`; **zero in `ken-runtime`**. The only WP
+frames touched (`PX8-T`, `PX8-F`) are `draft`.
+
+⚠ **The doc ring is ABSORBED into this WP, not parked** — authoring step 3 is
+its work and the librarian holds the anchor gate. ⛔ **It must not also run an
+independent doc WP**: `library/SOURCE-ATTESTATIONS` carries 17 `catalog/` rows
+that this WP rewrites wholesale, so any concurrent doc work collides on the
+ledger axis — **and a ledger collision merges clean and wrong.**
 
 ## Standing
 
 - ⛔ **Local builds/tests are TARGETED ONLY** — `scripts/ken-cargo -p
   ken-elaborator` / `--test <name>`. **Never `--workspace`** (`COORDINATION §12`,
   operator hard rule). Workspace-green and `--locked` mean **green in CI**.
+- ⛔ **Do not touch `crates/ken-runtime`** — `RT-FNSPLIT-B2V` is live there. If
+  this WP appears to need a change in it, that is a frame-boundary fact:
+  **hard-stop and route it**, do not reach across.
 - **Report an unpushed ref and KEEP GOING.** Build seats have no GitHub
   credential by design; the Steward pushes. Raising it is not gating on it.
-- **The other lane is live.** `RT-FNSPLIT-B2V` is active in `crates/ken-runtime`.
-  ⛔ **Do not touch `crates/ken-runtime`.** If this WP appears to need a change
-  there, that is a frame-boundary fact — **hard-stop and route it**, do not
-  reach across.
 - Read `agent/playbooks/tools/pin-a-property.md` before writing any assertion.
 - **Every anchor above is perishable.** Escalate a false fixed input; do not
   build around it.
