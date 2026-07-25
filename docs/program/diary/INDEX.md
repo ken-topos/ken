@@ -29,6 +29,8 @@ carried a derivable date).
 
 | Date | Summary |
 |---|---|
+| [2026-07-25](2026/Jul/25.md) | Two concurrent implementation lanes (`RT-FNSPLIT-B2V`, `KW-THEOREM`). B2V is QA-approved at `78a57d90` then Architect-blocked on persistent-handle lifetime and an undischarged `AC-4`; its Decision is rejected. Three B2V frame amendments. Two branches found stranded on single local refs; ~64G disk reclaimed. |
+| [2026-07-22](2026/Jul/22.md) | `RT-SPLIT` slices 3–5; `main` found RED on its own documentation gate; three silent-stall classes identified. |
 | [2026-07-21](2026/Jul/21.md) | SPAN-SEAL and RT-PARITY both merged and closed (9 Decisions total, 7 spent on the Steward's own defects, not the rings'). Adversary's RT-PARITY hunt found **BUDGET-EFF**: `TransferCount.remaining` is computed from the raw request length, not the capped effective one, on both interpreter and native — fail-closed but wrong against locked spec `38`. ADR-0010 amended (STR-BIJ) reasoning from PRINCIPLES alone; RT-ESCAPE filed; provider-refusal routing rule set (route to Opus, then gpt-5.6); MODELS.md tier-table fleet-wide correction identified. |
 | [2026-07-20](2026/Jul/20.md) | PX8-J-ERR (#30) hard-stopped to the Architect, ruled, and merged — closing out the PX8 series; issue #30 closed and the operator briefed. PX8-F (#11) also merged, CI green, §10 retros in. |
 | [2026-07-19](2026/Jul/19.md) | PX8-TA oriented-subcontinuation redesign hits three hard-stops; a research-advisory pull produces a strong convergence signal on hard-stop #3. PX8-H finally merges after the marathon Architect ruling chain (see 07-17/07-18); PX8-DS starts. |
