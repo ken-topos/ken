@@ -1,7 +1,8 @@
 # RT-FNSPLIT-B2A-S — retained-body selection defunctionalization
 
 **Owner:** Runtime · **Size:** M
-**Depends on:** `RT-FNSPLIT-B2A-C` (merged, `2db29abe`) · **Blocks:** `RT-FNSPLIT-B2F`
+**Depends on:** `RT-FNSPLIT-B2A-C` (merged, `2db29abe`)
+**Blocks:** `RT-FNSPLIT-B2F`
 **Anchors re-derived on `origin/main` = `4c5afda6`.** ⛔ They are **not** copied
 from the pre-`B2A-C` frame — every line number in the old draft was stale.
 If an anchor does not hold on your base, that is a **hard-stop**.
@@ -178,8 +179,9 @@ not touching it; if you must, **say so** and ⛔ do not re-attest.
 ## Hard-stop
 
 **Count of record is 8** (`RT-NATIVE-FNSPLIT` holds it; that line wins any
-disagreement). ⚠⚠ **#9 IS THE VERY NEXT STOP AND IT FIRES A RESEARCH PULL** — the
-Steward dispatches research **before** the Architect rules. Do not soften a
+disagreement).
+⚠⚠ **#9 IS THE VERY NEXT STOP AND IT FIRES A RESEARCH PULL** — the Steward
+dispatches research **before** the Architect rules. Do not soften a
 deliverable to avoid a stop; **the last two stops were Steward framing defects
 that the ring caught by stopping.**
 
