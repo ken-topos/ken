@@ -25,7 +25,64 @@
 >   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
 >   the AC rather than gaming it.
 >
-> ### ⏳ `RT-PLANNER-ATTRIB-K` IS PUBLISHING — PR #935 @ `23412242` (23:1xZ)
+> ## ⇢ RESUME HERE FIRST — 2026-07-25, post-compact
+>
+> **`origin/main = 5015bc71`. `origin/steward/work` = pushed and current.**
+>
+> ### 1. THE PRIORITY: close `RT-NATIVE-FNSPLIT`. One team stays on it.
+>
+> **Operator, 2026-07-25:** *"closing out RT-NATIVE-FNSPLIT is the priority.
+> We've been working toward that for about 36 hours now… keep one team active on
+> that effort until it closes."*
+>
+> - ⏳ **`RT-FNSPLIT-B2A` (L) is ACTIVE — runtime ring, kicked and `Working`.**
+>   Frame: `docs/program/wp/RT-NATIVE-FNSPLIT-recut-B2a-emission-port.md`, and it
+>   is **on `origin/steward/work`** (pushed *before* the kickoff). Branch
+>   `wp/RT-FNSPLIT-B2A-emission-port` from `5015bc71`.
+> - 📋 **`RT-FNSPLIT-B2B` (M) is FRAMED and `draft`** — `depends_on: [B2A]`. **It
+>   is the slice that CLOSES `RT-NATIVE-FNSPLIT`** and answers the operator's
+>   scaling gate `evt_4btfhwqhah1ye`.
+> - ⇒ **On B2a landing: compact the runtime ring and hand it B2B immediately.**
+>   Do not look for other work for that ring — the operator asked for one team
+>   held on this until it closes, and B2b is already framed so there is no gap.
+> - ⇒ **On B2b landing: flip `RT-NATIVE-FNSPLIT` `active` → `merged`.** That
+>   unblocks `NATIVE-HANDLE-CARRIER` → `PX8-F-CAP-41`.
+>
+> ### 2. ⭐ THEN `KW-THEOREM` — operator-ordered 2026-07-25
+>
+> *"after RT-NATIVE-FNSPLIT closes, run kw-theorem."* **This supersedes the
+> 07-22 "queue position LAST" directive.** Owner is **`spec`** ⇒ the receiving
+> unit is the **spec enclave**, not the runtime ring. Compact it first.
+> ⛔ **Do not promote it early to fill idle enclave time** — idle there is
+> expected until FNSPLIT closes.
+>
+> ### 3. Owed by me, neither touching runtime's path
+>
+> - **Re-review `DOC-W2`'s `agent/` surface on exact `fd73f417`** (I pushed it
+>   for them; doc-leader + doc-author both asked). My prior verdict was **FAIL**
+>   on F1 (let-convention fragment), F2 (`C_instance_T` teaching site), F3
+>   (Findings-routing in the retained trigger). ⚠ DOC-W2 touches `agent/`, so
+>   §14a does **not** exempt it — **the Architect's vote IS required**, parallel
+>   with the Librarian.
+> - **Publish the process batch** on `steward/work` (tracker, briefing, the
+>   architect §1b + steward §5a-ii symptom-inventory mechanism, DOC-W2 frame
+>   rulings, B2a/B2b frames). Nothing is held finished-and-unmerged now, so
+>   §10⁻ permits it. ⛔ Do **not** bundle it onto a WP candidate — that expands a
+>   reviewed diff past §14a.
+>
+> ### 4. New law as of 2026-07-24, applies to every hard-stopping WP
+>
+> **SYMPTOM INVENTORY** — architect §1b appends one line per hard-stop *in the
+> tracked file* (what was special-cased, keyed on what property); at the **3rd
+> entry** it must answer *"do these share a predicate?"* Steward §5a-ii seeds it
+> at release and backstops the check **framing only, never the answer**; a named
+> predicate is a **recut**, which is mine to author. Armed on the FNSPLIT issue
+> file and both B2 frames, seeded with the held chain's four entries and their
+> shared predicate — *a dynamic property must not name static code*.
+>
+> ---
+>
+> ### ⏳ `RT-PLANNER-ATTRIB-K` — MERGED `5015bc71`, PR #935 (history)
 >
 > **Ring closed it in ~20 minutes.** Decision `dec_2ef4dcemsersr` **resolved**,
 > verified from the object: `status: resolved`, `resolved_by:
