@@ -27,7 +27,31 @@
 **`steward/work` = `164afa8a` + this briefing only. I owe nothing. The ring owes
 nothing. Everything below is durable on `main` or on `origin` refs.**
 
-### ▶ THE ONE THING TO KNOW ON RESUME
+### ⛔⛔ THE #10 RULING HAS LANDED — READ IT FIRST, THEN AUTHOR THE FRAME
+
+**Architect ruling `evt_28cnmxf6ncghn`, 2026-07-25.** Headline as received:
+
+> *"hard-stop #10 is VALID and structural. HOLD B2F construction and insert one
+> inert executable-value prerequisite."*
+
+⇒ **This is a re-slice, so the frame is MINE to author (task #46).** `B2O`/`B2R`
+give static code ownership, unit population, slot order/width, and declared
+ownership. They do **not** define what the bits of `ValueWord`/`ResultWord`
+*mean*, nor how compiled code inspects a dynamic aggregate.
+
+**Do this on resume, in order:**
+
+1. `get_recent_context` the **full** ruling — the notification truncated it, and
+   a truncated notification is not a message.
+2. Author the new prerequisite node + shovel-ready frame. **RETAIN** `B2A-S`,
+   `B2O`, `B2R` — a valid hard-stop is not a licence to restart. **REPLACE**
+   only what the ruling names.
+3. `B2F` stays `active` but **held**; re-sequence it behind the new node.
+4. Transcribe durably — **an in-thread ruling is not a deliverable.**
+5. `RT-FNSPLIT-B2O-CHECK` is framed and blocked behind `B2F`; re-check that
+   sequencing once the new node exists.
+
+### ▶ The stop that produced it
 
 **`RT-FNSPLIT-B2F` was kicked, ran ~25 minutes, and hard-stopped at #10 before
 writing any production code.** The ring reports `D1`+`D2`+`D6`+`D7` **jointly
