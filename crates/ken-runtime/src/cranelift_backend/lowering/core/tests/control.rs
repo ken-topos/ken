@@ -109,8 +109,9 @@ fn run_px8j_malformed_recursor_consumer(
     };
     let lowered_fixture = match consumer {
         Px8jDirectRecursorConsumer::PendingLetProducer => &pending_let,
-        Px8jDirectRecursorConsumer::ProducerCall
-        | Px8jDirectRecursorConsumer::OrdinaryCall => &call,
+        Px8jDirectRecursorConsumer::ProducerCall | Px8jDirectRecursorConsumer::OrdinaryCall => {
+            &call
+        }
     };
     let (static_transition_plan, fixture_origin) = planned_root_occurrence(lowered_fixture);
     let mut compiler = Lowering {
@@ -220,15 +221,11 @@ fn run_px8j_malformed_recursor_consumer(
         residual: Box::new(Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
-            // A childless residual: `Construct` with no arguments derives no
-            // child origin, so an inert planned origin is honest here.
-            body: OwnedSourceOccurrence {
-                expr: RuntimeExpr::Construct {
-                    constructor: "ctor:fixture::PX8J::Done".to_string(),
-                    args: Vec::new(),
-                },
-                static_origin: inert_test_static_origin(),
-            },
+            // An inert residual body. This test drives the recursor-malformation
+            // validator and never lowers the body, so the inert planned origin is
+            // the whole of it — and since B2A-S the carrier *is* the origin, the
+            // fixture can no longer pair an arbitrary term with an unrelated tag.
+            body: inert_test_static_origin(),
         }),
         activation: ContinuationActivationId(8),
         invocation: RecursorInvocationSegment::new(
@@ -515,15 +512,9 @@ fn run_px8ds_edge_consumer(
         residual: Box::new(Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
-            // A childless residual: `Construct` with no arguments derives no
-            // child origin, so an inert planned origin is honest here.
-            body: OwnedSourceOccurrence {
-                expr: RuntimeExpr::Construct {
-                    constructor: "ctor:fixture::PX8DS::Done".to_string(),
-                    args: Vec::new(),
-                },
-                static_origin: inert_test_static_origin(),
-            },
+            // An inert residual body, as in the PX8J fixture above: the carrier is
+            // the origin, and this test never lowers the body.
+            body: inert_test_static_origin(),
         }),
         activation,
         invocation: segment,
@@ -555,8 +546,9 @@ fn run_px8ds_edge_consumer(
     // the compiler under test.
     let lowered_fixture = match consumer {
         Px8jDirectRecursorConsumer::PendingLetProducer => &pending_let,
-        Px8jDirectRecursorConsumer::ProducerCall
-        | Px8jDirectRecursorConsumer::OrdinaryCall => &call,
+        Px8jDirectRecursorConsumer::ProducerCall | Px8jDirectRecursorConsumer::OrdinaryCall => {
+            &call
+        }
     };
     let (static_transition_plan, fixture_origin) = planned_root_occurrence(lowered_fixture);
     compiler.static_transition_plan = static_transition_plan;
@@ -3317,7 +3309,8 @@ fn perturbing_a_borrowed_address_does_not_move_any_derived_origin() {
 
 #[test]
 fn an_out_of_range_child_position_is_a_loud_planner_invariant() {
-    let (plan, root) = planned_root_occurrence(&one_child_record());
+    let record = one_child_record();
+    let (plan, root) = planned_root_occurrence(&record);
     let error = plan
         .child_static_origin(root, 7)
         .expect_err("a record with one field has no child at position 7");
@@ -3411,36 +3404,255 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
     }
 }
 
-/// N3 — **no plan `origin -> expr` lookup from a lowering consumer.**
+/// **`RT-FNSPLIT-B2A-S` D4/AC-4 — the `origin -> expression` lookup count is
+/// EXACTLY ONE.** This pin *replaces* `RT-FNSPLIT-B2A-C`'s N3, and the transition
+/// is stated here rather than in a commit message so it stays auditable:
 ///
-/// Pinned at the producing end rather than by searching for callers: the plan
-/// exposes exactly three origin accessors to the rest of the backend, and none
-/// of them returns an expression. `RT-FNSPLIT-B2A-S`'s occurrence table was
-/// deliberately NOT folded in for this reason (D8), so the lookup this pin
-/// forbids does not exist to be called.
+/// | | B2A-C's N3 (retired) | this pin |
+/// |---|---|---|
+/// | lookups that exist | **0** — `!source.contains("-> Result<&'src RuntimeExpr")` | **1** |
+/// | consumers that call one | 0 (none existed to call) | **1** |
+///
+/// ⛔ N3 was **not** violated — it was **retired by design**. B2A-C asserted zero
+/// because at that point the origin was provenance, and any lookup would have been
+/// an unaudited second authority. B2A-S's whole job is to introduce the lookup so
+/// that a retained body is selected by its static name. ⭐ The count therefore goes
+/// `0 -> 1`, never `0 -> unbounded`: one producer, one consumer.
+///
+/// A reviewer reading the new lookup against B2A-C's AC list without this table
+/// would reject a correct diff.
 #[test]
-fn the_plan_exposes_no_origin_to_expression_lookup() {
-    let source = include_str!("../../../planning/static_transition.rs");
-    let exported: Vec<&str> = source
+fn exactly_one_plan_origin_to_expression_lookup_exists() {
+    let planner = include_str!("../../../planning/static_transition.rs");
+
+    // The PRODUCING end, pinned as a whole exported surface rather than by
+    // searching for one name: a second resolver added here would redden this even
+    // if it were never called.
+    let exported: Vec<&str> = planner
         .lines()
-        .filter(|line| line.trim_start().starts_with("pub(in crate::cranelift_backend) fn "))
+        .filter(|line| {
+            line.trim_start()
+                .starts_with("pub(in crate::cranelift_backend) fn ")
+        })
         .map(|line| line.trim())
         .collect();
     assert_eq!(
         exported,
         vec![
+            "pub(in crate::cranelift_backend) fn source_occurrence(",
             "pub(in crate::cranelift_backend) fn child_static_origin(",
             "pub(in crate::cranelift_backend) fn root_static_origin(",
             "pub(in crate::cranelift_backend) fn declaration_occurrence_origin(",
-            "pub(in crate::cranelift_backend) fn plan_static_transition_graph(",
+            "pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(",
         ],
-        "N3 -- the planner's exported surface changed; an origin->expression \
-         accessor here would let a lowering consumer select a body by tag, \
-         which is RT-FNSPLIT-B2A-S and not this unit"
+        "AC-4 -- the planner's exported surface changed; exactly one of these may \
+         return a source term"
     );
-    assert!(
-        !source.contains("-> Result<&'src RuntimeExpr"),
-        "N3 -- no accessor may return a borrowed source expression"
+    assert_eq!(
+        planner
+            .lines()
+            .filter(|line| line.contains("-> Result<&'src RuntimeExpr"))
+            .count(),
+        1,
+        "AC-4 -- exactly one accessor may return a borrowed source expression \
+         (B2A-C's N3 required zero; B2A-S requires one)"
+    );
+
+    // The CONSUMING end, over the WHOLE backend production surface.
+    //
+    // ⛔ The first candidate scanned only `lowering/core.rs` and `lowering/mod.rs`
+    // and argued closure from `Lowering::static_transition_plan` being private.
+    // The Architect rejected that (`evt_6sq2tq3v9jcd0`) and was right: the
+    // resolver is `pub(in crate::cranelift_backend)` and `planning.rs` re-exports
+    // `plan_static_transition_graph` to the backend parent, so ANY backend sibling
+    // can build its own plan and call the resolver without owning a `Lowering` at
+    // all. A second call in `artifact/**`, `compiled.rs` or `planning.rs` would
+    // have stayed green. Privacy of one field was never the closure.
+    let mut mentions = Vec::new();
+    for (file, source) in BACKEND_PRODUCTION_SOURCES {
+        // `static_transition.rs` carries its tests inline; the census is about the
+        // production surface, and the planner's own tests legitimately call the
+        // resolver to exercise it.
+        let production = source
+            .split_once("\n#[cfg(test)]\nmod tests {")
+            .map_or(*source, |(before, _)| before);
+        let n = identifier_occurrences(production, "source_occurrence");
+        if n > 0 {
+            mentions.push((*file, n));
+        }
+    }
+    assert_eq!(
+        mentions,
+        vec![
+            ("lowering/core.rs", 1),
+            ("planning/static_transition.rs", 1)
+        ],
+        "AC-4 -- the resolver may be NAMED exactly twice in production: its \
+         definition in the planner, and its single call from \
+         `retained_body_occurrence`. Any third mention is a second lookup"
+    );
+}
+
+/// Counts whole-identifier occurrences in production source, comments removed.
+///
+/// ⛔ **Neither a substring scan nor a line scan is sound, and the Architect proved
+/// both against me** (`evt_6sq2tq3v9jcd0`, `evt_1p11krxny4wny`). The first census
+/// tested `line.contains(".source_occurrence(")`, which a second lookup evaded by
+/// formatting alone:
+///
+/// ```text
+/// let _second = self
+///     .static_transition_plan
+///     .source_occurrence
+///     (static_origin)?;
+/// ```
+///
+/// No line contains `.source_occurrence(`, so the pin passed with two lookups
+/// present. ⇒ **A text pattern is a claim about layout; the property is about
+/// code.** Tokenizing is the fix, not a longer list of spellings:
+///
+/// - splitting on every non-identifier character makes newlines, dots and spaces
+///   all separators, so **no formatting can hide a mention**;
+/// - matching a **whole token** distinguishes `source_occurrence` from the
+///   `source_occurrences` field, which a substring scan would conflate;
+/// - counting the **identifier** rather than a call shape also catches a path-form
+///   or aliased call (`StaticTransitionPlan::source_occurrence(plan, o)`), because
+///   a method cannot be called without naming it;
+/// - comments are stripped per line **before** tokenizing, because the resolver's
+///   own doc comment and these very notes name it — an oracle that greps a name
+///   otherwise fires on the prose describing it.
+///
+/// ⚠ Residual: a call synthesized by a macro would not name the identifier in this
+/// source. There is no such macro in the backend, and one would be visible in the
+/// same review; this is a stated limit, not a silent one.
+#[cfg(test)]
+fn identifier_occurrences(source: &str, identifier: &str) -> usize {
+    source
+        .lines()
+        .map(|line| line.split_once("//").map_or(line, |(code, _)| code))
+        .flat_map(|code| code.split(|c: char| !c.is_alphanumeric() && c != '_'))
+        .filter(|token| *token == identifier)
+        .count()
+}
+
+#[test]
+fn the_identifier_census_survives_the_evasions_that_defeated_the_text_scan() {
+    // ⭐ Positive control built from the Architect's own two mutations. If the
+    // census cannot see these, the count above asserts nothing.
+    let split_across_lines = "let _second = self\n    .static_transition_plan\n    .source_occurrence\n    (static_origin)?;\n";
+    assert_eq!(
+        identifier_occurrences(split_across_lines, "source_occurrence"),
+        1,
+        "a mention split across lines must still be counted"
+    );
+    let path_form = "let _ = StaticTransitionPlan::source_occurrence(plan, origin)?;\n";
+    assert_eq!(identifier_occurrences(path_form, "source_occurrence"), 1);
+    // The plural FIELD must not be conflated with the resolver.
+    assert_eq!(
+        identifier_occurrences("self.plan.source_occurrences.len()\n", "source_occurrence"),
+        0,
+        "`source_occurrences` is a different identifier"
+    );
+    // Prose must not satisfy or inflate the census.
+    assert_eq!(
+        identifier_occurrences("// calls source_occurrence here\n", "source_occurrence"),
+        0
+    );
+    assert_eq!(
+        identifier_occurrences(
+            "/// `source_occurrence` is the sole route\n",
+            "source_occurrence"
+        ),
+        0
+    );
+}
+
+/// The backend's complete production source surface — the census's **closure
+/// proof**, not a convenience list.
+///
+/// ⭐ Why this is a proof rather than an enumeration someone must remember: a Rust
+/// file is compiled only if an ancestor module declares it with `mod`. So pinning
+/// every production `mod` declaration across the backend pins the *file set*, and
+/// a thirteenth backend file cannot be compiled without reddening
+/// `the_backend_production_surface_inventory_is_closed` below — which is what
+/// forces whoever adds it to extend this list.
+#[cfg(test)]
+const BACKEND_PRODUCTION_SOURCES: &[(&str, &str)] = &[
+    (
+        "cranelift_backend.rs",
+        include_str!("../../../../cranelift_backend.rs"),
+    ),
+    ("artifact/api.rs", include_str!("../../../artifact/api.rs")),
+    ("artifact/mod.rs", include_str!("../../../artifact/mod.rs")),
+    ("compiled.rs", include_str!("../../../compiled.rs")),
+    ("lowering/core.rs", include_str!("../../core.rs")),
+    ("lowering/mod.rs", include_str!("../../mod.rs")),
+    ("planning.rs", include_str!("../../../planning.rs")),
+    (
+        "planning/static_transition.rs",
+        include_str!("../../../planning/static_transition.rs"),
+    ),
+    (
+        "planning/static_transition/semantic_ir.rs",
+        include_str!("../../../planning/static_transition/semantic_ir.rs"),
+    ),
+    ("surface.rs", include_str!("../../../surface.rs")),
+    ("test_objects.rs", include_str!("../../../test_objects.rs")),
+    ("test_support.rs", include_str!("../../../test_support.rs")),
+];
+
+#[test]
+fn the_backend_production_surface_inventory_is_closed() {
+    // Every production `mod` declaration reachable in the backend, paired with the
+    // file that declares it. `mod tests;` is excluded: a sibling test module is not
+    // production surface, and its absence from the census is the point.
+    let mut declared = Vec::new();
+    for (file, source) in BACKEND_PRODUCTION_SOURCES {
+        let production = source
+            .split_once("\n#[cfg(test)]\nmod tests {")
+            .map_or(*source, |(before, _)| before);
+        for line in production.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("//") || !trimmed.ends_with(';') {
+                continue;
+            }
+            let Some(rest) = trimmed.strip_suffix(';') else {
+                continue;
+            };
+            let Some(name) = rest.rsplit_once("mod ").map(|(_, name)| name) else {
+                continue;
+            };
+            if name == "tests" || name.contains(' ') {
+                continue;
+            }
+            declared.push((*file, name));
+        }
+    }
+    assert_eq!(
+        declared,
+        vec![
+            ("cranelift_backend.rs", "artifact"),
+            ("cranelift_backend.rs", "compiled"),
+            ("cranelift_backend.rs", "lowering"),
+            ("cranelift_backend.rs", "planning"),
+            ("cranelift_backend.rs", "surface"),
+            ("cranelift_backend.rs", "test_objects"),
+            ("cranelift_backend.rs", "test_support"),
+            ("artifact/mod.rs", "api"),
+            ("lowering/mod.rs", "core"),
+            ("planning.rs", "static_transition"),
+            ("planning/static_transition.rs", "semantic_ir"),
+        ],
+        "AC-4 -- the backend's module inventory changed, so \
+         BACKEND_PRODUCTION_SOURCES is no longer the whole production surface and \
+         the sole-consumer census above has stopped being closed. Add the new \
+         file to that list."
+    );
+    assert_eq!(
+        declared.len() + 1,
+        BACKEND_PRODUCTION_SOURCES.len(),
+        "AC-4 -- every declared module must appear in the census list exactly once \
+         (+1 for `cranelift_backend.rs`, the root, which no `mod` line declares)"
     );
 }
 
@@ -3548,5 +3760,288 @@ fn every_source_term_carrier_holds_an_occurrence_and_never_a_bare_expression() {
             }
             index += 1;
         }
+    }
+}
+
+// ─── RT-FNSPLIT-B2A-S AC-1/AC-6 — the retained-body carrier holds a NAME ──────
+//
+// ⛔ AC-1 asks for this structurally, not asserted. It reads the DECLARATIONS of
+// the retained-closure variants, so a mention of `OwnedSourceOccurrence` in a
+// comment can neither satisfy nor break it, and it states the covered population
+// (AC-6) per variant in the assertions themselves.
+
+/// Every field a variant declares, in order.
+///
+/// ⛔ The **whole inventory**, not a search for known-bad spellings. The first
+/// candidate matched three exact `body:` spellings, and the Architect rejected it
+/// (`evt_6sq2tq3v9jcd0`): a compile-preserving `cached_body: RuntimeExpr` or
+/// `retained: Box<RuntimeExpr>` beside `body: StaticOriginId` evaded it entirely
+/// once the construction and pattern sites were updated. A detector enumerating
+/// what it forbids can only ever be as complete as the enumeration; pinning what
+/// is **allowed** rejects every added field regardless of name or type.
+#[cfg(test)]
+fn declared_fields(source: &'static str, header: &str) -> Vec<&'static str> {
+    declaration_span(source, header)
+        .into_iter()
+        .skip(1)
+        .take_while(|line| !line.trim_start().starts_with('}'))
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty() && !line.starts_with("//") && !line.starts_with("///"))
+        .collect()
+}
+
+#[test]
+fn the_field_inventory_extractor_sees_an_added_term_field() {
+    // Positive control on the extractor, using the exact evasion the Architect
+    // named. If the extractor cannot see this field, the equality assertion below
+    // is not actually closed over "no additional term carrier".
+    let synthetic =
+        "    Evasion {\n        body: StaticOriginId,\n        cached_body: RuntimeExpr,\n    },\n";
+    let fields = declared_fields(
+        Box::leak(synthetic.to_string().into_boxed_str()),
+        "    Evasion {",
+    );
+    assert_eq!(
+        fields,
+        vec!["body: StaticOriginId,", "cached_body: RuntimeExpr,"],
+        "the extractor must report EVERY declared field, so an added one breaks \
+         the inventory equality"
+    );
+}
+
+#[test]
+fn retained_closures_carry_a_static_origin_and_no_body_term() {
+    let source = include_str!("../../mod.rs");
+
+    // AC-6, the COVERED population: both variants that retained a body. Pinned as
+    // a complete field inventory, so ANY added field -- term-bearing or not --
+    // reddens and has to be justified here.
+    assert_eq!(
+        declared_fields(source, "    Closure {"),
+        vec![
+            "captures: Vec<Lowered>,",
+            "params: Vec<String>,",
+            "body: StaticOriginId,",
+        ],
+        "AC-1: `Lowered::Closure`'s field inventory changed. A second body \
+         authority beside the tag is exactly what this WP removed, so an added \
+         field must be argued, not absorbed"
+    );
+    assert_eq!(
+        declared_fields(source, "    DeclarationClosure {"),
+        vec![
+            "symbol: RuntimeSymbol,",
+            "captures: Vec<Lowered>,",
+            "params: Vec<String>,",
+            "body: StaticOriginId,",
+        ],
+        "AC-1: `Lowered::DeclarationClosure`'s field inventory changed"
+    );
+
+    // AC-6, the EXCLUDED variant, and why — a fact about the declaration rather
+    // than a judgement call: it carries no source term at all. Pinned as an
+    // inventory for the same reason as above, so it cannot quietly acquire one.
+    assert_eq!(
+        declared_fields(source, "    ComputationalRecursorClosure {"),
+        vec![
+            "residual: Box<Lowered>,",
+            "activation: ContinuationActivationId,",
+            "invocation: RecursorInvocationSegment,",
+        ],
+        "AC-6: ComputationalRecursorClosure is out of the covered population \
+         because it declares no body carrier. If it acquires one it JOINS the \
+         population, and this test is where that has to be said"
+    );
+}
+
+/// **`RT-FNSPLIT-B2A-S` D2 — the plan cannot escape into the compiled artifact,
+/// shown by the type system rather than asserted in prose.**
+///
+/// The plan now **borrows** the source trees, so non-escape stopped being
+/// incidental and became load-bearing. `CompiledModule<M>` has no lifetime
+/// parameter, so it cannot store a borrow of them; requiring `'static` is exactly
+/// that claim, checked by the compiler.
+///
+/// ⭐ Falsifiable by mutation in the ordinary D6 way: give `CompiledModule` a
+/// `&'src RuntimeExpr` field and this test **stops compiling**. That is a stronger
+/// failure mode than a red assertion — the escape cannot be introduced and then
+/// argued about.
+#[test]
+fn escaping_a_source_borrow_into_the_compiled_artifact_does_not_typecheck() {
+    fn holds_no_borrowed_state<T: 'static>() {}
+    holds_no_borrowed_state::<CompiledModule<cranelift_jit::JITModule>>();
+}
+
+// ─── RT-FNSPLIT-B2A-S AC-5 — nothing is KEYED by a scheduling entry ───────────
+//
+// ⭐ Why this needs a pin even though the resolver takes a `StaticOriginId`:
+// hard-stop #8 was a category error in which a scheduling entry stood in for a
+// source occurrence, and a `ComputationalMatch` SHARES its scheduling entry with
+// its scrutinee chain. So a collection keyed by an entry looks perfectly injective
+// on every fixture without one — the wrong key still looks unique — and then
+// silently merges two occurrences on the fixture that has one.
+//
+// ⛔ **This scan is a tripwire, not a discharge — and neither are the behavioural
+// controls, on their own.** Two Architect blocks established that, and the second
+// (`evt_1p11krxny4wny`) is the one that settles it: a real
+// `Vec<Option<&RuntimeExpr>>` indexed by `usize::try_from(scrutinee.entry.0)` at
+// the `ComputationalMatch` seam **compiles and passes all three nets**.
+//
+// ⇒ The framed property, *"no collection is keyed by `.entry`, and a mutation
+// introducing one reddens,"* is a **global negative over arbitrary code shapes**.
+// No test enforces that: detecting it needs dataflow, not a scan, and a scan can
+// always be spelled around. So the honest split is recorded here rather than
+// papered over with a longer list:
+//
+// The authoritative AC-5 is the Architect's four clauses (`origin/main`
+// `d0b6e064`, transcribed verbatim there); this is what discharges each:
+//
+//   (a) concrete entry-carrying types stay module-private
+//         -> `the_entry_carrying_types_are_module_private`
+//   (b) a non-vacuous split fixture proves entry-keying selects the wrong body
+//         -> `keying_selection_by_the_scheduling_entry_does_not_resolve_the_body`
+//   (c) a compile-preserving re-key of the sanctioned table reddens at the
+//       collision/invariant controls
+//         -> `filing_two_occurrences_under_one_origin_is_refused`
+//   (d) Architect review of the closed two-file planner surface and its exports
+//       confirms the stated residual -- review, not a test.
+//
+// ⛔ **BOTH residual arms, because recording one reads as if the other were
+// covered:**
+//
+//   RESIDUAL 1 — an independently maintained entry-keyed collection INSIDE the
+//     two planner files. Inside the planner, entry-keying is the planner's own
+//     job and is NOT prohibited; what is unenforceable is detecting a *second*
+//     selection authority built from it.
+//   RESIDUAL 2 — exported / inferred / ordinal entry exposure. A future method
+//     could hand out an entry as `impl Ord` (`StaticNodeId` already derives
+//     `Ord`) or as a derived `u32` ordinal, **naming neither private type**, so
+//     (a) would still hold while an outside consumer keyed on an entry anyway.
+//
+// ⛔ **Do not claim that an arbitrary independently maintained entry-keyed
+// collection is mechanically detected.** No test enforces that: detecting it
+// needs dataflow, not a scan, and a scan can always be spelled around.
+
+/// ⚠ Positive control for the AC-5 detector: it must actually recognise the shape
+/// it claims nothing matches, or "no matches" means nothing.
+#[cfg(test)]
+fn declares_collection_keyed_by_node_id(line: &str) -> bool {
+    [
+        "BTreeMap<StaticNodeId",
+        "BTreeSet<StaticNodeId",
+        "HashMap<StaticNodeId",
+        "HashSet<StaticNodeId",
+    ]
+    .iter()
+    .any(|shape| line.contains(shape))
+}
+
+#[test]
+fn the_entry_keyed_collection_detector_catches_the_shape_it_is_looking_for() {
+    assert!(declares_collection_keyed_by_node_id(
+        "    scheduled: BTreeMap<StaticNodeId, RuntimeExpr>,"
+    ));
+    assert!(declares_collection_keyed_by_node_id(
+        "    seen: BTreeSet<StaticNodeId>,"
+    ));
+    // The admissible neighbour: keyed by the OCCURRENCE, which B1R's
+    // `origin.0 == planned_node.0` bijection makes safe.
+    assert!(!declares_collection_keyed_by_node_id(
+        "    occurrences: BTreeMap<StaticOriginId, RuntimeExpr>,"
+    ));
+}
+
+/// **AC-5(a) — the concrete entry-carrying types are module-private.**
+///
+/// `PlannedExpr` and `StaticNodeId` are declared with **no `pub` modifier**, so
+/// they are private to `planning::static_transition` (`StaticNodeId` reaching its
+/// own `semantic_ir` child through `use super::`). The set of production files
+/// that can *name* either type is therefore exactly those two.
+///
+/// ## ⚠ What is measured, and what is NOT claimed
+///
+/// **Measured:** the privacy of two concrete types, i.e. which files can name
+/// them. **Not claimed:** that selection authority is confined, or that no
+/// outside code can key on a scheduling entry.
+///
+/// ⛔ **The implication between those two is invalid, and asserting it was my
+/// defect** (struck by Steward ruling `evt_4dh098a49cbze`; the earlier version of
+/// this test said privacy meant *"none can key on one"* and encoded that claim in
+/// its own name). Privacy of a *name* does not confine a *value*: a future method
+/// could hand an entry out as `impl Ord` — `StaticNodeId` already derives `Ord` —
+/// or as a derived `u32` ordinal, **naming neither private type**, and this test
+/// would still pass while an outside consumer keyed on an entry.
+///
+/// ⇒ This pin is clause **(a)** of four. (b) and (c) are the behavioural and
+/// collision controls in the planner; **(d) is Architect review**, and the two
+/// residual arms above are what that review covers.
+#[test]
+fn the_entry_carrying_types_are_module_private() {
+    let mut naming = Vec::new();
+    for (file, source) in BACKEND_PRODUCTION_SOURCES {
+        let production = source
+            .split_once("\n#[cfg(test)]\nmod tests {")
+            .map_or(*source, |(before, _)| before);
+        // Tokenized with comments stripped, so a doc comment MENTIONING the type
+        // (as `lowering/core.rs` does, twice, while being unable to name it) does
+        // not count.
+        let mentions = identifier_occurrences(production, "PlannedExpr")
+            + identifier_occurrences(production, "StaticNodeId");
+        if mentions > 0 {
+            naming.push(*file);
+        }
+    }
+    assert_eq!(
+        naming,
+        vec![
+            "planning/static_transition.rs",
+            "planning/static_transition/semantic_ir.rs",
+        ],
+        "AC-5(a): another backend file now NAMES an entry-carrying type. That is \
+         the measured fact only -- it does not by itself decide whether anything \
+         keys on an entry, which is residual arm 2 and Architect review"
+    );
+
+    // The naming set is what it is because the declarations are module-private. A
+    // `pub` of any width would widen it without changing any call.
+    let planner = include_str!("../../../planning/static_transition.rs");
+    assert!(
+        planner.contains("\nstruct PlannedExpr {"),
+        "AC-5: `PlannedExpr` must stay module-private"
+    );
+    assert!(
+        planner.contains("\nstruct StaticNodeId(u32);"),
+        "AC-5: `StaticNodeId` must stay module-private"
+    );
+}
+
+#[test]
+fn no_collection_is_keyed_by_a_scheduling_entry() {
+    // Over the CLOSED backend surface, not a hand-picked four files: the resolver
+    // and the plan are reachable from every backend sibling, so a tripwire scoped
+    // to `lowering/` and `planning/` would miss `artifact/**` and `compiled.rs`.
+    for (file, source) in BACKEND_PRODUCTION_SOURCES {
+        let production = source
+            .split_once("\n#[cfg(test)]\nmod tests {")
+            .map_or(*source, |(before, _)| before);
+        let keyed: Vec<&str> = production
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .filter(|line| {
+                declares_collection_keyed_by_node_id(line)
+                    // The index form the Architect named: a positional table
+                    // subscripted by a scheduling entry rather than an occurrence.
+                    || line.contains(".entry.0 as usize")
+                    || line.contains("[entry.0 as usize]")
+            })
+            .collect();
+        assert!(
+            keyed.is_empty(),
+            "{file} keys or indexes by a scheduling entry {keyed:?}; a \
+             ComputationalMatch shares its entry with its scrutinee chain, so this \
+             merges two occurrences on exactly the fixture that has one. \
+             ⚠ NOT an AC-5 clause: this is an early tripwire over enumerated \
+             forms, and AC-5 is discharged by (a)-(d) above"
+        );
     }
 }

@@ -73,11 +73,20 @@ fn inert_test_static_origin() -> StaticOriginId {
     planned_root_occurrence(&RuntimeExpr::Var(0)).1
 }
 
+/// The inert plan's source term.
+///
+/// A `static` rather than a temporary because the plan now **borrows** the term
+/// it planned (B2A-S D2): a plan built from `&RuntimeExpr::Var(0)` in an
+/// expression position would borrow a value dropped at the end of that statement.
+/// Giving the term `'static` lets the returned plan satisfy any caller's lifetime.
+#[cfg(test)]
+static INERT_TEST_EXPR: RuntimeExpr = RuntimeExpr::Var(0);
+
 /// The plan companion of `inert_test_static_origin`, for tests that build a
 /// `Lowering` to exercise a validator rather than to lower an expression.
 #[cfg(test)]
-fn inert_test_plan() -> StaticTransitionPlan {
-    planned_root_occurrence(&RuntimeExpr::Var(0)).0
+fn inert_test_plan() -> StaticTransitionPlan<'static> {
+    planned_root_occurrence(&INERT_TEST_EXPR).0
 }
 
 /// Plans one expression on its own and returns the closed plan together with
@@ -89,9 +98,11 @@ fn inert_test_plan() -> StaticTransitionPlan {
 /// `StaticOriginId`'s ordinal stays planner-private, so the only origins in
 /// existence anywhere are the ones the planner issued.
 #[cfg(test)]
-fn planned_root_occurrence(expr: &RuntimeExpr) -> (StaticTransitionPlan, StaticOriginId) {
-    let plan = plan_static_transition_graph(expr, &BTreeMap::new())
-        .expect("test fixture is plannable");
+fn planned_root_occurrence<'src>(
+    expr: &'src RuntimeExpr,
+) -> (StaticTransitionPlan<'src>, StaticOriginId) {
+    let plan =
+        plan_static_transition_graph(expr, &BTreeMap::new()).expect("test fixture is plannable");
     let root = plan
         .root_static_origin()
         .expect("a planned graph has a root source occurrence");

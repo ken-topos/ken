@@ -34,6 +34,35 @@ fn run_dynamic_constructor_dispatch_fixture(
     context.func =
         Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
     let seed_env = NativeSeedEnvironment::empty();
+    // Declared before `compiler`, because the plan installed below **borrows**
+    // this term (B2A-S D2) and so must outlive the `Lowering` that holds it.
+    // Locals drop in reverse order, so declaring it here is the whole fix.
+    let cases = [
+        (0, "ctor:fixture::Dynamic::Zero", 0, 40),
+        (1, "ctor:fixture::Dynamic::One", 1, 41),
+    ]
+    .into_iter()
+    .filter(|(tag, ..)| selected_tags.contains(tag))
+    .map(
+        |(_, constructor, binders, result)| crate::RuntimeMatchCase {
+            constructor: constructor.to_string(),
+            binders,
+            body: RuntimeExpr::Value(RuntimeValue::Int((result).into())),
+        },
+    )
+    .collect::<Vec<_>>();
+    let default = RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "px7p exact dynamic source default".to_string(),
+    };
+    // This path lowers the SELECTED case body, so its origin must be real: plan
+    // the very match these cases belong to and install that plan, so case *i*'s
+    // body is child `1 + i` of a genuinely planned occurrence.
+    let source_match = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Var(0)),
+        cases: cases.clone(),
+        default: default.clone(),
+    };
     let mut compiler = Lowering {
         seed_env: &seed_env,
         declarations: BTreeMap::new(),
@@ -104,32 +133,6 @@ fn run_dynamic_constructor_dispatch_fixture(
                     }],
                 },
             ],
-        };
-        let cases = [
-            (0, "ctor:fixture::Dynamic::Zero", 0, 40),
-            (1, "ctor:fixture::Dynamic::One", 1, 41),
-        ]
-        .into_iter()
-        .filter(|(tag, ..)| selected_tags.contains(tag))
-        .map(
-            |(_, constructor, binders, result)| crate::RuntimeMatchCase {
-                constructor: constructor.to_string(),
-                binders,
-                body: RuntimeExpr::Value(RuntimeValue::Int((result).into())),
-            },
-        )
-        .collect::<Vec<_>>();
-        let default = RuntimeTrap {
-            code: RuntimeTrapCode::PatternMatchFailure,
-            message: "px7p exact dynamic source default".to_string(),
-        };
-        // This path lowers the SELECTED case body, so its origin must be real:
-        // plan the very match these cases belong to and install that plan, so
-        // case *i*'s body is child `1 + i` of a genuinely planned occurrence.
-        let source_match = RuntimeExpr::Match {
-            scrutinee: Box::new(RuntimeExpr::Var(0)),
-            cases: cases.clone(),
-            default: default.clone(),
         };
         let (plan, match_origin) = planned_root_occurrence(&source_match);
         compiler.static_transition_plan = plan;

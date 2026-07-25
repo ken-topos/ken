@@ -215,11 +215,17 @@ pub(super) fn verify_cranelift_function_for_artifact_tests(
 /// walked, paired with the `StaticOriginId` the planner preallocated for it.
 ///
 /// The pair exists so that an occurrence's static name travels **with** the term
-/// rather than beside it. In this unit the origin is provenance only: nothing
-/// selects, dispatches, or branches on it — it is carried so that a child's
-/// origin can be derived positionally when the walk descends
-/// The origin never selects a body, calls a dispatcher, alters a branch, or
-/// reaches emitted code.
+/// rather than beside it, so a child's origin can be derived positionally as the
+/// walk descends.
+///
+/// ⚠ Since `RT-FNSPLIT-B2A-S` the origin is **no longer provenance only** — for a
+/// retained closure body it is the *selector*, and `retained_body_occurrence` is
+/// the one place a term is recovered from one. Be precise about what is still
+/// true, because the previous blanket claim here is now half wrong:
+///
+/// - it **does** select a retained closure body (that is the point of the unit);
+/// - it still **never** alters a branch, keys a collection, or reaches emitted
+///   code — no comparison, ordering, or arithmetic on an origin decides anything.
 #[derive(Clone, Copy)]
 struct SourceOccurrence<'a> {
     expr: &'a RuntimeExpr,
@@ -227,8 +233,14 @@ struct SourceOccurrence<'a> {
 }
 
 /// An owned source occurrence, for the points where the lowering **clones** a
-/// `RuntimeExpr` into a pending frame, a cloneable prefix template, or a
-/// retained closure.
+/// `RuntimeExpr` into a pending frame or a cloneable prefix template.
+///
+/// ⛔ **No longer a retained closure**: `RT-FNSPLIT-B2A-S` removed that, and
+/// `Lowered::Closure`/`DeclarationClosure` now name their body by origin alone. The
+/// source machine's in-flight frames still own their terms, and that is a forced
+/// boundary rather than a leftover — `lower_source_forked_match` synthesizes a
+/// `Trap` that exists nowhere in the source tree, so it has no planned occurrence
+/// to be resolved from and cannot be represented by a tag.
 ///
 /// ⭐ The pair is one value on purpose: `SourcePrefixTemplate` is `Clone`, and a
 /// clone that copied the term while dropping its origin would silently
@@ -249,13 +261,6 @@ impl OwnedSourceOccurrence {
             static_origin: occurrence.static_origin,
         }
     }
-
-    fn borrowed(&self) -> SourceOccurrence<'_> {
-        SourceOccurrence {
-            expr: &self.expr,
-            static_origin: self.static_origin,
-        }
-    }
 }
 
 struct Lowering<'a> {
@@ -265,10 +270,21 @@ struct Lowering<'a> {
     ///
     /// It lives here, rather than as a local of `compile_expr_into_module`,
     /// because every descent needs the checked positional child-origin table to
-    /// derive the child's static name. The plan holds no borrow of the source
-    /// trees, so it cannot escape into the compiled artifact
-    /// (`CompiledModule` has no lifetime parameter and takes only owned data).
-    static_transition_plan: StaticTransitionPlan,
+    /// derive the child's static name, and because a retained closure body is now
+    /// resolved *out of this plan* by its static origin.
+    ///
+    /// ⚠ **The plan borrows the source trees** — `StaticTransitionPlan<'a>` holds
+    /// each planned occurrence's term by reference, which is what lets a tag be
+    /// resolved back to a body without any site retaining a cloned one. So the
+    /// non-escape property is now **load-bearing** rather than incidental, and it
+    /// is not argued from the absence of borrows:
+    ///
+    /// `CompiledModule<M>` has **no lifetime parameter** and takes only owned
+    /// data, so nothing borrowed can be stored in it — the compiler rejects it.
+    /// `escaping_a_source_borrow_into_the_compiled_artifact_does_not_typecheck`
+    /// pins exactly that, by requiring `CompiledModule: 'static`; give the
+    /// artifact a borrowed field and the pin stops compiling.
+    static_transition_plan: StaticTransitionPlan<'a>,
     declaration_stack: Vec<RuntimeSymbol>,
     active_recursive_declarations: Vec<ActiveRecursiveDeclarationV1>,
     result_table: BTreeMap<i64, RuntimeGroundValue>,
@@ -449,24 +465,34 @@ enum Lowered {
     Record {
         fields: Vec<(String, Lowered)>,
     },
-    /// A retained closure.
+    /// A retained closure. ⭐ **The body is the static origin and nothing else.**
     ///
-    /// ⚠ The body is still **the** carrier and still the only thing consumed:
-    /// every call site re-lowers this cloned term exactly as before. What is new
-    /// is that the clone carries the body occurrence's preallocated origin in
-    /// the same value, because a retained body is re-lowered at a site where
-    /// nothing else names it. Replacing this carrier with the tag alone is a
-    /// later, separate change.
+    /// `body` used to be an `OwnedSourceOccurrence` — a cloned `RuntimeExpr`
+    /// carried beside its origin. That is the shape `RT-NATIVE-FNSPLIT` exists to
+    /// remove: it let a *dynamic* property (which term this value happens to hold)
+    /// name *static* code, so two authorities described one body and the cloned
+    /// one won.
+    ///
+    /// Now the value names its body the way the planner already named it, and the
+    /// term is recovered from the plan by that name alone
+    /// (`Lowering::retained_body_occurrence`). ⛔ Do not reintroduce a term here,
+    /// not even "for convenience": a carrier holding both would restore the two
+    /// authorities, and the origin would be back to decorating a body rather than
+    /// selecting one.
+    ///
+    /// ⚠ This does **not** change *when* a body is lowered. Each call site still
+    /// re-lowers the resolved term in its own whole configuration — that is
+    /// symptom-inventory entry 2, and it stays open for `RT-FNSPLIT-B2F`.
     Closure {
         captures: Vec<Lowered>,
         params: Vec<String>,
-        body: OwnedSourceOccurrence,
+        body: StaticOriginId,
     },
     DeclarationClosure {
         symbol: RuntimeSymbol,
         captures: Vec<Lowered>,
         params: Vec<String>,
-        body: OwnedSourceOccurrence,
+        body: StaticOriginId,
     },
     ComputationalRecursorClosure {
         residual: Box<Lowered>,

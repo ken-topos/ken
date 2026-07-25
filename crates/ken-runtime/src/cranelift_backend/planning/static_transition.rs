@@ -14,7 +14,10 @@ use super::{
     RuntimeDeclarationKind,
 };
 use crate::RuntimeExpr;
-use semantic_ir::{build_semantic_plane, SemanticMaterialArena, SemanticPlane, SemanticSourceSeed};
+use semantic_ir::{
+    build_semantic_plane, SemanticMaterialArena, SemanticPlane, SemanticSourceKind,
+    SemanticSourceSeed,
+};
 
 pub(in crate::cranelift_backend) use semantic_ir::StaticOriginId;
 
@@ -194,8 +197,22 @@ struct PlanContext {
     source_return: PersistentNodeId,
 }
 
+/// One planned source occurrence: the borrowed term, paired with the origin the
+/// planner gave it in the very same visit.
+///
+/// ⭐ The origin is stored **beside** the term rather than left implicit in the
+/// table position. A dense table whose entries only ever say "whatever lives at
+/// this index" cannot detect an entry written at the wrong index; storing the
+/// origin makes that failure observable, and `source_occurrence` rejects it
+/// instead of returning a plausible wrong body.
+#[derive(Clone, Copy)]
+struct PlannedOccurrence<'src> {
+    static_origin: StaticOriginId,
+    expr: &'src RuntimeExpr,
+}
+
 #[derive(Clone)]
-pub(in crate::cranelift_backend) struct StaticTransitionPlan {
+pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     entries: Vec<StaticNodeId>,
     nodes: Vec<StaticNode>,
     edges: Vec<StaticEdge>,
@@ -223,6 +240,19 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan {
     /// asymmetric with the two `lower_expr` closure arms
     ///.
     declaration_occurrences: BTreeMap<String, StaticOriginId>,
+    /// Every planned source occurrence, **dense by origin ordinal**.
+    ///
+    /// `origin_of` is `StaticOriginId(node.0)`, so a node's origin *is* its index
+    /// here. The table is written in the same visit that allocates the node's
+    /// semantic seed — `expression_seed`, the one function every occurrence's
+    /// seed passes through — so there is no second walk that could disagree with
+    /// the first, and totality is a property of the construction rather than of
+    /// an enumeration someone has to keep current.
+    ///
+    /// ⛔ `None` is a real answer, not a gap to paper over: a control node is a
+    /// planned node with no source term, so its slot stays empty and a lookup on
+    /// one is a **loud planner failure** rather than a substituted body.
+    source_occurrences: Vec<Option<PlannedOccurrence<'src>>>,
 }
 
 #[cfg(test)]
@@ -272,8 +302,8 @@ struct BoundaryB1Census {
     function_bytes: usize,
 }
 
-struct Planner {
-    plan: StaticTransitionPlan,
+struct Planner<'src> {
+    plan: StaticTransitionPlan<'src>,
     store_interner: BTreeMap<PersistentStoreNode, PersistentNodeId>,
     next_source: u32,
     terminal: StaticNodeId,
@@ -288,7 +318,7 @@ fn planner_capacity_error(detail: impl Into<String>) -> CraneliftBackendError {
     unsupported("NativeStaticTransitionPlanner", detail)
 }
 
-impl Planner {
+impl<'src> Planner<'src> {
     fn new() -> Result<Self, CraneliftBackendError> {
         let empty = PersistentNodeId(0);
         let frame = DynamicActivationFrame {
@@ -315,6 +345,7 @@ impl Planner {
                 semantic: SemanticPlane::default(),
                 root_occurrence: None,
                 declaration_occurrences: BTreeMap::new(),
+                source_occurrences: Vec::new(),
             },
             store_interner: BTreeMap::new(),
             next_source: 0,
@@ -385,7 +416,7 @@ impl Planner {
         kind: TransitionKind,
         owner: StaticSourceId,
         frame: DynamicActivationFrame,
-        expr: &RuntimeExpr,
+        expr: &'src RuntimeExpr,
         children: &[StaticOriginId],
     ) -> Result<PlannedExpr, CraneliftBackendError> {
         let node = self.push_node(kind, owner, frame)?;
@@ -402,16 +433,44 @@ impl Planner {
     fn expression_seed(
         &mut self,
         node: StaticNodeId,
-        expr: &RuntimeExpr,
+        expr: &'src RuntimeExpr,
         children: &[StaticOriginId],
     ) -> Result<(), CraneliftBackendError> {
-        let seed = SemanticSourceSeed::expression(
-            node,
-            expr,
-            children,
-            &mut self.plan.semantic_material,
-        )?;
+        let seed =
+            SemanticSourceSeed::expression(node, expr, children, &mut self.plan.semantic_material)?;
         self.plan.semantic_sources.push(seed);
+        self.record_source_occurrence(node, expr)
+    }
+
+    /// Files this occurrence's term under the origin the planner just gave it.
+    ///
+    /// ⭐ This is deliberately the *same* function that emits the semantic seed,
+    /// not a companion pass: the term and its static name are recorded in one
+    /// step, so no ordering between two walks can put them out of agreement. Every
+    /// planned occurrence reaches `expression_seed`, so the table is total over
+    /// the occurrence population by construction.
+    fn record_source_occurrence(
+        &mut self,
+        node: StaticNodeId,
+        expr: &'src RuntimeExpr,
+    ) -> Result<(), CraneliftBackendError> {
+        let index = node.0 as usize;
+        if self.plan.source_occurrences.len() <= index {
+            self.plan.source_occurrences.resize(index + 1, None);
+        }
+        // A second occurrence filed under one origin would make selection
+        // ambiguous, and ambiguity here is a compiler bug rather than a program
+        // the backend cannot handle — so it is a `PlannerInvariant`, not a
+        // capacity refusal (`RT-PLANNER-ATTRIB-K`).
+        if self.plan.source_occurrences[index].is_some() {
+            return Err(planner_error(
+                "static origin was given more than one source occurrence",
+            ));
+        }
+        self.plan.source_occurrences[index] = Some(PlannedOccurrence {
+            static_origin: origin_of(node),
+            expr,
+        });
         Ok(())
     }
 
@@ -511,7 +570,7 @@ impl Planner {
     /// `ComputationalMatch` element, and mixing them is a category error.
     fn plan_sequence(
         &mut self,
-        expressions: &[&RuntimeExpr],
+        expressions: &[&'src RuntimeExpr],
         ctx: PlanContext,
         successor: StaticNodeId,
         exit_kind: EdgeKind,
@@ -541,7 +600,7 @@ impl Planner {
     /// to the body's `entry`, while the parent records the body's `occurrence`.
     fn plan_cases(
         &mut self,
-        bodies: &[(&RuntimeExpr, usize)],
+        bodies: &[(&'src RuntimeExpr, usize)],
         ctx: PlanContext,
         successor: StaticNodeId,
         exit_kind: EdgeKind,
@@ -572,8 +631,7 @@ impl Planner {
         let occurrences = occurrences
             .into_iter()
             .map(|occurrence| {
-                occurrence
-                    .ok_or_else(|| planner_error("case position has no planned occurrence"))
+                occurrence.ok_or_else(|| planner_error("case position has no planned occurrence"))
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok((reject, occurrences))
@@ -585,7 +643,7 @@ impl Planner {
     /// them equal, by going through `expression_node`.
     fn plan_expr(
         &mut self,
-        expr: &RuntimeExpr,
+        expr: &'src RuntimeExpr,
         ctx: PlanContext,
         successor: StaticNodeId,
         exit_kind: EdgeKind,
@@ -601,7 +659,8 @@ impl Planner {
         };
         match expr {
             RuntimeExpr::Trap(_) => {
-                let node = self.expression_node(TransitionKind::Evaluate, owner, frame, expr, &[])?;
+                let node =
+                    self.expression_node(TransitionKind::Evaluate, owner, frame, expr, &[])?;
                 self.edge(node.entry, self.trap_terminal, EdgeKind::Trap)?;
                 Ok(node)
             }
@@ -609,7 +668,8 @@ impl Planner {
             | RuntimeExpr::Var(_)
             | RuntimeExpr::DeclarationRef { .. }
             | RuntimeExpr::ImportedDeclarationRef { .. } => {
-                let node = self.expression_node(TransitionKind::Evaluate, owner, frame, expr, &[])?;
+                let node =
+                    self.expression_node(TransitionKind::Evaluate, owner, frame, expr, &[])?;
                 self.edge(node.entry, successor, exit_kind)?;
                 Ok(node)
             }
@@ -692,13 +752,8 @@ impl Planner {
                 let mut children = Vec::with_capacity(1 + case_bodies.len());
                 children.push(scrutinee.occurrence);
                 children.extend(case_bodies);
-                let node = self.expression_node(
-                    TransitionKind::Evaluate,
-                    owner,
-                    frame,
-                    expr,
-                    &children,
-                )?;
+                let node =
+                    self.expression_node(TransitionKind::Evaluate, owner, frame, expr, &children)?;
                 self.edge(node.entry, scrutinee.entry, EdgeKind::Continue)?;
                 Ok(node)
             }
@@ -802,13 +857,8 @@ impl Planner {
                 let mut children = Vec::with_capacity(1 + capture_occurrences.len());
                 children.push(body.occurrence);
                 children.extend(capture_occurrences);
-                let node = self.expression_node(
-                    TransitionKind::Evaluate,
-                    owner,
-                    frame,
-                    expr,
-                    &children,
-                )?;
+                let node =
+                    self.expression_node(TransitionKind::Evaluate, owner, frame, expr, &children)?;
                 self.edge(
                     node.entry,
                     capture_entry,
@@ -921,7 +971,7 @@ impl Planner {
         }
     }
 
-    fn finish(mut self) -> Result<StaticTransitionPlan, CraneliftBackendError> {
+    fn finish(mut self) -> Result<StaticTransitionPlan<'src>, CraneliftBackendError> {
         self.plan.semantic = build_semantic_plane(
             &self.plan.nodes,
             &self.plan.edges,
@@ -933,7 +983,48 @@ impl Planner {
     }
 }
 
-impl StaticTransitionPlan {
+impl<'src> StaticTransitionPlan<'src> {
+    /// Resolves a static origin to the source term the planner filed under it.
+    ///
+    /// ⭐ **This is the sole `origin -> expression` route in the backend**, and it
+    /// is what `RT-FNSPLIT-B2A-C`'s N3 pin asserted did not exist. B2A-S retires
+    /// that pin deliberately: the count goes from zero to **exactly one**, so a
+    /// retained body is selected by its static name and by nothing else.
+    ///
+    /// Three distinct ways to be wrong, each rejected separately so a mutation
+    /// that breaks one is distinguishable from a mutation that breaks another:
+    ///
+    /// 1. an origin past the end of the table — outside the planned population;
+    /// 2. an origin naming a planned node that is **not** a source occurrence
+    ///    (a control node), whose slot is legitimately empty;
+    /// 3. an entry whose **stored** origin disagrees with the index it was found
+    ///    at — the table itself is corrupt, and returning a term from a
+    ///    mis-indexed entry is exactly the wrong-body substitution this WP
+    ///    exists to make impossible.
+    ///
+    /// ⛔ The returned lifetime is the **plan's** `'src`, not `&self`'s: the
+    /// borrow outlives this call, which is what lets a `&mut self` lowering step
+    /// resolve a tag and then lower the result. That is also why the plan cannot
+    /// escape — see `Lowering::static_transition_plan`.
+    pub(in crate::cranelift_backend) fn source_occurrence(
+        &self,
+        static_origin: StaticOriginId,
+    ) -> Result<&'src RuntimeExpr, CraneliftBackendError> {
+        let index = static_origin.0 as usize;
+        let slot = self.source_occurrences.get(index).ok_or_else(|| {
+            planner_error("static origin is outside the planned occurrence table")
+        })?;
+        let occurrence = slot
+            .as_ref()
+            .ok_or_else(|| planner_error("static origin names no planned source occurrence"))?;
+        if occurrence.static_origin != static_origin {
+            return Err(planner_error(
+                "planned occurrence's stored origin disagrees with its table position",
+            ));
+        }
+        Ok(occurrence.expr)
+    }
+
     /// The preallocated origin of one positional syntax child of `parent`.
     ///
     /// This is the **sole** production point for a child's static name, and the
@@ -1205,6 +1296,69 @@ impl StaticTransitionPlan {
             &self.semantic_sources,
             &self.semantic_material,
         )?;
+        self.validate_source_occurrence_table()?;
+        Ok(())
+    }
+
+    /// The occurrence table's three properties, each as its own failure.
+    ///
+    /// ⛔ Deliberately **not** one composite check. A single "the table is fine"
+    /// assertion is discharged by any one of these holding, so a mutation that
+    /// breaks exactly one would still be reported as the same failure; three
+    /// named failures make three different mutations distinguishable.
+    ///
+    /// The cross-check is against `semantic_sources`, a population produced by a
+    /// *different* mechanism in the same visit. Checking the table against itself
+    /// could only ever confirm its internal shape — it could not notice that an
+    /// occurrence the planner registered is missing from it.
+    fn validate_source_occurrence_table(&self) -> Result<(), CraneliftBackendError> {
+        // 1. Self-consistency: an entry's stored origin is the index it sits at.
+        for (index, slot) in self.source_occurrences.iter().enumerate() {
+            let Some(occurrence) = slot else {
+                continue;
+            };
+            if occurrence.static_origin.0 as usize != index {
+                return Err(planner_error(
+                    "occurrence table entry is filed under an origin that is not its index",
+                ));
+            }
+        }
+
+        // 2. Totality over the occurrence population: every expression seed the
+        //    walk registered has an entry, filed under that seed's own origin.
+        let mut expression_seeds = 0usize;
+        for seed in &self.semantic_sources {
+            if !matches!(seed.source, SemanticSourceKind::Expression(_)) {
+                continue;
+            }
+            expression_seeds += 1;
+            let filed = self
+                .source_occurrences
+                .get(seed.origin.0 as usize)
+                .and_then(|slot| slot.as_ref())
+                .ok_or_else(|| {
+                    planner_error("planned source occurrence is missing from the occurrence table")
+                })?;
+            if filed.static_origin != seed.origin {
+                return Err(planner_error(
+                    "occurrence table entry does not match its semantic seed's origin",
+                ));
+            }
+        }
+
+        // 3. No surplus: the table holds nothing no seed accounts for. With (2)
+        //    this is injectivity — one entry per registered occurrence, and no
+        //    entry without one.
+        let filed = self
+            .source_occurrences
+            .iter()
+            .filter(|slot| slot.is_some())
+            .count();
+        if filed != expression_seeds {
+            return Err(planner_error(
+                "occurrence table holds an entry no semantic seed accounts for",
+            ));
+        }
         Ok(())
     }
 
@@ -1552,10 +1706,10 @@ impl StaticTransitionPlan {
     }
 }
 
-pub(in crate::cranelift_backend) fn plan_static_transition_graph(
-    entry: &RuntimeExpr,
-    declarations: &BTreeMap<&str, &RuntimeDeclaration>,
-) -> Result<StaticTransitionPlan, CraneliftBackendError> {
+pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(
+    entry: &'src RuntimeExpr,
+    declarations: &BTreeMap<&str, &'src RuntimeDeclaration>,
+) -> Result<StaticTransitionPlan<'src>, CraneliftBackendError> {
     let mut planner = Planner::new()?;
     let empty = PersistentNodeId(0);
     let context = PlanContext {
@@ -2048,8 +2202,8 @@ mod tests {
     #[test]
     fn boundary_b1_semantics_are_discovery_order_and_dynamic_state_independent() {
         // Promise class: durable invariant.
-        let plan =
-            plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
         let mut reversed_sources = plan.semantic_sources.clone();
         reversed_sources.reverse();
         let reordered = build_semantic_plane(
@@ -2089,8 +2243,8 @@ mod tests {
     #[test]
     fn boundary_b1_negative_controls_fail_at_named_semantic_artifacts() {
         // Promise class: durable mutation proof.
-        let plan =
-            plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
 
         let pointer_origins = plan
             .nodes
@@ -2182,13 +2336,15 @@ mod tests {
 
         let mut superlinear_material = plan.semantic.clone();
         let deliberate_square = plan.nodes.len().checked_mul(plan.nodes.len()).unwrap();
-        superlinear_material.operands.extend((0..deliberate_square).map(|ordinal| {
-            SemanticOperandElement {
-                kind: SemanticAtomKind::LocalIndex,
-                content: DenseRange { start: 0, len: 0 },
-                payload: ordinal as u64,
-            }
-        }));
+        superlinear_material
+            .operands
+            .extend(
+                (0..deliberate_square).map(|ordinal| SemanticOperandElement {
+                    kind: SemanticAtomKind::LocalIndex,
+                    content: DenseRange { start: 0, len: 0 },
+                    payload: ordinal as u64,
+                }),
+            );
         superlinear_material.records[0].operands.len = superlinear_material.records[0]
             .operands
             .len
@@ -2215,6 +2371,213 @@ mod tests {
             value: Box::new(RuntimeExpr::Var(0)),
             body: Box::new(RuntimeExpr::Var(1)),
         }
+    }
+
+    /// Three occurrences that are **equal as terms**. A content or hash lookup
+    /// cannot tell them apart; their origins can.
+    fn content_equal_occurrences() -> RuntimeExpr {
+        RuntimeExpr::If {
+            scrutinee: Box::new(unit()),
+            then_expr: Box::new(unit()),
+            else_expr: Box::new(unit()),
+        }
+    }
+
+    /// `RT-FNSPLIT-B2A-S` D6 — the occurrence table's negative controls, each red
+    /// at its **own named artifact**.
+    ///
+    /// ⛔ The four expected errors are deliberately distinct. A single "the table
+    /// is invalid" verdict would be discharged by any one of these mutations, so
+    /// it could not tell a swapped entry from a missing one from a surplus one —
+    /// and the whole point of storing each entry's origin beside its term is that
+    /// those failures are distinguishable.
+    #[test]
+    fn occurrence_table_negative_controls_fail_at_named_artifacts() {
+        // Promise class: durable mutation proof.
+        let expr = equal_shaped_atom_fixture();
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
+        let vars = nodes_of_shape(&plan, RuntimeExprShape::Var);
+        assert_eq!(
+            vars.len(),
+            2,
+            "fixture must hold two equal-shaped occurrences"
+        );
+
+        // Control 1 — SWAP two equal-shaped entries. Each now sits at an index
+        // that is not its stored origin, so the wrong-body substitution is
+        // REFUSED rather than performed. This is the control that matters: the
+        // pair agrees on shape and counts, so nothing but the stored origin
+        // distinguishes them.
+        let mut swapped = plan.clone();
+        swapped
+            .source_occurrences
+            .swap(vars[0].0 as usize, vars[1].0 as usize);
+        assert_eq!(
+            swapped.validate_source_occurrence_table().unwrap_err(),
+            planner_error("occurrence table entry is filed under an origin that is not its index")
+        );
+        // ⭐ And the lookup refuses on its own, not only via the whole-plan
+        // validator — a consumer cannot reach a swapped body even in a plan that
+        // was never re-validated.
+        assert_eq!(
+            swapped.source_occurrence(origin_of(vars[0])).unwrap_err(),
+            planner_error("planned occurrence's stored origin disagrees with its table position")
+        );
+
+        // Control 2 — MISSING: a control node is a planned node with no source
+        // term, so its slot is legitimately empty and a lookup on it is loud
+        // rather than a substituted neighbour.
+        assert_eq!(
+            plan.source_occurrence(origin_of(plan.terminal_id()))
+                .unwrap_err(),
+            planner_error("static origin names no planned source occurrence")
+        );
+
+        // Control 3 — OUT OF RANGE: past the end of the planned population.
+        assert_eq!(
+            plan.source_occurrence(StaticOriginId(plan.nodes.len() as u32 + 7))
+                .unwrap_err(),
+            planner_error("static origin is outside the planned occurrence table")
+        );
+
+        // Control 4 — SURPLUS/DUPLICATE: an entry no semantic seed accounts for.
+        // Well-formed in isolation (its stored origin *is* its index), so only the
+        // cross-check against the independently produced seed population sees it.
+        let mut surplus = plan.clone();
+        let terminal = plan.terminal_id();
+        surplus.source_occurrences[terminal.0 as usize] = Some(PlannedOccurrence {
+            static_origin: origin_of(terminal),
+            expr: &expr,
+        });
+        assert_eq!(
+            surplus.validate_source_occurrence_table().unwrap_err(),
+            planner_error("occurrence table holds an entry no semantic seed accounts for")
+        );
+    }
+
+    /// `RT-FNSPLIT-B2A-S` D6/AC-3 — **identity is the ordinal, not the content.**
+    ///
+    /// ⭐ This is the chain's predicate as an executable test. The fixture's three
+    /// occurrences are equal as terms, so a content or hash lookup would have to
+    /// pick one of them arbitrarily — while the tag resolves each to its own
+    /// occurrence. If this test ever passes with the origins compared equal, a
+    /// dynamic property has started naming static code again.
+    #[test]
+    fn content_equal_occurrences_resolve_to_distinct_occurrences() {
+        // Promise class: durable invariant.
+        let expr = content_equal_occurrences();
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
+        let units = nodes_of_shape(&plan, RuntimeExprShape::Construct);
+        // ⚠ Load-bearing: without it the loop below is vacuous and this test
+        // passes while checking nothing at all.
+        assert_eq!(units.len(), 3, "fixture must hold three equal terms");
+
+        let resolved = units
+            .iter()
+            .map(|node| {
+                (
+                    origin_of(*node),
+                    plan.source_occurrence(origin_of(*node)).unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        for (index, (origin, term)) in resolved.iter().enumerate() {
+            for (other_origin, other_term) in resolved.iter().skip(index + 1) {
+                assert_ne!(origin, other_origin, "each occurrence has its own origin");
+                assert_eq!(
+                    term, other_term,
+                    "and a CONTENT lookup could not have told them apart"
+                );
+                assert!(
+                    !std::ptr::eq(*term, *other_term),
+                    "distinct occurrences resolve to distinct subterms"
+                );
+            }
+        }
+    }
+
+    /// `RT-FNSPLIT-B2A-S` D6/AC-3 — perturbing the borrowed **address** while the
+    /// ordinal mapping is unchanged does not move any identity.
+    ///
+    /// Two structurally equal source trees at different addresses plan to the same
+    /// origins, and each plan resolves its own origins into its own tree. So the
+    /// table's key is the planner's ordinal and the borrow is payload — which is
+    /// exactly what makes a lifetime admissible here rather than dangerous.
+    #[test]
+    fn a_source_tree_at_a_different_address_yields_identical_origins() {
+        // Promise class: durable invariant.
+        let first = equal_shaped_child_fixture();
+        let second = equal_shaped_child_fixture();
+        assert!(
+            !std::ptr::eq(&first, &second),
+            "the two fixtures must live at different addresses"
+        );
+
+        let first_plan = plan_static_transition_graph(&first, &BTreeMap::new()).unwrap();
+        let second_plan = plan_static_transition_graph(&second, &BTreeMap::new()).unwrap();
+
+        let origins = |plan: &StaticTransitionPlan<'_>| {
+            plan.semantic_sources
+                .iter()
+                .map(|seed| (seed.origin, seed.source))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            origins(&first_plan),
+            origins(&second_plan),
+            "identity must not depend on where the source tree happens to live"
+        );
+
+        // And the payload follows the borrow it was planned from, rather than
+        // leaking across plans.
+        for (origin, _) in origins(&first_plan) {
+            if let Ok(term) = first_plan.source_occurrence(origin) {
+                let other = second_plan.source_occurrence(origin).unwrap();
+                assert_eq!(term, other, "equal trees resolve to equal terms");
+                assert!(
+                    !std::ptr::eq(term, other),
+                    "but each plan resolves into its own tree"
+                );
+            }
+        }
+    }
+
+    /// `RT-FNSPLIT-B2A-S` AC-2 — the table is **total** over the planned expression
+    /// population, positively and not by the absence of a failure.
+    #[test]
+    fn the_occurrence_table_is_total_over_every_planned_expression() {
+        // Promise class: durable invariant.
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
+
+        let mut expressions = 0usize;
+        for seed in &plan.semantic_sources {
+            match seed.source {
+                SemanticSourceKind::Expression(_) => {
+                    expressions += 1;
+                    plan.source_occurrence(seed.origin).expect(
+                        "every planned expression occurrence resolves through its own origin",
+                    );
+                }
+                SemanticSourceKind::Control(_) => {
+                    plan.source_occurrence(seed.origin)
+                        .expect_err("a control node has no source term to resolve");
+                }
+            }
+        }
+        assert!(
+            expressions > 1,
+            "the fixture must plan more than one expression for totality to mean anything"
+        );
+        assert_eq!(
+            expressions,
+            plan.source_occurrences
+                .iter()
+                .filter(|slot| slot.is_some())
+                .count(),
+            "the table holds exactly one entry per planned expression occurrence"
+        );
     }
 
     /// Two `Let` occurrences of identical shape and counts whose positional
@@ -2248,10 +2611,14 @@ mod tests {
         // Promise class: durable mutation proof. This is the load-bearing
         // control: the swapped pair agrees on shape, opcode and every count, so
         // it is exactly the case B1's counted placeholders could not see.
-        let plan =
-            plan_static_transition_graph(&equal_shaped_atom_fixture(), &BTreeMap::new()).unwrap();
+        let expr = equal_shaped_atom_fixture();
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
         let vars = nodes_of_shape(&plan, RuntimeExprShape::Var);
-        assert_eq!(vars.len(), 2, "fixture must hold two equal-shaped occurrences");
+        assert_eq!(
+            vars.len(),
+            2,
+            "fixture must hold two equal-shaped occurrences"
+        );
 
         let first = plan.semantic.records[vars[0].0 as usize];
         let second = plan.semantic.records[vars[1].0 as usize];
@@ -2272,9 +2639,10 @@ mod tests {
 
         let mut swapped = plan.semantic.clone();
         for offset in 0..first.operands.len as usize {
-            swapped
-                .operands
-                .swap(first.operands.start as usize + offset, second.operands.start as usize + offset);
+            swapped.operands.swap(
+                first.operands.start as usize + offset,
+                second.operands.start as usize + offset,
+            );
         }
         assert_eq!(
             swapped
@@ -2289,8 +2657,8 @@ mod tests {
         );
 
         // The same swap on positional children of an equal-shaped pair.
-        let child_plan =
-            plan_static_transition_graph(&equal_shaped_child_fixture(), &BTreeMap::new()).unwrap();
+        let child_expr = equal_shaped_child_fixture();
+        let child_plan = plan_static_transition_graph(&child_expr, &BTreeMap::new()).unwrap();
         let lets = nodes_of_shape(&child_plan, RuntimeExprShape::Let);
         assert_eq!(lets.len(), 2);
         let first = child_plan.semantic.records[lets[0].0 as usize];
@@ -2365,11 +2733,8 @@ mod tests {
         right: crate::RuntimePartiality,
         case: &str,
     ) {
-        let plan = plan_static_transition_graph(
-            &equal_shaped_primitive_pair(left, right),
-            &BTreeMap::new(),
-        )
-        .unwrap();
+        let expr = equal_shaped_primitive_pair(left, right);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
         let calls = nodes_of_shape(&plan, RuntimeExprShape::PrimitiveCall);
         assert_eq!(calls.len(), 2, "{case}: fixture must hold two occurrences");
 
@@ -2459,16 +2824,13 @@ mod tests {
         // Promise class: durable mutation proof. B2a decodes atom content, so a
         // structurally well-formed atom whose span escapes the arena, or whose
         // bytes are not the ones the walk interned, is undecodable material.
-        let plan = plan_static_transition_graph(
-            &equal_shaped_primitive_pair(
-                crate::RuntimePartiality::Total,
-                crate::RuntimePartiality::CheckedTrap {
-                    obligation: "ken.bytes.at.inBounds".to_string(),
-                },
-            ),
-            &BTreeMap::new(),
-        )
-        .unwrap();
+        let expr = equal_shaped_primitive_pair(
+            crate::RuntimePartiality::Total,
+            crate::RuntimePartiality::CheckedTrap {
+                obligation: "ken.bytes.at.inBounds".to_string(),
+            },
+        );
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
 
         let mut escaped = plan.semantic.clone();
         let atom = escaped
@@ -2509,8 +2871,8 @@ mod tests {
     #[test]
     fn boundary_b1r_control_2_dropping_one_origins_material_record_is_rejected() {
         // Promise class: durable mutation proof.
-        let plan =
-            plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
         let carrier = plan
             .semantic
             .records
@@ -2547,8 +2909,8 @@ mod tests {
     #[test]
     fn boundary_b1r_control_3_duplicating_a_material_record_origin_is_rejected() {
         // Promise class: durable mutation proof.
-        let plan =
-            plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
         let mut duplicated = plan.semantic.clone();
         duplicated.records[1].origin = duplicated.records[0].origin;
         assert_eq!(
@@ -2705,8 +3067,8 @@ mod tests {
         // Promise class: durable invariant. These distinct planner
         // self-consistency failures are compiler bugs. The former fixed-K capacity arm is
         // not input-reachable because fixed K is a structural planner invariant.
-        let plan =
-            plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
 
         let mut missing_helper = plan.clone();
         missing_helper.planned_helpers.pop();
@@ -2774,8 +3136,8 @@ mod tests {
     #[test]
     fn distinct_activations_share_one_helper_key_and_source_return_is_not_terminal() {
         // Promise class: durable invariant.
-        let plan =
-            plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
         let wrapper = plan
             .nodes
             .iter()
@@ -2820,8 +3182,8 @@ mod tests {
     #[test]
     fn source_return_ownership_guards_fail_closed_on_exact_cross_wires() {
         // Promise class: durable invariant.
-        let plan =
-            plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
         let wrappers = plan
             .nodes
             .iter()
@@ -2952,8 +3314,8 @@ mod tests {
     #[test]
     fn quartet_edge_sets_and_completed_successor_reject_alternate_calls() {
         // Promise class: durable invariant.
-        let plan =
-            plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
         let wrapper = plan
             .nodes
             .iter()
@@ -3062,7 +3424,8 @@ mod tests {
     #[test]
     fn entry_and_reachability_closure_rejects_balancing_invalid_root() {
         // Promise class: durable invariant.
-        let plan = plan_static_transition_graph(&unit(), &BTreeMap::new()).unwrap();
+        let expr = unit();
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
 
         let mut outside = plan.clone();
         outside.entries[0] = StaticNodeId(u32::MAX);
@@ -3082,8 +3445,8 @@ mod tests {
     #[test]
     fn closed_identity_terminal_and_store_guards_reject_exact_mutations() {
         // Promise class: durable invariant.
-        let plan =
-            plan_static_transition_graph(&nested_resource_bracket(3), &BTreeMap::new()).unwrap();
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
 
         let mut wrong_node_identity = plan.clone();
         let evaluate = wrong_node_identity
@@ -3147,7 +3510,7 @@ mod tests {
         );
     }
 
-    impl StaticTransitionPlan {
+    impl StaticTransitionPlan<'_> {
         fn terminal_id(&self) -> StaticNodeId {
             self.nodes
                 .iter()
@@ -3241,7 +3604,11 @@ mod tests {
     fn b2ac_topology_digest(expr: &RuntimeExpr) -> String {
         let plan = plan_static_transition_graph(expr, &BTreeMap::new()).expect("plannable");
         let mut digest = String::new();
-        digest.push_str(&format!("nodes={} edges={}", plan.nodes.len(), plan.edges.len()));
+        digest.push_str(&format!(
+            "nodes={} edges={}",
+            plan.nodes.len(),
+            plan.edges.len()
+        ));
         for node in &plan.nodes {
             digest.push_str(&format!("|n{}:{:?}", node.id.0, node.transition));
         }
@@ -3263,6 +3630,36 @@ mod tests {
     /// the mechanical proof that the Boundary-A graph is topologically
     /// identical: same nodes in the same order, same edges with the same
     /// `(from, to, kind)`, same scheduling entries.
+    ///
+    /// ## ⚠ Reproducing the baseline — the recipe, because equality hides its own
+    /// provenance
+    ///
+    /// ⛔ The asserted property is *equality against committed constants*, so a
+    /// re-capture taken **after** the change would have produced byte-identical
+    /// values. **Nothing in this file distinguishes a genuine pre-change baseline
+    /// from a re-recording**, and the scratch worktree it was taken in is gone. So
+    /// the binding is demonstrated here rather than testified to — anyone can
+    /// redo it in about two minutes:
+    ///
+    /// ```text
+    /// git worktree add --detach /tmp/b2ac-base 70bd2c74
+    /// # port these two functions into that tree's test module verbatim:
+    /// #   `b2ac_topology_fixtures`  (the seven fixtures, by name)
+    /// #   `b2ac_topology_digest`    (nodes, edges, entries -- it reads nothing
+    /// #                              that postdates the base, which is why it
+    /// #                              compiles there at all)
+    /// cd /tmp/b2ac-base
+    /// scripts/ken-cargo test -p ken-runtime --lib -- b2ac_topology
+    /// git worktree remove /tmp/b2ac-base
+    /// ```
+    ///
+    /// ⛔ `scripts/ken-cargo`, never raw `cargo` — `COORDINATION §12`, and it binds
+    /// inside a copied recipe exactly as it binds anywhere else. A recipe that
+    /// spells the raw command teaches the next reader to bypass the build lock.
+    ///
+    /// Verified this way by the adversary on `2db29abe`: **all seven rows
+    /// reproduce byte-for-byte** from `70bd2c74`, including
+    /// `computational-under-let`, which is the row carrying the load.
     ///
     /// ⭐ Read `computational-under-let`: the parent `Sequence` (n12) edges to
     /// **n11**, the computational match's scrutinee, and *not* to the
@@ -3366,6 +3763,115 @@ mod tests {
         assert_ne!(origin_of(entry), outer, "the entry is not the occurrence");
     }
 
+    /// **`RT-FNSPLIT-B2A-S` AC-5 — keying selection by the scheduling ENTRY
+    /// resolves to the WRONG body. Demonstrated, not forbidden by a grep.**
+    ///
+    /// ⛔ The first candidate discharged AC-5 by scanning for four container
+    /// spellings keyed by `StaticNodeId`. The Architect rejected that
+    /// (`evt_6sq2tq3v9jcd0`) and was right: a `Vec` indexed by `planned.entry.0`, a
+    /// type alias, or a bespoke collection all violate the ruled property while
+    /// such a scan stays green. **The property is about which value selects a body,
+    /// so the control has to be about that too.**
+    #[test]
+    fn keying_selection_by_the_scheduling_entry_does_not_resolve_the_body() {
+        // Promise class: durable invariant.
+        let (_, computational) = b2ac_topology_fixtures()
+            .into_iter()
+            .find(|(name, _)| *name == "computational")
+            .expect("the computational fixture");
+        let plan =
+            plan_static_transition_graph(&computational, &BTreeMap::new()).expect("plannable");
+
+        let occurrence = plan.root_static_origin().expect("root occurrence");
+        let entry = *plan.entries.first().expect("a root entry");
+        assert_ne!(
+            occurrence,
+            origin_of(entry),
+            "AC-5: the fixture must actually exhibit the split, or this test is vacuous"
+        );
+
+        // What the TAG resolves to: this match.
+        let by_tag = plan
+            .source_occurrence(occurrence)
+            .expect("the occurrence resolves its own body");
+        assert!(
+            matches!(by_tag, RuntimeExpr::ComputationalMatch { .. }),
+            "AC-5: the occurrence must resolve to the match itself"
+        );
+
+        // What an ENTRY-keyed lookup would resolve to: anything but this body. It
+        // is either a different term or no source occurrence at all -- both are
+        // wrong answers for "the body of this match", which is the point.
+        let by_entry = plan.source_occurrence(origin_of(entry));
+        assert!(
+            !matches!(by_entry, Ok(term) if std::ptr::eq(term, by_tag)),
+            "AC-5: the scheduling entry must not resolve to the occurrence's body; \
+             if it does, entry and occurrence have been conflated again and \
+             hard-stop #8 is back"
+        );
+    }
+
+    /// **`RT-FNSPLIT-B2A-S` AC-5 — and entry-keying cannot be introduced QUIETLY,
+    /// because filing two occurrences under one origin is refused.**
+    ///
+    /// ⭐ This is the mechanism that makes the property enforceable rather than
+    /// merely stated. A `ComputationalMatch` shares its scheduling entry with its
+    /// scrutinee chain, so a table keyed by `.entry` files two terms under one
+    /// index — and `record_source_occurrence` rejects that outright.
+    ///
+    /// **Measured, not assumed:** replacing `expression_seed(resume, …)` with
+    /// `expression_seed(scrutinee.entry, …)` — a compile-preserving mutation, and
+    /// exactly the "key selection by `.entry`" change the Architect asked for —
+    /// reddens **48** tests, **36** of them naming this invariant.
+    #[test]
+    fn filing_two_occurrences_under_one_origin_is_refused() {
+        // Promise class: durable mutation proof.
+        let (_, computational) = b2ac_topology_fixtures()
+            .into_iter()
+            .find(|(name, _)| *name == "computational")
+            .expect("the computational fixture");
+
+        let mut planner = Planner::new().expect("planner");
+        let empty = PersistentNodeId(0);
+        let context = PlanContext {
+            environment: empty,
+            continuation: empty,
+            path: empty,
+            cleanup: empty,
+            affine: empty,
+            source_return: empty,
+        };
+        planner
+            .plan_expr(
+                &computational,
+                context,
+                planner.terminal,
+                EdgeKind::Continue,
+                0,
+            )
+            .expect("plannable");
+
+        // Any node that already owns an occurrence: re-filing it is the collision
+        // an entry-keyed table would produce.
+        let taken = planner
+            .plan
+            .semantic_sources
+            .iter()
+            .find_map(|seed| {
+                matches!(seed.source, SemanticSourceKind::Expression(_))
+                    .then_some(seed.planned_node)
+            })
+            .expect("the fixture plans at least one expression occurrence");
+        assert_eq!(
+            planner
+                .record_source_occurrence(taken, &computational)
+                .unwrap_err(),
+            planner_error("static origin was given more than one source occurrence"),
+            "AC-5: a second occurrence under one origin must be a loud planner \
+             invariant, since that is what silently merges two bodies"
+        );
+    }
+
     /// **AC-15 — a root or transparent-declaration `ComputationalMatch` body
     /// receives the RESUME occurrence, not the scrutinee origin.**
     #[test]
@@ -3378,8 +3884,8 @@ mod tests {
         // Root: the stored occurrence is the resume seed, and the scheduling
         // entry is the scrutinee -- so they must differ, and the occurrence must
         // resolve its own positional children.
-        let plan = plan_static_transition_graph(&computational, &BTreeMap::new())
-            .expect("plannable");
+        let plan =
+            plan_static_transition_graph(&computational, &BTreeMap::new()).expect("plannable");
         let root = plan.root_static_origin().expect("root occurrence");
         let entry = *plan.entries.first().expect("a root entry");
         assert_ne!(
@@ -3411,8 +3917,8 @@ mod tests {
         };
         let mut declarations = BTreeMap::new();
         declarations.insert("decl:fixture::b2ac", &declaration);
-        let plan = plan_static_transition_graph(&RuntimeExpr::Var(0), &declarations)
-            .expect("plannable");
+        let plan =
+            plan_static_transition_graph(&RuntimeExpr::Var(0), &declarations).expect("plannable");
         let occurrence = plan
             .declaration_occurrence_origin("decl:fixture::b2ac")
             .expect("the transparent declaration has an occurrence origin");
