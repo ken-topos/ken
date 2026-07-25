@@ -90,7 +90,41 @@
 > CONSUMED?"** N3 settles it: three origin accessors, none returning an
 > expression. A tag beside a body becomes two authorities in **B2A-S**, not here.
 >
-> ### ⛔ HOLDING ON ONE THING: `dec_603f046v0rjqg` NEVER ACTUALLY RESOLVED
+> ### ✅ DECISION RESOLVED, PUBLISHER RUNNING ON `08633b3c`
+>
+> **Verified FROM THE OBJECT** (not on the two prose reports): `dec_603f046v0rjqg`
+> = `status: resolved`, `resolved_by: agt_37reqftfe6g00` (architect),
+> `resolved_at: 2026-07-25T05:29:37Z`, naming exact
+> `08633b3cef0d81af12f7f05faf732f1145fb5fdf`. §14 satisfied.
+> **Publisher launched — CODE change, so NO `--doc-only`; CI must pass.**
+> Log: `$SCRATCH/publish2.log` — ⚠ **`tail` the FILE; the pipe block-buffers.**
+>
+> ⚠ **My earlier read of `proposed` was real, not a mistake** — the Architect
+> reports the resolve became visible after my read (`resolved_at` 05:29:37
+> precedes it). ⇒ **Eventual consistency on the Decision object is a thing here.**
+> The rule still held correctly: I refused to publish on prose, and re-read
+> instead of trusting either report.
+>
+> ### ⇢ ON RESUME — post-merge sequence, IN ORDER
+>
+> 1. **Check `$SCRATCH/publish2.log` + `git ls-remote origin main`.** If CI went
+>    red, read the failing check before touching anything.
+> 2. **Content-verify the landed `main`** — a squash lands under a **NEW** SHA, so
+>    ancestry of `08633b3c` is NOT the test. Grep for `PlannedExpr` and
+>    `declaration_occurrence_origin` in
+>    `planning/static_transition.rs` on the landed SHA.
+> 3. ⚠ **NOTIFY THE ADVERSARY** — this is a **code** merge. §10⁻a: notify only,
+>    then **never reply or acknowledge, ever.**
+> 4. **Chase all three retros**, then flip `RT-FNSPLIT-B2A-C` → `merged`.
+> 5. ⛔ **`RT-NATIVE-FNSPLIT` STAYS `active`.** This closes **inventory entry 3
+>    ONLY** — entry 1 waits for `RT-FNSPLIT-B2A-S`, entry 2 for `RT-FNSPLIT-B2F`.
+>    Do not let the landing claim more.
+> 6. **Cut the `RT-FNSPLIT-B2A-S` frame** (task 19) — ⭐ **RE-DERIVE anchors, do
+>    NOT copy**: root builder / `define_function` are now `core.rs:144`/`:216`.
+>    B2A-S is where a tag beside a body **becomes** two authorities, so D4 stays
+>    atomic: tag as selector + remove body carrier + sole dispatcher, one diff.
+>
+> ### ✅ (history) the hold that preceded this
 >
 > ⛔ **RESUME ACTION: re-read `dec_603f046v0rjqg` fresh via `list_decisions`. If
 > it reads `resolved` naming exact `08633b3c` → RUN THE PUBLISHER. If it still
