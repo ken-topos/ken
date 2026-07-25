@@ -25,30 +25,66 @@
 >   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
 >   the AC rather than gaming it.
 >
-> ## ⇢ RESUME HERE FIRST — 2026-07-25 T01:45Z
+> ## ⇢ RESUME HERE FIRST — 2026-07-25 T02:30Z
 >
-> **`origin/main = d3b9f36c`** (DOC-W2 landed). **`origin/steward/work = ac31f39c`**
-> (pushed). Two branches wait on origin: `wp/RT-FNSPLIT-B1R-semantic-material` =
-> `e58b3fa6` (**PR #937, in CI**) · `wp/steward-process-batch` = `b3ea7d93`
-> (**pushed, NOT yet published**).
+> **`origin/main = 7151ae58`** · **`origin/steward/work = 9901cca5`** (pushed) ·
+> `wp/steward-process-batch` = `1f9bb4bf` (**PR #938, in CI**).
 >
-> ### ⇢ THE NEXT ACT, in order
+> ### ✅ B2A IS KICKED AND THE RING IS WORKING. THE FLEET IS NOT IDLE.
 >
-> 1. **PR #937 (B1R).** Log: `$SCRATCH/b1r-publish.log`. ⚠ *Waiting on CI is
->    NORMAL, not a stall* — it is **not** doc-only, so the full gate runs.
->    **ON MERGE:** verify landed `origin/main` **by content** (both files under
->    `planning/**`, `lowering/core.rs` still untouched) → flip `RT-FNSPLIT-B1R`
->    to `merged` → request retros from `runtime-leader` → notify the adversary
->    (report-only; **never reply**).
-> 2. **THEN publish `wp/steward-process-batch` (`b3ea7d93`).** Already built off
->    `d3b9f36c`, intersection verified EMPTY, contains the ABI 19/19 spine, the
->    B1R/B2a/B2b frames, both playbook §-additions, `DOC-GATE-NEEDLE`, and the
->    corrected `moot.toml`. ⛔ **Re-check the intersection first** — #937 will
->    have moved `main` under it. Disjoint by construction (`docs/program/**` +
->    `moot.toml` vs `crates/ken-runtime/planning/**`), but *verify, don't assume*.
-> 3. **THEN, only after B1R retros are in and the ring is compacted**, release
->    `RT-FNSPLIT-B2A` (`ready`). It re-anchors onto landed B1R and receives **D0**
->    (the origin carrier) + controls 2/5.
+> **`RT-FNSPLIT-B2A` kicked at `evt_7j6ax916zks4b`** (2026-07-25 T02:2xZ),
+> `runtime-leader` **confirmed `Working`** and announced it would read the carried
+> frame and cut fresh from landed main. Status flipped **`active`**, tracker
+> regenerated. Full §2c gate ran: retros in · no in-flight obligation · quiescent
+> · all three seats compacted and **drops verified on the `Context compacted`
+> marker** (implementer reached `ctx 0%`) · contention checked on **both** axes.
+>
+> ### ⇢ THE NEXT ACT — WAIT ON TWO THINGS, then act on whichever lands first
+>
+> 1. **PR #938** — publisher is polling CI (log `$SCRATCH/batch-publish.log`; it
+>    block-buffers through a grep pipe, so `tail` the file, don't watch the pipe).
+>    On merge: **verify by content** —
+>    `git show origin/main:docs/program/wp/RT-NATIVE-FNSPLIT-recut-B2a-emission-port.md`
+>    — then flip nothing (it carries no WP of its own) and clear task #7.
+>    ⚠ **Measured before kicking: the merge-base intersection is EMPTY** (39
+>    branch paths, 0 under `crates/`; the 2 paths `main` moved are exactly B1R's).
+>    ⇒ **#938 will NOT revert B1R.** ★ I briefly thought it would, off a
+>    `main`-vs-branch diff that showed B1R content as "deleted" — **that is the
+>    wrong probe.** The detector is the *merge-base intersection*, always.
+> 2. **B2a hard-stop or fold** from `runtime-leader`. ⛔ **The next hard-stop on
+>    this chain is #6 and FIRES A RESEARCH PULL** — the Architect's ruling is
+>    gated *behind* the advisory. Dispatch `research` first; do not let the
+>    Architect rule ahead of it.
+>
+> ⛔ **HELD — do NOT release, operator-ruled (see §0-NOW-a):** `DOC-GATE-NEEDLE`
+> (verify) and `ABI-R1` (foundation). Both fully framed. **Fleet is FNSPLIT-only.**
+> ⇒ When a slot finally opens, **compact the receiving ring first** —
+> `verify-leader` and `verify-qa` have been sitting on "awaiting Steward
+> compaction" since 22:42, and `DOC-GATE-NEEDLE` is *verify-owned*, so that
+> compaction is the first half of that kickoff.
+>
+> ### ⚠ THE COUNT OF RECORD WAS STALE BY TWO STOPS — fixed, and it is a pattern
+>
+> `RT-NATIVE-FNSPLIT.md`'s armed counter read **`hard-stop count = 3`** while
+> stops **#4** (B2a pre-code; representation defect in landed B1) and **#5** (B1R
+> could not add the carrier without editing `lowering/core.rs`) had both happened
+> **and been ruled**. That is the exact line the file designates as *winning any
+> disagreement* with the Architect's re-derived count — so a stale value there is
+> worse than none: it would have deferred the research pull by three stops.
+> Corrected to **5**, both stops recorded with their ruling events.
+>
+> ★ **The lesson is structural, and it is the same one as the tracker-flip
+> defect: a counter is only authoritative if it is written AT the stop.** Writing
+> it "at the next seam that re-reads it" is how it silently drifts. ⚠ The B2a
+> **frame** still says "count is 3" — the issue file now states explicitly that
+> it wins, and the kickoff told the leader so.
+>
+> ⚠ **Also stale and NOT yet fixed:** `PX8` and `PX8-F-CAP-41` both read
+> `active` while nobody is working them (both are blocked, and the fleet is
+> FNSPLIT-only). They are program/parent nodes using `active` to mean "open",
+> which collides with `active` meaning "in flight with a seat" — and the frontier
+> pass reads that field. **Decide a spelling for open-but-unassigned program
+> roots rather than leaving two meanings on one value.**
 >
 > ### 0-NOW. What changed this session (supersedes the §0 below where they differ)
 >
