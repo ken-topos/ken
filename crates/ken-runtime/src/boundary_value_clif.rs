@@ -1307,8 +1307,6 @@ mod tests {
             "AC-9: a helper failed to emit a body, or one was added without \
              extending BOUNDARY_LOCAL_HELPERS"
         );
-        // Names, not just a count: a swap that kept the population size would
-        // pass a count and fails this.
         let mut seen = BOUNDARY_LOCAL_HELPERS.to_vec();
         seen.sort_unstable();
         seen.dedup();
@@ -1316,6 +1314,31 @@ mod tests {
             seen.len(),
             BOUNDARY_LOCAL_HELPERS.len(),
             "AC-9: the declared inventory has a duplicate name"
+        );
+
+        // ⛔ **The names the MODULE actually declares, not the names the list
+        // recites.** The two preceding assertions are both properties of
+        // `BOUNDARY_LOCAL_HELPERS` — they never ask the emitter anything, so a
+        // helper renamed at its `declare` site kept them green. Measured, after
+        // Runtime QA found the identical defect in the tag-closure pin: the
+        // shared error is a pin that interrogates the DECLARATION of intent
+        // instead of the artifact.
+        let mut declared: Vec<String> = module
+            .declarations()
+            .get_functions()
+            .filter_map(|(id, decl)| {
+                let name = decl.linkage_name(id).into_owned();
+                name.starts_with("ken_boundary_").then_some(name)
+            })
+            .collect();
+        declared.sort();
+        let mut expected: Vec<String> =
+            BOUNDARY_LOCAL_HELPERS.iter().map(|n| n.to_string()).collect();
+        expected.sort();
+        assert_eq!(
+            declared, expected,
+            "AC-9: the module's declared `ken_boundary_*` symbols are not exactly \
+             the permitted inventory"
         );
     }
 
@@ -1494,5 +1517,112 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// **`AC-1` at the EMITTED interface — the closed tag set, swept, not
+    /// sampled.**
+    ///
+    /// ⛔ **This test exists because the pin it replaces was a false green.**
+    /// `b2v_malformed_words_are_refused_with_distinct_exact_errors` probes the
+    /// single byte `0xFF`. Runtime QA changed `LAST_TAG` from `8` to `8 + 1`
+    /// and every boundary test stayed green (13/13): tag `9` became accepted by
+    /// `define_resolve`, and no emitted-code assertion ever asked about it.
+    ///
+    /// ★ The Rust-side twin already swept all 256 bytes. **The discipline was
+    /// applied on one side of the same property and not the other** — which is
+    /// exactly the failure mode of a per-candidate reminder, satisfied by the
+    /// control you were thinking hardest about.
+    ///
+    /// **MEASURED:** for every one of the 256 tag bytes, the emitted helpers
+    /// return the outcome CLASS the closed set implies.
+    /// **CLAIMED:** emitted code admits exactly the tags `BoundaryTag` admits.
+    /// **THE GAP:** the expectations are derived from `from_bits` /
+    /// `referent_owner` — a *different* expression of the rule than the CLIF's
+    /// `FIRST_HANDLE_TAG`/`LAST_TAG` comparisons — so the two must agree rather
+    /// than one restating the other.
+    #[test]
+    fn b2v_emitted_code_admits_exactly_the_closed_tag_set() {
+        use crate::boundary_value::{
+            BOUNDARY_ERR_BOUNDS, BOUNDARY_ERR_ESCAPE, BOUNDARY_ERR_TAG, BOUNDARY_OK,
+            BOUNDARY_TAG_BITS,
+        };
+
+        let (_m, class_code) = compile_probe(Probe::Unary(|h| h.class));
+        let (_m2, escape_code) = compile_probe(Probe::Status(|h| h.escape_check));
+
+        let mut store = BoundaryValueStore::new();
+        let mut builder = BoundaryArenaBuilder::new();
+        materialize_ground(&mut store, &mut builder, &cons(1)).expect("materializes");
+        let mut arena = builder.finish();
+        let base = arena.publish();
+
+        // Every handle-tagged probe word names a node index far past the end,
+        // so a KNOWN handle tag is distinguishable from an UNKNOWN tag by its
+        // error: bounds versus tag. Without that separation both would refuse
+        // and the sweep could not tell an admitted tag from a rejected one.
+        let out_of_range: u64 = 9_999;
+        let mut admitted = 0usize;
+        let mut rejected = 0usize;
+
+        for byte in 0u64..=255 {
+            let word = BoundaryWord((out_of_range << BOUNDARY_TAG_BITS) | byte);
+            let known = BoundaryTag::from_bits(byte);
+
+            let class = run2(class_code, base, word);
+            match known {
+                None => {
+                    assert_eq!(
+                        class, BOUNDARY_ERR_TAG,
+                        "AC-1: emitted `class` admitted tag byte {byte}, which is \
+                         outside the closed set"
+                    );
+                    rejected += 1;
+                }
+                Some(tag) if tag.is_immediate() => {
+                    assert!(
+                        class >= 0,
+                        "AC-1: emitted `class` refused the admitted immediate tag \
+                         {byte} with status {class}"
+                    );
+                    admitted += 1;
+                }
+                Some(_) => {
+                    assert_eq!(
+                        class, BOUNDARY_ERR_BOUNDS,
+                        "AC-1: an admitted handle tag {byte} with an out-of-range \
+                         index must fail on BOUNDS, not on tag"
+                    );
+                    admitted += 1;
+                }
+            }
+
+            let expected_escape = match known {
+                None => BOUNDARY_ERR_TAG,
+                Some(tag) => match tag.referent_owner() {
+                    BoundaryReferentOwner::InvocationArena => BOUNDARY_ERR_ESCAPE,
+                    BoundaryReferentOwner::NoReferent
+                    | BoundaryReferentOwner::PersistentStore => BOUNDARY_OK,
+                },
+            };
+            assert_eq!(
+                run2(escape_code, base, word),
+                expected_escape,
+                "AC-1/AC-7: emitted `escape_check` disagreed with the closed set \
+                 on tag byte {byte}"
+            );
+        }
+
+        // ⚠ POSITIVE CONTROL. A sweep whose every byte landed in one bucket
+        // would pass both arms above for the wrong reason.
+        assert_eq!(
+            admitted,
+            BoundaryTag::ALL.len(),
+            "AC-1: the number of admitted tag bytes must equal the closed set"
+        );
+        assert_eq!(
+            rejected,
+            256 - BoundaryTag::ALL.len(),
+            "AC-1: every remaining byte must be rejected"
+        );
     }
 }
