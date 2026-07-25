@@ -37,6 +37,7 @@ fn run_dynamic_constructor_dispatch_fixture(
     let mut compiler = Lowering {
         seed_env: &seed_env,
         declarations: BTreeMap::new(),
+        static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),
         active_recursive_declarations: Vec::new(),
         result_table: BTreeMap::new(),
@@ -122,6 +123,16 @@ fn run_dynamic_constructor_dispatch_fixture(
             code: RuntimeTrapCode::PatternMatchFailure,
             message: "px7p exact dynamic source default".to_string(),
         };
+        // This path lowers the SELECTED case body, so its origin must be real:
+        // plan the very match these cases belong to and install that plan, so
+        // case *i*'s body is child `1 + i` of a genuinely planned occurrence.
+        let source_match = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: cases.clone(),
+            default: default.clone(),
+        };
+        let (plan, match_origin) = planned_root_occurrence(&source_match);
+        compiler.static_transition_plan = plan;
         let lowered = compiler.lower_dynamic_constructor_match(
             &mut builder,
             dynamic,
@@ -129,6 +140,7 @@ fn run_dynamic_constructor_dispatch_fixture(
                 cases: &cases,
                 default: &default,
                 env: &[],
+                static_origin: match_origin,
             },
         )?;
         let value = match lowered {
@@ -218,6 +230,7 @@ fn heterogeneous_later_ordinary_missing_selects_exact_default() {
             cases: &later_cases,
             default: &later_default,
             env: &[],
+            static_origin: inert_test_static_origin(),
             retained_scrutinee_index: None,
             deferred_constructor_case: None,
         },
@@ -296,6 +309,7 @@ fn heterogeneous_first_ordinary_missing_selects_exact_default() {
             cases: &first_cases,
             default: &first_default,
             env: &[],
+            static_origin: inert_test_static_origin(),
             retained_scrutinee_index: None,
             deferred_constructor_case: None,
         },

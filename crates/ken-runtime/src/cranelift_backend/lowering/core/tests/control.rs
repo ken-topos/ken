@@ -21,10 +21,15 @@ enum Px8dsEdgeMutation {
     CrossSibling,
     WrongStaticParent,
 }
+/// ⚠ The plan here is a minimal inert one: every test that uses this builder
+/// exercises a ledger, authority, or frame validator and never lowers an
+/// expression through it, so no child origin is ever derived. A test that DOES
+/// lower a fixture builds its own `Lowering` with that fixture's plan.
 fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowering<'a> {
     Lowering {
         seed_env,
         declarations: BTreeMap::new(),
+        static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),
         active_recursive_declarations: Vec::new(),
         result_table: BTreeMap::new(),
@@ -88,9 +93,30 @@ fn run_px8j_malformed_recursor_consumer(
     context.func =
         Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
     let seed_env = NativeSeedEnvironment::empty();
+    // The consumer under test lowers exactly one of these two fixtures, so the
+    // plan is that fixture's own: every origin the lowering derives below is a
+    // real positional child of a really-planned occurrence.
+    let call = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Var(0)),
+        args: Vec::new(),
+    };
+    let pending_let = RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        body: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::Var(1)),
+            args: Vec::new(),
+        }),
+    };
+    let lowered_fixture = match consumer {
+        Px8jDirectRecursorConsumer::PendingLetProducer => &pending_let,
+        Px8jDirectRecursorConsumer::ProducerCall
+        | Px8jDirectRecursorConsumer::OrdinaryCall => &call,
+    };
+    let (static_transition_plan, fixture_origin) = planned_root_occurrence(lowered_fixture);
     let mut compiler = Lowering {
         seed_env: &seed_env,
         declarations: BTreeMap::new(),
+        static_transition_plan,
         declaration_stack: Vec::new(),
         active_recursive_declarations: Vec::new(),
         result_table: BTreeMap::new(),
@@ -143,6 +169,7 @@ fn run_px8j_malformed_recursor_consumer(
             message: "px8j malformed recursor role".to_string(),
         },
         outer_env: Vec::new(),
+        static_origin: inert_test_static_origin(),
         provenance: RecursorFrameProvenance(6),
         role,
         checked_frame_id: None,
@@ -193,9 +220,14 @@ fn run_px8j_malformed_recursor_consumer(
         residual: Box::new(Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
-            body: RuntimeExpr::Construct {
-                constructor: "ctor:fixture::PX8J::Done".to_string(),
-                args: Vec::new(),
+            // A childless residual: `Construct` with no arguments derives no
+            // child origin, so an inert planned origin is honest here.
+            body: OwnedSourceOccurrence {
+                expr: RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::PX8J::Done".to_string(),
+                    args: Vec::new(),
+                },
+                static_origin: inert_test_static_origin(),
             },
         }),
         activation: ContinuationActivationId(8),
@@ -223,28 +255,21 @@ fn run_px8j_malformed_recursor_consumer(
     };
     let active_frames = [EliminatorFrame::Active(active)];
     let env = [recursor];
-    let call = RuntimeExpr::Call {
-        callee: Box::new(RuntimeExpr::Var(0)),
-        args: Vec::new(),
-    };
-    let pending_let = RuntimeExpr::Let {
-        value: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
-        body: Box::new(RuntimeExpr::Call {
-            callee: Box::new(RuntimeExpr::Var(1)),
-            args: Vec::new(),
-        }),
-    };
     let mut function_context = FunctionBuilderContext::new();
     let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
     let entry = builder.create_block();
     builder.switch_to_block(entry);
+    let occurrence = SourceOccurrence {
+        expr: lowered_fixture,
+        static_origin: fixture_origin,
+    };
     match consumer {
-        Px8jDirectRecursorConsumer::PendingLetProducer => compiler
-            .lower_computational_producer_expr(&mut builder, &pending_let, &env, &active_frames),
-        Px8jDirectRecursorConsumer::ProducerCall => {
-            compiler.lower_computational_producer_expr(&mut builder, &call, &env, &active_frames)
+        Px8jDirectRecursorConsumer::PendingLetProducer
+        | Px8jDirectRecursorConsumer::ProducerCall => compiler
+            .lower_computational_producer_expr(&mut builder, occurrence, &env, &active_frames),
+        Px8jDirectRecursorConsumer::OrdinaryCall => {
+            compiler.lower_expr(&mut builder, occurrence, &env)
         }
-        Px8jDirectRecursorConsumer::OrdinaryCall => compiler.lower_expr(&mut builder, &call, &env),
     }
 }
 
@@ -490,9 +515,14 @@ fn run_px8ds_edge_consumer(
         residual: Box::new(Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
-            body: RuntimeExpr::Construct {
-                constructor: "ctor:fixture::PX8DS::Done".to_string(),
-                args: Vec::new(),
+            // A childless residual: `Construct` with no arguments derives no
+            // child origin, so an inert planned origin is honest here.
+            body: OwnedSourceOccurrence {
+                expr: RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::PX8DS::Done".to_string(),
+                    args: Vec::new(),
+                },
+                static_origin: inert_test_static_origin(),
             },
         }),
         activation,
@@ -521,6 +551,15 @@ fn run_px8ds_edge_consumer(
             args: Vec::new(),
         }),
     };
+    // Plan the fixture this consumer actually lowers, and install that plan on
+    // the compiler under test.
+    let lowered_fixture = match consumer {
+        Px8jDirectRecursorConsumer::PendingLetProducer => &pending_let,
+        Px8jDirectRecursorConsumer::ProducerCall
+        | Px8jDirectRecursorConsumer::OrdinaryCall => &call,
+    };
+    let (static_transition_plan, fixture_origin) = planned_root_occurrence(lowered_fixture);
+    compiler.static_transition_plan = static_transition_plan;
 
     let mut module = new_jit_module()?;
     let mut signature = module.make_signature();
@@ -535,13 +574,17 @@ fn run_px8ds_edge_consumer(
     let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
     let entry = builder.create_block();
     builder.switch_to_block(entry);
+    let occurrence = SourceOccurrence {
+        expr: lowered_fixture,
+        static_origin: fixture_origin,
+    };
     match consumer {
-        Px8jDirectRecursorConsumer::PendingLetProducer => compiler
-            .lower_computational_producer_expr(&mut builder, &pending_let, &env, &active_frames),
-        Px8jDirectRecursorConsumer::ProducerCall => {
-            compiler.lower_computational_producer_expr(&mut builder, &call, &env, &active_frames)
+        Px8jDirectRecursorConsumer::PendingLetProducer
+        | Px8jDirectRecursorConsumer::ProducerCall => compiler
+            .lower_computational_producer_expr(&mut builder, occurrence, &env, &active_frames),
+        Px8jDirectRecursorConsumer::OrdinaryCall => {
+            compiler.lower_expr(&mut builder, occurrence, &env)
         }
-        Px8jDirectRecursorConsumer::OrdinaryCall => compiler.lower_expr(&mut builder, &call, &env),
     }
 }
 
@@ -736,6 +779,7 @@ fn oriented_source_open_occurrence_cross_checks_the_closure_selected_parent() {
                 message: "PX8-DS source parent".to_string(),
             },
             outer_env: Vec::new(),
+            static_origin: inert_test_static_origin(),
             provenance: RecursorFrameProvenance(71),
             checked_frame_id: Some(2),
             checked_invocation_id: Some(0),
@@ -875,6 +919,7 @@ fn run_px8j_source_machine_install(
             message: "PX8-J-ERR source install".to_string(),
         },
         outer_env: Vec::new(),
+        static_origin: inert_test_static_origin(),
         provenance: RecursorFrameProvenance(18),
         role,
         checked_frame_id: None,
@@ -1443,6 +1488,7 @@ fn nested_computational_inner_missing_selects_exact_inner_default() {
             cases: &inner_cases,
             default: &inner_default,
             env: &[],
+            static_origin: inert_test_static_origin(),
             retained_scrutinee_index: None,
             deferred_constructor_case: None,
             provenance: RecursorFrameProvenance(1),
@@ -1455,6 +1501,7 @@ fn nested_computational_inner_missing_selects_exact_inner_default() {
             cases: &outer_cases,
             default: &outer_default,
             env: &[],
+            static_origin: inert_test_static_origin(),
             retained_scrutinee_index: None,
             deferred_constructor_case: None,
             provenance: RecursorFrameProvenance(0),
@@ -1869,6 +1916,7 @@ fn nested_computational_outer_missing_selects_exact_outer_default() {
             cases: &inner_cases,
             default: &inner_default,
             env: &[],
+            static_origin: inert_test_static_origin(),
             retained_scrutinee_index: None,
             deferred_constructor_case: None,
             provenance: RecursorFrameProvenance(1),
@@ -1881,6 +1929,7 @@ fn nested_computational_outer_missing_selects_exact_outer_default() {
             cases: &outer_cases,
             default: &outer_default,
             env: &[],
+            static_origin: inert_test_static_origin(),
             retained_scrutinee_index: None,
             deferred_constructor_case: None,
             provenance: RecursorFrameProvenance(0),
@@ -1891,7 +1940,7 @@ fn nested_computational_outer_missing_selects_exact_outer_default() {
         },
     ];
 
-    let (_, outer_frames) = select_computational_case(&frames, "ctor:fixture::Inner::Hit")
+    let (_, _, outer_frames) = select_computational_case(&frames, "ctor:fixture::Inner::Hit")
         .expect("the inner case succeeds before the outer miss");
     let trap = match select_computational_case(outer_frames, "ctor:fixture::Outer::Missing") {
         Err(trap) => trap,
@@ -1908,6 +1957,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
     let mut lowering = Lowering {
         seed_env: &seed_env,
         declarations: BTreeMap::new(),
+        static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),
         active_recursive_declarations: Vec::new(),
         result_table: BTreeMap::new(),
@@ -2362,6 +2412,7 @@ fn oriented_test_layer(frame_id: u64, role: RecursorLayerRole) -> ComputationalR
             message: format!("oriented frame {frame_id}"),
         },
         outer_env: Vec::new(),
+        static_origin: inert_test_static_origin(),
         provenance: RecursorFrameProvenance(frame_id),
         role,
         checked_frame_id: Some(frame_id),
@@ -2852,5 +2903,650 @@ fn self_consistent_join_site(
         checked_result_type_fingerprint,
         runtime_frame_fingerprint,
         answer_kind: crate::NativeJoinAnswerKindV1::Int,
+    }
+}
+
+// ─── RT-FNSPLIT-B2A-C D5 — the coverage guard ─────────────────────────────
+//
+// ⭐ This is the deliverable with the longest half-life in the chain: it is what
+// stops inventory entry 3 recurring the next time `RuntimeExpr` grows a field.
+// It has TWO independent failure modes, and the first is a COMPILE error rather
+// than an assertion, which is strictly stronger:
+//
+//  1. `expression_children` below matches every `RuntimeExpr` variant with its
+//     fields spelled out and **no `..` and no `_ =>` arm**. Add a field to any
+//     variant and this stops compiling (E0027 "pattern does not mention field");
+//     add a variant and it stops compiling (E0004). A wildcard here is what
+//     would let a new expression-typed field become silently originless, so the
+//     absence of one is the mechanism, not a style preference.
+//  2. Even with the pattern updated, the guard asserts that the plane holds
+//     **exactly** the enumerated children for a planned instance of every
+//     variant — no more, no fewer — so a field that is enumerated here but not
+//     planned, or planned but not enumerated, is still red.
+//
+// ⛔ A test that merely enumerates today's variants and passes is NOT this
+// guard (AC-3). The demonstration that it reddens on an *added* field is in the
+// handoff.
+
+/// Every expression-typed field of one occurrence, **in the planner's child
+/// order** — the order of the `children` slice handed to `expression_node` /
+/// `expression_seed`, which is what the positional child-origin range is laid
+/// out against.
+///
+/// ⚠ Two variants order their children differently from their declaration:
+/// `LexicalClosure` plans **body first** (position 0) with capture *i* at
+/// `1 + i`, and `Effect` gives position 0 to `capability.value` **only when it
+/// is present**, shifting every argument by one.
+#[cfg(test)]
+fn expression_children(expr: &RuntimeExpr) -> Vec<&RuntimeExpr> {
+    match expr {
+        RuntimeExpr::CheckedJoinSite { site_id: _, body } => vec![body],
+        RuntimeExpr::CheckedSubcontinuationFrame { frame_id: _, body } => vec![body],
+        RuntimeExpr::CheckedRecursiveInvocation {
+            call_template_id: _,
+            checked_occurrence_path: _,
+            body,
+        } => vec![body],
+        RuntimeExpr::CheckedComputationalIHSlots {
+            slot_template_ids: _,
+            checked_occurrence_paths: _,
+            body,
+        } => vec![body],
+        RuntimeExpr::CheckedComputationalIHInvocation {
+            call_template_id: _,
+            checked_occurrence_path: _,
+            body,
+        } => vec![body],
+        RuntimeExpr::Value(_) => Vec::new(),
+        RuntimeExpr::Var(_) => Vec::new(),
+        RuntimeExpr::Let { value, body } => vec![value, body],
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => vec![scrutinee, then_expr, else_expr],
+        RuntimeExpr::PrimitiveCall { primitive: _, args } => args.iter().collect(),
+        RuntimeExpr::Construct {
+            constructor: _,
+            args,
+        } => args.iter().collect(),
+        RuntimeExpr::Match {
+            scrutinee,
+            cases,
+            default: _,
+        } => std::iter::once(scrutinee.as_ref())
+            .chain(cases.iter().map(|case| &case.body))
+            .collect(),
+        RuntimeExpr::ComputationalMatch {
+            scrutinee,
+            cases,
+            default: _,
+        } => std::iter::once(scrutinee.as_ref())
+            .chain(cases.iter().map(|case| &case.body))
+            .collect(),
+        RuntimeExpr::Record { fields } => fields.iter().map(|(_, value)| value).collect(),
+        RuntimeExpr::Project { record, field: _ } => vec![record],
+        RuntimeExpr::Closure {
+            captures: _,
+            params: _,
+            body,
+        } => vec![body],
+        RuntimeExpr::LexicalClosure {
+            captures,
+            params: _,
+            body,
+        } => std::iter::once(body.as_ref()).chain(captures.iter()).collect(),
+        RuntimeExpr::DeclarationRef { symbol: _ } => Vec::new(),
+        RuntimeExpr::ImportedDeclarationRef {
+            symbol: _,
+            dependency: _,
+            dependency_semantic_hash: _,
+        } => Vec::new(),
+        RuntimeExpr::Call { callee, args } => std::iter::once(callee.as_ref())
+            .chain(args.iter())
+            .collect(),
+        RuntimeExpr::Effect {
+            family: _,
+            operation: _,
+            capability,
+            args,
+        } => capability
+            .iter()
+            .map(|capability| capability.value.as_ref())
+            .chain(args.iter())
+            .collect(),
+        RuntimeExpr::Trap(_) => Vec::new(),
+    }
+}
+
+/// One planned instance of **every** `RuntimeExpr` variant, each carrying at
+/// least one expression-typed field where the variant has any, so a dropped
+/// position cannot hide behind an empty list.
+#[cfg(test)]
+fn every_variant_occurrence() -> Vec<(&'static str, RuntimeExpr)> {
+    let leaf = || RuntimeExpr::Value(RuntimeValue::Bool(true));
+    let trap = || RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "b2ac coverage guard".to_string(),
+    };
+    vec![
+        (
+            "CheckedJoinSite",
+            RuntimeExpr::CheckedJoinSite {
+                site_id: 1,
+                body: Box::new(leaf()),
+            },
+        ),
+        (
+            "CheckedSubcontinuationFrame",
+            RuntimeExpr::CheckedSubcontinuationFrame {
+                frame_id: 2,
+                body: Box::new(leaf()),
+            },
+        ),
+        (
+            "CheckedRecursiveInvocation",
+            RuntimeExpr::CheckedRecursiveInvocation {
+                call_template_id: 3,
+                checked_occurrence_path: vec![1],
+                body: Box::new(leaf()),
+            },
+        ),
+        (
+            "CheckedComputationalIHSlots",
+            RuntimeExpr::CheckedComputationalIHSlots {
+                slot_template_ids: vec![4],
+                checked_occurrence_paths: vec![vec![1]],
+                body: Box::new(leaf()),
+            },
+        ),
+        (
+            "CheckedComputationalIHInvocation",
+            RuntimeExpr::CheckedComputationalIHInvocation {
+                call_template_id: 5,
+                checked_occurrence_path: vec![1],
+                body: Box::new(leaf()),
+            },
+        ),
+        ("Value", leaf()),
+        ("Var", RuntimeExpr::Var(0)),
+        (
+            "Let",
+            RuntimeExpr::Let {
+                value: Box::new(leaf()),
+                body: Box::new(RuntimeExpr::Var(0)),
+            },
+        ),
+        (
+            "If",
+            RuntimeExpr::If {
+                scrutinee: Box::new(leaf()),
+                then_expr: Box::new(leaf()),
+                else_expr: Box::new(leaf()),
+            },
+        ),
+        (
+            "PrimitiveCall",
+            total_primitive("prim:fixture::b2ac", vec![leaf(), leaf()]),
+        ),
+        (
+            "Construct",
+            RuntimeExpr::Construct {
+                constructor: "ctor:fixture::B2AC::Pair".to_string(),
+                args: vec![leaf(), leaf()],
+            },
+        ),
+        (
+            "Match",
+            RuntimeExpr::Match {
+                scrutinee: Box::new(leaf()),
+                cases: vec![
+                    RuntimeMatchCase {
+                        constructor: "ctor:fixture::B2AC::A".to_string(),
+                        binders: 0,
+                        body: leaf(),
+                    },
+                    RuntimeMatchCase {
+                        constructor: "ctor:fixture::B2AC::B".to_string(),
+                        binders: 0,
+                        body: leaf(),
+                    },
+                ],
+                default: trap(),
+            },
+        ),
+        (
+            "ComputationalMatch",
+            RuntimeExpr::ComputationalMatch {
+                scrutinee: Box::new(leaf()),
+                cases: vec![crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::B2AC::A".to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: leaf(),
+                }],
+                default: trap(),
+            },
+        ),
+        (
+            "Record",
+            RuntimeExpr::Record {
+                fields: vec![("l".to_string(), leaf()), ("r".to_string(), leaf())],
+            },
+        ),
+        (
+            "Project",
+            RuntimeExpr::Project {
+                record: Box::new(RuntimeExpr::Record {
+                    fields: vec![("l".to_string(), leaf())],
+                }),
+                field: "l".to_string(),
+            },
+        ),
+        (
+            "Closure",
+            RuntimeExpr::Closure {
+                captures: Vec::new(),
+                params: vec!["x".to_string()],
+                body: Box::new(leaf()),
+            },
+        ),
+        (
+            "LexicalClosure",
+            RuntimeExpr::LexicalClosure {
+                captures: vec![leaf(), leaf()],
+                params: vec!["x".to_string()],
+                body: Box::new(leaf()),
+            },
+        ),
+        (
+            "DeclarationRef",
+            RuntimeExpr::DeclarationRef {
+                symbol: "decl:fixture::b2ac".to_string(),
+            },
+        ),
+        (
+            "ImportedDeclarationRef",
+            RuntimeExpr::ImportedDeclarationRef {
+                symbol: "decl:fixture::b2ac".to_string(),
+                dependency: "pkg:fixture".to_string(),
+                dependency_semantic_hash: "hash".to_string(),
+            },
+        ),
+        (
+            "Call",
+            RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Var(0)),
+                args: vec![leaf(), leaf()],
+            },
+        ),
+        (
+            "Effect (capability present)",
+            RuntimeExpr::Effect {
+                family: "Fs".to_string(),
+                operation: ken_host::HostOpV1::FsReadFile,
+                capability: Some(crate::RuntimeCapabilityUse {
+                    identity: "cap:fixture::fs".to_string(),
+                    value: Box::new(RuntimeExpr::Var(0)),
+                }),
+                args: vec![leaf()],
+            },
+        ),
+        (
+            "Effect (capability absent)",
+            RuntimeExpr::Effect {
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleWrite,
+                capability: None,
+                args: vec![leaf(), leaf()],
+            },
+        ),
+        ("Trap", RuntimeExpr::Trap(trap())),
+    ]
+}
+
+#[test]
+fn every_expression_typed_field_is_a_reachable_positional_child_origin() {
+    let mut unreachable = Vec::new();
+    for (name, occurrence) in every_variant_occurrence() {
+        let (plan, origin) = planned_root_occurrence(&occurrence);
+        let children = expression_children(&occurrence);
+
+        // Every enumerated position resolves to a real preallocated origin.
+        for position in 0..children.len() {
+            if plan.child_static_origin(origin, position).is_err() {
+                unreachable.push(format!("{name}: position {position} does not resolve"));
+            }
+        }
+        // And there is no position beyond them: the plane holds exactly the
+        // enumerated children, so an unenumerated field is red too.
+        if plan.child_static_origin(origin, children.len()).is_ok() {
+            unreachable.push(format!(
+                "{name}: the plane holds a child at position {} that no field enumerates",
+                children.len()
+            ));
+        }
+    }
+    assert!(
+        unreachable.is_empty(),
+        "every expression-typed field must be a reachable positional child origin: {unreachable:#?}"
+    );
+}
+
+// ─── RT-FNSPLIT-B2A-C AC-4/AC-6 — the positional-derivation controls ──────
+//
+// ★ AC-4's second control is the chain's own predicate as an executable test:
+// if identity moves when only the ADDRESS moved, the tag is not authoritative.
+
+/// Two same-shaped children distinguishable **only** by how many children they
+/// themselves have — so which one a position resolves to is observable through
+/// the positional accessor alone, with no origin→expression lookup (N3).
+#[cfg(test)]
+fn one_child_record() -> RuntimeExpr {
+    RuntimeExpr::Record {
+        fields: vec![("l".to_string(), RuntimeExpr::Value(RuntimeValue::Bool(true)))],
+    }
+}
+
+#[cfg(test)]
+fn two_child_record() -> RuntimeExpr {
+    RuntimeExpr::Record {
+        fields: vec![
+            ("l".to_string(), RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            ("r".to_string(), RuntimeExpr::Value(RuntimeValue::Bool(false))),
+        ],
+    }
+}
+
+#[test]
+fn swapping_two_same_shaped_children_swaps_their_derived_origins() {
+    let branch = |then_expr: RuntimeExpr, else_expr: RuntimeExpr| RuntimeExpr::If {
+        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        then_expr: Box::new(then_expr),
+        else_expr: Box::new(else_expr),
+    };
+    // `arity_at(position)` reads how many children the occurrence at that
+    // position has, using nothing but the positional accessor.
+    let arity_at = |expr: &RuntimeExpr, position: usize| {
+        let (plan, root) = planned_root_occurrence(expr);
+        let child = plan
+            .child_static_origin(root, position)
+            .expect("If has three positional children");
+        (0..)
+            .take_while(|inner| plan.child_static_origin(child, *inner).is_ok())
+            .count()
+    };
+
+    let straight = branch(one_child_record(), two_child_record());
+    let swapped = branch(two_child_record(), one_child_record());
+
+    assert_eq!(arity_at(&straight, 1), 1, "then_expr is the one-child record");
+    assert_eq!(arity_at(&straight, 2), 2, "else_expr is the two-child record");
+    // The children swapped in the source; the derived origins swapped with them.
+    assert_eq!(arity_at(&swapped, 1), 2, "then_expr is now the two-child record");
+    assert_eq!(arity_at(&swapped, 2), 1, "else_expr is now the one-child record");
+}
+
+#[test]
+fn perturbing_a_borrowed_address_does_not_move_any_derived_origin() {
+    let expr = RuntimeExpr::If {
+        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        then_expr: Box::new(one_child_record()),
+        else_expr: Box::new(two_child_record()),
+    };
+    // A clone is the same syntax at different addresses, and boxing it again
+    // moves every interior node. No ordinal changes.
+    let relocated = Box::new(expr.clone());
+
+    let derive = |expr: &RuntimeExpr| {
+        let (plan, root) = planned_root_occurrence(expr);
+        (0..3)
+            .map(|position| {
+                plan.child_static_origin(root, position)
+                    .expect("If has three positional children")
+            })
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+        derive(&expr),
+        derive(relocated.as_ref()),
+        "identity must not move when only the address moved"
+    );
+}
+
+#[test]
+fn an_out_of_range_child_position_is_a_loud_planner_invariant() {
+    let (plan, root) = planned_root_occurrence(&one_child_record());
+    let error = plan
+        .child_static_origin(root, 7)
+        .expect_err("a record with one field has no child at position 7");
+    // AC-6: an invariant violation is a compiler bug, never a capacity limit --
+    // so the specific variant is asserted, not `is_err()`.
+    match error {
+        CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref reason)) => {
+            assert_eq!(reason, "static origin has no child at that source position");
+        }
+        other => panic!("expected a loud PlannerInvariant, got {other:?}"),
+    }
+}
+
+// ─── RT-FNSPLIT-B2A-C N1/N2 — the emission census, pinned mechanically ────
+//
+// AC-7 wants each negative-boundary pin discharged by a committed check rather
+// than by review reading. N1 and N2 are counting properties over the PRODUCTION
+// lowering and planning sources, so they are pinned by counting call
+// expressions in those exact files. The test sources live in a sibling
+// directory, so no `#[cfg(test)]` region has to be parsed out: the partition is
+// at file level.
+
+#[test]
+fn correspondence_adds_no_emitted_unit_to_the_production_census() {
+    struct Census {
+        file: &'static str,
+        source: &'static str,
+        builders: usize,
+        definitions: usize,
+        declarations: usize,
+    }
+    let census = [
+        Census {
+            file: "lowering/core.rs",
+            source: include_str!("../../core.rs"),
+            // N1: exactly one root `FunctionBuilder::new` and one root
+            // `define_function`. The two declarations are the entry point and
+            // the IMPORTED host-dispatch symbol -- an import, not a definition.
+            builders: 1,
+            definitions: 1,
+            declarations: 2,
+        },
+        Census {
+            file: "lowering/mod.rs",
+            source: include_str!("../../mod.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+        },
+        Census {
+            file: "planning.rs",
+            source: include_str!("../../../planning.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+        },
+        Census {
+            file: "planning/static_transition.rs",
+            source: include_str!("../../../planning/static_transition.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+        },
+        Census {
+            file: "planning/static_transition/semantic_ir.rs",
+            source: include_str!("../../../planning/static_transition/semantic_ir.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+        },
+    ];
+    for row in census {
+        assert_eq!(
+            row.source.matches("FunctionBuilder::new(").count(),
+            row.builders,
+            "{}: N1 -- the production root builder census moved",
+            row.file
+        );
+        assert_eq!(
+            row.source.matches(".define_function(").count(),
+            row.definitions,
+            "{}: N1/N2 -- a definition was added or removed",
+            row.file
+        );
+        assert_eq!(
+            row.source.matches(".declare_function(").count(),
+            row.declarations,
+            "{}: N2 -- a function declaration was added or removed",
+            row.file
+        );
+    }
+}
+
+/// N3 — **no plan `origin -> expr` lookup from a lowering consumer.**
+///
+/// Pinned at the producing end rather than by searching for callers: the plan
+/// exposes exactly three origin accessors to the rest of the backend, and none
+/// of them returns an expression. `RT-FNSPLIT-B2A-S`'s occurrence table was
+/// deliberately NOT folded in for this reason (D8), so the lookup this pin
+/// forbids does not exist to be called.
+#[test]
+fn the_plan_exposes_no_origin_to_expression_lookup() {
+    let source = include_str!("../../../planning/static_transition.rs");
+    let exported: Vec<&str> = source
+        .lines()
+        .filter(|line| line.trim_start().starts_with("pub(in crate::cranelift_backend) fn "))
+        .map(|line| line.trim())
+        .collect();
+    assert_eq!(
+        exported,
+        vec![
+            "pub(in crate::cranelift_backend) fn child_static_origin(",
+            "pub(in crate::cranelift_backend) fn root_static_origin(",
+            "pub(in crate::cranelift_backend) fn declaration_occurrence_origin(",
+            "pub(in crate::cranelift_backend) fn plan_static_transition_graph(",
+        ],
+        "N3 -- the planner's exported surface changed; an origin->expression \
+         accessor here would let a lowering consumer select a body by tag, \
+         which is RT-FNSPLIT-B2A-S and not this unit"
+    );
+    assert!(
+        !source.contains("-> Result<&'src RuntimeExpr"),
+        "N3 -- no accessor may return a borrowed source expression"
+    );
+}
+
+// ─── RT-FNSPLIT-B2A-C AC-1 — uniform threading, shown not asserted ────────
+//
+// ⛔ A prose claim that "the fallback is covered" does not discharge AC-1. This
+// reads the DECLARATIONS of the three source-term carriers and pins two
+// properties structurally:
+//
+//  1. no field in any of them is a bare `RuntimeExpr` / `Vec<RuntimeExpr>` --
+//     every carried term is an occurrence pair, so a frame cannot hold a term
+//     whose origin was dropped;
+//  2. every variant that carries a `cases` list also declares the parent
+//     `static_origin` its case bodies are derived from.
+//
+// Both are declaration-level, not substring-level: a mention of `RuntimeExpr` in
+// a comment or in this test's own message cannot satisfy or break them.
+
+#[cfg(test)]
+fn declaration_span(source: &'static str, header: &str) -> Vec<&'static str> {
+    let start = source
+        .find(header)
+        .unwrap_or_else(|| panic!("{header} is declared in the lowering facade"));
+    let mut depth = 0usize;
+    let mut span = Vec::new();
+    for line in source[start..].lines() {
+        span.push(line);
+        depth += line.matches('{').count();
+        depth -= line.matches('}').count();
+        if depth == 0 && span.len() > 1 {
+            break;
+        }
+    }
+    span
+}
+
+/// The bare-source-term predicate, factored out so it can be given a positive
+/// control. ⚠ Without one, this whole pin would pass for the trivial reason that
+/// it finds nothing — a negative check passes for any reason.
+#[cfg(test)]
+fn is_bare_source_term_field(line: &str) -> bool {
+    let field = line.trim();
+    field == "expr: RuntimeExpr,"
+        || field == "body: RuntimeExpr,"
+        || field == "then_expr: RuntimeExpr,"
+        || field == "else_expr: RuntimeExpr,"
+        || field == "remaining: Vec<RuntimeExpr>,"
+        || field == "args: Vec<RuntimeExpr>,"
+}
+
+#[test]
+fn the_bare_source_term_detector_catches_the_shape_it_is_looking_for() {
+    // The pre-B2A-C declarations, verbatim. If the detector cannot see these it
+    // is asserting nothing about the post-B2A-C ones.
+    for pre_amendment in [
+        "        expr: RuntimeExpr,",
+        "        body: RuntimeExpr,",
+        "        then_expr: RuntimeExpr,",
+        "        remaining: Vec<RuntimeExpr>,",
+        "        args: Vec<RuntimeExpr>,",
+    ] {
+        assert!(
+            is_bare_source_term_field(pre_amendment),
+            "the AC-1 detector must catch {pre_amendment:?}"
+        );
+    }
+    assert!(!is_bare_source_term_field("        expr: OwnedSourceOccurrence,"));
+    assert!(!is_bare_source_term_field("    // a comment naming RuntimeExpr"));
+}
+
+#[test]
+fn every_source_term_carrier_holds_an_occurrence_and_never_a_bare_expression() {
+    let source = include_str!("../../mod.rs");
+    for header in [
+        "enum SourceContinuation<'a> {",
+        "enum SourcePrefixTemplate {",
+        "enum SourceMachineState<'a> {",
+    ] {
+        let span = declaration_span(source, header);
+        let bare: Vec<&str> = span
+            .iter()
+            .copied()
+            .filter(|line| is_bare_source_term_field(line))
+            .collect();
+        assert!(
+            bare.is_empty(),
+            "AC-1: {header} still carries a bare source term without its origin: {bare:?}"
+        );
+
+        // Every `cases`-bearing variant declares its parent origin. The variant
+        // boundary is a field list, so scan forward from each `cases:` line to
+        // the variant's closing brace.
+        let mut index = 0;
+        while index < span.len() {
+            if span[index].trim().starts_with("cases: Vec<") {
+                let variant_tail = span[index..]
+                    .iter()
+                    .take_while(|line| !line.trim().starts_with("},"))
+                    .any(|line| line.trim() == "static_origin: StaticOriginId,");
+                assert!(
+                    variant_tail,
+                    "AC-1: {header} has a `cases` variant with no `static_origin`; \
+                     its case bodies would have no parent to derive from"
+                );
+            }
+            index += 1;
+        }
     }
 }

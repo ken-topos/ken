@@ -30,9 +30,12 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         oriented_subcontinuation_plan.as_ref(),
     )?;
     // Boundary A of RT-NATIVE-FNSPLIT: close and validate the factored static
-    // graph before Cranelift sees any semantic body. Phase 2 will consume this
-    // plan for emission; until then the existing emitter remains unchanged.
+    // graph before Cranelift sees any semantic body. The plan's positional
+    // child-origin table is reachable from the lowering, so
+    // every occurrence carries the static name the planner already gave it. The
+    // emitter is otherwise unchanged: the origin is provenance, never a selector.
     let static_transition_plan = plan_static_transition_graph(expr, &declarations)?;
+    let root_static_origin = static_transition_plan.root_static_origin()?;
     let mut sig = module.make_signature();
     sig.params
         .push(AbiParam::new(module.target_config().pointer_type()));
@@ -89,6 +92,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     let mut compiler = Lowering {
         seed_env,
         declarations,
+        static_transition_plan,
         declaration_stack: Vec::new(),
         active_recursive_declarations: Vec::new(),
         result_table: BTreeMap::new(),
@@ -169,7 +173,18 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
             initial_env.push(compiler.lower_value(&mut builder, value)?);
         }
         compiler.root_terminal_authority = compiler.take_distinguished_root_answer_authority()?;
-        let lowered = compiler.lower_expr(&mut builder, expr, &initial_env)?;
+        // D6/D9: the root lowering starts from the occurrence origin stored
+        // during the planner's root visit — never derived from the plan's
+        // scheduling `entries` — so the two walks start from one identity
+        // rather than two.
+        let lowered = compiler.lower_expr(
+            &mut builder,
+            SourceOccurrence {
+                expr,
+                static_origin: root_static_origin,
+            },
+            &initial_env,
+        )?;
         compiler.require_complete_join_plan_consumption()?;
         compiler.require_complete_dynamic_splice_edge_consumption()?;
         let result = match lowered {
@@ -201,7 +216,10 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     module
         .define_function(func_id, &mut ctx)
         .map_err(|err| backend_module(err.to_string()))?;
-    drop(static_transition_plan);
+    // The plan is no longer dropped unused here: `compiler` owns it and it dies
+    // with this call. `CompiledModule::from_parts` below takes only owned data
+    // and the type has no lifetime parameter, so no part of the plan can reach
+    // the artifact — the non-escape property is a fact about the types.
 
     Ok(CompiledModule::from_parts(
         module,
@@ -239,11 +257,14 @@ impl<'a> Lowering<'a> {
         self.lower_computational_match_value_composed(builder, value, &[*head, successor])
     }
 
+    /// `call_origin` is the origin of the `Call` occurrence `args` belong to.
+    #[allow(clippy::too_many_arguments)]
     fn lower_recursor_residual_call(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         residual: &Lowered,
         args: &[RuntimeExpr],
+        call_origin: StaticOriginId,
         argument_env: &[Lowered],
         saved_producer_env: &[Lowered],
         outer_eliminators: &[EliminatorFrame<'_>],
@@ -275,7 +296,11 @@ impl<'a> Lowering<'a> {
         };
         let mut call_env = args
             .iter()
-            .map(|arg| self.lower_expr(builder, arg, argument_env))
+            .enumerate()
+            .map(|(position, arg)| {
+                let arg = self.child_occurrence(call_origin, 1 + position, arg)?;
+                self.lower_expr(builder, arg, argument_env)
+            })
             .collect::<Result<Vec<_>, _>>()?;
         if params.len() != call_env.len() {
             return Err(unsupported(
@@ -289,15 +314,24 @@ impl<'a> Lowering<'a> {
         }
         call_env.extend_from_slice(captures);
         call_env.extend_from_slice(saved_producer_env);
-        self.lower_computational_producer_expr(builder, body, &call_env, outer_eliminators)
+        self.lower_computational_producer_expr(
+            builder,
+            body.borrowed(),
+            &call_env,
+            outer_eliminators,
+        )
     }
 
+    /// `static_origin` is the `ComputationalMatch` occurrence's own origin, so
+    /// `scrutinee` is its child `0` and case *i*'s body is its child `1 + i`.
+    #[allow(clippy::too_many_arguments)]
     fn lower_computational_match_expr(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        scrutinee: &RuntimeExpr,
+        scrutinee: SourceOccurrence<'_>,
         cases: &[crate::RuntimeComputationalMatchCase],
         default: &RuntimeTrap,
+        static_origin: StaticOriginId,
         producer_env: &[Lowered],
         eliminator_env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
@@ -321,6 +355,7 @@ impl<'a> Lowering<'a> {
                     cases,
                     default,
                     env: eliminator_env,
+                    static_origin,
                     retained_scrutinee_index: None,
                     deferred_constructor_case: None,
                     provenance,
@@ -336,13 +371,24 @@ impl<'a> Lowering<'a> {
         )
     }
 
+    /// Lowers one source occurrence as a *producer* under a stack of eliminator
+    /// frames.
+    ///
+    /// This is the second traversal of the same source population — the one that
+    /// reaches occurrences the direct descent does not — so it threads origins by
+    /// exactly the same table as `lower_expr`: no guessed subset, both routes or
+    /// neither.
     fn lower_computational_producer_expr(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        scrutinee: &RuntimeExpr,
+        occurrence: SourceOccurrence<'_>,
         producer_env: &[Lowered],
         eliminators: &[EliminatorFrame<'_>],
     ) -> Result<Lowered, CraneliftBackendError> {
+        let SourceOccurrence {
+            expr: scrutinee,
+            static_origin,
+        } = occurrence;
         if eliminators.is_empty() {
             return Err(unsupported(
                 "ComputationalMatch",
@@ -350,10 +396,10 @@ impl<'a> Lowering<'a> {
             ));
         }
         if matches!(eliminators[0], EliminatorFrame::InvocationReturn) {
-            return self.lower_expr(builder, scrutinee, producer_env);
+            return self.lower_expr(builder, occurrence, producer_env);
         }
         if let EliminatorFrame::PendingLet(continuation) = eliminators[0] {
-            let value = self.lower_expr(builder, scrutinee, producer_env)?;
+            let value = self.lower_expr(builder, occurrence, producer_env)?;
             if matches!(value, Lowered::RecursiveBackedge) {
                 return Ok(Lowered::RecursiveBackedge);
             }
@@ -366,6 +412,7 @@ impl<'a> Lowering<'a> {
                 builder,
                 continuation.residual,
                 continuation.args,
+                continuation.call_origin,
                 &continuation_env,
                 continuation.env,
                 &eliminators[1..],
@@ -380,13 +427,14 @@ impl<'a> Lowering<'a> {
                     | RuntimeExpr::ComputationalMatch { .. }
                     | RuntimeExpr::If { .. }
             ) {
-                let value = self.lower_expr(builder, scrutinee, producer_env)?;
+                let value = self.lower_expr(builder, occurrence, producer_env)?;
                 return self.resume_active_continuation(builder, value, active);
             }
         }
         match scrutinee {
             RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
                 self.enter_checked_subcontinuation_frame(*frame_id)?;
+                let body = self.child_occurrence(static_origin, 0, body)?;
                 let result = self.lower_computational_producer_expr(
                     builder,
                     body,
@@ -407,6 +455,7 @@ impl<'a> Lowering<'a> {
                 ..
             } => {
                 let instance = self.enter_checked_recursive_invocation(*call_template_id, body)?;
+                let body = self.child_occurrence(static_origin, 0, body)?;
                 let result = self.lower_computational_producer_expr(
                     builder,
                     body,
@@ -417,6 +466,7 @@ impl<'a> Lowering<'a> {
                 result
             }
             RuntimeExpr::CheckedComputationalIHSlots { body, .. } => {
+                let body = self.child_occurrence(static_origin, 0, body)?;
                 self.lower_computational_producer_expr(builder, body, producer_env, eliminators)
             }
             RuntimeExpr::CheckedComputationalIHInvocation {
@@ -425,6 +475,7 @@ impl<'a> Lowering<'a> {
                 ..
             } => {
                 self.enter_checked_computational_ih_invocation(*call_template_id)?;
+                let body = self.child_occurrence(static_origin, 0, body)?;
                 let value = self.lower_computational_producer_expr(
                     builder,
                     body,
@@ -434,6 +485,11 @@ impl<'a> Lowering<'a> {
                 self.finish_checked_computational_ih_marker(value)
             }
             RuntimeExpr::Let { value, body } => {
+                // The `Let`'s own children: value `0`, body `1`. When the body
+                // is itself the `Call` below, that `Call` occurrence's origin is
+                // this body child — which is what the pending-let frame carries
+                // so its arguments stay positionally derivable.
+                let body_origin = self.static_transition_plan.child_static_origin(static_origin, 1)?;
                 if reaches_environment_computational_recursor(body, producer_env, 1) {
                     if let RuntimeExpr::Call { callee, args } = body.as_ref() {
                         if let RuntimeExpr::Var(index) = callee.as_ref() {
@@ -479,12 +535,15 @@ impl<'a> Lowering<'a> {
                                         PendingLetContinuationFrame {
                                             residual: &residual,
                                             args,
+                                            call_origin: body_origin,
                                             env: producer_env,
                                         },
                                     ));
                                     composed.extend(frames);
                                     composed.push(EliminatorFrame::InvocationReturn);
                                     self.enter_oriented_semantic_region(installed.checked);
+                                    let value =
+                                        self.child_occurrence(static_origin, 0, value)?;
                                     let returned = self.lower_computational_producer_expr(
                                         builder,
                                         value,
@@ -503,15 +562,26 @@ impl<'a> Lowering<'a> {
                         }
                     }
                 }
-                let value = self.lower_expr(builder, value, producer_env)?;
+                let value_occurrence = self.child_occurrence(static_origin, 0, value)?;
+                let body_occurrence = SourceOccurrence {
+                    expr: body,
+                    static_origin: body_origin,
+                };
+                let value = self.lower_expr(builder, value_occurrence, producer_env)?;
                 if let Lowered::Trap(trap) = value {
                     return Ok(Lowered::Trap(trap));
                 }
                 let mut body_env = vec![value];
                 body_env.extend_from_slice(producer_env);
-                self.lower_computational_producer_expr(builder, body, &body_env, eliminators)
+                self.lower_computational_producer_expr(
+                    builder,
+                    body_occurrence,
+                    &body_env,
+                    eliminators,
+                )
             }
             RuntimeExpr::Call { callee, args } => {
+                let callee = self.child_occurrence(static_origin, 0, callee)?;
                 let callee = self.lower_expr(builder, callee, producer_env)?;
                 match callee {
                     Lowered::DeclarationClosure {
@@ -524,8 +594,9 @@ impl<'a> Lowering<'a> {
                         &symbol,
                         &captures,
                         &params,
-                        &body,
+                        body.borrowed(),
                         args,
+                        static_origin,
                         producer_env,
                         Some(eliminators),
                     ),
@@ -536,8 +607,10 @@ impl<'a> Lowering<'a> {
                     } => {
                         if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
                             if let Some((cases, default)) =
-                                ordinary_match_continuation(&params, &body)
+                                ordinary_match_continuation(&params, &body.expr)
                             {
+                                let argument =
+                                    self.child_occurrence(static_origin, 1, &args[0])?;
                                 let mut frame_env = captures;
                                 frame_env.extend_from_slice(producer_env);
                                 let mut composed = Vec::with_capacity(eliminators.len() + 1);
@@ -545,13 +618,14 @@ impl<'a> Lowering<'a> {
                                     cases,
                                     default,
                                     env: &frame_env,
+                                    static_origin: body.static_origin,
                                     retained_scrutinee_index: Some(0),
                                     deferred_constructor_case: None,
                                 }));
                                 composed.extend_from_slice(eliminators);
                                 return self.lower_computational_producer_expr(
                                     builder,
-                                    &args[0],
+                                    argument,
                                     producer_env,
                                     &composed,
                                 );
@@ -569,13 +643,18 @@ impl<'a> Lowering<'a> {
                         }
                         let mut call_env = args
                             .iter()
-                            .map(|arg| self.lower_expr(builder, arg, producer_env))
+                            .enumerate()
+                            .map(|(position, arg)| {
+                                let arg =
+                                    self.child_occurrence(static_origin, 1 + position, arg)?;
+                                self.lower_expr(builder, arg, producer_env)
+                            })
                             .collect::<Result<Vec<_>, _>>()?;
                         call_env.extend(captures);
                         call_env.extend_from_slice(producer_env);
                         self.lower_computational_producer_expr(
                             builder,
-                            &body,
+                            body.borrowed(),
                             &call_env,
                             eliminators,
                         )
@@ -658,13 +737,21 @@ impl<'a> Lowering<'a> {
                         }
                         let mut call_env = args
                             .iter()
-                            .map(|arg| self.lower_expr(builder, arg, producer_env))
+                            .enumerate()
+                            .map(|(position, arg)| {
+                                let arg =
+                                    self.child_occurrence(static_origin, 1 + position, arg)?;
+                                self.lower_expr(builder, arg, producer_env)
+                            })
                             .collect::<Result<Vec<_>, _>>()?;
                         call_env.extend(captures);
                         call_env.extend_from_slice(producer_env);
                         self.enter_oriented_semantic_region(installed.checked);
                         let returned = self.lower_computational_producer_expr(
-                            builder, &body, &call_env, &composed,
+                            builder,
+                            body.borrowed(),
+                            &call_env,
+                            &composed,
                         );
                         self.leave_oriented_semantic_region(installed.checked);
                         let returned = returned?;
@@ -706,7 +793,11 @@ impl<'a> Lowering<'a> {
                 if terminal_exit && itree_frame {
                     let lowered_args = args
                         .iter()
-                        .map(|arg| self.lower_expr(builder, arg, producer_env))
+                        .enumerate()
+                        .map(|(position, arg)| {
+                            let arg = self.child_occurrence(static_origin, position, arg)?;
+                            self.lower_expr(builder, arg, producer_env)
+                        })
                         .collect::<Result<Vec<_>, _>>()?;
                     return Ok(Lowered::Constructor {
                         constructor: constructor.clone(),
@@ -715,12 +806,13 @@ impl<'a> Lowering<'a> {
                 }
                 let (case_body, argument_binder_offset) = match eliminator {
                     EliminatorFrame::Computational(eliminator) => {
-                        let case = match eliminator
+                        let (case_index, case) = match eliminator
                             .cases
                             .iter()
-                            .find(|case| case.constructor == *constructor)
+                            .enumerate()
+                            .find(|(_, case)| case.constructor == *constructor)
                         {
-                            Some(case) => case,
+                            Some(selected) => selected,
                             None => return Ok(Lowered::Trap(eliminator.default.clone())),
                         };
                         if case.argument_binders != args.len() {
@@ -746,11 +838,19 @@ impl<'a> Lowering<'a> {
                                 ));
                             }
                         }
-                        (&case.body, case.recursive_positions.len())
+                        (
+                            self.case_body_occurrence(
+                                eliminator.static_origin,
+                                case_index,
+                                &case.body,
+                            )?,
+                            case.recursive_positions.len(),
+                        )
                     }
                     EliminatorFrame::Ordinary(eliminator) => {
-                        let case = match select_ordinary_case(eliminator, constructor) {
-                            Ok(case) => case,
+                        let (case_index, case) = match select_ordinary_case(eliminator, constructor)
+                        {
+                            Ok(selected) => selected,
                             Err(trap) => return Ok(Lowered::Trap(trap)),
                         };
                         if case.binders != args.len() {
@@ -764,7 +864,14 @@ impl<'a> Lowering<'a> {
                                 ),
                             ));
                         }
-                        (&case.body, 0)
+                        (
+                            self.case_body_occurrence(
+                                eliminator.static_origin,
+                                case_index,
+                                &case.body,
+                            )?,
+                            0,
+                        )
                     }
                     EliminatorFrame::PendingLet(_) => {
                         unreachable!("pending Let continuations are consumed before dispatch")
@@ -777,15 +884,25 @@ impl<'a> Lowering<'a> {
                     }
                 };
 
-                let bridge =
-                    immediate_binder_eliminator(case_body, argument_binder_offset, args.len());
+                // The bridge eliminator's cases live in the selected case body
+                // itself (`immediate_binder_eliminator` matches only a body that
+                // IS a match), so that body's origin is their parent.
+                let bridge = immediate_binder_eliminator(
+                    case_body.expr,
+                    argument_binder_offset,
+                    args.len(),
+                );
                 let bridge =
                     bridge.filter(|(field, _)| requires_heterogeneous_deforestation(&args[*field]));
 
                 if let Some((field, consumer)) = bridge {
                     let lowered_prefix = args[..field]
                         .iter()
-                        .map(|arg| self.lower_expr(builder, arg, producer_env))
+                        .enumerate()
+                        .map(|(position, arg)| {
+                            let arg = self.child_occurrence(static_origin, position, arg)?;
+                            self.lower_expr(builder, arg, producer_env)
+                        })
                         .collect::<Result<Vec<_>, _>>()?;
                     if let Some(Lowered::Trap(trap)) = lowered_prefix
                         .iter()
@@ -827,6 +944,7 @@ impl<'a> Lowering<'a> {
                         lowered_prefix: &lowered_prefix,
                         selected_field: field,
                         trailing_fields: &args[field + 1..],
+                        construct_origin: static_origin,
                         producer_env,
                         outer_eliminator: eliminator,
                         splice_caller,
@@ -839,6 +957,7 @@ impl<'a> Lowering<'a> {
                                 cases,
                                 default,
                                 env: &[],
+                                static_origin: case_body.static_origin,
                                 retained_scrutinee_index: None,
                                 deferred_constructor_case: Some(&deferred),
                                 provenance: self.mint_recursor_frame_provenance(),
@@ -853,15 +972,17 @@ impl<'a> Lowering<'a> {
                                 cases,
                                 default,
                                 env: &[],
+                                static_origin: case_body.static_origin,
                                 retained_scrutinee_index: None,
                                 deferred_constructor_case: Some(&deferred),
                             })
                         }
                     });
                     composed.push(EliminatorFrame::Active(selected_active));
+                    let selected = self.child_occurrence(static_origin, field, &args[field])?;
                     return self.lower_computational_producer_expr(
                         builder,
-                        &args[field],
+                        selected,
                         producer_env,
                         &composed,
                     );
@@ -869,7 +990,11 @@ impl<'a> Lowering<'a> {
 
                 let lowered_args = args
                     .iter()
-                    .map(|arg| self.lower_expr(builder, arg, producer_env))
+                    .enumerate()
+                    .map(|(position, arg)| {
+                        let arg = self.child_occurrence(static_origin, position, arg)?;
+                        self.lower_expr(builder, arg, producer_env)
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
                 self.lower_computational_match_value_composed(
                     builder,
@@ -885,12 +1010,13 @@ impl<'a> Lowering<'a> {
                 cases: producer_cases,
                 default: producer_default,
             } => {
+                let scrutinee = self.child_occurrence(static_origin, 0, scrutinee)?;
                 let selected = self.lower_expr(builder, scrutinee, producer_env)?;
                 if let Lowered::Bool { value, known } = selected {
-                    let true_case = producer_cases.iter().find(|case| {
+                    let true_case = producer_cases.iter().enumerate().find(|(_, case)| {
                         case.binders == 0 && case.constructor.ends_with("::Bool::True")
                     });
-                    let false_case = producer_cases.iter().find(|case| {
+                    let false_case = producer_cases.iter().enumerate().find(|(_, case)| {
                         case.binders == 0 && case.constructor.ends_with("::Bool::False")
                     });
                     let (Some(true_case), Some(false_case)) = (true_case, false_case) else {
@@ -900,13 +1026,11 @@ impl<'a> Lowering<'a> {
                         ));
                     };
                     if let Some(known) = known {
+                        let (index, case) = if known { true_case } else { false_case };
+                        let body = self.case_body_occurrence(static_origin, index, &case.body)?;
                         return self.lower_computational_producer_expr(
                             builder,
-                            if known {
-                                &true_case.body
-                            } else {
-                                &false_case.body
-                            },
+                            body,
                             producer_env,
                             eliminators,
                         );
@@ -918,13 +1042,15 @@ impl<'a> Lowering<'a> {
                     builder.append_block_param(merge, types::I64);
                     builder.ins().brif(value, true_block, &[], false_block, &[]);
                     let mut exit_merge = None;
-                    for (block, producer_case) in
+                    for (block, (index, producer_case)) in
                         [(true_block, true_case), (false_block, false_case)]
                     {
                         builder.switch_to_block(block);
+                        let body =
+                            self.case_body_occurrence(static_origin, index, &producer_case.body)?;
                         let lowered = self.lower_computational_producer_expr(
                             builder,
-                            &producer_case.body,
+                            body,
                             producer_env,
                             eliminators,
                         )?;
@@ -968,14 +1094,19 @@ impl<'a> Lowering<'a> {
                         (err_block, err_constructor.as_str(), *error),
                     ] {
                         builder.switch_to_block(block);
-                        let lowered = if let Some(producer_case) =
+                        let lowered = if let Some((index, producer_case)) =
                             dynamic_host_result_producer_case(producer_cases, constructor)?
                         {
                             let mut case_env = vec![payload];
                             case_env.extend_from_slice(producer_env);
+                            let body = self.case_body_occurrence(
+                                static_origin,
+                                index,
+                                &producer_case.body,
+                            )?;
                             self.lower_computational_producer_expr(
                                 builder,
-                                &producer_case.body,
+                                body,
                                 &case_env,
                                 eliminators,
                             )?
@@ -1010,6 +1141,7 @@ impl<'a> Lowering<'a> {
                             cases: producer_cases,
                             default: producer_default,
                             env: producer_env,
+                            static_origin,
                             eliminators,
                         },
                     );
@@ -1019,6 +1151,7 @@ impl<'a> Lowering<'a> {
                         cases: producer_cases,
                         default: producer_default,
                         env: producer_env,
+                        static_origin,
                         retained_scrutinee_index: None,
                         deferred_constructor_case: None,
                     };
@@ -1032,6 +1165,7 @@ impl<'a> Lowering<'a> {
                         cases: producer_cases,
                         default: producer_default,
                         env: producer_env,
+                        static_origin,
                         retained_scrutinee_index: None,
                         deferred_constructor_case: None,
                     };
@@ -1051,9 +1185,10 @@ impl<'a> Lowering<'a> {
                         "tree-producing match scrutinee is not Bool or a constructor",
                     ));
                 };
-                let Some(producer_case) = producer_cases
+                let Some((case_index, producer_case)) = producer_cases
                     .iter()
-                    .find(|case| case.constructor == constructor)
+                    .enumerate()
+                    .find(|(_, case)| case.constructor == constructor)
                 else {
                     return Ok(Lowered::Trap(producer_default.clone()));
                 };
@@ -1065,12 +1200,9 @@ impl<'a> Lowering<'a> {
                 }
                 let mut case_env = args;
                 case_env.extend_from_slice(producer_env);
-                self.lower_computational_producer_expr(
-                    builder,
-                    &producer_case.body,
-                    &case_env,
-                    eliminators,
-                )
+                let body =
+                    self.case_body_occurrence(static_origin, case_index, &producer_case.body)?;
+                self.lower_computational_producer_expr(builder, body, &case_env, eliminators)
             }
             RuntimeExpr::ComputationalMatch {
                 scrutinee: inner_scrutinee,
@@ -1098,6 +1230,7 @@ impl<'a> Lowering<'a> {
                         cases: inner_cases,
                         default: inner_default,
                         env: producer_env,
+                        static_origin,
                         retained_scrutinee_index: None,
                         deferred_constructor_case: None,
                         provenance,
@@ -1111,6 +1244,7 @@ impl<'a> Lowering<'a> {
                     },
                 ));
                 composed.extend_from_slice(eliminators);
+                let inner_scrutinee = self.child_occurrence(static_origin, 0, inner_scrutinee)?;
                 self.lower_computational_producer_expr(
                     builder,
                     inner_scrutinee,
@@ -1123,6 +1257,9 @@ impl<'a> Lowering<'a> {
                 then_expr,
                 else_expr,
             } => {
+                let scrutinee = self.child_occurrence(static_origin, 0, scrutinee)?;
+                let then_expr = self.child_occurrence(static_origin, 1, then_expr)?;
+                let else_expr = self.child_occurrence(static_origin, 2, else_expr)?;
                 let selected = self.lower_expr(builder, scrutinee, producer_env)?;
                 let Lowered::Bool { value, known } = selected else {
                     return Err(unsupported(
@@ -1174,7 +1311,11 @@ impl<'a> Lowering<'a> {
                 })
             }
             _ => {
-                let value = self.lower_expr(builder, scrutinee, producer_env)?;
+                // Everything this producer dispatcher does not special-case is
+                // handed to `lower_expr` **as the same occurrence**, origin
+                // included — the producer-side twin of the source machine's
+                // fallback arm.
+                let value = self.lower_expr(builder, occurrence, producer_env)?;
                 self.lower_computational_match_value_composed(builder, value, eliminators)
             }
         }
@@ -1219,7 +1360,7 @@ impl<'a> Lowering<'a> {
         let remaining_eliminators = &eliminators[1..];
         let (body, case_env) = match eliminator {
             EliminatorFrame::Computational(eliminator) => {
-                let (case, _) = match select_computational_case(
+                let (case_index, case, _) = match select_computational_case(
                     std::slice::from_ref(&eliminator),
                     &constructor,
                 ) {
@@ -1275,6 +1416,7 @@ impl<'a> Lowering<'a> {
                         cases: eliminator.cases.to_vec(),
                         default: eliminator.default.clone(),
                         outer_env: eliminator.env.to_vec(),
+                        static_origin: eliminator.static_origin,
                         provenance: eliminator.provenance,
                         checked_frame_id: eliminator.checked_frame_id,
                         checked_invocation_id: eliminator.checked_invocation_id,
@@ -1321,6 +1463,7 @@ impl<'a> Lowering<'a> {
                         eliminator.cases.to_vec(),
                         eliminator.default.clone(),
                         eliminator.env.to_vec(),
+                        eliminator.static_origin,
                         eliminator.provenance,
                         eliminator.checked_frame_id,
                         slot_template_id,
@@ -1349,27 +1492,29 @@ impl<'a> Lowering<'a> {
                     Err(trap) => return Ok(Lowered::Trap(trap)),
                 };
                 case_env.extend(frame_env);
+                let case_body =
+                    self.case_body_occurrence(eliminator.static_origin, case_index, &case.body)?;
                 if !case.recursive_positions.is_empty() {
                     return self.lower_source_machine(
                         builder,
-                        &case.body,
+                        case_body,
                         &case_env,
                         &active_state,
                     );
                 }
                 if remaining_eliminators.is_empty() {
-                    return self.lower_expr(builder, &case.body, &case_env);
+                    return self.lower_expr(builder, case_body, &case_env);
                 }
                 return self.lower_computational_producer_expr(
                     builder,
-                    &case.body,
+                    case_body,
                     &case_env,
                     remaining_eliminators,
                 );
             }
             EliminatorFrame::Ordinary(eliminator) => {
-                let case = match select_ordinary_case(eliminator, &constructor) {
-                    Ok(case) => case,
+                let (case_index, case) = match select_ordinary_case(eliminator, &constructor) {
+                    Ok(selected) => selected,
                     Err(trap) => return Ok(Lowered::Trap(trap)),
                 };
                 if case.binders != args.len() {
@@ -1393,7 +1538,14 @@ impl<'a> Lowering<'a> {
                     Err(trap) => return Ok(Lowered::Trap(trap)),
                 };
                 case_env.extend(frame_env);
-                (&case.body, case_env)
+                (
+                    self.case_body_occurrence(
+                        eliminator.static_origin,
+                        case_index,
+                        &case.body,
+                    )?,
+                    case_env,
+                )
             }
             EliminatorFrame::PendingLet(_) => {
                 unreachable!("pending Let continuations are consumed before value composition")
@@ -1438,38 +1590,46 @@ impl<'a> Lowering<'a> {
         let remaining = &eliminators[1..];
         let (zero_body, suc_body, computational) = match eliminator {
             EliminatorFrame::Computational(frame) => {
-                let zero = frame.cases.iter().find(|case| {
+                let zero = frame.cases.iter().enumerate().find(|(_, case)| {
                     case.constructor == self.process_symbols.nat_zero
                         && case.argument_binders == 0
                         && case.recursive_positions.is_empty()
                 });
-                let suc = frame.cases.iter().find(|case| {
+                let suc = frame.cases.iter().enumerate().find(|(_, case)| {
                     case.constructor == self.process_symbols.nat_suc
                         && case.argument_binders == 1
                         && case.recursive_positions.as_slice() == [0]
                 });
-                let (Some(zero), Some(suc)) = (zero, suc) else {
+                let (Some((zero_index, zero)), Some((suc_index, suc))) = (zero, suc) else {
                     return Err(unsupported(
                         "BoundedNat",
                         "computational Nat requires Zero and one recursive Suc predecessor",
                     ));
                 };
-                (&zero.body, &suc.body, true)
+                (
+                    self.case_body_occurrence(frame.static_origin, zero_index, &zero.body)?,
+                    self.case_body_occurrence(frame.static_origin, suc_index, &suc.body)?,
+                    true,
+                )
             }
             EliminatorFrame::Ordinary(frame) => {
-                let zero = frame.cases.iter().find(|case| {
+                let zero = frame.cases.iter().enumerate().find(|(_, case)| {
                     case.constructor == self.process_symbols.nat_zero && case.binders == 0
                 });
-                let suc = frame.cases.iter().find(|case| {
+                let suc = frame.cases.iter().enumerate().find(|(_, case)| {
                     case.constructor == self.process_symbols.nat_suc && case.binders == 1
                 });
-                let (Some(zero), Some(suc)) = (zero, suc) else {
+                let (Some((zero_index, zero)), Some((suc_index, suc))) = (zero, suc) else {
                     return Err(unsupported(
                         "BoundedNat",
                         "ordinary Nat frame requires exact Zero and Suc predecessor arms",
                     ));
                 };
-                (&zero.body, &suc.body, false)
+                (
+                    self.case_body_occurrence(frame.static_origin, zero_index, &zero.body)?,
+                    self.case_body_occurrence(frame.static_origin, suc_index, &suc.body)?,
+                    false,
+                )
             }
             EliminatorFrame::PendingLet(_) => {
                 unreachable!("pending Let continuations are consumed before Nat composition")
@@ -1709,7 +1869,14 @@ impl<'a> Lowering<'a> {
 
         let mut constructor_args = deferred.lowered_prefix.to_vec();
         constructor_args.push(retained_scrutinee.clone());
-        for field in deferred.trailing_fields {
+        // The trailing fields are the constructor's own children, continuing
+        // past the selected one: `child(construct_origin, selected_field + 1 + j)`.
+        for (offset, field) in deferred.trailing_fields.iter().enumerate() {
+            let field = self.child_occurrence(
+                deferred.construct_origin,
+                deferred.selected_field + 1 + offset,
+                field,
+            )?;
             let lowered = self.lower_expr(builder, field, deferred.producer_env)?;
             if let Lowered::Trap(trap) = lowered {
                 return Ok(Err(trap));
@@ -1788,6 +1955,7 @@ impl<'a> Lowering<'a> {
                         frame.cases.to_vec(),
                         frame.default.clone(),
                         outer_tail.clone(),
+                        frame.static_origin,
                         frame.provenance,
                         frame.checked_frame_id,
                         slot_template_id,
@@ -1813,8 +1981,8 @@ impl<'a> Lowering<'a> {
                 Ok(Ok(induction_hypotheses))
             }
             EliminatorFrame::Ordinary(frame) => {
-                let case = match select_ordinary_case(frame, deferred.constructor) {
-                    Ok(case) => case,
+                let (_case_index, case) = match select_ordinary_case(frame, deferred.constructor) {
+                    Ok(selected) => selected,
                     Err(trap) => return Ok(Err(trap)),
                 };
                 if case.binders != constructor_args.len() {
@@ -1846,7 +2014,7 @@ impl<'a> Lowering<'a> {
     fn lower_source_machine(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        expr: &RuntimeExpr,
+        occurrence: SourceOccurrence<'_>,
         env: &[Lowered],
         active: &ActiveContinuationFrame<'_>,
     ) -> Result<Lowered, CraneliftBackendError> {
@@ -1880,13 +2048,18 @@ impl<'a> Lowering<'a> {
             selected_lineage: Vec::new(),
             terminal_outer: active.cursor,
         };
-        self.lower_source_machine_with_continuation(builder, expr.clone(), env.to_vec(), control)
+        self.lower_source_machine_with_continuation(
+            builder,
+            OwnedSourceOccurrence::cloned(occurrence),
+            env.to_vec(),
+            control,
+        )
     }
 
     fn lower_source_machine_with_continuation<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        expr: RuntimeExpr,
+        expr: OwnedSourceOccurrence,
         env: Vec<Lowered>,
         control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
@@ -1907,7 +2080,7 @@ impl<'a> Lowering<'a> {
     fn lower_source_machine_with_continuation_inner<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        expr: RuntimeExpr,
+        expr: OwnedSourceOccurrence,
         env: Vec<Lowered>,
         control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
@@ -1915,14 +2088,18 @@ impl<'a> Lowering<'a> {
         loop {
             state = match state {
                 SourceMachineState::Eval {
-                    expr,
+                    expr:
+                        OwnedSourceOccurrence {
+                            expr,
+                            static_origin,
+                        },
                     env,
                     mut control,
                 } => match expr {
                     RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
                         self.enter_checked_subcontinuation_frame(frame_id)?;
                         SourceMachineState::Eval {
-                            expr: *body,
+                            expr: self.owned_child_occurrence(static_origin, 0, *body)?,
                             env,
                             control,
                         }
@@ -1940,14 +2117,14 @@ impl<'a> Lowering<'a> {
                                 next: Box::new(control.continuation),
                             };
                         SourceMachineState::Eval {
-                            expr: *body,
+                            expr: self.owned_child_occurrence(static_origin, 0, *body)?,
                             env,
                             control,
                         }
                     }
                     RuntimeExpr::CheckedComputationalIHSlots { body, .. } => {
                         SourceMachineState::Eval {
-                            expr: *body,
+                            expr: self.owned_child_occurrence(static_origin, 0, *body)?,
                             env,
                             control,
                         }
@@ -1964,7 +2141,7 @@ impl<'a> Lowering<'a> {
                                 next: Box::new(control.continuation),
                             };
                         SourceMachineState::Eval {
-                            expr: *body,
+                            expr: self.owned_child_occurrence(static_origin, 0, *body)?,
                             env,
                             control,
                         }
@@ -1981,12 +2158,12 @@ impl<'a> Lowering<'a> {
                     },
                     RuntimeExpr::Let { value, body } => {
                         control.continuation = SourceContinuation::LetBody {
-                            body: *body,
+                            body: self.owned_child_occurrence(static_origin, 1, *body)?,
                             env: env.clone(),
                             next: Box::new(control.continuation),
                         };
                         SourceMachineState::Eval {
-                            expr: *value,
+                            expr: self.owned_child_occurrence(static_origin, 0, *value)?,
                             env: env.clone(),
                             control,
                         }
@@ -2005,16 +2182,26 @@ impl<'a> Lowering<'a> {
                                 control,
                             }
                         } else {
+                            // Argument *i* is child *i*; the suffix keeps each
+                            // pending term paired with its own origin, so the
+                            // machine's positions cannot drift as it consumes them.
                             let first = args.remove(0);
+                            let remaining = args
+                                .into_iter()
+                                .enumerate()
+                                .map(|(offset, arg)| {
+                                    self.owned_child_occurrence(static_origin, 1 + offset, arg)
+                                })
+                                .collect::<Result<Vec<_>, _>>()?;
                             control.continuation = SourceContinuation::ConstructArgument {
                                 constructor,
-                                remaining: args,
+                                remaining,
                                 lowered: Vec::new(),
                                 env: env.clone(),
                                 next: Box::new(control.continuation),
                             };
                             SourceMachineState::Eval {
-                                expr: first,
+                                expr: self.owned_child_occurrence(static_origin, 0, first)?,
                                 env,
                                 control,
                             }
@@ -2029,22 +2216,30 @@ impl<'a> Lowering<'a> {
                             cases,
                             default,
                             env: env.clone(),
+                            static_origin,
                             next: Box::new(control.continuation),
                         };
                         SourceMachineState::Eval {
-                            expr: *scrutinee,
+                            expr: self.owned_child_occurrence(static_origin, 0, *scrutinee)?,
                             env,
                             control,
                         }
                     }
                     RuntimeExpr::Call { callee, args } => {
+                        let args = args
+                            .into_iter()
+                            .enumerate()
+                            .map(|(position, arg)| {
+                                self.owned_child_occurrence(static_origin, 1 + position, arg)
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
                         control.continuation = SourceContinuation::CallCallee {
                             args,
                             env: env.clone(),
                             next: Box::new(control.continuation),
                         };
                         SourceMachineState::Eval {
-                            expr: *callee,
+                            expr: self.owned_child_occurrence(static_origin, 0, *callee)?,
                             env,
                             control,
                         }
@@ -2060,19 +2255,32 @@ impl<'a> Lowering<'a> {
                             cases,
                             default,
                             env: env.clone(),
+                            static_origin,
                             provenance: self.mint_recursor_frame_provenance(),
                             checked_frame_id,
                             answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
                             next: Box::new(control.continuation),
                         };
                         SourceMachineState::Eval {
-                            expr: *scrutinee,
+                            expr: self.owned_child_occurrence(static_origin, 0, *scrutinee)?,
                             env,
                             control,
                         }
                     }
+                    // ⭐ The delegation point. Every form this dispatcher does not
+                    // handle — closures included — goes to `lower_expr` here, and
+                    // it now goes **as the same occurrence**: same term, same
+                    // origin. This arm is why a "machine-only" subset could never
+                    // have been threaded soundly.
                     other => SourceMachineState::Value {
-                        value: self.lower_expr(builder, &other, &env)?,
+                        value: self.lower_expr(
+                            builder,
+                            SourceOccurrence {
+                                expr: &other,
+                                static_origin,
+                            },
+                            &env,
+                        )?,
                         control,
                     },
                 },
@@ -2284,6 +2492,7 @@ impl<'a> Lowering<'a> {
                                     cases: layer.cases,
                                     default: layer.default,
                                     env: layer.outer_env,
+                                    static_origin: layer.static_origin,
                                     provenance: layer.provenance,
                                     checked_frame_id: layer.checked_frame_id,
                                     answer_route,
@@ -2328,6 +2537,7 @@ impl<'a> Lowering<'a> {
                                         cases: layer.cases,
                                         default: layer.default,
                                         env: layer.outer_env,
+                                        static_origin: layer.static_origin,
                                         provenance: layer.provenance,
                                         checked_frame_id: layer.checked_frame_id,
                                         answer_route,
@@ -2381,13 +2591,21 @@ impl<'a> Lowering<'a> {
                             cases,
                             default,
                             env,
+                            static_origin,
                             next,
                         } => {
                             control.continuation = *next;
                             match value {
                                 Lowered::BoundedNat(nat) => {
                                     return self.lower_source_bounded_nat_match(
-                                        builder, nat, false, &cases, &default, &env, control,
+                                        builder,
+                                        nat,
+                                        false,
+                                        &cases,
+                                        &default,
+                                        static_origin,
+                                        &env,
+                                        control,
                                     );
                                 }
                                 Lowered::StructuralNat(nat) => {
@@ -2397,16 +2615,17 @@ impl<'a> Lowering<'a> {
                                         true,
                                         &cases,
                                         &default,
+                                        static_origin,
                                         &env,
                                         control,
                                     );
                                 }
                                 Lowered::Bool { value, known } => {
-                                    let true_case = cases.iter().find(|case| {
+                                    let true_case = cases.iter().enumerate().find(|(_, case)| {
                                         case.binders == 0
                                             && case.constructor.ends_with("::Bool::True")
                                     });
-                                    let false_case = cases.iter().find(|case| {
+                                    let false_case = cases.iter().enumerate().find(|(_, case)| {
                                         case.binders == 0
                                             && case.constructor.ends_with("::Bool::False")
                                     });
@@ -2419,21 +2638,35 @@ impl<'a> Lowering<'a> {
                                         ));
                                     };
                                     if let Some(selected) = known {
+                                        let (index, case) =
+                                            if selected { true_case } else { false_case };
                                         SourceMachineState::Eval {
-                                            expr: if selected {
-                                                true_case.body.clone()
-                                            } else {
-                                                false_case.body.clone()
-                                            },
+                                            expr: self.owned_case_body_occurrence(
+                                                static_origin,
+                                                index,
+                                                case.body.clone(),
+                                            )?,
                                             env,
                                             control,
                                         }
                                     } else {
+                                        let (true_index, true_case) = true_case;
+                                        let (false_index, false_case) = false_case;
+                                        let true_body = self.case_body_occurrence(
+                                            static_origin,
+                                            true_index,
+                                            &true_case.body,
+                                        )?;
+                                        let false_body = self.case_body_occurrence(
+                                            static_origin,
+                                            false_index,
+                                            &false_case.body,
+                                        )?;
                                         return self.lower_source_dynamic_bool_match(
                                             builder,
                                             value,
-                                            &true_case.body,
-                                            &false_case.body,
+                                            true_body,
+                                            false_body,
                                             &env,
                                             control,
                                         );
@@ -2455,18 +2688,27 @@ impl<'a> Lowering<'a> {
                                         &ok_constructor,
                                         &cases,
                                         default,
+                                        static_origin,
                                         &env,
                                         control,
                                     );
                                 }
                                 Lowered::DynamicConstructor(dynamic) => {
                                     return self.lower_source_dynamic_constructor_match(
-                                        builder, dynamic, &cases, &default, &env, control,
+                                        builder,
+                                        dynamic,
+                                        &cases,
+                                        &default,
+                                        static_origin,
+                                        &env,
+                                        control,
                                     );
                                 }
                                 Lowered::Constructor { constructor, args } => {
-                                    let Some(case) =
-                                        cases.iter().find(|case| case.constructor == constructor)
+                                    let Some((case_index, case)) = cases
+                                        .iter()
+                                        .enumerate()
+                                        .find(|(_, case)| case.constructor == constructor)
                                     else {
                                         return Ok(Lowered::Trap(default));
                                     };
@@ -2484,7 +2726,11 @@ impl<'a> Lowering<'a> {
                                     let mut case_env = args;
                                     case_env.extend(env);
                                     SourceMachineState::Eval {
-                                        expr: case.body.clone(),
+                                        expr: self.owned_case_body_occurrence(
+                                            static_origin,
+                                            case_index,
+                                            case.body.clone(),
+                                        )?,
                                         env: case_env,
                                         control,
                                     }
@@ -2501,6 +2747,7 @@ impl<'a> Lowering<'a> {
                             cases,
                             default,
                             env,
+                            static_origin,
                             provenance,
                             checked_frame_id,
                             answer_route,
@@ -2515,19 +2762,20 @@ impl<'a> Lowering<'a> {
                                 _ => None,
                             };
                             let selected = match &value {
-                                Lowered::Constructor { constructor, .. } => {
-                                    cases.iter().find(|case| case.constructor == *constructor)
-                                }
+                                Lowered::Constructor { constructor, .. } => cases
+                                    .iter()
+                                    .enumerate()
+                                    .find(|(_, case)| case.constructor == *constructor),
                                 _ => None,
                             };
-                            let case = if let Some(case) = selected {
-                                case
+                            let (case_index, case) = if let Some(selected) = selected {
+                                selected
                             } else if answer_route
                                 == SourceComputationalAnswerRoute::CheckedSelectedRecursor
                                 && matches!(&value, Lowered::Constructor { .. })
                                 && px8tr_deforested_answer_route_enabled()
                             {
-                                let mut returns = cases.iter().filter(|case| {
+                                let mut returns = cases.iter().enumerate().filter(|(_, case)| {
                                     case.argument_binders == 1
                                         && case.constructor.ends_with("::ITree::Ret")
                                 });
@@ -2539,13 +2787,15 @@ impl<'a> Lowering<'a> {
                                 let exact_visible = visible.next().is_some()
                                     && visible.next().is_none()
                                     && cases.len() == 2;
-                                let Some(return_case) = return_case.filter(|return_case| {
-                                    exact_return
-                                        && exact_visible
-                                        && source_case_has_no_checked_control_markers(
-                                            &return_case.body,
-                                        )
-                                }) else {
+                                let Some((return_index, return_case)) =
+                                    return_case.filter(|(_, return_case)| {
+                                        exact_return
+                                            && exact_visible
+                                            && source_case_has_no_checked_control_markers(
+                                                &return_case.body,
+                                            )
+                                    })
+                                else {
                                     #[cfg(test)]
                                     px8tr_record_trap_provenance(
                                         Px8trTrapProvenanceEvent::CheckedRecursorDefault {
@@ -2570,9 +2820,14 @@ impl<'a> Lowering<'a> {
                                 let mut case_env = vec![retained];
                                 case_env.extend(env);
                                 control.continuation = *next;
+                                let body = self.owned_case_body_occurrence(
+                                    static_origin,
+                                    return_index,
+                                    return_case.body.clone(),
+                                )?;
                                 return self.lower_source_machine_with_continuation(
                                     builder,
-                                    return_case.body.clone(),
+                                    body,
                                     case_env,
                                     control,
                                 );
@@ -2629,6 +2884,7 @@ impl<'a> Lowering<'a> {
                                 cases: &cases,
                                 default: &default,
                                 env: &env,
+                                static_origin,
                                 retained_scrutinee_index: None,
                                 deferred_constructor_case: None,
                                 provenance,
@@ -2682,6 +2938,7 @@ impl<'a> Lowering<'a> {
                                         cases.clone(),
                                         default.clone(),
                                         env.clone(),
+                                        static_origin,
                                         provenance,
                                         frame.checked_frame_id,
                                         slot_template_id,
@@ -2730,6 +2987,7 @@ impl<'a> Lowering<'a> {
                                     cases: cases.clone(),
                                     default: default.clone(),
                                     outer_env: env.clone(),
+                                    static_origin,
                                     provenance,
                                     checked_frame_id: frame.checked_frame_id,
                                     checked_invocation_id: frame.checked_invocation_id,
@@ -2774,8 +3032,13 @@ impl<'a> Lowering<'a> {
                                 selected_scope,
                             };
                             control.selected_lineage.push(previous_selected);
+                            let body = self.owned_case_body_occurrence(
+                                static_origin,
+                                case_index,
+                                case.body.clone(),
+                            )?;
                             SourceMachineState::Eval {
-                                expr: case.body.clone(),
+                                expr: body,
                                 env: case_env,
                                 control,
                             }
@@ -2866,21 +3129,24 @@ impl<'a> Lowering<'a> {
         structural: bool,
         cases: &[crate::RuntimeMatchCase],
         _default: &RuntimeTrap,
+        static_origin: StaticOriginId,
         env: &[Lowered],
         suffix_control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let zero = cases
-            .iter()
-            .find(|case| case.constructor == self.process_symbols.nat_zero && case.binders == 0);
-        let suc = cases
-            .iter()
-            .find(|case| case.constructor == self.process_symbols.nat_suc && case.binders == 1);
-        let (Some(zero), Some(suc)) = (zero, suc) else {
+        let zero = cases.iter().enumerate().find(|(_, case)| {
+            case.constructor == self.process_symbols.nat_zero && case.binders == 0
+        });
+        let suc = cases.iter().enumerate().find(|(_, case)| {
+            case.constructor == self.process_symbols.nat_suc && case.binders == 1
+        });
+        let (Some((zero_index, zero)), Some((suc_index, suc))) = (zero, suc) else {
             return Err(unsupported(
                 "BoundedNat",
                 "structural Nat source match requires exact Zero and Suc predecessor arms",
             ));
         };
+        let zero_body = self.case_body_occurrence(static_origin, zero_index, &zero.body)?;
+        let suc_body = self.case_body_occurrence(static_origin, suc_index, &suc.body)?;
 
         let (source_prefix_template, terminal) =
             Self::split_source_prefix(suffix_control.continuation)?;
@@ -2938,9 +3204,9 @@ impl<'a> Lowering<'a> {
 
         let frame_baseline = self.consumed_subcontinuation_frames.clone();
         let mut frame_union = frame_baseline.clone();
-        for (arm_name, block, case, predecessor) in [
-            ("Zero", zero_block, zero, None),
-            ("Suc", suc_block, suc, Some(predecessor)),
+        for (arm_name, block, case_body, predecessor) in [
+            ("Zero", zero_block, zero_body, None),
+            ("Suc", suc_block, suc_body, Some(predecessor)),
         ] {
             builder.switch_to_block(block);
             let mut arm_env = predecessor
@@ -2968,7 +3234,7 @@ impl<'a> Lowering<'a> {
                 builder,
                 &frame_baseline,
                 &mut frame_union,
-                case.body.clone(),
+                OwnedSourceOccurrence::cloned(case_body),
                 arm_env,
                 branch_control,
             )?;
@@ -3040,7 +3306,7 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         frame_baseline: &std::collections::BTreeSet<(u64, u64)>,
         frame_union: &mut std::collections::BTreeSet<(u64, u64)>,
-        expr: RuntimeExpr,
+        expr: OwnedSourceOccurrence,
         env: Vec<Lowered>,
         control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
@@ -3054,8 +3320,8 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         condition: cranelift_codegen::ir::Value,
-        true_body: &RuntimeExpr,
-        false_body: &RuntimeExpr,
+        true_body: SourceOccurrence<'_>,
+        false_body: SourceOccurrence<'_>,
         env: &[Lowered],
         suffix_control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
@@ -3118,7 +3384,7 @@ impl<'a> Lowering<'a> {
                 builder,
                 &frame_baseline,
                 &mut frame_union,
-                body.clone(),
+                OwnedSourceOccurrence::cloned(body),
                 env.to_vec(),
                 branch_control,
             )?;
@@ -3172,6 +3438,7 @@ impl<'a> Lowering<'a> {
         ok_constructor: &str,
         cases: &[crate::RuntimeMatchCase],
         default: RuntimeTrap,
+        static_origin: StaticOriginId,
         env: &[Lowered],
         suffix_control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
@@ -3230,26 +3497,39 @@ impl<'a> Lowering<'a> {
                 selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
-            let lowered = if let Some(case) = cases
+            let lowered = if let Some((index, case)) = cases
                 .iter()
-                .find(|case| case.constructor == constructor && case.binders == 1)
+                .enumerate()
+                .find(|(_, case)| case.constructor == constructor && case.binders == 1)
             {
                 let mut arm_env = vec![payload];
                 arm_env.extend_from_slice(env);
+                let body =
+                    self.owned_case_body_occurrence(static_origin, index, case.body.clone())?;
                 self.lower_forked_branch(
                     builder,
                     &frame_baseline,
                     &mut frame_union,
-                    case.body.clone(),
+                    body,
                     arm_env,
                     branch_control,
                 )?
             } else {
+                // ⚠ THE ONE SYNTHESIZED TERM in the whole lowering: no source
+                // occurrence exists for "this alternative has no case", so the
+                // machine is handed a fresh `Trap` built from the match's own
+                // `default`. `default` is an ATOM of the match occurrence, not a
+                // child of it, so the honest origin for this term is the match
+                // occurrence's own — and `Trap` is a leaf, so no child is ever
+                // derived from it. ⛔ Do not mint an origin here.
                 self.lower_forked_branch(
                     builder,
                     &frame_baseline,
                     &mut frame_union,
-                    RuntimeExpr::Trap(default.clone()),
+                    OwnedSourceOccurrence {
+                        expr: RuntimeExpr::Trap(default.clone()),
+                        static_origin,
+                    },
                     env.to_vec(),
                     branch_control,
                 )?
@@ -3300,6 +3580,7 @@ impl<'a> Lowering<'a> {
         dynamic: DynamicConstructorV1,
         cases: &[crate::RuntimeMatchCase],
         default: &RuntimeTrap,
+        static_origin: StaticOriginId,
         env: &[Lowered],
         suffix_control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
@@ -3315,6 +3596,7 @@ impl<'a> Lowering<'a> {
                 dynamic,
                 cases,
                 default,
+                static_origin,
                 env,
                 suffix_control,
             );
@@ -3324,6 +3606,7 @@ impl<'a> Lowering<'a> {
             dynamic,
             cases,
             default,
+            static_origin,
             env,
             suffix_control,
         )
@@ -3335,6 +3618,7 @@ impl<'a> Lowering<'a> {
         dynamic: DynamicConstructorV1,
         cases: &[crate::RuntimeMatchCase],
         default: &RuntimeTrap,
+        static_origin: StaticOriginId,
         env: &[Lowered],
         suffix_control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
@@ -3369,15 +3653,16 @@ impl<'a> Lowering<'a> {
             );
             builder.ins().brif(selected, arm, &[], next, &[]);
             builder.switch_to_block(arm);
-            let case = match select_dynamic_constructor_case(cases, &alternative, default)? {
-                Ok(case) => case,
-                Err(_) => {
-                    let failure = builder.ins().iconst(types::I64, -4);
-                    builder.ins().return_(&[failure]);
-                    test_block = next;
-                    continue;
-                }
-            };
+            let (case_index, case) =
+                match select_dynamic_constructor_case(cases, &alternative, default)? {
+                    Ok(selected) => selected,
+                    Err(_) => {
+                        let failure = builder.ins().iconst(types::I64, -4);
+                        builder.ins().return_(&[failure]);
+                        test_block = next;
+                        continue;
+                    }
+                };
             let edge = self.mint_source_predecessor(target.clone());
             let continuation =
                 Self::instantiate_source_prefix_template(&fanout.source_prefix_template, edge)?;
@@ -3391,7 +3676,7 @@ impl<'a> Lowering<'a> {
                 builder,
                 &frame_baseline,
                 &mut frame_union,
-                case.body.clone(),
+                self.owned_case_body_occurrence(static_origin, case_index, case.body.clone())?,
                 materialize_dynamic_constructor_env(&alternative, env),
                 control,
             )?;
@@ -3420,6 +3705,7 @@ impl<'a> Lowering<'a> {
         dynamic: DynamicConstructorV1,
         cases: &[crate::RuntimeMatchCase],
         default: &RuntimeTrap,
+        static_origin: StaticOriginId,
         env: &[Lowered],
         suffix_control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
@@ -3473,15 +3759,16 @@ impl<'a> Lowering<'a> {
             );
             builder.ins().brif(selected, arm, &[], next, &[]);
             builder.switch_to_block(arm);
-            let case = match select_dynamic_constructor_case(cases, &alternative, default)? {
-                Ok(case) => case,
-                Err(_) => {
-                    let failure = builder.ins().iconst(types::I64, -4);
-                    builder.ins().return_(&[failure]);
-                    test_block = next;
-                    continue;
-                }
-            };
+            let (case_index, case) =
+                match select_dynamic_constructor_case(cases, &alternative, default)? {
+                    Ok(selected) => selected,
+                    Err(_) => {
+                        let failure = builder.ins().iconst(types::I64, -4);
+                        builder.ins().return_(&[failure]);
+                        test_block = next;
+                        continue;
+                    }
+                };
             let edge = self.mint_source_predecessor(target.clone());
             let continuation =
                 Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
@@ -3495,7 +3782,7 @@ impl<'a> Lowering<'a> {
                 builder,
                 &frame_baseline,
                 &mut frame_union,
-                case.body.clone(),
+                self.owned_case_body_occurrence(static_origin, case_index, case.body.clone())?,
                 materialize_dynamic_constructor_env(&alternative, env),
                 control,
             )?;
@@ -3736,7 +4023,7 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         symbol: RuntimeSymbol,
         captures: Vec<Lowered>,
-        body: RuntimeExpr,
+        body: OwnedSourceOccurrence,
         args: Vec<Lowered>,
         env: Vec<Lowered>,
         control: SourceControl<'b>,
@@ -3844,12 +4131,137 @@ impl<'a> Lowering<'a> {
         Ok(SourceCallOutcome::Complete(lowered?))
     }
 
+    /// Derives one **positional** child occurrence of `parent`.
+    ///
+    /// This is the lowering's sole route to a child's static name. `position` is
+    /// the child's source-field ordinal in the planner's own child order (see the
+    /// table on `lower_expr`), and the value comes out of B1R's checked
+    /// positional child-origin range. There is deliberately no other route: not
+    /// pointer identity, not the term's content or hash, not clone order, not
+    /// visit order, and no arithmetic that mints an origin
+    /// for it.
+    fn child_occurrence<'x>(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+        child: &'x RuntimeExpr,
+    ) -> Result<SourceOccurrence<'x>, CraneliftBackendError> {
+        Ok(SourceOccurrence {
+            expr: child,
+            static_origin: self
+                .static_transition_plan
+                .child_static_origin(parent, position)?,
+        })
+    }
+
+    /// The owned form of `child_occurrence`, for the source machine's pending
+    /// frames: it takes the child term **by value** and pairs it with its origin
+    /// in one constructor, so no step of the machine can hold a term whose origin
+    /// was dropped was dropped.
+    fn owned_child_occurrence(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+        child: RuntimeExpr,
+    ) -> Result<OwnedSourceOccurrence, CraneliftBackendError> {
+        Ok(OwnedSourceOccurrence {
+            expr: child,
+            static_origin: self
+                .static_transition_plan
+                .child_static_origin(parent, position)?,
+        })
+    }
+
+    /// The owned form of `case_body_occurrence`, for the source machine.
+    fn owned_case_body_occurrence(
+        &self,
+        parent: StaticOriginId,
+        index: usize,
+        body: RuntimeExpr,
+    ) -> Result<OwnedSourceOccurrence, CraneliftBackendError> {
+        self.owned_child_occurrence(parent, 1 + index, body)
+    }
+
+    /// Derives the occurrence of case *index*'s body under a match occurrence.
+    ///
+    /// Both match variants lay their children out as `[scrutinee, case 0 body,
+    /// case 1 body, …]`, so a case body is child `1 + index`. Cases are the one
+    /// place the lowering reaches a body by *searching* (by constructor name),
+    /// and a search recovers no position — so every such site enumerates to
+    /// recover the index rather than deriving identity from the match it found.
+    fn case_body_occurrence<'x>(
+        &self,
+        parent: StaticOriginId,
+        index: usize,
+        body: &'x RuntimeExpr,
+    ) -> Result<SourceOccurrence<'x>, CraneliftBackendError> {
+        self.child_occurrence(parent, 1 + index, body)
+    }
+
+    /// Lowers one source occurrence.
+    ///
+    /// ## The per-variant child-position table
+    ///
+    /// ⭐ **A child's position is its index in the `children: &[StaticNodeId]`
+    /// slice the planner hands to `expression_node` / `expression_seed`** — *not*
+    /// the `ordinal` parameter of `plan_expr`, which keys the frame's syntax and
+    /// path stores instead. Reading positions off the `plan_expr` call sites
+    /// gives the wrong table for every multi-child variant.
+    ///
+    /// | variant | positions (planner `children` order) |
+    /// |---|---|
+    /// | `CheckedJoinSite` / `CheckedSubcontinuationFrame` / `CheckedRecursiveInvocation` / `CheckedComputationalIHSlots` / `CheckedComputationalIHInvocation` | `0` = body |
+    /// | `Value` / `Var` / `DeclarationRef` / `ImportedDeclarationRef` / `Trap` | no expression children |
+    /// | `Let` | `0` = value, `1` = body |
+    /// | `If` | `0` = scrutinee, `1` = then, `2` = else |
+    /// | `PrimitiveCall` / `Construct` | `i` = `args[i]` |
+    /// | `Record` | `i` = `fields[i]`'s value |
+    /// | `Project` | `0` = record |
+    /// | `Match` | `0` = scrutinee, `1 + i` = `cases[i].body` |
+    /// | `ComputationalMatch` | `0` = scrutinee, `1 + i` = `cases[i].body` — ⚠ and it is the **sole** variant whose `entry != occurrence.node` (second axis below) |
+    /// | `Closure` | `0` = body |
+    /// | `LexicalClosure` | ⚠ `0` = **body**, `1 + i` = `captures[i]` |
+    /// | `Call` | `0` = callee, `1 + i` = `args[i]` |
+    /// | `Effect` | ⚠ capability present: `0` = `capability.value`, `1 + i` = `args[i]`; absent: `i` = `args[i]` |
+    ///
+    /// The planner's order and this walk's traversal **agree** on every variant.
+    /// Two of them disagree with *declaration field order*, which is the trap a
+    /// future author would fall into, so they are marked ⚠ above and again at
+    /// their arms:
+    ///
+    /// 1. `LexicalClosure` declares `captures, params, body` but plans **body
+    ///    first**, because the body is planned before the capture sequence.
+    /// 2. `Effect`'s capability takes position `0` **only when present**, so the
+    ///    argument base is a conditional offset rather than a constant.
+    ///
+    /// ## ⭐ THE SECOND AXIS: `entry` vs `occurrence`
+    ///
+    /// Positional agreement does **not** imply that the identity a parent
+    /// schedules is the identity that owns the child record. `plan_expr` returns
+    /// both (`PlannedExpr { entry, occurrence }`), and the positions above are
+    /// always indexed by the **occurrence**.
+    ///
+    /// | | `entry == occurrence.node`? |
+    /// |---|---|
+    /// | every variant except `ComputationalMatch` | **yes**, by construction — they all return through `expression_node` |
+    /// | `ComputationalMatch` | **no**, and deliberately: its record is seeded on its `SourceReturnResume` while a parent still schedules its scrutinee. It is the SOLE split. |
+    ///
+    /// ⛔ Passing an `entry` where an `occurrence` belongs is a category error, not
+    /// an off-by-one. The seed API takes `&[StaticOriginId]`
+    /// so the type now prevents it; do not re-conflate the two axes.
+    ///
+    /// ⛔ Where the two orders could ever disagree the **planner's** position
+    /// wins: the plane's records are already laid out against it.
     fn lower_expr(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        expr: &RuntimeExpr,
+        occurrence: SourceOccurrence<'_>,
         env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
+        let SourceOccurrence {
+            expr,
+            static_origin,
+        } = occurrence;
         match expr {
             RuntimeExpr::Value(value) => self.lower_value(builder, value),
             RuntimeExpr::CheckedJoinSite { site_id, body } => {
@@ -3859,6 +4271,7 @@ impl<'a> Lowering<'a> {
                         "nested checked join occurrence marker",
                     ));
                 }
+                let body = self.child_occurrence(static_origin, 0, body)?;
                 let result = self.lower_expr(builder, body, env);
                 if self.active_join_site.take().is_some() {
                     return Err(unsupported(
@@ -3870,6 +4283,7 @@ impl<'a> Lowering<'a> {
             }
             RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
                 self.enter_checked_subcontinuation_frame(*frame_id)?;
+                let body = self.child_occurrence(static_origin, 0, body)?;
                 let result = self.lower_expr(builder, body, env);
                 if self.active_subcontinuation_frame.take().is_some() {
                     return Err(unsupported(
@@ -3886,11 +4300,13 @@ impl<'a> Lowering<'a> {
             } => {
                 let instance =
                     self.enter_checked_recursive_invocation(*call_template_id, body)?;
+                let body = self.child_occurrence(static_origin, 0, body)?;
                 let result = self.lower_expr(builder, body, env);
                 self.leave_checked_recursive_invocation(instance)?;
                 result
             }
             RuntimeExpr::CheckedComputationalIHSlots { body, .. } => {
+                let body = self.child_occurrence(static_origin, 0, body)?;
                 self.lower_expr(builder, body, env)
             }
             RuntimeExpr::CheckedComputationalIHInvocation {
@@ -3899,6 +4315,7 @@ impl<'a> Lowering<'a> {
                 ..
             } => {
                 self.enter_checked_computational_ih_invocation(*call_template_id)?;
+                let body = self.child_occurrence(static_origin, 0, body)?;
                 let value = self.lower_expr(builder, body, env)?;
                 self.finish_checked_computational_ih_marker(value)
             }
@@ -3907,9 +4324,10 @@ impl<'a> Lowering<'a> {
                 .cloned()
                 .ok_or_else(|| unsupported("Var", format!("no runtime binding for index {index}"))),
             RuntimeExpr::PrimitiveCall { primitive, args } => {
-                self.lower_primitive_call(builder, primitive, args, env)
+                self.lower_primitive_call(builder, primitive, args, static_origin, env)
             }
             RuntimeExpr::Let { value, body } => {
+                let value = self.child_occurrence(static_origin, 0, value)?;
                 let lowered_value = self.lower_expr(builder, value, env)?;
                 if matches!(lowered_value, Lowered::RecursiveBackedge) {
                     return Ok(Lowered::RecursiveBackedge);
@@ -3919,6 +4337,7 @@ impl<'a> Lowering<'a> {
                 }
                 let mut body_env = vec![lowered_value];
                 body_env.extend_from_slice(env);
+                let body = self.child_occurrence(static_origin, 1, body)?;
                 self.lower_expr(builder, body, &body_env)
             }
             RuntimeExpr::If {
@@ -3926,6 +4345,9 @@ impl<'a> Lowering<'a> {
                 then_expr,
                 else_expr,
             } => {
+                let scrutinee = self.child_occurrence(static_origin, 0, scrutinee)?;
+                let then_expr = self.child_occurrence(static_origin, 1, then_expr)?;
+                let else_expr = self.child_occurrence(static_origin, 2, else_expr)?;
                 let lowered_scrutinee = self.lower_expr(builder, scrutinee, env)?;
                 if matches!(lowered_scrutinee, Lowered::RecursiveBackedge) {
                     return Ok(Lowered::RecursiveBackedge);
@@ -3973,7 +4395,11 @@ impl<'a> Lowering<'a> {
             RuntimeExpr::Construct { constructor, args } => {
                 let lowered_args = args
                     .iter()
-                    .map(|arg| self.lower_expr(builder, arg, env))
+                    .enumerate()
+                    .map(|(position, arg)| {
+                        let arg = self.child_occurrence(static_origin, position, arg)?;
+                        self.lower_expr(builder, arg, env)
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
                 if lowered_args
                     .iter()
@@ -4013,25 +4439,28 @@ impl<'a> Lowering<'a> {
                 cases,
                 default,
             } => {
+                let scrutinee_occurrence = self.child_occurrence(static_origin, 0, scrutinee)?;
                 if requires_heterogeneous_deforestation(scrutinee)
                     || self.declaration_call_produces_deforestable_aggregate(scrutinee)
                 {
                     return self.lower_computational_producer_expr(
                         builder,
-                        scrutinee,
+                        scrutinee_occurrence,
                         env,
                         &[EliminatorFrame::Ordinary(OrdinaryEliminatorFrame {
                             cases,
                             default,
                             env,
+                            static_origin,
                             retained_scrutinee_index: None,
                             deferred_constructor_case: None,
                         })],
                     );
                 }
-                let lowered_scrutinee = self.lower_expr(builder, scrutinee, env)?;
+                let lowered_scrutinee = self.lower_expr(builder, scrutinee_occurrence, env)?;
                 if let Lowered::BorrowedNativeValue { pointer } = lowered_scrutinee {
-                    return self.lower_borrowed_match(builder, pointer, cases, default, env);
+                    return self
+                        .lower_borrowed_match(builder, pointer, cases, default, static_origin, env);
                 }
                 if let Lowered::BorrowedOption {
                     present,
@@ -4041,11 +4470,27 @@ impl<'a> Lowering<'a> {
                 } = lowered_scrutinee
                 {
                     return self.lower_borrowed_option_match(
-                        builder, present, value, &none, &some, cases, default, env,
+                        builder,
+                        present,
+                        value,
+                        &none,
+                        &some,
+                        cases,
+                        default,
+                        static_origin,
+                        env,
                     );
                 }
                 if let Lowered::BoundedNat(nat) = lowered_scrutinee {
-                    return self.lower_bounded_nat_match(builder, nat, false, cases, default, env);
+                    return self.lower_bounded_nat_match(
+                        builder,
+                        nat,
+                        false,
+                        cases,
+                        default,
+                        static_origin,
+                        env,
+                    );
                 }
                 if let Lowered::StructuralNat(nat) = lowered_scrutinee {
                     return self.lower_bounded_nat_match(
@@ -4054,6 +4499,7 @@ impl<'a> Lowering<'a> {
                         true,
                         cases,
                         default,
+                        static_origin,
                         env,
                     );
                 }
@@ -4073,6 +4519,7 @@ impl<'a> Lowering<'a> {
                         &err_constructor,
                         &ok_constructor,
                         cases,
+                        static_origin,
                         env,
                     );
                 }
@@ -4084,14 +4531,19 @@ impl<'a> Lowering<'a> {
                             cases,
                             default,
                             env,
+                            static_origin,
                         },
                     );
                 }
                 if let Lowered::Bool { value, known } = lowered_scrutinee {
-                    let true_case = cases.iter().find(|case| {
+                    // ⭐ These two cases are found by CONSTRUCTOR NAME, and a
+                    // search yields no position — so both lookups enumerate and
+                    // keep the index. The index, not the found body, is what the
+                    // origin is derived from.
+                    let true_case = cases.iter().enumerate().find(|(_, case)| {
                         case.binders == 0 && case.constructor.ends_with("::Bool::True")
                     });
-                    let false_case = cases.iter().find(|case| {
+                    let false_case = cases.iter().enumerate().find(|(_, case)| {
                         case.binders == 0 && case.constructor.ends_with("::Bool::False")
                     });
                     let (Some(true_case), Some(false_case)) = (true_case, false_case) else {
@@ -4101,11 +4553,9 @@ impl<'a> Lowering<'a> {
                         ));
                     };
                     if let Some(selected) = known {
-                        return self.lower_expr(
-                            builder,
-                            if selected { &true_case.body } else { &false_case.body },
-                            env,
-                        );
+                        let (index, case) = if selected { true_case } else { false_case };
+                        let body = self.case_body_occurrence(static_origin, index, &case.body)?;
+                        return self.lower_expr(builder, body, env);
                     }
                     let true_block = builder.create_block();
                     let false_block = builder.create_block();
@@ -4116,11 +4566,12 @@ impl<'a> Lowering<'a> {
                         .ins()
                         .brif(value, true_block, &[], false_block, &[]);
                     let mut merge_kind = None;
-                    for (block, case) in
+                    for (block, (index, case)) in
                         [(true_block, true_case), (false_block, false_case)]
                     {
                         builder.switch_to_block(block);
-                        let lowered = self.lower_expr(builder, &case.body, env)?;
+                        let body = self.case_body_occurrence(static_origin, index, &case.body)?;
+                        let lowered = self.lower_expr(builder, body, env)?;
                         let (value, branch_kind) =
                             self.merge_scalar_branch(builder, lowered, "Match")?;
                         Self::record_scalar_merge_kind(
@@ -4145,7 +4596,11 @@ impl<'a> Lowering<'a> {
                 let Lowered::Constructor { constructor, args } = lowered_scrutinee else {
                     return Err(unsupported("Match", "scrutinee is not a constructor value"));
                 };
-                let Some(case) = cases.iter().find(|case| case.constructor == constructor) else {
+                let Some((index, case)) = cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, case)| case.constructor == constructor)
+                else {
                     return Ok(Lowered::Trap(default.clone()));
                 };
                 if case.binders != args.len() {
@@ -4161,18 +4616,21 @@ impl<'a> Lowering<'a> {
                 }
                 let mut case_env = args;
                 case_env.extend_from_slice(env);
-                self.lower_expr(builder, &case.body, &case_env)
+                let body = self.case_body_occurrence(static_origin, index, &case.body)?;
+                self.lower_expr(builder, body, &case_env)
             }
             RuntimeExpr::ComputationalMatch {
                 scrutinee,
                 cases,
                 default,
             } => {
+                let scrutinee = self.child_occurrence(static_origin, 0, scrutinee)?;
                 self.lower_computational_match_expr(
                     builder,
                     scrutinee,
                     cases,
                     default,
+                    static_origin,
                     env,
                     env,
                 )
@@ -4180,13 +4638,18 @@ impl<'a> Lowering<'a> {
             RuntimeExpr::Record { fields } => {
                 let lowered_fields = fields
                     .iter()
-                    .map(|(name, expr)| Ok((name.clone(), self.lower_expr(builder, expr, env)?)))
+                    .enumerate()
+                    .map(|(position, (name, expr))| {
+                        let expr = self.child_occurrence(static_origin, position, expr)?;
+                        Ok((name.clone(), self.lower_expr(builder, expr, env)?))
+                    })
                     .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
                 Ok(Lowered::Record {
                     fields: lowered_fields,
                 })
             }
             RuntimeExpr::Project { record, field } => {
+                let record = self.child_occurrence(static_origin, 0, record)?;
                 let lowered_record = self.lower_expr(builder, record, env)?;
                 let Lowered::Record { fields } = lowered_record else {
                     return Err(unsupported(
@@ -4199,11 +4662,17 @@ impl<'a> Lowering<'a> {
                     .find_map(|(name, value)| (name == *field).then_some(value))
                     .ok_or_else(|| unsupported("Project", format!("missing field {field}")))
             }
+            // D7, site 1 of 3. The occurrence's own origin is in scope here, so
+            // the body's origin is `child(_, 0)` — determined, not searched for.
+            // ⛔ The body clone is unchanged and is still the only thing any
+            // consumer reads; the origin rides along as provenance so that the
+            // call site which re-lowers this body has a static name for it.
             RuntimeExpr::Closure {
                 captures,
                 params,
                 body,
             } => {
+                let body = self.child_occurrence(static_origin, 0, body)?;
                 let lowered_captures = captures
                     .iter()
                     .map(|symbol| self.lower_seed_capture(builder, symbol))
@@ -4211,22 +4680,34 @@ impl<'a> Lowering<'a> {
                 Ok(Lowered::Closure {
                     captures: lowered_captures,
                     params: params.clone(),
-                    body: (**body).clone(),
+                    body: OwnedSourceOccurrence::cloned(body),
                 })
             }
+            // D7, site 2 of 3.
+            //
+            // ⚠ HAZARD 1 (D3): the planner plans the **body first** and the
+            // capture sequence after it, so body is position `0` and capture *i*
+            // is `1 + i` — the declaration order (`captures, params, body`) is
+            // NOT the child order. Evaluation order below is unchanged: the
+            // captures are still lowered before the body is retained.
             RuntimeExpr::LexicalClosure {
                 captures,
                 params,
                 body,
             } => {
+                let body = self.child_occurrence(static_origin, 0, body)?;
                 let captures = captures
                     .iter()
-                    .map(|capture| self.lower_expr(builder, capture, env))
+                    .enumerate()
+                    .map(|(position, capture)| {
+                        let capture = self.child_occurrence(static_origin, 1 + position, capture)?;
+                        self.lower_expr(builder, capture, env)
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(Lowered::Closure {
                     captures,
                     params: params.clone(),
-                    body: (**body).clone(),
+                    body: OwnedSourceOccurrence::cloned(body),
                 })
             }
             RuntimeExpr::DeclarationRef { symbol } => self.lower_declaration_ref(builder, symbol),
@@ -4241,6 +4722,7 @@ impl<'a> Lowering<'a> {
                 ),
             )),
             RuntimeExpr::Call { callee, args } => {
+                let callee = self.child_occurrence(static_origin, 0, callee)?;
                 let lowered_callee = self.lower_expr(builder, callee, env)?;
                 match lowered_callee {
                     Lowered::DeclarationClosure {
@@ -4253,8 +4735,9 @@ impl<'a> Lowering<'a> {
                         &symbol,
                         &captures,
                         &params,
-                        &body,
+                        body.borrowed(),
                         args,
+                        static_origin,
                         env,
                         None,
                     ),
@@ -4264,19 +4747,26 @@ impl<'a> Lowering<'a> {
                         body,
                     } => {
                         if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
+                            // The cases here belong to the closure BODY
+                            // occurrence: `ordinary_match_continuation` matches
+                            // only a body that *is* a `Match` (over `Var(0)`),
+                            // so the body's own origin is their parent.
                             if let Some((cases, default)) =
-                                ordinary_match_continuation(&params, &body)
+                                ordinary_match_continuation(&params, &body.expr)
                             {
+                                let argument =
+                                    self.child_occurrence(static_origin, 1, &args[0])?;
                                 let mut frame_env = captures;
                                 frame_env.extend_from_slice(env);
                                 return self.lower_computational_producer_expr(
                                     builder,
-                                    &args[0],
+                                    argument,
                                     env,
                                     &[EliminatorFrame::Ordinary(OrdinaryEliminatorFrame {
                                         cases,
                                         default,
                                         env: &frame_env,
+                                        static_origin: body.static_origin,
                                         retained_scrutinee_index: Some(0),
                                         deferred_constructor_case: None,
                                     })],
@@ -4285,7 +4775,12 @@ impl<'a> Lowering<'a> {
                         }
                         let mut call_env = args
                             .iter()
-                            .map(|arg| self.lower_expr(builder, arg, env))
+                            .enumerate()
+                            .map(|(position, arg)| {
+                                let arg =
+                                    self.child_occurrence(static_origin, 1 + position, arg)?;
+                                self.lower_expr(builder, arg, env)
+                            })
                             .collect::<Result<Vec<_>, _>>()?;
                         if params.len() != call_env.len() {
                             return Err(unsupported(
@@ -4299,7 +4794,7 @@ impl<'a> Lowering<'a> {
                         }
                         call_env.extend(captures);
                         call_env.extend_from_slice(env);
-                        self.lower_expr(builder, &body, &call_env)
+                        self.lower_expr(builder, body.borrowed(), &call_env)
                     }
                     mut callee @ Lowered::ComputationalRecursorClosure { .. } => {
                         let checked_ih_invocation =
@@ -4353,7 +4848,12 @@ impl<'a> Lowering<'a> {
                         };
                         let mut call_env = args
                             .iter()
-                            .map(|arg| self.lower_expr(builder, arg, env))
+                            .enumerate()
+                            .map(|(position, arg)| {
+                                let arg =
+                                    self.child_occurrence(static_origin, 1 + position, arg)?;
+                                self.lower_expr(builder, arg, env)
+                            })
                             .collect::<Result<Vec<_>, _>>()?;
                         if params.len() != call_env.len() {
                             return Err(unsupported(
@@ -4370,7 +4870,7 @@ impl<'a> Lowering<'a> {
                         self.enter_oriented_semantic_region(installed.checked);
                         let result = self.lower_computational_producer_expr(
                             builder,
-                            &body,
+                            body.borrowed(),
                             &call_env,
                             &frames,
                         );
@@ -4381,14 +4881,25 @@ impl<'a> Lowering<'a> {
                 }
             }
             RuntimeExpr::Trap(trap) => Ok(Lowered::Trap(trap.clone())),
+            // ⚠ HAZARD 2 (D3): the capability occupies child position `0` **only
+            // when present**, so the argument base is `1` with a capability and
+            // `0` without it. A constant base would mis-key every argument of
+            // every capability-carrying effect, and nothing in the types would
+            // notice.
             RuntimeExpr::Effect {
                 family,
                 operation,
                 capability,
                 args,
-            } if self.process_object => {
-                self.lower_process_host_effect(builder, family, *operation, capability.as_ref(), args, env)
-            }
+            } if self.process_object => self.lower_process_host_effect(
+                builder,
+                family,
+                *operation,
+                capability.as_ref(),
+                args,
+                static_origin,
+                env,
+            ),
             RuntimeExpr::Effect { family, operation, .. } => Err(unsupported(
                 "Effect",
                 format!(
@@ -4399,6 +4910,14 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    /// `static_origin` is the `Effect` occurrence's own origin.
+    ///
+    /// ⚠ HAZARD 2 (D3): the planner plans `capability.value` **first when it is
+    /// present**, so the argument base is `1` with a capability and `0` without
+    /// one. `argument_base` below is that conditional offset, computed once from
+    /// the same `Option` the planner tested (`static_transition.rs` `Effect`
+    /// arm) rather than assumed.
+    #[allow(clippy::too_many_arguments)]
     fn lower_process_host_effect(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -4406,6 +4925,7 @@ impl<'a> Lowering<'a> {
         operation: ken_host::HostOpV1,
         capability: Option<&crate::RuntimeCapabilityUse>,
         args: &[RuntimeExpr],
+        static_origin: StaticOriginId,
         env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
         if !CRANELIFT_HOST_EFFECT_CONSUMERS_V1.contains(&operation) {
@@ -4417,9 +4937,15 @@ impl<'a> Lowering<'a> {
                 ),
             ));
         }
+        let argument_base = usize::from(capability.is_some());
         let lowered = args
             .iter()
-            .map(|argument| self.lower_expr(builder, argument, env))
+            .enumerate()
+            .map(|(position, argument)| {
+                let argument =
+                    self.child_occurrence(static_origin, argument_base + position, argument)?;
+                self.lower_expr(builder, argument, env)
+            })
             .collect::<Result<Vec<_>, _>>()?;
         let pointer_type = builder.func.dfg.value_type(
             self.invocation_pointer
@@ -4496,8 +5022,11 @@ impl<'a> Lowering<'a> {
             | ken_host::HostOpV1::FsOpen => {
                 let capability = capability
                     .ok_or_else(|| unsupported("Effect", "FS operation has no live capability"))?;
+                // Present ⇒ the capability value is child 0 of this occurrence.
+                let capability_value =
+                    self.child_occurrence(static_origin, 0, &capability.value)?;
                 let Lowered::CapabilityToken { value: token } =
-                    self.lower_expr(builder, &capability.value, env)?
+                    self.lower_expr(builder, capability_value, env)?
                 else {
                     return Err(unsupported(
                         "Effect",
@@ -5277,14 +5806,15 @@ impl<'a> Lowering<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     fn lower_unary_recursive_nat_fold(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         symbol: &RuntimeSymbol,
         captures: &[Lowered],
         argument: Lowered,
-        zero_body: &RuntimeExpr,
-        suc_body: &RuntimeExpr,
+        zero_body: SourceOccurrence<'_>,
+        suc_body: SourceOccurrence<'_>,
         producer_env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
         let (target, structural) = match argument {
@@ -5399,21 +5929,30 @@ impl<'a> Lowering<'a> {
         ))
     }
 
+    /// `body` is the declaration closure's body occurrence (reachable by symbol,
+    /// D6); `call_origin` is the origin of the **`Call` occurrence** whose
+    /// arguments these are, so argument *i* is `child(call_origin, 1 + i)`.
+    #[allow(clippy::too_many_arguments)]
     fn lower_recursive_declaration_call(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         symbol: &RuntimeSymbol,
         captures: &[Lowered],
         params: &[String],
-        body: &RuntimeExpr,
+        body: SourceOccurrence<'_>,
         args: &[RuntimeExpr],
+        call_origin: StaticOriginId,
         producer_env: &[Lowered],
         eliminators: Option<&[EliminatorFrame<'_>]>,
     ) -> Result<Lowered, CraneliftBackendError> {
         let _checked_invocation = self.consume_checked_recursive_invocation_call(symbol)?;
         let lowered_args = args
             .iter()
-            .map(|arg| self.lower_expr(builder, arg, producer_env))
+            .enumerate()
+            .map(|(position, arg)| {
+                let arg = self.child_occurrence(call_origin, 1 + position, arg)?;
+                self.lower_expr(builder, arg, producer_env)
+            })
             .collect::<Result<Vec<_>, _>>()?;
         if params.len() != lowered_args.len() {
             return Err(unsupported(
@@ -5492,16 +6031,26 @@ impl<'a> Lowering<'a> {
         if eliminators.is_none() && params.len() == 1 && lowered_args.len() == 1 {
             if let RuntimeExpr::Match {
                 scrutinee, cases, ..
-            } = body
+            } = body.expr
             {
                 if matches!(scrutinee.as_ref(), RuntimeExpr::Var(0)) {
-                    let zero = cases.iter().find(|case| {
+                    // These two arms are found by constructor name under the
+                    // BODY occurrence's match, so their bodies are its children
+                    // `1 + index` — the index the search would otherwise discard.
+                    let zero = cases.iter().enumerate().find(|(_, case)| {
                         case.constructor == self.process_symbols.nat_zero && case.binders == 0
                     });
-                    let suc = cases.iter().find(|case| {
+                    let suc = cases.iter().enumerate().find(|(_, case)| {
                         case.constructor == self.process_symbols.nat_suc && case.binders == 1
                     });
-                    if let (Some(zero), Some(suc)) = (zero, suc) {
+                    if let (Some((zero_index, zero)), Some((suc_index, suc))) = (zero, suc) {
+                        let zero_body = self.case_body_occurrence(
+                            body.static_origin,
+                            zero_index,
+                            &zero.body,
+                        )?;
+                        let suc_body =
+                            self.case_body_occurrence(body.static_origin, suc_index, &suc.body)?;
                         return self.lower_unary_recursive_nat_fold(
                             builder,
                             symbol,
@@ -5510,8 +6059,8 @@ impl<'a> Lowering<'a> {
                                 .into_iter()
                                 .next()
                                 .expect("unary recursion owns one argument"),
-                            &zero.body,
-                            &suc.body,
+                            zero_body,
+                            suc_body,
                             producer_env,
                         );
                     }
@@ -5613,12 +6162,33 @@ impl<'a> Lowering<'a> {
                 format!("{symbol} is not an executable transparent declaration"),
             ));
         };
+        // D6/D7: a `DeclarationRef` is a childless leaf, and the declaration's
+        // body is a **separately planned** source occurrence, reachable by name.
+        // That is why this construction site needs no threading — and why it must
+        // not suggest the two `lower_expr` closure arms are nearly done. Only
+        // transparent declarations are planned, which is exactly the set that
+        // survives the rejection above, so a missing occurrence is a planner bug.
+        let declaration_origin = self
+            .static_transition_plan
+            .declaration_occurrence_origin(symbol.as_str())
+            .ok_or_else(|| {
+                // A planner invariant, not a capacity limit: this declaration is
+                // transparent, so the planner planned it.
+                backend(BackendFailure::PlannerInvariant(format!(
+                    "transparent declaration {symbol} has no planned source occurrence"
+                )))
+            })?;
+        let declaration_body = SourceOccurrence {
+            expr: body,
+            static_origin: declaration_origin,
+        };
         if let RuntimeExpr::Closure {
             captures,
             params,
             body,
         } = body
         {
+            let body = self.child_occurrence(declaration_origin, 0, body)?;
             let captures = captures
                 .iter()
                 .map(|capture| self.lower_seed_capture(builder, capture))
@@ -5627,7 +6197,7 @@ impl<'a> Lowering<'a> {
                 symbol: symbol.clone(),
                 captures,
                 params: params.clone(),
-                body: (**body).clone(),
+                body: OwnedSourceOccurrence::cloned(body),
             });
         }
         if self.declaration_stack.contains(symbol) {
@@ -5637,17 +6207,20 @@ impl<'a> Lowering<'a> {
             ));
         }
         self.declaration_stack.push(symbol.clone());
-        let result = self.lower_expr(builder, body, &[]);
+        let result = self.lower_expr(builder, declaration_body, &[]);
         self.declaration_stack.pop();
         result
     }
 
+    /// `static_origin` is the origin of the **match occurrence** whose cases
+    /// these are; case *i*'s body is `child(static_origin, 1 + i)`.
     fn lower_borrowed_match(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         pointer: cranelift_codegen::ir::Value,
         cases: &[crate::RuntimeMatchCase],
         _default: &RuntimeTrap,
+        static_origin: StaticOriginId,
         env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
         let kind = builder
@@ -5702,14 +6275,16 @@ impl<'a> Lowering<'a> {
                 })
                 .collect::<Vec<_>>();
             arm_env.extend_from_slice(env);
-            return self.lower_expr(builder, &case.body, &arm_env);
+            // The single-case fast path is still case 0 of this match.
+            let body = self.case_body_occurrence(static_origin, 0, &case.body)?;
+            return self.lower_expr(builder, body, &arm_env);
         }
         let merge = builder.create_block();
         builder.append_block_param(merge, types::I64);
         builder.append_block_param(merge, types::I64);
         let mut test_block = builder.current_block().expect("borrowed match block");
         let mut merge_kind = None;
-        for case in cases {
+        for (index, case) in cases.iter().enumerate() {
             let (expected_tag, expected_arity) =
                 borrowed_constructor_identity(&self.process_symbols, &case.constructor)
                     .ok_or_else(|| {
@@ -5747,7 +6322,8 @@ impl<'a> Lowering<'a> {
                 })
                 .collect::<Vec<_>>();
             arm_env.extend_from_slice(env);
-            let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
+            let body = self.case_body_occurrence(static_origin, index, &case.body)?;
+            let lowered = self.lower_expr(builder, body, &arm_env)?;
             let (value, kind) = self.merge_scalar_branch(builder, lowered, "Match")?;
             Self::record_scalar_merge_kind("Match", &mut merge_kind, kind)?;
             builder
@@ -5769,6 +6345,7 @@ impl<'a> Lowering<'a> {
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn lower_borrowed_option_match(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -5778,6 +6355,7 @@ impl<'a> Lowering<'a> {
         some: &str,
         cases: &[crate::RuntimeMatchCase],
         _default: &RuntimeTrap,
+        static_origin: StaticOriginId,
         env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
         let merge = builder.create_block();
@@ -5794,8 +6372,11 @@ impl<'a> Lowering<'a> {
             (none_block, none, Vec::new()),
         ] {
             builder.switch_to_block(block);
-            let case = cases.iter().find(|case| case.constructor == symbol);
-            let Some(case) = case else {
+            let case = cases
+                .iter()
+                .enumerate()
+                .find(|(_, case)| case.constructor == symbol);
+            let Some((index, case)) = case else {
                 let failure = builder.ins().iconst(types::I64, -1);
                 builder.ins().return_(&[failure]);
                 continue;
@@ -5805,7 +6386,8 @@ impl<'a> Lowering<'a> {
             }
             let mut arm_env = fields;
             arm_env.extend_from_slice(env);
-            let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
+            let body = self.case_body_occurrence(static_origin, index, &case.body)?;
+            let lowered = self.lower_expr(builder, body, &arm_env)?;
             let (value, is_exit) = self.merge_branch_value(builder, lowered, "Match")?;
             Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
             builder
@@ -5836,6 +6418,7 @@ impl<'a> Lowering<'a> {
         err_constructor: &str,
         ok_constructor: &str,
         cases: &[crate::RuntimeMatchCase],
+        static_origin: StaticOriginId,
         env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
         let merge = builder.create_block();
@@ -5850,9 +6433,10 @@ impl<'a> Lowering<'a> {
             (err_block, err_constructor, error),
         ] {
             builder.switch_to_block(block);
-            let Some(case) = cases
+            let Some((index, case)) = cases
                 .iter()
-                .find(|case| case.constructor == constructor && case.binders == 1)
+                .enumerate()
+                .find(|(_, case)| case.constructor == constructor && case.binders == 1)
             else {
                 let failure = builder.ins().iconst(types::I64, -1);
                 builder.ins().return_(&[failure]);
@@ -5860,7 +6444,8 @@ impl<'a> Lowering<'a> {
             };
             let mut arm_env = vec![payload];
             arm_env.extend_from_slice(env);
-            let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
+            let body = self.case_body_occurrence(static_origin, index, &case.body)?;
+            let lowered = self.lower_expr(builder, body, &arm_env)?;
             let (value, branch_kind) = self.merge_scalar_branch(builder, lowered, "Match")?;
             Self::record_scalar_merge_kind("Match", &mut merge_kind, branch_kind)?;
             builder
@@ -5878,6 +6463,7 @@ impl<'a> Lowering<'a> {
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn lower_bounded_nat_match(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -5885,14 +6471,15 @@ impl<'a> Lowering<'a> {
         structural: bool,
         cases: &[crate::RuntimeMatchCase],
         _default: &RuntimeTrap,
+        static_origin: StaticOriginId,
         env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
-        let zero = cases
-            .iter()
-            .find(|case| case.constructor == self.process_symbols.nat_zero && case.binders == 0);
-        let suc = cases
-            .iter()
-            .find(|case| case.constructor == self.process_symbols.nat_suc && case.binders == 1);
+        let zero = cases.iter().enumerate().find(|(_, case)| {
+            case.constructor == self.process_symbols.nat_zero && case.binders == 0
+        });
+        let suc = cases.iter().enumerate().find(|(_, case)| {
+            case.constructor == self.process_symbols.nat_suc && case.binders == 1
+        });
         let (Some(zero), Some(suc)) = (zero, suc) else {
             return Err(unsupported(
                 "BoundedNat",
@@ -5911,7 +6498,7 @@ impl<'a> Lowering<'a> {
                 .icmp_imm(cranelift_codegen::ir::condcodes::IntCC::Equal, nat.value, 0);
         builder.ins().brif(is_zero, zero_block, &[], suc_block, &[]);
         let mut merge_kind = None;
-        for (block, case, predecessor) in [
+        for (block, (index, case), predecessor) in [
             (zero_block, zero, None),
             (suc_block, suc, Some(predecessor)),
         ] {
@@ -5928,7 +6515,8 @@ impl<'a> Lowering<'a> {
                 })
                 .unwrap_or_default();
             arm_env.extend_from_slice(env);
-            let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
+            let body = self.case_body_occurrence(static_origin, index, &case.body)?;
+            let lowered = self.lower_expr(builder, body, &arm_env)?;
             let (value, kind) = self.merge_scalar_branch(builder, lowered, "BoundedNat")?;
             Self::record_scalar_merge_kind("BoundedNat", &mut merge_kind, kind)?;
             builder
@@ -5991,21 +6579,24 @@ impl<'a> Lowering<'a> {
             );
             builder.ins().brif(selected, arm, &[], next, &[]);
             builder.switch_to_block(arm);
-            let (cases, default, env) = match continuation {
+            let (cases, default, env, static_origin) = match continuation {
                 DynamicConstructorContinuation::Ordinary {
                     cases,
                     default,
                     env,
+                    static_origin,
                 }
                 | DynamicConstructorContinuation::Producer {
                     cases,
                     default,
                     env,
+                    static_origin,
                     ..
-                } => (cases, default, env),
+                } => (cases, default, env, static_origin),
             };
-            let case = match select_dynamic_constructor_case(cases, &alternative, default)? {
-                Ok(case) => case,
+            let (index, case) = match select_dynamic_constructor_case(cases, &alternative, default)?
+            {
+                Ok(selected) => selected,
                 Err(_owned_default) => {
                     let failure = builder.ins().iconst(types::I64, -4);
                     builder.ins().return_(&[failure]);
@@ -6014,17 +6605,14 @@ impl<'a> Lowering<'a> {
                 }
             };
             let arm_env = materialize_dynamic_constructor_env(&alternative, env);
+            let body = self.case_body_occurrence(static_origin, index, &case.body)?;
             let lowered = match continuation {
                 DynamicConstructorContinuation::Ordinary { .. } => {
-                    self.lower_expr(builder, &case.body, &arm_env)?
+                    self.lower_expr(builder, body, &arm_env)?
                 }
-                DynamicConstructorContinuation::Producer { eliminators, .. } => self
-                    .lower_computational_producer_expr(
-                        builder,
-                        &case.body,
-                        &arm_env,
-                        eliminators,
-                    )?,
+                DynamicConstructorContinuation::Producer { eliminators, .. } => {
+                    self.lower_computational_producer_expr(builder, body, &arm_env, eliminators)?
+                }
             };
             let (value, branch_kind) =
                 self.merge_scalar_branch(builder, lowered, "DynamicConstructor")?;
@@ -6056,16 +6644,23 @@ impl<'a> Lowering<'a> {
         ))
     }
 
+    /// `static_origin` is the `PrimitiveCall` occurrence's own origin; argument
+    /// *i* is child *i* (a primitive symbol is an atom, not a child).
     fn lower_primitive_call(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         primitive: &RuntimePrimitive,
         args: &[RuntimeExpr],
+        static_origin: StaticOriginId,
         env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
         let lowered_args = args
             .iter()
-            .map(|arg| self.lower_expr(builder, arg, env))
+            .enumerate()
+            .map(|(position, arg)| {
+                let arg = self.child_occurrence(static_origin, position, arg)?;
+                self.lower_expr(builder, arg, env)
+            })
             .collect::<Result<Vec<_>, _>>()?;
         if lowered_args
             .iter()

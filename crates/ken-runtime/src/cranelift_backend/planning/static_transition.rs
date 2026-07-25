@@ -16,7 +16,47 @@ use super::{
 use crate::RuntimeExpr;
 use semantic_ir::{build_semantic_plane, SemanticMaterialArena, SemanticPlane, SemanticSourceSeed};
 
+pub(in crate::cranelift_backend) use semantic_ir::StaticOriginId;
+
 pub(super) const MAX_HELPERS_PER_STATIC_SOURCE: usize = 8;
+
+/// ⭐ The dual result of planning one expression.
+///
+/// One `StaticNodeId` was previously made to mean two different things:
+///
+/// - **`entry`** — the first node the transfer graph *schedules* for the
+///   expression;
+/// - **`occurrence`** — the node on which `SemanticSourceSeed::expression`
+///   registered that `RuntimeExpr`, and from which its positional child-origin
+///   record is read.
+///
+/// They coincide for every ordinary form and **deliberately do not** for
+/// `ComputationalMatch`, whose occurrence is registered on its
+/// `SourceReturnResume` while the parent must still schedule its scrutinee.
+/// Returning one value for both made a parent record the scrutinee's identity as
+/// its child's origin — a category error, not an off-by-one.
+///
+/// ⛔ **The two fields have disjoint consumers, and that is the whole mechanism.**
+/// Transfer topology consumes **only `.entry`**; source correspondence consumes
+/// **only `.occurrence`**. This adds no node, no origin, no search and no
+/// arithmetic: both values are outputs of the same recursive visit, and
+/// `occurrence` is the origin already assigned to the already-existing semantic
+/// seed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct PlannedExpr {
+    entry: StaticNodeId,
+    occurrence: StaticOriginId,
+}
+
+/// The occurrence origin of a node the planner has just allocated a semantic
+/// seed for.
+///
+/// ⛔ Formed **only** inside the planner. `StaticOriginId`'s ordinal is
+/// planner-private precisely so no consumer outside this module can mint one, and
+/// this is the single function that does.
+fn origin_of(node: StaticNodeId) -> StaticOriginId {
+    StaticOriginId(node.0)
+}
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
@@ -166,6 +206,23 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan {
     semantic_sources: Vec<SemanticSourceSeed>,
     semantic_material: SemanticMaterialArena,
     semantic: SemanticPlane,
+    /// The **occurrence** origin of the whole program's root, stored at planning
+    /// time.
+    ///
+    /// ⛔ It is not recoverable from `entries`, which holds scheduling entries: a
+    /// root whose body is a `ComputationalMatch` schedules its scrutinee while
+    /// its occurrence lives on the resume (D9/AC-15). Deriving one from the other
+    /// afterwards is the conflation this field exists to prevent.
+    root_occurrence: Option<StaticOriginId>,
+    /// The **occurrence** origin of each transparent declaration, keyed by its
+    /// symbol — likewise stored at planning time, not recovered from an entry.
+    ///
+    /// A declaration is planned as its own source occurrence, so its body's
+    /// static name is reachable **by name** and needs no origin threaded into it.
+    /// This is what makes `Lowered::DeclarationClosure`'s construction site
+    /// asymmetric with the two `lower_expr` closure arms
+    ///.
+    declaration_occurrences: BTreeMap<String, StaticOriginId>,
 }
 
 #[cfg(test)]
@@ -256,6 +313,8 @@ impl Planner {
                 semantic_sources: Vec::new(),
                 semantic_material: SemanticMaterialArena::default(),
                 semantic: SemanticPlane::default(),
+                root_occurrence: None,
+                declaration_occurrences: BTreeMap::new(),
             },
             store_interner: BTreeMap::new(),
             next_source: 0,
@@ -314,18 +373,27 @@ impl Planner {
     }
 
     /// Registers an expression occurrence whose syntax children are already
-    /// planned. `children` is in source position order.
+    /// planned. `children` is in source position order, and holds each child's
+    /// **occurrence** origin — never its scheduling entry (D9).
+    ///
+    /// The returned `PlannedExpr` has `entry == occurrence.node`: an ordinary
+    /// form is scheduled at the very node its occurrence is registered on.
+    /// `ComputationalMatch` is the sole variant that does not go through here for
+    /// that reason.
     fn expression_node(
         &mut self,
         kind: TransitionKind,
         owner: StaticSourceId,
         frame: DynamicActivationFrame,
         expr: &RuntimeExpr,
-        children: &[StaticNodeId],
-    ) -> Result<StaticNodeId, CraneliftBackendError> {
+        children: &[StaticOriginId],
+    ) -> Result<PlannedExpr, CraneliftBackendError> {
         let node = self.push_node(kind, owner, frame)?;
         self.expression_seed(node, expr, children)?;
-        Ok(node)
+        Ok(PlannedExpr {
+            entry: node,
+            occurrence: origin_of(node),
+        })
     }
 
     /// Emits an already-pushed node's semantic material. Split out for the one
@@ -335,7 +403,7 @@ impl Planner {
         &mut self,
         node: StaticNodeId,
         expr: &RuntimeExpr,
-        children: &[StaticNodeId],
+        children: &[StaticOriginId],
     ) -> Result<(), CraneliftBackendError> {
         let seed = SemanticSourceSeed::expression(
             node,
@@ -436,28 +504,41 @@ impl Planner {
         })
     }
 
-    /// Plans a positional operand sequence. Returns the chain entry **and** each
-    /// element's own entry node indexed by its source position, so the parent
-    /// occurrence can record positional child origins rather than recovering
-    /// them from the transfer graph.
+    /// Plans a positional operand sequence. Returns the chain **entry** — what the
+    /// parent schedules — and each element's **occurrence** origin indexed by its
+    /// source position, which is what the parent records as its positional child
+    ///. The two are different values for a
+    /// `ComputationalMatch` element, and mixing them is a category error.
     fn plan_sequence(
         &mut self,
         expressions: &[&RuntimeExpr],
         ctx: PlanContext,
         successor: StaticNodeId,
         exit_kind: EdgeKind,
-    ) -> Result<(StaticNodeId, Vec<StaticNodeId>), CraneliftBackendError> {
+    ) -> Result<(StaticNodeId, Vec<StaticOriginId>), CraneliftBackendError> {
         let mut next = successor;
         let mut next_kind = exit_kind;
-        let mut entries = vec![StaticNodeId(0); expressions.len()];
+        let mut occurrences = vec![None; expressions.len()];
         for (ordinal, expression) in expressions.iter().enumerate().rev() {
-            next = self.plan_expr(expression, ctx, next, next_kind, ordinal as u32)?;
-            entries[ordinal] = next;
+            let planned = self.plan_expr(expression, ctx, next, next_kind, ordinal as u32)?;
+            next = planned.entry;
+            occurrences[ordinal] = Some(planned.occurrence);
             next_kind = EdgeKind::Continue;
         }
-        Ok((next, entries))
+        let occurrences = occurrences
+            .into_iter()
+            .map(|occurrence| {
+                occurrence.ok_or_else(|| {
+                    planner_error("operand sequence position has no planned occurrence")
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((next, occurrences))
     }
 
+    /// Plans one eliminator's case bodies. Returns the dispatch **entry** and each
+    /// body's **occurrence** origin by source position (D9): the case test edges
+    /// to the body's `entry`, while the parent records the body's `occurrence`.
     fn plan_cases(
         &mut self,
         bodies: &[(&RuntimeExpr, usize)],
@@ -465,9 +546,9 @@ impl Planner {
         successor: StaticNodeId,
         exit_kind: EdgeKind,
         default: StaticNodeId,
-    ) -> Result<(StaticNodeId, Vec<StaticNodeId>), CraneliftBackendError> {
+    ) -> Result<(StaticNodeId, Vec<StaticOriginId>), CraneliftBackendError> {
         let mut reject = default;
-        let mut entries = vec![StaticNodeId(0); bodies.len()];
+        let mut occurrences = vec![None; bodies.len()];
         for (ordinal, (body, binders)) in bodies.iter().enumerate().rev() {
             let mut body_ctx = ctx;
             for binder in 0..*binders {
@@ -478,18 +559,30 @@ impl Planner {
                     body_ctx.environment,
                 )?;
             }
-            let entry = self.plan_expr(body, body_ctx, successor, exit_kind, ordinal as u32)?;
-            entries[ordinal] = entry;
+            let planned = self.plan_expr(body, body_ctx, successor, exit_kind, ordinal as u32)?;
+            occurrences[ordinal] = Some(planned.occurrence);
             let owner = self.source()?;
             let frame = self.frame(0x80, ordinal as u32, ctx, reject)?;
             let test = self.control_node(TransitionKind::CaseTest, owner, frame)?;
-            self.edge(test, entry, EdgeKind::Select)?;
+            // Topology: the test selects the body's SCHEDULING entry.
+            self.edge(test, planned.entry, EdgeKind::Select)?;
             self.edge(test, reject, EdgeKind::Reject)?;
             reject = test;
         }
-        Ok((reject, entries))
+        let occurrences = occurrences
+            .into_iter()
+            .map(|occurrence| {
+                occurrence
+                    .ok_or_else(|| planner_error("case position has no planned occurrence"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((reject, occurrences))
     }
 
+    /// Plans one expression occurrence and returns **both** of its identities
+    /// (D9): the `entry` the parent schedules and the `occurrence` the parent
+    /// records at its source position. Every arm but `ComputationalMatch` returns
+    /// them equal, by going through `expression_node`.
     fn plan_expr(
         &mut self,
         expr: &RuntimeExpr,
@@ -497,7 +590,7 @@ impl Planner {
         successor: StaticNodeId,
         exit_kind: EdgeKind,
         ordinal: u32,
-    ) -> Result<StaticNodeId, CraneliftBackendError> {
+    ) -> Result<PlannedExpr, CraneliftBackendError> {
         let owner = self.source()?;
         let tag = runtime_expr_tag(expr);
         let frame = self.frame(tag, ordinal, ctx, successor)?;
@@ -509,7 +602,7 @@ impl Planner {
         match expr {
             RuntimeExpr::Trap(_) => {
                 let node = self.expression_node(TransitionKind::Evaluate, owner, frame, expr, &[])?;
-                self.edge(node, self.trap_terminal, EdgeKind::Trap)?;
+                self.edge(node.entry, self.trap_terminal, EdgeKind::Trap)?;
                 Ok(node)
             }
             RuntimeExpr::Value(_)
@@ -517,7 +610,7 @@ impl Planner {
             | RuntimeExpr::DeclarationRef { .. }
             | RuntimeExpr::ImportedDeclarationRef { .. } => {
                 let node = self.expression_node(TransitionKind::Evaluate, owner, frame, expr, &[])?;
-                self.edge(node, successor, exit_kind)?;
+                self.edge(node.entry, successor, exit_kind)?;
                 Ok(node)
             }
             RuntimeExpr::CheckedJoinSite { body, .. }
@@ -527,9 +620,14 @@ impl Planner {
             | RuntimeExpr::CheckedComputationalIHInvocation { body, .. }
             | RuntimeExpr::Project { record: body, .. } => {
                 let body = self.plan_expr(body, ctx, successor, exit_kind, 0)?;
-                let node =
-                    self.expression_node(TransitionKind::Sequence, owner, frame, expr, &[body])?;
-                self.edge(node, body, EdgeKind::Continue)?;
+                let node = self.expression_node(
+                    TransitionKind::Sequence,
+                    owner,
+                    frame,
+                    expr,
+                    &[body.occurrence],
+                )?;
+                self.edge(node.entry, body.entry, EdgeKind::Continue)?;
                 Ok(node)
             }
             RuntimeExpr::Let { value, body } => {
@@ -541,15 +639,15 @@ impl Planner {
                     exit_kind,
                     1,
                 )?;
-                let value = self.plan_expr(value, ctx, body, EdgeKind::Continue, 0)?;
+                let value = self.plan_expr(value, ctx, body.entry, EdgeKind::Continue, 0)?;
                 let node = self.expression_node(
                     TransitionKind::Sequence,
                     owner,
                     frame,
                     expr,
-                    &[value, body],
+                    &[value.occurrence, body.occurrence],
                 )?;
-                self.edge(node, value, EdgeKind::Continue)?;
+                self.edge(node.entry, value.entry, EdgeKind::Continue)?;
                 Ok(node)
             }
             RuntimeExpr::If {
@@ -561,17 +659,21 @@ impl Planner {
                 let else_entry = self.plan_expr(else_expr, ctx, successor, exit_kind, 2)?;
                 let branch_owner = self.source()?;
                 let branch = self.control_node(TransitionKind::Branch, branch_owner, frame)?;
-                self.edge(branch, then_entry, EdgeKind::Select)?;
-                self.edge(branch, else_entry, EdgeKind::Reject)?;
+                self.edge(branch, then_entry.entry, EdgeKind::Select)?;
+                self.edge(branch, else_entry.entry, EdgeKind::Reject)?;
                 let scrutinee = self.plan_expr(scrutinee, ctx, branch, EdgeKind::Continue, 0)?;
                 let node = self.expression_node(
                     TransitionKind::Evaluate,
                     owner,
                     frame,
                     expr,
-                    &[scrutinee, then_entry, else_entry],
+                    &[
+                        scrutinee.occurrence,
+                        then_entry.occurrence,
+                        else_entry.occurrence,
+                    ],
                 )?;
-                self.edge(node, scrutinee, EdgeKind::Continue)?;
+                self.edge(node.entry, scrutinee.entry, EdgeKind::Continue)?;
                 Ok(node)
             }
             RuntimeExpr::Match {
@@ -588,7 +690,7 @@ impl Planner {
                     self.plan_cases(&bodies, ctx, successor, exit_kind, default)?;
                 let scrutinee = self.plan_expr(scrutinee, ctx, dispatch, EdgeKind::Continue, 0)?;
                 let mut children = Vec::with_capacity(1 + case_bodies.len());
-                children.push(scrutinee);
+                children.push(scrutinee.occurrence);
                 children.extend(case_bodies);
                 let node = self.expression_node(
                     TransitionKind::Evaluate,
@@ -597,7 +699,7 @@ impl Planner {
                     expr,
                     &children,
                 )?;
-                self.edge(node, scrutinee, EdgeKind::Continue)?;
+                self.edge(node.entry, scrutinee.entry, EdgeKind::Continue)?;
                 Ok(node)
             }
             RuntimeExpr::ComputationalMatch {
@@ -655,10 +757,21 @@ impl Planner {
                 let scrutinee =
                     self.plan_expr(scrutinee, control_ctx, dispatch, EdgeKind::Continue, 0)?;
                 let mut children = Vec::with_capacity(1 + case_bodies.len());
-                children.push(scrutinee);
+                children.push(scrutinee.occurrence);
                 children.extend(case_bodies);
                 self.expression_seed(resume, expr, &children)?;
-                Ok(scrutinee)
+                // ⭐ THE SOLE SPLIT. This occurrence's record
+                // lives on `resume`, because the resume owns the outer edges and
+                // must exist before the cases are planned — but the transfer
+                // graph still schedules the SCRUTINEE, exactly as before. So the
+                // two identities genuinely differ here, and returning one value
+                // for both is what made a parent record the scrutinee's identity
+                // as this match's. ⛔ Do not "fix" this by returning `resume` as
+                // the entry: that would change the approved Boundary-A topology.
+                Ok(PlannedExpr {
+                    entry: scrutinee.entry,
+                    occurrence: origin_of(resume),
+                })
             }
             RuntimeExpr::Closure { body, .. } => {
                 let body_return_owner = self.source()?;
@@ -666,10 +779,15 @@ impl Planner {
                     self.control_node(TransitionKind::ClosureBody, body_return_owner, frame)?;
                 self.edge(body_return, self.terminal, EdgeKind::Continue)?;
                 let body = self.plan_expr(body, ctx, body_return, EdgeKind::Continue, 0)?;
-                let node =
-                    self.expression_node(TransitionKind::Evaluate, owner, frame, expr, &[body])?;
-                self.edge(node, successor, exit_kind)?;
-                self.edge(node, body, EdgeKind::StaticBody)?;
+                let node = self.expression_node(
+                    TransitionKind::Evaluate,
+                    owner,
+                    frame,
+                    expr,
+                    &[body.occurrence],
+                )?;
+                self.edge(node.entry, successor, exit_kind)?;
+                self.edge(node.entry, body.entry, EdgeKind::StaticBody)?;
                 Ok(node)
             }
             RuntimeExpr::LexicalClosure { captures, body, .. } => {
@@ -679,11 +797,11 @@ impl Planner {
                 self.edge(body_return, self.terminal, EdgeKind::Continue)?;
                 let body = self.plan_expr(body, ctx, body_return, EdgeKind::Continue, 0)?;
                 let captures = captures.iter().collect::<Vec<_>>();
-                let (capture_entry, capture_entries) =
+                let (capture_entry, capture_occurrences) =
                     self.plan_sequence(&captures, ctx, successor, exit_kind)?;
-                let mut children = Vec::with_capacity(1 + capture_entries.len());
-                children.push(body);
-                children.extend(capture_entries);
+                let mut children = Vec::with_capacity(1 + capture_occurrences.len());
+                children.push(body.occurrence);
+                children.extend(capture_occurrences);
                 let node = self.expression_node(
                     TransitionKind::Evaluate,
                     owner,
@@ -692,7 +810,7 @@ impl Planner {
                     &children,
                 )?;
                 self.edge(
-                    node,
+                    node.entry,
                     capture_entry,
                     if captures.is_empty() {
                         exit_kind
@@ -700,22 +818,22 @@ impl Planner {
                         EdgeKind::Continue
                     },
                 )?;
-                self.edge(node, body, EdgeKind::StaticBody)?;
+                self.edge(node.entry, body.entry, EdgeKind::StaticBody)?;
                 Ok(node)
             }
             RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
                 let expressions = args.iter().collect::<Vec<_>>();
-                let (first, operand_entries) =
+                let (first, operand_occurrences) =
                     self.plan_sequence(&expressions, ctx, successor, exit_kind)?;
                 let node = self.expression_node(
                     TransitionKind::Sequence,
                     owner,
                     frame,
                     expr,
-                    &operand_entries,
+                    &operand_occurrences,
                 )?;
                 self.edge(
-                    node,
+                    node.entry,
                     first,
                     if expressions.is_empty() {
                         exit_kind
@@ -727,17 +845,17 @@ impl Planner {
             }
             RuntimeExpr::Record { fields } => {
                 let expressions = fields.iter().map(|(_, value)| value).collect::<Vec<_>>();
-                let (first, operand_entries) =
+                let (first, operand_occurrences) =
                     self.plan_sequence(&expressions, ctx, successor, exit_kind)?;
                 let node = self.expression_node(
                     TransitionKind::Sequence,
                     owner,
                     frame,
                     expr,
-                    &operand_entries,
+                    &operand_occurrences,
                 )?;
                 self.edge(
-                    node,
+                    node.entry,
                     first,
                     if expressions.is_empty() {
                         exit_kind
@@ -751,17 +869,17 @@ impl Planner {
                 let mut expressions = Vec::with_capacity(args.len() + 1);
                 expressions.push(callee.as_ref());
                 expressions.extend(args);
-                let (first, operand_entries) =
+                let (first, operand_occurrences) =
                     self.plan_sequence(&expressions, ctx, successor, exit_kind)?;
                 let node = self.expression_node(
                     TransitionKind::Sequence,
                     owner,
                     frame,
                     expr,
-                    &operand_entries,
+                    &operand_occurrences,
                 )?;
                 self.edge(
-                    node,
+                    node.entry,
                     first,
                     if expressions.is_empty() {
                         exit_kind
@@ -780,17 +898,17 @@ impl Planner {
                     expressions.push(capability.value.as_ref());
                 }
                 expressions.extend(args);
-                let (first, operand_entries) =
+                let (first, operand_occurrences) =
                     self.plan_sequence(&expressions, ctx, successor, exit_kind)?;
                 let node = self.expression_node(
                     TransitionKind::Sequence,
                     owner,
                     frame,
                     expr,
-                    &operand_entries,
+                    &operand_occurrences,
                 )?;
                 self.edge(
-                    node,
+                    node.entry,
                     first,
                     if expressions.is_empty() {
                         exit_kind
@@ -816,6 +934,47 @@ impl Planner {
 }
 
 impl StaticTransitionPlan {
+    /// The preallocated origin of one positional syntax child of `parent`.
+    ///
+    /// This is the **sole** production point for a child's static name, and the
+    /// only admissible one: the position is the child's source-field ordinal and
+    /// the value comes out of B1R's checked positional child-origin range. There
+    /// is deliberately no pointer, content, hash, clone-order, or visit-order
+    /// route to an origin, and no arithmetic that mints one
+    ///.
+    pub(in crate::cranelift_backend) fn child_static_origin(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+    ) -> Result<StaticOriginId, CraneliftBackendError> {
+        self.semantic.child_origin(parent, position)
+    }
+
+    /// The **occurrence** origin of the whole program's root.
+    ///
+    /// Read from the value stored during the root's own planning visit (D9), not
+    /// derived from `entries.first()` — that is a *scheduling* entry, and for a
+    /// root whose body is a `ComputationalMatch` it names the scrutinee.
+    pub(in crate::cranelift_backend) fn root_static_origin(
+        &self,
+    ) -> Result<StaticOriginId, CraneliftBackendError> {
+        self.root_occurrence
+            .ok_or_else(|| planner_error("plan has no root occurrence"))
+    }
+
+    /// The **occurrence** origin of a transparent declaration, by symbol.
+    ///
+    /// `None` is a real answer, not a failure: a declaration that is not
+    /// transparent has no planned body, and the lowering rejects it on its own
+    /// terms. The caller must not substitute an origin of its own when this is
+    /// `None`.
+    pub(in crate::cranelift_backend) fn declaration_occurrence_origin(
+        &self,
+        symbol: &str,
+    ) -> Option<StaticOriginId> {
+        self.declaration_occurrences.get(symbol).copied()
+    }
+
     fn helper_key_for_activation(
         &self,
         node: StaticNodeId,
@@ -1407,13 +1566,32 @@ pub(in crate::cranelift_backend) fn plan_static_transition_graph(
         affine: empty,
         source_return: empty,
     };
-    let entry = planner.plan_expr(entry, context, planner.terminal, EdgeKind::Continue, 0)?;
-    planner.plan.entries.push(entry);
-    for declaration in declarations.values() {
+    // D9/AC-15: `entries` keeps the SCHEDULING entry; the occurrence is stored
+    // separately, from the same visit. For a root or declaration body that is a
+    // `ComputationalMatch` these are different nodes, and that case is the
+    // required discriminator.
+    let root = planner.plan_expr(entry, context, planner.terminal, EdgeKind::Continue, 0)?;
+    planner.plan.entries.push(root.entry);
+    planner.plan.root_occurrence = Some(root.occurrence);
+    for (symbol, declaration) in declarations {
         if let RuntimeDeclarationKind::Transparent { body } = &declaration.kind {
-            let entry =
+            let planned =
                 planner.plan_expr(body, context, planner.terminal, EdgeKind::Continue, 0)?;
-            planner.plan.entries.push(entry);
+            planner.plan.entries.push(planned.entry);
+            // A declaration body is its own planned source occurrence, so its
+            // occurrence origin is reachable by name. Two occurrences under one
+            // symbol would make that lookup ambiguous, which is a planner bug
+            // rather than an input condition.
+            if planner
+                .plan
+                .declaration_occurrences
+                .insert((*symbol).to_owned(), planned.occurrence)
+                .is_some()
+            {
+                return Err(planner_error(
+                    "transparent declaration planned more than one occurrence origin",
+                ));
+            }
         }
     }
     planner.finish()
@@ -2985,5 +3163,297 @@ mod tests {
                 .expect("closed graph has TrapTerminal")
                 .id
         }
+    }
+    #[cfg(test)]
+    fn b2ac_topology_fixtures() -> Vec<(&'static str, RuntimeExpr)> {
+        let leaf = || RuntimeExpr::Value(RuntimeValue::Bool(true));
+        let trap = || RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "b2ac topology".to_string(),
+        };
+        let computational = |body: RuntimeExpr| RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::B2AC::Node".to_string(),
+                args: vec![leaf()],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::B2AC::Node".to_string(),
+                argument_binders: 1,
+                recursive_positions: Vec::new(),
+                body,
+            }],
+            default: trap(),
+        };
+        vec![
+            ("leaf", leaf()),
+            (
+                "let-if",
+                RuntimeExpr::Let {
+                    value: Box::new(RuntimeExpr::If {
+                        scrutinee: Box::new(leaf()),
+                        then_expr: Box::new(leaf()),
+                        else_expr: Box::new(leaf()),
+                    }),
+                    body: Box::new(RuntimeExpr::Var(0)),
+                },
+            ),
+            (
+                "match",
+                RuntimeExpr::Match {
+                    scrutinee: Box::new(leaf()),
+                    cases: vec![RuntimeMatchCase {
+                        constructor: "ctor:fixture::B2AC::A".to_string(),
+                        binders: 0,
+                        body: leaf(),
+                    }],
+                    default: trap(),
+                },
+            ),
+            (
+                "lexical-closure-call",
+                RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::LexicalClosure {
+                        captures: vec![leaf()],
+                        params: vec!["x".to_string()],
+                        body: Box::new(RuntimeExpr::Var(0)),
+                    }),
+                    args: vec![leaf()],
+                },
+            ),
+            ("computational", computational(RuntimeExpr::Var(0))),
+            (
+                "computational-nested",
+                computational(computational(RuntimeExpr::Var(0))),
+            ),
+            (
+                "computational-under-let",
+                RuntimeExpr::Let {
+                    value: Box::new(computational(RuntimeExpr::Var(0))),
+                    body: Box::new(RuntimeExpr::Var(0)),
+                },
+            ),
+        ]
+    }
+
+    /// A canonical digest of the Boundary-A transfer graph: node transitions in
+    /// order, then every edge as `(from, to, kind)` in order.
+    #[cfg(test)]
+    fn b2ac_topology_digest(expr: &RuntimeExpr) -> String {
+        let plan = plan_static_transition_graph(expr, &BTreeMap::new()).expect("plannable");
+        let mut digest = String::new();
+        digest.push_str(&format!("nodes={} edges={}", plan.nodes.len(), plan.edges.len()));
+        for node in &plan.nodes {
+            digest.push_str(&format!("|n{}:{:?}", node.id.0, node.transition));
+        }
+        for edge in &plan.edges {
+            digest.push_str(&format!(
+                "|e{}:{}->{}:{:?}",
+                edge.id.0, edge.from.0, edge.to.0, edge.kind
+            ));
+        }
+        digest.push_str(&format!("|entries={:?}", plan.entries));
+        digest
+    }
+
+    /// **AC-11 — every transfer edge is unchanged and consumes `.entry`.**
+    ///
+    /// These digests were captured by running the identical probe against the
+    /// WP's base commit `70bd2c74` — before `PlannedExpr` existed — in a scratch
+    /// worktree, and are asserted here against the post-D9 planner. Equality is
+    /// the mechanical proof that the Boundary-A graph is topologically
+    /// identical: same nodes in the same order, same edges with the same
+    /// `(from, to, kind)`, same scheduling entries.
+    ///
+    /// ⭐ Read `computational-under-let`: the parent `Sequence` (n12) edges to
+    /// **n11**, the computational match's scrutinee, and *not* to the
+    /// `SourceReturnResume` (n6). That is D9's promise — the occurrence moved to
+    /// the resume while the schedule stayed on the scrutinee — and this row is
+    /// what would redden if a future change returned the resume as the entry.
+    #[cfg(test)]
+    const B2AC_BASE_TOPOLOGY: &[(&str, &str)] = &[
+        ("leaf", "nodes=3 edges=1|n0:Terminal|n1:TrapTerminal|n2:Evaluate|e0:2->0:Continue|entries=[StaticNodeId(2)]"),
+        ("let-if", "nodes=9 edges=8|n0:Terminal|n1:TrapTerminal|n2:Evaluate|n3:Evaluate|n4:Evaluate|n5:Branch|n6:Evaluate|n7:Evaluate|n8:Sequence|e0:2->0:Continue|e1:3->2:Continue|e2:4->2:Continue|e3:5->3:Select|e4:5->4:Reject|e5:6->5:Continue|e6:7->6:Continue|e7:8->7:Continue|entries=[StaticNodeId(8)]"),
+        ("match", "nodes=7 edges=6|n0:Terminal|n1:TrapTerminal|n2:Evaluate|n3:Evaluate|n4:CaseTest|n5:Evaluate|n6:Evaluate|e0:2->1:Trap|e1:3->0:Continue|e2:4->3:Select|e3:4->2:Reject|e4:5->4:Continue|e5:6->5:Continue|entries=[StaticNodeId(6)]"),
+        ("lexical-closure-call", "nodes=8 edges=7|n0:Terminal|n1:TrapTerminal|n2:Evaluate|n3:ClosureBody|n4:Evaluate|n5:Evaluate|n6:Evaluate|n7:Sequence|e0:2->0:Continue|e1:3->0:Continue|e2:4->3:Continue|e3:5->2:Continue|e4:6->5:Continue|e5:6->4:StaticBody|e6:7->6:Continue|entries=[StaticNodeId(7)]"),
+        ("computational", "nodes=11 edges=10|n0:Terminal|n1:TrapTerminal|n2:CompletedTail|n3:ProducerTail|n4:ProducerWrapper|n5:SourceReturnResume|n6:Evaluate|n7:Evaluate|n8:CaseTest|n9:Evaluate|n10:Sequence|e0:5->4:InvokeProducerWrapper|e1:4->3:InvokeProducerTail|e2:3->2:CompleteProducerTail|e3:2->0:Continue|e4:6->1:Trap|e5:7->5:SourceReturnOwnedResume|e6:8->7:Select|e7:8->6:Reject|e8:9->8:Continue|e9:10->9:Continue|entries=[StaticNodeId(10)]"),
+        ("computational-nested", "nodes=19 edges=19|n0:Terminal|n1:TrapTerminal|n2:CompletedTail|n3:ProducerTail|n4:ProducerWrapper|n5:SourceReturnResume|n6:Evaluate|n7:CompletedTail|n8:ProducerTail|n9:ProducerWrapper|n10:SourceReturnResume|n11:Evaluate|n12:Evaluate|n13:CaseTest|n14:Evaluate|n15:Sequence|n16:CaseTest|n17:Evaluate|n18:Sequence|e0:5->4:InvokeProducerWrapper|e1:4->3:InvokeProducerTail|e2:3->2:CompleteProducerTail|e3:2->0:Continue|e4:6->1:Trap|e5:10->9:InvokeProducerWrapper|e6:9->8:InvokeProducerTail|e7:8->7:CompleteProducerTail|e8:7->5:SourceReturnOwnedResume|e9:11->1:Trap|e10:12->10:SourceReturnOwnedResume|e11:13->12:Select|e12:13->11:Reject|e13:14->13:Continue|e14:15->14:Continue|e15:16->15:Select|e16:16->6:Reject|e17:17->16:Continue|e18:18->17:Continue|entries=[StaticNodeId(18)]"),
+        ("computational-under-let", "nodes=13 edges=12|n0:Terminal|n1:TrapTerminal|n2:Evaluate|n3:CompletedTail|n4:ProducerTail|n5:ProducerWrapper|n6:SourceReturnResume|n7:Evaluate|n8:Evaluate|n9:CaseTest|n10:Evaluate|n11:Sequence|n12:Sequence|e0:2->0:Continue|e1:6->5:InvokeProducerWrapper|e2:5->4:InvokeProducerTail|e3:4->3:CompleteProducerTail|e4:3->2:Continue|e5:7->1:Trap|e6:8->6:SourceReturnOwnedResume|e7:9->8:Select|e8:9->7:Reject|e9:10->9:Continue|e10:11->10:Continue|e11:12->11:Continue|entries=[StaticNodeId(12)]"),
+    ];
+
+    #[test]
+    fn boundary_a_topology_is_identical_to_the_pre_d9_planner() {
+        let expected: BTreeMap<&str, &str> = B2AC_BASE_TOPOLOGY.iter().copied().collect();
+        for (name, expr) in b2ac_topology_fixtures() {
+            let digest = b2ac_topology_digest(&expr);
+            let base = expected
+                .get(name)
+                .expect("every fixture has a recorded base digest");
+            assert_eq!(
+                &digest.as_str(),
+                base,
+                "AC-11: `{name}` changed the Boundary-A transfer graph. D9 must move \
+                 only which identity is RECORDED at a source position, never which \
+                 node is SCHEDULED."
+            );
+        }
+    }
+
+    /// **AC-13 — the split is exactly one variant.**
+    #[test]
+    fn computational_match_is_the_sole_entry_occurrence_split() {
+        let mut split = Vec::new();
+        for (name, expr) in b2ac_topology_fixtures() {
+            let mut planner = Planner::new().expect("planner");
+            let empty = PersistentNodeId(0);
+            let context = PlanContext {
+                environment: empty,
+                continuation: empty,
+                path: empty,
+                cleanup: empty,
+                affine: empty,
+                source_return: empty,
+            };
+            let planned = planner
+                .plan_expr(&expr, context, planner.terminal, EdgeKind::Continue, 0)
+                .expect("plannable");
+            if planned.occurrence != origin_of(planned.entry) {
+                split.push(name);
+            }
+        }
+        assert_eq!(
+            split,
+            vec!["computational", "computational-nested"],
+            "AC-13: only a `ComputationalMatch` result may split entry from \
+             occurrence, and every such result must. `computational-under-let` is \
+             a `Let` at the root, so its own result does not split."
+        );
+    }
+
+    /// **AC-14 — nested computational matches stay INJECTIVE even when several
+    /// occurrences share a scheduling entry.**
+    ///
+    /// ⭐ This is the row a shallow test omits. In `computational-nested` the
+    /// outer and inner matches are scheduled through the same chain, so a key
+    /// taken from the *entry* would look unique while naming the wrong
+    /// occurrence. The occurrences must differ, and each must resolve its own
+    /// children.
+    #[test]
+    fn nested_computational_occurrences_stay_injective_under_a_shared_entry() {
+        let (_, nested) = b2ac_topology_fixtures()
+            .into_iter()
+            .find(|(name, _)| *name == "computational-nested")
+            .expect("the nested computational fixture");
+        let plan = plan_static_transition_graph(&nested, &BTreeMap::new()).expect("plannable");
+        let outer = plan.root_static_origin().expect("root occurrence");
+        // The outer match's case body IS the inner match: child `1 + 0`.
+        let inner = plan
+            .child_static_origin(outer, 1)
+            .expect("the outer match's case body resolves");
+        assert_ne!(
+            outer, inner,
+            "AC-14: two computational occurrences must not share an origin"
+        );
+        // Each resolves its OWN children -- scrutinee at 0, case body at 1.
+        for occurrence in [outer, inner] {
+            plan.child_static_origin(occurrence, 0)
+                .expect("scrutinee position resolves");
+            plan.child_static_origin(occurrence, 1)
+                .expect("case-body position resolves");
+        }
+        // And the shared scheduling entry is genuinely shared: the plan's single
+        // root entry is a scrutinee chain node, not either occurrence.
+        let entry = *plan.entries.first().expect("a root entry");
+        assert_ne!(origin_of(entry), outer, "the entry is not the occurrence");
+    }
+
+    /// **AC-15 — a root or transparent-declaration `ComputationalMatch` body
+    /// receives the RESUME occurrence, not the scrutinee origin.**
+    #[test]
+    fn root_and_declaration_computational_bodies_take_the_resume_occurrence() {
+        let (_, computational) = b2ac_topology_fixtures()
+            .into_iter()
+            .find(|(name, _)| *name == "computational")
+            .expect("the computational fixture");
+
+        // Root: the stored occurrence is the resume seed, and the scheduling
+        // entry is the scrutinee -- so they must differ, and the occurrence must
+        // resolve its own positional children.
+        let plan = plan_static_transition_graph(&computational, &BTreeMap::new())
+            .expect("plannable");
+        let root = plan.root_static_origin().expect("root occurrence");
+        let entry = *plan.entries.first().expect("a root entry");
+        assert_ne!(
+            root,
+            origin_of(entry),
+            "AC-15: a root computational match must not take its scrutinee's origin"
+        );
+        plan.child_static_origin(root, 0)
+            .expect("the root occurrence resolves its scrutinee position");
+
+        // Transparent declaration: same discriminator, by symbol.
+        let declaration = RuntimeDeclaration {
+            symbol: "decl:fixture::b2ac".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: computational.clone(),
+            },
+            metadata: crate::RuntimeSymbolMetadata {
+                obligations: Default::default(),
+                obligation_metadata: Default::default(),
+                assumptions: Default::default(),
+                assumption_trust_metadata: Default::default(),
+                trusted_base_delta: Default::default(),
+                lowerability: None,
+                unsupported: None,
+                runtime_checks: Default::default(),
+                capabilities: Default::default(),
+                effects: Default::default(),
+            },
+        };
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::b2ac", &declaration);
+        let plan = plan_static_transition_graph(&RuntimeExpr::Var(0), &declarations)
+            .expect("plannable");
+        let occurrence = plan
+            .declaration_occurrence_origin("decl:fixture::b2ac")
+            .expect("the transparent declaration has an occurrence origin");
+        let declaration_entry = plan.entries[1];
+        assert_ne!(
+            occurrence,
+            origin_of(declaration_entry),
+            "AC-15: a declaration whose body is a computational match must not \
+             take its scrutinee's origin"
+        );
+        plan.child_static_origin(occurrence, 0)
+            .expect("the declaration occurrence resolves its scrutinee position");
+    }
+
+    /// **AC-12 — every semantic child position consumes `.occurrence`.**
+    ///
+    /// Pinned at the type rather than by auditing call sites: both seed entry
+    /// points take `&[StaticOriginId]`, and `StaticOriginId` can only be formed
+    /// by `origin_of` inside this module, so a `StaticNodeId` cannot reach a
+    /// child position at all.
+    #[test]
+    fn the_semantic_seed_api_accepts_only_occurrence_origins() {
+        let source = include_str!("static_transition.rs");
+        // ⚠ Count DECLARATION lines, not substring hits: this test's own
+        // assertion text mentions both spellings, and a substring oracle would
+        // fire on the prose that denies them.
+        let declarations = source
+            .lines()
+            .filter(|line| line.trim() == "children: &[StaticOriginId],")
+            .count();
+        assert_eq!(
+            declarations, 2,
+            "AC-12: `expression_node` and `expression_seed` must both take \
+             occurrence origins; a `&[StaticNodeId]` parameter here is the exact \
+             conflation this parameter type exists to prevent"
+        );
+        assert!(
+            !source
+                .lines()
+                .any(|line| line.trim() == "children: &[StaticNodeId],"),
+            "AC-12: no semantic child list may be typed as scheduling nodes"
+        );
     }
 }

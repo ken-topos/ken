@@ -14,6 +14,7 @@ use crate::{RuntimeDeclaration, RuntimeDeclarationKind, RuntimeExpr, RuntimeProg
 mod static_transition;
 
 pub(super) use static_transition::plan_static_transition_graph;
+pub(super) use static_transition::{StaticOriginId, StaticTransitionPlan};
 
 pub(super) fn native_join_plan_for_program(
     program: &RuntimeProgram,
