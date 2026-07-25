@@ -19,11 +19,12 @@
 
 use super::semantic_ir::{
     positioned_sources, DenseRange, PredeclaredFunctionId, RuntimeExprShape, SemanticAtomKind,
+    SemanticOperandElement, SemanticOwner,
 };
 use super::{
     planner_capacity_error, planner_error, unsupported, CraneliftBackendError, EdgeKind,
-    SemanticPlane, SemanticSourceKind, SemanticSourceSeed, StaticEdge, StaticNode, StaticNodeId,
-    StaticOriginId, TransitionKind,
+    SemanticPlane, SemanticSourceKind, SemanticSourceSeed, StaticEdge, StaticEdgeId, StaticNode,
+    StaticNodeId, StaticOriginId, TransitionKind,
 };
 
 /// The exclusive end of a dense range, with its overflow named.
@@ -114,13 +115,17 @@ impl AbiCarrier {
     ///
     /// ⛔ An opaque pointer without a stated rule does not discharge the
     /// prerequisite, so every carrier answers here and the match is exhaustive.
+    ///
+    /// ⚠ A **borrow is only meaningful against an owner that outlives the
+    /// borrower**, so this answer is incomplete on its own: read it together
+    /// with `storage_owner`, which names who that owner is.
     const fn ownership(self) -> AbiOwnership {
         match self {
             // A parameter or lexical capture arrives owned by the frame for the
             // activation's extent and is reclaimed when the activation ends.
             Self::ValueWord => AbiOwnership::OwnedByFrame,
-            // The seed carrier is minted from the seed environment, which
-            // outlives every activation reading it, so the frame borrows.
+            // Borrowed from durable artifact-static material — see
+            // `storage_owner`, which is where the corrected premise lives.
             Self::GroundValueCarrier => AbiOwnership::BorrowedForActivation,
             // A result leaves the callee for the caller at return.
             Self::ResultWord => AbiOwnership::TransferredToCaller,
@@ -132,6 +137,69 @@ impl AbiCarrier {
             Self::StoreHandle => AbiOwnership::BorrowedForActivation,
         }
     }
+
+    /// **`D4` — WHO owns the storage this carrier names.**
+    ///
+    /// ⛔ **This dimension exists because an earlier revision of this file got
+    /// the seed carrier's premise factually wrong**, and the error was exactly
+    /// the kind a stated-but-unnamed owner hides. It said the seed carrier is
+    /// *"minted from the seed environment, which outlives every activation
+    /// reading it."* **It does not, and it cannot:**
+    ///
+    /// - `Lowering<'a>` holds `seed_env: &'a NativeSeedEnvironment`
+    ///   (`lowering/mod.rs:267`) — a borrow that exists only for the duration of
+    ///   **compilation**;
+    /// - `CompiledModule<M>` has **no lifetime parameter** and takes only owned
+    ///   data (`lowering/mod.rs:281-285`), so nothing borrowed can be stored in
+    ///   it — the compiler rejects it, and
+    ///   `escaping_a_source_borrow_into_the_compiled_artifact_does_not_typecheck`
+    ///   pins precisely that.
+    ///
+    /// ⇒ **A runtime activation cannot borrow the seed environment.** An ABI
+    /// that says it can is describing a program that cannot be written, and
+    /// `B2F` would have inherited that as its calling convention.
+    ///
+    /// The corrected contract: a seed capture borrows **artifact-static**
+    /// material — minted *before* execution begins and therefore outliving every
+    /// activation. ⛔ **Minting that material is `B2F`'s work and is deliberately
+    /// absent here**: this node declares the durable owner, it does not
+    /// materialize anything. No encoder, no decoder, no second emission
+    /// authority.
+    const fn storage_owner(self) -> AbiStorageOwner {
+        match self {
+            // Parameters and lexical captures live in the activation's own frame
+            // once the boundary transfer completes.
+            Self::ValueWord | Self::ResultWord | Self::ControlWord | Self::TrapWord => {
+                AbiStorageOwner::ActivationFrame
+            }
+            // ⭐ The corrected owner. NOT the seed environment.
+            Self::GroundValueCarrier => AbiStorageOwner::ArtifactStatic,
+            // The store outlives the whole execution, not merely the activation.
+            Self::StoreHandle => AbiStorageOwner::PersistentStore,
+        }
+    }
+}
+
+/// **`D4` — the owner of the storage a carrier names.**
+///
+/// ⛔ Distinct from `AbiOwnership`, which is the *transfer discipline*. Keeping
+/// them apart is what makes an impossible borrow expressible-and-rejectable
+/// rather than merely unstated: `BorrowedForActivation` is not a claim at all
+/// until you can say **borrowed from what**, and the thing it is borrowed from
+/// must outlive the activation.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(u8)]
+pub(super) enum AbiStorageOwner {
+    /// The activation frame itself; reclaimed when the activation ends.
+    ActivationFrame,
+    /// Material minted into the compiled artifact **before execution begins**,
+    /// therefore outliving every activation that reads it.
+    ///
+    /// ⚠ The seed environment is **not** this — it is compilation-only. See
+    /// `AbiCarrier::storage_owner`.
+    ArtifactStatic,
+    /// The persistent store, which outlives the whole execution.
+    PersistentStore,
 }
 
 /// **`D4` — the stated lifetime/aliasing/transfer/reclamation modes.**
@@ -227,6 +295,9 @@ pub(super) struct AbiSlot {
     pub(super) kind: AbiSlotKind,
     pub(super) carrier: AbiCarrier,
     pub(super) ownership: AbiOwnership,
+    /// ⭐ Who owns the storage this slot borrows or holds. Recorded per slot so
+    /// a borrow's counterparty is part of the ABI rather than prose.
+    pub(super) storage_owner: AbiStorageOwner,
     pub(super) width_bytes: u16,
     pub(super) align_bytes: u16,
     /// Position within this slot's own kind-run, so a slot is recoverable
@@ -691,6 +762,23 @@ fn declared_arity(
         ));
     }
 
+    let (parameters, _) = occurrence_atom_counts(plane, defining_origin)?;
+    Ok((parameters, seed.capture_slots))
+}
+
+/// One occurrence's own non-child semantic atoms.
+///
+/// ⛔ Shared by `declared_arity` and `occurrence_atom_counts` so the two cannot
+/// disagree about which atoms belong to an occurrence — a disagreement neither
+/// would detect, since each would simply be reading its own answer.
+fn occurrence_operands<'plane>(
+    plane: &'plane SemanticPlane,
+    origin: StaticOriginId,
+) -> Result<&'plane [SemanticOperandElement], CraneliftBackendError> {
+    let descriptor = plane
+        .descriptors
+        .get(origin.0 as usize)
+        .ok_or_else(|| planner_error("defining occurrence has no semantic descriptor"))?;
     let program = plane
         .programs
         .get(descriptor.program.0 as usize)
@@ -704,20 +792,10 @@ fn declared_arity(
             "defining occurrence's program does not hold exactly one record",
         ));
     };
-    let operands = plane
+    plane
         .operands
         .get(record.operands.start as usize..range_end(record.operands)?)
-        .ok_or_else(|| planner_error("semantic operand range is outside the plane"))?;
-
-    let parameters = u32::try_from(
-        operands
-            .iter()
-            .filter(|atom| atom.kind == SemanticAtomKind::ParamName)
-            .count(),
-    )
-    .map_err(|_| planner_capacity_error("declared parameter count exhausted"))?;
-
-    Ok((parameters, seed.capture_slots))
+        .ok_or_else(|| planner_error("semantic operand range is outside the plane"))
 }
 
 /// Lays one unit's slot run: parameters, then captures, then the fixed
@@ -763,6 +841,7 @@ const fn slot(kind: AbiSlotKind, carrier: AbiCarrier, ordinal: u32) -> AbiSlot {
         kind,
         carrier,
         ownership: carrier.ownership(),
+        storage_owner: carrier.storage_owner(),
         width_bytes: carrier.width_bytes(),
         align_bytes: carrier.align_bytes(),
         ordinal,
@@ -927,44 +1006,194 @@ impl AbiPlane {
         }
 
         reject_imported_capture_edges(plane, sources, &definitions)?;
+        self.validate_boundary_layouts(plane, sources, edges)?;
         Ok(())
     }
 
+    /// **`D5` — every dynamic edge agrees on caller/callee LAYOUT.**
+    ///
+    /// For each `StaticBody` boundary, the caller-side signature is compared
+    /// against the callee descriptor **field by field and slot by slot** — kind,
+    /// carrier, ownership, storage owner, width, alignment and ordinal — not
+    /// merely that the boundary lands on the right frame.
+    ///
+    /// ⛔ Target identity is a *different* property and is checked elsewhere;
+    /// conflating the two is the defect this method exists to repair.
+    fn validate_boundary_layouts(
+        &self,
+        plane: &SemanticPlane,
+        sources: &[SemanticSourceSeed],
+        edges: &[StaticEdge],
+    ) -> Result<(), CraneliftBackendError> {
+        for signature in boundary_signatures(plane, sources, edges)? {
+            let descriptor = self
+                .descriptors
+                .get(signature.callee.0 as usize)
+                .ok_or_else(|| {
+                    planner_error(
+                        "static body edge callee is not forward-declared in the abi plane",
+                    )
+                })?;
+
+            // The provenance the graph says, against the provenance the
+            // descriptor recorded.
+            let AbiUnitDefinition::ClosureBody {
+                defining_origin,
+                provenance,
+            } = descriptor.definition
+            else {
+                return Err(planner_error(
+                    "static body edge callee is not a closure-body unit",
+                ));
+            };
+            if defining_origin != signature.defining_origin {
+                return Err(planner_error(
+                    "boundary signature and callee descriptor disagree on the defining occurrence",
+                ));
+            }
+            if provenance != signature.provenance {
+                return Err(planner_error(
+                    "boundary signature and callee descriptor disagree on capture provenance",
+                ));
+            }
+
+            // ⭐ The independent axis: the caller-side capture count against the
+            // callee's declared capture slots.
+            if descriptor.header.captures != signature.captures {
+                return Err(planner_error(
+                    "boundary signature and callee descriptor disagree on the transferred capture \
+                     count",
+                ));
+            }
+            if descriptor.header.parameters != signature.parameters {
+                return Err(planner_error(
+                    "boundary signature and callee descriptor disagree on the transferred \
+                     parameter count",
+                ));
+            }
+
+            // The full transfer layout, slot by slot.
+            let mut expected = Vec::new();
+            push_slots(
+                &mut expected,
+                descriptor.definition,
+                signature.parameters,
+                signature.captures,
+            )?;
+            let actual = slot_slice(&self.slots, descriptor.slots)?;
+            if actual != expected.as_slice() {
+                return Err(planner_error(
+                    "boundary signature and callee descriptor disagree on the transfer slot layout",
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
-// **`D5` — edge agreement and forward-declaration, and WHERE they are
-// actually enforced.**
-//
-// ⛔ **This node previously carried a `validate_edge_agreement` function
-// advertising six laws. `AC-11` measured it and every one of them was
-// unreachable, so it has been deleted rather than left as a law that never
-// runs.** An advertised-but-unenforced law is inherited *silently* by the
-// next node: the law is stated, the validator is genuinely fail-closed on
-// the paths that do fire, and the suite is green — there is no red anywhere
-// that touches it. `RT-FNSPLIT-B2F` will read this validator as its
-// guarantee, and it must count only laws that exist.
-//
-// **What enforces the two classes, with the witnesses that proved it:**
-//
-// | `D5` class | enforced by | measured arm |
-// |---|---|---|
-// | caller/callee edge layout agreement | `B2O`'s edge law (`semantic_ir.rs:1093`, *"static body edge target is not its function unit's seed"*) **composed with** this plane's positional check | `"abi descriptor is not positional for its function unit"` |
-// | recursive-bundle member forward-declared | this plane's density check — descriptors are dense and complete over the partition *before* any edge resolves | `"abi descriptor population is not exact for the function unit partition"` |
-//
-// ⭐ The composition is what makes the deleted code redundant rather than
-// missed. `B2O` proves `functions[callee].planned_node == edge.to`; this
-// plane proves `descriptors[i].planned_node == functions[i].planned_node`.
-// Together they give `descriptors[callee].planned_node == edge.to`, which is
-// exactly what the deleted arm asserted — so it could not fail without one
-// of its two premises failing first, and each of those has its own witness.
-//
-// ⚠ Two witnesses were tried for the deleted arm, not one: mutating the
-// descriptor alone fires the positional check, and mutating the descriptor
-// **and** its unit together fires *"function unit seed is neither a
-// scheduling entry nor a static body target"* from the definition
-// re-derivation at the top of `validate`. Both routes are recorded in
-// `b2r_ac11_...`.
-//
+/// **`D5` — the per-boundary ABI reference, derived CALLER-side from the graph.**
+///
+/// ⛔ **An earlier revision of this node deleted its edge-agreement check and
+/// claimed the property was enforced by composition: `B2O` gives
+/// `functions[callee].planned_node == edge.to`, this plane gives
+/// `descriptors[i].planned_node == functions[i].planned_node`, therefore
+/// `descriptors[callee].planned_node == edge.to`. That conclusion is TRUE and it
+/// is NOT layout agreement.** It establishes *target identity* — that the
+/// boundary lands on the callee's frame entry — and says nothing about parameter
+/// count, capture count, slot kinds, carriers, widths, alignment, ownership, or
+/// storage owner on the transfer. Two frames can agree on which one is being
+/// entered and disagree about every slot in it.
+///
+/// ⇒ What follows is the actual check: a **signature derived from the caller
+/// side of the boundary**, compared field-by-field against the callee's
+/// descriptor.
+///
+/// ⭐ **Why this is not tautological, stated per axis rather than in general:**
+///
+/// | axis | caller-side source | callee-side source | independent? |
+/// |---|---|---|---|
+/// | captures | the graph — capture **child origins** for a lexical closure, `CaptureSymbol` **atoms** for a seed closure | the recorded `capture_slots` field | ⭐ **yes** — different encodings, written by different code paths |
+/// | provenance | the defining occurrence's `RuntimeExprShape` | the descriptor's recorded `AbiUnitDefinition` | ⭐ **yes** — derived vs recorded |
+/// | parameters | `ParamName` atom count | `ParamName` atom count | ⚠ **no** — same source, so this axis is a consistency check, not corroboration |
+///
+/// ⚠ The parameter row is stated as a limitation rather than left to look like
+/// coverage. It cannot disagree, and a reader must not count it as a third
+/// independent witness.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(C)]
+pub(super) struct AbiBoundarySignature {
+    pub(super) edge: StaticEdgeId,
+    pub(super) callee: PredeclaredFunctionId,
+    pub(super) defining_origin: StaticOriginId,
+    pub(super) provenance: AbiCaptureProvenance,
+    pub(super) parameters: u32,
+    pub(super) captures: u32,
+}
+
+/// Derives one boundary signature per `StaticBody` edge, from the graph alone.
+fn boundary_signatures(
+    plane: &SemanticPlane,
+    sources: &[SemanticSourceSeed],
+    edges: &[StaticEdge],
+) -> Result<Vec<AbiBoundarySignature>, CraneliftBackendError> {
+    let mut signatures = Vec::new();
+    for edge in edges {
+        if edge.kind != EdgeKind::StaticBody {
+            continue;
+        }
+        let defining_origin = StaticOriginId(edge.from.0);
+        let seed = source_for(sources, defining_origin)?;
+        let provenance = closure_provenance(seed.source)?;
+
+        let (parameters, capture_atoms) = occurrence_atom_counts(plane, defining_origin)?;
+        // ⭐ The independent capture count, taken from the CALLER side.
+        let captures = match provenance {
+            // A lexical closure's captures are planned syntax children, laid out
+            // after the body child.
+            AbiCaptureProvenance::Lexical => u32::try_from(
+                lexical_capture_origins(plane, defining_origin)?.len(),
+            )
+            .map_err(|_| planner_capacity_error("boundary capture count exhausted"))?,
+            // A seed closure's captures are interned symbols, one atom each.
+            AbiCaptureProvenance::Seed => capture_atoms,
+        };
+
+        let callee_owner = plane
+            .descriptors
+            .get(edge.to.0 as usize)
+            .map(|descriptor| descriptor.owner)
+            .ok_or_else(|| planner_error("static body edge target has no semantic descriptor"))?;
+        let SemanticOwner::Function(callee) = callee_owner else {
+            return Err(planner_error("static body edge targets a shared exit"));
+        };
+
+        signatures.push(AbiBoundarySignature {
+            edge: edge.id,
+            callee,
+            defining_origin,
+            provenance,
+            parameters,
+            captures,
+        });
+    }
+    Ok(signatures)
+}
+
+/// `(ParamName count, CaptureSymbol count)` for one occurrence's own atoms.
+fn occurrence_atom_counts(
+    plane: &SemanticPlane,
+    origin: StaticOriginId,
+) -> Result<(u32, u32), CraneliftBackendError> {
+    let operands = occurrence_operands(plane, origin)?;
+    let count = |kind: SemanticAtomKind| -> Result<u32, CraneliftBackendError> {
+        u32::try_from(operands.iter().filter(|atom| atom.kind == kind).count())
+            .map_err(|_| planner_capacity_error("occurrence atom count exhausted"))
+    };
+    Ok((
+        count(SemanticAtomKind::ParamName)?,
+        count(SemanticAtomKind::CaptureSymbol)?,
+    ))
+}
 
 /// Checks the slot run is in canonical kind order with the declared carriers.
 ///
@@ -1014,11 +1243,13 @@ fn validate_slot_run(
         // ownership mode, and each is the carrier's own declaration rather than
         // an independently recorded value that could drift from it.
         if slot.ownership != slot.carrier.ownership()
+            || slot.storage_owner != slot.carrier.storage_owner()
             || slot.width_bytes != slot.carrier.width_bytes()
             || slot.align_bytes != slot.carrier.align_bytes()
         {
             return Err(planner_error(
-                "abi frame slot does not declare its carrier's width, alignment and ownership",
+                "abi frame slot does not declare its carrier's width, alignment, ownership and \
+                 storage owner",
             ));
         }
     }

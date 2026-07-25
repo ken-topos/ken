@@ -33,6 +33,7 @@ switch-over.
 | `P2` | unit count unchanged under an irrelevant caller binding | unchanged | ✅ |
 | `P2` | descriptor **shape** invariant, **identity** fields shift | exactly that | ✅ |
 | `P3` | seed-value independence is **structural**, not a green test | the builder's inputs hold no value; enforced by the signature | ✅ |
+| — | *(not predicted)* `AC-3`'s value-family control | ⛔ **first attempt renamed a capture symbol — not the framed discriminator**; repaired | miss |
 | `P4` | no per-slot static **type** is derivable from this plane | confirmed — the atoms carry `ParamName`/`CaptureSymbol`, names not types | ✅ |
 | `P5` | imported exclusion reachable and non-vacuous | reachable; witness constructed | ✅ |
 | `P6` | 1 `FunctionBuilder::new`, 1 `define_function`, 0 Cargo delta | **1 / 1 / 0 bytes** | ✅ |
@@ -212,14 +213,59 @@ asserts the **exact** planner error, never `is_err`/`expect_err`.
 | missing capture slot | `"abi descriptor is missing a declared capture slot"` | ✅ own arm |
 | extra capture slot | `"abi descriptor declares a capture slot its origin does not have"` | ✅ own arm |
 | implicit caller-env tail | `"abi frame carries an implicit caller-environment tail"` | ✅ own arm |
-| edge layout agreement | `"abi descriptor is not positional for its function unit"` | ⚠ **subsumed** |
+| edge layout agreement | `"boundary signature and callee descriptor disagree on the transferred capture count"` | ✅ own arm (**repaired** — see below) |
 | recursive-bundle forward declaration | `"abi descriptor population is not exact for the function unit partition"` | ⚠ **subsumed** |
 | imported capture edge | `Unsupported(ImportedDeclarationRef, "… requires dependency linking …")` | ✅ own arm |
 
-### The two subsumed classes, and the deletion
+### ⛔ CORRECTION — the first of these was not a subsumption, and calling it one was my error
 
-Both lived in a `validate_edge_agreement` function that advertised **six** laws.
-**Every one of them was unreachable.**
+**Architect finding, on blocked `37d06ef8`.** I deleted `validate_edge_agreement`
+and justified it by composition: `B2O` gives
+`functions[callee].planned_node == edge.to`, this plane gives
+`descriptors[i].planned_node == functions[i].planned_node`, therefore
+`descriptors[callee].planned_node == edge.to`.
+
+**That conclusion is true, and it is not layout agreement.** It establishes
+*target identity* — that the boundary lands on the callee's frame entry — and
+says **nothing** about parameter count, capture count, slot kinds, carriers,
+widths, alignment, ownership, or storage owner on the transfer. Two frames can
+agree on which one is being entered and disagree about every slot in it.
+
+⚠ **And my `AC-11` witness for that row mutated `planned_node`** — so it tested
+target identity while *naming* layout agreement. The row was green, the
+mechanism was absent, and the test's own name is what made it look covered.
+⭐ That is the same defect `AC-11` exists to catch, one level up: I applied the
+amendment to the validator and not to the witness I wrote for it.
+
+**The repair.** `AbiBoundarySignature` derives a signature from the **caller
+side** of each `StaticBody` boundary and `validate_boundary_layouts` compares it
+against the callee descriptor field-by-field and slot-by-slot.
+
+Independence, stated per axis rather than in general:
+
+| axis | caller-side source | callee-side source | independent? |
+|---|---|---|---|
+| captures | capture **child origins** (lexical) / `CaptureSymbol` **atoms** (seed) | the recorded `capture_slots` field | ⭐ **yes** |
+| provenance | the occurrence's `RuntimeExprShape` | the recorded `AbiUnitDefinition` | ⭐ **yes** |
+| parameters | `ParamName` atom count | `ParamName` atom count | ⚠ **no** — same source |
+
+⚠ The parameter row **cannot disagree** and is a consistency check, not
+corroboration. The slot-vector comparison is likewise **defense in depth** behind
+`validate_slot_run`, which sees a mutated carrier first. Both are stated as
+limits so a reader does not count them as independent witnesses.
+
+The new witness leaves identity intact and grows the defining occurrence's
+capture-child count in the graph while leaving `capture_slots` alone — a
+divergence **only** the caller-side comparison can see. It reaches
+`"boundary signature and callee descriptor disagree on the transferred capture
+count"`.
+
+### The remaining subsumed class, and the deletion that stands
+
+The forward-declaration row is still subsumed: descriptors are dense and complete
+over the partition before any edge resolves, which *is* forward-declaration, and
+the population check sees a gap first. That row is recorded as subsumed rather
+than counted as a law.
 
 ⚠ **Two independent witnesses were tried for the edge-agreement arm, not one.**
 Mutating the descriptor alone fires the positional check. Mutating the
@@ -228,22 +274,41 @@ shadow it — fires `"function unit seed is neither a scheduling entry nor a
 static body target"` from the definition re-derivation at the top of `validate`.
 Dead on both routes.
 
-⇒ **The function is deleted**, per `AC-11`'s remedy, with the composition that
-makes it redundant cited in its place:
-
-- `B2O` proves `functions[callee].planned_node == edge.to`
-  (`semantic_ir.rs:1093`);
-- this plane proves `descriptors[i].planned_node == functions[i].planned_node`;
-- together: `descriptors[callee].planned_node == edge.to` — **exactly what the
-  deleted arm asserted.** It could not fail without one of its two premises
-  failing first, and each premise has its own witness.
-
-**The property is enforced; what was deleted is a restatement.** That
-distinction is the whole content of the row, and stating it the other way round
-— "the check was removed" — would be false.
+⚠ **Two independent witnesses were tried before calling the forward-declaration
+arm dead**, and the same discipline produced the *wrong* answer for the
+edge-layout arm — because both witnesses I tried for it mutated identity, so both
+landed on identity detectors, and I read that as evidence the property was
+already covered. ⭐ **Failing to find a witness is evidence about the witnesses I
+could think of, never about the property.** The correct reading was that I had no
+witness for *layout*, which is exactly what the repaired mechanism now supplies.
 
 ⛔ **`B2O`'s own validator is NOT repaired here.** It is tracked as
 `RT-FNSPLIT-B2O-CHECK`. Inherit the discipline, not the diff.
+
+## ⛔ CORRECTION — `AC-3`'s positive control did not construct the value family
+
+**Architect finding, on blocked `37d06ef8`.** The frame asks for a seed capture
+whose ground value is a `Constructor`, a `Record`, or a `String`, each still
+yielding one fixed carrier. My control **renamed a capture symbol**. That varies
+which value the seed environment would supply, but never constructs a member of
+the family, so it cannot observe representability across it.
+
+**The repair is two mechanisms answering two questions:**
+
+1. **Representability** — an exhaustive map over `RuntimeGroundValue` with **no
+   `_ =>` arm**, so a seventh variant is a **compile error** rather than a value
+   that silently acquires a carrier.
+2. **Invariance** — the same closure planned against three seed environments,
+   each binding the capture to a different member of the family, giving
+   byte-identical descriptors.
+
+⚠ **Stated honestly, because it would otherwise overclaim:** the descriptors are
+identical *because the planner never receives a seed environment at all*. The
+control **exhibits** that the family is real, constructible, and inert to the
+contract; it does not *discover* invariance, and it could not have come out
+otherwise. The enforcement remains the constructor's signature. A non-vacuity
+assertion checks the compared descriptors actually contain a seed capture slot
+carrying the fixed carrier, so the three are not equal by being empty.
 
 ## Boundaries this node does not cross
 
@@ -266,7 +331,37 @@ State these as limits, not as coverage:
 5. **The `E1` inline-`mod` hole is open**, reported, and owned by
    `RT-FNSPLIT-B2O-CHECK`.
 6. **Ownership modes are declared, not enforced.** `AbiOwnership` states each
-   carrier's lifetime/transfer/reclamation rule and the validator checks each
-   slot carries **its carrier's own** declaration — it does **not** verify any
-   emitted code obeys those rules, because nothing is emitted. Enforcement is
-   `B2F`'s.
+   carrier's transfer discipline, `AbiStorageOwner` names **who owns the storage
+   it borrows from**, and the validator checks each slot carries **its carrier's
+   own** declarations — it does **not** verify any emitted code obeys them,
+   because nothing is emitted. Enforcement is `B2F`'s.
+7. **Artifact-static seed material is DECLARED, not minted.** The seed carrier
+   borrows from material that must exist before execution begins; **creating that
+   material is `B2F`'s work and is deliberately absent here.** No encoder, no
+   decoder, no second emission authority.
+
+## ⛔ CORRECTION — the seed carrier's ownership premise was FALSE
+
+**Architect finding, on blocked `37d06ef8`.** The carrier declared
+`BorrowedForActivation` on the reasoning that *"the seed environment … outlives
+every activation reading it."* **It does not, and it cannot:**
+
+- `Lowering<'a>` holds `seed_env: &'a NativeSeedEnvironment`
+  (`lowering/mod.rs:267`) — a borrow that exists only during **compilation**;
+- `CompiledModule<M>` has **no lifetime parameter** and takes only owned data,
+  so nothing borrowed can escape into the artifact — the compiler rejects it, and
+  `escaping_a_source_borrow_into_the_compiled_artifact_does_not_typecheck` pins
+  exactly that.
+
+⇒ **A runtime activation cannot borrow the seed environment.** I had written an
+ABI that describes a program which cannot be written, and `B2F` would have
+inherited it as its calling convention.
+
+⭐ **The shape of the error is the reusable part: `BorrowedForActivation` is not
+a claim at all until you can say *borrowed from what*.** A transfer discipline
+with no named counterparty reads as complete while asserting nothing checkable,
+which is why the repair is a **new dimension** rather than a corrected comment.
+`AbiStorageOwner` now names the owner per carrier, and the seed carrier borrows
+**artifact-static** material — minted before execution, outliving every
+activation. The validator checks every slot's storage owner against its carrier's
+declaration.
