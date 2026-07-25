@@ -22,74 +22,90 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ✅ LIVE — 19:35Z. `origin/main` = **`1e09a30a`** (PR **#969**). TASK #43 DONE.
+## ✅ LIVE — 2026-07-25. `origin/main` = **`1e09a30a`**. **`B2F` IS KICKED.**
 
-**`steward/work` = `1e09a30a`, clean, nothing unpublished. Publish queue empty.
-I owe nothing.**
+**Tasks #43 and #44 both DONE.** The Runtime ring is building
+`RT-FNSPLIT-B2F`. I owe nothing and nothing blocks the ring.
 
-### What just landed — the `B2F` frame re-anchor
+| | |
+|---|---|
+| kickoff | `evt_3q00bkdra1vca` → `runtime-leader`, confirmed `Working (32s)` |
+| Architect question | `evt_1s1qjm52r3jzj`, confirmed `Working (6s)` — **not a hold** |
+| node | `ready` → **`active`**, tracker regenerated |
+| branch-name collision | **resolved losslessly** — see below |
 
-PR #969, doc-only, three files, **all blob-identical on `main`**:
-`docs/program/wp/RT-FNSPLIT-B2F-functionization.md`,
-`docs/program/issues/RT-FNSPLIT-B2F.md`, `IMPLEMENTATION-PROGRESS.md`.
-Node **flipped `draft` → `ready`**; tracker row confirmed `ready` on `main`.
+### ✅ The `wp/` branch-name collision is RESOLVED
 
-The frame is re-anchored at `bd24422b`. The stale-premise hazard is **gone**:
-the discharged-hold block replaces `HELD AT HARD-STOP #9`, and the *"prerequisite
-missing and unowned"* language now names `B2O` (#963) and `B2R` (#967). ⚠ One
-`missing and unowned` string survives **by design** — it is the signpost at
-frame `:28-30` telling a reader looking for it that it merged.
+`wp/RT-FNSPLIT-B2F-functionization` existed on `origin` at `fbe206a7` and would
+have **rejected the ring's first push**. It was *not* a build branch: it was the
+durability push of the implementer's hard-stop-#9 evidence commit (task #27),
+which happened to take the build branch's name. Resolved in this order:
 
-Also folded in: `D1`–`D3` re-cut construct → consume-and-enforce; the corrected
-seed set (`plan.entries` ∪ `StaticBody` **targets**, *not* `ClosureBody` heads);
-new **`AC-11`** (boundary-slot representability — the adversary's `C4` finding on
-`abi.rs`) and **`AC-12`** (ownership modes obeyed, not re-read); `AC-G0` recorded
-answered (6 defs / 8 decls, Θ(1)).
+- `fbe206a7` pushed to `refs/heads/preserved/rt-fnsplit-b2f-hardstop-9-evidence`,
+  and **verified present at that exact SHA *before* anything was deleted**;
+- `refs/heads/wp/RT-FNSPLIT-B2F-functionization` deleted on `origin` and locally;
+- post-condition predicted before measuring, then measured: `wp/` → 0 refs,
+  `preserved/` → `fbe206a7`. Matched.
 
----
+⛔ **That evidence doc is NOT a build input, and it was deliberately NOT landed
+on `main`.** It is measured at `3891b7aa` and its §2 provenance partition is
+explicitly superseded by `B2O`'s owner map. Putting a document whose numbers are
+six merges stale into the ring's reading path is the *exact* hazard task #43
+existed to remove — landing it would have re-created that hazard under a new
+name.
 
-### ▶ NEXT ACTION — §2c gate, then kick Runtime on `B2F`. Four things to carry:
+### §2c gate — ran clean; recorded so the audit trail is checkable
 
-**1. ⛔⛔ `wp/RT-FNSPLIT-B2F-functionization` ALREADY EXISTS ON `origin` at
-`fbe206a7`** — the pre-#9 held branch, from the kickoff that hard-stopped. No
-worktree holds it (all three Runtime seats are on `<role>/work`), so nothing is
-blocked — **but the ring must cut its build branch FRESH from current
-`origin/main`, and a fresh branch of that name will REJECT the push against the
-stale remote ref.** Decide before kicking: delete the remote ref, or name the
-kickoff's branch explicitly. Do **not** let the ring discover this at push time.
+1. **Retros in** — `B2R` 3/3 posted (leader, QA, implementer).
+2. **No in-flight obligation** — `list_decisions(proposed)` = `[]`,
+   `list_questions(open)` = `[]`.
+3. **Quiescent** — all three seats idle.
+4/5. **Compacted, drops verified** — executed at the `B2R` close-out seam:
+  `runtime-implementer` **ctx 0%**; `runtime-leader` and `runtime-qa` both
+  `• Context compacted`. Their `› …` lines are **ghost text, not state**.
+7. **Pickup confirmed** — I saw both seats go `Working`; a returned `event_id`
+  is not evidence anyone read it.
+7b. **Contention: none.** The only other `active` node is the
+  `RT-NATIVE-FNSPLIT` parent umbrella — same ring, not a competing WP.
+8. **Flipped `active`** — **both** carriers, frontmatter *and* body-text tail.
 
-**2. Ring state, measured 19:33Z.** All three IDLE, sweep clear.
-`runtime-implementer` = **Claude Code, Opus 5, ctx 0%**. `runtime-leader` and
-`runtime-qa` are **Codex/terra** panes (`gpt-5.6-terra medium`) idle at
-ghost-text (`› Write tests for @filename` / `› Explain this codebase` — **that is
-a suggestion, not state**). All three were compacted at the `B2R` close-out seam
-with drops verified. ⚠ Codex panes need the **`-l` literal** send and a
-**post-compaction rouse**; a mention alone will not wake them.
+### ▶ NEXT — publish, then the queue
 
-**3. Route ONE question to the Architect** (§2 scope-checkpoint = Steward ruling
-+ exactly one confirming gate, ring notified-and-proceeds). My ruling, already
-written into `AC-11`: the adversary's `P1` repair to `abi.rs`'s `C4` exclusion
-**rides `RT-FNSPLIT-B2O-CHECK` (widened to `abi.rs`, with `P2`), not `B2F`** —
-`B2F` instead establishes representability at the slots it emits. The Architect
-confirms the soundness axis. ⭐ **This is safe to kick against:** the ruling can
-only be *relaxed* by the answer, never invalidated, and the ring's first work
-(`D1`/`D2`) does not touch it.
+**Unpublished on `steward/work`:** the `active` flip, the tracker regen, and
+this briefing. Publish doc-only — `main` still advertises `B2F` as `ready`,
+which is precisely the stale-frontier hazard §2c step 8 exists to prevent.
 
-**4. On kickoff, flip the node `ready` → `active`** (§2c step 8) and bundle the
-tracker regen into the next publish. This step is a *repeated* miss — three in
-one session on 2026-07-22.
+Then, in order:
 
-### Also owed
+- Task **#38** — frame `RT-FNSPLIT-B2O-CHECK`. ⭐ **Its scope grew:** the
+  adversary's `P1` **and** `P2` on `abi.rs` both route here, and I have told the
+  Runtime ring so in the `B2F` kickoff. This node now owes the `C4` repair.
+- **#12** B1R retros (batch, never publish singly) · **#5** `ABI-S3` ·
+  **#8** `KW-THEOREM` on FNSPLIT close · **#11** `DOC-GATE-NEEDLE`
+  (⛔ operator-held — do not release, do not re-ask).
+- **Archive pass on this file.** Everything below this block is history from
+  `B2O`/`B2R` and earlier, and the block immediately below still asserts
+  *"`B2R` IS ACTIVE AND BUILDING"* and *"retros 3/3 are not IN yet"* — both
+  false. Marked superseded in place; the real archive move is filed as a task.
 
-- **Re-arm the watchdog** — its STATE block is stale (says `main = c986d0a3`,
-  and says `steward/work` is ahead and unpublished; both were true two publishes
-  ago). Re-arm at 900s with `main = 1e09a30a`.
-- Task **#38** — frame `RT-FNSPLIT-B2O-CHECK`. ⭐ **Its scope just grew:** the
-  adversary's `P1` + `P2` on `abi.rs` route here.
-- Tasks **#12** (B1R retros, batch), **#5** (`ABI-S3`), **#8** (`KW-THEOREM` on
-  FNSPLIT close), **#11** (`DOC-GATE-NEEDLE` — ⛔ operator-held, do not re-ask).
-> ## ✅✅ LIVE STATE — 2026-07-25 T18:10Z. **`B2O` IS CLOSED. `B2R` IS ACTIVE AND
-> ## BUILDING, WITH `AC-11` AMENDED IN MID-FLIGHT.** **I owe nothing.**
+### ⚠ Watchdog
+
+Re-arm at 900s with `main = 1e09a30a` and `B2F active`. Interval state does
+**not** survive a compaction, and I self-compacted at the top of this window —
+assume it is dead until `list_subscriptions` says otherwise.
+
+> ## ⛔ SUPERSEDED — HISTORY ONLY. `B2R` MERGED (#967) AND ITS RETROS ARE 3/3 IN.
+> ## Everything from here down is the `B2O`/`B2R` window and earlier.
+>
+> **Do not resume from any block below this line.** Two of this block's own
+> headings are now false in the dangerous direction — it says `B2R` *"IS ACTIVE
+> AND BUILDING"* and that *"retros 3/3 are not IN yet"*. Both were true when
+> written and neither is true now. The live state is the block **above**.
+>
+> ### Original heading, kept so the block still reads in sequence
+>
+> ## ✅✅ LIVE STATE — 2026-07-25 T18:10Z. `B2O` IS CLOSED. `B2R` IS ACTIVE AND
+> ## BUILDING, WITH `AC-11` AMENDED IN MID-FLIGHT.
 >
 > ### ✅✅ 19:06Z — `B2R` IS **MERGED**. PR #967, `origin/main` = **`c986d0a3`**.
 >

@@ -858,10 +858,55 @@ it.
 **entry 2**. Entries 1 and 3 closed with `B2A-S` and `B2A-C`. State what is
 **not** claimed as its own sentence.
 
-**AC-11 — every boundary slot this node emits carries a REPRESENTABLE value,
-established by this node and NOT inherited from `C4`.** For each slot kind
-(`Capture`, `Result`, and the four `CONVENTION_SLOTS` at `abi.rs:381`), show
-that the value reaching it has a carrier `result_carrier` can supply.
+> ### ⭐⭐ AC-11 WAS AMENDED BY ARCHITECT RULING `evt_7ggqdk61pxzzf` (2026-07-25)
+>
+> **The ruling CONFIRMED the scope split and WIDENED the obligation.** The
+> repair of `reject_imported_capture_edges` stays in `RT-FNSPLIT-B2O-CHECK`, and
+> `B2F` must not patch it — but the switch-over may land ahead of that repair
+> **only if `B2F` independently and fail-closed establishes representability for
+> every transfer it makes.**
+>
+> ⛔ **The Steward's original enumeration was incomplete, in the direction that
+> matters.** It named `Capture`, `Result`, and the four convention slots and
+> **omitted `Parameter`** — but `push_slots` lays `Parameter / ValueWord`
+> **first**, and a caller argument can carry the same hidden imported result as
+> a capture or a return. **The source-valued transfer set is `Parameter` +
+> `Capture` + `Result`.**
+>
+> ⚠ **And it was wrong in the other direction too:** `Control`, `Trap`, and
+> `Store` are **protocol-produced convention values**. `result_carrier` is not
+> their producer, and presenting it as their representability proof is a false
+> discharge.
+>
+> ⛔ **I also told the Runtime ring at kickoff that this answer "can only relax
+> `AC-11`, never widen it." That was wrong** — it widened it. The corrected
+> contract below is the binding one.
+
+**AC-11 — every boundary transfer emitted by B2F is representable, established
+by B2F and not inherited from B2R `C4`.** *(Architect text, transcribed
+verbatim — do not paraphrase it.)*
+
+> 1. For every source-valued transfer — each `Parameter` argument, each
+>    `Capture`, and each `Result` — derive the actual value-flow producer that
+>    reaches the slot and prove that producer has an admitted carrier. Checking
+>    only the immediate occurrence's top-level `RuntimeExprShape` does not
+>    discharge this obligation. A direct imported reference and a binder-free
+>    wrapped import such as `If { true, imported, imported }` must either reject
+>    before emission or follow an explicitly represented dependency-linking
+>    path; the corresponding intra-module values must remain accepted.
+> 2. For the protocol slots `Control`, `Trap`, and `Store`, prove the emitter
+>    writes exactly the fixed carrier declared by the ABI. Do not claim these
+>    are supplied by `result_carrier`; they are protocol-produced, not
+>    source-expression results.
+> 3. The check/proof executes before the atomic authority switch-over can emit
+>    or call a unit. No path may treat `AbiPlane::validate`, `C4`, or descriptor
+>    existence as a substitute for this per-transfer proof.
+
+⛔ **Front-end unreachability is NOT available to you as a premise.** Neither the
+Adversary nor the Steward established it. `B2F` may use such an invariant **only
+if it is grounded structurally over every accepted input**, with the wrapped
+`Capture`/`Parameter`/`Result` cases as discriminators. **Otherwise it must
+reject those flows.**
 
 > ### ⛔⛔ WHY THIS IS AN AC AND NOT AN INHERITED GUARANTEE — the P1 hazard
 >
