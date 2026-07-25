@@ -90,7 +90,57 @@
 > CONSUMED?"** N3 settles it: three origin accessors, none returning an
 > expression. A tag beside a body becomes two authorities in **B2A-S**, not here.
 >
-> ### ✅ DECISION RESOLVED, PUBLISHER RUNNING ON `08633b3c`
+> ### ⛔ CI IS RED ON PR #940 — `08633b3c` DID NOT MERGE. Nothing landed.
+>
+> ```
+> ken-cli::px8ta_oriented_subcontinuation
+>     public_two_three_level_brackets_finish_and_release_lifo
+>   SIGABRT [65.254s] — thread has overflowed its stack
+> ```
+> `test shard 2/4` failed; `build + test` is the aggregate gate. Publisher stopped
+> correctly and merged nothing. Routed at `evt_1xxzgar9c4htr`; all three seats
+> confirmed `Working`. Log: `gh run view 30145934014` → `test shard 2/4`.
+>
+> ⚠ **454 of 533 tests DID NOT RUN** (fail-fast cancelled the shard). ⇒ **one
+> failure is a FLOOR, not a count.**
+>
+> ### ⛔ THIS IS A MECHANISM FINDING, NOT A FLAKE
+>
+> **The failing test is a two/three-level NESTED RESOURCE BRACKET** — nested-bracket
+> depth is *the* scaling axis `RT-NATIVE-FNSPLIT` exists to bound (original wall:
+> "four nested brackets fails to compile"; operator gate demands n=3..7).
+> **B2A-C added a parameter to every recursive lowering frame.** Wider frames ×
+> deep recursion = less depth before the stack dies. ⇒ **Correspondence threading
+> plausibly regressed the very axis the parent WP must improve.**
+>
+> ★ **Cleanest possible demonstration of why AC-8 says "green in CI."**
+> `-p ken-runtime` 334/334 and `-p ken-interp` green, while the regression lives
+> in a **`ken-cli`** integration test in another shard. Targeted builds are
+> STRUCTURALLY blind to it. Nobody erred locally — that is the gate's job.
+>
+> ### ⇢ ON RESUME — the ring owes a MEASUREMENT, not a fix
+>
+> I asked for attribution before any patch:
+> `scripts/ken-cargo test -p ken-cli --test px8ta_oriented_subcontinuation`
+> on `08633b3c` **and on base `70bd2c74`**. Green-on-base + red-on-tip ⇒ B2A-C
+> caused it; red on both ⇒ pre-existing. ⛔ **Still no `--workspace`.**
+>
+> ⛔ **I have NOT counted this as hard-stop #9** — it is a CI regression found
+> post-approval, not a ring stop on an ungroundable deliverable. **If the fix
+> needs a MECHANISM change (e.g. an explicit-worklist rewrite of the recursion),
+> THAT is #9 and the RESEARCH PULL FIRES** — dispatch research BEFORE the
+> Architect rules. A fix preserving D9's disjoint-consumer structure is an
+> in-scope fold.
+>
+> ### ⚠ PROCESS STATE — do not mis-read the resolved Decision
+>
+> **`dec_603f046v0rjqg` IS `resolved` (verified from the object) but it authorized
+> `08633b3c`, which FAILS CI.** ⛔ A resolved Decision does **not** authorize
+> merging a red candidate — CI is a separate gate. ⇒ **Any fix is a NEW SHA and
+> needs a NEW Decision naming it exactly** (that will be the candidate's 4th SHA).
+> `RT-FNSPLIT-B2A-C` stays `active`; **no retros yet**; nothing flips to `merged`.
+>
+> ### ✅ (history) verification that still stands
 >
 > **Verified FROM THE OBJECT** (not on the two prose reports): `dec_603f046v0rjqg`
 > = `status: resolved`, `resolved_by: agt_37reqftfe6g00` (architect),
