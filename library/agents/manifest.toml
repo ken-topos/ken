@@ -39,7 +39,7 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["contract-order", "sources-exist", "token-measurement"]
-measured_tokens = 730
+measured_tokens = 729
 
 [[module]]
 id = "core/proof-and-trust"
@@ -69,7 +69,7 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["contract-order", "sources-exist", "token-measurement"]
-measured_tokens = 538
+measured_tokens = 537
 
 [[module]]
 id = "tasks/read-review"
@@ -182,7 +182,7 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 2074
+measured_tokens = 2073
 
 [[pack]]
 id = "write-pure"
@@ -205,7 +205,7 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 2807
+measured_tokens = 2805
 
 [[pack]]
 id = "write-effectful"
@@ -221,7 +221,7 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 3338
+measured_tokens = 3336
 
 [[pack]]
 id = "author-package"
@@ -237,7 +237,7 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 3287
+measured_tokens = 3285
 
 [[pack]]
 id = "repair-proof"
@@ -253,7 +253,7 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 3212
+measured_tokens = 3210
 
 [[pack]]
 id = "diagnose"
@@ -274,4 +274,4 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 2101
+measured_tokens = 2100

@@ -85,7 +85,7 @@ ken check <file>
 | parse error | unsupported or misplaced syntax | reduce to a one-declaration probe |
 | `Refl expects an Eq-shaped goal` | goal reduced to `Top` | inspect endpoints; try `Proved` only if both collapse |
 | `Proved` type mismatch | equality remains stuck | inspect endpoints; use `Refl` only for reflexive equality |
-| last definition is not an IO tree | `ken run` used on a library | use `ken check` |
+| pure library has no `main` entrypoint | `ken run` used on a library | use `ken check` |
 | effect escapes declared row | omitted or wrong `visits` row | load `effects-and-capabilities.md` |
 
 ## 8. Validation
