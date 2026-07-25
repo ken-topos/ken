@@ -4422,3 +4422,102 @@ fn the_owner_classification_has_a_closed_production_naming_inventory() {
          measuring nothing"
     );
 }
+
+// ─── RT-FNSPLIT-B2V AC-3 — the Lowered disposition is exhaustive, no wildcard ─
+//
+// **MEASURED:** the `boundary_disposition` region of `lowering/mod.rs` contains
+// no `_ =>` arm and names all 21 `Lowered` variants.
+// **CLAIMED:** adding a 22nd variant is a COMPILE ERROR, so the transfer
+// population is closed structurally rather than by the `#10` histogram.
+// **THE GAP:** the compiler already guarantees exhaustiveness — what it cannot
+// guarantee is that nobody *silences* it. A `_ =>` arm would make a new variant
+// compile straight into whatever that arm returned. This pin exists for that
+// one job, and it also checks the dispatch is single, since a second
+// wildcarded dispatch elsewhere would be outside the compiler's guarantee too.
+
+#[test]
+fn b2v_ac3_the_lowered_boundary_disposition_has_no_wildcard_arm() {
+    let source = include_str!("../../mod.rs");
+    let region = source
+        .split_once("fn boundary_disposition(&self) -> BoundaryDisposition {")
+        .map(|(_, after)| after)
+        .and_then(|after| {
+            after
+                .split_once("#[derive(Clone)]\nstruct ActiveRecursiveDeclarationV1")
+                .map(|(body, _)| body)
+        })
+        .expect("AC-3: the disposition region was not found, so every check below is vacuous");
+
+    // ⚠ POSITIVE CONTROL FIRST. A negative check passes for any reason,
+    // including an extractor that returned an empty region.
+    assert!(
+        region.contains("Lowered::Constructor"),
+        "AC-3: the extracted region does not contain a token that is certainly \
+         in it, so its silence about `_ =>` means nothing"
+    );
+
+    // ⛔ Every arm head must name a `Lowered` variant.
+    //
+    // ⚠ This started as `!region.contains("_ =>")` and a compile-preserving
+    // evasion DEFEATED it in one line: `unhandled => ...` is a binding
+    // catch-all, so it silences exhaustiveness exactly like `_` while matching
+    // no `_ =>` substring. The pin was green with the catch-all in place. What
+    // the two evasions share is a GRANULARITY error — the check was a claim
+    // about one spelling where the property is about the SHAPE of every arm —
+    // so the repair is to enumerate arm heads rather than to add the second
+    // spelling to a forbidden list that is open at the top.
+    for line in region.lines() {
+        let trimmed = line.trim();
+        if !trimmed.contains("=>") {
+            continue;
+        }
+        assert!(
+            trimmed.starts_with("Lowered::") || trimmed.starts_with('|'),
+            "AC-3: `{trimmed}` is a match arm whose head does not name a \
+             `Lowered` variant. A catch-all — `_` or a binding — silences \
+             exhaustiveness, so a new variant would compile into it instead of \
+             failing until someone dispositions it."
+        );
+    }
+
+    // Every one of the 21 landed variants is named. Pinned as the ALLOWED
+    // inventory: a variant renamed or removed reddens here with its own name in
+    // the message, where a bare count would only say that something moved.
+    for variant in [
+        "Int", "Bool", "ProcessExitStatus", "CapabilityToken", "ResourceToken",
+        "BoundedNat", "StructuralNat", "ResponseBytes", "HostResult",
+        "DynamicConstructor", "Bytes", "BorrowedNativeValue", "BorrowedOption",
+        "String", "Constructor", "Record", "Closure", "DeclarationClosure",
+        "ComputationalRecursorClosure", "RecursiveBackedge", "Trap",
+    ] {
+        assert!(
+            region.contains(&format!("Lowered::{variant}")),
+            "AC-3: `Lowered::{variant}` has no disposition"
+        );
+    }
+
+    // ⛔ `Constructor` and `HostResult` are REQUIRED LIVE ARMS. A disposition
+    // that parked either in `FailClosedForbidden` would reject the dominant
+    // measured population — sound, and unable to satisfy `B2F`'s `D6`/`D7`.
+    // Checked positionally, so moving one into the forbidden block reddens.
+    let forbidden_block = region
+        .split_once("FailClosedForbidden {")
+        .map(|(_, after)| after)
+        .expect("AC-3: there is no fail-closed arm at all, which is itself wrong");
+    for required_live in ["Constructor", "HostResult"] {
+        assert!(
+            !forbidden_block.contains(&format!("Lowered::{required_live}")),
+            "AC-3: `Lowered::{required_live}` is a REQUIRED LIVE ARM and has \
+             been moved behind the fail-closed boundary"
+        );
+    }
+
+    // The dispatch is single: one definition, so the compiler's exhaustiveness
+    // guarantee covers the whole question and not just this copy of it.
+    assert_eq!(
+        source.matches("fn boundary_disposition").count(),
+        1,
+        "AC-3: a second disposition exists, and the compiler cannot promise \
+         the two agree"
+    );
+}
