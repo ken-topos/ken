@@ -22,99 +22,113 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-25 ~22:10Z. `origin/main` = **`81334478`**. **TWO LANES IN FLIGHT.**
+## ▶ LIVE — 2026-07-25 ~23:0xZ · `origin/main` = **`fdda953f`**
+### **TWO LANES, BOTH BLOCKED ON THEIR RINGS. I OWE NOTHING.**
 
-**`steward/work` = `81334478`, clean.** Both lanes are working; neither is
-waiting on me. My own next action is **watchdog cadence** (1200s interval,
-armed) plus the queue at the bottom of this block.
+**`steward/work` = `fdda953f` + this briefing commit.** Neither lane is waiting
+on me. My next action is **watchdog cadence** (1200s, armed) plus the queue
+below.
 
-> ⛔ **The previous LIVE block anchored on `aecdb001` and told a resuming
-> Steward to "§2c gate, then kick Runtime on `RT-FNSPLIT-B2V`." That work is
-> DONE — the ring is four `main`-SHAs past it and `B2V` is `active` and
-> mid-repair.** Acting on it would have re-kicked a live node. That block, and
-> the ~2100 lines below it, are archived at
-> [`2026/Jul/25.md`](2026/Jul/25.md).
+> ⛔ **THREE DEAD CANDIDATES ARE NAMED BELOW. None of them will ever be
+> published, and each has a *resolved or rejected* Decision attached — which is
+> exactly the shape that gets one published by accident.** Read the SHA, not
+> the Decision status.
 
-### ▶ LANE 1 — `RT-FNSPLIT-B2V` — ⛔ ARCHITECT-BLOCKED, RING IS FOLDING
-
-| | |
-|---|---|
-| branch on origin | `wp/RT-FNSPLIT-B2V-executable-value-abi` = **`78a57d90`** |
-| base / merge-base | `aecdb001` — 9 files, `+3002/−0`, `diff --check` clean |
-| Decision `dec_58gv9rmjqy49g` | ⛔ **REJECTED** (Architect `evt_2c6f3natxvwcm`) |
-
-⛔ **`78a57d90` IS DEAD AS A MERGE CANDIDATE — PERMANENTLY.** A rejected
-Decision never becomes resolvable, so there is nothing to re-read at merge
-time. **A fresh exact SHA needs a FRESH Decision**, read `resolved` with
-non-null `resolved_by` off the object (§14). `78a57d90` stays on origin as a
-durable checkpoint — **do not force-push over it**; push the repair as a
-descendant.
-
-**Two required closures, both in production bytes that were UNCHANGED from
-`c3f6da02` — so the prior QA clearance does NOT carry:**
-
-1. **Persistent handle lifetime.** Every handle word stores an
-   invocation-**arena node index**, and `define_resolve` reads every payload
-   that way — but both escape checks let `PersistentGround`/`PersistentClosure`
-   leave the invocation **on the tag alone**. After the arena dies the permitted
-   word names nothing. The real `SlotId` is only *inside* the ephemeral node.
-   `D2`/`AC-6` undischarged.
-2. **`AC-4`, verbatim.** `make_immediate` is the only constructor the emitted
-   interface exposes; every live word is Rust-materialized by
-   `BoundaryArenaBuilder` before `publish`, and the emitted probes never call
-   `make_immediate` at all. Emitted code was shown to **inspect a Rust-built
-   fixture**, never to **construct** one.
-
-⭐ **Finding #2 is not a false fixed input — the frame was RIGHT.** `AC-4`
-already said *"each `D3` operation exercised from emitted code, not from
-Rust."* The candidate cleared QA anyway, and **not through inattention**: QA
-verified every control the candidate shipped and independently reproduced both
-false-green mutations. **Nothing in the loop asks which `AC` each control
-discharges, or whether an `AC` has a control at all** — and an `AC` with zero
-controls is invisible to a review that examines controls. **Frame amended
-(2026-07-25, second): every QA verdict on this node carries an `AC` → control
-map, with `NO CONTROL — open residual` spelled out for any `AC` that has
-none.** Sibling of the `AC-8`/`AC-9` amendment one layer out.
-
-### ▶ LANE 2 — `KW-THEOREM` — stage 3 in flight, doc ring holds the branch
+### ▶ LANE 1 — `RT-FNSPLIT-B2V` — ring folding, candidate durable
 
 | | |
 |---|---|
-| branch on origin | `wp/KW-THEOREM-surface-keyword-rename` = **`dc5e4a39`** |
-| base | `c2c1ba9f` · 51 files (`43 crates/`, `6 spec/`, `2 library/`), `+325/−261` |
-| holder | **`doc-author`**, explicitly designated — migrating doc/catalog/library/agent/tooling |
+| branch on origin | `wp/RT-FNSPLIT-B2V-executable-value-abi` = **`ea8d9824`** |
+| base / merge-base | `aecdb001` — 10 files, `+6181/−4`, `diff --check` clean |
+| intersection vs `fdda953f` | **empty** — ⚠ re-derive if `main` moves |
+| state | QA running a full production re-review with the complete `AC`→control map |
 
-Steps 1 (`spec/`) and 2 (`ken-elaborator`) are committed and **Language
-QA-approved** on the exact SHA (`AC-4` harness green, span mutation
-discriminating). Next: doc-author's commit → **report the SHA to me, I push** →
-CV conformance lane → librarian anchor review → merge candidate.
+⛔ **DEAD, NEVER PUBLISHABLE:** `78a57d90` (`dec_58gv9rmjqy49g` rejected) and
+`657f60a0` (`dec_1wpa1y2b3g7cn` rejected). Both stay on origin as durable
+checkpoints — `ea8d9824` is a **fast-forward** over them, so nothing was
+orphaned. **Do not force-push this branch.**
 
-⛔ **Base is three doc-only publishes behind `origin/main` (`81334478`) — no
-rebase needed, but re-derive the path intersection against CURRENT `main`
-before handing me a merge candidate.** Merge authority is **Spec + Architect**,
-not §14a doc-only.
+The three Architect findings `ea8d9824` folds: a handle ABI lossy to emitted
+code (spilled `Int` read as `0`; `Bytes`/`String` indistinguishable at equal
+length), `ken_boundary_store_slot_local` accepting a caller-supplied `SlotId`
+(emitted code could forge store identity), and `alloc` admitting the Cartesian
+product of tag × class.
 
-⚠ **This branch sat on ONE LOCAL REF with no worktree holding it and no origin
-copy**, found on a routine sweep rather than from a report. Both problems were
-routed: report-the-SHA-and-keep-going is standing, and custody is now explicit.
+⚠ **`ea8d9824` touches one path outside `crates/ken-runtime` —
+`docs/program/rt-fnsplit-b2v-evasion-table.md`. That is a DOC, so it is NOT
+hard-stop #11.** The armed condition is a *production* path outside the fence.
+Do not fire the trigger on it; equally, do not let it become the precedent that
+lets production code sit outside.
 
-### ▶ ARMED COUNTERS — re-read these at every hard-stop
+### ▶ LANE 2 — `KW-THEOREM` — ⛔ CI RED, candidate dead, ring folding
 
-- **FNSPLIT hard-stop count of record = `10`. NEXT RESEARCH PULL = `#12`.**
-- **SYMPTOM INVENTORY = 3 entries. NEXT PREDICATE CHECK = the 6th entry.**
-- ⛔ **A review block is NOT a hard-stop.** `B2R` took two review blocks and the
-  count correctly stayed put. Inflating it pulls the research trigger early and
-  teaches the chain that *being found incomplete* and *hitting a wall* are one
-  event. They are not.
-- ⛔ **Never name the shared predicate yourself** (§5a-ii) — transport and
-  framing only. Naming it makes the Steward the de-facto designer.
+| | |
+|---|---|
+| branch on origin | `wp/KW-THEOREM-surface-keyword-rename` = `963d36ac` (**dead**) |
+| base | `c2c1ba9f` · 124 files, `+1613/−1234` |
+| Decision `dec_286hqjak5kjq8` | **`resolved`** — ⛔ **and bound to the DEAD SHA** |
 
-### ▶ Durable refs pushed this window
+⛔⛔ **THIS IS THE TRAP ON THIS BOARD: a RESOLVED Decision on a RED candidate.**
+`resolved` + non-null `resolved_by` is necessary, **never sufficient**. PR #977
+is blocked, the publisher was killed, and **nothing landed** — `main` never
+moved off `fdda953f`.
 
 ```
-architect/work                            d6179ccd   (ARCHITECT-STATE.md only)
-wp/RT-FNSPLIT-B2V-executable-value-abi    78a57d90   (superseded, kept)
-wp/KW-THEOREM-surface-keyword-rename      dc5e4a39
+ken-cli::ken_fmt strict_frozen_corpus_gate_is_green   FAILED
+crates/ken-cli/tests/ken_fmt.rs:111 — frozen corpus is not canonical:
+  catalog/guide/proof-techniques.ken.md
+  catalog/packages/Core/Classes/EffectfulClasses.ken.md
+  catalog/packages/Core/Logic/Transport.ken.md
+  catalog/packages/Data/Collections/Map.ken.md
+```
+
+**Measured over the whole population, not a sample:** of the 23 changed catalog
+`.ken.md`, **all 18 passing files have a longest `theorem` line ≤ 95 columns;
+all 4 failing files are ≥ 97.** Perfect separation, boundary 96. `theorem` is
+two characters longer than `lemma`, and every file's diff is an exact N-for-N
+line swap. ⛔ **That is a measurement, not a diagnosis** — the formatter was
+never read, and the ring owns the cause.
+
+⛔ **A fresh descendant SHA needs a FRESH Decision.** The Architect's, CV's and
+spec-author's approvals were all **explicitly exact-SHA** and do not carry;
+merge-tree `4932d845` and the empty-intersection result are void. Push the fix
+as a descendant — **do not force over `963d36ac`.** Merge authority is
+**Spec + Architect**, not §14a doc-only.
+
+⭐ **Four independent reviews approved this SHA and every local targeted run was
+green. CI was the only thing that caught it** — which is exactly what §12
+asserts, and why *workspace-green* means green in **CI**, never a local run.
+**The frame predicted this failure by name** (coupling #3: the formatter
+keyword list *"is a canonicalization oracle that fails in CI, not in a targeted
+build"*) and it still happened, because that warning lives in a section read
+once at kickoff.
+
+### ▶ ARMED COUNTERS — the SOLE count of record. Re-read at every hard-stop.
+
+- **FNSPLIT hard-stop count of record = `10`. NEXT RESEARCH PULL = `#11`**
+  (`runtime-leader` armed it in-fold: any closure needing a path outside
+  `crates/ken-runtime` is #11).
+- **SYMPTOM INVENTORY = 3 entries. NEXT PREDICATE CHECK = the 6th entry.**
+- ⚠⚠ **ARMED §5a-ii:** `B2V` has produced three blocked candidates —
+  `c3f6da02` (QA), `78a57d90` + `657f60a0` (Architect, production). **IF THE
+  NEXT `B2V` CANDIDATE IS BLOCKED ON PRODUCTION MECHANISM, that is the THIRD
+  consecutive Architect production block on one node, and I ask the §5a-ii
+  predicate question AT THAT MOMENT** — not the one after.
+- ⛔ **Ask the question ONLY. NEVER name a predicate** (§5a-ii) — that is the
+  Architect's call, and naming one makes the Steward the de-facto designer of
+  the recut. *"No, these are independent"* is a complete answer.
+- ⛔ **A review block is NOT a hard-stop, and a clean WP is not one either.**
+  `B2R` took two review blocks and the count correctly stayed at 10; `B2O` ran
+  clean and did not move it. Inflating the count pulls the research trigger
+  early and teaches the chain that *found incomplete* and *hit a wall* are one
+  event. They are not.
+
+### ▶ Durable refs on origin
+
+```
+wp/RT-FNSPLIT-B2V-executable-value-abi    ea8d9824   (657f60a0, 78a57d90 preserved)
+wp/KW-THEOREM-surface-keyword-rename      963d36ac   (CI-RED, kept, do not force over)
+architect/work                            e560cb20
 ```
 
 Each verified by `ls-remote` **at the exact SHA after the push**, never from
@@ -124,24 +138,25 @@ push output.
 
 | # | item |
 |---|---|
-| — | **Publish this briefing refresh + the `B2V` frame amendment** (`wp/steward-b2v-ac-discharge`) |
+| #48 | ⚠ **IN PROGRESS.** Three tail corrections committed. Remaining: archive the superseded 07-21/07-22 narrative. ⛔ **Do NOT bulk-archive — ~half the tail is durable law.** |
 | #12 | B1R retros → playbook corpus. **Batch; do not publish singly.** |
 | #5 | Frame `ABI-S3` shovel-ready |
-| #45 | ⚠ **PARTIALLY DONE.** The stale LIVE block is archived; the ~1040 lines *below* this block (`## Standing state` onward, much of it dated 2026-07-21) are **still unaudited** — some is durable standing discipline, some is stale. |
 | #11 | `DOC-GATE-NEEDLE` — ⛔ **operator-HELD. Do not release, do not re-ask.** |
 
 ### ▶ Environment
 
-Disk: `/` at 71%, `/workspaces/ken` at 80% after a ~64G reclaim. The mass is
-`.worktrees/*/target` plus an orphaned `~/.cache/ken-sccache`; **verify the
-live `SCCACHE_DIR` from the server's `/proc/<pid>/environ` before deleting any
-cache**, and check live processes (`ps -eo args | grep -oE
-'/workspaces/ken/\.worktrees/[a-z-]+'`) before touching any `target/` — a seat
-can read idle in tmux while 30 rustc processes run.
+Disk: `/` at 71%, `/workspaces/ken` at 80% after a ~64G reclaim. Mass is
+`.worktrees/*/target` plus an orphaned `~/.cache/ken-sccache`; **verify the live
+`SCCACHE_DIR` from the server's `/proc/<pid>/environ` before deleting any
+cache**, and check live processes before touching any `target/` — a seat can
+read idle in tmux while 30 rustc processes run.
 
-⛔ **Busy-detector regex — the spinner verb is RANDOMIZED**
-(`Hullaballooing…`). Never grep `Working (`; it produced two false IDLEs, one
-on a seat 52 minutes into a turn:
+⛔ **`pkill -f <pattern>` MATCHES YOUR OWN SHELL** if the pattern appears in its
+command line. It killed my own bash while stopping the publisher. Use `pgrep`,
+read the PID, then `kill` that PID.
+
+⛔ **Busy-detector regex — the spinner verb is RANDOMIZED** (`Booping…`,
+`Churned for…`). Never grep `Working (`:
 
 ```
 esc to interrupt|\([0-9]+m [0-9]+s|\([0-9]+s ·|[0-9.]+k tokens|Compacting|Press up to edit queued
