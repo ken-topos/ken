@@ -57,7 +57,7 @@
 //! past the repository root before ever touching the filesystem, so an
 //! existing host file outside the repo can't satisfy a manifest entry.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Component, Path, PathBuf};
 
 fn repo_root() -> PathBuf {
@@ -137,6 +137,15 @@ fn resolve_confined(base: &Path, rel: &str, repo_root: &Path) -> Option<PathBuf>
         return None;
     }
     Some(normalized)
+}
+
+fn resolve_controlled_path(repo_root: &Path, rel: &str, owner: &str) -> PathBuf {
+    resolve_confined(repo_root, rel, repo_root).unwrap_or_else(|| {
+        panic!(
+            "{owner}: controlled path {rel:?} is absolute, escapes the repository, \
+             or resolves through an escaping symlink"
+        )
+    })
 }
 
 // --- a hand-rolled parser for library/manifest.toml's controlled subset ---
@@ -580,6 +589,11 @@ const VALIDATION_GATES: &[ValidationGate] = &[
         token: "document-kind",
         applies: applies_to_every_record,
         run: check_document_kinds,
+    },
+    ValidationGate {
+        token: "checked-examples",
+        applies: applies_to_checked_example_records,
+        run: check_checked_examples,
     },
     ValidationGate {
         token: "links",
@@ -2648,5 +2662,1346 @@ fn slugify_matches_the_proposals_own_worked_anchor() {
     assert_eq!(
         slugify("1. Ken is a *software-engineering* language, not a programming language"),
         "1-ken-is-a-software-engineering-language-not-a-programming-language"
+    );
+}
+
+// --- Wave 2 agent-library gates -------------------------------------------
+//
+// These are global invariants over a second, deliberately small manifest
+// corpus. They are standalone tests rather than VALIDATION_GATES rows:
+// document-record applicability is the registry's category, while module
+// existence, a pack dependency DAG, and evaluation-to-pack coverage are
+// properties of the complete agent-library graph.
+
+#[derive(Debug, Clone, Copy)]
+enum ControlledScalarKind {
+    String,
+    Integer,
+    Other,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ControlledRecord {
+    scalars: BTreeMap<String, String>,
+    scalar_kinds: BTreeMap<String, ControlledScalarKind>,
+    arrays: BTreeMap<String, Vec<String>>,
+    arrays_are_strings: BTreeMap<String, bool>,
+}
+
+fn array_contains_only_strings(src: &str) -> bool {
+    let mut quoted = false;
+    let mut escaped = false;
+    for ch in src.chars() {
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                quoted = false;
+            }
+        } else if ch == '"' {
+            quoted = true;
+        } else if !matches!(ch, '[' | ']' | ',' | ' ' | '\t' | '\r' | '\n') {
+            return false;
+        }
+    }
+    !quoted
+}
+
+fn parse_controlled_records(src: &str, header: &str) -> Vec<ControlledRecord> {
+    let marker = format!("[[{header}]]");
+    let mut records = Vec::new();
+    let mut current: Option<ControlledRecord> = None;
+    let mut lines = src.lines().peekable();
+
+    while let Some(raw_line) = lines.next() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if line == marker {
+            if let Some(record) = current.take() {
+                records.push(record);
+            }
+            current = Some(ControlledRecord::default());
+            continue;
+        }
+        if line.starts_with("[[") {
+            if let Some(record) = current.take() {
+                records.push(record);
+            }
+            continue;
+        }
+        let Some(record) = current.as_mut() else {
+            continue;
+        };
+        let Some((key, mut value)) = line.split_once('=') else {
+            continue;
+        };
+        let key = key.trim().to_string();
+        value = value.trim();
+        let mut array_text = String::new();
+        if value.starts_with('[') && !value.contains(']') {
+            array_text.push_str(value);
+            array_text.push('\n');
+            for continuation in lines.by_ref() {
+                array_text.push_str(continuation);
+                array_text.push('\n');
+                if continuation.contains(']') {
+                    break;
+                }
+            }
+            value = array_text.trim();
+        }
+        if value.starts_with('[') {
+            record
+                .arrays_are_strings
+                .insert(key.clone(), array_contains_only_strings(value));
+            record.arrays.insert(key, extract_quoted_strings(value));
+        } else {
+            let (scalar, kind) = if value.starts_with('"') {
+                (
+                    extract_quoted_strings(value).pop().unwrap_or_default(),
+                    ControlledScalarKind::String,
+                )
+            } else if value.parse::<i64>().is_ok() {
+                (value.to_string(), ControlledScalarKind::Integer)
+            } else {
+                (value.to_string(), ControlledScalarKind::Other)
+            };
+            record.scalar_kinds.insert(key.clone(), kind);
+            record.scalars.insert(key, scalar);
+        }
+    }
+    if let Some(record) = current {
+        records.push(record);
+    }
+    records
+}
+
+fn parse_pack_file(src: &str) -> ControlledRecord {
+    let wrapped = format!("[[pack-file]]\n{src}");
+    parse_controlled_records(&wrapped, "pack-file")
+        .pop()
+        .expect("pack file parsed to no record")
+}
+
+fn controlled_record_value(record: &ControlledRecord) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    for (key, value) in &record.scalars {
+        let json = match record.scalar_kinds.get(key) {
+            Some(ControlledScalarKind::String) => serde_json::Value::String(value.clone()),
+            Some(ControlledScalarKind::Integer) => value
+                .parse::<i64>()
+                .map(serde_json::Value::from)
+                .unwrap_or(serde_json::Value::Null),
+            _ => serde_json::Value::Null,
+        };
+        object.insert(key.clone(), json);
+    }
+    for (key, values) in &record.arrays {
+        let mut items: Vec<_> = values
+            .iter()
+            .cloned()
+            .map(serde_json::Value::String)
+            .collect();
+        if !record.arrays_are_strings.get(key).copied().unwrap_or(false) {
+            items.push(serde_json::Value::Null);
+        }
+        object.insert(key.clone(), serde_json::Value::Array(items));
+    }
+    serde_json::Value::Object(object)
+}
+
+fn controlled_manifest_value(src: &str) -> serde_json::Value {
+    let wrapped = format!("[[manifest-root]]\n{src}");
+    let root = parse_controlled_records(&wrapped, "manifest-root")
+        .into_iter()
+        .next()
+        .expect("agent manifest has no root fields");
+    let mut value = controlled_record_value(&root);
+    let object = value.as_object_mut().expect("controlled root is an object");
+    object.insert(
+        "module".to_string(),
+        serde_json::Value::Array(
+            parse_controlled_records(src, "module")
+                .iter()
+                .map(controlled_record_value)
+                .collect(),
+        ),
+    );
+    object.insert(
+        "pack".to_string(),
+        serde_json::Value::Array(
+            parse_controlled_records(src, "pack")
+                .iter()
+                .map(controlled_record_value)
+                .collect(),
+        ),
+    );
+    value
+}
+
+fn is_kebab(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
+fn matches_shipped_pattern(value: &str, pattern: &str) -> Result<bool, String> {
+    let matched = match pattern {
+        "^[0-9a-f]{40}$" => {
+            value.len() == 40
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        }
+        "^[a-z0-9-]+$" => is_kebab(value),
+        "^(core|tasks)/[a-z0-9-]+$" => value
+            .split_once('/')
+            .is_some_and(|(prefix, rest)| matches!(prefix, "core" | "tasks") && is_kebab(rest)),
+        "^library/agents/(core|tasks)/.*\\.md$" => {
+            value
+                .strip_prefix("library/agents/")
+                .and_then(|rest| rest.split_once('/'))
+                .is_some_and(|(area, file)| {
+                    matches!(area, "core" | "tasks")
+                        && !file.is_empty()
+                        && file.ends_with(".md")
+                })
+        }
+        "^library/agents/packs/.*\\.toml$" => value
+            .strip_prefix("library/agents/packs/")
+            .is_some_and(|file| !file.is_empty() && file.ends_with(".toml")),
+        other => return Err(format!("unsupported declared schema pattern {other:?}")),
+    };
+    Ok(matched)
+}
+
+fn schema_violations(
+    schema: &serde_json::Value,
+    instance: &serde_json::Value,
+    schema_root: &serde_json::Value,
+    location: &str,
+) -> Vec<String> {
+    schema_violations_with_refs(schema, instance, schema_root, location, &mut Vec::new())
+}
+
+fn decode_json_pointer_component(component: &str) -> Result<String, String> {
+    let mut decoded = String::new();
+    let mut chars = component.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '~' {
+            decoded.push(ch);
+            continue;
+        }
+        match chars.next() {
+            Some('0') => decoded.push('~'),
+            Some('1') => decoded.push('/'),
+            Some(other) => {
+                return Err(format!("invalid JSON-pointer escape ~{other}"));
+            }
+            None => return Err("trailing ~ in JSON-pointer component".to_string()),
+        }
+    }
+    Ok(decoded)
+}
+
+fn resolve_local_schema_reference<'a>(
+    reference: &str,
+    schema_root: &'a serde_json::Value,
+) -> Result<&'a serde_json::Value, String> {
+    if reference.contains('%') {
+        return Err(format!(
+            "percent-encoded schema reference {reference:?} is unsupported"
+        ));
+    }
+    let Some(pointer) = reference.strip_prefix('#') else {
+        return Err(format!("external schema reference {reference:?} is unsupported"));
+    };
+    let mut target = schema_root;
+    if pointer.is_empty() {
+        return Ok(target);
+    }
+    let Some(pointer) = pointer.strip_prefix('/') else {
+        return Err(format!("invalid local schema reference {reference:?}"));
+    };
+    for encoded_component in pointer.split('/') {
+        let component = decode_json_pointer_component(encoded_component)
+            .map_err(|message| format!("{reference:?}: {message}"))?;
+        target = match target {
+            serde_json::Value::Object(object) => object.get(&component),
+            serde_json::Value::Array(array) => component
+                .parse::<usize>()
+                .ok()
+                .and_then(|index| array.get(index)),
+            _ => None,
+        }
+        .ok_or_else(|| {
+            format!(
+                "unresolved local schema reference {reference:?}: missing component {component:?}"
+            )
+        })?;
+    }
+    if !target.is_object() {
+        return Err(format!(
+            "local schema reference {reference:?} resolves to a non-object schema"
+        ));
+    }
+    Ok(target)
+}
+
+fn schema_violations_with_refs(
+    schema: &serde_json::Value,
+    instance: &serde_json::Value,
+    schema_root: &serde_json::Value,
+    location: &str,
+    active_refs: &mut Vec<String>,
+) -> Vec<String> {
+    let mut bad = Vec::new();
+    if let Some(reference_value) = schema.get("$ref") {
+        match reference_value.as_str() {
+            Some(reference) if active_refs.iter().any(|active| active == reference) => {
+                bad.push(format!(
+                    "{location}: schema reference cycle through {reference:?}"
+                ));
+            }
+            Some(reference) => {
+                match resolve_local_schema_reference(reference, schema_root) {
+                    Ok(target) => {
+                        active_refs.push(reference.to_string());
+                        bad.extend(schema_violations_with_refs(
+                            target,
+                            instance,
+                            schema_root,
+                            location,
+                            active_refs,
+                        ));
+                        active_refs.pop();
+                    }
+                    Err(message) => bad.push(format!("{location}: {message}")),
+                }
+            }
+            None => bad.push(format!("{location}: $ref must be a string")),
+        }
+    }
+
+    if let Some(expected) = schema.get("const") {
+        if instance != expected {
+            bad.push(format!(
+                "{location}: const violation: expected {expected}, found {instance}"
+            ));
+        }
+    }
+
+    if let Some(expected_type) = schema.get("type").and_then(serde_json::Value::as_str) {
+        let type_matches = match expected_type {
+            "object" => instance.is_object(),
+            "array" => instance.is_array(),
+            "string" => instance.is_string(),
+            "integer" => instance.as_i64().is_some(),
+            other => {
+                bad.push(format!("{location}: unsupported declared type {other:?}"));
+                false
+            }
+        };
+        if !type_matches {
+            bad.push(format!(
+                "{location}: type violation: expected {expected_type}, found {instance}"
+            ));
+            return bad;
+        }
+    }
+
+    if let Some(minimum) = schema.get("minimum").and_then(serde_json::Value::as_i64) {
+        if instance.as_i64().is_some_and(|value| value < minimum) {
+            bad.push(format!("{location}: minimum violation: expected at least {minimum}"));
+        }
+    }
+    if let Some(minimum) = schema.get("minLength").and_then(serde_json::Value::as_u64) {
+        if instance
+            .as_str()
+            .is_some_and(|value| value.chars().count() < minimum as usize)
+        {
+            bad.push(format!("{location}: minLength violation: expected at least {minimum}"));
+        }
+    }
+    if let Some(pattern) = schema.get("pattern").and_then(serde_json::Value::as_str) {
+        if let Some(value) = instance.as_str() {
+            match matches_shipped_pattern(value, pattern) {
+                Ok(true) => {}
+                Ok(false) => bad.push(format!(
+                    "{location}: pattern violation: {value:?} does not match {pattern:?}"
+                )),
+                Err(message) => bad.push(format!("{location}: {message}")),
+            }
+        }
+    }
+    if let Some(minimum) = schema.get("minItems").and_then(serde_json::Value::as_u64) {
+        if instance
+            .as_array()
+            .is_some_and(|values| values.len() < minimum as usize)
+        {
+            bad.push(format!("{location}: minItems violation: expected at least {minimum}"));
+        }
+    }
+    if let (Some(items_schema), Some(items)) = (schema.get("items"), instance.as_array()) {
+        for (index, item) in items.iter().enumerate() {
+            bad.extend(schema_violations_with_refs(
+                items_schema,
+                item,
+                schema_root,
+                &format!("{location}[{index}]"),
+                active_refs,
+            ));
+        }
+    }
+
+    if let Some(object) = instance.as_object() {
+        if let Some(required) = schema.get("required").and_then(serde_json::Value::as_array) {
+            for field in required {
+                let field = field.as_str().expect("schema required field is a string");
+                if !object.contains_key(field) {
+                    bad.push(format!("{location}: required field {field:?} is missing"));
+                }
+            }
+        }
+        if let Some(properties) = schema.get("properties").and_then(serde_json::Value::as_object) {
+            for (field, field_schema) in properties {
+                if let Some(value) = object.get(field) {
+                    bad.extend(schema_violations_with_refs(
+                        field_schema,
+                        value,
+                        schema_root,
+                        &format!("{location}.{field}"),
+                        active_refs,
+                    ));
+                }
+            }
+            if schema.get("additionalProperties") == Some(&serde_json::Value::Bool(false)) {
+                for field in object.keys() {
+                    if !properties.contains_key(field) {
+                        bad.push(format!(
+                            "{location}: additionalProperties violation: unknown field {field:?}"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    bad
+}
+
+fn unsupported_schema_keywords(schema: &serde_json::Value, location: &str) -> Vec<String> {
+    const SUPPORTED: &[&str] = &[
+        "$schema",
+        "$id",
+        "$ref",
+        "$defs",
+        "title",
+        "type",
+        "required",
+        "properties",
+        "const",
+        "pattern",
+        "minLength",
+        "minimum",
+        "items",
+        "minItems",
+        "additionalProperties",
+    ];
+    let Some(object) = schema.as_object() else {
+        return Vec::new();
+    };
+    let mut bad = Vec::new();
+    for key in object.keys() {
+        if !SUPPORTED.contains(&key.as_str()) {
+            bad.push(format!("{location}: unsupported schema keyword {key:?}"));
+        }
+    }
+    for container in ["properties", "$defs"] {
+        if let Some(children) = object.get(container).and_then(serde_json::Value::as_object) {
+            for (name, child) in children {
+                bad.extend(unsupported_schema_keywords(
+                    child,
+                    &format!("{location}.{container}.{name}"),
+                ));
+            }
+        }
+    }
+    if let Some(items) = object.get("items") {
+        bad.extend(unsupported_schema_keywords(
+            items,
+            &format!("{location}.items"),
+        ));
+    }
+    bad
+}
+
+fn record_scalar<'a>(record: &'a ControlledRecord, field: &str) -> &'a str {
+    record
+        .scalars
+        .get(field)
+        .map(String::as_str)
+        .unwrap_or("")
+}
+
+fn duplicate_record_ids(records: &[ControlledRecord]) -> BTreeSet<String> {
+    let mut seen = BTreeSet::new();
+    let mut duplicates = BTreeSet::new();
+    for record in records {
+        let id = record_scalar(record, "id").to_string();
+        if !seen.insert(id.clone()) {
+            duplicates.insert(id);
+        }
+    }
+    duplicates
+}
+
+fn controlled_source_violations(root: &Path, owner: &str, source: &str) -> Vec<String> {
+    let (path, anchor) = split_source(source);
+    let Some(resolved) = resolve_confined(root, path, root) else {
+        return vec![format!("{owner}: source {source:?} escapes the repository")];
+    };
+    if !resolved.exists() {
+        return vec![format!("{owner}: source {source:?} does not exist")];
+    }
+    if let Some(anchor) = anchor {
+        if !resolved.is_file() {
+            return vec![format!(
+                "{owner}: source anchor {anchor:?} requires a file, but {path:?} is not one"
+            )];
+        }
+        let contents = std::fs::read_to_string(&resolved)
+            .unwrap_or_else(|e| panic!("read {}: {e}", resolved.display()));
+        if !heading_anchors(&contents).contains(anchor) {
+            return vec![format!(
+                "{owner}: source anchor {anchor:?} does not exist in {path:?}"
+            )];
+        }
+    }
+    Vec::new()
+}
+
+fn unicode_whitespace_tokens(path: &Path) -> usize {
+    std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+        .split_whitespace()
+        .count()
+}
+
+fn module_contract_violations(path: &Path, src: &str) -> Vec<String> {
+    const SECTIONS: [&str; 10] = [
+        "## 1. Use when",
+        "## 2. Prerequisites",
+        "## 3. Current capability",
+        "## 4. Canonical forms",
+        "## 5. Invariants and prohibitions",
+        "## 6. Decision procedure",
+        "## 7. Failure signatures",
+        "## 8. Validation",
+        "## 9. Authority and sources",
+        "## 10. Known unavailable or partial behavior",
+    ];
+    let mut bad = Vec::new();
+    let mut previous = 0;
+    for (index, heading) in SECTIONS.iter().enumerate() {
+        let Some(position) = src.find(heading) else {
+            bad.push(format!("{}: missing {heading:?}", path.display()));
+            continue;
+        };
+        if index > 0 && position <= previous {
+            bad.push(format!(
+                "{}: {heading:?} is out of contract order",
+                path.display()
+            ));
+        }
+        let body_start = position + heading.len();
+        let body_end = SECTIONS
+            .get(index + 1)
+            .and_then(|next| src.find(next))
+            .unwrap_or(src.len());
+        if src[body_start..body_end].trim().is_empty() {
+            bad.push(format!("{}: {heading:?} is empty", path.display()));
+        }
+        previous = position;
+    }
+    bad
+}
+
+fn graph_violations(
+    module_ids: &BTreeSet<String>,
+    packs: &BTreeMap<String, ControlledRecord>,
+) -> Vec<String> {
+    fn visit(
+        id: &str,
+        packs: &BTreeMap<String, ControlledRecord>,
+        visiting: &mut BTreeSet<String>,
+        visited: &mut BTreeSet<String>,
+        bad: &mut Vec<String>,
+    ) {
+        if visited.contains(id) {
+            return;
+        }
+        if !visiting.insert(id.to_string()) {
+            bad.push(format!("circular pack dependency reaches {id:?}"));
+            return;
+        }
+        if let Some(pack) = packs.get(id) {
+            for dependency in pack
+                .arrays
+                .get("dependencies")
+                .into_iter()
+                .flatten()
+            {
+                visit(dependency, packs, visiting, visited, bad);
+            }
+        }
+        visiting.remove(id);
+        visited.insert(id.to_string());
+    }
+
+    let mut bad = Vec::new();
+    for (id, pack) in packs {
+        for module in pack.arrays.get("includes").into_iter().flatten() {
+            if !module_ids.contains(module) {
+                bad.push(format!("{id}: included module {module:?} is missing"));
+            }
+        }
+        for dependency in pack
+            .arrays
+            .get("dependencies")
+            .into_iter()
+            .flatten()
+        {
+            if !packs.contains_key(dependency) {
+                bad.push(format!("{id}: dependency pack {dependency:?} is missing"));
+            }
+        }
+    }
+    let mut visited = BTreeSet::new();
+    for id in packs.keys() {
+        visit(
+            id,
+            packs,
+            &mut BTreeSet::new(),
+            &mut visited,
+            &mut bad,
+        );
+    }
+    bad.sort();
+    bad.dedup();
+    bad
+}
+
+fn transitive_modules(
+    id: &str,
+    packs: &BTreeMap<String, ControlledRecord>,
+    out: &mut BTreeSet<String>,
+) {
+    let pack = &packs[id];
+    for dependency in pack
+        .arrays
+        .get("dependencies")
+        .into_iter()
+        .flatten()
+    {
+        transitive_modules(dependency, packs, out);
+    }
+    out.extend(
+        pack.arrays
+            .get("includes")
+            .into_iter()
+            .flatten()
+            .cloned(),
+    );
+}
+
+#[test]
+fn agent_library_manifest_schema_contract_and_measurements_hold() {
+    let root = repo_root();
+    let agent_root = root.join("library/agents");
+    let schema_dir = agent_root.join("schemas");
+    let schemas: BTreeSet<String> = std::fs::read_dir(&schema_dir)
+        .expect("read agent schema directory")
+        .map(|entry| entry.expect("schema entry").file_name().to_string_lossy().into())
+        .collect();
+    assert_eq!(
+        schemas,
+        BTreeSet::from([
+            "agent-manifest.schema.json".to_string(),
+            "pack.schema.json".to_string(),
+        ]),
+        "schemas exist exactly for the two manifest formats this gate consumes"
+    );
+
+    let manifest_schema: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(schema_dir.join("agent-manifest.schema.json"))
+            .expect("read agent manifest schema"),
+    )
+    .expect("parse agent manifest schema");
+    let pack_schema: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(schema_dir.join("pack.schema.json"))
+            .expect("read pack schema"),
+    )
+    .expect("parse pack schema");
+    let mut unsupported = unsupported_schema_keywords(&manifest_schema, "agent manifest schema");
+    unsupported.extend(unsupported_schema_keywords(&pack_schema, "pack schema"));
+    assert!(
+        unsupported.is_empty(),
+        "shipped schemas declare unsupported constraints:\n{}",
+        unsupported.join("\n")
+    );
+    let manifest_src =
+        std::fs::read_to_string(agent_root.join("manifest.toml")).expect("read agent manifest");
+    let manifest_bad = schema_violations(
+        &manifest_schema,
+        &controlled_manifest_value(&manifest_src),
+        &manifest_schema,
+        "agent manifest",
+    );
+    assert!(
+        manifest_bad.is_empty(),
+        "agent manifest schema violations:\n{}",
+        manifest_bad.join("\n")
+    );
+    let modules = parse_controlled_records(&manifest_src, "module");
+    let manifest_packs = parse_controlled_records(&manifest_src, "pack");
+    assert_eq!(modules.len(), 10, "Wave 2 requires four core and six task modules");
+    assert!(!manifest_packs.is_empty(), "agent manifest has no packs");
+    let duplicate_pack_ids = duplicate_record_ids(&manifest_packs);
+    assert!(
+        duplicate_pack_ids.is_empty(),
+        "agent manifest has duplicate pack IDs: {duplicate_pack_ids:?}"
+    );
+
+    let mut module_ids = BTreeSet::new();
+    let mut module_sizes = BTreeMap::new();
+    let mut bad = Vec::new();
+    for module in &modules {
+        let id = record_scalar(module, "id");
+        let path = record_scalar(module, "path");
+        if !module_ids.insert(id.to_string()) {
+            bad.push(format!("duplicate module id {id:?}"));
+        }
+        let full_path = resolve_controlled_path(&root, path, id);
+        let src = std::fs::read_to_string(&full_path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", full_path.display()));
+        bad.extend(module_contract_violations(&full_path, &src));
+        for source in module.arrays.get("sources").into_iter().flatten() {
+            bad.extend(controlled_source_violations(&root, id, source));
+        }
+        let measured = unicode_whitespace_tokens(&full_path);
+        let declared = record_scalar(module, "measured_tokens")
+            .parse::<usize>()
+            .unwrap_or(0);
+        if measured != declared {
+            bad.push(format!(
+                "{id}: measured_tokens is {declared}, recomputed {measured}"
+            ));
+        }
+        module_sizes.insert(id.to_string(), measured);
+    }
+    assert!(bad.is_empty(), "agent module manifest violations:\n{}", bad.join("\n"));
+
+    let mut packs = BTreeMap::new();
+    for manifest_pack in &manifest_packs {
+        let id = record_scalar(manifest_pack, "id");
+        let path =
+            resolve_controlled_path(&root, record_scalar(manifest_pack, "path"), id);
+        let pack = parse_pack_file(
+            &std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("read {}: {e}", path.display())),
+        );
+        let pack_bad = schema_violations(
+            &pack_schema,
+            &controlled_record_value(&pack),
+            &pack_schema,
+            id,
+        );
+        assert!(
+            pack_bad.is_empty(),
+            "{id}: pack schema violations:\n{}",
+            pack_bad.join("\n")
+        );
+        for source in manifest_pack.arrays.get("sources").into_iter().flatten() {
+            let source_bad = controlled_source_violations(&root, id, source);
+            assert!(
+                source_bad.is_empty(),
+                "{id}: pack source violations:\n{}",
+                source_bad.join("\n")
+            );
+        }
+        assert_eq!(record_scalar(&pack, "id"), id, "{id}: pack-file id drift");
+        for field in ["purpose"] {
+            assert_eq!(
+                record_scalar(&pack, field),
+                record_scalar(manifest_pack, field),
+                "{id}: {field} drift between manifest and pack file"
+            );
+        }
+        for field in ["triggers", "exclusions", "includes", "dependencies"] {
+            assert_eq!(
+                pack.arrays.get(field),
+                manifest_pack.arrays.get(field),
+                "{id}: {field} drift between manifest and pack file"
+            );
+        }
+        assert!(
+            packs.insert(id.to_string(), pack).is_none(),
+            "agent manifest has duplicate pack ID {id:?}"
+        );
+    }
+    let graph_bad = graph_violations(&module_ids, &packs);
+    assert!(graph_bad.is_empty(), "agent pack graph violations:\n{}", graph_bad.join("\n"));
+
+    for manifest_pack in &manifest_packs {
+        let id = record_scalar(manifest_pack, "id");
+        let mut includes = BTreeSet::new();
+        transitive_modules(id, &packs, &mut includes);
+        let measured: usize = includes.iter().map(|module| module_sizes[module]).sum();
+        let declared = record_scalar(manifest_pack, "measured_tokens")
+            .parse::<usize>()
+            .unwrap_or(0);
+        assert_eq!(
+            measured, declared,
+            "{id}: transitive unique module measurement drift"
+        );
+    }
+}
+
+#[test]
+fn agent_pack_integrity_rejects_missing_modules_and_cycles() {
+    let module_ids = BTreeSet::from(["core/read-ken".to_string()]);
+    let clean = parse_pack_file(
+        "id = \"clean\"\nincludes = [\"core/read-ken\"]\ndependencies = []\n",
+    );
+    let mut packs = BTreeMap::from([("clean".to_string(), clean.clone())]);
+    assert!(graph_violations(&module_ids, &packs).is_empty());
+
+    packs
+        .get_mut("clean")
+        .unwrap()
+        .arrays
+        .insert("includes".to_string(), vec!["core/missing".to_string()]);
+    let missing = graph_violations(&module_ids, &packs);
+    assert!(
+        missing
+            .iter()
+            .any(|message| message.contains("included module \"core/missing\" is missing")),
+        "planted missing module was not rejected at the named graph detector: {missing:?}"
+    );
+
+    let a = parse_pack_file("id = \"a\"\nincludes = []\ndependencies = [\"b\"]\n");
+    let b = parse_pack_file("id = \"b\"\nincludes = []\ndependencies = [\"a\"]\n");
+    let cycle = graph_violations(
+        &BTreeSet::new(),
+        &BTreeMap::from([("a".to_string(), a), ("b".to_string(), b)]),
+    );
+    assert!(
+        cycle
+            .iter()
+            .any(|message| message.contains("circular pack dependency")),
+        "planted circular dependency was not rejected at the named graph detector: {cycle:?}"
+    );
+}
+
+// Durable invariant: manifest key spaces stay injective as the corpus grows.
+#[test]
+fn agent_key_space_detectors_reject_duplicate_pack_and_task_ids() {
+    let duplicate_packs = parse_controlled_records(
+        "[[pack]]\nid = \"write-pure\"\n[[pack]]\nid = \"write-pure\"\n",
+        "pack",
+    );
+    assert_eq!(
+        duplicate_record_ids(&duplicate_packs),
+        BTreeSet::from(["write-pure".to_string()]),
+        "planted duplicate pack ID was not rejected at the named key-space detector"
+    );
+
+    let duplicate_tasks = parse_controlled_records(
+        "[[task]]\nid = \"write-pure\"\n[[task]]\nid = \"write-pure\"\n",
+        "task",
+    );
+    assert_eq!(
+        duplicate_record_ids(&duplicate_tasks),
+        BTreeSet::from(["write-pure".to_string()]),
+        "planted duplicate task ID was not rejected at the named key-space detector"
+    );
+}
+
+// Durable invariant: every constraint class declared by the shipped schemas
+// is executable, not decorative metadata.
+#[test]
+fn agent_schema_contract_rejects_each_declared_constraint_class() {
+    let root = repo_root();
+    let schema_dir = root.join("library/agents/schemas");
+    let pack_schema: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(schema_dir.join("pack.schema.json"))
+            .expect("read pack schema"),
+    )
+    .expect("parse pack schema");
+    let clean = "schema_version = 1\n\
+                 id = \"write-pure\"\n\
+                 purpose = \"Write Ken\"\n\
+                 triggers = [\"write\"]\n\
+                 exclusions = [\"effects\"]\n\
+                 dependencies = []\n\
+                 includes = [\"core/write-ken\"]\n";
+    assert!(
+        schema_violations(
+            &pack_schema,
+            &controlled_record_value(&parse_pack_file(clean)),
+            &pack_schema,
+            "clean pack",
+        )
+        .is_empty(),
+        "positive-control pack does not satisfy the shipped schema"
+    );
+
+    let mutations = [
+        (
+            "const",
+            clean.replace("schema_version = 1", "schema_version = 999"),
+        ),
+        (
+            "type",
+            clean.replace("schema_version = 1", "schema_version = \"1\""),
+        ),
+        ("pattern", clean.replace("id = \"write-pure\"", "id = \"WritePure\"")),
+        ("minItems", clean.replace("triggers = [\"write\"]", "triggers = []")),
+        ("minLength", clean.replace("purpose = \"Write Ken\"", "purpose = \"\"")),
+        (
+            "additionalProperties",
+            format!("{clean}unknown_field = \"must reject\"\n"),
+        ),
+    ];
+    for (constraint, source) in mutations {
+        let violations = schema_violations(
+            &pack_schema,
+            &controlled_record_value(&parse_pack_file(&source)),
+            &pack_schema,
+            constraint,
+        );
+        assert!(
+            violations.iter().any(|message| message.contains(constraint)),
+            "planted {constraint} violation did not fail at that constraint: {violations:?}"
+        );
+    }
+
+    let manifest_schema: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(schema_dir.join("agent-manifest.schema.json"))
+            .expect("read agent manifest schema"),
+    )
+    .expect("parse agent manifest schema");
+    let module = serde_json::json!({
+        "id": "core/write-ken",
+        "path": "library/agents/core/write-ken.md",
+        "purpose": "Write Ken",
+        "triggers": ["write"],
+        "prerequisites": [],
+        "sources": ["spec/30-surface/33-declarations.md"],
+        "revision": "a9860e9c1617e98799ac408fad8ef1e9c7085443",
+        "validation": ["schema"],
+        "measured_tokens": 0
+    });
+    let minimum = schema_violations(
+        &manifest_schema["$defs"]["module"],
+        &module,
+        &manifest_schema,
+        "module minimum",
+    );
+    assert!(
+        minimum.iter().any(|message| message.contains("minimum")),
+        "planted minimum violation did not fail at that constraint: {minimum:?}"
+    );
+
+    let required_source = clean.replace("purpose = \"Write Ken\"\n", "");
+    let required = schema_violations(
+        &pack_schema,
+        &controlled_record_value(&parse_pack_file(&required_source)),
+        &pack_schema,
+        "required",
+    );
+    assert!(
+        required
+            .iter()
+            .any(|message| message.contains("required field \"purpose\"")),
+        "planted required violation did not fail at that constraint: {required:?}"
+    );
+
+    let clean_pack = controlled_record_value(&parse_pack_file(clean));
+    let mut items_schema = pack_schema.clone();
+    items_schema["properties"]["triggers"]["items"]["const"] =
+        serde_json::json!("different trigger");
+    let items = schema_violations(
+        &items_schema,
+        &clean_pack,
+        &items_schema,
+        "items traversal",
+    );
+    assert!(
+        items.iter().any(|message| {
+            message.contains("items traversal.triggers[0]") && message.contains("const")
+        }),
+        "planted items traversal violation did not reach the array member: {items:?}"
+    );
+
+    let mut properties_schema = pack_schema.clone();
+    properties_schema["properties"]["purpose"]["const"] =
+        serde_json::json!("different purpose");
+    let properties = schema_violations(
+        &properties_schema,
+        &clean_pack,
+        &properties_schema,
+        "properties traversal",
+    );
+    assert!(
+        properties.iter().any(|message| {
+            message.contains("properties traversal.purpose") && message.contains("const")
+        }),
+        "planted properties traversal violation did not reach the field: {properties:?}"
+    );
+
+    let mut valid_module = module.clone();
+    valid_module["measured_tokens"] = serde_json::json!(1);
+    let mut dangling_ref_schema = manifest_schema.clone();
+    dangling_ref_schema["properties"]["module"]["items"]["$ref"] =
+        serde_json::json!("#/$defs/missing-module");
+    let dangling_ref = schema_violations(
+        &dangling_ref_schema["properties"]["module"],
+        &serde_json::json!([valid_module]),
+        &dangling_ref_schema,
+        "dangling $ref",
+    );
+    assert!(
+        dangling_ref.iter().any(|message| {
+            message.contains("unresolved local schema reference")
+                && message.contains("missing-module")
+        }),
+        "planted dangling $ref did not fail at the reference artifact: {dangling_ref:?}"
+    );
+
+    let escaped_pointer_schema = serde_json::json!({
+        "$ref": "#/$defs/slash~1name~0record",
+        "$defs": {
+            "slash/name~record": {"type": "string"}
+        }
+    });
+    assert!(
+        schema_violations(
+            &escaped_pointer_schema,
+            &serde_json::json!("resolved"),
+            &escaped_pointer_schema,
+            "escaped JSON pointer",
+        )
+        .is_empty(),
+        "RFC 6901 escapes in a local $ref were not decoded"
+    );
+
+    let sibling_schema = serde_json::json!({
+        "$ref": "#/$defs/string",
+        "minLength": 2,
+        "$defs": {
+            "string": {"type": "string"}
+        }
+    });
+    let sibling = schema_violations(
+        &sibling_schema,
+        &serde_json::json!("x"),
+        &sibling_schema,
+        "$ref sibling",
+    );
+    assert!(
+        sibling.iter().any(|message| message.contains("minLength")),
+        "supported sibling constraint beside $ref was skipped: {sibling:?}"
+    );
+
+    let cyclic_schema = serde_json::json!({
+        "$ref": "#/$defs/loop",
+        "$defs": {
+            "loop": {"$ref": "#/$defs/loop"}
+        }
+    });
+    let cycle = schema_violations(
+        &cyclic_schema,
+        &serde_json::json!("anything"),
+        &cyclic_schema,
+        "cyclic $ref",
+    );
+    assert!(
+        cycle
+            .iter()
+            .any(|message| message.contains("schema reference cycle")),
+        "planted recursive $ref did not fail at the cycle detector: {cycle:?}"
+    );
+
+    for (reference, expected) in [
+        ("https://example.invalid/schema", "external schema reference"),
+        ("#/$defs/non-schema", "non-object schema"),
+    ] {
+        let bad_reference_schema = serde_json::json!({
+            "$ref": reference,
+            "$defs": {
+                "non-schema": "not a schema"
+            }
+        });
+        let violations = schema_violations(
+            &bad_reference_schema,
+            &serde_json::json!("anything"),
+            &bad_reference_schema,
+            "unsupported $ref",
+        );
+        assert!(
+            violations.iter().any(|message| message.contains(expected)),
+            "planted {expected} did not fail at the reference artifact: {violations:?}"
+        );
+    }
+
+    let mut future_schema = pack_schema.clone();
+    future_schema["futureConstraint"] = serde_json::json!(true);
+    let future = unsupported_schema_keywords(&future_schema, "future keyword");
+    assert!(
+        future
+            .iter()
+            .any(|message| message.contains("futureConstraint")),
+        "planted unsupported schema keyword did not fail closed: {future:?}"
+    );
+}
+
+// Durable invariant: controlled data can name only repository-confined paths.
+#[test]
+fn agent_controlled_paths_fail_loudly_on_escape() {
+    let root = repo_root();
+    for raw in ["../outside-repository", "/tmp/outside-repository"] {
+        let result = std::panic::catch_unwind(|| {
+            resolve_controlled_path(&root, raw, "planted controlled-path violation")
+        });
+        assert!(
+            result.is_err(),
+            "planted controlled path {raw:?} was not rejected loudly"
+        );
+    }
+}
+
+#[test]
+fn agent_evaluation_tasks_and_packs_cover_each_other_exactly() {
+    let root = repo_root();
+    let agent_root = root.join("library/agents");
+    let manifest =
+        std::fs::read_to_string(agent_root.join("manifest.toml")).expect("read agent manifest");
+    let declared_packs: BTreeSet<String> = parse_controlled_records(&manifest, "pack")
+        .iter()
+        .map(|pack| record_scalar(pack, "id").to_string())
+        .collect();
+    let tasks_src = std::fs::read_to_string(agent_root.join("evaluations/tasks.toml"))
+        .expect("read evaluation tasks");
+    let tasks = parse_controlled_records(&tasks_src, "task");
+    assert_eq!(tasks.len(), 7, "the Wave 2 evaluation corpus must have seven tasks");
+    let duplicate_task_ids = duplicate_record_ids(&tasks);
+    assert!(
+        duplicate_task_ids.is_empty(),
+        "evaluation corpus has duplicate task IDs: {duplicate_task_ids:?}"
+    );
+    let selected_packs: BTreeSet<String> = tasks
+        .iter()
+        .map(|task| {
+            let pack = record_scalar(task, "pack");
+            assert!(!pack.is_empty(), "{} selects no pack", record_scalar(task, "id"));
+            let fixture = record_scalar(task, "fixture");
+            let fixture_path =
+                resolve_controlled_path(&root, fixture, record_scalar(task, "id"));
+            assert!(
+                fixture_path.is_file(),
+                "{} fixture does not exist: {fixture}",
+                record_scalar(task, "id")
+            );
+            pack.to_string()
+        })
+        .collect();
+    assert_eq!(
+        selected_packs, declared_packs,
+        "each task must select exactly one pack and no pack may be unused"
+    );
+    assert!(
+        declared_packs.iter().all(|pack| !pack.contains("refus")),
+        "refusal is point 10's cross-cutting property, not its own pack"
+    );
+    let refusal = tasks
+        .iter()
+        .find(|task| record_scalar(task, "id") == "refuse-unsupported")
+        .expect("missing refusal evaluation task");
+    assert!(
+        !refusal.arrays.get("must_refuse").unwrap_or(&Vec::new()).is_empty(),
+        "refusal task must name prohibited inventions"
+    );
+
+    let results_src =
+        std::fs::read_to_string(agent_root.join("evaluations/results-2026-07-24.toml"))
+            .expect("read cold-context evaluation results");
+    let runs = parse_controlled_records(&results_src, "run");
+    assert!(
+        runs.len() >= tasks.len(),
+        "evaluation results must record at least one run per task"
+    );
+    let task_ids: BTreeSet<String> = tasks
+        .iter()
+        .map(|task| record_scalar(task, "id").to_string())
+        .collect();
+    assert_eq!(
+        task_ids.len(),
+        tasks.len(),
+        "evaluation task ID cardinality must equal task record cardinality"
+    );
+    let mut latest = BTreeMap::new();
+    let mut observed_invention_failure = false;
+    for run in &runs {
+        let task_id = record_scalar(run, "task_id");
+        assert!(task_ids.contains(task_id), "result names unknown task {task_id:?}");
+        for field in [
+            "run_id",
+            "variant",
+            "seat_id",
+            "cold_evidence",
+            "pack",
+            "correctness",
+            "cited_authority",
+            "validation",
+        ] {
+            assert!(
+                !record_scalar(run, field).is_empty(),
+                "{task_id}: result omits axis/evidence field {field:?}"
+            );
+        }
+        for field in [
+            "correctness_evidence",
+            "unnecessary_loads",
+            "inventions",
+            "authority_paths",
+            "exact_loads",
+        ] {
+            assert!(
+                run.arrays.contains_key(field),
+                "{task_id}: result omits array axis/evidence field {field:?}"
+            );
+        }
+        if !run.arrays["inventions"].is_empty() {
+            observed_invention_failure = true;
+            assert_ne!(
+                record_scalar(run, "correctness"),
+                "correct",
+                "{task_id}: a run with an invention cannot be scored correct"
+            );
+        }
+        latest.insert(task_id.to_string(), run);
+    }
+    assert!(
+        observed_invention_failure,
+        "results must preserve the initial invented-capability failure, not smooth it into a pass"
+    );
+    assert_eq!(
+        latest.keys().cloned().collect::<BTreeSet<_>>(),
+        task_ids,
+        "results do not close every evaluation task"
+    );
+    for (task_id, run) in latest {
+        assert_eq!(
+            record_scalar(run, "correctness"),
+            "correct",
+            "{task_id}: latest cold result is not correct"
+        );
+        assert!(
+            run.arrays["inventions"].is_empty(),
+            "{task_id}: latest cold result invents syntax or capability"
+        );
+        assert_eq!(
+            record_scalar(run, "cited_authority"),
+            "complete",
+            "{task_id}: latest cold result does not cite complete authority"
+        );
+    }
+}
+
+fn has_checked_examples(src: &str) -> bool {
+    src.lines().any(|line| {
+        matches!(
+            line.trim(),
+            "```ken example" | "```ken reject"
+        )
+    })
+}
+
+fn applies_to_checked_example_records(entry: &DocEntry) -> bool {
+    let root = repo_root();
+    let path = resolve_controlled_path(&root, &entry.path, "checked-example applicability");
+    let src = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    has_checked_examples(&src)
+}
+
+fn run_checked_markdown(path: &Path, src: &str, index: usize) -> std::process::Output {
+    // Agent modules are ordinary `.md` documents, while `ken check` selects
+    // literate extraction by the `.ken.md` suffix. Preserve the complete
+    // source bytes in a temporary literate file so every checked fence is
+    // exercised through the real extractor without changing the
+    // product-facing document name.
+    let probe = std::env::temp_dir().join(format!(
+        "doc-w2-checked-examples-{}-{index}.ken.md",
+        std::process::id()
+    ));
+    std::fs::write(&probe, src).unwrap_or_else(|e| panic!("write {}: {e}", probe.display()));
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_ken"))
+        .arg("check")
+        .arg(&probe)
+        .output()
+        .unwrap_or_else(|e| panic!("run ken check {}: {e}", path.display()));
+    let _ = std::fs::remove_file(&probe);
+    output
+}
+
+fn check_checked_examples() {
+    let root = repo_root();
+    for (index, entry) in load_manifest()
+        .into_iter()
+        .filter(|entry| applies_to_checked_example_records(entry))
+        .enumerate()
+    {
+        let path =
+            resolve_controlled_path(&root, &entry.path, "checked-example execution");
+        let src = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let output = run_checked_markdown(&path, &src, index);
+        assert!(
+            output.status.success(),
+            "checked fences failed in {}:\nstdout:\n{}\nstderr:\n{}",
+            path.display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+#[test]
+fn checked_examples_detector_rejects_invalid_example_and_stale_reject() {
+    let invalid_example = "# Fixture\n\n```ken example\nconst broken : Bool = Missing\n```\n";
+    let invalid = run_checked_markdown(Path::new("invalid-example.md"), invalid_example, 10_001);
+    assert!(
+        !invalid.status.success()
+            && String::from_utf8_lossy(&invalid.stderr)
+                .contains("a 'ken example' block failed to elaborate"),
+        "invalid `ken example` did not fail at the checked-example artifact: {}",
+        String::from_utf8_lossy(&invalid.stderr)
+    );
+
+    let stale_reject = "# Fixture\n\n```ken reject\nconst valid : Bool = True\n```\n";
+    let stale = run_checked_markdown(Path::new("stale-reject.md"), stale_reject, 10_002);
+    assert!(
+        !stale.status.success()
+            && String::from_utf8_lossy(&stale.stderr)
+                .contains("a 'ken reject' block unexpectedly elaborated"),
+        "stale `ken reject` did not fail at the checked-example artifact: {}",
+        String::from_utf8_lossy(&stale.stderr)
     );
 }

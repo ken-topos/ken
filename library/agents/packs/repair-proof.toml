@@ -1,0 +1,9 @@
+schema_version = 1
+id = "repair-proof"
+purpose = "Repair a proof obligation without weakening it or adding hidden trust."
+triggers = ["repair a proof", "choose Proved or Refl", "close a checked law"]
+exclusions = ["change the proposition", "add an assumption", "replace proof with testing"]
+dependencies = ["write-pure"]
+includes = [
+  "tasks/prove-or-repair",
+]

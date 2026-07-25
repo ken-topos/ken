@@ -1,0 +1,9 @@
+schema_version = 1
+id = "author-package"
+purpose = "Find, use, or author a checked literate catalog package by task."
+triggers = ["find a package by task", "author a catalog package", "revise a literate package entry"]
+exclusions = ["generated package card", "ordinary application", "speculative package"]
+dependencies = ["write-pure"]
+includes = [
+  "tasks/author-package",
+]
