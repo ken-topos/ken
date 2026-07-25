@@ -22,8 +22,26 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-25 ~23:35Z · `origin/main` = **`fdda953f`**
-### **LANE 2 IS PUBLISHING. LANE 1 IS RECUT — the predicate was NAMED.**
+## ▶ LIVE — 2026-07-25 ~23:50Z · `origin/main` = **`c72be0b0`**
+### **✅ KW-THEOREM LANDED. LANE 1 RECUT — predicate NAMED, frame folded.**
+
+> ### ✅ OPERATOR DIRECTIVE 2026-07-25 — `lemma` retired from the language
+> entirely; permitted in comments and documentation. **VERIFIED ALREADY
+> SATISFIED on landed `main`, by POSITIVE CONTROL not by absence:**
+> `Lexer::lex("theorem lemma")` → `Token::Ident("lemma")` (ordinary identifier,
+> **not** a keyword); a `lemma` declaration head is **rejected**
+> (`RETIRED_SPELLING_SOURCE`); normative `spec/30-surface/31-lexical.md` and
+> `32-grammar.md` have **zero** occurrences; a corpus-wide source oracle permits
+> prose and forbids Ken source, probed against
+> `LEMMA lemmas lemma's lemma_identifier` so it cannot false-positive.
+> ⛔ *"Absent from the lexer"* alone would have been a **negative check that
+> passes for any reason** — the positive control is the evidence.
+> ⚠ **One deliberate residue:** `provide_lemma` remains a **normative protocol
+> enum value** (`spec/20-verification/25-protocol.md`,
+> `SuggestedAction::ProvideLemma`) — an **API token**, not a language construct;
+> the mathematical concept *lemma* is not retired. Recommended left alone;
+> **no WP opened.** ~350 other occurrences are ordinary prose, which the
+> directive permits.
 
 > ### ⛔⛔ FIRST, TWO THINGS THAT CHANGE HOW YOU OPERATE THIS SESSION
 >
@@ -71,8 +89,33 @@ are **promoted into scope** as the predicate's uncovered faces. ⛔ **It does NO
 stop the ring** (Architect said so explicitly) and **does NOT choose a
 mechanism** — that is the Architect's call, not the frame's.
 
-⚠ **Still owed on it:** route the recut to the Architect for review before it
-binds, and get a fresh QA `AC`→control map covering `AC-10`.
+> ### ⛔ ARCHITECT **BLOCKED** the first recut — folded at `cfe05e37`
+>
+> `wp/steward-b2v-recut` = `d6026a5c` (**blocked, preserved, NOT force-pushed**)
+> → `wp/steward-b2v-recut-2` = **`cfe05e37`** (folded, rebased on `c72be0b0`).
+> runtime-leader APPROVED; Architect blocked on three clauses, all correct:
+>
+> 1. ⭐ **`AC-10`'s disjunction was on the WRONG DOMAIN — vacuously
+>    satisfiable.** I wrote *"for every admitted value, either round trip or fail
+>    closed"*, which puts the failure arm **inside the admitted subset**, makes
+>    admission non-semantic, and **goes green on an implementation that rejects
+>    every represented value.** Now: classify first into *represented immediate /
+>    represented handle / protocol-only / fail-closed forbidden*; behavior is
+>    **entailed by the class**; **no represented value may take the failure arm.**
+>    ⛔ **The lesson: the day before I OVER-strengthened a predicate; steering
+>    away from that, I UNDER-constrained. Both are the same error — the predicate
+>    written on the wrong domain. Fix the domain, not the strength.**
+> 2. **"One control total over every value" is not an executable oracle** — the
+>    domains are infinite, so it would have become *a finite case sweep wearing a
+>    universal name*, which reads as total and is worse than an honest sweep.
+>    Totality is now proved **structurally**. **One property / one `AC` — not one
+>    test function.**
+> 3. **RETAIN froze the disposition wholesale while the same recut allowed
+>    narrowing** — self-contradictory. Now retains the sealed no-wildcard
+>    *mechanism* plus classifications outside `AC-10`'s implicated domain.
+>
+> ⚠ **Still owed:** Architect re-read of `cfe05e37`, then a fresh QA
+> `AC`→control map covering `AC-10`.
 
 ⛔ **DEAD, NEVER PUBLISHABLE:** `78a57d90` (`dec_58gv9rmjqy49g` rejected),
 `657f60a0` (`dec_1wpa1y2b3g7cn` rejected), and now `ddff2fae`. All stay on origin
@@ -103,7 +146,19 @@ hard-stop #11.** The armed condition is a *production* path outside the fence.
 Do not fire the trigger on it; equally, do not let it become the precedent that
 lets production code sit outside.
 
-### ▶ LANE 2 — `KW-THEOREM` — ▶ **PUBLISHING** on exact `305dc6d5`, PR #977
+### ▶ LANE 2 — `KW-THEOREM` — ✅ **MERGED** at `c72be0b0`, PR #977
+
+> ✅ **LANDED and VERIFIED BY CONTENT** — the publisher exits 0 even on failure,
+> so its own post-merge claim is not the evidence. Landed tree **`6f7cf51c`**,
+> byte-identical to the tree asserted **before** publishing; all six changed
+> files carry the candidate's exact blobs, ledger included. Tracker flipped to
+> `merged`, **body-text tail corrected** (it still read *"Now `ready`"*),
+> `gen-progress.sh` re-run.
+> ⚠ **STILL OWED: retros** — language ring, doc ring, spec enclave. CV's is
+> posted; doc-leader's is in flight. **Chase before any compaction.**
+> ⚠ **I buried this landing mid-message and two leaders truncated before
+> reaching it**, then sat waiting for a report I had already sent. **A gating
+> fact must LEAD the message.** Re-sent leading with it; both picked it up.
 
 | | |
 |---|---|
