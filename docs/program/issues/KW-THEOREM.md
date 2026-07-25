@@ -2,19 +2,57 @@
 id: KW-THEOREM
 title: "rename the surface keyword `lemma` to `theorem`"
 status: ready
-owner: spec
+owner: language
 size: M
 gate: none
 depends_on: []
 blocks: []
 github: null
-origin: operator directive 2026-07-22
+origin: operator directive 2026-07-22. RELEASED 2026-07-25 as the fleet's SECOND implementation lane on the operator's directive to open one (OpenAI capacity reset to 100%). Owner moved spec -> language: the mechanical core is crates/ken-elaborator, so the Language ring implements; the spec enclave / conformance-validator retains the review vote on the normative grammar (D2) and the ADR (D6).
 ---
 
-**Operator directive (2026-07-22):** rename the keyword `lemma` to `theorem`
-across the elaborator, catalog, library, spec, and docs.
+> ## ▶ THE FRAME IS WRITTEN — read it, not this file
+>
+> `docs/program/wp/KW-THEOREM-surface-keyword-rename.md`
+>
+> This file is the triage that produced the frame. **The frame carries the
+> deliverables, the acceptance criteria, the settled inputs, and the
+> do-not-reopen guardrails.**
+>
+> ### ✅ THE "HOLD UNTIL FNSPLIT CLOSE" PREMISE WAS UNMEASURED, AND IS FALSE
+>
+> This node was held on the Steward's assumption that a corpus-wide surface
+> rename would contend with the live FNSPLIT lane. **Measured at `aecdb001`, it
+> does not:** all 44 crate files carrying `lemma` are in `ken-elaborator` and
+> **none is in `ken-runtime`**, and the only WP frames it touches (`PX8-T`,
+> `PX8-F`) are `draft`. The hold is lifted.
+>
+> ### ⛔ IT DOES CONTEND — WITH THE DOC TRACK, ON THE LEDGER AXIS
+>
+> `library/SOURCE-ATTESTATIONS` carries **17 rows for `catalog/` sources**, and
+> this WP rewrites **698 keyword-leading declarations** across 23 catalog files
+> — so every attested catalog source changes hash. The doc track is the fleet's
+> one standing concurrency exception and it lives in `library/` + `agent/`.
+> **The doc track is PARKED for this WP's duration. Two lanes, not three.**
 
-## Measured footprint — 203 files, ~1,515 lines
+## ⚠ The footprint table below is SUPERSEDED — two counts were wrong
+
+Re-measured at `aecdb001` while framing. **Both corrections widen the work:**
+
+- **`library/` is 10 files, not 3** — and three of them are not prose:
+  `library/manifest.toml`, `library/agents/evaluations/results-2026-07-24.toml`,
+  and `library/agents/evaluations/fixtures/proof-terminals.txt`. **An
+  evaluation-results file and a fixture are oracles, not documentation.**
+- **`conformance/` includes a raw `.ken` source** —
+  `conformance/challenge/C6-lawful-ord-vs-stub/sound-ord-proved.ken` — not only
+  literate `.ken.md`. A glob written for `*.ken.md` misses it. That is a second
+  oracle class, and the frame's `AC-3` requires one glob definition covering
+  every Ken source root with a planted-declaration positive control per class.
+
+Also re-counted: `catalog/` keyword-leading declarations are **698**, not 697,
+with 36 further prose occurrences; `crates/` is **44** files, not 48.
+
+## Measured footprint — 203 files (ORIGINAL TRIAGE; see corrections above)
 
 | area | files | lines | character |
 |---|---|---|---|
@@ -170,7 +208,36 @@ authority (D1), so a catalog edit ahead of it would be unanchored.
 5. **`docs/` + `agent/`** — prose; **largest file count, lowest risk**, and the
    place where the leave-it-in-English class dominates.
 
-## 📍 QUEUE POSITION — ✅ NEXT AFTER `RT-NATIVE-FNSPLIT` CLOSES (operator, 2026-07-25)
+## 📍 QUEUE POSITION — ⚠ TWO OPERATOR DIRECTIVES, SAME DAY, IN TENSION
+
+> ### ⚠ UNRESOLVED AS OF 2026-07-25 — the Steward must not kick on its own read
+>
+> **Directive A (earlier, 2026-07-25):** *"after RT-NATIVE-FNSPLIT closes, run
+> kw-theorem"* — recorded below, with an explicit **⛔ do not release it early
+> to fill idle enclave time.**
+>
+> **Directive B (later, 2026-07-25):** *"add a second implementation team
+> lane"*, followed by *"KW-THEOREM?"* — the operator naming this node as that
+> lane, after an OpenAI capacity reset to 100%.
+>
+> **The Steward's read, offered and NOT acted on:** B supersedes A's *letter*
+> while preserving A's *purpose*. A's stated rationale was that FNSPLIT is the
+> standing priority and KW-THEOREM must not displace it. A second lane does not
+> displace FNSPLIT — Runtime is working `RT-FNSPLIT-B2V` concurrently and is
+> untouched by this WP (measured: zero shared files).
+>
+> ⛔ **But A is same-day, explicit, and says "do not release early" in terms.
+> The Steward does not get to retire that on inference.** The frame is written
+> and the contention is measured so the decision is cheap to make — but the
+> §2c gate compacts three seats, so **no kickoff until the operator confirms B
+> supersedes A.**
+>
+> ⚠ **One thing B changes that A did not contemplate:** A routed this to the
+> **spec enclave**. As a build lane it routes to the **Language ring** instead
+> (the mechanical core is `crates/ken-elaborator`), with the spec enclave
+> retaining the review vote on `D2`/`D6`. `owner:` has been moved accordingly.
+
+### (superseded framing) NEXT AFTER `RT-NATIVE-FNSPLIT` CLOSES (operator, 2026-07-25)
 
 > **Operator directive, 2026-07-25: *"after RT-NATIVE-FNSPLIT closes, run
 > kw-theorem."*** This **supersedes the 2026-07-22 "LAST" placement below.
