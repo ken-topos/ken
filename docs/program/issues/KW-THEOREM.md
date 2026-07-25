@@ -52,7 +52,7 @@ Re-measured at `aecdb001` while framing. **Both corrections widen the work:**
 Also re-counted: `catalog/` keyword-leading declarations are **698**, not 697,
 with 36 further prose occurrences; `crates/` is **44** files, not 48.
 
-## Measured footprint — 203 files, ~1,515 lines (ORIGINAL TRIAGE, see corrections above)
+## Measured footprint — 203 files (ORIGINAL TRIAGE; see corrections above)
 
 | area | files | lines | character |
 |---|---|---|---|
@@ -208,7 +208,36 @@ authority (D1), so a catalog edit ahead of it would be unanchored.
 5. **`docs/` + `agent/`** — prose; **largest file count, lowest risk**, and the
    place where the leave-it-in-English class dominates.
 
-## 📍 QUEUE POSITION — ✅ NEXT AFTER `RT-NATIVE-FNSPLIT` CLOSES (operator, 2026-07-25)
+## 📍 QUEUE POSITION — ⚠ TWO OPERATOR DIRECTIVES, SAME DAY, IN TENSION
+
+> ### ⚠ UNRESOLVED AS OF 2026-07-25 — the Steward must not kick on its own read
+>
+> **Directive A (earlier, 2026-07-25):** *"after RT-NATIVE-FNSPLIT closes, run
+> kw-theorem"* — recorded below, with an explicit **⛔ do not release it early
+> to fill idle enclave time.**
+>
+> **Directive B (later, 2026-07-25):** *"add a second implementation team
+> lane"*, followed by *"KW-THEOREM?"* — the operator naming this node as that
+> lane, after an OpenAI capacity reset to 100%.
+>
+> **The Steward's read, offered and NOT acted on:** B supersedes A's *letter*
+> while preserving A's *purpose*. A's stated rationale was that FNSPLIT is the
+> standing priority and KW-THEOREM must not displace it. A second lane does not
+> displace FNSPLIT — Runtime is working `RT-FNSPLIT-B2V` concurrently and is
+> untouched by this WP (measured: zero shared files).
+>
+> ⛔ **But A is same-day, explicit, and says "do not release early" in terms.
+> The Steward does not get to retire that on inference.** The frame is written
+> and the contention is measured so the decision is cheap to make — but the
+> §2c gate compacts three seats, so **no kickoff until the operator confirms B
+> supersedes A.**
+>
+> ⚠ **One thing B changes that A did not contemplate:** A routed this to the
+> **spec enclave**. As a build lane it routes to the **Language ring** instead
+> (the mechanical core is `crates/ken-elaborator`), with the spec enclave
+> retaining the review vote on `D2`/`D6`. `owner:` has been moved accordingly.
+
+### (superseded framing) NEXT AFTER `RT-NATIVE-FNSPLIT` CLOSES (operator, 2026-07-25)
 
 > **Operator directive, 2026-07-25: *"after RT-NATIVE-FNSPLIT closes, run
 > kw-theorem."*** This **supersedes the 2026-07-22 "LAST" placement below.

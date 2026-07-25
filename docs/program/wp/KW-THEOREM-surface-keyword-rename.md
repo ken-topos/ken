@@ -65,8 +65,15 @@ git to catch it.
 
 ⚠ **Two triage corrections found while framing, both of which widen the work:**
 
-1. **`library/` is 10 files, not 3.** The extra ones are not prose: `library/manifest.toml`, `library/agents/evaluations/results-2026-07-24.toml`, and `library/agents/evaluations/fixtures/proof-terminals.txt`. **An evaluation-results file and a fixture are oracles, not documentation** — changing them changes what a check compares against.
-2. **`conformance/` includes a raw `.ken` source**, `conformance/challenge/C6-lawful-ord-vs-stub/sound-ord-proved.ken`, not only literate `.ken.md`. A glob written for `*.ken.md` misses it.
+1. **`library/` is 10 files, not 3.** Three of them are not prose:
+   `library/manifest.toml`,
+   `library/agents/evaluations/results-2026-07-24.toml`, and
+   `library/agents/evaluations/fixtures/proof-terminals.txt`. **An
+   evaluation-results file and a fixture are oracles, not documentation** —
+   changing them changes what a check compares against.
+2. **`conformance/` includes a raw `.ken` source**,
+   `conformance/challenge/C6-lawful-ord-vs-stub/sound-ord-proved.ken`, not only
+   literate `.ken.md`. A glob written for `*.ken.md` misses it.
 
 ⇒ **Do not trust this table either.** It is a measurement of `aecdb001`; re-derive
 at pickup and **escalate a discrepancy rather than building around it.**
