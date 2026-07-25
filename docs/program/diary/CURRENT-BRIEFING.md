@@ -75,9 +75,10 @@ lets production code sit outside.
 
 | | |
 |---|---|
-| branch on origin | `wp/KW-THEOREM-surface-keyword-rename` = `963d36ac` (**dead**) |
-| base | `c2c1ba9f` · 124 files, `+1613/−1234` |
-| Decision `dec_286hqjak5kjq8` | **`resolved`** — ⛔ **and bound to the DEAD SHA** |
+| branch on origin | `wp/KW-THEOREM-surface-keyword-rename` = **`305dc6d5`** |
+| base | `c2c1ba9f` · 124 files, `+1613/−1234` + a 6-file `+16/−8` repair |
+| Decision `dec_286hqjak5kjq8` | ⛔ **VOID — resolved, but bound to DEAD `963d36ac`** |
+| state | awaiting fresh exact-SHA review, then a **fresh** Decision |
 
 ⛔⛔ **THIS IS THE TRAP ON THIS BOARD: a RESOLVED Decision on a RED candidate.**
 `resolved` + non-null `resolved_by` is necessary, **never sufficient**. PR #977
