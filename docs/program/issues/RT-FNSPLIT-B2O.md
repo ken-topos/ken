@@ -1,22 +1,43 @@
 ---
 id: RT-FNSPLIT-B2O
 title: "static body ownership — a total, validated occurrence → PredeclaredFunction mapping in the semantic plane, inert"
-status: active
+status: merged
 owner: runtime
 size: M
 gate: none
 depends_on: [RT-FNSPLIT-B2A-S]
 blocks: [RT-FNSPLIT-B2R, RT-FNSPLIT-B2F]
-github: null
+github: 963
 origin: Architect ruling evt_842spc7t6js1 on RT-FNSPLIT-B2F hard-stop #9 (2026-07-25), item 5 plus the one-owner half of item 6, gated behind research advisory evt_531c4k52mshrn per the armed #9 pull. Steward-filed under the ruling's explicit grant of re-slicing and sequencing ownership; Steward owns the frame, scope, and AC/control placement.
 ---
 
-> ## ✅ `active` — FRAME IS WRITTEN AND KICKED (Steward, 2026-07-25)
+> ## ✅ `merged` — `origin/main` = `e470ab65`, PR **#963** (Steward, 2026-07-25)
 >
-> The shovel-ready frame is **`docs/program/wp/RT-FNSPLIT-B2O-body-ownership.md`**
-> (fetchable on `origin/main`). It is **fully ruled — no held deliverable**;
-> `D1` was released by the Architect. Construction authority is live for the
-> Runtime ring.
+> Landed tree `22cd7cd8`, verified on `main` by **blob identity per file**: all 5
+> candidate files identical to the reviewed `61d01a28`, and all 8 main-side files
+> intact — the deliberately-stale base (`0e0821c1`, two merges behind) reverted
+> nothing. Merge Decision `dec_1km0f2r57r80f`, `resolved_by: architect`,
+> confirmed **fresh from the object**.
+>
+> **Closed on the FOURTH candidate**, and every fold found something real:
+> `e8c757f3` (QA blocked: a withdrawn claim surviving in a second carrier) →
+> `e8837fed` → `cb1505f8` (four `AC-9` entailments + all eight `AC-12` evasions)
+> → `61d01a28` (the last two entailments).
+>
+> ⭐ **`AC-12` final tally: 4 REDDENS · 3 CANNOT COMPILE · 1 GREEN-finding.** The
+> three compiler-refused rows were the strongest evidence in the WP *and* the
+> cheapest to obtain — naming `StaticNodeId` from `lowering/mod.rs` does not fail
+> a test, it **fails to build**. ⇒ **Ask which mechanism already enforces a
+> property before building a detector for it.**
+>
+> ⚠ **The one GREEN row is a tracked FOLLOW-UP, not a defect:**
+> `the_backend_production_surface_inventory_is_closed` misses an inline
+> `mod x { … }` because it inspects only declarations ending in `;`. This is the
+> **second** measured hole in that same enumerator (the first omitted `impl`), so
+> its fix must be a **structural item enumeration, not a third spelling**.
+>
+> The shovel-ready frame was **`docs/program/wp/RT-FNSPLIT-B2O-body-ownership.md`**.
+> ⏳ Retros called (`evt_7grqtx43tsqpb`); adversary notified on the landed SHA.
 >
 > This node exists because `RT-FNSPLIT-B2F` was ruled **not buildable as one
 > unit**. It is the **first** of two inert prerequisites.
@@ -27,7 +48,7 @@ origin: Architect ruling evt_842spc7t6js1 on RT-FNSPLIT-B2F hard-stop #9 (2026-0
 > `TransitionKind::ClosureBody` is a body's **return successor**, not its head.
 > The ruled seeds are `plan.entries` ∪ every `EdgeKind::StaticBody` **target**.
 
-> ## ⛔⛔ RESPUN 2026-07-25 — `D6`'s ROUTE ORACLE IS OUT. `status` STAYS `active`.
+> ## ⛔⛔ RESPUN 2026-07-25 — `D6`'s ROUTE ORACLE IS OUT (historical; this node is now `merged`).
 >
 > Five review folds across four candidate SHAs were spent on one defect family: a
 > hand-written source-text parser asked to model Rust's grammar. Architect ruling
