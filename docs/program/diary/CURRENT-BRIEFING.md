@@ -138,6 +138,29 @@
 > leader's progress posts or a hard-stop. Runtime WPs legitimately run **hours**
 > (`MODELS.md`) — an idle-looking pane on that ring is not a stall.
 >
+> **Observed healthy at T15:0xZ, and it is executing the frame as written:**
+> predictions committed *before* measuring, both cfg configurations compile, 27
+> tests pass, and **prediction 1 confirmed exactly — `[4, 5, 6, 7, 8] = n+1`**.
+> Running the **targeted** `-p ken-runtime` suite (never `--workspace`).
+>
+> ### ✅ VERIFY RING COMPACTED — a standing obligation I had missed
+>
+> `verify-leader` had been sitting at *"DOC-GATE-WIRE-BINDING closed; retros
+> consolidated; **awaiting Steward compaction**"* — an explicit request to me,
+> visible only in its **participant status field**, which no notification
+> surfaces. All three Verify seats are now compacted and drop-verified; told them
+> in `evt_4afsgzwgbea46`, including that this was **housekeeping, not a handoff
+> gate**, so they still get compacted again before their next WP.
+>
+> ⇒ ★ **`join_space`'s participant list is the only place a seat can leave a
+> request that reaches nobody.** Sweep the status fields when the channel is
+> quiet; a ring can be waiting on me without ever having sent a message.
+>
+> ⚠ **All three Verify seats are Codex, and `verify-implementer` is `gpt-5.6-sol`
+> = T1** — another sanctioned deviation from the `MODELS.md` Roles column, in the
+> same direction as `runtime-implementer`. Two rings now seat T1 on the
+> *implementer*. **Read the seat.**
+>
 > ### ⛔ TWO PREMISES THAT WERE WRONG IN MY OWN CARRIED-FORWARD NOTES
 >
 > **1. "All three Runtime seats are Claude" was FALSE.** `runtime-leader` and
