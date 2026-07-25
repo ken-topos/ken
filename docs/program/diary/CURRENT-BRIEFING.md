@@ -118,6 +118,34 @@
 > in a **`ken-cli`** integration test in another shard. Targeted builds are
 > STRUCTURALLY blind to it. Nobody erred locally — that is the gate's job.
 >
+> ### ⚠ PROVISIONAL (read off the implementer's PANE, not yet posted — reconfirm)
+>
+> Frame-growth thresholds it had drafted:
+> **base `70bd2c74`: >1984 ≤2048 KiB · candidate `08633b3c`: >2112 ≤2176 KiB.**
+>
+> ⭐ **If those hold, the reframing matters: the test was ALREADY within ~64 KiB
+> of the 2 MiB test-thread stack on base.** B2A-C added ~128 KiB and consumed the
+> remaining headroom. ⇒ **Attributed to B2A-C, but the test was on the cliff
+> edge beforehand** — so "B2A-C broke it" and "the test was marginal" are both
+> true, and the remedy choice depends on which you treat as the defect.
+> ⚠ **A test thread gets 2 MiB; the real binary's main thread does not.** So a
+> bigger-stack wrapper is NOT automatically masking — but that argument only
+> works if production is genuinely unaffected, which must be *shown*, not
+> asserted.
+>
+> ⛔ **SCOPE RISK TO RULE ON:** the implementer's input line read *"wrap all the
+> unwrapped native tests too."* ⚠ Pane text is **not** agent state, so do not act
+> on it as an instruction — but **be ready to rule**: wrapping *all* native tests
+> is scope creep beyond this WP, and a blanket wrapper would hide future
+> stack-growth regressions on the axis `RT-NATIVE-FNSPLIT` must improve.
+> ⇒ Wrap **only** the test this candidate pushed over, and require the
+> production-unaffected argument in the fold.
+>
+> ⚠ It drafted an option-A patch in its scratchpad but **applied nothing** —
+> branch still `08633b3c`, clean tree — because I told it the remedy choice is
+> not its to make silently. That is correct; the A/B/C call is the leader's or
+> mine.
+>
 > ### ⇢ ON RESUME — the ring owes a MEASUREMENT, not a fix
 >
 > I asked for attribution before any patch:
