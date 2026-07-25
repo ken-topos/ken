@@ -5,63 +5,79 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-24 ~22:20Z. OPERATOR IS PRESENT.**
+**As of 2026-07-25 ~17:20Z. OPERATOR IS PRESENT.**
 
-> ## ⇢ RESUME HERE — the frontier
+> ### ⛔ THREE STALE `RESUME HERE` BLOCKS WERE REMOVED FROM THIS SPOT
 >
-> **`origin/main = bf8036c0`.** Merged today, all verified by content:
-> `DOC-GATE-RECORD-AXIS` `64b0811f` · **RT-NATIVE-FNSPLIT Boundary A**
-> `647a2e5b` · `DOC-GATE-CONTROL-BINDING` `f0ceb702` · `RT-PLANNER-DIAGNOSTIC-K`
-> `36dd61f6`, plus steward publishes through #932.
+> They anchored on `bf8036c0`, `5554b33f`, and `0aa9e53f` — **three, four, and
+> five `main`-SHAs stale respectively** — and each was titled `RESUME HERE`, so a
+> cold resume read the *oldest* one first. Their content (merged SHAs, retro
+> status for Boundary A/B1, `DOC-GATE-WIRE-BINDING`, `RT-FNSPLIT-B2A-S`,
+> `DOC-GATE-RECORD-AXIS`) is durably recorded in the issue files and git history;
+> nothing was lost by compressing them.
 >
-> ### ✅ BOTH LANDED. `origin/main = 5554b33f`.
+> ⇒ **This file's own header rule was being violated by ME, one appended block at
+> a time.** Each append was individually reasonable — the newest state on top —
+> and collectively they turned the resume anchor into a trap. **The only live
+> state is the block immediately below. If you are resuming, read that and
+> nothing above it.**
+> ## ⛔⛔ LIVE STATE — 2026-07-25 T17:20Z. `B2O` IS **APPROVED, RESOLVED, AND
+> ## PUBLISHING AS PR #963.** All review folds are CLOSED. **I owe the post-merge
+> ## tail and nothing else.**
 >
-> - ✅ **`RT-NATIVE-FNSPLIT` Boundary B1 — `5554b33f`, PR #934. THE OPERATOR
->   PRIORITY, DELIVERED.** Closed on the **first candidate** — no review folds, no
->   re-anchor, no hard-stop. Verified by content: `semantic_ir.rs` present,
->   **zero wildcard arms**, `build_semantic_plane` at 5 sites, `fixed_k`
->   assertion intact, sibling `document-kind` row survived. **Retros IN.**
-> - ✅ **`DOC-GATE-WIRE-BINDING` — `a9860e9c`, PR #933.** Closes adversary I1.
->   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
->   the AC rather than gaming it.
+> **`origin/main` = `d78d586d`** (will move when #963 lands). Landed this pass,
+> all blob-verified: **#961** (§14a fails closed + doc-ring retro harvest) ·
+> **#962** (`AC-12`'s `not attempted` ruling). Earlier: #957, #958, #959
+> (doc-only), #960 (respin route).
 >
-> ## ⇢ RESUME HERE FIRST — 2026-07-25 T14:20Z
->
-> **`origin/main` = `0aa9e53f`.** ✅ **`RT-FNSPLIT-B2A-S` IS MERGED AND CLOSED**
-> — PR #944, CI green, **retros 3/3 in** (implementer `evt_24ky17mzmreth`, QA
-> `evt_wp6z5fyxx851`, leader `evt_4m72j0fcpfyb4`), flipped `merged`.
->
-> ✅ **ADVERSARY TRIAGE DONE. ✅ `B2F` FRAME WRITTEN AND `ready`. ✅ `B2B`
-> RE-DERIVED.** All three committed on `steward/work` (`8ce48a64`, `208989fd`).
->
-> ## ⛔⛔ LIVE STATE — 2026-07-25 T17:05Z. `B2O` RESPIN IS **IN ITS SECOND REVIEW
-> ## FOLD**: QA blocked, I ruled, the ring is folding. **NOTHING IS OWED BY ME.**
->
-> **`origin/main` = `d78d586d`.** Landed this pass, all blob-verified: **#961**
-> (§14a fails closed + doc-ring retro harvest) · **#962** (`AC-12`'s
-> `not attempted` ruling). Earlier: #957, #958, #959 (doc-only), #960 (respin
-> route).
->
-> ### ⇢ WHERE THE B2O LOOP ACTUALLY IS — read this before touching anything
+> ### ⇢ WHERE THE B2O LOOP ACTUALLY IS
 >
 > | | |
 > |---|---|
-> | candidate branch (**off-box**) | `wp/RT-FNSPLIT-B2O-body-ownership` = **`e8837fed`** |
+> | candidate (**on `origin`**) | `wp/RT-FNSPLIT-B2O-body-ownership` = **`61d01a28`** |
 > | its base | `0e0821c1` — **two merges behind `main`, and that is FINE** |
-> | ⛔ **do NOT ask for a rebase** | base currency is **mine**; merge result built + verified **twice**, post-condition pre-predicted both times (12 files = 5 + 7, every blob on its own side) |
-> | who owes what | **implementer owes finding 2**; QA + Architect await the fresh SHA; **I owe nothing** |
+> | ⛔ **do NOT ask for a rebase** | base currency is **mine**; merge result built + verified **FOUR times**, post-condition pre-predicted each time (13 files = 5 + 8, empty intersection, every blob on its own side, tree `22cd7cd8`) |
+> | Decision | **`dec_1km0f2r57r80f` — `resolved`, `resolved_by: architect`, `17:05:18Z`, on exact `61d01a28`.** Verified **fresh from the object**, not from the message that announced it. |
+> | reviews | Runtime QA **APPROVED** exact `61d01a28`; Architect **APPROVED** same SHA after blocking `cb1505f8`. No CV vote, no Librarian — diff has no `spec/`, `conformance/`, or `library/` path. |
+> | ⇢ **what I still owe** | CI → merge → **verify on `main` by blob identity per file** → notify adversary → **drive retros (3)** → flip `merged` → `git log` the tail |
 >
-> **QA blocked `e8c757f3` on three items** (`evt_11st13yy38eq4`) — all three
-> independently grounded by me, all three correct:
+> ### ⇢ THE FOLD SEQUENCE THAT CLOSED IT — four SHAs, each a real finding
 >
-> 1. ⭐ **`control.rs:~3536-3540` still asserted the reachability entailment**
->    (*"`mod.rs` cannot reach … that privacy is load-bearing"*) **while the report
->    withdrew it.** The exact split row I flagged. ⇒ **A withdrawn claim that
->    survives in a second carrier is not withdrawn.** ✅ folded at `e8837fed`.
-> 2. **Eight `AC-12` rows recorded `not attempted`** — the fork QA routed to me.
->    **I ruled AC-12 stands, and published the ruling as a frame amendment
->    (#962).** ⏳ **this is the open item.**
-> 3. **`git diff --check` failure** (blank line at EOF). ✅ folded.
+> `e8c757f3` (QA blocked) → `e8837fed` (findings 1+3) → `cb1505f8` (AC-9 ×4 +
+> all eight AC-12 evasions) → **`61d01a28`** (Architect's last two entailments).
+>
+> **`AC-12`'s final tally: 4 REDDENS · ⭐ 3 CANNOT COMPILE · ⚠ 1 GREEN-finding.**
+> The three compiler-refused rows were the **strongest and cheapest** evidence in
+> the WP — naming `StaticNodeId` from `lowering/mod.rs` does not fail a test, it
+> **fails to build.** ⇒ **Ask which mechanism already enforces a property before
+> building a detector for it; the compiler is a legitimate answer and usually the
+> best one.**
+>
+> ⚠ **The GREEN row is a FOLLOW-UP, not a defect** —
+> `the_backend_production_surface_inventory_is_closed` misses an inline
+> `mod x { … }` because it only inspects lines ending in `;`. **Tracked as its own
+> WP.** This is the *second* measured hole in that same enumerator (the first
+> omitted `impl`), so the fix must be a **structural item enumeration, not a third
+> spelling.**
+>
+> ### ★ Verified by me, independently, on `61d01a28`
+>
+> - **`AC-11` holds on all three limbs** — manifests byte-identical, no
+>   `syn`/`proc-macro2`/`quote` edge, executable production diff vs the anchor
+>   empty (`semantic_ir.rs` byte-identical; `static_transition.rs`'s 177 added
+>   lines all inside `#[cfg(test)] mod tests` at 1796, which runs to EOF).
+> - ⛔ **`AC-11`'s anchor is `96627f2a`, NOT the respin base.** I defaulted it to
+>   `0e0821c1` first and measured **580 + 296 changed production lines** — and
+>   `96627f2a` is **not even an ancestor** of the candidate, so a naive
+>   `git diff <anchor> <cand>` also drags in every unrelated main-side file.
+>   **That would have been my second false alarm on this exact criterion.** Read
+>   the criterion's named operand; never default it.
+> - **Final fold is comments/strings only** — `+15 −5`, one file, zero executable
+>   lines, both Architect items gone under a **wrap-immune** check.
+> - ★ **My own needle #3 returned `parent=0`** — it matched *nothing*, because a
+>   Rust string continuation leaves a `\` mid-phrase. Read carelessly that is a
+>   clean report from a probe that cannot see. ⇒ **The `parent=1` positive control
+>   is the only thing that makes a column of zeros mean anything.**
 >
 > ### ★ The AC-12 ruling, in case it is re-litigated
 >
@@ -81,10 +97,16 @@
 >
 > ### ⚠ Two live cautions
 >
-> - **`runtime-implementer` is at ctx 32%** and mid-fold. **Do not compact it
->   until the retros seam** — its 14-pin `AC-12` enumeration would have to be
->   re-derived. It is a **no-poll seat**: it went idle holding for the amended
->   frame and a convo mention did **not** wake it; a `send-keys` rouse did.
+> - **`runtime-implementer` is at ctx 35% and its fold is DONE** (branch released,
+>   on `runtime-implementer/work`, clean). It is **over the 33% mid-flight
+>   ceiling**, so it compacts at the **retros seam — which is now the next seam**,
+>   right after its retro is posted. ⛔ **Drive the retro first; a compaction eats
+>   an un-posted retro.** It is a **no-poll seat**: it once went idle holding for
+>   the amended frame and a convo mention did **not** wake it; a `send-keys` rouse
+>   did.
+> - **The whole Runtime ring + Architect are idle on CI for #963. That is ADR
+>   0002 correct behaviour, not a stall** — do not nudge any of them until the
+>   publisher returns.
 > - **`DOC-ATTEST-LIVING` is operator-HELD — ⛔ do not release, do not re-ask.**
 >   Diagnosed this pass: it is *also* not doc-only-concurrent on the merits,
 >   because `D2` changes the very CI gate the publisher polls before every merge.
