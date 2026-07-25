@@ -25,11 +25,112 @@
 >   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
 >   the AC rather than gaming it.
 >
-> ## ⇢ RESUME HERE FIRST — 2026-07-25 T00:45Z
+> ## ⇢ RESUME HERE FIRST — 2026-07-25 T01:45Z
 >
-> **`origin/main = 5015bc71`. `origin/steward/work = 91862414` (pushed).**
+> **`origin/main = d3b9f36c`** (DOC-W2 landed). **`origin/steward/work = ac31f39c`**
+> (pushed). Two branches wait on origin: `wp/RT-FNSPLIT-B1R-semantic-material` =
+> `e58b3fa6` (**PR #937, in CI**) · `wp/steward-process-batch` = `b3ea7d93`
+> (**pushed, NOT yet published**).
 >
-> ### 0. LIVE RIGHT NOW — `RT-FNSPLIT-B1R`, a REPRESENTATION RECUT
+> ### ⇢ THE NEXT ACT, in order
+>
+> 1. **PR #937 (B1R).** Log: `$SCRATCH/b1r-publish.log`. ⚠ *Waiting on CI is
+>    NORMAL, not a stall* — it is **not** doc-only, so the full gate runs.
+>    **ON MERGE:** verify landed `origin/main` **by content** (both files under
+>    `planning/**`, `lowering/core.rs` still untouched) → flip `RT-FNSPLIT-B1R`
+>    to `merged` → request retros from `runtime-leader` → notify the adversary
+>    (report-only; **never reply**).
+> 2. **THEN publish `wp/steward-process-batch` (`b3ea7d93`).** Already built off
+>    `d3b9f36c`, intersection verified EMPTY, contains the ABI 19/19 spine, the
+>    B1R/B2a/B2b frames, both playbook §-additions, `DOC-GATE-NEEDLE`, and the
+>    corrected `moot.toml`. ⛔ **Re-check the intersection first** — #937 will
+>    have moved `main` under it. Disjoint by construction (`docs/program/**` +
+>    `moot.toml` vs `crates/ken-runtime/planning/**`), but *verify, don't assume*.
+> 3. **THEN, only after B1R retros are in and the ring is compacted**, release
+>    `RT-FNSPLIT-B2A` (`ready`). It re-anchors onto landed B1R and receives **D0**
+>    (the origin carrier) + controls 2/5.
+>
+> ### 0-NOW. What changed this session (supersedes the §0 below where they differ)
+>
+> - **`DOC-W2` MERGED** — PR #936, squash of frozen `e1524de1`, `main = d3b9f36c`.
+>   Acceptance re-verified **by content**, retros in from all three seats, status
+>   flipped `merged`. **Closed under §10.**
+> - **`RT-FNSPLIT-B1R` is DONE and PUBLISHING.** Fold `e58b3fa6`: QA PASS
+>   `evt_44jkp6x9hs9ch`, Architect APPROVE `evt_2gfbba92ka46`, Decision
+>   `dec_4mq4fwgp3pq7x` **verified `resolved` from the object**. **AC-3a
+>   discharged by me**: exactly 2 files, both `planning/**`. The re-slice held.
+> - **I pushed `e58b3fa6` myself — it was on ONE local ref, ZERO off-box copies.**
+>   Third session running. Build seats have **no** GitHub credential *by design*;
+>   this is a Steward primitive (`mint-gh-token.sh`), **not** an operator
+>   escalation. Tell rings to **report an unpushed ref and keep going**.
+> - **`DOC-GATE-NEEDLE` filed** (`ready`, owner `verify`) from adversary L1/L2 on
+>   DOC-W2. ⇒ **A confirmed live false-green**, re-grounded by me at
+>   `library_documentation_gates.rs:3589`/`:3617`: the assertion is
+>   `contains(constraint)` while `:3587` passes that same `constraint` as the
+>   **`location`**, and every message is `"{location}: …"` — **the needle is the
+>   haystack the caller supplied.** Measured pair: deleting `type` enforcement
+>   leaves **31 passed / 0 failed**; deleting `const` correctly FAILS.
+>   ⚠ **HELD, not released** — it touches `crates/ken-cli`, so it is **outside**
+>   the doc-track exception to the fleet's single-threaded build posture.
+>   **Widening that is the operator's call.** Frame is shovel-ready.
+> - **`ABI-R1` is UNBLOCKED.** Its ledger collision is discharged: the
+>   attestation row is **re-derived** — `Errors.ken.md` is now **row 9**, OID
+>   `59fbe76d` (was row 7). It is the one genuinely releasable ABI node;
+>   `ABI-S3` is Runtime-owned and still held behind FNSPLIT.
+> - **`moot.toml` header rewritten** — it claimed every seat ran direct on
+>   Anthropic with one claudex-proxy exception. **False:** 25 of 28 seats are
+>   native Codex, **no** seat runs sonnet-5, and no claudex route remains. Live
+>   file and the batch now agree.
+>
+> ### 0-NOW-a. ⛔ OPERATOR RULING 2026-07-25 — FNSPLIT-ONLY. SETTLED, do not re-ask.
+>
+> I put the concurrency fork to the operator: **two** framed shovel-ready WPs,
+> **two idle rings** with retros in, file sets **verified disjoint** pairwise and
+> against everything in flight. **Ruling: HOLD BOTH. The fleet remains strictly
+> single-threaded on `RT-NATIVE-FNSPLIT`.**
+>
+> | WP | owner | status | why it is not running |
+> |---|---|---|---|
+> | `DOC-GATE-NEEDLE` | verify | `ready` | operator hold — **not** for lack of a frame |
+> | `ABI-R1` | foundation | `ready` | operator hold — **not** for lack of a frame |
+>
+> ★★ **THE DURABLE RULE, and it corrects how I had been reading this:** the
+> doc-track concurrency exception is **DOC-ONLY**. Its stated basis —
+> contention-free-ness — explains *why doc got the exception*; it is **NOT** a
+> general licence for any contention-free WP to run in parallel.
+> ⇒ **Proving disjoint file sets does not earn a slot.** Only the operator widens
+> concurrency, and the answer here was no.
+>
+> ⛔ **Do not re-ask, and do not re-derive the contention analysis** hoping for a
+> different answer — a settled operator ruling is a fixed input. Both frames are
+> **complete**; the only missing thing is a slot. Release them when the FNSPLIT
+> chain closes.
+>
+> ### 0-NOW-b. TWO defects of mine, on the record
+>
+> - **I called the gate test file "NEW at 4007 lines" in the merge notification.
+>   It is MODIFIED, +1356/−1 (2652 → 4007)** — caught by the adversary, verified
+>   by me. That **under-scoped the blast radius** I handed the red team: 24
+>   pre-existing tests and four merged `DOC-GATE-*` WPs live in that file.
+>   ★ `wc -l` on a merged blob answers *how big is it now*, **never** *is it new*
+>   — I reported a derived measurement as a provenance claim.
+> - **My first DOC-W2 review pass reported 4 missing rules; 3 were FALSE**, from
+>   phrase-matching rules the fold had legitimately reworded. Re-ran by concept
+>   with a positive control before casting. **On a fold that rewords, text-matching
+>   manufactures gaps.**
+>
+> ### 0-NOW-c. Chain counters — ARMED, re-read these every hard-stop
+>
+> - **FNSPLIT hard-stop count = 5. NEXT RESEARCH PULL = #6.** ⚠ `research`'s own
+>   status says "#4, next pull #6" and is **stale**; **this tracker is the count
+>   of record.** Catch-up rule is in force (the chain once ran to 10 with the
+>   trigger never firing): if a stop passes un-pulled, fire at the **very next**
+>   one, do not wait for a clean multiple.
+> - **SYMPTOM INVENTORY: entry 1 only. NEXT PREDICATE CHECK = 3rd entry.** The
+>   Architect appends; I backstop the *question*, **never the answer**.
+>
+> ### 0. HISTORICAL — how `RT-FNSPLIT-B1R` was cut (kept for the reasoning; the
+> ### state above supersedes it)
 >
 > **B2a hard-stopped before any code** (hard-stop **#4**; next Research pull is
 > **#6**). The Architect ruled option **(B)** and correctly **stopped**, calling it

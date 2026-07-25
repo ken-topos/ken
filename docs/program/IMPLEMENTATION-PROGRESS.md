@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-25 01:32:59Z — from 68 issue file(s) in `docs/program/issues/`.
+2026-07-25 02:06:08Z — from 69 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -44,7 +44,7 @@ the committed file matches the generator's output.
 | `ABI-A3` | promote FsReadDirectory, FsCreateDirectory, FsRemoveFile, FsRemoveDirectory to NativeTested | draft | runtime | M | none | — |
 | `ABI-M1` | manifest v2 — family-scoped, versioned, generated from family schemas | draft | runtime | L | none | — |
 | `ABI-M2` | runtime facility/operation probes, distinct from build-time facts | draft | runtime | M | none | — |
-| `ABI-R1` | correct stale filesystem capability prose — scoped roots, rights, symlink policy and no-follow resolution have landed | draft | foundation | S | none | — |
+| `ABI-R1` | correct stale filesystem capability prose — scoped roots, rights, symlink policy and no-follow resolution have landed | ready | foundation | S | none | — |
 | `ABI-R3` | generated operation inventory derived from catalog structure — a new operation must be a build break | draft | runtime | M | none | — |
 | `ABI-REVOKE` | runtime revocation membrane — the deferred runtime face of 62 §4 | draft | runtime | TBD | none | — |
 | `ABI-S1` | descriptor completion — seek, truncate, sync/data-sync, flags, duplication under explicit inheritance policy | draft | runtime | M | none | — |
@@ -61,6 +61,7 @@ the committed file matches the generator's output.
 | `CI-TRACKER-GATE` | Wire the issue-tracker schema + regeneration gate into CI | closed | operator | S | none | 804 |
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | closed | doc | S | none | — |
 | `DOC-GATE-CONTROL-BINDING` | validation-gate registry: make the two DOC-GATE-RECORD-AXIS checks orphan-proof by lifting them to pure detectors with committed controls | merged | verify | S | none | https://github.com/ken-topos/ken/pull/928 |
+| `DOC-GATE-NEEDLE` | schema-gate controls assert on a needle the test itself supplied, so one constraint class is fully vacuous | ready | verify | S | none | — |
 | `DOC-GATE-RECORD-AXIS` | validation-gate registry: bind token→runner COVERAGE on the record axis, and close the `kind` vocabulary | merged | verify | S | none | https://github.com/ken-topos/ken/pull/922 |
 | `DOC-GATE-WIRE-BINDING` | validation-gate registry: bind the kind-vocabulary RULE to its GATE by registering it as a VALIDATION_GATES row | merged | verify | XS | none | https://github.com/ken-topos/ken/pull/933 |
 | `DOC-VALIDATION-BINDING` | validation vocabulary claims a 1:1 binding to the gates; nothing binds it | merged | verify | S | none | — |
@@ -91,7 +92,7 @@ the committed file matches the generator's output.
 | `Q-RESIDUE` | the Track Q rework residue — 10 tests, folded from Q3-Q7 | closed | runtime | S | none | 818 |
 | `RT-AGG-COMPOSE` | escaping two Resources into one aggregate (Prod (Resource _) (Resource _)) fails at erasure — checked endpoints do not compose | draft | runtime | TBD | none | — |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | merged | runtime | M | none | PR #911 @ 238a5c5d (origin/main 4ac9141e, CI green) |
-| `RT-FNSPLIT-B1R` | RT-NATIVE-FNSPLIT Boundary B1R — encode the occurrence-local semantic material B1 counted but never stored (repair of landed B1) | active | runtime | L | none | — |
+| `RT-FNSPLIT-B1R` | RT-NATIVE-FNSPLIT Boundary B1R — encode the occurrence-local semantic material B1 counted but never stored (repair of landed B1) | merged | runtime | L | none | 937 |
 | `RT-FNSPLIT-B2A` | RT-NATIVE-FNSPLIT Boundary B2a — make the semantic plane load-bearing for emission (behaviour-preserving port) | ready | runtime | L | none | — |
 | `RT-FNSPLIT-B2B` | RT-NATIVE-FNSPLIT Boundary B2b — full emission census, finite differences, and the explicit growth verdict | draft | runtime | M | none | — |
 | `RT-NATIVE-FNSPLIT` | Native backend: bound per-function lowering growth to O(n) — helper identity is a variable-width whole-configuration key (orig. single-Function VReg::MAX, since fixed) | active | runtime | TBD | none | — |
@@ -112,9 +113,12 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
+- `ABI-R1` — correct stale filesystem capability prose — scoped roots, rights, symlink policy and no-follow resolution have landed
+- `DOC-GATE-NEEDLE` — schema-gate controls assert on a needle the test itself supplied, so one constraint class is fully vacuous
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `KW-THEOREM` — rename the surface keyword `lemma` to `theorem`
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
+- `RT-FNSPLIT-B2A` — RT-NATIVE-FNSPLIT Boundary B2a — make the semantic plane load-bearing for emission (behaviour-preserving port)
 - `STR-BIJ` — the String/List Char 'bijection' over-claim (adversary A1 + A2)
 
 ## Blockers
@@ -150,7 +154,6 @@ is itself not yet `merged`/`closed`:
 - `PX8` blocked by `PX8-WROTE-ABS` (status: draft)
 - `PX9` blocked by `PX8` (status: active)
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
-- `RT-FNSPLIT-B2A` blocked by `RT-FNSPLIT-B1R` (status: active)
 - `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2A` (status: ready)
 
 ## Gate progress
