@@ -34,7 +34,87 @@
 > ✅ **ADVERSARY TRIAGE DONE. ✅ `B2F` FRAME WRITTEN AND `ready`. ✅ `B2B`
 > RE-DERIVED.** All three committed on `steward/work` (`8ce48a64`, `208989fd`).
 >
-> ### ⇢ THE NEXT ACT IS A PUBLISH, THEN THE GATE, THEN THE KICK
+> ## ⛔⛔ LIVE STATE T14:55Z — `RT-FNSPLIT-B2F` IS HELD AT HARD-STOP #9
+>
+> **`origin/main` = `3891b7aa`** (PR #946). `B2F` was framed, published, kicked
+> (`evt_70zv3m1er8ta8`), flipped `active` — and the Runtime implementer then
+> raised **#9 before writing any code** (`evt_197xpdavdyrn0`), tree clean,
+> nothing to unwind. **COUNT OF RECORD = 9.**
+>
+> **Obstruction:** one-function-per-origin needs a **uniform runtime value
+> representation that does not exist** — `Lowered` is a compile-time
+> specialization lattice, aggregates carry host Rust data with no emitted
+> representation, signature is `(ptr) -> i64` — **and building it is not among
+> `D1`–`D8`.** Atomicity (`AC-1`, `D6`) forbids the one buildable increment
+> (functionize scalar-param origins, keep specialization for the rest), so
+> **sound-subset-with-a-guard is unavailable by construction.** Full detail and
+> both options are recorded in the frame's **HELD** block — not only in-thread.
+>
+> ### ⇢ NEXT ACT
+>
+> 1. ✅ **DONE — research dispatched `evt_63wjmry61vd89` BEFORE the Architect
+>    rules**, as the armed #9 trigger required; research seat compacted first and
+>    confirmed working. **#9's pull is CONSUMED; next armed pull is #12.**
+> 2. ⏳ **AWAIT the research advisory**, then **route both options to
+>    @architect**: (i) a prerequisite unit for the value representation +
+>    calling convention with `B2F` rebased on it, or (ii) bounded coexistence,
+>    which **requires `AC-1` and `D6` amended**. ⛔ Do **not** ask the Architect
+>    to rule before the advisory lands — that is how #6 got re-litigated. The
+>    deciding question is prior-art: *is a permanently-bounded two-strategy
+>    backend known-sound with a pin that cannot silently widen, or a known trap?*
+> 3. **Publish this batch** (frame HELD block, parent trigger line, briefing).
+>
+> **Steward rulings already issued at the stop, so the ring is not blocked on
+> them:** the `D5`/`D6` **narrow reading is correct** (remove inlining across the
+> retained-body boundary; keep traversal within one body — 7 of 58 sites consume
+> a retained body: `core.rs:327, 605, 620, 764, 4817, 4829, 4954`); the
+> implementer's **`#[cfg(test)]` correction is accepted as my frame defect** and
+> fixed in the frame (`core.rs` has **22 inline** `#[cfg(test)]` attributes
+> inside production functions, so `AC-1`'s "both configurations" has real
+> surface); and the **two ruling-independent deliverables proceed while held**
+> (`AC-G0`'s `native_int_clif` constant, the 58-site disposition table).
+>
+> ### ⛔ FOUR findings now stand against the B2F frame — THREE ARE MINE
+>
+> All four are recorded in the frame itself, and the frame is **corrected**:
+>
+> 1. **#9 — the missing uniform value representation.** Frame-level; with the
+>    Architect, pending the research advisory.
+> 2. **`D5`/`D6` scope** — settled by me: **narrow reading**.
+> 3. **`AC-5`'s taxonomy had no cell** — my two-way classification presupposed
+>    disposition is a function of the *site*; for **14** caller-dependent sites it
+>    is a function of the *path*. **Withdrawn**; amended to five classes.
+> 4. ⭐ **`D5`'s count was SPELLING-SCOPED — the real count is 59, not 58.** I
+>    derived it from `grep -c 'self\.lower_expr('`; **`core.rs:188` is
+>    `compiler.lower_expr(`** — un-gated production **and THE ROOT** (takes
+>    `root_static_origin`). A switch-over of all 58 would have left the program's
+>    **entry point** on the old authority. My stated span `:310`–`:6743` excluded
+>    it **by construction** — count and span were mutually consistent and both
+>    wrong. **Verified independently: 65 whole-token − 5 in comments = 60 = 1 def
+>    + 59 calls.** Taxonomy corrected to **32+9+14+3+1 = 59** (`:188` is
+>    `synthesized`, built inline at the call site).
+>
+> ⭐ **`AC-G0` — my "5" was also spelling-scoped**, a *source-site* count where an
+> *emitted-unit* population belongs (`define_view_consumer` is the shared body of
+> two defines ⇒ 5 sites, 6 units). Real constant: **6 definitions / 8
+> declarations**, Θ(1) per module. ⚠ **And the 6 was ALREADY pinned in this repo**
+> — `artifact/tests.rs:56` `LOCAL_HELPER_COUNT = 6`, with the bare `5` explicitly
+> retired 2026-07-21. **Cite it, don't duplicate.** Only the **declaration** side
+> is genuinely unpinned; program-independence needs **no detector** (the function
+> takes no program-derived parameter, so the compiler already forbids it).
+>
+> ★ **The lesson, twice in one hour, one layer apart: a census keyed to a
+> SPELLING standing in for a POPULATION.** Mine counted receivers; mine counted
+> source sites. Both were caught by **decomposing the total and checking the
+> decomposition against an independent derivation** — never by trusting the total.
+> ⇒ **`AC-5` now specifies the census MECHANISM (tokenized), not just the number**,
+> or the next reader re-derives 58 and loses the root again.
+>
+> ⚠ `RT-NATIVE-FNSPLIT` stays `active` — **entry 2 still open, still `B2F`'s**.
+> **No scaling claim is established.** Ring holds `wp/RT-FNSPLIT-B2F-functionization`
+> at `3891b7aa`, **0 dirty, 0 commits** — a re-slice costs nothing.
+>
+> ### ⇢ SUPERSEDED — the publish/gate/kick sequence below is DONE
 >
 > **1. PUBLISH the doc batch (7 files, doc-only) — ⛔ BEFORE the kick, not
 > after.** The `B2F` frame is on `steward/work` **only**; `origin/main` does not

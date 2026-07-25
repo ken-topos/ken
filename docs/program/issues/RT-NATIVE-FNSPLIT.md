@@ -482,7 +482,14 @@ hard-stop count    = 8   ← #6's PULL FIRED AND WAS CONSUMED. NEXT PULL = #9.
             made on merits, not carried forward.
           No local/refs/ or excluded-prototype material consulted; the held Ken
           branch was used only as repository-owned scale evidence.
-NEXT RESEARCH PULL = hard-stop #9, then #12, …
+NEXT RESEARCH PULL = hard-stop #12, …
+   ✅ #9 CONSUMED — raised 2026-07-25 on RT-FNSPLIT-B2F (evt_197xpdavdyrn0);
+      research dispatched evt_63wjmry61vd89 BEFORE the Architect ruled, as
+      armed. COUNT OF RECORD = 9. Obstruction: one-function-per-origin needs a
+      uniform runtime value representation that does not exist, and building it
+      is not among B2F's D1-D8. Two options are with the Architect —
+      (i) a prerequisite unit for the representation + calling convention, or
+      (ii) bounded coexistence, which requires AC-1 and D6 AMENDED.
 
 ⛔ **B2a runs one stop away from a research pull.** The #3 pull is CONSUMED
    (advisory evt_rwqb8ear89wx — Danvy/Nielsen defunctionalization granularity;
