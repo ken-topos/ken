@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2A-S
 title: "defunctionalize retained body selection — static-origin tag plus one closed consumer, replacing cloned-RuntimeExpr identity"
-status: ready
+status: active
 owner: runtime
 size: M
 gate: none
@@ -11,7 +11,13 @@ github: null
 origin: Architect ruling evt_6h5gw5c503n5z on RT-FNSPLIT-B2A hard-stop #6 (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the retired RT-FNSPLIT-B2A frame, whose Retain/Replace lists were inherited from the never-landed b077eb7a. Steward-filed; Steward owns the replacement frame and the full AC/control re-walk.
 ---
 
-> ## ✅ FRAMED AND READY — 2026-07-25
+> ## ✅ ACTIVE — kicked to the Runtime ring 2026-07-25 (`evt_3wmhpdq7dm8d8`)
+>
+> Ring compaction verified on the **completion marker** for all three seats
+> (implementer reached `ctx 0%`) before the mention went out. Fresh branch from
+> `origin/main` = `70bd2c74`.
+>
+> ## ✅ FRAMED — 2026-07-25
 >
 > **The shovel-ready frame is
 > `docs/program/wp/RT-FNSPLIT-B2A-S-selection-defunctionalization.md`.**
