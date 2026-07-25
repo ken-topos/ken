@@ -23,6 +23,67 @@ ownership mapping in the semantic plane. Inert — no emitted unit, no call edge
 > That is WRONG, and building it would have produced the wrong unit set and an
 > unsatisfiable edge law.**
 
+> ## ⛔⛔ RESPIN ROUTE — 2026-07-25, STEWARD. **THIS IS THE CURRENT
+> ## INSTRUCTION AND IT SUPERSEDES THE FOLD-5 CANDIDATE.**
+>
+> The `D6` route oracle is **out** (Architect `evt_5yxjd1zqnyvcq`, durable at
+> `architect/work` `8bff7b7a`; full ruling transcribed at `D6`). **Every other
+> deliverable and acceptance criterion in this frame stands unchanged.**
+>
+> ### The base — and it is NOT a revert
+>
+> Cut `wp/RT-FNSPLIT-B2O-body-ownership` fresh from current `origin/main`, then
+> carry forward the reviewed work from `96627f2a`. ⛔ **Do not rewind to
+> `97db6f0b`.** Measured on the two trees, which is why the distinction is safe
+> to act on:
+>
+> | `97db6f0b` → `96627f2a` | disposition |
+> |---|---|
+> | production **executable** bytes | **IDENTICAL — zero change in either file** |
+> | `static_transition.rs` + `semantic_ir.rs` | `///` doc-comment corrections **only** — ✅ **RETAIN**, they are folds 1–2's correct fixes |
+> | `control.rs` (+660 lines) | the `AC` controls ✅ **retain**; the route oracle ⛔ **out** |
+> | `docs/program/rt-fnsplit-b2o-call-disposition-report.md` | ⚠ **narrow** — see `AC-9` |
+>
+> ⇒ **Nothing four reviews approved is being unwound.** The production mechanism
+> never moved, and the comment corrections are improvements to keep. The respin
+> is a **subtraction from the test/report surface**, not a rebuild.
+>
+> ### ★★ WHAT COMES OUT — and the discriminator, because OVER-removing breaks
+> ### three pins that must survive
+>
+> ⛔ **"Delete the tests that read Rust source text" is the WRONG rule.** It would
+> destroy `AC-1`'s field inventory, `AC-4`'s module-surface inventory, and `D7`'s
+> widened-visibility inventory — all of which read source text and all of which
+> are sound. The ruling's line is **not** source-text-vs-not. It is:
+>
+> | a pin that claims… | verdict |
+> |---|---|
+> | **what is DECLARED** — a field exists, a module is `pub`, a `fn` carries no qualifier | ✅ **SURVIVES.** Source text is the authority for its own declarations. |
+> | **what can REACH a retained body** — routes, call sites, enclosing functions | ⛔ **OUT.** Reachability needs name resolution, macro expansion and indirect-call semantics, and source text supplies none of them. |
+>
+> ⚠ **`retained_body_helper_is_private` sits exactly on that line, and it is the
+> one to get right.** The *fact* — the helper carries no visibility qualifier — is
+> a **declaration** claim and may survive **as frozen evidence**. The *inference*
+> built on it — *"`mod.rs` therefore cannot reach it, so the inventory is still
+> correct"* — is a **reachability** claim and is **out**. ⇒ Same text, two claims:
+> **keep the measurement, delete the entailment.**
+>
+> ### ⭐ Reuse, do not re-derive, the relocation fixture
+>
+> `runtime-implementer/b2o-fold6-wip` = `11a3b15f` (off-box) already holds the
+> machinery that relocates a direct call into a nested `fn`, and the
+> equal-named-methods-in-two-`impl`s case. **`AC-10`'s control is that same
+> fixture with its verdict inverted.** The tree there is RED for an unrelated
+> recorded reason (the ancestry rewrite invalidated an indent-4 premise test) and
+> its occurrence-identity code is now moot — **take the fixture, drop the rest.**
+>
+> ### Counters — a review fold is NOT a hard-stop
+>
+> **Count of record = 9; next armed research pull = #12.** Symptom inventory
+> `ENTRIES = 3`; `NEXT PREDICATE CHECK = 6th`. Six review folds have been spent on
+> this WP and **zero hard-stops** — the mechanism was never the thing that
+> stalled, and the counters do not move for a fold.
+
 ---
 
 ## ⛔ READ FIRST — the function population DOES NOT EXIST YET
@@ -334,8 +395,16 @@ because nothing fails. Inventory its consumers before you move it.
 > 2. The **59-call census and the helper observations survive only as
 >    explicitly frozen review evidence** — never as authority.
 > 3. **Do NOT add `syn`, any new dependency, or a lowering production change.**
-> 4. Respin from the **already-reviewed production bytes**. They have not moved
->    since `97db6f0b`.
+> 4. Respin from the **already-reviewed production bytes**. Their **executable**
+>    content has not moved since `97db6f0b` — verified, not asserted: the only
+>    delta to `96627f2a` in either production file is `///` doc-comment text.
+>    ⛔ **That is a reason NOT to rewind:** those comment corrections are folds
+>    1–2's approved fixes. Base on `96627f2a`; see the Respin Route above.
+>
+> ⇒ **These four requirements are discharged as `AC-9` … `AC-12`, not as this
+> block.** They are restated there in obligation mood with a named control and a
+> per-item recording place each, because a requirement stated only in a ruling
+> block has no gate that reaches it.
 >
 > ### ★★ THE CONTROL INVERTS — READ THIS BEFORE WRITING ANY PIN
 >
@@ -499,6 +568,74 @@ second consumer appears, route through `retained_body_occurrence`
 `--workspace`, never `--locked`, never the conformance suite on this box** — the
 full gate runs in CI on GitHub and the scripted publisher polls those exact
 checks.
+
+> ### ⛔⛔ `AC-9` THROUGH `AC-12` ARE THE RESPIN'S CRITERIA. THEY EXIST BECAUSE
+> ### THE RULING'S FOUR REQUIREMENTS WERE, UNTIL NOW, ONLY IN A RULING BLOCK.
+>
+> ★ **This is my own defect and it is the second time on this WP.** A ruling
+> block under a deliverable is written in **report mood**; a criterion is written
+> in **obligation mood**, and only the second gets discharged. The first time,
+> the per-pin evasion requirement sat in a section headed *"standing hazards"* and
+> exactly one evasion of several was run. ⇒ **Requirements that arrive as prose
+> get re-homed into numbered criteria, each with a named control and a place to
+> record the result per item.** A requirement whose control you cannot name is
+> still a hope.
+
+**AC-9 — the `D6` report states the boundary HONESTLY, and this criterion is
+REVIEW-ENFORCED. Say so; do not mechanize it.** The report must (i) carry the
+census and the helper observations **explicitly labelled frozen review
+evidence**, (ii) state that the **owner graph is authoritative**, and (iii) state
+in its own sentence that **Rust-route closure is UNMECHANIZED**, with the four
+known residuals named: nested `fn`, equal-named methods across `impl` blocks,
+macro-generated routes, and same-named nested `fn`s in sibling blocks of one
+method.
+
+⛔ **Do NOT add a test that greps the report for a forbidden phrase.** An oracle
+that greps a claim fires on the prose *denying* it, so it would redden on the very
+sentence discharging this criterion. ⇒ **Record, in the report, a table of each
+reachability claim removed and the sentence that replaced it.** The residual arm
+is named rather than hidden: **this AC is guarded by review, not by CI**, and that
+is the honest cell.
+
+**AC-10 — the relocation control is GREEN, and it is paired with a RED twin so
+its green cannot be vacuous.** ⚠ A control asserting *"this mutation changes
+nothing"* passes when nothing reached it, so green alone is worthless here.
+
+| control | mutation | expected |
+|---|---|---|
+| **10a** | relocate a direct call into a nested `fn` | **GREEN** — semantic disposition unchanged |
+| **10b** | add an equal-named method in a second `impl` | **GREEN** — no new function-unit boundary |
+| **10c** | repoint one `StaticBody` edge to a different owner | **RED** — this is the axis that *is* authority |
+
+⭐ **`10c` is the positive control that makes `10a`/`10b` mean something:** it
+proves the harness observes semantic disposition at all. Without it, deleting the
+assertion body would leave `10a`/`10b` green forever. Record all three verdicts.
+
+**AC-11 — no dependency edge and no production change, with the numbers
+PREDICTED before measuring.** Against the respin base: every `Cargo.toml` and
+`Cargo.lock` **byte-identical**; no `syn`, `proc-macro2`, or `quote` edge added
+to any `ken-*` crate; and the **executable** production diff versus `96627f2a`
+**empty** (`///` comment changes permitted and expected). Write the predicted
+values down first, then measure — a count re-fit to what you observe measures
+nothing.
+
+**AC-12 — classify EVERY source-text-reading pin in the touched files, by
+enumeration you close rather than by the list in this frame.** ⛔ The Respin
+Route's table gives you the *discriminator*, not the *population* — a
+hand-enumerated fix covers the cases someone thought of, and this WP has already
+paid five times for exactly that.
+
+⇒ Sweep the touched test files for every pin that reads Rust source text,
+**predict the count before you look**, and record one row per pin:
+
+| pin | claim it makes | DECLARATION or REACHABILITY | disposition | evasion attempted, and outcome |
+|---|---|---|---|---|
+
+**Every row needs all five cells.** ⚠ Use a whitespace-normalizing sweep — a
+line-anchored grep cannot see a phrase that wraps at 80 columns, and that exact
+false negative has fired twice in this WP's history. The evasion column
+discharges `AC-5`'s per-pin evasion requirement **as an enumeration you close**,
+not as a quantifier the reader resolves.
 
 ## ⚠ Anchors — RE-DERIVE ON YOUR OWN BASE BEFORE YOU TRUST ONE
 

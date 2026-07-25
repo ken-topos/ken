@@ -34,11 +34,77 @@
 > ✅ **ADVERSARY TRIAGE DONE. ✅ `B2F` FRAME WRITTEN AND `ready`. ✅ `B2B`
 > RE-DERIVED.** All three committed on `steward/work` (`8ce48a64`, `208989fd`).
 >
-> ## ⛔⛔ LIVE STATE — `B2O` RESPIN LOOP **STOPPED BY THE STEWARD AT FOLD 5.**
-> ## FIVE FINDINGS, ONE DEFECT FAMILY. **SCOPING RULING ISSUED — SPLIT THE WP.**
+> ## ⛔⛔ LIVE STATE — `B2O` RESPIN LOOP STOPPED AT FOLD 5, **ARCHITECT RULED,
+> ## RE-SLICE LANDED, FRAME RESPUN. RUNTIME IS KICKED ON THE RESPIN.**
 >
-> **`origin/main` = `12d9e412`** (#953 `library-style`, #954 tracker, #955 armed
-> anchor, #956 carrier lessons).
+> **`origin/main` = `72da8b8f`** — #957 (fold-5 record + DS-1 status), #958 (the
+> re-slice: `D6` ruling transcribed, obligations re-homed into `B2R`/`B2F` by ID),
+> #959 (`DOC-LIBRARY-STYLE-01-ANATOMY`, doc-only). All blob-verified on `main`.
+>
+> ### ✅ THE FORK IS CLOSED — Architect chose (c) + (b), rejected (a)
+>
+> `evt_5yxjd1zqnyvcq`, durable at `architect/work` `8bff7b7a`. **Split the WP;
+> pin the property in the semantic plane; `syn` oracle rejected.** Authority is
+> the occurrence's `StaticOriginId`, its validated `SemanticOwner`, and the
+> planned edge kind — *a Rust wrapper does not create a Ken function-unit
+> boundary.*
+>
+> ★ **THE CONTROL INVERTS.** A wrapper or nested-`fn` relocation must now stay
+> **GREEN**. That is the exact mutation four candidate SHAs were spent making
+> **red** ⇒ those folds were making a detector better at detecting implementation
+> topology and reporting it as the property.
+>
+> ★ **It also retires my own framing.** I told the ring *"pin the property, not
+> the spelling"* and every fold obeyed me and built a better source-text parser —
+> because I never said **which plane** the property lives in. **"Pin the property"
+> is not actionable until you name the authority.**
+>
+> ### ⇢ RESPIN IS FRAMED AND KICKED — three things easy to get backwards
+>
+> 1. ⛔ **It is NOT a revert.** The production **executable** bytes never moved
+>    across any fold — measured: the only production delta `97db6f0b` → `96627f2a`
+>    is `///` comment text, and those comments are folds 1–2's approved fixes.
+>    Base on `96627f2a`; the respin **subtracts** from the test/report surface.
+> 2. ⚠ **The removal boundary is DECLARATION vs REACHABILITY**, not
+>    source-text-vs-not. Three sound pins read source text and must survive
+>    (`AC-1` field inventory, `AC-4` module surface, `D7` visibility).
+>    `retained_body_helper_is_private` sits on the line: **keep the measurement,
+>    delete the entailment.**
+> 3. **New criteria `AC-9` … `AC-12`** carry the ruling's four requirements in
+>    obligation mood. ★ They exist because I had transcribed the ruling into a
+>    **ruling block under a deliverable** — report mood — which is the second time
+>    on this WP that a real requirement landed in a carrier no gate reaches.
+>
+> ### ★ THE FINDING THAT REFRAMES THE WHOLE LOOP — verified, not inferred
+>
+> | where | occurrences of `cannot grow silently` |
+> |---|---|
+> | the frame | **0** — no AC ever required route-set closure |
+> | report at `97db6f0b` (first QA-approved tree) | **0** |
+> | report at folds 2–5 | **1** — introduced by the fold itself |
+>
+> The original finding was right: a count cannot support that claim. But a claim
+> outrunning its evidence has **two** repairs — strengthen the evidence or
+> **narrow the claim** — and nobody checked whether the claim was *required*.
+> **Narrowing was free at fold 2 and was one deleted sentence.** ⇒ **Before
+> hardening a mechanism to support a claim, check whether the claim is required
+> at all.**
+>
+> ### ⭐ The implementer broke a hold for the right reason, and it changed the frame
+>
+> Held with nothing owed, it posted a measured fact that was cheap for it and
+> expensive for a frame author: the ruling's four classification laws are
+> **already `return Err` arms** in the approved bytes (`validate_function_units`,
+> ~10 rejects, `match` on `SemanticOwner` with **no bare arm**). I verified it
+> rather than taking it on report. ⇒ **A `B2F` control asserting them is green on
+> every reachable input — vacuous, the same defect that took down `AC-5`.** I had
+> written them into `B2F` as criteria; they are now inherited invariants cited to
+> `B2O`.
+>
+> ★ **The rule taken from it, now in the frame:** *when a claim moves between
+> nodes, the part that survives the move is the part the source node was
+> **structurally unable** to verify.* Here that leaves exactly one obligation —
+> **one-for-one consumption** — which inert `B2O` could never check.
 >
 > **⛔ `96627f2a` IS NOT A MERGE CANDIDATE. `dec_tnrk878528r` is DEAD**
 > (@architect block `evt_7keypnnsrr0cd`). Candidate is off-box,
@@ -92,7 +158,13 @@
 > coverage it was meant to preserve. The `D6` report must say plainly that route
 > -set closure is a **review boundary today, not a mechanized property.**
 >
-> ### Feasibility, verified so fold 6 is not found impossible after it is written
+> ### Feasibility work on `syn` — ⚠ MOOT, and recorded rather than dropped
+>
+> The ruling **rejected** the real-parser option, so everything below is a correct
+> answer to a question that turned out not to be the question. ★ Kept on the
+> record because the *reason* it is moot is the reusable part: a better instrument
+> for the wrong plane is still the wrong instrument, and I had spent the
+> feasibility check before asking which plane the property lived in.
 >
 > - **`syn 2.0.118` IS present** in the local registry
 >   (`CARGO_HOME=/usr/local/cargo`)
@@ -106,7 +178,24 @@
 >   instrument, third time today.** Same family as the phrase-grep and the
 >   line-anchored sweep below.
 >
-> ### ⛔ TWO OPEN CORPUS DEFECTS FROM THE LIBRARIAN'S AS-BUILT NOTE (tasks #31/#32)
+> ### ✅ BOTH CORPUS DEFECTS CLOSED (tasks #31/#32 — kept for the method lessons)
+>
+> **1 — the retired diagnostic: closed on `main` at `72da8b8f`** (PR #959, doc
+> ring). Four live artifacts repaired citing the **behavior** not the message
+> text; `ds-1-findings-remediation.md` correctly **retains** its historical quote.
+> The ledger row for `07-catalog-style-guide.md` was regenerated and
+> Librarian-reviewed — blob `340c9e9a` matches its row exactly.
+>
+> ★ **It was the last un-discharged residual of `FR-3`'s companion half**, an
+> obligation assigned to Steward/Librarian and open since the DS-1 retro. It
+> surfaced as a stale *quotation* found by an as-built currency check, not by
+> anything watching the obligation.
+>
+> **2 — the DS-1 status prose: closed on `main` at `1861e73c`** (PR #957), flipped
+> against verified landed evidence per FR rather than blind.
+>
+> ⇣ Both original analyses retained below — the wrap-immune sweep form and the
+> ledger-axis reasoning are the durable parts.
 >
 > **1. The retired diagnostic is in FIVE files, not the three reported.** The CLI
 > now says `ken run: missing entrypoint 'main'` (`main.rs:312`,
