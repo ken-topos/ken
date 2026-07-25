@@ -10,6 +10,14 @@
 //! - `unknown` propagation (Kleene/Heyting logic, `41 §6`)
 
 pub mod artifact_validation;
+/// `RT-FNSPLIT-B2V` — the executable boundary-value ABI: one closed 64-bit
+/// tagged word for every source-valued boundary transfer.
+pub mod boundary_value;
+/// `RT-FNSPLIT-B2V` — the emitted-code half of the boundary-value ABI.
+///
+/// Private, exactly like `native_int_clif`: the CLIF graph is compiler-internal
+/// and is reached through [`boundary_value`]'s published layout constants.
+mod boundary_value_clif;
 pub mod canonical;
 pub mod cranelift_backend;
 pub mod executable_artifact_contract;
@@ -21,6 +29,7 @@ mod native_effect_v1;
 pub mod native_execution_differential;
 pub mod native_int;
 mod native_int_clif;
+
 #[doc(hidden)]
 pub mod native_join_plan;
 pub mod native_process_entrypoint;

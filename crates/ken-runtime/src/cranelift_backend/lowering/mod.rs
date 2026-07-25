@@ -20,6 +20,10 @@ pub(in crate::cranelift_backend) mod core;
 // --- external dependencies -------------------------------------------------
 pub(in crate::cranelift_backend) use std::collections::{BTreeMap, BTreeSet};
 
+// `RT-FNSPLIT-B2V` `D4`. Re-exported at facade scope like every other import in
+// this header so the `tests` subtree inherits the names.
+pub(in crate::cranelift_backend) use crate::boundary_value::{BoundaryClass, BoundaryTag};
+
 pub(in crate::cranelift_backend) use cranelift_codegen::ir::{
     types, AbiParam, FuncRef, Function, InstBuilder, MemFlags, StackSlotData, StackSlotKind,
     UserFuncName,
@@ -505,6 +509,185 @@ enum Lowered {
     RecursiveBackedge,
     Trap(RuntimeTrap),
 }
+
+/// `RT-FNSPLIT-B2V` `D4` — what a `Lowered` becomes when it crosses a boundary.
+///
+/// ⛔ **The population is closed by the compiler, not by a histogram.** The
+/// `#10` evidence measured 41 source-valued transfers and 26-of-154 aggregate
+/// root results; those numbers are *corroboration*. The proof is
+/// [`Lowered::boundary_disposition`]'s exhaustive, wildcard-free `match` over
+/// the 21 landed variants: a 22nd variant is a **compile error** until someone
+/// dispositions it, never a silent default into `ValueWord`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum BoundaryDisposition {
+    /// The payload rides in the tagged word itself.
+    ///
+    /// `spill` names the handle class used when a **runtime** magnitude test
+    /// finds the payload too wide for the immediate field. ⭐ Spelling the
+    /// spill out is the point: without it "represented immediate" would quietly
+    /// claim that every `Int` fits 56 bits, which is false for exactly the
+    /// values a bignum language exists to carry.
+    RepresentedImmediate {
+        tag: BoundaryTag,
+        spill: Option<BoundaryClass>,
+    },
+    /// An opaque handle. The **referent** owner is part of the disposition
+    /// because it is a different question from who owns the frame slot (`D2`).
+    RepresentedHandle {
+        tag: BoundaryTag,
+        class: BoundaryClass,
+    },
+    /// Never a source value at a boundary — protocol machinery only.
+    ProtocolOnly {
+        why: &'static str,
+    },
+    /// Rejected **before** emission, with an exact error.
+    FailClosedForbidden {
+        why: &'static str,
+    },
+}
+
+impl Lowered {
+    /// The boundary disposition of this value.
+    ///
+    /// ⛔ **No `_` arm, by construction.** Every variant is named.
+    pub(in crate::cranelift_backend) fn boundary_disposition(&self) -> BoundaryDisposition {
+        use BoundaryDisposition::{
+            FailClosedForbidden, ProtocolOnly, RepresentedHandle, RepresentedImmediate,
+        };
+        match self {
+            // ─── represented immediates ──────────────────────────────────
+            //
+            // Ken's `Int` is arbitrary precision, so the immediate field is a
+            // fast path and the spill is the general case. The choice between
+            // them is made by emitted code from the value's magnitude at
+            // RUNTIME; nothing inspects a JIT-time value to pick a layout,
+            // which is `AC-2`.
+            Lowered::Int { .. } => RepresentedImmediate {
+                tag: BoundaryTag::ImmediateInt,
+                spill: Some(BoundaryClass::Int),
+            },
+            // One bit. The only immediate that cannot overflow its field.
+            Lowered::Bool { .. } => RepresentedImmediate {
+                tag: BoundaryTag::ImmediateBool,
+                spill: None,
+            },
+            Lowered::ProcessExitStatus { .. } => RepresentedImmediate {
+                tag: BoundaryTag::ImmediateExitStatus,
+                spill: Some(BoundaryClass::Int),
+            },
+            Lowered::BoundedNat(_) => RepresentedImmediate {
+                tag: BoundaryTag::ImmediateBoundedNat,
+                spill: Some(BoundaryClass::Int),
+            },
+            Lowered::StructuralNat(_) => RepresentedImmediate {
+                tag: BoundaryTag::ImmediateStructuralNat,
+                spill: Some(BoundaryClass::Int),
+            },
+
+            // ─── tokens: handles, NOT immediates ─────────────────────────
+            //
+            // ⛔ A capability or resource token is an opaque 64-bit identity,
+            // and the immediate field is 56 bits. Truncating it would let two
+            // distinct tokens compare equal — an authority forgery, not a
+            // rounding error — so these take a handle whose node payload holds
+            // the full word. Their owner is the invocation because that is
+            // already the extent over which the token is valid.
+            Lowered::CapabilityToken { .. } | Lowered::ResourceToken { .. } => {
+                RepresentedHandle {
+                    tag: BoundaryTag::InvocationBorrowed,
+                    class: BoundaryClass::BorrowedOpaque,
+                }
+            }
+
+            // ─── persistable ground values ───────────────────────────────
+            //
+            // `Constructor` is a REQUIRED live arm: 29 of the 41 measured
+            // source-valued transfers are `Constructor` parameters, and a
+            // disposition that parked it in `FailClosedForbidden` would reject
+            // the dominant population — sound, and unable to satisfy `B2F`'s
+            // `D6`/`D7`. That is the whole finding of `#10`.
+            Lowered::Constructor { .. } | Lowered::DynamicConstructor(_) => RepresentedHandle {
+                tag: BoundaryTag::PersistentGround,
+                class: BoundaryClass::Constructor,
+            },
+            Lowered::Record { .. } => RepresentedHandle {
+                tag: BoundaryTag::PersistentGround,
+                class: BoundaryClass::Record,
+            },
+            Lowered::String(_) => RepresentedHandle {
+                tag: BoundaryTag::PersistentGround,
+                class: BoundaryClass::String,
+            },
+            Lowered::Bytes(_) => RepresentedHandle {
+                tag: BoundaryTag::PersistentGround,
+                class: BoundaryClass::Bytes,
+            },
+
+            // ─── borrowed ingress ────────────────────────────────────────
+            //
+            // ⛔ Invocation-owned: the referent is host storage that dies with
+            // the native invocation. `AC-7`'s escape check keys on exactly this
+            // owner, so a word naming one cannot silently outlive its buffer.
+            //
+            // `HostResult` is the second REQUIRED live arm. It carries a
+            // RUNTIME success discriminant plus the two payloads it selects
+            // between; the landed lowering holds those payloads as compile-time
+            // templates, which is why a compiled-once callee cannot consume one
+            // today.
+            Lowered::HostResult { .. } => RepresentedHandle {
+                tag: BoundaryTag::InvocationHostResult,
+                class: BoundaryClass::HostResult,
+            },
+            Lowered::ResponseBytes { .. }
+            | Lowered::BorrowedNativeValue { .. }
+            | Lowered::BorrowedOption { .. } => RepresentedHandle {
+                tag: BoundaryTag::InvocationBorrowed,
+                class: BoundaryClass::BorrowedOpaque,
+            },
+
+            // ─── closures ────────────────────────────────────────────────
+            //
+            // Represented as a handle to a record of the static origin plus the
+            // captured words. ⚠ Represented, NOT callable: `B2V` supplies no
+            // dispatch, because a cross-owner call is precisely what `D6`
+            // forbids and what `B2F` exists to add. Making these handles now
+            // rather than forbidding them is deliberate — a higher-order
+            // language will pass closures as parameters, and a
+            // `FailClosedForbidden` here would guarantee that wall for `B2F`.
+            Lowered::Closure { .. } | Lowered::DeclarationClosure { .. } => RepresentedHandle {
+                tag: BoundaryTag::PersistentClosure,
+                class: BoundaryClass::Closure,
+            },
+
+            // ─── fail-closed ─────────────────────────────────────────────
+            //
+            // ⛔ Not a value: it names a `ContinuationActivationId` and a
+            // `RecursorInvocationSegment`, which identify ONE in-flight
+            // activation of the enclosing recursor. Transferring it to another
+            // unit would hand over a cursor into a frame that unit does not
+            // have. Rejected before emission, with an exact error.
+            Lowered::ComputationalRecursorClosure { .. } => FailClosedForbidden {
+                why: "a computational recursor closure names an in-flight activation, \
+                      not a transferable value",
+            },
+
+            // ─── protocol-only ───────────────────────────────────────────
+            Lowered::RecursiveBackedge => ProtocolOnly {
+                why: "a tail-recursive edge is already a CFG jump; the block is \
+                      predecessor-free and there is no value to transfer",
+            },
+            // The trap word is its own `AbiCarrier`, written by the protocol.
+            // ⛔ `result_carrier` is not its producer — the `AC-11` correction
+            // on `B2F` says exactly this, and it holds here too.
+            Lowered::Trap(_) => ProtocolOnly {
+                why: "a trap is written to the activation's trap word, which is a \
+                      protocol carrier and not a source-expression result",
+            },
+        }
+    }
+}
+
 #[derive(Clone)]
 struct ActiveRecursiveDeclarationV1 {
     symbol: RuntimeSymbol,
