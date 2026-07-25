@@ -113,7 +113,32 @@ naming the new helper anything else.
 | pin | what it closes |
 |---|---|
 | `the_retained_body_routes_are_a_closed_inventory_of_named_functions` | definitions counted separately from consumers (`retained_body_occurrence` 1 + 8; `machine_body_occurrence` 1 + 3), **plus** the exact permitted set of enclosing functions for each |
-| `the_routing_function_enumerator_sees_a_relocated_call` | its positive control — feeds the enumerator the Architect's evasion under a non-matching name, and a non-degenerate pair where the count cannot discriminate but the inventory can |
+| `the_routing_function_enumerator_sees_a_relocated_call` | its positive control — the evasion under a non-matching name, the `pub fn` qualifier discriminator, nine qualifier forms, and a non-degenerate pair where the count cannot discriminate but the inventory can |
+| `the_method_boundary_oracle_enforces_its_impl_shape_premise` | the premise the attribution rests on, asserted against the real `core.rs`: one top-level `impl`, no nested `impl`, **no unparsable header**, and non-vacuity |
+
+### ⛔ SECOND CORRECTION — the first oracle was itself a false green
+
+The method-boundary oracle initially stripped a literal `"pub"` and then required
+`") "`, so a legal plain **`pub fn`** header was not recognized at all (Architect,
+`evt_4etegbq0xyaqq`). A new retained-body route declared `pub fn` was therefore
+**invisible to the inventory while every count stayed green** — the exact
+property this pin exists to close, defeated by a visibility modifier.
+
+⭐ **The repair is qualifier *independence*, not a longer list.** Adding `pub fn`
+to a spelling list would have left `const fn`, `async fn`, `unsafe fn`, and the
+next modifier open. The oracle now locates the **`fn` token** and the identifier
+after it, so every legal qualifier attributes identically, and it **fails closed**
+— an `impl`-level line carrying a `fn` token it cannot parse poisons the
+inventory rather than being skipped.
+
+⚠ The committed inventory was **not** wrong at the time: `core.rs` contains only
+bare `fn` at indent 4 (36 of them, zero `pub fn`), so the recorded routes were
+accurate. The defect was a **latent** false green — a gap that would have opened
+the moment anyone declared a route `pub`.
+
+**Mutation-verified on real `core.rs`:** adding `pub fn sneaky` and relocating one
+call site **compiles**, **reddens the inventory pin**, and leaves the 59-call
+census, the `source_occurrence` pin, and the impl-shape premise **green**.
 
 The routing inventory, asserted exactly: `lower_recursor_residual_call`,
 `lower_computational_producer_expr`, `retained_body_occurrence`,
