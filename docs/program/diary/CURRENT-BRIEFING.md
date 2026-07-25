@@ -262,34 +262,35 @@ Only a **wide** `capture-pane` shows the `at capacity` line above the composer.
   this chain ran **10 hard-stops dry**). **My tracker is the count of record**;
   the Architect re-derives its own across compactions and loses.
 
-  > ### ⛔ CORRECTED 2026-07-25 — THIS LINE ITSELF WENT STALE. Two chains, and
-  > ### the numbers below are NOT interchangeable.
+  > ### ⛔ THE NUMBERS ARE NOT HERE. **`▶ ARMED COUNTERS` in the LIVE block is
+  > ### the single count of record.** This section carries only the lessons.
   >
-  > This bullet used to read *"the issue file carries `hard-stop count = 33` /
-  > `NEXT RESEARCH PULL = #36`"*. **MEASURED:** `issues/RT-NATIVE-FNSPLIT.md`
-  > carries exactly one `NEXT RESEARCH PULL` line and it says **`#12`**, with
-  > `COUNT OF RECORD = 9` and `#9 CONSUMED`. **THE GAP:** `33`/`#36` described
-  > the **original pre-recut chain**, which was **frozen at the recut**; the
-  > **live** chain is the recut one (`wp/RT-NATIVE-FNSPLIT-recut.md` opened it
-  > at `1` on 2026-07-24, cadence `#3, #6, #9, #12, …`).
+  > **2026-07-25: this block used to restate the counters, and a briefing that
+  > states them twice has no count of record at all** — two copies drift, both
+  > read authoritative, and the reader cannot tell which is live. That is the
+  > same defect as the one below, one level up, so the duplicate is gone rather
+  > than re-synchronised.
   >
-  > ```text
-  > ORIGINAL chain  — FROZEN at 33 hard-stops. Do NOT resume this count.
-  > LIVE recut chain — COUNT OF RECORD = 9 · #3/#6/#9 consumed
-  >                    NEXT RESEARCH PULL = hard-stop #12
-  > SYMPTOM INVENTORY — ENTRIES = 3, answered at entry 2 (entry 3 = the CAUSE)
-  >                    NEXT PREDICATE CHECK = 6th entry
-  > ```
+  > ⛔ **Two chains exist and their numbers are NOT interchangeable.** The
+  > **original** chain is **FROZEN at 33 hard-stops — do not resume that
+  > count.** The **live** chain is the recut one (`wp/RT-NATIVE-FNSPLIT-recut.md`
+  > opened it at `1` on 2026-07-24, cadence `#3, #6, #9, #12, …`). This bullet
+  > once carried the frozen chain's `33`/`#36` onto the live chain.
   >
-  > ⛔ **Why this mattered more than a wrong number:** a `#36` anchor on a chain
-  > standing at **9** makes the trigger **unreachable** — 27 hard-stops of
+  > ⛔ **Why that mattered more than a wrong number:** a `#36` anchor on a chain
+  > standing at `9` makes the trigger **unreachable** — 27 hard-stops of
   > headroom on a mechanism that exists to fire every 3rd. The armed line was
-  > *present*, so every "is it armed?" check passed. **An armed trigger with a
+  > *present*, so every *"is it armed?"* check passed. **An armed trigger with a
   > stale anchor reads exactly like a working one**, which is the same defect
-  > class as the `10-hard-stops-dry` run it was written to prevent, one level up.
+  > class as the `10-hard-stops-dry` run it was written to prevent.
   >
-  > ★ **`RT-FNSPLIT-B2O` produced NO hard-stop, so the count did not move.** A
-  > clean WP never advances it — do not "catch up" the number for elapsed work.
+  > ★ **A clean WP does NOT advance the count** — `RT-FNSPLIT-B2O` produced no
+  > hard-stop and the count correctly stayed put. **Neither does a review
+  > block:** `B2R` took two and stayed at 10. A hard-stop is the implementer
+  > discovering it *cannot proceed*; a block is a candidate being *found
+  > incomplete*. ⛔ Do not "catch up" the number for elapsed work — inflating it
+  > pulls the research trigger early and teaches the chain that the two are one
+  > event.
 - **⛔ RT-NATIVE-FNSPLIT DOES NOT MERGE ON "the tests pass"** — the operator's
   scaling gate (`evt_4btfhwqhah1ye`) binds: empirical n=3..7 harness +
   research-grounded analytical growth order + a verdict. **SP-A is
@@ -407,35 +408,38 @@ where the mechanism actually lives before you route on the field.**
 `NATIVE-HANDLE-CARRIER` → `RT-NATIVE-FNSPLIT`, so the PX8 spine cannot fill this
 slot while #33 is open.
 
-### ⛔ FOUR OPERATOR DIRECTIVES ARE LAW AND ARE **NOT ON `main`**
+### ✅ CLOSED 2026-07-25 — the four operator directives ARE on `main`
 
-Found 2026-07-24 while checking `steward/work` drift. Verified **by content**
-(`git grep <phrase> origin/main`), not by branch-ahead, so the squash-merge trap
-is excluded:
+> ⛔ **This block used to read "FOUR OPERATOR DIRECTIVES ARE LAW AND ARE **NOT
+> ON `main`**" and asserted that the fleet was reviewing in series and the
+> adversary was running without its scope fence. All four have since landed.
+> The escalation it ended on — *"awaiting the operator's call"* — is
+> **DISCHARGED. Do not re-raise it.**
 
-| item | status |
+Re-measured on `origin/main` 2026-07-25:
+
+| directive | located |
 |---|---|
-| `COORDINATION §8a` — Architect/Librarian review in PARALLEL over disjoint domains | **not on main** |
-| `COORDINATION §10⁻a` — adversary channel report-only, scoped to `crates/`+catalog | **not on main** |
-| steward playbook §2d — separate judgment from action (OODA) | **not on main** |
-| steward playbook — contention has a LEDGER axis | **not on main** |
+| `COORDINATION §8a` — Architect/Librarian parallel, over disjoint domains | `agent/COORDINATION.md:455` |
+| `COORDINATION §10⁻a` — adversary channel report-only | `agent/COORDINATION.md:629` |
+| steward playbook §2d — separate judgment from action (OODA) | `agent/playbooks/federation/steward.md:1111` |
+| steward playbook — contention has a LEDGER axis | `agent/playbooks/federation/steward.md:260` |
 
-⛔ **Why this is not bookkeeping.** Every seat reads `agent/COORDINATION.md`
-**from its own worktree at `origin/main`.** After the power cycle the whole
-fleet re-oriented against a COORDINATION that is **missing two operator
-directives**. I hold them only because I read from `steward/work`. So the fleet
-is currently reviewing in series where §8a says parallel, and the adversary is
-operating without its §10⁻a scope fence.
+⛔ **The measurement itself nearly went wrong, and that is the durable part.**
+My first probe grepped the literal `in PARALLEL over disjoint` and reported §8a
+**missing**. The real heading is `PARALLEL, OVER DISJOINT` — a comma. One
+false negative would have sent a settled matter back to the operator as an open
+one. ⇒ **Probe with several short, lowercase, single-line fragments and require
+them to agree**; never one multi-word phrase, which in an 80-column file is
+odds-on to span a wrap or a punctuation mark you did not predict. The rule was
+already written ~700 lines below this line, in *Tooling traps* — **and it did
+not fire, because a rule that far from the work never does.**
 
-⚠ **`steward/work` is 70+ commits ahead of `origin/main`**, against §6a's *"at
-most the current unpublished tracker delta."* Most is the squash-merge trap —
-**do not treat branch-ahead as unmerged.** The correct route is §6a step 2: cut
-`wp/steward-<slug>` from **current** `origin/main` and apply only the intended
-changes; never publish `steward/work` itself.
-
-**Awaiting the operator's call on publishing this** (§10⁻: process work is
-subordinate to product flow — but these are the operator's own directives, and
-their absence is actively changing how the fleet behaves).
+⚠ **Still true and still load-bearing:** `steward/work` runs far ahead of
+`origin/main` against §6a's *"at most the current unpublished tracker delta"* —
+**mostly the squash-merge trap, so do not treat branch-ahead as unmerged.** The
+route is §6a step 2: cut `wp/steward-<slug>` from **current** `origin/main`,
+apply only the intended changes, and never publish `steward/work` itself.
 
 ### ▶ Doc track — IDLE
 
@@ -559,10 +563,13 @@ committed exit (PX10/PX11/PX12).
 > finding labels. **`PX9`-`PX12` keep their charter IDs.** `L` was rejected
 > as a prefix: `L1`-`L7` are existing WPs.
 
-> **★ COVERAGE ANSWER (operator asked 2026-07-21; verified file-by-file):
-> 0 of 18 items have an issue.** The only live node of §5's graph is
-> **PX8**, its *root*. Everything downstream of `PX8 -> ABI-R3` and
-> `PX8 -> PX9` is unframed. §9 of that document is the record.
+> **★ COVERAGE — CLOSED 2026-07-25. This read `0 of 18 items have an issue`;
+> it is now `18 of 18`.** Re-measured on `origin/main`: `ABI-A1/A2/A3`,
+> `ABI-M1/M2`, `ABI-R1/R3`, `ABI-REVOKE`, `ABI-S1`…`ABI-S6`, and
+> `PX9/PX10/PX11/PX12` all exist under `docs/program/issues/`. ⛔ **Do not
+> re-file them.** *Filed* is not *framed*, though — a tracked node with no
+> shovel-ready brief in `docs/program/wp/` is still not releasable, and that
+> gap is the real remaining work (`ABI-R1` is framed; `ABI-S3` is queued).
 >
 > **AND the document had a hole:** the charter's **runtime revocation
 > membrane** (`09` §5) is absent from it. `RevocationHandle { revoked: bool }`
