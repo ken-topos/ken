@@ -80,27 +80,67 @@
 > both cfg configurations pin the unchanged production census. ⛔ **No
 > encoder/decoder that creates a second live body-emission authority lands early.**
 >
-> ### ⇢ NEXT ACT
+> ### ⇢⇢ NEXT ACT — ONE THING: §2c GATE, THEN KICK `B2O`. Nothing else is open.
 >
-> 1. **Publish this batch** — `B2O` + `B2R` issue files (new), `B2F` re-scoped to
->    `draft`, parent closure ledger + armed-trigger line, tracker, briefing.
-> 2. **Push the implementer's #9 evidence commit off-box.** They are making **one
->    doc-only evidence commit** on `wp/RT-FNSPLIT-B2F-functionization` and will
->    report the SHA (leader confirmed `evt_2ab0cnr2hxtw6`). ⛔ It is uncommitted
->    with **zero off-box copies** until I push it — mint via
->    `.devcontainer/mint-gh-token.sh` (it **PRINTS**; command-substitute, never
->    `source`), mask with `sed`, `unset T`, verify with `ls-remote`.
->    ⚠ **This reverses my earlier no-commit hold** (`evt_765cfz3pmxzhw`), which was
->    correct while the ruling could still re-slice scope and is now stale.
-> 3. **Frame `RT-FNSPLIT-B2O` shovel-ready**, then §2c gate → kick Runtime.
->    The Architect explicitly cleared `B2O` to proceed with **no hold**; its four
->    mechanical constraints (`C1`–`C4`) are already transcribed into `B2R`'s issue
->    file and bind that frame, not this one.
-> 4. **Fold `D6`'s structural exhibit into the eventual `B2F` re-cut:**
+> **`origin/main` = `3d5919cb`** (PRs #949/#950/#951, each content-verified and
+> tree-equal). `steward/work` re-rooted and clean.
+>
+> ✅ **DONE:** #9 transcribed and re-sliced · `B2O`+`B2R` issue files on `main` ·
+> `B2F` → `draft` with all three deps · parent ledger + armed trigger updated ·
+> evidence `fbe206a7` pushed off-box · **`B2O` frame written, Architect-reviewed,
+> amended, and FETCHABLE** at
+> `docs/program/wp/RT-FNSPLIT-B2O-body-ownership.md` (514 lines, **`D1` no longer
+> held**).
+>
+> ⇢ **THE ONLY REMAINING ACT: run the §2c gate on all three Runtime seats
+> (`moot-runtime-leader`, `-implementer`, `-qa`), verify each drop on the
+> `Context compacted` marker — NOT the lagging ctx% footer — then post ONE
+> mention-led kickoff naming the frame path and `origin/main = 3d5919cb`, confirm
+> each seat goes `Working`, and flip `RT-FNSPLIT-B2O` to `active` AS PART OF THE
+> KICKOFF (`scripts/gen-progress.sh`, bundle into the next publish).** All three
+> seats are Claude, so no Codex-first ordering applies; the ring is home and idle
+> **by my instruction** (`evt_21rbc9r82kz8s`), so an idle pane is expected and is
+> **not** a stall.
+>
+> ⚠ **Tell them the anchors moved:** the frame is authoritative, and the seed
+> population in any older prose ("root ∪ `ClosureBody` heads") is **wrong**.
+>
+> ### ⚠ Carry into the eventual `B2F` re-cut — not now
+>
+> **Fold `D6`'s structural exhibit:**
 >    `lower_source_declaration_call` (`core.rs:4034-4050`) emits **no call** — it
 >    builds `call_env = args ++ captures ++ env` and continues with `expr: body`.
 >    ⭐ **That is the authority being removed, in four lines. A census is
 >    supporting evidence, never the mechanism.**
+>
+> ### ⭐⭐ THE B2O FRAME'S THREE HARD-WON FACTS — do not let a re-read lose these
+>
+> 1. **The function population DID NOT EXIST.** `plane.functions` was an alias of
+>    the node table (`PredeclaredFunctionId(planned_node.0)`), and that equality
+>    was **enforced** in three places. `StaticNode.transition` is a machine step,
+>    so "one target per `PredeclaredFunction`" would have emitted **one Cranelift
+>    function per transition state** — reading as literal compliance with `D1`.
+>    The Architect withdrew that phrase.
+> 2. ⛔ **`ClosureBody` IS THE BODY'S RETURN SUCCESSOR, NOT ITS HEAD.** I got this
+>    wrong and the Architect caught it. Read the planner in **construction
+>    order**: `body_return` is made first, wired to the shared terminal, then the
+>    body is planned *toward* it; `StaticBody` targets `body.entry`. Ruled seeds =
+>    `plan.entries` (root **+ every transparent declaration**) ∪ `StaticBody`
+>    **targets**.
+> 3. ⛔ **The shared `Terminal`/`TrapTerminal` made my edge law UNSATISFIABLE** —
+>    `edge(body_return, self.terminal, Continue)` is a non-`StaticBody` edge out
+>    of a body-owned node. They are shared **exit templates outside** the
+>    exclusive partition, and the owner field must be a **closed enum**
+>    (`SemanticOwner::{Function(id), Terminal, TrapTerminal}`) — ⛔ **never an
+>    `Option` or a reserved invalid id**, which would say "absent", a third thing
+>    that is false.
+>
+> ★ **The pattern across all three, and across this whole session: a marker that
+> names something ADJACENT to what the reader wants.** `self.lower_expr(` was a
+> receiver spelling, not the call population. `RuntimeExpr::Closure` was one of
+> two capture arms. `PredeclaredFunction` was a node alias. `ClosureBody` was a
+> return node. ⇒ **Read the construction, not the name — and count the
+> population.**
 >
 > **Steward rulings already issued at the stop, so the ring is not blocked on
 > them:** the `D5`/`D6` **narrow reading is correct** (remove inlining across the
