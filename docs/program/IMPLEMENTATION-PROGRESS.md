@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-25 10:28:24Z — from 73 issue file(s) in `docs/program/issues/`.
+2026-07-25 13:08:58Z — from 73 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -95,7 +95,7 @@ the committed file matches the generator's output.
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | merged | runtime | M | none | PR #911 @ 238a5c5d (origin/main 4ac9141e, CI green) |
 | `RT-FNSPLIT-B1R` | RT-NATIVE-FNSPLIT Boundary B1R — encode the occurrence-local semantic material B1 counted but never stored (repair of landed B1) | merged | runtime | L | none | 937 |
 | `RT-FNSPLIT-B2A-C` | plan↔lowering occurrence correspondence — transport the preallocated StaticOriginId to the site where it is out of scope | merged | runtime | L | none | 940 |
-| `RT-FNSPLIT-B2A-S` | defunctionalize retained body selection — static-origin tag plus one closed consumer, replacing cloned-RuntimeExpr identity | active | runtime | M | none | — |
+| `RT-FNSPLIT-B2A-S` | defunctionalize retained body selection — static-origin tag plus one closed consumer, replacing cloned-RuntimeExpr identity | merged | runtime | M | none | 944 |
 | `RT-FNSPLIT-B2A` | RT-NATIVE-FNSPLIT Boundary B2a — make the semantic plane load-bearing for emission (behaviour-preserving port) | draft | runtime | L | none | — |
 | `RT-FNSPLIT-B2B` | RT-NATIVE-FNSPLIT Boundary B2b — full emission census, finite differences, and the explicit growth verdict | draft | runtime | M | none | — |
 | `RT-FNSPLIT-B2F` | functionization and authority switch — per-static-origin Cranelift target functions, atomic with switch-over, equivalence evidence, and old-path removal | draft | runtime | L | none | — |
@@ -159,7 +159,6 @@ is itself not yet `merged`/`closed`:
 - `PX9` blocked by `PX8` (status: draft)
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
 - `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2A` (status: draft)
-- `RT-FNSPLIT-B2F` blocked by `RT-FNSPLIT-B2A-S` (status: active)
 
 ## Gate progress
 

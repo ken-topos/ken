@@ -162,6 +162,32 @@ this line wins.** Re-read this line on every hard-stop.
 >    one is absent, not because it was mis-chosen.
 > ```
 >
+> ### ⭐ CLOSURE LEDGER — which entries are DISCHARGED (Steward bookkeeping)
+>
+> The inventory above is append-only and is **not** rewritten as entries close.
+> This block is the closure record. ⛔ **Read it before claiming the parent is
+> done: the parent stays `active` until all three are closed.**
+>
+> ```text
+> entry 1  retained-body selection keyed on cloned RuntimeExpr pointer identity
+>          ✅ CLOSED by RT-FNSPLIT-B2A-S — PR #944, origin/main = 145fe915
+>             (2026-07-25). Selection is keyed by the planner's static origin;
+>             a retained closure carries no term.
+> entry 2  lower_expr re-lowers each retained body PER CALL SITE in that call
+>          site's whole configuration
+>          ⛔ OPEN — assigned to RT-FNSPLIT-B2F. Untouched by B2A-S and B2A-C;
+>             all three ring seats and the Architect said so independently.
+> entry 3  THE CAUSE — no static key in scope at the construction site
+>          ✅ CLOSED by RT-FNSPLIT-B2A-C — merged 2db29abe (2026-07-25).
+>             plan↔lowering occurrence correspondence now exists.
+> ```
+>
+> ⚠ **Entry 2 is the one that carries the growth verdict**, so no per-function
+> or scaling claim is established until B2F lands. Neither B2A-C nor B2A-S
+> installs a target function, calling convention, dispatch, or emitted-code
+> authority — do not read their closure as progress on the operator's
+> per-function growth gate.
+>
 > ## ⭐ ENTRY 3 IS WHY THE PREDICATE KEEPS BEING VIOLATED
 >
 > Entries 1 and 2 are two *surrogates*; entry 3 is the *vacancy* that forces a
