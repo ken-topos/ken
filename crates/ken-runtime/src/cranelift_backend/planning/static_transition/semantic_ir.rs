@@ -5,8 +5,8 @@
 //! contracts.
 
 use super::{
-    planner_capacity_error, planner_error, CraneliftBackendError, StaticEdge, StaticEdgeId,
-    StaticNode, StaticNodeId, TransitionKind,
+    planner_capacity_error, planner_error, CraneliftBackendError, EdgeKind, StaticEdge,
+    StaticEdgeId, StaticNode, StaticNodeId, TransitionKind,
 };
 use crate::{
     RuntimeExpr, RuntimeIntV1, RuntimePartiality, RuntimePrimitive, RuntimeTrap, RuntimeTrapCode,
@@ -36,6 +36,34 @@ pub(super) struct CaptureLayoutId(pub(super) u32);
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub(super) struct PredeclaredFunctionId(pub(super) u32);
+
+/// Which function unit a planned node belongs to.
+///
+/// ⛔ **Exhaustive and closed on purpose, and deliberately NOT
+/// `Option<PredeclaredFunctionId>`.** The unique `Terminal` and `TrapTerminal`
+/// are **shared exit templates**: they are reachable from every unit by
+/// construction (`static_transition.rs:835`, `:852`), so they sit outside the
+/// exclusive owner partition. They are neither target functions nor *missing
+/// data* — an `Option` would say "absent", which is a third thing and is false.
+/// A reserved "invalid" id would be worse still, because it type-checks as a
+/// function.
+///
+/// ⭐ This is the withdrawn `AC-5` defect relocated into a **type**. That AC's
+/// two-way site classification had no cell for the honest answer, so it could
+/// have been filled in *completely* and still been wrong. Here the same defect
+/// would have lived in a field whose every value is a `PredeclaredFunctionId`,
+/// where the code compiles and exactly two rows are lies. With this enum those
+/// two rows cannot be spelled.
+///
+/// ⚠ Distinct from `StaticNode.owner`, which is a `StaticSourceId` — Boundary
+/// A's authority attribution, not a function unit.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(u8)]
+pub(super) enum SemanticOwner {
+    Function(PredeclaredFunctionId),
+    Terminal,
+    TrapTerminal,
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
@@ -444,6 +472,27 @@ pub(super) struct CaptureLayout {
     pub(super) slots: DenseRange,
 }
 
+/// One function unit: a **seed** of the ownership partition, not a planned node.
+///
+/// ⛔ This table used to be a positional alias of the node table — one row per
+/// planned node, `PredeclaredFunctionId(planned_node.0)` — so a type whose name
+/// claimed "function" was populated with abstract-machine transition states. It
+/// is now populated from the ruled seeds:
+///
+/// ```text
+/// all scheduling entries in plan.entries   (root + each transparent declaration)
+///   UNION
+/// all TARGETS of EdgeKind::StaticBody edges  (each retained closure-body entry)
+/// ```
+///
+/// `planned_node` is this unit's **entry** node. ⚠ `id.0` is a dense ordinal over
+/// the seeds and is **no longer** equal to `planned_node.0`; any code that
+/// recovers one from the other is reintroducing the alias.
+///
+/// ⛔ There is exactly **one** table in this plane whose name claims "function",
+/// because `RT-FNSPLIT-B2R` attaches signatures and frame layouts to it and
+/// cannot be told which of two to use. Node-scoped semantic material stays in
+/// `SemanticDescriptor` + `SemanticProgram` + `SemanticRecord`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
 pub(super) struct PredeclaredFunction {
@@ -461,7 +510,14 @@ pub(super) struct SemanticDescriptor {
     pub(super) origin: StaticOriginId,
     pub(super) program: SemanticProgramId,
     pub(super) capture_layout: CaptureLayoutId,
-    pub(super) function: PredeclaredFunctionId,
+    /// The function unit this occurrence belongs to.
+    ///
+    /// ⛔ Formerly `function: PredeclaredFunctionId`, filled with
+    /// `PredeclaredFunctionId(planned_node.0)` — an identity alias carrying no
+    /// information. It now names the **owning** unit, which is what makes the
+    /// 59-call population dispositionable by owner and reaching path instead of
+    /// by source site.
+    pub(super) owner: SemanticOwner,
     pub(super) ruled_children: DenseRange,
 }
 
@@ -483,12 +539,203 @@ pub(super) struct SemanticPlane {
     pub(super) functions: Vec<PredeclaredFunction>,
 }
 
+/// The unique pair of shared exit templates, located and checked as a pair.
+///
+/// ⚠ `StaticTransitionPlan::validate` also requires exactly one of each. That is
+/// not redundant: this check runs during plane construction, *before* the plan's
+/// own validation, and a mutation control that hands a corrupted plane straight
+/// to `SemanticPlane::validate` never reaches the plan-level check at all.
+fn shared_exits(
+    nodes: &[StaticNode],
+) -> Result<(StaticNodeId, StaticNodeId), CraneliftBackendError> {
+    let mut terminal = None;
+    let mut trap_terminal = None;
+    for node in nodes {
+        match node.transition {
+            TransitionKind::Terminal => {
+                if terminal.replace(node.id).is_some() {
+                    return Err(planner_error(
+                        "closed graph has more than one Terminal shared exit",
+                    ));
+                }
+            }
+            TransitionKind::TrapTerminal => {
+                if trap_terminal.replace(node.id).is_some() {
+                    return Err(planner_error(
+                        "closed graph has more than one TrapTerminal shared exit",
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+    let terminal =
+        terminal.ok_or_else(|| planner_error("closed graph has no Terminal shared exit"))?;
+    let trap_terminal = trap_terminal
+        .ok_or_else(|| planner_error("closed graph has no TrapTerminal shared exit"))?;
+    Ok((terminal, trap_terminal))
+}
+
+/// The derived ownership partition: the function-unit seeds, and one owner per
+/// planned node.
+struct OwnershipPartition {
+    /// Seed entry nodes, dense by `PredeclaredFunctionId` ordinal: `entries`
+    /// first, in order, then every `StaticBody` target in edge order.
+    seeds: Vec<StaticNodeId>,
+    /// One owner per planned node, dense by node index.
+    owners: Vec<SemanticOwner>,
+}
+
+/// Derives the function-unit partition from the plan graph.
+///
+/// ⛔ **Derived, never hand-authored.** A map read off the graph cannot drift
+/// from it; a parallel table would need its own agreement checker, which is one
+/// more thing that can be green for the wrong reason.
+///
+/// The seeds are the ruled ones (Architect `evt_48dxvb2yrwpad`):
+///
+/// ```text
+/// every scheduling entry in plan.entries    (root + each transparent declaration)
+///   UNION
+/// every TARGET of an EdgeKind::StaticBody edge   (each retained closure-body entry)
+/// ```
+///
+/// ⛔ **`TransitionKind::ClosureBody` is NOT a head.** It is the body's *return
+/// successor*: `static_transition.rs:833-836` makes the `ClosureBody` control
+/// node **first**, wires it to the shared terminal, plans the body **toward** it,
+/// and only then adds the `StaticBody` edge to `body.entry`. Seeding on
+/// `ClosureBody` nodes would pick return nodes instead of entries **and** make
+/// the edge law unsatisfiable, because that terminal edge is a non-`StaticBody`
+/// edge out of a body-owned node.
+///
+/// Traversal is over non-`StaticBody` edges only, so a `StaticBody` edge is the
+/// one and only owner boundary. The two shared exits are never owned and never
+/// traversed through — they have no outgoing edges by construction
+/// (`static_transition.rs:1258`).
+fn partition_function_units(
+    nodes: &[StaticNode],
+    edges: &[StaticEdge],
+    entries: &[StaticNodeId],
+) -> Result<OwnershipPartition, CraneliftBackendError> {
+    let (terminal, trap_terminal) = shared_exits(nodes)?;
+
+    // Seed class 1 is `entries`; seed class 2 is the `StaticBody` targets. The
+    // three ways this can be malformed get three distinct failures on purpose —
+    // one composite "the seeds are fine" check is discharged by any one of them
+    // holding, so it could not distinguish the mutations AC-5 requires.
+    #[derive(Clone, Copy, Eq, PartialEq)]
+    enum SeedClass {
+        SchedulingEntry,
+        StaticBodyTarget,
+    }
+    let mut seed_class = vec![None; nodes.len()];
+    let mut seeds = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let index = entry.0 as usize;
+        let slot = seed_class
+            .get_mut(index)
+            .ok_or_else(|| planner_error("scheduling entry is outside the planned nodes"))?;
+        if slot.is_some() {
+            return Err(planner_error(
+                "closed graph contains a duplicate scheduling entry",
+            ));
+        }
+        *slot = Some(SeedClass::SchedulingEntry);
+        seeds.push(*entry);
+    }
+    for edge in edges {
+        if edge.kind != EdgeKind::StaticBody {
+            continue;
+        }
+        let index = edge.to.0 as usize;
+        let slot = seed_class
+            .get_mut(index)
+            .ok_or_else(|| planner_error("static body target is outside the planned nodes"))?;
+        match *slot {
+            Some(SeedClass::SchedulingEntry) => {
+                return Err(planner_error(
+                    "scheduling entry is also a static body target",
+                ));
+            }
+            Some(SeedClass::StaticBodyTarget) => {
+                return Err(planner_error(
+                    "static body target has more than one incoming static body edge",
+                ));
+            }
+            None => *slot = Some(SeedClass::StaticBodyTarget),
+        }
+        seeds.push(edge.to);
+    }
+
+    let mut outgoing = vec![Vec::new(); nodes.len()];
+    for edge in edges {
+        if edge.kind == EdgeKind::StaticBody {
+            continue;
+        }
+        if edge.to.0 as usize >= nodes.len() {
+            return Err(planner_error("transfer edge target is outside the planned nodes"));
+        }
+        outgoing
+            .get_mut(edge.from.0 as usize)
+            .ok_or_else(|| planner_error("transfer edge source is outside the planned nodes"))?
+            .push(edge.to);
+    }
+
+    let is_shared_exit = |node: StaticNodeId| node == terminal || node == trap_terminal;
+    let mut owners = vec![None; nodes.len()];
+    owners[terminal.0 as usize] = Some(SemanticOwner::Terminal);
+    owners[trap_terminal.0 as usize] = Some(SemanticOwner::TrapTerminal);
+
+    for (ordinal, seed) in seeds.iter().enumerate() {
+        let unit = SemanticOwner::Function(PredeclaredFunctionId(
+            u32::try_from(ordinal)
+                .map_err(|_| planner_capacity_error("function unit identity exhausted"))?,
+        ));
+        let mut frontier = vec![*seed];
+        while let Some(node) = frontier.pop() {
+            if is_shared_exit(node) {
+                // A shared exit is this unit's local return or trap, never a
+                // node it owns and never a node to traverse through.
+                continue;
+            }
+            match owners[node.0 as usize] {
+                Some(existing) if existing == unit => continue,
+                Some(SemanticOwner::Function(_)) => {
+                    return Err(planner_error(
+                        "planned node is owned by more than one function unit",
+                    ));
+                }
+                Some(SemanticOwner::Terminal) | Some(SemanticOwner::TrapTerminal) => {
+                    return Err(planner_error("shared exit was reached as an owned node"));
+                }
+                None => {
+                    owners[node.0 as usize] = Some(unit);
+                    frontier.extend_from_slice(&outgoing[node.0 as usize]);
+                }
+            }
+        }
+    }
+
+    let owners = owners
+        .into_iter()
+        .map(|owner| owner.ok_or_else(|| planner_error("planned node has no function unit owner")))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(OwnershipPartition { seeds, owners })
+}
+
 /// The sole semantic-definition constructor. It positions seeds by their
 /// already-planned node ID, visits each node once, visits each edge once, and
 /// flattens each variable source/capture collection once.
+///
+/// ⚠ `entries` is threaded in because it is **planner state, not graph
+/// structure**: the scheduling entries are pushed at `static_transition.rs:1728`
+/// and `:1734` and cannot be recovered from `nodes`/`edges`. "A node with no
+/// incoming `StaticBody`" is *not* the same set — every ordinary node satisfies
+/// that too.
 pub(super) fn build_semantic_plane(
     nodes: &[StaticNode],
     edges: &[StaticEdge],
+    entries: &[StaticNodeId],
     sources: &[SemanticSourceSeed],
     arena: &SemanticMaterialArena,
 ) -> Result<SemanticPlane, CraneliftBackendError> {
@@ -520,6 +767,8 @@ pub(super) fn build_semantic_plane(
         });
     }
 
+    let partition = partition_function_units(nodes, edges, entries)?;
+
     let mut plane = SemanticPlane::default();
     // Atom content is referenced by absolute span, so the interned bytes move
     // across whole; only the atom and child-origin arenas are re-laid per record.
@@ -533,7 +782,7 @@ pub(super) fn build_semantic_plane(
         let origin = source.origin;
         let program = SemanticProgramId(planned_node.0);
         let capture_layout = CaptureLayoutId(planned_node.0);
-        let function = PredeclaredFunctionId(planned_node.0);
+        let owner = partition.owners[position];
 
         // Positional re-lay of the material the source walk already emitted for
         // this origin. Nothing is re-derived here, and no placeholder is minted.
@@ -584,22 +833,33 @@ pub(super) fn build_semantic_plane(
             DenseRange::at_end(&plane.ruled_children, node_children.len(), "ruled child")?;
         plane.ruled_children.extend(node_children);
 
-        plane.functions.push(PredeclaredFunction {
-            id: function,
-            planned_node,
-            origin,
-            program,
-        });
         plane.descriptors.push(SemanticDescriptor {
             planned_node,
             origin,
             program,
             capture_layout,
-            function,
+            owner,
             ruled_children: child_range,
         });
     }
-    plane.validate(nodes, edges, sources, arena)?;
+
+    // One row per function unit — NOT one per planned node. The seeds carry
+    // their own entry node, so a unit's identity is its entry rather than a
+    // position in the node table.
+    for (ordinal, seed) in partition.seeds.iter().enumerate() {
+        let id = PredeclaredFunctionId(
+            u32::try_from(ordinal)
+                .map_err(|_| planner_capacity_error("function unit identity exhausted"))?,
+        );
+        plane.functions.push(PredeclaredFunction {
+            id,
+            planned_node: *seed,
+            origin: StaticOriginId(seed.0),
+            program: SemanticProgramId(seed.0),
+        });
+    }
+
+    plane.validate(nodes, edges, entries, sources, arena)?;
     Ok(plane)
 }
 
@@ -699,10 +959,177 @@ impl SemanticPlane {
         .ok_or_else(|| planner_error("static origin has no child at that source position"))
     }
 
+    /// The function-unit population, the ownership partition, and the edge laws
+    /// — each as its own named failure.
+    ///
+    /// ⛔ Deliberately not one composite check, for the same reason
+    /// `validate_source_occurrence_table` is not: a single "ownership is fine"
+    /// assertion is discharged by any one of these holding, so the eight
+    /// mutations `AC-5` requires would be indistinguishable from each other.
+    ///
+    /// The partition is **recomputed from the graph** here and compared against
+    /// what the plane recorded. That is what makes a corrupted owner field a
+    /// planner error rather than a plausible wrong answer.
+    ///
+    /// The edge laws are checked *on top of* that comparison because they
+    /// constrain the **algorithm** and not just the record. ⚠ But they are
+    /// **defense in depth behind the overlap check, not the primary detector** —
+    /// measured, not assumed: a traversal edited to cross `StaticBody` is caught
+    /// by **overlap** first, because the callee's seed gets claimed by the caller
+    /// (mutation M1). The `StaticBody` law becomes the *sole* detector only once
+    /// the overlap check is **also** disabled (mutation M2).
+    ///
+    /// ⛔ An earlier revision of this comment said such a traversal "would
+    /// produce a self-consistent partition, and only the distinct-unit law
+    /// catches it." That was wrong, and wrong in the direction that matters: it
+    /// credited this law with work the overlap check is doing, and a reader who
+    /// believed it might weaken overlap thinking the edge law still covered them.
+    fn validate_function_units(
+        &self,
+        nodes: &[StaticNode],
+        edges: &[StaticEdge],
+        entries: &[StaticNodeId],
+    ) -> Result<(), CraneliftBackendError> {
+        let partition = partition_function_units(nodes, edges, entries)?;
+
+        // D5 prediction 1: the unit population is exactly the two seed classes.
+        // Predicted from the design on 2026-07-25, before measuring:
+        // `functions.len() == entries.len() + count(StaticBody edges)`.
+        let static_body_edges = edges
+            .iter()
+            .filter(|edge| edge.kind == EdgeKind::StaticBody)
+            .count();
+        let expected_units = entries
+            .len()
+            .checked_add(static_body_edges)
+            .ok_or_else(|| planner_capacity_error("function unit count exhausted"))?;
+        if self.functions.len() != expected_units || partition.seeds.len() != expected_units {
+            return Err(planner_error(
+                "function unit population is not the scheduling entries and static body targets",
+            ));
+        }
+
+        // Dense, positional, and seeded on the node the partition seeded on.
+        for (ordinal, function) in self.functions.iter().enumerate() {
+            let id = PredeclaredFunctionId(
+                u32::try_from(ordinal)
+                    .map_err(|_| planner_capacity_error("function unit identity exhausted"))?,
+            );
+            let seed = partition.seeds[ordinal];
+            if function.id != id
+                || function.planned_node != seed
+                || function.origin != StaticOriginId(seed.0)
+                || function.program != SemanticProgramId(seed.0)
+            {
+                return Err(planner_error(
+                    "function unit is not positional for its seed",
+                ));
+            }
+        }
+
+        // AC-2: totality and exclusivity are PINNED, not merely structural. The
+        // owner field is one field rather than a list, so "owned by two units" is
+        // unrepresentable in the record — but a *wrongly assigned* owner is very
+        // representable, which is what this comparison catches.
+        if self.descriptors.len() != partition.owners.len() {
+            return Err(planner_error(
+                "semantic descriptor population is not exact for the ownership partition",
+            ));
+        }
+        let mut terminals = 0usize;
+        let mut trap_terminals = 0usize;
+        for (position, descriptor) in self.descriptors.iter().enumerate() {
+            if descriptor.owner != partition.owners[position] {
+                return Err(planner_error(
+                    "semantic descriptor owner is not the node's derived function unit",
+                ));
+            }
+            match descriptor.owner {
+                SemanticOwner::Function(id) => {
+                    if id.0 as usize >= self.functions.len() {
+                        return Err(planner_error(
+                            "semantic descriptor names an unknown function unit",
+                        ));
+                    }
+                }
+                SemanticOwner::Terminal => terminals += 1,
+                SemanticOwner::TrapTerminal => trap_terminals += 1,
+            }
+        }
+        // AC-2: the shared-exit population is EXACTLY the two sentinels — not
+        // "at least", and not "whichever nodes ended up unowned".
+        if terminals != 1 || trap_terminals != 1 {
+            return Err(planner_error(
+                "shared exit population is not exactly one Terminal and one TrapTerminal",
+            ));
+        }
+
+        // D3, the edge laws.
+        let owner_of = |node: StaticNodeId| -> Result<SemanticOwner, CraneliftBackendError> {
+            self.descriptors
+                .get(node.0 as usize)
+                .map(|descriptor| descriptor.owner)
+                .ok_or_else(|| planner_error("ownership edge endpoint has no semantic descriptor"))
+        };
+        for edge in edges {
+            let from = owner_of(edge.from)?;
+            let to = owner_of(edge.to)?;
+            let SemanticOwner::Function(from_unit) = from else {
+                // Sentinels have no outgoing edges (`static_transition.rs:1258`),
+                // so an edge leaving one is a graph the planner did not build.
+                return Err(planner_error("shared exit has an outgoing transfer edge"));
+            };
+            if edge.kind == EdgeKind::StaticBody {
+                // A StaticBody edge crosses from one unit to a DISTINCT unit,
+                // and its target is that unit's seed.
+                let SemanticOwner::Function(to_unit) = to else {
+                    return Err(planner_error("static body edge targets a shared exit"));
+                };
+                if to_unit == from_unit {
+                    return Err(planner_error(
+                        "static body edge does not cross a function unit boundary",
+                    ));
+                }
+                if self.functions[to_unit.0 as usize].planned_node != edge.to {
+                    return Err(planner_error(
+                        "static body edge target is not its function unit's seed",
+                    ));
+                }
+            } else {
+                // A non-StaticBody edge stays inside one unit, or exits to a
+                // shared exit — which lowers as this unit's own return or trap,
+                // never as a cross-owner call.
+                match to {
+                    SemanticOwner::Terminal | SemanticOwner::TrapTerminal => {}
+                    SemanticOwner::Function(to_unit) if to_unit == from_unit => {}
+                    SemanticOwner::Function(_) => {
+                        return Err(planner_error(
+                            "transfer edge crosses a function unit boundary without a static body edge",
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Each top-level scheduling entry has NO incoming static body edge.
+        // ⚠ Not "every head except the root": a transparent declaration entry is
+        // a top-level seed too, so the root is not the only entry.
+        let scheduling_entries = entries.iter().copied().collect::<Vec<_>>();
+        for edge in edges {
+            if edge.kind == EdgeKind::StaticBody && scheduling_entries.contains(&edge.to) {
+                return Err(planner_error(
+                    "scheduling entry has an incoming static body edge",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn validate(
         &self,
         nodes: &[StaticNode],
         edges: &[StaticEdge],
+        entries: &[StaticNodeId],
         sources: &[SemanticSourceSeed],
         arena: &SemanticMaterialArena,
     ) -> Result<(), CraneliftBackendError> {
@@ -746,15 +1173,20 @@ impl SemanticPlane {
                 "semantic descriptor population is not exact for planned nodes",
             ));
         }
+        // ⚠ `functions` is deliberately NOT in this list any more. The
+        // node-exact arenas stay node-exact — that is what keeps `child_origin`'s
+        // one-record-per-program requirement and `B2A-C`'s correspondence
+        // working — but the function table is now seed-exact, and asserting it
+        // against `nodes.len()` is the alias this node exists to remove.
         if self.programs.len() != nodes.len()
             || self.records.len() != nodes.len()
             || self.capture_layouts.len() != nodes.len()
-            || self.functions.len() != nodes.len()
         {
             return Err(planner_error(
                 "semantic program arena contains a post-origin clone",
             ));
         }
+        self.validate_function_units(nodes, edges, entries)?;
 
         let source_by_node = positioned_sources(nodes, sources)?;
         let expected_operands = source_by_node.iter().try_fold(0usize, |total, source| {
@@ -841,22 +1273,16 @@ impl SemanticPlane {
             let program = self.programs[position];
             let record = self.records[position];
             let layout = self.capture_layouts[position];
-            let function = self.functions[position];
             let source = source_by_node[position];
             if descriptor.planned_node != node
                 || descriptor.origin != source.origin
                 || descriptor.program != SemanticProgramId(node.0)
                 || descriptor.capture_layout != CaptureLayoutId(node.0)
-                || descriptor.function != PredeclaredFunctionId(node.0)
                 || program.id != SemanticProgramId(node.0)
                 || layout.id != CaptureLayoutId(node.0)
-                || function.id != PredeclaredFunctionId(node.0)
-                || function.planned_node != node
-                || function.origin != source.origin
-                || function.program != SemanticProgramId(node.0)
             {
                 return Err(planner_error(
-                    "node, descriptor, program, capture layout, and function are not positional",
+                    "node, descriptor, program, and capture layout are not positional",
                 ));
             }
             if program.records.len != 1

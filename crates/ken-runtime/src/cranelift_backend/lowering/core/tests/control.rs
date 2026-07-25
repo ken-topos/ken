@@ -3526,6 +3526,112 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
 /// source. There is no such macro in the backend, and one would be visible in the
 /// same review; this is a stated limit, not a silent one.
 #[cfg(test)]
+/// **Every production source carrying an `impl Lowering` block.**
+///
+/// ⛔ `core.rs` alone is NOT the routing surface, and assuming it was is the
+/// defect this constant exists to prevent: `lowering/mod.rs:2473` carries a
+/// **second** `impl<'a> Lowering<'a>` block. A retained-body route added there
+/// would have sat entirely outside a `core.rs`-scoped inventory.
+///
+/// ⛔ **An earlier revision of this comment continued: *"today `mod.rs` cannot
+/// reach `retained_body_occurrence` … that privacy is therefore load-bearing …
+/// this list is what makes the inventory still correct after a deliberate
+/// widening."* That is the REACHABILITY entailment the Architect ruling
+/// (`evt_5yxjd1zqnyvcq`) struck, and it is withdrawn here too.**
+///
+/// The list is now a **declaration inventory only**: it names the files that
+/// carry an `impl Lowering` block, so a declaration appearing in a second one is
+/// *visible*. It supports no claim about who can **call** anything — that is the
+/// plan graph's to answer, via an occurrence's `SemanticOwner` and the planned
+/// edge kind.
+const LOWERING_IMPL_SOURCES: &[(&str, &str)] = &[
+    ("lowering/core.rs", include_str!("../../core.rs")),
+    ("lowering/mod.rs", include_str!("../../mod.rs")),
+];
+
+/// Is the retained-body helper still declared private to module `core`?
+///
+/// Matched as the exact unqualified form, so **any** visibility qualifier is a
+/// miss. That is intentional and is not a spelling list: the property is "no
+/// qualifier at all", which has exactly one spelling.
+fn retained_body_helper_is_private(core: &str) -> bool {
+    core.lines()
+        .any(|line| line.trim() == "fn retained_body_occurrence(")
+}
+
+/// **`RT-FNSPLIT-B2O` `AC-12` split row — the DECLARATION survives, the
+/// REACHABILITY entailment does not.** Architect ruling `evt_5yxjd1zqnyvcq`.
+///
+/// This pin is what remains of the withdrawn route oracle, and the boundary is
+/// the point of it:
+///
+/// - **MEASURED:** `retained_body_occurrence` is declared in `lowering/core.rs`
+///   with **no visibility qualifier**. Source text is authoritative for its own
+///   declarations, so this is a fact the scan can settle.
+/// - **CLAIMED:** exactly that, and nothing further.
+/// - **THE GAP:** ⛔ this does **not** establish which functions can *reach* the
+///   helper. The withdrawn oracle made that inference — *"`mod.rs` therefore
+///   cannot reach it, so the route inventory is still correct"* — and
+///   reachability is not a property of declaration text. Name resolution, macro
+///   expansion, and indirect calls all sit outside what any source scan sees.
+///
+/// ⇒ **The authority for boundaries is the plan graph** — an occurrence's
+/// `StaticOriginId`, its validated `SemanticOwner`, and the planned edge kind —
+/// **not this file's text.** A Rust wrapper or a same-named method in another
+/// `impl` creates no Ken function-unit boundary, so no pin here should redden
+/// when one is added; see `b2o_ac10c_repointing_a_static_body_edge_changes_the_
+/// disposition` for the axis that *is* authority.
+///
+/// Promise class: **normative compatibility vector** — the unqualified spelling
+/// is the contract, and widening it is a deliberate review event.
+#[test]
+fn the_retained_body_helper_carries_no_visibility_qualifier() {
+    let core = LOWERING_IMPL_SOURCES
+        .iter()
+        .find(|(file, _)| *file == "lowering/core.rs")
+        .map(|(_, source)| *source)
+        .expect("the impl-source list must carry core.rs");
+    assert!(
+        retained_body_helper_is_private(core),
+        "`retained_body_occurrence` no longer declares as the exact unqualified \
+         form in `lowering/core.rs`.\n\
+         ⛔ DO NOT 'fix' this by accepting the new spelling -- that is the \
+         evasion this WP paid five review folds to learn. A visibility \
+         qualifier here is a DELIBERATE widening and belongs in review, with \
+         the frozen evidence in the D6 report updated to match.\n\
+         ⚠ This pin makes NO claim about who can reach the helper; that is the \
+         plan graph's to answer, not this file's."
+    );
+
+    // The helper is declared in exactly one of the `impl Lowering` sources. This
+    // is a DECLARATION inventory over both files -- it says where the helper is
+    // written, never who can call it.
+    let declaring = LOWERING_IMPL_SOURCES
+        .iter()
+        .filter(|(_, source)| retained_body_helper_is_private(source))
+        .map(|(file, _)| *file)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        declaring,
+        vec!["lowering/core.rs"],
+        "the retained-body helper's DECLARING file set changed. ⚠ A declaration \
+         in a second `impl Lowering` source is a review event; this pin reports \
+         it and draws no conclusion about reachability."
+    );
+
+    // Non-vacuity: the needles must be real files, or both assertions above are
+    // satisfied by an empty read.
+    for (file, source) in LOWERING_IMPL_SOURCES {
+        assert!(
+            source.len() > 10_000,
+            "`{file}` did not load; the assertions above would pass vacuously"
+        );
+    }
+}
+
+
+
+
 fn identifier_occurrences(source: &str, identifier: &str) -> usize {
     source
         .lines()
@@ -4044,4 +4150,234 @@ fn no_collection_is_keyed_by_a_scheduling_entry() {
              forms, and AC-5 is discharged by (a)-(d) above"
         );
     }
+}
+
+// ─── RT-FNSPLIT-B2O D6/D7 — the call population, and inertness ─────────────
+
+/// **`RT-FNSPLIT-B2O` `D6` — the `lower_expr` call population, and why its
+/// disposition is now BY OWNER rather than by source site.**
+///
+/// ⛔ **This is a report, not the authority, and this pin is FROZEN DECLARATION
+/// EVIDENCE.** The authority is the ownership mapping in the semantic plane —
+/// an occurrence's `StaticOriginId`, its validated `SemanticOwner`, and the
+/// planned edge kind.
+///
+/// ⚠ An earlier revision said this pin existed so the population *"cannot drift
+/// silently."* **It does not establish that**, and the claim is withdrawn: the
+/// census counts textual occurrences of an identifier, which is a declaration
+/// fact. It observes nothing about which Rust functions can reach a retained
+/// body. See the `D6` report's UNMECHANIZED section for the four residuals.
+///
+/// ⚠ **The census is TOKENIZED, not `self.`-spelled.** `grep -c
+/// 'self\.lower_expr('` returns **58** and silently loses the program's entry
+/// point: the root call is spelled `compiler.lower_expr(` (`core.rs:188`) and
+/// takes `root_static_origin`, so it *seeds* the descent rather than traversing.
+/// A receiver spelling is a census of the RECEIVER, and the call it misses is the
+/// one that matters most.
+///
+/// ⭐ **Why the count is asserted as two measurements and the 59 is DERIVED.**
+/// Freezing "59" directly would be a snapshot. Instead this pins the token total
+/// and the definition count, and subtracts — so the pin states the *relation*
+/// `calls = tokens - definitions`, and a call added or removed reddens with an
+/// arithmetic explanation rather than a bare number mismatch.
+///
+/// ### The disposition, derived from the ownership mapping
+///
+/// `B2O` makes a `StaticBody` edge the **one and only** owner boundary. So a call
+/// into `lower_expr` crosses an owner boundary **iff the occurrence it lowers is
+/// a `StaticBody` target — that is, iff it lowers a retained body.** ⇒ The test
+/// is on the **occurrence's owner and the planned edge kind**, and on nothing
+/// else.
+///
+/// ⛔ **Withdrawn here:** that retained bodies are *"reachable only through the
+/// single `origin -> expression` route"* and that the population is
+/// *"characterised structurally, by one pinned route."*
+/// `exactly_one_plan_origin_to_expression_lookup_exists` constrains the
+/// identifier `source_occurrence` **only** — it says nothing about who may call
+/// `retained_body_occurrence`, so it never supported either sentence.
+///
+/// ⇒ **The boundary-crossing population is derived from the validated owner
+/// partition**, instead of enumerated as a table of source sites. That is the
+/// repair for the withdrawn `AC-5`: its two-way site classification had no cell
+/// for "depends on the reaching path", so it could have been filled in completely
+/// and still been wrong. For the 14 caller-dependent sites the answer genuinely
+/// *is* a function of the reaching path — the same parameter carries both a
+/// retained body and ordinary sub-expressions — and no per-site row can say that.
+/// The **validated owner partition** can: an occurrence's `StaticOriginId`, its
+/// `SemanticOwner`, and the planned edge kind answer it per occurrence, which is
+/// the only authority here.
+#[test]
+fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
+    // Promise class: durable invariant — a relation over the production source,
+    // not a frozen count. `tokens` and `definitions` each move for a stated
+    // reason; `calls` is their difference.
+    let core = include_str!("../../core.rs");
+    let tokens = identifier_occurrences(core, "lower_expr");
+    let definitions = core
+        .lines()
+        .filter(|line| line.trim() == "fn lower_expr(")
+        .count();
+    assert_eq!(
+        definitions, 1,
+        "D6: there must be exactly one `lower_expr` definition for the call \
+         count to be `tokens - definitions`"
+    );
+    let calls = tokens - definitions;
+    assert_eq!(
+        calls, 59,
+        "D6: the tokenized production call population into `lower_expr` moved. \
+         ⚠ If you reached this by counting `self.lower_expr(` you will have got \
+         58 -- the root call at `core.rs:188` is spelled `compiler.lower_expr(`"
+    );
+
+    // Non-vacuity: the tokenizer must actually see the root call's receiver
+    // spelling, or the paragraph above is describing something the pin cannot
+    // measure.
+    assert!(
+        core.contains("compiler.lower_expr("),
+        "D6: the root call's spelling is gone, so this census no longer \
+         distinguishes the entry point from traversal"
+    );
+
+    // ⭐ The DISCRIMINATOR, on a shared input: a non-degenerate pair where the
+    // tokenizer and the receiver-spelled scan give different answers. Without
+    // this, "use the tokenizer" is advice rather than a checked property — and a
+    // positive control that only exercises `self.` would be spelling-scoped in
+    // exactly the way that produced 58.
+    let both_receivers = "let a = self.lower_expr(b, o, e)?;\nlet c = compiler.lower_expr(b, o, e)?;\n";
+    assert_eq!(
+        identifier_occurrences(both_receivers, "lower_expr"),
+        2,
+        "the census must count a call regardless of its receiver"
+    );
+    assert_eq!(
+        both_receivers.matches("self.lower_expr(").count(),
+        1,
+        "if the receiver-spelled scan agreed with the tokenizer here, this pair \
+         would not discriminate and would prove nothing about the 58/59 gap"
+    );
+
+    // ⚠ Honest limit, recorded next to the enforced statement rather than left
+    // for the next reader to discover: this census does NOT partition out
+    // `core.rs`'s 22 inline `#[cfg(test)]` regions, so a call added inside one
+    // would be counted as production. That errs toward a FALSE RED, never a
+    // false green, so it is the safe direction — but it is a limit, not a
+    // property, and "production" here means "textually in the production file".
+    assert!(
+        core.contains("#[cfg(test)]"),
+        "the caveat above describes inline cfg(test) regions that are no longer \
+         present, so it has gone stale and must be re-derived"
+    );
+}
+
+/// **`RT-FNSPLIT-B2O` `D7`/`AC-1` — inertness, as reach rather than as a builder
+/// count.**
+///
+/// The emitted-unit census (`correspondence_adds_no_emitted_unit_to_the_production_census`)
+/// already pins `1` builder / `1` definition / `2` declarations in `core.rs` and
+/// zero everywhere else, and it counts **source text**, which is why it discharges
+/// `AC-1`'s "in BOTH configurations" rather than needing a per-`cfg` variant:
+///
+/// > **MEASURED:** text occurrences of the builder/definition/declaration forms
+/// > across each whole production file, `#[cfg(test)]` regions included.
+/// > **CLAIMED:** production emits no new unit under `cfg(test)` or without it.
+/// > **THE GAP:** none in the strict direction — any unit emitted in *either*
+/// > configuration must appear in the text, so a text census is a superset of
+/// > both. It is stricter than the AC, not weaker.
+///
+/// ⛔ **But a builder census cannot see an executable edge, and it was already
+/// zero before this node**, so on its own it is a check that would pass whether
+/// or not `B2O` stayed inert.
+///
+/// ⛔ **Withdrawn:** an earlier revision presented what follows as *"two
+/// mechanisms"* proving *"no emission edge is representable."* Neither
+/// establishes that, and the pin does not claim it. What this pin is:
+///
+/// 1. **A visibility inventory (declaration).** `SemanticOwner` is
+///    `pub(super)`, and this pin asserts the **allowed inventory** of widened
+///    items rather than a forbidden list, so *any* new widening reddens —
+///    including one nobody imagined. ⚠ The hatch is not hypothetical:
+///    `StaticOriginId` went through it deliberately. ⚠ But visibility bounds
+///    **naming**, not reaching: a type is reachable through a method that
+///    returns it, an `impl Trait`, or a re-export without ever being named.
+/// 2. **A naming inventory (declaration).** `SemanticOwner` appears **zero**
+///    times in the production region of every backend source except the file
+///    that defines it. This makes a new mention **visible to review**; it is not
+///    a proof of unreachability.
+///
+/// ⇒ **Inertness itself is pinned BEHAVIORALLY**, by
+/// `correspondence_adds_no_emitted_unit_to_the_production_census` — that is the
+/// mechanism that would actually observe an emission edge. These two are
+/// declaration inventories that make a change loud, and that is their whole
+/// claim.
+#[test]
+fn the_owner_classification_is_named_in_production_only_by_the_module_that_defines_it() {
+    // Promise class: durable invariant — a DECLARATION inventory.
+    //
+    // ⚠ RENAMED under the Architect ruling (`evt_5yxjd1zqnyvcq`). This pin was
+    // called `..._has_no_reach_into_any_emission_path`, and that name asserted an
+    // inference the mechanism cannot make: a type can be *reached* without being
+    // *named* — through a method that returns it, an `impl Trait`, a re-export,
+    // or a derived ordinal. Naming is not capability. The name now states what
+    // is actually measured, because the name is the part future readers quote.
+    let mut naming = Vec::new();
+    for (file, source) in BACKEND_PRODUCTION_SOURCES {
+        // `static_transition.rs` carries its tests inline, and those tests
+        // legitimately name the owner classification to exercise it.
+        let production = source
+            .split_once("\n#[cfg(test)]\nmod tests {")
+            .map_or(*source, |(before, _)| before);
+        let n = identifier_occurrences(production, "SemanticOwner");
+        if n > 0 {
+            naming.push(*file);
+        }
+    }
+    assert_eq!(
+        naming,
+        vec!["planning/static_transition/semantic_ir.rs"],
+        "D7: the owner classification is NAMED in production only by the module \
+         that defines it, and that inventory changed.\n\
+         ⚠ MEASURED: which production files mention the identifier. CLAIMED: \
+         exactly that. THE GAP: a mention is not an executable edge and the \
+         absence of one is not proof there is none -- a type can be reached \
+         without being named. Inertness itself is pinned behaviorally by \
+         `correspondence_adds_no_emitted_unit_to_the_production_census`; this \
+         pin is a declaration inventory that makes a new mention VISIBLE to \
+         review, not a proof of unreachability."
+    );
+
+    // The allowed inventory of widened visibility in the plane. ⛔ Asserted as
+    // the exact permitted set, not as a scan for a forbidden spelling, so that
+    // ANY new widening reddens -- including one nobody imagined.
+    //
+    // ⚠ This is a DECLARATION inventory. It records which items are widened; it
+    // does not entail anything about what is representable or reachable, because
+    // visibility bounds NAMING, not reaching.
+    let plane = include_str!("../../../planning/static_transition/semantic_ir.rs");
+    let widened = plane
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.starts_with("//"))
+        .filter(|line| line.contains("pub(in crate"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        widened,
+        vec!["pub(in crate::cranelift_backend) struct StaticOriginId(pub(super) u32);"],
+        "D7: the plane's widened-visibility inventory changed. `StaticOriginId` \
+         is widened deliberately so the lowering can carry an occurrence's \
+         static name.\n\
+         ⚠ This is a DECLARATION inventory, not a proof of inertness: a \
+         widening of the OWNER surface is a DELIBERATE REVIEW EVENT that must \
+         be argued here, not absorbed. It entails nothing by itself about what \
+         is representable or reachable -- inertness is pinned behaviorally by \
+         `correspondence_adds_no_emitted_unit_to_the_production_census`"
+    );
+
+    // Non-vacuity: the needle must occur somewhere, or both assertions above are
+    // satisfied by a typo.
+    assert!(
+        identifier_occurrences(plane, "SemanticOwner") > 0,
+        "the owner classification is not in the plane at all, so this pin is \
+         measuring nothing"
+    );
 }
