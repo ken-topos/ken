@@ -115,9 +115,13 @@
 > Recorded on `RT-NATIVE-FNSPLIT` gate req. 1: **the n=3..7 harness MUST run on the
 > product's 8 MiB stack, not the `ken-cli` 256 MiB test convention**, or it reports
 > wall-time/RSS while silently tolerating stack growth that kills the product.
-> **Stack exhaustion is a THIRD growth axis.** B2A-C's threading cost ~128 KiB per
-> recursive frame against <64 KiB of headroom; the remedy wrapped the one test that
-> noticed, which also blinds it permanently.
+> **Stack exhaustion is a THIRD growth axis.** ⛔ **CORRECTED (adversary N2,
+> `evt_7mve56d192pv6`): I wrongly wrote "~128 KiB PER RECURSIVE FRAME."** The
+> bisect measured a **~128 KiB shift in the TOTAL minimum stack** over an
+> **unmeasured** number of frames `k`; per-frame is ≈`128/k` and is **UNKNOWN**.
+> ⚠ Do not claim it "errs safe" — that presumes `k > 1`, also unmeasured.
+> ⭐ **`k` is the operand a scaling projection needs; instrument it in the n=3..7
+> harness.** The remedy wrapped the one test that noticed, blinding it permanently.
 >
 > ### ⇢ ALSO OWED (not blocking)
 >

@@ -76,8 +76,24 @@ Gates the [[NATIVE-HANDLE-CARRIER]] fast-follow + [[PX8-F-CAP-41]] too.
 > `ulimit -s`), NOT on the `crates/ken-cli/tests/` convention of
 > `stack_size(256 * 1024 * 1024)`.**
 >
-> **Why, measured:** B2A-C's correspondence threading added ~128 KiB per
-> recursive lowering frame, and CI went red on
+> ⛔ **CORRECTION 2026-07-25 (adversary N2, `evt_7mve56d192pv6`) — THE STEWARD'S
+> ORIGINAL WORDING HERE WAS WRONG AND IS FIXED BELOW.** I first wrote that
+> threading added *"~128 KiB per recursive lowering frame."* **That is not what
+> was measured.** The bisect measured a **~128 KiB shift in the TOTAL minimum
+> stack** for a test driving bracket depths 2–3, across an **unknown number of
+> recursive frames `k`**. Per-frame growth is ≈ `128/k` KiB and **`k` was never
+> measured** — the recursion is over the *expression tree*, not the bracket depth,
+> so `k` is not 2 or 3 either.
+> ⚠ **Do not launder a total into a per-frame figure**, and do not claim it "errs
+> safe": extrapolating at 128 KiB/frame is pessimistic only if `k > 1`, which is
+> itself a claim about an unmeasured quantity. ⇒ **The honest statement is that
+> per-frame growth is UNKNOWN.**
+> ⭐ **`k` IS THE THING TO MEASURE** before this axis carries any weight in the
+> analytical model — a per-frame number is exactly the operand a scaling
+> projection consumes.
+>
+> **Why, measured:** B2A-C's correspondence threading shifted the total minimum
+> stack by ~128 KiB, and CI went red on
 > `ken-cli::px8ta_oriented_subcontinuation
 > public_two_three_level_brackets_finish_and_release_lifo` with
 > `fatal runtime error: stack overflow` (PR #940). Bisected at 64 KiB resolution:
@@ -105,6 +121,12 @@ Gates the [[NATIVE-HANDLE-CARRIER]] fast-follow + [[PX8-F-CAP-41]] too.
 > ⇒ **Stack exhaustion is a THIRD growth axis** alongside compile wall-time and
 > peak RSS, and it is the one the current test convention hides. The harness
 > should report it explicitly per n.
+>
+> ⛔ **AND IT NEEDS `k`, NOT A TOTAL.** The axis is only usable if the harness
+> reports **recursion depth `k` alongside peak stack per n** — otherwise it
+> produces another total with no per-frame operand, which is the exact defect
+> corrected above. ⇒ Instrument `k` (max recursive depth reached in the lowering)
+> as a first-class output of the n=3..7 harness.
 
 ## ⛔ ARMED §5a RESEARCH-CONSULT TRIGGER — the count of record
 

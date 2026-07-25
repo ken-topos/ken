@@ -11,6 +11,45 @@ github: null
 origin: Architect ruling evt_6h5gw5c503n5z on RT-FNSPLIT-B2A hard-stop #6 (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the retired RT-FNSPLIT-B2A frame, whose Retain/Replace lists were inherited from the never-landed b077eb7a. Steward-filed; Steward owns the replacement frame and the full AC/control re-walk.
 ---
 
+> ## ⭐⭐ ADVERSARY-SUPPLIED TRIPWIRES — THIS UNIT DELIBERATELY CROSSES BOTH
+>
+> The adversary discharged both surfaces I flagged on B2A-C (`evt_7mve56d192pv6`)
+> and, better, gave the **exact tripwire** for each. ⛔ **B2A-S's whole job is to
+> cross tripwire 1 on purpose** — so the frame must say so explicitly rather than
+> letting a reviewer read the crossing as a regression.
+>
+> **1. `OwnedSourceOccurrence` is provenance TODAY.** Verified: `static_origin`
+> is **never compared, never a map key, never branched on** anywhere in production
+> `lowering/`. The struct (`lowering/mod.rs:238-243`) holds `expr` **and**
+> `static_origin` together, so the expression is *co-located*, not retrieved —
+> there is nothing to look one up *with*.
+> ⇒ **TRIPWIRE: the first read of the origin's VALUE in a decision.**
+> ⭐ **That read IS this unit's D4/D5.** When B2A-S makes the tag a selector it
+> crosses this line by design — and at that moment the retained-body carrier must
+> leave **in the same diff**, because from then on two authorities really would
+> coexist. **State the crossing in the frame and in the handoff.**
+>
+> **2. Nested `ComputationalMatch` sharing a scheduling entry is BENIGN today.**
+> Verified: every production use of `.entry` is an **edge endpoint**
+> (`self.edge(from, to, kind)`) or `next = planned.entry` for sequencing — never a
+> map key, never an identity, never compared.
+> ⇒ **TRIPWIRE: the first collection keyed by `.entry`.** Occurrences remain safe
+> as keys because B1R enforces the `origin.0 == planned_node.0` bijection.
+> ⛔ **So B2A-S must key its selector on `.occurrence`, NEVER on `.entry`** — and
+> an AC should redden if a collection keyed by `.entry` appears.
+>
+> ⚠ **Carry N1 into this unit as a deliverable** (adversary, cost ≈ 3 lines): the
+> AC-11 topology differential's provenance is **VERIFIED** — all 7 rows reproduce
+> byte-for-byte from `70bd2c74` — but **the recipe is not in the tree**, so nobody
+> else can re-verify it. ★ The deep reason it needed an outside check: **the
+> asserted property is EQUALITY against committed constants, so a post-change
+> re-capture would have produced byte-identical values — no observation
+> distinguishes a genuine pre-change baseline from a re-recorded one.**
+> ⇒ **Record the recipe in the comment**: base SHA, the two probe function names
+> (`b2ac_topology_digest`, `b2ac_topology_fixtures`), and the
+> `git worktree add --detach <path> 70bd2c74` + test invocation. Demonstrate the
+> binding; do not testify to it.
+>
 > ## ⇢ RE-CUT 2026-07-25 — THIS NODE IS THE **SELECTION** UNIT, NOT RETIRED.
 >
 > **The Architect ruled the re-slice at `evt_1jdh8pn8y96z`.** This node survives
