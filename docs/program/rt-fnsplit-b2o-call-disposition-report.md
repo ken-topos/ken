@@ -155,8 +155,11 @@ mechanism to support a claim, check whether the claim is required at all.**
 
 - **It does not partition the 59 calls into two disjoint sets of source sites.**
   It cannot, and that is the finding: for the caller-dependent sites the answer
-  is per `(site × reaching path)`. What is closed is the **routing-function
-  inventory**, not the call-site list.
+  is per `(site × reaching path)`. ⛔ **Nothing here is closed.** An earlier
+  revision ended this bullet *"what is closed is the routing-function
+  inventory"*; that inventory is withdrawn and no closure claim replaces it.
+  Disposition derives from `StaticOriginId` + validated `SemanticOwner` + the
+  planned edge kind, and from nothing in this document.
 - **It does not close DRIFT either.** An earlier revision said the inventory
   guaranteed that a new function able to reach a retained body could not be added
   silently. ⛔ **That guarantee is withdrawn and nothing replaces it in this WP.**

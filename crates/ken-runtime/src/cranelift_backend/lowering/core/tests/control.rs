@@ -4157,9 +4157,16 @@ fn no_collection_is_keyed_by_a_scheduling_entry() {
 /// **`RT-FNSPLIT-B2O` `D6` — the `lower_expr` call population, and why its
 /// disposition is now BY OWNER rather than by source site.**
 ///
-/// ⛔ **This is a report, not the authority.** The authority is the ownership
-/// mapping in the semantic plane; this pin exists so the population the report
-/// describes cannot drift silently underneath it.
+/// ⛔ **This is a report, not the authority, and this pin is FROZEN DECLARATION
+/// EVIDENCE.** The authority is the ownership mapping in the semantic plane —
+/// an occurrence's `StaticOriginId`, its validated `SemanticOwner`, and the
+/// planned edge kind.
+///
+/// ⚠ An earlier revision said this pin existed so the population *"cannot drift
+/// silently."* **It does not establish that**, and the claim is withdrawn: the
+/// census counts textual occurrences of an identifier, which is a declaration
+/// fact. It observes nothing about which Rust functions can reach a retained
+/// body. See the `D6` report's UNMECHANIZED section for the four residuals.
 ///
 /// ⚠ **The census is TOKENIZED, not `self.`-spelled.** `grep -c
 /// 'self\.lower_expr('` returns **58** and silently loses the program's entry
@@ -4178,13 +4185,19 @@ fn no_collection_is_keyed_by_a_scheduling_entry() {
 ///
 /// `B2O` makes a `StaticBody` edge the **one and only** owner boundary. So a call
 /// into `lower_expr` crosses an owner boundary **iff the occurrence it lowers is
-/// a `StaticBody` target — that is, iff it lowers a retained body.** Retained
-/// bodies are reachable only through the single `origin -> expression` route,
-/// which `exactly_one_plan_origin_to_expression_lookup_exists` pins at **exactly
-/// one** production consumer (`retained_body_occurrence`).
+/// a `StaticBody` target — that is, iff it lowers a retained body.** ⇒ The test
+/// is on the **occurrence's owner and the planned edge kind**, and on nothing
+/// else.
 ///
-/// ⇒ **The boundary-crossing population is characterised structurally, by one
-/// pinned route, instead of enumerated as a table of source sites.** That is the
+/// ⛔ **Withdrawn here:** that retained bodies are *"reachable only through the
+/// single `origin -> expression` route"* and that the population is
+/// *"characterised structurally, by one pinned route."*
+/// `exactly_one_plan_origin_to_expression_lookup_exists` constrains the
+/// identifier `source_occurrence` **only** — it says nothing about who may call
+/// `retained_body_occurrence`, so it never supported either sentence.
+///
+/// ⇒ **The boundary-crossing population is derived from the validated owner
+/// partition**, instead of enumerated as a table of source sites. That is the
 /// repair for the withdrawn `AC-5`: its two-way site classification had no cell
 /// for "depends on the reaching path", so it could have been filled in completely
 /// and still been wrong. For the 14 caller-dependent sites the answer genuinely
@@ -4272,22 +4285,29 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
 ///
 /// ⛔ **But a builder census cannot see an executable edge, and it was already
 /// zero before this node**, so on its own it is a check that would pass whether
-/// or not `B2O` stayed inert. This pin measures the thing that actually changed:
-/// **whether the ownership classification can be reached from an emission path
-/// at all.**
+/// or not `B2O` stayed inert.
 ///
-/// Two mechanisms, strongest first:
+/// ⛔ **Withdrawn:** an earlier revision presented what follows as *"two
+/// mechanisms"* proving *"no emission edge is representable."* Neither
+/// establishes that, and the pin does not claim it. What this pin is:
 ///
-/// 1. **The compiler.** `SemanticOwner` is `pub(super)` — nameable only inside
-///    `planning::static_transition` and its children. Every emission path lives
-///    under `lowering/`, which therefore **cannot name it**, so no emission edge
-///    is representable. The one escape hatch is a visibility widening, and this
-///    pin asserts the **allowed inventory** of widened items rather than a
-///    forbidden list, so *any* new widening reddens — including one nobody
-///    imagined. ⚠ That hatch is not hypothetical: `StaticOriginId` went through
-///    exactly it, deliberately, to let the lowering carry an occurrence's name.
-/// 2. **Reach.** `SemanticOwner` appears **zero** times in the production region
-///    of every backend source except the file that defines it.
+/// 1. **A visibility inventory (declaration).** `SemanticOwner` is
+///    `pub(super)`, and this pin asserts the **allowed inventory** of widened
+///    items rather than a forbidden list, so *any* new widening reddens —
+///    including one nobody imagined. ⚠ The hatch is not hypothetical:
+///    `StaticOriginId` went through it deliberately. ⚠ But visibility bounds
+///    **naming**, not reaching: a type is reachable through a method that
+///    returns it, an `impl Trait`, or a re-export without ever being named.
+/// 2. **A naming inventory (declaration).** `SemanticOwner` appears **zero**
+///    times in the production region of every backend source except the file
+///    that defines it. This makes a new mention **visible to review**; it is not
+///    a proof of unreachability.
+///
+/// ⇒ **Inertness itself is pinned BEHAVIORALLY**, by
+/// `correspondence_adds_no_emitted_unit_to_the_production_census` — that is the
+/// mechanism that would actually observe an emission edge. These two are
+/// declaration inventories that make a change loud, and that is their whole
+/// claim.
 #[test]
 fn the_owner_classification_is_named_in_production_only_by_the_module_that_defines_it() {
     // Promise class: durable invariant — a DECLARATION inventory.
