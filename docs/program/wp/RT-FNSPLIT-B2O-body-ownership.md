@@ -11,14 +11,17 @@ ownership mapping in the semantic plane. Inert — no emitted unit, no call edge
   of item 6, on research advisory `evt_531c4k52mshrn`. Steward-filed under the
   ruling's grant of re-slicing and sequencing ownership.
 
-> ## ⏳ ONE DELIVERABLE IS PENDING AN ARCHITECT ANSWER — `evt_5vd31pvbrgdf3`
+> ## ✅ FULLY RULED — nothing is held. Architect `evt_48dxvb2yrwpad`.
 >
-> **D1 below (the function population) is held.** Everything else in this frame
-> is settled and can be started. The held question is whether the real unit set
-> re-populates the existing `PredeclaredFunction` table (with a rename, since its
-> current population is not what the name promises) or lands beside it as a new
-> table. **Do not start `D1` until that is answered here.** `D2`–`D7` do not
-> depend on it.
+> `D1` was briefly held on `evt_5vd31pvbrgdf3` and is now answered: **repurpose
+> the sole `PredeclaredFunction` table** as the real function-unit table, and
+> **remove the misleading per-node row** — there must be exactly one table whose
+> name claims "function," and `B2R` attaches signatures to it.
+>
+> ⛔ **AND THE RULING CORRECTED MY SEED DERIVATION — see the next section. An
+> earlier revision of this frame said the heads were the `ClosureBody` nodes.
+> That is WRONG, and building it would have produced the wrong unit set and an
+> unsatisfiable edge law.**
 
 ---
 
@@ -69,22 +72,81 @@ And `StaticNode.transition` is a `TransitionKind` (`static_transition.rs:79-91`)
 Every `SemanticProgram` also spans **exactly one** record, so nothing in the
 plane groups a body's occurrences either.
 
-## The good news — the boundary is ALREADY MARKED, so the unit set is derived
+## The unit set is DERIVED from the plan graph — and here are the right seeds
 
-The unit set is **not invented by this node**; it is read off the plan graph:
+The unit set is **not invented by this node**; it is read off the plan graph. But
+the seeds are **not** what an obvious reading suggests.
+
+### ⛔⛔ `TransitionKind::ClosureBody` IS NOT THE HEAD. It is the body's RETURN.
+
+Read the planner (`static_transition.rs:831-846`, and identically `:848-871` for
+`LexicalClosure`) in **order**:
+
+```rust
+let body_return = self.control_node(TransitionKind::ClosureBody, …)?;  // 1. made FIRST
+self.edge(body_return, self.terminal, EdgeKind::Continue)?;            // 2. exits to the
+                                                                      //    SHARED terminal
+let body = self.plan_expr(body, ctx, body_return, EdgeKind::Continue, 0)?;
+                                          // 3. the body is planned TOWARD body_return
+…
+self.edge(node.entry, body.entry, EdgeKind::StaticBody)?;   // 4. the boundary edge
+                                                           //    targets body.entry
+```
+
+⇒ The `ClosureBody` node is the body's **return successor**, planned *before* the
+body and reached *after* it. The head is the **`StaticBody` edge's target**
+(`body.entry`). The unit **owns** its `ClosureBody` return node; it is not seeded
+by it.
+
+⭐ **A frame revision of mine said "root ∪ `ClosureBody` heads." It was wrong, and
+it would have failed twice over:** the unit set would have been seeded on return
+nodes instead of entries, **and** the edge law would have been *unsatisfiable*,
+because step 2 above is a **non-`StaticBody` edge from a body-owned node to the
+shared terminal.** ⇒ **This is the third time this chain has been bitten by a
+marker that names something adjacent to what the reader wants** (`self.lower_expr(`
+was a receiver spelling, not the call population; `RuntimeExpr::Closure` was one
+of two capture arms). **Read the construction order, not the name.**
+
+### The ruled seeds (Architect `evt_48dxvb2yrwpad`)
 
 ```
-static_transition.rs:834,851   TransitionKind::ClosureBody   (both closure arms)
-static_transition.rs:845,871   EdgeKind::StaticBody          (the boundary edge)
+1. every scheduling entry in StaticTransitionPlan.entries   (static_transition.rs:216)
+     = the program root plus each transparent declaration body
+2. every TARGET (edge.to) of an EdgeKind::StaticBody edge   (:845, :871)
+     = each retained closure-body entry
 ```
 
-⇒ **function units = the root ∪ the `ClosureBody` heads**, and **ownership = the
-reachability partition of nodes under non-`StaticBody` edges from each head.**
-`StaticBody` is exactly the cross-owner edge.
+Give these seeds **dense** `PredeclaredFunctionId`s. Validate that entries are
+unique (there is already a uniqueness check at `:1158`), that `StaticBody` targets
+are unique, and that the **two seed sets are disjoint**. ⛔ **A duplicate is a
+planner error, not a deduplication opportunity.**
 
-This matters for honesty as much as for cost: an ownership map *derived* from the
-plan graph cannot drift from the graph, whereas a second hand-maintained table
-can — and would then need its own agreement checker.
+⚠ `entries.first()` is a **scheduling** entry — `:1047` already warns about this
+in-source. Do not treat position 0 as privileged beyond what that comment says.
+
+### ⭐ Two shared exit sentinels sit OUTSIDE the exclusive partition
+
+`self.terminal` is a **single shared node**, and the unique `Terminal` and
+`TrapTerminal` are reachable from **many** units by design.
+
+⇒ Classify them as **shared exit templates, outside the exclusive function-owner
+partition.** An edge to one lowers as **the current unit's local return/trap,
+never as a cross-owner call.** Any *other* multiply-owned or unowned node is a
+planner error.
+
+⚠ Without this exception the ownership partition is not merely incomplete — it is
+**contradictory**, since every unit's return path ends at the same node.
+
+### Ownership
+
+For each seed, traverse outgoing edges **without crossing `StaticBody`**. Every
+ordinary node must be reachable from **exactly one** seed. Record the owner on the
+semantic descriptor (or an equally canonical dense node-owner arena). ⛔ **Do not
+maintain a second hand-authored population** — a map *derived* from the graph
+cannot drift from it, whereas a parallel table needs its own agreement checker.
+
+⚠ There is already a reachability computation seeded from `entries` at
+`static_transition.rs:1275` — read it before writing a second one.
 
 ## ⭐ AND THE OWNER FIELD ALREADY EXISTS — it is currently an identity alias
 
@@ -94,8 +156,8 @@ it is filled with `PredeclaredFunctionId(planned_node.0)` — an identity alias
 carrying no information.
 
 **So the core change is not a new structure. It is: repopulate `functions` as the
-real unit set, and make `descriptor.function` name the OWNING unit instead of the
-node's own index.** Consequences, all of them wanted:
+real unit set, and make that field name the OWNING unit instead of the node's own
+index.** Consequences, all of them wanted:
 
 - **Totality is structural, not asserted.** There is already exactly one
   descriptor per origin, so every occurrence has exactly one owner **by
@@ -107,6 +169,39 @@ node's own index.** Consequences, all of them wanted:
   (`semantic_ir.rs:664-700`, which destructures `[record]` and *requires* exactly
   one) is **untouched**, and `B2A-C`'s landed correspondence keeps working
   unchanged. ⛔ Do not widen this node to the programs axis.
+
+> ### ⛔⛔ BUT THE FIELD'S TYPE CANNOT TELL THE TRUTH — and this is the subtlest
+> ### requirement in the frame
+>
+> `function: PredeclaredFunctionId` **cannot represent the two shared exit
+> sentinels.** They are not functions, so no `PredeclaredFunctionId` describes
+> them.
+>
+> ⛔ **And you may NOT reach for an `Option`, a sentinel index, or a reserved
+> "invalid" id.** The sentinels are **explicit shared exit templates** — they are
+> **not missing data** and **not target functions**. An `Option<…>` says "absent",
+> which is a third thing that is false.
+>
+> ⇒ **Replace the field with an exhaustive closed classification**, e.g.
+>
+> ```rust
+> enum SemanticOwner {
+>     Function(PredeclaredFunctionId),
+>     Terminal,
+>     TrapTerminal,
+> }
+> ```
+>
+> Every ordinary descriptor is `Function`; **only the unique two sentinel
+> descriptors** take a shared-exit variant.
+>
+> ⭐ **Why this is worth a whole box:** a taxonomy with no cell for the honest
+> answer *reads as complete*. That is exactly how the withdrawn `AC-5` passed
+> review — its two-way classification had no cell for "depends on the reaching
+> path", so it could have been filled in completely and still been wrong. Here the
+> same defect would live in a **type**, where it is even harder to see: the code
+> would compile, every descriptor would carry a `PredeclaredFunctionId`, and two
+> of them would be lies.
 
 ## What this node does NOT do
 
@@ -124,31 +219,57 @@ node's own index.** Consequences, all of them wanted:
 
 ## Deliverables
 
-### ⏳ D1 — the function unit population *(HELD, see the box at the top)*
+### D1 — the function unit population, in the ONE table named "function"
 
-Establish the real unit set: **root ∪ `ClosureBody` heads**, derived from the
-plan graph rather than hand-listed. Whether this re-populates
-`PredeclaredFunction` (renamed) or lands as a new table is the held question.
+Repopulate `PredeclaredFunction` as the **real** function-unit table, with dense
+`PredeclaredFunctionId`s over the ruled seeds:
 
-⛔ **Whichever it is, the type whose population is one-per-transition-node must
-not remain in the plane under a name that promises "function."** If both tables
-end up existing, `B2R` item 3 cannot say which one names a signature.
+```
+all scheduling entries in plan.entries       (root + each transparent declaration)
+  UNION
+all TARGETS (edge.to) of EdgeKind::StaticBody edges   (each retained body entry)
+```
 
-### D2 — `descriptor.function` becomes the owner pointer
+⛔ **Remove the misleading per-node function row. Do not leave the node-alias
+table beside a new `FunctionUnit` table** — there must be **exactly one** table
+whose name claims "function," because `B2R` attaches signatures and frame layouts
+to it and cannot be told which of two to use.
 
-Fill `SemanticDescriptor.function` with the **owning** unit, computed by the
-reachability partition, replacing the `PredeclaredFunctionId(planned_node.0)`
-identity alias.
+The node-level semantic definition already lives in `SemanticDescriptor` +
+`SemanticProgram` + `SemanticRecord`. **Retain those node-scoped artifacts** and
+move any non-redundant field from the old per-node function row into them.
 
-### D3 — the boundary predicate, as a checkable graph property
+Validate: entries unique, `StaticBody` targets unique, and the **two seed sets
+disjoint**. ⛔ **A duplicate is a planner error, not a deduplication
+opportunity.**
+
+### D2 — the owner classification on every descriptor
+
+Replace the `function: PredeclaredFunctionId` identity alias with the **exhaustive
+closed classification** described in the box above —
+`SemanticOwner::{Function(PredeclaredFunctionId), Terminal, TrapTerminal}` or an
+equivalent — filled from the reachability partition.
+
+⛔ **No `Option`, no reserved invalid id, no sentinel index.** The two shared
+exits are neither functions nor missing data.
+
+### D3 — the edge laws, as checkable graph properties
 
 State and check, over the whole plan graph:
 
-- every **non-`StaticBody`** edge has `owner(from) == owner(to)`;
-- every **`StaticBody`** edge has `owner(from) != owner(to)`, and `to` **is** a
-  unit head;
-- every unit head is the target of exactly one `StaticBody` edge, **except the
-  root**, which is a head and the target of none.
+- a **non-`StaticBody`** edge either stays **within one `Function` owner** **or
+  targets `Terminal`/`TrapTerminal`**;
+- a **`StaticBody`** edge crosses from a `Function` owner to a **distinct function
+  seed**;
+- **each `StaticBody` target has exactly one incoming `StaticBody` edge**;
+- **each top-level scheduling entry has none.**
+
+⚠ **Do not write "every head except the root has one incoming `StaticBody`."**
+That is wrong for **transparent declaration entries**, which are top-level seeds
+too — the root is not the only entry. An earlier revision of this frame said
+exactly that.
+
+⛔ **Any other cross-owner edge is a planner error.**
 
 ### D4 — validation, as a planner error before emission
 
@@ -176,10 +297,22 @@ in the test/comment, and only then measure.** A count that differs from the
 prediction is **a finding to route, not a number to update**. ★ This is the
 `pin-a-property` discipline (`agent/playbooks/tools/pin-a-property.md`).
 
+**The predictions to write down BEFORE measuring:**
+
+```
+functions.len()           = entries.len() + count(StaticBody edges)
+descriptors/programs/records  remain EXACTLY nodes.len()   (node-exact, unchanged)
+every non-sentinel node   has exactly ONE Function owner
+shared-exit population    is exactly { Terminal, TrapTerminal }
+cross-owner edges         are exactly the StaticBody edges
+```
+
 ⚠ `:1687` is the subtle one: `helper_definitions` is a **metric other things
-read**, not a test. Changing the function population changes a reported figure.
-Inventory its consumers before you move it, and say in the WP what the figure
-means afterwards.
+read**, not a test — easy to miss when you read the red as "three tests."
+**Rename it to the property it now measures** (e.g. `function_units`). ⛔ *"Helper
+definitions" must not silently inherit the old node count* — a name that keeps
+reporting a number whose meaning changed underneath it is worse than a rename,
+because nothing fails. Inventory its consumers before you move it.
 
 ### D6 — the 59-call disposition, BY OWNER, as a derived report
 
@@ -216,11 +349,15 @@ unit census is unchanged (`core.rs` 1 builder / 1 definition / 2 declarations;
 configurations" has real surface in the file you are touching — it is not a
 formality.
 
-**AC-2 — totality is pinned, not merely structural.** Assert every origin
-resolves to an in-range owner. ⭐ **"It is total by construction" is exactly the
-claim #5 was defeated on** — the carrier existed and the property did not follow.
-A structural guarantee still needs a check that *fires* if the construction
-changes.
+**AC-2 — totality and exclusivity are pinned, not merely structural.** Assert
+every **non-sentinel** node resolves to exactly one in-range `Function` owner, and
+that the shared-exit population is **exactly** `{Terminal, TrapTerminal}` — no
+more, no fewer. Overlap is permitted **nowhere else**; a non-sentinel unowned or
+multiply-owned node is a planner error.
+
+⭐ **"It is total by construction" is exactly the claim #5 was defeated on** — the
+carrier existed and the property did not follow. A structural guarantee still
+needs a check that *fires* if the construction changes.
 
 **AC-3 — ⛔ COMPOSITION, BIDIRECTIONALLY. This is the #8 lesson and it is the AC
 most likely to be under-served.** Hard-stop #8 was **predictable from the
@@ -235,25 +372,64 @@ entry its parent pointed at, so totality held while composition failed.
 - an owner boundary crossed on the way **down** is the same boundary seen on the
   way **back up**;
 - `owner(child_origin(p, i))` agrees with `owner(p)` for every non-boundary
-  child, **for every `SemanticOpcode` variant**, not for a sampled few.
+  child, **for every `SemanticOpcode` variant**, not for a sampled few;
+- ⭐ **each retained-body unit OWNS its reachable `ClosureBody` return successor**,
+  and that successor exits only through the shared terminal. **This is the "up"
+  half of the invariant** — the boundary crossed on descent is represented by the
+  **callee seed**, and the body's return node stays inside that **callee's** owner.
+
+⛔ **`B2O` must NOT invent a static edge back to the caller.** `B2R` later carries
+the dynamic return continuation in the frame. A static return edge here would
+manufacture a cross-owner edge that the graph does not have, and `D3` would then
+be describing a graph this node created rather than the one the planner builds.
 
 ⭐ **Compose the accessor with itself, per variant, before threading it
 anywhere.** Rigour does not supply relevance: write down the mechanism
 obligation the measurement is meant to discharge, then check the implication.
 
-**AC-4 — the unit set is exactly root ∪ `ClosureBody` heads, with a POSITIVE
-control.** ⚠ A negative check ("no extra units") passes for any reason,
-including because nothing reached the checker. So include a control that **adds a
-closure** and observes **exactly one** additional unit, and a control that adds a
-non-closure expression and observes **zero** additional units.
+**AC-4 — the unit set is exactly `plan.entries` ∪ `StaticBody` targets, with
+THREE POSITIVE controls.** ⚠ A negative check ("no extra units") passes for any
+reason, including because nothing reached the checker.
 
-**AC-5 — the boundary predicate is enforced, with an evasion attempt per pin.**
-For each pin in `D3`, attempt a **compile-preserving** evasion — construct a plan
-that violates the invariant and confirm the planner errors. ⛔ A pin that
-enumerates spellings is not a proof of the property.
+| control | expected |
+|---|---|
+| add one retained closure | **exactly one** additional function unit |
+| add one transparent declaration | **exactly one** additional function unit |
+| add a non-closure expression inside an existing unit | **zero** additional units |
 
-**AC-6 — the three re-baselined pins carry their predictions.** Each records the
-predicted number and the reason, dated, in the test or comment.
+⚠ **The middle row is the one an obvious test set omits.** A closure/non-closure
+pair does not exercise the **second top-level seed class** at all, so a
+declaration-entry bug would pass every control. ⭐ **Two seed classes require two
+positive controls** — this is the "no cell for the honest answer" defect in test
+form.
+
+**AC-5 — every law is enforced, with an INDEPENDENT redden control each.** For
+each, construct the violation and confirm the planner errors **before emission**.
+⛔ A pin that enumerates spellings is not a proof of the property; attempt a
+**compile-preserving** evasion of each.
+
+Required, each reddening **on its own**:
+
+1. a missing root entry;
+2. a missing **transparent declaration** entry;
+3. a missing `StaticBody` target;
+4. a **duplicate** `StaticBody` target;
+5. a non-`StaticBody` cross-owner edge;
+6. an ordinary node owned by **two** seeds (overlap);
+7. a **sentinel misclassified as a `Function`**;
+8. a `ClosureBody` return successor assigned to the **caller** instead of the
+   callee.
+
+⚠ Number 8 is the one that would otherwise ship green: assigning the return node
+to the caller is the *intuitive* reading of "the caller resumes here", it produces
+a coherent-looking partition, and only the down/up invariant catches it.
+
+**AC-6 — the three re-baselined pins carry their predictions, and the metric is
+renamed.** Each records the predicted number and its reason, dated, in the test or
+comment; all five predictions in `D5` are written down **before** measuring; and
+`helper_definitions` is renamed to the property it now measures. ⚠ Renaming is
+part of the AC because this pin is the one that **cannot fail loudly** — a metric
+keeps reporting whatever it is given.
 
 **AC-7 — `B2A-C`'s correspondence is untouched.** `child_origin` still requires
 exactly one record per program; `programs`/`records` stay one-to-one.
@@ -278,8 +454,11 @@ Every anchor in this chain has moved at least once; `lower_expr` alone went
 | synthesized root call | `lowering/core.rs:188` (`compiler.lower_expr`) |
 | tokenized production call population | **59** |
 | `StaticNode` / `TransitionKind` | `planning/static_transition.rs:164`, `:79` |
-| `ClosureBody` heads | `planning/static_transition.rs:834`, `:851` |
-| `StaticBody` edges | `planning/static_transition.rs:845`, `:871` |
+| **seed class 1** — scheduling entries | `planning/static_transition.rs:216` (`entries`), pushed at `:1728`, uniqueness checked at `:1158`, caveat at `:1047` |
+| **seed class 2** — `StaticBody` edge TARGETS | `planning/static_transition.rs:845`, `:871` |
+| ⛔ `ClosureBody` = retained-body **RETURN SUCCESSOR**, never a head | `planning/static_transition.rs:834`, `:851` |
+| shared exit sentinel | `self.terminal`; `TransitionKind::{Terminal, TrapTerminal}` at `:80-81` |
+| existing reachability walk from `entries` | `planning/static_transition.rs:1275` |
 | `SemanticDescriptor` | `planning/static_transition/semantic_ir.rs:459` |
 | `PredeclaredFunction` | `…/semantic_ir.rs:449` |
 | id aliasing | `…/semantic_ir.rs:534-536` |
