@@ -3893,19 +3893,34 @@ fn escaping_a_source_borrow_into_the_compiled_artifact_does_not_typecheck() {
 // always be spelled around. So the honest split is recorded here rather than
 // papered over with a longer list:
 //
-//   ENFORCED, by the compiler — `a_scheduling_entry_is_not_spellable_outside_the_planner`
-//     an entry cannot be named, hence cannot be keyed on, outside two files.
-//   ENFORCED, behaviourally — `keying_selection_by_the_scheduling_entry_does_not_resolve_the_body`
-//     entry-keying yields the WRONG body, with a non-vacuity guard.
-//   ENFORCED, mechanically — `filing_two_occurrences_under_one_origin_is_refused`
-//     the sanctioned selection table cannot be re-keyed onto entries quietly.
-//   NOT ENFORCED — an additional, independently maintained entry-keyed collection
-//     inside those two planner files. That is a REVIEW property, and it is how
-//     both of these blocks were actually found.
+// The authoritative AC-5 is the Architect's four clauses (`origin/main`
+// `d0b6e064`, transcribed verbatim there); this is what discharges each:
 //
-// ⚠ A frame correction narrowing AC-5 to the three enforceable statements is
-// routed to @steward/@architect; this comment is the in-tree record of the gap so
-// the next reader inherits the limit rather than the overclaim.
+//   (a) concrete entry-carrying types stay module-private
+//         -> `the_entry_carrying_types_are_module_private`
+//   (b) a non-vacuous split fixture proves entry-keying selects the wrong body
+//         -> `keying_selection_by_the_scheduling_entry_does_not_resolve_the_body`
+//   (c) a compile-preserving re-key of the sanctioned table reddens at the
+//       collision/invariant controls
+//         -> `filing_two_occurrences_under_one_origin_is_refused`
+//   (d) Architect review of the closed two-file planner surface and its exports
+//       confirms the stated residual -- review, not a test.
+//
+// ⛔ **BOTH residual arms, because recording one reads as if the other were
+// covered:**
+//
+//   RESIDUAL 1 — an independently maintained entry-keyed collection INSIDE the
+//     two planner files. Inside the planner, entry-keying is the planner's own
+//     job and is NOT prohibited; what is unenforceable is detecting a *second*
+//     selection authority built from it.
+//   RESIDUAL 2 — exported / inferred / ordinal entry exposure. A future method
+//     could hand out an entry as `impl Ord` (`StaticNodeId` already derives
+//     `Ord`) or as a derived `u32` ordinal, **naming neither private type**, so
+//     (a) would still hold while an outside consumer keyed on an entry anyway.
+//
+// ⛔ **Do not claim that an arbitrary independently maintained entry-keyed
+// collection is mechanically detected.** No test enforces that: detecting it
+// needs dataflow, not a scan, and a scan can always be spelled around.
 
 /// ⚠ Positive control for the AC-5 detector: it must actually recognise the shape
 /// it claims nothing matches, or "no matches" means nothing.
@@ -3936,55 +3951,59 @@ fn the_entry_keyed_collection_detector_catches_the_shape_it_is_looking_for() {
     ));
 }
 
-/// **AC-5, the half that IS enforceable: a scheduling entry is not even
-/// SPELLABLE outside the planner.**
-///
-/// ⛔ Read with `no_collection_is_keyed_by_a_scheduling_entry` below and the two
-/// planner controls: the framed property — *no collection anywhere is keyed by
-/// `.entry`* — is a **global negative over arbitrary code shapes**, and the
-/// Architect demonstrated that no scan discharges it (`evt_1p11krxny4wny`: a real
-/// `Vec<Option<&RuntimeExpr>>` indexed by `usize::try_from(scrutinee.entry.0)`
-/// compiles and passes every net). ⇒ **What a test can enforce is the surface on
-/// which the hazard is expressible at all**, and that is a visibility fact:
+/// **AC-5(a) — the concrete entry-carrying types are module-private.**
 ///
 /// `PlannedExpr` and `StaticNodeId` are declared with **no `pub` modifier**, so
 /// they are private to `planning::static_transition` (`StaticNodeId` reaching its
-/// own `semantic_ir` child through `use super::`). No consumer — not `lowering`,
-/// not `artifact`, not `compiled`, not `surface` — can name an entry, so none can
-/// key on one. That reduces "any of twelve backend files" to **exactly two**, and
-/// the compiler enforces the reduction.
+/// own `semantic_ir` child through `use super::`). The set of production files
+/// that can *name* either type is therefore exactly those two.
 ///
-/// ⚠ Inside those two files an independently maintained entry-keyed collection
-/// remains a **review** property, not a pinned one. Saying so is the point: the
-/// previous candidate claimed a discharge it did not have.
+/// ## ⚠ What is measured, and what is NOT claimed
+///
+/// **Measured:** the privacy of two concrete types, i.e. which files can name
+/// them. **Not claimed:** that selection authority is confined, or that no
+/// outside code can key on a scheduling entry.
+///
+/// ⛔ **The implication between those two is invalid, and asserting it was my
+/// defect** (struck by Steward ruling `evt_4dh098a49cbze`; the earlier version of
+/// this test said privacy meant *"none can key on one"* and encoded that claim in
+/// its own name). Privacy of a *name* does not confine a *value*: a future method
+/// could hand an entry out as `impl Ord` — `StaticNodeId` already derives `Ord` —
+/// or as a derived `u32` ordinal, **naming neither private type**, and this test
+/// would still pass while an outside consumer keyed on an entry.
+///
+/// ⇒ This pin is clause **(a)** of four. (b) and (c) are the behavioural and
+/// collision controls in the planner; **(d) is Architect review**, and the two
+/// residual arms above are what that review covers.
 #[test]
-fn a_scheduling_entry_is_not_spellable_outside_the_planner() {
-    let mut surface = Vec::new();
+fn the_entry_carrying_types_are_module_private() {
+    let mut naming = Vec::new();
     for (file, source) in BACKEND_PRODUCTION_SOURCES {
         let production = source
             .split_once("\n#[cfg(test)]\nmod tests {")
             .map_or(*source, |(before, _)| before);
         // Tokenized with comments stripped, so a doc comment MENTIONING the type
         // (as `lowering/core.rs` does, twice, while being unable to name it) does
-        // not count as reach.
-        let reach = identifier_occurrences(production, "PlannedExpr")
+        // not count.
+        let mentions = identifier_occurrences(production, "PlannedExpr")
             + identifier_occurrences(production, "StaticNodeId");
-        if reach > 0 {
-            surface.push(*file);
+        if mentions > 0 {
+            naming.push(*file);
         }
     }
     assert_eq!(
-        surface,
+        naming,
         vec![
             "planning/static_transition.rs",
             "planning/static_transition/semantic_ir.rs",
         ],
-        "AC-5: the entry-carrying types became reachable from another backend \
-         file, so the surface on which entry-keying is spellable has grown"
+        "AC-5(a): another backend file now NAMES an entry-carrying type. That is \
+         the measured fact only -- it does not by itself decide whether anything \
+         keys on an entry, which is residual arm 2 and Architect review"
     );
 
-    // And the reduction holds because the declarations are module-private. A `pub`
-    // of any width here would widen the surface above without changing any call.
+    // The naming set is what it is because the declarations are module-private. A
+    // `pub` of any width would widen it without changing any call.
     let planner = include_str!("../../../planning/static_transition.rs");
     assert!(
         planner.contains("\nstruct PlannedExpr {"),
@@ -4018,10 +4037,11 @@ fn no_collection_is_keyed_by_a_scheduling_entry() {
             .collect();
         assert!(
             keyed.is_empty(),
-            "AC-5: {file} keys or indexes by a scheduling entry {keyed:?}; a \
+            "{file} keys or indexes by a scheduling entry {keyed:?}; a \
              ComputationalMatch shares its entry with its scrutinee chain, so this \
              merges two occurrences on exactly the fixture that has one. \
-             ⚠ This tripwire is not the discharge -- see the two planner controls"
+             ⚠ NOT an AC-5 clause: this is an early tripwire over enumerated \
+             forms, and AC-5 is discharged by (a)-(d) above"
         );
     }
 }
