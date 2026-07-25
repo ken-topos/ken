@@ -138,12 +138,54 @@ authority, so a catalog edit ahead of it would be unanchored.
 ## Acceptance criteria
 
 **AC-1 — emit the fixed-base occurrence set.** `lemma` / `lemmas` / possessive
-and plural forms, **plus** surface-derived identifiers and anchors. ⛔ **One glob
-definition covering every Ken source root** — `catalog/**/*.ken.md`,
-`conformance/**/*.ken`, `conformance/**/*.ken.md`, `examples/`, and the
-evaluation fixtures. **Positive control: a deliberately planted `lemma`
-declaration in each root class is SEEN by the sweep.** A sweep that grew one arm
-per missed file has reproduced the bug it exists to prevent.
+and plural forms, **plus** surface-derived identifiers and anchors.
+
+> ## ⛔ AMENDED 2026-07-25 — MY HAND-ENUMERATED ROOT LIST WAS WRONG THREE WAYS
+>
+> Reported by `spec-leader` (`evt_6zkdcmsrrxy9k`) and **re-derived independently
+> by the Steward** against `c2c1ba9f`. The original AC listed
+> `catalog/**/*.ken.md`, `conformance/**/*.ken`, `conformance/**/*.ken.md`,
+> `examples/`, and the evaluation fixtures. Measured, that list:
+>
+> 1. **Missed `catalog/packages/Tooling/Verification/ProofErasureBoundaryChecker.ken`**
+>    — `catalog/` is **42 × `.ken.md` + 1 × `.ken`**, and that one file is
+>    live and consumed: `include_str!`'d at
+>    `crates/ken-interp/src/proof_erasure_checker.rs:15` and enumerated by the
+>    formatter corpus gate at `crates/ken-cli/tests/ken_fmt.rs:101`.
+> 2. **Named `conformance/**/*.ken.md`, which matches ZERO files.** Conformance
+>    holds **15 × `.ken`** and plain `.md` seed docs — no literate Ken at all.
+> 3. **Omitted `tooling/highlight-js/sample.ken` entirely** — a tracked Ken
+>    source in a root I never listed.
+>
+> ⇒ **Repo-wide there are 33 non-literate `.ken` sources** (catalog 1,
+> conformance 15, examples 16, tooling 1) **and 42 literate `.ken.md`**, all in
+> `catalog/`.
+>
+> ⚠ **The missed catalog file carries ZERO `lemma` occurrences**, so no rename is
+> missed *today*. **That is exactly why it is dangerous:** the AC would have gone
+> green on an unclosed population and the defect would have surfaced on the next
+> corpus-wide migration instead.
+>
+> ★ **The failure is mine and it is the one this AC exists to prevent.** I wrote
+> *"enumerate every Ken source root"* as the rule — and then **hand-enumerated
+> the roots.** A hand list is the thing that is never closed. I even flagged the
+> `.ken`-vs-`.ken.md` split for `conformance/` and did not re-check `catalog/`.
+
+⛔ **DERIVE the population structurally from the tracked tree — never hand-list
+roots:**
+
+```sh
+git ls-tree -r --name-only <candidate-sha> | grep -E '\.ken(\.md)?$'
+```
+
+**One expression, evaluated against the exact candidate.** Plus the non-source
+oracles that are not `.ken` at all — the conformance seed `.md` docs and
+`library/agents/evaluations/{results-*.toml,fixtures/proof-terminals.txt}`.
+
+**Positive control: a deliberately planted `lemma` declaration in EACH class —
+literate `.ken.md`, non-literate `.ken`, and each non-source oracle — is SEEN by
+the sweep.** A sweep that grew one arm per missed file has reproduced the bug it
+exists to prevent.
 
 **AC-2 — classify every row** as (a) keyword-contract rename, (b) derived
 identifier/anchor rename **with its consumers**, or (c) **intentional
