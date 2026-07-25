@@ -2,19 +2,57 @@
 id: KW-THEOREM
 title: "rename the surface keyword `lemma` to `theorem`"
 status: ready
-owner: spec
+owner: language
 size: M
 gate: none
 depends_on: []
 blocks: []
 github: null
-origin: operator directive 2026-07-22
+origin: operator directive 2026-07-22. RELEASED 2026-07-25 as the fleet's SECOND implementation lane on the operator's directive to open one (OpenAI capacity reset to 100%). Owner moved spec -> language: the mechanical core is crates/ken-elaborator, so the Language ring implements; the spec enclave / conformance-validator retains the review vote on the normative grammar (D2) and the ADR (D6).
 ---
 
-**Operator directive (2026-07-22):** rename the keyword `lemma` to `theorem`
-across the elaborator, catalog, library, spec, and docs.
+> ## ▶ THE FRAME IS WRITTEN — read it, not this file
+>
+> `docs/program/wp/KW-THEOREM-surface-keyword-rename.md`
+>
+> This file is the triage that produced the frame. **The frame carries the
+> deliverables, the acceptance criteria, the settled inputs, and the
+> do-not-reopen guardrails.**
+>
+> ### ✅ THE "HOLD UNTIL FNSPLIT CLOSE" PREMISE WAS UNMEASURED, AND IS FALSE
+>
+> This node was held on the Steward's assumption that a corpus-wide surface
+> rename would contend with the live FNSPLIT lane. **Measured at `aecdb001`, it
+> does not:** all 44 crate files carrying `lemma` are in `ken-elaborator` and
+> **none is in `ken-runtime`**, and the only WP frames it touches (`PX8-T`,
+> `PX8-F`) are `draft`. The hold is lifted.
+>
+> ### ⛔ IT DOES CONTEND — WITH THE DOC TRACK, ON THE LEDGER AXIS
+>
+> `library/SOURCE-ATTESTATIONS` carries **17 rows for `catalog/` sources**, and
+> this WP rewrites **698 keyword-leading declarations** across 23 catalog files
+> — so every attested catalog source changes hash. The doc track is the fleet's
+> one standing concurrency exception and it lives in `library/` + `agent/`.
+> **The doc track is PARKED for this WP's duration. Two lanes, not three.**
 
-## Measured footprint — 203 files, ~1,515 lines
+## ⚠ The footprint table below is SUPERSEDED — two counts were wrong
+
+Re-measured at `aecdb001` while framing. **Both corrections widen the work:**
+
+- **`library/` is 10 files, not 3** — and three of them are not prose:
+  `library/manifest.toml`, `library/agents/evaluations/results-2026-07-24.toml`,
+  and `library/agents/evaluations/fixtures/proof-terminals.txt`. **An
+  evaluation-results file and a fixture are oracles, not documentation.**
+- **`conformance/` includes a raw `.ken` source** —
+  `conformance/challenge/C6-lawful-ord-vs-stub/sound-ord-proved.ken` — not only
+  literate `.ken.md`. A glob written for `*.ken.md` misses it. That is a second
+  oracle class, and the frame's `AC-3` requires one glob definition covering
+  every Ken source root with a planted-declaration positive control per class.
+
+Also re-counted: `catalog/` keyword-leading declarations are **698**, not 697,
+with 36 further prose occurrences; `crates/` is **44** files, not 48.
+
+## Measured footprint — 203 files, ~1,515 lines (ORIGINAL TRIAGE, see corrections above)
 
 | area | files | lines | character |
 |---|---|---|---|

@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2V
 title: "executable boundary-value ABI — one closed 64-bit tagged word for ValueWord/ResultWord plus the emitted-code interface to construct, discriminate and project it"
-status: ready
+status: active
 owner: runtime
 size: L
 gate: none
