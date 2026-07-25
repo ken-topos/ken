@@ -94,7 +94,7 @@ fn planned_root_occurrence(expr: &RuntimeExpr) -> (StaticTransitionPlan, StaticO
         .expect("test fixture is plannable");
     let root = plan
         .root_static_origin()
-        .expect("a planned graph has a root entry occurrence");
+        .expect("a planned graph has a root source occurrence");
     (plan, root)
 }
 

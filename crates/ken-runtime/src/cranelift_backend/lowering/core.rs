@@ -173,9 +173,10 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
             initial_env.push(compiler.lower_value(&mut builder, value)?);
         }
         compiler.root_terminal_authority = compiler.take_distinguished_root_answer_authority()?;
-        // D6: the root occurrence takes the planner's own first entry origin —
-        // the same occurrence `plan_static_transition_graph` planned first — so
-        // the two walks start from one identity rather than two.
+        // D6/D9: the root lowering starts from the occurrence origin stored
+        // during the planner's root visit — never derived from the plan's
+        // scheduling `entries` — so the two walks start from one identity
+        // rather than two.
         let lowered = compiler.lower_expr(
             &mut builder,
             SourceOccurrence {
@@ -6162,19 +6163,19 @@ impl<'a> Lowering<'a> {
             ));
         };
         // D6/D7: a `DeclarationRef` is a childless leaf, and the declaration's
-        // body is a **separately planned** entry occurrence, reachable by name.
+        // body is a **separately planned** source occurrence, reachable by name.
         // That is why this construction site needs no threading — and why it must
         // not suggest the two `lower_expr` closure arms are nearly done. Only
         // transparent declarations are planned, which is exactly the set that
-        // survives the rejection above, so a missing entry is a planner bug.
+        // survives the rejection above, so a missing occurrence is a planner bug.
         let declaration_origin = self
             .static_transition_plan
             .declaration_occurrence_origin(symbol.as_str())
             .ok_or_else(|| {
                 // A planner invariant, not a capacity limit: this declaration is
-                // transparent, so the planner planned it (a planner invariant, not a capacity limit).
+                // transparent, so the planner planned it.
                 backend(BackendFailure::PlannerInvariant(format!(
-                    "transparent declaration {symbol} has no planned entry occurrence"
+                    "transparent declaration {symbol} has no planned source occurrence"
                 )))
             })?;
         let declaration_body = SourceOccurrence {

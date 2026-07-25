@@ -1579,7 +1579,7 @@ pub(in crate::cranelift_backend) fn plan_static_transition_graph(
                 planner.plan_expr(body, context, planner.terminal, EdgeKind::Continue, 0)?;
             planner.plan.entries.push(planned.entry);
             // A declaration body is its own planned source occurrence, so its
-            // occurrence origin is reachable by name. Two entries under one
+            // occurrence origin is reachable by name. Two occurrences under one
             // symbol would make that lookup ambiguous, which is a planner bug
             // rather than an input condition.
             if planner
@@ -1589,7 +1589,7 @@ pub(in crate::cranelift_backend) fn plan_static_transition_graph(
                 .is_some()
             {
                 return Err(planner_error(
-                    "transparent declaration planned more than one entry origin",
+                    "transparent declaration planned more than one occurrence origin",
                 ));
             }
         }
