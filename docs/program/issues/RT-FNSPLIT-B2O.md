@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2O
 title: "static body ownership — a total, validated occurrence → PredeclaredFunction mapping in the semantic plane, inert"
-status: draft
+status: active
 owner: runtime
 size: M
 gate: none
@@ -11,12 +11,21 @@ github: null
 origin: Architect ruling evt_842spc7t6js1 on RT-FNSPLIT-B2F hard-stop #9 (2026-07-25), item 5 plus the one-owner half of item 6, gated behind research advisory evt_531c4k52mshrn per the armed #9 pull. Steward-filed under the ruling's explicit grant of re-slicing and sequencing ownership; Steward owns the frame, scope, and AC/control placement.
 ---
 
-> ## ⛔ `draft` — FRAME NOT YET WRITTEN. Do not start.
+> ## ✅ `active` — FRAME IS WRITTEN AND KICKED (Steward, 2026-07-25)
+>
+> The shovel-ready frame is **`docs/program/wp/RT-FNSPLIT-B2O-body-ownership.md`**
+> (fetchable on `origin/main`). It is **fully ruled — no held deliverable**;
+> `D1` was released by the Architect. Construction authority is live for the
+> Runtime ring.
 >
 > This node exists because `RT-FNSPLIT-B2F` was ruled **not buildable as one
-> unit**. It is the **first** of two inert prerequisites. The shovel-ready frame
-> will be `docs/program/wp/RT-FNSPLIT-B2O-body-ownership.md`; until it exists
-> and the Steward kicks it, there is no construction authority here.
+> unit**. It is the **first** of two inert prerequisites.
+>
+> ⛔ **Read the frame, not this file, for the ruled seed set.** Any prose
+> anywhere — including earlier drafts of this document — that describes the unit
+> heads as "the root plus the `ClosureBody` heads" is **WRONG**:
+> `TransitionKind::ClosureBody` is a body's **return successor**, not its head.
+> The ruled seeds are `plan.entries` ∪ every `EdgeKind::StaticBody` **target**.
 
 ## Why this node exists
 
