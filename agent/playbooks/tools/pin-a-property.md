@@ -269,6 +269,26 @@ the edit). **Reporting the invalid rows is what makes the valid ones
 trustworthy** — a campaign that silently drops them is indistinguishable from one
 that had no failures.
 
+### ⛔ And the provenance check itself fails in BOTH directions
+
+**Measured 2026-07-25, on the very next candidate after the rows above.** A
+provenance check reported `applied=False` for two mutations that **had** landed:
+it re-counted the anchor **after** the replacement, and **the replacement string
+contained the anchor.** The campaign would have discarded **two sound results as
+unproven.**
+
+⚠ **An instrument that certifies evidence can fail toward throwing good evidence
+away, and that is exactly as corrupting as passing bad evidence through** — it is
+merely quieter, because a discarded row leaves no trace to audit. The rule above,
+read only in the false-positive direction (*"did it change the subject, and only
+the subject"*), does not catch this.
+
+⇒ **Count the anchor BEFORE the edit and compare against a PREDICTED
+post-count** — do not re-match a needle the replacement may still contain. A
+provenance check is itself a pin, so §6's positive control and §6a's
+which-arm-fired question apply to it: **feed it a mutation you know landed and a
+mutation you know did not, and confirm it distinguishes them.**
+
 - Apply each mutation at its **natural production site**, not at a convenient
   one; a mutation the real code path never reaches proves nothing.
 - **Restore byte-identically** and verify with `git diff --quiet`.
