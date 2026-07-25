@@ -34,13 +34,199 @@
 > ✅ **ADVERSARY TRIAGE DONE. ✅ `B2F` FRAME WRITTEN AND `ready`. ✅ `B2B`
 > RE-DERIVED.** All three committed on `steward/work` (`8ce48a64`, `208989fd`).
 >
-> ## ⛔⛔ LIVE STATE — `B2O` CANDIDATE `97db6f0b` DELIVERED, IN QA, NO HARD-STOP
+> ## ⛔⛔ LIVE STATE — `B2O` RESPIN LOOP **STOPPED BY THE STEWARD AT FOLD 5.**
+> ## FIVE FINDINGS, ONE DEFECT FAMILY. **SCOPING RULING ISSUED — SPLIT THE WP.**
 >
-> **`origin/main` = `27084bbf`** (#953 `library-style`, #954 tracker+briefing).
-> Current act: **merge-gate `RT-FNSPLIT-B2O`** — candidate off-box at
-> `97db6f0b`, QA green at 354 tests, awaiting the leader's approved handoff.
-> See the ✅ CANDIDATE DELIVERED block below for the full sequence and the two
-> ACs I will read closest.
+> **`origin/main` = `12d9e412`** (#953 `library-style`, #954 tracker, #955 armed
+> anchor, #956 carrier lessons).
+>
+> **⛔ `96627f2a` IS NOT A MERGE CANDIDATE. `dec_tnrk878528r` is DEAD**
+> (@architect block `evt_7keypnnsrr0cd`). Candidate is off-box,
+> `ls-remote`-verified — nothing at risk while this is decided.
+>
+> ### The five rejected candidates — all off-box, none lost
+>
+> | SHA | rejected because | keyed to | found by |
+> |---|---|---|---|
+> | `97db6f0b` | two `D3` comments overstating what the edge law detects | prose | implementer, self-caught |
+> | `c59d76ce` | `D6` route-inventory not closed over routing methods | set closure | Architect |
+> | `02afcc3f` | qualifier **spelling** — a legal `pub fn` was invisible | spelling | Architect |
+> | `02afcc3f` | inventory's **file scope** — `mod.rs` unscanned | file scope | implementer, against its own pin |
+> | `96627f2a` | **indentation** (nested `fn`) + **name collision** (`file::method` dedups) | layout | Architect |
+>
+> ### ⛔⛔ THE RULING TO CARRY: FIVE FOLDS IN ONE FAMILY IS NOT CONVERGENCE
+>
+> Every fix was correct. **Every fix created the surface for the next.** Folds
+> 3–5 are one defect: **a hand-written source-text parser being asked to model
+> Rust's grammar, which is not a finite list.** Indentation, qualifiers,
+> nesting, name collision — and `macro_rules!` is already recorded as the next
+> one, unbuilt. ⇒ **A sixth fold has no reason to be the last. That is the tell.**
+> My law for it: *repeated defeats of one checker mean the DEFAULT BRANCH is
+> wrong* — change the instrument, not the latest gap in it.
+>
+> ★ **THE SHARPER QUESTION, PUT TO THE ARCHITECT (`evt_3xwwqqz14byks`): the pin
+> is in the WRONG PLANE.** The property — *no new function can route to a
+> retained body* — is a property of **the semantic plane, the plan graph where
+> ownership is computed** (`plan.entries` ∪ `EdgeKind::StaticBody` targets,
+> already validated by partition + composition laws). The pin measures it by
+> **reading Rust source text and counting methods.** ⇒ **All five defeats were
+> defeats of the PROXY layer, never of the property.** If it were pinned where
+> it lives, no Rust-grammar question would arise at all.
+>
+> ### ⇒ MY SCOPING RULING (sequencing is mine; the mechanism call is the Architect's)
+>
+> **The production mechanism has not moved in three respins** — `planning/` is
+> comment-only since `97db6f0b`; `lowering/core.rs` and `mod.rs` were **never
+> touched by this WP at all** (verified `git diff --quiet` against base
+> `3baa80f4`, not taken on report). ⇒ **A production mechanism four reviews
+> found sound is held by a test-and-report artifact that has consumed five
+> review cycles.** Those are separable:
+>
+> **Land `B2O` on its approved production mechanism with `D6`'s claim narrowed
+> to what holds; carry per-occurrence route-identity attribution as its own
+> small WP with a real AC and a real instrument.**
+>
+> ⚠ **The condition, so it cannot strand:** narrowing `D6` **MOVES** the ACs
+> defined on *"the route set cannot grow silently"* — they do not evaporate.
+> Re-home them onto the new WP **by ID**, or the split silently drops the
+> coverage it was meant to preserve. The `D6` report must say plainly that route
+> -set closure is a **review boundary today, not a mechanized property.**
+>
+> ### Feasibility, verified so fold 6 is not found impossible after it is written
+>
+> - **`syn 2.0.118` IS present** in the local registry
+>   (`CARGO_HOME=/usr/local/cargo`)
+>   **and already in `Cargo.lock`** via `serde_derive` / `wasm-bindgen-macro-support`
+>   / `zerocopy-derive`; so are `proc-macro2 1.0.106` and `quote`. A real-parser
+>   oracle needs **no network fetch and adds no new crate to the supply chain.**
+> - **No `ken-*` crate depends on any of them**, so a test-only dev-dependency is
+>   a `Cargo.lock` **edge** change ⇒ the `--locked` gate must re-verify **in CI,
+>   never on this box.**
+> - ⚠ I first reported `syn` ABSENT — my glob used `~/.cargo`. **Wrong
+>   instrument, third time today.** Same family as the phrase-grep and the
+>   line-anchored sweep below.
+>
+> ### ⛔ TWO OPEN CORPUS DEFECTS FROM THE LIBRARIAN'S AS-BUILT NOTE (tasks #31/#32)
+>
+> **1. The retired diagnostic is in FIVE files, not the three reported.** The CLI
+> now says `ken run: missing entrypoint 'main'` (`main.rs:312`,
+> `RunError::MissingEntrypoint` ← `ProgramAdmissionError::MissingMain`, asserted
+> by three `ken-cli` tests); the corpus still quotes *"last definition is not an
+> IO tree"*. **A line-anchored `grep` finds only 3 — the phrase WRAPS at 80
+> columns.** Wrap-immune form:
+>
+> ```sh
+> for f in $(git ls-files '*.md' '*.rs'); do
+>   n=$(tr '\n' ' ' < "$f" | tr -s ' ' | grep -c "is not an IO tree"); [ "$n" != 0 ] && echo "$n  $f"
+> done
+> ```
+>
+> | file | status |
+> |---|---|
+> | `docs/program/07-catalog-style-guide.md` §3 (L101–102) | ⛔ **LEDGER-ATTESTED** — see below |
+> | `library/learn/reading-ken/06-execution.md` (L44–45) | ⚠ **still present on candidate `e564ce04`** — the rewrite carried it forward verbatim; the Librarian's ch-06 requirement is **NOT** discharged |
+> | `library/agents/core/write-ken.md:88` | stale — doc ring |
+> | `library/agents/core/toolchain.md:63` | stale — doc ring |
+> | `docs/program/wp/ds-1-findings-remediation.md:119` | historical quote — **do NOT rewrite** |
+>
+> ⛔ **I did NOT fix the style guide, and the reason is the LEDGER AXIS.**
+> `library/SOURCE-ATTESTATIONS:33` attests it at blob
+> `74456b010ba0f36c24074af067418fff2d2f3e5d` — **exact match to the current
+> file** — and `gen-doc-status.sh:511` hard-fails on mismatch. Editing one word
+> moves the OID, breaks the doc gate, and needs a ledger row regenerated **and
+> Librarian-reviewed**, while a doc candidate touching `STATUS`/attestations is
+> mid-review. **That is the 2026-07-22 silent-union collision.** ⇒ **The §3 fix
+> sequences with the doc ring; the ledger row is theirs, not mine.**
+>
+> ★ **Repair principle (Librarian's, endorsed): cite the BEHAVIOR, not the
+> message text**, unless the message text *is* the contract. Swapping in the
+> current string just re-arms the staleness on the next diagnostic edit.
+>
+> **2. `ds-1-findings-remediation.md` reads `not yet assigned` for shipped work.**
+> Line 16 says *"Kick status: created and queued; not yet assigned"* and frames
+> **FR-3** as an open gap (*"`ken run` has no library check-mode"*) — but
+> `ken check` is landed and tested (`main.rs:24` dispatches `"check"`,
+> `main.rs:270` routes `elaborate_cli_file("check", …)`, `ken_check_mode.rs` is
+> 158 lines). Its citation `main.rs:188` is also stale (now `:312`).
+> ⚠ **NOT flipping on that evidence** — FR-3 was *"check-mode **+ AC
+> reconcile**"* and only the check-mode half is verified. Claiming closure
+> because the visible half landed is the same error as reading a green test as a
+> green property.
+>
+> ★ **This is the §7b step-8 frontier defect ONE LAYER OUT.** A stale `ready` in
+> **frontmatter** has `gen-progress.sh` and a schema check; a stale status in
+> **frame prose** has only me. **Frontmatter has a generator; frame prose has
+> me.** Third carrier of the same lesson today.
+>
+> ### ⛔ THE ONE THING TO CARRY FORWARD: I HELD A FORMALLY VALID GATE
+>
+> Two messages crossed seconds apart. **@architect posted APPROVE on `02afcc3f`,
+> resolving on cast** (`evt_vsttnzpgzk4d`). **@runtime-implementer then measured
+> that `fail closed` is NOT structural** — it held by a **spelling coincidence**,
+> and its red message invited the wrong repair (`evt_3hjh46wwtt7kt`).
+>
+> **The approval was authored before the evidence existed, so it was not a
+> judgement on it.** My §14 gate *would have passed*. I refused it
+> (`evt_24tredzd7d8y0`) on the narrow ground that is actually mine: **I do not
+> publish while the design authority's approval is known to predate a measured
+> counter-example to the exact property it turned on.** `@runtime-leader`
+> independently rejected `dec_5rfw4gjtnsnbk` on the same evidence — verified
+> `[]` fresh from the object.
+>
+> **All three parties converged independently:** my hold, the leader's formal
+> rejection, and **@architect's explicit withdrawal** (`evt_q3hhaps2zgg8`) —
+> *"my approval of exact `02afcc3f` is superseded by this post-cast evidence …
+> I am retracting the resolved approval and require the fold."* It also owned
+> the verdict error precisely: **its approval had attributed the protection to a
+> closed routing-method inventory, and that inventory ranges only over
+> `core.rs` while `Lowering` also has an impl in `lowering/mod.rs`.**
+>
+> ★ **Three seats reaching the same conclusion from three different starting
+> points is the system working — but note that NONE of them was the gate.** The
+> gate said pass. What caught it was one seat testing its own pin after
+> approval, and that is not a mechanism — it is a disposition. The mechanism
+> that *would* have caught it is the per-pin evasion AC below.
+>
+> ★ **The gate certifies that a reviewer approved a SHA. It never certifies the
+> reviewer had seen everything known about it.** Arrival order is not authorship
+> order. Re-derive the *authorship* order whenever an approval and a finding
+> land close together.
+>
+> ⚠ **The sharper half:** a pin that fails closed *for the wrong reason* is worse
+> than one that fails open — the failure **looks like the guard working**, and
+> the diagnostic then steers the next person to fix the symptom.
+>
+> ### ⭐ TWICE TODAY, STATING AN EXPECTED CHECK PRODUCED A REAL FINDING
+>
+> I said I would ask for a per-pin compile-preserving evasion attempt at merge.
+> The implementer ran them **before being asked** (finding #1), and later
+> measured **against its own pin** with QA approval already in hand, reporting
+> *"not favourable to my own pin"* (finding #3). ⇒ **State the expected
+> merge-time check at HANDOFF time.** It is cheaper than enforcing it at the
+> gate and it is the behaviour to protect.
+>
+> ### ⛔ MY OWN DEFECT, NOW FIXED IN THE CORPUS: RIGHT CONTENT, WRONG CARRIER
+>
+> Four instances in one session — in each, **a check existed and answered a
+> NARROWER question than the one that mattered**, which is why none felt like a
+> gap:
+>
+> | content was right | carrier had no gate |
+> |---|---|
+> | issue body `⛔ FRAME NOT YET WRITTEN` | `check-issue-schema` validates the **frontmatter field** |
+> | briefing `NEXT RESEARCH PULL = #36` | the armed line's **presence** passed every check; its value was unreachable |
+> | frame "attempt an evasion per pin" | a **hazards paragraph** — nothing discharges advice |
+> | publish-verify phrase grep | answered *"are these bytes adjacent?"* |
+>
+> Landed in #956: `agent/memory/fleet/`
+> `a-requirement-in-an-advisory-section-is-never-discharged.md`, the §2e rule
+> that such a sentence **is an AC** (per-pin enumeration + a named positive
+> control that would fire if skipped + a place to record each result), and
+> step 5's replacement with a **blob-identity** check.
+>
+> ⇒ **For `B2R`: the per-pin evasion attempt is a HARD AC with a named positive
+> control.** `B2R` inherits this exact boundary and "what may cross an owner
+> boundary" is *maximally* easy to pin by spelling.
 >
 > **Doc ring runs CONCURRENTLY** (doc-only exception): `doc-author` →
 > `librarian` iterating `library/learn/reading-ken/01-anatomy.md` under the

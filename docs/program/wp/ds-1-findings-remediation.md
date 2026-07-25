@@ -13,9 +13,41 @@ named `absurdEmpty`; fences checked via `elaborate_ken_md_file`). These WPs
 remove the workarounds' *cause* so later catalog entries don't inherit them.
 **FR-3 is the highest-value** — it bears on *every* pure-library catalog entry.
 
-**Kick status:** created and queued; **not yet assigned.** Per the operator's
-DS-1 process-review hold, the actual kickoffs wait for the review — this doc
-makes them ready to route.
+> ## ✅ ALL THREE REMEDIATED — status corrected 2026-07-25 (Steward)
+>
+> **The `Kick status` line below said *"created and queued; not yet assigned"*
+> long after all three shipped.** It is retained, struck, because the staleness
+> is the more useful record: this file's **findings** were kept current by the
+> people implementing them, while its **status** had no generator and no gate —
+> only me. Found by the Librarian's as-built currency sweep, not by anything
+> watching the obligation.
+>
+> | | remediation | evidence, verified against landed code |
+> |---|---|---|
+> | **FR-1** | ✅ landed | `crates/ken-elaborator/tests/explicit_data_parser.rs:288` asserts `data Empty : Type where {}` parses, citing FR-1 by name. The `"explicit data block requires at least one constructor"` hard error is **gone** from the elaborator. |
+> | **FR-2** | ✅ landed | `crates/ken-elaborator/tests/fr2_absurd_collision_hygiene.rs` — **11 tests**. `RESERVED_SUGAR = {Refl, Axiom, absurd}` is a resolve-time hard error; `J`/`Eq` intercept **only** arity-3 applications so `class Eq a` coexists. |
+> | **FR-3** | ✅ landed, **both halves** | Half 1: `crates/ken-cli/tests/ken_check_mode.rs` — `check_pure_library_file_exits_zero_no_io`, `check_file_with_failing_fence_exits_one_same_error_path`, `check_io_shaped_file_also_exits_zero_without_running_io`. Half 2 (the Steward/Librarian AC reconcile) landed on `wp/DOC-LIBRARY-STYLE-01-ANATOMY` `06204d96`. |
+>
+> ⚠ **FR-2's design text below is NOT stale** — it is already the
+> Architect-corrected, arity-indexed ruling (`evt_4p5a2xkqemnge`), and it matches
+> the landed test file's own description. I suspected it carried the overruled
+> *"every syntactic `Eq`"* pin and **checked instead of assuming; it does not.**
+>
+> ⚠ **FR-3's `main.rs:188` citation is stale** (now `main.rs:312`), and the
+> diagnostic it quotes is retired — the CLI now says
+> `ken run: missing entrypoint 'main'`. **Both are deliberately left as written:
+> a findings record quotes what was observed WHEN it was observed.** Rewriting
+> history to match the present would destroy the evidence that the finding was
+> ever true. The live corpus was swept separately.
+>
+> ★ **The lesson, and it is the third carrier of it in one day:** a real
+> obligation sitting in **frame prose** has no generator and no schema check
+> reaching it. `status:` frontmatter has `gen-progress.sh`; a sentence does not.
+> Read the prose of your own frames for sentences that are actually *state*.
+
+~~**Kick status:** created and queued; **not yet assigned.**~~ Per the operator's
+DS-1 process-review hold, the actual kickoffs waited for the review — this doc
+made them ready to route.
 
 Grounding: all three sites verified against landed code
 (`origin/main`-adjacent), not just the report.
