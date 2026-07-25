@@ -13,9 +13,17 @@ use crate::{
     RuntimeValue, Sign,
 };
 
+/// The preallocated positional identity of one planned occurrence.
+///
+/// Widened to `pub(in crate::cranelift_backend)` by `RT-FNSPLIT-B2A-C` so the
+/// lowering can carry an occurrence's static name to the site that lowers it.
+/// The wrapped ordinal stays `pub(super)` deliberately: a consumer outside this
+/// planner can hold, compare, and pass an origin, but **cannot mint one** from
+/// an arbitrary integer, so the tag population can only ever be the planner's
+/// own.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
-pub(super) struct StaticOriginId(pub(super) u32);
+pub(in crate::cranelift_backend) struct StaticOriginId(pub(super) u32);
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
@@ -635,6 +643,57 @@ fn opcode_for_source(source: SemanticSourceKind) -> SemanticOpcode {
 }
 
 impl SemanticPlane {
+    /// The preallocated origin of one **positional** syntax child.
+    ///
+    /// Child *k* is recovered as child *k* out of the occurrence's own
+    /// child-origin range — never by search, shape-matching, pointer, or clone
+    /// order. This is the accessor `RT-FNSPLIT-B2A-C` descends with: knowing an
+    /// occurrence's origin, its children's origins are already determined, so
+    /// no second identity space is minted for them.
+    ///
+    /// Every planned origin resolves here: `build_semantic_plane` lays the
+    /// descriptors, programs, and records dense over the planned nodes and
+    /// indexed by planned-node id, and an origin *is* its node's ordinal. The
+    /// only failing lookup is a position past this occurrence's own child count,
+    /// which is a compiler bug in the caller's ordinal, not an input condition.
+    pub(super) fn child_origin(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+    ) -> Result<StaticOriginId, CraneliftBackendError> {
+        let descriptor = self
+            .descriptors
+            .get(parent.0 as usize)
+            .ok_or_else(|| planner_error("static origin is outside the semantic descriptors"))?;
+        if descriptor.origin != parent {
+            return Err(planner_error(
+                "descriptor origin is not its preallocated positional identity",
+            ));
+        }
+        let program = self
+            .programs
+            .get(descriptor.program.0 as usize)
+            .ok_or_else(|| planner_error("descriptor names an unknown semantic program"))?;
+        let [record] = plane_slice(&self.records, program.records, "semantic record")? else {
+            return Err(planner_error(
+                "semantic program does not hold exactly one record",
+            ));
+        };
+        if record.origin != parent {
+            return Err(planner_error(
+                "semantic record origin is not its preallocated positional identity",
+            ));
+        }
+        plane_slice(
+            &self.child_origins,
+            record.child_origins,
+            "semantic child origin",
+        )?
+        .get(position)
+        .copied()
+        .ok_or_else(|| planner_error("static origin has no child at that source position"))
+    }
+
     pub(super) fn validate(
         &self,
         nodes: &[StaticNode],

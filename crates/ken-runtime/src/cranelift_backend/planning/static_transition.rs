@@ -16,6 +16,8 @@ use super::{
 use crate::RuntimeExpr;
 use semantic_ir::{build_semantic_plane, SemanticMaterialArena, SemanticPlane, SemanticSourceSeed};
 
+pub(in crate::cranelift_backend) use semantic_ir::StaticOriginId;
+
 pub(super) const MAX_HELPERS_PER_STATIC_SOURCE: usize = 8;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -166,6 +168,15 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan {
     semantic_sources: Vec<SemanticSourceSeed>,
     semantic_material: SemanticMaterialArena,
     semantic: SemanticPlane,
+    /// The planned entry origin of each transparent declaration, keyed by its
+    /// symbol.
+    ///
+    /// A declaration is planned as its own source occurrence (`:1415` below), so
+    /// its body's static name is reachable **by name** and needs no origin
+    /// threaded into it. This is what makes `Lowered::DeclarationClosure`'s
+    /// construction site asymmetric with the two `lower_expr` closure arms
+    /// (`RT-FNSPLIT-B2A-C` D6/D7).
+    declaration_entries: BTreeMap<String, StaticOriginId>,
 }
 
 #[cfg(test)]
@@ -256,6 +267,7 @@ impl Planner {
                 semantic_sources: Vec::new(),
                 semantic_material: SemanticMaterialArena::default(),
                 semantic: SemanticPlane::default(),
+                declaration_entries: BTreeMap::new(),
             },
             store_interner: BTreeMap::new(),
             next_source: 0,
@@ -816,6 +828,50 @@ impl Planner {
 }
 
 impl StaticTransitionPlan {
+    /// The preallocated origin of one positional syntax child of `parent`.
+    ///
+    /// This is the **sole** production point for a child's static name, and the
+    /// only admissible one: the position is the child's source-field ordinal and
+    /// the value comes out of B1R's checked positional child-origin range. There
+    /// is deliberately no pointer, content, hash, clone-order, or visit-order
+    /// route to an origin, and no arithmetic that mints one
+    /// (`RT-FNSPLIT-B2A-C` D2).
+    pub(in crate::cranelift_backend) fn child_static_origin(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+    ) -> Result<StaticOriginId, CraneliftBackendError> {
+        self.semantic.child_origin(parent, position)
+    }
+
+    /// The planned entry origin of the whole program's root occurrence.
+    ///
+    /// The root is the first entry the planner pushed, planned before any
+    /// declaration (`plan_static_transition_graph` below), so the lowering's own
+    /// root walk starts from the same occurrence the planner started from
+    /// (`RT-FNSPLIT-B2A-C` D6).
+    pub(in crate::cranelift_backend) fn root_static_origin(
+        &self,
+    ) -> Result<StaticOriginId, CraneliftBackendError> {
+        self.entries
+            .first()
+            .map(|entry| StaticOriginId(entry.0))
+            .ok_or_else(|| planner_error("plan has no root entry occurrence"))
+    }
+
+    /// The planned entry origin of a transparent declaration, by symbol.
+    ///
+    /// `None` is a real answer, not a failure: a declaration that is not
+    /// transparent has no planned body, and the lowering rejects it on its own
+    /// terms. The caller must not substitute an origin of its own when this is
+    /// `None`.
+    pub(in crate::cranelift_backend) fn declaration_entry_origin(
+        &self,
+        symbol: &str,
+    ) -> Option<StaticOriginId> {
+        self.declaration_entries.get(symbol).copied()
+    }
+
     fn helper_key_for_activation(
         &self,
         node: StaticNodeId,
@@ -1409,11 +1465,25 @@ pub(in crate::cranelift_backend) fn plan_static_transition_graph(
     };
     let entry = planner.plan_expr(entry, context, planner.terminal, EdgeKind::Continue, 0)?;
     planner.plan.entries.push(entry);
-    for declaration in declarations.values() {
+    for (symbol, declaration) in declarations {
         if let RuntimeDeclarationKind::Transparent { body } = &declaration.kind {
             let entry =
                 planner.plan_expr(body, context, planner.terminal, EdgeKind::Continue, 0)?;
             planner.plan.entries.push(entry);
+            // A declaration body is its own planned source occurrence, so its
+            // entry origin is reachable by name. Two entries under one symbol
+            // would make that lookup ambiguous, which is a planner bug rather
+            // than an input condition (`RT-FNSPLIT-B2A-C` D6).
+            if planner
+                .plan
+                .declaration_entries
+                .insert((*symbol).to_owned(), StaticOriginId(entry.0))
+                .is_some()
+            {
+                return Err(planner_error(
+                    "transparent declaration planned more than one entry origin",
+                ));
+            }
         }
     }
     planner.finish()

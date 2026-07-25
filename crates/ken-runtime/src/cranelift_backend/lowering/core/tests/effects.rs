@@ -44,6 +44,7 @@ fn run_checked_bounded_nat_fixture(
     let mut compiler = Lowering {
         seed_env: &seed_env,
         declarations: BTreeMap::new(),
+        static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),
         active_recursive_declarations: Vec::new(),
         result_table: BTreeMap::new(),
@@ -166,12 +167,21 @@ fn run_checked_bounded_nat_fixture(
                             },
                         },
                     ];
+                    // Real origins: plan the match these cases belong to.
+                    let source_match = RuntimeExpr::Match {
+                        scrutinee: Box::new(RuntimeExpr::Var(0)),
+                        cases: cases.clone(),
+                        default: default.clone(),
+                    };
+                    let (plan, match_origin) = planned_root_occurrence(&source_match);
+                    compiler.static_transition_plan = plan;
                     compiler.lower_bounded_nat_match(
                         &mut builder,
                         nat,
                         false,
                         &cases,
                         &default,
+                        match_origin,
                         &[],
                     )?
                 }
@@ -230,11 +240,19 @@ fn run_checked_bounded_nat_fixture(
                             },
                         },
                     ];
+                    let source_match = RuntimeExpr::ComputationalMatch {
+                        scrutinee: Box::new(RuntimeExpr::Var(0)),
+                        cases: cases.clone(),
+                        default: default.clone(),
+                    };
+                    let (plan, match_origin) = planned_root_occurrence(&source_match);
+                    compiler.static_transition_plan = plan;
                     let frames = [EliminatorFrame::Computational(
                         ComputationalEliminatorFrame {
                             cases: &cases,
                             default: &default,
                             env: &[],
+                            static_origin: match_origin,
                             retained_scrutinee_index: None,
                             deferred_constructor_case: None,
                             provenance: compiler.mint_recursor_frame_provenance(),

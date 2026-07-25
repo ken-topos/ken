@@ -51,7 +51,7 @@ pub(in crate::cranelift_backend) use super::compiled::{CompiledModule, ResultDec
 pub(in crate::cranelift_backend) use super::planning::{
     collect_checked_oriented_markers, collect_checked_subcontinuation_frames,
     plan_static_transition_graph, validate_oriented_subcontinuation_transport,
-    CheckedOrientedMarkerSets,
+    CheckedOrientedMarkerSets, StaticOriginId, StaticTransitionPlan,
 };
 pub(in crate::cranelift_backend) use super::surface::{
     backend, backend_module, unsupported, BackendFailure, CraneliftBackendError,
@@ -211,9 +211,63 @@ pub(super) fn verify_cranelift_function_for_artifact_tests(
 ) -> Result<(), CraneliftBackendError> {
     verify_cranelift_function(func, isa)
 }
+/// One source occurrence the lowering is working on: the expression the planner
+/// walked, paired with the `StaticOriginId` the planner preallocated for it.
+///
+/// The pair exists so that an occurrence's static name travels **with** the term
+/// rather than beside it. In this unit the origin is provenance only: nothing
+/// selects, dispatches, or branches on it — it is carried so that a child's
+/// origin can be derived positionally when the walk descends
+/// (`RT-FNSPLIT-B2A-C` D1/D4, and the negative boundary N1-N4).
+#[derive(Clone, Copy)]
+struct SourceOccurrence<'a> {
+    expr: &'a RuntimeExpr,
+    static_origin: StaticOriginId,
+}
+
+/// An owned source occurrence, for the points where the lowering **clones** a
+/// `RuntimeExpr` into a pending frame, a cloneable prefix template, or a
+/// retained closure.
+///
+/// ⭐ The pair is one value on purpose: `SourcePrefixTemplate` is `Clone`, and a
+/// clone that copied the term while dropping its origin would silently
+/// reintroduce exactly the recoverability vacancy this unit exists to close
+/// (`RT-FNSPLIT-B2A-C` D4). Making them one field makes that drop unspellable.
+#[derive(Clone)]
+struct OwnedSourceOccurrence {
+    expr: RuntimeExpr,
+    static_origin: StaticOriginId,
+}
+
+impl OwnedSourceOccurrence {
+    /// Clones a borrowed occurrence into an owned one, carrying the origin in
+    /// the same constructor as the clone.
+    fn cloned(occurrence: SourceOccurrence<'_>) -> Self {
+        Self {
+            expr: occurrence.expr.clone(),
+            static_origin: occurrence.static_origin,
+        }
+    }
+
+    fn borrowed(&self) -> SourceOccurrence<'_> {
+        SourceOccurrence {
+            expr: &self.expr,
+            static_origin: self.static_origin,
+        }
+    }
+}
+
 struct Lowering<'a> {
     seed_env: &'a NativeSeedEnvironment,
     declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
+    /// The closed static plan for this compilation.
+    ///
+    /// It lives here, rather than as a local of `compile_expr_into_module`,
+    /// because every descent needs the checked positional child-origin table to
+    /// derive the child's static name. The plan holds no borrow of the source
+    /// trees, so it cannot escape into the compiled artifact
+    /// (`CompiledModule` has no lifetime parameter and takes only owned data).
+    static_transition_plan: StaticTransitionPlan,
     declaration_stack: Vec<RuntimeSymbol>,
     active_recursive_declarations: Vec<ActiveRecursiveDeclarationV1>,
     result_table: BTreeMap<i64, RuntimeGroundValue>,
@@ -309,6 +363,11 @@ struct ComputationalRecursorFramePayload {
     cases: Vec<crate::RuntimeComputationalMatchCase>,
     default: RuntimeTrap,
     outer_env: Vec<Lowered>,
+    /// The origin of the computational-match occurrence these cases came from,
+    /// cloned into this payload **in the same constructor as the cases** so a
+    /// later resumption can still derive a case body's origin positionally
+    /// (`RT-FNSPLIT-B2A-C` D4).
+    static_origin: StaticOriginId,
     provenance: RecursorFrameProvenance,
     checked_frame_id: Option<u64>,
     checked_invocation_id: Option<u64>,
@@ -389,16 +448,24 @@ enum Lowered {
     Record {
         fields: Vec<(String, Lowered)>,
     },
+    /// A retained closure.
+    ///
+    /// ⚠ The body is still **the** carrier and still the only thing consumed:
+    /// every call site re-lowers this cloned term exactly as before. What is new
+    /// is that the clone carries the body occurrence's preallocated origin in
+    /// the same value, because a retained body is re-lowered at a site where
+    /// nothing else names it. Removing this carrier in favour of the tag is
+    /// `RT-FNSPLIT-B2A-S`, not this unit.
     Closure {
         captures: Vec<Lowered>,
         params: Vec<String>,
-        body: RuntimeExpr,
+        body: OwnedSourceOccurrence,
     },
     DeclarationClosure {
         symbol: RuntimeSymbol,
         captures: Vec<Lowered>,
         params: Vec<String>,
-        body: RuntimeExpr,
+        body: OwnedSourceOccurrence,
     },
     ComputationalRecursorClosure {
         residual: Box<Lowered>,
@@ -483,15 +550,22 @@ fn validate_dynamic_constructor_alternatives<'a>(
     }
     Ok(())
 }
+/// Selects the source case for one dynamic-constructor alternative.
+///
+/// ⭐ Returns the case's **index** alongside it: the selection is a search by
+/// constructor name, and a search recovers no position. The caller needs the
+/// index to derive the body's static origin positionally
+/// (`RT-FNSPLIT-B2A-C` D2).
 fn select_dynamic_constructor_case<'a>(
     cases: &'a [crate::RuntimeMatchCase],
     alternative: &DynamicConstructorAlternativeV1,
     default: &'a RuntimeTrap,
-) -> Result<Result<&'a crate::RuntimeMatchCase, &'a RuntimeTrap>, CraneliftBackendError> {
+) -> Result<Result<(usize, &'a crate::RuntimeMatchCase), &'a RuntimeTrap>, CraneliftBackendError> {
     let mut selected = cases
         .iter()
-        .filter(|case| case.constructor == alternative.constructor);
-    let Some(case) = selected.next() else {
+        .enumerate()
+        .filter(|(_, case)| case.constructor == alternative.constructor);
+    let Some((index, case)) = selected.next() else {
         return Ok(Err(default));
     };
     if selected.next().is_some() {
@@ -514,7 +588,7 @@ fn select_dynamic_constructor_case<'a>(
             ),
         ));
     }
-    Ok(Ok(case))
+    Ok(Ok((index, case)))
 }
 fn materialize_dynamic_constructor_env(
     alternative: &DynamicConstructorAlternativeV1,
@@ -596,8 +670,12 @@ fn lowered_char_list(value: &Lowered) -> Option<Vec<u8>> {
 fn dynamic_host_result_producer_case<'a>(
     cases: &'a [crate::RuntimeMatchCase],
     constructor: &str,
-) -> Result<Option<&'a crate::RuntimeMatchCase>, CraneliftBackendError> {
-    let Some(case) = cases.iter().find(|case| case.constructor == constructor) else {
+) -> Result<Option<(usize, &'a crate::RuntimeMatchCase)>, CraneliftBackendError> {
+    let Some((index, case)) = cases
+        .iter()
+        .enumerate()
+        .find(|(_, case)| case.constructor == constructor)
+    else {
         return Ok(None);
     };
     if case.binders != 1 {
@@ -609,13 +687,16 @@ fn dynamic_host_result_producer_case<'a>(
             ),
         ));
     }
-    Ok(Some(case))
+    Ok(Some((index, case)))
 }
 #[derive(Clone, Copy)]
 struct ComputationalEliminatorFrame<'a> {
     cases: &'a [crate::RuntimeComputationalMatchCase],
     default: &'a RuntimeTrap,
     env: &'a [Lowered],
+    /// The origin of the computational-match occurrence these cases belong to.
+    /// Case *i*'s body is `child(static_origin, 1 + i)`.
+    static_origin: StaticOriginId,
     retained_scrutinee_index: Option<usize>,
     deferred_constructor_case: Option<&'a DeferredConstructorCaseEnvironment<'a>>,
     provenance: RecursorFrameProvenance,
@@ -629,6 +710,10 @@ struct OrdinaryEliminatorFrame<'a> {
     cases: &'a [crate::RuntimeMatchCase],
     default: &'a RuntimeTrap,
     env: &'a [Lowered],
+    /// The origin of the **match occurrence these cases belong to**. Case *i*'s
+    /// body is `child(static_origin, 1 + i)`; see `SourceContinuation::
+    /// MatchScrutinee` for why one parent origin beats a per-case vector.
+    static_origin: StaticOriginId,
     retained_scrutinee_index: Option<usize>,
     deferred_constructor_case: Option<&'a DeferredConstructorCaseEnvironment<'a>>,
 }
@@ -636,6 +721,9 @@ struct OrdinaryEliminatorFrame<'a> {
 struct PendingLetContinuationFrame<'a> {
     residual: &'a Lowered,
     args: &'a [RuntimeExpr],
+    /// The origin of the `Call` occurrence `args` belong to; argument *i* is
+    /// `child(call_origin, 1 + i)`.
+    call_origin: StaticOriginId,
     env: &'a [Lowered],
 }
 #[derive(Clone, Copy)]
@@ -654,6 +742,10 @@ struct ComputationalRecursorLayer {
     cases: Vec<crate::RuntimeComputationalMatchCase>,
     default: RuntimeTrap,
     outer_env: Vec<Lowered>,
+    /// The origin of the computational-match occurrence these cases came from,
+    /// carried with the clone so a resumed selection can still derive a case
+    /// body's origin positionally (`RT-FNSPLIT-B2A-C` D4).
+    static_origin: StaticOriginId,
     provenance: RecursorFrameProvenance,
     role: RecursorLayerRole,
     checked_frame_id: Option<u64>,
@@ -1508,6 +1600,7 @@ fn installed_oriented_eliminator_frames(
                 cases: &layer.cases,
                 default: &layer.default,
                 env: &layer.outer_env,
+                static_origin: layer.static_origin,
                 retained_scrutinee_index: None,
                 deferred_constructor_case: None,
                 provenance: layer.provenance,
@@ -1702,7 +1795,7 @@ enum SourceContinuation<'a> {
         next: Box<SourceContinuation<'a>>,
     },
     LetBody {
-        body: RuntimeExpr,
+        body: OwnedSourceOccurrence,
         env: Vec<Lowered>,
         next: Box<SourceContinuation<'a>>,
     },
@@ -1716,28 +1809,37 @@ enum SourceContinuation<'a> {
         next: Box<SourceContinuation<'a>>,
     },
     IfScrutinee {
-        then_expr: RuntimeExpr,
-        else_expr: RuntimeExpr,
+        then_expr: OwnedSourceOccurrence,
+        else_expr: OwnedSourceOccurrence,
         env: Vec<Lowered>,
         next: Box<SourceContinuation<'a>>,
     },
     ConstructArgument {
         constructor: RuntimeSymbol,
-        remaining: Vec<RuntimeExpr>,
+        remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<Lowered>,
         env: Vec<Lowered>,
         next: Box<SourceContinuation<'a>>,
     },
+    /// ⭐ `static_origin` is the **match occurrence's own** origin, carried in
+    /// the same constructor as the cloned cases. Case *i*'s body is derived from
+    /// it positionally at the point of use (`child(static_origin, 1 + i)`).
+    ///
+    /// A parallel `Vec<StaticOriginId>` beside `cases` would be the obvious
+    /// alternative and is worse: two vectors can desync, and a desync is
+    /// undetectable here. One parent origin cannot.
     MatchScrutinee {
         cases: Vec<crate::RuntimeMatchCase>,
         default: RuntimeTrap,
         env: Vec<Lowered>,
+        static_origin: StaticOriginId,
         next: Box<SourceContinuation<'a>>,
     },
     ComputationalMatchScrutinee {
         cases: Vec<crate::RuntimeComputationalMatchCase>,
         default: RuntimeTrap,
         env: Vec<Lowered>,
+        static_origin: StaticOriginId,
         provenance: RecursorFrameProvenance,
         checked_frame_id: Option<u64>,
         answer_route: SourceComputationalAnswerRoute,
@@ -1748,13 +1850,13 @@ enum SourceContinuation<'a> {
         next: Box<SourceContinuation<'a>>,
     },
     CallCallee {
-        args: Vec<RuntimeExpr>,
+        args: Vec<OwnedSourceOccurrence>,
         env: Vec<Lowered>,
         next: Box<SourceContinuation<'a>>,
     },
     CallArgument {
         callee: Lowered,
-        remaining: Vec<RuntimeExpr>,
+        remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<Lowered>,
         env: Vec<Lowered>,
         next: Box<SourceContinuation<'a>>,
@@ -1817,7 +1919,7 @@ enum SourcePrefixTemplate {
         next: Box<SourcePrefixTemplate>,
     },
     LetBody {
-        body: RuntimeExpr,
+        body: OwnedSourceOccurrence,
         env: Vec<Lowered>,
         next: Box<SourcePrefixTemplate>,
     },
@@ -1831,14 +1933,14 @@ enum SourcePrefixTemplate {
         next: Box<SourcePrefixTemplate>,
     },
     IfScrutinee {
-        then_expr: RuntimeExpr,
-        else_expr: RuntimeExpr,
+        then_expr: OwnedSourceOccurrence,
+        else_expr: OwnedSourceOccurrence,
         env: Vec<Lowered>,
         next: Box<SourcePrefixTemplate>,
     },
     ConstructArgument {
         constructor: RuntimeSymbol,
-        remaining: Vec<RuntimeExpr>,
+        remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<Lowered>,
         env: Vec<Lowered>,
         next: Box<SourcePrefixTemplate>,
@@ -1847,12 +1949,14 @@ enum SourcePrefixTemplate {
         cases: Vec<crate::RuntimeMatchCase>,
         default: RuntimeTrap,
         env: Vec<Lowered>,
+        static_origin: StaticOriginId,
         next: Box<SourcePrefixTemplate>,
     },
     ComputationalMatchScrutinee {
         cases: Vec<crate::RuntimeComputationalMatchCase>,
         default: RuntimeTrap,
         env: Vec<Lowered>,
+        static_origin: StaticOriginId,
         provenance: RecursorFrameProvenance,
         checked_frame_id: Option<u64>,
         answer_route: SourceComputationalAnswerRoute,
@@ -1863,13 +1967,13 @@ enum SourcePrefixTemplate {
         next: Box<SourcePrefixTemplate>,
     },
     CallCallee {
-        args: Vec<RuntimeExpr>,
+        args: Vec<OwnedSourceOccurrence>,
         env: Vec<Lowered>,
         next: Box<SourcePrefixTemplate>,
     },
     CallArgument {
         callee: Lowered,
-        remaining: Vec<RuntimeExpr>,
+        remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<Lowered>,
         env: Vec<Lowered>,
         next: Box<SourcePrefixTemplate>,
@@ -1960,8 +2064,16 @@ struct SelectedCaseReturnDelimiter {
     invocation_id: Option<u64>,
 }
 enum SourceMachineState<'a> {
+    /// A pending expression the machine will evaluate.
+    ///
+    /// ⭐ This is the state the source-machine fallback arm feeds
+    /// (`core.rs:2074`, `other => …lower_expr(builder, &other, &env)`), which
+    /// hands over every form the machine's own dispatcher does not handle —
+    /// closures included. That is why the origin has to be here rather than in a
+    /// guessed subset of the frames: the machine and the direct descent are the
+    /// same population reached two ways (`RT-FNSPLIT-B2A-C` D1).
     Eval {
-        expr: RuntimeExpr,
+        expr: OwnedSourceOccurrence,
         env: Vec<Lowered>,
         control: SourceControl<'a>,
     },
@@ -1980,11 +2092,13 @@ enum DynamicConstructorContinuation<'a> {
         cases: &'a [crate::RuntimeMatchCase],
         default: &'a RuntimeTrap,
         env: &'a [Lowered],
+        static_origin: StaticOriginId,
     },
     Producer {
         cases: &'a [crate::RuntimeMatchCase],
         default: &'a RuntimeTrap,
         env: &'a [Lowered],
+        static_origin: StaticOriginId,
         eliminators: &'a [EliminatorFrame<'a>],
     },
 }
@@ -2014,6 +2128,10 @@ struct DeferredConstructorCaseEnvironment<'a> {
     lowered_prefix: &'a [Lowered],
     selected_field: usize,
     trailing_fields: &'a [RuntimeExpr],
+    /// The origin of the `Construct` occurrence the fields belong to. Field *i*
+    /// of that constructor is its child *i*, so `trailing_fields[j]` is
+    /// `child(construct_origin, selected_field + 1 + j)`.
+    construct_origin: StaticOriginId,
     producer_env: &'a [Lowered],
     outer_eliminator: EliminatorFrame<'a>,
     splice_caller: Option<&'a ActiveContinuationFrame<'a>>,
@@ -2280,21 +2398,32 @@ fn collect_runtime_declaration_refs(expr: &RuntimeExpr, output: &mut BTreeSet<Ru
         | RuntimeExpr::Trap(_) => {}
     }
 }
+/// Selects an ordinary case by constructor, **with its index**.
+///
+/// The index is what makes the selected body's origin derivable: the search
+/// itself recovers no position (`RT-FNSPLIT-B2A-C` D2).
 fn select_ordinary_case<'a>(
     eliminator: OrdinaryEliminatorFrame<'a>,
     constructor: &str,
-) -> Result<&'a crate::RuntimeMatchCase, RuntimeTrap> {
+) -> Result<(usize, &'a crate::RuntimeMatchCase), RuntimeTrap> {
     eliminator
         .cases
         .iter()
-        .find(|case| case.constructor == constructor)
+        .enumerate()
+        .find(|(_, case)| case.constructor == constructor)
         .ok_or_else(|| eliminator.default.clone())
 }
+/// Selects a computational case by constructor, **with its index**, plus the
+/// remaining frames.
+///
+/// The index is load-bearing: the selected body's origin is `child(the frame's
+/// `static_origin`, 1 + index)`, and the search alone recovers no position.
 fn select_computational_case<'frames, 'data>(
     eliminators: &'frames [ComputationalEliminatorFrame<'data>],
     constructor: &str,
 ) -> Result<
     (
+        usize,
         &'data crate::RuntimeComputationalMatchCase,
         &'frames [ComputationalEliminatorFrame<'data>],
     ),
@@ -2309,8 +2438,9 @@ fn select_computational_case<'frames, 'data>(
     eliminator
         .cases
         .iter()
-        .find(|case| case.constructor == constructor)
-        .map(|case| (case, &eliminators[1..]))
+        .enumerate()
+        .find(|(_, case)| case.constructor == constructor)
+        .map(|(index, case)| (index, case, &eliminators[1..]))
         .ok_or_else(|| eliminator.default.clone())
 }
 impl<'a> Lowering<'a> {
@@ -2855,12 +2985,14 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn make_computational_recursor(
         &mut self,
         recursive: Lowered,
         cases: Vec<crate::RuntimeComputationalMatchCase>,
         default: RuntimeTrap,
         outer_env: Vec<Lowered>,
+        static_origin: StaticOriginId,
         provenance: RecursorFrameProvenance,
         checked_frame_id: Option<u64>,
         computational_ih_slot_template_id: Option<u64>,
@@ -2904,6 +3036,7 @@ impl<'a> Lowering<'a> {
             cases,
             default,
             outer_env,
+            static_origin,
             provenance,
             role,
             checked_frame_id: inferred_frame_id,
@@ -3007,6 +3140,7 @@ impl<'a> Lowering<'a> {
                                 cases: scope.frame.cases.clone(),
                                 default: scope.frame.default.clone(),
                                 outer_env: scope.frame.outer_env.clone(),
+                                static_origin: scope.frame.static_origin,
                                 provenance: scope.frame.provenance,
                                 checked_frame_id: scope.frame.checked_frame_id,
                                 checked_invocation_id: scope.frame.checked_invocation_id,
@@ -3778,11 +3912,13 @@ impl<'a> Lowering<'a> {
                 cases,
                 default,
                 env,
+                static_origin,
                 next,
             } => SourceContinuation::MatchScrutinee {
                 cases,
                 default,
                 env,
+                static_origin,
                 next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
                     stack,
@@ -3793,6 +3929,7 @@ impl<'a> Lowering<'a> {
                 cases,
                 default,
                 env,
+                static_origin,
                 provenance,
                 checked_frame_id,
                 answer_route,
@@ -3801,6 +3938,7 @@ impl<'a> Lowering<'a> {
                 cases,
                 default,
                 env,
+                static_origin,
                 provenance,
                 checked_frame_id,
                 answer_route,
@@ -4093,6 +4231,7 @@ impl<'a> Lowering<'a> {
                 cases,
                 default,
                 env,
+                static_origin,
                 next,
             } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
@@ -4101,6 +4240,7 @@ impl<'a> Lowering<'a> {
                         cases,
                         default,
                         env,
+                        static_origin,
                         next: Box::new(next),
                     },
                     terminal,
@@ -4110,6 +4250,7 @@ impl<'a> Lowering<'a> {
                 cases,
                 default,
                 env,
+                static_origin,
                 provenance,
                 checked_frame_id,
                 answer_route,
@@ -4121,6 +4262,7 @@ impl<'a> Lowering<'a> {
                         cases,
                         default,
                         env,
+                        static_origin,
                         provenance,
                         checked_frame_id,
                         answer_route,
@@ -4253,17 +4395,23 @@ impl<'a> Lowering<'a> {
                 cases,
                 default,
                 env,
+                static_origin,
                 next,
             } => SourceContinuation::MatchScrutinee {
                 cases: cases.clone(),
                 default: default.clone(),
                 env: env.clone(),
+                // D4: the template clone carries the origin with the cases. A
+                // clone that copied the terms and dropped this field would
+                // silently reintroduce the vacancy this unit closes.
+                static_origin: *static_origin,
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
             SourcePrefixTemplate::ComputationalMatchScrutinee {
                 cases,
                 default,
                 env,
+                static_origin,
                 provenance,
                 checked_frame_id,
                 answer_route,
@@ -4272,6 +4420,7 @@ impl<'a> Lowering<'a> {
                 cases: cases.clone(),
                 default: default.clone(),
                 env: env.clone(),
+                static_origin: *static_origin,
                 provenance: *provenance,
                 checked_frame_id: *checked_frame_id,
                 answer_route: *answer_route,

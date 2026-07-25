@@ -21,10 +21,15 @@ enum Px8dsEdgeMutation {
     CrossSibling,
     WrongStaticParent,
 }
+/// ⚠ The plan here is a minimal inert one: every test that uses this builder
+/// exercises a ledger, authority, or frame validator and never lowers an
+/// expression through it, so no child origin is ever derived. A test that DOES
+/// lower a fixture builds its own `Lowering` with that fixture's plan.
 fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowering<'a> {
     Lowering {
         seed_env,
         declarations: BTreeMap::new(),
+        static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),
         active_recursive_declarations: Vec::new(),
         result_table: BTreeMap::new(),
@@ -88,9 +93,30 @@ fn run_px8j_malformed_recursor_consumer(
     context.func =
         Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
     let seed_env = NativeSeedEnvironment::empty();
+    // The consumer under test lowers exactly one of these two fixtures, so the
+    // plan is that fixture's own: every origin the lowering derives below is a
+    // real positional child of a really-planned occurrence.
+    let call = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Var(0)),
+        args: Vec::new(),
+    };
+    let pending_let = RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        body: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::Var(1)),
+            args: Vec::new(),
+        }),
+    };
+    let lowered_fixture = match consumer {
+        Px8jDirectRecursorConsumer::PendingLetProducer => &pending_let,
+        Px8jDirectRecursorConsumer::ProducerCall
+        | Px8jDirectRecursorConsumer::OrdinaryCall => &call,
+    };
+    let (static_transition_plan, fixture_origin) = planned_root_occurrence(lowered_fixture);
     let mut compiler = Lowering {
         seed_env: &seed_env,
         declarations: BTreeMap::new(),
+        static_transition_plan,
         declaration_stack: Vec::new(),
         active_recursive_declarations: Vec::new(),
         result_table: BTreeMap::new(),
@@ -143,6 +169,7 @@ fn run_px8j_malformed_recursor_consumer(
             message: "px8j malformed recursor role".to_string(),
         },
         outer_env: Vec::new(),
+        static_origin: inert_test_static_origin(),
         provenance: RecursorFrameProvenance(6),
         role,
         checked_frame_id: None,
@@ -193,9 +220,14 @@ fn run_px8j_malformed_recursor_consumer(
         residual: Box::new(Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
-            body: RuntimeExpr::Construct {
-                constructor: "ctor:fixture::PX8J::Done".to_string(),
-                args: Vec::new(),
+            // A childless residual: `Construct` with no arguments derives no
+            // child origin, so an inert planned origin is honest here.
+            body: OwnedSourceOccurrence {
+                expr: RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::PX8J::Done".to_string(),
+                    args: Vec::new(),
+                },
+                static_origin: inert_test_static_origin(),
             },
         }),
         activation: ContinuationActivationId(8),
@@ -223,28 +255,21 @@ fn run_px8j_malformed_recursor_consumer(
     };
     let active_frames = [EliminatorFrame::Active(active)];
     let env = [recursor];
-    let call = RuntimeExpr::Call {
-        callee: Box::new(RuntimeExpr::Var(0)),
-        args: Vec::new(),
-    };
-    let pending_let = RuntimeExpr::Let {
-        value: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
-        body: Box::new(RuntimeExpr::Call {
-            callee: Box::new(RuntimeExpr::Var(1)),
-            args: Vec::new(),
-        }),
-    };
     let mut function_context = FunctionBuilderContext::new();
     let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
     let entry = builder.create_block();
     builder.switch_to_block(entry);
+    let occurrence = SourceOccurrence {
+        expr: lowered_fixture,
+        static_origin: fixture_origin,
+    };
     match consumer {
-        Px8jDirectRecursorConsumer::PendingLetProducer => compiler
-            .lower_computational_producer_expr(&mut builder, &pending_let, &env, &active_frames),
-        Px8jDirectRecursorConsumer::ProducerCall => {
-            compiler.lower_computational_producer_expr(&mut builder, &call, &env, &active_frames)
+        Px8jDirectRecursorConsumer::PendingLetProducer
+        | Px8jDirectRecursorConsumer::ProducerCall => compiler
+            .lower_computational_producer_expr(&mut builder, occurrence, &env, &active_frames),
+        Px8jDirectRecursorConsumer::OrdinaryCall => {
+            compiler.lower_expr(&mut builder, occurrence, &env)
         }
-        Px8jDirectRecursorConsumer::OrdinaryCall => compiler.lower_expr(&mut builder, &call, &env),
     }
 }
 
@@ -490,9 +515,14 @@ fn run_px8ds_edge_consumer(
         residual: Box::new(Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
-            body: RuntimeExpr::Construct {
-                constructor: "ctor:fixture::PX8DS::Done".to_string(),
-                args: Vec::new(),
+            // A childless residual: `Construct` with no arguments derives no
+            // child origin, so an inert planned origin is honest here.
+            body: OwnedSourceOccurrence {
+                expr: RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::PX8DS::Done".to_string(),
+                    args: Vec::new(),
+                },
+                static_origin: inert_test_static_origin(),
             },
         }),
         activation,
@@ -521,6 +551,15 @@ fn run_px8ds_edge_consumer(
             args: Vec::new(),
         }),
     };
+    // Plan the fixture this consumer actually lowers, and install that plan on
+    // the compiler under test.
+    let lowered_fixture = match consumer {
+        Px8jDirectRecursorConsumer::PendingLetProducer => &pending_let,
+        Px8jDirectRecursorConsumer::ProducerCall
+        | Px8jDirectRecursorConsumer::OrdinaryCall => &call,
+    };
+    let (static_transition_plan, fixture_origin) = planned_root_occurrence(lowered_fixture);
+    compiler.static_transition_plan = static_transition_plan;
 
     let mut module = new_jit_module()?;
     let mut signature = module.make_signature();
@@ -535,13 +574,17 @@ fn run_px8ds_edge_consumer(
     let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
     let entry = builder.create_block();
     builder.switch_to_block(entry);
+    let occurrence = SourceOccurrence {
+        expr: lowered_fixture,
+        static_origin: fixture_origin,
+    };
     match consumer {
-        Px8jDirectRecursorConsumer::PendingLetProducer => compiler
-            .lower_computational_producer_expr(&mut builder, &pending_let, &env, &active_frames),
-        Px8jDirectRecursorConsumer::ProducerCall => {
-            compiler.lower_computational_producer_expr(&mut builder, &call, &env, &active_frames)
+        Px8jDirectRecursorConsumer::PendingLetProducer
+        | Px8jDirectRecursorConsumer::ProducerCall => compiler
+            .lower_computational_producer_expr(&mut builder, occurrence, &env, &active_frames),
+        Px8jDirectRecursorConsumer::OrdinaryCall => {
+            compiler.lower_expr(&mut builder, occurrence, &env)
         }
-        Px8jDirectRecursorConsumer::OrdinaryCall => compiler.lower_expr(&mut builder, &call, &env),
     }
 }
 
@@ -736,6 +779,7 @@ fn oriented_source_open_occurrence_cross_checks_the_closure_selected_parent() {
                 message: "PX8-DS source parent".to_string(),
             },
             outer_env: Vec::new(),
+            static_origin: inert_test_static_origin(),
             provenance: RecursorFrameProvenance(71),
             checked_frame_id: Some(2),
             checked_invocation_id: Some(0),
@@ -875,6 +919,7 @@ fn run_px8j_source_machine_install(
             message: "PX8-J-ERR source install".to_string(),
         },
         outer_env: Vec::new(),
+        static_origin: inert_test_static_origin(),
         provenance: RecursorFrameProvenance(18),
         role,
         checked_frame_id: None,
@@ -1443,6 +1488,7 @@ fn nested_computational_inner_missing_selects_exact_inner_default() {
             cases: &inner_cases,
             default: &inner_default,
             env: &[],
+            static_origin: inert_test_static_origin(),
             retained_scrutinee_index: None,
             deferred_constructor_case: None,
             provenance: RecursorFrameProvenance(1),
@@ -1455,6 +1501,7 @@ fn nested_computational_inner_missing_selects_exact_inner_default() {
             cases: &outer_cases,
             default: &outer_default,
             env: &[],
+            static_origin: inert_test_static_origin(),
             retained_scrutinee_index: None,
             deferred_constructor_case: None,
             provenance: RecursorFrameProvenance(0),
@@ -1869,6 +1916,7 @@ fn nested_computational_outer_missing_selects_exact_outer_default() {
             cases: &inner_cases,
             default: &inner_default,
             env: &[],
+            static_origin: inert_test_static_origin(),
             retained_scrutinee_index: None,
             deferred_constructor_case: None,
             provenance: RecursorFrameProvenance(1),
@@ -1881,6 +1929,7 @@ fn nested_computational_outer_missing_selects_exact_outer_default() {
             cases: &outer_cases,
             default: &outer_default,
             env: &[],
+            static_origin: inert_test_static_origin(),
             retained_scrutinee_index: None,
             deferred_constructor_case: None,
             provenance: RecursorFrameProvenance(0),
@@ -1891,7 +1940,7 @@ fn nested_computational_outer_missing_selects_exact_outer_default() {
         },
     ];
 
-    let (_, outer_frames) = select_computational_case(&frames, "ctor:fixture::Inner::Hit")
+    let (_, _, outer_frames) = select_computational_case(&frames, "ctor:fixture::Inner::Hit")
         .expect("the inner case succeeds before the outer miss");
     let trap = match select_computational_case(outer_frames, "ctor:fixture::Outer::Missing") {
         Err(trap) => trap,
@@ -1908,6 +1957,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
     let mut lowering = Lowering {
         seed_env: &seed_env,
         declarations: BTreeMap::new(),
+        static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),
         active_recursive_declarations: Vec::new(),
         result_table: BTreeMap::new(),
@@ -2362,6 +2412,7 @@ fn oriented_test_layer(frame_id: u64, role: RecursorLayerRole) -> ComputationalR
             message: format!("oriented frame {frame_id}"),
         },
         outer_env: Vec::new(),
+        static_origin: inert_test_static_origin(),
         provenance: RecursorFrameProvenance(frame_id),
         role,
         checked_frame_id: Some(frame_id),

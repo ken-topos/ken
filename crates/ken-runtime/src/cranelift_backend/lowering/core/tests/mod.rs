@@ -61,6 +61,43 @@ mod control;
 mod effects;
 mod values;
 
+/// A real, planner-issued origin for a hand-built frame or layer that carries
+/// **no** syntax children (an empty `cases` list, a childless residual).
+///
+/// Such a frame still needs an origin, and a test cannot invent one. This takes
+/// the root of a minimal planned expression: no child is ever derived from it,
+/// because it has none — and if a test ever did derive one, the positional
+/// lookup would fail loudly rather than return a plausible neighbour.
+#[cfg(test)]
+fn inert_test_static_origin() -> StaticOriginId {
+    planned_root_occurrence(&RuntimeExpr::Var(0)).1
+}
+
+/// The plan companion of `inert_test_static_origin`, for tests that build a
+/// `Lowering` to exercise a validator rather than to lower an expression.
+#[cfg(test)]
+fn inert_test_plan() -> StaticTransitionPlan {
+    planned_root_occurrence(&RuntimeExpr::Var(0)).0
+}
+
+/// Plans one expression on its own and returns the closed plan together with
+/// its **root occurrence's** origin.
+///
+/// Unit tests that build a `Lowering` by hand need a real plan, because the
+/// lowering derives every child origin out of it (`RT-FNSPLIT-B2A-C` D2). Note
+/// that a test *cannot* fabricate an origin even if it wanted to:
+/// `StaticOriginId`'s ordinal stays planner-private, so the only origins in
+/// existence anywhere are the ones the planner issued.
+#[cfg(test)]
+fn planned_root_occurrence(expr: &RuntimeExpr) -> (StaticTransitionPlan, StaticOriginId) {
+    let plan = plan_static_transition_graph(expr, &BTreeMap::new())
+        .expect("test fixture is plannable");
+    let root = plan
+        .root_static_origin()
+        .expect("a planned graph has a root entry occurrence");
+    (plan, root)
+}
+
 // Shared by >1 subject module: §10.2 places a helper at the lowest
 // tests/mod.rs ancestor shared by its actual users.
 fn console_write_effect() -> RuntimeExpr {
