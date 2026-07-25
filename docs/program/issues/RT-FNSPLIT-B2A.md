@@ -6,7 +6,7 @@ owner: runtime
 size: L
 gate: none
 depends_on: [RT-FNSPLIT-B1R]
-blocks: [RT-FNSPLIT-B2B]
+blocks: []
 github: null
 origin: recut frame docs/program/wp/RT-NATIVE-FNSPLIT-recut.md; Boundary B split at an Architect review gate (evt_49bnspfb74tne, addendum evt_3b2a75fcaegja). B2 further split into B2a/B2b by the Steward 2026-07-25 on the runtime ring's own B1 retro carry — "keep representation checkpoints separate from a retained emission port".
 ---
@@ -16,7 +16,21 @@ origin: recut frame docs/program/wp/RT-NATIVE-FNSPLIT-recut.md; Boundary B split
 > Read that, not this file. This entry exists so the tracker and the dependency
 > graph see the work.
 
-> ## ⛔ HARD-STOPPED PRE-CODE (#6) AND BACK TO `draft` — 2026-07-25
+> ## ⛔ RETIRED 2026-07-25 — SUPERSEDED BY `RT-FNSPLIT-B2A-S` + `RT-FNSPLIT-B2F`
+>
+> **The Architect retired this frame outright** (`evt_6h5gw5c503n5z`, amendment
+> `evt_25ynt8615r9sk`). It is kept for lineage; ⛔ **do not build from it.**
+>
+> - **`RT-FNSPLIT-B2A-S`** — defunctionalize retained body selection (the
+>   static-origin tag + one closed consumer). Retires inventory entry 1.
+> - **`RT-FNSPLIT-B2F`** — per-static-origin Cranelift target functions, atomic
+>   with switch-over, differential equivalence, and old-authority removal.
+>
+> ⚠ Its ACs were **re-walked and placed deliberately**, not copied: see each
+> successor node. `AC-4`/`AC-5` → `B2A-S`; `AC-1`/`AC-2`/`AC-3`/`AC-7`/`AC-8` →
+> `B2F`.
+
+> ## ⛔ HARD-STOPPED PRE-CODE (#6) — 2026-07-25 (the stop that retired this frame)
 >
 > **Kicked, audited, and stopped before a single edit** (`evt_3xzv4xn77na0d`;
 > leader confirmed `evt_34y9pnbs8r330`). ⇒ **`status: draft`, not `ready`** — the

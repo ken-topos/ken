@@ -25,12 +25,50 @@
 >   **Retros IN.** Ring's own catch: AC-3 was *unsatisfiable* and they corrected
 >   the AC rather than gaming it.
 >
-> ## ⇢ RESUME HERE FIRST — 2026-07-25 T02:30Z
+> ## ⇢ RESUME HERE FIRST — 2026-07-25 T02:45Z
 >
-> **`origin/main = 7151ae58`** · **`origin/steward/work = 9901cca5`** (pushed) ·
-> `wp/steward-process-batch` = `1f9bb4bf` (**PR #938, in CI**).
+> **`origin/main = 70bd2c74`** (PR #938 MERGED, content-verified) ·
+> **`origin/steward/work = f70cdbdf`** (pushed).
 >
-> ### ✅ B2A IS KICKED AND THE RING IS WORKING. THE FLEET IS NOT IDLE.
+> ### ⇢ THE NEXT ACT — ALL RULINGS ARE IN. AUTHOR TWO FRAMES, THEN KICK.
+>
+> **B2a hard-stopped at #6, the old frame is RETIRED, and the Architect has ruled
+> on all three questions** (`evt_6h5gw5c503n5z` + amendment `evt_25ynt8615r9sk`),
+> gated behind research advisory `evt_4w1rf45d4fkv3`. ⛔ **Nothing is blocked on
+> anyone else. The next act is MINE and it is authoring.**
+>
+> **The re-slice is DECIDED and the two nodes already exist as `draft`, with every
+> ruled constraint transcribed into them** (a ruling that lives only in a channel
+> thread is not a deliverable — these files are the durable copy):
+>
+> 1. **`docs/program/issues/RT-FNSPLIT-B2A-S.md`** — *defunctionalize retained
+>    body selection.* Carries the **seven ruled admissibility requirements**.
+>    Retires inventory entry 1; leaves entry 2 **explicitly open**.
+> 2. **`docs/program/issues/RT-FNSPLIT-B2F.md`** — *per-static-origin Cranelift
+>    target functions*, **atomic** with switch-over + differential equivalence +
+>    old-authority removal. Carries Q1's four merits and Q3's **four checkable
+>    scaffolding conditions**.
+>
+> **⇢ DO THIS, in order:**
+>
+> 1. **Author `docs/program/wp/` frames for B2A-S and B2F** from the transcribed
+>    rulings in those two issue files. ⚠ **B2A-S only needs to be shovel-ready to
+>    kick** — B2F is sequenced behind it and can be framed later.
+> 2. **Flip `RT-FNSPLIT-B2A-S` → `ready`**, run `scripts/gen-progress.sh`.
+> 3. **COMPACT THE RUNTIME RING** — all three seats, unconditionally, ctx unread.
+>    It is the **first half of the kickoff**, not a separate step. The implementer
+>    has explicitly said it is ready for compaction and has recorded its own
+>    corrections to the channel so they do not die with its context.
+> 4. **Kick B2A-S** mentioning `runtime-leader` only (`agt_37reqrd72cg00`); fresh
+>    branch from `origin/main`; confirm `Working`.
+> 5. **Flip → `active`** as part of the kickoff, not later.
+>
+> ⛔ **DO NOT re-derive the rulings from the channel and do not re-ask the ring** —
+> both seats have already read and accepted them. ⛔ **The ring's original
+> three-slice proposal is REFUTED; its `ii`/`iii` split was rejected outright.**
+> The implementer itself recorded that it will not resume as if it survived.
+>
+> ### ✅ (done) B2A was kicked and the ring worked it to a clean pre-code stop
 >
 > **`RT-FNSPLIT-B2A` kicked at `evt_7j6ax916zks4b`** (2026-07-25 T02:2xZ),
 > `runtime-leader` **confirmed `Working`** and announced it would read the carried
