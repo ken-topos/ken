@@ -2145,6 +2145,189 @@ mod tests {
         );
     }
 
+    fn primitive_call(symbol: &str, partiality: crate::RuntimePartiality) -> RuntimeExpr {
+        RuntimeExpr::PrimitiveCall {
+            primitive: crate::RuntimePrimitive {
+                symbol: symbol.to_string(),
+                partiality,
+            },
+            args: Vec::new(),
+        }
+    }
+
+    /// Two `PrimitiveCall` occurrences sharing one symbol and one (empty)
+    /// argument shape, differing only in the partiality that lowering branches on.
+    fn equal_shaped_primitive_pair(
+        left: crate::RuntimePartiality,
+        right: crate::RuntimePartiality,
+    ) -> RuntimeExpr {
+        RuntimeExpr::Let {
+            value: Box::new(primitive_call("ken.bytes.at", left)),
+            body: Box::new(primitive_call("ken.bytes.at", right)),
+        }
+    }
+
+    /// Decodes one record's single descriptor atom back out of the closed name
+    /// arena, so a control asserts on the material's CONTENT and not on the
+    /// incidental fact that two occurrences interned at different offsets.
+    fn descriptor_bytes(plan: &StaticTransitionPlan, node: StaticNodeId) -> Vec<u8> {
+        let record = plan.semantic.records[node.0 as usize];
+        assert_eq!(record.operands.len, 1, "a primitive owns one atom");
+        let atom = plan.semantic.operands[record.operands.start as usize];
+        assert_eq!(atom.kind, SemanticAtomKind::PrimitiveDescriptor);
+        let start = atom.content.start as usize;
+        plan.semantic.names[start..start + atom.content.len as usize].to_vec()
+    }
+
+    /// Asserts that an equal-shaped primitive pair differing only in partiality
+    /// has genuinely different material, and that cross-wiring one occurrence's
+    /// descriptor onto the other reddens at occurrence-exactness.
+    fn assert_partiality_is_occurrence_exact(
+        left: crate::RuntimePartiality,
+        right: crate::RuntimePartiality,
+        case: &str,
+    ) {
+        let plan = plan_static_transition_graph(
+            &equal_shaped_primitive_pair(left, right),
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        let calls = nodes_of_shape(&plan, RuntimeExprShape::PrimitiveCall);
+        assert_eq!(calls.len(), 2, "{case}: fixture must hold two occurrences");
+
+        let first = plan.semantic.records[calls[0].0 as usize];
+        let second = plan.semantic.records[calls[1].0 as usize];
+        assert_eq!(
+            (first.opcode, first.operands.len, first.child_origins.len),
+            (second.opcode, second.operands.len, second.child_origins.len),
+            "{case}: the pair is not equal-shaped, so this control proves nothing"
+        );
+        assert_ne!(
+            descriptor_bytes(&plan, calls[0]),
+            descriptor_bytes(&plan, calls[1]),
+            "{case}: the two primitives encode identical material, so the plane \
+             cannot tell them apart and B2a would emit the wrong behaviour"
+        );
+
+        // Cross-wire: point the first occurrence's descriptor at the second's
+        // encoded content. Shape, opcode, counts and atom kind all still agree.
+        let mut cross_wired = plan.semantic.clone();
+        let victim = first.operands.start as usize;
+        cross_wired.operands[victim].content =
+            cross_wired.operands[second.operands.start as usize].content;
+        assert_eq!(
+            cross_wired
+                .validate(
+                    &plan.nodes,
+                    &plan.edges,
+                    &plan.semantic_sources,
+                    &plan.semantic_material,
+                )
+                .unwrap_err(),
+            planner_error("semantic material record is not occurrence-exact for its origin"),
+            "{case}: a cross-wired primitive descriptor was not caught"
+        );
+    }
+
+    #[test]
+    fn boundary_b1r_primitive_partiality_is_occurrence_exact_material() {
+        // Promise class: durable mutation proof. Partiality changes what
+        // lowering emits (immediate trap versus continue, plus distinct
+        // constructor/obligation/assumption material), so a symbol-only atom
+        // would let these occurrences share one body while lowering differently.
+        assert_partiality_is_occurrence_exact(
+            crate::RuntimePartiality::Total,
+            crate::RuntimePartiality::CheckedTrap {
+                obligation: "ken.bytes.at.inBounds".to_string(),
+            },
+            "distinct partiality variants",
+        );
+
+        // A variant-tag-only encoding would pass the case above and fail here:
+        // same variant, one differing field.
+        assert_partiality_is_occurrence_exact(
+            crate::RuntimePartiality::SafeOption {
+                none: "None".to_string(),
+                some: "Some".to_string(),
+                obligation: None,
+            },
+            crate::RuntimePartiality::SafeOption {
+                none: "Nothing".to_string(),
+                some: "Some".to_string(),
+                obligation: None,
+            },
+            "same variant, one differing field",
+        );
+
+        // The optional field must also discriminate, so its presence byte is
+        // load-bearing rather than decorative.
+        assert_partiality_is_occurrence_exact(
+            crate::RuntimePartiality::SafeOption {
+                none: "None".to_string(),
+                some: "Some".to_string(),
+                obligation: None,
+            },
+            crate::RuntimePartiality::SafeOption {
+                none: "None".to_string(),
+                some: "Some".to_string(),
+                obligation: Some("ken.bytes.at.inBounds".to_string()),
+            },
+            "same variant, optional field present versus absent",
+        );
+    }
+
+    #[test]
+    fn boundary_b1r_atom_content_must_stay_inside_the_closed_name_arena() {
+        // Promise class: durable mutation proof. B2a decodes atom content, so a
+        // structurally well-formed atom whose span escapes the arena, or whose
+        // bytes are not the ones the walk interned, is undecodable material.
+        let plan = plan_static_transition_graph(
+            &equal_shaped_primitive_pair(
+                crate::RuntimePartiality::Total,
+                crate::RuntimePartiality::CheckedTrap {
+                    obligation: "ken.bytes.at.inBounds".to_string(),
+                },
+            ),
+            &BTreeMap::new(),
+        )
+        .unwrap();
+
+        let mut escaped = plan.semantic.clone();
+        let atom = escaped
+            .operands
+            .iter_mut()
+            .find(|atom| atom.content.len > 0)
+            .expect("fixture has an atom with out-of-line content");
+        atom.content.start = u32::try_from(plan.semantic.names.len()).unwrap();
+        assert_eq!(
+            escaped
+                .validate(
+                    &plan.nodes,
+                    &plan.edges,
+                    &plan.semantic_sources,
+                    &plan.semantic_material,
+                )
+                .unwrap_err(),
+            planner_error("semantic atom content range is outside its closed name arena")
+        );
+
+        let mut retagged = plan.semantic.clone();
+        retagged.names.push(0xff);
+        assert_eq!(
+            retagged
+                .validate(
+                    &plan.nodes,
+                    &plan.edges,
+                    &plan.semantic_sources,
+                    &plan.semantic_material,
+                )
+                .unwrap_err(),
+            planner_error(
+                "semantic atom content arena is not the material the source walk interned"
+            )
+        );
+    }
+
     #[test]
     fn boundary_b1r_control_2_dropping_one_origins_material_record_is_rejected() {
         // Promise class: durable mutation proof.

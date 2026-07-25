@@ -8,7 +8,10 @@ use super::{
     planner_capacity_error, planner_error, CraneliftBackendError, StaticEdge, StaticEdgeId,
     StaticNode, StaticNodeId, TransitionKind,
 };
-use crate::{RuntimeExpr, RuntimeIntV1, RuntimeTrap, RuntimeTrapCode, RuntimeValue, Sign};
+use crate::{
+    RuntimeExpr, RuntimeIntV1, RuntimePartiality, RuntimePrimitive, RuntimeTrap, RuntimeTrapCode,
+    RuntimeValue, Sign,
+};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
@@ -270,8 +273,12 @@ pub(super) enum SemanticAtomKind {
     SlotTemplateId,
     /// De Bruijn local index of a `Var` occurrence.
     LocalIndex,
+    /// One complete primitive: `content` spans an injective tagged encoding of
+    /// the symbol **and** its `RuntimePartiality`, including every variant field.
+    /// Partiality changes what lowering emits, so a symbol-only atom would let
+    /// two same-shaped occurrences share one body while lowering differently.
+    PrimitiveDescriptor,
     /// Symbol atoms: `content` spans the interned name bytes.
-    PrimitiveSymbol,
     ConstructorSymbol,
     DeclarationSymbol,
     DependencySymbol,
@@ -714,6 +721,21 @@ impl SemanticPlane {
                 "semantic child-origin arena is not exact for its positional source children",
             ));
         }
+        // Atom content is what B2a will decode. A structurally well-formed atom
+        // whose span escapes the closed name arena, or whose bytes are not the
+        // ones the walk interned, is undecodable material — reject both.
+        if self.names != arena.names {
+            return Err(planner_error(
+                "semantic atom content arena is not the material the source walk interned",
+            ));
+        }
+        for atom in &self.operands {
+            validate_range(
+                atom.content,
+                self.names.len(),
+                "semantic atom content range is outside its closed name arena",
+            )?;
+        }
         if self
             .operands
             .len()
@@ -1061,7 +1083,11 @@ fn emit_expression_atoms(
         // scrutinee/then/else, and callee/args are syntax children.
         RuntimeExpr::Let { .. } | RuntimeExpr::If { .. } | RuntimeExpr::Call { .. } => {}
         RuntimeExpr::PrimitiveCall { primitive, .. } => {
-            arena.push_named(SemanticAtomKind::PrimitiveSymbol, &primitive.symbol, 0)?;
+            // One budgeted element, widened content: the whole primitive, not
+            // just its symbol.
+            let descriptor = primitive_descriptor_bytes(primitive)?;
+            let span = arena.intern(&descriptor)?;
+            arena.push_atom(SemanticAtomKind::PrimitiveDescriptor, span, 0)?;
         }
         RuntimeExpr::Construct { constructor, .. } => {
             arena.push_named(SemanticAtomKind::ConstructorSymbol, constructor, 0)?;
@@ -1157,6 +1183,64 @@ fn emit_expression_atoms(
         }
     }
     Ok(())
+}
+
+/// Length-prefixed field, so a concatenation of fields is injective: `"ab"+"c"`
+/// and `"a"+"bc"` encode differently.
+fn push_encoded_field(bytes: &mut Vec<u8>, value: &str) -> Result<(), CraneliftBackendError> {
+    bytes.extend_from_slice(&checked_u32(value.len())?.to_le_bytes());
+    bytes.extend_from_slice(value.as_bytes());
+    Ok(())
+}
+
+/// Injective tagged encoding of one complete `RuntimePrimitive`: the
+/// length-prefixed symbol, an explicit `RuntimePartiality` variant tag, and
+/// every field of that variant.
+///
+/// ⛔ Deliberately hand-written and exhaustive with no wildcard arm: a new
+/// `RuntimePartiality` variant must choose its own tag and fields here. It is
+/// **not** derived from `Debug`, a hash, a pointer, or clone order, and it costs
+/// no extra material element — the primitive's single budgeted atom simply
+/// carries wider content.
+fn primitive_descriptor_bytes(
+    primitive: &RuntimePrimitive,
+) -> Result<Vec<u8>, CraneliftBackendError> {
+    let mut bytes = Vec::new();
+    push_encoded_field(&mut bytes, &primitive.symbol)?;
+    match &primitive.partiality {
+        RuntimePartiality::Total => bytes.push(0),
+        RuntimePartiality::SafeOption {
+            none,
+            some,
+            obligation,
+        } => {
+            bytes.push(1);
+            push_encoded_field(&mut bytes, none)?;
+            push_encoded_field(&mut bytes, some)?;
+            match obligation {
+                Some(obligation) => {
+                    bytes.push(1);
+                    push_encoded_field(&mut bytes, obligation)?;
+                }
+                None => bytes.push(0),
+            }
+        }
+        RuntimePartiality::SafeResult { err, ok, error } => {
+            bytes.push(2);
+            push_encoded_field(&mut bytes, err)?;
+            push_encoded_field(&mut bytes, ok)?;
+            push_encoded_field(&mut bytes, error)?;
+        }
+        RuntimePartiality::CheckedTrap { obligation } => {
+            bytes.push(3);
+            push_encoded_field(&mut bytes, obligation)?;
+        }
+        RuntimePartiality::TrustedTrap { assumption } => {
+            bytes.push(4);
+            push_encoded_field(&mut bytes, assumption)?;
+        }
+    }
+    Ok(bytes)
 }
 
 /// One eliminator's default trap collapses to a single atom: its code, with the
