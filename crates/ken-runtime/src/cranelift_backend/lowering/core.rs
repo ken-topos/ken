@@ -4217,7 +4217,7 @@ impl<'a> Lowering<'a> {
     /// | `Record` | `i` = `fields[i]`'s value |
     /// | `Project` | `0` = record |
     /// | `Match` | `0` = scrutinee, `1 + i` = `cases[i].body` |
-    /// | `ComputationalMatch` | ⛔ `0` = scrutinee, `1 + i` = `cases[i].body` **on the occurrence's own record — which is seeded on its `SourceReturnResume` node, so a parent's child entry names the SCRUTINEE and the record is not positionally reachable. Hard-stop #8; do not assume this row works.** |
+    /// | `ComputationalMatch` | `0` = scrutinee, `1 + i` = `cases[i].body` — ⚠ and it is the **sole** variant whose `entry != occurrence.node` (second axis below) |
     /// | `Closure` | `0` = body |
     /// | `LexicalClosure` | ⚠ `0` = **body**, `1 + i` = `captures[i]` |
     /// | `Call` | `0` = callee, `1 + i` = `args[i]` |
@@ -4233,14 +4233,21 @@ impl<'a> Lowering<'a> {
     /// 2. `Effect`'s capability takes position `0` **only when present**, so the
     ///    argument base is a conditional offset rather than a constant.
     ///
-    /// ⛔ And one variant does NOT agree, which is `RT-FNSPLIT-B2A-C`'s
-    /// hard-stop #8: `plan_expr` returns a `ComputationalMatch`'s **scrutinee**
-    /// as its entry node while seeding the occurrence's own record on the
-    /// `SourceReturnResume` node, so every parent records the scrutinee's origin
-    /// as its child and the record holding the match's children is reachable
-    /// from no positional entry. Its scrutinee is still exact — the carried
-    /// origin simply *is* the scrutinee's — but its case bodies are not
-    /// derivable, and every recovery route is one D2 forbids.
+    /// ## ⭐ THE SECOND AXIS: `entry` vs `occurrence` (D9, after hard-stop #8)
+    ///
+    /// Positional agreement does **not** imply that the identity a parent
+    /// schedules is the identity that owns the child record. `plan_expr` returns
+    /// both (`PlannedExpr { entry, occurrence }`), and the positions above are
+    /// always indexed by the **occurrence**.
+    ///
+    /// | | `entry == occurrence.node`? |
+    /// |---|---|
+    /// | every variant except `ComputationalMatch` | **yes**, by construction — they all return through `expression_node` |
+    /// | `ComputationalMatch` | **no**, and deliberately: its record is seeded on its `SourceReturnResume` while a parent still schedules its scrutinee. It is the SOLE split. |
+    ///
+    /// ⛔ Passing an `entry` where an `occurrence` belongs was hard-stop #8 — a
+    /// category error, not an off-by-one. The seed API takes `&[StaticOriginId]`
+    /// so the type now prevents it; do not re-conflate the two axes.
     ///
     /// ⛔ Where the two orders could ever disagree the **planner's** position
     /// wins: the plane's records are already laid out against it.

@@ -3443,3 +3443,110 @@ fn the_plan_exposes_no_origin_to_expression_lookup() {
         "N3 -- no accessor may return a borrowed source expression"
     );
 }
+
+// ─── RT-FNSPLIT-B2A-C AC-1 — uniform threading, shown not asserted ────────
+//
+// ⛔ A prose claim that "the fallback is covered" does not discharge AC-1. This
+// reads the DECLARATIONS of the three source-term carriers and pins two
+// properties structurally:
+//
+//  1. no field in any of them is a bare `RuntimeExpr` / `Vec<RuntimeExpr>` --
+//     every carried term is an occurrence pair, so a frame cannot hold a term
+//     whose origin was dropped;
+//  2. every variant that carries a `cases` list also declares the parent
+//     `static_origin` its case bodies are derived from.
+//
+// Both are declaration-level, not substring-level: a mention of `RuntimeExpr` in
+// a comment or in this test's own message cannot satisfy or break them.
+
+#[cfg(test)]
+fn declaration_span(source: &'static str, header: &str) -> Vec<&'static str> {
+    let start = source
+        .find(header)
+        .unwrap_or_else(|| panic!("{header} is declared in the lowering facade"));
+    let mut depth = 0usize;
+    let mut span = Vec::new();
+    for line in source[start..].lines() {
+        span.push(line);
+        depth += line.matches('{').count();
+        depth -= line.matches('}').count();
+        if depth == 0 && span.len() > 1 {
+            break;
+        }
+    }
+    span
+}
+
+/// The bare-source-term predicate, factored out so it can be given a positive
+/// control. ⚠ Without one, this whole pin would pass for the trivial reason that
+/// it finds nothing — a negative check passes for any reason.
+#[cfg(test)]
+fn is_bare_source_term_field(line: &str) -> bool {
+    let field = line.trim();
+    field == "expr: RuntimeExpr,"
+        || field == "body: RuntimeExpr,"
+        || field == "then_expr: RuntimeExpr,"
+        || field == "else_expr: RuntimeExpr,"
+        || field == "remaining: Vec<RuntimeExpr>,"
+        || field == "args: Vec<RuntimeExpr>,"
+}
+
+#[test]
+fn the_bare_source_term_detector_catches_the_shape_it_is_looking_for() {
+    // The pre-B2A-C declarations, verbatim. If the detector cannot see these it
+    // is asserting nothing about the post-B2A-C ones.
+    for pre_amendment in [
+        "        expr: RuntimeExpr,",
+        "        body: RuntimeExpr,",
+        "        then_expr: RuntimeExpr,",
+        "        remaining: Vec<RuntimeExpr>,",
+        "        args: Vec<RuntimeExpr>,",
+    ] {
+        assert!(
+            is_bare_source_term_field(pre_amendment),
+            "the AC-1 detector must catch {pre_amendment:?}"
+        );
+    }
+    assert!(!is_bare_source_term_field("        expr: OwnedSourceOccurrence,"));
+    assert!(!is_bare_source_term_field("    // a comment naming RuntimeExpr"));
+}
+
+#[test]
+fn every_source_term_carrier_holds_an_occurrence_and_never_a_bare_expression() {
+    let source = include_str!("../../mod.rs");
+    for header in [
+        "enum SourceContinuation<'a> {",
+        "enum SourcePrefixTemplate {",
+        "enum SourceMachineState<'a> {",
+    ] {
+        let span = declaration_span(source, header);
+        let bare: Vec<&str> = span
+            .iter()
+            .copied()
+            .filter(|line| is_bare_source_term_field(line))
+            .collect();
+        assert!(
+            bare.is_empty(),
+            "AC-1: {header} still carries a bare source term without its origin: {bare:?}"
+        );
+
+        // Every `cases`-bearing variant declares its parent origin. The variant
+        // boundary is a field list, so scan forward from each `cases:` line to
+        // the variant's closing brace.
+        let mut index = 0;
+        while index < span.len() {
+            if span[index].trim().starts_with("cases: Vec<") {
+                let variant_tail = span[index..]
+                    .iter()
+                    .take_while(|line| !line.trim().starts_with("},"))
+                    .any(|line| line.trim() == "static_origin: StaticOriginId,");
+                assert!(
+                    variant_tail,
+                    "AC-1: {header} has a `cases` variant with no `static_origin`; \
+                     its case bodies would have no parent to derive from"
+                );
+            }
+            index += 1;
+        }
+    }
+}
