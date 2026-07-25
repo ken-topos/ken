@@ -6,7 +6,7 @@ owner: runtime
 size: TBD
 gate: none
 depends_on: []
-blocks: []
+blocks: [NATIVE-HANDLE-CARRIER]
 github: null
 origin: PX8-SPAN-PROV Phase 2 native reachability wall (runtime-implementer measured repro evt_7qhtk8w489am4; CV option-(c) ruling evt_77q2tc5dh1kzj; Steward scope ruling evt_7c160ej3bwz4; Architect means/layer ruling evt_7gkn3g4tsvgb9, 2026-07-23). Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---

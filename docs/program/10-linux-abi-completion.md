@@ -307,20 +307,64 @@ not from memory:
 
 | Track | Items | Issues existing |
 |---|---|---|
-| R — reconcile | ABI-R1, ABI-R3 (ABI-R2 withdrawn) | **0 of 2** |
-| A — availability | ABI-A1, ABI-A2, ABI-A3 | **0 of 3** |
-| M — manifest | ABI-M1, ABI-M2 | **0 of 2** |
-| S — synchronous floor | PX9, ABI-S1–ABI-S6 | **0 of 7** |
-| T — committed exit | PX10, PX11, PX12 | **0 of 3** |
+| R — reconcile | ABI-R1, ABI-R3 (ABI-R2 withdrawn) | ✅ **2 of 2** |
+| A — availability | ABI-A1, ABI-A2, ABI-A3 | ✅ **3 of 3** |
+| M — manifest | ABI-M1, ABI-M2 | ✅ **2 of 2** |
+| S — synchronous floor | PX9, ABI-S1–ABI-S6 | ✅ **7 of 7** |
+| T — committed exit | PX10, PX11, PX12 | ✅ **3 of 3** |
 | **capability membrane** | ABI-REVOKE | ✅ **1 of 1** |
 
-**1 of 19** (was 0 of 18 — see §9.1; ABI-REVOKE is the item this document
-originally omitted, now framed and in the graph).
+## ✅ 19 of 19 TRACKED — 2026-07-25 (operator-directed)
 
-The only node of §5's graph with live work is **PX8**, its
-root, in flight as `BUDGET-EFF` / `SEAL-2` / `RT-ESCAPE` / `RT-SPLIT`
-(+ merged `SPAN-SEAL`, `RT-PARITY`). Everything downstream of `PX8 --> ABI-R3`
-and `PX8 --> PX9` is unframed. This document is the whole record of it.
+**Operator, 2026-07-25:** *"begin framing wps and setting up tasks … for the
+remaining work in that program."* All 17 missing nodes now exist under
+`docs/program/issues/`, and §5's graph is encoded as real `depends_on`/`blocks`
+frontmatter so **`scripts/gen-progress.sh` derives the blocking** rather than a
+reader inferring it from prose.
+
+> ⛔ **TRACKED ≠ RELEASABLE.** These are DAG nodes, not shovel-ready WP frames.
+> Each still needs a `docs/program/wp/` frame with deliverables, acceptance
+> criteria, fixed inputs, negative controls, and a contention check before
+> release (§2c front-load rule). **Do not release one on the strength of its
+> issue file.**
+
+### ⛔ CORRECTION — `RT-NATIVE-FNSPLIT` is UPSTREAM of PX8, not a follow-on after it
+
+**Recorded because the inverted reading was held and acted on.** The direction
+is:
+
+```
+RT-NATIVE-FNSPLIT → NATIVE-HANDLE-CARRIER → PX8-F-CAP-41 → PX8 → {ABI-R3, PX9} → …
+```
+
+- `PX8-F-CAP-41` is a **PX8 clause-(a) blocker**, and PX8 does not close until it
+  **and** `PX8-WROTE-ABS` discharge *and* the closure property is re-verified.
+- `RT-NATIVE-FNSPLIT` was spun **out of** `PX8-SPAN-PROV` Phase 2's native
+  reachability wall (its own `origin:` field), and `PX8-SPAN-PROV` deferred native
+  conformance cells **to** it.
+
+⇒ ★ **`RT-NATIVE-FNSPLIT` sits at the HEAD of this entire program's critical
+path.** PX8 makes **15 of 19** items unblock, so the campaign is not "before the
+ABI program" — it *is* the ABI program's first gate. That is the strongest
+available argument for the operator's standing priority on closing it.
+
+### ⭐ Only TWO nodes are startable before PX8 closes
+
+Everything in §5 descends from `PX8` **except**:
+
+| node | size | owner | why it is free |
+|---|---|---|---|
+| **ABI-R1** | S | Foundation | documentation-only; depends on nothing (§5:223) |
+| **ABI-S3** | M | Runtime | no inbound edge; but it **gates `PX12`**, so landing it early removes an input to the committed exit |
+
+⇒ **The fleet's single-threading on FNSPLIT is largely DAG-forced, not a
+sequencing failure** — but these two are genuine parallel work available now, and
+leaving them idle while rings sit idle is a real loss.
+
+The only node of §5's graph with live *build* work is **PX8**, its root, in
+flight as `BUDGET-EFF` / `SEAL-2` / `RT-ESCAPE` / `RT-SPLIT` (+ merged
+`SPAN-SEAL`, `RT-PARITY`, `PX8-SPAN-PROV`), and **blocked on the
+`RT-NATIVE-FNSPLIT` chain above.**
 
 ### 9.1 ✅ CLOSED — the revocation-membrane gap is now framed and in the graph
 

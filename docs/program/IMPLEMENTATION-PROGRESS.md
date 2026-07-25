@@ -32,14 +32,27 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-25 00:26:02Z — from 51 issue file(s) in `docs/program/issues/`.
+2026-07-25 00:40:35Z — from 68 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
 | ID | Title | Status | Owner | Size | Gate | GitHub |
 |---|---|---|---|---|---|---|
 | `A3` | catalog-coverage walker | draft | TBD | TBD | none | — |
+| `ABI-A1` | promote ConsoleRead and ClockWallNow to NativeTested with differential evidence | draft | runtime | M | none | — |
+| `ABI-A2` | promote FsAppendFile, FsMetadata, FsRename to NativeTested | draft | runtime | M | none | — |
+| `ABI-A3` | promote FsReadDirectory, FsCreateDirectory, FsRemoveFile, FsRemoveDirectory to NativeTested | draft | runtime | M | none | — |
+| `ABI-M1` | manifest v2 — family-scoped, versioned, generated from family schemas | draft | runtime | L | none | — |
+| `ABI-M2` | runtime facility/operation probes, distinct from build-time facts | draft | runtime | M | none | — |
+| `ABI-R1` | correct stale filesystem capability prose — scoped roots, rights, symlink policy and no-follow resolution have landed | draft | foundation | S | none | — |
+| `ABI-R3` | generated operation inventory derived from catalog structure — a new operation must be a build break | draft | runtime | M | none | — |
 | `ABI-REVOKE` | runtime revocation membrane — the deferred runtime face of 62 §4 | draft | runtime | TBD | none | — |
+| `ABI-S1` | descriptor completion — seek, truncate, sync/data-sync, flags, duplication under explicit inheritance policy | draft | runtime | M | none | — |
+| `ABI-S2` | directory streaming — supersedes whole-directory read where streaming is the honest shape | draft | runtime | M | none | — |
+| `ABI-S3` | monotonic clocks, sleep/deadlines, and secure kernel entropy | draft | runtime | M | none | — |
+| `ABI-S4` | statx-shaped metadata with field-availability bits | draft | runtime | M | none | — |
+| `ABI-S5` | terminal basics and process signal disposition at the executable edge | draft | runtime | M | none | — |
+| `ABI-S6` | ordinary anonymous and file-backed mappings as opaque runtime-owned regions and bounded byte views | draft | runtime | L | none | — |
 | `BUDGET-EFF` | TransferCount.remaining must be bounded by the effective request | merged | verify | M | none | — |
 | `BUDGET-EXHAUST` | transfer-budget bound checks are fail-open on variant extension | merged | verify | S | none | — |
 | `CAT-CAPEX` | catalog exhibits no checked capability/authority exemplar | draft | steward | TBD | none | — |
@@ -65,10 +78,14 @@ the committed file matches the generator's output.
 | `ORACLE-VIS-CHECK` | replace the text-pin oracle in px4b_native_production.rs with a real visibility check | merged | runtime | S | none | — |
 | `ORACLE-VIS-PACKAGING` | replace the text-pin visibility oracle on build_process_starter_executable_artifact | merged | runtime | XS | none | — |
 | `PUB-VERIFY` | scripted-pr-automerge.sh exits 0 on a failed push | closed | steward | S | none | — |
+| `PX10` | processes — declarative spawn plan, deny-by-default inheritance, pidfd identity, typed child-exit observation | draft | runtime | L | none | — |
+| `PX11` | sockets — typed addresses, bounded send/receive, explicit option families, injected resolver capability | draft | runtime | L | none | — |
+| `PX12` | readiness — nonblocking transitions, epoll/eventfd/timerfd/signalfd, cancellation and timeout IN THE OPERATION TYPE | draft | runtime | L | none | — |
 | `PX8-F-CAP-41` | PX8 clause-(a) behavior blocker — closed buffer endpoint (start==capacity) must derive zero-effective ReadEof, not host-reject | active | foundation | M | none | 41 |
 | `PX8-SPAN-PROV` | PX8 clause-(b) gap — BufferSpan carries no originating-buffer identity; freeze accepts a same-shape span from a different buffer | merged | spec-enclave | M | none | 914 |
 | `PX8-WROTE-ABS` | PX8 clause-(a) evidence gap — interpreter capped-short Wrote lacks an absolute oracle; PR-C error identities unreached | draft | TBD | TBD | none | — |
 | `PX8` | partial/positioned IO — the completion program's root; closure condition | active | runtime | L | none | — |
+| `PX9` | cross-domain System.Error — semantic identity, raw errno, operation, resource, safe context, and honest retry classification | draft | foundation | L | none | — |
 | `Q-CLAIM-CLOSURE` | Q-RESIDUE adversary findings — claim-loss in multi-claim test blocks, plus R1/R2/R3 | merged | runtime | S | none | — |
 | `Q-CLAIM-COMPARE-ORD` | claim-loss in list_instance_routes... (compare_ord) — both routing claims dropped, replacement only instantiates Bool | merged | runtime | XS | none | — |
 | `Q-RESIDUE` | the Track Q rework residue — 10 tests, folded from Q3-Q7 | closed | runtime | S | none | 818 |
@@ -105,9 +122,34 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 Items not yet `merged`/`closed` whose `depends_on` names an id that
 is itself not yet `merged`/`closed`:
 
+- `ABI-A1` blocked by `ABI-REVOKE` (status: draft)
+- `ABI-A2` blocked by `ABI-REVOKE` (status: draft)
+- `ABI-A3` blocked by `ABI-REVOKE` (status: draft)
+- `ABI-A3` blocked by `ABI-R3` (status: draft)
+- `ABI-M1` blocked by `ABI-R3` (status: draft)
+- `ABI-M2` blocked by `ABI-M1` (status: draft)
+- `ABI-R3` blocked by `PX8` (status: active)
+- `ABI-REVOKE` blocked by `ABI-R3` (status: draft)
+- `ABI-S1` blocked by `PX9` (status: draft)
+- `ABI-S2` blocked by `ABI-A3` (status: draft)
+- `ABI-S4` blocked by `ABI-M1` (status: draft)
+- `ABI-S5` blocked by `PX9` (status: draft)
+- `ABI-S6` blocked by `ABI-S1` (status: draft)
 - `F4` blocked by `A3` (status: draft)
 - `NATIVE-HANDLE-CARRIER` blocked by `RT-NATIVE-FNSPLIT` (status: active)
+- `PX10` blocked by `PX9` (status: draft)
+- `PX10` blocked by `ABI-M1` (status: draft)
+- `PX10` blocked by `ABI-S5` (status: draft)
+- `PX11` blocked by `PX9` (status: draft)
+- `PX11` blocked by `ABI-M1` (status: draft)
+- `PX12` blocked by `PX10` (status: draft)
+- `PX12` blocked by `PX11` (status: draft)
+- `PX12` blocked by `ABI-S3` (status: draft)
 - `PX8-F-CAP-41` blocked by `NATIVE-HANDLE-CARRIER` (status: draft)
+- `PX8` blocked by `PX8-F-CAP-41` (status: active)
+- `PX8` blocked by `PX8-WROTE-ABS` (status: draft)
+- `PX9` blocked by `PX8` (status: active)
+- `PX9` blocked by `ABI-REVOKE` (status: draft)
 - `RT-FNSPLIT-B2A` blocked by `RT-FNSPLIT-B1R` (status: active)
 - `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2A` (status: ready)
 

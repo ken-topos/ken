@@ -11,7 +11,7 @@ github: null
 origin: recut frame docs/program/wp/RT-NATIVE-FNSPLIT-recut.md; Boundary B split at an Architect review gate (evt_49bnspfb74tne, addendum evt_3b2a75fcaegja). B2 further split into B2a/B2b by the Steward 2026-07-25 on the runtime ring's own B1 retro carry — "keep representation checkpoints separate from a retained emission port".
 ---
 
-> ## The authoritative frame is `docs/program/wp/RT-NATIVE-FNSPLIT-recut-B2a-emission-port.md`
+> ## Authoritative frame: `wp/RT-NATIVE-FNSPLIT-recut-B2a-emission-port.md`
 >
 > Read that, not this file. This entry exists so the tracker and the dependency
 > graph see the work.

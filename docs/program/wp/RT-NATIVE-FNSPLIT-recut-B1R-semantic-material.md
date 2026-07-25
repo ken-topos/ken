@@ -1,4 +1,4 @@
-# RT-NATIVE-FNSPLIT — Boundary B1R: encode the occurrence-local semantic material B1 counted but never stored
+# RT-NATIVE-FNSPLIT — B1R: encode the semantic material B1 counted but never stored
 
 **WP frame (Steward). Owning team: Runtime. Size: L. One branch, one merge
 Decision.** Parent: `docs/program/wp/RT-NATIVE-FNSPLIT-recut.md`. Repairs:

@@ -6,7 +6,7 @@ owner: TBD
 size: TBD
 gate: none
 depends_on: []
-blocks: []
+blocks: [PX8]
 github: null
 origin: architect PX8 closure-property verdict evt_163mfgjs7fkh8 (2026-07-23); Steward-filed (agents cannot create tracked work per COORDINATION §2)
 ---

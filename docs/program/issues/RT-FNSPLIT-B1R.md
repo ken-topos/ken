@@ -11,7 +11,7 @@ github: null
 origin: RT-FNSPLIT-B2A carrier hard-stop (runtime-implementer evt_6fm274bx4q6hb, hard-stop #4 on the recut chain); Architect classification evt_7d5v99mh8n9cc ruling option (B) as a REPRESENTATION RECUT ahead of B2a, with symptom-inventory entry 1 appended at a8eaba91. Slice cut by the Steward 2026-07-25.
 ---
 
-> ## The authoritative frame is `docs/program/wp/RT-NATIVE-FNSPLIT-recut-B1R-semantic-material.md`
+> ## Authoritative frame: `wp/RT-NATIVE-FNSPLIT-recut-B1R-semantic-material.md`
 >
 > Read that, not this file. This entry exists so the tracker and the dependency
 > graph see the work.
