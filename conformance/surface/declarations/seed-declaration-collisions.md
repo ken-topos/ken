@@ -68,8 +68,8 @@ a generic parse/type error, warning, or bare `is_err` does not conform.
   fn J (x : Bool) : Bool = x
   data Marker = Only
 
-  lemma eq_sugar (a : Type) (x : a) : Eq a x x = Refl
-  lemma j_sugar
+  theorem eq_sugar (a : Type) (x : a) : Eq a x x = Refl
+  theorem j_sugar
     (ty : Type) (a : ty) (b : ty) (q : Equal ty a b)
     : Equal ty a b = J (\b' _. Equal ty a b') Refl q
   ```
