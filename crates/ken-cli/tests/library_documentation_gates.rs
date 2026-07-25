@@ -2886,16 +2886,106 @@ fn schema_violations(
     schema_root: &serde_json::Value,
     location: &str,
 ) -> Vec<String> {
-    let mut bad = Vec::new();
-    if let Some(reference) = schema.get("$ref").and_then(serde_json::Value::as_str) {
-        let mut target = schema_root;
-        let Some(pointer) = reference.strip_prefix("#/") else {
-            return vec![format!("{location}: unsupported schema reference {reference:?}")];
-        };
-        for component in pointer.split('/') {
-            target = &target[component];
+    schema_violations_with_refs(schema, instance, schema_root, location, &mut Vec::new())
+}
+
+fn decode_json_pointer_component(component: &str) -> Result<String, String> {
+    let mut decoded = String::new();
+    let mut chars = component.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '~' {
+            decoded.push(ch);
+            continue;
         }
-        return schema_violations(target, instance, schema_root, location);
+        match chars.next() {
+            Some('0') => decoded.push('~'),
+            Some('1') => decoded.push('/'),
+            Some(other) => {
+                return Err(format!("invalid JSON-pointer escape ~{other}"));
+            }
+            None => return Err("trailing ~ in JSON-pointer component".to_string()),
+        }
+    }
+    Ok(decoded)
+}
+
+fn resolve_local_schema_reference<'a>(
+    reference: &str,
+    schema_root: &'a serde_json::Value,
+) -> Result<&'a serde_json::Value, String> {
+    if reference.contains('%') {
+        return Err(format!(
+            "percent-encoded schema reference {reference:?} is unsupported"
+        ));
+    }
+    let Some(pointer) = reference.strip_prefix('#') else {
+        return Err(format!("external schema reference {reference:?} is unsupported"));
+    };
+    let mut target = schema_root;
+    if pointer.is_empty() {
+        return Ok(target);
+    }
+    let Some(pointer) = pointer.strip_prefix('/') else {
+        return Err(format!("invalid local schema reference {reference:?}"));
+    };
+    for encoded_component in pointer.split('/') {
+        let component = decode_json_pointer_component(encoded_component)
+            .map_err(|message| format!("{reference:?}: {message}"))?;
+        target = match target {
+            serde_json::Value::Object(object) => object.get(&component),
+            serde_json::Value::Array(array) => component
+                .parse::<usize>()
+                .ok()
+                .and_then(|index| array.get(index)),
+            _ => None,
+        }
+        .ok_or_else(|| {
+            format!(
+                "unresolved local schema reference {reference:?}: missing component {component:?}"
+            )
+        })?;
+    }
+    if !target.is_object() {
+        return Err(format!(
+            "local schema reference {reference:?} resolves to a non-object schema"
+        ));
+    }
+    Ok(target)
+}
+
+fn schema_violations_with_refs(
+    schema: &serde_json::Value,
+    instance: &serde_json::Value,
+    schema_root: &serde_json::Value,
+    location: &str,
+    active_refs: &mut Vec<String>,
+) -> Vec<String> {
+    let mut bad = Vec::new();
+    if let Some(reference_value) = schema.get("$ref") {
+        match reference_value.as_str() {
+            Some(reference) if active_refs.iter().any(|active| active == reference) => {
+                bad.push(format!(
+                    "{location}: schema reference cycle through {reference:?}"
+                ));
+            }
+            Some(reference) => {
+                match resolve_local_schema_reference(reference, schema_root) {
+                    Ok(target) => {
+                        active_refs.push(reference.to_string());
+                        bad.extend(schema_violations_with_refs(
+                            target,
+                            instance,
+                            schema_root,
+                            location,
+                            active_refs,
+                        ));
+                        active_refs.pop();
+                    }
+                    Err(message) => bad.push(format!("{location}: {message}")),
+                }
+            }
+            None => bad.push(format!("{location}: $ref must be a string")),
+        }
     }
 
     if let Some(expected) = schema.get("const") {
@@ -2959,11 +3049,12 @@ fn schema_violations(
     }
     if let (Some(items_schema), Some(items)) = (schema.get("items"), instance.as_array()) {
         for (index, item) in items.iter().enumerate() {
-            bad.extend(schema_violations(
+            bad.extend(schema_violations_with_refs(
                 items_schema,
                 item,
                 schema_root,
                 &format!("{location}[{index}]"),
+                active_refs,
             ));
         }
     }
@@ -2980,11 +3071,12 @@ fn schema_violations(
         if let Some(properties) = schema.get("properties").and_then(serde_json::Value::as_object) {
             for (field, field_schema) in properties {
                 if let Some(value) = object.get(field) {
-                    bad.extend(schema_violations(
+                    bad.extend(schema_violations_with_refs(
                         field_schema,
                         value,
                         schema_root,
                         &format!("{location}.{field}"),
+                        active_refs,
                     ));
                 }
             }
@@ -3524,6 +3616,158 @@ fn agent_schema_contract_rejects_each_declared_constraint_class() {
     assert!(
         minimum.iter().any(|message| message.contains("minimum")),
         "planted minimum violation did not fail at that constraint: {minimum:?}"
+    );
+
+    let required_source = clean.replace("purpose = \"Write Ken\"\n", "");
+    let required = schema_violations(
+        &pack_schema,
+        &controlled_record_value(&parse_pack_file(&required_source)),
+        &pack_schema,
+        "required",
+    );
+    assert!(
+        required
+            .iter()
+            .any(|message| message.contains("required field \"purpose\"")),
+        "planted required violation did not fail at that constraint: {required:?}"
+    );
+
+    let clean_pack = controlled_record_value(&parse_pack_file(clean));
+    let mut items_schema = pack_schema.clone();
+    items_schema["properties"]["triggers"]["items"]["const"] =
+        serde_json::json!("different trigger");
+    let items = schema_violations(
+        &items_schema,
+        &clean_pack,
+        &items_schema,
+        "items traversal",
+    );
+    assert!(
+        items.iter().any(|message| {
+            message.contains("items traversal.triggers[0]") && message.contains("const")
+        }),
+        "planted items traversal violation did not reach the array member: {items:?}"
+    );
+
+    let mut properties_schema = pack_schema.clone();
+    properties_schema["properties"]["purpose"]["const"] =
+        serde_json::json!("different purpose");
+    let properties = schema_violations(
+        &properties_schema,
+        &clean_pack,
+        &properties_schema,
+        "properties traversal",
+    );
+    assert!(
+        properties.iter().any(|message| {
+            message.contains("properties traversal.purpose") && message.contains("const")
+        }),
+        "planted properties traversal violation did not reach the field: {properties:?}"
+    );
+
+    let mut valid_module = module.clone();
+    valid_module["measured_tokens"] = serde_json::json!(1);
+    let mut dangling_ref_schema = manifest_schema.clone();
+    dangling_ref_schema["properties"]["module"]["items"]["$ref"] =
+        serde_json::json!("#/$defs/missing-module");
+    let dangling_ref = schema_violations(
+        &dangling_ref_schema["properties"]["module"],
+        &serde_json::json!([valid_module]),
+        &dangling_ref_schema,
+        "dangling $ref",
+    );
+    assert!(
+        dangling_ref.iter().any(|message| {
+            message.contains("unresolved local schema reference")
+                && message.contains("missing-module")
+        }),
+        "planted dangling $ref did not fail at the reference artifact: {dangling_ref:?}"
+    );
+
+    let escaped_pointer_schema = serde_json::json!({
+        "$ref": "#/$defs/slash~1name~0record",
+        "$defs": {
+            "slash/name~record": {"type": "string"}
+        }
+    });
+    assert!(
+        schema_violations(
+            &escaped_pointer_schema,
+            &serde_json::json!("resolved"),
+            &escaped_pointer_schema,
+            "escaped JSON pointer",
+        )
+        .is_empty(),
+        "RFC 6901 escapes in a local $ref were not decoded"
+    );
+
+    let sibling_schema = serde_json::json!({
+        "$ref": "#/$defs/string",
+        "minLength": 2,
+        "$defs": {
+            "string": {"type": "string"}
+        }
+    });
+    let sibling = schema_violations(
+        &sibling_schema,
+        &serde_json::json!("x"),
+        &sibling_schema,
+        "$ref sibling",
+    );
+    assert!(
+        sibling.iter().any(|message| message.contains("minLength")),
+        "supported sibling constraint beside $ref was skipped: {sibling:?}"
+    );
+
+    let cyclic_schema = serde_json::json!({
+        "$ref": "#/$defs/loop",
+        "$defs": {
+            "loop": {"$ref": "#/$defs/loop"}
+        }
+    });
+    let cycle = schema_violations(
+        &cyclic_schema,
+        &serde_json::json!("anything"),
+        &cyclic_schema,
+        "cyclic $ref",
+    );
+    assert!(
+        cycle
+            .iter()
+            .any(|message| message.contains("schema reference cycle")),
+        "planted recursive $ref did not fail at the cycle detector: {cycle:?}"
+    );
+
+    for (reference, expected) in [
+        ("https://example.invalid/schema", "external schema reference"),
+        ("#/$defs/non-schema", "non-object schema"),
+    ] {
+        let bad_reference_schema = serde_json::json!({
+            "$ref": reference,
+            "$defs": {
+                "non-schema": "not a schema"
+            }
+        });
+        let violations = schema_violations(
+            &bad_reference_schema,
+            &serde_json::json!("anything"),
+            &bad_reference_schema,
+            "unsupported $ref",
+        );
+        assert!(
+            violations.iter().any(|message| message.contains(expected)),
+            "planted {expected} did not fail at the reference artifact: {violations:?}"
+        );
+    }
+
+    let mut future_schema = pack_schema.clone();
+    future_schema["futureConstraint"] = serde_json::json!(true);
+    let future = unsupported_schema_keywords(&future_schema, "future keyword");
+    assert!(
+        future
+            .iter()
+            .any(|message| message.contains("futureConstraint")),
+        "planted unsupported schema keyword did not fail closed: {future:?}"
     );
 }
 
