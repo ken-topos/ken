@@ -118,6 +118,41 @@ this line wins.** Re-read this line on every hard-stop.
 > it at the construction site. Same class as
 > `a-required-deliverable-can-transitively-require-the-frames-excluded-scope`.
 >
+> ## ✅ RESOLVED 2026-07-25 — entry 3 has an owner, and the RE-SLICE IS RULED
+>
+> **Census `TOTAL` + injective** (`runtime-implementer`, `evt_4tqj93ctj24z2`,
+> type-driven over the `RuntimeExpr` declaration, not a grep) ⇒ **Architect
+> ruled the third option CONFIRMED** (`evt_1jdh8pn8y96z`): correspondence
+> **transports an already-settled fact to a site where it is out of scope** — it
+> does not choose static identity, invent an identity space, or define behaviour
+> for an unplanned occurrence. So it is **production plumbing, NOT Q3
+> functionization authority**, and the Q3 atomic boundary stays intact.
+>
+> ```
+> B1R → RT-FNSPLIT-B2A-C → RT-FNSPLIT-B2A-S → RT-FNSPLIT-B2F
+>       correspondence      selection           functionization
+>       (entry 3)           (entry 1, atomic)   (entry 2, atomic Q3)
+> ```
+>
+> ⛔ **STATE THE INVENTORY CLOSURES SEPARATELY (ruled).** Closing the cause's
+> transport seam is **not** closing either downstream symptom:
+>
+> | entry | closed by |
+> |---|---|
+> | **3** recoverability vacancy (the CAUSE) | `RT-FNSPLIT-B2A-C` |
+> | **1** cloned-body / pointer identity | `RT-FNSPLIT-B2A-S` (complete selection) |
+> | **2** whole-configuration specialization | `RT-FNSPLIT-B2F` (atomic switch) |
+>
+> ⚠ **The census carried a deliberate scoped `could_not_determine`:** the
+> *partition* (which occurrences are machine-only) is program-dependent and not
+> statically enumerable. **Totality is determined; the enumeration is not.**
+> ⛔ Do not read "TOTAL" as "and here is the partition", and do not let any frame
+> enumerate a guessed machine-only subset.
+>
+> ★ **The ring retracted its own convergence read, unprompted:** it had inferred
+> "collapses into B2F" from the **size** of the carrier when the deciding
+> property was its **totality**. **Size is not a boundary discriminator.**
+>
 > ## ⛔ DO NOT WAIT FOR THE 3rd ENTRY. Entries 1 and 2 ARE THE SAME PREDICATE.
 >
 > Entry 2 is *"a dynamic property naming static code"* — the chain's predicate,

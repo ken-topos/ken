@@ -5,13 +5,41 @@ status: draft
 owner: runtime
 size: M
 gate: none
-depends_on: [RT-FNSPLIT-B1R]
+depends_on: [RT-FNSPLIT-B2A-C]
 blocks: [RT-FNSPLIT-B2F]
 github: null
 origin: Architect ruling evt_6h5gw5c503n5z on RT-FNSPLIT-B2A hard-stop #6 (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the retired RT-FNSPLIT-B2A frame, whose Retain/Replace lists were inherited from the never-landed b077eb7a. Steward-filed; Steward owns the replacement frame and the full AC/control re-walk.
 ---
 
-> ## ⛔ HALTED AT HARD-STOP #7 — 2026-07-25. DO NOT BUILD FROM THIS FRAME.
+> ## ⇢ RE-CUT 2026-07-25 — THIS NODE IS THE **SELECTION** UNIT, NOT RETIRED.
+>
+> **The Architect ruled the re-slice at `evt_1jdh8pn8y96z`.** This node survives
+> with a **narrowed scope** and a **new predecessor**:
+>
+> ```
+> B1R → RT-FNSPLIT-B2A-C → RT-FNSPLIT-B2A-S → RT-FNSPLIT-B2F
+>       correspondence      THIS NODE          functionization
+>                           (selection)
+> ```
+>
+> - **D1–D3 LEAVE this node** — the dense table, its lifetime, and the visibility
+>   widening belong to **`RT-FNSPLIT-B2A-C`**, which transports the origin to the
+>   site. `5c7eae26` folds in *there*, not here.
+> - **D4 + D5 STAY, and are now satisfiable** — because correspondence puts the
+>   origin *in scope* at the two `lower_expr` closure arms. D4 was unsatisfiable
+>   only because this frame assumed an origin nothing produced.
+> - ⛔ **This unit remains ATOMIC, by ruling:** add the tag **as selector**,
+>   **remove the retained body carrier**, and **install the sole dispatcher** —
+>   *in the same diff*. That was always the right requirement; only its
+>   prerequisite was missing.
+>
+> ⚠ **The frame at `docs/program/wp/RT-FNSPLIT-B2A-S-selection-defunctionalization.md`
+> is STALE against this re-cut** — it still carries D1–D3 and still assumes the
+> origin is available. ⛔ Do not build from it until the Steward re-cuts it.
+> **Inventory:** this unit closes **entry 1**; entry 2 waits for `B2F`; entry 3 is
+> closed by `B2A-C`. State them separately.
+>
+> ## ⛔ HALTED AT HARD-STOP #7 — 2026-07-25 (the stop that forced the re-cut)
 >
 > **D4 is unsatisfiable inside this frame's own boundary.** Raised by
 > `runtime-leader` at `evt_2fvxkmfw8m1k8` after D1–D3 landed clean at
