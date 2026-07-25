@@ -1,17 +1,44 @@
 ---
 id: RT-FNSPLIT-B2F
 title: "functionization and authority switch — per-static-origin Cranelift target functions, atomic with switch-over, equivalence evidence, and old-path removal"
-status: active
+status: ready
 owner: runtime
 size: L
 gate: none
-depends_on: [RT-FNSPLIT-B2A-S, RT-FNSPLIT-B2O, RT-FNSPLIT-B2R]
+depends_on: [RT-FNSPLIT-B2A-S, RT-FNSPLIT-B2O, RT-FNSPLIT-B2R, RT-FNSPLIT-B2V]
 blocks: []
 github: null
 origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answering Steward Q1-Q3 on merits (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the D1/D2 half of the retired RT-FNSPLIT-B2A frame. RE-SLICED 2026-07-25 by Architect ruling evt_842spc7t6js1 on hard-stop #9 (research advisory evt_531c4k52mshrn) plus addendum evt_t4fykh52ncb: this node is NOT buildable as one unit and now depends on two inert prerequisites. Steward-filed; Steward owns the replacement frame and AC/control placement.
 ---
 
-> ## ▶ `active` — RELEASED TO RUNTIME 2026-07-25, kickoff `evt_3q00bkdra1vca`
+> ## ⛔ HELD AT HARD-STOP #10 — a NEW PREREQUISITE `RT-FNSPLIT-B2V` IS INSERTED
+>
+> **Architect ruling `evt_28cnmxf6ncghn`, 2026-07-25.** This node was kicked
+> (`evt_3q00bkdra1vca`), ran ~25 minutes, and hard-stopped at **#10 before any
+> production code was written**. `crates/` is byte-identical to `1e09a30a`;
+> **there is nothing to unwind.** Evidence: `49e24b59..1b789817` on `origin`
+> `wp/RT-FNSPLIT-B2F-functionization`.
+>
+> **The stop is VALID and STRUCTURAL.** `B2O`/`B2R` give static code ownership,
+> unit population, slot order/width, and declared ownership. **They never
+> defined what the bits of `ValueWord`/`ResultWord` MEAN**, nor how compiled
+> code inspects a dynamic aggregate. Measured `Constructor` (29 `Parameter`
+> transfers) and `HostResult` (4) have no executable word representation, so a
+> fail-closed guard would reject **~33 of 41** source-valued transfers —
+> incompatible with `D6` and `D7`.
+>
+> ⇒ **`RT-FNSPLIT-B2V` is inserted between `B2R` and this node.** Sequence is
+> `B2O` → `B2R` → **`B2V`** → `B2F`. ⛔ **Runtime does not resume `B2F`
+> construction until `B2V`'s frame is fetchable on `origin/main` AND explicitly
+> kicked.**
+>
+> ⭐ **`AC-11` IS RE-SCOPED BY THIS RULING.** It becomes **enforcement of `B2V`
+> on every `Parameter`/`Capture`/`Result` transfer** — **not** rejection of
+> common aggregates, and **not** inheritance from `C4`. The `Parameter` +
+> `Capture` + `Result` transfer set stands; what changes is that the correct
+> response to an aggregate is now *represent it*, not *refuse it*.
+>
+> ### Historical — the release block, kept because the gate record is real
 >
 > **The frame is re-anchored and the ring is building against it.** Read
 > `docs/program/wp/RT-FNSPLIT-B2F-functionization.md` **as it stands on
