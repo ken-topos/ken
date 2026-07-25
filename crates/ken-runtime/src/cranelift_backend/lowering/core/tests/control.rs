@@ -3699,6 +3699,10 @@ const BACKEND_PRODUCTION_SOURCES: &[(&str, &str)] = &[
         include_str!("../../../planning/static_transition.rs"),
     ),
     (
+        "planning/static_transition/abi.rs",
+        include_str!("../../../planning/static_transition/abi.rs"),
+    ),
+    (
         "planning/static_transition/semantic_ir.rs",
         include_str!("../../../planning/static_transition/semantic_ir.rs"),
     ),
@@ -3747,6 +3751,7 @@ fn the_backend_production_surface_inventory_is_closed() {
             ("artifact/mod.rs", "api"),
             ("lowering/mod.rs", "core"),
             ("planning.rs", "static_transition"),
+            ("planning/static_transition.rs", "abi"),
             ("planning/static_transition.rs", "semantic_ir"),
         ],
         "AC-4 -- the backend's module inventory changed, so \
@@ -4101,11 +4106,16 @@ fn the_entry_carrying_types_are_module_private() {
         naming,
         vec![
             "planning/static_transition.rs",
+            "planning/static_transition/abi.rs",
             "planning/static_transition/semantic_ir.rs",
         ],
         "AC-5(a): another backend file now NAMES an entry-carrying type. That is \
          the measured fact only -- it does not by itself decide whether anything \
-         keys on an entry, which is residual arm 2 and Architect review"
+         keys on an entry, which is residual arm 2 and Architect review.\n\
+         `abi.rs` joined this inventory in `RT-FNSPLIT-B2R`: the ABI plane names \
+         `StaticNodeId` because a function unit's frame entry IS its seed node, \
+         and the descriptor records which node that is. It remains module-private \
+         and is not widened."
     );
 
     // The naming set is what it is because the declarations are module-private. A
@@ -4311,8 +4321,22 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
 /// declaration inventories that make a change loud, and that is their whole
 /// claim.
 #[test]
-fn the_owner_classification_is_named_in_production_only_by_the_module_that_defines_it() {
+fn the_owner_classification_has_a_closed_production_naming_inventory() {
     // Promise class: durable invariant — a DECLARATION inventory.
+    //
+    // ⚠ RENAMED AGAIN by `RT-FNSPLIT-B2R`, and the rename is the honest part.
+    // The previous name was `..._is_named_in_production_only_by_the_module_that_
+    // defines_it`, and `B2R` **falsified that claim legitimately**: the ABI plane
+    // consumes the validated owner partition, which is precisely what the `B2R`
+    // frame mandates ("the population is `B2O`'s owner partition, consumed as
+    // data"). A pin whose name asserts sole-consumership cannot survive the node
+    // that adds the second consumer, and quietly widening the expected list while
+    // keeping that name would leave a corrected body under an uncorrected name.
+    //
+    // ⇒ What is pinned now is the **closed allowed inventory** of production
+    // files naming the classification. It still reddens on a *third* consumer —
+    // including one nobody imagined — which is the property worth guarding. What
+    // it no longer claims is that there is only one.
     //
     // ⚠ RENAMED under the Architect ruling (`evt_5yxjd1zqnyvcq`). This pin was
     // called `..._has_no_reach_into_any_emission_path`, and that name asserted an
@@ -4334,9 +4358,26 @@ fn the_owner_classification_is_named_in_production_only_by_the_module_that_defin
     }
     assert_eq!(
         naming,
-        vec!["planning/static_transition/semantic_ir.rs"],
-        "D7: the owner classification is NAMED in production only by the module \
-         that defines it, and that inventory changed.\n\
+        vec![
+            "planning/static_transition/abi.rs",
+            "planning/static_transition/semantic_ir.rs",
+        ],
+        "D7: the owner classification's production naming inventory changed.\n\
+         The two permitted members are the module that DEFINES it \
+         (`semantic_ir`) and the `B2R` ABI plane (`abi`), which names it to \
+         resolve a static-body boundary's CALLEE unit when deriving that \
+         boundary's caller-side signature. A third file is a review event: say \
+         why that consumer must name the classification rather than take a \
+         descriptor.\n\
+         ⚠ This membership moved twice inside `RT-FNSPLIT-B2R` and the history \
+         is worth one line, because the second move is the load-bearing one. \
+         `abi.rs` first named the type in a redundant edge-agreement check that \
+         `AC-11` measured as unreachable and deleted -- at which point it left \
+         this inventory. The Architect then established that the deleted \
+         composition proved target IDENTITY and never layout AGREEMENT, so a \
+         real per-boundary signature replaced it, and that mechanism genuinely \
+         needs the classification. The name is here now for a live reason, not \
+         a vestigial one.\n\
          ⚠ MEASURED: which production files mention the identifier. CLAIMED: \
          exactly that. THE GAP: a mention is not an executable edge and the \
          absence of one is not proof there is none -- a type can be reached \
