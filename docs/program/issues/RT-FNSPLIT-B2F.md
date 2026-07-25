@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2F
 title: "functionization and authority switch — per-static-origin Cranelift target functions, atomic with switch-over, equivalence evidence, and old-path removal"
-status: ready
+status: active
 owner: runtime
 size: L
 gate: none
