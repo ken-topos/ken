@@ -15,7 +15,7 @@ use crate::{
 
 /// The preallocated positional identity of one planned occurrence.
 ///
-/// Widened to `pub(in crate::cranelift_backend)` by `RT-FNSPLIT-B2A-C` so the
+/// Widened to `pub(in crate::cranelift_backend)` so the
 /// lowering can carry an occurrence's static name to the site that lowers it.
 /// The wrapped ordinal stays `pub(super)` deliberately: a consumer outside this
 /// planner can hold, compare, and pass an origin, but **cannot mint one** from
@@ -168,12 +168,13 @@ impl SemanticSourceSeed {
     /// visit. `children` are the occurrence's syntax children in **source
     /// position order**, already planned by the walk; their origins are the
     /// children's own preallocated positional identities, never minted here.
-    /// ⭐ `children` are the children's **occurrence** origins, never their
-    /// scheduling entries (`RT-FNSPLIT-B2A-C` D9). The parameter is
-    /// `&[StaticOriginId]` rather than `&[StaticNodeId]` so the type prevents
-    /// that conflation instead of the call sites having to remember it: for a
-    /// `ComputationalMatch` child the two are deliberately different nodes, and
-    /// passing the entry here was hard-stop #8.
+    ///
+    /// ⭐ They are each child's **occurrence** origin, never its scheduling
+    /// entry. The parameter is `&[StaticOriginId]` rather than
+    /// `&[StaticNodeId]` so the type prevents that conflation instead of the
+    /// call sites having to remember it: for a `ComputationalMatch` child the
+    /// two are deliberately different nodes, and passing a scheduling entry
+    /// here is a category error, not an off-by-one.
     pub(super) fn expression(
         planned_node: StaticNodeId,
         expr: &RuntimeExpr,
@@ -651,7 +652,7 @@ impl SemanticPlane {
     ///
     /// Child *k* is recovered as child *k* out of the occurrence's own
     /// child-origin range — never by search, shape-matching, pointer, or clone
-    /// order. This is the accessor `RT-FNSPLIT-B2A-C` descends with: knowing an
+    /// order. This is the accessor the emitter descends with: knowing an
     /// occurrence's origin, its children's origins are already determined, so
     /// no second identity space is minted for them.
     ///

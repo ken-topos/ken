@@ -20,8 +20,7 @@ pub(in crate::cranelift_backend) use semantic_ir::StaticOriginId;
 
 pub(super) const MAX_HELPERS_PER_STATIC_SOURCE: usize = 8;
 
-/// ⭐ The dual result of planning one expression (`RT-FNSPLIT-B2A-C` D9, ruled
-/// after hard-stop #8).
+/// ⭐ The dual result of planning one expression.
 ///
 /// One `StaticNodeId` was previously made to mean two different things:
 ///
@@ -222,7 +221,7 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan {
     /// static name is reachable **by name** and needs no origin threaded into it.
     /// This is what makes `Lowered::DeclarationClosure`'s construction site
     /// asymmetric with the two `lower_expr` closure arms
-    /// (`RT-FNSPLIT-B2A-C` D6/D7).
+    ///.
     declaration_occurrences: BTreeMap<String, StaticOriginId>,
 }
 
@@ -508,8 +507,8 @@ impl Planner {
     /// Plans a positional operand sequence. Returns the chain **entry** — what the
     /// parent schedules — and each element's **occurrence** origin indexed by its
     /// source position, which is what the parent records as its positional child
-    /// (`RT-FNSPLIT-B2A-C` D9). The two are different values for a
-    /// `ComputationalMatch` element, and mixing them was hard-stop #8.
+    ///. The two are different values for a
+    /// `ComputationalMatch` element, and mixing them is a category error.
     fn plan_sequence(
         &mut self,
         expressions: &[&RuntimeExpr],
@@ -761,7 +760,7 @@ impl Planner {
                 children.push(scrutinee.occurrence);
                 children.extend(case_bodies);
                 self.expression_seed(resume, expr, &children)?;
-                // ⭐ THE SOLE SPLIT (D9, hard-stop #8). This occurrence's record
+                // ⭐ THE SOLE SPLIT. This occurrence's record
                 // lives on `resume`, because the resume owns the outer edges and
                 // must exist before the cases are planned — but the transfer
                 // graph still schedules the SCRUTINEE, exactly as before. So the
@@ -942,7 +941,7 @@ impl StaticTransitionPlan {
     /// the value comes out of B1R's checked positional child-origin range. There
     /// is deliberately no pointer, content, hash, clone-order, or visit-order
     /// route to an origin, and no arithmetic that mints one
-    /// (`RT-FNSPLIT-B2A-C` D2).
+    ///.
     pub(in crate::cranelift_backend) fn child_static_origin(
         &self,
         parent: StaticOriginId,
@@ -1582,7 +1581,7 @@ pub(in crate::cranelift_backend) fn plan_static_transition_graph(
             // A declaration body is its own planned source occurrence, so its
             // occurrence origin is reachable by name. Two entries under one
             // symbol would make that lookup ambiguous, which is a planner bug
-            // rather than an input condition (`RT-FNSPLIT-B2A-C` D6).
+            // rather than an input condition.
             if planner
                 .plan
                 .declaration_occurrences
@@ -3448,7 +3447,7 @@ mod tests {
             declarations, 2,
             "AC-12: `expression_node` and `expression_seed` must both take \
              occurrence origins; a `&[StaticNodeId]` parameter here is the exact \
-             conflation that caused hard-stop #8"
+             conflation this parameter type exists to prevent"
         );
         assert!(
             !source

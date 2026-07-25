@@ -218,7 +218,8 @@ pub(super) fn verify_cranelift_function_for_artifact_tests(
 /// rather than beside it. In this unit the origin is provenance only: nothing
 /// selects, dispatches, or branches on it — it is carried so that a child's
 /// origin can be derived positionally when the walk descends
-/// (`RT-FNSPLIT-B2A-C` D1/D4, and the negative boundary N1-N4).
+/// The origin never selects a body, calls a dispatcher, alters a branch, or
+/// reaches emitted code.
 #[derive(Clone, Copy)]
 struct SourceOccurrence<'a> {
     expr: &'a RuntimeExpr,
@@ -231,8 +232,8 @@ struct SourceOccurrence<'a> {
 ///
 /// ⭐ The pair is one value on purpose: `SourcePrefixTemplate` is `Clone`, and a
 /// clone that copied the term while dropping its origin would silently
-/// reintroduce exactly the recoverability vacancy this unit exists to close
-/// (`RT-FNSPLIT-B2A-C` D4). Making them one field makes that drop unspellable.
+/// reintroduce exactly the recoverability vacancy the pair exists to close.
+/// Making them one field makes that drop unspellable.
 #[derive(Clone)]
 struct OwnedSourceOccurrence {
     expr: RuntimeExpr,
@@ -366,7 +367,7 @@ struct ComputationalRecursorFramePayload {
     /// The origin of the computational-match occurrence these cases came from,
     /// cloned into this payload **in the same constructor as the cases** so a
     /// later resumption can still derive a case body's origin positionally
-    /// (`RT-FNSPLIT-B2A-C` D4).
+    ///.
     static_origin: StaticOriginId,
     provenance: RecursorFrameProvenance,
     checked_frame_id: Option<u64>,
@@ -454,8 +455,8 @@ enum Lowered {
     /// every call site re-lowers this cloned term exactly as before. What is new
     /// is that the clone carries the body occurrence's preallocated origin in
     /// the same value, because a retained body is re-lowered at a site where
-    /// nothing else names it. Removing this carrier in favour of the tag is
-    /// `RT-FNSPLIT-B2A-S`, not this unit.
+    /// nothing else names it. Replacing this carrier with the tag alone is a
+    /// later, separate change.
     Closure {
         captures: Vec<Lowered>,
         params: Vec<String>,
@@ -555,7 +556,7 @@ fn validate_dynamic_constructor_alternatives<'a>(
 /// ⭐ Returns the case's **index** alongside it: the selection is a search by
 /// constructor name, and a search recovers no position. The caller needs the
 /// index to derive the body's static origin positionally
-/// (`RT-FNSPLIT-B2A-C` D2).
+///.
 fn select_dynamic_constructor_case<'a>(
     cases: &'a [crate::RuntimeMatchCase],
     alternative: &DynamicConstructorAlternativeV1,
@@ -744,7 +745,7 @@ struct ComputationalRecursorLayer {
     outer_env: Vec<Lowered>,
     /// The origin of the computational-match occurrence these cases came from,
     /// carried with the clone so a resumed selection can still derive a case
-    /// body's origin positionally (`RT-FNSPLIT-B2A-C` D4).
+    /// body's origin positionally.
     static_origin: StaticOriginId,
     provenance: RecursorFrameProvenance,
     role: RecursorLayerRole,
@@ -2071,7 +2072,7 @@ enum SourceMachineState<'a> {
     /// hands over every form the machine's own dispatcher does not handle —
     /// closures included. That is why the origin has to be here rather than in a
     /// guessed subset of the frames: the machine and the direct descent are the
-    /// same population reached two ways (`RT-FNSPLIT-B2A-C` D1).
+    /// same population reached two ways.
     Eval {
         expr: OwnedSourceOccurrence,
         env: Vec<Lowered>,
@@ -2401,7 +2402,7 @@ fn collect_runtime_declaration_refs(expr: &RuntimeExpr, output: &mut BTreeSet<Ru
 /// Selects an ordinary case by constructor, **with its index**.
 ///
 /// The index is what makes the selected body's origin derivable: the search
-/// itself recovers no position (`RT-FNSPLIT-B2A-C` D2).
+/// itself recovers no position.
 fn select_ordinary_case<'a>(
     eliminator: OrdinaryEliminatorFrame<'a>,
     constructor: &str,

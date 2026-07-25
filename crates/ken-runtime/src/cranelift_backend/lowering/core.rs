@@ -30,8 +30,8 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         oriented_subcontinuation_plan.as_ref(),
     )?;
     // Boundary A of RT-NATIVE-FNSPLIT: close and validate the factored static
-    // graph before Cranelift sees any semantic body. `RT-FNSPLIT-B2A-C` makes
-    // the plan's positional child-origin table reachable from the lowering, so
+    // graph before Cranelift sees any semantic body. The plan's positional
+    // child-origin table is reachable from the lowering, so
     // every occurrence carries the static name the planner already gave it. The
     // emitter is otherwise unchanged: the origin is provenance, never a selector.
     let static_transition_plan = plan_static_transition_graph(expr, &declarations)?;
@@ -375,8 +375,8 @@ impl<'a> Lowering<'a> {
     ///
     /// This is the second traversal of the same source population — the one that
     /// reaches occurrences the direct descent does not — so it threads origins by
-    /// exactly the same table as `lower_expr` (`RT-FNSPLIT-B2A-C` D1: no guessed
-    /// subset, both routes or neither).
+    /// exactly the same table as `lower_expr`: no guessed subset, both routes or
+    /// neither.
     fn lower_computational_producer_expr(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -2270,7 +2270,7 @@ impl<'a> Lowering<'a> {
                     // handle — closures included — goes to `lower_expr` here, and
                     // it now goes **as the same occurrence**: same term, same
                     // origin. This arm is why a "machine-only" subset could never
-                    // have been threaded soundly (`RT-FNSPLIT-B2A-C` D1).
+                    // have been threaded soundly.
                     other => SourceMachineState::Value {
                         value: self.lower_expr(
                             builder,
@@ -4138,7 +4138,7 @@ impl<'a> Lowering<'a> {
     /// positional child-origin range. There is deliberately no other route: not
     /// pointer identity, not the term's content or hash, not clone order, not
     /// visit order, and no arithmetic that mints an origin
-    /// (`RT-FNSPLIT-B2A-C` D2).
+    /// for it.
     fn child_occurrence<'x>(
         &self,
         parent: StaticOriginId,
@@ -4156,7 +4156,7 @@ impl<'a> Lowering<'a> {
     /// The owned form of `child_occurrence`, for the source machine's pending
     /// frames: it takes the child term **by value** and pairs it with its origin
     /// in one constructor, so no step of the machine can hold a term whose origin
-    /// was dropped (`RT-FNSPLIT-B2A-C` D4).
+    /// was dropped was dropped.
     fn owned_child_occurrence(
         &self,
         parent: StaticOriginId,
@@ -4199,7 +4199,7 @@ impl<'a> Lowering<'a> {
 
     /// Lowers one source occurrence.
     ///
-    /// ## The per-variant child-position table (`RT-FNSPLIT-B2A-C` D3, AC-2)
+    /// ## The per-variant child-position table
     ///
     /// ⭐ **A child's position is its index in the `children: &[StaticNodeId]`
     /// slice the planner hands to `expression_node` / `expression_seed`** — *not*
@@ -4233,7 +4233,7 @@ impl<'a> Lowering<'a> {
     /// 2. `Effect`'s capability takes position `0` **only when present**, so the
     ///    argument base is a conditional offset rather than a constant.
     ///
-    /// ## ⭐ THE SECOND AXIS: `entry` vs `occurrence` (D9, after hard-stop #8)
+    /// ## ⭐ THE SECOND AXIS: `entry` vs `occurrence`
     ///
     /// Positional agreement does **not** imply that the identity a parent
     /// schedules is the identity that owns the child record. `plan_expr` returns
@@ -4245,8 +4245,8 @@ impl<'a> Lowering<'a> {
     /// | every variant except `ComputationalMatch` | **yes**, by construction — they all return through `expression_node` |
     /// | `ComputationalMatch` | **no**, and deliberately: its record is seeded on its `SourceReturnResume` while a parent still schedules its scrutinee. It is the SOLE split. |
     ///
-    /// ⛔ Passing an `entry` where an `occurrence` belongs was hard-stop #8 — a
-    /// category error, not an off-by-one. The seed API takes `&[StaticOriginId]`
+    /// ⛔ Passing an `entry` where an `occurrence` belongs is a category error, not
+    /// an off-by-one. The seed API takes `&[StaticOriginId]`
     /// so the type now prevents it; do not re-conflate the two axes.
     ///
     /// ⛔ Where the two orders could ever disagree the **planner's** position
@@ -6172,7 +6172,7 @@ impl<'a> Lowering<'a> {
             .declaration_occurrence_origin(symbol.as_str())
             .ok_or_else(|| {
                 // A planner invariant, not a capacity limit: this declaration is
-                // transparent, so the planner planned it (`RT-PLANNER-ATTRIB-K`).
+                // transparent, so the planner planned it (a planner invariant, not a capacity limit).
                 backend(BackendFailure::PlannerInvariant(format!(
                     "transparent declaration {symbol} has no planned entry occurrence"
                 )))
