@@ -91,6 +91,19 @@
 > ⇒ **Next time, compact the CODEX seats FIRST in a mixed ring** — they are the
 > ones that can fail.
 >
+> ### ⚠⚠ TWO SIMILAR WP BRANCH NAMES — PUSH TO THE RIGHT ONE
+>
+> | ref on `origin` | SHA | what it is |
+> |---|---|---|
+> | `wp/RT-FNSPLIT-B2A-S-selection` | *(not yet pushed)* | ⭐ **THE LIVE BRANCH** |
+> | `wp/RT-FNSPLIT-B2A-S-selection-defunctionalization` | `5c7eae26` | ⛔ **ABANDONED** pre-re-slice work, retained as durable input only |
+>
+> ⛔ **The durability sweep must `ls-remote` and push `…-selection`, NOT
+> `…-selection-defunctionalization`.** The frame *file* is still named after the
+> abandoned branch (`docs/program/wp/RT-FNSPLIT-B2A-S-selection-defunctionalization.md`),
+> which makes the wrong name the easy one to reach for. Pushing to the stale ref
+> would resurrect dead work or look like live work vanished.
+>
 > ### ✅ `RT-FNSPLIT-B2A-S` IS FRAMED AND `ready` — anchors re-derived on `4c5afda6`
 >
 > **Frame REWRITTEN, not amended:** `docs/program/wp/RT-FNSPLIT-B2A-S-selection-defunctionalization.md`.
