@@ -248,22 +248,55 @@ point of closing the enumeration by sweep.
 | `retained_body_helper_is_private` (+ its new pin) | the helper carries no visibility qualifier | **DECLARATION** — entailment struck | **SPLIT / RETAINED** | widened the declaration to `pub fn` → **reddens**; the *reachability* entailment it used to carry is deleted, not defended |
 | `..._is_named_in_production_only_by_the_module_that_defines_it` | which production files name `SemanticOwner` | **DECLARATION** — renamed | **SPLIT / RETAINED** | a type reachable *without* being named is the known gap; recorded, and inertness is pinned behaviorally instead |
 | `the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site` | 59 tokenized calls exist | **DECLARATION** | **RETAINED**, relabelled frozen evidence | line-split + path-form + `source_occurrences` conflation → all held (tokenizer) |
-| `correspondence_adds_no_emitted_unit_to_the_production_census` | the emitted-unit census is unchanged | **DECLARATION** | RETAINED, unmodified | not attempted — pre-existing pin from an earlier WP, outside this respin's diff |
-| `every_source_term_carrier_holds_an_occurrence_and_never_a_bare_expression` | carrier fields hold occurrences | **DECLARATION** | RETAINED, unmodified | not attempted — as above |
-| `exactly_one_plan_origin_to_expression_lookup_exists` | one `origin → expression` route | **DECLARATION** | RETAINED, unmodified | already corrected once (it constrains `source_occurrence` only); no further evasion run |
-| `no_collection_is_keyed_by_a_scheduling_entry` | no collection keys on an entry | **DECLARATION** | RETAINED, unmodified | not attempted — pre-existing |
-| `retained_closures_carry_a_static_origin_and_no_body_term` | closures carry origins | **DECLARATION** | RETAINED, unmodified | not attempted — pre-existing |
-| `the_backend_production_surface_inventory_is_closed` | the production surface inventory | **DECLARATION** | RETAINED, unmodified | not attempted — pre-existing |
-| `the_entry_carrying_types_are_module_private` | entry types are module-private | **DECLARATION** | RETAINED, unmodified | not attempted — pre-existing |
-| `the_semantic_seed_api_accepts_only_occurrence_origins` | the seed API's accepted origins | **DECLARATION** | RETAINED, unmodified | not attempted — pre-existing; **this is the pin I predicted did not exist** |
+| `correspondence_adds_no_emitted_unit_to_the_production_census` | the emitted-unit census is unchanged | **DECLARATION** | RETAINED, unmodified | added a `.define_function(` occurrence to `lowering/mod.rs` → **REDDENS** ✅ |
+| `every_source_term_carrier_holds_an_occurrence_and_never_a_bare_expression` | carrier fields hold occurrences | **DECLARATION** | RETAINED, unmodified | added a bare-term variant to `SourceContinuation` → ⭐ **CANNOT COMPILE** — the compiler enforces it |
+| `exactly_one_plan_origin_to_expression_lookup_exists` | one `origin → expression` route | **DECLARATION** | RETAINED, unmodified | added a second real `source_occurrence` call in production → **REDDENS** ✅ |
+| `no_collection_is_keyed_by_a_scheduling_entry` | no collection keys on an entry | **DECLARATION** | RETAINED, unmodified | added a fn indexing by `entry.0 as usize` → **REDDENS** ✅ |
+| `retained_closures_carry_a_static_origin_and_no_body_term` | closures carry origins | **DECLARATION** | RETAINED, unmodified | added a field to `Lowered::Closure` → ⭐ **CANNOT COMPILE** — every construction site must account for it |
+| `the_backend_production_surface_inventory_is_closed` | the production surface inventory | **DECLARATION** | RETAINED, unmodified | appended an **inline** `mod evade_inline { … }` → ⚠ **GREEN — A FINDING.** The pin only inspects lines ending in `;`, so `mod x { … }` grows the production surface invisibly. **Not fixed** (pre-existing pin; a GREEN is recorded, not repaired) |
+| `the_entry_carrying_types_are_module_private` | entry types are module-private | **DECLARATION** | RETAINED, unmodified | named `StaticNodeId` from `lowering/mod.rs` → ⭐ **CANNOT COMPILE** — module privacy makes the violation unrepresentable, the strongest outcome available |
+| `the_semantic_seed_api_accepts_only_occurrence_origins` | the seed API's accepted origins | **DECLARATION** | RETAINED, unmodified | respaced the two `children: &[StaticOriginId],` **declaration lines** → **REDDENS** ✅ (`left: 0, right: 2`) |
 
-⚠ **The "not attempted" cells are honest, not oversights.** Those eight pins are
-pre-existing declaration pins from earlier work packages; this respin is a
-**subtraction** and does not touch them, so running evasions against them would
-widen the diff beyond the WP without a criterion asking for it. **They are
-classified, which is what `AC-12` requires; they are not re-verified.** If the
-ring wants them evasion-tested, that is a separate pass and should be said so
-rather than assumed from this table.
+## Evasion outcomes — all 16 rows carry one, none say `not attempted`
+
+**Steward ruling on QA's block of `e8c757f3`:** `not attempted` is not an
+outcome, and `EVERY` includes pins this WP did not author. That is right, and
+the reasoning I had used was refuted by my own work: a mutation proof is
+**restored byte-identically**, which is exactly why `AC-10a`/`10b` coexist with
+`AC-11`'s empty production diff. **A byte-identically-restored evasion cannot
+widen the candidate diff.**
+
+Outcomes over the eight retained declaration pins:
+
+| outcome | count | pins |
+|---|---|---|
+| **REDDENS** ✅ | 4 | census · lookup · entry-key · seed-api |
+| ⭐ **CANNOT COMPILE** | 3 | source-term carrier · closure fields · entry-type privacy |
+| ⚠ **GREEN — finding** | 1 | production surface inventory |
+
+⭐ **The three compiler-enforced rows are the strongest evidence here, and they
+were the cheapest to obtain.** Naming `StaticNodeId` from `lowering/mod.rs` does
+not fail a test — **it fails to build**, because module privacy makes the
+violation unrepresentable. Where the language already refuses, a recorded
+failure-to-compile beats any detector.
+
+⚠ **The one GREEN is reported, not repaired** — `the_backend_production_surface_
+inventory_is_closed` misses an inline `mod x { … }` because it only inspects
+lines ending in `;`. Fixing a pre-existing pin would widen a subtraction WP.
+
+### ⛔ And one of my own evasions was invalid before it was right
+
+My first attempt at the seed-API row respaced **every** occurrence of
+`children: &[StaticOriginId],` — including the one inside the **test's own needle
+string**. The oracle was mutated to match its mutated subject, and it reported
+**GREEN**. Re-run against the declaration lines only, leaving the needle
+untouched, it **REDDENS** (`left: 0, right: 2`).
+
+⇒ **A mutation that edits the detector is not an evasion of it.** I would have
+filed a spurious finding against a sound pin. In the same campaign four earlier
+mutations never applied at all (bad anchors) and one "GREEN" came from a comment
+insertion that added nothing for the pin to catch — **verdicts from mutations
+that did not apply are not evidence**, and they look exactly like data.
 
 ⛔ **No pin in this table is REACHABILITY and RETAINED.** That combination is
 exactly what the ruling forbids, and its absence is the table's main claim.
