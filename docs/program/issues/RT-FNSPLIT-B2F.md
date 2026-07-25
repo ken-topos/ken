@@ -251,3 +251,85 @@ atomic boundary, **B2B must be re-derived or subsumed** — do not release it
 against its current frame. ⚠ Its premise ("a census taken while the emitter is
 still moving measures a moving target") is still sound; what changed is *which*
 node the verdict attaches to.
+
+## ⛔⛔ RE-HOMED FROM `B2O` — 2026-07-25 (Architect `evt_5yxjd1zqnyvcq`)
+
+**`B2O`'s `D6` source-route oracle was ruled OUT.** Its structural obligation is
+re-homed into `B2R` (ABI/layout population) and here. This section discharges
+the Steward's condition on that split: *narrowing a claim MOVES its acceptance
+criteria.*
+
+### The boundary-disposition view — derived, not hand-authored
+
+> `B2F` derives a boundary-disposition view **from validated graph facts** rather
+> than a parallel hand-authored table.
+
+**The classification is total, and the fourth arm is a rejection:**
+
+| graph fact | disposition |
+|---|---|
+| `StaticBody` edge between **distinct** function owners | **cross-owner call** |
+| same-owner ordinary edge | **local traversal** |
+| function edge to a **terminal** owner | **shared exit** |
+| any other combination | ⛔ **REJECT** |
+
+⚠ **The reject arm is load-bearing.** A taxonomy with no cell for the honest
+answer reads as complete while silently absorbing the cases it cannot classify.
+
+> ### ⛔⛔ THESE FOUR ARE **INVARIANTS `B2F` RELIES ON — NOT ACs `B2F`
+> ### DISCHARGES.** AN AC ASSERTING THEM WOULD BE **VACUOUS**.
+>
+> Raised by `runtime-implementer` (`evt_2m655yqt94ycg`) while held, and
+> **verified independently by the Steward against `96627f2a`**, not taken on
+> report:
+>
+> **`validate_function_units`** (`planning/static_transition/semantic_ir.rs`,
+> ~140 lines) **already enforces all four as `return Err` arms** in the
+> production bytes `B2O` landed:
+>
+> - `match descriptor.owner` over `Function` / `Terminal` / `TrapTerminal` with
+>   **no `_ =>` arm** — so a new `SemanticOwner` variant is a **compile error**,
+>   not a silent fall-through.
+> - `SemanticOwner::Function(to_unit) if to_unit == from_unit => {}` — the
+>   same-owner ordinary edge is the *accepting* arm; `Function(_) =>` rejects.
+> - `"static body edge targets a shared exit"` and `"shared exit has an outgoing
+>   transfer edge"` are explicit rejects.
+>
+> ⇒ **Planning REFUSES TO CONSTRUCT a violating graph.** A `B2F` control
+> asserting one of these laws is green on **every input that can reach `B2F`**,
+> because no violating input can be built to reach it. **It would read as
+> coverage and test nothing** — the vacuity failure this chain has already been
+> caught by once (the withdrawn `AC-5`).
+>
+> ⇒ **Cite them to `B2O` as inherited invariants. Do NOT re-assert them here.**
+>
+> ★ **The obligation that actually survives the re-home is `1.` below —
+> one-for-one consumption — which inert `B2O` cannot check and never could.**
+> When a claim moves between nodes, the part that survives is the part the
+> source node was structurally unable to verify. Everything else was already
+> discharged where it was written.
+
+**`B2F` must then:**
+
+1. **Consume that view one-for-one** — no second table, no re-derivation.
+2. **Emit each cross-owner transfer with its `B2R` descriptor.**
+3. **Preserve intra-owner locality.**
+4. **Enter the root unit.**
+5. **Remove the old cross-owner whole-configuration re-emission path.**
+
+### ★★ THE CONTROL INVERTS
+
+> *"A Rust wrapper or nested function relocation must remain **GREEN** for
+> semantic boundary classification, proving source topology is not authority."*
+
+⛔ Structured controls mutate **graph/owner axes**, never source text. A pin that
+reddens on a Rust refactor is measuring the wrong thing. **Four candidate SHAs
+were spent on this in `B2O`; do not re-derive it.**
+
+### If sequencing needs a separate durability node
+
+It **may expose only an inert derived semantic-disposition view.** It **must
+not** become a second authority table, and it gates **`B2F` switch-over — never
+`B2O` production landing.**
+
+⛔ **Do NOT add `syn`, any new dependency, or a source-parsing oracle.**

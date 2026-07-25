@@ -194,3 +194,36 @@ the corrected roots: **`evt_3k9xam3ws9pgz`**.
   function is bounded by its own static body/transition contract. `AC-G0`'s
   native-int constant is accounted **separately** from the per-static-function
   population.
+
+## ⛔⛔ RE-HOMED FROM `B2O` — 2026-07-25 (Architect `evt_5yxjd1zqnyvcq`)
+
+**`B2O`'s `D6` source-route oracle was ruled OUT and its structural obligation
+re-homed here and into `B2F`.** This section is the Steward's discharge of the
+condition set on that split: *narrowing a claim MOVES its acceptance criteria;
+it does not delete them.* If an obligation below cannot be traced to a
+successor, the split dropped coverage.
+
+**Ruled scope added to this node:**
+
+> `B2R` derives **ABI/layout population from the function units and the owner
+> cut** — not from any source-text census of Rust methods.
+
+⇒ The population `B2R` lays out is the **validated `SemanticOwner` partition
+`B2O` produces**, consumed as data. The authority for "what is a function unit"
+is the occurrence's `StaticOriginId`, its validated `SemanticOwner`, and the
+planned edge kind — **never** a Rust signature, name, visibility, or file.
+
+### ★★ THE CONTROL INVERTS — this binds every pin in this node
+
+> *"A Rust wrapper or nested function relocation must remain **GREEN** for
+> semantic boundary classification, proving source topology is not authority."*
+
+⛔ **A pin here that reddens because someone added a Rust wrapper, renamed a
+method, changed a visibility, or moved a `fn` between files is measuring the
+wrong thing and reporting success.** Structured controls mutate **graph/owner
+axes**. `B2O` spent **four candidate SHAs** discovering this; do not re-derive
+it. See `docs/program/wp/RT-FNSPLIT-B2O-body-ownership.md` `D6` for the full
+ledger, including the finding that the claim being defended was never required
+by any AC.
+
+⛔ **Do NOT add `syn`, any new dependency, or a source-parsing oracle.**
