@@ -159,3 +159,72 @@ production consumer.**
    be shared rather than callee-owned.
 3. If `descriptors.len()` moves off `nodes.len()`, the axes are not separable
    after all and the frame's "do not widen" boundary is not where it says it is.
+
+---
+
+# Respin predictions — `AC-11` and `AC-12`
+
+Written against the respin base (the seven reviewed commits carried onto
+`0e0821c1`), **before running any sweep or diff**, per `AC-11` and `AC-12`.
+Committed first so that a value re-fit to an observation is impossible rather
+than merely discouraged.
+
+## `AC-12` — the population of source-text-reading pins
+
+**The discriminator I am closing the enumeration with**, stated before the
+count so the count cannot be the thing that defines the population: a pin is
+*source-text-reading* iff its assertion consumes the **text of a `.rs` file**
+(via `include_str!` or a read of a source path) rather than a value the
+compiler or the planner produced. A pin that reads a `plan`, a descriptor, an
+owner, or an edge is **not** in this population however much prose surrounds
+it.
+
+**PREDICTED COUNT: 11 pins.** Enumerated, with the classification I predict for
+each:
+
+| # | pin | predicted class |
+|---|---|---|
+| 1 | `the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site` (the 59 census) | DECLARATION |
+| 2 | `the_ownership_classification_has_no_reach_into_any_emission_path` | DECLARATION |
+| 3 | `the_retained_body_routes_are_a_closed_inventory_of_named_functions` | **REACHABILITY** |
+| 4 | `the_routing_function_enumerator_sees_a_relocated_call` | **REACHABILITY** |
+| 5 | `the_method_boundary_oracle_enforces_its_impl_shape_premise` | **REACHABILITY** |
+| 6 | `a_cross_file_route_reddens_for_the_cross_file_reason` | **REACHABILITY** |
+| 7 | `the_method_boundary_oracle_holds_on_the_second_impl_file` | **REACHABILITY** |
+| 8 | the emitted-unit census pin (`D7`) | DECLARATION |
+| 9 | the `AC-1` field inventory | DECLARATION |
+| 10 | the `AC-4` module surface | DECLARATION |
+| 11 | the `D7` visibility inventory | DECLARATION |
+
+**PREDICTED SPLIT: 5 REACHABILITY (all removed), 6 DECLARATION (all retained).**
+
+⚠ **Where I expect to be wrong, recorded before measuring so the correction is
+visible rather than absorbed:** rows 8–11 are the ones I am least sure are
+*four distinct pins* — they may be fewer test functions carrying more than one
+assertion each, in which case the count falls and the split moves with it. I am
+**not** predicting a range; 11 is the number, and if the sweep says otherwise
+the sweep wins and the delta gets recorded as a miss, not smoothed away.
+
+⚠ `retained_body_helper_is_private` is a **helper, not a pin** — it is not in
+the 11. Its *measurement* (the helper carries no visibility qualifier) is a
+declaration fact that survives as frozen evidence; its *entailment* (therefore
+`mod.rs` cannot reach it) is reachability and goes out with the oracle. It is
+the one row that splits rather than being kept or deleted whole.
+
+## `AC-11` — no dependency edge, no production change
+
+Predicted against `96627f2a`:
+
+1. **`Cargo.toml` files differing: 0.**
+2. **`Cargo.lock` differing: 0 bytes.**
+3. **`syn` / `proc-macro2` / `quote` edges added to any `ken-*` crate: 0.**
+4. **Executable production diff in `static_transition.rs` + `semantic_ir.rs`:
+   EMPTY.** Non-`///` changed lines predicted **0**. `///` changes are permitted
+   and expected — they are folds 1–2's approved corrections, carried, not
+   re-authored.
+
+## Falsifier for the respin as a whole
+
+If the subtraction changes **any** non-comment line in either production file,
+the respin has stopped being a subtraction from the test and report surface and
+`AC-11` fails. That is a single `git diff` and it is the cheapest check here.
