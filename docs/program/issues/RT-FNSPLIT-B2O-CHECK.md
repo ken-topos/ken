@@ -3,13 +3,38 @@ id: RT-FNSPLIT-B2O-CHECK
 title: "the B2O checking layer advertises more than it enforces — structural closure for the item enumerator and reachability for the validator arms"
 status: ready
 owner: runtime
-size: S
+size: M
 gate: none
-depends_on: [RT-FNSPLIT-B2O]
+depends_on: [RT-FNSPLIT-B2O, RT-FNSPLIT-B2F]
 blocks: []
 github: null
-origin: Findings on landed B2O (origin/main e470ab65). (a) Steward's own AC-12 tally recorded one GREEN row as a reported follow-up rather than fixing it inside a subtraction WP. (b) Adversary report evt_kzc8ntfsyhn9 (thr_2seh2bm1kr5mh), P1/P2/P3. Grounding status, stated precisely: the Steward independently re-measured Finding A's filter, Finding B1's shadowing (both call sites and both error strings), and Finding B3's vacuous conjunct against the landed source. Findings B2 (the six witness-less arms) and C (the zero-instance capture class) are the Adversary's measurements, relayed unverified — the ring re-measures them, and must not treat this file as their corroboration. Steward-filed; Steward owns the frame and the AC/control placement.
+origin: Findings on landed B2O (origin/main e470ab65). (a) Steward's own AC-12 tally recorded one GREEN row as a reported follow-up rather than fixing it inside a subtraction WP. (b) Adversary report evt_kzc8ntfsyhn9 (thr_2seh2bm1kr5mh), P1/P2/P3. SCOPE GREW 2026-07-25 on the B2R hunt (adversary evt_3wjme1fk20dw5) plus Architect ruling evt_7ggqdk61pxzzf, which routed the C4 imported-edge repair HERE and explicitly forbade B2F from patching it; two further findings (P1 the C4 exclusion, P2 the entailed second direction in AbiPlane::validate) joined, and the size moved S -> M because P1 is a design task rather than a mechanical closure. Grounding status, stated precisely: the Steward independently re-measured Finding A's filter, Finding B1's shadowing (both call sites and both error strings), Finding B3's vacuous conjunct, and derived P2 independently against 6c6de5cc. Findings B2 (the six witness-less arms) and C (the zero-instance capture class) are the Adversary's measurements, relayed unverified; for P1 the Steward verified the code shape but NOT the fixture measurements. The ring re-measures everything and must not treat this file as anyone's corroboration. Steward-filed; Steward owns the frame and the AC/control placement.
 ---
+
+> ## ▶ THE FRAME IS WRITTEN — read it, not this file
+>
+> `docs/program/wp/RT-FNSPLIT-B2O-CHECK-advertised-vs-enforced.md`
+>
+> **Read the frame for scope and acceptance.** This file records
+> the findings as measured; the frame carries the deliverables, the ACs, and the
+> do-not-reopen guardrails.
+>
+> ### ⛔ `RT-FNSPLIT-B2F` IS LISTED AS A DEPENDENCY ON CONTENTION, NOT ON LOGIC
+>
+> `B2F` is **not** a logical prerequisite. The Architect ruled
+> (`evt_7ggqdk61pxzzf`) that `B2F` must establish representability
+> **independently and fail-closed**, so it does not wait on `P1`'s repair.
+>
+> The constraint is **file contention**: `B2F` is an atomic `L` switch-over that
+> rewrites the emission path across **all four** files this node touches
+> (`abi.rs`, `semantic_ir.rs`, `static_transition.rs`, `tests/control.rs`). It
+> cannot be split, so it goes first. The dependency is recorded in `depends_on`
+> so the tracker stops offering this node as frontier — **the mechanism is a
+> dependency; the reason is contention.**
+>
+> ⚠ **Every anchor in this file will move when `B2F` lands.** That already
+> happened once: these citations were written against `e470ab65` and `B2R` made
+> them stale *before the frame existed*. Re-derive at pickup.
 
 > ## One node, because both findings are the SAME defect in two substrates
 >
