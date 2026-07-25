@@ -205,7 +205,7 @@ fn splay_violations(source: &str) -> Vec<String> {
 
 fn assert_no_zero_indent_continuation(label: &str, source: &str) {
     const TOP_LEVEL_PREFIXES: &[&str] = &[
-        "program", "package", "view", "const", "fn", "proc", "space", "prove", "prop", "lemma",
+        "program", "package", "view", "const", "fn", "proc", "space", "prove", "prop", "theorem",
         "proof", "axiom", "law", "data", "def", "foreign", "temporal", "class", "instance",
         "derive", "module", "import", "export", "let", "pub", "--", "}",
     ];

@@ -49,11 +49,11 @@ fn canonical_operations_compute_on_concrete_naturals() {
     env.elaborate_ken_md_file(NAT_ARITH_KEN_MD)
         .expect("Data/Numeric/Nat/Arithmetic.ken.md must elaborate");
     env.elaborate_decl(
-        "lemma add_two_three_check : Equal Nat (add (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))) (Suc (Suc (Suc (Suc (Suc Zero))))) = Proved",
+        "theorem add_two_three_check : Equal Nat (add (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))) (Suc (Suc (Suc (Suc (Suc Zero))))) = Proved",
     )
     .expect("add 2 3 must compute to 5");
     env.elaborate_decl(
-        "lemma mul_two_three_check : Equal Nat (mul (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))) (Suc (Suc (Suc (Suc (Suc (Suc Zero)))))) = Proved",
+        "theorem mul_two_three_check : Equal Nat (mul (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))) (Suc (Suc (Suc (Suc (Suc (Suc Zero)))))) = Proved",
     )
     .expect("mul 2 3 must compute to 6");
 }

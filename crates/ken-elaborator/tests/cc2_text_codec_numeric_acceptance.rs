@@ -272,7 +272,7 @@ fn bijection_prerequisite_is_the_single_separately_homed_assumption() {
         .contains("axiom string_to_list_char_retraction"));
     assert!(extracted
         .source
-        .contains("lemma string_to_list_char_injective"));
+        .contains("theorem string_to_list_char_injective"));
 
     let mut env = dependency_env();
     let before: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
@@ -307,8 +307,8 @@ fn located_numeric_discriminators_and_codec_boundary_are_checked() {
         );
     }
 
-    assert!(CODEC_KEN_MD.contains("lemma ascii_view_none"));
-    assert!(CODEC_KEN_MD.contains("lemma ascii_view_some"));
+    assert!(CODEC_KEN_MD.contains("theorem ascii_view_none"));
+    assert!(CODEC_KEN_MD.contains("theorem ascii_view_some"));
     assert!(CODEC_KEN_MD.contains("const ascii_a_view"));
     assert!(CODEC_KEN_MD.contains("const ascii_a_missing_view"));
     assert!(CODEC_KEN_MD.contains("const utf8_lead_view"));
@@ -403,7 +403,7 @@ fn verified_roundtrip_stays_structural_and_key_instances_stay_out_of_numeric() {
     let extracted = ken_elaborator::literate::extract_ken_md(NUMERIC_KEN_MD)
         .expect("Numeric.ken.md must extract");
     let checked = extracted.source;
-    assert!(checked.contains("lemma format_digits_roundtrip"));
+    assert!(checked.contains("theorem format_digits_roundtrip"));
     assert!(!checked.contains("instance DecEq String"));
     assert!(!checked.contains("instance Ord String"));
     assert!(!checked.contains("Bytes↔List"));

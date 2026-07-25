@@ -812,7 +812,7 @@ fn walk_decl(decl: &SurfaceDecl, facts: &mut RootFacts) {
             }
             facts.decl_refs.push((name.clone(), refs));
         }
-        SurfaceDecl::LemmaDecl {
+        SurfaceDecl::TheoremDecl {
             name,
             params,
             theorem,

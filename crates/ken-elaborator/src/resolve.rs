@@ -112,8 +112,8 @@ pub enum RDeclKind {
     Prove,
     /// `prop P ... : Omega where { ... }`.
     Prop { intros: Vec<RPropIntro> },
-    /// `lemma name ... : theorem = proof`.
-    Lemma,
+    /// `theorem name ... : theorem = proof`.
+    Theorem,
     /// `proof p for subject ... : theorem = proof`.
     AttachedProof { subject: String, proof_name: String },
     /// A `law Name (param) { field : φ ; … }` bundle.
@@ -955,7 +955,7 @@ pub(crate) fn resolve_decl_in_unit(
             })
         }
 
-        Decl::LemmaDecl {
+        Decl::TheoremDecl {
             name,
             params,
             theorem,
@@ -972,7 +972,7 @@ pub(crate) fn resolve_decl_in_unit(
                 requires: vec![],
                 ensures: vec![],
                 span: span.clone(),
-                kind: RDeclKind::Lemma,
+                kind: RDeclKind::Theorem,
             })
         }
 
@@ -992,7 +992,7 @@ pub(crate) fn resolve_decl_in_unit(
                 requires: vec![],
                 ensures: vec![],
                 span: span.clone(),
-                kind: RDeclKind::Lemma,
+                kind: RDeclKind::Theorem,
             })
         }
 

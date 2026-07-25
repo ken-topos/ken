@@ -195,7 +195,7 @@ impl Parser {
             Token::KwLet => self.parse_let_decl(start),
             Token::KwProve => self.parse_prove_decl(start),
             Token::KwProp => self.parse_prop_decl(start),
-            Token::KwLemma => self.parse_lemma_decl(start),
+            Token::KwTheorem => self.parse_theorem_decl(start),
             Token::KwAxiom => self.parse_axiom_decl(start),
             Token::KwProof => self.parse_attached_proof_decl(start),
             Token::KwLaw => self.parse_law_decl(start),
@@ -226,7 +226,7 @@ impl Parser {
             Token::KwPackage => self.parse_boundary_decl(start, BoundaryKind::Package),
             other => Err(ElabError::ParseError {
                 msg: format!(
-                    "expected 'view', 'const', 'fn', 'proc', 'let', 'prove', 'prop', 'lemma', 'proof', \
+                    "expected 'view', 'const', 'fn', 'proc', 'let', 'prove', 'prop', 'theorem', 'proof', \
                      'law', 'data', 'def', 'foreign', 'temporal', 'class', 'instance', \
                      'derive', 'module', 'import', 'export', \
                      'pub', 'program', 'package', or 'space proc', found {:?}",
@@ -600,9 +600,9 @@ impl Parser {
         })
     }
 
-    /// `lemma name binder* : theorem = proof`
-    fn parse_lemma_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
-        self.advance(); // consume 'lemma'
+    /// `theorem name binder* : theorem = proof`
+    fn parse_theorem_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'theorem'
         let (name, _) = self.expect_ident()?;
         let params = self.parse_binders()?;
         self.expect(&Token::Colon)?;
@@ -610,7 +610,7 @@ impl Parser {
         self.expect(&Token::Eq)?;
         let body = self.parse_expr()?;
         let end = body.span().end;
-        Ok(Decl::LemmaDecl {
+        Ok(Decl::TheoremDecl {
             name,
             params,
             theorem,

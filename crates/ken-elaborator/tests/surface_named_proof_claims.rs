@@ -1,7 +1,7 @@
 //! SURF named proof-claim machinery.
 //!
 //! Pins `spec/30-surface/33-declarations.md` §8 and the conformance seed:
-//! `prop`, standalone `lemma`, and attached `proof <name> for <subject>` are
+//! `prop`, standalone `theorem`, and attached `proof <name> for <subject>` are
 //! ordinary checked proof terms over the existing proof lane. Attached proofs
 //! resolve by canonical `subject::proof_name`, never by a bare proof name.
 
@@ -54,7 +54,7 @@ fn local_prop_intro_resolves_through_the_family_name() {
         prop HasProof (a : Type) : Omega where {
           intro : HasProof a
         }
-        lemma consume (a : Type) : HasProof a = HasProof.intro a
+        theorem consume (a : Type) : HasProof a = HasProof.intro a
         "#,
     );
 
@@ -64,11 +64,11 @@ fn local_prop_intro_resolves_through_the_family_name() {
 }
 
 #[test]
-fn standalone_lemma_is_checked_in_ordinary_namespace() {
+fn standalone_theorem_is_checked_in_ordinary_namespace() {
     let env = elaborate_ok(
         r#"
-        lemma int_self (x : Int) : Equal Int x x = Refl
-        lemma consume (x : Int) : Equal Int x x = int_self x
+        theorem int_self (x : Int) : Equal Int x x = Refl
+        theorem consume (x : Int) : Equal Int x x = int_self x
         "#,
     );
 
@@ -82,8 +82,8 @@ fn attached_proof_canonical_path_and_selector_both_resolve() {
         r#"
         fn id (x : Int) : Int = x
         proof id_self for id (x : Int) : Equal Int (id x) x = Refl
-        lemma consume_path (x : Int) : Equal Int (id x) x = id::id_self x
-        lemma consume_selector (x : Int) : Equal Int (id x) x =
+        theorem consume_path (x : Int) : Equal Int (id x) x = id::id_self x
+        theorem consume_selector (x : Int) : Equal Int (id x) x =
           (proof id_self for id) x
         "#,
     );
@@ -101,7 +101,7 @@ fn bare_attached_proof_name_is_not_in_ordinary_namespace() {
         r#"
         fn id (x : Int) : Int = x
         proof id_self for id (x : Int) : Equal Int (id x) x = Refl
-        lemma bad (x : Int) : Equal Int (id x) x = id_self x
+        theorem bad (x : Int) : Equal Int (id x) x = id_self x
         "#,
     );
 
@@ -114,8 +114,8 @@ fn bare_attached_proof_name_is_not_in_ordinary_namespace() {
 }
 
 #[test]
-fn non_proof_lemma_result_is_rejected() {
-    let err = elaborate_err("lemma not_proof (x : Int) : Int = x");
+fn non_proof_theorem_result_is_rejected() {
+    let err = elaborate_err("theorem not_proof (x : Int) : Int = x");
 
     match err {
         ElabError::TypeMismatch { reason, .. } => {
@@ -124,7 +124,7 @@ fn non_proof_lemma_result_is_rejected() {
                 "diagnostic should name the proof sort, got {reason}"
             );
         }
-        other => panic!("expected TypeMismatch for non-proof lemma, got {other:?}"),
+        other => panic!("expected TypeMismatch for non-proof theorem, got {other:?}"),
     }
 }
 
@@ -183,12 +183,12 @@ fn duplicate_attached_proof_name_on_same_subject_is_rejected() {
 }
 
 #[test]
-fn helper_lemma_can_bridge_same_subject_attached_proofs() {
+fn helper_theorem_can_bridge_same_subject_attached_proofs() {
     let env = elaborate_ok(
         r#"
         fn id (x : Int) : Int = x
         proof p1 for id (x : Int) : Equal Int (id x) x = Refl
-        lemma helper (x : Int) : Equal Int (id x) x = id::p1 x
+        theorem helper (x : Int) : Equal Int (id x) x = id::p1 x
         proof p2 for id (x : Int) : Equal Int (id x) x = helper x
         "#,
     );
@@ -207,7 +207,7 @@ fn module_selective_import_exposes_canonical_attached_proof_only() {
           pub proof id_self for id (x : Int) : Equal Int (id x) x = Refl
         }
         import M (id)
-        lemma consume (x : Int) : Equal Int (id x) x = id::id_self x
+        theorem consume (x : Int) : Equal Int (id x) x = id::id_self x
         "#,
     );
 
@@ -226,7 +226,7 @@ fn module_selective_import_exposes_prop_intro_without_bare_intro() {
           }
         }
         import M (HasProof)
-        lemma consume (a : Type) : HasProof a = HasProof.intro a
+        theorem consume (a : Type) : HasProof a = HasProof.intro a
         "#,
     );
 
@@ -245,7 +245,7 @@ fn qualified_module_import_exposes_prop_intro_through_family_path() {
           }
         }
         import M
-        lemma consume (a : Type) : M.HasProof a = M.HasProof.intro a
+        theorem consume (a : Type) : M.HasProof a = M.HasProof.intro a
         "#,
     );
 

@@ -10,16 +10,16 @@ const PAIR_LENS_SOURCE: &str = r#"
 fn setFstPairBoolBool (s : Pair Bool Bool) (b : Bool) : Pair Bool Bool =
   mk_pair Bool Bool b (pair_snd Bool Bool s)
 
-lemma pair_refl_fn (s : Pair Bool Bool) : Equal (Pair Bool Bool) s s =
+theorem pair_refl_fn (s : Pair Bool Bool) : Equal (Pair Bool Bool) s s =
   Refl
 
-lemma fstLensSetGet (s : Pair Bool Bool)
+theorem fstLensSetGet (s : Pair Bool Bool)
   : Equal (Pair Bool Bool)
       (setFstPairBoolBool s (pair_fst Bool Bool s))
       s =
   Refl
 
-lemma fstLensSetSet (s : Pair Bool Bool) (b : Bool) (c : Bool)
+theorem fstLensSetSet (s : Pair Bool Bool) (b : Bool) (c : Bool)
   : Equal (Pair Bool Bool)
       (setFstPairBoolBool (setFstPairBoolBool s b) c)
       (setFstPairBoolBool s c) =
@@ -40,7 +40,7 @@ fn wrong_endpoint_pair_lens_law_still_rejects() {
         .expect("base pair lens source elaborates");
 
     let bad = env.elaborate_decl(
-        "lemma badSetGet (s : Pair Bool Bool) \
+        "theorem badSetGet (s : Pair Bool Bool) \
            : Equal (Pair Bool Bool) (setFstPairBoolBool s True) s = \
            Refl",
     );
@@ -57,7 +57,7 @@ fn componentwise_proof_is_not_unrelated_full_pair_equality() {
         .expect("base pair lens source elaborates");
 
     let bad = env.elaborate_decl(
-        "lemma badComponentAsFull \
+        "theorem badComponentAsFull \
            (s : Pair Bool Bool) \
            (t : Pair Bool Bool) \
            (p : And \

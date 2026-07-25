@@ -30,7 +30,7 @@ fn assert_bool_reduces(env: &mut ElabEnv, name: &str, expression: &str, expected
     env.elaborate_decl(&format!("const {name} : Bool = {expression}"))
         .unwrap_or_else(|e| panic!("{name} must elaborate: {e}"));
     env.elaborate_decl(&format!(
-        "lemma {name}_reduces : Equal Bool {name} {expected} = Proved"
+        "theorem {name}_reduces : Equal Bool {name} {expected} = Proved"
     ))
     .unwrap_or_else(|e| panic!("{name} must reduce to {expected}: {e}"));
 }
@@ -39,7 +39,7 @@ fn assert_ord_result_reduces(env: &mut ElabEnv, name: &str, expression: &str, ex
     env.elaborate_decl(&format!("const {name} : OrdResult = {expression}"))
         .unwrap_or_else(|e| panic!("{name} must elaborate: {e}"));
     env.elaborate_decl(&format!(
-        "lemma {name}_reduces : Equal OrdResult {name} {expected} = Proved"
+        "theorem {name}_reduces : Equal OrdResult {name} {expected} = Proved"
     ))
     .unwrap_or_else(|e| panic!("{name} must reduce to {expected}: {e}"));
 }
@@ -74,23 +74,23 @@ fn raw_compare_discriminates_all_results_and_strict_negatives() {
 
     assert_decl(
         &mut env,
-        "lemma raw_eq_positive : Equal Bool True True = compare_raw::eq_sound Bool bool_leq (Ord_instance_Bool).antisym True True Proved",
+        "theorem raw_eq_positive : Equal Bool True True = compare_raw::eq_sound Bool bool_leq (Ord_instance_Bool).antisym True True Proved",
     );
     assert_decl(
         &mut env,
-        "lemma raw_lt_positive : Equal Bool (bool_leq False True) True = compare_raw::lt_sound Bool bool_leq False True Proved",
+        "theorem raw_lt_positive : Equal Bool (bool_leq False True) True = compare_raw::lt_sound Bool bool_leq False True Proved",
     );
     assert_decl(
         &mut env,
-        "lemma raw_gt_positive : Equal Bool (bool_leq False True) True = compare_raw::gt_sound Bool bool_leq (Ord_instance_Bool).total True False Proved",
+        "theorem raw_gt_positive : Equal Bool (bool_leq False True) True = compare_raw::gt_sound Bool bool_leq (Ord_instance_Bool).total True False Proved",
     );
     assert_decl(
         &mut env,
-        "lemma raw_lt_reverse_negative : Equal Bool (bool_leq True False) False = compare_raw::lt_reverse_false Bool bool_leq False True Proved",
+        "theorem raw_lt_reverse_negative : Equal Bool (bool_leq True False) False = compare_raw::lt_reverse_false Bool bool_leq False True Proved",
     );
     assert_decl(
         &mut env,
-        "lemma raw_gt_forward_negative : Equal Bool (bool_leq True False) False = compare_raw::gt_forward_false Bool bool_leq True False Proved",
+        "theorem raw_gt_forward_negative : Equal Bool (bool_leq True False) False = compare_raw::gt_forward_false Bool bool_leq True False Proved",
     );
 }
 
@@ -183,19 +183,19 @@ fn structural_ord_instances_and_all_laws_are_checked_zero_delta() {
     let pair_leq = "pair_ord_leq Bool Bool Ord_instance_Bool Ord_instance_Bool";
     assert_decl(
         &mut env,
-        &format!("lemma pair_refl_law : IsTrue ({pair_leq} {p1} {p1}) = ({pair_ord}).refl {p1}"),
+        &format!("theorem pair_refl_law : IsTrue ({pair_leq} {p1} {p1}) = ({pair_ord}).refl {p1}"),
     );
     assert_decl(
         &mut env,
-        &format!("lemma pair_antisym_law : Equal (Pair Bool Bool) {p1} {p1} = ({pair_ord}).antisym {p1} {p1} Proved Proved"),
+        &format!("theorem pair_antisym_law : Equal (Pair Bool Bool) {p1} {p1} = ({pair_ord}).antisym {p1} {p1} Proved Proved"),
     );
     assert_decl(
         &mut env,
-        &format!("lemma pair_trans_law : IsTrue ({pair_leq} {p0} {p2}) = ({pair_ord}).trans {p0} {p1} {p2} Proved Proved"),
+        &format!("theorem pair_trans_law : IsTrue ({pair_leq} {p0} {p2}) = ({pair_ord}).trans {p0} {p1} {p2} Proved Proved"),
     );
     assert_decl(
         &mut env,
-        &format!("lemma pair_total_law : IsTrue (bool_or ({pair_leq} {p2} {p0}) ({pair_leq} {p0} {p2})) = ({pair_ord}).total {p2} {p0}"),
+        &format!("theorem pair_total_law : IsTrue (bool_or ({pair_leq} {p2} {p0}) ({pair_leq} {p0} {p2})) = ({pair_ord}).total {p2} {p0}"),
     );
 
     let list_ord = "Ord_instance_List Bool Ord_instance_Bool";
@@ -205,19 +205,19 @@ fn structural_ord_instances_and_all_laws_are_checked_zero_delta() {
     let list_leq = "list_ord_leq Bool Ord_instance_Bool";
     assert_decl(
         &mut env,
-        &format!("lemma list_refl_law : IsTrue ({list_leq} {ys} {ys}) = ({list_ord}).refl {ys}"),
+        &format!("theorem list_refl_law : IsTrue ({list_leq} {ys} {ys}) = ({list_ord}).refl {ys}"),
     );
     assert_decl(
         &mut env,
-        &format!("lemma list_antisym_law : Equal (List Bool) {ys} {ys} = ({list_ord}).antisym {ys} {ys} Proved Proved"),
+        &format!("theorem list_antisym_law : Equal (List Bool) {ys} {ys} = ({list_ord}).antisym {ys} {ys} Proved Proved"),
     );
     assert_decl(
         &mut env,
-        &format!("lemma list_trans_law : IsTrue ({list_leq} {xs} {zs}) = ({list_ord}).trans {xs} {ys} {zs} Proved Proved"),
+        &format!("theorem list_trans_law : IsTrue ({list_leq} {xs} {zs}) = ({list_ord}).trans {xs} {ys} {zs} Proved Proved"),
     );
     assert_decl(
         &mut env,
-        &format!("lemma list_total_law : IsTrue (bool_or ({list_leq} {zs} {xs}) ({list_leq} {xs} {zs})) = ({list_ord}).total {zs} {xs}"),
+        &format!("theorem list_total_law : IsTrue (bool_or ({list_leq} {zs} {xs}) ({list_leq} {xs} {zs})) = ({list_ord}).total {zs} {xs}"),
     );
 }
 

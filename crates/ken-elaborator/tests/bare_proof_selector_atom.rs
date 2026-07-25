@@ -32,9 +32,9 @@ fn bare_grouped_and_canonical_selectors_have_identical_ast_and_elaboration() {
         r#"
         fn s (x : Int) : Int = x
         proof p for s (x : Int) : Equal Int (s x) x = Refl
-        lemma via_bare (x : Int) : Equal Int (s x) x = proof p for s x
-        lemma via_grouped (x : Int) : Equal Int (s x) x = (proof p for s) x
-        lemma via_canonical (x : Int) : Equal Int (s x) x = s::p x
+        theorem via_bare (x : Int) : Equal Int (s x) x = proof p for s x
+        theorem via_grouped (x : Int) : Equal Int (s x) x = (proof p for s) x
+        theorem via_canonical (x : Int) : Equal Int (s x) x = s::p x
         "#,
     )
     .expect("all three selector spellings should elaborate");

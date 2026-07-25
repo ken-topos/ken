@@ -1471,7 +1471,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     )
     .map_err(|e| ElabError::Internal(format!("prelude transfer_count_positive_prop failed: {e}")))?;
     elab.elaborate_decl(
-        "lemma transfer_count_positive (count : TransferCount) : transfer_count_positive_prop count = match count { PrivateTransferCount predecessor remaining |-> Refl }",
+        "theorem transfer_count_positive (count : TransferCount) : transfer_count_positive_prop count = match count { PrivateTransferCount predecessor remaining |-> Refl }",
     )
     .map_err(|e| ElabError::Internal(format!("prelude transfer_count_nat::positive failed: {e}")))?;
     elab.elaborate_decl(
@@ -2085,7 +2085,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     )
     .map_err(|e| ElabError::Internal(format!("prelude write_all_call_bound failed: {e}")))?;
     elab.elaborate_decl(
-        "lemma buffer_suc_cong (x : Nat) (y : Nat) (p : Equal Nat x y) : Equal Nat (Suc x) (Suc y) = J (\\z _. Equal Nat (Suc x) (Suc z)) Refl p",
+        "theorem buffer_suc_cong (x : Nat) (y : Nat) (p : Equal Nat x y) : Equal Nat (Suc x) (Suc y) = J (\\z _. Equal Nat (Suc x) (Suc z)) Refl p",
     )
     .map_err(|e| ElabError::Internal(format!("prelude buffer_suc_cong failed: {e}")))?;
     elab.elaborate_decl(

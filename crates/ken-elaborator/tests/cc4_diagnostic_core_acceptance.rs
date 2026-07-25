@@ -222,7 +222,7 @@ fn exact_non_degenerate_injections_preserve_every_location_field() {
               (Suc (Suc (Suc Zero)))
               (Suc (Suc (Suc Zero))))
 
-        lemma cc4_valid_range :
+        theorem cc4_valid_range :
             ValidByteRange
               (MkByteRange
                 (Suc (Suc Zero))
@@ -231,7 +231,7 @@ fn exact_non_degenerate_injections_preserve_every_location_field() {
 
         const cc4_environment_name : String = "PATH"
 
-        lemma cc4_valid_environment :
+        theorem cc4_valid_environment :
             ValidOrigin (environment_origin cc4_environment_name) =
           Proved
         "#,
@@ -239,14 +239,14 @@ fn exact_non_degenerate_injections_preserve_every_location_field() {
     .expect("non-degenerate CC4 probes must elaborate");
 
     let invalid = env.elaborate_decl(
-        "lemma cc4_invalid_range : ValidByteRange (MkByteRange (Suc Zero) Zero) = Proved",
+        "theorem cc4_invalid_range : ValidByteRange (MkByteRange (Suc Zero) Zero) = Proved",
     );
     assert!(
         matches!(invalid, Err(ElabError::KernelRejected { .. })),
         "start > end must fail specifically at kernel checking, got {invalid:?}"
     );
     let empty_config = env.elaborate_decl(
-        "lemma cc4_empty_config : ValidOrigin (config_key_origin (Nil String)) = Proved",
+        "theorem cc4_empty_config : ValidOrigin (config_key_origin (Nil String)) = Proved",
     );
     assert!(
         matches!(empty_config, Err(ElabError::KernelRejected { .. })),

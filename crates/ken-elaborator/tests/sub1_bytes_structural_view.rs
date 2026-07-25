@@ -317,20 +317,20 @@ fn ac4_roundtrip_propositions_are_usable_but_not_refl_reductions() {
     let trust_before: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
 
     env.elaborate_decl(
-        "lemma use_bytes_roundtrip (bs : Bytes) : \
+        "theorem use_bytes_roundtrip (bs : Bytes) : \
          Equal Bytes (list_to_bytes (bytes_to_list bs)) bs = \
          bytes_list_roundtrip bs",
     )
     .expect("registered Bytes roundtrip proposition must be usable");
     env.elaborate_decl(
-        "lemma use_list_roundtrip (xs : List UInt8) : \
+        "theorem use_list_roundtrip (xs : List UInt8) : \
          Equal (List UInt8) (bytes_to_list (list_to_bytes xs)) xs = \
          list_bytes_roundtrip xs",
     )
     .expect("registered List UInt8 roundtrip proposition must be usable");
 
     let refl = env.elaborate_decl(
-        "lemma false_refl_roundtrip (bs : Bytes) : \
+        "theorem false_refl_roundtrip (bs : Bytes) : \
          Equal Bytes (list_to_bytes (bytes_to_list bs)) bs = Refl",
     );
     assert!(

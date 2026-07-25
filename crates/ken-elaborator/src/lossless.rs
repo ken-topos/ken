@@ -404,7 +404,7 @@ fn collect_decl_spans(decl: &Decl, out: &mut Vec<Span>) {
                 collect_type_spans(&intro.ty, out);
             }
         }
-        Decl::LemmaDecl {
+        Decl::TheoremDecl {
             params,
             theorem,
             body,

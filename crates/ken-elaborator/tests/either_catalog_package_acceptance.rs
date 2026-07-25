@@ -156,11 +156,11 @@ fn ac8_mapleft_leaves_right_untouched() {
 fn swap_involutive_concrete_examples() {
     let mut env = base_env();
     env.elaborate_decl(
-        "lemma swapInvolutiveLeftExample : Equal (Either Nat Nat) (swap Nat Nat (swap Nat Nat (Left Nat Nat Zero))) (Left Nat Nat Zero) = swap::involutive Nat Nat (Left Nat Nat Zero)",
+        "theorem swapInvolutiveLeftExample : Equal (Either Nat Nat) (swap Nat Nat (swap Nat Nat (Left Nat Nat Zero))) (Left Nat Nat Zero) = swap::involutive Nat Nat (Left Nat Nat Zero)",
     )
     .expect("swap(swap(Left 0)) = Left 0");
     env.elaborate_decl(
-        "lemma swapInvolutiveRightExample : Equal (Either Nat Nat) (swap Nat Nat (swap Nat Nat (Right Nat Nat Zero))) (Right Nat Nat Zero) = swap::involutive Nat Nat (Right Nat Nat Zero)",
+        "theorem swapInvolutiveRightExample : Equal (Either Nat Nat) (swap Nat Nat (swap Nat Nat (Right Nat Nat Zero))) (Right Nat Nat Zero) = swap::involutive Nat Nat (Right Nat Nat Zero)",
     )
     .expect("swap(swap(Right 0)) = Right 0");
 }

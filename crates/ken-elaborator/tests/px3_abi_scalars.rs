@@ -270,7 +270,7 @@ fn ac3_raw_narrowing_is_private_and_ac5_refl_stays_rejected() {
         );
 
         env.elaborate_decl(&format!(
-            "lemma px3_{snake}_ordinary_refl (x : {name}) : Equal {name} x x = Refl"
+            "theorem px3_{snake}_ordinary_refl (x : {name}) : Equal {name} x x = Refl"
         ))
         .expect("ordinary Refl control must remain valid");
     }

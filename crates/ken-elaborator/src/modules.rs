@@ -762,13 +762,13 @@ fn qualify_decl_name(decl: &Decl, prefix: &str) -> Decl {
             intros: intros.clone(),
             span: span.clone(),
         },
-        Decl::LemmaDecl {
+        Decl::TheoremDecl {
             name,
             params,
             theorem,
             body,
             span,
-        } => Decl::LemmaDecl {
+        } => Decl::TheoremDecl {
             name: qualify(prefix, name),
             params: params.clone(),
             theorem: theorem.clone(),
@@ -1009,7 +1009,7 @@ fn rewrite_rdecl(
                 })
                 .collect::<Result<Vec<_>, ElabError>>()?,
         },
-        RDeclKind::Lemma => RDeclKind::Lemma,
+        RDeclKind::Theorem => RDeclKind::Theorem,
         RDeclKind::AttachedProof {
             subject,
             proof_name,
@@ -1174,7 +1174,7 @@ fn is_qualifiable(decl: &Decl) -> bool {
         Decl::ViewDecl { .. }
             | Decl::LetDecl { .. }
             | Decl::PropDecl { .. }
-            | Decl::LemmaDecl { .. }
+            | Decl::TheoremDecl { .. }
             | Decl::AxiomDecl { .. }
             | Decl::AttachedProofDecl { .. }
             | Decl::DataDecl { .. }
@@ -1188,7 +1188,7 @@ fn is_recursive_candidate(decl: &Decl) -> bool {
         decl,
         Decl::ViewDecl { .. }
             | Decl::LetDecl { .. }
-            | Decl::LemmaDecl { .. }
+            | Decl::TheoremDecl { .. }
             | Decl::AxiomDecl { .. }
             | Decl::AttachedProofDecl { .. }
     )
@@ -1437,7 +1437,7 @@ fn expand_scope(
                         || (adj[k].contains(&k)
                             && matches!(
                                 rdecls[k].kind,
-                                RDeclKind::Lemma | RDeclKind::AttachedProof { .. }
+                                RDeclKind::Theorem | RDeclKind::AttachedProof { .. }
                             ));
                     if !recursive {
                         let rdecl = &rdecls[k];
@@ -1449,7 +1449,7 @@ fn expand_scope(
                         let has_proof = members.iter().any(|rdecl| {
                             matches!(
                                 rdecl.kind,
-                                RDeclKind::Lemma | RDeclKind::AttachedProof { .. }
+                                RDeclKind::Theorem | RDeclKind::AttachedProof { .. }
                             )
                         });
                         let has_computational = members.iter().any(|rdecl| {
@@ -1477,7 +1477,7 @@ fn expand_scope(
                         for rdecl in &members {
                             let simple_kind = matches!(
                                 &rdecl.kind,
-                                RDeclKind::Let | RDeclKind::Lemma | RDeclKind::AttachedProof { .. }
+                                RDeclKind::Let | RDeclKind::Theorem | RDeclKind::AttachedProof { .. }
                             ) || matches!(
                                 &rdecl.kind,
                                 RDeclKind::View { constraints, is_space_op, .. }
