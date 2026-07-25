@@ -141,6 +141,38 @@
 > fleet's single-threading is largely **DAG-forced**, not a sequencing failure.
 > **Those two are unframed and are the only parallel ABI work available.**
 >
+> ### 0b-ii. ⏳ DOC-W2 IS PUBLISHING — PR #936, branch FROZEN
+>
+> **PR #936 open at exact `e1524de173a5709ef15e732fb4f307110a648025`.** Decision
+> **`dec_7qywmfc5k8834` RESOLVED**, verified fresh from the object
+> (`resolved_at 2026-07-25T01:02:52Z`), three-lane gate satisfied (Librarian
+> `library/` · Architect `crates/` · Steward `agent/`).
+>
+> **Publisher log:** `$SCRATCH/docw2-publish.log`. It is in its **CI pre-poll
+> wait (~567s)** — ⚠ **waiting on CI is NORMAL (ADR 0002), not a stall.** Check
+> the log and `pgrep -f scripted-pr-automerge` before concluding anything.
+> ⚠ **NOT doc-only** (touches `crates/ken-cli/tests`, `Cargo.toml`, `Cargo.lock`)
+> ⇒ the full CI gate runs, including workspace + `--locked`.
+>
+> **ON MERGE:** verify landed `origin/main` by **CONTENT** → request retros from
+> `doc-leader` → **notify the adversary (report-only, never reply)** → then
+> re-derive the `SOURCE-ATTESTATIONS` row before releasing `ABI-R1`.
+>
+> ⛔ **I deliberately did NOT add the playbook's tracker-sync commit to the
+> candidate** — it would have made the merged SHA differ from the SHA three
+> reviewers approved, and expanded reviewed scope past the three lanes.
+> **Exact-SHA integrity beats tracker convenience; the tracker rides my own
+> process publish instead.** Record this as the standing resolution of that
+> conflict.
+>
+> ✅ **Closed a stale-Decision hazard:** `dec_5cb9mvk1tx0k2` was still `proposed`,
+> proposing a merge of B1 candidate `3d04293a` — **not reachable from `main`**,
+> while B1 actually landed as `5554b33f`. Under §14 the publisher merges on a
+> *resolved* Decision, so an open Decision naming a superseded SHA is a live
+> mis-merge hazard. **Rejected as SUPERSEDED.** ★ Lesson: close a Decision when
+> its candidate is re-cut — a stale `proposed` is indistinguishable from a
+> pending one.
+>
 > ### 0c. OWED BY ME
 >
 > 1. **DOC-W2 agent-surface review on exact `e1524de1`** (published by me).
