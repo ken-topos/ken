@@ -3993,7 +3993,9 @@ fn NoDup (k : Type) (v : Type) (leq : k → k → Bool) (xs : List (Pair k v)) :
 fn Distinct (k : Type) (v : Type) (leq : k → k → Bool) (m : Tree k v) : Prop =
   NoDup k v leq (to_list k v m)
 
-theorem distinct_empty (k : Type) (v : Type) (leq : k → k → Bool) : Distinct k v leq (empty k v) =
+theorem distinct_empty
+      (k : Type) (v : Type) (leq : k → k → Bool)
+    : Distinct k v leq (empty k v) =
   Proved
 
 fn assoc_step_inner

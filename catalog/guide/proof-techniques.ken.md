@@ -188,7 +188,9 @@ for `list_append`: the base case has both sides reduce to the constructor
 result (the induction hypothesis) is lifted under `Cons x` by `cong`:
 
 ```ken example
-theorem list_right_unit (a : Type) (xs : List a) : Equal (List a) (list_append a xs (Nil a)) xs =
+theorem list_right_unit
+      (a : Type) (xs : List a)
+    : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
     Nil ↦ Proved;
     Cons x t ↦

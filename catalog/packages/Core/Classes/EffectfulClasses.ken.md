@@ -507,7 +507,9 @@ theorem list_bind_lid
     : Equal (List b) (list_bind a b (list_pure a x) k) (k x) =
   proof right_unit for list_append b (k x)
 
-theorem list_bind_rid (a : Type) (m : List a) : Equal (List a) (list_bind a a m (list_pure a)) m =
+theorem list_bind_rid
+      (a : Type) (m : List a)
+    : Equal (List a) (list_bind a a m (list_pure a)) m =
   match m {
     Nil ↦ Proved;
     Cons h t ↦

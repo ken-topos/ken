@@ -83,7 +83,9 @@ theorem sym (ty : Type) (x : ty) (y : ty) (p : Eq ty x y) : Eq ty y x =
 `trans` composes two propositional equalities.
 
 ```ken
-theorem trans (ty : Type) (x : ty) (y : ty) (z : ty) (p : Eq ty x y) (q : Eq ty y z) : Eq ty x z =
+theorem trans
+      (ty : Type) (x : ty) (y : ty) (z : ty) (p : Eq ty x y) (q : Eq ty y z)
+    : Eq ty x z =
   J (λz' _. Eq ty x z') p q
 ```
 
