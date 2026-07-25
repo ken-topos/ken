@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-25 02:29:07Z — from 70 issue file(s) in `docs/program/issues/`.
+2026-07-25 02:35:37Z — from 70 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -94,7 +94,7 @@ the committed file matches the generator's output.
 | `RT-AGG-COMPOSE` | escaping two Resources into one aggregate (Prod (Resource _) (Resource _)) fails at erasure — checked endpoints do not compose | draft | runtime | TBD | none | — |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | merged | runtime | M | none | PR #911 @ 238a5c5d (origin/main 4ac9141e, CI green) |
 | `RT-FNSPLIT-B1R` | RT-NATIVE-FNSPLIT Boundary B1R — encode the occurrence-local semantic material B1 counted but never stored (repair of landed B1) | merged | runtime | L | none | 937 |
-| `RT-FNSPLIT-B2A` | RT-NATIVE-FNSPLIT Boundary B2a — make the semantic plane load-bearing for emission (behaviour-preserving port) | active | runtime | L | none | — |
+| `RT-FNSPLIT-B2A` | RT-NATIVE-FNSPLIT Boundary B2a — make the semantic plane load-bearing for emission (behaviour-preserving port) | draft | runtime | L | none | — |
 | `RT-FNSPLIT-B2B` | RT-NATIVE-FNSPLIT Boundary B2b — full emission census, finite differences, and the explicit growth verdict | draft | runtime | M | none | — |
 | `RT-NATIVE-FNSPLIT` | Native backend: bound per-function lowering growth to O(n) — helper identity is a variable-width whole-configuration key (orig. single-Function VReg::MAX, since fixed) | active | runtime | TBD | none | — |
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
@@ -155,7 +155,7 @@ is itself not yet `merged`/`closed`:
 - `PX8` blocked by `PX8-WROTE-ABS` (status: draft)
 - `PX9` blocked by `PX8` (status: active)
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
-- `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2A` (status: active)
+- `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2A` (status: draft)
 
 ## Gate progress
 

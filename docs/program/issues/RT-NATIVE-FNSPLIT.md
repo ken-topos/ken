@@ -86,9 +86,39 @@ this line wins.** Re-read this line on every hard-stop.
 > ```text
 > SYMPTOM INVENTORY (append only; never rewritten)
 > NEXT PREDICATE CHECK = 3rd entry, then 6th, 9th, …
-> ENTRIES = 1  (2 more before the predicate question is due)
+> ENTRIES = 2  ← ⛔ BUT THE PREDICATE QUESTION IS ALREADY ANSWERED. See below.
 > 1. retained body selection — keyed on cloned RuntimeExpr pointer identity
+> 2. lower_expr re-lowers each retained closure body AT EVERY CALL SITE, in
+>    that call site's whole configuration (core.rs:4214/4229 clone the body
+>    into Lowered::Closure; :4302 lowers the clone against
+>    args ++ captures ++ env)  — keyed on runtime configuration
 > ```
+>
+> ## ⛔ DO NOT WAIT FOR THE 3rd ENTRY. Entries 1 and 2 ARE THE SAME PREDICATE.
+>
+> Entry 2 is *"a dynamic property naming static code"* — the chain's predicate,
+> verbatim — and it is **also identical to HELD-CHAIN entry 1** (whole-
+> configuration specialization). The runtime-implementer said so itself:
+> `lower_expr`'s per-call-site re-lowering *"is simultaneously symptom-inventory
+> entry #1 and whole-configuration specialization itself."*
+>
+> ★ **So the mechanism has already produced its answer at entry 2, and holding
+> the question until a 3rd entry would be mechanical compliance defeating the
+> mechanism's purpose.** The inventory exists to detect a shared predicate across
+> stops, not to reach a count. **Two entries that reduce to one predicate is the
+> finding.** "Check at the 3rd" is a *floor on when to ask*, never a *bar on
+> answering early*.
+>
+> ⇒ **The recut did NOT eliminate whole-configuration specialization; it built a
+> closed plane BESIDE it and never connected them.** Boundary A closed the plane,
+> B1/B1R filled in its semantic material — and `core.rs:204` still drops the
+> whole thing on the floor, leaving the original specializing inliner as the only
+> live emission path. **That is why B2a is a construction and not a port**, and
+> it is the same defect the recut was chartered to remove, one level up.
+>
+> ⚠ **This also means the frozen held-chain count of 33 was never as separable
+> from the recut as the re-arm assumed.** The recut replaced the *plan*, not the
+> *emitter* — and the emitter is where the predicate lives.
 >
 > ⛔ **Seeded, not empty of history.** The *held* chain's four entries are
 > already known and were the input to the recut — keep them visible so a new
@@ -109,7 +139,7 @@ this line wins.** Re-read this line on every hard-stop.
 
 ```text
 RECUT CHAIN (live, from kickoff evt_2kgfmmeeh2x7w, 2026-07-24)
-hard-stop count    = 5   ← ⛔ NEXT STOP (#6) FIRES A RESEARCH PULL
+hard-stop count    = 6   ← ⛔ PULL FIRED 2026-07-25. NEXT PULL = #9.
   ⚠ THIS LINE READ "3" UNTIL 2026-07-25 AND WAS STALE BY TWO STOPS. Stops #4
     and #5 both happened and neither was posted here, so the authoritative
     count silently disagreed with reality in the one place designated to win
@@ -164,7 +194,31 @@ hard-stop count    = 5   ← ⛔ NEXT STOP (#6) FIRES A RESEARCH PULL
        (widen StaticOriginId only to pub(in crate::cranelift_backend); field
        named static_origin; no mod.rs-only partial carrier).
        NO research pull due (< #6).
-NEXT RESEARCH PULL = hard-stop #6 ← ⛔ THE VERY NEXT STOP. then #9, #12, …
+  #6 = B2a hard-stopped BEFORE ANY EDIT on a full fixed-input audit, raised by
+       runtime-implementer at evt_3xzv4xn77na0d, leader confirmed
+       evt_34y9pnbs8r330 (2026-07-25). 8 of 9 anchors held; the Retain line
+       "exported root + bounded deferred Cranelift functions" is FALSE OF THE
+       BASE. Steward independently re-verified all three deciding measurements:
+         - partition.rs ABSENT from main; PartitionWorkItem = 0; work_?item = 0.
+           They exist only on preserved/wp-...-b077eb7a, which is NOT an
+           ancestor of main (merge-base 8ebe370a).
+         - production lowering/ has exactly ONE FunctionBuilder::new
+           (core.rs:140) and ONE define_function (core.rs:202); every other
+           site is under core/tests/.
+         - planner<->emitter coupling is one symbol: plan_static_transition_graph,
+           built at core.rs:35, dropped at :204, zero refs to the plane types
+           outside planning/.
+       ⇒ B2a's Retain/Replace lists were INHERITED FROM THE HELD TREE and
+       describe artifacts absent from B2a's base. The emitted units D2 would
+       re-key DO NOT EXIST, so D1/D2 is a CONSTRUCTION (per-transition units, a
+       real calling convention for the 8-field DynamicActivationFrame, and a
+       persistent-store runtime, proven behaviour-preserving across the whole
+       6201-line SCC) — not the behaviour-preserving port the frame asserts.
+       ⛔ THIS IS A STEWARD FRAMING DEFECT, not an execution failure. The ring
+       invoked the frame's own unreviewable-diff stop, exactly as instructed,
+       and refused to reinterpret the deliverables to fit what was buildable.
+       ⇒ RESEARCH PULL FIRED. Architect ruling is GATED BEHIND the advisory.
+NEXT RESEARCH PULL = hard-stop #9, then #12, …
 
 ⛔ **B2a runs one stop away from a research pull.** The #3 pull is CONSUMED
    (advisory evt_rwqb8ear89wx — Danvy/Nielsen defunctionalization granularity;
