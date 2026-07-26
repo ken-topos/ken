@@ -22,12 +22,42 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~06:4xZ · `origin/main` = **`adc9d563`**
-### **✅ #986 · #987 · #988 · #989 · #990 · #991 MERGED.**
-### ▶ P1 IS HANDED OFF AND WITH QA. `2b22acca` pushed and verified on origin.
-### ⛔ ONE THING IS OWED BY ME: a §7 cell for `Debug` totality (see below).
+## ▶ LIVE — 2026-07-26 ~06:5xZ · `origin/main` = **`db552f4e`**
+### **✅ #986 → #994 MERGED (nine).**
+### ⛔ P1 IS **BLOCKED**: `dec_75wqn9tv715e9` **REJECTED** by the Architect at `2b22acca`. One-line comment fold owed by the ring; ⛔ **DO NOT PUBLISH**.
+### ✅ THE `Debug` §7 CELL IS WRITTEN — `AC-V11` + `AC-V12` filed (see below).
 
-> ### ▶ CURRENT: `RT-VALUE-TOTALITY-P1` IS WITH QA at `2b22acca`
+> ### ⛔ CURRENT: P1 IS REJECTED AT `2b22acca` — a narrow TRUSTED-SOURCE defect
+>
+> ```
+> decision dec_75wqn9tv715e9   status=rejected
+>          resolved_by=agt_37reqftfe6g00 (architect)  06:39:07Z
+> block    evt_3xc87m7e19sqd
+> qa       APPROVED same exact SHA  evt_7ryf4ezzyncx3  (approval PRECEDED the block)
+> ```
+>
+> **The defect:** in `crates/ken-runtime/src/values.rs` the `Drop` comment says the
+> implementation dismantles the tree *"breadth-first onto an explicit heap stack."*
+> `Vec::pop()` is LIFO ⇒ **depth-first**. ⚠ Architectural, not cosmetic —
+> breadth-first and depth-first have **different live-frontier memory bounds**, so
+> the comment hands the next maintainer the wrong mechanism contract.
+>
+> ⭐ **The wording is NOT from my frame — I checked.** `git grep -i breadth` over
+> the frame and the node is empty; it appears once in the whole candidate diff, in
+> the implementer's own comment. **One line, no production-expression change.**
+>
+> ⇒ **Sequence owed, in order:** implementer folds the comment → **I push the
+> fresh SHA** (the ring has no credential; this exact WP already proved it) →
+> leader **rebinds QA to the fresh exact SHA** → **fresh Decision** (the old one is
+> spent) → §14 gate → publish. ⛔ `2b22acca` is dead as a merge candidate.
+>
+> ⭐ **The Architect confirmed the residual boundary explicitly** — Debug, the
+> remaining identity derives, the foundation twin and the actual cycle carrier are
+> *declared residuals, not discharged*. That was the one thing I asked the ring to
+> refuse to overclaim, and it now holds at **three** seats (QA, Architect, and the
+> candidate's own evidence doc at line 180).
+
+> ### ▶ PRIOR STATE (still true): the P1 mechanism at `2b22acca`
 >
 > ```
 > handoff  runtime-implementer  evt_dyn90nq2fza5   merge_ready
@@ -60,20 +90,39 @@
 > two-sided. Same shape as the sibling ring's defect: the detector reddened, the
 > population was one-fifth of the claim.
 
-> ### ⛔ OWED BY ME — a §7 cell for `Debug`. It is a FRAME defect, not a build one.
+> ### ✅ THE `Debug` §7 GAP IS CLOSED — and the routing split TWO ways, not one
 >
-> Derived **`Debug`, `PartialEq`, `Ord`, `Hash` remain host-recursive and
-> measurably die at `D`**, so *"`Value` traversals are total"* is **FALSE** after
-> P1 — and **`Debug` has no cell in §7 at all**. §7's identity-derive cell is
-> scoped to *disagreement with canonical identity*, not *totality*. ⚠ `Debug` is
-> reachable from ordinary diagnostic code — a `{:?}` in a panic or log line can
-> abort the process — so this is not cosmetic.
+> **Premise re-derived, not inherited.** The derive lines say it outright:
 >
-> ⇒ **Add the §7 cell and route the scope decision (P2, or its own node).** ⛔ Do
-> **not** widen the live WP, and QA was told not to block on it. ⚠ **Do hold the
-> ring to the narrow Phase-1 claim** and refuse any wording reading *"all `Value`
-> traversals are now total"* — that sentence is false and would be the lasting
-> damage.
+> ```
+> origin/main   #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+> 2b22acca      #[derive(Debug,        PartialEq, Eq, PartialOrd, Ord, Hash)]
+> ```
+>
+> `Clone` left the derive list and is hand-written iteratively; **everything else
+> stayed derived, so it stayed host-recursive.** ⇒ P1 makes exactly **three**
+> traversals total — encoder, `Clone`, `Drop`.
+>
+> **Landed:** frame §7 gained two cells + a new **§7a**; the node gained a **P3**
+> phase row and two ACs.
+>
+> - **`AC-V11` — `Debug` is depth-total. Its OWN item (P3), not folded into P2.**
+>   `Debug` appears **once** in the entire node, inside a quoted derive line — no
+>   `AC` names it, so unlike the identity comparisons it has **no P2 edit to ride
+>   on**. Folding it in would add depth scope to a WP whose subject is
+>   representation. It also does **not depend on P2** — releasable any time after
+>   P1.
+> - **`AC-V12` — the identity comparisons are depth-total. Rides P2, and is ⛔ NOT
+>   a reading of `AC-V8`.**
+>
+> ⭐ **The load-bearing find, and it corrected my own first draft.** I initially
+> wrote `AC-V8`'s arms as *by-construction vs by-test*; its actual two arms are
+> **canonical-by-construction carrier** vs **sealed witness defined from the
+> canonical contract** — which makes the point *sharper*: the first arm buys
+> agreement by constraining the **carrier**, leaving the comparison walking
+> structurally. **So a P2 author can discharge `AC-V8` completely, on the arm it
+> lists FIRST, and leave identity comparison process-aborting** — invisible
+> precisely because the AC it would ride is already green.
 
 > ### ⚠ MY MISROUTING, REPAIRED — read the participant id AT POST TIME
 >

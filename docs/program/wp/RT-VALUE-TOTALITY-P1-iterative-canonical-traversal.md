@@ -426,6 +426,60 @@ GitHub**. "No regression" here means **green in CI**.
 | `ir::RuntimeValue` deriving `PartialEq`/`Eq` across `ClosureRef` | **Phase 2** — pin 2 failing on the operational carrier right now |
 | the **cycle contract itself** | ⛔ **retargeted, not discharged** — it is owed on B2V's `BoundaryPersistentImage(BoundaryRegion)` at `BoundaryValueStore::adopt` (`evt_45x5dn9jcrhhq`), where a cycle **is** constructible and the parked evidence shows emitted code building one |
 | `RECUT 2`'s phase-closure artifact re-derivation | ⛔ **unrelieved** by this node or this phase — still a hard gate on B2V |
+| derived **`Debug`** — still host-recursive, and process-aborting at the same `D` that `AC-V1` exercises | ⛔ **had NO cell here and is named by NO `AC` in the node** — see §7a. Routed to its own node item, **not** folded into P2 |
+| the identity derives' **TOTALITY**, as distinct from their *agreement* | **Phase 2 `AC-V8`** — but ⚠ **only on one of its two permitted discharges**; see §7a |
+
+### 7a. ⛔ THE PHASE-1 CLAIM IS NARROWER THAN "`Value` TRAVERSALS ARE TOTAL"
+
+⛔ **After Phase 1, the sentence *"`Value` traversals are total"* is FALSE.**
+Refuse that wording wherever it appears — in a retro, an evidence doc, a status
+line, or a successor frame. What Phase 1 makes total is exactly three
+traversals: **the canonical encoder, `Clone`, and `Drop`.**
+
+**Measured on the candidate, not inherited.** `Clone` left the derive list and
+is hand-written iteratively; everything else stayed derived, so it stayed
+host-recursive:
+
+```
+origin/main   #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+candidate     #[derive(Debug,        PartialEq, Eq, PartialOrd, Ord, Hash)]
+```
+
+⚠ **`Debug` is the one that matters operationally, and it is the one with no
+cell.** It is reachable from *ordinary diagnostic code* — a `{:?}` in a panic
+handler, a log line, or an `assert_eq!` failure message — so the abort fires on
+the path a maintainer reaches for **while diagnosing something else**. The
+identity derives at least sit behind deliberate comparison sites.
+
+#### ⛔ WHY THIS IS NOT ALREADY COVERED BY `AC-V8` — the two discharges differ
+
+`AC-V8` names **two** permitted structural answers, and asks for **one**:
+the store carrier is **canonical-by-construction**, or equality/order/hash are
+exposed **only on a sealed canonical witness** and **defined from the canonical
+contract**. ★ **Neither arm's agreement property entails totality, and the two
+arms do not even fail the same way:**
+
+| `AC-V8` discharge | agreement | totality |
+|---|---|---|
+| **canonical-by-construction carrier** — non-canonical forms cannot exist, so a structural comparison agrees | ✅ | ⛔ **nothing displaced the structural recursion** — agreement was bought by constraining the *carrier*, not by changing *how comparison walks* |
+| **sealed witness defined FROM the canonical contract** | ✅ | ✅ **free**, because it inherits P1's iterative encoder |
+
+⇒ **A P2 author can discharge `AC-V8` completely, on the arm the AC lists
+first, and leave the identity comparisons process-aborting.** That is not a
+defect in `AC-V8` — agreement is the property it was written to pin, and it pins
+it — it is a **second, independent property that only one of the two arms
+delivers**. ⚠ It is invisible precisely *because* the AC it would ride is
+already green.
+
+⛔ **So do not write this as "clarify `AC-V8`."** Totality is not a reading of
+`AC-V8`; it is a **separate obligation** that must say which arm it requires, or
+require iterativeness explicitly on whichever arm P2 picks. A frame that leaves
+it implicit is choosing the first arm by default.
+
+⛔ **And `Debug` rides nothing.** No P2 `AC` rewrites it, so unlike the identity
+derives its totality has **no edit to ride on** — which is why it is routed as
+its own item and not folded into P2. Folding it in would add unrelated scope to
+a WP whose subject is representation, not depth.
 
 ## 8. Standing
 
