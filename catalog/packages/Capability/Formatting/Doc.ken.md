@@ -4,7 +4,7 @@
 Text leaves are structural `List Char` values, so fitting and the content laws
 remain ordinary kernel-checked Ken.
 
-## Index
+## Contents
 
 1. [Document algebra](#1-document-algebra)
 2. [Fitting and rendering](#2-fitting-and-rendering)

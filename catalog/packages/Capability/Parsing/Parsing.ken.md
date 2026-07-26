@@ -6,7 +6,7 @@ package models source identity as an immutable byte artifact: spans are only
 half-open byte endpoints, and source identity is supplied by values such as
 `Located` and by validity predicates, never by a bare `Span`.
 
-## Index
+## Contents
 
 1. [Motivation](#1-motivation)
 2. [Definition](#2-definition)
@@ -15,14 +15,6 @@ half-open byte endpoints, and source identity is supplied by values such as
 5. [Design notes](#5-design-notes)
 6. [References](#6-references)
 7. [Trust  derivation](#7-trust--derivation)
-
-**Named reading paths**
-
-- *Newcomer* → [Motivation](#1-motivation) → [Using it](#3-using-it)
-- *Practitioner* → [Using it](#3-using-it) →
-  [Laws  proofs](#4-laws--proofs)
-- *Researcher* →
-  [Laws  proofs](#4-laws--proofs) → [Design notes](#5-design-notes)
 
 ## 1. Motivation
 

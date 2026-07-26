@@ -3,7 +3,7 @@
 `Tooling.Testing.Property` exercises decidable predicates over explicit finite samples and
 reports the first counterexample.
 
-## Index
+## Contents
 
 - [Motivation](#motivation)
 - [Definition](#definition)
@@ -12,13 +12,6 @@ reports the first counterexample.
 - [Design notes](#design-notes)
 - [References](#references)
 - [Trust & derivation](#trust--derivation)
-
-## Reading paths
-
-- **Newcomer:** Motivation → Using it
-- **Practitioner:** Definition → Using it
-- **Researcher:** Laws & proofs → Trust & derivation
-- **Porting a property suite:** Design notes → Definition
 
 ## Motivation
 

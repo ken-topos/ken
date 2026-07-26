@@ -6,7 +6,7 @@ written. This strand distills design moves the fleet has paid for in real
 build failures (`agent/memory/enclave/`) into public guide prose, in Ken's
 own terms.
 
-## Index
+## Contents
 
 1. [`class` vs. explicit dictionary](#1-class-vs-explicit-dictionary)
 2. [Subsume-don't-proliferate, unless trust

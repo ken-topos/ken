@@ -5,7 +5,7 @@ and reports the exact character index of the first failure. Its formatting
 floor is structural: decimal digits convert to characters and back without
 crossing the opaque `String`/`List Char` bijection.
 
-## Index
+## Contents
 
 1. [Motivation](#1-motivation)
 2. [Located errors](#2-located-errors)
@@ -13,14 +13,6 @@ crossing the opaque `String`/`List Char` bijection.
 4. [Structural formatting](#4-structural-formatting)
 5. [Checked examples](#5-checked-examples)
 6. [Trust and derivation](#6-trust-and-derivation)
-
-**Named reading paths**
-
-- *Newcomer* → [Motivation](#1-motivation) → [Decimal parsing](#3-decimal-parsing)
-- *Practitioner* → [Decimal parsing](#3-decimal-parsing) →
-  [Checked examples](#5-checked-examples)
-- *Researcher* → [Structural formatting](#4-structural-formatting) →
-  [Trust and derivation](#6-trust-and-derivation)
 
 ## 1. Motivation
 

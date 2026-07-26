@@ -5,7 +5,7 @@ Five small, non-recursive wrappers over the kernel's `J` equality eliminator
 function, coercing a value along a type-level equality, and the equality
 algebra (`sym`/`trans`) every later proof leans on.
 
-## Index
+## Contents
 
 1. [Motivation](#1-motivation)
 2. [Definition](#2-definition)
@@ -14,14 +14,6 @@ algebra (`sym`/`trans`) every later proof leans on.
 5. [Design notes](#5-design-notes)
 6. [References](#6-references)
 7. [Trust  derivation](#7-trust--derivation)
-
-**Named reading paths**
-
-- *Newcomer* → [Motivation](#1-motivation) → [Using it](#3-using-it)
-- *Practitioner* → [Using it](#3-using-it) →
-  [Laws  proofs](#4-laws--proofs)
-- *Researcher* →
-  [Design notes](#5-design-notes) → [Trust  derivation](#7-trust--derivation)
 
 ## 1. Motivation
 
