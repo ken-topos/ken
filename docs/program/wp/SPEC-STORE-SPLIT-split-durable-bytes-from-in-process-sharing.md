@@ -90,7 +90,35 @@ table**. If Ken does *not* mean to promise it, say so and drop it.
 complexity bound leaves the implementer to infer it from the retired mechanism,
 which is how the conflation got in.
 
-## `AC-4` — all eight conformance rows retargeted or retired, each with its reason
+## `AC-4` — every coupled conformance row retargeted or retired, each with its reason
+
+> ### ⛔ AMENDED 2026-07-26 — THIS AC SAID "ALL EIGHT" AND THAT WAS A CLOSED
+> ### POPULATION CLAIM OVER A HAND LIST. The eight are a FLOOR, not the set.
+>
+> `spec-leader` verified at `bce75fec` that further live conformance producers
+> assert the same mechanics — in the values, evaluation, capacity, and surface
+> areas — and that capacity and surface **cross-case prose** names them too. So
+> the eight below are **not** the population asserting global interning /
+> same-slot / FNV-1a / probing / load factor / page size / reset.
+>
+> ⭐ **The tell was inside the table the whole time: four of its eight "lives in"
+> cells read `(locate)`.** A table that cannot say where half its rows live was
+> never a census, and I labelled it "all eight" anyway.
+>
+> ⇒ **Required, and it is a DELIVERABLE, not a check:**
+> 1. **Retain the eight-row table below** — verified as the consistent narrow
+>    treatment — and **ground every `(locate)` cell** to a real producer.
+> 2. **Add a producer-derived expanded census** of every row asserting any demoted
+>    mechanism, and give each one a retarget-or-retire disposition **plus its
+>    cross-case prose**, in the **SAME candidate**.
+> 3. ⛔ **Absence from my table is NOT a reason to leave a mechanism assertion
+>    standing.** That is the specific failure this amendment exists to prevent.
+>
+> ⚠ **Derive the census from the PRODUCERS, not from a keyword grep.** A grep for
+> `slot|page|arena|intern` over `conformance/` returns matches in unrelated senses
+> — "page" and "slot" are both homonyms here — so a grep-derived list would trade
+> my under-count for an over-count. ⛔ **Do not replace one false population claim
+> with another.**
 
 | row | asserts | lives in |
 |---|---|---|
