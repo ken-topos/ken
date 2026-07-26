@@ -9,7 +9,7 @@ eliminator — zero new kernel feature, zero `trusted_base()` delta anywhere in
 this file. The `Bytes` structural view also supplies `bytes_nat_length`, an
 ordinary fold through `bytes_to_list` with no cached length or local `Axiom`.
 
-## Index
+## Contents
 
 1. [Motivation](#1-motivation)
 2. [Definition](#2-definition)
@@ -19,14 +19,6 @@ ordinary fold through `bytes_to_list` with no cached length or local `Axiom`.
 6. [Findings](#6-findings)
 7. [References](#7-references)
 8. [Trust  derivation](#8-trust--derivation)
-
-**Named reading paths**
-
-- *Newcomer* → [Motivation](#1-motivation) → [Using it](#3-using-it)
-- *Practitioner* → [Using it](#3-using-it) →
-  [Laws  proofs](#4-laws--proofs)
-- *Researcher* →
-  [Laws  proofs](#4-laws--proofs) → [Design notes](#5-design-notes)
 
 ## 1. Motivation
 

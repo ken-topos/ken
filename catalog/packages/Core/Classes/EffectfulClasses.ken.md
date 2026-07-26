@@ -9,7 +9,7 @@ proves them lawfully for `List` and `Option`. `§9` extends the family with
 `Traversable`, the class that walks a container while threading an arbitrary
 `Applicative` effect.
 
-## Index
+## Contents
 
 1. [Motivation](#1-motivation)
 2. [Definition](#2-definition)
@@ -19,15 +19,6 @@ proves them lawfully for `List` and `Option`. `§9` extends the family with
 6. [References](#6-references)
 7. [Trust  derivation](#7-trust--derivation)
 9. [`Traversable`](#9-traversable)
-
-**Named reading paths**
-
-- *Newcomer* → [Motivation](#1-motivation) → [Using it](#3-using-it)
-- *Practitioner* → [Using it](#3-using-it) →
-  [Laws  proofs](#4-laws--proofs)
-- *Researcher* → [Laws  proofs](#4-laws--proofs) →
-  [Design notes](#5-design-notes)
-- *Porting from Haskell/Lean/Agda* → [Design notes](#5-design-notes)
 
 ## 1. Motivation
 

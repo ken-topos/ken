@@ -4,7 +4,7 @@ The `Option`/`Result`/`Either` combinator floor: one entry for all three
 sum families, each combinator paired with its defining equation(s) as a real
 proof term.
 
-## Index
+## Contents
 
 1. [Motivation](#1-motivation)
 2. [Definition](#2-definition)
@@ -13,14 +13,6 @@ proof term.
 5. [Design notes](#5-design-notes)
 6. [References](#6-references)
 7. [Trust & derivation](#7-trust--derivation)
-
-**Named reading paths**
-
-- *Newcomer* → [Motivation](#1-motivation) → [Using it](#3-using-it)
-- *Practitioner* → [Using it](#3-using-it) →
-  [Laws & proofs](#4-laws--proofs)
-- *Researcher* → [Laws & proofs](#4-laws--proofs) →
-  [Design notes](#5-design-notes)
 
 ## 1. Motivation
 

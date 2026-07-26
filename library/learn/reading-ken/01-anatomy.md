@@ -13,10 +13,9 @@ redefine it.
 
 ## Catalog Format
 
-An entry begins with a title and statement of intent, an index, and named
-reading paths for readers who need different depths. These are followed by
+An entry begins with a title and statement of intent, then a Contents section.
 Motivation, Definition, Using it, Laws & proofs, Design notes, References, and
-Trust & derivation, in that order
+Trust & derivation follow in that order
 ([§2](../../../docs/program/07-catalog-style-guide.md#2-the-standard-entry-format)).
 The former Findings section is omitted because language gaps are tracked
 outside reader-facing package documentation
@@ -39,8 +38,7 @@ invented snippets.
 Open
 [`catalog/packages/Core/Logic/EmptyDec.ken.md`](../../../catalog/packages/Core/Logic/EmptyDec.ken.md).
 Its title and opening sentence identify `Empty` and `Dec` as the subject.
-The index shows the whole entry at a glance, and the named reading paths offer
-short routes through it.
+Contents shows the whole entry at a glance.
 
 Motivation explains the problem before presenting code. A `Bool` records which
 side of a decision holds but discards its proof, while a proof-irrelevant

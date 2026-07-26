@@ -46,30 +46,6 @@ extracts and checks `ken example`/`ken reject` fences when the path ends in
 keeps the examples honest; renaming to `.md` would silently un-check them. Keep
 `.ken.md` on any doc whose examples must stay verified.
 
-## Reading paths
-
-The guide serves a wide range of readers at different depths
-(`06-catalog-campaign.md` purpose 3). Pick the path that matches you —
-none require reading a strand front-to-back before starting to write:
-
-- **Newcomer to Ken, first catalog entry.** Surface reference §1–§3 (purity
-  keywords, `data`/`match`, refinement types) → Decomposition §1 (class vs.
-  dictionary) → write a small `fn` with one law, then read Proof techniques
-  §1–§2 to discharge it.
-- **Agent authoring a catalog package (the common case).** Skim all three
-  strands' tables of contents once, then use the guide as a reference: jump
-  to Proof techniques when a law won't close, to Decomposition when a design
-  choice feels ad hoc, to Surface reference for exact syntax.
-- **Porting a proof idiom from Lean/Agda/Idris.** Proof techniques §3
-  (`funext` is *definitional*, not an axiom) and §4 (non-termination —
-  Ken's kernel requires structural termination, there is no `sorry`/postpone)
-  are the two places Ken's discipline differs most from what you already
-  know.
-- **Reviewing a catalog entry.** Decomposition's "reusable moves" table
-  doubles as a review checklist: does this entry coexist rather than
-  subsume across a trust boundary? Is a `class` used only where dispatch is
-  genuinely needed?
-
 ## What V1 covers, and what it deliberately omits
 
 This is a **V1** — enough to author a Core/Data-Section entry like `DS-1`

@@ -5,7 +5,7 @@ keyed-collection operations: deletion, combining insertion, union,
 intersection, difference, set algebra, key/value projections, and a small
 binary-relations library.
 
-## Index
+## Contents
 
 1. [Motivation](#1-motivation)
 2. [Definition](#2-definition)
@@ -14,14 +14,6 @@ binary-relations library.
 5. [Design notes](#5-design-notes)
 6. [References](#6-references)
 7. [Trust & derivation](#7-trust--derivation)
-
-**Named reading paths**
-
-- *Newcomer* → [Motivation](#1-motivation) → [Using it](#3-using-it)
-- *Practitioner* → [Using it](#3-using-it) →
-  [Laws & proofs](#4-laws--proofs) §4.7 (Layer-2 operations)
-- *Researcher* → [Laws & proofs](#4-laws--proofs) §4.1–§4.6 (the capstone) →
-  [Design notes](#5-design-notes)
 
 ## 1. Motivation
 

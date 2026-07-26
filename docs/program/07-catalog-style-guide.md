@@ -37,16 +37,10 @@ worked examples, references, and reviewer navigation.
 
 - An H1 title and a one-line statement of intent (the newcomer's and the
   training-signal's first anchor).
-- An **index**: anchor links to the sections below.
-- **Named reading paths** — the mechanism that makes progressive disclosure real
-  for the catalog's wide persona range. Route each persona to its depth, e.g.:
-  - *Newcomer* → Motivation → Using it
-  - *Practitioner* → Using it → Laws & proofs
-  - *Researcher* → Laws & proofs → Design notes
-  - *Porting from Haskell/Lean/Agda* → Design notes
+- A **contents** section: anchor links to the sections below.
 
-**Required sections, in order** (native markdown heading anchors; the index links
-to them):
+**Required sections, in order** (native markdown heading anchors; the contents
+section links to them):
 
 1. **Motivation** — what the component is, what it refines or generalizes, why it
    exists. Teaching-first prose.
@@ -386,7 +380,7 @@ Definition of done:
   proof-relevant `data ... : Omega`, or proof-surface downgrade.
 - `trusted_base()` delta unchanged or narrowed.
 - The entry's Trust/derivation and source map reflect the new organization.
-- The diff improves at least one concrete axis: entry structure, reading paths,
+- The diff improves at least one concrete axis: entry structure, contents,
   examples, references, naming, comments, proof-family grouping, or Findings.
 - The retro records which guide rules were useful and which were ambiguous.
 
@@ -402,7 +396,7 @@ abstraction boundaries are unchanged does not require the Architect.
 ## 11. Pilot
 
 The **first reframed `.ken.md` entry doubles as the format pilot** — it exercises
-the full standard end to end (front matter, reading paths, the fence roles,
+the full standard end to end (front matter, contents, the fence roles,
 References, Findings, Trust/derivation) before the format is applied to large
 proof-heavy bodies. Prefer a small, proof-strategy-rich, low-delta component for
 the pilot; do not begin with a CAT-4-scale body. Pilot evidence shows readability
@@ -420,7 +414,7 @@ refinement follow-on is recorded.
 
 **Standard-entry / refinement author checklist.** No semantics, law shapes, or
 proof requirements weakened · public API/proof names preserved or mapped · front
-matter has index + reading paths · required sections present and in order ·
+matter has contents · required sections present and in order ·
 canonical code in `` ```ken ``, negatives in `` ```ken reject ``/`` ```ken
 ignore `` · References section present (Wikipedia/papers/books as they exist) ·
 Findings section present (empty allowed) · Trust/derivation and source map

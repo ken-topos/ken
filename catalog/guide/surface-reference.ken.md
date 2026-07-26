@@ -13,7 +13,7 @@ form that no landed catalog code actually uses (implicit `{A : Type}`
 parameters, most visibly), this strand says so and shows the form that is
 actually in use instead.
 
-## Index
+## Contents
 
 1. [Purity keywords: `const`/`fn`/`proc`](#1-purity-keywords-constfnproc)
 2. [`def`: transparent definitions](#2-def-transparent-definitions)

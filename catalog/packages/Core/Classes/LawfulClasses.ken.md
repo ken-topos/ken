@@ -5,7 +5,7 @@ every later ES4 package: three structure classes for decidable equality and
 total order, each an ordinary record built from `Bool` and the kernel's own
 equality vocabulary — no new kernel former.
 
-## Index
+## Contents
 
 1. [Motivation](#1-motivation)
 2. [Definition](#2-definition)
@@ -21,16 +21,6 @@ operations it needs. Laws & proofs is grouped by carrier and proof family:
 the audited primitive `Int` boundary, finite `Bool` case splits, then the
 projection transports for `Char`. Trust & derivation records the corresponding
 trusted-base posture and validation evidence.
-
-**Named reading paths**
-
-- *Newcomer* → [Motivation](#1-motivation) → [Using it](#3-using-it)
-- *Practitioner* → [Using it](#3-using-it) →
-  [Laws & proofs](#4-laws--proofs)
-- *Researcher* →
-  [Laws & proofs](#4-laws--proofs) → [Design notes](#5-design-notes)
-- *Porting from Haskell, Lean, or Agda* → [Motivation](#1-motivation) →
-  [Definition](#2-definition) → [Design notes](#5-design-notes)
 
 ## 1. Motivation
 

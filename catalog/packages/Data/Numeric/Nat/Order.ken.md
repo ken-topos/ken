@@ -6,7 +6,7 @@ primitive and can only postulate its laws. This entry exports that
 instance plus the small set of `Nat` operations (`min`, `max`, `sub`,
 `compare`) that build on it.
 
-## Index
+## Contents
 
 1. [Motivation](#1-motivation)
 2. [Order and its laws](#2-order-and-its-laws)
@@ -15,15 +15,6 @@ instance plus the small set of `Nat` operations (`min`, `max`, `sub`,
 5. [Design notes](#5-design-notes)
 6. [References](#6-references)
 7. [Trust  derivation](#7-trust--derivation)
-
-**Named reading paths**
-
-- *Newcomer* → [Motivation](#1-motivation) → [Using it](#3-using-it)
-- *Practitioner* → [Using it](#3-using-it) →
-  [Laws  proofs](#4-laws--proofs)
-- *Researcher* → [Laws  proofs](#4-laws--proofs) →
-  [Design notes](#5-design-notes)
-- *Porting from Lean/Agda* → [Design notes](#5-design-notes)
 
 ## 1. Motivation
 

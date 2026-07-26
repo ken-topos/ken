@@ -86,7 +86,7 @@ The four purposes are colinear, not competing, when the entry is a **literate
 - Purpose 1 needs self-describing components — the literate entry's code +
   laws + proofs.
 - Purpose 3 needs progressive disclosure — the literate entry's layered
-  sections and named reading paths.
+  sections and contents list.
 - Purpose 2 is what purposes 1+3 *produce* when done well: verified + literate
   + proof-carrying + novel.
 - Purpose 4 (Findings) falls out of the act of authoring, captured in a
@@ -180,19 +180,19 @@ root; the package tree is a light container beneath it.
 
 ```text
 catalog/
-  README.md            catalog index + the four purposes, one screen
+  README.md            catalog contents + the four purposes, one screen
   REFERENCES.md        catalog-wide reference conventions (per-entry refs live
                        in each entry — see the style guide)
   guide/               the authoring guide — "writing Ken" (see below)
   packages/            light container: a README + the Section/Domain tree
-    README.md          package index / navigation
+    README.md          package contents / navigation
     <Section>/<Domain>/[<Subdomain>/]<Pkg>.ken[.md]
                                         the leaf package (identity-mapped to
                                         `import <Section>.<Domain>.[<Subdomain>.]<Pkg>`,
                                         `07-catalog-style-guide.md`)
 ```
 
-- `catalog/` root holds any *whole-catalog* detail (index, cross-package
+- `catalog/` root holds any *whole-catalog* detail (contents, cross-package
   conventions, the pointer to this charter and to the style guide).
 - `catalog/packages/` is **just a container** — a README and the Section/Domain
   tree, nothing heavier. Packages are filed by **Section, with a Domain
@@ -347,8 +347,8 @@ often discovers the proof before the clearest presentation of it.
    the proofs are real, the derivation path is stated, the trusted-base delta is
    honest, and the WP's acceptance criteria are met.
 2. **Catalog refinement.** A follow-on WP raises the landed component to the
-   standard entry format: literate narrative, reading paths, examples, laws,
-   References, Findings, naming, and behavior-preserving refactor. This is a
+   standard entry format: literate narrative, contents navigation, examples,
+   laws, References, Findings, naming, and behavior-preserving refactor. This is a
    planned step, not optional cleanup, and it does not weaken proof obligations.
 
 The durable standard is `07-catalog-style-guide.md`. The Steward records a

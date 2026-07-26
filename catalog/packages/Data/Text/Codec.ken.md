@@ -4,20 +4,12 @@
 the language and adds a small, total ASCII classifier. Decoding remains a
 `Result`; looking at an absent byte remains `None`.
 
-## Index
+## Contents
 
 1. [Motivation](#1-motivation)
 2. [Definition](#2-definition)
 3. [Laws and examples](#3-laws-and-examples)
 4. [Trust and derivation](#4-trust-and-derivation)
-
-**Named reading paths**
-
-- *Newcomer* → [Motivation](#1-motivation) → [Definition](#2-definition)
-- *Practitioner* → [Definition](#2-definition) →
-  [Laws and examples](#3-laws-and-examples)
-- *Researcher* → [Laws and examples](#3-laws-and-examples) →
-  [Trust and derivation](#4-trust-and-derivation)
 
 ## 1. Motivation
 

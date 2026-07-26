@@ -3,7 +3,7 @@
 `Validation e a` is an error-or-value sum whose lawful `Applicative` instance
 combines independent errors through a supplied `Semigroup e`.
 
-## Index
+## Contents
 
 1. [Motivation](#1-motivation)
 2. [Definition](#2-definition)
@@ -12,14 +12,6 @@ combines independent errors through a supplied `Semigroup e`.
 5. [Design notes](#5-design-notes)
 6. [References](#6-references)
 7. [Trust & derivation](#7-trust--derivation)
-
-**Named reading paths**
-
-- *Newcomer* → [Motivation](#1-motivation) → [Using it](#3-using-it)
-- *Practitioner* → [Using it](#3-using-it) →
-  [Laws & proofs](#4-laws--proofs)
-- *Researcher* → [Laws & proofs](#4-laws--proofs) →
-  [Design notes](#5-design-notes)
 
 ## 1. Motivation
 

@@ -5,7 +5,7 @@ that lets you *compute* whether a proposition holds and recover the proof
 or refutation. Together they let ordinary code case-split on a proposition
 the way it already case-splits on a `Bool`, without losing the proof.
 
-## Index
+## Contents
 
 1. [Motivation](#1-motivation)
 2. [Definition](#2-definition)
@@ -14,15 +14,6 @@ the way it already case-splits on a `Bool`, without losing the proof.
 5. [Design notes](#5-design-notes)
 6. [References](#6-references)
 7. [Trust  derivation](#7-trust--derivation)
-
-**Named reading paths**
-
-- *Newcomer* → [Motivation](#1-motivation) → [Using it](#3-using-it)
-- *Practitioner* → [Using it](#3-using-it) →
-  [Laws  proofs](#4-laws--proofs)
-- *Researcher* →
-  [Laws  proofs](#4-laws--proofs) → [Design notes](#5-design-notes)
-- *Porting from Lean/Agda* → [Design notes](#5-design-notes)
 
 ## 1. Motivation
 

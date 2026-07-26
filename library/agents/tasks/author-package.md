@@ -15,9 +15,9 @@ nearest existing package entries in the same catalog domain.
 ## 3. Current capability
 
 A package is a `.ken.md` literate source whose checked fences tangle to its
-implementation. Current entries carry an index, named reading paths,
-motivation, definition, usage, laws and proofs, design notes, references, and
-trust and derivation.
+implementation. Current entries carry a contents section, motivation,
+definition, usage, laws and proofs, design notes, references, and trust and
+derivation.
 
 ## 4. Canonical forms
 
@@ -25,8 +25,7 @@ Use this order:
 
 ```text
 front matter and title
-index
-named reading paths
+Contents
 Motivation
 Definition
 Using it
@@ -36,12 +35,10 @@ references
 Trust & derivation
 ```
 
-The index links to every required section. Named paths route newcomers,
-practitioners, researchers, and readers porting from another language to the
-depth they need. `Findings` is deliberately absent: style-guide §5 retired it
-from reader-facing entries in favor of live gap routing. Choose the catalog
-path by task/domain. The path and declared module identity must agree with the
-catalog convention.
+The contents section links to every required section. `Findings` is deliberately
+absent: style-guide §5 retired it from reader-facing entries in favor of live gap
+routing. Choose the catalog path by task/domain. The path and declared module
+identity must agree with the catalog convention.
 
 ## 5. Invariants and prohibitions
 

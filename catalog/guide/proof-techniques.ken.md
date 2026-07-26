@@ -12,7 +12,7 @@ Every example below is checked against the real elaborator; every reject
 example is checked to actually fail, with the real error message quoted so a
 reader recognizes it when they hit it themselves.
 
-## Index
+## Contents
 
 1. [`Proved` vs. `Refl`: the two-way
    discriminator](#1-Proved-vs-refl-the-two-way-discriminator) (§1.1: when
