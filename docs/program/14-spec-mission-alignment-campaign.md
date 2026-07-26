@@ -212,7 +212,7 @@ briefs are in §6.1–§6.8; the operator was briefed on 2026-07-26.
 
 | # | fork | decides | blocks |
 |---|---|---|---|
-| C1 | **Runtime `unknown` execution policy** — universal Kleene third value, or artifact status + explicit execution policy | ▶ **DIRECTION SET 2026-07-26** — retire the runtime value (operator); §6.1 | needs §2 census + Architect ruling on replacement semantics before any edit |
+| C1 | **Runtime `unknown` execution policy** — universal Kleene third value, or artifact status + explicit execution policy | ✅ **FULLY DIRECTED 2026-07-26** — retire the runtime value; build-and-fault-if-reached; case 2 resolves to `fault`; §6.1 | needs the §2 census + an Architect ruling on the fault's shape before any edit |
 | C2 | **`Ord`/`Map` key equality** — must order-equivalence yield kernel `Equal`? | ✅ **RULED 2026-07-26** — option (b), key relation derived from the order; §6.2 | ▶ needs framing as a localized Map/Set key-interface split |
 | C3 | **Capability revocation** — universal transitive lineage, or a revocable/non-revocable split | ✅ **CLOSED — option (a), NO SPLIT, operator 2026-07-26** | nothing; two small editorial follow-ons in §6.3 |
 | C4 | **SCT termination** — exact SCT as source compatibility, or a kernel-checkable termination-evidence interface with SCT as one producer | ✅ **CLOSED — option (a), operator 2026-07-26** | nothing; SCT is deliberate source compatibility |
@@ -306,7 +306,22 @@ carrying the `TypedHole` payload** — same shape as `CapacityExhausted`. That
 keeps the development loop (the artifact builds and runs), is fail-closed, gives
 per-run localization, and needs **no inhabitant of any ordinary type**.
 
-⛔ **Two follow-on decisions, with my recommendation on each:**
+## ✅ BOTH C1 FOLLOW-ONS SETTLED (operator concurred, 2026-07-26)
+
+1. ✅ **An `unknown` verdict builds a runnable artifact and FAULTS if a hole is
+   reached** — not refuse-to-build. `21 §5.1`'s *"leaves the program running"*
+   is amended to that, not deleted: the program still runs, and the fault is
+   loud, catchable, and carries the `TypedHole` payload.
+2. ✅ **`43 §2` case 2's `fault / unknown` disjunction resolves to `fault`.**
+   Unguarded partial primitives fault; the undecided disjunction leaves the
+   normative text.
+
+⇒ **C1 is now fully specified as a direction.** ⛔ It is still not a released
+node — the §2 conformance census (~57 runtime rows) and an Architect ruling on
+the fault's exact shape come first.
+
+⛔ **The two recommendations below are the ones the operator settled above. They
+are kept as the reasoning, not as open questions — do not re-ask them.**
 
 1. **What an `unknown` verdict does operationally.** `21 §5.1` currently says it
    "leaves the program **running**." Under the direction that sentence must
