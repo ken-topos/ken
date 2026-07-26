@@ -5,7 +5,8 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-26 ~09:4xZ. OPERATOR IS PRESENT** — mission drafted ~11:30Z.
+**As of 2026-07-26 ~11:1xZ. OPERATOR IS PRESENT** — status reported; mission
+expected ~11:30Z. ⛔ Do not write the mission.
 
 > ### ⛔ THREE STALE `RESUME HERE` BLOCKS WERE REMOVED FROM THIS SPOT
 >
@@ -22,45 +23,70 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~10:3xZ · ⛔ **NO `main` SHA HERE, BY CONSTRUCTION**
+## ▶ LIVE — 2026-07-26 ~11:1xZ · ⛔ **NO `main` SHA HERE, BY CONSTRUCTION**
 ### ⛔ **This header used to carry `origin/main`. It was ALWAYS the pre-merge**
 ### **base — stale the instant the block landed. `git rev-parse origin/main`.**
-### ✅ **#986 → #1011 ALL MERGED** — incl. #1005 (sweep), #1009 (`R5` erratum).
-### ✅ **`ABI-R1` CLOSED** — merged on the third candidate, **all three retros IN**.
-### ▶ **ONE LANE LIVE: Runtime `B2V`** — fresh `898fdb5c`, **QA rebound**.
+### ✅ **#986 → #1014 ALL MERGED** — incl. #1009 (`R5` erratum), #1013 (`#82`).
+### ✅ **`ABI-R1` CLOSED** · ✅ **`RT-FNSPLIT-B2V` CLOSED** — retros IN on both.
+### ⏸ **ZERO LANES LIVE.** `B2F` is the frontier — **kick not yet sent**.
 ### ⛔ **2 ADVERSARY FINDINGS OPEN** — `RT-VALUE-TOTALITY` §7; unframed (#78).
 
-> ### ▶ ONE LANE LIVE — Runtime on `B2V`. Foundation's lane CLOSED (merged).
+> ### ⏸ ZERO LANES LIVE — `B2V` and `ABI-R1` both CLOSED. `B2F` is the frontier.
 >
 > ```
-> wp/RT-FNSPLIT-B2V-executable-value-abi          898fdb5c   leader-reviewed, QA REBOUND, DURABLE
+> wp/RT-FNSPLIT-B2V-executable-value-abi          a5c8ba73   MERGED #1014 - branch GONE from origin
 > preserved/rt-fnsplit-b2v-dc35c12d               dc35c12d   the SHA QA's prior BLOCK cites
 > preserved/rt-fnsplit-b2v-ab11a3d2               ab11a3d2   divergent line - would have been orphaned
 > preserved/rt-fnsplit-b2v-prereanchor-a7aa60eb   a7aa60eb   pre-re-anchor tip
 > preserved/abi-r1-0c8b77fc                       0c8b77fc   ABI-R1 candidate 1, blocked
 > ```
 >
-> **`898fdb5c` re-derived independently before the push:** base `ee226c5e`
-> (ancestor ✅), scope exactly **11** paths (10 `ken-runtime` + the evasion table),
-> and *no rebase warranted* confirmed on **both** the file axis (intersection with
-> everything `main` added since `ee226c5e` is **empty**, positive control: injecting
-> `store.rs` yields 1 hit) **and the ledger axis** (no B2V path is attested in
-> `library/SOURCE-ATTESTATIONS`, positive control returns 1). ⛔ **Disjoint file
-> lists are not sufficient — that is what bit `ABI-R1` against `DOC-W2`.**
+> **Every seat in the Runtime ring is compaction-VERIFIED** (leader, implementer
+> `ctx 0%`, QA), so the §2c handoff gate's steps 1–5 are already discharged for
+> the next kick. What remains before `B2F` goes out: a **re-anchor check of the
+> `B2F` frame against landed `B2V`**, and step 5b — `git cat-file -e` on every
+> object the kickoff names.
+>
+> ⛔ **`--is-ancestor a5c8ba73 origin/main` RETURNS EXIT 1 AND THE WORK IS FULLY
+> LANDED.** The publisher squashes, so **no** candidate SHA is ever an ancestor of
+> `main`. ⇒ **Ancestry answers reachability; only BLOB IDENTITY answers
+> landed-ness.** Verified: `boundary_value.rs` `d152dc41` and
+> `boundary_value_clif.rs` `c380cc5f` byte-identical candidate↔`main`, with an
+> absent→present control (`scripts/moot-actor-id.sh`) proving the check
+> discriminates.
+>
+> ⛔ **AND THE MERGE DELETED THE WP BRANCH ON `origin`, SO `a5c8ba73` IS LOCAL-ONLY
+> — `git for-each-ref --contains` STILL REPORTS IT UNDER `refs/remotes/origin/`.**
+> A plain `git fetch` does not prune that tracking ref, so the cache states a
+> falsehood *in the remote's own namespace*. `git ls-remote --heads origin
+> 'wp/RT-FNSPLIT-B2V*'` → **empty**; control `preserved/rt-fnsplit-b2v-dc35c12d` →
+> a row. ⇒ ⛔ **Only `ls-remote` asks the remote.** I wrote "branch kept" into this
+> block off the tracking ref and had to correct it minutes later. Nothing is lost
+> (content is on `main`) and no preservation ref is warranted — branch deletion is
+> the normal end state of every merged WP.
+>
+> ⚠ And note the path: it is `src/boundary_value_clif.rs`, **not**
+> `src/cranelift_backend/lowering/boundary_value_clif.rs` as my own merge report
+> said — **the blob was exact and the path was wrong**, so every re-derivation of
+> the hash passed. **A locator has two coordinates.**
 >
 > ⛔ **`dc35c12d` NEEDED ITS PRESERVATION REF AND `fed42481` DID NOT.**
 > `--is-ancestor dc35c12d 898fdb5c` → **exit 1**, and `dc35c12d` was the *live*
 > `origin` tip, so the force-move would have orphaned the exact object QA's prior
 > BLOCK cites. Contrast `fed42481` (an ancestor of `dc35c12d`: plain fast-forward,
-> no `--force`) and `ab11a3d2` (divergent, would have been orphaned). ⭐ **Three
-> identical-looking "push my checkpoint" requests, three different answers — and
-> the only way to tell is `git merge-base --is-ancestor` BEFORE the push.** ⛔ A
-> commit *distance* ("four commits past X") is not ancestry and reads as if it is.
+> no `--force`), `ab11a3d2` (divergent, would have been orphaned), and `a5c8ba73`
+> (a descendant of rejected `898fdb5c`, so a plain FF and **no ref needed even
+> though a rejected Decision cites its parent**). ⭐ **Four identical-looking "push
+> my checkpoint" requests, four different answers — and the only way to tell is
+> `git merge-base --is-ancestor` BEFORE the push.** ⛔ A commit *distance* ("four
+> commits past X") is not ancestry and reads as if it is. ⛔ And **"cited by review
+> evidence" is not what creates the hazard — REACHABILITY is.**
 >
-> ⛔ **Do not open a second lane** — `#78` is sequenced *behind* `B2V` (same files),
-> the doc lane is operator-HELD, and `ABI-S3` is Runtime-owned and held behind the
-> `RT-NATIVE-FNSPLIT` priority. **Foundation going idle now is correct, not a
-> stall** — its ring closed with retros in.
+> ⛔ **Do not open a second lane** — `#78` is sequenced *behind* `B2F` (same
+> files), the doc lane is operator-HELD, and `ABI-S3` is Runtime-owned and held
+> behind the `RT-NATIVE-FNSPLIT` priority. **Foundation, Language, Verify, Spec,
+> Kernel and Ergo idle now is CORRECT, not a stall** — every one of those rings
+> closed with retros in, under the settled single-threaded posture.
 
 > ### ⛔ THE CANDIDATE TREE CARRIES THE **PRE-ERRATUM** FRAME — bind TWO anchors
 >
