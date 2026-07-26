@@ -22,30 +22,80 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~08:3xZ · `origin/main` = **`8209c8f5`**
-### **✅ #986 → #1001 MERGED (sixteen).**
-### ✅ **P1 CLOSED.** ✅ **`B2V` KICKED AND BUILDING** — #74 DONE.
-### ▶ **NEXT: §2c gate → kick Foundation on `ABI-R1` (#72)** — pre-gated.
-### ⛔ **2 ADVERSARY FINDINGS OPEN** — §7 of that node; repair unframed (#78).
+## ▶ LIVE — 2026-07-26 ~09:0xZ · `origin/main` = **`7eaa42a3`**
+### **✅ #986 → #1003 MERGED (eighteen).**
+### ✅ **`B2V` BUILDING, three folds deep** — `RULING R3` transcribed (#1003).
+### ✅ **`ABI-R1` KICKED — Foundation live** `evt_37qes7vz8c6z0` (#72 DONE).
+### ⛔ **2 ADVERSARY FINDINGS OPEN** — `RT-VALUE-TOTALITY` §7; unframed (#78).
 ### ⛔ **SWEEP IS `--dry-run` ONLY UNTIL #79** — it flags BUSY seats wedged.
 
-> ### ▶ B2V IS LIVE — kicked `evt_4hhk4h1ga7h1f`, both first-hour gates discharged
+> ### ▶ BOTH LANES ARE FILLED — Runtime on `B2V`, Foundation on `ABI-R1`
 >
 > ```
-> wp/RT-FNSPLIT-B2V-executable-value-abi          3025713c   merge-base 8209c8f5's parent f87adc3f
+> wp/RT-FNSPLIT-B2V-executable-value-abi          ab11a3d2   contains 481b2fea 720f301c 5e6b0945 3025713c
 > preserved/rt-fnsplit-b2v-prereanchor-a7aa60eb   a7aa60eb   <- created BEFORE the force-move
+> ABI-R1                                          no branch yet; ring kicked at 7eaa42a3
 > ```
 >
-> Ring re-anchored 23 commits, zero conflicts, `-p ken-runtime` **green 438/438**,
-> and reported `RECUT 2` as **ADDITIVE** — not a hard-stop, measured in the code.
+> ⛔ **These are the only two live lanes. Do not open a third** — `#78` is
+> sequenced *behind* `B2V` (same files) and the doc lane is operator-HELD.
 >
-> ⛔ **I had to correct their preservation claim.** They said `a7aa60eb` was
-> *"preserved two ways"* — but one was the **origin branch I was being asked to
-> force-move**, and the other a **local** tag. `git ls-remote origin | grep a7aa60eb`
-> returned **exactly one** ref. ⇒ Doing what was asked would have collapsed it to one
-> local tag, zero off-box copies. I pushed `preserved/*` **first**, then moved the
-> branch under `--force-with-lease`. ⭐ **A preservation claim has to be evaluated
-> against the operation it is guarding — the request is often what invalidates it.**
+> ⛔ **I verified containment rather than trusting the leader's list** — all four
+> named checkpoints are genuine ancestors of `ab11a3d2`, so the single push covers
+> every one. ⚠ A list of SHAs in a handoff is a claim; `--is-ancestor` is the check.
+
+> ### ⭐⭐ `RULING R3` — the ring was stopped on a contradiction THE FRAME CREATED
+>
+> Runtime asked whether wiring its classifier into the already-production emitter
+> was in `B2V` scope or forbidden by `D6`'s inertness. The Architect ruled
+> (`dec_r09576dypk6e`, **verified `resolved` + `resolved_by` from the object, never
+> from prose**): **wiring is in scope and REQUIRED.**
+>
+> ⭐ **The load-bearing distinction is that the two clauses govern DIFFERENT
+> boundaries.** `RECUT 2` is about the helper artifact being *generated from* the
+> sole representation authority; `D6` is about it staying inert **at the semantic
+> call graph**. ⇒ **Production codegen consumption is not `B2F` activation**, so
+> both were satisfiable at once — and **the frame never said so.** The ring read
+> them as opposed because, as written, they were.
+>
+> ⛔ **An in-thread ruling is not a durable deliverable.** I transcribed it into
+> the frame as `RULING R3` and landed it (#1003) *before* releasing the seat — the
+> implementer was compacting, and its fresh context would not have carried the
+> channel. ⚠ The frame is what an implementer obeys; the thread is not.
+>
+> ⭐ **Then the ring did the thing worth repeating:** it built the completeness
+> artifact and **argued against its own sufficiency** — calling it a seventh
+> declaration in a consumer-less layer rather than presenting green tests as
+> closure. The ruling agreed with the ring's own instinct. Seven `class_guard`
+> sites carrying literal class lists now read from the plan (`720f301c`,
+> Architect-confirmed causal, not ceremonial).
+
+> ### ⛔ `ABI-R1` — WHAT THE KICKOFF CARRIES, so nobody re-derives it
+>
+> ```
+> frame   docs/program/wp/ABI-R1-capability-prose-currency.md   blob 0a28c7df
+> node    docs/program/issues/ABI-R1.md                         blob a2297870  status ready
+> target  catalog/packages/Capability/Filesystem/Errors.ken.md    blob 59fbe76d
+> pins    crates/ken-host/src/capability.rs                       blob 5c03ed32
+> ```
+>
+> ⭐ **The frame's anchor is `d3b9f36c` — six `main`-SHAs stale — and it does not
+> matter, because both load-bearing files are BLOB-IDENTICAL at `7eaa42a3`.** So
+> the verbatim quote at lines 7–10 resolves exactly (I re-read lines 5–12 and
+> matched it), and every line pin in **Fixed inputs** is exact rather than
+> plausible. ⇒ **Staleness is a question about CONTENT, not about SHA distance** —
+> and the blob answers it in one command.
+>
+> ⛔ **The target IS a cited source** — `library/SOURCE-ATTESTATIONS` row 9 holds
+> that exact OID, so editing the prose moves it and the ledger row moves in the
+> **same commit**. Frame `D4` already says this; its own *"row may have drifted"*
+> caveat is **DISCHARGED** — row 9 matches the live blob.
+>
+> ⚠ **Size `S` is about the diff, not the care.** The paragraph being replaced is
+> false and *the obvious replacement is false in the other direction* — `ABI-R2`
+> was withdrawn from this program for exactly that. ⛔ `AFull` did **not** lose
+> `WRITE`/`DELETE`; the word that changes is **"anywhere"**. ⛔ Confinement is a
+> claim about the **resolver**, not about `check_fs_capability`.
 
 > ### ⛔⛔ I SHIPPED FIVE BAD LOCATORS, LIFTED FROM A MUTATION PROOF (fixed, #1001)
 >
@@ -198,12 +248,18 @@
 > captured currently reports healthy. ⛔ `clear` is the permissive answer and
 > "could not observe" must not map to it.
 
-> ### ▶ CURRENT: WHERE TO GO NEXT — two open lanes, both mine to start
+> ### ⛔ SUPERSEDED — both lanes are now FILLED (#74 and #72 are DONE)
 >
-> | lane | state | task |
-> |---|---|---|
-> | **Runtime** | idle, compacting. Next work is **`B2V`**, ⛔ **not** P2/P3 — and it needs a **re-anchor** first | **#74** |
-> | **Foundation** | idle. `ABI-R1` already assessed releasable (frame on `main`, disjoint from P1, no cited-source hit, ring durable) | **#72** |
+> This block used to read *"two open lanes, both mine to start."* ⛔ **Both are
+> started** — see the LIVE block: Runtime on `B2V` at `ab11a3d2`, Foundation on
+> `ABI-R1`. ⛔ **Do not re-kick either.**
+>
+> ⚠ **And one cell of it was simply FALSE.** It described `ABI-R1` as having *"no
+> cited-source hit."* The target **IS** a cited source —
+> `library/SOURCE-ATTESTATIONS` row 9 — and the frame's `D4` had said so all
+> along. ⇒ **My own readiness summary contradicted the frame it was summarizing**,
+> in the direction that would have let the ring discover the ledger coupling late.
+> Kept here, corrected, because the wrong version is the one a resume would obey.
 >
 > ⛔ **P2's frame is MINE and is NOT WRITTEN.** P3 (`AC-V11`) is filed and
 > independent of P2, but neither is the frontier.
