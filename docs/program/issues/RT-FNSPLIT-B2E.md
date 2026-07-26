@@ -188,6 +188,65 @@ the eliminator is a finding, not tidiness.**
 ⇒ Tests must exercise the **emitted consumer path**, ⛔ not the ledger and dead
 emitter in isolation. ⛔ **No Decision until a fresh COMPLETE candidate lands.**
 
+## ⭐⭐ RULING `R3` — THE PREPARATION SEAM (Architect, 2026-07-26)
+
+`dec_6cjcfms028q64` **resolved**, grounded on exact `c19625e8` against base
+`9410d7b8`. ⭐ **Transcribed here because an in-thread ruling is not a durable
+deliverable — and this node has now lost a ruling to the channel three times
+(`R1`, `R2`, `R3`), which is why the pattern gets its own section below.**
+
+### ✅ The measurement was CORRECT; the "unsatisfiable" conclusion was too broad
+
+The three missing links are **real**:
+
+1. the semantic eliminators hold `RuntimeSymbol` / `String`, **not** a
+   `BoundaryNameReference`;
+2. the validated semantic name plane is **private to planning**, and
+   `compile_expr_into_module` currently builds it inside lowering preparation;
+3. **no production `BoundaryValueStore`** is owned or threaded by lowering.
+
+⛔ **The Architect WITHDREW its own prior instruction.** *"Make current production
+Lowering callers supply a live store so every admitted route immediately emits"*
+was **over-broad**: it would make Lowering own store-local identity and would
+cross `B2E`'s inertness line into `B2F` activation.
+
+⛔ **But item 1 is not deferrable wholesale.** `R1`/`R2` still require `B2E` to
+land the **complete inert bridge**, so that `B2F` does not reconstruct hard-stop
+`#11` one layer later. ⭐ **This is within `B2E`, not a new prerequisite node** —
+`D5`/`R1` explicitly put the artifact/store binding path here. The needed change
+is a **two-phase preparation seam**, not a production traffic switch.
+
+### The ruled boundary — four sides
+
+| side | what is ruled |
+|---|---|
+| **store ownership/lifetime** | `BoundaryValueStore` is **caller-owned** runtime/artifact state. Lowering does not create, own, or retain it. `B2F` owns the eventual production instance and its lifetime. |
+| **planning** | `B2E` exposes a **closed typed view of artifact-static name references**, keyed to the actual planned `Match` case constructor / `Project` field occurrence. ⛔ Do **not** make raw `SemanticPlane.names` public; ⛔ do **not** re-intern the `RuntimeExpr` string as a substitute. The plane already carries `CaseConstructor` / `ProjectField` atoms and their spans — **expose the capability, not the plane internals.** |
+| **preparation** | An artifact/module preparation boundary consumes that typed view **plus a caller-owned store**, resolves **only** through the existing `bind_name` → `intern_symbol` authority, and produces the prepared table plus the occurrence/case/field-to-slot mapping. |
+| **lowering** | Consumes **only an opaque prepared decode context**: `B2V` helper refs, table handle, and the plan-derived slot for the semantic occurrence. ⛔ It must not see plane bytes, own the store, or mint/rederive a name ID. |
+
+**Activation.** Existing production callers stay **inactive / no-traffic** in
+`B2E`. ⛔ `B2F`'s residual is **exactly** to create/own the production
+store/context, pass it, and activate the already-built semantic path — `B2F` may
+**not** invent the bridge, derive references, or add a second resolver.
+
+### Disposition of `c19625e8` — and the evidence bar it did not clear
+
+`c19625e8` remains a preserved **WIP**, ⛔ **not a review candidate**. Items 2–5
+carry.
+
+⚠ **The JIT probe is valid but not terminal.** It is discriminating
+**emitter-level** evidence — it uses the real producer, and swapping the table row
+or neutering the tag comparison causally flips the result. ⛔ **But it hand-feeds
+a reference/table.** Terminal item-6 evidence requires executing a **real `Match`
+or `Project` semantic route whose slot comes from that route's plan-derived
+reference.**
+
+⛔ **DO NOT land the proposed "achievable half"** — a materialized table plus
+threaded helper refs while the slot remains unobtainable. ⭐ **That would read as
+bridge delivery while preserving the exact missing edge**, which is the precise
+failure `R3` exists to prevent.
+
 ## Evidence and preservation
 
 | artifact | where |

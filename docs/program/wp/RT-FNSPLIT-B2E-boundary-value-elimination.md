@@ -293,6 +293,55 @@ store-local interning authority. No parallel name authority.**
 > Decision). ⛔ Do not open a Decision until a fresh **complete** candidate is
 > handed off.
 
+> ### ⭐⭐ RULING `R3` — THE PREPARATION SEAM (Architect, 2026-07-26)
+>
+> `dec_6cjcfms028q64` **resolved**, grounded on exact `c19625e8` against base
+> `9410d7b8` and the governing `R1` frame/node. ⭐ **Transcribed here for the same
+> reason as `R1` and `R2` — an in-thread ruling is not a durable deliverable, and
+> this WP has now lost three of them to the channel.**
+>
+> ✅ **The measurement was correct; the "unsatisfiable" conclusion was too broad.**
+> The three missing links are real: the semantic eliminators hold `RuntimeSymbol`
+> / `String` rather than a `BoundaryNameReference`; the validated semantic name
+> plane is private to planning and `compile_expr_into_module` builds it inside
+> lowering preparation; and no production `BoundaryValueStore` is owned or
+> threaded by lowering.
+>
+> ⛔ **The Architect WITHDREW its own prior instruction.** *"Make current
+> production Lowering callers supply a live store so every admitted route
+> immediately emits"* would make Lowering own store-local identity and would cross
+> `B2E`'s inertness line into `B2F` activation.
+>
+> ⛔ **But item 1 is not deferrable wholesale** — `R1`/`R2` still require the
+> **complete inert bridge** so `B2F` cannot reconstruct hard-stop `#11` one layer
+> later. ⭐ **This stays inside `B2E`, and is not a new prerequisite node:** `D5`
+> and `R1` already put the artifact/store binding path here. What is needed is a
+> **two-phase preparation seam**, not a production traffic switch.
+>
+> | side | ruled boundary |
+> |---|---|
+> | **store ownership** | `BoundaryValueStore` is **caller-owned**. Lowering does not create, own, or retain it. `B2F` owns the production instance and lifetime. |
+> | **planning** | Expose a **closed typed view of artifact-static name references**, keyed to the planned `Match` case constructor / `Project` field occurrence. ⛔ Do not publish raw `SemanticPlane.names`; ⛔ do not re-intern the `RuntimeExpr` string. The plane already carries `CaseConstructor` / `ProjectField` atoms and spans — **expose the capability, not the internals.** |
+> | **preparation** | Consumes that typed view **plus a caller-owned store**, resolves **only** via `bind_name` → `intern_symbol`, and produces the prepared table plus the occurrence/case/field-to-slot mapping. |
+> | **lowering** | Consumes **only an opaque prepared decode context** — `B2V` helper refs, table handle, plan-derived slot. ⛔ No plane bytes, no store ownership, no minting or rederiving a name ID. |
+>
+> **Activation.** Production callers stay **inactive / no-traffic** in `B2E`.
+> ⛔ `B2F`'s residual is exactly to create/own the production store/context, pass
+> it, and activate the already-built path — it may **not** invent the bridge,
+> derive references, or add a second resolver.
+>
+> ⚠ **The evidence bar `c19625e8` did NOT clear.** Its JIT probe is valid and
+> discriminating **emitter-level** evidence — real producer, and swapping the
+> table row or neutering the tag comparison causally flips it. ⛔ **But it
+> hand-feeds a reference/table.** Terminal item-6 evidence must execute a **real
+> `Match` or `Project` semantic route whose slot comes from that route's
+> plan-derived reference.**
+>
+> ⛔ **DO NOT land the "achievable half"** — a materialized table plus threaded
+> helper refs while the slot stays unobtainable. ⭐ **It would read as bridge
+> delivery while preserving the exact missing edge**, which is what `R3` exists to
+> prevent.
+
 ⭐ **A dead-code allowance is a SUPPRESSED ORACLE.** `#[allow(dead_code)]` on the
 only decode emitter is precisely the annotation that silences the compiler's own
 answer to *"is this authority ever consumed?"* ⇒ ⛔ **When a node's deliverable is

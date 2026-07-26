@@ -105,6 +105,45 @@ to write Ken's code.** Per `CLEAN-ROOM.md`:
 When unsure whether you may look at something under `local/refs/`, the answer
 is no — ask the operator or the Spec enclave.
 
+## ⛔ NEVER call `get_transcript` (convo MCP) — it kills your own transport
+
+**Operator prohibition, 2026-07-26. Binds every seat.** ⛔ Do not call
+`mcp__convo__get_transcript` — not with a small `limit`, not "just once", not as
+a fallback when another read comes back thin.
+
+**Why:** its `limit` argument does **not** bound the response. A `limit=4` call
+returned a payload large enough to take the session's convo **stdio connection
+down with it** — every `mcp__convo__*` tool disappeared mid-turn.
+
+⭐ **The cost is not a failed read — it is losing the ability to POST.** You go
+blind and mute together: no `post_response` to unblock a ring waiting on you, no
+`list_decisions`, no `orientation`. ⚠ And it is silent to everyone else — the
+fleet keeps posting into a channel you can no longer hear, and your seat looks
+merely quiet.
+
+⭐ **Know why you will be tempted, so you can catch yourself.** It is the only
+read that returns message **bodies**; `get_recent_context` and `get_mentions`
+return headers only (timestamp, speaker, event id). So the moment you need the
+full text of a **truncated notification** — precisely when something is blocked
+and you are in a hurry — `get_transcript` is the obvious reach. **That urgency is
+the trap: it is the worst possible moment to lose transport.**
+
+✅ **Use instead — the HTTP read path**, the same API the MCP adapter wraps,
+with **your own** credential (⛔ never another seat's `api_key`; ⛔ never dump
+`.moot/actors.json` to learn its shape):
+
+```python
+API = tomllib.load(open('/workspaces/ken/moot.toml','rb'))['convo']['api_url'].rstrip('/')
+me  = json.load(open('/workspaces/ken/.moot/actors.json'))['actors']['<your-role>']
+# GET {API}/api/spaces/{space_id}/events?limit=N   → full `text` per event
+# Authorization: Bearer me['api_key']
+```
+
+⚠ **Temporary measure** pending a new convo release; the operator is raising the
+method's utility with the convo team. Until then the prohibition is absolute —
+⛔ a working `get_transcript` in some future version is not a reason to try it
+now to find out.
+
 ## Conventions
 
 - **Read `docs/PRINCIPLES.md`** — the project's reasoning charter (agents-write/

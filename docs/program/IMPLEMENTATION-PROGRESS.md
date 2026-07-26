@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-26 16:13:28Z — from 89 issue file(s) in `docs/program/issues/`.
+2026-07-26 17:03:46Z — from 90 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -74,6 +74,7 @@ the committed file matches the generator's output.
 | `F3-39` | F3 [task-list #39] — reducer: degrade-not-wrap + retire legacy arms | draft | runtime | TBD | none | — |
 | `F4` | content-addressing + value-model design (aka PX8-F-PROOF) | draft | foundation+spec-enclave | M | none | — |
 | `KW-ORACLE-CLOSURE` | close the KW-THEOREM source oracle structurally — the occurrence sweep is never applied, and the file population is a five-arm hand enumeration | merged | language | S | none | 986 |
+| `KW-ORACLE-REMOVE` | Delete the whole-tree source-text oracle: it asserts facts about repository text, which is now a prohibited test subject | ready | language | S | none | — |
 | `KW-THEOREM` | rename the surface keyword `lemma` to `theorem` | merged | language | M | none | — |
 | `LOADER-CITE-ANCHOR` | LOADER-STALE-PREMISE cites the spec by line number (:147-158) — rots silently in the one catalog file outside the currency gate | merged | doc | XS | none | — |
 | `LOADER-STALE-PREMISE` | \"no disk loader yet\" is stale in 9 places — including already-landed library/ content | merged | doc | S | none | — |
@@ -136,6 +137,7 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `DOC-ATTEST-LIVING` — attesting living tracker files makes every routine WP status flip redden the currency gate
 - `DOC-CATALOG-CONTENTS` — Catalog entry format: rename the `## Index` heading to `## Contents` in 19 entries and remove the 16 reading-path sections, then close the derived artifacts
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
+- `KW-ORACLE-REMOVE` — Delete the whole-tree source-text oracle: it asserts facts about repository text, which is now a prohibited test subject
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `RT-FNSPLIT-B2E` — semantic boundary-value elimination — an opaque boundary inhabitant plus a mechanically closed operation-by-class disposition ledger over every reachable Lowered consumer, inert
 - `SPEC-31-WIDTH-ERRATUM` — spec 31-lexical mandates a 96-column canonical width while the formatting conformance suite asserts 88 in 18 places and cites 31 §1d as its source — rule the exact value and reconcile

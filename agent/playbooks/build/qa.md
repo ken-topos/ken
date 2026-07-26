@@ -271,6 +271,62 @@ classify it, it is not ready (Block):**
   event that retires it, sits beside the authoritative owner, and enumerates its
   blast-radius consumers.
 
+### ⛔⛔ PROHIBITED SUBJECT — never assert facts about repository TEXT
+
+**Operator rule, 2026-07-26:** *"Test oracles that assert facts about source
+code, catalog, or documentation lines are an invitation for failure and delay.
+Tests should focus on behavior."*
+
+⛔ **BLOCK any test whose subject is the text of the repository** rather than the
+behaviour of a program: line numbers, line contents, occurrence positions or
+counts in prose, heading inventories, section presence, or a hardcoded census of
+where words appear in `catalog/`, `docs/`, `library/`, `spec/`, or `agent/`.
+⛔ This is **not** weighed against usefulness — a corpus-text assertion is
+inadmissible even when it is accurate, even when it once caught something.
+
+⭐⭐ **WHY THIS IS A SUBJECT RULE AND NOT A FOURTH PROMISE CLASS — read this
+before you argue an exception.** The three classes above govern *what kind of
+promise* a test makes; **none of them asks what the test is ABOUT.** So a
+corpus-text oracle self-classifies straight into **"normative compatibility
+vector"** — *"pins exact values because those values are the contract"* — and
+passes this gate cleanly. **That is exactly what happened.**
+`crates/ken-elaborator/tests/kw_theorem_source_oracle.rs` pinned 64
+`(path, line, count)` rows across 18 files in six top-level trees, froze their
+line numbers repo-wide, and blocked an unrelated doc WP while reading, on its
+face, as a compliant compatibility vector. ⚠ And the failure recorded as this
+section's *own* motivating example — *"a milestone census frozen as a permanent
+invariant"* — **is the same shape**. The gate described the disease and still
+admitted the patient.
+
+⇒ **A subject prohibition is orthogonal to the promise classes, which is the
+point: you cannot re-classify your way past it.** Ask *"what is this test
+about?"* before *"what does it promise?"*.
+
+**The tell, in one question:** ⭐ *"Does an edit that changes nothing about how
+any program behaves make this test fail?"* If yes — inserting a paragraph,
+renaming a heading, reflowing prose — **the test is measuring the repository,
+not the software.** It will red for people who did nothing wrong, in files they
+have never read, and the cost lands on whoever is unlucky rather than whoever
+erred.
+
+**✅ What to do instead — the property is usually still testable, as behaviour:**
+- a *policy* about identifiers → assert the **compiler/elaborator rejects** the
+  construct, on a fixture you author. That is behaviour, it is local, and prose
+  cannot break it.
+- a *generated artifact* must match its source → assert the **generator is
+  deterministic** and its output round-trips; do not pin the output's lines.
+- a *structural* document invariant (a manifest covers every file) → assert the
+  **relation** between two artifacts, keyed on identity, never on position.
+
+⚠ **Boundary, stated so it is not over-applied:** a test that parses a
+structured data file (a manifest, a lockfile) and checks a **relation** is
+behaviour-adjacent and permitted — line-by-line *parsing* is an implementation
+detail, not the subject. `crates/ken-cli/tests/library_documentation_gates.rs`
+sits on the permitted side: it validates manifest↔library consistency with real
+detector controls and hardcodes no coordinates. ⛔ The prohibition is on
+**assertions keyed to textual position or corpus-wide word census**, not on
+reading a file.
+
 **The ten hard gates (apply at review; judgment, not syntax — §9 of the
 reference):**
 1. **Traceability** — every test names its spec/conformance source and promise
