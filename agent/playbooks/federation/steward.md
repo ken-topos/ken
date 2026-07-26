@@ -291,12 +291,39 @@ brief** — the implementer should execute mostly mechanically, not design
 >    SEEN the recipient go `Working`.** `capture-pane` **WIDE** on every seat you
 >    mentioned:
 >
+>    ⛔ **CAPTURE `-S -40` OR MORE. A SHORT WINDOW MANUFACTURES A FALSE `IDLE`.**
+>    The spinner/elapsed line sits **above** the composer, so a narrow capture
+>    renders the composer + `ctx N%` + the permissions line — a display identical
+>    to a healthy idle seat — while cutting off the one token that proves the seat
+>    is live. **It does not return "unknown"; it returns a confident wrong
+>    answer.** ⇒ Never conclude "idle" from a window whose topmost line is the
+>    composer: that window structurally cannot hold the evidence.
+>
 >    | pane shows | meaning | repair |
 >    |---|---|---|
 >    | `Working (Ns…)` | ✅ delivered | none |
->    | `› [Pasted Content …]`, no `Working` | delivered to the buffer, **never submitted** | send a bare **`Enter`** to that pane |
->    | **empty prompt, no paste, no `Working`** | **never delivered at all** | **re-deliver the CONTENT**: `send-keys` a pointer to the original `evt_…`/thread and say "read and execute it" |
+>    | **any spinner + elapsed** — `✻ <verb>… (Nm Ns · ↓ Nk tokens` | ✅ **BUSY**, high-effort turns show **no** `Working` and **no** `esc to interrupt` | **nothing** |
+>    | `› [Pasted Content …]`, no spinner | delivered to the buffer, **never submitted** | send a bare **`Enter`** to that pane |
+>    | **empty composer, no paste, no spinner** | ⚠ **AMBIGUOUS — not "never delivered"** | ⛔ **re-capture wider FIRST** (see below), and only then re-deliver |
 >    | `Working` + `Queued follow-up inputs` | busy, message queued | **nothing — DO NOT RESEND** |
+>
+>    ⛔ **THE "EMPTY COMPOSER" ROW USED TO SAY "never delivered at all" AND THAT
+>    WAS WRONG.** ★ Measured 2026-07-26: I read that row off a
+>    `capture-pane -S -6 | tail -6` and told a leader its implementer's turn had
+>    **ended mid-sequence**. It was **32 minutes into one continuous turn** and
+>    posting its handoff. The leader re-tasked a seat that was already working. ⚠ A
+>    *kickoff* re-delivery into a live turn double-delivers; a `/compact` there
+>    **destroys in-flight work**.
+>
+>    ⭐ **The decisive test is the elapsed counter's CONTINUITY across two
+>    captures.** `14m 22s` then `32m 16s` is **ONE** turn — a genuinely new turn
+>    restarts near zero. So when you believe a seat went idle, take a second wide
+>    capture and compare the two elapsed readings before acting: that single number
+>    separates *"it was live and I mis-read"* from *"it stopped."*
+>
+>    ⚠ **And none of these is evidence a turn ended:** a clean worktree, commits
+>    already present, or an empty composer. All three are equally true of a live
+>    turn sitting inside a tool call.
 >
 >    **`post_response` returning an `event_id` proves the EVENT exists. It does
 >    NOT prove any agent read it.** This transport failed **four times on
