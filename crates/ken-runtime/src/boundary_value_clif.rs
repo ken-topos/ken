@@ -2698,15 +2698,27 @@ pub(crate) mod tests {
     /// learns, it learns by calling the helpers on a word and an arena pointer
     /// handed to it at run time.
     fn compile_probe(probe: Probe) -> (JITModule, *const u8) {
+        compile_probe_with_plan(
+            probe,
+            &crate::boundary_value::BoundaryEmissionPlan::derive(),
+        )
+    }
+
+    /// The same probe, compiled against a **caller-supplied** plan.
+    ///
+    /// ⛔ **This is what makes the per-site causal evidence possible.** A
+    /// whole-graph capture comparison cannot see one site defecting while the
+    /// others still consume the plan; running the compiled helper and asking
+    /// what it *answers* can.
+    fn compile_probe_with_plan(
+        probe: Probe,
+        plan: &crate::boundary_value::BoundaryEmissionPlan,
+    ) -> (JITModule, *const u8) {
         let mut module = jit();
         let native = crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
             .expect("native-int graph emits");
-        let helpers = emit_boundary_value_local_graph(
-            &mut module,
-            &native,
-            &crate::boundary_value::BoundaryEmissionPlan::derive(),
-        )
-        .expect("graph emits");
+        let helpers =
+            emit_boundary_value_local_graph(&mut module, &native, plan).expect("graph emits");
         let ptr = module.target_config().pointer_type();
 
         let arity = match probe {
@@ -7119,6 +7131,186 @@ pub(crate) mod tests {
             a, b,
             "AC-10: the shared child resolves to ONE canonical node"
         );
+    }
+
+    /// **`RECUT 2`, causal and PER-SITE — every emitted tag-admission test is
+    /// the plan's, not a constant that happens to agree with it.**
+    ///
+    /// ⛔ **This exists because the whole-graph differential was NOT enough,
+    /// and three mutations proved it.** Hardcoding `define_resolve`'s validity
+    /// test, the region selection's band test, or `escape_check`'s invocation
+    /// band each left
+    /// `recut2_the_emitted_helper_graph_changes_when_the_tag_sets_change`
+    /// green: that pin compares the *entire* captured CLIF, so one site
+    /// defecting is invisible while the other consumers still move. Its
+    /// granularity was the graph; the property is per-site.
+    ///
+    /// **MEASURED:** for every admitted tag, removing it from the plan's
+    /// admitted set changes what each probed helper *answers* for a word
+    /// carrying it — from its real status to `ERR_TAG`.
+    /// **CLAIMED:** no probed helper decides tag legality from a constant.
+    /// **THE GAP:** sites no probe reaches. `store_field`'s child-tag check and
+    /// `make_immediate`'s immediate-set check are exercised by their own
+    /// behavioural tests but not by this differential, so for those two the
+    /// evidence is the whole-graph pin plus review — stated here rather than
+    /// implied by this test's name.
+    #[test]
+    fn b2v_every_emitted_tag_admission_test_is_the_plans() {
+        use crate::boundary_value::{
+            BoundaryEmissionPlan, BoundaryTagAdmission, BOUNDARY_ERR_TAG, BOUNDARY_TAG_BITS,
+        };
+
+        let plan = BoundaryEmissionPlan::derive();
+        let mut store = BoundaryValueStore::new();
+        let builder = BoundaryArenaBuilder::new();
+        materialize_ground(&mut store, &cons(1)).expect("materializes");
+        let f = bind(&mut store, builder);
+        let base = f.base;
+
+        // A node index far past the end, so an ADMITTED handle tag answers
+        // `ERR_BOUNDS` and a rejected one answers `ERR_TAG`. Without that
+        // separation both refuse and the differential cannot tell them apart.
+        let out_of_range: u64 = 9_999;
+        let probes: [(&str, Probe); 2] = [
+            ("class", Probe::Unary(|h| h.class)),
+            ("escape_check", Probe::Status(|h| h.escape_check)),
+        ];
+
+        assert!(
+            !plan.tags().admitted().is_empty(),
+            "RECUT 2: the plan admits no tag, so the sweep below is empty"
+        );
+        for tag in plan.tags().admitted() {
+            let thinner: Vec<_> = plan
+                .tags()
+                .admitted()
+                .iter()
+                .copied()
+                .filter(|other| other != tag)
+                .collect();
+            let perturbed = BoundaryEmissionPlan::new(
+                plan.admitted_classes().to_vec(),
+                plan.int_magnitude_classes().to_vec(),
+                plan.byte_span_classes().to_vec(),
+                BoundaryTagAdmission::new(
+                    thinner,
+                    plan.tags().immediate().to_vec(),
+                    plan.tags().handle().to_vec(),
+                    plan.tags().owner_bands().to_vec(),
+                ),
+            );
+            let word = BoundaryWord((out_of_range << BOUNDARY_TAG_BITS) | *tag as u64);
+
+            for (name, probe) in probes {
+                let (_real_module, real_code) = compile_probe_with_plan(probe, &plan);
+                let (_pert_module, pert_code) = compile_probe_with_plan(probe, &perturbed);
+                let real = run2(real_code, base, word);
+                let pert = run2(pert_code, base, word);
+
+                assert_ne!(
+                    real, BOUNDARY_ERR_TAG,
+                    "RECUT 2: `{name}` already refuses {tag:?} as an unknown tag \
+                     under the REAL plan, so the perturbation below cannot \
+                     change its answer and would prove nothing"
+                );
+                assert_eq!(
+                    pert, BOUNDARY_ERR_TAG,
+                    "RECUT 2: `{name}` still admits {tag:?} after the plan \
+                     stopped admitting it — its validity test is a constant, \
+                     not the plan's set"
+                );
+            }
+        }
+    }
+
+    /// **`RECUT 2`, causal and PER-SITE — the emitted region selection follows
+    /// the plan's owner bands.**
+    ///
+    /// ⛔ The tag test above holds the bands fixed, so a helper could consume
+    /// the admitted set and still decide *ownership* from a threshold; the
+    /// mutation that does exactly that survived it. Here each handle tag is
+    /// moved to the other band and the helper's answer must follow.
+    ///
+    /// **MEASURED:** with a bound persistent region holding a node and an empty
+    /// arena, `class` at node index 0 answers a persistent-banded tag and an
+    /// invocation-banded tag differently — so moving a tag between bands
+    /// changes its answer. **CLAIMED:** the region a word resolves in is the
+    /// plan's, not the tag's ordinal position. **THE GAP:** that index 0 is a
+    /// discriminating fixture, which the two `assert_ne!`s below establish
+    /// rather than assume.
+    #[test]
+    fn b2v_every_emitted_owner_band_test_is_the_plans() {
+        use crate::boundary_value::{
+            BoundaryEmissionPlan, BoundaryReferentOwner, BoundaryTagAdmission, BOUNDARY_TAG_BITS,
+        };
+
+        let plan = BoundaryEmissionPlan::derive();
+        let mut store = BoundaryValueStore::new();
+        let builder = BoundaryArenaBuilder::new();
+        materialize_ground(&mut store, &cons(1)).expect("materializes");
+        let f = bind(&mut store, builder);
+        let base = f.base;
+
+        assert!(
+            plan.tags().owner_bands().len() >= 2,
+            "RECUT 2: fewer than two owner bands, so a reassignment cannot be \
+             expressed and this test proves nothing"
+        );
+        assert!(
+            !plan.tags().handle().is_empty(),
+            "RECUT 2: no handle tags, so the sweep below is empty"
+        );
+
+        for tag in plan.tags().handle() {
+            let owner = tag.referent_owner();
+            let elsewhere = match owner {
+                BoundaryReferentOwner::PersistentStore => BoundaryReferentOwner::InvocationArena,
+                BoundaryReferentOwner::InvocationArena | BoundaryReferentOwner::NoReferent => {
+                    BoundaryReferentOwner::PersistentStore
+                }
+            };
+            let bands: Vec<_> = plan
+                .tags()
+                .owner_bands()
+                .iter()
+                .map(|(band, tags)| {
+                    let mut tags: Vec<_> =
+                        tags.iter().copied().filter(|other| other != tag).collect();
+                    if *band == elsewhere {
+                        tags.push(*tag);
+                        tags.sort();
+                    }
+                    (*band, tags)
+                })
+                .collect();
+            let perturbed = BoundaryEmissionPlan::new(
+                plan.admitted_classes().to_vec(),
+                plan.int_magnitude_classes().to_vec(),
+                plan.byte_span_classes().to_vec(),
+                BoundaryTagAdmission::new(
+                    plan.tags().admitted().to_vec(),
+                    plan.tags().immediate().to_vec(),
+                    plan.tags().handle().to_vec(),
+                    bands,
+                ),
+            );
+
+            // Index 0 exists in the persistent region and not in the empty
+            // arena, so the two regions give different answers.
+            let word = BoundaryWord(*tag as u64);
+            let (_real_module, real_code) =
+                compile_probe_with_plan(Probe::Unary(|h| h.class), &plan);
+            let (_pert_module, pert_code) =
+                compile_probe_with_plan(Probe::Unary(|h| h.class), &perturbed);
+            let real = run2(real_code, base, word);
+            let pert = run2(pert_code, base, word);
+            assert_ne!(
+                real, pert,
+                "RECUT 2: `class` answers the same for {tag:?} whether the plan \
+                 bands it under {owner:?} or {elsewhere:?} — the region \
+                 selection is not derived from the bands"
+            );
+        }
     }
 
     /// **`AC-1`/`AC-6` — the plan's owner bands and `referent_owner` are the
