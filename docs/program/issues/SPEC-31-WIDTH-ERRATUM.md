@@ -1,7 +1,7 @@
 ---
 id: SPEC-31-WIDTH-ERRATUM
 title: "spec 31-lexical mandates a 96-column canonical width while the formatting conformance suite asserts 88 in 18 places and cites 31 §1d as its source — rule the exact value and reconcile"
-status: draft
+status: ready
 owner: spec
 size: S
 gate: none
@@ -40,30 +40,65 @@ source:** `:173` and `:384` both read `- spec: `31 §1d` (88 display columns …
   from display width. ⚠ Its stated purpose is *"the 88/89 pair fixes both
   boundary orientation and display-width counting"* — a **boundary-orientation
   pin at the wrong boundary**.
-- **the comment threshold** (`:610`–`:658`) — *"comments-pin-hard-lines-and-the-88-threshold"*,
+- **the comment threshold** (`:610`–`:658`) —
+   *"comments-pin-hard-lines-and-the-88-threshold"*,
   where *"`code + two spaces + comment` exactly 88 display columns"* is
   load-bearing, against a spec rule (`31:332`) that says **96**.
 - `:479` — *"every line would fit within 88 columns."*
 
-## What needs deciding, and by whom
+## ✅ RULED BY THE OPERATOR, 2026-07-26 — **96 IS NORMATIVE**
 
-⛔ **Which value is correct is not the enclave's to settle unilaterally**, because
-the landed formatter already implements one of them. Two questions, in order:
+> **Operator:** *"re 88 v 96. 96 is what it should be. It was an incomplete
+> revision, apparently."*
 
-1. **⭐ Which width is normative — 96 or 88?** ⚠ Note the asymmetry: **two
-   artifacts say 96** (the spec section and the landed `layout.rs`), **one says
-   88** (the conformance suite, 18 times). ⛔ A count is not an argument — the
-   question is which was *derived* and which was *inherited*, and neither is
-   evidenced here. **Architect.**
-2. **Then the reconcile.** Whichever way it goes, one artifact family moves.
-   Moving a conformance row is a **conformance-granularity** decision, not spec
-   editing. **Architect rules; spec enclave executes.**
+⇒ ⛔ **The value question is CLOSED. Do not re-ask it, and do not re-argue it
+from the 18-vs-1 count.** The count was never the argument; the operator's
+ruling names the **cause** — an incomplete revision — which is exactly the
+derived-vs-inherited question this node said was unevidenced. **`conformance/` is
+the side that carries a superseded value.**
 
-⚠ **Do not assume the 18-vs-1 count settles it.** A single deliberate spec
-revision from 88 → 96 that never swept `conformance/` produces exactly this
-picture — and so does a conformance suite written against a superseded draft.
-⛔ Establish which happened before editing either side; the `git log` on both
-files is the cheap discriminator and nobody has run it.
+⇒ **`spec/30-surface/31-lexical.md` and `crates/ken-elaborator/src/layout.rs` are
+correct and DO NOT CHANGE.** The reconcile moves `conformance/`.
+
+### ⛔ AND IT IS NOT A `sed` — the arithmetic has to be re-derived
+
+**This is the one thing most likely to be got wrong**, because `88` → `96` looks
+like a substitution and is not:
+
+1. ⛔ **`FMT7`'s fixtures are a BOUNDARY PAIR, not a constant.** `:169`–`:187`
+   builds paired fixtures *"at display widths 88 and 89"* across eight syntactic
+   forms, whose stated purpose is *"the 88/89 pair fixes both boundary
+   orientation and display-width counting."* ⇒ The pair becomes **96/97**, and
+   **every fixture must be re-authored to those widths** — a fixture whose text
+   is 88 columns wide is simply *flat* at a 96 limit and tests nothing. ⚠ A
+   number-only edit leaves eight fixtures **silently vacuous while reading as
+   updated.**
+2. ⛔ **The comment threshold is derived arithmetic.** `:639` — *"makes `code` +
+   two spaces + `comment` exactly 88 display columns"* — is a computed
+   construction against a spec rule (`31:332`) that says **96**. The code and
+   comment lengths must be re-derived so the sum is exactly 96, and the `89`
+   partner becomes `97`.
+3. ⛔ **Fix the false attributions too.** `:173` and `:384` read
+   ``- spec: `31 §1d` (88 display columns …)`` — they attribute a value to a
+   section that states 96. **Those citation lines are part of the defect, not
+   collateral.**
+4. ⚠ **The Unicode cases are the reason the pair exists.** `FMT7` deliberately
+   includes *"Unicode glyphs whose UTF-8 byte length differs from display
+   width"*, because a byte-counting implementation flips exactly one arm. ⇒ The
+   re-authored fixtures must preserve that property at the new boundary, or the
+   pin stops discriminating byte-counting from display-counting — which is
+   **most** of what it was for.
+
+⇒ ⭐ **Required control:** for each re-authored pair, show the **`96` arm stays
+flat and the `97` arm breaks.** A pair where both arms break, or both stay flat,
+is not a boundary pin. ⛔ `18` occurrences changed is not evidence; a passing
+discriminating pair is.
+
+## Sequencing
+
+⛔ **Not concurrent with `SPEC-ALIGN-A1`** — same ring (spec enclave), and A1 is
+live. This releases when A1 closes. ⚠ A1 is forbidden from touching it: A1 may
+not move a conformance row, which is why this was carved out in the first place.
 
 ## Scope
 
