@@ -1,7 +1,7 @@
 ---
 id: KW-ORACLE-CLOSURE
 title: "close the KW-THEOREM source oracle structurally — the occurrence sweep is never applied, and the file population is a five-arm hand enumeration"
-status: ready
+status: active
 owner: language
 size: S
 gate: none
