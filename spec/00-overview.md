@@ -114,9 +114,10 @@ Two invariants govern this shape:
 3. **Total by default.** Definitions admitted to the kernel are checked for
    termination (size-change termination over δ-unfolding); non-terminating or
    partial computation is explicit, not silent.
-4. **Content-addressing as identity.** Values are identified by the hash of
-   their structure, giving O(1) structural equality and global deduplication.
-   Identity is a property of *what a value is*, not where it lives.
+4. **Content-addressing for canonical data.** Canonical, persistable data values
+   are identified by the hash of their structure, giving O(1) structural
+   equality and global deduplication. Runtime-local opaque values such as
+   ordinary closures have no such identity (`40-runtime/41-values.md §2.1`).
 5. **Failure is a first-class output.** A proof that does not go through yields
    a structured artifact (countermodel / typed hole / region decomposition),
    never an opaque error. Legibility is a feature, specified in

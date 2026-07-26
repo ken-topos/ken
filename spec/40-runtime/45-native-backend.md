@@ -32,9 +32,11 @@ flowchart TD
   core --> kernel["kernel check (TCB)<br/>admits a well-typed core term"]
   kernel --> interp["interpreter X1 (oracle)<br/>reference value"]
   kernel --> backend["native backend X3<br/>native value"]
-  interp -. "differential agreement<br/>identical K3 value; interpreter right by definition" .- backend
-  interp --> val["the observable value"]
-  backend --> val
+  interp -->|"direct closure-free result"| iobs["closure-free comparable<br/>ground observation"]
+  backend -->|"direct closure-free result"| bobs["closure-free comparable<br/>ground observation"]
+  interp -. "callable-bearing result<br/>selected well-typed projection/application probes" .-> iobs
+  backend -. "callable-bearing result<br/>selected well-typed projection/application probes" .-> bobs
+  iobs -. "differential agreement<br/>identical observations; interpreter right by definition" .- bobs
 ```
 
 Adding the backend grows the system's **tested** surface (a new evaluator and
@@ -101,13 +103,17 @@ without the model changing.
 > (`42 §2`). The pieces:
 >
 > - **Value representation follows the K3 model** (`41`, `OQ-7`): scalars
->   (`Int`/`Bool`/`Float`) are **unboxed typed immediates**; compound /
->   identity-bearing values are **content-addressed heap slots** (interned, so
->   structural equality is O(1) slot-id comparison). The backend shares the
->   interpreter's value model; it does not invent a second representation.
-> - **Functions lower to closures with sharing** — application is
->   **call-by-value, strict, left-to-right** (`42 §2`, `OQ-eval-order`), results
->   shared via the content-addressed heap (equal subcomputations deduplicated).
+>   (`Int`/`Bool`/`Float`) are **unboxed typed immediates**; closure-free
+>   canonical compound data uses **content-addressed heap slots** (interned, so
+>   structural equality is O(1) slot-id comparison); ordinary closures and
+>   graphs containing them are runtime-local opaque values (`41 §2.1`). The
+>   backend shares this observable value boundary with the interpreter but is
+>   free to choose an unobservable internal closure representation.
+> - **Functions lower to ordinary closures** — application is
+>   **call-by-value, strict, left-to-right** (`42 §2`, `OQ-eval-order`).
+>   Equal subcomputations deduplicate only when their result is
+>   content-addressable canonical data. No closure identity, equality, hash, or
+>   persistence is observable.
 > - **Primitives lower to the audited runtime semantics** (`14 §5`, `18a`):
 >   each `Decl::Primitive` operation computes the value its registered
 >   interpreter dispatch defines — the backend must compute the **same** partial
@@ -140,12 +146,23 @@ the primary correctness discipline (`AC2`), and it is what makes BE-NotInTCB
 (§2) safe: the backend does not have to be *trusted* to be correct, because
 every divergence from the oracle is a **loud, catchable** failure.
 
-> **Contract BE-Differential (`AC2`).** For any **closed, ground** core term
-> `t`, evaluating `t` through the interpreter and through the native backend
-> must produce **identical K3 values** (content-addressed model, `41 §4`: same
-> slot / same immediate). On any disagreement, **the interpreter is right by
-> definition** (`42 §5`); the backend is the defect. The backend earns trust by
-> agreement over the corpus, not by inspection.
+> **Contract BE-Differential (`AC2`).** For any closed core term `t` whose
+> result is a **closure-free comparable ground observation** (canonical data or
+> a comparable immediate), evaluating `t` through the interpreter and through
+> the native backend must produce **identical K3 values** (content-addressed
+> model, `41 §4`: same slot for canonical data / same immediate). On any
+> disagreement, **the interpreter is right by definition** (`42 §5`); the
+> backend is the defect. The backend earns trust by agreement over the corpus,
+> not by inspection.
+
+A result containing a callable at any depth is not a direct comparable ground
+observation. The differential harness projects to such callables as needed,
+applies selected well-typed inputs, and compares only the resulting
+closure-free comparable ground observations; separately projected
+closure-free fields may be compared directly. A differential harness MUST NOT
+compare closure slots, pointers, canonical bytes, or code/environment
+identities. This discipline does not require extensional function equality or
+a decision procedure for it.
 
 **The layers-may-differ boundary (the discriminating line).** The backend is
 **allowed** to differ from the interpreter in **internal strategy** — a
@@ -167,8 +184,8 @@ value**. So the corpus discriminates on exactly this line:
 This pair is the seed of the `conformance/runtime/backend/` corpus: it is not
 "does the backend compile," it is "does the backend's *value* agree with the
 oracle's, while its *internals* are free." **Determinism and canonicity carry**
-(`42 §2`): the backend must be deterministic (same term → same value) and
-canonical for closed ground computations, exactly as the interpreter is.
+(`42 §2`): a closure-free comparable ground observation must be deterministic
+(same term → same value) and canonical, exactly as in the interpreter.
 
 The corpus is only as strong as the terms it runs; the **producer** side (the
 real differential harness against the landed interpreter, `crates/ken-interp`)
@@ -233,7 +250,8 @@ Once `OQ-backend-target` is ratified, `X3-build` (Team Runtime) delivers:
 
 - **`ken-codegen`** — the backend lowering the model of §3 to the **ratified**
   target: value representation (K3 immediates + interned slots),
-  CBV-with-sharing closures, the audited primitives, constructor-dispatch
+  runtime-local opaque closures with CBV application, the audited primitives,
+  constructor-dispatch
   eliminators, proof erasure.
 - **The differential harness** — the real validator running the codegen output
   **against the landed interpreter** (`crates/ken-interp`), enforcing

@@ -1,7 +1,8 @@
 # The runtime and reference semantics
 
-> Status: **DRAFT v0**. Normative for the value model, equality, and the
-> reference-semantics role; capacity/representation choices are flagged OQ.
+> Status: **DRAFT v0**. Normative for the value model, equality, callable
+> boundary, and reference-semantics role; capacity/representation choices are
+> flagged OQ.
 > Contract for WS-X (X1/X2, later X3/X4). It rests on two design commitments:
 > **heterogeneous typed values (not uniform f64)** and **FNV-1a + memcmp content
 > addressing (not Leech-lattice geometry)**.
@@ -16,8 +17,8 @@ which later backends are validated).
 
 1. A **value model** (`41-values.md`): how Ken values are represented —
    heterogeneous typed immediates for scalars, a **content-addressed heap** for
-   compound/identity-bearing values, with O(1) structural equality and global
-   deduplication.
+   closure-free canonical compound data with O(1) structural equality and
+   global deduplication, and runtime-local opaque ordinary closures.
 2. The **operational semantics** (`42-evaluation.md`): how core terms reduce to
    values, how effects act, and how `unknown` propagates through partial
    programs.
@@ -52,8 +53,9 @@ which later backends are validated).
 
 ## 3. Design principles
 
-- **Immutability + sharing.** Pure values are immutable; equal values are shared
-  (dedup). Identity is *what a value is*, not where it lives (`41 §equality`).
+- **Immutability + canonical-data sharing.** Pure values are immutable; equal
+  canonical data is shared (dedup). Ordinary closures are runtime-local opaque
+  callables with no structural or persistent identity (`41 §2.1`).
 - **Loud refusal over silent degradation.** Resource limits fail loudly, never
   silently corrupt (`44`) — independent of any specific Leech-derived numbers.
 - **Reference first, performance behind it.** The interpreter is simple and
@@ -63,7 +65,8 @@ which later backends are validated).
 ## 4. What WS-X must deliver (ties to X1/X2, G1/G6/G5-perf)
 
 The reference interpreter (X1) that runs the G1 vertical slice and is the
-reference semantics for everything after; the content-addressed runtime (X2)
-with O(1) equality + dedup and conventional addressing; and (later) the native
-backend (X3) + scale validation (X4) with any capacity boundary
-*deliberate and loud*. Conformance: `../../conformance/runtime/`.
+reference semantics for everything after; the content-addressed canonical-data
+runtime (X2) with O(1) equality + dedup, conventional addressing, and a
+runtime-local opaque callable boundary; and (later) the native backend (X3) +
+scale validation (X4) with any capacity boundary *deliberate and loud*.
+Conformance: `../../conformance/runtime/`.

@@ -52,31 +52,38 @@ only non-value residues are **`unknown`** (an open hole, §4) and, for an opt-in
 opaque non-total definition, **divergence** (§3.3, `43 §2, case 4`). The
 interpreter computes values; the kernel's **η** (`17 §2`, type-directed) and **Ω
 proof-irrelevance** are *conversion-time* equalities, not evaluation steps
-(§3.5) — agreement on functions is therefore "up to the kernel's η at compare
-time" (§3.5).
+(§3.5). Runtime closures are not compared by representation or identity;
+evaluator agreement for a callable-bearing result uses selected well-typed
+projections/applications to closure-free comparable ground observations (§3.7,
+§5).
 
 ## 2. Evaluation order (`OQ-eval-order` DECIDED)
 
 **Totality makes evaluation order meaning-preserving.** Because every Ken
 program terminates (SCT, `../10-kernel/17 §4`), there is no ⊥/divergence to
-distinguish strict from lazy in the total core — both compute the *same value*.
-So evaluation order is a purely **operational** choice (space, time,
-legibility), **not** semantics — unlike a partial language, where laziness is
-observable. That frees the choice to favor predictability.
+distinguish strict from lazy in the total core — both compute the same
+**observable behavior**. That is the same closure-free comparable ground
+observation directly, or the same selected such observations after projecting
+and applying a callable-bearing result (§3.7). Evaluation order is therefore a
+purely **operational** choice (space, time, legibility), **not** semantics —
+unlike a partial language, where laziness is observable. That frees the choice
+to favor predictability.
 
 **Decision (operator, 2026-06-27): call-by-value (strict) with sharing, strict
 by default, lazy only where required or annotated.**
 
 - **Strict CBV is the default** — application arguments, `let` bindings,
   constructor arguments, and pair components are evaluated **eagerly,
-  left-to-right**; results are shared via the content-addressed heap (`41`), so
-  equal subcomputations are deduplicated (CBV's predictability + the store's
-  space efficiency, no recomputation). Chosen because, the choice being
-  meaning-preserving, strict is the most **legible and predictable**: a cost
-  model you can reason about, an order that matches how the code reads, and no
-  thunk/space-leak footguns. **Predictability is also a precondition for the
-  time/space reasoning security depends on** — the `@ct` timing discipline
-  (`../60-security/61 §5a`) and worst-case bounds need a non-data-dependent
+  left-to-right**; content-addressable results are shared via the heap (`41`),
+  so equal canonical-data subcomputations are deduplicated (CBV's
+  predictability + the store's space efficiency, no recomputation). Ordinary
+  closures and graphs containing them remain runtime-local (`41 §2.1`).
+  Chosen because, the choice being meaning-preserving, strict is the most
+  **legible and predictable**: a cost model you can reason about, an order that
+  matches how the code reads, and no thunk/space-leak footguns.
+  **Predictability is also a precondition for the time/space reasoning security
+  depends on** — the `@ct` timing discipline (`../60-security/61 §5a`) and
+  worst-case bounds need a non-data-dependent
   "when"; lazy-by-default would undermine them.
 - **Laziness where semantically required — the eliminator's branches.** The
   **one** non-strict position is an **eliminator's methods**: `elim_D M m̄ ī s`
@@ -98,7 +105,11 @@ by default, lazy only where required or annotated.**
   decides definitional equality by **lazy WHNF** (`§1`, `17`); the *runtime*
   executes **CBV-with-sharing**. Different layers, allowed to differ — as Lean's
   kernel reduces lazily for defeq while compiled code runs strictly. The two
-  need only agree on final values (`§1`).
+  agree on **closure-free comparable ground observations**: directly for a
+  closure-free result, and through selected well-typed
+  projection/application probes for a result containing a callable at any
+  depth. They never compare runtime closure representation or identity (§3.7,
+  §5, `41 §2.1`).
 
 ## 3. The evaluation algorithm
 
@@ -107,8 +118,8 @@ rather than textually substituting (the declarative β of `§1` is `t[u/x]`; the
 implementation realizes it by binding `x` in the environment — equivalent by the
 standard environment/substitution correspondence, and the binding is what makes
 the argument **shared**, evaluated once). The strategy below is normative for
-*results*; an implementation may use any internal representation that realizes
-them (`§5`).
+observable behavior; an implementation may use any internal representation
+that realizes it (`§5`).
 
 ### 3.1 Values and environments
 
@@ -116,9 +127,9 @@ A **value** `v` (the inhabitants of `41`'s model):
 
 ```
 v ::= n                          -- scalar immediate: Int word, Bool, Char, Float, Decimal (41 §1)
-    | cₖ v̄                        -- constructor application, saturated (data) — interned (41 §2)
-    | (v₁ , v₂)                   -- pair (Σ); a record is a right-nested pair (13 §3) — interned
-    | ⟨ λ(x:A).t ; ρ ⟩            -- closure: code + captured env — interned by (code_id, ρ) (41 §3a)
+    | cₖ v̄                        -- constructor application, saturated (data)
+    | (v₁ , v₂)                   -- pair (Σ); a record is a right-nested pair (13 §3)
+    | ⟨ λ(x:A).t ; ρ ⟩            -- ordinary closure: runtime-local and opaque (41 §2.1)
     | Type ℓ | (x:A)→B | (x:A)×B  -- type values (types ARE values; canonical type formers)
     | str | bytes | array | map | set   -- collection values (heap, 41 §2)
     | unknown                     -- the open-hole residue (41 §6, §4)
@@ -127,9 +138,11 @@ v ::= n                          -- scalar immediate: Int word, Bool, Char, Floa
 
 An **environment** `ρ` maps de Bruijn indices to values (`ρ(i)`), a persistent
 vector extended on each binder. `eval : Env → Term → Value`, `apply : Value →
-Value → Value`. Every **compound** value (`cₖ v̄`, pair, closure, collection,
-bignum) is **interned** on construction via the `41 §3b` algorithm, yielding a
-slot id; equal content ⇒ same slot ⇒ dedup (§3.4).
+Value → Value`. Every closure-free canonical compound (`cₖ v̄`, pair,
+collection, bignum) is interned on construction via the `41 §3b` algorithm,
+yielding a slot id; equal content ⇒ same slot ⇒ dedup (§3.4). An ordinary
+closure, or an aggregate containing one, is constructed as a runtime-local
+value and never reaches that interner (`41 §2.1`).
 
 ### 3.2 `eval` / `apply`
 
@@ -138,8 +151,8 @@ eval ρ (Var i)          = ρ(i)                                      -- lookup 
 eval ρ (Const c)        = eval ρ∅ (body c)            -- δ: c has a body (transparent OR opaque); bodyless c → prim/postulate (§3.3)
 eval ρ (λ(x:A).t)       = ⟨ λ(x:A).t ; ρ ⟩            -- closure; NO reduction under the binder (WHNF, §3.5)
 eval ρ (App f u)        = apply (eval ρ f) (eval ρ u)              -- CBV: force operator, then argument
-eval ρ (cₖ ā)           = intern (cₖ (map (eval ρ) ā))            -- strict constructor args
-eval ρ (a , b)          = intern (eval ρ a , eval ρ b)            -- strict pair
+eval ρ (cₖ ā)           = construct (cₖ (map (eval ρ) ā))         -- strict constructor args
+eval ρ (a , b)          = construct (eval ρ a , eval ρ b)         -- strict pair
 eval ρ (p.1)            = fst (eval ρ p)             ;   eval ρ (p.2) = snd (eval ρ p)   -- Σ-β
 eval ρ (let x = e₁ in e₂) = eval (ρ , eval ρ e₁) e₂              -- strict let; e₁ forced once, shared
 eval ρ (Type ℓ)         = Type ℓ                                   -- type value, level carried verbatim (12 §4)
@@ -154,6 +167,11 @@ apply ⟨ λ(x:A).t ; ρ' ⟩ u = eval (ρ' , u) t                       -- β b
 apply ⟨neutral n⟩       u = ⟨neutral (n · u)⟩                      -- stuck (open terms only)
 apply unknown           u = unknown                                -- strict (§4)
 ```
+
+`construct` does not prescribe an allocation strategy. It interns a
+closure-free canonical graph as required by `41 §2–§3`; if any reachable value
+is an ordinary closure, it constructs a runtime-local graph and MUST NOT submit
+that graph to canonicalization or persistence.
 
 ### 3.3 Per-form reduction (reconciled with `17 §1`)
 
@@ -211,21 +229,24 @@ apply unknown           u = unknown                                -- strict (§
 
 ### 3.4 Sharing and dedup (where the heap is consulted)
 
-Two distinct sharings, both via the content-addressed heap (`41`):
+Two distinct sharings, only one of which requires the content-addressed heap:
 
 - **Evaluation sharing** — a `let`/argument value is computed **once** and bound
   in the env (§3.2); every use reads the bound value. No recomputation (CBV +
   binding).
-- **Representation sharing (dedup)** — every compound value is **interned** at
-  construction (`41 §3b`): equal canonical content ⇒ the **same slot id** ⇒
-  stored once. Two subcomputations that produce structurally-equal results
-  resolve to the **same heap entry**.
+- **Representation sharing (dedup)** — every closure-free canonical compound
+  is interned at construction (`41 §3b`): equal canonical content ⇒ the **same
+  slot id** ⇒ stored once. Two subcomputations that produce structurally-equal
+  canonical data resolve to the **same heap entry**. Ordinary closures and
+  closure-containing graphs have no canonical representative or slot identity
+  (`41 §2.1`).
 
-Consequently **structural equality is O(1)** — a slot-id comparison (`41 §4`),
-not a deep traversal (the traversal happened once, at intern time). The
-conformance corpus asserts **dedup** (equal subcomputations share a slot), not
-merely value-equality (§3.7, AC2) — a recompute-without-dedup bug yields an
-equal value at a *different* slot, which the slot assertion catches.
+Consequently **structural equality of content-addressed data is O(1)** — a
+slot-id comparison (`41 §4`), not a deep traversal (the traversal happened
+once, at intern time). The conformance corpus asserts **dedup** for canonical
+data (equal subcomputations share a slot), not merely value-equality (§3.7,
+AC2) — a recompute-without-dedup bug yields an equal value at a *different*
+slot, which the slot assertion catches. It does not compare closure slots.
 
 ### 3.5 WHNF vs full value (the boundary)
 
@@ -245,15 +266,15 @@ the shared conversion rules**, the interpreter's full value and the kernel's
 WHNF-plus-congruence coincide (same constructor normal form). A value produced
 through `PrimReduction::Op` is excluded from this claim: it is specified by the
 runtime primitive registry and remains opaque to conversion. On **functions**
-the interpreter stops at a closure
-while the kernel applies **η** (`17 §2`) and **Ω proof-irrelevance** at
-*conversion* time; so "the interpreter's value equals the kernel's reduct" holds
-**up to the kernel's η / proof-irrelevance** — the interpreter need not
-implement η (it produces values; the kernel compares them). The level discipline
-is likewise **carried, not recomputed**: `Type ℓ` and the type formers evaluate
-to themselves with the kernel's **explicit** level `ℓ` unchanged (`12 §4`);
-evaluation forms no new types and so introduces **no** new level computation to
-reconcile against `12`.
+the interpreter stops at a closure while the kernel applies **η** (`17 §2`) and
+**Ω proof-irrelevance** at *conversion* time. Those are kernel comparisons of
+terms, not equality on runtime closures. The interpreter need not implement η;
+cross-evaluator function behavior is observed only through selected well-typed
+applications to closure-free comparable ground observations (§3.7). The level
+discipline is likewise **carried, not recomputed**: `Type ℓ` and the type
+formers evaluate to themselves with the kernel's **explicit** level `ℓ`
+unchanged (`12 §4`); evaluation forms no new types and so introduces **no** new
+level computation to reconcile against `12`.
 
 ### 3.6 Canonicity (testable)
 
@@ -267,26 +288,33 @@ never a stuck neutral:
 - `Eq`-by-type on closed canonical types → its computed proposition (C2–C4),
   proof-irrelevant at the value layer.
 
-The kernel's **confluence** (`17 §1`) + **totality** (`43 §1`) make this value
-**unique**. The **only** marked non-value outcomes are `unknown` (an open hole,
-§4) and the divergence of an opt-in **opaque non-total** definition (§3.3, `43
-§2.4`) — both *listed*, never silent. **Branch laziness (AC3)** is the
-structural face of canonicity here: an untaken eliminator method is never
-evaluated, so a branch that *would* produce `unknown` or diverge does **not**
-contaminate a result selected away from it (§2) — asserted structurally, since
-the pure fragment is otherwise total.
+The kernel's **confluence** (`17 §1`) + **totality** (`43 §1`) make a
+closure-free comparable result unique directly. If a result contains a callable
+at any depth, uniqueness is observable only through selected well-typed
+projections/applications to such results; it does not require a unique closure
+representation (`41 §2.1`). The **only** marked non-value outcomes are `unknown`
+(an open hole, §4) and the divergence of an opt-in **opaque non-total**
+definition (§3.3, `43 §2.4`) — both *listed*, never silent. **Branch laziness
+(AC3)** is the structural face of canonicity here: an untaken eliminator method
+is never evaluated, so a branch that *would* produce `unknown` or diverge does
+**not** contaminate a result selected away from it (§2) — asserted structurally,
+since the pure fragment is otherwise total.
 
 ### 3.7 Determinism (testable)
 
-**Determinism.** Evaluation of a closed term is a **function** — same term →
-**same value**, and (for compounds) the **same slot id**. It holds because
-reduction is confluent (`17 §1`) and CBV fixes the order; totality makes any
-order yield the same value (§2), and interning makes the representative
-canonical (§3.4). Determinism is what makes the interpreter a usable **oracle**
-(§5). The discriminating conformance case (AC2) must **flip**: a correct
-**shared** evaluation (equal subterms → one slot) versus a recompute-divergence
-(equal value at two slots) — assert the slot identity, not just value equality,
-or the case passes vacuously.
+**Determinism.** Evaluation of a closed term is a **function**. A closure-free
+comparable ground result yields the same observation, and content-addressed
+compound data yields the **same slot id**. A result containing a callable at any
+depth is compared only through selected well-typed projections/applications
+that yield closure-free comparable ground observations, never through closure
+identity or representation (`41 §2.1`). This holds because reduction is
+confluent (`17 §1`) and CBV fixes the order; totality makes any order preserve
+the same observations (§2), and interning makes the canonical-data
+representative stable (§3.4). Determinism is what makes the interpreter a
+usable **oracle** (§5). The discriminating conformance case (AC2) must **flip**
+for canonical data: a correct shared evaluation (equal subterms → one slot)
+versus a recompute-divergence (equal value at two slots) — assert the slot
+identity, not just value equality, or the case passes vacuously.
 
 ## 4. `unknown` propagation
 
@@ -323,9 +351,14 @@ discriminating test (AC4) flips on **hole-present → `unknown`** vs **hole-abse
 ## 5. The interpreter as oracle (and the REPL)
 
 - **Differential oracle.** The native backend (X3) is validated by running a
-  differential corpus through both and requiring **identical values** (`44`/X4).
-  The interpreter is the reference; on any disagreement, the interpreter is
-  **right by definition** — so a bug here is a wrong *answer* silently
+  differential corpus through both and requiring identical **closure-free
+  comparable ground observations** (`45 §4`). A closure-free result is compared
+  directly; a result containing a callable at any depth is observed only
+  through selected well-typed projections/applications to such observations.
+  Runtime closure identity, representation, hash, slot, and provenance are
+  never compared (`41 §2.1`). The interpreter is the reference; on any
+  disagreement, the interpreter is **right by definition** — so a bug here is a
+  wrong *answer* silently
   propagated to every backend, which is why X1 is ★★ (agreement with the kernel
   on shared reductions and with independent primitive-value oracles for `Op`,
   §1, plus the canonicity/determinism corpus; X1 is **not** in the TCB for type
@@ -459,11 +492,38 @@ effect at the head and its continuation (then `k`'s effects) underneath. So:
 - **Single tail resumption fixes run order.** Because `k` is resumed once, in
   tail position (§6.2), the driver never interleaves or reorders — the performed
   order **is** the spine order. This realizes `36`'s sequencing discipline.
-- **Discriminating (the trace).** The observable result of an effectful program
-  is its **interaction trace** — the sequence of `Vis` op-tags performed and the
-  `Ret` leaf. A **reordered**/**dropped** interaction is a **different trace**
-  (a different tree), so the case **flips**: the correct order is one trace, any
-  reordering or omission is a distinct, detectable one.
+- **Discriminating (the trace envelope).** The observable envelope of an
+  effectful run contains one event per performed `Vis`, in sequence, with its
+  effect symbol and operation constructor, followed by the terminal `Ret`
+  result. A **reordered**/**dropped** interaction is a different envelope, so
+  the case **flips**: the correct order is one trace, and any reordering or
+  omission is distinct and detectable.
+
+**Closure-safe trace observation and export.** The envelope is compared
+structurally. An op argument, response, aggregate, or terminal result is
+compared directly only when it is a closure-free comparable ground
+observation. A callable-bearing payload at any depth is observed only through
+selected well-typed projections/applications to such observations; no closure
+pointer, slot, hash, code/environment identity, provenance, or representation
+is compared (`41 §2.1`, `45 §4`).
+
+A durable trace export has the stricter publication boundary from `41 §2.1`.
+If any op argument, response, or terminal-result graph contains an ordinary
+closure, the whole export MUST refuse before ITF bytes or a content hash exist.
+It MUST NOT redact or omit the payload, replace it with a pointer/digest/local
+handle, or drop the corresponding live `Vis` event. The event still occurs in
+the runtime envelope; only durable export refuses (`../70-behavioral/73 §2.5`).
+
+These are the minimum mission-derived constraints:
+
+| Retained constraint | Mission property that fails without it |
+|---|---|
+| One structural event per `Vis` in sequence | Dropping or reordering an interaction makes the recorded run false, violating correctness and boundary honesty (`docs/PRINCIPLES.md` principles 4 and 8). |
+| Payload/result comparison only by closure-free observations or selected probes | Comparing an opaque callable would expose an intensional implementation identity as semantics, violating correctness and boundary honesty (principles 4 and 8). |
+| Whole-trace refusal before durable export | A process-local callable cannot be reproduced by a durable trace; redaction or late substitution would silently degrade a security-boundary artifact (principles 8 and 12). |
+
+This contract fixes no probe enumeration, serializer layout, handle scheme, or
+monitor transport mechanism.
 
 ### 6.5 Row-bounding at evaluation (normative property)
 
@@ -499,12 +559,13 @@ shape; it does not promote an `Op` runtime result into conversion. So:
   is the one it denotes. The two semantics are **one denotation**: L5 says *what
   tree the program is*; X1 *runs* that tree, substituting the world's responses
   at the `Vis` nodes via `H`.
-- **The agreement is the trace.** For a **fixed** handler `H` (the same
-  responses), X1's performed sequence of `Vis` op-tags and its `Ret` result are
-  exactly the spine and leaf of L5's `⟦e⟧`. This is what conformance asserts: on
-  a corpus, **X1's trace == L5's ITree** (same `Vis`-tag sequence, same `Ret`
-  leaf) — not "it elaborates," but the structural identity of the *run* with the
-  *denotation*.
+- **The agreement is the closure-safe trace observation.** For a **fixed**
+  handler `H` (the same responses), X1's event envelope is exactly L5's `Vis`
+  spine followed by its `Ret` result. Conformance compares the envelope
+  structurally. It compares closure-free payloads and the terminal result
+  directly, and observes any callable-bearing payload/result only through the
+  selected well-typed probes of §6.4. The denotational identity is unchanged;
+  it does not imply closure equality.
 
 ### 6.7 `unknown` through effects
 
@@ -527,13 +588,14 @@ case (per §4) flips on hole-present → `unknown` vs hole-free → a real trace
 ### 6.8 Determinism and the oracle role (effects)
 
 Pure evaluation is a function (§3.7); **effectful** runs are a function **of its
-world responses** — given the same `H`, X1 produces the same trace and result.
+world responses**. Given the same `H`, X1 produces the same structural event
+envelope and corresponding closure-safe payload/result observations (§6.4).
 So X1 is the **oracle for effectful programs relative to a fixed handler**: a
 native backend (X3) is judged by running the same corpus with the same mock `H`
-and requiring the **identical trace** (`44`/X4, §5). The pure fragment's
-determinism + canonicity (§3.6–3.7) are **unchanged** — effect evaluation wraps
-the driver *around* the pure core; it does not alter pure reduction (no
-regression, acceptance 5).
+and requiring the same envelope and observations (`45 §4`, §5). It never
+requires closure identity. The pure fragment's determinism + canonicity
+(§3.6–3.7) are **unchanged** — effect evaluation wraps the driver *around* the
+pure core; it does not alter pure reduction (no regression, acceptance 5).
 
 **Level discipline:** §6 forms **no new types** — the `ITree`/`Effect`/`State`
 types are `36 §2.1`/`§7.4`'s, already level-reconciled; evaluation carries their
@@ -547,8 +609,9 @@ The **effect driver** `drive_H` (§6.2) parametric in the real-world handler `H`
 **exhaustively over `ρ_open`** (no catch-all on open-row dispatch, §6.5); the
 **sequencing** as linear consumption of the `bind`-built `Vis` spine (§6.4);
 **row-bounding** as a type fact, not runtime (§6.5); **`unknown`** strict
-through the driver (§6.7); and the **X1 == L5 trace agreement** (§6.6) as the
-reference-correctness property — the ★★ load-bearing obligation. Built in
+through the driver (§6.7); and the **X1 == L5 closure-safe trace-observation
+agreement** (§6.6) as the reference-correctness property — the ★★ load-bearing
+obligation. Built in
 `ken-interp`, **wrapping** the unchanged pure core (§7). Pure handlers (`space`
 via `run_state`, user `handle`) discharge in §3; only the open row reaches the
 driver.
@@ -556,31 +619,35 @@ driver.
 Conformance: `../../conformance/runtime/effects/` — per-effect perform+resume;
 the trace order (a reorder/drop **flips**); row-bounding (an out-of-row op is
 uninstantiable, caught at elaboration); handled-vs-unhandled (a pure handler
-discharges in §3, the open row hits the driver); **X1-trace == L5-ITree** on a
-shared corpus; exhaustive-traversal (no catch-all on the open-row dispatch); and
+discharges in §3, the open row hits the driver); **X1 closure-safe trace
+observation == L5 ITree** on a shared corpus; exhaustive traversal (no catch-all
+on the open-row dispatch); and
 `unknown` strict through `perform`. Each case **flips** on its targeted bug or
-asserts a structural output (the `Vis`-tag sequence, the `Ret` leaf), per
-COORDINATION §7.
+asserts the structural event envelope plus closure-safe payload/result
+observations, per COORDINATION §7.
 
 ## 7. What WS-X must deliver here (X1, pure-core)
 
 A reference interpreter that evaluates **closed core terms to values** realizing
 the kernel's shared reductions (`§1`, `§3.3`) plus audited, interpreter-only
-primitive operations,
-**deterministically** (§3.7) and with **canonicity** for closed ground programs
-(§3.6); **CBV with sharing** via the content-addressed heap (§2, §3.4) with
+primitive operations, **deterministically** (§3.7) and with **canonicity** for
+closed ground programs (§3.6), observed under the closure-free/probe boundary;
+**CBV with sharing** via the content-addressed heap (§2, §3.4) with
 **branch-lazy** eliminators (§2); **`unknown` propagation** (§4); and the
 **oracle** role for later backends (§5). It runs the **G1** vertical slice
 end-to-end (V0 elaborates surface → core, X1 runs the core); effect evaluation —
 the interaction-tree driver — is in §6. The interpreter is the semantic
-reference — **not** in the TCB for soundness, but a wrong value here propagates
-to every backend, so correctness is agreement with the kernel for shared rules
-plus the primitive-value and conformance oracles.
+reference — **not** in the TCB for soundness, but a wrong closure-free
+observation or wrong behavior under a selected probe propagates to every
+backend, so correctness is agreement with the kernel for shared rules plus the
+primitive-value and conformance oracles.
 
 Conformance: `../../conformance/runtime/evaluation/` — canonicity of closed
 inductive/observational computations (constructor form; `cast`-refl → `a`;
-`Eq`-by-type; quotient elim), determinism + **dedup** (same term → same value at
-the same slot), short-circuit / branch laziness (untaken arm not forced), and
-`unknown` propagation (hole-present flips to `unknown`, hole-free never does).
-Each discriminating case **flips** on its targeted bug or asserts a structural
-output (slot identity, constructor head), per COORDINATION §7.
+`Eq`-by-type; quotient elim), determinism + **dedup** for closure-free canonical
+data (same term → same value at the same slot), callable-bearing results by
+selected closure-free ground observations, short-circuit / branch laziness
+(untaken arm not forced), and `unknown` propagation (hole-present flips to
+`unknown`, hole-free never does). Each discriminating case **flips** on its
+targeted bug or asserts a structural output (slot identity, constructor head),
+per COORDINATION §7.

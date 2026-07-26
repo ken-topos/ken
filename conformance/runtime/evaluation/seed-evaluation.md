@@ -74,8 +74,8 @@ computations, C2–C6/C9/C10), `16 §9.1` (the `(oracle)` cast/transport edges),
 `14 §5` (audited prim). The **K2 locked reductions**
 `kernel/observational/seed-observational.md` (`cast-refl`, `cast-computes-*`,
 `quotient-eq`, `quotient-elim`, `eq-inductive-*`). Heap:
-`41 §2`/`§3a`/`§4`/`§6`. V0: `surface/elaboration/seed-elaboration.md` (the G1
-elaboration X1 runs).
+`41 §2`/`§2.1`/`§3a`/`§4`/`§6`. V0:
+`surface/elaboration/seed-elaboration.md` (the G1 elaboration X1 runs).
 
 ---
 
@@ -152,28 +152,44 @@ deferred stuck forms, `42 §6`.)
 
 ---
 
-## CAN2 — determinism + sharing by slot identity (frame AC2)
+## CAN2 — determinism + canonical-data sharing (frame AC2)
 
 Evaluation of a closed term is a **function** (same term → same value,
-`42 §3.7`); results are **shared** via the content-addressed heap — equal
-subcomputations dedup to the **same slot id** (`42 §3.4`), making `==` an O(1)
-slot compare (`41 §4`). AC2 asserts **slot identity**, not just `==`
-(`42 §3.7`).
+`42 §3.7`). Closure-free canonical results are **shared** via the
+content-addressed heap: equal subcomputations dedup to the **same slot id**
+(`42 §3.4`), making `==` an O(1) slot compare (`41 §4`). Ordinary closures are
+outside that identity contract (`41 §2.1`); their deterministic behavior is
+observed only through selected applications to closure-free ground results.
 
 ### runtime/evaluation/det-same-term-same-value (property)
-- spec: `42 §3.7` (determinism)
-- given: the same closed term evaluated twice (independent runs).
-- expect: **identical value** — same constructor form and, for a compound, the
-  **same slot id** (`42 §3.7`, `41 §4`).
+- spec: `42 §3.7` (determinism), `41 §2.1`
+- given: the same closed term whose result is a closure-free comparable ground
+  observation, evaluated twice (independent runs)
+- expect: **identical observation** — the same comparable immediate, or the
+  same constructor form and **same slot id** for canonical compound data
+  (`42 §3.7`, `41 §4`)
 - why: determinism is what makes X1 a usable oracle. A non-deterministic
   evaluator (e.g. iteration-order-dependent) flips the second run's value/slot.
   (property; the AC2 baseline.)
 
+### runtime/evaluation/det-higher-order-by-ground-application (property)
+- spec: `42 §3.5`/`§3.7`, `41 §2.1`
+- given: evaluate the same closed term producing an ordinary closure twice;
+  apply each result to the same selected well-typed inputs, including inputs
+  that exercise captured data, until each probe yields a closure-free ground
+  observation
+- expect: corresponding observations are identical. The case never compares
+  closure equality, slot, hash, code id, captured environment, or provenance.
+- why: determinism extends through callable behavior without turning an
+  intensional representation into function equality. The probes are selected
+  observations, not an exhaustive or extensional decision procedure.
+
 ### runtime/evaluation/det-sharing-dedups-by-slot (oracle)
 - spec: `42 §3.4` (representation sharing / dedup), `41 §2`/`§4`; extends
   `runtime/values/dedup-shares-slot`
-- given: a closed term producing the **same** compound value by two independent
-  subcomputations, e.g. `pair (big_expr) (big_expr)`.
+- given: a closed term producing the same **closure-free canonical** compound
+  value by two independent subcomputations, e.g.
+  `pair (big_expr) (big_expr)`
 - expect: both components intern to the **same slot id** (stored once); `==` is
   **true** by O(1) slot compare, with **no recomputation** of the shared value
   (`(oracle)` on the trace). **Assert slot identity, not just `==`**

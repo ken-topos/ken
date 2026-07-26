@@ -44,10 +44,10 @@ language primitive.
 
 `String` is an immutable **UTF-8** text value and a **primitive type** (an
 opaque type constant, `../10-kernel/14 §5`); it is **content-addressed** like
-any compound value (`41 §2`), so equal strings share one slot and equality is
-**O(1)** (`41 §4`). It is **not** `List Char` — that is a separate, convertible
-*view* (`§2.3`). The runtime representation is a **packed byte buffer**, NFC-
-normalized at construction (`41 §3a`, kind tag `0x04`).
+other canonical compound data (`41 §2`), so equal strings share one slot and
+equality is **O(1)** (`41 §4`). It is **not** `List Char` — that is a separate,
+convertible *view* (`§2.3`). The runtime representation is a **packed byte
+buffer**, NFC-normalized at construction (`41 §3a`, kind tag `0x04`).
 
 ### 2.1 NFC normalization is at the address, not just the surface
 

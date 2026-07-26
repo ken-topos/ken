@@ -263,7 +263,9 @@ claim with no conformance case is a claim no one can rely on
   minting orthogonal. Each assertion names its parser, N4, or
   I-4 §B reachability gate; re-export-carried instance surfaces and multi-root
   precedence remain out.
-- `runtime/seed-runtime.md` — dedup + O(1) equality; `Int` past 2⁵³ exact;
+- `runtime/seed-runtime.md` and `runtime/values/README.md` — closure-free
+  canonical-data dedup + O(1) equality; ordinary-closure opacity, aggregate
+  `DecEq` absence, and transitive publication refusal; `Int` past 2⁵³ exact;
   `unknown` propagation.
 - `runtime/capacity/seed-capacity.md` — X2 store hardening (`44`): dedup-aware
   accounting (distinct, not occurrences), the **loud** at-limit failure
@@ -271,13 +273,15 @@ claim with no conformance case is a claim no one can rely on
   page release (`arena_bytes → 0`), region-scoped lifetime + escape-survival,
   retired-ids-never-resurrected, and no-lattice-on-the-hot-path.
 - `runtime/backend/seed-backend.md` — X3a native backend **differential
-  equivalence** (`45`): the interpreter-is-oracle rule (same closed ground term
-  through both → **identical K3 values**; interpreter right by definition,
-  `42 §5`), the **observable/unobservable** discriminating pair (a divergence in
-  observable value **rejects** / an unobservable-internal strategy difference
-  **admits**, `42 §2` layers-may-differ), the **not-in-TCB** posture (a codegen
-  bug is a wrong value, **never a false `proved`** — the trust chain kernel `Q`
-  / interpreter-oracle `tested` / backend `tested`, **not** kernel-backed),
+  equivalence** (`45`): the interpreter-is-oracle rule (same closed term through
+  both → identical closure-free comparable ground observations; callable
+  results are reached by selected projections/applications, never closure
+  identity; interpreter right by definition, `42 §5`), the
+  **observable/unobservable** discriminating pair (an observation divergence
+  **rejects** / an unobservable-internal strategy difference **admits**, `42 §2`
+  layers-may-differ), the **not-in-TCB** posture (a codegen bug is a wrong
+  observation, **never a false `proved`** — the trust chain kernel `Q` /
+  interpreter-oracle `tested` / backend `tested`, **not** kernel-backed),
   determinism-carries, and the `44` capacity cross-ref. A design/discipline
   corpus: the interpreter half is landed (`crates/ken-interp`), the backend half
   is `(oracle)`/X3-build-deferred; target-agnostic (`OQ-backend-target` stays
@@ -404,9 +408,12 @@ claim with no conformance case is a claim no one can rely on
 - `behavioral/trace/seed-trace.md` — B3 trace/instrumentation contract
   (`73`): the runtime companion to the B1 export — the `Σ`-event schema at the
   effect boundary, correlation keys for multi-`space` traces, the runtime
-  `Q`/`P` assertion points, and the monitor projected from `T`. An **untrusted
-  one-way projection** of already-verified content + instrumentation: adds
-  nothing to the trusted base, proves nothing new.
+  `Q`/`P` assertion points, and the monitor projected from `T`. Runtime event
+  envelopes preserve every `Vis`; only transitively closure-free envelopes
+  serialize/content-hash, with isolated op-argument/response/terminal-result
+  refusal controls. An **untrusted one-way projection** of already-verified
+  content + instrumentation: adds nothing to the trusted base, proves nothing
+  new.
 - `behavioral/resource-lifetime/seed-resource-lifetime.md` — the direct
   file-only `ResourceLifetimeObligation` body in the `T` channel: the exact
   `FsOpen` / `FsHandleMetadata` / `ResourceRelease` plan, the

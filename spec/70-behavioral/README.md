@@ -96,7 +96,9 @@ sharing one export and one logic** (`71 §1`, `73 §4`):
   the exported temporal obligations (LTL → Büchi, MOP-style), the **agentic
   safety envelope** (the LLM/agent as a nondeterministic oracle inside a
   verifiable FSM), and **trace conformance** closing the loop back to L1 (does
-  the implementation *refine* the model?).
+  the implementation *refine* the model?). Runtime events remain observable,
+  but only transitively closure-free trace envelopes cross the serialized
+  monitor boundary (`73 §2.5`).
 
 ## 6. What this area must deliver
 

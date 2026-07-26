@@ -68,8 +68,10 @@ non-runnable library as a failed program.
 
 Capture the exact command and exit status. For documentation fences, run `ken
 check` on the containing Markdown file. For execution claims, record observable
-output. For native claims, compare with the reference interpreter on the same
-checked input.
+output. For native claims, compare closure-free ground observations with the
+reference interpreter on the same checked input. Observe a callable-bearing
+result only through selected, well-typed projections or applications; never
+compare closure identity or representation.
 
 ## 9. Authority and sources
 

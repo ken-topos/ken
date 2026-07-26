@@ -15,27 +15,29 @@ the meaning of the verdicts/effects it reads (those are `../../verify/`,
 
 ## Reading disciplines
 
-**The observable is the emitted trace artifact from a real run — never a kernel
-verdict, never a synthetic literal.** A B3 case runs a **real program** through
-the **actual instrumentation + emitter** and asserts a **structural property of
-the emitted contract**: which `Σ` member an event concretizes, the correlation
-keys it carries, which point a `Q`/`P` projects to, or that the monitor
-is the image of `T`. It is **not** elaboration accept/reject (`30-surface`/IFC),
-**not** the upstream `proved`/`unknown` verdict (`21 §5`, `../../verify/`), and
-**not** the export-field projection (`71 §2.1`, `../export/`). What these cases
-pin is the **runtime concretization** of an already-established export.
+**Runtime observation and durable export are distinct.** A B3 case runs a
+**real program** through the **actual instrumentation + emitter**. The runtime
+envelope always records one event per `Vis`; callable-bearing payloads/results
+are observed only by selected closure-free ground probes. A durable trace
+artifact exists only when every op argument, response, and terminal-result graph
+is transitively closure-free; otherwise export refuses before bytes/hash while
+the live event remains (`42 §6.4`, `73 §2.5`). Cases assert structural
+properties of the real envelope/export: which `Σ` member an event concretizes,
+the correlation keys it carries, which point a `Q`/`P` projects to, or that the
+monitor is the image of `T`. They never hand-build a synthetic literal.
 
-**A trace event is an ITF *witness*, not a *claim* (`71 §3.2`, `73 §2.1/§3`).**
+**A trace event is a *witness*, not a *claim* (`71 §3.2`, `73 §2.1/§3`).**
 An event carries op/response **values** and has **no epistemic status** — it is
-never tagged `proved`/`tested`/`delegated`. A green trace is *evidence for* a
-`delegated` `T`, **never a promotion** of it (the one-way gate, TR-F). The net
-here is **projection/instrumentation fidelity + one-way flow**, not verdict
-meaning (subsumed upstream).
+never tagged `proved`/`tested`/`delegated`. Runtime witnesshood does not confer
+ITF serializability. A green exportable trace is *evidence for* a `delegated`
+`T`, **never a promotion** of it (the one-way gate, TR-F). The net here is
+**projection/instrumentation fidelity + closure-safe export + one-way flow**,
+not verdict meaning (subsumed upstream).
 
 **Locked structure vs deferred spelling (`73 §2.6`, `71 §3.1`).** The five-part
 contract (event schema, correlation keys, `Q`/`P` assertion points, monitor
 projection, ITF serialization), each part's value-set, the correlation-key set,
-and the cross-field invariants **TC1–TC5** are **locked** (normative,
+and the cross-field invariants **TC1–TC6** are **locked** (normative,
 checkable). The **literal serialized field keys** are `(oracle)`-tagged — `Ward`
 finalizes the wire token; a rename after it binds is a breaking change (a new
 hash, `71 §3.3`). Cases refer to a field/part by its **concept** and
@@ -49,6 +51,11 @@ case (TR-E) pins the **projection-as-projection** over the landed `T` channel
 (the monitor is the image of `T`, changes with `T`) **now**, and `(oracle)`-tags
 the **semantic** Büchi acceptance of a concrete `Temporal` formula. No case
 asserts a `Temporal` constructor set or a `compile` faithfulness equation.
+
+TR-D/E/F use transitively closure-free payload/result controls whenever an ITF
+artifact or downstream monitor is involved. Callable-bearing export refusal is
+isolated in TR-G; a runtime event's existence alone does not authorize monitor
+transport.
 
 **QA gate: real run → real instrumentation.** Every case drives a **real
 program** through the **actual** `drive_H` instrumentation (`36 §2` perform
@@ -119,8 +126,9 @@ signature / Büchi-monitor acceptance (B2).
 - spec: `spec/70-behavioral/73-conformance.md §2.2` (TC3), `36 §4/§4.1/§4.4`,
   `41 §3`
 - given: **two distinct `space`s** each performing an op, plus a **cross-space
-  message** (a `send` in space A of a content-addressed value, a `receive` of it
-  in space B, `36 §4.4`); run through the instrumentation
+  message** (a `send` in space A of the closure-free canonical record
+  `{ sequence = 7, payload = "ok" }`, and a `receive` of it in space B,
+  `36 §4.4`); run through the instrumentation
 - expect: (a) **every** event carries its **space identity** (the space's single
   effect label, `36 §4.1`); (b) the `send`/`receive` events carry **matching
   message provenance** (the message value's content address, `41 §3`) that
@@ -204,6 +212,27 @@ signature / Büchi-monitor acceptance (B2).
   `../export/` EX-E1 to the **runtime monitor** verdict — the offline-discharge
   case there, the live-monitor case here — same gate, not re-derived.)
 
+## TR-G. Closure-safe durable export (AC1/TC6)
+
+### trace/export-refuses-each-callable-bearing-position (AC1, soundness)
+- spec: `spec/70-behavioral/73-conformance.md §2.1/§2.5/§2.6` (TC2, TC6),
+  `42 §6.4`, `41 §2.1`
+- given: four real runs through instrumentation + emitter, identical except for
+  one position at a time: (a) a wholly closure-free op argument, response, and
+  terminal result; (b) an ordinary closure only in the op argument; (c) one
+  only in the response; (d) one only in the terminal result. Each run performs
+  at least one `Vis`; all non-target positions are closure-free.
+- expect: (a) produces ITF bytes and a content hash. Each of (b)–(d) refuses the
+  whole export **before** bytes/hash, without redaction, substitution, partial
+  output, or a local identity. In all four runs the corresponding live `Vis`
+  event still fires exactly once; the terminal-result arm performs its `Vis`
+  before returning the callable-bearing result.
+- why: the positive arm makes "reject everything" red. Isolating the three
+  negative positions proves recursive coverage instead of letting one early
+  failure mask the others. Requiring the live event count makes
+  "drop the offending `Vis`" red. This is the durable boundary from `41 §2.1`,
+  not a serializer-layout or handle mechanism. (soundness; controlled matrix.)
+
 ## Coverage map (AC / invariant → case)
 
 | AC / invariant | Case |
@@ -214,6 +243,7 @@ signature / Büchi-monitor acceptance (B2).
 | AC4 / TC4 runtime `Q`/`P` assertion points | TR-D |
 | AC5 / TC4 monitor projected from `T` | TR-E |
 | AC6 / TC5 one-way / emit-only | TR-F |
+| AC1 / TC6 closure-safe durable export | TR-G |
 
 ## Cross-case sweep (group by projection source; assert agreement)
 
@@ -234,15 +264,20 @@ signature / Büchi-monitor acceptance (B2).
   pins it (no promotion edge from a monitor verdict; the event is a witness, not
   a claim). Across the corpus, **no** case routes a monitor verdict into a
   `proved` status.
+- **Boundary invariant 3 — closure-safe export (TC6).** TR-G pins closure-free
+  success plus isolated op-argument/response/terminal-result refusal before
+  bytes/hash, while TR-B and TR-G jointly prove that refusal did not erase a
+  live `Vis`.
 - **The correlation pair is non-degenerate.** TR-C asserts correlated events
   **link** *while* uncorrelated events **don't** — the **sole** net for the
   correlation keys: a constant/global key passes "do they link?" vacuously and
   fails "do unrelated ones stay separate?".
 - **Projection-fidelity is the net (B3 analog of N1).** The contract is an
   untrusted projection + instrumentation; the kernel never inspects the trace
-  bytes (`73` banner, `71 §6/§5.1`). So the `(soundness)` cases {TR-B, TR-F} are
-  the **sole** net for out-of-boundary emission / verdict-promotion — the
-  erased-before-kernel omission-hole, here for the trace contract.
+  bytes (`73` banner, `71 §6/§5.1`). So the `(soundness)` cases {TR-B, TR-F,
+  TR-G} are the **sole** net for out-of-boundary emission, verdict promotion,
+  and callable-bearing durable export — the erased-before-kernel omission-hole,
+  here for the trace contract.
 
 ## Subsumed upstream — not re-derived
 

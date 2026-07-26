@@ -412,12 +412,15 @@ reflective prover (`../20-verification/23 §3`) relies on closed terms computing
 
 ### 3.9 Fast paths (non-normative, for performance)
 
-Because the runtime is content-addressed (`../40-runtime/41-values.md`), two
-closed terms with the same content hash are equal — an O(1) shortcut conversion
-MAY take before structural comparison. Memoizing whnf and sharing via the heap
-make repeated conversions cheap. These are optimizations and are explicitly
-**out of the decidability-critical TCB** (frame: the content-hash fast path is
-non-normative); they must never report unequal terms equal or vice versa.
+For closed canonical data admitted to the content-addressed store
+(`../40-runtime/41-values.md`), two terms with the same canonical content hash
+are equal — an O(1) shortcut conversion MAY take before structural comparison.
+Ordinary closures and closure-containing graphs have no content hash and MUST
+NOT enter this fast path (`41 §2.1`). Memoizing whnf and sharing canonical data
+via the heap make repeated conversions cheap. These are optimizations and are
+explicitly **out of the decidability-critical TCB** (frame: the content-hash
+fast path is non-normative); they must never report unequal terms equal or vice
+versa.
 
 ## 4. Termination of conversion — the SCT gate
 

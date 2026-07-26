@@ -3,10 +3,12 @@
 Format: `../../README.md`. These pin the **differential-equivalence
 discipline** of the native backend (X3,
 `spec/40-runtime/45-native-backend.md`, DRAFT v0): the backend is validated by
-running the **same** closed ground core term through it **and** the reference
-interpreter, requiring **identical K3 values** — the interpreter is the
-**oracle**, and on any disagreement the interpreter is **right by definition**
-(`42 §5`). The load-bearing posture: the native backend runs
+running the **same** closed core term through it **and** the reference
+interpreter, requiring identical **closure-free comparable ground
+observations**. A callable at any depth is reached through selected well-typed
+projections/applications to such observations — never closure comparison. The
+interpreter is the **oracle**, and on any disagreement it is **right by
+definition** (`42 §5`). The load-bearing posture: the native backend runs
 **already-kernel-checked** core, so it is **NOT in the type-soundness TCB**
 (the X1 framing extended to codegen) — a codegen bug is a **wrong answer**,
 not a soundness hole. This is a **design/discipline** corpus: it pins the
@@ -23,9 +25,10 @@ oracle.
 Grounding (landed `§`-bodies + landed code, content-reconciled — not the
 plan): `42 §5` (the interpreter as differential oracle; the native backend as
 its consumer; X1 **not** in the type-soundness TCB — runs
-already-kernel-checked terms), `42 §2` (determinism/canonicity carry;
-"different layers, allowed to differ… need only **agree on final values**" —
-the observable/unobservable boundary), `42 §1` (values realize the kernel's
+already-kernel-checked terms), `42 §2` (determinism/canonicity carry; layers
+agree on closure-free comparable ground observations, reaching
+callable-bearing results through selected probes — the
+observable/unobservable boundary), `42 §1` (values realize the kernel's
 reductions). **Landed reference:** the interpreter oracle
 `crates/ken-interp/src/lib.rs` (the differential reference; the future backend
 runs against **this**). `docs/PRINCIPLES.md` (small-auditable-TCB,
@@ -36,20 +39,24 @@ so no case names or assumes a target.
 
 ## Reading these cases — the X3-backend disciplines
 
-**The observable is the final K3 value; the unobservable is strategy and
-representation (`42 §2`).** The differential corpus compares the **content-
-addressed K3 value** a term computes to — the observable. What a backend is
-free to differ in (relative to the interpreter, or the kernel's WHNF) is
+**The observable is a closure-free comparable ground observation; the
+unobservable is strategy and representation (`42 §2`, `45 §4`).** Canonical
+data is compared by value/slot and comparable immediates natively. If a result
+contains a callable at any depth, the harness selects well-typed
+projections/applications and compares only the closure-free observations they
+produce. What a backend is free to differ in (relative to the interpreter, or
+the kernel's WHNF) is
 **strategy and internal representation**: reduction/evaluation order
 (meaning-preserving in the total core, `42 §2`), closure encoding, how sharing
 is realized on the heap — the **unobservable internals**. The `42 §2` rule is
-exact: "different layers, allowed to differ… need only **agree on final
-values**." So the corpus's discriminating boundary (§BD2) is
-**observable-value divergence rejects / an unobservable-internal difference
-admits** — a non-degenerate pair on that boundary (COORDINATION §7). (`@ct`
+exact: layers may differ internally but must agree on closure-free comparable
+ground observations, directly or through selected probes. So the corpus's
+discriminating boundary (§BD2) is **observation divergence rejects / an
+unobservable-internal difference admits** — a non-degenerate pair on that
+boundary (COORDINATION §7). (`@ct`
 **timing** is order-sensitive, but that is a **separate** discipline delegated
 to `Ward` (`61 §5a.6`), not the value differential — this corpus pins
-**value** equivalence, not timing.)
+**observation** equivalence, not timing.)
 
 **The backend is a TESTED surface, not a TRUSTED one — get the trust level
 right (`42 §5`, reflect-don't-extend).** Because the backend runs
@@ -75,13 +82,13 @@ cases pin the **discipline**; the runs are the build ring's.
 
 ### runtime/backend/backend-agrees-with-interpreter-on-observable-value (oracle)
 - spec: `45 §4` (BE-Differential), `42 §5` (interpreter as oracle), `42 §1`
-- given: a closed, ground core term `t` (e.g. an arithmetic computation, a
-  constructor-producing `elim`, an observational `Eq`/`cast` computation) run
-  through **both** the reference interpreter and the native backend
-- expect: the two produce the **identical K3 value** (content-addressed,
-  `41`); the corpus asserts **value equality** (same content-hash / same
-  slot), and on **disagreement the interpreter is right by definition** — the
-  backend is wrong
+- given: a closed core term `t` whose result is a closure-free comparable
+  ground observation (e.g. arithmetic, a closure-free constructor-producing
+  `elim`, or an observational `Eq`/`cast` computation), run through **both**
+  the reference interpreter and the native backend
+- expect: the two produce the **identical observation**: equal comparable
+  immediates, or the same canonical data value/slot (`41`). On disagreement
+  the interpreter is right by definition — the backend is wrong.
 - why: (oracle) BD1, the differential-agreement rule (`42 §5`). The backend
   earns trust by **agreement over the corpus**, not by inspection. The
   interpreter half is landed (`crates/ken-interp`); the **backend half is
@@ -89,23 +96,35 @@ cases pin the **discipline**; the runs are the build ring's.
   here. Assert the **observable value**, not an internal trace (that is §BD2's
   boundary).
 
+### runtime/backend/higher-order-agrees-by-ground-observation (oracle)
+- spec: `45 §4` (BE-Differential), `41 §2.1`, `42 §5`
+- given: a closed term whose result contains a callable, including a callable
+  nested in a record; run both layers, select the same well-typed projections
+  and applications, and drive each probe to a closure-free comparable ground
+  observation
+- expect: corresponding observations agree. A separately projected
+  closure-free field may compare directly; the callable itself has no equality,
+  hash, slot, provenance, or representation comparison.
+- why: higher-order differential equivalence observes behavior without
+  asserting extensional equality or requiring an exhaustive input procedure.
+
 ## BD2 — the observable / unobservable boundary (AC2 ★)
 
 > The non-degenerate pair is **{BD2-obs, BD2-int}** on the `42 §2`
-> observable/unobservable boundary: a divergence in the **final value**
-> rejects; a difference in **unobservable internals** with the same final
-> value admits. A corpus comparing *strategy* would over-reject valid
+> observable/unobservable boundary: a divergence in a closure-free comparable
+> ground observation rejects; a difference in **unobservable internals** with
+> the same observations admits. A corpus comparing *strategy* would over-reject valid
 > backends; one ignoring observable divergence would admit miscompiles (the
 > omission hole).
 
 ### runtime/backend/observable-value-divergence-rejected (oracle)
-- spec: `45 §4` (BE-Differential), `42 §2` (agree on final values), `42 §5`
-- given: a (hypothetical) backend whose output for a closed ground `t` is a
-  **different observable K3 value** than the interpreter's — e.g. a wrong
+- spec: `45 §4` (BE-Differential), `42 §2` (observation boundary), `42 §5`
+- given: a (hypothetical) backend whose closure-free ground observation for
+  `t` differs from the interpreter's — e.g. a wrong
   arithmetic result, a different constructor head from a mis-lowered `elim`,
   or a different normal form
-- expect: the corpus **rejects** it — the content-addressed values differ, so
-  the backend disagrees with the oracle and is **wrong** (`42 §5`, interpreter
+- expect: the corpus **rejects** it — the comparable observations differ, so
+  the backend disagrees with the oracle and is **wrong** (`42 §5`; interpreter
   right by definition)
 - why: (oracle, soundness of the discipline) BD2 — the reject arm, the
   miscompile net. This is the guard: a corpus that did **not** compare the
@@ -119,8 +138,9 @@ cases pin the **discipline**; the runs are the build ring's.
 - given: a backend that differs from the interpreter only in **unobservable
   internals** — a different (meaning-preserving) reduction/evaluation order, a
   different closure encoding, or a different internal heap layout — but
-  computes the **same** observable K3 value for `t`
-- expect: the corpus **admits** it — value equality holds, so the difference
+  computes the **same** closure-free ground observations for `t`
+- expect: the corpus **admits** it — observational agreement holds, so the
+  difference
   is **within** the `42 §2` layers-may-differ bound; strategy is not a
   conformance property
 - why: (oracle) BD2 — the admit arm. The corpus must **not** over-constrain
@@ -158,10 +178,11 @@ cases pin the **discipline**; the runs are the build ring's.
 
 ### runtime/backend/backend-preserves-determinism (oracle)
 - spec: `45 §4` (BE-Differential), `42 §3.7` (determinism), `42 §2`
-- given: the same closed ground term `t` evaluated by the backend **twice**
-  (and against the interpreter)
-- expect: the backend yields the **same** observable K3 value on every run
-  (intra-backend determinism) **and** agrees with the interpreter
+- given: the same closed term `t` evaluated by the backend **twice** (and
+  against the interpreter), observed directly when its result is closure-free
+  and through the same selected projections/applications otherwise
+- expect: the backend yields the **same** closure-free comparable observations
+  on every run (intra-backend determinism) **and** agrees with the interpreter
   (inter-layer) — a value depending on allocation addresses, hash-map
   iteration order, or any non-deterministic internal leaking into the
   **observable** is **rejected**
@@ -169,7 +190,8 @@ cases pin the **discipline**; the runs are the build ring's.
   faithful differential consumer (the interpreter's own determinism is X1's
   CAN2, `../evaluation/seed-evaluation.md`; this pins the backend must
   **also** be deterministic and agree). A non-deterministic backend breaks the
-  "same term → same value" contract the differential corpus rests on.
+  "same term → same closure-free observations" contract the differential corpus
+  rests on.
   Cross-refs CAN2; does **not** re-pin the interpreter's determinism.
 
 ## BD5 — capacity / limits cross-ref (AC5)
@@ -191,6 +213,7 @@ cases pin the **discipline**; the runs are the build ring's.
   `codegen-bug-is-wrong-value-not-soundness-hole` (soundness).
 - **AC2** (differential-equivalence discipline):
   `backend-agrees-with-interpreter-on-observable-value` (oracle),
+  `higher-order-agrees-by-ground-observation` (oracle),
   `observable-value-divergence-rejected` (oracle),
   `unobservable-internal-difference-admitted` (oracle),
   `backend-preserves-determinism` (oracle).
@@ -203,13 +226,14 @@ cases pin the **discipline**; the runs are the build ring's.
 
 ## Cross-case consistency sweep
 
-- **The observable is one thing across every case (`42 §2`).** BD1
+- **The observable is one thing across every case (`42 §2`, `45 §4`).** BD1
   (agreement), BD2-obs (divergence rejects), BD2-int (internal difference
   admits), and BD4 (determinism) must **agree**: the conformance observable is
-  **always** the final content-addressed K3 value — never an internal trace,
-  evaluation order, or heap layout. A case asserting a strategy/representation
-  difference is a conformance failure would contradict BD2-int and the `42 §2`
-  bound.
+  **always** a closure-free comparable ground observation — directly for
+  canonical data/immediates, or through selected projections/applications when
+  a callable occurs at any depth. It is never a closure identity, internal
+  trace, evaluation order, or heap layout. Treating a representation difference
+  as a conformance failure would contradict BD2-int and the `42 §2` bound.
 - **The backend never touches soundness (`42 §5`).** BD3 (not-in-TCB) and
   BD1/BD2 (differential net) are one story: a backend defect is **always** a
   wrong value caught by the differential corpus, **never** a typing/soundness
@@ -228,10 +252,10 @@ cases pin the **discipline**; the runs are the build ring's.
   **X1's** (`../evaluation/seed-evaluation.md`, CAN1/CAN2). This seed drives
   the interpreter as the **oracle** the backend validates against; it does
   **not** re-pin the interpreter's own correctness.
-- **The K3 value model, content addressing, O(1) equality, dedup** are the
-  **runtime's** (`../seed-runtime.md`, `../values/`, `../../` `41`). This seed
-  observes value equality as the **differential** observable; the value model
-  is X1/runtime's home.
+- **The K3 value model, canonical-data content addressing/O(1) equality, and
+  closure opacity** are the **runtime's** (`../seed-runtime.md`, `../values/`,
+  `../../` `41`). This seed consumes that observable boundary for the
+  differential; the value model is X1/runtime's home.
 - **The capacity model** is **`44`/X4's** (`../capacity/seed-capacity.md`).
   BD5 cross-refs it; it is not re-pinned.
 - **The codegen lowering model + the backend target** are **`/spec §45`'s**
@@ -246,7 +270,8 @@ landed** (`crates/ken-interp/src/lib.rs`); the **backend half is `(oracle)` /
 X3-build-deferred**. The **producer-grep gate is the X3-build ring's**:
 `ken- codegen` output must be validated by the **real differential harness**
 running the corpus through the backend **and** the landed interpreter,
-requiring identical K3 values — **not** a hand-fed value table, **not** the
+requiring identical closure-free ground observations — **not** a hand-fed
+value table, **not** the
 interpreter compared against itself (the
 `conformance-hand-feeds-the-deliverable` net). Flagged forward into the
 X3-build frame; it is **not** exercised here. The build does **not** start
