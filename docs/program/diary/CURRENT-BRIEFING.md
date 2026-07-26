@@ -84,7 +84,7 @@
 | branch on origin | `wp/RT-FNSPLIT-B2V-executable-value-abi` = **`fd4e7f08`** — ⛔ **BLOCKED** (production block **#4**) |
 | Decision | `dec_7sd3enk81maws` **rejected on the object** — Architect, `evt_4bs6scfmt5ax0` |
 | state | runtime-leader routed the three repairs (`evt_4ms9arc37p89w`); implementer folding from `fd4e7f08`, ⛔ **no force-push of any rejected checkpoint** |
-| recut | `wp/steward-b2v-recut-4` = **`d2fdee73`** — fold 3 pushed, awaiting Architect re-read |
+| recut | `wp/steward-b2v-recut-5` = **`e4fa5ec5`** — fold 4 pushed (`evt_612dykrppbqme`), awaiting Architect **bind** |
 
 ⭐⭐ **THE §5a-ii PREDICATE CHECK FIRED AND WAS ANSWERED `YES`**
 (`evt_2zxt6m9bg43r2`). The three production blocks are **not** independent: they
@@ -181,8 +181,43 @@ mechanism** — that is the Architect's call, not the frame's.
 > ⇒ **A recut needs a review LOOP, not a single authoring pass.** Treat the next
 > one that way from the start.
 >
-> ⚠ **Still owed:** Architect re-read of `d2fdee73`; then a fresh QA
-> `AC`→control map covering `AC-10`.
+> ### ✅ FOLD-IN, NOT A BLOCK — `d2fdee73` closed both defects
+>
+> `evt_1tdq9g139snay`. `D4`/`AC-3`/RETAIN all accepted; *"the later clarification
+> now explains rather than contradicts those authorities."* One held question
+> answered by **ruling**, folded at `wp/steward-b2v-recut-5` = **`e4fa5ec5`**.
+>
+> ⭐⭐ **THE RULING TO CARRY — the header-constant face is `AC-1`, NOT `AC-10`.**
+> `AC-10` closes an **admitted runtime value** under *emitted producer → valid
+> word → separately compiled consumer*. The `fd4e7f08` header defect **never
+> falsified that round trip**: the constant had **no consumer** and the published
+> vector was large enough for every accessed field. The real fault is **one
+> closed layout claimed while two inconsistent authorities exist, one unused** —
+> an `AC-1` face. ⛔ **Widening `AC-10` to absorb every dead or drifting
+> declaration would have destroyed the named predicate's boundary.**
+>
+> ⭐ **This cuts against the obvious instinct, so keep it.** I found an uncovered
+> face and the pull was to **widen the nearest `AC` until it covered** — which
+> quietly converts a **named** predicate back into an **enumerated** one, the
+> exact failure this recut exists to end. Raising it as a **held question** was
+> right because **the answer was a boundary, not an extension.**
+>
+> **Folded into operative `AC-1`:** the field inventory is the **sole layout
+> authority**; a declared extent is **derived and consumed, or it does not
+> exist**; publication emits exactly the derived extent; every emitted offset +
+> field width lies within it; a causal control **reddens on independent drift**
+> of inventory / published word count / declared extent / emitted offset.
+> ⛔ **Constant-vs-constant equality does not discharge it.** Also now a
+> **mandatory `AC-1` row in the QA map** — ⚠ `fd4e7f08`'s map was complete and
+> honest and had **no such row**, which is exactly how 136-vs-144 passed a full
+> `AC`→control review.
+>
+> ⚠ **RETAIN is not an acceptance control** (Architect). RETAIN keeps *"one
+> derived layout"* as the architectural property; the **enforceable** obligation
+> lives in `AC-1`, where a QA map can be held against it.
+>
+> ⚠ **Still owed:** Architect **bind** of `e4fa5ec5`; then a fresh QA
+> `AC`→control map covering `AC-10` **and** the new `AC-1` layout-closure row.
 
 ### ▶ B2V candidate `fd4e7f08` — ⛔ **BLOCKED**, three production defects
 
@@ -210,11 +245,10 @@ mechanism** — that is the Architect's call, not the frame's.
 >
 > ⛔ **That is `B2V`'s own founding diagnosis one layer down** — this node exists
 > because the aggregate-result path was *a Rust-side decode, not a value
-> representation.* The recut predicate reaches **(2)** and **(3)**; it does **not**
-> obviously reach **(1)**, a declared constant with no consumer. ⚠ Recorded in the
-> frame as an **uncovered face still to answer** — ⛔ do not read it as the recut
-> being validated, and do not quietly widen `AC-10` to cover it. That is the
-> Architect's call.
+> representation.* ✅ **RULED `evt_1tdq9g139snay`:** the recut predicate reaches
+> **(2)** and **(3)**; **(1) is an `AC-1` layout-closure face, not an `AC-10`
+> one**, and is folded there. See the fold-in box above for why that boundary
+> matters more than the fix.
 
 Measured on the push, not taken:
 
@@ -411,7 +445,8 @@ wp/RT-FNSPLIT-B2V-executable-value-abi    fd4e7f08   (BLOCKED; ddff2fae, ea8d982
 wp/steward-b2v-recut                      d6026a5c   (blocked, preserved)
 wp/steward-b2v-recut-2                    cfe05e37   (blocked, preserved)
 wp/steward-b2v-recut-3                    bbf3c7dd   (blocked, preserved)
-wp/steward-b2v-recut-4                    d2fdee73   <- CURRENT, awaiting Architect
+wp/steward-b2v-recut-4                    20476cfb   (fold 3 @ d2fdee73 + briefing)
+wp/steward-b2v-recut-5                    e4fa5ec5   <- CURRENT, awaiting Architect bind
 wp/KW-THEOREM-surface-keyword-rename      963d36ac   (CI-RED, kept, do not force over)
 architect/work                            e560cb20
 ```
