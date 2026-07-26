@@ -884,6 +884,62 @@ it.
 > `AC-11`, never widen it." That was wrong** — it widened it. The corrected
 > contract below is the binding one.
 
+> ## ⭐⭐ RE-ANCHORED ONTO LANDED `RT-FNSPLIT-B2V` — 2026-07-26, Steward
+>
+> **`B2V` is merged** (`a5c8ba73`, PR #1014, retros in). This frame was written
+> before `B2V` existed and, until this block, **did not mention it once** — while
+> the `RT-FNSPLIT-B2F` node records that the hard-stop-#10 ruling
+> (`evt_28cnmxf6ncghn`) **re-scoped `AC-11`**. The re-scoping lived in the node
+> and not in the frame the implementer opens. That is corrected here.
+>
+> ### ⛔ WHAT THE RE-SCOPING CHANGES — the answer to an aggregate INVERTED
+>
+> `AC-11` becomes **enforcement of `B2V` on every `Parameter` / `Capture` /
+> `Result` transfer.** It is **not** rejection of common aggregates, and **not**
+> inheritance from `B2R`'s `C4`. The transfer set is unchanged. **What changed is
+> that the correct response to an aggregate is now *represent it*, not *refuse
+> it*.** ⚠ Read clause 1 below with that inversion in force: *"must either reject
+> before emission or follow an explicitly represented dependency-linking path"*
+> now resolves toward the **represented** branch wherever `B2V` supplies a
+> carrier, and the reject branch is the exception rather than the default.
+>
+> ### ✅ The hard-stop-#10 blocker is DISCHARGED — measured, not inherited
+>
+> #10 stopped this node because measured `Constructor` (29 `Parameter` transfers)
+> and `HostResult` (4) **had no executable word representation at all**, so a
+> fail-closed guard would reject **~33 of 41** source-valued transfers,
+> incompatible with `D6` and `D7`. Verified on landed `main`:
+>
+> | check | result |
+> |---|---|
+> | node classes for the blocking cases | `Constructor = 4`, `Record = 5`, `HostResult = 6` present in `BoundaryNodeClass` |
+> | emitted-graph entry point | `boundary_value_clif::emit_boundary_value_local_graph` |
+> | called from a **live** (non-test) site | ✅ `cranelift_backend/lowering/core.rs:87` |
+>
+> ⇒ *"There is no executable word representation"* is now **false**. The
+> representation exists and is emitted.
+>
+> ### ⭐ THE EXACT SEAM `B2F` MUST CLOSE — one line, and it is deliberate
+>
+> ```rust
+> // crates/ken-runtime/src/cranelift_backend/lowering/core.rs:87
+> let _boundary_value_abi = crate::boundary_value_clif::emit_boundary_value_local_graph(
+> ```
+>
+> **The underscore binding discards the result.** The ABI is emitted into the
+> module and **nothing consumes it** — which is precisely the *"INERT but
+> EXECUTABLE"* deliverable `B2V` was scoped to produce. ⇒ **`B2F` is the node that
+> makes it live**, by routing `Parameter`/`Capture`/`Result` transfers through that
+> value rather than dropping it.
+>
+> ⚠ **Residual, and it is yours to measure, not mine to assert:** I verified that a
+> carrier *exists* for the blocking classes and that the ABI is emitted from live
+> code. ⛔ **I did NOT verify that each of the ~33 transfers is representable
+> end-to-end** — that is the content of `AC-11` clause 1 and it needs the
+> producer-tracing walk, not a type-level existence check. **Do not cite this block
+> as that proof.** Re-derive the 41/33 split against landed `main` and report what
+> you get; if it disagrees with those figures, your measurement wins.
+
 **AC-11 — every boundary transfer emitted by B2F is representable, established
 by B2F and not inherited from B2R `C4`.** *(Architect text, transcribed
 verbatim — do not paraphrase it.)*
