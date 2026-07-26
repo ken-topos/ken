@@ -905,10 +905,15 @@ it.
 >
 > ### ✅ The hard-stop-#10 blocker is DISCHARGED — measured, not inherited
 >
-> #10 stopped this node because measured `Constructor` (29 `Parameter` transfers)
-> and `HostResult` (4) **had no executable word representation at all**, so a
-> fail-closed guard would reject **~33 of 41** source-valued transfers,
-> incompatible with `D6` and `D7`. Verified on landed `main`:
+> #10 stopped this node because `Constructor` and `HostResult` transfers **had no
+> executable word representation at all**, so a fail-closed guard would reject
+> most source-valued transfers, incompatible with `D6` and `D7`.
+>
+> ⛔ **The `41` / `29` / `~33 of 41` figures that used to appear in this block are
+> HISTORIC and are no longer the operand.** They were taken pre-`B2V` against a
+> top-level-shape proxy. The current census is below; bind that one.
+>
+> Verified on landed `main`:
 >
 > | check | result |
 > |---|---|
@@ -934,11 +939,48 @@ it.
 >
 > ⚠ **Residual, and it is yours to measure, not mine to assert:** I verified that a
 > carrier *exists* for the blocking classes and that the ABI is emitted from live
-> code. ⛔ **I did NOT verify that each of the ~33 transfers is representable
-> end-to-end** — that is the content of `AC-11` clause 1 and it needs the
-> producer-tracing walk, not a type-level existence check. **Do not cite this block
-> as that proof.** Re-derive the 41/33 split against landed `main` and report what
-> you get; if it disagrees with those figures, your measurement wins.
+> code. ⛔ **I did NOT verify that each transfer is representable end-to-end** —
+> that is the content of `AC-11` clause 1 and it needs the producer-tracing walk,
+> not a type-level existence check. **Do not cite this block as that proof.**
+>
+> ### ⭐ THE CENSUS IS MEASURED — 47 events / 10 positions, NOT 41 (2026-07-26)
+>
+> The re-derivation this block asked for **has been done and it disagreed.** Bind
+> these figures; the historic `41` / `29` are dead operands.
+>
+> | class | measured | historic |
+> |---|---|---|
+> | `Constructor` | **31** | 29 |
+> | `Int` | **8** | — |
+> | `HostResult` | **4** | 4 |
+> | `CapabilityToken` | **2** | — |
+> | `BorrowedNativeValue` | **2** | — |
+> | **total** | **47 events / 10 distinct positions** | ~41 |
+>
+> **Provenance, labelled:** measured by `runtime-implementer` against bound code
+> `bb3e58ea` and this frame's prior blob `65d3fa25`; relayed by `runtime-leader`.
+> Evidence was doc-only and **unpushed** when this amendment was written, so ⛔ do
+> not treat the census as Steward-re-derived — it is a ring measurement recorded
+> on a fetchable ref so terminal QA can bind an operand instead of a proxy. The
+> discriminator that makes it better than the old figure: it is censused at the
+> point where `call_env == args ++ captures`, i.e. the **actual transfer
+> boundary**, not a top-level-shape proxy.
+>
+> Also reported with it: every observed transfer lands on an exhaustive
+> `Represented*` `boundary_disposition` arm — **zero** `FailClosedForbidden`, zero
+> `ProtocolOnly` ⇒ a fail-closed guard rejects **0 of 47**, against #10's ~33 of
+> 41. That is why #10 is spent.
+>
+> ⛔ **THIS AMENDMENT DOES NOT NARROW `AC-11`.** A census of what the current
+> corpus *happens to* transfer is not a proof about what `B2F` *may* emit.
+> `AC-11`'s producer-tracing walk, its represented-aggregate requirement, and its
+> fail-closed branch all remain in force at full strength. "0 of 47 unrepresentable
+> today" is **not** a licence to omit the guard: see the corpus lesson that a
+> negative check passes for any reason, and #10's own history — the same
+> population was measured once already and the figure moved.
+>
+> ⚠ And if **your** measurement disagrees with 47/31, yours wins and you say so —
+> the same standing rule that produced this correction.
 
 **AC-11 — every boundary transfer emitted by B2F is representable, established
 by B2F and not inherited from B2R `C4`.** *(Architect text, transcribed

@@ -23,6 +23,16 @@ origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answ
 > into the frame** (`docs/program/wp/RT-FNSPLIT-B2F-functionization.md`), which
 > previously did not mention `B2V` at all. Bind the frame; this node is the record.
 >
+> ⛔ **THE CENSUS FIGURES QUOTED IN THE HISTORICAL RULING BELOW ARE SUPERSEDED.**
+> The ruling's *"`Constructor` (29 `Parameter` transfers)"* and *"~33 of 41"* were
+> taken pre-`B2V` against a top-level-shape proxy. Re-measured 2026-07-26 by the
+> Runtime ring at the actual transfer boundary (`call_env == args ++ captures`):
+> **47 events / 10 distinct positions — `Constructor` 31, `Int` 8, `HostResult` 4,
+> `CapabilityToken` 2, `BorrowedNativeValue` 2**, and **0 of 47** reach a
+> fail-closed disposition. The quoted numbers are left in place because the ruling
+> record is verbatim; the **frame** carries the live operand and the provenance.
+> ⛔ The re-measurement does **not** narrow `AC-11` — see the frame's census block.
+>
 > ### Historical — the ruling that inserted `B2V`
 >
 > ## ⛔ HELD AT HARD-STOP #10 — a NEW PREREQUISITE `RT-FNSPLIT-B2V` IS INSERTED
