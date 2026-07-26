@@ -354,8 +354,9 @@ choice:
 
 1. **The `Σ`-event schema (§2.1)** — the field-level record per perform-node,
    emitted at the single `Vis` site in `drive_H` (`eval.rs`); the `effect`/`op`
-   fields a 1:1 concretization of a B1 `Σ` member (TC1), the op-arg/response ITF
-   witnesses with no status.
+   fields a 1:1 concretization of a B1 `Σ` member (TC1); the op-argument and
+   response values are runtime witnesses with no status and become ITF-exportable
+   only under §2.5.
 2. **Correlation keys (§2.2)** — space identity on every event; message
    provenance (the content address, `41 §3`) on every cross-space message event
    (TC3).
