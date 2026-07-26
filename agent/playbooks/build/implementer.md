@@ -213,6 +213,38 @@ topology-touching. This is the grain the Steward's promotion ladder runs on
 (COORDINATION §10); skipping it starves the only mechanism that propagates your
 lessons to the other teams.
 
+## ⛔⛔ NEVER TEST THE TEXT OF THE REPOSITORY — test behaviour
+
+**Operator rule, 2026-07-26:** *"Test oracles that assert facts about source
+code, catalog, or documentation lines are an invitation for failure and delay.
+Tests should focus on behavior."*
+
+⛔ **Do not author a test whose subject is repository text**: line numbers, line
+contents, occurrence positions or counts in prose, heading inventories, section
+presence, or a hardcoded census of where a word appears in `catalog/`, `docs/`,
+`library/`, `spec/`, or `agent/`.
+
+⭐ **The one question that decides it:** *"Does an edit that changes nothing
+about how any program behaves make this test fail?"* If inserting a paragraph,
+renaming a heading, or reflowing prose can red it, **you are measuring the
+repository, not the software** — and the red lands on whoever is unlucky, in a
+file they have never read, instead of on whoever erred.
+
+⚠ **This is a rule about the test's SUBJECT, and it is why your promise class
+will not save you.** A corpus-text census reads perfectly as a *normative
+compatibility vector* (*"these values are the contract"*) and passes QA's promise
+gate. `crates/ken-elaborator/tests/kw_theorem_source_oracle.rs` did exactly that
+— 64 `(path, line, count)` rows across 18 files, freezing their line numbers
+repo-wide and blocking an unrelated doc WP. ⇒ **Ask what the test is ABOUT
+before you ask what it promises.**
+
+✅ **Express the property as behaviour instead:** a policy about identifiers →
+assert the elaborator **rejects** the construct on a fixture you author; a
+generated artifact → assert the **generator round-trips**, never pin its output's
+lines; a document invariant → assert a **relation between artifacts keyed on
+identity**, never on position. Full gate + the permitted boundary case: the
+`Test design` section of `agent/playbooks/build/qa.md`.
+
 ## ⭐ Authoring a mechanical pin — load the `pin-a-property` skill
 
 Any acceptance criterion you discharge with a test, a source scan, or a
