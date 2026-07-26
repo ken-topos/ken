@@ -14,13 +14,14 @@
 > (`OQ-domain`, §3); the Leech-lattice numbers are *aesthetic*, not
 > load-bearing, and out of the core (§4).
 >
-> **X2 grounding (perishable-frame, K2c-s2 rule).** This elaboration is pinned
-> against the **landed** K3 store on `main` (`ken-runtime/src/store.rs`,
-> `canonical.rs`, `hash.rs`), not the F4 prose. Where the F4 design and the
-> landed code diverge, the **landed code is normative** and the divergence is
-> flagged inline (the store is realized **per `space`** with a bare-hash index,
+> **X2 grounding record (expired draft-reconciliation rule).** During X2
+> authoring, this chapter reconciled the earlier F4 design prose with the
+> then-landed K3 store (`ken-runtime/src/store.rs`, `canonical.rs`, `hash.rs`).
+> That drafting rule expired when this chapter became the normative contract;
+> an implementation does not outrank it. The reconciliation recorded three
+> divergences: the store is realized **per `space`** with a bare-hash index,
 > not a process-wide `(root, hash)` index; reclamation drops page buffers, not
-> `madvise`; the index resize is single-writer, not lock-free). One cross-file
+> `madvise`; and index resize is single-writer, not lock-free. One cross-file
 > reconcile for `41 §2`/`§3b` is flagged in §1 (not changed here).
 
 ## 1. The store
