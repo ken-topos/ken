@@ -33,128 +33,102 @@ verbatim (⚠ it was only in gitignored `local/`) at
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶▶ LIVE — 2026-07-26 ~17:1xZ · ALL EIGHT TRACK C FORKS SETTLED; A1 MERGED
+## ▶▶ LIVE — 2026-07-26 ~17:4xZ · ⛔ `main` IS RED; ONE DELETION UNBLOCKS IT
 
 ⛔ **`git rev-parse origin/main` — no SHA here, by construction.**
 
-### ⭐⭐ NEW STANDING LAW — tests may not assert facts about repository TEXT
+### ⛔⛔ THE ONE THING THAT MATTERS RIGHT NOW
 
-**Operator, 2026-07-26:** *"Test oracles that assert facts about source code,
-catalog, or documentation lines are an invitation for failure and delay. Tests
-should focus on behavior."* Written into **`agent/playbooks/build/qa.md`**
-(review gate) and **`implementer.md`** (authoring gate).
+**`main` fails `-p ken-elaborator`.** The source-text oracle's frozen
+line-number allow-list pins `catalog/…/EffectfulClasses.ken.md` and
+`Derived.ken.md`; the **doc-only** catalog merge (`95bc855c`) moved those lines.
+⇒ **Every non-doc-only merge is blocked behind `KW-ORACLE-REMOVE`**, Runtime's
+`B2E` included. Language is executing the deletion now.
 
-⭐ **It had to be a SUBJECT prohibition, not a fourth promise class** — the
-existing gate's three classes ask *what a test promises*, never *what it is
-about*, so a corpus-text census self-classified as a "normative compatibility
-vector" and passed cleanly. The deciding question: *"does an edit that changes
-nothing about how any program behaves make this test fail?"*
+⭐ **A doc-only merge reddened a Rust suite** — exactly the coupling the operator
+named when he deleted the library currency gate the same afternoon.
 
-⇒ **`KW-ORACLE-REMOVE`** (node + frame written, `status: ready`, owner
-**language**, size **S**) deletes
-`crates/ken-elaborator/tests/kw_theorem_source_oracle.rs`. ⛔ **Not yet
-published and Language NOT yet kicked** — §2c gate outstanding.
+### ⭐⭐ STANDING LAW — tests may not assert facts about repository TEXT
 
-⭐ **Removal is safe and the proof is in the node:** the replacement keyword is
-live in the lexer and the retired token is **not a token anywhere** in
-`crates/*/src/` — so the retirement is enforced **by construction** (that source
-is a parse error). The oracle policed *prose*, not well-formedness.
+**Operator:** *"Test oracles that assert facts about source code, catalog, or
+documentation lines are an invitation for failure and delay. Tests should focus
+on behavior."* In **`agent/playbooks/build/qa.md`** (review gate) and
+**`implementer.md`** (authoring gate).
 
-### ▶ Lane state
+⭐ **It had to be a SUBJECT prohibition, not a fourth promise class** — the three
+existing classes ask *what a test promises*, never *what it is about*, so a
+corpus-text census self-classified as a "normative compatibility vector" and
+passed cleanly. Deciding question: *"does an edit that changes nothing about how
+any program behaves make this test fail?"*
 
-- **Runtime / B2E** — WP ref `0a46f2b7` (pushed, verified). Partial checkpoint;
-  QA has BLOCKed twice on inventory pins that held a count while a consumer
-  stayed disconnected. **No Decision open.**
-- **Doc / DOC-CATALOG-CONTENTS** — ⛔ **HELD**, blocked on `KW-ORACLE-REMOVE`.
-  Complete 24-file product delta + analysis commit are durable at
-  `wp/DOC-CATALOG-CONTENTS-index-to-contents = 1e36a37d` (pushed, verified: zero
-  `crates/`). ▶ **Resumes by rebasing onto the post-removal base.**
-- **Language** — idle, retros in, owns the oracle. **The ring to kick next.**
+### ▶ Lane state — two live, both healthy
 
-⚠ **Correction owed to the doc ring:** I told them the preflight doc must carry
-zero occurrences of the retired token. The real population is files carrying
-**Ken content** (`classify()` returns `Option` and the loop skips `None`), so a
-fence-free markdown file was never in scope — which is why this very file
-legally carries 10 occurrences on `main`. Over-strict, not wrong; they complied.
+- **Language / `KW-ORACLE-REMOVE`** — kicked, ring `Working`. Deletes
+  `crates/ken-elaborator/tests/kw_theorem_source_oracle.rs`. ⛔ **No Decision
+  open; that is mine.** ⚠ **The implementer has BLOCKED TWICE on AC-4 and was
+  right both times** — see below.
+- **Runtime / `B2E`** — resumed from `6cee1072` after a clean out-of-context
+  stop; R4 boundaries are settled and purely executional. ⛔ **No Decision open.**
+  `preserved/b2e-rejected-source-oracle = 159f4109`, unextended.
+- **Doc, Verify, Foundation, Kernel, Ergo** — idle **and correct**: the fleet is
+  single-threaded on build work by design, and no ready node is theirs.
 
-### ✅ Track C forks — ALL EIGHT SETTLED, all durable in `14-…-campaign.md`
+### ⛔ AC-4 WAS WRONG TWICE. Same shape both times, and it was mine.
 
-**C6** deferred/unspec'd (no prover integrated; the flagged text is exactly what
-`prover.rs` marks `[placeholder — reifies in V4]`; reopens on check-time latency
-or any V4 backend WP). **C7** deferred behind the content-store fork — they are
-one mechanism seen from two ends. **C8** closed as **status quo with the
-advisory's premise measured FALSE**: `36-effects §1.4`'s `⊆`-not-`=` headroom
-rule already implements all three clauses. ▶ One **editorial** Track A follow-on
-— the carve-out that decides C8 is buried in a parenthetical inside the bullet
-about the check that *does* hard-error.
+| | I wrote | truth at the named base |
+|---|---|---|
+| 1st | the target runs **12** tests | **7** — I counted `^fn ` (helpers), not `^#[test]` |
+| 2nd | **7 passed** to absent | **6 passed / 1 failed** — I never observed it at all |
 
-| fork | disposition |
-|---|---|
-| **C1** runtime `unknown` | ▶ **DIRECTION: retire the runtime third value** (operator). ⛔ Not yet a released node — class-1 change, needs the §2 conformance census (~57 runtime rows) + an Architect ruling on replacement semantics. Two follow-on choices recommended, not settled: what an `unknown` verdict does operationally, and resolving `43 §2` case 2's `fault / unknown` disjunction to `fault`. |
-| **C2** `Ord`/`Map` | ✅ **RULED** (Architect): option (b) with `KeyEq` **derived from the order**. Task `#106` frames it. |
-| **C3** revocation | ✅ **CLOSED — no split.** Two editorial follow-ons in §6.3. |
-| **C4** SCT | ✅ **CLOSED** — exact SCT is deliberate source compatibility. |
-| **C5** coherence | ✅ Layer 1 CLOSED (ADR 0008) · ▶ Layer 2 DEFERRED behind Linux ABI/compiler, "probably next". |
+⭐ **The shape: a fixed input I had not read out of the artifact at the base I
+named.** ⛔ **Do not file two blocks as friction** — the second one is the
+measurement that discovered `main` was red. A number is checkable; that is why a
+wrong one gets caught instead of silently reshaping the work.
 
-⛔ **STILL OPEN: C6** (prover portfolio), **C7** (`space` vs physical), **C8**
-(purity reverse errors — cheapest). ⛔ Do not re-ask C1's follow-ons as fresh;
-they are recommended-and-recorded, awaiting an operator word only if they differ.
+### ✅ CLOSED THIS WINDOW
 
-### ✅ `SPEC-ALIGN-A1` MERGED (PR #1028) — node flipped, retros OWED
+- **`DOC-CATALOG-CONTENTS`** — merged `95bc855c` (PR #1031, doc-only). Librarian
+  verified all 25 paths byte-identical. Node flipped; **retros owed** from the
+  doc ring. ⛔ **Its "derived-artifact tail" requirement is VOID** — I ruled the
+  whole tail gate-compliance, not product, and said so in the node.
+- **The publisher's library currency gate** — REMOVED (PR #1032, operator). It
+  keyed on **whole-file blob OIDs**; both recorded firings were spurious.
+- **`SPEC-ALIGN-A1`** — merged `4c2d9529`, all four retros in, node verified
+  `status: merged` at `f52b0f61` **with a control** (the merge object itself
+  still carries the pre-flip blob). Enclave idle and clean.
+- **All eight Track C forks** — durable in `14-…-campaign.md`. **C6** deferred
+  and unspec'd · **C7** deferred behind the content-store fork · **C8** closed as
+  status quo with **the advisory's premise measured FALSE** (`36-effects §1.4`'s
+  subset-not-equality headroom rule already implements all three clauses). ⛔ Do
+  not re-ask any of them. One editorial Track A follow-on remains.
+- **`get_transcript`** — banned fleet-wide in `AGENTS.md`.
 
-Blob-verified with a discriminating control. ⛔ **Retros still owed** from
-spec-leader, spec-author, conformance-validator, and librarian. A merged WP with
-no retro is not done — chase before compacting those seats.
+### ▶ What I owe next, in order
 
-⭐ **`SPEC-ALIGN-B1` is now free of its A1 dependency. ⛔ DO NOT let the enclave
-pull it** — I own release sequencing and told them so; re-anchor it first.
+1. **Publish this batch** (node + frame corrections + this briefing) so Language
+   binds the corrected AC-4 from `main`, not from a channel message.
+2. **`KW-ORACLE-REMOVE` Decision + merge** the moment the candidate lands —
+   it is the merge pipeline's blocker.
+3. **Doc-ring retros**, then the ring closes.
+4. **Re-anchor `SPEC-ALIGN-B1`** against landed A1 and release it. ⛔ The enclave
+   was told not to pull it; that hold is mine to lift.
 
-### ⚠ TWO TRAPS THAT FIRED TODAY — both caught, both worth remembering
+### ⚠ Standing traps, still live
 
-1. ⛔ **`steward/work` held the PRE-A1 blob `45f0990b`** — publishing the batch on
-   that base would have **silently reverted A1**. Caught by
-   `merge-base --is-ancestor`, rebased, re-verified. **Rebase before every batch.**
-2. ⛔ **I reported the A1 node as "flipped" when the flip was only on
-   `steward/work`.** spec-leader checked `main` and correctly saw `status: ready`.
-   **Committed is not reachable — say WHERE.**
+1. ⛔ **`steward/work` is stale immediately after every publish** — rebase before
+   every batch. It once held a pre-A1 blob that would have silently reverted A1.
+2. ⛔ **Committed is not reachable.** Verify landed content by **blob identity**,
+   never ancestry — the publisher squashes.
+3. ⛔ **`--doc-only` skips CI polling but not the publisher's own gates** — and,
+   as of today, it is also how a red suite reached `main` unnoticed.
 
-### ▶ Runtime lane: `B2E` candidate `e42aefa2`, `R3` NOW DURABLE
+## ⛔ SUPERSEDED — 2026-07-26 ~1x:xxZ · NOT LIVE. Read the block ABOVE this one.
 
-`wp/RT-FNSPLIT-B2E-boundary-value-elimination` = **`aeaec7ea`** on `origin`
-(⛔ **PARTIAL checkpoint, not a candidate** — the leader states the computational
-consumer-inventory control is unproven and a test-only evidence fold is owed).
-Lineage `e42aefa2` → `be87e5e8` → `aeaec7ea`, all reachable, all fast-forward.
-QA binds on the exact remote SHA with frame/node from `origin/main` (⛔ **not**
-the candidate's pre-`R1` copies). ⛔ **No Decision open, and do not open one.**
-
-⚠ **Do NOT clear the leader's 4-vs-5 route-count pin claim** — a mutation that
-reddens does not confirm which detector caught it, and a pin enumerating counts
-is not a proof of the inventory property. Routed to QA as such (`evt_73x6kv8503qgs`).
-
-✅ **`R1`, `R2`, and `R3` are all transcribed** into frame + node. ⭐ **This WP
-lost three rulings to the channel in one day** — task `#107` proposes the
-structural detector instead of a fourth hand transcription.
-
-### ✅ Doc lane KICKED — `DOC-CATALOG-CONTENTS`, `evt_3cpp4bmqtr6ce`
-
-Base `f3863b48`, §2c gate run in full: retros in, quiescence checked, **all three
-compactions started BEFORE the kickoff and each verified "Context compacted"**,
-every named object `cat-file -e`'d at the base with an absent-path control, then
-the mention, then step 7. ⛔ **`doc-author` STRANDED** on `[Pasted Content 2404
-chars]` with no spinner — repaired with a bare `Enter`, re-verified `Working`.
-⇒ Step 7 is not ceremony; it caught a silent drop on this very kickoff.
-
-▶ **TWO LANES LIVE: Runtime on `B2E`, doc ring on `DOC-CATALOG-CONTENTS`.**
-
-### ⛔ SUPERSEDED — the doc lane WAS held pending the batch; it is now kicked
-
-Node + frame are in the publishing batch, **not on `origin/main`**. ⛔ The kickoff
-is gated on that batch landing (§2c step 5b — a base that lacks the artifacts it
-names is a false fixed input). Librarian is holding its rebind and knows why.
-**Sequence: batch lands → `cat-file -e` frame+node at the landed SHA → §2c gate on
-the doc ring → kick → return the kickoff event.**
-
-## ▶ LIVE — 2026-07-26 ~1x:xxZ · ⛔ **NO `main` SHA HERE, BY CONSTRUCTION**
+> **This block was the LIVE block and is now history.** ⛔ It is still titled in
+> the LIVE voice throughout, so a cold resume that lands here reads stale state
+> as current. Its durable content is in the issue nodes and git history; it is
+> retained only until task `#48` archives it into `diary/`. **Nothing below this
+> line is a resume anchor.**
 ### ⛔ **This header used to carry `origin/main`. It was ALWAYS the pre-merge**
 ### **base — stale the instant the block landed. `git rev-parse origin/main`.**
 ### ✅ **#986 → #1027 ALL MERGED** — incl. #1009 (`R5` erratum), #1013 (`#82`),
