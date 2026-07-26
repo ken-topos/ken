@@ -5233,7 +5233,6 @@ fn recut2_the_emitted_helper_graph_changes_when_the_authority_changes() {
     // ⛔ Perturb ONLY the axis the plan names: the class set a limb helper may
     // touch. Nothing else about the emitter or the module changes.
     let perturbed = BoundaryEmissionPlan::new(
-        derived.admitted_classes().to_vec(),
         vec![BoundaryClass::Record],
         derived.byte_span_classes().to_vec(),
         derived.tags().clone(),
@@ -5290,11 +5289,11 @@ fn recut2_the_plan_is_derived_from_the_partition_not_restated() {
     );
 
     let plan = BoundaryEmissionPlan::derive();
-    assert_eq!(
-        plan.admitted_classes(),
-        admitted.iter().copied().collect::<Vec<_>>(),
-        "RECUT 2: the plan's admitted set is not the partition's"
-    );
+    // ⛔ There is no whole-admitted-class assertion here, because the plan no
+    // longer carries that set: no emitted helper ever read it. The per-shape
+    // sets below are recomputed from `admitted` in this test, so the classifier
+    // is still the thing being pinned — dropping an unconsumed accessor removed
+    // a declaration, not a control.
     for (shape, got) in [
         (
             BoundaryStorageShape::IntMagnitude,
@@ -5365,7 +5364,6 @@ fn recut2_the_emitted_helper_graph_changes_when_the_tag_sets_change() {
          between two identical plans"
     );
     let perturbed = BoundaryEmissionPlan::new(
-        derived.admitted_classes().to_vec(),
         derived.int_magnitude_classes().to_vec(),
         derived.byte_span_classes().to_vec(),
         BoundaryTagAdmission::new(
@@ -5454,7 +5452,6 @@ fn recut2_the_emitted_helper_graph_changes_when_the_owner_bands_change() {
     bands[1].1.push(moved);
     bands[1].1.sort();
     let perturbed = BoundaryEmissionPlan::new(
-        derived.admitted_classes().to_vec(),
         derived.int_magnitude_classes().to_vec(),
         derived.byte_span_classes().to_vec(),
         BoundaryTagAdmission::new(

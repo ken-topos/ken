@@ -7386,7 +7386,6 @@ impl crate::boundary_value::BoundaryEmissionPlan {
             .into_iter()
             .collect();
         crate::boundary_value::BoundaryEmissionPlan::new(
-            admitted.into_iter().collect(),
             int_magnitude,
             byte_span,
             BoundaryTagAdmission::new(

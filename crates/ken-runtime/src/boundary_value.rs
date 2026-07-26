@@ -448,7 +448,6 @@ impl BoundaryClass {
 /// inspecting a value describes a program that cannot be written (`D1`/`AC-2`).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct BoundaryEmissionPlan {
-    admitted_classes: Vec<BoundaryClass>,
     int_magnitude_classes: Vec<BoundaryClass>,
     byte_span_classes: Vec<BoundaryClass>,
     tags: BoundaryTagAdmission,
@@ -542,17 +541,22 @@ impl BoundaryTagAdmission {
 impl BoundaryEmissionPlan {
     /// Build a plan from already-derived class and tag sets.
     ///
+    /// ⛔ There is deliberately **no** whole-admitted-class set here. One was
+    /// carried for a while and no emitted helper ever read it — `rustc` said so
+    /// on every lib build (`method admitted_classes is never used`). A derived
+    /// set with no production consumer is a declaration, and `RULING R3` is
+    /// explicit that a declaration does not discharge the predicate. The
+    /// per-storage-shape sets below are the ones the emitter actually uses.
+    ///
     /// ⛔ Crate-private and unexported: the only caller is the derivation in
     /// `cranelift_backend::lowering`, so a second hand-written plan cannot
     /// appear beside the helper bodies.
     pub(crate) fn new(
-        admitted_classes: Vec<BoundaryClass>,
         int_magnitude_classes: Vec<BoundaryClass>,
         byte_span_classes: Vec<BoundaryClass>,
         tags: BoundaryTagAdmission,
     ) -> Self {
         BoundaryEmissionPlan {
-            admitted_classes,
             int_magnitude_classes,
             byte_span_classes,
             tags,
@@ -562,11 +566,6 @@ impl BoundaryEmissionPlan {
     /// The tag sets the emitted helpers branch on.
     pub(crate) fn tags(&self) -> &BoundaryTagAdmission {
         &self.tags
-    }
-
-    /// Every class the partition admits as a published handle.
-    pub(crate) fn admitted_classes(&self) -> &[BoundaryClass] {
-        &self.admitted_classes
     }
 
     /// The classes a limb-storage helper may touch.

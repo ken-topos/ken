@@ -7222,7 +7222,6 @@ pub(crate) mod tests {
                 .filter(|other| other != tag)
                 .collect();
             let perturbed = BoundaryEmissionPlan::new(
-                plan.admitted_classes().to_vec(),
                 plan.int_magnitude_classes().to_vec(),
                 plan.byte_span_classes().to_vec(),
                 BoundaryTagAdmission::new(
@@ -7327,7 +7326,6 @@ pub(crate) mod tests {
                 })
                 .collect();
             let perturbed = BoundaryEmissionPlan::new(
-                plan.admitted_classes().to_vec(),
                 plan.int_magnitude_classes().to_vec(),
                 plan.byte_span_classes().to_vec(),
                 BoundaryTagAdmission::new(
@@ -7398,7 +7396,6 @@ pub(crate) mod tests {
 
         let respell = |relation: Vec<(BoundaryTag, BoundaryClass)>| {
             BoundaryEmissionPlan::new(
-                plan.admitted_classes().to_vec(),
                 plan.int_magnitude_classes().to_vec(),
                 plan.byte_span_classes().to_vec(),
                 BoundaryTagAdmission::new(
@@ -7608,7 +7605,6 @@ pub(crate) mod tests {
         // class of a different storage shape, so the guard stays well-formed
         // and only its membership changes.
         let perturbed = BoundaryEmissionPlan::new(
-            plan.admitted_classes().to_vec(),
             vec![BoundaryClass::Record],
             plan.byte_span_classes().to_vec(),
             plan.tags().clone(),
