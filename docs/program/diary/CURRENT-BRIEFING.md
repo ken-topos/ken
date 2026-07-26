@@ -22,19 +22,34 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~06:0xZ · `origin/main` = **`63ad112c`**
-### **✅ #986 + #987 MERGED. P1 frame IS ON MAIN. Both forks ruled.**
-### ⛔ NEXT: Runtime retros-in → compact the ring → kick P1. In that order.
+## ▶ LIVE — 2026-07-26 ~06:0xZ · `origin/main` = **`b445cd15`**
+### **✅ #986 · #987 · #988 MERGED. P1 IS KICKED AND RUNNING.**
+### ⛔ RUNTIME IS BUILDING. Nothing is owed to me on the critical path.
 
-> ### ▶ THE ONE THING IN FLIGHT RIGHT NOW
+> ### ⛔ DO NOT RE-DO THE KICKOFF — IT IS DONE. `evt_64xwmxt5v3qk`
 >
-> `evt_1psyw7ggxanb0` asks **@runtime-leader** one question: **are `RT-FNSPLIT-B2R`
-> retros posted?** It engaged (`Working`). ⛔ **Do not compact that ring until it
-> answers** — compaction destroys an unposted retro permanently. On *"retros in"*:
-> `scripts/handoff-gate-compact.sh runtime-leader runtime-implementer runtime-qa`
-> (background), verify each drop **wide**, then kick **the leader only**.
-> ⚠ That message deliberately says *"NOT a kickoff, do not act on it"* — so a
-> kickoff is still owed and the ring knows it.
+> ```
+> WP      RT-VALUE-TOTALITY-P1     node status: active (verified on main)
+> branch  wp/RT-VALUE-TOTALITY-P1  base origin/main = 63ad112c
+> gate    RUN IN FULL -- B2R retros confirmed (evt_v3gb9yyne1m8 /
+>         evt_3q5d2qdnj0vsb / evt_5n9kybev0x9q2); all 3 seats compact-verified
+>         (leader + QA "Context compacted", implementer ctx 0%); leader seen
+>         `Working` AFTER the mention; contention + ledger both clear
+> ```
+>
+> ⚠ **An earlier version of this very block said *"NEXT: retros-in → compact →
+> kick"*. That is DONE.** An instruction to resume finished work is a **stale-read
+> signature** — if you find one here, trust `origin/main` and the node over this
+> file.
+>
+> **What I am waiting for:** Runtime's first substantive report, or a hard-stop.
+> ⛔ Do not nudge before there is silence to diagnose.
+
+> ### ▶ THE ONLY THING STILL OWED TO ME: the three LANGUAGE retros
+>
+> Requested `evt_2vk0vbv3gz334`. ⛔ **Do not compact the Language ring until they
+> are posted** — the ring is idle now, so they are at risk, and compaction
+> destroys an unposted retro permanently.
 
 > ### ⚠ OPERATOR AWAY until **11:30Z** — drafting **THE MISSION** then
 >
