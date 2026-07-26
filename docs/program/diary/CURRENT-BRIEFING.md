@@ -46,27 +46,37 @@ verbatim (⚠ it was only in gitignored `local/`) at
 ### §2c gate ran in full: 3 compactions verified, `cat-file -e` on every named
 ### object with an absent-path control, leader+QA confirmed `Working`.
 ### ▶ **ONE LANE LIVE: Runtime on `B2E`.** Task `#97` carries the watch list.
-### ▶ **`B2E` BIND IS `46ed5c97`** on `origin`
-### (`wp/RT-FNSPLIT-B2E-boundary-value-elimination`), `ls-remote`-verified. NOT a
-### merge request — no Decision, no publish.
-### ⛔ **`3f7f2255` IS SUPERSEDED — DO NOT REVIEW IT.** It bakes the numeric
-### store-local id at `lowering/mod.rs:2486` (`store_local_id() as i64`), which
-### `R1` forbids in as many words. Verified present there, gone from production at
-### `46ed5c97`. Strict fast-forward (`3f7f2255` IS its ancestor), 1 commit, 3 files
-### +207 −66. Repair = **`BoundaryNameSlot`**, an opaque newtype for the
-### artifact-static table POSITION; the emitter takes a slot and **loads**, so no
-### `u64` is in scope to bake. ⚠ The only remaining `store_local_id() as i64` hit
-### is a `///` comment — ⛔ **QA may not accept that as evidence.**
+### ▶ **`B2E` BRANCH = `adb0c672`** on `origin`
+### (`wp/RT-FNSPLIT-B2E-boundary-value-elimination`), `ls-remote`-verified.
+### ⛔ **IT IS A WIP CHECKPOINT, NOT A CANDIDATE. No Decision is open.**
+### ⛔ **`46ed5c97` REJECTED** (`dec_3xnydcbcz4zm9` rejected); **`3f7f2255`
+### SUPERSEDED** (baked the numeric id at `lowering/mod.rs:2486`). Each move was a
+### pure fast-forward, ancestry verified, nothing orphaned.
+### ✅ **`RULING R2` TRANSCRIBED into frame + node** — it existed ONLY in the
+### channel (`evt_111gwqrdsm1n2`) while THREE WIP commits already cited it by
+### name; measured absent from both artifacts at the tip AND on `main`. Same
+### undurable state `R1` was in. ⛔ Publish is PENDING (blocked on the A1 window).
+### ✅ **`D5` IS SETTLED: the INERT binding is sufficient with NO production
+### caller.** This ANSWERS my `evt_6t3t89exkbr37` question — ⛔ **CLOSED, do not
+### pursue.** ⭐ `R1` and `R2` read as contradictory unless you hold this: **`R1`'s
+### "a newtype alone is not sufficient" is about the MECHANISM'S SHAPE, not about
+### call reachability.** ⛔ Do NOT add a production switch to satisfy `D5`.
+### ⛔ **THE BLOCK IS THREE `D4`/`D7` GAPS, NONE ABOUT `D5`:** (1) no admitted
+### opaque value is actually eliminated — the only decode emitter is
+### `#[allow(dead_code)]` with NO caller; (2) `Project` has a ledger row with no
+### implementation; (3) the value-general recursive case is absent, leaving exactly
+### the top-level-only shape rejected at `#11` — **that residual is NOT
+### authorized.** ⚠ The source described (1) TRUTHFULLY — ⛔ **a truthful residual
+### record is still a MISSING DELIVERABLE.**
+### ⭐ **`#[allow(dead_code)]` IS A SUPPRESSED ORACLE** — rustc was computing gap 1
+### for free and the annotation turned it off. ⚠ **This is MY inference, not the
+### Architect's words**; recorded as frame guidance, contradictable.
+### ▶ **Items 1 and 6 OPEN, leader-routed, I have NOT assessed them.** Item 1 needs
+### the name table MATERIALIZED; item 6 reports `push_node` appears not to expose
+### `tag_id` — possibly blocked on a MISSING API, not effort.
 ### ⛔ **MY OWN "NO NEW SHA" NEEDED CORRECTING** (`evt_4es0jndag4bn6`): it was
 ### scoped to refusing a FRAME FOLD and I did not say so. ⇒ **It does NOT freeze
-### the ring's own forward repair of a code defect.** "Keep it moving" is satisfied
-### by ADVANCING, not by freezing on a SHA with a known violation.
-### ▶ **OPEN WITH THE ARCHITECT, NOT BLOCKING** (`evt_6t3t89exkbr37`): does a
-### TYPE-LEVEL connection with **NO production caller** discharge `D5`/`AC-E5`?
-### `R1` sanctions "one INERT path now, `B2F` ACTIVATES later" **and** says a
-### newtype alone is "necessary but not sufficient". The implementer declines to
-### claim it and invites a block. QA records `D5`/`AC-E5` **CONDITIONAL** on the
-### ruling. ⛔ I have NOT assumed either reading.
+### the ring's own forward repair of a code defect.**
 ### ⛔ **THE CANDIDATE CARRIES THE PRE-`R1` FRAME — still true at `46ed5c97`.** Its
 ### tree has frame `20928eac` / node `8275c6c5`; the governing `e86c5331` /
 ### `c947dc77` landed at `4297e55c`, which is **NOT an ancestor** (base `9410d7b8`
@@ -111,6 +121,19 @@ verbatim (⚠ it was only in gitignored `local/`) at
 ### the `97` arm breaks.
 ### ⛔ **MY `A1` §2 TABLE IS NOT RELIABLE PER-CELL** — it cited a FILE and inherited
 ### the claim from its subject matter. A locator has TWO coordinates.
+### ⛔ **`SPEC-ALIGN-A1` PR #1028 DID NOT MERGE — CI FAILED.** `build + test` and
+### `test shard 1/4` both failed; the publisher **correctly refused to merge** and
+### `main` did NOT move. ⭐ **This is why the full CI path was right over
+### `--doc-only`** — doc-only skips exactly these checks.
+### ✅ Candidate is SAFE and durable: `wp/SPEC-ALIGN-A1` = `a31c927c` on `origin`.
+### ⚠ **OWNERSHIP IS AN OPEN QUESTION, not obviously the ring's.** Measured
+### locally: the conformance diff changes **ZERO** AC/assert/expect/verdict/stimulus
+### lines — it is prose-only. #1027 merged green on the full path shortly before, so
+### CI was green at `870f5b65`'s content. ⇒ Candidate suspects are a **spec↔
+### conformance currency/citation gate** tripped by the `44-capacity.md` authority
+### repair, or an infra flake. ⛔ Do NOT assume the ring broke a test.
+### ⛔ **A FRESH SHA NEEDS A FRESH DECISION** — `dec_65kgppyq7151m` approved exact
+### `a31c927c`; no predecessor approval carries (Architect, this thread).
 ### ▶ **SECOND LANE: spec enclave on `SPEC-ALIGN-A1`** (Track A of the
 ### mission-alignment campaign). Contention-free by path — `spec/`+`docs/` vs
 ### `crates/`. ⛔ **NOT semantically free:** A1 must NOT relax the store family
