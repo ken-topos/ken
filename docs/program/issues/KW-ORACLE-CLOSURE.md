@@ -1,7 +1,7 @@
 ---
 id: KW-ORACLE-CLOSURE
 title: "close the KW-THEOREM source oracle structurally — the occurrence sweep is never applied, and the file population is a five-arm hand enumeration"
-status: draft
+status: active
 owner: language
 size: S
 gate: none
@@ -10,6 +10,13 @@ blocks: []
 github: null
 origin: Adversary post-merge hunt on landed `origin/main` = `c72be0b0`, evt_4q06tgtrw6bv (thr_2seh2bm1kr5mh). Two findings, both in `crates/ken-elaborator/tests/kw_theorem_source_oracle.rs`, **both with zero live instances** — the adversary ran each missing check itself against the full landed population and the corpus is clean. Filed anyway because each is one call site / one predicate wide, and because `RT-FNSPLIT-B2F` is not the only consumer that will lean on this oracle. Steward triage 2026-07-25.
 ---
+
+> ## ▶ THE FRAME IS WRITTEN — read it, not this file
+>
+> `docs/program/wp/KW-ORACLE-CLOSURE-structural-population.md`. It carries the
+> re-derived anchors, the AC→control map, and ⭐ the measured design fact that
+> makes P2 small: `candidate_inputs()` **already** enumerates the whole tree via
+> `git ls-tree -r`, so the narrow part is `classify`, not the enumeration.
 
 > ## ⚠ THERE IS NOTHING HIDING TODAY — THAT IS NOT THE POINT
 >

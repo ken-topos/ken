@@ -1,7 +1,7 @@
 ---
 id: SPEC-CLOSURE-BOUNDARY
 title: "Revise the runtime value spec to remove the closure-identity inconsistency and state the closure/value boundary with minimum constraints on the implementation"
-status: active
+status: merged
 owner: spec
 size: M
 gate: none
@@ -114,3 +114,39 @@ saying it is the failure mode that cost six blocks.
   why this is a spec node and not a frame fold.
 - Wrap markdown at 80 columns. Report an unpushed ref and keep going; the
   Steward pushes.
+
+## ✅ MERGED 2026-07-26 — PR #982, exact `0ccca4c5`
+
+`origin/main` `dd9f4e76` → **`33f0695f`**. Verified by **blob identity**, not
+ancestry — this repo **squash-merges**, so the approved SHA is correctly *not* an
+ancestor of `main`. `41-values.md` `b2ec8cb8`, `73-conformance.md` `27747cc1`,
+`06-execution.md` `6ad4c461`, `SOURCE-ATTESTATIONS` `c03c7fe7`,
+`toolchain.md` `f64437b0` all byte-identical on `main`.
+
+**It took three candidates and a fourth descendant.** `10e29f48` was **rejected**
+by the Architect; `26cfb5db` was **blocked** by the CV on one normative residual
+in `73 §5` item 1; `7bfd744f` was approved and `dec_5dws8kw685gj3` resolved — and
+then **could not merge**. The publisher's library-currency gate refused the merge
+result because six revised spec files are **cited sources**. `0ccca4c5` is the
+Librarian's revalidation descendant, carried by a **fresh** Decision
+`dec_44qez0er55ytz` (resolved by the Architect; `7bfd744f`'s approval did not
+carry).
+
+⭐ **The corpus was genuinely falsified, not merely stale.** Two derived pages
+were asserting things the revision makes false and were repaired
+(`06-execution.md` claimed universal *"identical values"* **twice**;
+`agents/core/toolchain.md` gave an unqualified direct comparison). Seven further
+consumers were opened at their cited anchors and held.
+
+⛔ **`AC-S4` IS THE DEFECT THIS NODE LEAVES BEHIND.** It scoped the blast radius
+to **conformance**, and the **library corpus was also a consumer**. Nothing in the
+criteria named it, which is why a real falsification surfaced at the publisher
+instead of during review — after *two* exhaustive T1 review passes that were each
+correct within their scope. **Future spec nodes touching cited sources must name
+`library/` in the blast-radius AC.** Promoted to `steward.md` §2c step **7c**.
+
+⚠ **What this does NOT do:** it settles the *contract*, not the implementation.
+`crates/` still contradicts it — see [[RT-VALUE-TOTALITY]], which measured that
+`canonical.rs:182` still encodes closures memcmp-exact and that `Value`'s derive
+list grants `Closure` the structural equality, ordering and hashing this boundary
+forbids. **Retros outstanding: spec-leader, spec-author, conformance-validator.**

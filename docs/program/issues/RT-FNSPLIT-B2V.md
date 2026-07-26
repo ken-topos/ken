@@ -5,7 +5,7 @@ status: active
 owner: runtime
 size: L
 gate: none
-depends_on: [RT-FNSPLIT-B2O, RT-FNSPLIT-B2R, SPEC-CLOSURE-BOUNDARY]
+depends_on: [RT-FNSPLIT-B2O, RT-FNSPLIT-B2R, SPEC-CLOSURE-BOUNDARY, RT-VALUE-TOTALITY]
 blocks: [RT-FNSPLIT-B2F]
 github: null
 origin: Architect ruling evt_28cnmxf6ncghn on hard-stop #10 of RT-FNSPLIT-B2F (raised by runtime-implementer evt_71d2jg83z2yt4, leader escalation evt_r7797bd7bzk3, evidence 49e24b59..1b789817 on origin wp/RT-FNSPLIT-B2F-functionization). The ruling found #10 VALID and STRUCTURAL and required exactly ONE new prerequisite inserted between B2R and B2F, delivering an INERT but EXECUTABLE boundary-value ABI. It explicitly forbade splitting the value contract from its access interface, on the ground that a second slot-only declaration would reproduce #9/#10 one layer down. Architect durable checkpoint at ARCHITECT-STATE.md commit 74b4f51b. Steward owns the ID, the frame, and the AC/control placement.

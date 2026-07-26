@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-26 04:10:17Z — from 82 issue file(s) in `docs/program/issues/`.
+2026-07-26 04:31:00Z — from 83 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -72,7 +72,7 @@ the committed file matches the generator's output.
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
 | `F3-39` | F3 [task-list #39] — reducer: degrade-not-wrap + retire legacy arms | draft | runtime | TBD | none | — |
 | `F4` | content-addressing + value-model design (aka PX8-F-PROOF) | draft | foundation+spec-enclave | M | none | — |
-| `KW-ORACLE-CLOSURE` | close the KW-THEOREM source oracle structurally — the occurrence sweep is never applied, and the file population is a five-arm hand enumeration | draft | language | S | none | — |
+| `KW-ORACLE-CLOSURE` | close the KW-THEOREM source oracle structurally — the occurrence sweep is never applied, and the file population is a five-arm hand enumeration | active | language | S | none | — |
 | `KW-THEOREM` | rename the surface keyword `lemma` to `theorem` | merged | language | M | none | — |
 | `LOADER-CITE-ANCHOR` | LOADER-STALE-PREMISE cites the spec by line number (:147-158) — rots silently in the one catalog file outside the currency gate | merged | doc | XS | none | — |
 | `LOADER-STALE-PREMISE` | \"no disk loader yet\" is stale in 9 places — including already-landed library/ content | merged | doc | S | none | — |
@@ -112,10 +112,11 @@ the committed file matches the generator's output.
 | `RT-SCALE-B` | Boundary B — the full n=3..7 emission measurement, the research-grounded analytical model, and the operator scaling verdict that gates RT-NATIVE-FNSPLIT's merge | draft | runtime | L | none | — |
 | `RT-SPLIT` | decompose cranelift_backend.rs | merged | runtime | L | none | — |
 | `RT-SRC-DISPATCH-COVER` | close the source-machine scrutinee-dispatch coverage tier surfaced by RT-SPLIT slice 4 | draft | runtime | TBD | none | — |
+| `RT-VALUE-TOTALITY` | Make every total traversal of Value non-recursive in the host stack, and remove the closure capabilities the landed closure boundary forbids | draft | runtime | L | none | — |
 | `SEAL-2` | carrier producer closure, over a derived enumeration | merged | foundation | M | none | PR #912 @ 4ac9141e (origin/main, CI green) |
 | `SPAN-SEAL` | seal the BufferSpan producer surface | merged | foundation | M | none | — |
 | `SPEC-38-ERRATUM` | spec 38-ffi-io self-contradicts on the transfer bound — rule and reconcile | closed | spec | S | none | 827 |
-| `SPEC-CLOSURE-BOUNDARY` | Revise the runtime value spec to remove the closure-identity inconsistency and state the closure/value boundary with minimum constraints on the implementation | active | spec | M | none | — |
+| `SPEC-CLOSURE-BOUNDARY` | Revise the runtime value spec to remove the closure-identity inconsistency and state the closure/value boundary with minimum constraints on the implementation | merged | spec | M | none | — |
 | `SPEC-MISSION-GROUNDING` | Ground the spec as a whole against the mission — audit every retained constraint for which mission property fails without it, and relax the ones where nothing does | draft | spec | L | none | — |
 | `SRC-ATTEST` | squash-stable whole-source attestation + fresh merge-result authorization | merged | doc | M | none | — |
 | `STR-BIJ` | the String/List Char 'bijection' over-claim (adversary A1 + A2) | ready | spec-enclave | S | none | — |
@@ -169,7 +170,7 @@ is itself not yet `merged`/`closed`:
 - `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2F` (status: ready)
 - `RT-FNSPLIT-B2F` blocked by `RT-FNSPLIT-B2V` (status: active)
 - `RT-FNSPLIT-B2O-CHECK` blocked by `RT-FNSPLIT-B2F` (status: ready)
-- `RT-FNSPLIT-B2V` blocked by `SPEC-CLOSURE-BOUNDARY` (status: active)
+- `RT-FNSPLIT-B2V` blocked by `RT-VALUE-TOTALITY` (status: draft)
 - `RT-SCALE-B` blocked by `RT-FNSPLIT-B2F` (status: ready)
 
 ## Gate progress

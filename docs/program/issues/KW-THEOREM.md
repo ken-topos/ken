@@ -308,4 +308,14 @@ prose while forbidding Ken source. ⚠ **One residue, deliberately left:**
 (`25-protocol.md`, `SuggestedAction::ProvideLemma`) — an API token, not a
 language construct; the mathematical concept *lemma* is not retired.
 
-**Retros owed:** language ring, doc ring, spec enclave.
+**Retros:** ✅ **doc ring IN** — Librarian posted `evt_4s3jm80pfa946` (trap,
+held discipline, and the reusable carry that a corpus-wide surface-spelling
+migration must run the **full frozen-corpus canonicality gate at the
+corpus-authoring stage**, even when every edit is mechanically N-for-N and the
+semantic checks are green). ⛔ **language ring and spec enclave OUTSTANDING** —
+chased 2026-07-26 at `evt_632e09r2eexx9`.
+
+⚠ **The Language ring must not be compacted until its retro is posted**, and
+its next WP ([[KW-ORACLE-CLOSURE]], framed and `ready`) cannot be released
+until then — the release gate compacts the receiving ring first, and
+compaction destroys an unposted retro.

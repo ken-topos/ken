@@ -288,6 +288,56 @@ brief** — the implementer should execute mostly mechanically, not design
 >    sequence them and **re-derive the consumer population after the first
 >    lands** — it will have changed, which is the point.
 >
+> 7c. **★★ A SOLO WP WITH NO CONTENDER CAN STILL BE BLOCKED BY THE LEDGER —
+>    intersect your own file set against the CITED-SOURCE list on every
+>    publish.** Step 7b asks whether two WPs collide *through* the ledger. This
+>    is the other question, and there is no second WP in it: **does the thing I
+>    am about to publish stale an attestation?**
+>
+>    **2026-07-26.** `SPEC-CLOSURE-BOUNDARY` reached the publisher with a
+>    **resolved** Decision after a three-candidate review — CV blocked twice on
+>    exact SHAs, the Architect gave a fresh external soundness approval — and the
+>    publisher **refused the merge result**: six revised spec files are cited
+>    sources, so merging would have left `main` red for the next PR to run the
+>    full suite, *looking like that PR's failure rather than this one's*.
+>
+>    ⛔ **Two exhaustive T1 reviews could not see it, and neither was
+>    negligent.** CV explicitly verified *"the candidate/current-main changed-path
+>    intersection is empty"* — **true**, and not the question: the ledger lives in
+>    `library/`, outside the `spec/` + `conformance/` scope both reviews were
+>    correctly bounded to. ★ **Path-intersection-empty is not publishable.** The
+>    two checks have different populations, and a review cannot be faulted for
+>    answering the question it was scoped to.
+>
+>    ⇒ It is one command. Run it instead of reasoning about it:
+>
+>    ```sh
+>    while IFS= read -r f; do
+>      git show origin/main:library/SOURCE-ATTESTATIONS | awk '{print $2}' \
+>        | grep -qxF "$f" && echo "CITED: $f"
+>    done < <(git diff --name-only origin/main...HEAD)
+>    ```
+>
+>    **First ask whether `main` is ALREADY red on those rows** — compare attested
+>    against `origin/main`'s actual blob per path. If `main` is green and your
+>    candidate moved them, the staleness is **your blast radius**; if `main` is
+>    already red, you have found a *pre-existing* defect and the fix is not yours
+>    to fold. ⛔ Do not route repair work before you know which one it is.
+>
+>    ⛔ **The repair does NOT sequence — it must fold into the SAME candidate.**
+>    Landing a ledger refresh first is circular: the attestation must name the
+>    candidate's blobs, and those do not exist on `main` until the candidate
+>    lands. So the revalidation rides the candidate branch — which **moves the
+>    tip** and therefore **voids the Decision**. A fresh Decision on the successor
+>    SHA is part of the cost, not an afterthought.
+>
+>    ⚠ **You may not install the attestation yourself.**
+>    `gen-source-attestations.sh` writes only a `.proposed` sibling, by
+>    construction — two file paths instead of one flag, because **the attestation
+>    IS the claim that someone re-validated.** Route it to the **Librarian**, and
+>    expect **real page edits, not a blob bump**: if the change altered meaning,
+>    corpus prose is now **false**, not merely stale.
+>
 > 8. **★ FLIP THE WP's TRACKER STATUS TO `active` — as part of the kickoff, not
 >    "later."** The kickoff is not complete until the catalog says the work is
 >    in flight. Edit `status:` in `docs/program/issues/<ID>.md`, run
