@@ -161,6 +161,59 @@ private. **This is `OQ-A`'s cost, now visible instead of contradicted.**
 is load-bearing for something `OQ-A` did not weigh — **that escalates to the
 operator.** This ruling declines to open a design fork; it does not overrule one.
 
+## ⭐⭐ `RULING R2` — bytes are NOT OBSERVABLE; a codec belongs in KEN
+
+**OPERATOR, 2026-07-26.**
+
+**Transcribed from `evt_5sjbp8ba6wsk3`. Operator, verbatim:**
+
+> *"Map/Set's internal bytes should not be observable. Only it's external
+> behavior should be observable. If a codec is required for map/set to be
+> transportable, then the codec should be in ken, as it would also be generally
+> useful not just inter-thread, but inter-process or over the network."*
+
+⭐ **This confirms `R1` above and supersedes its framing on one point.**
+
+### 1. ⛔ "NOT OBSERVABLE" is stronger than "may differ" — say the stronger thing
+
+- ✅ **The observables are** extensional equality, ordered `to_list`, and **durable
+  round-trip** (write then read yields an extensionally-equal map).
+- ⛔ **The bytes are not an observable at all.** ⛔ **No conformance row may assert
+  byte equality *or* byte inequality across insertion histories.**
+
+⚠ **Why the weaker wording is a defect, not a nuance:** *"possible byte
+differences"* states a byte difference as a **permitted outcome**, which invites a
+row that **observes bytes** in order to check it. *"Not observable"* forbids the
+row. ⭐ The R1 successor's own producers already got this right — *"neither equal
+nor unequal cross-history bytes"* — so the **spec text must be made to say what
+the producers say**, not the reverse.
+
+### 2. ⛔ A transport codec, if ever needed, is KEN-LEVEL — never runtime or spec
+
+`R1` forbade *defining* one here. The operator has now settled **where it lives if
+it is ever wanted**: **in Ken, as ordinary package Ken, exactly like `52-map`
+itself** — because a canonical serialization is *"generally useful not just
+inter-thread, but inter-process or over the network."*
+
+⇒ ⭐ **The same shape as `OQ-A`:** a capability that looks like it wants to be a
+runtime primitive is delivered as **proved, pure, package-level Ken, out of
+`trusted_base()`**. A runtime codec would serve only the in-process case and would
+**grow the TCB** to do it.
+
+⇒ ⛔ **Separate WP. Nothing about a codec enters this candidate.**
+
+### 3. The transport clause — measured, and it is consistent
+
+`spec/90-open-decisions.md` `OQ-Space` reads: **`Transport:` content-addressed
+immutable, closure-free value passing (**cross-space dedup by hash**; composes
+with K3)**.
+
+⇒ **Cross-space dedup by hash simply MISSES for extensionally-equal `Map`/`Set`
+values built in different orders, and that is not a defect** — dedup is an
+internal optimization over non-observable bytes, and this WP makes it private.
+⛔ **But that clause must not read as a guarantee.** Text promising dedup as
+*semantics* rather than as optimization is a real finding — route it.
+
 ## `AC-4` — every coupled conformance row retargeted or retired, each with its reason
 
 > ### ⛔ AMENDED 2026-07-26 — THIS AC SAID "ALL EIGHT" AND THAT WAS A CLOSED
