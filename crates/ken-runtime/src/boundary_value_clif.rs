@@ -7251,6 +7251,15 @@ pub(crate) mod tests {
         let f = bind(&mut store, builder);
         let base = f.base;
 
+        // ⛔ BOTH probes, not just `class`. The first cut of this test drove
+        // `class` alone, and the mutation that hardcodes `escape_check`'s
+        // invocation band stayed green through it: a probe that never reaches
+        // a site is not evidence about that site.
+        let probes: [(&str, Probe); 2] = [
+            ("class", Probe::Unary(|h| h.class)),
+            ("escape_check", Probe::Status(|h| h.escape_check)),
+        ];
+
         assert!(
             plan.tags().owner_bands().len() >= 2,
             "RECUT 2: fewer than two owner bands, so a reassignment cannot be \
@@ -7298,18 +7307,18 @@ pub(crate) mod tests {
             // Index 0 exists in the persistent region and not in the empty
             // arena, so the two regions give different answers.
             let word = BoundaryWord(*tag as u64);
-            let (_real_module, real_code) =
-                compile_probe_with_plan(Probe::Unary(|h| h.class), &plan);
-            let (_pert_module, pert_code) =
-                compile_probe_with_plan(Probe::Unary(|h| h.class), &perturbed);
-            let real = run2(real_code, base, word);
-            let pert = run2(pert_code, base, word);
-            assert_ne!(
-                real, pert,
-                "RECUT 2: `class` answers the same for {tag:?} whether the plan \
-                 bands it under {owner:?} or {elsewhere:?} — the region \
-                 selection is not derived from the bands"
-            );
+            for (name, probe) in probes {
+                let (_real_module, real_code) = compile_probe_with_plan(probe, &plan);
+                let (_pert_module, pert_code) = compile_probe_with_plan(probe, &perturbed);
+                let real = run2(real_code, base, word);
+                let pert = run2(pert_code, base, word);
+                assert_ne!(
+                    real, pert,
+                    "RECUT 2: `{name}` answers the same for {tag:?} whether the \
+                     plan bands it under {owner:?} or {elsewhere:?} — that \
+                     helper's owner decision is not derived from the bands"
+                );
+            }
         }
     }
 
