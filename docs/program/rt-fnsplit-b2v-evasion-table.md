@@ -721,6 +721,72 @@ it destroys the baseline the check depends on*.
 
 ---
 
+# ⛔ `AC-3` — the five static encoding policies, routed after I flagged the gap
+
+I reported in the `9b4e6684` handoff that the `AC-3` control proved
+wildcard-freedom only and that policy assignment was unstarted. The leader held
+the handoff and routed it; this closes it.
+
+## The gap was that the TYPE could not express the claim
+
+`AC-3` requires each of the 21 variants to carry **exactly one of five** static
+policies, and names the misassignment it cares about: *a variant with a declared
+spill must not be assigned immediate-only.* But *immediate-only* and
+*immediate-with-declared-handle-spill* were **the same constructor**
+distinguished by an `Option` field, so "exactly one of five" was a **reading** of
+`BoundaryDisposition` rather than a fact about it — and a claim the type cannot
+express is one a control has to restate, which is how the misassignment survives.
+
+⛔ **And exhaustiveness does not help.** "No `_` arm" says every variant has *a*
+disposition; it says nothing about *which*. The existing control could not have
+caught a spill arm assigned immediate-only, and neither could any strengthening
+of it.
+
+## Two structural changes, one of which was the real problem
+
+**`StaticEncodingPolicy`** is now a five-variant enum derived from a disposition
+by an exhaustive `match`, so the five are five in the type.
+
+**`LoweredVariant`** is the variant *tag*, and `boundary_disposition` takes
+**that** rather than `&Lowered`. ⭐ **This is the one that matters.** The frame
+says a policy is a claim about a whole variant, never about a sampled value — but
+a disposition taking `&Lowered` can only be swept by constructing 21 values, so
+any sweep would have been asserting a variant-level claim from value-level
+evidence. Taking the tag makes the sweep **total by construction**: there is no
+value to sample, and the function cannot come to depend on a payload without
+someone changing its signature. Both `Lowered::variant` and
+`LoweredVariant::boundary_disposition` are `match`es with no `_` arm.
+
+## The control and its discriminators
+
+`b2v_ac3_every_variant_carries_exactly_one_of_the_five_static_policies` sweeps
+all 21 tags, asserts each policy is in the closed five, and checks the spill
+correspondence in both directions. Its non-degenerate pair is `Int` (declares a
+spill) against `Bool` (does not) on the same assertion — a checker ignoring
+`spill` puts both in one policy and passes everything else. Every policy must be
+**inhabited and not universal**, so an unreachable policy and a degenerate
+assignment both redden.
+
+| # | mutation | reddens | collateral |
+|---|---|---|---|
+| **M32** | `policy()` maps a declared spill to *immediate-only* | the policy control | **none — 1 test** |
+| **M33** | `Lowered::Int` drops its declared spill | the policy control | **none — 1** |
+
+⚠ **The old source scan's positive control fired during the refactor** — its
+extractor anchors went stale and it failed with *"the extracted region does not
+contain a token that is certainly in it, so its silence about `_ =>` means
+nothing."* That is the control working: it refused to report a green it could not
+justify. Retargeted onto the tag dispatch and kept, because it guards something
+the new sweep does not — that nobody **silences** exhaustiveness with a binding
+catch-all.
+
+⚠ **`rustfmt` reformatted the module tree again.** Formatting `lowering/mod.rs`
+reflowed 65 lines of `lowering/core.rs`, which this fold does not touch. Caught
+by the diff-stat audit and reverted; `control.rs`'s delta is content-only under
+`git diff -w`.
+
+---
+
 # AC → discharging control
 
 Required by the frame's second amendment (`origin/main` = `fdda953f`): one row
@@ -733,6 +799,7 @@ because a taxonomy with nowhere to put the honest answer records it as covered.
 | **AC-1** closed + type-enforced | `b2v_the_tag_set_is_closed_in_both_directions`; `b2v_emitted_code_admits_exactly_the_closed_tag_set` | Rust sweep + **256-byte emitted sweep** through `class` and `escape_check`; admitted count `== ALL.len()`, rejected `== 256 - ALL.len()`. A new tag is a compile error at `from_bits`'s closed `match` and at `ALL` |
 | **AC-1** region bands | `b2v_the_region_thresholds_agree_with_referent_owner` | the CLIF's numeric bands classify every tag exactly as `referent_owner()`; both bands asserted non-empty |
 | **AC-2** no value-specialization | **the compiler** + `b2v_the_immediate_handle_choice_tracks_magnitude_only` | `boundary_value` imports no `NativeSeedEnvironment` and no environment vector — passing one **does not compile**. Magnitude cases test `MAX`, `MAX±1`, `MIN`, `MIN±1` |
+| **AC-3** five static policies | `b2v_ac3_every_variant_carries_exactly_one_of_the_five_static_policies` | all 21 variant **tags** swept — total by construction, because `boundary_disposition` takes `LoweredVariant` and has no value to sample. `StaticEncodingPolicy` makes "one of five" a fact about the type rather than a reading of an `Option`. Non-degenerate pair `Int` (declares spill) vs `Bool` (does not); every policy asserted inhabited and not universal. Causal: **M32** (a declared spill mapped to immediate-only) and **M33** (`Int` loses its spill) |
 | **AC-3** exhaustive, no wildcard | `b2v_ac3_the_lowered_boundary_disposition_has_no_wildcard_arm` | arm-*head* enumeration (every `=>` line starts `Lowered::` or `\|`), 21 variants named, `Constructor`/`HostResult` checked **positionally** outside the fail-closed block, single-dispatch assertion. ⚠ first form was **defeated** by a binding catch-all |
 | **AC-4** **content** | `b2v_a_separately_compiled_consumer_reads_a_spilled_int_by_content`; `b2v_emitted_code_constructs_equal_length_bytes_and_strings_by_content`; `b2v_the_two_string_producers_agree_byte_for_byte` | a spilled `Int` is a `NativeIntV1` pair decoded by `ken_native_int_resolve_local`; `Bytes`/`String` are **built and read** byte-by-byte from the region's data span, by emitted code, with the class a run-time argument. Every case is **equal length** or **asserted to spill**, and the results are asserted mutually distinct. ⚠ The prior form was **defeated** — its `String` handles were Rust-materialized, so `M14` was green on `ea8d9824` |
 | **AC-4** **construct** | `b2v_emitted_code_constructs_a_nonconstant_constructor_and_a_consumer_reads_it`; `…constructs_both_host_result_arms`; `…constructs_a_record_readable_by_name`; `b2v_construction_fails_closed_at_each_ceiling` | a separately compiled **producer** mints each live class from `alloc` + `store_*`; one compiled body, three runtime heads; every ceiling and closed-set refusal asserted at its **exact** status |

@@ -510,6 +510,164 @@ enum Lowered {
     Trap(RuntimeTrap),
 }
 
+/// ⛔ **The `Lowered` variant TAG, without a value.**
+///
+/// `D4`'s policies are claims about a **whole variant**, never about a sampled
+/// value — the frame says so in as many words, because assigning *immediate-only*
+/// to a variant that has a spill arm is the vacuity route `AC-10` exists to
+/// close. A disposition that takes `&Lowered` cannot be swept over the variants
+/// without constructing 21 values, and a control that samples one value per
+/// variant would be asserting the variant-level claim from value-level evidence.
+///
+/// ⭐ So the disposition is a function of **this** — the tag alone — and the tag
+/// set is enumerable. `Lowered::variant` and
+/// `LoweredVariant::boundary_disposition` are both `match`es with **no `_`
+/// arm**, so a 22nd `Lowered` variant is a compile error in both.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum LoweredVariant {
+    Int,
+    Bool,
+    ProcessExitStatus,
+    CapabilityToken,
+    ResourceToken,
+    BoundedNat,
+    StructuralNat,
+    ResponseBytes,
+    HostResult,
+    DynamicConstructor,
+    Bytes,
+    BorrowedNativeValue,
+    BorrowedOption,
+    String,
+    Constructor,
+    Record,
+    Closure,
+    DeclarationClosure,
+    ComputationalRecursorClosure,
+    RecursiveBackedge,
+    Trap,
+}
+
+impl LoweredVariant {
+    /// Every variant, in declaration order.
+    pub(in crate::cranelift_backend) const ALL: [LoweredVariant; 21] = [
+        LoweredVariant::Int,
+        LoweredVariant::Bool,
+        LoweredVariant::ProcessExitStatus,
+        LoweredVariant::CapabilityToken,
+        LoweredVariant::ResourceToken,
+        LoweredVariant::BoundedNat,
+        LoweredVariant::StructuralNat,
+        LoweredVariant::ResponseBytes,
+        LoweredVariant::HostResult,
+        LoweredVariant::DynamicConstructor,
+        LoweredVariant::Bytes,
+        LoweredVariant::BorrowedNativeValue,
+        LoweredVariant::BorrowedOption,
+        LoweredVariant::String,
+        LoweredVariant::Constructor,
+        LoweredVariant::Record,
+        LoweredVariant::Closure,
+        LoweredVariant::DeclarationClosure,
+        LoweredVariant::ComputationalRecursorClosure,
+        LoweredVariant::RecursiveBackedge,
+        LoweredVariant::Trap,
+    ];
+}
+
+impl Lowered {
+    /// This value's variant tag. ⛔ Exhaustive, no `_` arm.
+    pub(in crate::cranelift_backend) fn variant(&self) -> LoweredVariant {
+        match self {
+            Lowered::Int { .. } => LoweredVariant::Int,
+            Lowered::Bool { .. } => LoweredVariant::Bool,
+            Lowered::ProcessExitStatus { .. } => LoweredVariant::ProcessExitStatus,
+            Lowered::CapabilityToken { .. } => LoweredVariant::CapabilityToken,
+            Lowered::ResourceToken { .. } => LoweredVariant::ResourceToken,
+            Lowered::BoundedNat(_) => LoweredVariant::BoundedNat,
+            Lowered::StructuralNat(_) => LoweredVariant::StructuralNat,
+            Lowered::ResponseBytes { .. } => LoweredVariant::ResponseBytes,
+            Lowered::HostResult { .. } => LoweredVariant::HostResult,
+            Lowered::DynamicConstructor(_) => LoweredVariant::DynamicConstructor,
+            Lowered::Bytes(_) => LoweredVariant::Bytes,
+            Lowered::BorrowedNativeValue { .. } => LoweredVariant::BorrowedNativeValue,
+            Lowered::BorrowedOption { .. } => LoweredVariant::BorrowedOption,
+            Lowered::String(_) => LoweredVariant::String,
+            Lowered::Constructor { .. } => LoweredVariant::Constructor,
+            Lowered::Record { .. } => LoweredVariant::Record,
+            Lowered::Closure { .. } => LoweredVariant::Closure,
+            Lowered::DeclarationClosure { .. } => LoweredVariant::DeclarationClosure,
+            Lowered::ComputationalRecursorClosure { .. } => {
+                LoweredVariant::ComputationalRecursorClosure
+            }
+            Lowered::RecursiveBackedge => LoweredVariant::RecursiveBackedge,
+            Lowered::Trap(_) => LoweredVariant::Trap,
+        }
+    }
+}
+
+/// `RT-FNSPLIT-B2V` `D4` — the five STATIC ENCODING POLICIES, as a closed set.
+///
+/// ⛔ **Five policies, and the type says five.** They were previously readable
+/// only by inspecting a `BoundaryDisposition`: *immediate-only* and
+/// *immediate-with-declared-handle-spill* are the same constructor distinguished
+/// by an `Option` field, so "every variant has exactly one of five" was a
+/// **reading** of the type rather than a fact about it. `AC-3` requires the
+/// assignment, and a claim a type cannot express is a claim a control has to
+/// restate — which is how the misassignment it names would survive.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum StaticEncodingPolicy {
+    /// Every value encodes in the tagged word; **no spill arm exists**.
+    ImmediateOnly,
+    /// Every value encodes as an opaque handle, with explicit lifetime and
+    /// referent owner.
+    HandleOnly,
+    /// Values encode immediate **or**, on a declared closed condition, as a
+    /// handle carrying the same lifetime/referent-owner obligations.
+    ImmediateWithDeclaredHandleSpill,
+    /// Never a source value at a boundary.
+    ProtocolOnly,
+    /// Rejected before emission, with an exact error.
+    FailClosedForbidden,
+}
+
+impl StaticEncodingPolicy {
+    /// Every policy, in the frame's order.
+    pub(in crate::cranelift_backend) const ALL: [StaticEncodingPolicy; 5] = [
+        StaticEncodingPolicy::ImmediateOnly,
+        StaticEncodingPolicy::HandleOnly,
+        StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill,
+        StaticEncodingPolicy::ProtocolOnly,
+        StaticEncodingPolicy::FailClosedForbidden,
+    ];
+}
+
+impl BoundaryDisposition {
+    /// The static encoding policy this disposition declares.
+    ///
+    /// ⛔ **A declared spill is the THIRD policy, not the first.**
+    /// `RepresentedImmediate { spill: Some(_) }` claims that a value encodes
+    /// immediate *or* spills to a handle on a declared condition — it does not
+    /// claim every value of the variant is immediate, and calling it
+    /// *immediate-only* would let a proof attach handle evidence to one sampled
+    /// spill while never establishing the handle obligations for the partition.
+    pub(in crate::cranelift_backend) fn policy(self) -> StaticEncodingPolicy {
+        match self {
+            BoundaryDisposition::RepresentedImmediate { spill: None, .. } => {
+                StaticEncodingPolicy::ImmediateOnly
+            }
+            BoundaryDisposition::RepresentedImmediate { spill: Some(_), .. } => {
+                StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill
+            }
+            BoundaryDisposition::RepresentedHandle { .. } => StaticEncodingPolicy::HandleOnly,
+            BoundaryDisposition::ProtocolOnly { .. } => StaticEncodingPolicy::ProtocolOnly,
+            BoundaryDisposition::FailClosedForbidden { .. } => {
+                StaticEncodingPolicy::FailClosedForbidden
+            }
+        }
+    }
+}
+
 /// `RT-FNSPLIT-B2V` `D4` — what a `Lowered` becomes when it crosses a boundary.
 ///
 /// ⛔ **The population is closed by the compiler, not by a histogram.** The
@@ -538,20 +696,32 @@ pub(in crate::cranelift_backend) enum BoundaryDisposition {
         class: BoundaryClass,
     },
     /// Never a source value at a boundary — protocol machinery only.
-    ProtocolOnly {
-        why: &'static str,
-    },
+    ProtocolOnly { why: &'static str },
     /// Rejected **before** emission, with an exact error.
-    FailClosedForbidden {
-        why: &'static str,
-    },
+    FailClosedForbidden { why: &'static str },
 }
 
 impl Lowered {
     /// The boundary disposition of this value.
     ///
     /// ⛔ **No `_` arm, by construction.** Every variant is named.
+    /// The boundary disposition of this value's VARIANT.
+    ///
+    /// ⛔ A policy is a claim about the whole variant, so it is a function of
+    /// the variant TAG and of nothing else — see [`LoweredVariant`]. Delegating
+    /// makes that structural: this cannot come to depend on a payload without
+    /// someone changing the signature, and the tag set is enumerable, so the
+    /// `AC-3` assignment can be swept without constructing 21 values.
     pub(in crate::cranelift_backend) fn boundary_disposition(&self) -> BoundaryDisposition {
+        self.variant().boundary_disposition()
+    }
+}
+
+impl LoweredVariant {
+    /// The boundary disposition of this variant.
+    ///
+    /// ⛔ **No `_` arm, by construction.** Every variant is named.
+    pub(in crate::cranelift_backend) fn boundary_disposition(self) -> BoundaryDisposition {
         use BoundaryDisposition::{
             FailClosedForbidden, ProtocolOnly, RepresentedHandle, RepresentedImmediate,
         };
@@ -563,24 +733,24 @@ impl Lowered {
             // them is made by emitted code from the value's magnitude at
             // RUNTIME; nothing inspects a JIT-time value to pick a layout,
             // which is `AC-2`.
-            Lowered::Int { .. } => RepresentedImmediate {
+            LoweredVariant::Int => RepresentedImmediate {
                 tag: BoundaryTag::ImmediateInt,
                 spill: Some(BoundaryClass::Int),
             },
             // One bit. The only immediate that cannot overflow its field.
-            Lowered::Bool { .. } => RepresentedImmediate {
+            LoweredVariant::Bool => RepresentedImmediate {
                 tag: BoundaryTag::ImmediateBool,
                 spill: None,
             },
-            Lowered::ProcessExitStatus { .. } => RepresentedImmediate {
+            LoweredVariant::ProcessExitStatus => RepresentedImmediate {
                 tag: BoundaryTag::ImmediateExitStatus,
                 spill: Some(BoundaryClass::Int),
             },
-            Lowered::BoundedNat(_) => RepresentedImmediate {
+            LoweredVariant::BoundedNat => RepresentedImmediate {
                 tag: BoundaryTag::ImmediateBoundedNat,
                 spill: Some(BoundaryClass::Int),
             },
-            Lowered::StructuralNat(_) => RepresentedImmediate {
+            LoweredVariant::StructuralNat => RepresentedImmediate {
                 tag: BoundaryTag::ImmediateStructuralNat,
                 spill: Some(BoundaryClass::Int),
             },
@@ -593,12 +763,10 @@ impl Lowered {
             // rounding error — so these take a handle whose node payload holds
             // the full word. Their owner is the invocation because that is
             // already the extent over which the token is valid.
-            Lowered::CapabilityToken { .. } | Lowered::ResourceToken { .. } => {
-                RepresentedHandle {
-                    tag: BoundaryTag::InvocationBorrowed,
-                    class: BoundaryClass::BorrowedOpaque,
-                }
-            }
+            LoweredVariant::CapabilityToken | LoweredVariant::ResourceToken => RepresentedHandle {
+                tag: BoundaryTag::InvocationBorrowed,
+                class: BoundaryClass::BorrowedOpaque,
+            },
 
             // ─── persistable ground values ───────────────────────────────
             //
@@ -607,19 +775,19 @@ impl Lowered {
             // disposition that parked it in `FailClosedForbidden` would reject
             // the dominant population — sound, and unable to satisfy `B2F`'s
             // `D6`/`D7`. That is the whole finding of `#10`.
-            Lowered::Constructor { .. } | Lowered::DynamicConstructor(_) => RepresentedHandle {
+            LoweredVariant::Constructor | LoweredVariant::DynamicConstructor => RepresentedHandle {
                 tag: BoundaryTag::PersistentGround,
                 class: BoundaryClass::Constructor,
             },
-            Lowered::Record { .. } => RepresentedHandle {
+            LoweredVariant::Record => RepresentedHandle {
                 tag: BoundaryTag::PersistentGround,
                 class: BoundaryClass::Record,
             },
-            Lowered::String(_) => RepresentedHandle {
+            LoweredVariant::String => RepresentedHandle {
                 tag: BoundaryTag::PersistentGround,
                 class: BoundaryClass::String,
             },
-            Lowered::Bytes(_) => RepresentedHandle {
+            LoweredVariant::Bytes => RepresentedHandle {
                 tag: BoundaryTag::PersistentGround,
                 class: BoundaryClass::Bytes,
             },
@@ -635,13 +803,13 @@ impl Lowered {
             // between; the landed lowering holds those payloads as compile-time
             // templates, which is why a compiled-once callee cannot consume one
             // today.
-            Lowered::HostResult { .. } => RepresentedHandle {
+            LoweredVariant::HostResult => RepresentedHandle {
                 tag: BoundaryTag::InvocationHostResult,
                 class: BoundaryClass::HostResult,
             },
-            Lowered::ResponseBytes { .. }
-            | Lowered::BorrowedNativeValue { .. }
-            | Lowered::BorrowedOption { .. } => RepresentedHandle {
+            LoweredVariant::ResponseBytes
+            | LoweredVariant::BorrowedNativeValue
+            | LoweredVariant::BorrowedOption => RepresentedHandle {
                 tag: BoundaryTag::InvocationBorrowed,
                 class: BoundaryClass::BorrowedOpaque,
             },
@@ -655,7 +823,7 @@ impl Lowered {
             // rather than forbidding them is deliberate — a higher-order
             // language will pass closures as parameters, and a
             // `FailClosedForbidden` here would guarantee that wall for `B2F`.
-            Lowered::Closure { .. } | Lowered::DeclarationClosure { .. } => RepresentedHandle {
+            LoweredVariant::Closure | LoweredVariant::DeclarationClosure => RepresentedHandle {
                 tag: BoundaryTag::PersistentClosure,
                 class: BoundaryClass::Closure,
             },
@@ -667,20 +835,20 @@ impl Lowered {
             // activation of the enclosing recursor. Transferring it to another
             // unit would hand over a cursor into a frame that unit does not
             // have. Rejected before emission, with an exact error.
-            Lowered::ComputationalRecursorClosure { .. } => FailClosedForbidden {
+            LoweredVariant::ComputationalRecursorClosure => FailClosedForbidden {
                 why: "a computational recursor closure names an in-flight activation, \
                       not a transferable value",
             },
 
             // ─── protocol-only ───────────────────────────────────────────
-            Lowered::RecursiveBackedge => ProtocolOnly {
+            LoweredVariant::RecursiveBackedge => ProtocolOnly {
                 why: "a tail-recursive edge is already a CFG jump; the block is \
                       predecessor-free and there is no value to transfer",
             },
             // The trap word is its own `AbiCarrier`, written by the protocol.
             // ⛔ `result_carrier` is not its producer — the `AC-11` correction
             // on `B2F` says exactly this, and it holds here too.
-            Lowered::Trap(_) => ProtocolOnly {
+            LoweredVariant::Trap => ProtocolOnly {
                 why: "a trap is written to the activation's trap word, which is a \
                       protocol carrier and not a source-expression result",
             },

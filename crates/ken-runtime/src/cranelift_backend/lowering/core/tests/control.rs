@@ -262,8 +262,12 @@ fn run_px8j_malformed_recursor_consumer(
     };
     match consumer {
         Px8jDirectRecursorConsumer::PendingLetProducer
-        | Px8jDirectRecursorConsumer::ProducerCall => compiler
-            .lower_computational_producer_expr(&mut builder, occurrence, &env, &active_frames),
+        | Px8jDirectRecursorConsumer::ProducerCall => compiler.lower_computational_producer_expr(
+            &mut builder,
+            occurrence,
+            &env,
+            &active_frames,
+        ),
         Px8jDirectRecursorConsumer::OrdinaryCall => {
             compiler.lower_expr(&mut builder, occurrence, &env)
         }
@@ -572,8 +576,12 @@ fn run_px8ds_edge_consumer(
     };
     match consumer {
         Px8jDirectRecursorConsumer::PendingLetProducer
-        | Px8jDirectRecursorConsumer::ProducerCall => compiler
-            .lower_computational_producer_expr(&mut builder, occurrence, &env, &active_frames),
+        | Px8jDirectRecursorConsumer::ProducerCall => compiler.lower_computational_producer_expr(
+            &mut builder,
+            occurrence,
+            &env,
+            &active_frames,
+        ),
         Px8jDirectRecursorConsumer::OrdinaryCall => {
             compiler.lower_expr(&mut builder, occurrence, &env)
         }
@@ -2987,7 +2995,9 @@ fn expression_children(expr: &RuntimeExpr) -> Vec<&RuntimeExpr> {
             captures,
             params: _,
             body,
-        } => std::iter::once(body.as_ref()).chain(captures.iter()).collect(),
+        } => std::iter::once(body.as_ref())
+            .chain(captures.iter())
+            .collect(),
         RuntimeExpr::DeclarationRef { symbol: _ } => Vec::new(),
         RuntimeExpr::ImportedDeclarationRef {
             symbol: _,
@@ -3236,7 +3246,10 @@ fn every_expression_typed_field_is_a_reachable_positional_child_origin() {
 #[cfg(test)]
 fn one_child_record() -> RuntimeExpr {
     RuntimeExpr::Record {
-        fields: vec![("l".to_string(), RuntimeExpr::Value(RuntimeValue::Bool(true)))],
+        fields: vec![(
+            "l".to_string(),
+            RuntimeExpr::Value(RuntimeValue::Bool(true)),
+        )],
     }
 }
 
@@ -3244,8 +3257,14 @@ fn one_child_record() -> RuntimeExpr {
 fn two_child_record() -> RuntimeExpr {
     RuntimeExpr::Record {
         fields: vec![
-            ("l".to_string(), RuntimeExpr::Value(RuntimeValue::Bool(true))),
-            ("r".to_string(), RuntimeExpr::Value(RuntimeValue::Bool(false))),
+            (
+                "l".to_string(),
+                RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            ),
+            (
+                "r".to_string(),
+                RuntimeExpr::Value(RuntimeValue::Bool(false)),
+            ),
         ],
     }
 }
@@ -3272,11 +3291,27 @@ fn swapping_two_same_shaped_children_swaps_their_derived_origins() {
     let straight = branch(one_child_record(), two_child_record());
     let swapped = branch(two_child_record(), one_child_record());
 
-    assert_eq!(arity_at(&straight, 1), 1, "then_expr is the one-child record");
-    assert_eq!(arity_at(&straight, 2), 2, "else_expr is the two-child record");
+    assert_eq!(
+        arity_at(&straight, 1),
+        1,
+        "then_expr is the one-child record"
+    );
+    assert_eq!(
+        arity_at(&straight, 2),
+        2,
+        "else_expr is the two-child record"
+    );
     // The children swapped in the source; the derived origins swapped with them.
-    assert_eq!(arity_at(&swapped, 1), 2, "then_expr is now the two-child record");
-    assert_eq!(arity_at(&swapped, 2), 1, "else_expr is now the one-child record");
+    assert_eq!(
+        arity_at(&swapped, 1),
+        2,
+        "then_expr is now the two-child record"
+    );
+    assert_eq!(
+        arity_at(&swapped, 2),
+        1,
+        "else_expr is now the one-child record"
+    );
 }
 
 #[test]
@@ -3629,9 +3664,6 @@ fn the_retained_body_helper_carries_no_visibility_qualifier() {
     }
 }
 
-
-
-
 fn identifier_occurrences(source: &str, identifier: &str) -> usize {
     source
         .lines()
@@ -3830,8 +3862,12 @@ fn the_bare_source_term_detector_catches_the_shape_it_is_looking_for() {
             "the AC-1 detector must catch {pre_amendment:?}"
         );
     }
-    assert!(!is_bare_source_term_field("        expr: OwnedSourceOccurrence,"));
-    assert!(!is_bare_source_term_field("    // a comment naming RuntimeExpr"));
+    assert!(!is_bare_source_term_field(
+        "        expr: OwnedSourceOccurrence,"
+    ));
+    assert!(!is_bare_source_term_field(
+        "    // a comment naming RuntimeExpr"
+    ));
 }
 
 #[test]
@@ -4254,7 +4290,8 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
     // this, "use the tokenizer" is advice rather than a checked property — and a
     // positive control that only exercises `self.` would be spelling-scoped in
     // exactly the way that produced 58.
-    let both_receivers = "let a = self.lower_expr(b, o, e)?;\nlet c = compiler.lower_expr(b, o, e)?;\n";
+    let both_receivers =
+        "let a = self.lower_expr(b, o, e)?;\nlet c = compiler.lower_expr(b, o, e)?;\n";
     assert_eq!(
         identifier_occurrences(both_receivers, "lower_expr"),
         2,
@@ -4439,7 +4476,7 @@ fn the_owner_classification_has_a_closed_production_naming_inventory() {
 fn b2v_ac3_the_lowered_boundary_disposition_has_no_wildcard_arm() {
     let source = include_str!("../../mod.rs");
     let region = source
-        .split_once("fn boundary_disposition(&self) -> BoundaryDisposition {")
+        .split_once("fn boundary_disposition(self) -> BoundaryDisposition {")
         .map(|(_, after)| after)
         .and_then(|after| {
             after
@@ -4451,7 +4488,7 @@ fn b2v_ac3_the_lowered_boundary_disposition_has_no_wildcard_arm() {
     // ⚠ POSITIVE CONTROL FIRST. A negative check passes for any reason,
     // including an extractor that returned an empty region.
     assert!(
-        region.contains("Lowered::Constructor"),
+        region.contains("LoweredVariant::Constructor"),
         "AC-3: the extracted region does not contain a token that is certainly \
          in it, so its silence about `_ =>` means nothing"
     );
@@ -4472,9 +4509,9 @@ fn b2v_ac3_the_lowered_boundary_disposition_has_no_wildcard_arm() {
             continue;
         }
         assert!(
-            trimmed.starts_with("Lowered::") || trimmed.starts_with('|'),
+            trimmed.starts_with("LoweredVariant::") || trimmed.starts_with('|'),
             "AC-3: `{trimmed}` is a match arm whose head does not name a \
-             `Lowered` variant. A catch-all — `_` or a binding — silences \
+             `LoweredVariant`. A catch-all — `_` or a binding — silences \
              exhaustiveness, so a new variant would compile into it instead of \
              failing until someone dispositions it."
         );
@@ -4484,15 +4521,31 @@ fn b2v_ac3_the_lowered_boundary_disposition_has_no_wildcard_arm() {
     // inventory: a variant renamed or removed reddens here with its own name in
     // the message, where a bare count would only say that something moved.
     for variant in [
-        "Int", "Bool", "ProcessExitStatus", "CapabilityToken", "ResourceToken",
-        "BoundedNat", "StructuralNat", "ResponseBytes", "HostResult",
-        "DynamicConstructor", "Bytes", "BorrowedNativeValue", "BorrowedOption",
-        "String", "Constructor", "Record", "Closure", "DeclarationClosure",
-        "ComputationalRecursorClosure", "RecursiveBackedge", "Trap",
+        "Int",
+        "Bool",
+        "ProcessExitStatus",
+        "CapabilityToken",
+        "ResourceToken",
+        "BoundedNat",
+        "StructuralNat",
+        "ResponseBytes",
+        "HostResult",
+        "DynamicConstructor",
+        "Bytes",
+        "BorrowedNativeValue",
+        "BorrowedOption",
+        "String",
+        "Constructor",
+        "Record",
+        "Closure",
+        "DeclarationClosure",
+        "ComputationalRecursorClosure",
+        "RecursiveBackedge",
+        "Trap",
     ] {
         assert!(
-            region.contains(&format!("Lowered::{variant}")),
-            "AC-3: `Lowered::{variant}` has no disposition"
+            region.contains(&format!("LoweredVariant::{variant}")),
+            "AC-3: `LoweredVariant::{variant}` has no disposition"
         );
     }
 
@@ -4506,8 +4559,8 @@ fn b2v_ac3_the_lowered_boundary_disposition_has_no_wildcard_arm() {
         .expect("AC-3: there is no fail-closed arm at all, which is itself wrong");
     for required_live in ["Constructor", "HostResult"] {
         assert!(
-            !forbidden_block.contains(&format!("Lowered::{required_live}")),
-            "AC-3: `Lowered::{required_live}` is a REQUIRED LIVE ARM and has \
+            !forbidden_block.contains(&format!("LoweredVariant::{required_live}")),
+            "AC-3: `LoweredVariant::{required_live}` is a REQUIRED LIVE ARM and has \
              been moved behind the fail-closed boundary"
         );
     }
@@ -4515,9 +4568,146 @@ fn b2v_ac3_the_lowered_boundary_disposition_has_no_wildcard_arm() {
     // The dispatch is single: one definition, so the compiler's exhaustiveness
     // guarantee covers the whole question and not just this copy of it.
     assert_eq!(
-        source.matches("fn boundary_disposition").count(),
+        source.matches("fn boundary_disposition(self)").count(),
         1,
         "AC-3: a second disposition exists, and the compiler cannot promise \
          the two agree"
     );
+}
+
+// ─── RT-FNSPLIT-B2V AC-3 — exactly one of the FIVE static encoding policies ───
+
+/// **`AC-3` — every `Lowered` variant carries exactly one of `D4`'s five static
+/// encoding policies, and a declared spill is the SPILL policy.**
+///
+/// ⛔ The prior control proved wildcard-freedom and nothing else. Exhaustiveness
+/// says every variant has *a* disposition; it says nothing about *which*, and
+/// the frame names the misassignment it cares about: a variant with a declared
+/// spill arm assigned *immediate-only* would let a proof attach handle evidence
+/// to one sampled spill while never establishing the handle obligations for the
+/// whole partition. That is the vacuity route `AC-10` exists to close, and no
+/// amount of "no `_` arm" detects it.
+///
+/// ⚠ MEASURED: the policy of every one of the 21 variant **tags**. CLAIMED:
+/// each variant has exactly one of five policies. THE GAP: that a policy is a
+/// claim about the *variant* and not about a sampled value — closed structurally
+/// rather than asserted, because `boundary_disposition` now takes
+/// `LoweredVariant` and has no value to sample.
+#[test]
+fn b2v_ac3_every_variant_carries_exactly_one_of_the_five_static_policies() {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    // ⛔ The sweep is over the tag set, so it is TOTAL by construction — there
+    // are no 21 values to build and therefore no sampling to get wrong.
+    let assigned: BTreeMap<LoweredVariant, StaticEncodingPolicy> = LoweredVariant::ALL
+        .iter()
+        .map(|variant| (*variant, variant.boundary_disposition().policy()))
+        .collect();
+    assert_eq!(
+        assigned.len(),
+        LoweredVariant::ALL.len(),
+        "AC-3: a variant is listed twice, so the sweep is not over the tag set"
+    );
+    assert_eq!(
+        assigned.len(),
+        21,
+        "AC-3: the landed variant count has moved"
+    );
+
+    // Every assigned policy is one of the five, and the five are the closed set.
+    let five: BTreeSet<StaticEncodingPolicy> = StaticEncodingPolicy::ALL.iter().copied().collect();
+    assert_eq!(
+        five.len(),
+        5,
+        "AC-3: the policy set is not five distinct policies"
+    );
+    for (variant, policy) in &assigned {
+        assert!(
+            five.contains(policy),
+            "AC-3: {variant:?} carries a policy outside the closed set"
+        );
+    }
+
+    // ⛔ **THE misassignment the frame names.** A disposition that declares a
+    // spill must be the third policy, never the first.
+    for variant in LoweredVariant::ALL {
+        let disposition = variant.boundary_disposition();
+        if let BoundaryDisposition::RepresentedImmediate { spill, .. } = disposition {
+            let expected = if spill.is_some() {
+                StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill
+            } else {
+                StaticEncodingPolicy::ImmediateOnly
+            };
+            assert_eq!(
+                disposition.policy(),
+                expected,
+                "AC-3: {variant:?} declares spill {spill:?} and must carry the \
+                 matching policy — assigning immediate-only to a variant with a \
+                 spill arm is the vacuity route AC-10 exists to close"
+            );
+        }
+    }
+    // ⚠ NON-DEGENERATE PAIR on that exact boundary: `Int` declares a spill and
+    // `Bool` does not, and they must land in DIFFERENT policies. A checker that
+    // ignored `spill` would put both in one and pass the loop above.
+    assert_eq!(
+        assigned[&LoweredVariant::Int],
+        StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill,
+        "AC-3: Int declares a PersistentGround/Int spill, so it is the third policy"
+    );
+    assert_eq!(
+        assigned[&LoweredVariant::Bool],
+        StaticEncodingPolicy::ImmediateOnly,
+        "AC-3: Bool has no spill arm, so it is the first policy"
+    );
+    assert_ne!(
+        assigned[&LoweredVariant::Int],
+        assigned[&LoweredVariant::Bool],
+        "AC-3: the spill boundary must separate them, or neither assertion means \
+         anything"
+    );
+
+    // `Constructor` and `HostResult` are REQUIRED LIVE arms — represented, in
+    // policy terms, not merely absent from the forbidden block.
+    for required in [LoweredVariant::Constructor, LoweredVariant::HostResult] {
+        assert_eq!(
+            assigned[&required],
+            StaticEncodingPolicy::HandleOnly,
+            "AC-3: {required:?} is a required LIVE represented arm"
+        );
+    }
+
+    // ⚠ POSITIVE CONTROL over the policy set: every policy the frame declares
+    // must actually be inhabited. A policy nobody uses is unreachable surface
+    // that reads as supported — the same defect that removed `ImmediateCapability`
+    // from the tag set — and a policy holding all 21 would make every check
+    // above vacuous.
+    let mut population: BTreeMap<StaticEncodingPolicy, usize> = BTreeMap::new();
+    for policy in assigned.values() {
+        *population.entry(*policy).or_default() += 1;
+    }
+    for policy in StaticEncodingPolicy::ALL {
+        let count = population.get(&policy).copied().unwrap_or(0);
+        assert!(
+            count > 0,
+            "AC-3: no variant carries {policy:?}, so it is unreachable surface"
+        );
+        assert!(
+            count < LoweredVariant::ALL.len(),
+            "AC-3: {policy:?} holds every variant, so the assignment is degenerate"
+        );
+    }
+
+    // ⛔ Every fail-closed arm names an EXACT reason, never a bare rejection.
+    for variant in LoweredVariant::ALL {
+        match variant.boundary_disposition() {
+            BoundaryDisposition::FailClosedForbidden { why }
+            | BoundaryDisposition::ProtocolOnly { why } => assert!(
+                !why.is_empty(),
+                "AC-3: {variant:?} rejects without an exact reason"
+            ),
+            BoundaryDisposition::RepresentedImmediate { .. }
+            | BoundaryDisposition::RepresentedHandle { .. } => {}
+        }
+    }
 }
