@@ -70,12 +70,49 @@ binding phrased against a blob survives a change to the very ref it was written
 against.** This is the same discipline as verifying a landing by blob identity
 rather than by ancestry, applied to *instructions* instead of *evidence*.
 
+## ★★ AND THE CORRECTION HAS MORE SURFACES THAN THE DOCUMENT YOU WROTE IT IN
+
+Measured hours later, same WP. My erratum corrected the gloss in the **frame**.
+Then:
+
+| surface | who found it |
+|---|---|
+| the frame | me (the erratum) |
+| the implementer's **seam commit** prose | the implementer, on re-reading the corrected text |
+| **four trusted source comments** in two `.rs` files | the Architect, which **REJECTED** the candidate for them |
+
+The comments asserted the superseded contract directly: a heading reading *"one
+authoritative relation"*, a *"One table, two enforcement points"* claim, the
+universal per-cell rule the erratum had removed, and an acceptance gap pointing at
+a test family that cannot discharge it.
+
+⇒ ⛔ **The sweep scope for a corrected contract is not "the document I wrote it in"
+— it is EVERY SURFACE THAT RESTATES THE CONTRACT.** Source comments are one of
+them, because they are *trusted* source. I sent a correction and never asked what
+else stated the same thing.
+
+⭐ **And the Architect's diagnosis of the worst site is the general form: the
+heading is what a hurried reader takes away, so a correct body a dozen lines below
+does not repair it.** That is the identical shape as the original defect — a
+faithful verbatim ruling block did not repair the unfaithful gloss beneath it —
+reappearing one layer down, in code, authored by a different seat.
+
+⚠ **Related, and worth its own habit:** the reject said the stale comment named a
+*nonexistent* test; two tests of that family **do** exist, and neither can
+discharge the gap. ⇒ **A stale reference naming a REAL thing that cannot discharge
+the obligation is worse than one naming nothing, because a reader who greps finds
+hits and stops looking.**
+
 ## How to apply
 
 - **When you correct an in-flight reference doc, the correction is not delivered
   until you have named the two anchors to every seat that will read it.** Routing
   the corrected text is step one; re-binding the readers is step two, and it is
   the one that gets skipped because step one *feels* like the whole job.
+- ⛔ **Then ask the surface question: WHAT ELSE STATES THIS CONTRACT?** Grep the
+  corrected claim's distinctive phrasing across `crates/`, not just `docs/` —
+  headings, module docs, test-name references. A correction that reaches only its
+  own document leaves the contract asserted in every other voice.
 - **Check it mechanically rather than remembering whether the base predates the
   fix:** `git rev-parse <candidate>:<doc>` vs `git rev-parse origin/main:<doc>`.
   Different OIDs ⇒ the candidate's reader will see the old text.

@@ -43,6 +43,49 @@ that blind spot's grounding.** It fires on *"an error in the safe direction"*,
 It is **the worst possible vector for a bad number, because it travels as
 comfort** — the reader stops checking precisely where checking was needed.
 
+### ★★ THE MIRROR CASE: a SELF-CRITICISM is also falsifiability-removed
+
+**Measured 2026-07-26, RT-FNSPLIT-B2V.** An implementer said its own
+comment-only checker was *"blind to a trailing comment on a code line"*. The
+Steward repeated that in a published report as grounds for running a second
+check. Then the implementer **tested it** and both of its checkers **flagged** a
+planted trailing-comment change:
+
+```
+CHECK A  prefix-grep on diff lines      -> FLAGS it   (fail-safe, noisy)
+CHECK B  strip full-line comments, cmp  -> FLAGS it   (fail-safe, over-strict)
+```
+
+⇒ The tool was **over-strict, not blind.** Neither checker can pass a code change.
+⛔ **And the author had reported a weakness its own tool did not have, without
+testing it** — a claim about a mechanism, stated confidently, never executed.
+
+⭐ **Why this is the mirror of the reassurance rule and not just another instance:**
+a self-deprecating claim about your own tool is the most credible-sounding
+statement in the room. The author knows the tool best, and the claim runs *against*
+their own interest, so there is no visible motive to shade it. **Both of those are
+reasons a reader skips the check rather than runs it.** A reassurance travels as
+**comfort**; a self-criticism travels as **deference**. Same suppression of
+scrutiny, opposite emotional register — which is why the existing rule does not
+predict this case.
+
+⚠ **And the direction is the whole thing.** *Blind* means *may accept a bad input* —
+**unsound**. *Over-strict* means *may reject a good input* — **sound**. Those are
+not degrees of one weakness; they point opposite ways across the soundness line,
+and the mischaracterisation would have licensed distrusting a claim that was
+already sound on the author's own evidence. ⇒ ⛔ **Never publish a weakness in a
+tool without naming which side of that line it falls on, and never restate someone
+else's weakness claim without it. A hedge that loses the direction is worse than no
+hedge, because it reads as precision.**
+
+⭐ **The good version of "run two checkers", from the same exchange:** not *"a
+second opinion"* but **complementary failure modes.** The Steward's checker also
+strips *trailing* comments, so it is more precise — and pays for it with a hole
+(a change inside a string literal containing `//` is stripped identically on both
+sides). The implementer's cannot have that hole **because it never strips**. Two
+checkers that fail in opposite directions is a real argument; two that fail the
+same way is one checker run twice.
+
 ⇒ If you state a **direction**, you must have measured **both ends**. The
 difference between the inexcusable version and the sound one was two
 `git show | wc -l` calls.

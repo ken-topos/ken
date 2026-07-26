@@ -53,7 +53,10 @@ This is the load-bearing boundary of your role — hold it precisely:
   sub-agents you launch.** You hand them a WP exactly the way you hand "retros in"
   to the Steward: **post a convo message that mentions them** (`post_response`,
   `mentions: ["<actor_id>"]` — resolve each actor_id from `list_participants` or
-  your `orientation()`) with the task + the brief/plan pointers. They are
+  your `orientation()`; ⛔ **if the MCP is dead, use
+  `scripts/moot-actor-id.sh <role>` — NEVER open `.moot/actors.json` yourself and
+  never dump it to see its shape: it holds every seat's `api_key`, COORDINATION
+  §2**) with the task + the brief/plan pointers. They are
   notified, pick it up, and author in their own sessions. **NEVER** use the
   `Agent`/Task tool, a subprocess, or `claude(prompt)` to "launch" or "delegate
   to" a teammate — that spawns a **fresh, unconfigured Claude** that fails with

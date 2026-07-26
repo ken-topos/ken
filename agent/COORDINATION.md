@@ -96,6 +96,22 @@ has bitten DeepSeek leaders mis-reading "hand the WP to your implementer" as a
 launch instead of a mention. Assignment, query, handoff — all are mentions; local
 git only.
 
+- ⛔ **RESOLVING AN `actor_id`: USE `scripts/moot-actor-id.sh <role>`. NEVER OPEN
+  `.moot/actors.json` YOURSELF, AND NEVER DUMP IT TO LEARN ITS SHAPE.** That file
+  holds every seat's `api_key` beside its `actor_id`. **Another seat's `api_key`
+  is never yours to read** — only your own role's, and only for the HTTP fallback.
+  ⭐ **Both leaks so far happened during SCHEMA DISCOVERY, not during the
+  lookup**: once by `sed`/`grep` over the raw file, once when a field-projecting
+  one-liner returned nothing (the author had guessed the key names) and the author
+  dumped the file *"just to see the structure"*, printing three records verbatim.
+  ⇒ **A rule saying "project only the fields you need" does not bind the moment
+  that leaks**, because you cannot write a projection until you know the field
+  names. The script exists so you never need to look: it projects `actor_id` by
+  name, enforces an **output whitelist** (nothing but `<role> agt_<id>` can leave
+  it), and fails closed. `--list` prints the known role names; controls in
+  `scripts/test-moot-actor-id.sh`. **If you must read the file for your own
+  `api_key`, narrow by KEY NAMES ONLY — never print a value, never serialize a
+  record.**
 - Handoff that passes work to B → mention **B only**.
 - "Your request is done," nothing pending → mention **nobody**.
 - **A mention is a demand for attention; an ack is not — so never mention on an
