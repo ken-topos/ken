@@ -1231,3 +1231,117 @@ unbounded recursion the adoption walk just lost.
 | **AC-10** cycles vs sharing | `b2v_ac10_a_multi_node_cycle_is_refused_while_a_shared_dag_adopts`; `b2v_ac10_a_constructible_node_cycle_is_refused_not_recursed` | a three-node cycle is refused **deterministically** — twice, from every entry point on the ring — while a shared-child DAG of the same shape adopts and the shared child resolves to **one** canonical node. Causal: **M45** and **M46**, which are the two directions of the same discriminator |
 | **AC-10** depth | `b2v_ac10_a_deep_acyclic_chain_adopts_without_walk_recursion` | depth 2000 adopts and is store-minted, and is asserted **never** to return `BOUNDARY_ERR_CYCLE`. ⛔ **Partial** — the walk is iterative, but the landed `Value` encoder still bounds a chain at ~2500. Measured on both algorithms above; the residual is stated, not narrowed |
 | **AC-6** persistent content-addressing *(was `NO CONTROL — open residual`)* | the `AC-10`/`AC-6` adoption rows above, plus the `Closure` rows | ⭐ **Now closed for every persistent class the disposition admits.** The row above at *"an emitted-constructed node carries `NULL_SLOT`"* recorded the state before adoption existed; adoption mints for ground values and, with this fold, for closures. It is retained above as the record of what was true then |
+
+---
+
+# `RECUT 2` fold — the phase-closure artifact
+
+`RECUT 2` retires the per-cell `AC`→control map as a *sufficient* proof shape:
+the map stays required, and stops being the proof. What replaces it is one
+mechanically closed artifact over the finite structural partition, spanning
+
+```text
+authority -> producer -> validator -> canonicalizer/adopter -> publisher -> consumer
+```
+
+## What is compiler-closed, and what is not
+
+⛔ **Stated as a split rather than as one claim, because the two halves have
+very different strength.**
+
+| half | mechanism | strength |
+|---|---|---|
+| **completeness** — every required phase is bound | `PhaseClosure` has six mandatory fields (no `Option`, no `Default`); `LifecyclePhase::index` is a wildcard-free match; `BoundaryOutcome::phase_closure` is wildcard-free | **compile error** — a row with a hole, a seventh phase, or a new outcome does not build |
+| **derivation** — the required set is not a per-row choice | `BoundaryOutcome::requires` derives it from the outcome's *class*; `StructurallyAbsent` is never selected by a row | **compile + control** — the sweep reddens on either mismatch direction |
+| **identity** — the bound anchor *is* the production item | `derived_witness` for 5 anchors; `CONTROL_CLOSED` names a causal control for the 3 that need a JIT | ⛔ **control-closed only. See `M-E`.** |
+
+## The mutations
+
+Each applied at its natural production site, run, then restored
+byte-identically and verified with `git diff --quiet` (⚠ `--stat` always exits
+`0` and is not an emptiness test).
+
+| id | mutation | pin it must redden | result |
+|---|---|---|---|
+| **M-A** | the `StoreMinted` row drops `canonicalizer_adopter` to `StructurallyAbsent` | `recut2_every_admitted_row_closes_every_required_phase` | ✅ **RED** — this is blocks `#5`/`#6` reproduced as a one-line edit |
+| **M-B** | `requires` says an `ImmediateWord` needs the adopter | same | ✅ **RED** (the required-but-absent direction, from the other side) |
+| **M-C** | `LifecyclePhase::ALL` repeats a phase instead of listing all six | `recut2_the_phase_inventory_is_bound_to_the_type` | ✅ **RED** |
+| **M-D** | a JIT-only anchor loses its row in `CONTROL_CLOSED` | `recut2_every_anchor_is_closed_by_a_witness_or_a_named_control` | ✅ **RED** |
+| **M-E** | `derived_witness` deletes the production call and returns the literal `Some(1)` | `recut2_derived_witnesses_come_from_the_production_authority` | ⛔ **GREEN — THE EVASION WINS** |
+| **M-F** | an invocation handle claims to require adoption | `recut2_only_the_store_minted_handle_requires_the_whole_lifecycle` | ✅ **RED** |
+| **M-G** | the normalization authority drifts (accepts a leading zero) **while** the witness stays hardcoded | `recut2_derived_witnesses_come_from_the_production_authority` | ✅ **RED** — the drift a frozen literal cannot see |
+
+## ⛔ `M-E` won, and the repair does not fully close it
+
+**Reported rather than quietly patched.** Replacing the witness's production
+call with the constant it currently returns leaves the pin green, because a
+hardcoded value and a live call are indistinguishable **while they agree**.
+
+The pin originally compared the witness against a frozen `Some(1)` — two
+hand-maintained constants agreeing, which is the `AC-1` defect in miniature. The
+repair computes the expected side **from the authority**:
+
+```rust
+let normalization_rejects_leading_zero =
+    !boundary_int_magnitude_is_canonical(0, &[1, 0]);
+assert_eq!(anchor.derived_witness(), Some(i64::from(normalization_rejects_leading_zero)));
+```
+
+⚠ **Measured, both before and after the repair:** `M-E` is **still green**. The
+repair does **not** make a hardcoded witness detectable today, and claiming
+otherwise would be the overclaim this table exists to prevent. What it does buy
+is `M-G`: once the authority's behaviour moves, the hardcoded witness diverges
+from it and the pin reddens. So the honest statement is **drift-closed, not
+identity-closed**, and identity remains control-closed via `CONTROL_CLOSED`.
+
+## ⛔ What this artifact does NOT close — the finding
+
+**The classification layer has no production consumer, and the compiler says
+so.** On the lib (non-`cfg(test)`) build, `rustc` reports every one of
+`BoundaryDisposition`, `StaticEncodingPolicy`, `BoundaryInput`,
+`BoundaryOutcome`, `MagnitudePartition`, `ReachabilityPartition`,
+`AdoptionPartition`, `HandleIdentity`, `LoweredVariant`, `permitted_by` and
+`policy` as **never used**. The emitted producer, by contrast, **is** a
+production consumer — `lowering/core.rs:81`, non-test.
+
+⇒ The static policy and the value partition are Rust oracles governing an
+emitted path that never consults them. `RECUT 2` names exactly this: *"a
+declaration, classifier row, Rust oracle, or residual label with no production
+consumer does not discharge the predicate."*
+
+⛔ **This artifact sits in that same layer and does not by itself discharge the
+predicate.** It closes completeness; it adds no production consumer. Whether
+wiring the classifier into the already-production emitter is in scope for `B2V`
+or barred by `D6` inertness is an open scope question routed to the Architect,
+not a judgment taken here.
+
+## `D6` — predicted before measuring, then measured
+
+⚠ Prediction stated in `evt_387scrzz83p0b` **before** running any census. The
+artifact was deliberately placed **inside `lowering/mod.rs`** rather than in a
+new module, to avoid the `B2R` registration-driven fan-out where registering one
+file changed the input to every pin iterating `BACKEND_PRODUCTION_SOURCES`.
+
+| quantity | predicted | measured |
+|---|---|---|
+| `BACKEND_PRODUCTION_SOURCES` entries | unchanged | **13** — unchanged |
+| declared-module list | unmoved (no new `mod`) | unchanged; `correspondence_adds_no_emitted_unit_to_the_production_census` green |
+| `lowering/mod.rs` census row | `0` definitions / `0` declarations | unchanged — a `match` and some types declare and define nothing |
+| `LOCAL_HELPER_COUNT` | `6` | **6** |
+| `BOUNDARY_LOCAL_HELPERS` | unchanged | **28**, file untouched by the commit |
+
+✅ **No row moved, so there is nothing to re-baseline**, and the prediction was
+not adjusted to fit the measurement.
+
+## Suite
+
+`scripts/ken-cargo test -p ken-runtime` (targeted, from the seat's worktree):
+**431 lib + 12 integration passed, 0 failed.** The five new controls are the
+delta from 426.
+
+⚠ **One correction to an earlier report.** The first gate run was piped through
+`tail -60`, so the grep that produced *"compiler warnings/errors: 0"* could only
+see the last sixty lines and no compiler output at all. Re-measured on the full
+buffer: **28 lib + 7 lib-test warnings**, all pre-existing dead-code and
+unused-mut notices. The test counts were unaffected. ⭐ Those unread warnings
+are what surfaced the finding above.

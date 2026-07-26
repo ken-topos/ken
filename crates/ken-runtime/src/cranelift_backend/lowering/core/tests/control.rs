@@ -5104,20 +5104,36 @@ fn recut2_derived_witnesses_come_from_the_production_authority() {
          computes nothing and the layout authority has no content"
     );
 
-    // The normalization witness is `1` only because the authority REJECTS a
-    // leading-zero magnitude. If the contract stopped rejecting it, this moves.
+    // ⛔ **The expected value is COMPUTED BY the authority here, not written as
+    // a literal.** Mutation `M-E` deleted the production call inside
+    // `derived_witness` and replaced it with `Some(1)`; against a frozen `1`
+    // that evasion stayed green, because a hardcoded constant and a live call
+    // are indistinguishable while they happen to agree. Computing the expected
+    // side from the authority does not make them distinguishable *today* — see
+    // the residual below — but it does mean the two diverge the moment the
+    // contract moves, which is the drift a frozen literal cannot see.
+    let normalization_rejects_leading_zero =
+        !crate::boundary_value::boundary_int_magnitude_is_canonical(0, &[1, 0]);
     assert_eq!(
         ProductionAnchor::IntNormalizationAuthority.derived_witness(),
-        Some(1),
-        "RECUT 2: the canonical sign/limb authority no longer rejects a \
-         leading-zero magnitude, so the witness is not measuring the contract"
+        Some(i64::from(normalization_rejects_leading_zero)),
+        "RECUT 2: the normalization witness no longer tracks the canonical \
+         sign/limb authority, so it is measuring its own spelling"
     );
     // ⚠ The two-sided half: the same authority must ACCEPT a canonical
-    // magnitude, or "rejects a leading zero" is just "rejects everything".
+    // magnitude, or "rejects a leading zero" is just "rejects everything" and
+    // the witness above is `1` for a reason that has nothing to do with the
+    // contract.
     assert!(
         crate::boundary_value::boundary_int_magnitude_is_canonical(0, &[1]),
         "RECUT 2: the normalization authority rejects a canonical magnitude too, \
          so its rejection above is not discriminating"
+    );
+    assert!(
+        normalization_rejects_leading_zero,
+        "RECUT 2: the authority now ACCEPTS a leading-zero magnitude — the \
+         canonical sign/limb contract has changed and this anchor's meaning \
+         changed with it"
     );
 
     // The status witnesses are the exact codes the production paths return.
