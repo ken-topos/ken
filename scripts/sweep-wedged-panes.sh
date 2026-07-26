@@ -25,6 +25,20 @@
 # call") is HEALTHY — the seat is busy and will consume it. Do not resend: that
 # double-delivers. Only a paste still sitting on the `›` composer line is wedged.
 #
+# ⚠ HONEST RESIDUAL — A BUSY SEAT IS REPORTED, NEVER REPAIRED. A stranded
+# delivery on a seat that is mid-turn is real and this script will not fix it:
+# pressing Enter into a live turn is how a `/compact` destroys in-flight work.
+# So `busy` is a "come back later", and it means ⛔ **one sweep is not a clean
+# bill of health for the fleet** — a run that reports four BUSY seats has
+# answered nothing about those four. Re-run when they go idle.
+#
+# ⚠ AND A FALSE BUSY WOULD MAKE THIS SCRIPT BLIND while still printing
+# reassuring output, which is why the busy detector is positional (pane tail
+# only) and why `test-classify-pane-composer.sh` pins BOTH directions —
+# `busy-*` rows and `done-*`/`echo-duration` rows. ⛔ Never "fix" a false wedged
+# report by widening the busy guard; that trades a visible wrong answer for a
+# silent one.
+#
 # Usage:
 #   scripts/sweep-wedged-panes.sh            # repair, report what it touched
 #   scripts/sweep-wedged-panes.sh --dry-run  # report only
@@ -49,10 +63,15 @@ while read -r session; do
     # ⛔ `-e` is REQUIRED. Without the escape sequences an idle pane's own
     # suggestion text ("Explain this codebase") is indistinguishable from a real
     # delivery, and submitting it sends the agent an instruction nobody wrote.
-    pane="$(tmux capture-pane -e -t "$session" -p 2>/dev/null || true)"
-    [[ -z "$pane" ]] && continue
+    # ⛔ `-S -50` is NOT optional either, and for a reason that took two live
+    # misfires to learn: the status/spinner line renders ABOVE the composer, so a
+    # capture whose topmost line is the composer structurally cannot hold the
+    # evidence that the seat is busy. It does not return "unknown" — it returns a
+    # confident IDLE. The classifier anchors on the LAST prompt-glyph line, so
+    # extra scrollback is harmless; too little is not.
+    pane="$(tmux capture-pane -e -t "$session" -p -S -50 2>/dev/null || true)"
 
-    verdict="$(printf '%s' "$pane" | python3 "$CLASSIFY" 2>/dev/null || echo error)"
+    verdict="$(printf '%s' "$pane" | python3 "$CLASSIFY" 2>/dev/null || echo unreadable)"
 
     case "$verdict" in
         paste|slash:*)
@@ -61,8 +80,18 @@ while read -r session; do
             [[ "$DRY_RUN" == 1 ]] && continue
             tmux send-keys -t "$session" Enter
             ;;
-        error)
-            echo "sweep: $session — classifier FAILED; treating as unknown, not touching it"
+        busy)
+            # ⛔ NEVER submit into a live turn — an Enter on a stranded `/compact`
+            # here destroys in-flight work. Reported, not repaired, because a
+            # stranded delivery on a busy seat is a real thing that needs the
+            # Steward's eyes rather than the script's reflex.
+            echo "sweep: $session — BUSY (mid-turn); not touching it"
+            ;;
+        unreadable)
+            # ⛔ Was silently `continue`d as an empty pane, which read exactly like
+            # a healthy seat in the final report. An unreadable pane is an
+            # unanswered question, so say so.
+            echo "sweep: $session — pane UNREADABLE or classifier failed; NOT a clear seat"
             ;;
         *)
             # queued (healthy, will be consumed) · ghost (the UI's own text) ·
@@ -89,8 +118,8 @@ fi
 sleep 3
 for i in "${!wedged[@]}"; do
     session="${wedged[$i]}"
-    pane="$(tmux capture-pane -e -t "$session" -p 2>/dev/null || true)"
-    after="$(printf '%s' "$pane" | python3 "$CLASSIFY" 2>/dev/null || echo error)"
+    pane="$(tmux capture-pane -e -t "$session" -p -S -50 2>/dev/null || true)"
+    after="$(printf '%s' "$pane" | python3 "$CLASSIFY" 2>/dev/null || echo unreadable)"
     case "$after" in
         paste|slash:*)
             echo "sweep: $session — STILL WEDGED after Enter (${after}); needs manual attention"
