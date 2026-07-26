@@ -33,10 +33,11 @@ verbatim (⚠ it was only in gitignored `local/`) at
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~11:1xZ · ⛔ **NO `main` SHA HERE, BY CONSTRUCTION**
+## ▶ LIVE — 2026-07-26 ~1x:xxZ · ⛔ **NO `main` SHA HERE, BY CONSTRUCTION**
 ### ⛔ **This header used to carry `origin/main`. It was ALWAYS the pre-merge**
 ### **base — stale the instant the block landed. `git rev-parse origin/main`.**
-### ✅ **#986 → #1024 ALL MERGED** — incl. #1009 (`R5` erratum), #1013 (`#82`).
+### ✅ **#986 → #1027 ALL MERGED** — incl. #1009 (`R5` erratum), #1013 (`#82`),
+### #1025/#1026 (campaign+premise corrections), **#1027 (the REQUIREMENTS tier)**.
 ### ✅ **`ABI-R1` CLOSED** · ✅ **`RT-FNSPLIT-B2V` CLOSED** — retros IN on both.
 ### ✅ **`DOC-GATE-NEEDLE` CLOSED #1019** — blob-verified, 3 retros in, node flipped.
 ### ⛔ **`#11` IS RULED: `RT-FNSPLIT-B2E` INSERTED BEFORE `B2F`.**
@@ -45,6 +46,21 @@ verbatim (⚠ it was only in gitignored `local/`) at
 ### §2c gate ran in full: 3 compactions verified, `cat-file -e` on every named
 ### object with an absent-path control, leader+QA confirmed `Working`.
 ### ▶ **ONE LANE LIVE: Runtime on `B2E`.** Task `#97` carries the watch list.
+### ✅ **`B2E` REVIEW CANDIDATE `3f7f2255` IS DURABLE ON `origin`** — branch
+### `wp/RT-FNSPLIT-B2E-boundary-value-elimination`, `ls-remote`-verified; it did
+### NOT exist on `origin` before, so 7 commits had ZERO off-box copies. NOT a
+### merge request — no Decision, no publish.
+### ⛔ **AND THE CANDIDATE CARRIES THE PRE-`R1` FRAME.** Its tree has frame
+### `20928eac` / node `8275c6c5`; the governing `e86c5331` / `c947dc77` landed at
+### `4297e55c`, which is **NOT an ancestor** of `3f7f2255` (base `9410d7b8`
+### predates it). `diff` = **86 lines**, and the candidate's copy still literally
+### reads *"ONE artifact-static name derivation"* — the premise `R1` ruled FALSE.
+### ⇒ A QA seat reading the frame from its own checkout reviews `D5`/`AC-E5`
+### against the wrong contract. Routed `evt_5nkj13260m0t5`: bind CODE at
+### `3f7f2255`, read the FRAME from `origin/main`, and ⛔ **NAME THE BLOB** in the
+### QA assignment. ⭐ This is task `#88`'s lesson recurring: **an erratum on `main`
+### does not reach a branch cut before it, and the reviewer's checkout is the
+### stale copy.**
 ### `crates/` byte-identical to `bb3e58ea`; nothing to unwind. Evidence on
 ### `origin`: `preserved/rt-fnsplit-b2f-hardstop-11-evidence` = `d1abbc79`.
 ### Verify ring compaction VERIFIED on all three seats. Adversary hunt reported.
@@ -58,10 +74,17 @@ verbatim (⚠ it was only in gitignored `local/`) at
 ### artifact name REFERENCE with the store-local `intern_symbol` ID. ⛔ A NEWTYPE
 ### ALONE DOES NOT DISCHARGE `D5`/`AC-E5`. Architect record preserved on `origin`:
 ### `preserved/architect-state-1d9a6f86`. `B2F` residual is now ONE thing.
-### ⛔ **NEW: `SPEC-31-WIDTH-ERRATUM`** (`aa3d32d4`) — spec `31 §1d`+`layout.rs:12`
-### say **96** columns; the formatting seed says **88** 18x and CITES `31 §1d`.
-### Latent ONLY because those rows are `RED-UNTIL-BUILT`. ⛔ Do NOT treat 18-vs-1
-### as the argument — `git log` on both files is the undone discriminator.
+### ✅ **`SPEC-31-WIDTH-ERRATUM` RULED BY THE OPERATOR: 96 IS NORMATIVE.** Blob
+### `8442453b`, status `ready`, sequenced BEHIND `A1` (same ring). *"96 is what it
+### should be. It was an incomplete revision."* ⇒ `spec/` + `layout.rs` DO NOT
+### CHANGE; **`conformance/` moves.** ⛔ The value question is CLOSED — do not
+### re-ask, and ⛔ do NOT re-argue from the 18-vs-1 count; the count was never the
+### argument. ⛔ **AND IT IS NOT A `sed`:** `FMT7`'s eight `88`/`89` fixture PAIRS
+### become `96`/`97` and must be **re-authored** (a number-only edit leaves them
+### silently vacuous while READING as updated); the comment-threshold arithmetic
+### must re-derive to sum to 96; the false `spec: 31 §1d (88 …)` attributions at
+### `:173`/`:384` are part of the defect. ⭐ Control: the `96` arm stays flat and
+### the `97` arm breaks.
 ### ⛔ **MY `A1` §2 TABLE IS NOT RELIABLE PER-CELL** — it cited a FILE and inherited
 ### the claim from its subject matter. A locator has TWO coordinates.
 ### ▶ **SECOND LANE: spec enclave on `SPEC-ALIGN-A1`** (Track A of the
@@ -83,6 +106,26 @@ verbatim (⚠ it was only in gitignored `local/`) at
 ### (coverage bound — **which of 63 spec files were read is UNSTATED**) are open.
 ### ⚠ Absence from the advisory is NOT evidence a chapter is clean.
 ### ⛔ **2 ADVERSARY FINDINGS OPEN** — `RT-VALUE-TOTALITY` §7; unframed (#78).
+### ✅ **THE REQUIREMENTS TIER IS LAW — landed #1027.**
+### `docs/program/15-requirements-and-acceptance-criteria.md` (`0a5d6333`) +
+### `scripts/check-rq-ac-links.sh` (`6de23a45`). Tiers are
+### **`conformance/` → `PROGRAM.RQ-n` → `WP.AC-n`, ONE direction.** Naming is
+### MANDATORY: `<WP-id>.AC-<n>` / `<PROGRAM-id>.RQ-<n>`. ⛔ Do NOT renumber
+### in-flight ACs (`B2E.AC-E5` is cited by `dec_6r447gawdp6hy` and uneditable
+### channel traffic). Operator scope: RQs retroactive for **in-progress** work,
+### ⛔ NOT for completed work, required for all future work. `none` cells are
+### legitimate both ways (AC with no RQ = a process/inertness control; RQ with no
+### conformance row = a program NFR).
+### ⭐ **THE PAYOFF: a residual is not a new object — it is an RQ no AC references
+### yet.** That withdrew the `.R-n` and `.EX-n` objects I had proposed.
+### ⛔ **THE CHECK IS RED ON PURPOSE (`exit=1`), and it is WEAKER than it reads:**
+### it verifies a reference EXISTS, never that the AC is strong enough to discharge
+### the RQ. Current: `TABLE-ONLY` `RQ-1`/`2`/`4`, `UNREFERENCED` `RQ-3`/`5`/`6`,
+### `NO-RQ-BLOCK` `RT-VALUE-TOTALITY`. Task `#104` wires the frames.
+### ⚠ **`RQ-0` is the GRADE:** the check would PROBABLY have caught `#11`, but the
+### load-bearing part is **Rule 1 at AUTHORING time, not the report** — and Rule 1
+### is satisfiable by pointing a weak AC at an RQ. ⛔ Do NOT describe the check as
+### preventing this class of hard stop.
 
 > ### ✅ `DOC-GATE-NEEDLE` MERGED — PR #1019. Verify lane is FREE.
 >
