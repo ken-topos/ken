@@ -11,6 +11,64 @@ github: null
 origin: PX8-SPAN-PROV Phase 2 native reachability wall (runtime-implementer measured repro evt_7qhtk8w489am4; CV option-(c) ruling evt_77q2tc5dh1kzj; Steward scope ruling evt_7c160ej3bwz4; Architect means/layer ruling evt_7gkn3g4tsvgb9, 2026-07-23). Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
+## ⭐⭐ Requirements (`RQ`) — retroactive, per `docs/program/15-*.md`
+
+> **This program is the RETROFIT.** Operator, 2026-07-26: *"we should establish
+> RQs retroactively for work in progress. completed work needn't have them, and
+> all future work should."* This program qualifies (`B2E` `ready`, `B2F` `ready`)
+> — and it is the one program whose **merged** nodes are included, because its
+> residual chain was discovered by hand and is therefore **gradeable** (§ RQ-0).
+>
+> ⛔ **This section is the authority for RQ text.** A frame quoting an RQ is a
+> convenience copy; if they disagree, this wins.
+
+| id | kind | requirement | conformance rows it applies | discharged by |
+|---|---|---|---|---|
+| **`RT-NATIVE-FNSPLIT.RQ-1`** | functional | A cross-owner call transfers a boundary value whose **representation is a tagged word**, not a compile-time template. | `conformance/runtime/values/README.md` (value model), `conformance/runtime/seed-runtime.md` | ✅ `B2V.AC-*` (merged) |
+| **`RT-NATIVE-FNSPLIT.RQ-2`** | functional | Ownership and region/lifetime context of a transferred value is **declared and obeyed** across the boundary. | `conformance/runtime/capacity/seed-capacity.md` (region/reclamation), `conformance/runtime/values/README.md` | ✅ `B2R.AC-*` (merged) |
+| **`RT-NATIVE-FNSPLIT.RQ-3`** | functional | ⛔ **Boundary values are ELIMINATED — every semantic consumer reachable from a transferred value disposes of it, in PRODUCTION traffic.** | `conformance/runtime/evaluation/seed-evaluation.md`, `conformance/runtime/values/README.md` | ▶ `B2E` prepares the ledger + binding; ⛔ **`B2F` is the only node that can discharge it** |
+| **`RT-NATIVE-FNSPLIT.RQ-4`** | functional | Name identity is **one authority**: a single artifact-static name reference resolved through the producer's store-local interning. | `none` — no seed case asserts name-authority singularity. ⚠ **This absence is itself a finding**; see below. | ▶ `B2E.AC-E5` (in flight, per `RULING R1`) |
+| **`RT-NATIVE-FNSPLIT.RQ-5`** | **non-functional** | Cross-owner call overhead does not regress against the pre-split baseline. | `none` — a complexity/perf contract, not a definitional row | ⛔ **UNREFERENCED — no AC in this program claims it** |
+| **`RT-NATIVE-FNSPLIT.RQ-6`** | **non-functional** | Compiled-once function bodies are created once per unit, not per call site. | `none` — an NFR | ▶ `B2F` (its atomicity clause) |
+
+### ⛔ TWO OPEN REQUIREMENTS, ONE OF THEM PREVIOUSLY INVISIBLE
+
+- **`RQ-3`** — open by design; `B2F` is held at `#11` awaiting `B2E`. Expected.
+- ⭐ **`RQ-5` is UNREFERENCED and nobody had noticed.** No AC in `B1R`, `B2A-C`,
+  `B2A-S`, `B2O`, `B2R`, `B2V`, `B2E`, or `B2F` claims the overhead bound. ⇒ **The
+  program could deliver every functional requirement and regress performance
+  without a single red gate.** That is the check finding something on its first
+  run, on a program I have been sequencing for weeks.
+  ⚠ **I am not filing a WP for it in this turn** — whether it needs its own node
+  or a clause in `B2F` is a scoping call, and `B2F` is held. Recorded as open.
+
+⚠ **`RQ-4`'s `none` is a finding, not a clean bill.** Name-authority singularity
+has no conformance row, so the *only* thing preventing a second name derivation is
+`B2E.AC-E5`'s relocation control. ⛔ If that AC is weakened, nothing definitional
+catches it. Sibling of the `B2V` lesson that two expressions of one authority
+cannot disagree with each other.
+
+## ⭐ `RQ-0` — THE GRADE: would the unreferenced-RQ check have caught hard-stop `#11`?
+
+**Required by `15-*.md §6`, and it is designed to be able to say no.**
+
+**Answer: PROBABLY, and the mechanism is Rule 1 at authoring time — not the check
+itself.** Honest breakdown:
+
+| | |
+|---|---|
+| ✅ **What it would have shown** | After `B2V` merged, `RQ-3` was **unreferenced by any AC**. Three consecutive green WPs with the program's central requirement unclaimed — visible continuously, in a table, instead of as a surprise at `B2F` pickup. |
+| ⭐ **Where it actually bites** | **Not the report — Rule 1 applied when `B2F`'s frame was authored.** `B2F` would have had to name which of its ACs discharges `RQ-3`, and writing that reference forces the question *"does anything eliminate a boundary word?"* ⇒ That is precisely the question `#11` answered NO to, asked at framing rather than at build. |
+| ⛔ **How it could still have failed** | The check reports; **it does not gate.** And Rule 1 is satisfiable by pointing a *weak* AC at `RQ-3` — which turns the check green without making the property true. **An advertised link is not an enforced one.** |
+| ⚠ **What I already had and did not use** | `B2V`'s frame said in plain text that it *cannot check consumption*. The information existed; what was missing was anything that forced the **next** frame to name a discharger. |
+
+⇒ **Verdict: the scheme keeps its main claim, but the load-bearing part is Rule 1
+at authoring time, and the report is the backstop.** ⛔ Do not describe the check
+as preventing this class of stop. It makes the gap continuously visible and gives
+the framing question a place to be asked; a determined author can still satisfy it
+vacuously. That residual is real and belongs in the doc, not in a footnote.
+
+
 > ## ⛔ READ THE VIABILITY RULING BELOW BEFORE THIS SECTION
 >
 > **The original root cause described immediately below — one Cranelift
