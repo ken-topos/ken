@@ -22,34 +22,74 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~09:4xZ · ⛔ **NO `main` SHA HERE, BY CONSTRUCTION**
+## ▶ LIVE — 2026-07-26 ~10:3xZ · ⛔ **NO `main` SHA HERE, BY CONSTRUCTION**
 ### ⛔ **This header used to carry `origin/main`. It was ALWAYS the pre-merge**
 ### **base — stale the instant the block landed. `git rev-parse origin/main`.**
-### ✅ **#986 → #1006 ALL MERGED** — incl. #1005 (sweep fix) + #1006 (`ABI-R1`).
-### ✅ **`ABI-R1` MERGED** — third candidate. ⚠ **retros chased, NOT yet in.**
-### ▶ **ONE LANE LIVE: Runtime `B2V`** — ruling `R4` discharged, QA next.
+### ✅ **#986 → #1011 ALL MERGED** — incl. #1005 (sweep), #1009 (`R5` erratum).
+### ✅ **`ABI-R1` CLOSED** — merged on the third candidate, **all three retros IN**.
+### ▶ **ONE LANE LIVE: Runtime `B2V`** — fresh `898fdb5c`, **QA rebound**.
 ### ⛔ **2 ADVERSARY FINDINGS OPEN** — `RT-VALUE-TOTALITY` §7; unframed (#78).
 
 > ### ▶ ONE LANE LIVE — Runtime on `B2V`. Foundation's lane CLOSED (merged).
 >
 > ```
-> wp/RT-FNSPLIT-B2V-executable-value-abi          dc35c12d   leader-reviewed, QA-eligible, DURABLE
+> wp/RT-FNSPLIT-B2V-executable-value-abi          898fdb5c   leader-reviewed, QA REBOUND, DURABLE
+> preserved/rt-fnsplit-b2v-dc35c12d               dc35c12d   the SHA QA's prior BLOCK cites
 > preserved/rt-fnsplit-b2v-ab11a3d2               ab11a3d2   divergent line - would have been orphaned
 > preserved/rt-fnsplit-b2v-prereanchor-a7aa60eb   a7aa60eb   pre-re-anchor tip
 > preserved/abi-r1-0c8b77fc                       0c8b77fc   ABI-R1 candidate 1, blocked
 > ```
 >
-> ⛔ **`fed42481` IS NO LONGER A TIP AND NEEDS NO PRESERVATION** — it is an
-> ancestor of `dc35c12d`, so the push was a plain fast-forward, no `--force`.
-> ⭐ **Contrast `ab11a3d2`, which WAS on a divergent line and would have been
-> orphaned.** Same-looking "push my checkpoint" request, opposite answer — and the
-> only way to tell is `git merge-base --is-ancestor` **before** the push. ⛔ A
+> **`898fdb5c` re-derived independently before the push:** base `ee226c5e`
+> (ancestor ✅), scope exactly **11** paths (10 `ken-runtime` + the evasion table),
+> and *no rebase warranted* confirmed on **both** the file axis (intersection with
+> everything `main` added since `ee226c5e` is **empty**, positive control: injecting
+> `store.rs` yields 1 hit) **and the ledger axis** (no B2V path is attested in
+> `library/SOURCE-ATTESTATIONS`, positive control returns 1). ⛔ **Disjoint file
+> lists are not sufficient — that is what bit `ABI-R1` against `DOC-W2`.**
+>
+> ⛔ **`dc35c12d` NEEDED ITS PRESERVATION REF AND `fed42481` DID NOT.**
+> `--is-ancestor dc35c12d 898fdb5c` → **exit 1**, and `dc35c12d` was the *live*
+> `origin` tip, so the force-move would have orphaned the exact object QA's prior
+> BLOCK cites. Contrast `fed42481` (an ancestor of `dc35c12d`: plain fast-forward,
+> no `--force`) and `ab11a3d2` (divergent, would have been orphaned). ⭐ **Three
+> identical-looking "push my checkpoint" requests, three different answers — and
+> the only way to tell is `git merge-base --is-ancestor` BEFORE the push.** ⛔ A
 > commit *distance* ("four commits past X") is not ancestry and reads as if it is.
 >
 > ⛔ **Do not open a second lane** — `#78` is sequenced *behind* `B2V` (same files),
 > the doc lane is operator-HELD, and `ABI-S3` is Runtime-owned and held behind the
 > `RT-NATIVE-FNSPLIT` priority. **Foundation going idle now is correct, not a
-> stall** — the only thing outstanding from that ring is its retros.
+> stall** — its ring closed with retros in.
+
+> ### ⛔ THE CANDIDATE TREE CARRIES THE **PRE-ERRATUM** FRAME — bind TWO anchors
+>
+> I corrected two of my own reader-aid glosses on `RULING R5` (#1009). The B2V
+> candidate is based on `ee226c5e`, which **predates** the erratum, and B2V does
+> not touch the frame — so it carries the old blob **correctly**:
+>
+> ```
+> frame docs/program/wp/RT-FNSPLIT-B2V-executable-value-abi.md
+>   0728ce37   origin/main            HAS the ERRATUM - authoritative
+>   61af6841   ee226c5e AND 898fdb5c  my superseded gloss, live at :1248
+> ```
+>
+> ⇒ ⭐ **The merge is clean and the content is stale, and those are not in
+> tension.** No conflict, no warning, nothing to notice. **The implementer was fine
+> because it had been TOLD and re-read `main`; QA had no such prompt** — checking
+> out the approved SHA and reading the frame from that tree is the *normal, correct*
+> reviewer behaviour and it silently yields the corrected-away text.
+>
+> ✅ **Routed before QA rebound, and the leader adopted it verbatim:** bind **code
+> at `898fdb5c`** and **frame at blob `0728ce37`**, two operands, named
+> mechanically. ⭐ **And naming the OID rather than "current `origin/main`" proved
+> itself within 20 minutes** — I published #1011, `main` moved to `e6b2b29d`, and
+> the binding was untouched because the blob is identical at every main since. **A
+> binding phrased against a moving ref is invalidated by any publish; one phrased
+> against a blob survives a change to the very ref it was written against.**
+>
+> ⇒ Promoted to `agent/memory/fleet/` as
+> `a-correction-on-main-does-not-reach-a-candidate-cut-before-it`.
 
 > ### ✅ `B2V` — `RULING R4` LANDED AND WAS DISCHARGED IN ~8 MINUTES
 >
