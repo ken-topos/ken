@@ -553,8 +553,30 @@ pub fn boundary_int_marker_mask(owner: BoundaryReferentOwner) -> u64 {
         .fold(0u64, |mask, (marker, _)| mask | (1u64 << *marker))
 }
 
+/// Whether `(sign, limbs)` is a canonical exact-`Int` magnitude.
+///
+/// ⛔ **The one statement of the contract `RuntimeIntV1::canonical_sign_and_limbs`
+/// produces**, so the Rust builder's assertion and the emitted seal are checking
+/// the same thing rather than two hand-written approximations of it:
+///
+/// - **at least one limb** — an empty magnitude denotes no integer;
+/// - **no leading zero limb** — least-significant first, so a zero in the top
+///   position means the same value has two encodings;
+/// - **zero is non-negative** — negative zero is a second encoding of zero.
+///
+/// ⚠ A one-limb `[0]` *is* canonical: that is the value zero. Rejecting it would
+/// be an over-strengthening the contract does not entail.
+pub fn boundary_int_magnitude_is_canonical(sign: u64, limbs: &[u64]) -> bool {
+    if sign > 1 || limbs.is_empty() {
+        return false;
+    }
+    let zero = limbs == [0];
+    let top_ok = limbs.last() != Some(&0) || zero;
+    top_ok && !(zero && sign == 1)
+}
+
 /// Byte stride of one arena node.
-pub const BOUNDARY_NODE_STRIDE: i32 = 80;
+pub const BOUNDARY_NODE_STRIDE: i32 = 88;
 
 /// `BoundaryClass` of this node.
 pub const NODE_CLASS: i32 = 0;
@@ -599,6 +621,23 @@ pub const NODE_LIMBS_AT: i32 = 64;
 /// Number of limbs a spilled `Int` node's magnitude has. Zero for every other
 /// class and for a `Small`.
 pub const NODE_LIMB_COUNT: i32 = 72;
+/// ⛔ **`1` once a region-limbed `Int`'s magnitude has been checked CANONICAL,
+/// `0` while it is still being written.** Every reader of a region-limbed
+/// magnitude requires it, so an unsealed node **denotes nothing**.
+///
+/// This exists because canonicity is not checkable when the span is claimed.
+/// `store_int_limbs` runs before a single limb is written, so it can bound the
+/// length and the sign and nothing else — it cannot see a leading zero limb, it
+/// cannot see negative zero, and it cannot see a producer that claims three
+/// limbs and writes two. Those are properties of the *finished* magnitude, and a
+/// finished magnitude needs a completion step to be a thing the ABI can talk
+/// about at all.
+///
+/// ⭐ **The seal is what makes "fails closed before publication" true rather
+/// than aspirational.** The node exists and its word is in the producer's hand
+/// the moment `alloc` returns; what a consumer can do with it is the only
+/// meaningful sense of published, and until the seal a consumer can do nothing.
+pub const NODE_INT_SEALED: i32 = 80;
 
 /// Byte size of a **region header**.
 ///
@@ -663,6 +702,59 @@ pub const ARENA_LIMBS: i32 = 112;
 pub const ARENA_LIMB_COUNT: i32 = 120;
 /// Limb-table capacity — the fourth ceiling construction fails closed against.
 pub const ARENA_LIMB_CAPACITY: i32 = 128;
+
+/// ⛔ **Every region-header field, named, in one list.**
+///
+/// The declared size and the published bytes were allowed to disagree once —
+/// `publish` emitted 18 words against a 136-byte (17-word) constant that had **no
+/// consumer anywhere in the tree**, so the layout claim was unenforced in both
+/// directions at once. `publish` now writes *through* these offsets (a stale
+/// constant is an out-of-bounds panic), and this list closes the other
+/// direction: the pin asserts the offsets are exactly `0, 8, …` up to
+/// [`BOUNDARY_REGION_HEADER_BYTES`], so a **new field without a size bump** and a
+/// **size bump without a field** both redden.
+///
+/// ⭐ The allowed inventory, not a forbidden list: any addition must appear here
+/// to pass, including one nobody imagined.
+pub const BOUNDARY_REGION_HEADER_FIELDS: &[(&str, i32)] = &[
+    ("ARENA_NODES", ARENA_NODES),
+    ("ARENA_NODE_COUNT", ARENA_NODE_COUNT),
+    ("ARENA_WORDS", ARENA_WORDS),
+    ("ARENA_WORD_COUNT", ARENA_WORD_COUNT),
+    ("ARENA_NAMES", ARENA_NAMES),
+    ("ARENA_NAME_COUNT", ARENA_NAME_COUNT),
+    ("ARENA_NODE_CAPACITY", ARENA_NODE_CAPACITY),
+    ("ARENA_WORD_CAPACITY", ARENA_WORD_CAPACITY),
+    ("ARENA_PERSISTENT", ARENA_PERSISTENT),
+    ("ARENA_FROZEN", ARENA_FROZEN),
+    ("ARENA_DATA", ARENA_DATA),
+    ("ARENA_DATA_COUNT", ARENA_DATA_COUNT),
+    ("ARENA_DATA_CAPACITY", ARENA_DATA_CAPACITY),
+    ("ARENA_NATIVE_INT", ARENA_NATIVE_INT),
+    ("ARENA_LIMBS", ARENA_LIMBS),
+    ("ARENA_LIMB_COUNT", ARENA_LIMB_COUNT),
+    ("ARENA_LIMB_CAPACITY", ARENA_LIMB_CAPACITY),
+];
+
+/// Every node field, named, in one list — the node's half of the same closure.
+///
+/// `push_node` writes exactly `NODE_WORDS` entries, and `NODE_WORDS` is derived
+/// from [`BOUNDARY_NODE_STRIDE`]; the pin ties this list to both, so a field
+/// added to the node without a stride bump is a compile-time length mismatch or
+/// a red test rather than a silently truncated write.
+pub const BOUNDARY_NODE_FIELDS: &[(&str, i32)] = &[
+    ("NODE_CLASS", NODE_CLASS),
+    ("NODE_OWNER", NODE_OWNER),
+    ("NODE_SLOT", NODE_SLOT),
+    ("NODE_TAG_ID", NODE_TAG_ID),
+    ("NODE_PAYLOAD", NODE_PAYLOAD),
+    ("NODE_FIELD_COUNT", NODE_FIELD_COUNT),
+    ("NODE_FIELDS_AT", NODE_FIELDS_AT),
+    ("NODE_EXTENT", NODE_EXTENT),
+    ("NODE_LIMBS_AT", NODE_LIMBS_AT),
+    ("NODE_LIMB_COUNT", NODE_LIMB_COUNT),
+    ("NODE_INT_SEALED", NODE_INT_SEALED),
+];
 
 /// Status returned by every emitted-code helper on success.
 pub const BOUNDARY_OK: i64 = 0;
@@ -753,6 +845,12 @@ impl BoundaryRegion {
         }
     }
 
+    /// Words in the published header, or `0` before publication. The layout
+    /// pin measures this rather than re-deriving the constant it is checking.
+    pub fn published_header_len(&self) -> usize {
+        self.header.len()
+    }
+
     /// Number of live magnitude limbs, on the same published-header rule.
     pub fn limb_count(&self) -> usize {
         match self.header.first() {
@@ -838,10 +936,29 @@ impl BoundaryRegion {
         {
             return None;
         }
+        if self.node_field(index, NODE_INT_SEALED)? != 1 {
+            return None;
+        }
         let at = self.node_field(index, NODE_LIMBS_AT)? as usize;
         let len = self.node_field(index, NODE_LIMB_COUNT)? as usize;
         let end = at.checked_add(len)?;
         (end <= self.limb_count()).then(|| &self.limbs[at..end])
+    }
+
+    /// Overwrite one raw field of one node — **fault injection, tests only**.
+    ///
+    /// ⛔ There is no production path that can produce a *stale or malformed*
+    /// node span: the Rust builder computes spans from its own live counts and
+    /// the emitted helpers bounds-check every write. So the reader's
+    /// wraparound guard has **no reachable producer to exercise it**, and a
+    /// control that cannot construct the malformed input is not evidence about
+    /// the guard — it is the "pin that never exercises the violating mechanism"
+    /// shape again. This injects the corruption directly, which is the only way
+    /// to ask the question at all.
+    #[cfg(test)]
+    pub fn poke_node_field(&mut self, index: u64, offset: i32, value: u64) {
+        let base = index as usize * NODE_WORDS;
+        self.nodes[base + (offset as usize / 8)] = value;
     }
 
     /// Append `limbs` to the limb table, returning its start index.
@@ -902,6 +1019,15 @@ impl BoundaryRegion {
             limbs.is_empty() || extent == BOUNDARY_INT_REGION_LIMBS,
             "limbs belong only to a region-limbed Int"
         );
+        // ⛔ The SAME canonicity contract the emitted seal enforces, asserted at
+        // the other producer. `RuntimeIntV1::canonical_sign_and_limbs` is the
+        // authority: at least one limb, least-significant first with no leading
+        // zero limb, and zero is non-negative.
+        debug_assert!(
+            extent != BOUNDARY_INT_REGION_LIMBS
+                || boundary_int_magnitude_is_canonical(payload, limbs),
+            "a region-limbed Int must carry a canonical magnitude"
+        );
         debug_assert!(
             names.is_empty() || names.len() == children.len(),
             "a name table, when present, is parallel to the word table"
@@ -942,6 +1068,10 @@ impl BoundaryRegion {
             extent,
             limbs_at,
             limbs.len() as u64,
+            // Rust-materialized magnitudes come from `canonical_sign_and_limbs`
+            // and are asserted canonical above, so they are born sealed. Emitted
+            // construction earns the seal from `ken_boundary_seal_int_local`.
+            u64::from(extent == BOUNDARY_INT_REGION_LIMBS),
         ]);
         self.live_nodes = index as usize + 1;
         BoundaryWord::handle(tag, index)
@@ -956,29 +1086,43 @@ impl BoundaryRegion {
     /// — the live counts and the reserved node/word storage are mutable — so the
     /// pointer is `*mut`, and the region must be held mutably for the extent it
     /// is published, exactly as `NativeIntArenaV1` holds its own header.
+    /// ⛔ **Sized from [`BOUNDARY_REGION_HEADER_BYTES`] and written through the
+    /// offset constants, so the declared layout and the published bytes cannot
+    /// disagree.** The previous form was a positional `vec![…]` whose length
+    /// nobody derived and nobody checked: it published **18** words where the
+    /// constant declared **17**, the constant had no consumer anywhere in the
+    /// tree, and the reviewed "112 → 136" layout claim was therefore *false and
+    /// unenforced*. A positional literal makes the constant decorative — the
+    /// bytes are correct only if a reader counted the lines. Indexing by the
+    /// offsets makes a stale constant an out-of-bounds panic, and
+    /// [`BOUNDARY_REGION_HEADER_FIELDS`] closes the other direction.
     pub fn publish(&mut self) -> *mut u64 {
-        self.header = vec![
-            self.nodes.as_ptr() as u64,
-            self.live_nodes as u64,
-            self.words.as_ptr() as u64,
-            self.live_words as u64,
-            self.names.as_ptr() as u64,
-            self.names.len() as u64,
-            (self.nodes.len() / NODE_WORDS) as u64,
-            self.words.len() as u64,
-            self.persistent,
-            // Everything materialized before publication is frozen; emitted code
-            // constructs strictly beyond it.
-            self.live_nodes as u64,
-            self.data.as_ptr() as u64,
-            self.live_data as u64,
-            self.data.len() as u64,
-            self.native_int,
-            self.limbs.as_ptr() as u64,
-            self.live_limbs as u64,
-            self.limbs.len() as u64,
-            0,
-        ];
+        let mut header = vec![0u64; (BOUNDARY_REGION_HEADER_BYTES / 8) as usize];
+        header[(ARENA_NODES / 8) as usize] = self.nodes.as_ptr() as u64;
+        header[(ARENA_NODE_COUNT / 8) as usize] = self.live_nodes as u64;
+        header[(ARENA_WORDS / 8) as usize] = self.words.as_ptr() as u64;
+        header[(ARENA_WORD_COUNT / 8) as usize] = self.live_words as u64;
+        header[(ARENA_NAMES / 8) as usize] = self.names.as_ptr() as u64;
+        header[(ARENA_NAME_COUNT / 8) as usize] = self.names.len() as u64;
+        header[(ARENA_NODE_CAPACITY / 8) as usize] = (self.nodes.len() / NODE_WORDS) as u64;
+        header[(ARENA_WORD_CAPACITY / 8) as usize] = self.words.len() as u64;
+        header[(ARENA_PERSISTENT / 8) as usize] = self.persistent;
+        // Everything materialized before publication is frozen; emitted code
+        // constructs strictly beyond it.
+        header[(ARENA_FROZEN / 8) as usize] = self.live_nodes as u64;
+        header[(ARENA_DATA / 8) as usize] = self.data.as_ptr() as u64;
+        header[(ARENA_DATA_COUNT / 8) as usize] = self.live_data as u64;
+        header[(ARENA_DATA_CAPACITY / 8) as usize] = self.data.len() as u64;
+        header[(ARENA_NATIVE_INT / 8) as usize] = self.native_int;
+        header[(ARENA_LIMBS / 8) as usize] = self.limbs.as_ptr() as u64;
+        header[(ARENA_LIMB_COUNT / 8) as usize] = self.live_limbs as u64;
+        header[(ARENA_LIMB_CAPACITY / 8) as usize] = self.limbs.len() as u64;
+        debug_assert_eq!(
+            header.len() * std::mem::size_of::<u64>(),
+            BOUNDARY_REGION_HEADER_BYTES as usize,
+            "the published header must be exactly the declared layout"
+        );
+        self.header = header;
         self.header.as_mut_ptr()
     }
 }
@@ -1234,6 +1378,12 @@ impl BoundaryValueStore {
     /// writes.** There is no path by which emitted code takes persistent space
     /// the store did not grant, which is what keeps this from being a second,
     /// unaccountable heap.
+    /// The persistent image, mutably — **fault injection, tests only.**
+    #[cfg(test)]
+    pub fn image_mut(&mut self) -> &mut BoundaryPersistentImage {
+        &mut self.image
+    }
+
     pub fn reserve_persistent(&mut self, nodes: usize, words: usize, data: usize, limbs: usize) {
         self.image.reserve(nodes, words, data, limbs);
     }

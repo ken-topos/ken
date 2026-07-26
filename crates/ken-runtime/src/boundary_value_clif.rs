@@ -45,8 +45,8 @@ use crate::boundary_value::{
     BOUNDARY_ERR_CAPACITY, BOUNDARY_ERR_CLASS, BOUNDARY_ERR_ESCAPE, BOUNDARY_ERR_FROZEN,
     BOUNDARY_ERR_RELATION, BOUNDARY_ERR_SHAPE, BOUNDARY_ERR_TAG, BOUNDARY_INT_REGION_LIMBS,
     BOUNDARY_NODE_STRIDE, BOUNDARY_OK, BOUNDARY_TAG_BITS, BOUNDARY_TAG_CLASS_RELATION,
-    BOUNDARY_TAG_MASK, NODE_CLASS, NODE_EXTENT, NODE_FIELDS_AT, NODE_FIELD_COUNT, NODE_LIMBS_AT,
-    NODE_LIMB_COUNT, NODE_OWNER, NODE_PAYLOAD, NODE_SLOT, NODE_TAG_ID,
+    BOUNDARY_TAG_MASK, NODE_CLASS, NODE_EXTENT, NODE_FIELDS_AT, NODE_FIELD_COUNT, NODE_INT_SEALED,
+    NODE_LIMBS_AT, NODE_LIMB_COUNT, NODE_OWNER, NODE_PAYLOAD, NODE_SLOT, NODE_TAG_ID,
 };
 use crate::cranelift_backend::{backend_module, CraneliftBackendError};
 
@@ -84,6 +84,7 @@ pub const BOUNDARY_LOCAL_HELPERS: &[&str] = &[
     "ken_boundary_store_field_local",
     "ken_boundary_store_name_local",
     "ken_boundary_store_int_tag_local",
+    "ken_boundary_seal_int_local",
     "ken_boundary_store_int_limbs_local",
     "ken_boundary_store_int_limb_local",
     "ken_boundary_store_bytes_len_local",
@@ -173,6 +174,9 @@ pub(crate) struct BoundaryLocalFuncs {
     /// `(arena, word, native_tag) -> status` — record a spilled `Int`'s
     /// `NativeIntV1` tag. Class-guarded to `Int`.
     pub store_int_tag: FuncId,
+    /// `(arena, word) -> status` — check a region-limbed `Int`'s magnitude
+    /// canonical and seal it. Until this succeeds the node denotes nothing.
+    pub seal_int: FuncId,
     /// `(arena, word, sign, len, out) -> status` — claim `len` magnitude limbs
     /// in the node's OWN region for a spilled `Int` and write the span's start
     /// to `*out`. The counterpart of `store_bytes_len` for `Int` content.
@@ -215,6 +219,7 @@ struct Graph {
     store_field: FuncId,
     store_name: FuncId,
     store_int_tag: FuncId,
+    seal_int: FuncId,
     store_int_limbs: FuncId,
     store_int_limb: FuncId,
     store_bytes_len: FuncId,
@@ -257,6 +262,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     let store_field = declare(module, "ken_boundary_store_field_local", 4)?;
     let store_name = declare(module, "ken_boundary_store_name_local", 4)?;
     let store_int_tag = declare(module, "ken_boundary_store_int_tag_local", 3)?;
+    let seal_int = declare(module, "ken_boundary_seal_int_local", 2)?;
     let store_int_limbs = declare(module, "ken_boundary_store_int_limbs_local", 5)?;
     let store_int_limb = declare(module, "ken_boundary_store_int_limb_local", 4)?;
     let store_bytes_len = declare(module, "ken_boundary_store_bytes_len_local", 4)?;
@@ -285,6 +291,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
         store_field,
         store_name,
         store_int_tag,
+        seal_int,
         store_int_limbs,
         store_int_limb,
         store_bytes_len,
@@ -315,6 +322,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     define_store_field(module, graph)?;
     define_store_name(module, graph)?;
     define_store_int_tag(module, graph)?;
+    define_seal_int(module, graph)?;
     define_store_int_limbs(module, graph)?;
     define_store_int_limb(module, graph)?;
     define_store_bytes_len(module, graph)?;
@@ -343,6 +351,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
         store_field,
         store_name,
         store_int_tag,
+        seal_int,
         store_int_limbs,
         store_int_limb,
         store_bytes_len,
@@ -1750,6 +1759,45 @@ fn region_limbs_guard(b: &mut FunctionBuilder<'_>, node: cranelift_codegen::ir::
     b.switch_to_block(ok);
 }
 
+/// Bounds-check a limb span **without wrapping** and return its base address,
+/// returning [`BOUNDARY_ERR_BOUNDS`] from the caller if it does not fit.
+///
+/// ⛔ **`at + len <= live` is the wrong test and it was the shipped one.** CLIF's
+/// `iadd` wraps, so a stale or malformed `at` near `u64::MAX` produces a small
+/// sum that satisfies the comparison, after which the address is formed from the
+/// **unchecked** `at`. The source comment claimed it failed closed before any
+/// address was formed; it did not, and the Rust oracle beside it was correctly
+/// using `checked_add` the whole time — the two halves of one property, written
+/// to different standards.
+///
+/// `at <= live && len <= live - at` is the non-wrapping form: the subtraction is
+/// only evaluated where it cannot underflow, and neither comparison can wrap.
+fn region_limb_base(
+    b: &mut FunctionBuilder<'_>,
+    ptr: cranelift_codegen::ir::Type,
+    region: cranelift_codegen::ir::Value,
+    at: cranelift_codegen::ir::Value,
+    len: cranelift_codegen::ir::Value,
+    live: cranelift_codegen::ir::Value,
+) -> cranelift_codegen::ir::Value {
+    let start_ok = b.ins().icmp(IntCC::UnsignedLessThanOrEqual, at, live);
+    let room = b.ins().isub(live, at);
+    let len_ok = b.ins().icmp(IntCC::UnsignedLessThanOrEqual, len, room);
+    let fits = b.ins().band(start_ok, len_ok);
+    let spanned = b.create_block();
+    let unspanned = b.create_block();
+    b.ins().brif(fits, spanned, &[], unspanned, &[]);
+
+    b.switch_to_block(unspanned);
+    let err = b.ins().iconst(types::I64, BOUNDARY_ERR_BOUNDS);
+    b.ins().return_(&[err]);
+
+    b.switch_to_block(spanned);
+    let table = b.ins().load(ptr, MemFlags::trusted(), region, ARENA_LIMBS);
+    let byte_at = b.ins().imul_imm(at, 8);
+    b.ins().iadd(table, byte_at)
+}
+
 /// `(arena, word, sign, len, out) -> status` — claim `len` magnitude limbs in
 /// the node's own region and write the span's start to `*out`.
 ///
@@ -1780,10 +1828,17 @@ fn define_store_int_limbs<M: Module>(
         // ⛔ The sign is a BIT, not a number. `decode_final_export` reads `0` or
         // `1` and refuses anything else, so admitting a third value here would
         // build a node the exact-`Int` decoder cannot read back.
+        //
+        // ⛔ And the magnitude has **at least one limb**. An empty magnitude
+        // denotes no integer at all, and it is the one canonicity clause that
+        // *is* checkable here — the others are properties of limbs that do not
+        // exist yet, which is precisely why `seal_int` has to exist.
         let bit = b.ins().icmp_imm(IntCC::UnsignedLessThanOrEqual, sign, 1);
+        let nonempty = b.ins().icmp_imm(IntCC::UnsignedGreaterThanOrEqual, len, 1);
+        let shape_ok = b.ins().band(bit, nonempty);
         let shaped = b.create_block();
         let unshaped = b.create_block();
-        b.ins().brif(bit, shaped, &[], unshaped, &[]);
+        b.ins().brif(shape_ok, shaped, &[], unshaped, &[]);
 
         b.switch_to_block(unshaped);
         let err = b.ins().iconst(types::I64, BOUNDARY_ERR_SHAPE);
@@ -1819,6 +1874,12 @@ fn define_store_int_limbs<M: Module>(
             .store(MemFlags::trusted(), live, node, NODE_LIMBS_AT);
         b.ins()
             .store(MemFlags::trusted(), len, node, NODE_LIMB_COUNT);
+        // ⛔ Claiming a span UNSEALS the node. A producer that claims a second
+        // span on an already-sealed node must re-earn the seal, so a stale
+        // canonicity proof can never stay attached to a fresh magnitude.
+        let unsealed = b.ins().iconst(types::I64, 0);
+        b.ins()
+            .store(MemFlags::trusted(), unsealed, node, NODE_INT_SEALED);
         b.ins()
             .store(MemFlags::trusted(), need, region, ARENA_LIMB_COUNT);
         b.ins().store(MemFlags::trusted(), live, out, 0);
@@ -1829,6 +1890,102 @@ fn define_store_int_limbs<M: Module>(
         b.finalize();
     }
     finish(module, graph.store_int_limbs, func)
+}
+
+/// `(arena, word) -> status` — check a region-limbed `Int`'s magnitude canonical
+/// and seal it.
+///
+/// ⛔ **The completion step, and the interface change that makes "fails closed
+/// before publication" true instead of aspirational.** `store_int_limbs` runs
+/// before a single limb exists, so it can bound the length and the sign and
+/// nothing else: it cannot see a leading zero limb, it cannot see negative zero,
+/// and it cannot see a producer that claims three limbs and writes two. Those
+/// are properties of the *finished* magnitude. Without a completion step the
+/// producer's success meant only "the span was reserved", and a consumer could
+/// project a word that denotes no exact `Int`.
+///
+/// ⭐ **`ken_boundary_int_*_local` requires the seal**, so an unsealed node
+/// denotes nothing — which is the only operative meaning of unpublished here,
+/// since the word is in the producer's hand from the moment `alloc` returns.
+///
+/// The clauses are `boundary_int_magnitude_is_canonical`'s, one for one:
+/// at least one limb (already held), no leading zero limb, and zero is
+/// non-negative. ⚠ A one-limb `[0]` **is** canonical — it is the value zero, and
+/// rejecting it would be an over-strengthening the contract does not entail.
+fn define_seal_int<M: Module>(module: &mut M, graph: Graph) -> Result<(), CraneliftBackendError> {
+    let ptr = module.target_config().pointer_type();
+    let mut func = begin(module, graph.seal_int, 2);
+    let resolve = module.declare_func_in_func(graph.resolve, &mut func);
+    let mut fctx = FunctionBuilderContext::new();
+    {
+        let mut b = FunctionBuilder::new(&mut func, &mut fctx);
+        let entry = b.create_block();
+        b.append_block_params_for_function_params(entry);
+        b.switch_to_block(entry);
+        let p = b.block_params(entry).to_vec();
+        let (arena, word) = (p[0], p[1]);
+        let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
+        mutable_guard(&mut b, word, region);
+        class_guard(&mut b, node, &[BoundaryClass::Int]);
+        region_limbs_guard(&mut b, node);
+
+        let sign = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_PAYLOAD);
+        let len = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_LIMB_COUNT);
+        let at = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_LIMBS_AT);
+        let live = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), region, ARENA_LIMB_COUNT);
+        let base = region_limb_base(&mut b, ptr, region, at, len, live);
+
+        // The top limb, at `len - 1`. `store_int_limbs` guarantees `len >= 1`,
+        // and `region_limb_base` has just re-derived the span against the live
+        // count, so this address is inside the table.
+        let top_index = b.ins().iadd_imm(len, -1);
+        let top_offset = b.ins().imul_imm(top_index, 8);
+        let top_address = b.ins().iadd(base, top_offset);
+        let top = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), top_address, 0);
+
+        let one_limb = b.ins().icmp_imm(IntCC::Equal, len, 1);
+        let top_zero = b.ins().icmp_imm(IntCC::Equal, top, 0);
+        // The value zero: exactly one limb, and that limb is zero.
+        let is_zero = b.ins().band(one_limb, top_zero);
+        // No leading zero limb — unless the magnitude IS zero.
+        let top_nonzero = b.ins().icmp_imm(IntCC::NotEqual, top, 0);
+        let top_ok = b.ins().bor(top_nonzero, is_zero);
+        // Zero is non-negative: refuse negative zero.
+        let negative = b.ins().icmp_imm(IntCC::Equal, sign, 1);
+        let negative_zero = b.ins().band(negative, is_zero);
+        let sign_ok = b.ins().icmp_imm(IntCC::Equal, negative_zero, 0);
+        let canonical = b.ins().band(top_ok, sign_ok);
+        let ok = b.create_block();
+        let bad = b.create_block();
+        b.ins().brif(canonical, ok, &[], bad, &[]);
+
+        b.switch_to_block(bad);
+        // ⛔ The node stays UNSEALED, so a producer that ignores this status
+        // still cannot publish a word a consumer will read.
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_SHAPE);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(ok);
+        let sealed = b.ins().iconst(types::I64, 1);
+        b.ins()
+            .store(MemFlags::trusted(), sealed, node, NODE_INT_SEALED);
+        let z = b.ins().iconst(types::I64, BOUNDARY_OK);
+        b.ins().return_(&[z]);
+
+        b.seal_all_blocks();
+        b.finalize();
+    }
+    finish(module, graph.seal_int, func)
 }
 
 /// `(arena, word, index, limb) -> status` — write one magnitude limb.
@@ -2169,6 +2326,22 @@ fn define_int_part<M: Module>(
         // dies first; routing it through that arena would be asking the wrong
         // region, which is the defect this marker exists to remove.
         b.switch_to_block(in_region);
+        // ⛔ The magnitude must be SEALED. An unsealed node is one whose limbs
+        // have been claimed but never checked canonical, and a consumer that
+        // could project it would be reading a word that denotes no exact `Int`.
+        let sealed = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_INT_SEALED);
+        let is_sealed = b.ins().icmp_imm(IntCC::Equal, sealed, 1);
+        let readable = b.create_block();
+        let unsealed = b.create_block();
+        b.ins().brif(is_sealed, readable, &[], unsealed, &[]);
+
+        b.switch_to_block(unsealed);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_SHAPE);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(readable);
         let region_sign = b
             .ins()
             .load(types::I64, MemFlags::trusted(), node, NODE_PAYLOAD);
@@ -2178,26 +2351,11 @@ fn define_int_part<M: Module>(
         let at = b
             .ins()
             .load(types::I64, MemFlags::trusted(), node, NODE_LIMBS_AT);
-        // The node's span is checked against the region's LIVE limb count
-        // before any address is formed, so a node carrying a stale span fails
-        // closed rather than reading past the table.
         let live = b
             .ins()
             .load(types::I64, MemFlags::trusted(), region, ARENA_LIMB_COUNT);
-        let end = b.ins().iadd(at, region_len);
-        let fits = b.ins().icmp(IntCC::UnsignedLessThanOrEqual, end, live);
-        let spanned = b.create_block();
-        let unspanned = b.create_block();
-        b.ins().brif(fits, spanned, &[], unspanned, &[]);
-
-        b.switch_to_block(unspanned);
-        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_BOUNDS);
-        b.ins().return_(&[err]);
-
-        b.switch_to_block(spanned);
-        let table = b.ins().load(ptr, MemFlags::trusted(), region, ARENA_LIMBS);
-        let byte_at = b.ins().imul_imm(at, 8);
-        let region_base = b.ins().iadd(table, byte_at);
+        // Non-wrapping, before any address is formed — see `region_limb_base`.
+        let region_base = region_limb_base(&mut b, ptr, region, at, region_len, live);
         b.ins().jump(
             decoded,
             &[region_sign.into(), region_len.into(), region_base.into()],
@@ -2309,8 +2467,8 @@ mod tests {
         boundary_immediate_admits, boundary_immediate_domain, boundary_int_marker_admits,
         boundary_relation_admits, materialize_borrowed, materialize_ground,
         materialize_host_result, BoundaryArenaBuilder, BoundaryArenaV1, BoundaryValueStore,
-        BoundaryWord, BOUNDARY_IMMEDIATE_INT_MAX, BOUNDARY_IMMEDIATE_INT_MIN,
-        BOUNDARY_PAYLOAD_BITS,
+        BoundaryWord, BOUNDARY_IMMEDIATE_INT_MAX, BOUNDARY_IMMEDIATE_INT_MIN, BOUNDARY_NODE_FIELDS,
+        BOUNDARY_PAYLOAD_BITS, BOUNDARY_REGION_HEADER_BYTES, BOUNDARY_REGION_HEADER_FIELDS,
     };
     use crate::ir::RuntimeGroundValue;
     use crate::native_int::RuntimeIntV1;
@@ -2497,6 +2655,12 @@ mod tests {
             base,
             persistent,
         }
+    }
+
+    fn run5(code: *const u8, base: *const u64, a: u64, b: u64, c: u64, d: u64) -> i64 {
+        let f: extern "C" fn(*const u64, u64, u64, u64, u64) -> i64 =
+            unsafe { std::mem::transmute(code) };
+        f(base, a, b, c, d)
     }
 
     fn run4(code: *const u8, base: *const u64, a: u64, b: u64, c: u64) -> i64 {
@@ -2883,7 +3047,7 @@ mod tests {
             );
             assert_eq!(
                 BOUNDARY_LOCAL_HELPERS.len(),
-                27,
+                28,
                 "the helper population must not move with the value population"
             );
         }
@@ -3156,6 +3320,7 @@ mod tests {
         store_name: cranelift_codegen::ir::FuncRef,
         make_immediate: cranelift_codegen::ir::FuncRef,
         store_int_tag: cranelift_codegen::ir::FuncRef,
+        seal_int: cranelift_codegen::ir::FuncRef,
         store_int_limbs: cranelift_codegen::ir::FuncRef,
         store_int_limb: cranelift_codegen::ir::FuncRef,
         store_bytes_len: cranelift_codegen::ir::FuncRef,
@@ -3218,6 +3383,7 @@ mod tests {
             store_name: module.declare_func_in_func(helpers.store_name, &mut ctx.func),
             make_immediate: module.declare_func_in_func(helpers.make_immediate, &mut ctx.func),
             store_int_tag: module.declare_func_in_func(helpers.store_int_tag, &mut ctx.func),
+            seal_int: module.declare_func_in_func(helpers.seal_int, &mut ctx.func),
             store_int_limbs: module.declare_func_in_func(helpers.store_int_limbs, &mut ctx.func),
             store_int_limb: module.declare_func_in_func(helpers.store_int_limb, &mut ctx.func),
             store_bytes_len: module.declare_func_in_func(helpers.store_bytes_len, &mut ctx.func),
@@ -4169,6 +4335,48 @@ mod tests {
     /// The closure is removal, not a guard: `EMITTED_WRITABLE_NODE_OFFSETS`
     /// makes emitting a setter for `NODE_SLOT` a panic, so the capability
     /// cannot be rebuilt by accident.
+    /// Every emitted helper that MUTATES a node or a region table.
+    ///
+    /// ⛔ Membership is by what the helper does, not by how it is spelled —
+    /// `ken_boundary_seal_int_local` writes `NODE_INT_SEALED` and carries no
+    /// `store_` prefix.
+    const EMITTED_WRITERS: &[&str] = &[
+        "ken_boundary_alloc_local",
+        "ken_boundary_seal_int_local",
+        "ken_boundary_store_tag_id_local",
+        "ken_boundary_store_scalar_local",
+        "ken_boundary_store_field_local",
+        "ken_boundary_store_name_local",
+        "ken_boundary_store_int_tag_local",
+        "ken_boundary_store_int_limbs_local",
+        "ken_boundary_store_int_limb_local",
+        "ken_boundary_store_bytes_len_local",
+        "ken_boundary_store_byte_local",
+    ];
+
+    /// Every emitted helper that only projects. `make_immediate` is here
+    /// deliberately: it builds a word from a tag and a payload and touches no
+    /// region at all.
+    const EMITTED_READERS: &[&str] = &[
+        "ken_boundary_resolve_local",
+        "ken_boundary_class_local",
+        "ken_boundary_owner_local",
+        "ken_boundary_slot_local",
+        "ken_boundary_scalar_local",
+        "ken_boundary_tag_local",
+        "ken_boundary_field_count_local",
+        "ken_boundary_field_local",
+        "ken_boundary_record_field_local",
+        "ken_boundary_host_success_local",
+        "ken_boundary_host_payload_local",
+        "ken_boundary_make_immediate_local",
+        "ken_boundary_escape_check_local",
+        "ken_boundary_byte_local",
+        "ken_boundary_int_sign_local",
+        "ken_boundary_int_len_local",
+        "ken_boundary_int_limb_local",
+    ];
+
     #[test]
     fn b2v_emitted_code_cannot_assign_store_identity() {
         // The allowed inventory, not a forbidden list: any node word outside
@@ -4198,26 +4406,41 @@ mod tests {
         // all — and it would miss a writer that spelled the field differently.
         // Pinning the permitted set makes ANY new writer redden, including one
         // nobody imagined.
-        let writers: Vec<&str> = BOUNDARY_LOCAL_HELPERS
+        //
+        // ⛔ **And the classification is TOTAL, because the prefix scan that
+        // stood here was the same defect one level up.** It discovered writers
+        // by `name.starts_with("ken_boundary_store_")` — so a writer named
+        // anything else was invisible to it, and `ken_boundary_seal_int_local`
+        // (which writes `NODE_INT_SEALED`) is exactly that helper. A discovery
+        // rule keyed on spelling cannot enumerate an inventory; only a
+        // partition can. Every helper must appear in exactly one of the two
+        // lists below, so a new helper of ANY name reddens until someone says
+        // which it is.
+        let mut classified: Vec<&str> = EMITTED_WRITERS
             .iter()
-            .filter(|name| name.starts_with("ken_boundary_store_"))
+            .chain(EMITTED_READERS.iter())
             .copied()
             .collect();
+        let declared = classified.len();
+        classified.sort_unstable();
+        classified.dedup();
         assert_eq!(
-            writers,
-            vec![
-                "ken_boundary_store_tag_id_local",
-                "ken_boundary_store_scalar_local",
-                "ken_boundary_store_field_local",
-                "ken_boundary_store_name_local",
-                "ken_boundary_store_int_tag_local",
-                "ken_boundary_store_int_limbs_local",
-                "ken_boundary_store_int_limb_local",
-                "ken_boundary_store_bytes_len_local",
-                "ken_boundary_store_byte_local",
-            ],
-            "AC-6: the emitted writer inventory has moved — a new writer needs \
-             its own account of what it may set"
+            classified.len(),
+            declared,
+            "AC-6: a helper is classified twice"
+        );
+        let mut inventory: Vec<&str> = BOUNDARY_LOCAL_HELPERS.to_vec();
+        inventory.sort_unstable();
+        assert_eq!(
+            classified, inventory,
+            "AC-6: every emitted helper must be classified as a reader or a \
+             writer — a new writer needs its own account of what it may set"
+        );
+        // ⚠ POSITIVE CONTROL on both halves: a partition that put everything in
+        // one bucket would satisfy the equality above vacuously.
+        assert!(
+            !EMITTED_WRITERS.is_empty() && !EMITTED_READERS.is_empty(),
+            "AC-6: neither half of the partition may be empty"
         );
 
         // ⚠ And behaviourally, over the whole writable inventory: exercise
@@ -4380,6 +4603,7 @@ mod tests {
         b.ins().jump(loop_head, &[next.into()]);
 
         b.switch_to_block(done);
+        guard(b, refs.seal_int, &[base, word]);
         b.ins().return_(&[word]);
     }
 
@@ -4740,6 +4964,306 @@ mod tests {
             ),
             BOUNDARY_ERR_BOUNDS,
             "a magnitude past the field is out of BOUNDS"
+        );
+    }
+
+    /// **`AC-1` — the declared layout IS the published layout, in both
+    /// directions.**
+    ///
+    /// ⛔ It was not. `BOUNDARY_REGION_HEADER_BYTES` said 136 while `publish`
+    /// emitted 18 words (144 bytes), and the constant had **no consumer
+    /// anywhere in the tree** — so the reviewed "112 → 136" layout claim was
+    /// false *and* unenforced, and the mismatch was invisible from either side.
+    ///
+    /// ⚠ MEASURED: the named field offsets are exactly the 8-byte slots of the
+    /// declared size, and a published header has exactly that many words.
+    /// CLAIMED: emitted code and Rust agree about where every header and node
+    /// field lives. THE GAP: that `publish` *writes through* these constants
+    /// rather than positionally — which it now does, so a stale constant is an
+    /// out-of-bounds panic and this pin closes the other direction.
+    #[test]
+    fn b2v_the_declared_layout_is_the_published_layout() {
+        for (what, fields, bytes) in [
+            (
+                "region header",
+                BOUNDARY_REGION_HEADER_FIELDS,
+                BOUNDARY_REGION_HEADER_BYTES,
+            ),
+            ("node", BOUNDARY_NODE_FIELDS, BOUNDARY_NODE_STRIDE),
+        ] {
+            // ⭐ The ALLOWED inventory: the offsets must be exactly the slots of
+            // the declared size — no gap, no duplicate, nothing past the end.
+            // A new field without a size bump and a size bump without a field
+            // both redden, and so does a field nobody listed.
+            let declared: Vec<i32> = (0..bytes).step_by(8).collect();
+            let mut offsets: Vec<i32> = fields.iter().map(|(_, at)| *at).collect();
+            let named = offsets.len();
+            offsets.sort_unstable();
+            offsets.dedup();
+            assert_eq!(offsets.len(), named, "{what}: an offset is listed twice");
+            assert_eq!(
+                offsets, declared,
+                "{what}: the field offsets are not exactly the declared \
+                 {bytes}-byte layout"
+            );
+            assert!(!fields.is_empty(), "{what}: the inventory may not be empty");
+        }
+
+        // And the published bytes agree with the declaration, measured on a
+        // real region rather than derived from the same constant twice.
+        let mut store = BoundaryValueStore::new();
+        materialize_ground(&mut store, &RuntimeGroundValue::Bool(true));
+        let f = bind(&mut store, BoundaryArenaBuilder::new());
+        assert_eq!(
+            store.image().0.published_header_len() * std::mem::size_of::<u64>(),
+            BOUNDARY_REGION_HEADER_BYTES as usize,
+            "AC-1: the published region header is not the declared size"
+        );
+        let _ = f;
+    }
+
+    /// `(base, sign, len, seed, top) -> word` — the wide-`Int` producer with the
+    /// **top limb chosen by the caller**, so a control can drive the magnitude
+    /// to each noncanonical shape without a second compiled body.
+    fn emit_wide_int_producer_with_top(
+        b: &mut FunctionBuilder<'_>,
+        refs: &Refs,
+        p: &[cranelift_codegen::ir::Value],
+        ptr: cranelift_codegen::ir::Type,
+    ) {
+        let (base, sign, len, seed, top) = (p[0], p[1], p[2], p[3], p[4]);
+        let out = cell(b, ptr);
+        let tag = b
+            .ins()
+            .iconst(types::I64, BoundaryTag::PersistentGround as i64);
+        let class = b.ins().iconst(types::I64, BoundaryClass::Int as i64);
+        let zero = b.ins().iconst(types::I64, 0);
+        guard(b, refs.alloc, &[base, tag, class, zero, out]);
+        let word = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
+        let marker = b.ins().iconst(types::I64, BOUNDARY_INT_REGION_LIMBS as i64);
+        guard(b, refs.store_int_tag, &[base, word, marker]);
+        let span = cell(b, ptr);
+        guard(b, refs.store_int_limbs, &[base, word, sign, len, span]);
+
+        let loop_head = b.create_block();
+        b.append_block_param(loop_head, types::I64);
+        b.ins().jump(loop_head, &[zero.into()]);
+        b.switch_to_block(loop_head);
+        let i = b.block_params(loop_head)[0];
+        let more = b.ins().icmp(IntCC::UnsignedLessThan, i, len);
+        let body = b.create_block();
+        let done = b.create_block();
+        b.ins().brif(more, body, &[], done, &[]);
+
+        b.switch_to_block(body);
+        // The last limb is the caller's; every other is `seed + i`.
+        let last = b.ins().iadd_imm(len, -1);
+        let is_last = b.ins().icmp(IntCC::Equal, i, last);
+        let running = b.ins().iadd(seed, i);
+        let limb = b.ins().select(is_last, top, running);
+        guard(b, refs.store_int_limb, &[base, word, i, limb]);
+        let next = b.ins().iadd_imm(i, 1);
+        b.ins().jump(loop_head, &[next.into()]);
+
+        b.switch_to_block(done);
+        guard(b, refs.seal_int, &[base, word]);
+        b.ins().return_(&[word]);
+    }
+
+    /// **`AC-1`/`AC-4` — emitted wide-`Int` construction cannot publish a word
+    /// that denotes no canonical exact `Int`.**
+    ///
+    /// ⛔ It could. `store_int_limbs` checked `sign <= 1` and capacity and
+    /// nothing else, so `len = 0`, a leading zero limb, and negative zero all
+    /// returned success — and the committed control used an arbitrary nonzero
+    /// seed, so it never went near the boundary. The contract is
+    /// `RuntimeIntV1::canonical_sign_and_limbs`'s and it is not optional: a
+    /// leading zero limb gives one value two encodings, and negative zero gives
+    /// zero a second one.
+    ///
+    /// ⚠ The canonicity clauses are **not** checkable where the span is
+    /// claimed — no limb exists yet — so the interface gained a completion step.
+    /// `seal_int` runs after the limbs are written, and every reader requires
+    /// the seal, which is what makes "fails closed before publication" a
+    /// property of the mechanism rather than a sentence about it.
+    #[test]
+    fn b2v_emitted_wide_int_construction_refuses_a_noncanonical_magnitude() {
+        let (_pm, produce) = compile_producer(5, emit_wide_int_producer_with_top);
+        let (_c1, len_code) = compile_probe(Probe::Unary(|h| h.int_len));
+
+        // (sign, len, seed, top, expected) — one row per canonicity clause,
+        // each differing from the admitted row in exactly one component.
+        let cases: [(u64, u64, u64, u64, i64); 6] = [
+            // ⚠ POSITIVE CONTROL — the admitted shape, so "refuses everything"
+            // cannot pass this test.
+            (0, 3, 7, 9, BOUNDARY_OK),
+            (1, 3, 7, 9, BOUNDARY_OK),
+            // Empty magnitude: no integer at all. Refused where the span is
+            // claimed, because length is the one clause checkable there.
+            (0, 0, 7, 9, BOUNDARY_ERR_SHAPE),
+            // Leading zero limb: two encodings of one value.
+            (0, 3, 7, 0, BOUNDARY_ERR_SHAPE),
+            (1, 2, 7, 0, BOUNDARY_ERR_SHAPE),
+            // Negative zero: a second encoding of zero.
+            (1, 1, 0, 0, BOUNDARY_ERR_SHAPE),
+        ];
+        let mut admitted = 0;
+        let mut refused = 0;
+        for (sign, len, seed, top, expected) in cases {
+            let mut store = BoundaryValueStore::new();
+            let f = bind_limbs(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (2, 0, 0),
+                (0, 0, 0),
+                (8, 0),
+            );
+            let produced = run5(produce, f.base, sign, len, seed, top);
+            if expected == BOUNDARY_OK {
+                assert!(
+                    produced > 0,
+                    "a canonical magnitude must publish (sign {sign}, len {len}, \
+                     top {top}); got status {produced}"
+                );
+                assert_eq!(
+                    run2(len_code, f.base, BoundaryWord(produced as u64)),
+                    len as i64,
+                    "a sealed magnitude reads back its length"
+                );
+                admitted += 1;
+            } else {
+                assert_eq!(
+                    produced, expected,
+                    "a noncanonical magnitude must be refused with an exact \
+                     status (sign {sign}, len {len}, top {top})"
+                );
+                refused += 1;
+            }
+        }
+        assert!(admitted > 0 && refused > 0, "neither arm may be empty");
+
+        // ⛔ **The seal is what makes the refusal a refusal.** A producer that
+        // ignores the status must still be unable to publish: a node whose
+        // limbs were claimed but never sealed reads as `ERR_SHAPE`, not as a
+        // magnitude. Without this the checks above would be advice.
+        let (_um, unsealed) = compile_producer(4, emit_wide_int_producer_no_seal);
+        let (_c2, sign_code) = compile_probe(Probe::Unary(|h| h.int_sign));
+        let (_c3, limb_code) = compile_probe(Probe::Binary(|h| h.int_limb));
+        let mut store = BoundaryValueStore::new();
+        let f = bind_limbs(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (2, 0, 0),
+            (0, 0, 0),
+            (8, 0),
+        );
+        let word = BoundaryWord(run4(unsealed, f.base, 0, 2, 5) as u64);
+        for (what, status) in [
+            ("sign", run2(sign_code, f.base, word)),
+            ("len", run2(len_code, f.base, word)),
+            ("limb", run3(limb_code, f.base, word, 0)),
+        ] {
+            assert_eq!(
+                status, BOUNDARY_ERR_SHAPE,
+                "AC-4: an unsealed magnitude must not be readable ({what})"
+            );
+        }
+    }
+
+    /// The wide-`Int` producer **without** the completion step — the positive
+    /// control for the seal itself.
+    fn emit_wide_int_producer_no_seal(
+        b: &mut FunctionBuilder<'_>,
+        refs: &Refs,
+        p: &[cranelift_codegen::ir::Value],
+        ptr: cranelift_codegen::ir::Type,
+    ) {
+        let (base, sign, len, seed) = (p[0], p[1], p[2], p[3]);
+        let out = cell(b, ptr);
+        let tag = b
+            .ins()
+            .iconst(types::I64, BoundaryTag::PersistentGround as i64);
+        let class = b.ins().iconst(types::I64, BoundaryClass::Int as i64);
+        let zero = b.ins().iconst(types::I64, 0);
+        guard(b, refs.alloc, &[base, tag, class, zero, out]);
+        let word = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
+        let marker = b.ins().iconst(types::I64, BOUNDARY_INT_REGION_LIMBS as i64);
+        guard(b, refs.store_int_tag, &[base, word, marker]);
+        let span = cell(b, ptr);
+        guard(b, refs.store_int_limbs, &[base, word, sign, len, span]);
+        let loop_head = b.create_block();
+        b.append_block_param(loop_head, types::I64);
+        b.ins().jump(loop_head, &[zero.into()]);
+        b.switch_to_block(loop_head);
+        let i = b.block_params(loop_head)[0];
+        let more = b.ins().icmp(IntCC::UnsignedLessThan, i, len);
+        let body = b.create_block();
+        let done = b.create_block();
+        b.ins().brif(more, body, &[], done, &[]);
+        b.switch_to_block(body);
+        let limb = b.ins().iadd(seed, i);
+        guard(b, refs.store_int_limb, &[base, word, i, limb]);
+        let next = b.ins().iadd_imm(i, 1);
+        b.ins().jump(loop_head, &[next.into()]);
+        b.switch_to_block(done);
+        b.ins().return_(&[word]);
+    }
+
+    /// **`AC-1` — the region-limb span check does not WRAP.**
+    ///
+    /// ⛔ The reader computed `end = at + len` with CLIF's wrapping `iadd` and
+    /// accepted `end <= live`. A span whose start is near `u64::MAX` wraps to a
+    /// small sum, satisfies the comparison, and the address is then formed from
+    /// the **unchecked** `at`. The comment above it said it failed closed before
+    /// any address was formed. The Rust oracle beside it used `checked_add` and
+    /// was correct — two halves of one property written to different standards.
+    ///
+    /// ⚠ **No production path can produce a malformed span**, so this control
+    /// injects the corruption directly. A control that cannot construct the
+    /// violating input is not evidence about the guard.
+    #[test]
+    fn b2v_a_wrapped_limb_span_fails_closed() {
+        let (_c1, sign_code) = compile_probe(Probe::Unary(|h| h.int_sign));
+        let (_c2, limb_code) = compile_probe(Probe::Binary(|h| h.int_limb));
+
+        let value = wide_int(0);
+        let mut store = BoundaryValueStore::new();
+        let word = materialize_ground(&mut store, &RuntimeGroundValue::Int(value))
+            .expect("a wide Int materializes");
+        let index = word.payload();
+
+        // ⚠ POSITIVE CONTROL first, on the untouched node: the reader answers,
+        // so a later refusal is about the span and not about the fixture. The
+        // image is published exactly once — the corruption happens in place,
+        // and the second invocation rebinds the same region.
+        let f = bind(&mut store, BoundaryArenaBuilder::new());
+        let persistent = f.persistent;
+        assert_eq!(run2(sign_code, f.base, word), 0, "the intact node reads");
+        drop(f);
+
+        // A start that makes `at + len` WRAP to a small value. Under the old
+        // form `end` was tiny, `end <= live` held, and the address came from
+        // this `at`.
+        store
+            .image_mut()
+            .0
+            .poke_node_field(index, NODE_LIMBS_AT, u64::MAX - 1);
+        let f = rebind(persistent);
+        assert_eq!(
+            run2(sign_code, f.base, word),
+            BOUNDARY_ERR_BOUNDS,
+            "AC-1: a wrapped span must fail closed before an address is formed"
+        );
+        assert_eq!(
+            run3(limb_code, f.base, word, 0),
+            BOUNDARY_ERR_BOUNDS,
+            "AC-1: and on the limb path too"
+        );
+        // The Rust oracle must agree — it is the half that was already right.
+        assert_eq!(
+            store.image().0.node_limbs(index),
+            None,
+            "the Rust oracle must refuse the same span"
         );
     }
 
