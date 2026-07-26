@@ -84,7 +84,7 @@ advisory nominates is **asserted by at least one conformance row**:
 | bignum tag `0x01`, inline-`i64` fast path | `conformance/surface/numbers/seed-numbers.md:49`, `:68`; `conformance/runtime/values/README.md:76` |
 | minimal-limb sign-magnitude encoding | `conformance/runtime/values/README.md:154`–`:161`; `conformance/README.md:124` |
 | canonical two-space indentation as a byte-identity expectation | `conformance/surface/elaboration/seed-multi-binding-let.md:363`, `:393`, `:585` |
-| formatter line width | `conformance/surface/formatting/seed-canonical-format.md:10` (**`RED-UNTIL-BUILT`**) |
+| formatter line width | ⛔ **CORRECTED — this cell was wrong.** It cited `seed-canonical-format.md:10`, which asserts only `RED-UNTIL-BUILT` **status, not a width**. The real consumers are `:169`–`:187` (`FMT7`) and `:610`–`:658`, and they assert **88** while `spec/30-surface/31-lexical.md:124` and `crates/ken-elaborator/src/layout.rs:12` say **96**. ⇒ **Not a relaxation candidate — a live contradiction**, tracked as [`SPEC-31-WIDTH-ERRATUM`](issues/SPEC-31-WIDTH-ERRATUM.md). Found by the CV within an hour of the A1 kickoff (`evt_3jpxb2qhkx2d0`), Steward-verified. ⭐ **A locator has two coordinates**; re-deriving the file is not evidence about the lines. |
 
 ### What follows from that, and it is the whole shape of Track A
 
