@@ -7322,6 +7322,202 @@ pub(crate) mod tests {
         }
     }
 
+    /// **`RECUT 2`, structural — EVERY `class_guard` call site takes its set
+    /// from the plan, including the ones no probe reaches.**
+    ///
+    /// ⛔ **Why a source scan, when `pin-a-property` says reach for one last.**
+    /// The behavioural pin below covers the three call sites this harness's
+    /// probe shapes can reach. Four cannot: `store_int_limbs` takes five
+    /// parameters, `store_int_tag` three, and `store_int_limb` /
+    /// `store_bytes_len` take a value where `Probe::Binary` passes an out
+    /// pointer. Leaving four of seven sites to review, after a mutation proved
+    /// exactly this kind of site can silently defect, is the overclaim — so
+    /// they get a mechanism whose limits are stated instead.
+    ///
+    /// **This pins the ALLOWED form, not a forbidden list:** every argument
+    /// must come from `plan`. A new guard spelled any other way reddens,
+    /// including one nobody imagined.
+    ///
+    /// **MEASURED:** the third argument of every `class_guard(...)` call in
+    /// this module is a `plan.` expression. **CLAIMED:** no emitted class guard
+    /// enumerates classes by hand. ⛔ **THE GAP:** a helper that *launders* a
+    /// literal — `fn my_classes() -> &'static [BoundaryClass]` passed as
+    /// `plan.foo()`-shaped text — is not detectable here and is not detectable
+    /// by the behavioural pin either for the four unreachable sites. That arm
+    /// is review-enforced, and saying so is the point of writing it down.
+    #[test]
+    fn b2v_every_class_guard_call_site_takes_its_set_from_the_plan() {
+        let source = include_str!("boundary_value_clif.rs");
+        let needle = "class_guard(";
+        let mut sites = 0usize;
+        let mut cursor = 0usize;
+
+        while let Some(found) = source[cursor..].find(needle) {
+            let at = cursor + found;
+            cursor = at + needle.len();
+            // Skip the definition itself and any doc-comment mention: only a
+            // CALL has a `(` immediately followed by arguments on the same
+            // logical expression, and only a call is preceded by whitespace.
+            let before = source[..at]
+                .rfind('\n')
+                .map(|n| &source[n + 1..at])
+                .unwrap_or("");
+            // ⚠ This scan reads its OWN source, so it matches its own needle
+            // literal and its own doc comment. Skip the definition, doc lines,
+            // and any occurrence inside a string.
+            if before.trim_start().starts_with("fn ")
+                || before.contains("///")
+                || before.ends_with('"')
+            {
+                continue;
+            }
+
+            // Take the balanced argument list.
+            let mut depth = 1usize;
+            let mut end = cursor;
+            for (offset, ch) in source[cursor..].char_indices() {
+                match ch {
+                    '(' => depth += 1,
+                    ')' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            end = cursor + offset;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            assert!(
+                depth == 0,
+                "RECUT 2: could not find the end of a `class_guard` argument \
+                 list at byte {at} -- an undetermined parse FAILS rather than \
+                 passing, or every gap in this scan is a silent green"
+            );
+            let args = &source[cursor..end];
+            let third = args
+                .rsplit(',')
+                .next()
+                .expect("a comma-separated argument list has a last element")
+                .trim();
+            assert!(
+                third.starts_with("plan."),
+                "RECUT 2: a `class_guard` call takes `{third}`, which does not \
+                 come from the plan -- an emitted class guard that enumerates \
+                 its own classes is the hand-maintained table beside the helper \
+                 bodies that RULING R3 excludes"
+            );
+            sites += 1;
+        }
+
+        // ⛔ Positive control: a scan that matched nothing passes for any
+        // reason at all. Seven is the count the mutation table was run
+        // against; fewer means the scan stopped seeing sites, more means new
+        // ones appeared and were checked.
+        assert!(
+            sites >= 7,
+            "RECUT 2: the scan found {sites} `class_guard` call sites, fewer \
+             than the seven this module has -- it is no longer looking at the \
+             surface it claims to cover"
+        );
+    }
+
+    /// **`RECUT 2`, causal and PER-SITE — every emitted CLASS guard is the
+    /// plan's.**
+    ///
+    /// ⛔ **This closes a hole in `720f301c`, the axis the Architect confirmed.**
+    /// `class_guard(&mut b, node, plan.int_magnitude_classes())` appears at five
+    /// sites. Disconnecting **one** of them — restoring the literal
+    /// `&[BoundaryClass::Int]` it used to be, leaving the other four consuming
+    /// the plan — left the whole suite green: 439 passed, 0 failed. The
+    /// whole-graph differential
+    /// `recut2_the_emitted_helper_graph_changes_when_the_authority_changes`
+    /// cannot see it, because the four remaining consumers still move the
+    /// aggregate. Same granularity fault the tag axis had, found by running the
+    /// same mutation against the earlier axis rather than assuming it was safe
+    /// because it was confirmed.
+    ///
+    /// **MEASURED:** for each probed class-guarded helper, perturbing the class
+    /// set that guards it changes that helper's answer for a node of the
+    /// original class — from its real status to `ERR_CLASS`.
+    /// **CLAIMED:** no probed helper's class guard is a literal.
+    /// **THE GAP:** `store_int_limbs` (5 params) and `store_int_tag` (3 params)
+    /// do not fit this harness's probe shapes, so for those two the evidence
+    /// remains the whole-graph pin plus review. Named, not implied.
+    #[test]
+    fn b2v_every_emitted_class_guard_is_the_plans() {
+        use crate::boundary_value::{BoundaryEmissionPlan, BOUNDARY_ERR_CLASS};
+
+        let plan = BoundaryEmissionPlan::derive();
+        // ⛔ Perturb ONLY the int-magnitude class set. `Record` is an admitted
+        // class of a different storage shape, so the guard stays well-formed
+        // and only its membership changes.
+        let perturbed = BoundaryEmissionPlan::new(
+            plan.admitted_classes().to_vec(),
+            vec![BoundaryClass::Record],
+            plan.byte_span_classes().to_vec(),
+            plan.tags().clone(),
+        );
+
+        // The node is produced by the REAL emitter; only the reader varies.
+        let (_pm, produce) = compile_producer(3, emit_spilled_int_producer);
+        let value = (1i64 << 60) + 7;
+        assert!(
+            !BoundaryWord::int_fits_immediate(value),
+            "the fixture must spill, or no Int-classed node exists to guard"
+        );
+        let mut store = BoundaryValueStore::new();
+        let native = crate::native_int::NativeIntArenaV1::default();
+        let mut f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (2, 0, 0),
+            (0, 0, 0),
+        );
+        with_native_int(&mut f, &native);
+        let word = BoundaryWord(run3(produce, f.base, BoundaryWord(value as u64), 0) as u64);
+        assert_eq!(
+            word.tag(),
+            Some(BoundaryTag::PersistentGround),
+            "the producer did not mint a spilled Int, so the sweep below reads \
+             the wrong node"
+        );
+
+        let unary: [(&str, Probe); 2] = [
+            ("int_sign", Probe::Unary(|h| h.int_sign)),
+            ("int_len", Probe::Unary(|h| h.int_len)),
+        ];
+        let binary: [(&str, Probe); 1] = [("int_limb", Probe::Binary(|h| h.int_limb))];
+
+        for (name, probe, index) in unary
+            .iter()
+            .map(|(n, p)| (*n, *p, None))
+            .chain(binary.iter().map(|(n, p)| (*n, *p, Some(0u64))))
+        {
+            let (_real_module, real_code) = compile_probe_with_plan(probe, &plan);
+            let (_pert_module, pert_code) = compile_probe_with_plan(probe, &perturbed);
+            let (real, pert) = match index {
+                None => (run2(real_code, f.base, word), run2(pert_code, f.base, word)),
+                Some(i) => (
+                    run3(real_code, f.base, word, i),
+                    run3(pert_code, f.base, word, i),
+                ),
+            };
+            assert_ne!(
+                real, BOUNDARY_ERR_CLASS,
+                "RECUT 2: `{name}` already refuses this node on class under the \
+                 REAL plan, so the perturbation cannot change its answer and \
+                 would prove nothing"
+            );
+            assert_eq!(
+                pert, BOUNDARY_ERR_CLASS,
+                "RECUT 2: `{name}` still accepts an Int-classed node after the \
+                 plan stopped admitting `Int` for limb storage — its class \
+                 guard is a literal, not the plan's set"
+            );
+        }
+    }
+
     /// **`AC-1`/`AC-6` — the plan's owner bands and `referent_owner` are the
     /// same classification.**
     ///
