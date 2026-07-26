@@ -5,7 +5,7 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-26 ~00:05Z. OPERATOR IS PRESENT.**
+**As of 2026-07-26 ~09:4xZ. OPERATOR IS PRESENT** — mission drafted ~11:30Z.
 
 > ### ⛔ THREE STALE `RESUME HERE` BLOCKS WERE REMOVED FROM THIS SPOT
 >
@@ -22,24 +22,70 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~09:2xZ · ⛔ **NO `main` SHA HERE, BY CONSTRUCTION**
+## ▶ LIVE — 2026-07-26 ~09:4xZ · ⛔ **NO `main` SHA HERE, BY CONSTRUCTION**
 ### ⛔ **This header used to carry `origin/main`. It was ALWAYS the pre-merge**
 ### **base — stale the instant the block landed. `git rev-parse origin/main`.**
-### ✅ **#986 → #1004 MERGED.** ▶ **#1005 in CI** — the sweep fix (#79 + #76).
-### ✅ **BOTH LANES FILLED** — Runtime `B2V`, Foundation `ABI-R1`. #72 #74 DONE.
-### ⛔ **`ABI-R1` IS ON ITS THIRD CANDIDATE — and MY overclaim caused one.**
+### ✅ **#986 → #1006 ALL MERGED** — incl. #1005 (sweep fix) + #1006 (`ABI-R1`).
+### ✅ **`ABI-R1` MERGED** — third candidate. ⚠ **retros chased, NOT yet in.**
+### ▶ **ONE LANE LIVE: Runtime `B2V`** — ruling `R4` discharged, QA next.
 ### ⛔ **2 ADVERSARY FINDINGS OPEN** — `RT-VALUE-TOTALITY` §7; unframed (#78).
 
-> ### ▶ BOTH LANES ARE FILLED — Runtime on `B2V`, Foundation on `ABI-R1`
+> ### ▶ ONE LANE LIVE — Runtime on `B2V`. Foundation's lane CLOSED (merged).
 >
 > ```
-> wp/RT-FNSPLIT-B2V-executable-value-abi          ab11a3d2   contains 481b2fea 720f301c 5e6b0945 3025713c
-> preserved/rt-fnsplit-b2v-prereanchor-a7aa60eb   a7aa60eb   <- created BEFORE the force-move
-> wp/ABI-R1-capability-prose-currency             0c8b77fc   pushed; BLOCKED, superseded twice
+> wp/RT-FNSPLIT-B2V-executable-value-abi          dc35c12d   leader-reviewed, QA-eligible, DURABLE
+> preserved/rt-fnsplit-b2v-ab11a3d2               ab11a3d2   divergent line - would have been orphaned
+> preserved/rt-fnsplit-b2v-prereanchor-a7aa60eb   a7aa60eb   pre-re-anchor tip
+> preserved/abi-r1-0c8b77fc                       0c8b77fc   ABI-R1 candidate 1, blocked
 > ```
 >
-> ⛔ **These are the only two live lanes. Do not open a third** — `#78` is
-> sequenced *behind* `B2V` (same files) and the doc lane is operator-HELD.
+> ⛔ **`fed42481` IS NO LONGER A TIP AND NEEDS NO PRESERVATION** — it is an
+> ancestor of `dc35c12d`, so the push was a plain fast-forward, no `--force`.
+> ⭐ **Contrast `ab11a3d2`, which WAS on a divergent line and would have been
+> orphaned.** Same-looking "push my checkpoint" request, opposite answer — and the
+> only way to tell is `git merge-base --is-ancestor` **before** the push. ⛔ A
+> commit *distance* ("four commits past X") is not ancestry and reads as if it is.
+>
+> ⛔ **Do not open a second lane** — `#78` is sequenced *behind* `B2V` (same files),
+> the doc lane is operator-HELD, and `ABI-S3` is Runtime-owned and held behind the
+> `RT-NATIVE-FNSPLIT` priority. **Foundation going idle now is correct, not a
+> stall** — the only thing outstanding from that ring is its retros.
+
+> ### ✅ `B2V` — `RULING R4` LANDED AND WAS DISCHARGED IN ~8 MINUTES
+>
+> The Architect answered **both** open B2V questions in one event
+> (`evt_51xk9sxqdtzgt`), transcribed into the frame as **`RULING R4`** (after `R3`):
+>
+> 1. The **immediate tag→class projection is IN SCOPE and REQUIRED.**
+>    `define_class`'s `is_bool ? Bool : Int` is a second hand-maintained mapping
+>    beside the helper body and **cannot stand as a named residual.** Kept
+>    explicitly separate from `BOUNDARY_TAG_CLASS_RELATION`, which governs *node*
+>    `NODE_CLASS` legality and correctly excludes immediates.
+> 2. ⛔ **`R3`'s evidence bar is PER-SITE**, and the Architect **withdrew its own
+>    earlier confirmation** that the class axis was closed. Repair stays in the
+>    **same increment**; `fed42481` is **not** a boundary to take instead.
+>
+> ⭐ **Clause 2 exists because the implementer disconnected ONE of five
+> `class_guard` sites back to its literal and the suite stayed at 439 passed / 0
+> failed.** ⇒ **A differential over an aggregate is an EXISTENTIAL — *someone*
+> consumed the authority — not the universal it reads as.** That one sentence
+> covers four green mutations across two axes. ⛔ **And a confirmed deliverable is
+> not a reason to skip the mutation:** the Architect's confirmation was accurate
+> about the code it read, and a code review structurally cannot report whether the
+> pin behind it is as strong as both parties assume.
+>
+> ⚠ **I had recorded the opposite in my own resume note** — *"if the sequencing
+> question reaches me, `fed42481` IS the clean boundary."* The ruling went the
+> other way. Superseded explicitly (task #85) rather than left standing, because a
+> resume obeys the instruction it finds, not the one that turned out to be right.
+>
+> ⭐ **Second lesson from the ring, and it is the sharper one:** *an inventory is
+> bounded by an unwritten notion of the surface.* The implementer's located list
+> missed two sites — one with no constant to grep for, one outside the fold's
+> private notion of "class" — from **two searches, each exhaustive within a
+> boundary neither wrote down.** ⇒ **Enumerate uses of the AUTHORITY, not
+> occurrences of the defect's NAME.** `grep BoundaryTag::` found the missing site
+> instantly; `grep FIRST_HANDLE_TAG` never could.
 
 > ### ⛔⛔ I OVERCLAIMED FROM A `| head -20` GREP AND IT COST THE RING A FOLD
 >
@@ -112,32 +158,27 @@
 > sites carrying literal class lists now read from the plan (`720f301c`,
 > Architect-confirmed causal, not ceremonial).
 
-> ### ⛔ `ABI-R1` — WHAT THE KICKOFF CARRIES, so nobody re-derives it
+> ### ✅ `ABI-R1` IS MERGED — this kickoff block is SPENT, and here is the residue
 >
-> ```
-> frame   docs/program/wp/ABI-R1-capability-prose-currency.md   blob 0a28c7df
-> node    docs/program/issues/ABI-R1.md                         blob a2297870  status ready
-> target  catalog/packages/Capability/Filesystem/Errors.ken.md    blob 59fbe76d
-> pins    crates/ken-host/src/capability.rs                       blob 5c03ed32
-> ```
+> ⛔ **The kickoff inventory that stood here (frame/node/target/pin blobs at
+> `7eaa42a3`, status `ready`) is HISTORY and has been removed rather than left to
+> read as live.** It is durably recorded in `docs/program/issues/ABI-R1.md`, which
+> is now `status: merged` and carries the merge SHA, the blob-identity check with
+> its negative control, and the three-candidate history. ⇒ **Read the node.**
 >
-> ⭐ **The frame's anchor is `d3b9f36c` — six `main`-SHAs stale — and it does not
-> matter, because both load-bearing files are BLOB-IDENTICAL at `7eaa42a3`.** So
-> the verbatim quote at lines 7–10 resolves exactly (I re-read lines 5–12 and
-> matched it), and every line pin in **Fixed inputs** is exact rather than
-> plausible. ⇒ **Staleness is a question about CONTENT, not about SHA distance** —
-> and the blob answers it in one command.
+> Two things from that block are still worth carrying, because they are *general*:
 >
-> ⛔ **The target IS a cited source** — `library/SOURCE-ATTESTATIONS` row 9 holds
-> that exact OID, so editing the prose moves it and the ledger row moves in the
-> **same commit**. Frame `D4` already says this; its own *"row may have drifted"*
-> caveat is **DISCHARGED** — row 9 matches the live blob.
+> ⭐ **Staleness is a question about CONTENT, not SHA distance.** The frame's anchor
+> was six `main`-SHAs stale and it did not matter, because both load-bearing files
+> were **blob-identical** at the kick base. One command answers it; SHA distance
+> never does.
 >
-> ⚠ **Size `S` is about the diff, not the care.** The paragraph being replaced is
-> false and *the obvious replacement is false in the other direction* — `ABI-R2`
-> was withdrawn from this program for exactly that. ⛔ `AFull` did **not** lose
-> `WRITE`/`DELETE`; the word that changes is **"anywhere"**. ⛔ Confinement is a
-> claim about the **resolver**, not about `check_fs_capability`.
+> ⚠ **Size `S` is about the diff, not the care.** The replaced paragraph was false
+> and *the obvious replacement was false in the other direction* — `ABI-R2` was
+> withdrawn from this program for exactly that, and this WP still took three
+> candidates. ⛔ `AFull` never lost `WRITE`/`DELETE`; the word that changed was
+> **"anywhere"**. ⛔ Confinement is a claim about the **resolver**, not about
+> `check_fs_capability`.
 
 > ### ⛔⛔ I SHIPPED FIVE BAD LOCATORS, LIFTED FROM A MUTATION PROOF (fixed, #1001)
 >
