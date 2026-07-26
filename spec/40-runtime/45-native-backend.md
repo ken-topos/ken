@@ -144,19 +144,23 @@ the primary correctness discipline (`AC2`), and it is what makes BE-NotInTCB
 (§2) safe: the backend does not have to be *trusted* to be correct, because
 every divergence from the oracle is a **loud, catchable** failure.
 
-> **Contract BE-Differential (`AC2`).** For any **closed, ground** core term
-> `t`, evaluating `t` through the interpreter and through the native backend
-> must produce **identical K3 values** (content-addressed model, `41 §4`: same
-> slot / same immediate). On any disagreement, **the interpreter is right by
-> definition** (`42 §5`); the backend is the defect. The backend earns trust by
-> agreement over the corpus, not by inspection.
+> **Contract BE-Differential (`AC2`).** For any closed core term `t` whose
+> result is a **closure-free comparable ground observation** (canonical data or
+> a comparable immediate), evaluating `t` through the interpreter and through
+> the native backend must produce **identical K3 values** (content-addressed
+> model, `41 §4`: same slot for canonical data / same immediate). On any
+> disagreement, **the interpreter is right by definition** (`42 §5`); the
+> backend is the defect. The backend earns trust by agreement over the corpus,
+> not by inspection.
 
-This direct identity comparison is intentionally limited to **ground** results.
-Higher-order equivalence is tested by applying the interpreter and backend
-callables to the same well-typed inputs and comparing their ground
-observations. A differential harness MUST NOT compare closure slots, pointers,
-canonical bytes, or code/environment identities. This does not require
-extensional function equality; no such generally decidable equality exists.
+A result containing a callable at any depth is not a direct comparable ground
+observation. The differential harness projects to such callables as needed,
+applies selected well-typed inputs, and compares only the resulting
+closure-free comparable ground observations; separately projected
+closure-free fields may be compared directly. A differential harness MUST NOT
+compare closure slots, pointers, canonical bytes, or code/environment
+identities. This discipline does not require extensional function equality or
+a decision procedure for it.
 
 **The layers-may-differ boundary (the discriminating line).** The backend is
 **allowed** to differ from the interpreter in **internal strategy** — a
@@ -178,8 +182,8 @@ value**. So the corpus discriminates on exactly this line:
 This pair is the seed of the `conformance/runtime/backend/` corpus: it is not
 "does the backend compile," it is "does the backend's *value* agree with the
 oracle's, while its *internals* are free." **Determinism and canonicity carry**
-(`42 §2`): the backend must be deterministic (same term → same value) and
-canonical for closed ground computations, exactly as the interpreter is.
+(`42 §2`): a closure-free comparable ground observation must be deterministic
+(same term → same value) and canonical, exactly as in the interpreter.
 
 The corpus is only as strong as the terms it runs; the **producer** side (the
 real differential harness against the landed interpreter, `crates/ken-interp`)

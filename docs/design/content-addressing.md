@@ -250,8 +250,8 @@ Every source of non-deterministic encoding is eliminated:
   elements).
 
 **Choice: adopt the encoding above as the single canonical byte form.**
-The tag space is deliberately small (256 tags); the current 10 assignments
-leave ample room for future value kinds.
+The tag space is deliberately small (256 tags); the current nine
+content-addressed compound assignments leave ample room for future value kinds.
 
 ## 2. Hashing
 
@@ -417,11 +417,14 @@ above. The exact initial index capacity and resize policy (recommend
 starting at 2¹⁶ buckets, doubling at 70% load) is an X2 tuning constant
 — the algorithm is fixed.**
 
-### 3.5 Benchmark results
+### 3.5 Pre-revision benchmark record
 
-The benchmark harness (`benches/content_addressing.rs`) exercises the
-design at 10³–10⁶ synthetic canonical compound values with 50% duplicates.
-Ordinary closures are not part of the content-addressing benchmark. Results:
+These measurements predate the ordinary-closure boundary in §1.9. The
+generator selected ten synthetic compound kinds, including ordinary
+`Closure`, and the benchmark interned every value classified as compound. The
+acceptance dedup population used the same generator. The results therefore
+describe the superseded universal-interning population, not the revised
+closure-free store contract:
 
 | Benchmark | Value | Note |
 |---|---|---|
@@ -433,26 +436,31 @@ Ordinary closures are not part of the content-addressing benchmark. Results:
 | `fnv1a_1kb` | 1.016 µs | ~1 GB/s hash throughput |
 | `canonical_encode_record` | 238 ns | small record encoding |
 
-**Analysis:**
+**Historical analysis:**
 
-- **Throughput scales reasonably.** Intern throughput declines modestly
+- **Throughput scaled reasonably.** Intern throughput declined modestly
   with data size (6,200 → 2,954 values/ms from 10⁴ to 10⁶), consistent
   with linear-ish scaling given index resizing and arena growth.
-- **Equality is O(1).** Shallow and deep values compare in ~350 ps —
+- **Equality was O(1) for the measured store slots.** Shallow and deep values
+  compared in ~350 ps —
   identical time regardless of value depth (100 nesting levels vs.
-  flat), confirming slot-id compare is the only operation.
-- **Dedup rate matches expected.** The measured dedup rate is within
+  flat), reflecting slot-id comparison.
+- **Dedup rate matched the old population's expectation.** The measured rate
+  was within
   5% of the expected 0.5 (synthetic data with 50% duplicates).
-- **Loud refusal works.** `CapacityExhausted` is returned cleanly at the
+- **Loud refusal worked.** `CapacityExhausted` was returned cleanly at the
   configured limit (test limit 100); no silent drop, alias, or
   corruption.
-- **Memory per distinct value: ~150 bytes** — well under the 2 KiB sanity
+- **Memory per distinct value was ~150 bytes** — well under the 2 KiB sanity
   bound for these small synthetic values.
-- **All 16 lib tests + 3 acceptance tests pass.** The property tests
-  cover canonical encoding determinism (map/set ordering, record field
-  order, bignum minimal limb, kind-tag disambiguation), FNV-1a
-  correctness, intern/dedup behavior, loud-at-limit, slot-id compare,
-  and reset/reclamation.
+- **At measurement time, 16 library tests and 3 acceptance tests passed.**
+  They covered canonical encoding determinism (map/set ordering, record field
+  order, bignum minimal limb, kind-tag disambiguation), FNV-1a correctness,
+  intern/dedup behavior, loud-at-limit, slot-id comparison, and
+  reset/reclamation over the old population.
+
+Remeasurement is due after the implementation excludes ordinary closures and
+closure-containing graphs from canonicalization and interning.
 
 ## 4. Dedup + the lattice non-dependency
 
