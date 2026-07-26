@@ -31,6 +31,126 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
 }
 
+# report_failing_job_logs <failing-checks-json>
+#
+# When publication stops on red CI, fetch the failing jobs' logs and print the
+# subset that shows WHY. Without this the operator gets two job URLs and no cause,
+# and agents hold no GitHub credentials to go look -- so the diagnosis stalls on a
+# human. The publisher already has a token; this reuses it.
+#
+# ⛔ NEVER let this diagnostic change the outcome. Every failure path here is
+#    non-fatal: the caller still dies on the original red-checks condition. A
+#    broken log fetch must not convert a red PR into a crash with no verdict, and
+#    must never be mistaken for a merge.
+#
+# ⛔ GREP THE FULL STREAM, THEN CAP THE RESULT -- never `tail` before the grep.
+#    A probe truncated before its filter is not a measurement of what the filter
+#    was looking for: the real error is usually thousands of lines above the tail.
+#
+# ⚠ CI LOGS ARE LARGE (tens of MB is normal), so every axis is bounded:
+#     jobs        PUBLISHER_FAILLOG_MAX_JOBS=3
+#     download    PUBLISHER_FAILLOG_MAX_BYTES=20971520  (20 MiB)
+#     hit lines   PUBLISHER_FAILLOG_MAX_HITS=40
+#     line width  PUBLISHER_FAILLOG_MAX_COLS=400
+#   ⛔ EVERY BOUND ANNOUNCES ITSELF WHEN IT BITES. A silently truncated log reads
+#      as a complete diagnosis, which is worse than no diagnosis -- the reader
+#      concludes "that's the whole failure" from a window that could not hold it.
+#      The byte cap is deliberately far above real logs so it practically never
+#      fires; if it does, we say so and the grep result is explicitly a FLOOR.
+report_failing_job_logs() {
+  local failing_json="$1"
+  local max_jobs="${PUBLISHER_FAILLOG_MAX_JOBS:-3}"
+  local max_bytes="${PUBLISHER_FAILLOG_MAX_BYTES:-20971520}"
+  local max_hits="${PUBLISHER_FAILLOG_MAX_HITS:-40}"
+  local max_cols="${PUBLISHER_FAILLOG_MAX_COLS:-400}"
+  local name link job_id log_file hits total shown job_n total_jobs bytes truncated
+
+  command -v gh >/dev/null 2>&1 || return 0
+
+  total_jobs="$(printf '%s\n' "$failing_json" | jq 'length' 2>/dev/null || echo 0)"
+  printf '\n===== AUTO-FETCHED FAILING JOB LOGS =====\n' >&2
+  if [ "${total_jobs:-0}" -gt "$max_jobs" ]; then
+    printf '⚠ %s failing check(s); fetching logs for the first %s only.\n' \
+      "$total_jobs" "$max_jobs" >&2
+  fi
+
+  job_n=0
+  while IFS=$'\t' read -r name link; do
+    [ -n "${link:-}" ] || continue
+    job_n=$((job_n + 1))
+    [ "$job_n" -le "$max_jobs" ] || continue
+
+    # Links look like .../actions/runs/<run>/job/<job>. Only the job id can fetch logs.
+    job_id="$(printf '%s' "$link" | sed -nE 's#.*/job/([0-9]+).*#\1#p')"
+    printf '\n--- %s ---\n' "${name:-<unnamed check>}" >&2
+    if [ -z "$job_id" ]; then
+      printf '  (no job id in %s -- not an Actions job; cannot fetch logs)\n' "$link" >&2
+      continue
+    fi
+
+    log_file="$(mktemp)" || continue
+    # {owner}/{repo} are gh placeholders resolved from the current remote.
+    # ⛔ Do NOT hardcode the org -- this repo was renamed ken-topos -> swe-toolkit.
+    #
+    # ⛔ CHECK gh's OWN STATUS VIA PIPESTATUS, never the pipeline's.
+    #    `if ! gh api ... | head -c ...` tests HEAD's exit code, so a failed fetch
+    #    reports success and this branch becomes dead code. Measured: with an
+    #    unusable token the error message never printed. Do not "fix" this by
+    #    relying on `set -o pipefail` -- that couples a local correctness property
+    #    to a global shell option someone can change far from here.
+    #
+    # ⚠ 141 = SIGPIPE, which is EXPECTED and benign: `head -c` closes the pipe once
+    #   the cap is reached, killing a still-writing gh. Treating it as failure would
+    #   report "could not fetch" for exactly the large logs we did fetch.
+    gh api "repos/{owner}/{repo}/actions/jobs/${job_id}/logs" 2>/dev/null |
+      head -c "$max_bytes" >"$log_file"
+    gh_status="${PIPESTATUS[0]}"
+    if [ "$gh_status" -ne 0 ] && [ "$gh_status" -ne 141 ]; then
+      printf '  ⛔ could not fetch logs for job %s (gh exit %s).\n' "$job_id" "$gh_status" >&2
+      printf '     If this persists the token likely lacks the Actions read scope;\n' >&2
+      printf '     the job URL remains authoritative: %s\n' "$link" >&2
+      rm -f "$log_file"
+      continue
+    fi
+
+    bytes="$(wc -c <"$log_file" | tr -d ' ')"
+    truncated=no
+    [ "${bytes:-0}" -ge "$max_bytes" ] && truncated=yes
+
+    # Filter the WHOLE downloaded stream, then cap what we print.
+    hits="$(grep -nEi \
+      '(^|[^[:alnum:]])(error(\[E[0-9]+\])?:|##\[error\]|panicked at|assertion .*failed|test result: FAILED|^failures:|error: could not compile|SIGSEGV|SIGABRT|out of memory|Killed|No space left)' \
+      "$log_file" 2>/dev/null || true)"
+    total="$(printf '%s' "$hits" | grep -c . || true)"
+
+    if [ "$truncated" = yes ]; then
+      printf '  ⛔ LOG TRUNCATED at %s bytes -- the grep below saw ONLY that prefix.\n' \
+        "$max_bytes" >&2
+      printf '     Treat these hits as a FLOOR; the cause may be past the cut.\n' >&2
+    fi
+
+    if [ "${total:-0}" -eq 0 ]; then
+      printf '  (no error-shaped lines matched in %s bytes; last 40 lines instead)\n' \
+        "$bytes" >&2
+      tail -n 40 "$log_file" | cut -c "1-${max_cols}" >&2 || true
+    else
+      shown="$total"
+      [ "$total" -gt "$max_hits" ] && shown="$max_hits"
+      printf '  %s error-shaped line(s) matched in %s bytes; showing %s.\n' \
+        "$total" "$bytes" "$shown" >&2
+      [ "$total" -gt "$max_hits" ] &&
+        printf '  ⚠ %s further match(es) NOT shown.\n' "$((total - max_hits))" >&2
+      printf '  ⚠ This filter is a FLOOR, not the whole failure. Authoritative: %s\n' \
+        "$link" >&2
+      printf '%s\n' "$hits" | head -n "$max_hits" | cut -c "1-${max_cols}" >&2
+    fi
+    rm -f "$log_file"
+  done < <(printf '%s\n' "$failing_json" |
+    jq -r '.[] | [(.name // ""), (.link // "")] | @tsv' 2>/dev/null || true)
+
+  printf '\n===== END FAILING JOB LOGS =====\n' >&2
+}
+
 target=""
 title=""
 description=""
@@ -632,6 +752,9 @@ while :; do
 
   if [ "$failing_count" -gt 0 ]; then
     printf '%s\n' "$failing" | jq -r '.[] | "- \(.name): \(.bucket) \(.link)"' >&2
+    # Two job URLs and no cause stalls the diagnosis on a human with credentials.
+    # ⛔ Non-fatal by construction: we still die on the original condition below.
+    report_failing_job_logs "$failing" || true
     die "PR #$pr_number has failing checks"
   fi
 
