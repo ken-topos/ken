@@ -142,7 +142,8 @@ New machinery you should build **with**, not around:
 | `OwnedChildren::push_steps` impls (the only two: `Vec<Value>`, `BTreeMap<Vec<u8>, Value>`) | `canonical.rs:111`, `:115`, `:124` |
 | `encode_header` — the per-variant header/tag writer, exhaustive over `Value` | `canonical.rs:167` |
 | `encode_canonical_recursive_reference` — the twin reference encoder, **`#[cfg(test)]`** | `canonical.rs:362` (attr at `:361`) |
-| `detach_children` · `rebuild` — the iterative `Drop`/`Clone` worklist machinery | `values.rs:141`, `:182` |
+| `detach_children` · `rebuild` — the iterative `Drop`/`Clone` worklist machinery | `values.rs:138`, `:179` |
+| `Job::Visit` — `Clone`'s worklist arm | `values.rs:309` (`Job` enum at `:299`) |
 
 ⛔ **`encode_canonical_recursive_reference` is `#[cfg(test)]` — it is NOT
 available to production code.** If a deliverable needs a recursive encoder
