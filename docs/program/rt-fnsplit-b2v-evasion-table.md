@@ -928,6 +928,67 @@ than inside a green.
 
 ---
 
+# ⛔ THE CYCLE QUESTION, ANSWERED — and it was a live defect
+
+The ruling on the `Closure` gap says: *"If closure cycles are constructible,
+stop and route rather than recursing accidentally."* I answered that before
+building, and the answer is worse than it sounds.
+
+## Measured: cycles ARE constructible, and the shipped adoption recursed on them
+
+`ken_boundary_store_field_local` refuses only a **persistent parent with an
+invocation-owned child**. So emitted code can allocate two persistent nodes and
+write each as the other's child — and **both writes return `OK`**, through every
+guard: bounds, tag, frozen prefix, escape.
+
+⛔ **This is not a closure question. It was a live defect in the ground adoption
+I shipped at `fe7d8a08`**, which recursed over `Constructor`/`Record` children
+with no cycle guard. `b2v_ac10_a_constructible_node_cycle_is_refused_not_recursed`
+builds the cycle through the emitted interface, asserts both writes are admitted,
+and asserts adoption returns an exact status.
+
+⭐ **M42 is the sharpest mutation on this node.** Removing the guard does not
+redden the control — it **stack-overflows and aborts the test binary**. That is
+precisely the failure the guard prevents, demonstrated rather than argued.
+
+⚠ The positive control cost me a round: my acyclic fixture used arbitrary
+constructor ids, and adoption refused it — correctly, because a node naming an id
+the store never interned has no canonical image. Interning first keeps the
+control about the cycle rather than about symbols.
+
+## Also fixed: adoption was retagging canonicalized children
+
+`adopt_node` rewrote a canonicalized child as `PersistentGround`. For a nested
+`PersistentClosure` that **silently changes what the child is** — the exact
+retagging the ruling forbids. The child's tag is now preserved; it is the
+child's, not the parent's to choose.
+
+## ⛔ WHAT IS NOT IN THIS FOLD — the `Closure` canonical-image layer
+
+**Unstarted, and I am not shipping a partial one.** The ruling requires a closed
+canonical-image layer over `Value::Closure { code_id, captured }`, with `code_id`
+derived from B2O/B2R callable-unit identity in an **artifact-bound** namespace.
+What I established while scoping it, which the next fold can start from:
+
+- `Value::Closure { code_id: u64, captured: Vec<Value> }` **already exists**
+  (`values.rs:74`), so the image layer returns `Value`, not
+  `RuntimeGroundValue` — that is the "do not force `Closure` through
+  `read_ground`" instruction, and it also fixes tag preservation for free,
+  because each child's image kind follows its own node class.
+- ⛔ **`StaticOriginId` is a bare `u32` ordinal** (`semantic_ir.rs:26`) — exactly
+  the "collides across artifacts" case the ruling excludes. It must be combined
+  with `RuntimeArtifactIdentity { package_identity, core_semantic_hash,
+  artifact_hash }` (`artifact_validation.rs:50`), which means the store needs an
+  **artifact binding** it does not currently have, and adoption must fail closed
+  while unbound.
+- Adoption would intern `Value` directly rather than through
+  `persist(RuntimeGroundValue)`, so a `persist_image` seam is needed.
+
+⚠ `HostResult` and `BorrowedOpaque` stay invocation-owned and keep rejecting, per
+the ruling — that part is unchanged and correct.
+
+---
+
 # AC → discharging control
 
 Required by the frame's second amendment (`origin/main` = `fdda953f`): one row

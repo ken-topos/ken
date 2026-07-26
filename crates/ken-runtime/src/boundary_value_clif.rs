@@ -5715,6 +5715,111 @@ mod tests {
         );
     }
 
+    /// `(base, tag_id) -> word` — allocate one persistent `Constructor` with a
+    /// single child slot, leaving the child unwritten.
+    fn emit_cyclic_pair_node(
+        b: &mut FunctionBuilder<'_>,
+        refs: &Refs,
+        p: &[cranelift_codegen::ir::Value],
+        ptr: cranelift_codegen::ir::Type,
+    ) {
+        let (base, tag_id) = (p[0], p[1]);
+        let out = cell(b, ptr);
+        let tag = b
+            .ins()
+            .iconst(types::I64, BoundaryTag::PersistentGround as i64);
+        let class = b
+            .ins()
+            .iconst(types::I64, BoundaryClass::Constructor as i64);
+        let one = b.ins().iconst(types::I64, 1);
+        guard(b, refs.alloc, &[base, tag, class, one, out]);
+        let word = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
+        guard(b, refs.store_tag_id, &[base, word, tag_id]);
+        b.ins().return_(&[word]);
+    }
+
+    /// **`AC-10` — a node CYCLE is constructible by emitted code, and adoption
+    /// refuses it rather than recursing.**
+    ///
+    /// ⛔ **Measured, not assumed.** `ken_boundary_store_field_local` refuses
+    /// only a persistent parent with an *invocation-owned* child — so emitted
+    /// code can allocate two persistent nodes and write each as the other's
+    /// child, and **both writes pass every guard**. The frame said to answer the
+    /// cycle question before recursing; this is the answer, and it means the
+    /// shipped ground adoption had unbounded recursion on a reachable input.
+    ///
+    /// ⚠ MEASURED: both `store_field` calls return `OK`, then adoption returns
+    /// an exact status. CLAIMED: adoption terminates on every reachable graph.
+    /// THE GAP: that the guard is on the *reachability walk* and not on one
+    /// shape — closed by the in-progress set, which is keyed on node index and
+    /// so catches a cycle of any length.
+    #[test]
+    fn b2v_ac10_a_constructible_node_cycle_is_refused_not_recursed() {
+        let (_pm, alloc_pair) = compile_producer(2, emit_cyclic_pair_node);
+        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
+
+        let mut store = BoundaryValueStore::new();
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (4, 4, 0),
+            (0, 0, 0),
+        );
+        let first = BoundaryWord(run3(alloc_pair, f.base, BoundaryWord(1), 0) as u64);
+        let second = BoundaryWord(run3(alloc_pair, f.base, BoundaryWord(2), 0) as u64);
+        assert!(
+            first.0 as i64 > 0 && second.0 as i64 > 0,
+            "both nodes allocate"
+        );
+
+        // ⛔ The cycle itself — and every guard admits it.
+        assert_eq!(
+            run4(store_field, f.base, first.0, 0, second.0),
+            BOUNDARY_OK,
+            "emitted code may write a persistent child into a persistent parent"
+        );
+        assert_eq!(
+            run4(store_field, f.base, second.0, 0, first.0),
+            BOUNDARY_OK,
+            "AC-10: and the reverse edge too — the cycle is CONSTRUCTIBLE"
+        );
+
+        // ⭐ Adoption terminates with an exact status instead of recursing.
+        assert_eq!(
+            store.adopt(first),
+            Err(BOUNDARY_ERR_SHAPE),
+            "AC-10: a cyclic graph has no canonical image and must fail closed"
+        );
+
+        // ⚠ POSITIVE CONTROL — an acyclic graph of the same shape adopts, so
+        // the refusal is about the cycle and not about aggregates.
+        let mut clean = BoundaryValueStore::new();
+        // ⚠ The constructor ids must be REAL interned symbols: a node naming an
+        // id the store never interned has no canonical image, and adoption
+        // correctly refuses it. Interning first keeps this control about the
+        // cycle.
+        let leaf_id = clean.intern_symbol("ctor:fixture::Cycle::Leaf");
+        let root_id = clean.intern_symbol("ctor:fixture::Cycle::Root");
+        let g = bind_with(
+            &mut clean,
+            BoundaryArenaBuilder::new(),
+            (4, 4, 0),
+            (0, 0, 0),
+        );
+        let leaf = BoundaryWord(run3(alloc_pair, g.base, BoundaryWord(leaf_id), 0) as u64);
+        let root = BoundaryWord(run3(alloc_pair, g.base, BoundaryWord(root_id), 0) as u64);
+        let immediate = BoundaryWord::immediate(BoundaryTag::ImmediateInt, 5);
+        assert_eq!(
+            run4(store_field, g.base, leaf.0, 0, immediate.0),
+            BOUNDARY_OK
+        );
+        assert_eq!(run4(store_field, g.base, root.0, 0, leaf.0), BOUNDARY_OK);
+        assert!(
+            clean.adopt(root).is_ok(),
+            "AC-10: the same shape without a cycle must adopt"
+        );
+    }
+
     /// **`AC-1`/`AC-6` — the region thresholds and `referent_owner` are the
     /// same classification.**
     ///

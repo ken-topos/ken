@@ -1565,12 +1565,41 @@ impl BoundaryValueStore {
         // The store takes ownership of what emitted code appended before it
         // validates any of it.
         self.image.0.absorb_published_counts();
-        let index = self.adopt_node(word.payload())?;
+        let mut in_progress = std::collections::BTreeSet::new();
+        let index = self.adopt_node(word.payload(), &mut in_progress)?;
         Ok(BoundaryWord::handle(tag, index))
     }
 
     /// Adopt one node, returning the **canonical** index its value now lives at.
-    fn adopt_node(&mut self, index: u64) -> Result<u64, i64> {
+    fn adopt_node(
+        &mut self,
+        index: u64,
+        in_progress: &mut std::collections::BTreeSet<u64>,
+    ) -> Result<u64, i64> {
+        // ⛔ **A NODE CYCLE IS CONSTRUCTIBLE, and unbounded recursion here would
+        // hang the compiler rather than reject the input.** Measured, not
+        // assumed: `ken_boundary_store_field_local` refuses only a persistent
+        // parent with an *invocation-owned* child, so emitted code can allocate
+        // two persistent nodes and write each as the other's child — both
+        // writes pass every guard. A content-addressed image of such a graph
+        // does not exist, so this fails closed with an exact status.
+        //
+        // ⚠ This was a live defect in the shipped ground adoption, not only a
+        // closure question. The frame told me to answer the cycle question
+        // before recursing; the answer is that they are constructible.
+        if !in_progress.insert(index) {
+            return Err(BOUNDARY_ERR_SHAPE);
+        }
+        let adopted = self.adopt_node_inner(index, in_progress);
+        in_progress.remove(&index);
+        adopted
+    }
+
+    fn adopt_node_inner(
+        &mut self,
+        index: u64,
+        in_progress: &mut std::collections::BTreeSet<u64>,
+    ) -> Result<u64, i64> {
         let slot = self
             .image
             .0
@@ -1604,14 +1633,18 @@ impl BoundaryValueStore {
                 BoundaryReferentOwner::NoReferent => {}
                 BoundaryReferentOwner::InvocationArena => return Err(BOUNDARY_ERR_ESCAPE),
                 BoundaryReferentOwner::PersistentStore => {
-                    let canonical = self.adopt_node(child.payload())?;
+                    let canonical = self.adopt_node(child.payload(), in_progress)?;
                     if canonical != child.payload() {
-                        // The child canonicalized onto an existing store node,
-                        // so the parent must name that one.
-                        self.image.0.set_word_at(
-                            at + offset,
-                            BoundaryWord::handle(BoundaryTag::PersistentGround, canonical),
-                        );
+                        // ⛔ **Preserve the child's OWN tag.** Rewriting it as
+                        // `PersistentGround` would retag a nested
+                        // `PersistentClosure` into a ground handle — a
+                        // canonicalization that silently changes what the child
+                        // *is*. The tag is the child's, not the parent's to
+                        // choose.
+                        let tag = child.tag().ok_or(BOUNDARY_ERR_TAG)?;
+                        self.image
+                            .0
+                            .set_word_at(at + offset, BoundaryWord::handle(tag, canonical));
                     }
                 }
             }
