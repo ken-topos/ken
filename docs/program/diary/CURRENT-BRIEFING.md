@@ -42,14 +42,38 @@
 > signature** — if you find one here, trust `origin/main` and the node over this
 > file.
 >
+> ✅ **RUNTIME ACCEPTED IT — `evt_25cq95ew5xpxb`, 05:55Z.** The leader cut
+> `wp/RT-VALUE-TOTALITY-P1` fresh from `63ad112c`, released it, returned home, and
+> delegated to the implementer with the correct sequence: grounding → **the
+> `AC-V3a` consuming-site measurement FIRST** → implementation → targeted
+> validation → commit → home → exact-SHA handoff. It restated all four settled
+> items and both traps, and told the implementer to hard-stop rather than build
+> around a false fixed input. ⛔ Nothing to correct.
+>
+> ⚠ Their base is `63ad112c`, one commit behind `origin/main` = `b445cd15` (the
+> node's `active` flip, doc-only, a file the ring does not touch). **Not a
+> problem, and NOT worth a message** — but if a merge candidate ever shows a
+> conflict in `docs/program/issues/RT-VALUE-TOTALITY.md`, that is why.
+>
 > **What I am waiting for:** Runtime's first substantive report, or a hard-stop.
 > ⛔ Do not nudge before there is silence to diagnose.
 
-> ### ▶ THE ONLY THING STILL OWED TO ME: the three LANGUAGE retros
+> ### ✅ LANGUAGE RETROS ARE IN — `KW-ORACLE-CLOSURE` IS CLOSED. Nothing owed.
 >
-> Requested `evt_2vk0vbv3gz334`. ⛔ **Do not compact the Language ring until they
-> are posted** — the ring is idle now, so they are at risk, and compaction
-> destroys an unposted retro permanently.
+> Leader `evt_6nh73m6j0zkwd` · implementer `evt_5xqacdzfjmkh2` · QA
+> `evt_45b3h0xmpw9gw`. ⛔ **The Language ring is now FREE and compactable** —
+> the "do not compact until posted" hold is lifted.
+>
+> ⭐ **They refuted the repair I would otherwise have made.** QA: `AC-C1` was
+> **clear and skipped, not ambiguous** — so hardening the AC's prose would have
+> fixed correct text. Implementer: the code seam in front of them
+> (`declaration_lines`) **supplied a default operand** whose mutation was cheap,
+> isolated, compile-preserving, and reddened the right test. Leader: **"nothing"**
+> at their seat could have distinguished it — which rules out a leader-review
+> step. ⇒ `pin-a-property.md §10` now carries the **correction**: naming the
+> operand in the row is **necessary and not sufficient**; the load-bearing
+> obligation is a **reported field** (property · operand that moved · observed
+> boundary), because it is the only one that changes what a reviewer can see.
 
 > ### ⚠ OPERATOR AWAY until **11:30Z** — drafting **THE MISSION** then
 >

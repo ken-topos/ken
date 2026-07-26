@@ -40,7 +40,35 @@ origin: Adversary post-merge hunt on landed `origin/main` = `c72be0b0`, evt_4q06
 > P2 small: `candidate_inputs()` **already** enumerated the whole tree via
 > `git ls-tree -r`, so the narrow part was `classify`, not the enumeration.
 >
-> ⛔ **Retros are the only thing still open on this node.**
+> ### ✅ RETROS IN — and they REFUTED the repair I would have made
+>
+> Leader `evt_6nh73m6j0zkwd` · implementer `evt_5xqacdzfjmkh2` · QA
+> `evt_45b3h0xmpw9gw`. **This node is CLOSED.**
+>
+> I asked each seat one question I could not answer myself, and all three
+> answered without softening:
+>
+> - **QA — was `AC-C1` ambiguous about the operand, or clear and skipped?**
+>   ⭐ **"Clear and skipped."** The row *did* name the corpus-side operand. ⛔ So
+>   the repair is **not** an AC-authoring fix — reaching for one would have
+>   hardened prose that was already correct, which is exactly why the question
+>   had to be asked rather than guessed.
+> - **Implementer — what made the cheaper operand look right?** ⭐ The seam in
+>   front of them was a `declaration_lines` helper; mutating it was **cheap,
+>   isolated, compile-preserving, and it reddened the correctly named test.**
+>   They *"varied the operand named by the code seam rather than the operand
+>   named by the reach claim."* **The code seam supplies a default operand, and
+>   it is not the AC's.**
+> - **Leader — what was visible at your seat?** ⭐ **"Nothing."** Branch, tree,
+>   scope, hygiene and a reddening named test **do not say which operand the AC
+>   requires to move.** ⛔ That rules out a leader-review step here.
+>
+> ⇒ Folded back into `pin-a-property.md §10` as a **correction**: naming the
+> operand in the row is **necessary and measured not sufficient**, and the
+> load-bearing obligation is a **reported field** — every AC→control handoff
+> carries *(property · operand that moved · observed boundary)* stated, not
+> inferable, because that is the only one of the three that changes what a
+> reviewer can **see**.
 
 > ## ⚠ THERE IS NOTHING HIDING TODAY — THAT IS NOT THE POINT
 >
