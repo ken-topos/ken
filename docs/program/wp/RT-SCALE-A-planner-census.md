@@ -126,22 +126,45 @@ provisional run could not see the inner planner at all.
 > — it would touch files `B2V` is rewriting, which is a sequencing decision, not
 > an implementation detail.
 >
-> ### ⚠ OPEN QUESTION FOR THE ARCHITECT — the stack axis moved, and I will not paper over it
+> ### ✅ RULED — `evt_1dgbawkjfs507`, 2026-07-26. BINDING HARNESS SHAPE.
 >
-> `D1` demands the harness run on **the product's 8 MiB stack**. A
-> `#[cfg(test)]` unit test runs on **libtest's spawned-thread stack (~2 MiB by
-> default)**, and `prlimit` governs the process's main thread, **not** libtest's
-> threads.
+> **`D1` REMAINS AN 8 MiB PRODUCT-STACK MEASUREMENT.** ⛔ It is **not** amended
+> down to libtest's ~2 MiB default — **pin the planner worker explicitly
+> instead.** The Architect verified this amended frame at exact `368f8706` and
+> the production tree at `4427147d`.
 >
-> ⭐ **2 MiB is STRICTER than 8 MiB, so this cannot HIDE stack growth** — which
-> is the failure `D1` exists to prevent, and it is not reintroduced. ⛔ **But
-> stricter is not the same as the stated metric**, and a run that overflows at
-> 2 MiB is not evidence it would overflow in the product.
+> ⭐ **Why no public seam:** `StaticTransitionPlan` and
+> `plan_static_transition_graph` are `pub(in crate::cranelift_backend)`;
+> `BoundaryACensus` and `census()` are test-only; and the existing n=3..7 fixture
+> **already invokes the exact production planner** inside `static_transition.rs`.
+> ⛔ **A public seam would create a production contract whose only consumer is a
+> test — unnecessary surface and the wrong architectural trade.**
 >
-> ⇒ **Report the stack the measurement actually ran on, name it in the census,
-> and do not convert a 2 MiB overflow into a product claim.** Whether `D1`'s
-> 8 MiB requirement is amended or the harness must pin its thread stack
-> explicitly is the **Architect's** call.
+> 1. Harness stays in `static_transition.rs` and **must call the real
+>    `plan_static_transition_graph` and `StaticTransitionPlan::census()`.** ⛔ No
+>    copy, no `include!`, no proxy planner, no visibility widening, no new
+>    `pub`/`pub(crate)` census API.
+> 2. Run the census body on a **deliberately created worker whose requested stack
+>    is exactly `8 * 1024 * 1024` bytes.** **Name that nominal stack in every
+>    census and verdict.** ⛔ The small libtest dispatch thread must perform **no
+>    recursive planning work.**
+> 3. ⛔⛔ **PROCESS ISOLATION IS REQUIRED — an in-process `join` ALONE DOES NOT
+>    DISCHARGE `AC-A1`.** A Rust worker stack overflow may **abort its process
+>    rather than return through `join`**, so the failure you most need to catch
+>    is the one `join` cannot report. Use the permanent test as a **supervisor
+>    over an isolated worker invocation** (or an equivalently causal mechanism)
+>    so that **timeout, signal, nonzero exit, missing/malformed result, and stack
+>    failure ALL become the exact third outcome `could_not_determine` and FAIL
+>    the test.** The isolated worker then creates the exact 8 MiB planner thread.
+> 4. ⛔ **Do not infer product failure from the incidental ~2 MiB libtest stack,
+>    and do not use 256 MiB.** The metric is **the explicitly pinned 8 MiB
+>    worker**.
+> 5. `D2`–`D5`, `AC-A1`–`AC-A8`, the exact deferred spelling, and the
+>    `RT-SCALE-B` deferral boundary are **unchanged**.
+>
+> ⭐ **The framing that dissolves the conflict:** *permanence means committed and
+> automatically run — not "must be an integration-test crate."* My original
+> constraint confused the two.
 
 ### `D1` — the harness, permanent and in-tree
 
