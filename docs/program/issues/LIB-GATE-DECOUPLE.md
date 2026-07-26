@@ -1,17 +1,52 @@
 ---
 id: LIB-GATE-DECOUPLE
 title: "main is red on two library documentation-census gates: the currency gate the operator decoupled from merges still fires from inside CI, and a doc-only merge invalidated the ledger unreported"
-status: ready
+status: merged
 owner: verify
 size: S
 gate: none
 depends_on: []
-blocks: [KW-ORACLE-REMOVE]
-github: null
+blocks: []
+github: 1039
 origin: Surfaced 2026-07-26 when PR #1035 (KW-ORACLE-REMOVE, exact 68c3d870, Architect-approved) failed CI on two tests in a different crate. Steward measured the failure at origin/main=11b21039 WITHOUT the candidate — 29 passed, 2 failed — proving the red pre-exists. Root cause is Steward's own doc-only merge 95bc855c (PR #1031). Steward-filed per COORDINATION §2.
 ---
 
-> ## ⛔⛔ `main` IS RED AND THE BLOCKED CANDIDATE IS INNOCENT
+> ## ✅ MERGED 2026-07-26 — PR #1039, `origin/main = f84e4804`
+>
+> **Exact `d09f7830d2e7fb0331484be99761e758bf884701`**, Decision
+> `dec_3z467d3br3z4k` (`resolved`, `resolved_by` = architect).
+> Verified by **blob identity**, not ancestry: `library_documentation_gates.rs`
+> on `main` is `811851e4`, byte-identical to the approved candidate; landed tree
+> `c5633d6a` matched the tree CI checked; `#[test]` count 31 → 26.
+> Candidate preserved at `preserved/lib-gate-decouple-d09f7830` — ⛔ the publisher
+> deleted the `wp/` branch on merge, so that ref is the durable handle.
+>
+> **Five tests removed, not two.** QA blocked the first candidate (`20805228`)
+> on a third live-document dependency it found independently; the fold went to
+> five. ⭐ The failing-test list was NOT the scope.
+>
+> ## ⛔ MY STATED RESIDUAL WAS TOO NARROW — the Architect held approval over it
+>
+> `AC-5` said only *"citations may drift."* True, and a fraction of what the
+> deletion retires. ⭐ **I described the bug I was fixing, not the capability I
+> was deleting** — they coincide only by accident. The full residual, split
+> because the two do not cost the same:
+>
+> | assurance | disposition |
+> |---|---|
+> | source currency, generated currency, cited-source attestations | **DEFERRED** — `gen-doc-status.sh` / `gen-source-attestations.sh` are kept and unchanged; they run at release points |
+> | live agent manifest/schema/module contracts, controlled sources, `measured_tokens`, manifest↔pack parity, pack graph, evaluation-corpus closure, manifest token agreement, real-manifest layout, and 9 of the 11 validation routes | **RETIRED** — zero remaining automated consumer, measured |
+>
+> ⚠ **Entrypoints removed, machinery retained.** `VALIDATION_GATES` and its 11
+> check functions remain as dead code (warnings only — the tree sets no
+> `-D warnings`). Disclosed as a **re-arm door**, not a blocker; both reviewers
+> saw it and neither required its removal.
+>
+> ⚠ **Consequence for the next spec WP:** 13 `spec/` files are attested cited
+> sources. Editing one now drifts the ledger with **nothing reporting it**. That
+> duty moved into `SPEC-STORE-SPLIT`'s frame as `AC-8`.
+
+> ## ⛔⛔ `main` WAS RED AND THE BLOCKED CANDIDATE WAS INNOCENT
 >
 > `KW-ORACLE-REMOVE` exact `68c3d870` is **correct, Architect-approved
 > (`dec_200k7z471z9x6`, `resolved`), and cannot land** until this clears. ⛔ Do
