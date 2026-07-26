@@ -6,7 +6,7 @@ ba72396b7fac154fdb333017840100d26e25f961	catalog/examples/CommandLine/Forge.ken.
 e5ddb3aaecdce01733ad8a90b588b49c3268167c	catalog/guide/proof-techniques.ken.md
 9a1e8273ce56b6108e99f6ee1d72c9dc4ed25fe7	catalog/guide/surface-reference.ken.md
 0266a7a7ffb3e9464e783daf6565d50f2f73e2d7	catalog/packages/Capability/Console/Text.ken.md
-59fbe76dde61a9ab3a1d4599088c60f04502ea89	catalog/packages/Capability/Filesystem/Errors.ken.md
+a997783121fdc55d0021e5e907e1bd7cd20b1a06	catalog/packages/Capability/Filesystem/Errors.ken.md
 d0b8ff6eba911c032e9acd29421988a85c9b8ea9	catalog/packages/Capability/System/IO.ken.md
 1d650cf0fbb93b5769e0575b74faa4b489bff6b5	catalog/packages/Core/Classes/EffectfulClasses.ken.md
 bb82debfefd9fbed243e3a910db65c50e103fa44	catalog/packages/Core/Classes/LawfulClasses.ken.md
