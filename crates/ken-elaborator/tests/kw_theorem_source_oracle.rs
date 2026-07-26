@@ -54,6 +54,164 @@ const NON_FENCED_ORACLES: &[NonFencedOracle] = &[NonFencedOracle {
     reason: "the proof-terminal task embeds complete Ken declarations as plain text",
 }];
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OccurrenceDisposition {
+    OrdinaryEnglish,
+    IntentionalResidual,
+}
+
+struct AllowedOccurrences {
+    path: &'static str,
+    lines: &'static [(usize, usize)],
+    disposition: OccurrenceDisposition,
+    reason: &'static str,
+}
+
+// KW-THEOREM AC-2's review-visible leave/residual classification. Each tuple is
+// `(line, occurrence count)`, so a new occurrence on an existing line also
+// reddens instead of inheriting that line's prior classification.
+const ALLOWED_OCCURRENCES: &[AllowedOccurrences] = &[
+    AllowedOccurrences {
+        path: "agent/memory/fleet/a-vacuous-law-has-zero-trust-delta.md",
+        lines: &[(44, 1), (57, 1), (61, 1)],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "mathematical prose names a helper result",
+    },
+    AllowedOccurrences {
+        path: "catalog/guide/proof-techniques.ken.md",
+        lines: &[(8, 1), (274, 1), (348, 1)],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "proof guidance names helper results",
+    },
+    AllowedOccurrences {
+        path: "catalog/guide/surface-reference.ken.md",
+        lines: &[(372, 1)],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "surface guidance names a helper result",
+    },
+    AllowedOccurrences {
+        path: "catalog/packages/Core/Classes/EffectfulClasses.ken.md",
+        lines: &[
+            (189, 1),
+            (615, 1),
+            (1069, 1),
+            (1172, 1),
+            (1180, 1),
+            (1183, 1),
+            (1185, 1),
+            (1190, 1),
+            (1243, 1),
+            (1346, 1),
+            (1514, 1),
+            (1863, 1),
+            (3352, 1),
+        ],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "package prose names mathematical helper results",
+    },
+    AllowedOccurrences {
+        path: "catalog/packages/Data/Collections/Derived.ken.md",
+        lines: &[(673, 1), (674, 1), (849, 1)],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "package prose names mathematical helper results",
+    },
+    AllowedOccurrences {
+        path: "catalog/packages/Data/Collections/Map.ken.md",
+        lines: &[
+            (3910, 1),
+            (3931, 1),
+            (5662, 1),
+            (7604, 1),
+            (9533, 1),
+            (12427, 1),
+            (13594, 1),
+        ],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "package prose names mathematical helper results",
+    },
+    AllowedOccurrences {
+        path: "catalog/packages/Data/Numeric/Nat/Order.ken.md",
+        lines: &[(256, 1), (309, 1)],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "package prose names mathematical helper results",
+    },
+    AllowedOccurrences {
+        path: "conformance/surface/declarations/seed-named-proof-claims.md",
+        lines: &[(31, 1), (43, 1), (49, 1), (51, 1)],
+        disposition: OccurrenceDisposition::IntentionalResidual,
+        reason: "AC-2(d)/AC-4 retains the retired spelling in its anchor, source, and diagnostic",
+    },
+    AllowedOccurrences {
+        path: "docs/program/07-catalog-style-guide.md",
+        lines: &[(157, 1), (158, 1), (205, 1), (431, 1), (443, 1)],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "catalog guidance names helper results",
+    },
+    AllowedOccurrences {
+        path: "docs/program/diary/2026/Jul/21.md",
+        lines: &[
+            (370, 1),
+            (383, 1),
+            (655, 1),
+            (705, 1),
+            (751, 1),
+            (1261, 1),
+            (1283, 1),
+            (1405, 1),
+        ],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "historical narrative names mathematical helper results",
+    },
+    AllowedOccurrences {
+        path: "docs/program/wp/KM-sigma-eq-pair-refl.md",
+        lines: &[(50, 1)],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "work-package prose names a helper result",
+    },
+    AllowedOccurrences {
+        path: "docs/program/wp/SPAN-SEAL-buffer-span-producer-closure.md",
+        lines: &[(16, 1), (59, 1), (112, 2)],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "work-package prose names helper results",
+    },
+    AllowedOccurrences {
+        path: "docs/program/wp/SURF-named-proof-claims.md",
+        lines: &[(147, 2), (179, 1)],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "work-package prose names helper results",
+    },
+    AllowedOccurrences {
+        path: "docs/program/wp/let3-catalog-let-pilot.md",
+        lines: &[(58, 1), (59, 1)],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "work-package prose names a helper result",
+    },
+    AllowedOccurrences {
+        path: "docs/program/wp/str-bij-overclaim-erratum.md",
+        lines: &[(53, 1), (135, 1)],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "work-package prose names a helper result",
+    },
+    AllowedOccurrences {
+        path: "library/learn/reading-ken/02-types-contracts-and-proofs.md",
+        lines: &[(102, 1), (130, 1)],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "learning prose names mathematical helper results",
+    },
+    AllowedOccurrences {
+        path: "spec/30-surface/33-declarations.md",
+        lines: &[(381, 1), (584, 1)],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "normative prose names mathematical helper results",
+    },
+    AllowedOccurrences {
+        path: "spec/30-surface/38-ffi-io.md",
+        lines: &[(615, 1)],
+        disposition: OccurrenceDisposition::OrdinaryEnglish,
+        reason: "normative prose names a mathematical helper result",
+    },
+];
+
 #[derive(Debug, Eq, PartialEq)]
 struct RetiredOccurrence {
     line: usize,
@@ -208,21 +366,20 @@ fn markdown_ken_lines(source: &str) -> Result<MarkdownKenLines<'_>, String> {
     })
 }
 
-fn declaration_lines(class: SourceClass, source: &str) -> Result<Vec<(usize, &str)>, String> {
+fn occurrence_lines(class: SourceClass, source: &str) -> Result<Vec<(usize, &str)>, String> {
     if class.is_markdown() {
-        Ok(markdown_ken_lines(source)?.lines)
-    } else {
-        Ok(source
-            .lines()
-            .enumerate()
-            .map(|(i, line)| (i + 1, line))
-            .collect())
+        markdown_ken_lines(source)?;
     }
+    Ok(source
+        .lines()
+        .enumerate()
+        .map(|(i, line)| (i + 1, line))
+        .collect())
 }
 
 fn retired_occurrences(class: SourceClass, source: &str) -> Result<Vec<RetiredOccurrence>, String> {
     let mut findings = Vec::new();
-    for (line, text) in declaration_lines(class, source)? {
+    for (line, text) in occurrence_lines(class, source)? {
         for offset in retired_occurrence_offsets(text) {
             findings.push(RetiredOccurrence {
                 line,
@@ -259,12 +416,43 @@ fn retired_findings(
     findings
 }
 
+fn occurrence_census(findings: &[(String, RetiredOccurrence)]) -> BTreeMap<(String, usize), usize> {
+    let mut census = BTreeMap::new();
+    for (path, finding) in findings {
+        *census.entry((path.clone(), finding.line)).or_default() += 1;
+    }
+    census
+}
+
+fn allowed_occurrence_census() -> BTreeMap<(String, usize), usize> {
+    let mut census = BTreeMap::new();
+    for file in ALLOWED_OCCURRENCES {
+        assert!(!file.reason.is_empty(), "{} needs a reason", file.path);
+        assert!(
+            matches!(
+                file.disposition,
+                OccurrenceDisposition::OrdinaryEnglish | OccurrenceDisposition::IntentionalResidual
+            ),
+            "{} needs an AC-2 disposition",
+            file.path
+        );
+        for &(line, count) in file.lines {
+            assert!(
+                census.insert((file.path.to_owned(), line), count).is_none(),
+                "{}:{line} is classified twice",
+                file.path
+            );
+        }
+    }
+    census
+}
+
 // MEASURED: every UTF-8 file in the exact `git ls-tree` candidate is classified
 // by Ken content, with one named self-exclusion, structurally recognized
 // evaluation results, and one named non-fenced fixture representation; all
-// selected Ken lines are scanned for retired occurrences.
-// CLAIMED: no retired occurrence survives in tracked Ken source or a source
-// oracle except the enumerated AC-2(d)/AC-4 negative control.
+// lines of every selected file are scanned for retired occurrences.
+// CLAIMED: every retired occurrence in tracked Ken source or a source oracle is
+// enumerated as either ordinary-English leave or intentional AC-2(d) residual.
 // THE GAP: this source oracle observes tracked text and Ken-fence structure, not
 // parser semantics; the same-harness AC-4 test separately pins lexing, full
 // elaboration, formatting, and the exact negative diagnostic.
@@ -276,16 +464,10 @@ fn exact_candidate_has_no_unclassified_retired_occurrences() {
     let findings = retired_findings(&candidate, inputs);
 
     assert_eq!(
-        findings,
-        vec![(
-            "conformance/surface/declarations/seed-named-proof-claims.md".to_owned(),
-            RetiredOccurrence {
-                line: 43,
-                column: 3,
-                text: "lemma kw_theorem_refl (x : Bool) : Equal Bool x x = Refl".to_owned(),
-            },
-        )],
-        "every residual retired declaration must be an enumerated AC-2(d) control"
+        occurrence_census(&findings),
+        allowed_occurrence_census(),
+        "every retired occurrence must have an exact AC-2 leave/residual classification; \
+         findings: {findings:#?}"
     );
 }
 
@@ -295,7 +477,8 @@ fn occurrence_scan_reaches_every_population_class_beyond_declaration_heads() {
     let controls = [
         (
             SourceClass::FencedKen,
-            "ordinary prose\n```ken\nconst names : String = \"lemmas lemma_identifier\"\n```\n",
+            "Retired lemmas remain forbidden in prose.\n```ken\nconst name : String = \
+             \"lemma_identifier\"\n```\n",
         ),
         (
             SourceClass::RawKen,
@@ -327,7 +510,7 @@ fn occurrence_scan_reaches_every_population_class_beyond_declaration_heads() {
             .count();
         assert_eq!(
             class_findings, 2,
-            "{class:?} must expose plural and derived occurrences beyond a declaration head"
+            "{class:?} must expose both planted occurrences beyond a declaration head"
         );
     }
 }
