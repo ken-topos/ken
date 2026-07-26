@@ -70,10 +70,10 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined) · DONE
 | `30-surface/38-ffi-io.md` | `Bytes`, binary I/O, FFI | DRAFT |
 | `30-surface/39-elaboration.md` | Surface → kernel elaboration, implicits, inference | DRAFT |
 | `40-runtime/README.md` | Runtime / reference-semantics overview | DRAFT |
-| `40-runtime/41-values.md` | Value rep, content-addressed heap, O(1) structural eq, dedup | DRAFT |
+| `40-runtime/41-values.md` | Value model, durable canonical bytes, extensional equality, private runtime representation | DRAFT |
 | `40-runtime/42-evaluation.md` | Operational semantics of the reference interpreter | DRAFT |
 | `40-runtime/43-termination.md` | Totality, SCT, partial/`unknown` execution | DRAFT |
-| `40-runtime/44-capacity.md` | Content store; slot-ceiling decision; lattice's real roles | DRAFT |
+| `40-runtime/44-capacity.md` | Runtime resource profile; loud limits; private storage; lattice's optional roles | DRAFT |
 | `40-runtime/46-checked-core-package.md` | Checked-core package v0 | DRAFT |
 | `40-runtime/47-erasure-runtime-ir.md` | Erasure/runtime IR seed | DRAFT |
 | `40-runtime/48-executable-artifact-contract.md` | Artifact contract | DRAFT |

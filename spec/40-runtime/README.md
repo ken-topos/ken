@@ -4,8 +4,8 @@
 > boundary, and reference-semantics role; capacity/representation choices are
 > flagged OQ.
 > Contract for WS-X (X1/X2, later X3/X4). It rests on two design commitments:
-> **heterogeneous typed values (not uniform f64)** and **FNV-1a + memcmp content
-> addressing (not Leech-lattice geometry)**.
+> **heterogeneous typed values (not uniform f64)** and **deterministic durable
+> canonical bytes separated from private in-process representation**.
 
 The **interpreter is the reference semantics** (`../00-overview.md §3`): the
 meaning of a Ken program *is* its evaluation here. A later native backend (X3)
@@ -16,17 +16,16 @@ which later backends are validated).
 ## 1. What the runtime provides
 
 1. A **value model** (`41-values.md`): how Ken values are represented —
-   heterogeneous typed immediates for scalars, a **content-addressed heap** for
-   closure-free canonical compound data with O(1) structural equality and
-   global deduplication, and runtime-local opaque ordinary closures.
+   heterogeneous typed values, deterministic durable bytes for closure-free
+   canonical data, private in-process storage, and runtime-local opaque
+   ordinary closures.
 2. The **operational semantics** (`42-evaluation.md`): how core terms reduce to
    values, how effects act, and how `unknown` propagates through partial
    programs.
 3. **Termination/totality at runtime** (`43-termination.md`): what is guaranteed
    total (the kernel-checked core) vs. where partiality/`unknown` can appear.
-4. The **content store and its limits** (`44-capacity.md`): addressing, dedup,
-   reclamation, and the (deliberately chosen, not numerologically fixed)
-   capacity story.
+4. The **runtime resource contract** (`44-capacity.md`): loud declared limits,
+   semantics-invisible reclamation, and private storage choices.
 5. The **checked-core package** (`46-checked-core-package.md`): the stable
    post-elaboration, kernel-admitted compiler input, including version,
    semantic-hash, metadata, and trust-coverage rules.
@@ -42,20 +41,23 @@ which later backends are validated).
 
 ## 2. The two design commitments this section encodes
 
-- **No uniform f64.** Scalars (`Int`, `Bool`, `Float`, handles) are **unboxed,
-  typed** machine values, never routed through a float or a heap slot (`41 §1`).
-  Each value's static type fixes its representation directly (`35-numbers.md`).
-- **Conventional content addressing.** The heap is addressed by a **fast hash
-  (FNV-1a-style) + `memcmp`**, with slot ids a monotonic counter — **not** by
-  Leech-lattice geometry or Co₀-orbit canonicalization, which are *never* on the
-  allocation path (`41 §3`, `44`). The Leech/Golay/Co₀ machinery, if used at
-  all, is scoped to three *separate, optional* roles (`44 §4`).
+- **No uniform f64.** Scalars (`Int`, `Bool`, `Float`, handles) retain their
+  declared types and operations; they are never routed through a semantic
+  decode-from-float stratum (`41 §1`). A runtime may use unboxed machine values
+  or another private representation without changing the value
+  (`35-numbers.md`).
+- **Canonical durability, private runtime representation.** Closure-free
+  canonical values crossing a durable boundary have deterministic bytes;
+  copying, sharing, interning, hashing, indexing, and allocation are private
+  runtime choices (`41 §3`, `44`). Leech/Golay/Co₀ machinery is not a semantic
+  dependency and, if used at all, stays in optional profiled roles (`44 §4`).
 
 ## 3. Design principles
 
-- **Immutability + canonical-data sharing.** Pure values are immutable; equal
-  canonical data is shared (dedup). Ordinary closures are runtime-local opaque
-  callables with no structural or persistent identity (`41 §2.1`).
+- **Immutability without observable representation.** Pure values are
+  immutable; copying or sharing equal data does not change program behavior.
+  Ordinary closures are runtime-local opaque callables with no structural or
+  persistent identity (`41 §2.1`).
 - **Loud refusal over silent degradation.** Resource limits fail loudly, never
   silently corrupt (`44`) — independent of any specific Leech-derived numbers.
 - **Reference first, performance behind it.** The interpreter is simple and
@@ -65,8 +67,9 @@ which later backends are validated).
 ## 4. What WS-X must deliver (ties to X1/X2, G1/G6/G5-perf)
 
 The reference interpreter (X1) that runs the G1 vertical slice and is the
-reference semantics for everything after; the content-addressed canonical-data
-runtime (X2) with O(1) equality + dedup, conventional addressing, and a
+reference semantics for everything after; the canonical-data runtime (X2) with
+deterministic durable bytes, private in-process representation, and a
 runtime-local opaque callable boundary; and (later) the native backend (X3) +
-scale validation (X4) with any capacity boundary *deliberate and loud*.
+scale validation (X4) with any declared capacity boundary *deliberate and
+loud*.
 Conformance: `../../conformance/runtime/`.

@@ -43,8 +43,8 @@ points, never silently:
    terminating definition as **opaque** (`../10-kernel/17 §4`), it never
    δ-reduces (so it cannot break conversion) but may diverge at *runtime*. This
    is an explicit, surfaced choice, not a default.
-5. **Resource-limit exhaustion** — a `space`'s interning store or arena hitting
-   its capacity bound raises `CapacityExhausted` (`44 §2`): a **loud,
+5. **Resource-limit exhaustion** — a runtime resource profile hitting its
+   declared bound raises `CapacityExhausted` (`44 §2`): a **loud,
    catchable** fault surfaced at the `space` boundary, **never** a silent
    drop/alias. **Distinct** from the partial-primitive class (case 2): the
    program stays logically total — this is a runtime *resource* bound, so Ken

@@ -752,8 +752,9 @@ space Counter {
   **state-passing fold** of the interaction tree (§4.2), imperative surface,
   functional denotation.
 - A `space` is the **only** place identity-bearing mutable state exists; pure
-  values are immutable. Closure-free canonical data is content-addressed;
-  ordinary closures and graphs containing them are runtime-local and opaque
+  values are immutable. Closure-free canonical data has deterministic bytes at
+  durable boundaries, while its in-process storage is private. Ordinary
+  closures and graphs containing them are runtime-local and opaque
   (`../40-runtime/41-values.md §2.1`).
 
 State has **two surfaces over one denotation**: the imperative `space` block
@@ -830,14 +831,18 @@ discharged by `refl` (`16 §2`).
 ### 4.4 Concurrency & isolation — shared-nothing (`OQ-Space` DECIDED)
 
 For *in-Ken* communication, spaces are **shared-nothing**: they share no mutable
-memory and communicate only by passing immutable, closure-free,
-content-addressed value graphs (actor-style). A message boundary rejects an
-ordinary closure nested at any depth before publication (`41 §2.1`).
+memory and communicate only by passing immutable, closure-free value graphs
+(actor-style). A durable message boundary applies deterministic canonical bytes
+to admitted values and rejects an ordinary closure nested at any depth before
+publication (`41 §2.1`).
 Live-domain invocation across artifacts is a distinct non-serialized boundary;
 it does not permit messaging a closure through this path. Isolation is
 therefore a **guarantee**, not a discipline — no shared mutable state ⇒ no data
 races — on which capability revocation and confinement rest
-(`../60-security/62 §4`, ADR 0004). This pairs with the rest of the model: a
+(`../60-security/62 §4`, ADR 0004). Physical copying, sharing, interning, and
+storage ownership are private runtime choices and do not weaken this
+no-shared-mutable-authority guarantee (`../40-runtime/44 §1a`). This pairs with
+the rest of the model: a
 space handle is a **capability** (§3), send/receive are **effects** (§2),
 messages carry **IFC labels** (§3), and message events are **Ward's behavioral
 alphabet** (`../70-behavioral/`). The **runtime realization** — process, thread,

@@ -14,10 +14,10 @@
 > the FFI are how a verified core meets the outside world; the **boundary
 > discipline** matters more than the syntax.
 >
-> **L6 grounding (perishable-frame reconcile):** `Bytes` is the landed `41 §3a`
-> content-addressed kind tag `0x05` (an interned compound, `41 §5`); its
-> addressing is FNV-1a + `memcmp` (`41 §3`), **not** the serialization/Merkle
-> hash (`§1.5`). Effect tracking rides L5's row system (`36 §1`); the one kernel
+> **L6 grounding (perishable-frame reconcile):** `Bytes` has the landed durable
+> canonical kind tag `0x05` (`41 §3a`); its in-process representation is private
+> and is distinct from the serialization/Merkle hash (`§1.5`). Effect tracking
+> rides L5's row system (`36 §1`); the one kernel
 > admission L5's effect *denotation* needed — W-style (Π-bound) recursive
 > inductives for the `ITree` `Vis` node (`14 §8.4`) — **has landed in K1.5**
 > (`check_no_pi_bound_recursive` retired, `crates/ken-kernel/src/inductive.rs`),
@@ -60,17 +60,15 @@ registered operation symbols, listed in the trusted-base ledger (`18 §5`).
 
 - **Immutable and finite.** A `Bytes` value never changes after construction;
   there is **no mutating operation** in the surface (the AC1 structural
-  property). "Updating" bytes (e.g. `slice`, `concat`) **allocates a new value**
-  and shares nothing observable with the old one — the `41 §2` append-mostly,
-  immutable-heap discipline.
-- **Runtime representation (landed `41`).** `Bytes` is a **content-addressed,
-  interned compound** (`41 §5` table): stored once in the heap, keyed by the
-  hash of its canonical bytes, with **O(1) structural equality** by slot-id
-  (`41 §4`). Its canonical encoding (`41 §3a`) is the **kind tag `0x05`**
-  followed by the raw byte sequence (length-determined); two `Bytes` values with
-  identical content encode identically and share a slot. In-process addressing
-  uses **FNV-1a + `memcmp`** (`41 §3`) — distinct from the cryptographic/Merkle
-  hash used for serialization (`§1.5`); two hashes, two jobs.
+  property). "Updating" bytes (for example, `slice` or `concat`) returns a value
+  without changing either input. Allocation, copying, and sharing are private
+  runtime choices (`41 §2`).
+- **Durable encoding and private runtime representation (landed `41`).** The
+  canonical encoding (`41 §3a`) is the **kind tag `0x05`** followed by the raw
+  byte sequence (length-determined). Two `Bytes` values with identical content
+  encode identically and compare equal. Their in-process addressing, storage,
+  and equality acceleration are private; they are distinct from the
+  cryptographic/Merkle hash used for serialization (`§1.5`).
 - **The `(ptr, len)` boundary.** A `Bytes` value's machine face is a
   `(pointer, length)` pair (`38 §2` marshalling, `41 §1`). L6 keeps this
   boundary clean and explicit so **L7's** `foreign` marshalling (`Bytes` ↔ a C
@@ -681,7 +679,7 @@ following the primitive lowering (`41 §1`):
 |---|---|---|
 | scalars `Int*`/`UInt*`/`Float*`/`Bool`/`Char` | the named machine type (`i64`/`f64`/`i1`/`u32`/…) | `41 §1` typed immediates |
 | `Bytes` | **`(ptr, len)`** — a pointer + length pair | L6 `§1.1`, `41 §1` |
-| handle / `section` | tagged pointer / slot-id (transport convention) | `41 §1`/`§3`, `44` |
+| handle / `section` | runtime-defined opaque handle | `41 §1`, `44` |
 
 - `Bytes` ↔ `(ptr, len)` is the **L6 boundary** (`§1.1`) — L7 **rides it, does
   not re-derive** (guardrail). L6 keeps that boundary clean and explicit

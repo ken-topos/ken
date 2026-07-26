@@ -3,7 +3,7 @@
 Format: `../../README.md`. These pin the **reference interpreter** that **X1**
 delivers (`docs/program/wp/X1-interpreter.md`,
 `spec/40-runtime/42-evaluation.md`): evaluate **core terms** (`10-kernel/11`,
-the elaborator's output) to **values** (`41`, the K3 content-addressed model),
+the elaborator's output) to **values** (`41`, the runtime value model),
 realizing exactly the kernel's reductions (`17 §1`), **deterministically**, with
 **canonicity** for closed ground computations, and `unknown` propagation.
 **Pure-core (G1) scope** — effects are deferred (below). They extend — and must
@@ -25,7 +25,7 @@ end-to-end, so the cases carry the tag and the never-regress bar.)
 
 **Tags.** `(oracle)` — confirmed at build time against Ken's interpreter (safe:
 X1 not in the type-soundness TCB): **interpreter-internal** observations (the
-evaluation *trace*, which subterms are interned, slot-id specifics), and — per
+evaluation trace and permitted reuse), and — per
 `42 §3.3`/`16 §9.1` — the `cast Type Type` non-`refl` reduction and certain
 quotient-transport edge cases, which X1 **inherits as `(oracle)`** and does
 **not** lock (ground from `16` + the conformance oracle at build time; the
@@ -52,8 +52,9 @@ headings/the draft — the L5 `§2.1` lesson,
 is **the eliminator's methods held unevaluated** — `if`/`match`/`&&`/`||` all
 elaborate to `elim_D`, and only the scrutinee-selected method fires (ι); it is
 **not** a special rule (`42 §2`, `§3.3`), so CAN3 cites that mechanism and its
-bug ("methods evaluated strictly before selection"); (b) dedup is asserted by
-**slot identity**, not `==` (`42 §3.4`, `§3.7`); (c) the `unknown` absorbing
+bug ("methods evaluated strictly before selection"); (b) equal subcomputations
+are compared by extensional observations, never slot identity (`42 §3.4`,
+`§3.7`); (c) the `unknown` absorbing
 connectives **are** the untaken-eliminator-arm rule (`42 §4`); (d) functions
 evaluate to **closures** (WHNF), data to **full** normal form, and
 kernel-agreement on functions is **up to η at compare time** (`42 §3.5`); (e)
@@ -64,16 +65,17 @@ grounded in the landed `42` + the **K2 `seed-observational` locked reductions**
 computes) + `17 §1`/`16 §9`.
 
 **Citations.** `42-evaluation.md` §1 (reduction table: β/Σ-β/ι/δ/prim/obs, the
-kernel-agreement source), §2 (CBV-with-sharing; the eliminator-branch non-strict
-position), §3.2 (`eval`/`apply`), §3.3 (per-form reduction; obs with the
-C-numbers), §3.4 (sharing + dedup, O(1) slot equality), §3.5 (WHNF-vs-full
-boundary, η-at-compare, levels carried), §3.6 (canonicity), §3.7 (determinism),
+kernel-agreement source), §2 (CBV with evaluation-once binding reuse; the
+eliminator-branch non-strict position), §3.2 (`eval`/`apply`), §3.3 (per-form
+reduction; obs with the C-numbers), §3.4 (evaluation reuse with private
+representation), §3.5 (WHNF-vs-full boundary, η-at-compare, levels carried),
+§3.6 (canonicity), §3.7 (determinism),
 §4 (`unknown` propagation), §6 (effects deferred / stuck forms). Kernel: `17 §1`
 (β, Σ-projection, ι, δ, obs, prim), `16 §2.2`/`§3.2`/`§5`/`§6` (observational
 computations, C2–C6/C9/C10), `16 §9.1` (the `(oracle)` cast/transport edges),
 `14 §5` (audited prim). The **K2 locked reductions**
 `kernel/observational/seed-observational.md` (`cast-refl`, `cast-computes-*`,
-`quotient-eq`, `quotient-elim`, `eq-inductive-*`). Heap:
+`quotient-eq`, `quotient-elim`, `eq-inductive-*`). Value model:
 `41 §2`/`§2.1`/`§3a`/`§4`/`§6`. V0:
 `surface/elaboration/seed-elaboration.md` (the G1 elaboration X1 runs).
 
@@ -93,9 +95,9 @@ deferred stuck forms, `42 §6`.)
 - given: a closed `Nat` computation, e.g. `add 2 3` (δ-unfold `add`, ι on the
   `Nat` eliminator, or `prim` where `Nat`/`Int` is primitive, `42 §3.3`).
 - expect: **reduces-to** the constructor form `5`
-  (`suc (suc (suc (suc (suc zero))))`, or the `Int`-immediate `5` if primitive —
-  exact representation `(oracle)`, `41 §1`); **fully** evaluated (`42 §3.5`),
-  **not** stuck/neutral.
+  (`suc (suc (suc (suc (suc zero))))`, or the typed `Int` value `5` if
+  primitive); **fully** evaluated (`42 §3.5`), **not** stuck/neutral. The
+  scalar's private representation is not observed (`41 §1`).
 - why: the canonicity headline — a closed inductive computation reaches a
   constructor. A bug that leaves the eliminator neutral (un-fired ι) yields a
   stuck term, not `5` — the verdict flips value-vs-stuck. (soundness; AC1.)
@@ -152,24 +154,24 @@ deferred stuck forms, `42 §6`.)
 
 ---
 
-## CAN2 — determinism + canonical-data sharing (frame AC2)
+## CAN2 — determinism + canonical observations (frame AC2)
 
 Evaluation of a closed term is a **function** (same term → same value,
-`42 §3.7`). Closure-free canonical results are **shared** via the
-content-addressed heap: equal subcomputations dedup to the **same slot id**
-(`42 §3.4`), making `==` an O(1) slot compare (`41 §4`). Ordinary closures are
-outside that identity contract (`41 §2.1`); their deterministic behavior is
-observed only through selected applications to closure-free ground results.
+`42 §3.7`). Equal closure-free canonical results have equal extensional
+observations and identical durable canonical bytes where publication is
+requested (`42 §3.4`, `41 §4`). Copying or sharing them is private. Ordinary
+closures are outside that identity contract (`41 §2.1`); their deterministic
+behavior is observed only through selected applications to closure-free ground
+results.
 
 ### runtime/evaluation/det-same-term-same-value (property)
 - spec: `42 §3.7` (determinism), `41 §2.1`
 - given: the same closed term whose result is a closure-free comparable ground
   observation, evaluated twice (independent runs)
-- expect: **identical observation** — the same comparable immediate, or the
-  same constructor form and **same slot id** for canonical compound data
-  (`42 §3.7`, `41 §4`)
+- expect: **identical observation** — the same comparable scalar or the same
+  constructor form and extensional content (`42 §3.7`, `41 §4`)
 - why: determinism is what makes X1 a usable oracle. A non-deterministic
-  evaluator (e.g. iteration-order-dependent) flips the second run's value/slot.
+  evaluator (e.g. iteration-order-dependent) flips the second run's value.
   (property; the AC2 baseline.)
 
 ### runtime/evaluation/det-higher-order-by-ground-application (property)
@@ -184,34 +186,31 @@ observed only through selected applications to closure-free ground results.
   intensional representation into function equality. The probes are selected
   observations, not an exhaustive or extensional decision procedure.
 
-### runtime/evaluation/det-sharing-dedups-by-slot (oracle)
-- spec: `42 §3.4` (representation sharing / dedup), `41 §2`/`§4`; extends
-  `runtime/values/dedup-shares-slot`
+### runtime/evaluation/det-equal-subcomputations-observe-equally (oracle)
+- spec: `42 §3.4` (evaluation reuse), `41 §2`/`§4`; extends
+  `runtime/values/equal-canonical-values-same-durable-bytes`
 - given: a closed term producing the same **closure-free canonical** compound
   value by two independent subcomputations, e.g.
   `pair (big_expr) (big_expr)`
-- expect: both components intern to the **same slot id** (stored once); `==` is
-  **true** by O(1) slot compare, with **no recomputation** of the shared value
-  (`(oracle)` on the trace). **Assert slot identity, not just `==`**
-  (`42 §3.7`).
-- why: content-addressed sharing at the eval layer — equal results share a slot.
-  A recompute-without-dedup bug yields an equal value at a *different* slot
-  (`42 §3.4`); the slot-identity assertion catches it where a bare `==` would
-  pass vacuously. (oracle; extends the values anchor.)
+- expect: both components compare equal and, when durably encoded, produce
+  identical canonical bytes. An evaluation trace may show reuse, but the case
+  does not require reuse, interning, or slot identity.
+- why: evaluation-once binding reuse and deterministic value observations are
+  semantic; physical sharing is private. (oracle; extends the values anchor.)
 
 ### runtime/evaluation/det-canonical-order-independent (oracle)
 - spec: `41 §3a` (`Map`/`Set` canonical order), `§4`; `42 §3.7`
 - given: a `Map` (or `Set`) value produced by two evaluation paths with
   **different insertion orders**, e.g. `{1↦a, 2↦b}` built insert-1-then-2 vs
   insert-2-then-1.
-- expect: the **same slot id** → `==` is **true** — the canonical encoding sorts
-  entries by key bytes (`41 §3a`), so construction order is invisible.
-- why: **verdict-flip** (the `42 §3.7` "shared vs recompute-divergence"): a
-  canonicalization bug that encodes in *insertion* order gives two slots for
-  equal `Map`s → `==` flips to **false** (and dedup silently fails). Correct →
-  `true`, bug → `false`. (The `values/` corpus owns encoding-determinism proper;
-  this pins the evaluation consequence: equal results share regardless of how
-  evaluation built them.) (oracle; verdict-flip.)
+- expect: `==` is **true** and durable canonical bytes are identical — the
+  canonical encoding sorts entries by key bytes (`41 §3a`), so construction
+  order is invisible.
+- why: **verdict-flip**: a canonicalization bug that encodes in insertion order
+  produces different bytes for equal `Map`s. Correct → identical; bug →
+  different. The `values/` corpus owns encoding determinism proper; this pins
+  the evaluation consequence without prescribing storage. (oracle;
+  verdict-flip.)
 
 ---
 
@@ -229,7 +228,7 @@ taken arm" and short-circuit **fall out of ι**, not a special rule.
 but **change no observable value** (`42 §3.6`: a branch is selected away from,
 so even a would-be-`unknown` arm does not contaminate the result). These cases
 therefore assert the **structural/trace** property — the untaken method is **not
-evaluated** (its subterms never reach the interner) — tagged `(oracle)`.
+evaluated** (no evaluation step enters its body) — tagged `(oracle)`.
 **Deferred strengthening:** the result becomes value-observable only once an
 **effect** (L5 follow-on) **or** an **opaque-non-total divergent** branch
 (`42 §3.3` escape hatch) sits in the untaken arm; flagged, not forced here.
@@ -239,26 +238,27 @@ evaluated** (its subterms never reach the interner) — tagged `(oracle)`.
 - given: `if true then x else Y` (≡ `elim_Bool _ x Y true`), where `Y`
   constructs a distinct compound value (e.g. `pair (big_a) (big_b)`).
 - expect: **reduces-to** `x`; the `else` method `Y` and its subterms are **not
-  evaluated** — not interned, absent from the evaluation trace (`(oracle)`).
+  evaluated** — no evaluation step enters `Y` in the trace (`(oracle)`).
 - why: branch laziness as a structural assertion. The targeted bug — "methods
-  evaluated strictly *before* selection" (`42 §2`) — would intern `Y`'s value
-  (an extra slot / trace entry) while still returning `x`, so the *value* is
-  unchanged but the **structural** assertion catches it. (oracle; AC3.)
+  evaluated strictly *before* selection" (`42 §2`) — would enter `Y` while
+  still returning `x`, so the *value* is unchanged but the **structural** trace
+  assertion catches it. (oracle; AC3.)
 
 ### runtime/evaluation/lazy-match-taken-branch-only (oracle)
 - spec: `42 §2`/`§3.3`
 - given: `match (inl a) { inl x → x ; inr y → Y }` (≡ `elim_Sum`), `Y` a
   distinct compound.
-- expect: **reduces-to** `a`; the `inr` method `Y` is **not evaluated** (not
-  interned / not in the trace).
+- expect: **reduces-to** `a`; the `inr` method `Y` is **not evaluated** and its
+  body is absent from the evaluation trace.
 - why: only the constructor-selected method evaluates (ι). A strict-all-methods
-  bug interns `Y` — caught structurally. (oracle; AC3.)
+  bug enters `Y` — caught structurally. (oracle; AC3.)
 
 ### runtime/evaluation/shortcircuit-and-or (oracle)
 - spec: `42 §2`/`§3.3` (`&&`/`||` are `elim_Bool`)
 - given: `false && Y` and `true || Y`, `Y` a distinct compound.
 - expect: `false && Y` **reduces-to** `false`, `true || Y` **reduces-to**
-  `true`; in both, `Y` is **not evaluated** (not interned / not in the trace).
+  `true`; in both, `Y` is **not evaluated** and its body is absent from the
+  evaluation trace.
 - why: short-circuit is the `elim_Bool` scrutinee selecting the determined
   method (`42 §2`). (Note: a Kleene `∧`/`∨` over `unknown` does *not*
   discriminate strict-vs-short — `false ∧ x = false` either way, `41 §6` — so

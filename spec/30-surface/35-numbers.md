@@ -28,9 +28,10 @@
 ## 1. The model, stated plainly
 
 Ken's numeric model has **distinct, honestly-typed scalars**, not a single
-universal numeric type. Values lower heterogeneously — `i1`/`i8`/`i64`/`f64`/
-structs — as unboxed SSA values (`../40-runtime/41-values.md`). The design rests
-on three commitments, each load-bearing for a *verified* language:
+universal numeric type. Values use type-specific operations and may use
+heterogeneous runtime fast paths such as `i1`/`i8`/`i64`/`f64` or small
+structs (`../40-runtime/41-values.md`); boxing and storage remain private. The
+design rests on three commitments, each load-bearing for a *verified* language:
 
 1. **Exactness by default.** The unsuffixed integer type `Int` is
    arbitrary-precision (§2.1), so `a + b` *means* addition and arithmetic specs
@@ -38,74 +39,75 @@ on three commitments, each load-bearing for a *verified* language:
 2. **Honesty in the type.** `Float` is one honestly-named IEEE type among
    several, **not** the universal carrier and **not** the integer-literal
    default; `Decimal` is a first-class exact base-10 type. The type a value
-   carries tells the truth about its representation and its equality.
+   carries tells the truth about its numeric semantics and its equality.
 3. **Partiality is marked, never silent.** Fixed-width overflow and
    division-by-zero are *obligation-generating* partial points (§3), surfaced in
    the obligation set — never a silent wrap or trap.
 
 > There is no uniform-`f64` ontology and no 4×`f64` wire framing
-> (`../40-runtime/41-values.md`). Lowering is heterogeneous and typed; the type
-> determines the representation.
+> (`../40-runtime/41-values.md`). Operations are heterogeneous and typed; the
+> runtime representation is private.
 
 ## 2. The numeric types
 
-| Type | Meaning | Literal | Lowering (`41`) |
+| Type | Meaning | Literal | Permitted fast path (`41`) |
 |---|---|---|---|
-| **`Int`** | **arbitrary-precision** integer (default) | `42`, `0xFF` | small-int fast path `i64`, promotes to heap bignum (§2.1) |
-| **`Int8 Int16 Int32 Int64`** | native signed fixed-width integers | `42 : Int32` | `i8`/`i16`/`i32`/`i64` immediates |
-| **`UInt8 UInt16 UInt32 UInt64`** | native unsigned fixed-width integers | `0xFF : UInt8` | `u8`/`u16`/`u32`/`u64` immediates |
-| **`Decimal`** | base-10 exact decimal (money) — **core type** | `3.14d` | inline `{i64 coeff, i32 exp}`, promotes to heap (§2.2) |
-| **`Float`** | IEEE-754 binary64 | `3.14`, `1e-9` | `f64` immediate |
-| `Float32` | IEEE-754 binary32 | `1.5f32` | `f32` immediate |
-| `Bool` | boolean | `true`/`false` | `i1` |
-| `Char` | Unicode scalar value | `'a'` | `u32` (U+0000–U+10FFFF, surrogates excluded) |
+| **`Int`** | **arbitrary-precision** integer (default) | `42`, `0xFF` | small `Int` may use `i64`; larger values use a bignum (§2.1) |
+| **`Int8 Int16 Int32 Int64`** | native signed fixed-width integers | `42 : Int32` | may use `i8`/`i16`/`i32`/`i64` |
+| **`UInt8 UInt16 UInt32 UInt64`** | native unsigned fixed-width integers | `0xFF : UInt8` | may use `u8`/`u16`/`u32`/`u64` |
+| **`Decimal`** | base-10 exact decimal (money) — **core type** | `3.14d` | may use a small coefficient/exponent pair (§2.2) |
+| **`Float`** | IEEE-754 binary64 | `3.14`, `1e-9` | may use `f64` |
+| `Float32` | IEEE-754 binary32 | `1.5f32` | may use `f32` |
+| `Bool` | boolean | `true`/`false` | may use `i1` |
+| `Char` | Unicode scalar value | `'a'` | may use `u32` (U+0000–U+10FFFF, surrogates excluded) |
 
 Every row is a **primitive type** in the kernel's sense (`14 §5`, §6): an opaque
 type constant whose inhabitants are literals and the results of registered
-primitive operations. The lowerings below are pinned to the **landed**
-`41-values.md`, not paraphrased — `41` is the authority for representation.
+primitive operations. The fast paths are permissions, not observable
+representations; `41` is the authority for the private representation boundary.
 
 ### 2.1 `Int` — arbitrary-precision (`OQ-int` DECIDED)
 
 `Int` is arbitrary-precision by default (not fixed-64). For a *verified*
 language silent overflow is a correctness hazard; arbitrary precision makes
 `a + b` mean addition, so `a + b == b + a` holds with no side-condition. The
-representation is a **small-integer fast path** — a machine word `i64` for the
-common case — that **promotes to a heap bignum** only when a value outgrows the
-word (`41 §1`, `41 §5`). The heap form is sign-magnitude, minimal-limb (no
-trailing-zero limbs), content-addressed with canonical-encoding tag `0x01`
-(`41 §3a`); equality is therefore exact at every magnitude. This is the
-2⁵³-exactness guarantee at the representation level: a 20-digit integer literal
-is an exact bignum, never an `f64`-rounded double (AC1).
+representation may use a **small-integer fast path** — a machine word `i64` for
+the common case — and a bignum when a value outgrows the word (`41 §1`,
+`41 §5`). Bignums have a sign-magnitude, minimal-limb durable encoding (no
+trailing-zero limbs), with canonical-encoding tag `0x01` (`41 §3a`);
+in-process boxing, copying, and sharing are private. Equality is exact at every
+magnitude. This is the 2⁵³-exactness guarantee at the representation level: a
+20-digit integer literal is an exact integer, never an `f64`-rounded double
+(AC1).
 
 ### 2.2 Fixed-width integers (`OQ-int` DECIDED)
 
 The full signed `Int8/Int16/Int32/Int64` and unsigned
 `UInt8/UInt16/UInt32/UInt64` set are **first-class native types**, the everyday
 currency of bitfields, wire/byte layout, and C-ABI FFI interop (`38`). Each
-lowers **directly to its machine width** as an unboxed immediate (`41 §5`,
-"Immediate scalars" — stored inline, never interned). Their overflow semantics
-are explicit and obligation-generating (§3) — the differentiator from a
-silent-wrap fixed-width integer.
+has the named machine-width range and operations. A runtime may use the named
+machine width as a fast path (`41 §5`), but boxing and storage are private.
+Their overflow semantics are explicit and
+obligation-generating (§3) — the differentiator from a silent-wrap fixed-width
+integer.
 
 ### 2.3 `Decimal` — exact base-10 (`OQ-int` DECIDED)
 
 `Decimal` is a core, essential type — exact base-10 for money and any
 computation where binary floating point is wrong by construction; **not** an
 `f64` alias. A `Decimal` is a base-10 value `coeff × 10^exp` with an
-**arbitrary-precision coefficient** and a bounded `i32` base-10 exponent. The
-layout mirrors `Int`: an **inline `{i64 coeff, i32 exp}` fast path** that
-**promotes to a heap big-`Decimal`** (canonical-encoding tag `0x0A`, `41 §3a`)
-when the coefficient outgrows `i64` (`41 §5`, "Small `Decimal`"). Literal suffix
-`d`. Because the coefficient is exact, `0.1d + 0.2d == 0.3d` holds exactly
-(AC6) — the property the `Float` analog cannot offer.
+**arbitrary-precision coefficient** and a bounded `i32` base-10 exponent. A
+runtime may use a small coefficient/exponent pair as a fast path; the durable
+big-`Decimal` encoding uses tag `0x0A` (`41 §3a`). Boxing and promotion are
+private (`41 §5`). Literal suffix `d`. Because the coefficient is exact,
+`0.1d + 0.2d == 0.3d` holds exactly (AC6) — the property the `Float` analog
+cannot offer.
 
 > **Reconcile note (don't cite the frame's struct).** An earlier draft and the
-> WP frame floated a flat `{i128 coeff, i32 exp}`. The **landed** `41 §5` pins
-> the inline fast path as `{i64 coeff, i32 exp}` **with heap promotion** of the
-> coefficient (parallel to `Int`), so the coefficient is arbitrary-precision,
-> not capped at 128 bits. `41` is the lowering authority; this chapter follows
-> it.
+> WP frame floated a flat `{i128 coeff, i32 exp}`. The semantic requirement is
+> an arbitrary-precision coefficient, not that representation. A small fast
+> path is permitted, but no fixed-width coefficient may cap the value and no
+> boxing/promotion scheme is observable.
 
 ### 2.4 `Float`/`Float32`, `Bool`, `Char`
 

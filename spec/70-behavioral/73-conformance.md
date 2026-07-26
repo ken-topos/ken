@@ -130,12 +130,14 @@ cannot. The **locked** correlation-key set:
   **per-space trace**.
 - **Message provenance** — on a cross-space **send**/**receive** event. Spaces
   are **shared-nothing**, communicating only by passing immutable,
-  closure-free content-addressed value graphs (`36 §4.4`); the message value's
-  **content address** (`41 §3`) is the natural provenance token, linking the
-  sender's send event to the receiver's receive event. A closure-containing
-  graph rejects before message publication and therefore emits no such token.
-  A monitor stitches per-space traces into a **global trace** along these
-  matched provenance tokens.
+  closure-free values (`36 §4.4`). Each send operation creates an opaque
+  **message-event correlation token**, copied to its matching receive event.
+  The token identifies that message transfer, not the value: two sends of equal
+  values have distinct tokens, and no program can inspect one as value
+  identity. Copying, sharing, storage, and durable-byte policy remain private
+  (`41 §2`, `44 §1a`). A closure-containing graph rejects before message
+  publication and therefore emits no token. A monitor stitches per-space
+  traces into a **global trace** along matched provenance tokens.
 
 The keys are **complete by construction (TC3):** space identity rides every
 event; message provenance rides every cross-space message event — enough to
@@ -358,8 +360,8 @@ choice:
    response values are runtime witnesses with no status and become ITF-exportable
    only under §2.5.
 2. **Correlation keys (§2.2)** — space identity on every event; message
-   provenance (the content address, `41 §3`) on every cross-space message event
-   (TC3).
+   provenance as an opaque per-transfer correlation token on every cross-space
+   message event (TC3).
 3. **Runtime `Q`/`P` assertion points (§2.3)** — `Q` → watched-invariant, `P` →
    confirm-held, the proposition projected from the B1 export's `Q`/`P` (TC4).
 4. **The monitor projection (§2.4)** — `compile : Temporal Σ → Monitor` over the

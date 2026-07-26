@@ -114,10 +114,12 @@ Two invariants govern this shape:
 3. **Total by default.** Definitions admitted to the kernel are checked for
    termination (size-change termination over δ-unfolding); non-terminating or
    partial computation is explicit, not silent.
-4. **Content-addressing for canonical data.** Canonical, persistable data values
-   are identified by the hash of their structure, giving O(1) structural
-   equality and global deduplication. Runtime-local opaque values such as
-   ordinary closures have no such identity (`40-runtime/41-values.md §2.1`).
+4. **Canonical durability without observable storage.** Closure-free canonical
+   values that cross a durable boundary have deterministic bytes and
+   extensional equality. Copying, sharing, interning, hashing, and indexing are
+   private runtime choices. Runtime-local opaque values such as ordinary
+   closures have no structural, canonical, slot, or persistent identity
+   (`40-runtime/41-values.md §2.1`).
 5. **Failure is a first-class output.** A proof that does not go through yields
    a structured artifact (countermodel / typed hole / region decomposition),
    never an opaque error. Legibility is a feature, specified in
@@ -233,7 +235,9 @@ cite the spec section they pin.
 - **de Bruijn criterion** — soundness rests only on a small re-checking kernel;
   see §3. Its security reading is **authorship-independence**
   (`60-security/64`).
-- **Content-addressed** — identified by the hash of structure (`40-runtime/41`).
+- **Content-addressed** — durably named by a digest of canonical bytes; this
+  does not imply an in-process identity or storage strategy
+  (`40-runtime/41`).
 - **Information-flow control (IFC) / non-interference** — a *relational*
   (2-safety) discipline ensuring data flows only upward in a security-label
   lattice; "no secret reaches a public sink" (`60-security/61`).

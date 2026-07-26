@@ -124,26 +124,28 @@ signature / Büchi-monitor acceptance (B2).
 
 ### trace/correlated-events-link-uncorrelated-dont (AC3)
 - spec: `spec/70-behavioral/73-conformance.md §2.2` (TC3), `36 §4/§4.1/§4.4`,
-  `41 §3`
+  `41 §2`, `44 §1a`
 - given: **two distinct `space`s** each performing an op, plus a **cross-space
   message** (a `send` in space A of the closure-free canonical record
   `{ sequence = 7, payload = "ok" }`, and a `receive` of it in space B,
   `36 §4.4`); run through the instrumentation
 - expect: (a) **every** event carries its **space identity** (the space's single
   effect label, `36 §4.1`); (b) the `send`/`receive` events carry **matching
-  message provenance** (the message value's content address, `41 §3`) that
-  **links** them; (c) two **unrelated** events (different spaces, no message
-  between them) **do not** share provenance — a monitor can place each event in
-  its per-space trace and stitch the global trace **only** across matched
-  provenance
+  message provenance** (an opaque per-transfer correlation token) that
+  **links** them; (c) a second send of an equal value carries a distinct token,
+  and two **unrelated** events (different spaces, no message between them)
+  **do not** share provenance — a monitor can place each event in its per-space
+  trace and stitch the global trace **only** across matched provenance
 - why: AC3/TC3 — correlation completeness: offline model-checking glossed
   identity; a live monitor cannot. The case asserts **both directions** — linked
   *and* not-linked — because a build that assigns a **constant/global**
   correlation key would make *everything* link (passing a one-directional
-  "do they link?" check vacuously); only the pair (correlated link **while**
-  uncorrelated don't) nets it. Dropping the space identity, or the provenance
-  token, breaks reconstruction → red. (The discriminating-pair pattern; here the
-  axis is correlated↔uncorrelated.)
+  "do they link?" check vacuously), while using the value's digest would merge
+  distinct transfers of equal values. Only the pair (correlated link **while**
+  equal-but-distinct and unrelated transfers don't) nets it. Dropping the space
+  identity or provenance token breaks reconstruction → red. (The
+  discriminating-pair pattern; here the axis is transfer-correlated ↔
+  transfer-distinct.)
 
 ## TR-D. Runtime `Q`/`P` assertion points (AC4/TC4)
 

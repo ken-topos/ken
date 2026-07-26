@@ -3,18 +3,20 @@
 Format: `../../README.md`. These pin the **L3 deliverable**
 (`docs/program/wp/L3-strings-collections.md`,
 `spec/30-surface/37-strings-collections.md`): the **`String` UTF-8 primitive**
-(content-addressed, NFC-normalized, byte-length ≠ char-length, not `List Char`),
+(canonically encoded, NFC-normalized, byte-length ≠ char-length, not
+`List Char`),
 the **core collection types** (`List`/`Option`/`Result` transparent inductive;
-`Array` abstract over the `41` heap — `Map`/`Set` are now the **proved BST** of
+`Array` abstract with private representation — `Map`/`Set` are now the
+**proved BST** of
 `../../stdlib/map/seed-map.md`, superseding the heap model, see the supersession
 note below), the **combinators with laws as propositions**, **infinitude without
 coinduction** (the fuel-bounded inductive unfold + the structural-absence net),
-and **structural equality + `DecEq`/`Ord`** with the verified `sort` (which
-threads an **explicit comparator** since the ES2-remainder §6 pin — the
-lawful-`Ord` class is **deferred**). **L3b (AC7) adds the user-type instancing
-crossing** — a user `instance DecEq` resolved by Lc's landed `instance_search`
-now that the §37 §6 gate is open (Lc, `4aa36c7`), with the
-user-`Ord`-drives-`sort` half deferred to the lawful-`Ord` class. They extend —
+and **structural equality**, the proved `Ord`-keyed `Map`/`Set`, and the
+verified `sort` (which threads an **explicit comparator** since the
+ES2-remainder §6 pin — the lawful-`Ord` class is **deferred**). **L3b (AC7)
+records the user-type instancing crossing**, while its former `DecEq`-keyed Map
+vehicle is superseded below; the user-`Ord`-drives-`sort` half remains deferred
+to the lawful-`Ord` class. They extend —
 and must not regress — the on-`main` surface invariants (`../seed-surface.md`,
 `../data-match/seed-data-match.md`) and the `String` primitive already
 registered for L6 (`../bytes-io/seed-bytes-io.md`).
@@ -33,8 +35,8 @@ keying faculty, key equality is the derived `leq k k' ∧ leq k' k` (`52 §2`). 
 (subsume-don't-proliferate); the cases below tagged **(superseded →
 seed-map.md)** retain only their non-`Map` content (e.g. the `List` half of the
 O(1)-equality case) — their heap-`Map`/`Set` assertions are **void, do not code
-to them**. `Array` is unaffected (still `41`-heap, kind `0x06`). Companion to
-the `/spec` supersession in `37 §3.3` this WP lands.
+to them**. `Array` retains durable kind `0x06`; its runtime representation is
+private. Companion to the `/spec` supersession in `37 §3.3` this WP lands.
 
 **Grounded (content-verified against the landed targets, not heading numbers —
 the `conformance-oracle-grounding-fallback` discipline):** `14 §5` (`String` is
@@ -42,17 +44,16 @@ a primitive type — an opaque constant, trusted/audited by `18 §5`); the lande
 `byte_length`/`char_length` `PrimReduction::Op` arms compute over literal values
 in `ken-interp`, but remain opaque to kernel conversion pending K3 (the landed
 `catalog/guide/proof-techniques.ken.md §1.1` primitive-`Op` `Refl` rejection is
-the current control); `41 §2`/`§4` (content-addressed append-mostly heap;
-O(1) structural equality = slot-id comparison); `41 §3a` +
-`docs/design/content-addressing.md §1.1` (kind tags **`String 0x04`,
-`Array 0x06`** — verified against the enumerated table; `String` =
-NFC-normalized UTF-8 **at construction**. The heap `Map 0x07`/`Set 0x08`
+the current control); `41 §2`/`§4` (immutable values, extensional equality,
+and private runtime representation); `41 §3a` (durable kind tags
+**`String 0x04`, `Array 0x06`**; `String` = NFC-normalized UTF-8 **at
+construction**. The former heap `Map 0x07`/`Set 0x08`
 kinds + their canonical-byte-encoding insertion-order-independent identity are
 **retired** by OQ-A — `Map`/`Set` are proved `Ord k`-keyed trees with
 extensional identity, `../../stdlib/map/seed-map.md`); `34 §1`/`§3`
 (`List`/`Option`/`Result` inductive `data` + `elim_List`, **landed L2**);
 `34 §5` (refinement types — the `sort` carrier); `33 §4` (a type exported
-**abstractly** — name only, constructors hidden — the `Array`/`Map`/`Set`
+**abstractly** — name only, constructors hidden — the `Array`
 opaque-carrier surface); `33 §5` (typeclasses as subobjects: **structure classes
 `DecEq`/`Ord`**, the canonical-instance resolver convention, an unsatisfiable
 constraint fails resolution = compile error); `42 §2` (`Lazy` is a thunk type
@@ -72,11 +73,11 @@ not the frame):**
   definitionally or by `Refl` is **DEFERRED/RED-UNTIL-K3**, conditional on K3
   actually registering those operations for conversion. Runtime evaluation is
   not evidence of kernel conversion.
-- **NFC normalization is currently STUBBED** (`content-addressing.md §1.4` K3
-  note: "the F4 benchmark stubs NFC — strings are encoded as-is"). The spec pins
-  NFC-aware O(1) equality as **normative** (`37 §2.1`), but the
-  canonically-equivalent-strings-share-a-slot behavior **depends on real NFC
-  landing**. So the NFC-equality case is **`(oracle)`-staged** (it asserts the
+- **NFC normalization is currently STUBBED** (landed runtime inspection:
+  strings are encoded as-is). The spec pins NFC-aware equality as **normative**
+  (`37 §2.1`), but the canonically-equivalent-string behavior **depends on real
+  NFC landing**. So the NFC-equality case is **`(oracle)`-staged** (it asserts
+  the
   spec's normative behavior, must **not** be run red against the stub — the
   `tag-deferred-seam-cases-at-elaboration-time` discipline). The byte-length ≠
   char-length fact is **NFC-independent** (a CJK/non-combining witness) and
@@ -84,8 +85,9 @@ not the frame):**
 - **`Array`/`Map`/`Set`, class/constraint resolution, the combinators, and
   `sort` are net-new elaborator surface** — none is registered in
   `ken-elaborator/src` today (only the `String` primitive, `List`/`Option`/
-  `Result` L2 `data`, and the content-addressed heap are landed). Every positive
-  case here therefore drives a **real new producer the build wires**, and the QA
+  `Result` L2 `data`, and the runtime value substrate are landed). Every
+  positive case here therefore drives a **real new producer the build wires**,
+  and the QA
   gate **producer-greps** that registration before counting green (the
   `conformance-hand-feeds-the-deliverable` net): **no synthetic collection
   literal, no hand-fed obligation, no hand-fed `DecEq` flag** where a real
@@ -95,15 +97,14 @@ not the frame):**
 - **Structural, not "compiles."** AC1 asserts **both** live interpreter values
   (`byte_length` **and** `char_length`) and their elaborated `Int` result type,
   not that an application type-checks and not that `Refl` closes; AC2 asserts
-  the **sharing** (unchanged sub-structure = same
-  slot-id), not a correct result value; AC3/AC6 assert the **emitted
-  obligation's shape**, not "it type-checks".
+  the persistence observations (source unchanged, update correct), not a
+  private sharing strategy; AC3/AC6 assert the **emitted obligation's shape**,
+  not "it type-checks".
 - **Verdict-flip / structural-flip on the target bug**
-  (`discriminating-conformance-verdict-must-flip`): AC5 pairs a `DecEq`-key
-  **accept** vs a non-`DecEq`-key **reject** (the classification boundary is a
-  non-degenerate **pair**, never one case — COORDINATION §7); AC2's sharing
-  flips slot-id under a deep-copy bug; AC6's `Perm` conjunct flips against a
-  `const Nil` sort.
+  (`discriminating-conformance-verdict-must-flip`): AC5 compares equal
+  structures produced through distinct construction histories; AC2 flips if
+  the source is mutated or an unrelated element changes; AC6's `Perm`
+  conjunct flips against a `const Nil` sort.
 - **Absence is pinned by CONSTRUCT signature, not lexeme** (`B2`/`Sec1-N1`
   absence-net carry, sharpened here): AC4's no-coinduction net targets the
   **AST/judgment node** (a `codata` former / a greatest-fixpoint type / `cofix`
@@ -120,8 +121,8 @@ not the frame):**
   partial decode and the round-trip law are **L6's** (`../bytes-io/`),
   referenced not re-pinned; the `data`/`match`/`elim_List` and
   refinement-carrier machinery are **L2's** (`../data-match/`), referenced; L3
-  pins only what is L3-specific (collection shape, persistence-sharing, the
-  laws, the no-coinduction decision, `DecEq`/`Ord` split, `sort`).
+  pins only what is L3-specific (collection shape, persistence, the laws, the
+  no-coinduction decision, proved-Map `Ord` keying, `sort`).
 
 **Tags.** `(soundness)` — a kernel **trusted-base** commitment whose wrongness
 is a soundness bug: the no-coinduction structural absence (`37 §7`, a kernel
@@ -130,21 +131,19 @@ admission-gate commitment) and the `sort` obligation **completeness** (a dropped
 lesson). `(property)` — an invariant over many inputs / a law, not a single
 trace. `(oracle)` — confirmed by the Spec enclave / at build time, safe as it is
 **not** kernel-normative: unsettled prelude/op **spellings** (`get`/`index`,
-`map`/…), the `Array`/`Map`/`Set` **internal
-representation** (RRB/HAMT/branching factor — `41 §5` X2 tuning), whether
-`Set a` is literally `Map a Unit`, and the **NFC-equality case** (pending real
-NFC, per the staging fact above). The **kind tags `0x04`/`0x06`/`0x07`/`0x08`,
-the byte/char length distinction, the convertible-view totalities, the
-persistence-sharing, the `DecEq`-membership verdict flip, the no-coinduction
-absence, the `isSorted ∧ Perm` refinement, and every verdict** are
-**normative**.
+`map`/…), the `Array` **internal representation**, whether `Set a` is literally
+`Map a Unit`, and the **NFC-equality case** (pending real NFC, per the staging
+fact above). The durable kind tags, byte/char length distinction,
+convertible-view totalities, persistent value behavior, no-coinduction
+absence, `isSorted ∧ Perm` refinement, and every live verdict are
+**normative**. Runtime sharing is not.
 
 ---
 
-## AC1 — `String` is a content-addressed UTF-8 primitive (not `List Char`)
+## AC1 — `String` is a canonically encoded UTF-8 primitive (not `List Char`)
 
-`String` is a `14 §5` primitive (opaque constant), content-addressed (`41 §2`,
-kind `0x04`), NFC-normalized at construction (`41 §3a`); it is **not**
+`String` is a `14 §5` primitive (opaque constant), uses durable kind `0x04`,
+and is NFC-normalized at construction (`41 §3a`); it is **not**
 `List Char` (a separate, convertible view, `37 §2.3`).
 
 ### surface/collections/string-byte-length-differs-from-char-length
@@ -192,7 +191,7 @@ kind `0x04`), NFC-normalized at construction (`41 §3a`); it is **not**
 - expect: `String` and `List Char` are **distinct types** (a `String` is **not**
   accepted where a `List Char` is required without an explicit conversion).
   `String → List Char` is **total** (decode the `char_length`-long view);
-  `List Char → String` is **total** (encode UTF-8 then NFC-normalize + intern —
+  `List Char → String` is **total** (encode UTF-8 then NFC-normalize —
   and cannot encode an invalid scalar, since `Char` excludes the surrogate block
   `U+D800–U+DFFF`, `35 §2.4`). The `String ↔ Bytes` pair (`String → Bytes`
   total; **`Bytes → String` partial → `Result`**) is **L6's home**
@@ -206,32 +205,31 @@ kind `0x04`), NFC-normalized at construction (`41 §3a`); it is **not**
   `List Char → String` partial (admitting invalid scalars) is caught.
   (type-distinction + totality.)
 
-### surface/collections/string-nfc-canonically-equal-shares-slot (oracle)
-- spec: `37 §2.1`, `41 §3a` / `content-addressing.md §1.4` (NFC at construction)
+### surface/collections/string-nfc-canonically-equal (oracle)
+- spec: `37 §2.1`, `41 §3a` (NFC at construction)
 - given: two `String` literals that are **canonically equivalent under NFC** but
   spelled differently in source — the precomposed `U+00E9` ("é") and the
   decomposed `U+0065 U+0301` ("e" + combining acute).
-- expect: both intern to the **same slot** (NFC-normalized before interning,
-  `41 §3a`), so `s == t` is **O(1)-true** (a slot-id comparison, `41 §4`) and
+- expect: `s == t` is true, their durable canonical bytes are identical, and
   the runtime results of `byte_length s` and `byte_length t` are equal over the
-  **stored normalized** bytes. This is a value assertion, not a `Refl` claim;
-  equality is decided once at intern time, never by re-traversal.
-- why: AC1's content-addressed-NFC face — the normative `37 §2.1` behavior.
+  normalized bytes. This is a value assertion, not a `Refl` or representation
+  claim.
+- why: AC1's canonical-NFC face — the normative `37 §2.1` behavior.
   **`(oracle)`-staged:** NFC normalization is currently **stubbed**
-  (`content-addressing.md §1.4` K3 note: strings encoded as-is), so this asserts
-  the spec's normative target and must **not** be run red against the stub — it
+  (strings are currently encoded as-is), so this asserts the spec's normative
+  target and must **not** be run red against the stub — it
   is confirmed when real NFC lands (the `tag-deferred-seam` discipline). The
   byte/char case above is the NFC-independent, real-now sibling. (oracle; NFC
   normative target.)
 
 ---
 
-## AC2 — collections are immutable + persistent (sharing observable as slot-id)
+## AC2 — collections are immutable + persistent
 
 `List`/`Option`/`Result` are transparent inductive `data` (L2, landed);
-`Array`/`Map`/`Set` are abstract over the `41 §2` append-mostly heap. An
-"update" allocates the changed spine and **shares** the rest — observable as
-slot-id equality (`41 §2`).
+`Array` is abstract; `Map`/`Set` are proved package values. An update returns a
+new value and leaves its source unchanged; allocation and structural sharing
+are private (`41 §2`).
 
 ### surface/collections/list-pattern-matches-via-real-elim
 - spec: `37 §3.1`, `34 §1`/`§3` (`List` inductive `data`, `elim_List`)
@@ -248,26 +246,18 @@ slot-id equality (`41 §2`).
   (bypassing `34 §3`) is caught by asserting the `elim_List` lowering.
   (structural; landed mechanism.)
 
-### surface/collections/array-update-shares-unchanged-structure
-- spec: `37 §3.2`/`§3.4`, `41 §2` (append-mostly heap, structural sharing)
+### surface/collections/array-update-preserves-unchanged-values
+- spec: `37 §3.2`/`§3.4`, `41 §2`
 - given: an `Array a` `v` of several elements; `w = set i x v` updating one
   index `i`.
-- expect: `w` is a **new** value (distinct root slot-id from `v`), but the
-  sub-structures **not on the root→`i` path are the same slots** as in `v` —
-  `set` allocates only the changed path and **shares** the rest (`41 §2`).
-  Assert the **shared sub-structure = same slot-id** (structural sharing),
-  **and** `v` is unchanged (same root slot, same contents) after. The persistent
-  index tree reconciles O(1)-ish index with sharing (`37 §3.2`): a flat `O(1)`
-  buffer **cannot** also share on update, so the honest claim is bounded-depth
-  descent, not literal `O(1)`.
-- why: AC2's headline as a **structural sharing flip**, per `41`-style — not
-  "the result is correct". A deep-copy / non-sharing `set` (correct value, no
-  sharing) gives the **same result** but **different** sub-structure slot-ids —
-  caught **only** by the slot-id sharing assertion (a value-only check is
-  green-vs-green here). **Net-new producer:** the QA gate producer-greps the
-  real `Array` registration + `set`; the sharing must be observed on the
-  **real** persistent `set`, not a hand-constructed two-slot pair. (structural
-  sharing; hand-feed net.)
+- expect: `w[i] == x`; every other index has the same extensional value as in
+  `v`; and `v` is unchanged after the update. The case does not inspect
+  pointers, slots, or substructure identity.
+- why: AC2 pins the observable persistence contract. A mutating `set` or an
+  update that changes an unrelated element flips the result. Deep-copy and
+  structural-sharing implementations both pass. **Net-new producer:** the QA
+  gate producer-greps the real `Array` registration + `set`, not a
+  hand-constructed result. (persistent value; hand-feed net.)
 
 ---
 
@@ -380,61 +370,34 @@ The §1 decision (state inductively, do not coinduct) is enforced by a
 
 ---
 
-## AC5 — structural equality + `DecEq` (the membership verdict flip)
+## AC5 — structural equality
 
-Equality is structural + content-addressed (`41 §4`); `DecEq` (`33 §5`) is the
-**membership** constraint for `Map`/`Set`, `Ord` the **order** constraint — the
-pinned split. A key type without `DecEq` is a compile error.
+Equality is structural/extensional and representation-independent (`41 §4`);
+the proved `Map`/`Set` carrier is keyed by lawful `Ord` (`52 §2`). The former
+`DecEq`-keyed Map rows below are retained as explicit supersession records,
+not live producers.
 
-### surface/collections/structurally-equal-collections-o1-comparable
-- spec: `37 §6`/`§3.3`, `41 §4` (O(1) slot-id equality), `41 §3a`
+### surface/collections/structurally-equal-collections-compare-equal
+- spec: `37 §6`/`§3.3`, `41 §4`, `41 §3a`
   (insertion-order-independent canonical form)
 - given: two `List` values built by different expressions but **structurally
   equal**; and (richer) two `Map` values built in **different insertion orders**
   with the same key→value content.
-- expect: the two `List`s **share one slot** (content-addressed) and compare
-  **O(1)-equal** (`41 §4`) — real now (landed heap). The `Map` half is
-  **superseded** — a proved BST is **not** interned by byte-order, so two
-  same-content `Map`s are equal **extensionally via ordered `toList`**, not
-  O(1)-slot (`52 §5.3`; `../../stdlib/map/seed-map.md`). Only the `List` half
-  (content-addressed O(1) slot-id) is asserted here now.
-- why: AC5's equality face — content-addressed identity as **slot-id**, for the
-  **`List`** half (real-now). The former insertion-order-independent O(1) `Map`
-  identity is **retired** (OQ-A); `Map` equality is now extensional via ordered
-  `toList` (`../../stdlib/map/seed-map.md`). A bug that makes `List` equality
-  structure-walk (not slot-id) is caught. (structural slot-id, `List`.)
+- expect: the two `List`s compare equal. The same-content `Map`s compare equal
+  extensionally via ordered `toList` (`52 §5.3`;
+  `../../stdlib/map/seed-map.md`). No pointer, slot, or complexity result is
+  asserted.
+- why: AC5's equality face is representation-independent. A bug that makes
+  equality depend on insertion order or allocation path is caught.
+  (structural/extensional equality.)
 
 ### surface/collections/map-key-without-deceq-rejected
 **(SUPERSEDED → `../../stdlib/map/seed-map.md`.** The keying constraint is now
 `where Ord k` (`52 §2`), **not** `DecEq k` — a key type without a lawful `Ord`
 is rejected, and a non-canonical `Ord` key (e.g. `Decimal`) is unlawful
 (`52 §2.1`). Live home `stdlib/map/noncanonical-key-not-a-lawful-map-key`.**)**
-- spec: `52 §2`/`§2.1` (`Ord k` keying + canonical carrier), `33 §5`
-  (constraint resolution; unsatisfiable ⇒ compile error)
-- given: `Map k v` (and `Set a`) instantiated with (a) a key type that **has**
-  `DecEq` (a core type, built-in instance — `Int`); (b) a key type that
-  **lacks** `DecEq` (e.g. a function type `A → B`, for which decidable equality
-  cannot exist).
-- expect: **the verdict flips.** (a) **accepts** — `DecEq Int` resolves
-  (built-in instance, `37 §6`); (b) **rejects** at compile time, the constraint
-  `DecEq (A → B)` **unsatisfiable** (proof search for subobject membership
-  fails, `33 §5`), the error **naming the missing `DecEq` instance**. `Ord` is
-  **not** required for the core `Map`/`Set` (canonical byte order already orders
-  stored keys) — it is the constraint for **ordered** ops (`minKey`/range), the
-  pinned split.
-- why: AC5's membership verdict flip — a **non-degenerate pair** keyed on a
-  **structural** discriminator (constraint resolution succeeds vs fails), per
-  COORDINATION §7, not a self-reported string. A single accept case is
-  green-vs-green under a bug that drops the `DecEq` requirement entirely (it
-  would accept **both**); the reject arm is the guard. **Net-new producer:**
-  class/constraint resolution does not exist in `ken-elaborator` today —
-  producer-grep the real constraint check (built-in `DecEq` instances ship in
-  L3; **user-type** `instance DecEq` was **L-classes-gated** at L3, `33 §5`/`39`
-  — that gate is now **open** (Lc landed, `4aa36c7`) and **delivered in L3b**,
-  AC7 `user-deceq-instance-keys-map-via-real-search`). The reject must be a
-  **real** resolution failure, not
-  a hand-fed "no instance" flag. (verdict-flip pair; hand-feed net; L-classes
-  boundary pinned.)
+- disposition: no active `given`/`expect` remains here. The lawful `Ord`
+  accept/reject pair lives in `../../stdlib/map/seed-map.md`.
 
 ---
 
@@ -473,13 +436,9 @@ elaboration **emits the conjoined obligation**.
 
 ## AC7 — user-type `DecEq`/`Ord` instancing (L3b — the §6 gate crossing)
 
-L3 pinned the `DecEq`/`Ord` boundary with **built-in** instances and tagged
-user-type instancing `(oracle)` L-classes-gated (AC5/AC6). **Lc landed**
-(`4aa36c7`) — the gate §37 §6 flagged is now **open for `DecEq`**: a user
-`instance DecEq K` resolved by Lc's landed
-`instance_search(class, head) -> Option<GlobalId>` (`classes.rs:91`; `Some` =
-the canonical user instance, `None` = a no-instance error), which **extends**
-AC5 (membership/identity) into user types. The **`Ord` half is deferred**:
+L3 pinned user-type instance search before OQ-A retired the `DecEq`-keyed Map
+carrier. The former Map vehicle remains below only as a supersession record.
+The **`Ord` half is deferred**:
 ES2-remainder's §6 pin gives `sort` an **explicit comparator** and defers the
 lawful-`Ord` class, so `sort` (and ordered `Map`/`Set` ops) resolve **no** user
 `Ord` today — the two user-`Ord`-drives-`sort` cases below are gated on the
@@ -494,25 +453,9 @@ coverage (`instance_search` returns `Some`/`None` for a user instance — Lc
 `4aa36c7`, `classes.rs:91`) survives as general class-resolution coverage, but a
 `Map` is now keyed by `Ord k` (`52 §2`), so the user-`Map`-keying vehicle
 re-points to a user `instance Ord K`.**)**
-- spec: `52 §2` (`Ord k` keying), `37 §6` (staging boundary open),
-  `33 §5`/`39 §6` (Lc instance search — the resolver under test)
-- given: a user `data K = …` with (a) a user `instance DecEq K`, and (b) the
-  **same** `data K` with **no** `DecEq K` instance — each used to key a
-  `Map K v` (construction + `lookup`)
-- expect: **the verdict flips on the user instance.** (a) **accepts** —
-  `instance_search("DecEq", "K")` returns `Some(id)`, the user dictionary keys
-  the map and `lookup`/`insert` work; (b) **rejects** at compile time —
-  `instance_search` returns `None`, a **no-instance error naming the missing
-  `DecEq K`**, **not** a silent built-in fallback and **not** a runtime
-  failure
-- why: (L3b-AC1 ★) the user-instancing crossing — extends AC5's built-in
-  `map-key-without-deceq-rejected` into **user** types. **Producer-grep the
-  real resolver:** the `Map` key op must call `instance_search`
-  (`classes.rs:91`) for the user type — **not** a built-in `DecEq`-only table
-  (which would pass a primitive-keyed test while a user-keyed map silently
-  falls back or fails: the built-in-fallback trap). The **reject arm is the
-  guard** — a single accept is green-vs-green under a resolver that ignores
-  the instance requirement.
+- disposition: no active `given`/`expect` remains here. Generic resolver
+  coverage remains outside this retired Map-specific vehicle; lawful Map
+  keying lives in `../../stdlib/map/seed-map.md`.
 
 ### surface/collections/user-ord-instance-drives-verified-sort (deferred)
 - spec: `51-lawful-classes.md` (the lawful `Ord` class + `where Ord a` supplying
@@ -542,10 +485,9 @@ re-points to a user `instance Ord K`.**)**
   **no-instance error naming the missing `Ord K`**
 - why: (L3b-AC2, deferred) user `Ord` drives the verified `sort` **once the
   lawful class + desugaring land**; the reject arm + the **law-carrying**
-  dictionary (not the empty stub) are the guard. Until then the **live**
-  user-instancing coverage is the `DecEq` path
-  (`user-deceq-instance-keys-map-via-real-search`); the explicit-comparator
-  `sort` emission is pinned comparator-side by `sort-emits-issorted-and-perm`.
+  dictionary (not the empty stub) are the guard. Until then the
+  explicit-comparator `sort` emission is pinned comparator-side by
+  `sort-emits-issorted-and-perm`.
   (deferred; do **not** count green against today's empty-stub `Ord`.)
 
 ### surface/collections/user-ord-sort-emits-both-conjuncts (soundness, deferred)
@@ -587,22 +529,8 @@ insertion-order-canonical. No replacement O(1)-slot `Map`-identity case exists �
 the property is gone; the live ordering home is
 `stdlib/map/tolist-ascending-by-key`.**)**
 - spec: **retired** — see `52 §5.3` + `../../stdlib/map/seed-map.md`
-- given: two `Map K v` keyed by a **user** type `K` (with `instance DecEq K`),
-  built by inserting the **same** (key, value) set in **different insertion
-  orders**; and (contrast) a pair differing in one entry
-- expect: the same-content pair **interns to the same slot** (O(1) slot-id) —
-  the canonical form is sorted by the **canonical byte encoding** of each key
-  (`41 §3a`), so identity is insertion-order-independent **for a user key type
-  too**, needing **no** user `Ord`; the differing-entry pair is **unequal**
-- why: (L3b-AC4) the user-key extension of AC5's
-  `structurally-equal-collections-o1-comparable`. **Identity is byte-order,
-  not `Ord`:** `Ord K` (AC2) gates only *ordered* ops (`minKey`/range),
-  **never** identity (`37 §3.3`, the pinned split) — a case requiring user
-  `Ord` for `Map` identity would contradict §3.3. The user `DecEq K` is the
-  **membership** constraint (AC1); the canonical byte encoding of the heap
-  value (`41 §3a`) gives identity for free. Producer: the real key-sorted
-  canonicalization over a **user** key (byte-order), **not** a list-compare
-  and **not** an `Ord`-keyed sort. Assert **same slot-id**, not just `==`.
+- disposition: no active `given`/`expect` remains here. The live proved-Map
+  producer compares extensional ordered contents and does not observe storage.
 
 ## Derived string surface (slice 2) — the `List Char` floor + 5 string ops
 
@@ -805,14 +733,14 @@ result **values** (`Lt`/`Eq`/`Gt`, not `Ordering`); the SCT check stays in its
   lawful `DecEq`** (it identifies distinct sequences → non-canonical → would
   inhabit `Bottom`, ADR 0010 §3); the codepoint-wise `eq` is canonical over the
   `List Char` carrier and sound. **Reconciliation with
-  `string-nfc-canonically-equal-shares-slot` (oracle):** that is a **different
-  operation at a different layer** — the `String` content-addressed `==`
-  (slot-id, O(1)) on two NFC-equivalent **literals** that NFC-at-construction
-  **merges** to one slot (→ `==` `True`, when real NFC lands); **this** case is
+  `string-nfc-canonically-equal` (oracle):** that is a **different operation at
+  a different layer** — extensional `String` `==` on two NFC-equivalent
+  **literals** that NFC-at-construction normalizes to one scalar sequence
+  (→ `==` `True`, when real NFC lands); **this** case is
   the derived codepoint-wise `list_eq`/`eq` on two genuinely-distinct **scalar
   sequences** (which `String` construction never yields as distinct values). No
-  overlapping-input contradiction: `==` decides content-addressed **identity**
-  (post-normalization); `eq`/`list_eq` decides **scalar-sequence** equality
+  overlapping-input contradiction: `==` decides post-normalization extensional
+  equality; `eq`/`list_eq` decides **scalar-sequence** equality
   (NFC-blind); under real NFC they **agree** on `String` values. (property;
   NFC-blind; layer reconciliation.)
 
@@ -861,25 +789,26 @@ result **values** (`Lt`/`Eq`/`Gt`, not `Ordering`); the SCT check stays in its
   `string-byte-length-differs-from-char-length`,
   `string-length-op-refl-deferred-k3` (deferred/RED-UNTIL-K3),
   `string-is-not-list-char-but-convertible`,
-  `string-nfc-canonically-equal-shares-slot` (oracle).
-- **AC2** (persistent collections, sharing):
+  `string-nfc-canonically-equal` (oracle).
+- **AC2** (persistent collections):
   `list-pattern-matches-via-real-elim`,
-  `array-update-shares-unchanged-structure`.
+  `array-update-preserves-unchanged-values`.
 - **AC3** (lawful combinators):
   `functor-law-emits-obligation-cross-decl-resolves`,
   `map-lookup-insert-law-emits-obligation`.
 - **AC4** (no coinduction + inductive infinitude):
   `no-coinductive-construct-in-kernel` (soundness),
   `fuel-bounded-unfold-produces-finite-prefix`.
-- **AC5** (structural equality + `DecEq` flip):
-  `structurally-equal-collections-o1-comparable`,
-  `map-key-without-deceq-rejected`.
+- **AC5** (structural equality):
+  `structurally-equal-collections-compare-equal`. The former `DecEq`-keyed
+  Map case is superseded by the `Ord`-keyed proved Map corpus.
 - **AC6** (verified `sort`, explicit comparator, `Perm` present):
   `sort-emits-issorted-and-perm` (soundness).
-- **AC7** (user-type `DecEq`/`Ord` instancing, L3b — the §6 gate crossing):
-  `user-deceq-instance-keys-map-via-real-search`,
-  `user-deceq-keyed-map-canonical-identity`; **deferred (lawful-`Ord`-class
-  WP):** `user-ord-instance-drives-verified-sort`,
+- **AC7** (user-type instance search, L3b — the §6 gate crossing):
+  the former `user-deceq-instance-keys-map-via-real-search` and
+  `user-deceq-keyed-map-canonical-identity` are retained supersession controls
+  with no active `given`/`expect`. **Deferred (lawful-`Ord`-class WP):**
+  `user-ord-instance-drives-verified-sort`,
   `user-ord-sort-emits-both-conjuncts` (soundness).
 - **DS-AC1–7** (derived string surface, slice 2 — the `List Char` floor + 5
   string ops):
@@ -894,38 +823,29 @@ result **values** (`Lt`/`Eq`/`Gt`, not `Ordering`); the SCT check stays in its
 
 ## Cross-case consistency sweep
 
-- **Content-addressed equality is one story across every collection (`41 §4`).**
-  `string-nfc-…-shares-slot`, `array-update-shares-unchanged-structure`, and
-  `structurally-equal-collections-o1-comparable` must **agree**: equality is
-  **always** a slot-id comparison (O(1)), and "sharing/identity" is **always**
-  observed as slot-id — never a structural re-walk, never insertion-order- or
-  construction-history-dependent. A case asserting an O(n) structural equality
-  or an order-dependent `Map` identity would contradict this class. This is the
-  content-addressed **identity** `==`; the derived slice-2 `eq`/`compare`
-  (`string-eq-…`/`string-compare-…`) are a **different, coexisting** story
-  (next bullet).
-- **Derived string `eq`/`compare` are codepoint-wise functions, distinct from
-  content-addressed `==` but agreeing in result.** The slice-2
+- **Extensional equality is one story across every collection (`41 §4`).**
+  `string-nfc-canonically-equal`,
+  `array-update-preserves-unchanged-values`, and
+  `structurally-equal-collections-compare-equal` agree: equality never depends
+  on a pointer, slot, allocation path, insertion order, or construction
+  history. Copying and structural sharing are both permitted.
+- **Derived string `eq`/`compare` are codepoint-wise functions that agree with
+  extensional `==` in result.** The slice-2
   `eq`/`compare`/`list_eq` (`string-eq-codepoint-wise-accept-reject-pair`,
   `string-compare-3way-lexicographic-triple`,
   `list-eq-is-codepoint-wise-not-nfc-folding`) decide **scalar-sequence**
-  equality/order over the `List Char` view — an explicit codepoint walk, **not**
-  the O(1) slot-id `==` (so they do **not** violate the "identity is always
-  slot-id" invariant above; they are derived decision *functions*, not the
-  content-addressed identity). On well-formed `String` values they **agree** in
-  result with `==` (both decide the NFC-normalized scalar sequence). The
+  equality/order over the `List Char` view. On well-formed `String` values they
+  **agree** in result with `==` (both decide the NFC-normalized scalar
+  sequence). The
   NFC-vs-NFD pin (`list-eq-…-not-nfc-folding`) lives at the `List Char` layer,
   where distinct scalar sequences are **unconditionally** unequal — it does
-  **not** contradict `string-nfc-canonically-equal-shares-slot` (oracle), which
-  is `==` on NFC-equivalent **literals** that construction merges to one slot.
-  A case asserting the derived `eq` folds NFC-equivalence (or that `==`
-  structure-walks) would contradict this split.
-- **`DecEq`-membership vs `Ord`-order split is consistent across `Map` and
-  `Set`.** `map-key-without-deceq-rejected` pins that the **core** `Map`/`Set`
-  require **`DecEq`** (membership) and **not** `Ord` (`Ord` gates only ordered
-  ops). The same split must hold for `Set` (it is `Map a Unit` semantically,
-  `37 §3.3`); a case requiring `Ord` for plain membership/identity would
-  contradict it.
+  **not** contradict `string-nfc-canonically-equal` (oracle), which is `==` on
+  NFC-equivalent literals normalized at construction. A case asserting the
+  derived `eq` folds NFC-equivalence would contradict this split.
+- **The proved `Map`/`Set` keying story is `Ord`, not storage identity.**
+  The former `DecEq`-keyed cases are marked superseded and are not live
+  producers. The active `stdlib/map` corpus compares ordered extensional
+  contents and admits no byte-order, pointer, slot, or interning identity.
 - **Infinitude is inductive on both faces.** `no-coinductive-construct-…`
   (absence of a coinductive former) and `fuel-bounded-unfold-…` (presence of an
   inductive producer) are duals of the §1 decision: every way to "stream" is an
@@ -938,16 +858,10 @@ result **values** (`Lt`/`Eq`/`Gt`, not `Ordering`); the SCT check stays in its
   **completeness** — both conjuncts). None may degrade to "it type-checks",
   which passes vacuously when no obligation is emitted (the untrusted-layer
   omission hole).
-- **The user-instance path (AC7) is one story with the built-in path
-  (AC5/AC6).** AC7's user `DecEq` cases resolve via the **same** landed
-  `instance_search` (`classes.rs:91`) — so the built-in and user `DecEq` paths
-  must **agree**: `Map` identity is **always** byte-order canonical (never
-  `Ord`; `user-deceq-keyed-map-canonical-identity` vs the frame's "via resolved
-  Ord"), and a missing `DecEq` instance is **always** a no-instance compile
-  error, **never** a silent built-in fallback or runtime failure. A case letting
-  the user `DecEq` path diverge — `Ord`-keyed `Map` identity or a runtime
-  fallback — would contradict this class. The **`Ord` sort-VC leg** of this
-  equivalence (`user-ord-sort-emits-both-conjuncts` ≡
+- **The user-instance path (AC7) does not revive the retired Map carrier.**
+  Both old `DecEq`-keyed Map rows remain only as explicit supersession
+  controls. The **`Ord` sort-VC leg**
+  (`user-ord-sort-emits-both-conjuncts` ≡
   `sort-emits-issorted-and-perm`, both conjuncts on the user path) is
   **deferred** with the lawful-`Ord`-class WP — there is no user-`Ord` `sort`
   path on `main` to agree with the base, so `sort-emits-issorted-and-perm` (the
@@ -967,10 +881,9 @@ result **values** (`Lt`/`Eq`/`Gt`, not `Ordering`); the SCT check stays in its
 - **`Char` (scalar, surrogate exclusion) and numeric literals** are **L1's**
   (`../numbers/seed-numbers.md`). L3 references `Char` (`35 §2.4`) for the
   `List Char` view, not re-pinned.
-- **The content-addressed heap, O(1) equality, dedup, and capacity** are the
-  **runtime's** (`../../runtime/seed-runtime.md`, `../../runtime/capacity/`). L3
-  observes slot-id sharing/equality as the **surface** consequence; the heap
-  mechanism is X1/X2's home.
+- **Durable canonical bytes, extensional equality, and resource profiles** are
+  the runtime's (`../../runtime/seed-runtime.md`,
+  `../../runtime/capacity/`). L3 observes value behavior; storage is private.
 - **`Lazy` force/memo, generators, the behavioral seam** are **deferred /
   other-WP** (`42 §2` G1 / L5 / `70-behavioral/`). L3 pins only the **fuel-
   bounded unfold** (item 1) as buildable-now; the other three idioms are named
@@ -980,32 +893,33 @@ result **values** (`Lt`/`Eq`/`Gt`, not `Ordering`); the SCT check stays in its
 
 L3 builds on **landed** substrate: the `String` **primitive** (`14 §5`,
 registered for L6 in `ken-elaborator/src/bytes.rs`), `List`/`Option`/`Result`
-**L2 `data`** + `elim_List` (`34`), the **content-addressed heap** with O(1)
-slot-id equality (`41 §2`/`§4`), the **`L-resolver-globals`** cross-declaration
+**L2 `data`** + `elim_List` (`34`), the runtime value model's canonical bytes
+and extensional equality (`41 §2`/`§4`), the **`L-resolver-globals`**
+cross-declaration
 fallback (`c3a3f1d`), and the **strict-positivity + SCT** admission gates
 (`14 §8`/`17 §4`). The cases that ride **only** landed machinery are real now:
 `list-pattern-matches-via-real-elim`, the resolution face of `functor-law-…`,
-`structurally-equal-collections-o1-comparable` (the `List` half),
+`structurally-equal-collections-compare-equal` (the `List` half),
 `fuel-bounded-unfold-…`, and `no-coinductive-construct-…` (the kernel is clean
 today).
 
 The build-half **Team Language** delivers is **net-new**: the `String` byte/char
-ops + the four conversions; `Array`/`Map`/`Set` (kinds `0x06`/`0x07`/`0x08`)
-with persistent `set`/`insert`/`lookup`; the `map`/`filter`/`fold`/`zip`
-combinators + their laws; the `DecEq`/`Ord` built-in instances + constraint
-resolution; and the verified `sort`. So the QA gate (new-surface WP)
+ops + the four conversions; `Array` (durable kind `0x06`) with persistent
+`set`; the proved package `Map`/`Set` with `insert`/`lookup`; the
+`map`/`filter`/`fold`/`zip` combinators + their laws; instance resolution; and
+the verified `sort`. So the QA gate (new-surface WP)
 **producer-greps** the `String`/`Array`/`Map`/`Set` **registration** in
 `ken-elaborator/src/` (and the `String` primitive in the kernel set, `18 §5`)
 **before** counting green; the laws + `sort` must route through **real `22`
-obligation emission**, the `Map` `DecEq` reject through **real** constraint
-resolution, the `Array` sharing through the **real** persistent `set` — **no**
-synthetic literal or hand-fed obligation where a real elaboration is asserted
+obligation emission**, lawful Map keying through **real** constraint
+resolution, and Array persistence through the **real** `set` — **no** synthetic
+literal or hand-fed obligation where a real elaboration is asserted
 (the `conformance-hand-feeds-the-deliverable` net). The **NFC-equality** case is
 `(oracle)`-staged until real NFC normalization lands
 (`content-addressing.md §1.4` K3 note); **user-type** `DecEq`/`Ord` instancing
-is **delivered in L3b** (AC7, post-Lc `4aa36c7`) — the collection ops wire to
-the landed `instance_search` (`classes.rs:91`) for user types (net-new build).
-The NFC half stays `(oracle)`; the rest is normative.
+is covered by the class corpus after Lc `4aa36c7`; the former `DecEq`-keyed Map
+vehicle is superseded here. The NFC half stays `(oracle)`; the live cases are
+normative.
 
 Primitive-`Op` conversion is a separate staging axis: runtime value cases for
 `byte_length`/`char_length` are live, while the `Refl` proof case remains

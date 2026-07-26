@@ -138,12 +138,12 @@ claim with no conformance case is a claim no one can rely on
   `isScalar := IsTrue(inRangeBool)` Ω-encoding (**sort-not-token**) and
   extraction **computing** the scalar proof (runtime face deferred).
 - `surface/collections/seed-collections.md` — L3 strings & collections (`37`):
-  `String` as a content-addressed **NFC UTF-8 primitive**: byte-length ≠
+  `String` as a canonically encoded **NFC UTF-8 primitive**: byte-length ≠
   char-length through live interpreter values; primitive-`Op` conversion and
   `Refl` explicitly deferred to K3; **not** `List Char`;
   `List`/`Option`/`Result` transparent
-  inductive (L2) and `Array` abstract over the `41` heap (kind `0x06`) with
-  **persistence observable as slot-id** (the heap `Map`/`Set` `0x07`/`0x08`
+  inductive (L2) and `Array` abstract with durable kind `0x06` and extensional
+  persistent behavior (the heap `Map`/`Set` `0x07`/`0x08`
   model is **superseded** by the proved BST, `stdlib/map/seed-map.md`); the
   combinator laws as **emitted propositions**; **infinitude without
   coinduction** (the fuel-bounded inductive `unfoldUpTo` + the
@@ -264,14 +264,13 @@ claim with no conformance case is a claim no one can rely on
   I-4 §B reachability gate; re-export-carried instance surfaces and multi-root
   precedence remain out.
 - `runtime/seed-runtime.md` and `runtime/values/README.md` — closure-free
-  canonical-data dedup + O(1) equality; ordinary-closure opacity, aggregate
-  `DecEq` absence, and transitive publication refusal; `Int` past 2⁵³ exact;
-  `unknown` propagation.
-- `runtime/capacity/seed-capacity.md` — X2 store hardening (`44`): dedup-aware
-  accounting (distinct, not occurrences), the **loud** at-limit failure
-  (`CapacityExhausted` raised, never the silent `NULL_SLOT` drop), reclamation
-  page release (`arena_bytes → 0`), region-scoped lifetime + escape-survival,
-  retired-ids-never-resurrected, and no-lattice-on-the-hot-path.
+  canonical bytes + extensional equality with private storage;
+  ordinary-closure opacity, aggregate `DecEq` absence, and transitive
+  publication refusal; `Int` past 2⁵³ exact; `unknown` propagation.
+- `runtime/capacity/seed-capacity.md` — X2 resource behavior (`44`):
+  profile-declared accounting, **loud** at-limit failure,
+  semantics-invisible reclamation, logical-space isolation + escape survival,
+  no stale alias/false merge, and no semantic lattice dependency.
 - `runtime/backend/seed-backend.md` — X3a native backend **differential
   equivalence** (`45`): the interpreter-is-oracle rule (same closed term through
   both → identical closure-free comparable ground observations; callable
