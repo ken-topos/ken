@@ -591,86 +591,27 @@ brief** — the implementer should execute mostly mechanically, not design
 >    Same lesson as the ctx%-scan and the stranded-paste sweep: **where a
 >    backstop depends on you remembering to look, convert it into a step.**
 >
-> 8b. **★★ `ls-remote` THE WP BRANCH — approved work lives on ONE LOCAL REF far
->    more often than you expect, and build seats CANNOT push it themselves.**
+> 8b. **⛔ THERE IS NO OFF-BOX PUSH PROTOCOL. DELETED — operator, 2026-07-26.**
 >
->    ```sh
->    git ls-remote origin refs/heads/wp/<ID>-<slug>      # empty ⇒ ZERO off-box copies
->    git for-each-ref --contains <sha> --format='%(refname)'
->    ```
+>    > *"You do not need off-box pushes. In decades of software development, I
+>    > have never lost a commit to a drive failure."* — and, on the ~80 lines of
+>    > sweep-and-push recipe that used to sit here: *"keep it simple. the off box
+>    > push protocol needlessly complicates and wastes time and tokens."*
 >
->    ⛔ **`git branch -r --contains` / `for-each-ref` answer against your LOCAL
->    MIRROR of the remote, not against origin.** `refs/remotes/origin/*` is only
->    as fresh as your last fetch of *that refspec*, so a branch that exists on
->    origin can report as absent and a deleted one as present. **Only `ls-remote`
->    asks origin.** ⚠ And *"N commits ahead of `origin/main`"* is a different
->    question from *"N commits not on origin"* — a durability sweep must compare
->    each branch against **its own** remote tip, or every seat whose branch simply
->    sits at `origin/main` reads as an exposure and the real ones drown.
+>    ⇒ **A branch existing on one local ref is NORMAL, not an exposure.** Do not
+>    sweep for it, do not push a WP or seat branch to origin, do not mint a token
+>    for durability, and do not raise an unpushed ref to a ring as a finding.
+>    **`origin` carries `main` only** — every other branch was deleted on the
+>    same ruling. A publish still pushes its own candidate branch, because that
+>    is how `scripted-pr-automerge.sh` opens a PR; that is the *only* push.
 >
->    ⚠ **Extend the check past WP branches: SEAT WORK branches carry local-only
->    commits too, and nobody is watching them.** Measured 2026-07-26 —
->    `architect/work` held **8** local-only state commits including the B2V
->    predicate and cycle rulings and the RT-SCALE-A harness ruling (pushed);
->    `adversary/work` **86**; `librarian/work` **9**. ⛔ A singleton's state
->    branch is its post-compaction resume anchor, and it never merges, so it has
->    **no publish event to make its durability anyone's problem.** Sweep every
->    worktree, not just the frontier:
->
->    ```sh
->    git worktree list --porcelain | awk '/^worktree /{w=$2} /^branch /{print w" "$2}' \
->    | while read -r wt br; do b=${br#refs/heads/}
->        rem=$(git ls-remote origin "refs/heads/$b" | awk '{print $1}')
->        [ -n "$rem" ] && n=$(git rev-list --count "$rem"..$(git -C "$wt" rev-parse HEAD)) \
->          && [ "$n" != 0 ] && echo "$b: $n LOCAL-ONLY"
->      done
->    ```
->
->    ⚠ **Then ask whether the commits are unmerged WORK or squash-merge
->    leftovers** before treating them as loss — branch-ahead ⇏ unmerged.
->
->    ⛔ **Build seats have NO GitHub credential, by design.** A seat that
->    finishes a fold and reports an exact SHA has often *tried* to push and
->    failed with `could not read Username`. It cannot fix this, and it will
->    keep working while the only copy sits on one local ref.
->
->    ⚠ **You CAN push it, and it is yours to just do** — no operator routing, no
->    `scripted-pr-automerge.sh`. A WP-branch push is not a merge and does not
->    mutate `main`. The credential is **minted on demand**, the same way the
->    publisher does it at its own line 91:
->
->    ```sh
->    T="$(.devcontainer/mint-gh-token.sh)"   # PRINTS the token — never `source` it
->    U="$(git remote get-url origin | sed "s|https://|https://x-access-token:${T}@|")"
->    git push "$U" <sha>:refs/heads/<branch> 2>&1 \
->      | sed 's/x-access-token:[^@]*@/x-access-token:***@/g'
->    unset T U
->    ```
->
->    ⛔ **DERIVE the URL from `origin`; never hardcode the org/repo.** This recipe
->    used to spell `github.com/<org>/ken.git` literally, and the org was renamed on
->    **2026-07-25** (`ken-topos` → `swe-toolkit`). The hardcoded form **kept
->    working**, because GitHub silently redirects a renamed org — so the recipe was
->    wrong and *nothing failed*, which is the worst version of wrong. That
->    redirect is a courtesy, not a guarantee: it lapses the moment anyone claims
->    the abandoned org name. ⇒ **Any org/repo/URL literal in a runbook is a latent
->    breakage whose alarm is disabled by a redirect. Read it from the repo.**
->
->    Re-anchor first (`git cat-file -t <sha>`; parent an ancestor of `main`),
->    then `ls-remote` to confirm, and report the exact remote SHA back.
->    Use `--force-with-lease=<branch>:<old-sha>` **only** on a respin.
->
->    **2026-07-24: THREE single-ref exposures in one session** — `7547da95` and
->    `d2d0fa0d` were reviewer-**approved** and unpushed when I went to publish;
->    `415b5aa7` was 21k lines of stopped WIP. The same condition nearly lost the
->    `b077eb7a` checkpoint, where a compaction helper **hard-reset that exact
->    branch within ten minutes**. ★ I also told a seat "it has to come from you,"
->    which is **false** and stalled its active unit — it correctly refused to
->    proceed on a durability gap it had no power to close.
->
->    ⇒ **Tell rings: report an unpushed ref and KEEP GOING.** Raising it is not
->    gating on it. **Where a backstop depends on you remembering to look, convert
->    it into a step** — same lesson as step 8 and the stranded-paste sweep.
+>    ⚠ **What this replaces, so the old reasoning does not creep back:** this step
+>    used to treat a single-ref branch as a durability incident, with a
+>    per-worktree `ls-remote` sweep, a token-minting push recipe, and a "tell
+>    rings to report unpushed refs" instruction. **All of it is gone.** Preserving
+>    a ref is still occasionally right for a *hard-reset hazard* — the
+>    handoff-gate script's `preserved/<branch>` net (§2c step 4) — but that is a
+>    **local** ref, and it does not want a remote copy either.
 >
 > 9. **★ ON PUBLISH — ack "PR #N is open at `<SHA>` — the branch is FROZEN" into
 >    the WP thread, immediately.** A `git_request` becoming a live PR is
