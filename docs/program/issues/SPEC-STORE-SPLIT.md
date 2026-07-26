@@ -106,6 +106,48 @@ stopped being required.
   does not expose the physical choice.** ⭐ This is the control Ken needs: it is
   precisely a cross-owner call boundary that does not leak its representation.
 
+## 3a. ⭐⭐ THE CLOSURE RELAXATION ALREADY LANDED — this node is only its SEAM
+
+⛔ **`SPEC-CLOSURE-BOUNDARY` is MERGED** (PR #982, exact `0ccca4c5`,
+`origin/main` `dd9f4e76` → `33f0695f`, blob-verified). It made ordinary
+`Closure` **runtime-local and opaque**: no Ken-visible structural equality,
+`DecEq`, ordering, canonical hash, slot identity, or provenance; persistence
+**transitively closure-free**; stable callable identity only as
+`StaticCallableRef` with no captured environment.
+
+⭐ **It is UPSTREAM of this campaign, not inside it** —
+`14-spec-mission-alignment-campaign.md` opens by naming this campaign *"that
+WP's generalization."* ⛔ **Do not re-open its six ruled clauses here.**
+
+### ⛔ The one seam where the two relaxations touch, and it is load-bearing
+
+§3 item 1 retains canonical encoding **for values that cross a durable
+boundary**. The closure boundary says a closure crossing that boundary must be
+**refused before bytes exist** — ⛔ never silently substituted by a pointer,
+ordinal, digest, or handle.
+
+⇒ **These agree, but only if the store split says so.** Write §3 item 1 so that
+*"values that cross a durable boundary"* **excludes ordinary closures by
+construction**, not as a special case bolted on afterwards. ⛔ **A durable-bytes
+clause written without the closure exclusion in front of it re-admits the exact
+arm `RT-VALUE-TOTALITY` P2 exists to delete** (`canonical.rs:182`, measured
+still live).
+
+⚠ **And read §3 item 2 with this in hand.** Demoting *same-slot conformance* to
+private must **not** read as making slot identity newly available to closures —
+the closure boundary forbids closures having slot identity **at all**, which is
+a stronger statement than "the mechanism is private." ⛔ Two different claims;
+state both.
+
+### ▶ What is genuinely still open on closures — one thread, and it is not mine
+
+`SPEC-CLOSURE-BOUNDARY`'s **`AC-S7`** invited the enclave to say if a ruled
+clause was **still stronger than the mission needs**, rather than implement it.
+⚠ **I have not verified whether that invitation was exercised.** ⇒ If, while
+writing §3, the enclave finds a closure clause over-strong against the relaxed
+store contract, **route it as a fork** — ⛔ do not fold a closure relaxation
+into this node silently, and ⛔ do not assume silence meant "nothing to say."
+
 ## 4. ⛔ THE CONFORMANCE ROWS THIS MUST RETARGET — the real cost, stated up front
 
 ⚠ **A relaxation is a COUPLED `spec/` + `conformance/` change.** These rows
@@ -159,6 +201,13 @@ arena organization, and reset mechanics become private.
 4. **Salvage decision on `e1b540e2`** — merge, subsume, or discard, decided
    **against the reworked program**, ⛔ never on the grounds that it is nearly
    done.
+5. **Frame `RT-VALUE-TOTALITY` P2** — ⛔ **NOT WRITTEN**, and it is the landed
+   closure boundary's *only* remaining carry-through into `crates/`
+   (`AC-V4`–`AC-V6`, `AC-V8`–`AC-V10`, `AC-V12`: carrier split, derives, closure
+   arm, `ken-foundation` twin, checked projection). It waits on this node
+   because **its carrier split IS the store question** — §3a is the seam. ⚠ P3
+   (`AC-V11`, `Debug` depth-totality) does **not** depend on P2 and is
+   releasable independently.
 
 ## 8. ⚠ THE HONEST RESIDUAL
 
