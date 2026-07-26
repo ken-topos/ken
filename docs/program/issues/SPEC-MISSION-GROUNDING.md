@@ -1,7 +1,7 @@
 ---
 id: SPEC-MISSION-GROUNDING
 title: "Ground the spec as a whole against the mission — audit every retained constraint for which mission property fails without it, and relax the ones where nothing does"
-status: draft
+status: active
 owner: spec
 size: L
 gate: none
@@ -11,13 +11,55 @@ github: null
 origin: Operator question 2026-07-26 — "the question to ground the spec against the goals of the language has been a great benefit (or will be, at least). What agent would be best suited to perform the same analysis on the spec as a whole?" followed by "ok make a note of the process." Generalizes the single-node result on SPEC-CLOSURE-BOUNDARY, which began with the operator's direction challenge (evt_5qr8c07a1tbc9) and whose immediate cause was six consecutive Architect production blocks on RT-FNSPLIT-B2V against a premise nobody had examined. Steward-filed per COORDINATION §2 (agents cannot create tracked work).
 ---
 
-> ## ⛔ THIS NODE IS `draft` AND BLOCKED ON AN OPERATOR INPUT, NOT ON A SEAT
+> ## ✅ PRECONDITION DISCHARGED, FIRST PASS RAN — this node is now the umbrella
 >
-> The operator is drafting **the mission** (stated 2026-07-26, ~03:50Z, to be
-> drafted at ~11:30Z). ⛔ **Do not start the audit before it exists** — and do
-> not substitute a seat's reading of `docs/PRINCIPLES.md §I` for it. The
-> measurement in §3 below is the reason: the citable mission today is ~25 lines
-> and does not contain either half of the goal the operator states out loud.
+> ⛔ **The `draft`/blocked-on-an-operator-input header that stood here is
+> superseded, not qualified.** Its premise — that the mission did not exist as a
+> citable artifact — became **false** on 2026-07-26:
+>
+> - **`AC-M1` is DISCHARGED.** `docs/MISSION.md` exists on `origin/main`
+>   (blob `1e52e77e`, 47 lines: *Why Ken exists* · *Commitments* · *The
+>   boundary*). The operator wrote it, as §3 required.
+> - **The first pass RAN.** The operator dispatched the
+>   **conformance-validator** directly — the seat §2 nominates — which compared
+>   `docs/MISSION.md` against the whole normative spec. **Research** added a
+>   prior-art addendum. ⚠ The pass covered **the whole spec**, not the
+>   `40-runtime` pilot §4 prescribed.
+> - **Output, captured verbatim and tracked:**
+>   [`docs/program/spec-mission-overspecification-advisory.md`](../spec-mission-overspecification-advisory.md)
+>   (it was delivered into gitignored `local/`, so the analysis existed on one
+>   box only).
+> - **Dispositions:**
+>   [`docs/program/14-spec-mission-alignment-campaign.md`](../14-spec-mission-alignment-campaign.md)
+>   — Track A `SPEC-ALIGN-A1` (released), Track B `SPEC-ALIGN-B1` (deferred
+>   behind the Linux ABI campaign), Track C eight design forks needing rulings.
+>
+> ⇒ **This node is now the umbrella**: it owns the *method and its standard of
+> evidence*; the tracks own the edits. ⛔ It does not close when `A1` lands —
+> see the AC reconciliation immediately below, which is the reason it is
+> `active` rather than `merged`.
+
+## ⚠ AC RECONCILIATION — what the first pass DID AND DID NOT discharge
+
+⛔ **Do not read "the pass ran" as "the node's ACs are met."** The pass was
+dispatched directly and did not run against this node's criteria, so three are
+open and one is only partly met. Stated per-AC because a whole-node verdict
+would collapse four different answers into one:
+
+| AC | state | why |
+|---|---|---|
+| `AC-M1` mission properties exist as a citable artifact | ✅ **discharged** | `docs/MISSION.md`, blob `1e52e77e` |
+| `AC-M2` verdict taxonomy with a cell for the honest answer | ⚠ **substituted, not discharged** | the advisory uses a *mechanism-vs-property* test plus research's *four-class* scheme. ⛔ Neither has an **`inherited`** cell nor a **`cannot-determine`** cell — the two this AC exists to force. A constraint that is in the spec *because it was already in the spec* is invisible in the delivered scheme. |
+| `AC-M3` independent refutation pass | ⛔ **NOT discharged** | research supplied **prior-art corroboration**, which is not refutation. ⭐ It *did* contradict the CV on three axes — downgrading SCT termination and instance coherence to forks, upgrading runtime `unknown` to #1 — so it was not a rubber stamp. But it read the report and commented on it, which is the exact inheritance shape this AC names. **The adversary refutation pass is still owed.** |
+| `AC-M4` relaxations stated as what the spec STOPPED requiring | ▶ **inherited by `SPEC-ALIGN-A1`** | no relaxation has landed yet; carried as A1's five-item record |
+| `AC-M5` conformance blast radius stated BEFORE the wording settles | ⚠ **partly, and the Steward moved it earlier** | the advisory did not state it. The Steward measured it before releasing anything (campaign §2): **every** class-4 candidate has a conformance row. That is what re-cut Track A from *cleanup* into *census-then-stop*. |
+| `AC-M6` the pass reports its own method failures | ⚠ **partly** | the advisory states *"absence from the mission is not by itself proof of overspecification"* and research adds the classification the report lacked — both genuine method findings. ⛔ But no coverage bound is stated: **nothing says which of the 63 spec files were read**, so the pass's own completeness is unmeasured. |
+| `AC-M7` a previously-Architect-ruled constraint may be challenged | ✅ **exercised** | the advisory challenges the content store, the prover architecture, and `OQ-Space` — all previously ruled |
+
+⇒ **Open on this node, independent of any track:** the `AC-M3` adversary
+refutation pass, the `AC-M2` `inherited`/`cannot-determine` cells, and the
+`AC-M6` coverage bound. ⛔ **Track A does not subsume these** — A1 audits
+mechanism against consumers; these audit the *audit*.
 
 ## 1. What actually produced the result on one node
 
