@@ -195,6 +195,8 @@ arena organization, and reset mechanics become private.
    built around the constraint being removed. **Retire them and write fresh.**
 2. **Re-put hard-stop `#11` to the Architect** against the new contract. ⚠ ⛔ **Do
    not assume it dissolves** — that must be established, not inherited.
+   **Its evidence is §7a below** — ⛔ do not re-derive it, and ⛔ do not re-put
+   `#11` as it stood.
 3. **Re-read `SPEC-ALIGN-A1`'s stop list.** Its stated justification cites live
    `B2E` work, which no longer exists. ⚠ Each stop also rests on live rows and
    C7; §3–§5 move both. **Re-read, do not auto-clear.**
@@ -208,6 +210,65 @@ arena organization, and reset mechanics become private.
    because **its carrier split IS the store question** — §3a is the seam. ⚠ P3
    (`AC-V11`, `Debug` depth-totality) does **not** depend on P2 and is
    releasable independently.
+
+## 7a. ▶ HARD-STOP `#11`'s MEASUREMENTS — carried here because they live nowhere else
+
+⚠ **These were raised BEFORE any production edit** — `crates/` was byte-identical
+to `bb3e58ea`, so there is nothing to unwind. ⛔ They are input to the re-cut, not
+a defect report.
+
+**Durable evidence ref:**
+`preserved/rt-fnsplit-b2f-hardstop-11-evidence = d1abbc79` on `origin`.
+⛔ **Bind `d1abbc79`, not `a376bf65`** — the earlier ref named only **2**
+eliminators, so a reader of the stale one **under-scopes the problem.**
+
+### The measurement
+
+**`B2V` landed a boundary-word REPRESENTATION with NO CONSUMER.** A value can be
+written into a tagged word; **nothing reads one back** into a `Lowered` the
+lowering can eliminate.
+
+All **three** eliminators require a compile-time template, and a **landed test
+defends the refusal**:
+
+| eliminator | site |
+|---|---|
+| `Match` | `core.rs:4697` |
+| `ComputationalMatch` | `core.rs:1387` |
+| `Project` | `core.rs:4754` |
+
+Every `LexicalClosure` body is its own unit (`static_transition.rs:961`), so
+under `D1` its args arrive through `Parameter`/`ValueWord` slots; **31 of the 47
+transfers are `Constructor`.**
+
+### The falsification — stripped the template at all 11 cross-owner sites
+
+| stripped | result |
+|---|---|
+| `args` | **reddens** |
+| `tag` | **reddens** |
+| `HostResult.{ok,error}` | **444/0 GREEN** ⇒ `HostResult` is **not** implicated, which **narrows `#10`'s pairing** |
+
+### ⚠⚠ THE CAVEAT THAT MATTERS MOST — the safety net is one test
+
+⛔ **Both reddenings are the SAME single test out of 444.** Coverage is **thin** —
+which is precisely why a **partial** switch-over would have looked green.
+⛔ **Any re-cut that leans on those two reddenings as its safety net is leaning on
+one test.** Establish real coverage first, or state that you are proceeding
+without it.
+
+### ⭐ THE PATTERN — three instances, and it is why the sequence never terminated
+
+`B2O` partition/consumption · `B2R` modes/obedience · `B2V`
+representation/consumption — **each node shipped a representation whose
+eliminator was the NEXT node's problem, and each residual was found
+downstream.**
+
+⇒ ⛔ **Every re-cut node MUST NAME WHO ELIMINATES WHAT IT REPRESENTS.** A node
+that lands a representation and defers its consumer has shipped the verifiable
+half and moved the hard half forward one slot. This is a standing memory lesson
+(`a-representation-node-must-name-who-eliminates-it`); ⭐ **the re-cut is where it
+gets applied, not re-learned.**
 
 ## 8. ⚠ THE HONEST RESIDUAL
 
