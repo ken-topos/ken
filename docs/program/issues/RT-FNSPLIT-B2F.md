@@ -5,13 +5,37 @@ status: ready
 owner: runtime
 size: L
 gate: none
-depends_on: [RT-FNSPLIT-B2A-S, RT-FNSPLIT-B2O, RT-FNSPLIT-B2R, RT-FNSPLIT-B2V]
+depends_on: [RT-FNSPLIT-B2A-S, RT-FNSPLIT-B2O, RT-FNSPLIT-B2R, RT-FNSPLIT-B2V, RT-FNSPLIT-B2E]
 blocks: [RT-SCALE-B]
 github: null
 origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answering Steward Q1-Q3 on merits (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the D1/D2 half of the retired RT-FNSPLIT-B2A frame. RE-SLICED 2026-07-25 by Architect ruling evt_842spc7t6js1 on hard-stop #9 (research advisory evt_531c4k52mshrn) plus addendum evt_t4fykh52ncb: this node is NOT buildable as one unit and now depends on two inert prerequisites. Steward-filed; Steward owns the replacement frame and AC/control placement.
 ---
 
-> ## ⛔ HELD AT HARD-STOP #11 — `B2V` LANDED A REPRESENTATION WITH NO CONSUMER
+> ## ⛔ HELD AT HARD-STOP #11 — RULED: `RT-FNSPLIT-B2E` IS INSERTED BEFORE THIS NODE
+>
+> **Architect ruling `evt_35p5ancbdmzr7`, Decision `dec_43h1rggqxcf1a`** —
+> `resolved`, `resolved_by=agt_37reqftfe6g00`, verified from the object. **The stop
+> is ACCEPTED.** Full transcription lives in
+> **`docs/program/issues/RT-FNSPLIT-B2E.md`**; the parts that bind *this* node:
+>
+> - **Sequence is now `B2O` → `B2R` → `B2V` → `B2E` → `B2F`.** ⛔ This node does
+>   **not** resume until the closed `B2E` artifact lands. Its release gate depends
+>   on that artifact, not merely on `B2E` being merged.
+> - ✅ **`B2F` resumes UNCHANGED in purpose and atomicity.** It remains the atomic
+>   node that creates compiled-once units and routes production boundary traffic.
+>   ⛔ `B2E` does **not** take a bite of it: `B2E` must land with **zero `B2F`
+>   target population, zero cross-owner call switch, zero old-authority removal.**
+> - **Count #11 stands** — the numbering does not reset. ⛔ **No research pull is
+>   due until #12.**
+> - ⛔ **The three escapes are closed by settled authority**, so do not re-propose
+>   them at resume: **caller specialization** (defeats `D1`), **scalar-only
+>   coexistence** (rejected at #9), **compile-time rehydration** (violates `D6`).
+> - ⚠ **The stop's own shorthand was corrected by the ruling:** `B2V` *did* land
+>   the low-level tagged-word interface. What is missing is the **semantic
+>   elimination bridge** above it. ⛔ Do not carry *"B2V has no consumer"* forward
+>   as the description — it under-describes what exists and over-describes the gap.
+>
+> ### ▶ THE STOP AS RAISED — retained because the gate record is real
 >
 > **2026-07-26 ~13:00Z, `runtime-implementer`, raised before any production edit.**
 > `crates/` is **byte-identical to `bb3e58ea`** — **there is nothing to unwind.**
@@ -26,9 +50,9 @@ origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answ
 > Fast-forwarded (`a376bf65..d1abbc79`, ancestry verified before the move).
 > ⭐ The implementer flagged the gap itself, mention-free so as not to
 > double-deliver into the Architect's live turn.
-> **With the Architect** for a ruling on the representation-versus-elimination
-> boundary. ⛔ **Do not resume `D1`–`D8` construction on this node until that
-> ruling lands and the Steward re-slices or re-releases.**
+> ✅ **The ruling has LANDED** — see the block at the top of this file. ⛔ **Do not
+> resume `D1`–`D8` construction until the closed `B2E` artifact lands and the
+> Steward re-releases this node.**
 >
 > **The stop, in one line:** a value can be *written* into a tagged boundary word;
 > nothing can *read* one back into a `Lowered` that the lowering can eliminate.

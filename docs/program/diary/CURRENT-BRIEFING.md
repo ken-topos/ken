@@ -33,9 +33,13 @@ handle it."* Report + Research addendum:
 ### ✅ **#986 → #1019 ALL MERGED** — incl. #1009 (`R5` erratum), #1013 (`#82`).
 ### ✅ **`ABI-R1` CLOSED** · ✅ **`RT-FNSPLIT-B2V` CLOSED** — retros IN on both.
 ### ✅ **`DOC-GATE-NEEDLE` MERGED #1019** — blob-verified; retros + flip OWED (#93).
-### ⛔ **ZERO LANES LIVE — `B2F` IS HARD-STOPPED AT `#11`, with the Architect.**
+### ⛔ **ZERO LANES LIVE. `#11` IS RULED: `RT-FNSPLIT-B2E` INSERTED BEFORE `B2F`.**
+### `B2O` -> `B2R` -> `B2V` -> **`B2E`** -> `B2F`. Node filed `status: draft`;
+### ▶ **NEXT STEWARD DELIVERABLE = the `B2E` frame, then §2c gate + kick Runtime.**
 ### `crates/` byte-identical to `bb3e58ea`; nothing to unwind. Evidence on
-### `origin`: `preserved/rt-fnsplit-b2f-hardstop-11-evidence` = `a376bf65`.
+### `origin`: `preserved/rt-fnsplit-b2f-hardstop-11-evidence` = `d1abbc79`.
+### ✅ **`DOC-GATE-NEEDLE` CLOSED** — merged #1019, 3 retros in, node flipped;
+### Verify ring compaction VERIFIED on all three seats. Adversary hunt out.
 ### ⛔ **`B2F` CENSUS AMENDED: 47 events / 10 positions, NOT 41.** Ring-measured;
 ### the historic `41`/`29`/`~33 of 41` are DEAD operands. ⛔ Does NOT narrow `AC-11`.
 ### ✅ **CV mission/spec over-specification review + Research prior-art addendum:**
