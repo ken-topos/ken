@@ -14,6 +14,34 @@ reframes the catalog for the phase now beginning: the same components, but
 authored deliberately for the audiences and uses below, in a literate format,
 under a clear home.
 
+## Requirements — `DOC-CATALOG`
+
+> **Program-level requirements** per
+> `docs/program/15-requirements-and-acceptance-criteria.md`. These are what the
+> component WPs must satisfy **collectively**; each WP's ACs name the RQ they
+> apply. ⛔ This section is the authority for the RQ text — a WP frame quoting it
+> is a convenience copy, and if they disagree, **this doc wins**.
+
+| RQ | kind | requirement | conformance |
+|---|---|---|---|
+| `DOC-CATALOG.RQ-1` | functional | Every catalog entry presents **one** consistent, named navigation section, spelled the same way across the corpus. | `none` — the catalog is first-party product documentation; no conformance row governs entry headings |
+| `DOC-CATALOG.RQ-2` | functional | Entry format facts have **exactly one authoring home**, and every consumer that describes the format agrees with the entries. ⚠ Consumers may assert the format in prose without quoting a heading. | `none` — an internal-consistency property |
+| `DOC-CATALOG.RQ-3` | functional | **Ken fence content is byte-preserved** across any documentation-format change. A doc sweep may never alter Ken source. | the catalog's Ken fences are checked by the library documentation gates |
+| `DOC-CATALOG.RQ-4` | functional | Generated library artifacts — the source-attestation ledger, `REVISION`/`STATUS.md`, and `library/agents/manifest.toml` token measures — are **consistent with the entries they describe**, including transitively. | `none` — a derived-artifact currency property |
+| `DOC-CATALOG.RQ-5` | non-functional | A catalog entry remains **readable to different depths** — a reader can orient without reading the whole entry. ⭐ Recorded because removing the named reading paths retires *one mechanism* for this; the requirement it served does not retire with it. | `none` — a quality bound, not a checkable row |
+
+⭐ **`RQ-5` is why this section exists rather than a naming convention alone.**
+Retiring a mechanism silently deletes the promise the mechanism kept unless the
+promise is written down somewhere that outlives it. That is the
+non-functional-requirement tier doing exactly the job
+`15-*.md` §3 describes.
+
+⚠ **Open requirement:** `RQ-5` is claimed by **no AC** in
+`DOC-CATALOG-CONTENTS` — that WP removes a mechanism serving it and does not
+replace it. Per `15-*.md` §5 that is a **residual**, and it is visible here
+deliberately rather than discovered downstream. ⇒ It needs either a successor
+mechanism or an explicit ruling that the `## Contents` section alone discharges it.
+
 ## What the catalog is — four purposes at once
 
 The catalog is not only where reusable Ken code lives. It serves four purposes
