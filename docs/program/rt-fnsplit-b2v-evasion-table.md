@@ -1345,3 +1345,95 @@ see the last sixty lines and no compiler output at all. Re-measured on the full
 buffer: **28 lib + 7 lib-test warnings**, all pre-existing dead-code and
 unused-mut notices. The test counts were unaffected. ⭐ Those unread warnings
 are what surfaced the finding above.
+
+---
+
+# The authority-to-emitter edge — Architect ruling `evt_7nkbf495pg54h`
+
+The phase-closure artifact above closed **completeness** and left the finding
+that the classification layer had **no production consumer**. The Architect
+ruled the wiring **in `B2V` scope and required**: `RECUT 2` governs whether the
+fixed helper artifact is *generated from* the representation authority, while
+`D6` governs whether it is *inert at the semantic call graph*. Production
+codegen consumption is not `B2F` activation.
+
+## What was actually hand-maintained
+
+Seven `class_guard` call sites in `boundary_value_clif.rs` each carried a
+literal class list beside the helper body:
+
+```rust
+class_guard(&mut b, node, &[BoundaryClass::Int]);                        // x5
+class_guard(&mut b, node, &[BoundaryClass::Bytes, BoundaryClass::String]); // x2
+```
+
+⛔ That is *"another hand-maintained table beside the helper bodies"*, which the
+ruling names as not counting. All seven now read from the plan.
+
+## The seam
+
+```text
+lowering/core.rs   BoundaryEmissionPlan::derive()      <- the authority
+        |                                                (BoundaryInput -> outcome
+        |                                                 -> class, x storage_shape)
+        v
+emit_boundary_value_local_graph(module, native_int, &plan)
+        v
+define_store_int_limbs / _limb / _tag / seal_int / bytes_len / byte_access / int_part
+        v
+class_guard(.., plan.int_magnitude_classes() | plan.byte_span_classes())
+```
+
+`BoundaryEmissionPlan` is data-only and `pub(crate)`; its **derivation** lives in
+`cranelift_backend::lowering` because `BoundaryInput` is private to that module.
+⭐ **That privacy is the mechanism, not an accident:** the emitter *cannot*
+restate the authority, because it cannot see it.
+
+⚠ **Measured before rewiring:** the derived sets are exactly `[Int]` and
+`[Bytes, String]` — precisely what the literals said. So the change is
+behaviour-preserving today and its whole value is that the edge is now causal.
+
+## Causal evidence — the ruling's bar, not a "plan is passed" check
+
+| id | mutation / probe | result |
+|---|---|---|
+| **M-H** | the emitter ignores the plan: five guards revert to `&[BoundaryClass::Int]` | ✅ **RED** — `recut2_the_emitted_helper_graph_changes_when_the_authority_changes` |
+| **perturbed plan** | same emitter, plan's int-magnitude set changed to `[Record]` | ✅ emitted CLIF **differs**, and differs *in the class constant the plan supplies* |
+| **same plan twice** | two captures under the identical plan | ✅ **equal** — so the inequality above is attributable, not noise |
+| **derivation** | recompute both sets in the test from the classifier and `storage_shape` | ✅ `recut2_the_plan_is_derived_from_the_partition_not_restated` |
+
+⛔ **A `capture_..._with_plan` injection point was added specifically so this
+could be causal.** Without it the only available evidence would have been "the
+plan is passed", which is the `let _ = plan` the ruling excludes.
+
+⚠ **Restore discipline, and a mistake worth recording.** The first `M-H` run was
+performed while the wiring was still **uncommitted**, and `git checkout -- <file>`
+restored the file to `HEAD`, discarding the entire wiring along with the
+mutation. Nothing was lost permanently — it was re-applied from the same script
+— but the rule is the one this repo already carries: **commit the real change
+before any mutation-proof reset.** `M-H` was then re-proved against the
+committed tree, and the tree verified clean with `git diff --quiet`.
+
+## `D6` — re-measured after the wiring, still unchanged
+
+| quantity | predicted | measured after wiring |
+|---|---|---|
+| `BACKEND_PRODUCTION_SOURCES` | unchanged | **13** |
+| `LOCAL_HELPER_COUNT` | `6` | **6** |
+| `BOUNDARY_LOCAL_HELPERS` | unchanged | **28** |
+| new module / new helper | none | none |
+
+✅ The plan changes helper **body contents** only — the fixed Θ(1) helper set,
+the semantic generated-function population, the calls and the ownership topology
+are untouched, which is the inertness `D6` protects and `B2F` depends on.
+
+**Suite:** `scripts/ken-cargo test -p ken-runtime` — **433 lib + 12 integration,
+0 failed.**
+
+## What remains open
+
+⛔ **This closes the edge for the class-legality axis of the helper bodies.** It
+does **not** claim every representation authority is consumed: `tag`, `owner`
+and `identity` legality in the emitted bodies were not part of this fold, and
+the `RECUT 2` predicate names them alongside class. They are the next increment,
+not a residual being waived.
