@@ -7275,7 +7275,7 @@ pub(crate) mod tests {
     #[test]
     fn b2v_every_emitted_owner_band_test_is_the_plans() {
         use crate::boundary_value::{
-            BoundaryEmissionPlan, BoundaryReferentOwner, BoundaryTagAdmission, BOUNDARY_TAG_BITS,
+            BoundaryEmissionPlan, BoundaryReferentOwner, BoundaryTagAdmission,
         };
 
         let plan = BoundaryEmissionPlan::derive();
