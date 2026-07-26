@@ -1,11 +1,11 @@
 ---
 id: RT-SCALE-A
 title: "Boundary A — re-derive the planner census for n=3..7 against the COMPLETED factored representation, superseding the provisional outer-planner numbers"
-status: draft
+status: ready
 owner: runtime
 size: M
 gate: none
-depends_on: [RT-FNSPLIT-B2F]
+depends_on: [RT-FNSPLIT-B2A-S]
 blocks: [RT-SCALE-B]
 github: null
 origin: Operator scaling-gate directive 2026-07-23 (evt_4btfhwqhah1ye), relocated to the recut by `docs/program/wp/RT-NATIVE-FNSPLIT-recut.md` §"THE COMPLETE n=3..7 EMPIRICAL GATE MOVES TO THE RECUT" as Boundary A. Steward-filed 2026-07-26 (agents cannot create tracked work per COORDINATION §2) because the gate had acceptance criteria and no tracked node — it lived only as prose inside RT-NATIVE-FNSPLIT.md and the recut frame.

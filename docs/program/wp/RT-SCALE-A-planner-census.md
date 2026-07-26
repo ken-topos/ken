@@ -34,7 +34,74 @@ confirmation** — if the completed representation reproduces the outer-planner
 census exactly, that is a *finding to explain*, not a validation, because the
 provisional run could not see the inner planner at all.
 
+> ## ⛔⛔ RE-CUT 2026-07-26 — THIS NODE NO LONGER WAITS ON `B2F`. RUN IT NOW.
+>
+> **`depends_on` was `[RT-FNSPLIT-B2F]`. It is now `[RT-FNSPLIT-B2A-S]`, which is
+> MERGED.** The Steward wrote the old dependency and it was wrong.
+>
+> ⭐ **Why this is the operator's call and not a tidy-up.** The effort's goal is a
+> **growth property**. `B2F` sits behind `B2V`, which has absorbed **six
+> Architect production blocks**. So the old edge sequenced **the earliest
+> available growth signal behind the two hardest remaining nodes** — and across
+> **43 hard-stops on two chains there is still not one measured number describing
+> growth in `n`.**
+>
+> ⛔ **That is the exact structural flaw the recut was supposed to fix.** The
+> recut exists because *"33 hard-stops of correct, converging work accumulated on
+> a representation that provably could not reach the gate."* The recut repaired
+> the **representation**; it did **not** repair *measurement-comes-last*. This
+> edge is that repair.
+>
+> **What makes it runnable today:** this node censuses the **planner** — static
+> nodes, edges, planned helpers, `K`, and the helper-**identity** invariants. The
+> planner landed at `B2A-C`/`B2A-S`, both merged, and `647a2e5b` already produced
+> a provisional census — ⇒ **runnability is demonstrated, not assumed.**
+>
+> ### ⛔ DEFERRED ROWS — report them, never omit them
+>
+> Some rows genuinely cannot be measured until `B2V` defines the value word and
+> `B2F` emits. ⛔ **Report each as `DEFERRED — NEEDS B2V/B2F`, in that exact
+> spelling.** A deferred row is **not** `could_not_determine` (a *failure*) and
+> is **not** a silent omission — those two already read identically in a green
+> verdict, which is the failure `AC-A1` exists to prevent, and a third state that
+> is neither must be spelled or it will be read as one of them.
+>
+> | row | why deferred |
+> |---|---|
+> | constant **node payload width** (`D3` invariant 2, width half) | the payload is `B2V`'s value word |
+> | **frame / store-node schema** width (`D2`) | same |
+>
+> ⛔ **Everything else is due now** — including `D3` invariants **1, 3 and 4**,
+> the **ID** half of invariant 2, `D4`, and `D5`'s `k`.
+>
+> ⚠ **THE DEFERRAL BOUNDARY IS A QUESTION FOR THE ARCHITECT, NOT A RULING.** The
+> Steward drew it from what the planner produces. ⭐ **If the Architect moves it,
+> it can only move rows OUT of deferral and INTO this node's scope** — so the
+> boundary being wrong delays nothing. ⛔ **Do not use an unresolved boundary as
+> a reason to wait; report what you measured and name what you deferred.**
+
 ## Deliverables
+
+> ### ⛔ CONTENTION CONSTRAINT — `B2V` IS IN FLIGHT IN THE SAME CRATE
+>
+> `RT-FNSPLIT-B2V` is **active** and touching ten files in
+> `crates/ken-runtime/src/`, **including `lib.rs` and
+> `cranelift_backend/lowering/mod.rs`**.
+>
+> ⇒ ⛔ **Put the harness in a NEW integration-test file under
+> `crates/ken-runtime/tests/`** (the directory does not exist yet). Cargo
+> **auto-discovers** integration tests, so this needs **no `lib.rs` edit and no
+> `mod` registration** — which makes the file-set intersection with `B2V`
+> **empty by construction rather than by luck.**
+>
+> ⛔ **Do NOT add a `#[cfg(test)]` module inside `src/`.** That requires a
+> parent-module edit, and the parent is a file `B2V` is rewriting.
+>
+> ⚠ **`cfg(test)` build asymmetry:** an integration test compiles the crate
+> **without** `cfg(test)`, so anything reachable only under `cfg(test)` is
+> invisible to it. If a census metric needs an internal, expose it through a
+> deliberate `pub` surface and **say so** — do not reach for a `cfg(test)` hook
+> and discover the asymmetry late.
 
 ### `D1` — the harness, permanent and in-tree
 
