@@ -22,12 +22,60 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~08:1xZ · `origin/main` = **`a7d3e2b0`**
-### **✅ #986 → #999 MERGED (fourteen).**
-### ✅ **`RT-VALUE-TOTALITY-P1` IS CLOSED** — merged **and** all three retros in.
-### ✅ **`B2V` RE-ANCHORED.** ▶ **NEXT: §2c gate → kick Runtime (#74).**
-### ⛔ **2 OPEN ADVERSARY FINDINGS ON P1** — in `RT-VALUE-TOTALITY` §7 (#77).
-### ▶ Foundation lane still FREE (#72 — `ABI-R1`, leader re-oriented and waiting).
+## ▶ LIVE — 2026-07-26 ~08:3xZ · `origin/main` = **`8209c8f5`**
+### **✅ #986 → #1001 MERGED (sixteen).**
+### ✅ **P1 CLOSED.** ✅ **`B2V` KICKED AND BUILDING** — #74 DONE.
+### ▶ **NEXT: §2c gate → kick Foundation on `ABI-R1` (#72)** — pre-gated.
+### ⛔ **2 ADVERSARY FINDINGS OPEN** — §7 of that node; repair unframed (#78).
+### ⛔ **SWEEP IS `--dry-run` ONLY UNTIL #79** — it flags BUSY seats wedged.
+
+> ### ▶ B2V IS LIVE — kicked `evt_4hhk4h1ga7h1f`, both first-hour gates discharged
+>
+> ```
+> wp/RT-FNSPLIT-B2V-executable-value-abi          3025713c   merge-base 8209c8f5's parent f87adc3f
+> preserved/rt-fnsplit-b2v-prereanchor-a7aa60eb   a7aa60eb   <- created BEFORE the force-move
+> ```
+>
+> Ring re-anchored 23 commits, zero conflicts, `-p ken-runtime` **green 438/438**,
+> and reported `RECUT 2` as **ADDITIVE** — not a hard-stop, measured in the code.
+>
+> ⛔ **I had to correct their preservation claim.** They said `a7aa60eb` was
+> *"preserved two ways"* — but one was the **origin branch I was being asked to
+> force-move**, and the other a **local** tag. `git ls-remote origin | grep a7aa60eb`
+> returned **exactly one** ref. ⇒ Doing what was asked would have collapsed it to one
+> local tag, zero off-box copies. I pushed `preserved/*` **first**, then moved the
+> branch under `--force-with-lease`. ⭐ **A preservation claim has to be evaluated
+> against the operation it is guarding — the request is often what invalidates it.**
+
+> ### ⛔⛔ I SHIPPED FIVE BAD LOCATORS, LIFTED FROM A MUTATION PROOF (fixed, #1001)
+>
+> The adversary's five arm sites were measured on its tree **with the 26th probe
+> variant already inserted**. I transcribed two into the B2V frame and **re-quoted
+> them in the live kickoff**. All five were wrong, by different amounts:
+>
+> ```
+> canonical.rs encode_header                        :168  -> :167
+> canonical.rs encode_canonical_recursive_reference :~530 -> :362
+> values.rs detach_children                         :141  -> :138
+> values.rs rebuild                                 :182  -> :179
+> values.rs Clone's Visit arm                       :311  -> :309
+> ```
+>
+> ⛔ **A mutation proof's locators are measurements of the MUTANT** — evidence about
+> the finding, never locators against `main`.
+>
+> ⭐ **The implementer caught it and diagnosed it better than I did:** a uniform
+> `+3` on both rows is *"one derivation, not two typos"* — which is what pointed at
+> the mutant as the shared source. And its framing of why it survives is the one
+> that landed: **both wrong lines fall INSIDE the correct function body**, so a
+> reader who opens the file sees plausible code and reads the locator as good.
+>
+> ⇒ This is the **inverse** of the `abi.rs` defect in the same frame, where the path
+> was wrong and every line exact. ⛔ **A locator has two independent coordinates and
+> neither vouches for the other.** ⚠ I then made the *same* error a third time on
+> ABI-R1 — guessed which file `lines 7–10` belonged to, compared blobs on the wrong
+> one, and briefly called a valid quote stale. **Never infer the path from a
+> plausible line match.**
 
 > ### ⛔⛔ AN ADVERSARY REPORT SAT UNPROCESSED FOR ~1h — IT IS NOW IN §7 (#77)
 >
