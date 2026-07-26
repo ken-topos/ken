@@ -37,17 +37,17 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{FuncId, Linkage, Module};
 
 use crate::boundary_value::{
-    boundary_class_mask, boundary_domain_mask, boundary_int_marker_mask, BoundaryClass,
-    BoundaryImmediateDomain, BoundaryReferentOwner, BoundaryTag, ARENA_DATA, ARENA_DATA_CAPACITY,
-    ARENA_DATA_COUNT, ARENA_FROZEN, ARENA_LIMBS, ARENA_LIMB_CAPACITY, ARENA_LIMB_COUNT,
-    ARENA_NAMES, ARENA_NAME_COUNT, ARENA_NATIVE_INT, ARENA_NODES, ARENA_NODE_CAPACITY,
-    ARENA_NODE_COUNT, ARENA_PERSISTENT, ARENA_SEALED, ARENA_WORDS, ARENA_WORD_CAPACITY,
-    ARENA_WORD_COUNT, BOUNDARY_ERR_BOUNDS, BOUNDARY_ERR_CAPACITY, BOUNDARY_ERR_CLASS,
-    BOUNDARY_ERR_ESCAPE, BOUNDARY_ERR_FROZEN, BOUNDARY_ERR_RELATION, BOUNDARY_ERR_SEALED,
-    BOUNDARY_ERR_SHAPE, BOUNDARY_ERR_TAG, BOUNDARY_INT_REGION_LIMBS, BOUNDARY_NODE_STRIDE,
-    BOUNDARY_OK, BOUNDARY_TAG_BITS, BOUNDARY_TAG_CLASS_RELATION, BOUNDARY_TAG_MASK, NODE_CLASS,
-    NODE_EXTENT, NODE_FIELDS_AT, NODE_FIELD_COUNT, NODE_INT_SEALED, NODE_LIMBS_AT, NODE_LIMB_COUNT,
-    NODE_OWNER, NODE_PAYLOAD, NODE_SLOT, NODE_TAG_ID,
+    boundary_domain_mask, boundary_int_marker_mask, BoundaryClass, BoundaryImmediateDomain,
+    BoundaryReferentOwner, BoundaryTag, ARENA_DATA, ARENA_DATA_CAPACITY, ARENA_DATA_COUNT,
+    ARENA_FROZEN, ARENA_LIMBS, ARENA_LIMB_CAPACITY, ARENA_LIMB_COUNT, ARENA_NAMES,
+    ARENA_NAME_COUNT, ARENA_NATIVE_INT, ARENA_NODES, ARENA_NODE_CAPACITY, ARENA_NODE_COUNT,
+    ARENA_PERSISTENT, ARENA_SEALED, ARENA_WORDS, ARENA_WORD_CAPACITY, ARENA_WORD_COUNT,
+    BOUNDARY_ERR_BOUNDS, BOUNDARY_ERR_CAPACITY, BOUNDARY_ERR_CLASS, BOUNDARY_ERR_ESCAPE,
+    BOUNDARY_ERR_FROZEN, BOUNDARY_ERR_RELATION, BOUNDARY_ERR_SEALED, BOUNDARY_ERR_SHAPE,
+    BOUNDARY_ERR_TAG, BOUNDARY_INT_REGION_LIMBS, BOUNDARY_NODE_STRIDE, BOUNDARY_OK,
+    BOUNDARY_TAG_BITS, BOUNDARY_TAG_MASK, NODE_CLASS, NODE_EXTENT, NODE_FIELDS_AT,
+    NODE_FIELD_COUNT, NODE_INT_SEALED, NODE_LIMBS_AT, NODE_LIMB_COUNT, NODE_OWNER, NODE_PAYLOAD,
+    NODE_SLOT, NODE_TAG_ID,
 };
 use crate::cranelift_backend::{backend_module, CraneliftBackendError};
 
@@ -1442,32 +1442,41 @@ fn one_i64(b: &mut FunctionBuilder<'_>) -> cranelift_codegen::ir::Value {
     b.ins().iconst(types::I64, 1)
 }
 
-/// Select the class bitmask the ABI relation admits for `tag`.
+/// Select the class bitmask the ABI relation admits for `tag`, **from the
+/// plan's partition-derived relation**.
 ///
-/// ⭐ Θ(1): four comparisons and a chain of selects, no table walk and no data
-/// section. Every constant is computed by [`boundary_class_mask`] from the one
-/// authoritative relation, so this cannot say something the table does not.
+/// ⭐ Θ(1): one comparison per admitted row and a chain of selects — no table
+/// walk and no data section.
+///
+/// ⛔ **Seeded with the EMPTY mask, and that is `RULING R5` clause 2 rather
+/// than a style choice.** The code this replaces folded from the last row
+/// backwards so the innermost value was a *real* mask, justified by
+/// `select_region_by_tag` having already refused any unlisted tag. Both halves
+/// of that are exactly what the ruling forbids: a real seed means a tag with no
+/// row silently inherits another row's classes, and leaning on an upstream guard
+/// makes the absent-row branch **unreachable and therefore untestable**. ⚠ An
+/// untestable fail-closed branch is not a fail-closed branch. With a zero seed
+/// the allocator's relation decision fails closed on its own — an absent row
+/// admits nothing and yields exact `BOUNDARY_ERR_RELATION`.
+///
+/// ⛔ The masks are computed here from the plan's relation, not from
+/// `BOUNDARY_TAG_CLASS_RELATION`. That slice is a Rust-side mirror, reconciled
+/// to this relation over the whole product; it is not what the emitter reads.
 fn relation_mask(
     b: &mut FunctionBuilder<'_>,
     tag: cranelift_codegen::ir::Value,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
 ) -> cranelift_codegen::ir::Value {
-    // Fold from the *last* handle tag backwards, so the innermost value is a
-    // real mask rather than a zero default: an unlisted tag can never reach
-    // here, because `select_region_by_tag` has already refused it.
-    let mut chain: Option<cranelift_codegen::ir::Value> = None;
-    for (tag_value, _) in BOUNDARY_TAG_CLASS_RELATION.iter().rev() {
-        let mask = b
-            .ins()
-            .iconst(types::I64, boundary_class_mask(*tag_value) as i64);
-        chain = Some(match chain {
-            None => mask,
-            Some(rest) => {
-                let hit = b.ins().icmp_imm(IntCC::Equal, tag, *tag_value as i64);
-                b.ins().select(hit, mask, rest)
-            }
-        });
+    let mut chain = b.ins().iconst(types::I64, 0);
+    for (tag_value, classes) in plan.tags().handle_class_relation() {
+        let mask = classes
+            .iter()
+            .fold(0u64, |mask, class| mask | (1u64 << (*class as u64)));
+        let named = b.ins().iconst(types::I64, mask as i64);
+        let hit = b.ins().icmp_imm(IntCC::Equal, tag, *tag_value as i64);
+        chain = b.ins().select(hit, named, chain);
     }
-    chain.expect("the relation is non-empty")
+    chain
 }
 
 /// `(arena, tag, class, field_count, out) -> status` — allocate a handle node in
@@ -1519,10 +1528,10 @@ fn define_alloc<M: Module>(
         // disposition can produce — `PersistentClosure + HostResult`,
         // `InvocationHostResult + Constructor`. Minting one succeeds and then
         // fails much later at an unrelated projection, reporting the wrong
-        // defect in the wrong place. The mask comes from
-        // `BOUNDARY_TAG_CLASS_RELATION`, so there is one table and the CLIF
-        // cannot drift from it.
-        let mask = relation_mask(&mut b, tag);
+        // defect in the wrong place. The mask comes from the plan's
+        // partition-derived relation, so the emitted check cannot say something
+        // the authority does not.
+        let mask = relation_mask(&mut b, tag, plan);
         let one = one_i64(&mut b);
         let bit = b.ins().ishl(one, class);
         let admitted = b.ins().band(mask, bit);
@@ -2683,7 +2692,7 @@ pub(crate) mod tests {
         materialize_ground, materialize_host_result, BoundaryArenaBuilder, BoundaryArenaV1,
         BoundaryValueStore, BoundaryWord, NodeField, RegionHeaderField, BOUNDARY_IMMEDIATE_INT_MAX,
         BOUNDARY_IMMEDIATE_INT_MIN, BOUNDARY_NODE_STRIDE, BOUNDARY_PAYLOAD_BITS,
-        BOUNDARY_REGION_HEADER_BYTES,
+        BOUNDARY_REGION_HEADER_BYTES, BOUNDARY_TAG_CLASS_RELATION,
     };
     // Statuses only the controls assert on — the production graph never returns
     // them from a helper, so they belong to the test scope rather than to the
@@ -3603,15 +3612,31 @@ pub(crate) mod tests {
             cranelift_codegen::ir::Type,
         ),
     ) -> (JITModule, *const u8) {
+        compile_producer_with_plan(
+            arity,
+            emit,
+            &crate::boundary_value::BoundaryEmissionPlan::derive(),
+        )
+    }
+
+    /// The same producer, against a **caller-supplied** plan — the per-cell
+    /// relation evidence `RULING R5` clause 5 requires needs to run the emitted
+    /// allocator under a perturbed relation, not just diff its text.
+    fn compile_producer_with_plan(
+        arity: usize,
+        emit: fn(
+            &mut FunctionBuilder<'_>,
+            &Refs,
+            &[cranelift_codegen::ir::Value],
+            cranelift_codegen::ir::Type,
+        ),
+        plan: &crate::boundary_value::BoundaryEmissionPlan,
+    ) -> (JITModule, *const u8) {
         let mut module = jit();
         let native = crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
             .expect("native-int graph emits");
-        let helpers = emit_boundary_value_local_graph(
-            &mut module,
-            &native,
-            &crate::boundary_value::BoundaryEmissionPlan::derive(),
-        )
-        .expect("graph emits");
+        let helpers =
+            emit_boundary_value_local_graph(&mut module, &native, plan).expect("graph emits");
         let ptr = module.target_config().pointer_type();
 
         let mut sig = module.make_signature();
@@ -4797,17 +4822,12 @@ pub(crate) mod tests {
             "AC-1: neither arm may be empty"
         );
 
-        // The mask the CLIF consumes must agree with the table, per pair.
-        for tag in BoundaryTag::ALL {
-            for class in BoundaryClass::ALL {
-                let by_mask = boundary_class_mask(tag) & (1u64 << (class as u64)) != 0;
-                assert_eq!(
-                    by_mask,
-                    boundary_relation_admits(tag, class),
-                    "the emitted mask disagrees with the relation for {tag:?} + {class:?}"
-                );
-            }
-        }
+        // ⛔ The per-pair mask agreement that used to live here compared two
+        // expressions of the SAME hand-written slice, which is why it could not
+        // notice that nothing derived it. It is replaced by
+        // `b2v_the_rust_mirror_and_the_derived_relation_reconcile_over_the_product`,
+        // which compares the mirror against the PARTITION over this same
+        // product, in both directions.
     }
 
     /// `(base, sign, len, seed) -> word` — build a PERSISTENT wide `Int`
@@ -7296,6 +7316,7 @@ pub(crate) mod tests {
                     plan.tags().handle().to_vec(),
                     plan.tags().owner_bands().to_vec(),
                     plan.tags().immediate_value_classes().to_vec(),
+                    plan.tags().handle_class_relation().to_vec(),
                 ),
             );
             let word = BoundaryWord((out_of_range << BOUNDARY_TAG_BITS) | *tag as u64);
@@ -7400,6 +7421,7 @@ pub(crate) mod tests {
                     plan.tags().handle().to_vec(),
                     bands,
                     plan.tags().immediate_value_classes().to_vec(),
+                    plan.tags().handle_class_relation().to_vec(),
                 ),
             );
 
@@ -7418,6 +7440,168 @@ pub(crate) mod tests {
                      helper's owner decision is not derived from the bands"
                 );
             }
+        }
+    }
+
+    /// **`RULING R5` clause 3 — the Rust mirror and the partition-derived
+    /// relation reconcile over the WHOLE product, in BOTH directions.**
+    ///
+    /// ⛔ **This is the executable form of a claim that used to be a comment.**
+    /// `BOUNDARY_TAG_CLASS_RELATION`'s doc said it was *"derived from
+    /// `Lowered::boundary_disposition`"* and was *"the single source"*. Nothing
+    /// derived it and nothing checked it; the two happened to agree, which is a
+    /// measurement, not a mechanism. The ruling's words: *"measured agreement
+    /// today is not evidence — it is a claim awaiting an executable form."*
+    ///
+    /// **MEASURED:** for every one of the `BoundaryTag::ALL × BoundaryClass::ALL`
+    /// cells, the mirror admits the cell **iff** the partition-derived plan
+    /// relation does. **CLAIMED:** the Rust builders' legality answer is the
+    /// authority's. **THE GAP:** none over this product — it is finite and swept
+    /// exhaustively, in both directions, which is why the ruling could name the
+    /// product rather than a sample.
+    #[test]
+    fn b2v_the_rust_mirror_and_the_derived_relation_reconcile_over_the_product() {
+        let plan = crate::boundary_value::BoundaryEmissionPlan::derive();
+        let derived_admits = |tag: BoundaryTag, class: BoundaryClass| {
+            plan.tags()
+                .handle_class_relation()
+                .iter()
+                .any(|(t, classes)| *t == tag && classes.contains(&class))
+        };
+
+        let (mut both, mut neither) = (0usize, 0usize);
+        for tag in BoundaryTag::ALL {
+            for class in BoundaryClass::ALL {
+                let mirror = boundary_relation_admits(tag, class);
+                let derived = derived_admits(tag, class);
+                // Both directions in one assertion over a finite product: a
+                // cell the mirror adds and a cell it drops are the same failure.
+                assert_eq!(
+                    mirror, derived,
+                    "R5: the Rust mirror and the partition disagree on {tag:?} + \
+                     {class:?} — mirror={mirror}, partition={derived}"
+                );
+                if mirror {
+                    both += 1;
+                } else {
+                    neither += 1;
+                }
+            }
+        }
+        // ⚠ NON-EMPTY POSITIVE CONTROLS on both arms, per clause 5. A relation
+        // that admitted everything, or nothing, would make the agreement above
+        // hold for a reason that has nothing to do with the two sides matching.
+        assert!(
+            both > 0,
+            "R5: no cell is admitted by either side, so agreement is vacuous"
+        );
+        assert!(
+            neither > 0,
+            "R5: every cell is admitted, so agreement cannot distinguish the \
+             relation from the full product"
+        );
+        // And the admitted count is the mirror's own content, so a mirror that
+        // silently emptied would redden here rather than pass the sweep above.
+        let rows: usize = BOUNDARY_TAG_CLASS_RELATION
+            .iter()
+            .map(|(_, classes)| classes.len())
+            .sum();
+        assert_eq!(
+            both, rows,
+            "R5: the swept agreement count does not match the mirror's own rows"
+        );
+    }
+
+    /// **`RULING R5` clause 5 — the emitted relation is the plan's, PER CELL.**
+    ///
+    /// ⛔ **Aggregate CLIF inequality is insufficient**, and clause 5 sharpens
+    /// `R4`'s per-*site* rule to per-**cell**: remap one exact `(tag, class)`
+    /// cell and drop one, then watch the emitted `alloc` change its acceptance.
+    ///
+    /// **MEASURED:** for every admitted cell, an `alloc` of that `(tag, class)`
+    /// succeeds under the real plan and returns exact `ERR_RELATION` under a plan
+    /// with that one cell dropped; and a cell remapped onto another tag's row
+    /// moves acceptance with it. **CLAIMED:** the allocator's relation decision
+    /// is the partition's, cell by cell. **THE GAP:** that the plan's relation is
+    /// the partition's own answer — closed by the derivation control.
+    #[test]
+    fn b2v_the_emitted_relation_is_the_plans_per_cell() {
+        use crate::boundary_value::{BoundaryEmissionPlan, BoundaryTagAdmission};
+
+        let plan = BoundaryEmissionPlan::derive();
+        let with_relation = |relation: Vec<(BoundaryTag, Vec<BoundaryClass>)>| {
+            BoundaryEmissionPlan::new(
+                plan.int_magnitude_classes().to_vec(),
+                plan.byte_span_classes().to_vec(),
+                BoundaryTagAdmission::new(
+                    plan.tags().admitted().to_vec(),
+                    plan.tags().immediate().to_vec(),
+                    plan.tags().handle().to_vec(),
+                    plan.tags().owner_bands().to_vec(),
+                    plan.tags().immediate_value_classes().to_vec(),
+                    relation,
+                ),
+            )
+        };
+
+        let cells: Vec<(BoundaryTag, BoundaryClass)> = plan
+            .tags()
+            .handle_class_relation()
+            .iter()
+            .flat_map(|(tag, classes)| classes.iter().map(move |class| (*tag, *class)))
+            .collect();
+        assert!(
+            !cells.is_empty(),
+            "R5: the relation is empty, so the per-cell sweep below is empty"
+        );
+
+        for (tag, class) in cells {
+            let dropped: Vec<(BoundaryTag, Vec<BoundaryClass>)> = plan
+                .tags()
+                .handle_class_relation()
+                .iter()
+                .map(|(t, classes)| {
+                    let kept: Vec<BoundaryClass> = classes
+                        .iter()
+                        .copied()
+                        .filter(|c| !(*t == tag && *c == class))
+                        .collect();
+                    (*t, kept)
+                })
+                .collect();
+
+            let (_rm, real_alloc) = compile_producer_with_plan(4, emit_alloc_probe, &plan);
+            let (_dm, drop_alloc) =
+                compile_producer_with_plan(4, emit_alloc_probe, &with_relation(dropped));
+
+            let mut store = BoundaryValueStore::new();
+            let f = bind_with(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (64, 8, 0),
+                (64, 8, 0),
+            );
+            let real = run4(real_alloc, f.base, tag as u64, class as u64, 0);
+            assert!(
+                real >= 0,
+                "R5: the real plan must ADMIT {tag:?} + {class:?}, or dropping \
+                 the cell cannot change anything (got {real})"
+            );
+
+            let mut store = BoundaryValueStore::new();
+            let f = bind_with(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (64, 8, 0),
+                (64, 8, 0),
+            );
+            let without = run4(drop_alloc, f.base, tag as u64, class as u64, 0);
+            assert_eq!(
+                without, BOUNDARY_ERR_RELATION,
+                "R5: `alloc` still admits {tag:?} + {class:?} after the plan \
+                 dropped that exact cell — the emitted relation is not the \
+                 plan's, or its fold is not fail-closed on an absent row"
+            );
         }
     }
 
@@ -7460,7 +7644,7 @@ pub(crate) mod tests {
             "RECUT 2: the plan classifies no immediate tag, so the sweep is empty"
         );
 
-        let respell = |relation: Vec<(BoundaryTag, BoundaryClass)>| {
+        let respell = |immediate_classes: Vec<(BoundaryTag, BoundaryClass)>| {
             BoundaryEmissionPlan::new(
                 plan.int_magnitude_classes().to_vec(),
                 plan.byte_span_classes().to_vec(),
@@ -7469,7 +7653,8 @@ pub(crate) mod tests {
                     plan.tags().immediate().to_vec(),
                     plan.tags().handle().to_vec(),
                     plan.tags().owner_bands().to_vec(),
-                    relation,
+                    immediate_classes,
+                    plan.tags().handle_class_relation().to_vec(),
                 ),
             )
         };

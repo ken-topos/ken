@@ -5372,6 +5372,7 @@ fn recut2_the_emitted_helper_graph_changes_when_the_tag_sets_change() {
             derived.tags().handle().to_vec(),
             derived.tags().owner_bands().to_vec(),
             derived.tags().immediate_value_classes().to_vec(),
+            derived.tags().handle_class_relation().to_vec(),
         ),
     );
     let other = crate::boundary_value_clif::tests::capture_with_plan(&perturbed);
@@ -5460,6 +5461,7 @@ fn recut2_the_emitted_helper_graph_changes_when_the_owner_bands_change() {
             derived.tags().handle().to_vec(),
             bands,
             derived.tags().immediate_value_classes().to_vec(),
+            derived.tags().handle_class_relation().to_vec(),
         ),
     );
     let other = crate::boundary_value_clif::tests::capture_with_plan(&perturbed);

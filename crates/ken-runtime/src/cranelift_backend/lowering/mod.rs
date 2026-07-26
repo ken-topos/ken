@@ -7344,6 +7344,8 @@ impl crate::boundary_value::BoundaryEmissionPlan {
         let mut owner_bands: BTreeMap<BoundaryReferentOwner, BTreeSet<BoundaryTag>> =
             BTreeMap::new();
         let mut immediate_value_classes: BTreeMap<BoundaryTag, BoundaryClass> = BTreeMap::new();
+        let mut handle_class_relation: BTreeMap<BoundaryTag, BTreeSet<BoundaryClass>> =
+            BTreeMap::new();
         for cell in BoundaryInput::all() {
             // ⛔ Wildcard-free: a new outcome variant must decide here whether
             // its tag is admitted, rather than defaulting to "not emitted".
@@ -7363,6 +7365,9 @@ impl crate::boundary_value::BoundaryEmissionPlan {
                     admitted.insert(class);
                     handle_tags.insert(tag);
                     owner_bands.entry(owner).or_default().insert(tag);
+                    // ⛔ Node-class legality, from `HandleWord` only. An
+                    // `ImmediateWord` has no node, so it contributes no row.
+                    handle_class_relation.entry(tag).or_default().insert(class);
                 }
                 BoundaryOutcome::ProtocolOnly | BoundaryOutcome::FailClosedForbidden => {}
             }
@@ -7397,6 +7402,10 @@ impl crate::boundary_value::BoundaryEmissionPlan {
                     .map(|(owner, tags)| (owner, tags.into_iter().collect()))
                     .collect(),
                 immediate_value_classes.into_iter().collect(),
+                handle_class_relation
+                    .into_iter()
+                    .map(|(tag, classes)| (tag, classes.into_iter().collect()))
+                    .collect(),
             ),
         )
     }

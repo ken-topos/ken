@@ -469,6 +469,7 @@ pub(crate) struct BoundaryTagAdmission {
     handle: Vec<BoundaryTag>,
     owner_bands: Vec<(BoundaryReferentOwner, Vec<BoundaryTag>)>,
     immediate_value_classes: Vec<(BoundaryTag, BoundaryClass)>,
+    handle_class_relation: Vec<(BoundaryTag, Vec<BoundaryClass>)>,
 }
 
 impl BoundaryTagAdmission {
@@ -479,6 +480,7 @@ impl BoundaryTagAdmission {
         handle: Vec<BoundaryTag>,
         owner_bands: Vec<(BoundaryReferentOwner, Vec<BoundaryTag>)>,
         immediate_value_classes: Vec<(BoundaryTag, BoundaryClass)>,
+        handle_class_relation: Vec<(BoundaryTag, Vec<BoundaryClass>)>,
     ) -> Self {
         BoundaryTagAdmission {
             admitted,
@@ -486,6 +488,7 @@ impl BoundaryTagAdmission {
             handle,
             owner_bands,
             immediate_value_classes,
+            handle_class_relation,
         }
     }
 
@@ -525,6 +528,20 @@ impl BoundaryTagAdmission {
     /// helper fails closed on it rather than defaulting.
     pub(crate) fn immediate_value_classes(&self) -> &[(BoundaryTag, BoundaryClass)] {
         &self.immediate_value_classes
+    }
+
+    /// The normalized handle `BoundaryTag → set<BoundaryClass>` relation — what
+    /// may be written into a **node's** `NODE_CLASS`.
+    ///
+    /// ⛔ **This is the emitted allocator's sole authority for the relation**,
+    /// and it is derived from `BoundaryOutcome::HandleWord` in the one
+    /// partition sweep. `ImmediateWord` is excluded by construction: an
+    /// immediate has no node, so it has no node class. A tag with no row here
+    /// admits nothing, and the allocator's fold is seeded with the empty mask so
+    /// that absence is `BOUNDARY_ERR_RELATION` on its own rather than something
+    /// an earlier guard has to make unreachable.
+    pub(crate) fn handle_class_relation(&self) -> &[(BoundaryTag, Vec<BoundaryClass>)] {
+        &self.handle_class_relation
     }
 
     /// The tags published under one owner — empty if the partition publishes
@@ -593,13 +610,24 @@ impl BoundaryEmissionPlan {
 /// minting one succeeds and then fails much later at an unrelated projection,
 /// which reports the wrong defect at the wrong place.
 ///
-/// This table is derived from `Lowered::boundary_disposition` and is the single
-/// source both the Rust builders and the emitted allocator check against:
-/// [`boundary_class_mask`] compiles it to the bitmask the CLIF tests.
+/// ⛔ **NOT the authority, and NOT derived — a hand-written Rust MIRROR.** The
+/// authority is the `BoundaryInput → BoundaryOutcome` partition, and the emitted
+/// allocator consumes it through `BoundaryEmissionPlan::handle_class_relation`.
+/// This slice exists only because the **Rust** builders need the same legality
+/// answer before publication, and the partition is private to
+/// `cranelift_backend::lowering` where they cannot see it.
+///
+/// ⚠ Its previous doc called it *"derived from `Lowered::boundary_disposition`"*
+/// and *"the single source"*. Both were false: nothing derived it and nothing
+/// checked it. It is now **mechanically reconciled** to the partition-derived
+/// relation over the full finite `BoundaryTag::ALL × BoundaryClass::ALL` product,
+/// **in both directions**, by
+/// `b2v_the_rust_mirror_and_the_derived_relation_reconcile_over_the_product`.
+/// Drift in either direction reddens.
 ///
 /// Immediate tags are absent by construction — they have no node, so they have
 /// no class.
-pub const BOUNDARY_TAG_CLASS_RELATION: &[(BoundaryTag, &[BoundaryClass])] = &[
+pub(crate) const BOUNDARY_TAG_CLASS_RELATION: &[(BoundaryTag, &[BoundaryClass])] = &[
     (
         BoundaryTag::PersistentGround,
         // The ground classes plus the spill arm: an `Int` too wide for the
@@ -623,25 +651,14 @@ pub const BOUNDARY_TAG_CLASS_RELATION: &[(BoundaryTag, &[BoundaryClass])] = &[
     ),
 ];
 
-/// Whether the ABI admits this `(tag, class)` pair.
-pub fn boundary_relation_admits(tag: BoundaryTag, class: BoundaryClass) -> bool {
+/// Whether the ABI admits this `(tag, class)` pair, per the Rust mirror.
+///
+/// The Rust builders' fail-before-publication check. Kept because they cannot
+/// see the private lowering partition; reconciled to it over the full product.
+pub(crate) fn boundary_relation_admits(tag: BoundaryTag, class: BoundaryClass) -> bool {
     BOUNDARY_TAG_CLASS_RELATION
         .iter()
         .any(|(t, classes)| *t == tag && classes.contains(&class))
-}
-
-/// The relation for one tag, as a bitmask over [`BoundaryClass`] discriminants.
-///
-/// ⭐ This is what makes the emitted check Θ(1): the allocator selects one mask
-/// with four comparisons and tests one bit, rather than walking a table. The
-/// mask is *computed from* the relation above, so the CLIF cannot drift from
-/// the declaration — there is one table and one derivation.
-pub fn boundary_class_mask(tag: BoundaryTag) -> u64 {
-    BOUNDARY_TAG_CLASS_RELATION
-        .iter()
-        .filter(|(t, _)| *t == tag)
-        .flat_map(|(_, classes)| classes.iter())
-        .fold(0u64, |mask, class| mask | (1u64 << (*class as u64)))
 }
 
 // ---------------------------------------------------------------------------
@@ -708,10 +725,14 @@ pub fn boundary_immediate_domain(tag: BoundaryTag) -> Option<BoundaryImmediateDo
 
 /// The tags in one domain, as a bitmask over [`BoundaryTag`] discriminants.
 ///
-/// ⭐ What makes the emitted check Θ(1) and undriftable, exactly as
-/// [`boundary_class_mask`] does for the relation: the CLIF evaluates all three
-/// domain predicates and selects by a mask **computed from this table**, so
-/// there is no second place to edit.
+/// ⭐ What makes the emitted check Θ(1) and undriftable: the CLIF evaluates all
+/// three domain predicates and selects by a mask **computed from this table**,
+/// so there is no second place to edit.
+///
+/// ⚠ The `(tag, class)` relation used to have a twin of this function. It is
+/// gone: that relation's mask is now folded from the plan's partition-derived
+/// rows inside `relation_mask`, because "computed from this table" was the wrong
+/// property when the table itself was the hand-maintained thing.
 pub fn boundary_domain_mask(domain: BoundaryImmediateDomain) -> u64 {
     BOUNDARY_IMMEDIATE_DOMAIN
         .iter()
@@ -789,8 +810,8 @@ pub fn boundary_int_marker_admits(marker: u64, owner: BoundaryReferentOwner) -> 
 /// The markers admitted for one owner, as a bitmask over marker values.
 ///
 /// ⭐ Θ(1) in the emitted check and computed from the table above, so the CLIF
-/// cannot drift from the declaration — the third instance of this pattern, after
-/// [`boundary_class_mask`] and [`boundary_domain_mask`].
+/// cannot drift from the declaration — the same pattern as
+/// [`boundary_domain_mask`].
 pub fn boundary_int_marker_mask(owner: BoundaryReferentOwner) -> u64 {
     BOUNDARY_INT_MARKER_OWNER
         .iter()
