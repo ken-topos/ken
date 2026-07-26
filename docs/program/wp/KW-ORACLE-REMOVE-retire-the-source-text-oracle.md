@@ -48,10 +48,20 @@ scripts/ken-cargo test -p ken-elaborator
 ⛔ Never `--workspace`; workspace-green means **green in CI** (`COORDINATION §12`).
 
 **AC-4 — the deletion is causally verified, not assumed.** ⭐ Report the test
-count **before and after** from the same command. A deletion that removes 12
-tests should move the total by 12. ⚠ **If the count moves by a different number,
-say so and stop** — that means the file's tests were not all running, or
-something else changed, and either way your AC-2 claim needs re-examining.
+count **before and after** from the same command. The file holds **7** `#[test]`
+functions, so the `kw_theorem_source_oracle` target should go from **7 passed**
+to **absent**. ⚠ **If the delta is not 7, say so and stop** — that means the
+file's tests were not all running, or something else changed, and either way
+your AC-2 claim needs re-examining.
+
+> ⛔ **CORRECTED 2026-07-26 — this AC originally said 12, and 12 was wrong.**
+> `language-implementer` blocked on it and was right: `grep -c '^#\[test\]'`
+> returns **7**. I had counted `^fn ` declarations, which includes helpers
+> (`candidate_inputs`, `classify`, `occurrence_lines`, `retired_findings`, …).
+> ⭐ **The block is the AC working as intended** — a fixed input stated as a
+> number is checkable, so a wrong one gets caught instead of silently reshaping
+> the work. The "what goes" list in the node names the 7 correctly; only this
+> count was wrong.
 
 **AC-5 — no production reference is left dangling.** Confirm no `src/` or other
 test file referenced the deleted module. The build succeeding is *evidence* for

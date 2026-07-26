@@ -558,7 +558,7 @@ fresh_result_gate() {
       die "publisher gate: CANNOT EVALUATE -- could not re-read origin/main before merging."
 
     if [ "$(git rev-parse origin/main)" = "$checked_base" ]; then
-      printf 'Publisher gate: currency check passed on the merge result of %s onto %s.\n' \
+      printf 'Publisher gate: merge result of %s onto %s built cleanly; base unchanged.\n' \
         "$head_sha" "$(git rev-parse --short "$checked_base")"
       return 0
     fi
