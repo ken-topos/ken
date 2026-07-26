@@ -39,6 +39,23 @@ echo "classify-pane-composer controls:"
 # --- NEGATIVE controls: must never be actioned -------------------------------
 check ghost        ghost "${E}[0;1m›${E}[0m ${E}[2mFind and fix a bug in @filename${E}[0m"
 check ghost-slash  ghost "${E}[0;1m›${E}[0m ${E}[2m/compact${E}[0m"
+
+# ⛔ THE SAME NEGATIVE CONTROL IN THE *CLAUDE* PROMPT SHAPE. Measured on a live
+#    pane 2026-07-26: Claude renders `❯` + U+00A0 NO-BREAK SPACE + dim text,
+#    and the separator-skip loop tested `in " \t"`, which U+00A0 does not match.
+#    The loop broke before the dim run, is_dim came back False, and `ghost-slash`
+#    above became `slash:/compact` -- the sweep would have compacted a healthy
+#    seat on its own suggestion text.
+#
+#    ⭐ `ghost-slash` was CORRECT and still blind: it is written with the Codex
+#    glyph and an ASCII space, so the Claude shape was absent from the control
+#    POPULATION, not from the detector. ⛔ When you add a prompt shape to
+#    PROMPT, add its ghost row here in the SAME commit -- an allow-listed
+#    command reaching Enter is the one outcome with no undo.
+NB=$' '
+check ghost-nbsp   ghost "${E}[39m❯${NB}${E}[2m/compact${E}[0m"
+check ghost-claude ghost "${E}[39m❯ ${E}[2m/compact${E}[0m"
+check slash-nbsp   slash:/compact "${E}[39m❯${NB}/compact"
 check arbitrary    other "${E}[0;1m›${E}[0m rm -rf /"
 check clear        clear "${E}[0;1m›${E}[0m"
 check queued       queued "${E}[2mMessages to be submitted after next tool call${E}[0m"

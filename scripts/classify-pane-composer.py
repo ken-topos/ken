@@ -63,7 +63,7 @@ def composer_content(line):
         if m:
             i = m.end()
             continue
-        if line[i] in " \t":
+        if line[i].isspace():
             i += 1
             continue
         break
@@ -73,6 +73,24 @@ def composer_content(line):
     # The dim attribute must apply to the CONTENT, so look only at the SGR runs
     # between the prompt glyph and the first visible character. A dim run later
     # in the line styles something else and says nothing about the composer.
+    #
+    # ⛔ SKIP ANY UNICODE WHITESPACE HERE, NOT JUST `" \t"` -- @steward, measured
+    #    2026-07-26 on a live `moot-runtime-implementer` pane. Claude renders its
+    #    composer as `❯` + U+00A0 NO-BREAK SPACE + `ESC[2m` + text, and a
+    #    `rest[j] in " \t"` test does not match U+00A0. The loop therefore BROKE
+    #    at the separator, never reached the dim run, and returned is_dim=False
+    #    for text that was dim on screen.
+    #
+    #    ⚠ That failed in the UNSAFE direction: `slash:/compact` instead of
+    #    `ghost`, so the sweep would have pressed Enter on a healthy Claude
+    #    seat's own SUGGESTION TEXT and destroyed its context. `.strip()` below
+    #    removes U+00A0, so the text matched the allow-list exactly.
+    #
+    #    ⭐ The `ghost-slash` control did not catch it, and was not wrong: it is
+    #    written with the Codex `›` glyph and an ASCII space, so the entire
+    #    Claude glyph+NBSP shape was absent from the control POPULATION. The
+    #    detector was fine; the fixtures could not reach the defect. Controls are
+    #    now parameterised over both prompt shapes.
     j, is_dim = 0, False
     while j < len(rest):
         m = SGR.match(rest, j)
@@ -81,7 +99,7 @@ def composer_content(line):
                 is_dim = True
             j = m.end()
             continue
-        if rest[j] in " \t":
+        if rest[j].isspace():
             j += 1
             continue
         break
