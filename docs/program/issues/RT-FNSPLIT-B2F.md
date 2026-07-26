@@ -11,9 +11,63 @@ github: null
 origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answering Steward Q1-Q3 on merits (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the D1/D2 half of the retired RT-FNSPLIT-B2A frame. RE-SLICED 2026-07-25 by Architect ruling evt_842spc7t6js1 on hard-stop #9 (research advisory evt_531c4k52mshrn) plus addendum evt_t4fykh52ncb: this node is NOT buildable as one unit and now depends on two inert prerequisites. Steward-filed; Steward owns the replacement frame and AC/control placement.
 ---
 
-> ## ✅ HARD-STOP #10 IS CLEARED — `B2V` MERGED, THIS NODE IS RELEASED (2026-07-26)
+> ## ⛔ HELD AT HARD-STOP #11 — `B2V` LANDED A REPRESENTATION WITH NO CONSUMER
 >
-> **The hold below is SPENT. Both of its conditions are met:** `B2V`'s frame is on
+> **2026-07-26 ~13:00Z, `runtime-implementer`, raised before any production edit.**
+> `crates/` is **byte-identical to `bb3e58ea`** — **there is nothing to unwind.**
+> Evidence **`d1abbc79`** = `docs/program/rt-fnsplit-b2f-hardstop-11-evidence.md`,
+> durable on `origin` at `preserved/rt-fnsplit-b2f-hardstop-11-evidence`.
+>
+> ⛔ **`d1abbc79`, NOT `a376bf65`.** The ref was first pushed at `a376bf65` and was
+> **stale by exactly one additive commit** — the implementer's addendum landed after
+> the push and names **`Project` (`core.rs:4754`) as a THIRD eliminator** with the
+> same compile-time-template wall. ⇒ **The elimination surface `B2E` must cover is
+> 3, not 2**, and a reader who fetched only the first ref would have under-scoped it.
+> Fast-forwarded (`a376bf65..d1abbc79`, ancestry verified before the move).
+> ⭐ The implementer flagged the gap itself, mention-free so as not to
+> double-deliver into the Architect's live turn.
+> **With the Architect** for a ruling on the representation-versus-elimination
+> boundary. ⛔ **Do not resume `D1`–`D8` construction on this node until that
+> ruling lands and the Steward re-slices or re-releases.**
+>
+> **The stop, in one line:** a value can be *written* into a tagged boundary word;
+> nothing can *read* one back into a `Lowered` that the lowering can eliminate.
+> Every aggregate `Lowered` carries compile-time structure, **all three eliminators**
+> require that template (`Match` `core.rs:4697`, `ComputationalMatch` `core.rs:1387`,
+> `Project` `core.rs:4754`) and a landed test
+> **defends** the refusal, while every `LexicalClosure` body is its own unit
+> (`static_transition.rs:961`) — so under `D1` its arguments arrive through
+> `Parameter`/`ValueWord` slots, and **31 of the 47 transfers are `Constructor`**.
+> Falsified by stripping the template at all 11 cross-owner sites: `args` reddens,
+> the tag reddens, `HostResult.{ok,error}` is **444/0 green** ⇒ `HostResult` is
+> measurably **not** implicated, narrowing #10's pairing.
+>
+> ⛔ **This is NOT a defect in `B2V`.** Its scope was *"INERT but EXECUTABLE"* and
+> its own source records that a compiled-once callee cannot consume a `HostResult`
+> today. **The consumer side was never in anyone's scope** — which is why it
+> survived a full ring and two reviews.
+>
+> ⭐ **Third instance of one pattern in this chain:** `B2O` shipped a partition and
+> could not check one-for-one consumption; `B2R` declared ownership modes and could
+> not check obedience; `B2V` landed a representation and cannot check consumption.
+> **Each node's residual is exactly the half its own inertness made unverifiable,
+> and each was found by the node downstream.** ⇒ Binding on the next frame written
+> in this chain: **when a node ships a representation, name who eliminates it.**
+>
+> ⚠ The census amendment below (**47 events / 10 positions**) is **unaffected** —
+> the stale item was the implementer's *"no hard stop"* verdict, which was scoped
+> to three measured axes, not the measurement. ⛔ **A clearance's scope is not
+> visible in its wording**; both the leader's relay and the Steward's frame
+> amendment were built on it in good faith.
+>
+> ## ✅ HARD-STOP #10 IS CLEARED — `B2V` MERGED (2026-07-26)
+>
+> ⛔ **THIS BLOCK RELEASED THE NODE AND `#11` ABOVE HAS SINCE RE-HELD IT.** #10
+> **is** cleared and stays cleared — that part is durable. But the release it
+> granted is **spent**: read the `#11` block above for the live state. ⛔ Do not
+> cite this heading as permission to resume `D1`–`D8`.
+>
+> **The #10 hold below is SPENT. Both of its conditions are met:** `B2V`'s frame is
 > `origin/main` and `B2V` itself is **merged** (`a5c8ba73`, PR #1014, retros in),
 > and this node has been **explicitly kicked** by the Steward. ⛔ **Do not cite the
 > hold text below to refuse work on this node** — it is retained because the gate
