@@ -22,9 +22,40 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~06:0xZ · `origin/main` = **`b445cd15`**
-### **✅ #986 · #987 · #988 MERGED. P1 IS KICKED AND RUNNING.**
-### ⛔ RUNTIME IS BUILDING. Nothing is owed to me on the critical path.
+## ▶ LIVE — 2026-07-26 ~06:3xZ · `origin/main` = **`48cc267d`**
+### **✅ #986 · #987 · #988 · #989 · #990 · #991 MERGED.**
+### ▶ P1 IS BUILT + COMMITTED (`cb33c729`), NOW DURABLE ON ORIGIN
+### ⚠ …but its turn ended MID-SEQUENCE and the branch is still HELD.
+
+> ### ⛔⛔ READ THIS FIRST — RUNTIME'S P1 WORK EXISTED ON NO REMOTE
+>
+> ```
+> branch  wp/RT-VALUE-TOTALITY-P1   tip cb33c72980fafd3be0075ec6a33592a693b1f4f1
+>         bf9db26e  iterative canonical traversal, Clone and Drop
+>         cb33c729  extend the depth controls to every child position
+> diff    canonical.rs +815 - store.rs +97 - values.rs +239
+>         crates/ken-runtime/tests/value_depth_totality.rs +574 (NEW)
+>         4 files, 1561 insertions
+> origin  ✅ PUSHED BY ME and verified by ls-remote -- it was on NO remote before
+> ```
+>
+> ⚠ **`git ls-remote` returned nothing for that ref** — 1561 insertions in exactly
+> one local worktree ref. Pushed the exact SHA via `mint-gh-token` before doing
+> anything else. ⛔ The implementer has no credential **by design**; this is not its
+> failure, it is the exposure that shape always creates.
+>
+> **What did NOT happen:** it committed but did **not** return home and did **not**
+> hand off — the turn just ended (idle, ctx 25%, worktree clean, still ON the wp
+> branch). So ⛔ **the branch is HELD and QA cannot take it**, and ⚠ **neither the
+> `AC-V3a` consuming-population number nor the measured depth `D` has been reported
+> to anyone.** A test file existing is not evidence the measurement happened, and
+> the frame forbids choosing the `Drop` mechanism on taste.
+>
+> ⇒ Routed to the **leader** (never the worker): `evt_7b6mp67jt8ewg`, and confirmed
+> it read that exact event id and went `Working`. **It owns the finish.** ⛔ Do not
+> compact `runtime-implementer` — the unreported measurements exist nowhere else.
+> ⛔ Do not rebase the wp branch (`behind 3` is only doc/agent-side commits;
+> a rebase moves the tip and voids banked review).
 
 > ### ⛔ DO NOT RE-DO THE KICKOFF — IT IS DONE. `evt_64xwmxt5v3qk`
 >
@@ -50,10 +81,46 @@
 > items and both traps, and told the implementer to hard-stop rather than build
 > around a false fixed input. ⛔ Nothing to correct.
 >
-> ⚠ Their base is `63ad112c`, one commit behind `origin/main` = `b445cd15` (the
-> node's `active` flip, doc-only, a file the ring does not touch). **Not a
-> problem, and NOT worth a message** — but if a merge candidate ever shows a
-> conflict in `docs/program/issues/RT-VALUE-TOTALITY.md`, that is why.
+> ⚠ Their base is `63ad112c`, now **3 behind** `origin/main` = `48cc267d`. Every
+> one of those three is doc/agent-side (`b856b7a9` retro closure, `9f7772f4`
+> pane-sweep fix, `48cc267d` two playbook promotions) — **nothing under
+> `crates/`**. **Not a problem**: I verify the *merge result* at publish time.
+
+> ### ✅ WHAT ELSE LANDED THIS WINDOW — all verified by BLOB IDENTITY
+>
+> | PR | what | main |
+> |---|---|---|
+> | #989 | `KW-ORACLE-CLOSURE` retro closure + `pin-a-property §10` CORRECTED | `b856b7a9` |
+> | #990 | pane-sweep catches the 2nd stranding shape, refuses UI furniture | `9f7772f4` |
+> | #991 | 3 orphaned adversary lessons recovered + 2 `RT-SCALE-A` promotions | `48cc267d` |
+>
+> ⭐ **#990's load-bearing part is what the sweep REFUSES.** An idle pane renders
+> its own suggestion text on the composer, so with colour stripped it is
+> indistinguishable from a real delivery. Discriminator: suggestions are wrapped
+> in `ESC[2m`, so the sweep captures with `-e`. **Mutation-proved** — deleting the
+> ghost branch makes it return `slash:/compact` on *suggestion text*, i.e. it
+> would compact healthy seats. Residual: a short raw-text delivery classifies
+> `other`, reported but never submitted, so **the sweep does not replace the
+> per-seat `Working` check**.
+>
+> ⚠ **#991 corrected MY OWN triage instrument.** `git diff main...tip` shows what
+> the *branch* added since the merge base — **not** what `main` is missing; it
+> called a file `main` already has 350 new lines. With a direct two-operand
+> comparison, every `preserved/*` tip sits at an old `main` and would revert
+> 200–650 files. `GH-24/25/32/38` were deleted **on purpose** by `69c9a46d`, so
+> five tips carry nothing. **Still genuinely absent and NOT swept:**
+> `px8ta_terminal_answer_authority.rs` + the two B2F hard-stop evidence docs.
+
+> ### ⚠ MY OWN HEARTBEAT WAS MISDIRECTING RESUMES — REWRITTEN, NOW STATE-FREE
+>
+> The `agent_interval` prompt embedded a main-SHA, a "NEXT ACTION" and two
+> durability counts. All four went stale and it then spent this whole window
+> telling me to author a frame that had **already landed as PR #987** and
+> repeating `adversary/work = 86` (the real answer against `origin/main` is **4**;
+> 86 was measured against a *diverged* `origin/adversary/work` — wrong operand).
+> ⇒ Rewritten to carry **no SHA, no next-action, no counts**: anything
+> time-varying goes stale by construction and then arrives dressed as a directive
+> from me.
 >
 > **What I am waiting for:** Runtime's first substantive report, or a hard-stop.
 > ⛔ Do not nudge before there is silence to diagnose.
