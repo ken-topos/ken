@@ -107,6 +107,34 @@
 | Decision | `dec_7sd3enk81maws` **rejected on the object** — Architect, `evt_4bs6scfmt5ax0` |
 | state | runtime-leader routed the three repairs (`evt_4ms9arc37p89w`); implementer folding from `fd4e7f08`, ⛔ **no force-push of any rejected checkpoint** |
 | recut | ✅ **BOUND AND MERGED** — read the frame on `origin/main`, never a `wp/steward-b2v-recut-*` ref |
+| **fresh candidate** | `wp/RT-FNSPLIT-B2V-executable-value-abi` = **`81a68435`** — pushed 00:3xZ, `ls-remote`-verified. **Preservation only; NO Decision open, NOT a publish request.** |
+| **held on** | ⛔ Architect ruling `evt_hxns0g9zcjzk` — **QA has not started, deliberately** |
+
+> ### ⛔ THE OPEN QUESTION — `AC-6` identity inside bound `AC-10`
+>
+> May an emitted-constructed handle with **no `SlotId`** satisfy *"identity
+> intact"* through an explicit `HandleIdentity::NoStoreIdentity` outcome that a
+> separately compiled consumer recovers and the classifier predicts — **or does
+> `AC-6` require store adoption / minting a real `SlotId`** for
+> emitted-constructed nodes?
+>
+> ⭐ **The ring HELD rather than deciding, and that was right.** The alternative
+> is a **lifecycle choice above the prior mechanism**, and they named it as one
+> instead of picking it. Same shape the recut taught twice: an uncovered face is
+> **raised as a question**, never resolved by widening the nearest `AC` — the
+> answer may be a **boundary** (that is how the header constant landed in `AC-1`
+> instead of destroying `AC-10`'s boundary).
+>
+> ⚠ **Which way this one cuts:** the implementation *"keeps every admitted value
+> represented; it does not narrow the domain"* — so it is **not** the vacuity
+> route `AC-10` closes. The live question is narrower: **is `NoStoreIdentity` an
+> identity OUTCOME or an identity ABSENCE?** ⛔ Those read identically in a green
+> verdict.
+>
+> **`81a68435` verified independently before the push:** base/merge-base
+> `aecdb001` ✅ · 11 files ✅ · `+9608/−22` ✅ · `diff --check` zero bytes ✅ ·
+> intersection vs `4427147d` **empty** ✅ · fast-forward from `fd4e7f08`, so
+> `fd4e7f08`/`ddff2fae`/`ea8d9824`/`657f60a0`/`78a57d90` **all** stay reachable.
 
 ⭐⭐ **THE §5a-ii PREDICATE CHECK FIRED AND WAS ANSWERED `YES`**
 (`evt_2zxt6m9bg43r2`). The three production blocks are **not** independent: they
@@ -482,7 +510,8 @@ push output.
 | # | item |
 |---|---|
 | #48 | ⚠ **IN PROGRESS.** Three tail corrections committed. Remaining: archive the superseded 07-21/07-22 narrative. ⛔ **Do NOT bulk-archive — ~half the tail is durable law.** |
-| #54 | ⛔⛔ **THE SCALING GATE HAS NO TRACKED NODE.** `RT-NATIVE-FNSPLIT`'s merge condition — Boundary A's planner census **and** the n=3..7 empirical harness + analytical model + verdict — exists **only as prose inside `RT-NATIVE-FNSPLIT.md` and the recut frame.** ⚠ **That is the KW-THEOREM failure shape exactly: a requirement stated in a document nobody executes against.** Frame both as real nodes **before `B2F` lands**, so the gate is not discovered at the end. Carry into them: workers on the **product's 8 MiB stack** (not the 256 MiB `ken-cli` convention — 6 sites already blind); **`k` (recursive lowering frames) is UNKNOWN and must be measured** before the model can consume it; ⛔ **there is NO baseline** — report absolute values, and the historic n=4 `1,482 states` figure is **non-comparable**. |
+| ⭐ **OPEN WITH THE OPERATOR** | **A consolidated AC list — decision pending, resume HERE.** Asked 2026-07-26; I recommended **two steps** and they had not yet chosen. **(1)** A **GENERATED** AC inventory (like `gen-progress.sh`), ⛔ **never hand-maintained** — a written index is a second source of truth, and this file already deleted its duplicated armed counters on the grounds that *stating them twice means having no count of record at all*. It would immediately expose three coexisting spellings (`AC-1` / `AC1.1′` / `AC-A1`) and per-frame numbering where `AC-10` means two unrelated things. **(2)** ⭐ **The valuable half — require the QA `AC`→control map to land as a FILE on the WP branch, not only as a convo message.** Today the frames are in-tree and discharge status is in chat, which is why `AC-10` sat `NO CONTROL — open residual` across FOUR candidates before anyone treated it as a debt. Step 2 touches every ring's verdict discipline ⇒ Architect + build leaders weigh in, do not impose it. ⚠ **Risk to state either way: an index reads as a coverage claim when it is only an inventory** — `fd4e7f08`'s map was complete and every row honest, and three defects sat outside it because no `AC` asked the question. Fold into #51. |
+| #54 | ✅ **DONE** — ⛔⛔ **THE SCALING GATE HAD NO TRACKED NODE.** `RT-NATIVE-FNSPLIT`'s merge condition — Boundary A's planner census **and** the n=3..7 empirical harness + analytical model + verdict — exists **only as prose inside `RT-NATIVE-FNSPLIT.md` and the recut frame.** ⚠ **That is the KW-THEOREM failure shape exactly: a requirement stated in a document nobody executes against.** Frame both as real nodes **before `B2F` lands**, so the gate is not discovered at the end. Carry into them: workers on the **product's 8 MiB stack** (not the 256 MiB `ken-cli` convention — 6 sites already blind); **`k` (recursive lowering frames) is UNKNOWN and must be measured** before the model can consume it; ⛔ **there is NO baseline** — report absolute values, and the historic n=4 `1,482 states` figure is **non-comparable**. |
 | #51+#12 | ⭐ **Promote the candidate-boundary-control lesson** (all three `KW-THEOREM` rings converged on it **independently**) + B1R retros → playbook corpus. **Batch; do not publish singly.** The deliverable is the **executable edge** (the language ring's post-corpus formatter return edge), not the policy sentence. |
 | #52 | Frame **`KW-ORACLE-CLOSURE`** (`draft`, filed 2026-07-25) — the adversary's two post-merge findings on the `KW-THEOREM` source oracle. Both **zero live instances**, both **structural**. ⛔ Do not close by re-running the measurements; and ⛔ **P2's fix must not be a sixth `classify` arm.** |
 | #5 | Frame `ABI-S3` shovel-ready |
