@@ -288,6 +288,37 @@ constant helper declarations are **predicted before measuring** and
 word serves `ValueWord` and `ResultWord`; its relation to `GroundValueCarrier`
 is stated. A new carrier or a new tag is a **compile error**, not a default.
 
+> #### `AC-1` layout closure — Architect ruling `evt_1tdq9g139snay`, 2026-07-26
+>
+> **The node/header field inventory is the SOLE layout authority.** Any
+> declared or exported extent is **mechanically derived** from that inventory
+> **and consumed** by allocation/publication, **or it does not exist**.
+> Publication emits **exactly** the derived extent, and every emitted
+> reader/writer offset **plus field width** lies within it.
+>
+> ⛔ **A committed causal control must REDDEN when the field inventory, the
+> published word count, the declared extent, or an emitted offset drifts
+> independently.** ⛔ **Checking a hand-maintained constant against another
+> hand-maintained constant does not discharge this.**
+>
+> ⚠ **The contract is one authority with real consumers** — **not** a preferred
+> spelling and **not** a frozen byte count. The implementation stays free to
+> delete the dead constant, derive it from the field inventory, or introduce a
+> typed layout object.
+>
+> ⭐ **Why this is `AC-1` and NOT `AC-10`** — the Architect ruled the boundary
+> explicitly, and it matters. `AC-10` closes an **admitted runtime value** under
+> *emitted producer → valid word → separately compiled consumer*. The `fd4e7f08`
+> header defect **did not falsify that round trip**: `BOUNDARY_REGION_HEADER_BYTES`
+> had **no consumer**, and the published vector was large enough for every
+> accessed field. ⛔ **Quietly widening `AC-10` to swallow every dead or drifting
+> declaration would have destroyed the named predicate's boundary.** The real
+> fault is that the representation claimed **one closed, type-enforced layout
+> while carrying two inconsistent authorities, one of them unused** — an `AC-1`
+> face. RETAIN's *"one derived layout"* points at the right mechanism, but
+> **RETAIN is not an acceptance control**, which is why the requirement lives
+> here.
+
 **AC-2 — the representation cannot be value-specialized.** ⭐ **Prefer the
 compiler over a test:** if `D1` is built so that no seed value or caller depth
 is *in scope* at the construction site, that is a stronger discharge than any
@@ -402,6 +433,18 @@ sizes, not asserted.
 >
 > ⚠ **This is content added to a message QA already sends** — no new party, no
 > new hop, no new gate, no change to the reviewer set.
+>
+> #### ⛔ MANDATORY ROW added 2026-07-26 — `AC-1` **layout closure**
+>
+> The map's `AC-1` row must name the control discharging the **layout-closure
+> clause** (Architect `evt_1tdq9g139snay`), not only tag/carrier closure. That
+> control **reddens when the field inventory, the published word count, the
+> declared extent, or an emitted offset drifts independently.**
+> ⛔ **A row citing a constant-vs-constant equality assertion does NOT discharge
+> it** — that is two hand-maintained authorities agreeing, which is the defect.
+> ⚠ `fd4e7f08`'s map was complete and honest **and had no such row**, because
+> the clause did not exist yet; that is precisely how a 136-vs-144 mismatch
+> passed a full `AC`→control review.
 
 ## Do-not-reopen guardrails
 
@@ -465,10 +508,16 @@ inheritance from `C4`.
   emitted reader wraps `at + region_len` where the Rust oracle uses
   `checked_add`. ⛔ **That is this node's own founding diagnosis one layer down**
   — `B2V` exists because the aggregate-result path was *a Rust-side decode, not a
-  value representation*. **The recut predicate reaches defects (2) and (3)**
-  (construct a *valid* word; keep it *resolvable*); **it does not obviously reach
-  (1)**, which is a declared-constant-without-consumer. Do not read that as the
-  recut being validated — read it as one uncovered face still to answer.
+  value representation*.
+
+  ✅ **RULED 2026-07-26 (`evt_1tdq9g139snay`), and the boundary is the point.**
+  The recut predicate reaches **(2)** and **(3)** — construct a *valid* word,
+  keep it *resolvable*. **(1) is NOT an `AC-10` face**: the header constant had
+  no consumer and the published vector was large enough for every accessed
+  field, so the round trip was never falsified. It is an **`AC-1` layout-closure
+  face** and is folded there. ⛔ **Widening `AC-10` to absorb it would have
+  destroyed the named predicate's boundary** — the reason to raise an uncovered
+  face as a *question* rather than patch it into the nearest `AC`.
   ⭐ **This counter exists because §5a-ii's could not see this.** §5a-ii counts
   **hard-stops**, and a review block is correctly **not** a hard-stop — so three
   Architect production blocks moved neither the hard-stop count nor the symptom
