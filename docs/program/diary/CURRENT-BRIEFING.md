@@ -28,10 +28,41 @@ expected ~11:30Z. ⛔ Do not write the mission.
 ### **base — stale the instant the block landed. `git rev-parse origin/main`.**
 ### ✅ **#986 → #1014 ALL MERGED** — incl. #1009 (`R5` erratum), #1013 (`#82`).
 ### ✅ **`ABI-R1` CLOSED** · ✅ **`RT-FNSPLIT-B2V` CLOSED** — retros IN on both.
-### ⏸ **ZERO LANES LIVE.** `B2F` is the frontier — **kick not yet sent**.
+### ▶ **ONE LANE LIVE: Verify on `DOC-GATE-NEEDLE`** (operator-released, #1015).
+### ⏸ `B2F` is the FNSPLIT frontier — **kick still not sent**, and that is a choice.
+### ✅ **`docs/MISSION.md` EXISTS AND IS ON `main`** — `SPEC-MISSION-GROUNDING`
+### unblocked in substance; ⚠ `AC-M1` not met (commitments are unnumbered).
 ### ⛔ **2 ADVERSARY FINDINGS OPEN** — `RT-VALUE-TOTALITY` §7; unframed (#78).
 
-> ### ⏸ ZERO LANES LIVE — `B2V` and `ABI-R1` both CLOSED. `B2F` is the frontier.
+> ### ▶ ONE LANE LIVE — Verify on `DOC-GATE-NEEDLE`. `B2F` unkicked.
+>
+> **Operator released `DOC-GATE-NEEDLE` 2026-07-26 ~11:4xZ** — *"the
+> implementation teams are quiescent. fix the DOC-GATE-NEEDLE issue. It doesn't
+> matter to me how."* Kickoff `evt_1wbv9ysrt7jhc`; **all three Verify seats
+> confirmed `Working` after the post.** Binding: base `origin/main` = `57a05000`,
+> frame = the **node** at blob `e2b3aaa8` (there is no `docs/program/wp/` file —
+> verified absent), target `crates/ken-cli/tests/library_documentation_gates.rs`
+> blob `7415e7b2`.
+>
+> ⛔ **The 2026-07-25 HOLD on that WP is SPENT, but the ruling attached to it is
+> NOT.** The doc-track concurrency exception is **DOC-ONLY**; proving your file
+> sets disjoint **does not earn a slot**. This WP was *granted* one. I edited that
+> block rather than annotating it, because it sat at the top of the frame saying
+> *"do not re-ask"* and would have been obeyed.
+>
+> ⚠ **A THIRD compaction-drop shape, measured today:** a `/compact` sent to a
+> **busy** Codex seat is **rejected outright, not queued** — `■ '/compact' is
+> disabled while a task is in progress`. `verify-implementer` had silently not
+> compacted for exactly this reason. Distinct from the two stranding shapes in
+> `#66`/`#90`, and *detectable* because the refusal prints. Candidate for the
+> classifier.
+>
+> ### `B2F` — unkicked on purpose
+>
+> Everything for the kick is ready except a re-anchor check of the frame against
+> landed `B2V`. I am holding it while the mission analysis settles direction,
+> because committing the FNSPLIT lane minutes before a possible redirect is
+> expensive to unwind. **Task `#92` carries the full gate state.**
 >
 > ```
 > wp/RT-FNSPLIT-B2V-executable-value-abi          a5c8ba73   MERGED #1014 - branch GONE from origin
