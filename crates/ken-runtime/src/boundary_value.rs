@@ -600,7 +600,12 @@ impl BoundaryEmissionPlan {
 // The tag × class relation
 // ---------------------------------------------------------------------------
 
-/// ⛔ **The valid `(tag, class)` pairs — one authoritative relation.**
+/// ⛔ **The valid `(tag, class)` pairs, as the RECONCILED RUST MIRROR — not the
+/// authority.**
+///
+/// ⚠ This heading used to read *"one authoritative relation"*, which
+/// contradicted the explanation a dozen lines below it. The heading is the part
+/// a hurried reader takes away, so it is corrected here rather than only there.
 ///
 /// A closed set of tags and a closed set of classes do **not** make a closed
 /// ABI: the tag decides *lifetime and region*, the class decides
@@ -1513,9 +1518,15 @@ impl BoundaryRegion {
         names: &[u64],
         limbs: &[u64],
     ) -> BoundaryWord {
-        // ⛔ The Rust builders check the SAME relation the emitted allocator
-        // does. One table, two enforcement points — a pair no disposition can
-        // produce must be unbuildable from either side.
+        // ⛔ The Rust builders enforce the SAME tag x node-class legality
+        // contract the emitted allocator does — ONE CONTRACT, TWO ENFORCEMENT
+        // PATHS, and deliberately not one table. Emitted allocation reads the
+        // partition-derived plan relation, which is the sole authority; Rust
+        // reads `BOUNDARY_TAG_CLASS_RELATION`, the crate-private mirror
+        // reconciled to that authority over the full finite product. A pair no
+        // disposition can produce must be unbuildable from either side, and the
+        // reconciliation is what makes "either side" mean one contract rather
+        // than two independently maintained answers.
         assert!(
             boundary_relation_admits(tag, class),
             "the ABI does not admit {tag:?} + {class:?}"

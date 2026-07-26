@@ -4758,10 +4758,19 @@ pub(crate) mod tests {
     /// negatively, over the whole product.**
     ///
     /// ⚠ MEASURED: every one of the `BoundaryTag::ALL × BoundaryClass::ALL`
-    /// pairs is put through the emitted allocator. CLAIMED: the ABI admits
-    /// exactly the relation the disposition yields. THE GAP: that
-    /// `BOUNDARY_TAG_CLASS_RELATION` *is* that disposition's relation — which
-    /// `b2v_ac3_…` pins on the disposition side.
+    /// pairs is put through the emitted allocator, against the **Rust mirror**'s
+    /// answer. CLAIMED: the ABI admits exactly the relation the disposition
+    /// yields. THE GAP: that the mirror *is* the disposition's relation — closed
+    /// by [`b2v_the_rust_mirror_and_the_derived_relation_reconcile_over_the_product`],
+    /// which sweeps the same product against the partition-derived plan in both
+    /// directions.
+    ///
+    /// ⚠ This line used to point the gap at an elided `b2v_ac3_…`. Two tests
+    /// with that prefix do exist, in `lowering/core/tests/control.rs` — they pin
+    /// that the disposition has no wildcard arm and that every variant carries
+    /// exactly one static policy. ⛔ **Neither says anything about the mirror**,
+    /// so the reference named a real family that could not discharge the gap,
+    /// which is worse than naming nothing: a reader who greps finds hits.
     #[test]
     fn b2v_the_tag_class_relation_is_closed_over_the_whole_product() {
         let (_pm, alloc_code) = compile_producer(4, emit_alloc_probe);
@@ -7512,11 +7521,23 @@ pub(crate) mod tests {
         );
     }
 
-    /// **`RULING R5` clause 5 — the emitted relation is the plan's, PER CELL.**
+    /// **`RULING R5` clause 5 — the emitted relation is the plan's, bound by an
+    /// exact-cell discriminator.**
     ///
-    /// ⛔ **Aggregate CLIF inequality is insufficient**, and clause 5 sharpens
-    /// `R4`'s per-*site* rule to per-**cell**: remap one exact `(tag, class)`
-    /// cell and drop one, then watch the emitted `alloc` change its acceptance.
+    /// ⛔ **Aggregate CLIF inequality is insufficient.** Clause 5 applies `R4`'s
+    /// causal principle to this single relation consumer with a **cell-specific
+    /// discriminator**: remap and drop **one exact** `(tag, class)` cell and
+    /// observe that cell's emitted acceptance change or `ERR_RELATION`.
+    /// Population closure comes from the **full-product both-direction
+    /// reconciliation** plus the opposite-side drift mutations, not from this
+    /// sweep.
+    ///
+    /// ⚠ **It is NOT a requirement to run one mutation per cell** — the landed
+    /// `R5` erratum says so explicitly, and an earlier version of this comment
+    /// claimed clause 5 "sharpens `R4` to a universal per-cell rule", which
+    /// licensed more than the ruling grants. The sweep below *is* per-cell
+    /// because it is cheap here, which is a choice this control makes and not an
+    /// obligation the ruling imposes.
     ///
     /// **MEASURED:** for every admitted cell, an `alloc` of that `(tag, class)`
     /// succeeds under the real plan and returns exact `ERR_RELATION` under a plan
