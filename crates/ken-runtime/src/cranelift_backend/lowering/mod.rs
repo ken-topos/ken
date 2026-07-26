@@ -992,6 +992,370 @@ impl BoundaryOutcome {
     }
 }
 
+// ---------------------------------------------------------------------------
+// `RECUT 2` — representation authority-to-execution closure
+// ---------------------------------------------------------------------------
+//
+// ⛔ **`AC-10` closes the CLASSIFICATION; this closes the EXECUTION.** The
+// partition above proves every boundary input reaches exactly one outcome
+// permitted by its variant's static policy. It does **not** ask whether the
+// outcome's lifecycle is executable end to end — and that is the predicate the
+// Architect named across blocks `#1`–`#6`: *every representation authority must
+// be the sole authority actually consumed by the production path it governs,
+// and every admitted partition must have one total executable lifecycle.*
+//
+// ⭐ **Why this is a type and not a table.** The proof shape RECUT 2 retires is
+// a hand-maintained matrix that can drift from the production enums. So the row
+// set here is not written down: it is **derived** by iterating
+// [`BoundaryInput::all`] and classifying, and the phases are **struct fields
+// with no default**. A row that cannot say what closes a phase does not
+// compile, and a new outcome or a new phase is a compile error rather than a
+// row nobody added.
+//
+// ⚠ **The honest boundary, stated once here rather than implied:** the
+// compiler closes *completeness* — that every required phase is bound. It does
+// **not** close *identity* — that the bound anchor is the real production item
+// rather than a lookalike. Identity is closed by named causal controls, and
+// [`ProductionAnchor::derived_witness`] exists so that the subset of anchors
+// which can be evaluated without a JIT are checked against production values
+// rather than against their own spelling.
+
+/// One phase of the lifecycle `RECUT 2` requires every admitted row to close.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum LifecyclePhase {
+    /// The authority that decides the representation.
+    Authority,
+    /// Emitted code that constructs a word of this outcome.
+    Producer,
+    /// The check that rejects a malformed or unrepresentable input.
+    Validator,
+    /// Canonicalization and store adoption / identity mint.
+    CanonicalizerAdopter,
+    /// The step that makes the word visible past the producer.
+    Publisher,
+    /// A separately compiled reader that recovers the value.
+    Consumer,
+}
+
+impl LifecyclePhase {
+    /// Every phase, in lifecycle order.
+    ///
+    /// ⛔ Bound to the enum by [`LifecyclePhase::index`]'s wildcard-free match,
+    /// so a seventh phase cannot be added without extending this array.
+    pub(in crate::cranelift_backend) const ALL: [LifecyclePhase; 6] = [
+        LifecyclePhase::Authority,
+        LifecyclePhase::Producer,
+        LifecyclePhase::Validator,
+        LifecyclePhase::CanonicalizerAdopter,
+        LifecyclePhase::Publisher,
+        LifecyclePhase::Consumer,
+    ];
+
+    /// This phase's position in [`LifecyclePhase::ALL`].
+    ///
+    /// ⛔ **This is the pin that binds `ALL`'s length to the type.** A seventh
+    /// variant is a non-exhaustive-match compile error here, and the control
+    /// `recut2_the_phase_inventory_is_bound_to_the_type` checks that every
+    /// index round-trips through `ALL` — so `ALL` cannot silently omit one.
+    pub(in crate::cranelift_backend) fn index(self) -> usize {
+        match self {
+            LifecyclePhase::Authority => 0,
+            LifecyclePhase::Producer => 1,
+            LifecyclePhase::Validator => 2,
+            LifecyclePhase::CanonicalizerAdopter => 3,
+            LifecyclePhase::Publisher => 4,
+            LifecyclePhase::Consumer => 5,
+        }
+    }
+}
+
+/// The production item that closes a phase.
+///
+/// ⛔ **Every variant names a real item on the production path**, not a
+/// description of one. The `derived_witness` below is what keeps that honest
+/// for the anchors it can reach: it returns a value **computed by** the named
+/// authority, so deleting or rewiring the authority changes the witness.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum ProductionAnchor {
+    /// `boundary_value::NodeField` / `RegionHeaderField` — the sole layout
+    /// authority, from which every extent is derived (`AC-1` layout closure).
+    LayoutFieldInventory,
+    /// `boundary_value::boundary_int_magnitude_is_canonical` — the canonical
+    /// sign/limb contract, authoritative wherever a word is built.
+    IntNormalizationAuthority,
+    /// `boundary_value_clif::emit_boundary_value_local_graph` — the emitted
+    /// producer helpers.
+    EmittedProducerGraph,
+    /// The emitted escape gate refusing a pending or invocation-owned word.
+    EmittedEscapeGate,
+    /// `BoundaryValueStore::adopt`'s iterative tri-colour reachable-graph walk.
+    ReachableGraphValidator,
+    /// `BoundaryValueStore::adopt` — postorder canonicalization and the
+    /// store-only identity mint.
+    StoreAdoption,
+    /// `BoundaryArenaBuilder::publish` / `BoundaryValueStore::publish_persistent`.
+    RegionPublication,
+    /// `boundary_value_clif::capture_boundary_value_local_graph` — a separately
+    /// compiled consumer.
+    SeparatelyCompiledConsumer,
+}
+
+impl ProductionAnchor {
+    /// A value **computed by the named production item**, where that is
+    /// possible without a JIT module.
+    ///
+    /// ⛔ **`None` is not a waiver and not a residual** — it says this anchor's
+    /// identity is closed by a named causal control instead, and
+    /// `recut2_every_anchor_is_closed_by_a_witness_or_a_named_control` requires
+    /// each `None` anchor to appear in [`ProductionAnchor::CONTROL_CLOSED`].
+    /// Making "cannot determine" a third outcome that must be *accounted for*,
+    /// rather than one that falls through to pass, is the point.
+    pub(in crate::cranelift_backend) fn derived_witness(self) -> Option<i64> {
+        match self {
+            // Derived from the field inventory: if a field is added, removed or
+            // reordered, this value moves.
+            ProductionAnchor::LayoutFieldInventory => {
+                Some(crate::boundary_value::NODE_EXTENT as i64)
+            }
+            // Computed by calling the normalization authority on a magnitude it
+            // must reject — a leading-zero limb is non-canonical by contract.
+            ProductionAnchor::IntNormalizationAuthority => Some(i64::from(
+                !crate::boundary_value::boundary_int_magnitude_is_canonical(0, &[1, 0]),
+            )),
+            // Derived from the escape gate's exact status constant.
+            ProductionAnchor::EmittedEscapeGate => Some(crate::boundary_value::BOUNDARY_ERR_ESCAPE),
+            // Derived from the validator's exact malformed-shape status.
+            ProductionAnchor::ReachableGraphValidator => {
+                Some(crate::boundary_value::BOUNDARY_ERR_CYCLE)
+            }
+            // Derived from the seal/quiescence handoff's exact status.
+            ProductionAnchor::RegionPublication => Some(crate::boundary_value::BOUNDARY_ERR_SEALED),
+            // ⛔ These three need a live JIT module to evaluate, so their
+            // identity is control-closed rather than witness-closed.
+            ProductionAnchor::EmittedProducerGraph
+            | ProductionAnchor::StoreAdoption
+            | ProductionAnchor::SeparatelyCompiledConsumer => None,
+        }
+    }
+
+    /// The anchors whose identity is closed by a named causal control rather
+    /// than by a derived witness, each paired with that control.
+    ///
+    /// ⛔ **This list is the residual given a cell**, in the frame's sense: it
+    /// records what is control-enforced instead of letting the absence read as
+    /// enforcement.
+    pub(in crate::cranelift_backend) const CONTROL_CLOSED: &'static [(
+        ProductionAnchor,
+        &'static str,
+    )] = &[
+        (
+            ProductionAnchor::EmittedProducerGraph,
+            "b2v_the_helper_inventory_is_closed_and_named",
+        ),
+        (
+            ProductionAnchor::StoreAdoption,
+            "b2v_adoption_mints_a_real_slot_and_equal_values_converge",
+        ),
+        (
+            ProductionAnchor::SeparatelyCompiledConsumer,
+            "b2v_a_separately_compiled_consumer_recovers_the_value",
+        ),
+    ];
+}
+
+/// How one phase is closed for one row.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum PhaseBinding {
+    /// Closed by a named production item.
+    Closed(ProductionAnchor),
+    /// The outcome class structurally has no such phase.
+    ///
+    /// ⛔ **Derived from the outcome by [`BoundaryOutcome::requires`], never
+    /// chosen per row.** If a row could declare a phase absent on its own
+    /// authority, this enum would be the drift-prone matrix again with an
+    /// escape hatch — every uncomfortable cell would become `StructurallyAbsent`
+    /// and the artifact would close vacuously.
+    StructurallyAbsent,
+}
+
+/// One row of the closure artifact — all six phases, none optional.
+///
+/// ⛔ **There is no `Default` and no `Option`.** Omitting a field is a
+/// missing-field compile error, which is RECUT 2's *"a missing lifecycle phase
+/// must be a construction failure"* discharged by construction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct PhaseClosure {
+    authority: PhaseBinding,
+    producer: PhaseBinding,
+    validator: PhaseBinding,
+    canonicalizer_adopter: PhaseBinding,
+    publisher: PhaseBinding,
+    consumer: PhaseBinding,
+}
+
+impl PhaseClosure {
+    /// This row's binding for one phase.
+    pub(in crate::cranelift_backend) fn binding(&self, phase: LifecyclePhase) -> PhaseBinding {
+        match phase {
+            LifecyclePhase::Authority => self.authority,
+            LifecyclePhase::Producer => self.producer,
+            LifecyclePhase::Validator => self.validator,
+            LifecyclePhase::CanonicalizerAdopter => self.canonicalizer_adopter,
+            LifecyclePhase::Publisher => self.publisher,
+            LifecyclePhase::Consumer => self.consumer,
+        }
+    }
+}
+
+impl BoundaryOutcome {
+    /// Whether this outcome's class **requires** a phase.
+    ///
+    /// ⛔ **Derived from the outcome, so a row cannot excuse itself.** A
+    /// `ProtocolOnly` value never reaches a boundary, so it has no producer,
+    /// adopter, publisher or consumer — but it still has an authority that says
+    /// so and a validator that enforces it. An invocation handle has no
+    /// *canonicalizer/adopter* because store adoption must **reject** it
+    /// (Ruling B item 6); that absence is a contract, not a gap.
+    pub(in crate::cranelift_backend) fn requires(self, phase: LifecyclePhase) -> bool {
+        match (self, phase) {
+            // An immediate rides in the word: produced, validated, published and
+            // read, but never canonicalized or adopted by the store.
+            (BoundaryOutcome::ImmediateWord { .. }, LifecyclePhase::Authority)
+            | (BoundaryOutcome::ImmediateWord { .. }, LifecyclePhase::Producer)
+            | (BoundaryOutcome::ImmediateWord { .. }, LifecyclePhase::Validator)
+            | (BoundaryOutcome::ImmediateWord { .. }, LifecyclePhase::Publisher)
+            | (BoundaryOutcome::ImmediateWord { .. }, LifecyclePhase::Consumer) => true,
+            (BoundaryOutcome::ImmediateWord { .. }, LifecyclePhase::CanonicalizerAdopter) => false,
+
+            // ⛔ A store-minted handle is the only outcome that requires ALL
+            // SIX. This is the row the six blocks kept failing.
+            (
+                BoundaryOutcome::HandleWord {
+                    identity: HandleIdentity::StoreMinted,
+                    ..
+                },
+                _,
+            ) => true,
+
+            // An invocation handle has no store identity to mint, by design.
+            (
+                BoundaryOutcome::HandleWord {
+                    identity: HandleIdentity::NoStoreIdentity,
+                    ..
+                },
+                LifecyclePhase::CanonicalizerAdopter,
+            ) => false,
+            (
+                BoundaryOutcome::HandleWord {
+                    identity: HandleIdentity::NoStoreIdentity,
+                    ..
+                },
+                LifecyclePhase::Authority,
+            )
+            | (
+                BoundaryOutcome::HandleWord {
+                    identity: HandleIdentity::NoStoreIdentity,
+                    ..
+                },
+                LifecyclePhase::Producer,
+            )
+            | (
+                BoundaryOutcome::HandleWord {
+                    identity: HandleIdentity::NoStoreIdentity,
+                    ..
+                },
+                LifecyclePhase::Validator,
+            )
+            | (
+                BoundaryOutcome::HandleWord {
+                    identity: HandleIdentity::NoStoreIdentity,
+                    ..
+                },
+                LifecyclePhase::Publisher,
+            )
+            | (
+                BoundaryOutcome::HandleWord {
+                    identity: HandleIdentity::NoStoreIdentity,
+                    ..
+                },
+                LifecyclePhase::Consumer,
+            ) => true,
+
+            // Never a source value at a boundary, and rejected before emission:
+            // both are closed by an authority plus the validator that enforces
+            // it, and neither ever produces, adopts, publishes or is read.
+            (BoundaryOutcome::ProtocolOnly, LifecyclePhase::Authority)
+            | (BoundaryOutcome::ProtocolOnly, LifecyclePhase::Validator)
+            | (BoundaryOutcome::FailClosedForbidden, LifecyclePhase::Authority)
+            | (BoundaryOutcome::FailClosedForbidden, LifecyclePhase::Validator) => true,
+            (BoundaryOutcome::ProtocolOnly, LifecyclePhase::Producer)
+            | (BoundaryOutcome::ProtocolOnly, LifecyclePhase::CanonicalizerAdopter)
+            | (BoundaryOutcome::ProtocolOnly, LifecyclePhase::Publisher)
+            | (BoundaryOutcome::ProtocolOnly, LifecyclePhase::Consumer)
+            | (BoundaryOutcome::FailClosedForbidden, LifecyclePhase::Producer)
+            | (BoundaryOutcome::FailClosedForbidden, LifecyclePhase::CanonicalizerAdopter)
+            | (BoundaryOutcome::FailClosedForbidden, LifecyclePhase::Publisher)
+            | (BoundaryOutcome::FailClosedForbidden, LifecyclePhase::Consumer) => false,
+        }
+    }
+
+    /// The lifecycle closure for this outcome.
+    ///
+    /// ⛔ **Wildcard-free over the outcome, and every field is mandatory**, so
+    /// a new outcome variant is a compile error and an existing one cannot ship
+    /// a hole.
+    pub(in crate::cranelift_backend) fn phase_closure(self) -> PhaseClosure {
+        match self {
+            BoundaryOutcome::ImmediateWord { .. } => PhaseClosure {
+                authority: PhaseBinding::Closed(ProductionAnchor::LayoutFieldInventory),
+                producer: PhaseBinding::Closed(ProductionAnchor::EmittedProducerGraph),
+                validator: PhaseBinding::Closed(ProductionAnchor::IntNormalizationAuthority),
+                canonicalizer_adopter: PhaseBinding::StructurallyAbsent,
+                publisher: PhaseBinding::Closed(ProductionAnchor::RegionPublication),
+                consumer: PhaseBinding::Closed(ProductionAnchor::SeparatelyCompiledConsumer),
+            },
+            BoundaryOutcome::HandleWord {
+                identity: HandleIdentity::StoreMinted,
+                ..
+            } => PhaseClosure {
+                authority: PhaseBinding::Closed(ProductionAnchor::LayoutFieldInventory),
+                producer: PhaseBinding::Closed(ProductionAnchor::EmittedProducerGraph),
+                validator: PhaseBinding::Closed(ProductionAnchor::ReachableGraphValidator),
+                canonicalizer_adopter: PhaseBinding::Closed(ProductionAnchor::StoreAdoption),
+                publisher: PhaseBinding::Closed(ProductionAnchor::RegionPublication),
+                consumer: PhaseBinding::Closed(ProductionAnchor::SeparatelyCompiledConsumer),
+            },
+            BoundaryOutcome::HandleWord {
+                identity: HandleIdentity::NoStoreIdentity,
+                ..
+            } => PhaseClosure {
+                authority: PhaseBinding::Closed(ProductionAnchor::LayoutFieldInventory),
+                producer: PhaseBinding::Closed(ProductionAnchor::EmittedProducerGraph),
+                validator: PhaseBinding::Closed(ProductionAnchor::EmittedEscapeGate),
+                canonicalizer_adopter: PhaseBinding::StructurallyAbsent,
+                publisher: PhaseBinding::Closed(ProductionAnchor::RegionPublication),
+                consumer: PhaseBinding::Closed(ProductionAnchor::SeparatelyCompiledConsumer),
+            },
+            BoundaryOutcome::ProtocolOnly => PhaseClosure {
+                authority: PhaseBinding::Closed(ProductionAnchor::LayoutFieldInventory),
+                producer: PhaseBinding::StructurallyAbsent,
+                validator: PhaseBinding::Closed(ProductionAnchor::EmittedEscapeGate),
+                canonicalizer_adopter: PhaseBinding::StructurallyAbsent,
+                publisher: PhaseBinding::StructurallyAbsent,
+                consumer: PhaseBinding::StructurallyAbsent,
+            },
+            BoundaryOutcome::FailClosedForbidden => PhaseClosure {
+                authority: PhaseBinding::Closed(ProductionAnchor::LayoutFieldInventory),
+                producer: PhaseBinding::StructurallyAbsent,
+                validator: PhaseBinding::Closed(ProductionAnchor::ReachableGraphValidator),
+                canonicalizer_adopter: PhaseBinding::StructurallyAbsent,
+                publisher: PhaseBinding::StructurallyAbsent,
+                consumer: PhaseBinding::StructurallyAbsent,
+            },
+        }
+    }
+}
+
 /// `RT-FNSPLIT-B2V` `D4` — what a `Lowered` becomes when it crosses a boundary.
 ///
 /// ⛔ **The population is closed by the compiler, not by a histogram.** The

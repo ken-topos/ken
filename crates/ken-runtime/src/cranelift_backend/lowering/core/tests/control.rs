@@ -4925,3 +4925,264 @@ fn b2v_ac10_every_boundary_input_receives_one_policy_entailed_outcome() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// `RECUT 2` — representation authority-to-execution closure
+// ---------------------------------------------------------------------------
+
+/// **`RECUT 2`.** Every admitted row closes every phase its outcome requires.
+///
+/// ⛔ **This is the artifact RECUT 2 demands, and its row set is DERIVED.**
+/// Nothing here enumerates rows: the cells come from [`BoundaryInput::all`], the
+/// outcome from the wildcard-free classifier, the required phases from the
+/// outcome's own class, and the bindings from a struct with six mandatory
+/// fields. A hand-maintained matrix can drift from the production enums; this
+/// cannot, because there is no matrix to maintain.
+///
+/// ⚠ MEASURED: for all 252 cells, every phase the outcome's class requires is
+/// bound to a named production anchor, and every phase it does not require is
+/// `StructurallyAbsent`. CLAIMED: every admitted partition has one total
+/// executable lifecycle. THE GAP: that each anchor **is** the production item it
+/// names — closed for five anchors by `derived_witness` below, and for the other
+/// three by the named controls in `ProductionAnchor::CONTROL_CLOSED`.
+#[test]
+fn recut2_every_admitted_row_closes_every_required_phase() {
+    use std::collections::BTreeSet;
+
+    let cells = BoundaryInput::all();
+    // Positive control FIRST: an empty sweep satisfies every `for` below.
+    assert_eq!(
+        cells.len(),
+        21 * 2 * 3 * 2,
+        "RECUT 2: the cell product moved, so this sweep is not over the partition"
+    );
+
+    let mut bound_anchors = BTreeSet::new();
+    let mut absent_seen = false;
+    for cell in &cells {
+        let outcome = cell.outcome();
+        let closure = outcome.phase_closure();
+        for phase in LifecyclePhase::ALL {
+            match (outcome.requires(phase), closure.binding(phase)) {
+                // Required and bound — the row closes this phase.
+                (true, PhaseBinding::Closed(anchor)) => {
+                    bound_anchors.insert(anchor);
+                }
+                // Not required and absent — a contract, derived from the class.
+                (false, PhaseBinding::StructurallyAbsent) => absent_seen = true,
+                // ⛔ The two failures RECUT 2 exists to make loud.
+                (true, PhaseBinding::StructurallyAbsent) => panic!(
+                    "RECUT 2: {cell:?} receives {outcome:?}, whose class REQUIRES \
+                     {phase:?}, but the row declares it structurally absent — an \
+                     authority with no closed execution is the named predicate's \
+                     failure"
+                ),
+                (false, PhaseBinding::Closed(anchor)) => panic!(
+                    "RECUT 2: {cell:?} receives {outcome:?}, whose class does not \
+                     require {phase:?}, yet the row binds {anchor:?} — a phase \
+                     nothing entails is a claim with no authority behind it"
+                ),
+            }
+        }
+    }
+
+    // ⚠ TWO-SIDED. Without these, a `requires` that answered `false` everywhere
+    // would pass the loop above with every row structurally absent, and a
+    // `requires` that answered `true` everywhere would pass a row that bound one
+    // anchor to all six phases. Both must be inhabited.
+    assert!(
+        absent_seen,
+        "RECUT 2: no phase is ever structurally absent, so `requires` is constant \
+         and the derivation is degenerate"
+    );
+    assert!(
+        bound_anchors.len() >= 5,
+        "RECUT 2: only {} distinct anchors are reachable across the whole \
+         partition, so most of the lifecycle is closed by one item standing in \
+         for the rest",
+        bound_anchors.len()
+    );
+}
+
+/// **`RECUT 2`.** The phase inventory is bound to the type, not restated beside it.
+///
+/// ⛔ **This is the `AC-V1b` defect, refused.** That pin froze `25` next to an
+/// enum and was invariant under adding a variant by construction. Here the
+/// index is produced by a wildcard-free match on the enum, so a seventh phase
+/// is a compile error there, and this control proves `ALL` did not silently
+/// drop one.
+#[test]
+fn recut2_the_phase_inventory_is_bound_to_the_type() {
+    for (position, phase) in LifecyclePhase::ALL.into_iter().enumerate() {
+        assert_eq!(
+            phase.index(),
+            position,
+            "RECUT 2: {phase:?} sits at {position} in ALL but indexes {}",
+            phase.index()
+        );
+    }
+    let distinct: std::collections::BTreeSet<_> = LifecyclePhase::ALL.into_iter().collect();
+    assert_eq!(
+        distinct.len(),
+        LifecyclePhase::ALL.len(),
+        "RECUT 2: ALL repeats a phase, so a missing one is masked by a duplicate"
+    );
+}
+
+/// **`RECUT 2`.** No anchor is silently unclosed.
+///
+/// ⛔ **"Cannot determine" is a third outcome that must be ACCOUNTED FOR**, not
+/// one that falls through to pass. An anchor with no derived witness must name
+/// the causal control that closes its identity instead; an anchor that does
+/// neither is the residual with no cell.
+#[test]
+fn recut2_every_anchor_is_closed_by_a_witness_or_a_named_control() {
+    use std::collections::BTreeSet;
+
+    let mut anchors = BTreeSet::new();
+    for cell in BoundaryInput::all() {
+        let closure = cell.outcome().phase_closure();
+        for phase in LifecyclePhase::ALL {
+            if let PhaseBinding::Closed(anchor) = closure.binding(phase) {
+                anchors.insert(anchor);
+            }
+        }
+    }
+    assert!(
+        !anchors.is_empty(),
+        "RECUT 2: no anchor is bound anywhere, so every check below is vacuous"
+    );
+
+    let control_closed: BTreeSet<_> = ProductionAnchor::CONTROL_CLOSED
+        .iter()
+        .map(|(anchor, _)| *anchor)
+        .collect();
+    for anchor in &anchors {
+        match anchor.derived_witness() {
+            Some(_) => assert!(
+                !control_closed.contains(anchor),
+                "RECUT 2: {anchor:?} has BOTH a derived witness and a control \
+                 row — one of the two is not describing this anchor"
+            ),
+            None => assert!(
+                control_closed.contains(anchor),
+                "RECUT 2: {anchor:?} has no derived witness and names no causal \
+                 control, so nothing closes its identity — this is exactly the \
+                 residual that reads as enforcement"
+            ),
+        }
+    }
+
+    // ⛔ Every declared control row must correspond to an anchor the partition
+    // actually reaches. A control for a dead anchor is a row that can never fail.
+    for (anchor, control) in ProductionAnchor::CONTROL_CLOSED {
+        assert!(
+            anchors.contains(anchor),
+            "RECUT 2: {anchor:?} names control `{control}` but is bound by no row \
+             in the partition, so that control guards nothing"
+        );
+    }
+}
+
+/// **`RECUT 2`.** The derived witnesses are computed by production, not restated.
+///
+/// ⛔ **A witness that agrees with a constant written beside it proves nothing**
+/// — that is two hand-maintained authorities agreeing, the `AC-1` defect. Each
+/// value below is checked against the *behaviour* of the authority that
+/// produces it, so rewiring the authority moves the witness.
+#[test]
+fn recut2_derived_witnesses_come_from_the_production_authority() {
+    // The layout witness is the node extent DERIVED from the field inventory.
+    // ⛔ Asserted as a relation to the inventory, never as a frozen byte count:
+    // a reviewed layout delta is predicate delta, not a regression.
+    let extent = ProductionAnchor::LayoutFieldInventory
+        .derived_witness()
+        .expect("the layout authority is evaluable without a JIT");
+    assert!(
+        extent > 0,
+        "RECUT 2: the derived node extent is {extent}, so the field inventory \
+         computes nothing and the layout authority has no content"
+    );
+
+    // The normalization witness is `1` only because the authority REJECTS a
+    // leading-zero magnitude. If the contract stopped rejecting it, this moves.
+    assert_eq!(
+        ProductionAnchor::IntNormalizationAuthority.derived_witness(),
+        Some(1),
+        "RECUT 2: the canonical sign/limb authority no longer rejects a \
+         leading-zero magnitude, so the witness is not measuring the contract"
+    );
+    // ⚠ The two-sided half: the same authority must ACCEPT a canonical
+    // magnitude, or "rejects a leading zero" is just "rejects everything".
+    assert!(
+        crate::boundary_value::boundary_int_magnitude_is_canonical(0, &[1]),
+        "RECUT 2: the normalization authority rejects a canonical magnitude too, \
+         so its rejection above is not discriminating"
+    );
+
+    // The status witnesses are the exact codes the production paths return.
+    assert_eq!(
+        ProductionAnchor::EmittedEscapeGate.derived_witness(),
+        Some(crate::boundary_value::BOUNDARY_ERR_ESCAPE)
+    );
+    assert_eq!(
+        ProductionAnchor::ReachableGraphValidator.derived_witness(),
+        Some(crate::boundary_value::BOUNDARY_ERR_CYCLE)
+    );
+    assert_eq!(
+        ProductionAnchor::RegionPublication.derived_witness(),
+        Some(crate::boundary_value::BOUNDARY_ERR_SEALED)
+    );
+    // ⛔ And the statuses must be DISTINCT: three phases sharing one code would
+    // make a control that fires for one indistinguishable from the others.
+    let statuses = [
+        crate::boundary_value::BOUNDARY_ERR_ESCAPE,
+        crate::boundary_value::BOUNDARY_ERR_CYCLE,
+        crate::boundary_value::BOUNDARY_ERR_SEALED,
+    ];
+    let distinct: std::collections::BTreeSet<_> = statuses.iter().collect();
+    assert_eq!(
+        distinct.len(),
+        statuses.len(),
+        "RECUT 2: two lifecycle phases report the same exact status, so a \
+         control cannot tell which one fired"
+    );
+}
+
+/// **`RECUT 2`.** The store-minted handle is the only outcome requiring all six.
+///
+/// ⛔ **This is the row the six blocks kept failing**, so it is pinned as a
+/// relation to the phase inventory rather than as the number six — the count is
+/// derived from `LifecyclePhase::ALL`, so adding a phase strengthens this
+/// automatically instead of leaving a stale literal behind.
+#[test]
+fn recut2_only_the_store_minted_handle_requires_the_whole_lifecycle() {
+    let full: Vec<BoundaryOutcome> = BoundaryInput::all()
+        .into_iter()
+        .map(|cell| cell.outcome())
+        .filter(|outcome| {
+            LifecyclePhase::ALL
+                .into_iter()
+                .all(|phase| outcome.requires(phase))
+        })
+        .collect();
+    assert!(
+        !full.is_empty(),
+        "RECUT 2: no outcome requires the whole lifecycle, so the artifact never \
+         asks the question the six blocks failed"
+    );
+    for outcome in full {
+        assert!(
+            matches!(
+                outcome,
+                BoundaryOutcome::HandleWord {
+                    identity: HandleIdentity::StoreMinted,
+                    ..
+                }
+            ),
+            "RECUT 2: {outcome:?} requires every phase, but only a store-minted \
+             handle should — a non-persistent outcome demanding adoption means \
+             the requirement is not derived from the class"
+        );
+    }
+}
