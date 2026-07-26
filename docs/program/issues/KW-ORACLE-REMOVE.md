@@ -11,6 +11,25 @@ github: null
 origin: Operator ruling 2026-07-26 — "That test should not exist. Remove it. It should be a violation of our testing policies," followed by the general rule "Test oracles that assert facts about source code, catalog, or documentation lines are an invitation for failure and delay. Tests should focus on behavior." Surfaced when the librarian's DOC-CATALOG-CONTENTS preflight found the oracle blocking a doc-only WP. Steward-filed per COORDINATION §2.
 ---
 
+> ## ⛔⛔ `main` IS RED ON THIS ORACLE. This WP is the fix, not a cleanup.
+>
+> **Measured by `language-implementer` at `origin/main = f52b0f61`:**
+> `exact_candidate_has_no_unclassified_retired_occurrences` **FAILS**. The landed
+> catalog change (`95bc855c`) moved lines in
+> `catalog/packages/Core/Classes/EffectfulClasses.ken.md` and `Derived.ken.md`,
+> **both pinned by the oracle's frozen line-number allow-list**
+> (`kw_theorem_source_oracle.rs:93`, `:113`). Corroborated structurally.
+>
+> ⇒ **Every non-doc-only merge is now blocked behind this deletion**, because the
+> publisher polls CI and CI is red. That includes Runtime's `B2E` when it
+> becomes a candidate.
+>
+> ⭐ **A doc-only merge reddened a Rust test suite.** That is the coupling the
+> operator was describing when he removed the library currency gate hours
+> earlier — *"including it as a CI-type system induces coupling that causes just
+> the sort of slowdown and waffling that we're dealing with now."* This node was
+> already justified on principle; it is now justified by a stopped pipeline.
+
 > ## ▶ DELETE ONE TEST FILE — the analysis is done, read the measurements
 >
 > This is an `S`: remove

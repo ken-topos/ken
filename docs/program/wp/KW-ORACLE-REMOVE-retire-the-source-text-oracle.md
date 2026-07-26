@@ -47,21 +47,50 @@ scripts/ken-cargo test -p ken-elaborator
 ```
 ⛔ Never `--workspace`; workspace-green means **green in CI** (`COORDINATION §12`).
 
-**AC-4 — the deletion is causally verified, not assumed.** ⭐ Report the test
-count **before and after** from the same command. The file holds **7** `#[test]`
-functions, so the `kw_theorem_source_oracle` target should go from **7 passed**
-to **absent**. ⚠ **If the delta is not 7, say so and stop** — that means the
-file's tests were not all running, or something else changed, and either way
-your AC-2 claim needs re-examining.
+**AC-4 — the deletion is causally verified, not assumed.** ⭐ Run the same
+command before and after and report both.
 
-> ⛔ **CORRECTED 2026-07-26 — this AC originally said 12, and 12 was wrong.**
-> `language-implementer` blocked on it and was right: `grep -c '^#\[test\]'`
-> returns **7**. I had counted `^fn ` declarations, which includes helpers
-> (`candidate_inputs`, `classify`, `occurrence_lines`, `retired_findings`, …).
-> ⭐ **The block is the AC working as intended** — a fixed input stated as a
-> number is checkable, so a wrong one gets caught instead of silently reshaping
-> the work. The "what goes" list in the node names the 7 correctly; only this
-> count was wrong.
+| | `kw_theorem_source_oracle` target | `-p ken-elaborator` overall |
+|---|---|---|
+| **before** | **runs 7 tests**, of which **1 FAILS** | **RED** |
+| **after** | **absent** | **green** |
+
+⚠ **The failing test is `exact_candidate_has_no_unclassified_retired_occurrences`,
+and its red is the WP's justification — not an obstacle to it.** Do not
+investigate it, do not repair it, do not treat it as a precondition to clear.
+
+⭐ **The only number that discriminates is `runs 7 tests`.** It distinguishes
+*"I deleted a file of 7 live tests"* from *"I deleted a file whose tests were
+already not running."* ⛔ **If the target does not run exactly 7, stop and say
+so.** If the pass/fail split differs from 6/1, note it and **continue** — that
+is a census drifting further, which is expected and is not your problem.
+
+> ### ⛔ CORRECTED TWICE. Both corrections were mine, and they had the same shape.
+>
+> **First (count):** this AC said **12**. `language-implementer` blocked and was
+> right — `grep -c '^#\[test\]'` returns **7**. I had counted `^fn `
+> declarations, sweeping in helpers (`candidate_inputs`, `classify`,
+> `occurrence_lines`, `retired_findings`, …).
+>
+> **Second (pass state):** the corrected AC said **"7 passed → absent"**. Also
+> false: at `f52b0f61` the target is **6 passed / 1 failed**, because the landed
+> catalog change (`95bc855c`) moved lines in
+> `catalog/packages/Core/Classes/EffectfulClasses.ken.md` and
+> `Derived.ken.md` — **both pinned by the oracle's frozen line-number
+> allow-list** (`kw_theorem_source_oracle.rs:93`, `:113`). The implementer
+> blocked a second time and was right a second time.
+>
+> ⭐ **The shape both times: I wrote a fixed input I had not measured at the base
+> I named.** The first was a count I derived from the wrong grep; the second was
+> a pass/fail state I never observed at all — I assumed green because the suite
+> had been green when I read the file. ⇒ **An AC that names an observable must
+> be read out of the artifact at the stated base, exactly like any other claim.**
+>
+> ⭐ **And the second block is worth more than the correction it forced:** it is
+> the measurement that proved **`main` itself is red on this oracle**, which is
+> why this WP is now the fleet's merge-pipeline blocker rather than a cleanup.
+> ⛔ **Do not read two blocks as friction.** Both stopped work that would
+> otherwise have reported success against a false claim.
 
 **AC-5 — no production reference is left dangling.** Confirm no `src/` or other
 test file referenced the deleted module. The build succeeding is *evidence* for
@@ -93,10 +122,8 @@ of the WP.
 This is a deletion, so the usual "does the pin discriminate?" questions do not
 apply. What does apply:
 
-- ⭐ **AC-4's count delta is the discriminating control.** It is the one cheap
-  check that distinguishes *"I deleted a file of 12 live tests"* from *"I
-  deleted a file whose tests were already not running,"* and those are different
-  facts about what the repo had.
+- ⭐ **AC-4's `runs 7 tests` count is the discriminating control** — see AC-4 for
+  why the pass/fail split is deliberately *not* part of it.
 - ⛔ **`git diff --stat` always exits 0** — it is not an emptiness test. Use
   `--quiet` (or read `--name-only`) when you need to assert a diff is empty.
 

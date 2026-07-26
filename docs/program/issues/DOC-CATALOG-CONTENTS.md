@@ -1,7 +1,7 @@
 ---
 id: DOC-CATALOG-CONTENTS
-title: "Catalog entry format: rename the `## Index` heading to `## Contents` in 19 entries and remove the 16 reading-path sections, then close the derived artifacts"
-status: ready
+title: "Catalog entry format: rename the `## Index` heading to `## Contents` in 19 entries and remove the 16 reading-path sections"
+status: merged
 owner: doc
 size: M
 gate: none
@@ -11,13 +11,48 @@ github: null
 origin: Operator-directed catalog-format change, reported by the librarian (evt_66fx861j5xatx, thread thr_5wmt68pxnen2n) and confirmed mine by the operator 2026-07-26. Filed as a FRESH node rather than reusing the closed style WP, at the librarian's request — a closed WP has no live spine to hang a review or a publisher gate on. Steward-filed per COORDINATION §2.
 ---
 
-> ## ▶ A DOC-ONLY FORMAT CHANGE WITH A DERIVED-ARTIFACT TAIL
+> ## ✅ LANDED AND CLOSED — 2026-07-26, PR #1031, `origin/main = 95bc855c`
 >
-> The visible work is a heading rename and a section removal. **The part that
-> makes it an `M` rather than an `S` is everything downstream that is
-> *generated*:** the source-attestation ledger, `REVISION`/`STATUS`, and the
-> agent-pack token measures in `library/agents/manifest.toml`. ⛔ A candidate
-> that changes the 19 entries and stops is incomplete.
+> Candidate `1e36a37d`, approved by the librarian on the exact object and
+> verified landed byte-identically across all 25 paths. Published **doc-only**
+> per the operator (*"It's a doc only change. The CI failure is spurious.
+> Create a doc-only PR."*).
+>
+> ⛔ **Read what follows as history, not as live scope** — and read the next
+> block before you read the original framing, because one of its requirements
+> was withdrawn mid-flight.
+
+> ## ⛔ THE DERIVED-ARTIFACT TAIL WAS WITHDRAWN — the gate it served no longer exists
+>
+> **This node originally opened:** *"The part that makes it an `M` rather than
+> an `S` is everything downstream that is generated: the source-attestation
+> ledger, `REVISION`/`STATUS`, and the agent-pack token measures in
+> `library/agents/manifest.toml`. ⛔ A candidate that changes the 19 entries and
+> stops is incomplete."*
+>
+> ⇒ **That requirement is VOID.** The operator removed the library currency gate
+> from the publisher entirely (2026-07-26, PR #1032): *"no remove it. it's just
+> friction. we can generate such a document at version release points. Including
+> it as a CI-type system induces coupling that causes just the sort of slowdown
+> and waffling that we're dealing with now."* The ledger keyed on **whole-file
+> blob OIDs**, so a prose-only edit moved the OID and reddened the gate with
+> nothing semantic having changed — which is exactly what happened here, and
+> what had happened on `SPEC-ALIGN-A1` before it.
+>
+> ⭐ **The candidate that merged is therefore the 19-entry change and its four
+> consumers — precisely the shape this node called "incomplete."** The doc ring
+> was mid-step on the withdrawn tail when the ruling landed; they stopped
+> cleanly and installed nothing.
+>
+> ⚠ **Steward defect recorded, because the ring paid for it:** I measured the
+> OID mismatch correctly and was right that `--doc-only` would not bypass the
+> gate — then **dispatched the ring to satisfy the gate instead of asking
+> whether it should gate a merge at all.** That was the second time the same day
+> I converted a policy question into a compliance task (the first: routing an
+> oracle *re-key* design question to the Architect rather than asking whether
+> the oracle should exist). **Both times the operator asked the question one
+> level up.** The tell in both: I treated a mechanism I had just measured as a
+> fixed input.
 
 ## Bound base and independently verified scope
 
