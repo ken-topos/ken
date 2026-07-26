@@ -1801,3 +1801,95 @@ does is **executable** rather than a `///` line nobody runs.
 `BOUNDARY_LOCAL_HELPERS` **28**, `declare(...)` **28**,
 `BACKEND_PRODUCTION_SOURCES` **13**, dead-code oracle **18 lib warnings, same
 set**. `define_class` gained a parameter and a fold; it did not gain a helper.
+
+---
+
+# `RULING R5` — the relation seam, and the erratum that caught my framing
+
+⭐ **The seam I proposed was ruled with one load-bearing change**, and then the
+Architect's **erratum** corrected two glosses — one of which I had already
+propagated into my own commit message. Both are recorded here because the
+correction is the reusable part.
+
+## What the ruling changed about my proposal
+
+I proposed *"emitter consumes the plan's derived relation, plus a pin making the
+table's derived claim executable."* Clause 3 kept that but re-framed what the two
+sides **are**:
+
+⛔ **ONE contract, TWO enforcement paths — not two authorities.** The
+partition-derived relation is the **sole** representation authority. The Rust
+builders and the emitted allocator enforce the same tag × node-class legality at
+different production sites; the mirror survives only at minimal visibility with
+full both-direction reconciliation. **What is forbidden is an independently
+maintained or independently authoritative mirror.**
+
+⚠ **My seam commit reproduced the overstated gloss** — it said the Rust builders
+have *"a fail-before-publication contract the emitter's plan does not serve,"*
+which licenses exactly the second authority the ruling forbids. The source doc is
+corrected; this is the record that the wrong version was written.
+
+## What was built
+
+| clause | mechanism |
+|---|---|
+| 1 | `BoundaryTagAdmission::handle_class_relation`, derived in the one `BoundaryInput::all()` sweep from `HandleWord` only — `ImmediateWord` contributes no row, because an immediate has no node |
+| 2 | `relation_mask(b, tag, plan)`, **seeded with the empty mask** |
+| 3 | `BOUNDARY_TAG_CLASS_RELATION` → `pub(crate)`, docs corrected, both-direction full-product reconciliation |
+| 4 | `boundary_class_mask` **deleted** — after the emitter stopped folding over it, its only caller was a test. `boundary_relation_admits` kept: it has a real non-test consumer |
+| 5 | per-cell drop **and** remap, plus the absent-row control, plus opposite-side drift |
+
+⛔ **Clause 2 is the subtle one.** The code replaced folded from the *last* row
+backwards so the innermost value was a **real mask**, justified in its own comment
+by *"an unlisted tag can never reach here, because `select_region_by_tag` has
+already refused it."* Both halves are what the ruling forbids: a real seed lets a
+row-less tag inherit another row's classes, and leaning on the upstream guard
+makes the absent-row branch **unreachable and therefore untestable**. ⚠ *An
+untestable fail-closed branch is not a fail-closed branch.*
+
+## ⚠ Two things clause 5 exposed that I had not built
+
+**The remap half.** Clause 5 says *remap **and** drop*. I built only drop.
+⭐ **They are not redundant:** a consumer that intersects the plan with a
+hardcoded table passes **every** drop — withdrawing a cell from the plan still
+withdraws it from the intersection — and fails a remap, because acceptance has to
+*move* to the recipient row rather than merely shrink. Drop shows the plan can
+take a cell away; remap shows the plan decides where cells are.
+
+**The absent-row control.** Neither the drop sweep nor the remap reads the seed:
+dropping a cell leaves the tag's row present, so the fold still takes a `hit` arm.
+Only removing a row **entirely** reads the seed. Without that control, "seeded
+with the empty mask" is a claim about a branch no test can enter.
+
+## The mutation table
+
+| # | mutation | expected | measured | caught by |
+|---|---|---|---|---|
+| `M-R1` | `relation_mask` bypasses the plan, folds the Rust mirror again | red | red | per-cell relation pin |
+| `M-R2` | the fold is seeded with a **real** last-row mask | red | red | per-cell pin's **absent-row** control |
+| `M-R3` | **mirror** drift — the Rust slice gains a cell the partition lacks | red | red | reconciliation + product sweep |
+| `M-R4` | **partition** drift — the derived relation loses a cell the mirror has | red | red | reconciliation + product sweep + 6 behavioural |
+
+⭐ **`M-R3` and `M-R4` are the ruling's "opposite directions", and the
+reconciliation reddens on both** — verified by reading its name out of each
+failure list rather than inferring it from the count. `M-R2` reddening is what
+retires the untestable-branch objection: the seed is now a thing a test can
+observe.
+
+## A retired pin, and why it could never have caught this
+
+`b2v_the_tag_class_relation_is_closed_over_the_whole_product` carried a per-pair
+check that `boundary_class_mask(tag)` agreed with `boundary_relation_admits(tag,
+class)`. ⛔ **Both sides were expressions of the same hand-written slice.** It
+swept the full product, it was green, and it was structurally incapable of
+noticing that nothing derived the slice — the exact
+aggregate/self-agreement shape this WP has now hit four times. It is
+replaced by a reconciliation against the **partition**.
+
+## `D6` — unchanged
+
+`BOUNDARY_LOCAL_HELPERS` **28**, `declare(...)` **28**,
+`BACKEND_PRODUCTION_SOURCES` **13**, `LOCAL_HELPER_COUNT` **6**,
+`lowering/mod.rs` **0/0/0**, one non-test emitter call site. Lib warnings **17**,
+same set — `boundary_class_mask`'s deletion removed surface rather than adding
+dead surface.
