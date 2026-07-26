@@ -22,9 +22,19 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~05:5xZ · `origin/main` = **`7415dbd8`**
-### **✅ Both forks ruled. P1 frame WRITTEN. PR #986 in flight.**
-### ⛔ Runtime is IDLE — the frame exists but is NOT YET PUBLISHED, so do not kick.
+## ▶ LIVE — 2026-07-26 ~06:0xZ · `origin/main` = **`63ad112c`**
+### **✅ #986 + #987 MERGED. P1 frame IS ON MAIN. Both forks ruled.**
+### ⛔ NEXT: Runtime retros-in → compact the ring → kick P1. In that order.
+
+> ### ▶ THE ONE THING IN FLIGHT RIGHT NOW
+>
+> `evt_1psyw7ggxanb0` asks **@runtime-leader** one question: **are `RT-FNSPLIT-B2R`
+> retros posted?** It engaged (`Working`). ⛔ **Do not compact that ring until it
+> answers** — compaction destroys an unposted retro permanently. On *"retros in"*:
+> `scripts/handoff-gate-compact.sh runtime-leader runtime-implementer runtime-qa`
+> (background), verify each drop **wide**, then kick **the leader only**.
+> ⚠ That message deliberately says *"NOT a kickoff, do not act on it"* — so a
+> kickoff is still owed and the ring knows it.
 
 > ### ⚠ OPERATOR AWAY until **11:30Z** — drafting **THE MISSION** then
 >
@@ -49,24 +59,21 @@
 > pages were asserting the **falsified** reading. ⛔ **Path-intersection-empty is
 > not publishable** — now §2c step 7c.
 
-### ▶ LANE 1 — `RT-VALUE-TOTALITY` — ✅ **P1 FRAME WRITTEN, ⛔ NOT PUBLISHED**
+### ▶ LANE 1 — `RT-VALUE-TOTALITY` — ✅ **P1 FRAME IS ON MAIN (PR #987)**
 
 ```
 node    docs/program/issues/RT-VALUE-TOTALITY.md    status: ready
 frame   docs/program/wp/RT-VALUE-TOTALITY-P1-iterative-canonical-traversal.md
-        committed f5639548 on steward/work + origin/steward/work -- NOT on main
+        blob bd75c761ee92 -- VERIFIED PRESENT at origin/main 63ad112c
 ruling  evt_4qref8hksbdyw   dec_1dckq8c0f9xjv   (carrier split, 05:07Z)
 ruling  evt_45x5dn9jcrhhq                       (cycle SCOPE, 05:29Z)
-blocks  RT-FNSPLIT-B2V (status active, ring IDLE)
+blocks  RT-FNSPLIT-B2V (status active but STOOD DOWN, ring idle)
 ```
 
-> ### ⛔ NEXT ACTION: PUBLISH THE FRAME, THEN §2c GATE, THEN KICK — in that order
->
-> ⛔ **Do NOT kick before the frame is on `main`.** That exact failure happened on
-> 2026-07-26 (I claimed a frame was on `main` when it was on `steward/work`), and
-> it is now gate **step 5b**: `git cat-file -e <base>:<path>` per named object.
-> ⚠ I deliberately did NOT publish it alongside PR #986 — racing a second merge
-> into `main` while the publisher polls #986's checks can stale that merge.
+⛔ **The only thing between here and a kickoff is the §2c gate** — retros-in, then
+compact all three Runtime seats, verify the drops, then mention the leader only.
+⚠ I published this **after** #986 rather than alongside it: racing a second merge
+into `main` while the publisher polls the first PR's checks can stale that merge.
 
 **SPLIT INTO TWO PHASES, and only P1 is framed.** P1 = totality (`AC-V1`
 iterative encoder · `AC-V2` structural pin · `AC-V3` clone+drop). P2 =
@@ -122,15 +129,23 @@ recorded not deleted**.
 PARKED; `RECUT 2`'s phase-closure artifact must still be **re-derived** against
 the three-lifecycle partition — this node does not relieve that gate.
 
-### ▶ LANE 2 — `KW-ORACLE-CLOSURE` — ✅ APPROVED, **PR #986 OPEN, BRANCH FROZEN**
+### ▶ LANE 2 — `KW-ORACLE-CLOSURE` — ✅ **MERGED. ⛔ ONLY THE RETROS ARE OPEN.**
 
 ```
-PR #986   wp/KW-ORACLE-CLOSURE @ 79acbabb   -- publisher polling CI, merges on green
-Decision  dec_6nvh9tnrf970k  resolved  resolved_by agt_37reqftfe6g00 @ 05:32:09Z
-          VERIFIED FROM THE OBJECT via dec_check.py -- never from prose
-ledger    NOT a cited source. Positive control: ledger has 51 rows / 11 crates rows
-freeze    acked to the ring at evt_1zyzarvppkwgf (step 9)
+PR #986   MERGED  origin/main 9b6d4d16  landed tree 50c485ce  node -> merged
+blob      kw_theorem_source_oracle.rs = c2119e62 == candidate 79acbabb  ✅
+Decision  dec_6nvh9tnrf970k  resolved_by agt_37reqftfe6g00 @ 05:32:09Z
+          verified FROM THE OBJECT via dec_check.py -- never from prose
+retros    REQUESTED evt_2vk0vbv3gz334 -- ⛔ NOT IN. Do not compact Language.
 ```
+
+⭐ **The landed tree `50c485ce` is byte-identical to the merge tree I computed
+BEFORE publishing** — prediction and post-condition agreed, which is the actual
+proof nothing since `c3b8f193` was reverted.
+
+⚠ **The retro ask names one question I cannot answer myself:** was my `AC-C1` row
+**ambiguous about the operand**, or **clear and skipped**? Opposite repairs, and I
+wrote the row.
 
 > ### ⛔ `--is-ancestor` FAILS ON THIS CANDIDATE AND THAT IS CORRECT
 >
