@@ -28,13 +28,13 @@ expected ~11:30Z. ⛔ Do not write the mission.
 ### **base — stale the instant the block landed. `git rev-parse origin/main`.**
 ### ✅ **#986 → #1014 ALL MERGED** — incl. #1009 (`R5` erratum), #1013 (`#82`).
 ### ✅ **`ABI-R1` CLOSED** · ✅ **`RT-FNSPLIT-B2V` CLOSED** — retros IN on both.
-### ▶ **ONE LANE LIVE: Verify on `DOC-GATE-NEEDLE`** (operator-released, #1015).
-### ⏸ `B2F` is the FNSPLIT frontier — **kick still not sent**, and that is a choice.
+### ▶ **TWO LANES LIVE: Verify on `DOC-GATE-NEEDLE`, Runtime on `B2F`.**
+### ✅ `B2F` KICKED — hard-stop #10 cleared, frame re-anchored onto landed `B2V`.
 ### ✅ **`docs/MISSION.md` EXISTS AND IS ON `main`** — `SPEC-MISSION-GROUNDING`
 ### unblocked in substance; ⚠ `AC-M1` not met (commitments are unnumbered).
 ### ⛔ **2 ADVERSARY FINDINGS OPEN** — `RT-VALUE-TOTALITY` §7; unframed (#78).
 
-> ### ▶ ONE LANE LIVE — Verify on `DOC-GATE-NEEDLE`. `B2F` unkicked.
+> ### ▶ TWO LANES LIVE — Verify on `DOC-GATE-NEEDLE`, Runtime on `B2F`.
 >
 > **Operator released `DOC-GATE-NEEDLE` 2026-07-26 ~11:4xZ** — *"the
 > implementation teams are quiescent. fix the DOC-GATE-NEEDLE issue. It doesn't
@@ -57,12 +57,25 @@ expected ~11:30Z. ⛔ Do not write the mission.
 > `#66`/`#90`, and *detectable* because the refusal prints. Candidate for the
 > classifier.
 >
-> ### `B2F` — unkicked on purpose
+> ### ✅ `B2F` KICKED — `evt_7p5fqzw9tk22h`, base `bb3e58ea`, frame blob `65d3fa25`
 >
-> Everything for the kick is ready except a re-anchor check of the frame against
-> landed `B2V`. I am holding it while the mission analysis settles direction,
-> because committing the FNSPLIT lane minutes before a possible redirect is
-> expensive to unwind. **Task `#92` carries the full gate state.**
+> ⛔ **The frame mentioned `B2V` ZERO times** while the node carried the `AC-11`
+> re-scoping from the hard-stop-#10 ruling. Re-anchored in PR #1018, and the node's
+> `HELD` block is cleared with an explicit *do not cite this to refuse work* — the
+> **third** superseded block that day sitting where it would be obeyed.
+>
+> **#10 discharged by measurement, not inheritance:** `BoundaryNodeClass` carries
+> `Constructor`/`Record`/`HostResult`, and `emit_boundary_value_local_graph` is
+> called from a **live** non-test site at `lowering/core.rs:87`.
+>
+> ⭐ **The seam:** that call binds its result to `_boundary_value_abi` — an
+> underscore discard. The ABI is emitted and **nothing consumes it**, exactly the
+> *"INERT but EXECUTABLE"* state `B2V` was scoped to deliver. `B2F` makes it live.
+>
+> ⚠ **Residual I stated to the ring:** a carrier *exists* and the ABI *is* emitted;
+> I did **not** verify each of the ~33 of 41 transfers is representable end-to-end.
+> That is `AC-11` clause 1's producer-tracing walk. The ring re-derives the split
+> and its measurement wins. **Task `#94` carries the full state.**
 >
 > ```
 > wp/RT-FNSPLIT-B2V-executable-value-abi          a5c8ba73   MERGED #1014 - branch GONE from origin
