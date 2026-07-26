@@ -22,40 +22,78 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~06:5xZ · `origin/main` = **`db552f4e`**
-### **✅ #986 → #994 MERGED (nine).**
-### ⛔ P1 IS **BLOCKED**: `dec_75wqn9tv715e9` **REJECTED** by the Architect at `2b22acca`. One-line comment fold owed by the ring; ⛔ **DO NOT PUBLISH**.
-### ✅ THE `Debug` §7 CELL IS WRITTEN — `AC-V11` + `AC-V12` filed (see below).
+## ▶ LIVE — 2026-07-26 ~07:0xZ · `origin/main` = **`53dc0360`**
+### **✅ #986 → #995 MERGED (ten).**
+### ▶ **PR #996 OPEN at exact `2d12a10a`; branch FROZEN.** CI polling. ⛔ Resume via task **#71**.
+### ✅ THE `Debug` §7 CELL IS LANDED — `AC-V11` + `AC-V12` filed (see below).
 
-> ### ⛔ CURRENT: P1 IS REJECTED AT `2b22acca` — a narrow TRUSTED-SOURCE defect
+> ### ▶ CURRENT: P1 IS PUBLISHING. ⛔ Do not re-run the gates — they PASSED.
 >
 > ```
-> decision dec_75wqn9tv715e9   status=rejected
->          resolved_by=agt_37reqftfe6g00 (architect)  06:39:07Z
-> block    evt_3xc87m7e19sqd
-> qa       APPROVED same exact SHA  evt_7ryf4ezzyncx3  (approval PRECEDED the block)
+> PR       #996   wp/RT-VALUE-TOTALITY-P1 @ 2d12a10abd4d12ba0b9350268842f9b9c8ae3c82
+> §14      dec_10qxwx9s8wscn  resolved  resolved_by=agt_37reqftfe6g00  06:46:57Z
+>          -- verified FRESH FROM THE OBJECT by me, not from any message
+> freeze   announced to the ring at evt_3jqydy9tvxr67
 > ```
 >
-> **The defect:** in `crates/ken-runtime/src/values.rs` the `Drop` comment says the
-> implementation dismantles the tree *"breadth-first onto an explicit heap stack."*
-> `Vec::pop()` is LIFO ⇒ **depth-first**. ⚠ Architectural, not cosmetic —
-> breadth-first and depth-first have **different live-frontier memory bounds**, so
-> the comment hands the next maintainer the wrong mechanism contract.
+> ⚠ **The publisher's exit code is the LAUNCHER's.** Confirm pid `433316` exited
+> **and** `origin/main` moved off `53dc0360`. A waiter writes `$SCRATCH/wait_p1.log`.
+> Then verify the five files by **BLOB IDENTITY** — ⛔ not ancestry, ⛔ not a
+> phrase grep. Full sequence is in task **#71**.
 >
-> ⭐ **The wording is NOT from my frame — I checked.** `git grep -i breadth` over
-> the frame and the node is empty; it appears once in the whole candidate diff, in
-> the implementer's own comment. **One line, no production-expression change.**
+> **How it got here:** the first candidate `2b22acca` was **rejected**
+> (`dec_75wqn9tv715e9`, `evt_3xc87m7e19sqd`) over a `///` comment claiming the tree
+> is dismantled *"breadth-first onto an explicit heap stack"* while `Vec::pop()` is
+> LIFO ⇒ depth-first — **different live-frontier memory bounds**, so a trusted
+> source carried the wrong mechanism contract. ⭐ **QA had approved that exact SHA
+> BEFORE the block, and the block was still right.** The wording was never in my
+> frame (`git grep -i breadth` over frame and node is empty).
 >
-> ⇒ **Sequence owed, in order:** implementer folds the comment → **I push the
-> fresh SHA** (the ring has no credential; this exact WP already proved it) →
-> leader **rebinds QA to the fresh exact SHA** → **fresh Decision** (the old one is
-> spent) → §14 gate → publish. ⛔ `2b22acca` is dead as a merge candidate.
+> The fold is `values.rs` `+13/-2`, **every changed line a `///` comment** — I
+> filtered the diff for any non-`///` `+/-` line and got nothing. ⭐ And it answered
+> more than the finding: it states *why* the distinction is contractual, **and that
+> neither LIFO nor FIFO dominates for every shape.** Nobody asked for that clause.
 >
-> ⭐ **The Architect confirmed the residual boundary explicitly** — Debug, the
-> remaining identity derives, the foundation twin and the actual cycle carrier are
-> *declared residuals, not discharged*. That was the one thing I asked the ring to
-> refuse to overclaim, and it now holds at **three** seats (QA, Architect, and the
-> candidate's own evidence doc at line 180).
+> ⚠ **I had to push `2d12a10a` myself** (`2b22acca..2d12a10a`) — the leader
+> requested an Architect reread on a SHA that was **not on origin**, for the second
+> time on this same branch. Build seats have no credential by design; ⇒ **the push
+> is a Steward duty, not a courtesy.**
+>
+> ⭐ **The narrow claim now holds at FOUR independent seats** — QA, the Architect's
+> block, the candidate's own evidence doc (line 180), and filed ACs on `main`.
+
+> ### ⚠ "PATH INTERSECTION IS EMPTY" DOES NOT ANSWER "IS THE BASE STALE"
+>
+> Three seats reported the empty intersection on this candidate. It is **a
+> different population**: a candidate on an old base **reverts everything landed
+> since without conflicting**, so that check structurally cannot see it. I ran the
+> separate probe — of the five files, three are byte-identical on `main` and two
+> exist in **neither** tree (new files) ⇒ safe.
+>
+> ⛔ **And my first version of that probe LIED in the safe direction.**
+> `git rev-parse` **echoes the failing argument**, so a file absent from both trees
+> produced two *different error strings* and reported `⛔ MOVED ON MAIN`. Re-run
+> with `git cat-file -e`. ⚠ A probe that fails noisily in the safe direction is
+> still one I would have believed had it failed the other way.
+
+> ### ✅ DURABILITY CLOSED — four seat branches had ZERO off-box copies
+>
+> ```
+> librarian/work      6f167e9b   (9 commits)     kernel-leader/work  2ad9466e (3)
+> ergo-leader/work    451b1bab   (1)             ergo-qa/work        cf791c7f (1)
+> ```
+>
+> All four pushed and **verified by SHA equality against `ls-remote`**. ⚠ A seat's
+> state branch is its post-compaction resume anchor and **never merges**, so it has
+> no publish event to make its durability anyone's problem — and the compaction
+> script `git reset --hard`s exactly these refs.
+>
+> ⛔ **Read the sweep's two columns correctly.** *Ahead of its own remote* and *not
+> on `origin/main`* are different questions and they disagree: `steward/work` read
+> **7 ahead** yet is **0 not-on-main** (a stale remote mirror, not an exposure);
+> `architect/work` reads **458 not-on-main** because it is a long-diverged lineage
+> — its real exposure is the **2** commits ahead of its own remote. `adversary/work`
+> is **4**, not the 86 an earlier read reported against a diverged remote.
 
 > ### ▶ PRIOR STATE (still true): the P1 mechanism at `2b22acca`
 >
