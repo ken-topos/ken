@@ -24,7 +24,7 @@
 
 ## ▶ LIVE — 2026-07-26 ~07:0xZ · `origin/main` = **`53dc0360`**
 ### **✅ #986 → #995 MERGED (ten).**
-### ▶ **PR #996 OPEN at exact `2d12a10a`; branch FROZEN.** CI polling. ⛔ Resume via task **#71**.
+### ▶ **PR #996 OPEN at `2d12a10a`; FROZEN.** ⛔ Resume via task **#71**.
 ### ✅ THE `Debug` §7 CELL IS LANDED — `AC-V11` + `AC-V12` filed (see below).
 
 > ### ▶ CURRENT: P1 IS PUBLISHING. ⛔ Do not re-run the gates — they PASSED.
@@ -62,19 +62,38 @@
 > ⭐ **The narrow claim now holds at FOUR independent seats** — QA, the Architect's
 > block, the candidate's own evidence doc (line 180), and filed ACs on `main`.
 
-> ### ⚠ "PATH INTERSECTION IS EMPTY" DOES NOT ANSWER "IS THE BASE STALE"
+> ### ⛔ I ALMOST PUBLISHED A FALSE MECHANISM HERE — the corrected version
 >
-> Three seats reported the empty intersection on this candidate. It is **a
-> different population**: a candidate on an old base **reverts everything landed
-> since without conflicting**, so that check structurally cannot see it. I ran the
-> separate probe — of the five files, three are byte-identical on `main` and two
-> exist in **neither** tree (new files) ⇒ safe.
+> ⛔ **The draft of this block said a stale base "reverts everything landed since
+> without conflicting." THAT IS FALSE**, and it is the exact claim the fleet
+> already corrected once: a squash-merge applies **merge-base → branch**, *not*
+> `main → branch`, so files the candidate never touched **cannot** be reverted.
+> ⚠ The false version is the expensive direction — an invisible failure licenses
+> **unbounded** re-anchoring against a moving `main`, with no termination.
 >
-> ⛔ **And my first version of that probe LIED in the safe direction.**
-> `git rev-parse` **echoes the failing argument**, so a file absent from both trees
-> produced two *different error strings* and reported `⛔ MOVED ON MAIN`. Re-run
-> with `git cat-file -e`. ⚠ A probe that fails noisily in the safe direction is
-> still one I would have believed had it failed the other way.
+> ✅ **What is actually true.** The three seats' *"current-main intersection is
+> empty"* is the **right** check and it **settles** base staleness here — empty
+> intersection ⇒ immaterial. I also built the result (`git merge-tree
+> --write-tree` → `e26cd9cc`, conflict-free), which is strictly better than
+> reasoning about the diff at all. ⚠ The residual the intersection test *does*
+> leave is a **non-empty** one with **disjoint hunks**, which merges silently as a
+> union — not the empty case.
+>
+> ⭐ **I caught this by reading my own memory on the topic rather than trusting the
+> version in my head.** The plausible-sounding mechanism was already refuted, by
+> me, in writing.
+>
+> ### ⛔ AND MY STALE-BASE PROBE LIED — in the alarming direction
+>
+> `git rev-parse <ref>:<path>` **echoes the failing argument on error**, so a file
+> absent from **both** trees yielded two *different* strings and reported
+> `⛔ MOVED ON MAIN`. The `|| echo none` fallback never fired — rev-parse exited
+> non-zero *after already printing*. ⇒ Use **`git cat-file -e`** (exit status, no
+> output to mis-read). Two of the five files tripped it; both are new files.
+>
+> ⚠ **Grade the probe's construction, not the direction it happened to fail in.**
+> This one manufactured alarm, so I investigated. The identical defect in a check
+> whose alarming branch reads *"clear"* would have been believed.
 
 > ### ✅ DURABILITY CLOSED — four seat branches had ZERO off-box copies
 >
