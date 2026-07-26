@@ -5373,6 +5373,7 @@ fn recut2_the_emitted_helper_graph_changes_when_the_tag_sets_change() {
             derived.tags().immediate().to_vec(),
             derived.tags().handle().to_vec(),
             derived.tags().owner_bands().to_vec(),
+            derived.tags().immediate_value_classes().to_vec(),
         ),
     );
     let other = crate::boundary_value_clif::tests::capture_with_plan(&perturbed);
@@ -5461,6 +5462,7 @@ fn recut2_the_emitted_helper_graph_changes_when_the_owner_bands_change() {
             derived.tags().immediate().to_vec(),
             derived.tags().handle().to_vec(),
             bands,
+            derived.tags().immediate_value_classes().to_vec(),
         ),
     );
     let other = crate::boundary_value_clif::tests::capture_with_plan(&perturbed);
@@ -5495,10 +5497,15 @@ fn recut2_the_tag_admission_is_derived_from_the_partition_not_restated() {
     let mut immediate: BTreeSet<BoundaryTag> = BTreeSet::new();
     let mut handle: BTreeSet<BoundaryTag> = BTreeSet::new();
     let mut bands: BTreeMap<BoundaryReferentOwner, BTreeSet<BoundaryTag>> = BTreeMap::new();
+    let mut value_classes: BTreeMap<BoundaryTag, crate::boundary_value::BoundaryClass> =
+        BTreeMap::new();
     for cell in BoundaryInput::all() {
         match cell.outcome() {
-            BoundaryOutcome::ImmediateWord { tag } => {
+            BoundaryOutcome::ImmediateWord { tag, value_class } => {
                 immediate.insert(tag);
+                if let Some(class) = value_class {
+                    value_classes.insert(tag, class);
+                }
             }
             BoundaryOutcome::HandleWord { tag, owner, .. } => {
                 handle.insert(tag);
@@ -5546,6 +5553,20 @@ fn recut2_the_tag_admission_is_derived_from_the_partition_not_restated() {
             .map(|(owner, tags)| (owner, tags.into_iter().collect::<Vec<_>>()))
             .collect::<Vec<_>>(),
         "RECUT 2: the plan's owner bands are not the partition's"
+    );
+    // ⛔ The immediate-class projection, swept from the same outcomes. Kept
+    // separate from the node-class relation on purpose: this is what the
+    // `class` helper reports for an immediate word, not a node's `NODE_CLASS`.
+    assert!(
+        !value_classes.is_empty(),
+        "RECUT 2: the partition classifies no immediate, so the equality below \
+         is between empty relations"
+    );
+    assert_eq!(
+        plan.tags().immediate_value_classes(),
+        value_classes.into_iter().collect::<Vec<_>>(),
+        "RECUT 2: the plan's immediate value-class relation is not the \
+         partition's"
     );
 }
 

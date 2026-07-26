@@ -761,7 +761,15 @@ pub(in crate::cranelift_backend) enum AdoptionPartition {
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(in crate::cranelift_backend) enum BoundaryOutcome {
     /// The value rides in the tagged word.
-    ImmediateWord { tag: BoundaryTag },
+    ///
+    /// ⛔ `value_class` is what the uniform `class` helper must report for such
+    /// a word — a *boundary-value* classification, deliberately NOT a node
+    /// class (an immediate has no node). See
+    /// [`BoundaryTag::immediate_value_class`].
+    ImmediateWord {
+        tag: BoundaryTag,
+        value_class: Option<BoundaryClass>,
+    },
     /// A handle, with every obligation the frame names discharged: class,
     /// referent owner, identity, and lifetime (the owner *is* the lifetime).
     HandleWord {
@@ -838,10 +846,16 @@ impl BoundaryInput {
                     // and that constancy is asserted rather than assumed.
                     (None, MagnitudePartition::WithinImmediateField)
                     | (None, MagnitudePartition::BeyondImmediateField) => {
-                        BoundaryOutcome::ImmediateWord { tag }
+                        BoundaryOutcome::ImmediateWord {
+                            tag,
+                            value_class: tag.immediate_value_class(),
+                        }
                     }
                     (Some(_), MagnitudePartition::WithinImmediateField) => {
-                        BoundaryOutcome::ImmediateWord { tag }
+                        BoundaryOutcome::ImmediateWord {
+                            tag,
+                            value_class: tag.immediate_value_class(),
+                        }
                     }
                     // ⛔ **The SPILL ARM is a handle outcome**, so it discharges the
                     // same class / owner / identity / lifetime obligations as
@@ -7329,12 +7343,19 @@ impl crate::boundary_value::BoundaryEmissionPlan {
         let mut handle_tags: BTreeSet<BoundaryTag> = BTreeSet::new();
         let mut owner_bands: BTreeMap<BoundaryReferentOwner, BTreeSet<BoundaryTag>> =
             BTreeMap::new();
+        let mut immediate_value_classes: BTreeMap<BoundaryTag, BoundaryClass> = BTreeMap::new();
         for cell in BoundaryInput::all() {
             // ⛔ Wildcard-free: a new outcome variant must decide here whether
             // its tag is admitted, rather than defaulting to "not emitted".
             match cell.outcome() {
-                BoundaryOutcome::ImmediateWord { tag } => {
+                BoundaryOutcome::ImmediateWord { tag, value_class } => {
                     immediate_tags.insert(tag);
+                    // ⛔ An immediate the authority cannot classify gets NO
+                    // entry, so the emitted helper fails closed on it rather
+                    // than inheriting a default arm.
+                    if let Some(class) = value_class {
+                        immediate_value_classes.insert(tag, class);
+                    }
                 }
                 BoundaryOutcome::HandleWord {
                     tag, class, owner, ..
@@ -7376,6 +7397,7 @@ impl crate::boundary_value::BoundaryEmissionPlan {
                     .into_iter()
                     .map(|(owner, tags)| (owner, tags.into_iter().collect()))
                     .collect(),
+                immediate_value_classes.into_iter().collect(),
             ),
         )
     }

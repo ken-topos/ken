@@ -196,6 +196,43 @@ impl BoundaryTag {
     pub fn is_immediate(self) -> bool {
         self.referent_owner() == BoundaryReferentOwner::NoReferent
     }
+
+    /// The [`BoundaryClass`] the uniform `class` helper reports for a word
+    /// carrying this tag as an **immediate**. `None` for a handle tag, whose
+    /// class comes from its node.
+    ///
+    /// ⛔ **This is NOT an immediate node class, and it is deliberately kept
+    /// apart from [`BOUNDARY_TAG_CLASS_RELATION`].** That relation governs what
+    /// may be written into a node's `NODE_CLASS`, and it excludes immediate
+    /// tags for a real reason — an immediate has no node, so there is nothing
+    /// to give a class to. What this answers is a different question the ABI
+    /// still has to answer: *when a consumer asks the `class` helper about an
+    /// immediate word, what boundary-value classification comes back?* Merging
+    /// the two would invent a fictional immediate node class and would make the
+    /// node-legality relation admit tags it must keep refusing.
+    ///
+    /// ⭐ Total and wildcard-free, exactly like [`BoundaryTag::referent_owner`]:
+    /// a new tag is a compile error here rather than a value that silently
+    /// inherits whichever arm a hand-written branch left as its default. The
+    /// emitted `class` helper used to answer this with
+    /// `is_bool ? Bool : Int` written beside the helper body — a second mapping
+    /// that could disagree with this one and nothing would notice.
+    pub fn immediate_value_class(self) -> Option<BoundaryClass> {
+        match self {
+            BoundaryTag::ImmediateBool => Some(BoundaryClass::Bool),
+            // Every remaining immediate is an integer scalar. The finer
+            // identity — exit status vs bounded nat vs structural nat — lives
+            // in the word's own tag byte and is not a ground-value class.
+            BoundaryTag::ImmediateInt
+            | BoundaryTag::ImmediateExitStatus
+            | BoundaryTag::ImmediateBoundedNat
+            | BoundaryTag::ImmediateStructuralNat => Some(BoundaryClass::Int),
+            BoundaryTag::PersistentGround
+            | BoundaryTag::PersistentClosure
+            | BoundaryTag::InvocationBorrowed
+            | BoundaryTag::InvocationHostResult => None,
+        }
+    }
 }
 
 /// Who owns the **referent** a handle points at, and therefore how long it
@@ -432,6 +469,7 @@ pub(crate) struct BoundaryTagAdmission {
     immediate: Vec<BoundaryTag>,
     handle: Vec<BoundaryTag>,
     owner_bands: Vec<(BoundaryReferentOwner, Vec<BoundaryTag>)>,
+    immediate_value_classes: Vec<(BoundaryTag, BoundaryClass)>,
 }
 
 impl BoundaryTagAdmission {
@@ -441,12 +479,14 @@ impl BoundaryTagAdmission {
         immediate: Vec<BoundaryTag>,
         handle: Vec<BoundaryTag>,
         owner_bands: Vec<(BoundaryReferentOwner, Vec<BoundaryTag>)>,
+        immediate_value_classes: Vec<(BoundaryTag, BoundaryClass)>,
     ) -> Self {
         BoundaryTagAdmission {
             admitted,
             immediate,
             handle,
             owner_bands,
+            immediate_value_classes,
         }
     }
 
@@ -475,6 +515,17 @@ impl BoundaryTagAdmission {
     /// into whichever side of that threshold its tag landed on.
     pub(crate) fn owner_bands(&self) -> &[(BoundaryReferentOwner, Vec<BoundaryTag>)] {
         &self.owner_bands
+    }
+
+    /// Each admitted immediate tag paired with the class the `class` helper
+    /// must report for it.
+    ///
+    /// ⛔ **Not a node class.** See [`BoundaryTag::immediate_value_class`] for
+    /// why this is a separate contract from [`BOUNDARY_TAG_CLASS_RELATION`]. A
+    /// tag absent from this relation has no classification, and the emitted
+    /// helper fails closed on it rather than defaulting.
+    pub(crate) fn immediate_value_classes(&self) -> &[(BoundaryTag, BoundaryClass)] {
+        &self.immediate_value_classes
     }
 
     /// The tags published under one owner — empty if the partition publishes

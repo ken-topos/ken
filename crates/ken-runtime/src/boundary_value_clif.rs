@@ -306,7 +306,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     };
 
     define_resolve(module, graph, plan)?;
-    define_class(module, graph)?;
+    define_class(module, graph, plan)?;
     define_node_word(module, graph, graph.owner, NODE_OWNER)?;
     define_node_word(module, graph, graph.slot, NODE_SLOT)?;
     define_scalar(module, graph)?;
@@ -724,7 +724,11 @@ fn define_node_word<M: Module>(
 /// Handles read their node's class; immediates derive it from the word tag, so
 /// emitted code gets one uniform answer without having to know which arm it is
 /// looking at first.
-fn define_class<M: Module>(module: &mut M, graph: Graph) -> Result<(), CraneliftBackendError> {
+fn define_class<M: Module>(
+    module: &mut M,
+    graph: Graph,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
+) -> Result<(), CraneliftBackendError> {
     let ptr = module.target_config().pointer_type();
     let mut func = begin(module, graph.class, 3);
     let resolve = module.declare_func_in_func(graph.resolve, &mut func);
@@ -774,16 +778,45 @@ fn define_class<M: Module>(module: &mut M, graph: Graph) -> Result<(), Cranelift
 
         b.switch_to_block(immediate);
         let tag = b.ins().band_imm(word, BOUNDARY_TAG_MASK as i64);
-        let is_bool = b
-            .ins()
-            .icmp_imm(IntCC::Equal, tag, BoundaryTag::ImmediateBool as i64);
-        // Every non-`Bool` immediate is an integer scalar. The finer identity —
-        // exit status vs capability vs bounded nat — lives in the word's own
-        // tag byte, which emitted code reads with a single `band`; it does not
-        // need a helper and does not belong in the ground-value class space.
-        let bool_class = b.ins().iconst(types::I64, BoundaryClass::Bool as i64);
-        let int_class = b.ins().iconst(types::I64, BoundaryClass::Int as i64);
-        let class = b.ins().select(is_bool, bool_class, int_class);
+        // ⛔ **The immediate's reported class comes from the AUTHORITY, one
+        // entry per admitted immediate tag.** This was
+        // `is_bool ? Bool : Int` — a second mapping written beside the helper
+        // body, free to disagree with the partition and with nothing to notice
+        // if it did. `RULING R3` names that shape as a discharge that does not
+        // count.
+        //
+        // ⚠ These are **boundary-value** classifications, not node classes.
+        // `BOUNDARY_TAG_CLASS_RELATION` governs what may be written into a
+        // node's `NODE_CLASS` and rightly excludes every immediate tag, because
+        // an immediate has no node. Merging the two contracts would invent a
+        // fictional immediate node class.
+        //
+        // Innermost value is the unclassifiable answer: an immediate tag the
+        // authority gives no class fails closed rather than inheriting an arm.
+        let mut classified: Option<cranelift_codegen::ir::Value> = None;
+        let mut class = b.ins().iconst(types::I64, 0);
+        for (candidate, value_class) in plan.tags().immediate_value_classes() {
+            let hit = b.ins().icmp_imm(IntCC::Equal, tag, *candidate as i64);
+            let named = b.ins().iconst(types::I64, *value_class as i64);
+            class = b.ins().select(hit, named, class);
+            classified = Some(match classified {
+                None => hit,
+                Some(prev) => b.ins().bor(prev, hit),
+            });
+        }
+        let classified = match classified {
+            Some(classified) => classified,
+            None => b.ins().iconst(types::I8, 0),
+        };
+        let named = b.create_block();
+        let unclassified = b.create_block();
+        b.ins().brif(classified, named, &[], unclassified, &[]);
+
+        b.switch_to_block(unclassified);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_CLASS);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(named);
         b.ins().store(MemFlags::trusted(), class, out, 0);
         let z = b.ins().iconst(types::I64, BOUNDARY_OK);
         b.ins().return_(&[z]);
@@ -7197,6 +7230,7 @@ pub(crate) mod tests {
                     plan.tags().immediate().to_vec(),
                     plan.tags().handle().to_vec(),
                     plan.tags().owner_bands().to_vec(),
+                    plan.tags().immediate_value_classes().to_vec(),
                 ),
             );
             let word = BoundaryWord((out_of_range << BOUNDARY_TAG_BITS) | *tag as u64);
@@ -7301,6 +7335,7 @@ pub(crate) mod tests {
                     plan.tags().immediate().to_vec(),
                     plan.tags().handle().to_vec(),
                     bands,
+                    plan.tags().immediate_value_classes().to_vec(),
                 ),
             );
 
@@ -7320,6 +7355,126 @@ pub(crate) mod tests {
                 );
             }
         }
+    }
+
+    /// **`RECUT 2`, causal and PER-SITE — the immediate word's reported class
+    /// is the authority's, per tag.**
+    ///
+    /// ⛔ **The site the located inventory never named.** `define_class`
+    /// answered `is_bool ? BoundaryClass::Bool : BoundaryClass::Int` — a second
+    /// tag → class mapping written beside the helper body, which is `RULING
+    /// R3`'s "another hand-maintained table". It was invisible to the tag
+    /// inventory because it names no threshold constant, and invisible to the
+    /// class fold because that fold only ever looked at *node* classes.
+    ///
+    /// ⚠ **These are boundary-value classifications, not node classes**, and
+    /// the two contracts stay apart: `BOUNDARY_TAG_CLASS_RELATION` governs
+    /// `NODE_CLASS` legality and must keep excluding every immediate tag.
+    ///
+    /// **MEASURED:** per admitted immediate tag, remapping it in the plan
+    /// changes what `class` answers for a word carrying it, and removing it
+    /// makes `class` fail closed with `ERR_CLASS`.
+    /// **CLAIMED:** the emitted immediate classification is the authority's.
+    /// **THE GAP:** that the plan's relation is the partition's own answer —
+    /// closed by `recut2_the_tag_admission_is_derived_from_the_partition_not_restated`,
+    /// which now sweeps this relation too.
+    #[test]
+    fn b2v_the_emitted_immediate_class_is_the_plans() {
+        use crate::boundary_value::{
+            BoundaryEmissionPlan, BoundaryTagAdmission, BOUNDARY_ERR_CLASS, BOUNDARY_OK,
+        };
+
+        let plan = BoundaryEmissionPlan::derive();
+        let mut store = BoundaryValueStore::new();
+        let builder = BoundaryArenaBuilder::new();
+        materialize_ground(&mut store, &cons(1)).expect("materializes");
+        let f = bind(&mut store, builder);
+        let base = f.base;
+
+        assert!(
+            !plan.tags().immediate_value_classes().is_empty(),
+            "RECUT 2: the plan classifies no immediate tag, so the sweep is empty"
+        );
+
+        let respell = |relation: Vec<(BoundaryTag, BoundaryClass)>| {
+            BoundaryEmissionPlan::new(
+                plan.admitted_classes().to_vec(),
+                plan.int_magnitude_classes().to_vec(),
+                plan.byte_span_classes().to_vec(),
+                BoundaryTagAdmission::new(
+                    plan.tags().admitted().to_vec(),
+                    plan.tags().immediate().to_vec(),
+                    plan.tags().handle().to_vec(),
+                    plan.tags().owner_bands().to_vec(),
+                    relation,
+                ),
+            )
+        };
+
+        for (tag, real_class) in plan.tags().immediate_value_classes() {
+            // ⛔ A class no immediate is ever given, so "the answer changed"
+            // cannot be an accident of two immediates sharing a class.
+            let foreign = BoundaryClass::Record;
+            assert_ne!(
+                *real_class, foreign,
+                "the perturbation must actually change {tag:?}'s class"
+            );
+            let remapped: Vec<_> = plan
+                .tags()
+                .immediate_value_classes()
+                .iter()
+                .map(|(other, class)| {
+                    if other == tag {
+                        (*other, foreign)
+                    } else {
+                        (*other, *class)
+                    }
+                })
+                .collect();
+            let dropped: Vec<_> = plan
+                .tags()
+                .immediate_value_classes()
+                .iter()
+                .copied()
+                .filter(|(other, _)| other != tag)
+                .collect();
+
+            let word = BoundaryWord(*tag as u64);
+            let probe = Probe::Unary(|h| h.class);
+            let (_rm, real_code) = compile_probe_with_plan(probe, &plan);
+            let (_qm, remap_code) = compile_probe_with_plan(probe, &respell(remapped));
+            let (_dm, drop_code) = compile_probe_with_plan(probe, &respell(dropped));
+
+            assert_eq!(
+                run2(real_code, base, word),
+                *real_class as i64,
+                "RECUT 2: `class` does not report {real_class:?} for {tag:?} \
+                 under the real plan, so the perturbations below are measured \
+                 against the wrong baseline"
+            );
+            assert_eq!(
+                run2(remap_code, base, word),
+                foreign as i64,
+                "RECUT 2: `class` still reports {real_class:?} for {tag:?} \
+                 after the plan remapped it — the immediate classification is \
+                 a literal, not the authority's"
+            );
+            assert_eq!(
+                run2(drop_code, base, word),
+                BOUNDARY_ERR_CLASS,
+                "RECUT 2: `class` still classifies {tag:?} after the plan \
+                 stopped classifying it — the helper is defaulting rather than \
+                 failing closed"
+            );
+        }
+
+        // ⚠ Positive control on the harness itself: `BOUNDARY_OK` is not what
+        // these comparisons return, so an all-zero read would not masquerade
+        // as agreement.
+        assert_ne!(
+            BOUNDARY_ERR_CLASS, BOUNDARY_OK,
+            "the two outcomes this test distinguishes must be distinguishable"
+        );
     }
 
     /// **`RECUT 2`, structural — EVERY `class_guard` call site takes its set
