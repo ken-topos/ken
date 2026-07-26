@@ -225,6 +225,44 @@ brief** — the implementer should execute mostly mechanically, not design
 >    is **not** proof. Unchanged ctx ⇒ resend that pane and re-verify it. Do not
 >    post the kickoff/handoff until every required pane is compacted, compacting,
 >    or queued.
+>
+>    ⚠ **And a stranded `/compact` is invisible to the sweep.** On a Codex pane
+>    `moot compact <role>` can leave `› /compact` sitting **unsubmitted** on the
+>    composer while printing `Sent /compact to moot-<role>` — measured
+>    2026-07-26 on the Architect. The repair is a bare `Enter` to that pane.
+>    ⛔ `scripts/sweep-wedged-panes.sh` will **not** catch it: the sweep keys on
+>    a `[Pasted Content …]` marker, and a slash command has none. **A backstop
+>    keyed to ONE stranding shape is blind to another that causes the same
+>    failure** — and this failure is quieter than a stranded mention, because
+>    the seat keeps billing stale context and nothing reports it.
+> 5b. **★★ VERIFY EVERY OBJECT YOU ARE ABOUT TO NAME EXISTS AT THE BASE YOU ARE
+>    ABOUT TO NAME. One command per object, before the mention leaves your
+>    hands.**
+>
+>    ```sh
+>    git cat-file -e <base>:<path>   # frame, node, every file you cite
+>    git rev-parse <base>:<path>     # and quote the blob, so the ring can bind it
+>    ```
+>
+>    ⛔ **A named base that does not contain the named artifact is not a
+>    release.** 2026-07-26: I opened a kickoff with *"Both files are on `main` at
+>    the base above"* — the frame was committed on `steward/work` and **never
+>    published**. It was **false when I sent it**.
+>
+>    ★ **Both receiving seats caught it independently within minutes and
+>    neither synthesized a base** — the leader ran `git merge-base --is-ancestor`
+>    and got exit 1 (*"I will not guess or synthesize a merge"*); the implementer
+>    named it a **false fixed input** and confirmed it had checked out nothing.
+>    ⚠ **Do not read that as the backstop working.** Had either constructed a
+>    plausible base, the ring would have built against a tree no reviewer could
+>    reproduce, and it would have surfaced at review or later.
+>
+>    ⇒ The reason this needs its own step is the same reason step 8 does: the
+>    frame is *written* long before the kickoff is *posted*, and publishing it is
+>    a separate act I can complete in my head. **The claim is cheap to check and
+>    expensive to be wrong about, so check it mechanically rather than
+>    remembering whether you published.** Sibling of §6a's blob-identity rule —
+>    verify the artifact, never a story about it.
 > 6. **ONLY NOW** post the kickoff/handoff mention (§2 mention discipline).
 > 7. **⚠ CONFIRM THE MENTION ACTUALLY REACHED THE RECIPIENT'S TURN.**
 >    **A kickoff is NOT complete when you post it. It is complete when you have
@@ -364,6 +402,36 @@ brief** — the implementer should execute mostly mechanically, not design
 >    git ls-remote origin refs/heads/wp/<ID>-<slug>      # empty ⇒ ZERO off-box copies
 >    git for-each-ref --contains <sha> --format='%(refname)'
 >    ```
+>
+>    ⛔ **`git branch -r --contains` / `for-each-ref` answer against your LOCAL
+>    MIRROR of the remote, not against origin.** `refs/remotes/origin/*` is only
+>    as fresh as your last fetch of *that refspec*, so a branch that exists on
+>    origin can report as absent and a deleted one as present. **Only `ls-remote`
+>    asks origin.** ⚠ And *"N commits ahead of `origin/main`"* is a different
+>    question from *"N commits not on origin"* — a durability sweep must compare
+>    each branch against **its own** remote tip, or every seat whose branch simply
+>    sits at `origin/main` reads as an exposure and the real ones drown.
+>
+>    ⚠ **Extend the check past WP branches: SEAT WORK branches carry local-only
+>    commits too, and nobody is watching them.** Measured 2026-07-26 —
+>    `architect/work` held **8** local-only state commits including the B2V
+>    predicate and cycle rulings and the RT-SCALE-A harness ruling (pushed);
+>    `adversary/work` **86**; `librarian/work` **9**. ⛔ A singleton's state
+>    branch is its post-compaction resume anchor, and it never merges, so it has
+>    **no publish event to make its durability anyone's problem.** Sweep every
+>    worktree, not just the frontier:
+>
+>    ```sh
+>    git worktree list --porcelain | awk '/^worktree /{w=$2} /^branch /{print w" "$2}' \
+>    | while read -r wt br; do b=${br#refs/heads/}
+>        rem=$(git ls-remote origin "refs/heads/$b" | awk '{print $1}')
+>        [ -n "$rem" ] && n=$(git rev-list --count "$rem"..$(git -C "$wt" rev-parse HEAD)) \
+>          && [ "$n" != 0 ] && echo "$b: $n LOCAL-ONLY"
+>      done
+>    ```
+>
+>    ⚠ **Then ask whether the commits are unmerged WORK or squash-merge
+>    leftovers** before treating them as loss — branch-ahead ⇏ unmerged.
 >
 >    ⛔ **Build seats have NO GitHub credential, by design.** A seat that
 >    finishes a fold and reports an exact SHA has often *tried* to push and
