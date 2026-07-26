@@ -22,11 +22,93 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~07:4xZ · `origin/main` = **`283eb20a`**
-### **✅ #986 → #998 MERGED (thirteen).**
+## ▶ LIVE — 2026-07-26 ~08:1xZ · `origin/main` = **`a7d3e2b0`**
+### **✅ #986 → #999 MERGED (fourteen).**
 ### ✅ **`RT-VALUE-TOTALITY-P1` IS CLOSED** — merged **and** all three retros in.
-### ▶ **NEXT: re-anchor `B2V` → kick Runtime (#74).** Foundation lane FREE (#72).
-### ⛔ **THE SWEEP WOULD HAVE COMPACTED A HEALTHY SEAT** — fixed in #998, below.
+### ✅ **`B2V` RE-ANCHORED.** ▶ **NEXT: §2c gate → kick Runtime (#74).**
+### ⛔ **2 OPEN ADVERSARY FINDINGS ON P1** — in `RT-VALUE-TOTALITY` §7 (#77).
+### ▶ Foundation lane still FREE (#72 — `ABI-R1`, leader re-oriented and waiting).
+
+> ### ⛔⛔ AN ADVERSARY REPORT SAT UNPROCESSED FOR ~1h — IT IS NOW IN §7 (#77)
+>
+> `evt_wv5fng3kt2yx` landed **07:10:49Z**, after P1 closed and **before** my 07:4xZ
+> briefing checkpoint — and I published that checkpoint without recording it. It
+> existed **only as a channel message** until 08:1xZ. ⛔ §10⁻a makes the adversary
+> channel report-only, which removes the reply — **it does not remove the routing**,
+> and a report-only channel is exactly the one with no acknowledgement to notice
+> missing.
+>
+> ⇒ ⛔ **A LIVE-BLOCK CHECKPOINT IS NOT A SUFFICIENT SWEEP FOR INBOUND REPORTS.**
+> Reading the channel and *writing the briefing* felt like the same act; they are
+> not. Both findings are now durable in
+> `docs/program/issues/RT-VALUE-TOTALITY.md` **§7**.
+>
+> **7a — `AC-V1b`'s coverage guard does not bind.** `canonical.rs:750`'s doc claims
+> the count is taken *"against the enum's own arm count"*; the body is
+> `assert_eq!(kinds.len(), 25)` over `differential_corpus()` alone and **names
+> `Value`'s cardinality nowhere**. Adversary added a 26th variant with only the five
+> compiler-demanded arms and left the corpus alone ⇒ **all three `AC-V1b` tests
+> pass, 371/371 green**, encoding written twice and compared zero times. The module
+> doc already concedes the differential is not an independent byte oracle, so
+> **coverage was its whole value.** ⚠ Exhaustiveness is genuine — a variant enters
+> **unverified**, not unhandled.
+>
+> **7b —** `values.rs:14`–`:20`'s *"will not compile"* holds for its five named
+> positions; `Step::Val` is constructible in the parent module, so a new arm escapes
+> the sealed bound.
+>
+> ⭐ **7a is the THIRD instance of one defect class in one WP, and it settles the
+> discriminator as POSITION.** Same class — stating what the author believed the
+> code did — three times: `assert_eq!(compound_subvalues, 8)` (subject has 7) died
+> **in under a minute** as an executable assertion; the `breadth-first` `Drop`
+> comment survived QA and needed the **Architect**; this one survived QA **and
+> close** and needed the **adversary**. ⛔ **None is a QA miss** — a doc comment on a
+> trusted source is untestable *in place*, not under-tested. The implementer proved
+> this in its own retro by refuting my weaker "read more carefully" candidate with
+> the counter-example from inside the same WP.
+>
+> ⛔ P1 stays **CLOSED**; these land separately on the `KW-ORACLE-CLOSURE`
+> precedent. ⛔ Do **not** repair 7a by editing the doc down to match the weaker
+> mechanism — that preserves a coverage claim the code cannot make. ⭐ `B2V`'s `D4`
+> is the pattern already in the corpus: *"a new variant is a compile error, not a
+> silent `ValueWord`."*
+
+> ### ✅ `B2V` RE-ANCHORED — and the frame's `abi.rs` path was WRONG FROM BIRTH
+>
+> Re-measured every landed-surface locator against `a7d3e2b0`:
+>
+> ```
+> Lowered lattice, 21 variants   mod.rs:417 -> :415   (derive :415 -> :414)  count HOLDS
+> Store/intern/slot_id           store.rs:343/:360/:400                      EXACT, unchanged
+> AbiCarrier Value/Ground/Result abi.rs:64/:74/:76     PATH WRONG FROM BIRTH, lines exact
+> declared ownership             abi.rs:126-:131                             lines exact
+> Rust-side decode               mod.rs:290, emit_result :5820               EXACT, unchanged
+> ```
+>
+> The framed `planning/static_transition/abi.rs` **does not exist at `a7d3e2b0`
+> and did not exist at `164afa8a` either** — the real path has always carried a
+> `cranelift_backend/` component. My defect. ⭐ **And it survived the ring's own
+> locator-correction pass**, which re-derived *line offsets* while the broken path
+> came through untouched — because a locator with a wrong path and right lines
+> reads as **correct** to anyone navigating by symbol search. ⇒ ⛔ **A locator has
+> two independent coordinates; re-deriving one is not evidence about the other.**
+>
+> ✅ **`D2`'s premise SURVIVES P1** — still no decoder anywhere in `ken-runtime`,
+> so `D2` is correctly scoped and still required. ⚠ Its *letter* is stale: *"declares
+> `encode_canonical` and nothing else"* was true at `aecdb001`; the file now carries
+> the whole iterative encoder. Read it for the premise, not the inventory.
+>
+> **Held branch `a7aa60eb` is INTACT and untouched** (merge-base `aecdb001`,
+> pre-P1). Read-only `merge-tree` against `a7d3e2b0` is **clean** — tree
+> `f26ba8d9`. ⛔ **Textual only; that is not "it still builds"**, so the ring's first
+> act is `-p ken-runtime`.
+>
+> ⚠ **My first positive control was not one.** I ran `8f677ebc × a7aa60eb`
+> *assuming* it would conflict because both touch `canonical.rs`; it returned exit
+> 0, which proves nothing — the branch **adds** a region at ~`:259` while P1 changed
+> the encoder elsewhere, so clean was the right answer. A real control took a
+> synthetic same-line divergence, which reports `exit=1`. ⇒ **A control must be a
+> case whose answer you already know.**
 
 > ### ⛔⛔ THE WEDGED-PANE SWEEP WAS UNSAFE ON *CLAUDE* PANES — FIXED (#998)
 >

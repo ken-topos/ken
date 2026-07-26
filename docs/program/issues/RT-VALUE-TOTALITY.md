@@ -457,12 +457,18 @@ hard-stop here is *the same wall* the FNSPLIT chain kept hitting, it counts on
   `active` until they land, and a mechanical reading of that edge would idle the
   Runtime ring behind two phases that are not on B2V's path. Neither is the
   converse true: P2/P3 are not thereby optional, only not prerequisite.
-- ⛔ **P1's merge is also a RE-ANCHOR EVENT for `B2V`, not just an unblock.** P1
-  rewrote `canonical.rs` and `values.rs`; the held `B2V` branch
-  (`wp/RT-FNSPLIT-B2V-executable-value-abi`) predates it and touches the **same
-  two files** (see the contention note below). Its base and its frame anchors must
-  be re-derived against `8f677ebc` **before** any resume kick. An unfreeze is a
-  semantic rebase, not a fast-forward.
+- ✅ **P1's merge was also a RE-ANCHOR EVENT for `B2V`, and the re-anchor is
+  DONE** (Steward, 2026-07-26, against `origin/main` = `a7d3e2b0`). P1 rewrote
+  `canonical.rs` and `values.rs`; the held `B2V` branch
+  (`wp/RT-FNSPLIT-B2V-executable-value-abi`, origin `a7aa60eb`, merge-base
+  `aecdb001`) predates it. ⚠ **Measured, correcting an earlier claim here that it
+  touched the same *two* files: it touches `canonical.rs` only** — its `D2` decode
+  inverse adds a region at ~`:259`; it does **not** touch `values.rs`. A read-only
+  `git merge-tree` probe against `a7d3e2b0` is **clean** (merged tree `f26ba8d9`),
+  verified with a synthetic same-line control that does report a conflict. ⛔ That
+  is textual only and is **not** "it still builds" — the ring's first act on
+  resume is `-p ken-runtime`. Frame anchors re-derived in the frame's
+  re-anchor block; the `abi.rs` path there was wrong from birth and is fixed.
 - ⛔ `RECUT 2`'s phase-closure artifact must be **re-derived** against the settled
   three-lifecycle partition regardless — that remains a hard gate and this node
   does not relieve it.
@@ -473,3 +479,142 @@ hard-stop here is *the same wall* the FNSPLIT chain kept hitting, it counts on
 - ⛔ Targeted builds only — never `--workspace`; the full gate runs in CI.
 - Report an unpushed ref and keep going; the Steward pushes. Wrap markdown at 80
   columns.
+
+## 7. ⛔ POST-MERGE ADVERSARY FINDINGS ON P1 — two, both open
+
+**Source:** adversary `evt_wv5fng3kt2yx`, 2026-07-26 07:10Z, against
+`origin/main` = `8f677ebc`. Method: rebased, mutated, measured, restored
+byte-identically (`git diff --quiet` exit 0), re-ran `-p ken-runtime --lib` →
+371/371. Scope `crates/` only. Tree clean at `ed74117e`, no mutations left.
+
+⛔ **P1 IS CLOSED — merged with all three retros in — and these do NOT reopen it.**
+They are repairs to land separately, on the `KW-ORACLE-CLOSURE` precedent for
+post-merge adversary findings. ⛔ **Neither is a QA miss; see the position note
+at the end.** ⛔ §10⁻a: the adversary channel is report-only — these are routed,
+never answered.
+
+### 7a. `AC-V1b`'s coverage guard is a frozen literal — its doc says otherwise
+
+`canonical.rs:750` `ac_v1b_corpus_covers_every_value_variant`. The doc at
+`:746`–`:749` claims the count is *"counted from the corpus itself **against the
+enum's own arm count**, so adding a variant without extending the corpus reddens
+rather than silently narrowing coverage."*
+
+The body is `assert_eq!(kinds.len(), 25)` where `kinds` is a `BTreeSet` of
+`encode(value)[0]` over `differential_corpus()` **alone**. ⇒ **The test body
+contains no reference to `Value`'s cardinality, so `kinds.len()` is invariant
+under adding a variant by construction.** (Steward re-confirmed by reading; no
+mutation needed.)
+
+**Measured:** a 26th variant `Value::AdvProbe(bool)` plus **only** the five arms
+the compiler demanded — `canonical.rs:168` `encode_header`, `canonical.rs:~530`
+`encode_canonical_recursive_reference` (`#[cfg(test)]`), `values.rs:141`
+`detach_children`, `values.rs:182` `rebuild`, `values.rs:311` `Clone`'s `Visit`
+match — with `differential_corpus()` **untouched**:
+
+| check | result |
+|---|---|
+| `ac_v1b_corpus_covers_every_value_variant` | **PASS** |
+| `ac_v1b_iterative_encoding_is_byte_identical_to_the_recursive_reference` | **PASS** |
+| `ac_v1b_corpus_is_non_vacuous_and_discriminating` | **PASS** |
+| full `-p ken-runtime --lib` | **371 passed, 0 failed** |
+
+⇒ The new variant's encoding was **written twice and compared zero times**, and
+nothing in the crate noticed.
+
+⭐ **Why this outweighs its size.** The module doc at `:350`–`:355` already states,
+honestly, that the differential is *"not an independent oracle for the byte
+values — a mutation to a `tag` constant moves both sides and this differential
+stays green."* **Coverage is therefore its entire value**, and the frozen `25` is
+exactly what fails to bind it. `AC-V1b` is the pin establishing that the
+restructuring changed no bytes; if a variant can enter uncompared, that
+establishment is silently partial.
+
+⚠ **Honest scope — the compiler does real work here.** This is **not** "a variant
+slips in unhandled": exhaustiveness is genuine and the five error sites were
+precise. A variant slips in **unverified**. For a hand-written twin-encoder
+differential that is the one risk it exists to cover.
+
+**Fix shape (adversary's, and the machinery is already present):** bind the number
+to the enum instead of restating it beside — e.g. `fn kind_tag(&Value) -> u8`
+whose exhaustive match the compiler forces, and count **its** distinct outputs;
+roughly the shape `AC-V1b` already uses for the tag byte. ⛔ **Do not "fix" this
+by editing the doc down to match the weaker mechanism** — that keeps a coverage
+claim the code cannot make. ⭐ `RT-FNSPLIT-B2V`'s `D4` is the correct pattern
+already in the corpus: *"a new variant is a compile error, not a silent
+`ValueWord`."*
+
+### 7b. The `"will not compile"` bound is scoped to five positions
+
+`values.rs:14`–`:20` says giving a recursive child position indirection *"will not
+compile"*. True and verified **for the five named positions**:
+`child_positions::push` is bounded on a sealed trait implemented only for
+`Vec<Value>` and `BTreeMap<Vec<u8>, Value>`, so retyping `args` to
+`Vec<Rc<Value>>` fails at the call site.
+
+⛔ **But `Step::Val` is constructible directly in the parent module** —
+`canonical.rs:149` does exactly that for the root — so a future variant's arm can
+push children without routing through `push`, and the bound never applies to it.
+Closing move: make `Step::Val` constructible only inside `child_positions`.
+Preventive, one line. Flagged because the cycle-unconstructibility argument leans
+on that bound being the **sole** path.
+
+### 7c. ⭐ THE POSITION LESSON — third instance in ONE WP, pattern now proven
+
+Three defects of the same class in this WP — *stating what the author believed the
+code did rather than what it does* — with outcomes governed by **position, not
+diligence**:
+
+| instance | position | outcome |
+|---|---|---|
+| `assert_eq!(compound_subvalues, 8)`, subject has **7** | executable assertion | **died on first run, under a minute, unassisted** |
+| the `breadth-first` `Drop` comment | `///` doc comment | survived full QA; **Architect block** caught it |
+| `AC-V1b`'s *"against the enum's own arm count"* (7a) | `///` doc comment | survived QA **and** close; **adversary** caught it post-merge |
+
+⛔ **Do not file any of these as a QA miss.** A doc comment on a trusted source is
+structurally exempt from every instrument the project owns — not under-tested,
+**untestable in place**. The implementer established this in its own retro
+(`evt_2119bqa3tnz0a`) by refuting the Steward's weaker "someone should read it
+more carefully" candidate with the counter-example from inside the same WP;
+7a is the **third** data point and it confirms the position reading.
+
+### 7d. ⭐ WHAT SURVIVED ATTACK — preserve this; it is evidence, not praise
+
+The adversary calls P1 *"the most rigorous WP I have hunted"* and its residual
+disclosure *"the best I have seen in this fleet."* It opened the hunt expecting the
+disclosed-deferral failure — artifacts around a deferred half quietly claiming the
+whole — **and found the opposite**:
+
+- The evidence doc measures `Debug`, `PartialEq`, `Ord` **and** `Hash` all dying
+  at `D` on the **landed post-change** code, states in its own voice that
+  *"`Value` traversals are total" is **false***, and identifies that `Debug` has
+  **no cell** in the frame's §7 residual table while the cell that does exist is
+  scoped to *disagreement with canonical identity* rather than totality. It then
+  found the independent `ken-foundation` twin carrying the same defect and
+  explained why it was correctly out of scope. **No claim overreaches its
+  evidence.**
+- **Reachability of those four:** no `BTreeSet<Value>` / `HashMap<Value, _>`
+  anywhere in production. The `BTreeMap<Value, Value>` hits in `lowering/mod.rs`
+  are `cranelift_codegen::ir::Value`, an unrelated type. **No live overflow path
+  today.**
+- **`D = 131072` is not budget-fitted.** Bisected out of process against the
+  *pre-change* mechanisms at two stack sizes, both thresholds published in the
+  module header — 16× the 1 MiB drop threshold, 2.0× the 8 MiB one, all six
+  (mechanism, stack) pairs confirmed to abort at exactly that `D`. Per-scenario
+  pinned `STACK_BYTES` removes ambient `ulimit -s` from the claim. ⇒ The
+  "green by 3% of a hidden budget" check **passes cleanly**.
+- **The `Drop` comment the Architect blocked is now right in the way that
+  matters.** It does not merely say "depth-first": it states that a LIFO worklist
+  holds the unvisited siblings along the current root-to-node path while a FIFO
+  frontier holds an entire level, and that **neither dominates for every shape**.
+  That is the memory-bound contract the block was about, not a wording repair.
+  Verified: `detach_children` + `Vec::pop` is LIFO.
+- **`Drop` allocates nothing per node** — `Vec::new()` does not allocate until
+  first push, and an already-detached child pushes nothing, so teardown adds no
+  allocation failure path.
+- **`Clone`'s `Map` rebuild zip is sound** — children pushed from
+  `entries.values().rev()`, popped in key order; `rebuild` zips against
+  `entries.keys()`, and `BTreeMap`'s `keys()`/`values()` share that order. A `zip`
+  mismatch would truncate **silently**, so it was checked rather than assumed.
+- **`done.len() - children` cannot underflow** — `Finish` is pushed before its
+  children so it pops after all of them, and each contributes exactly one entry.

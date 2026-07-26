@@ -73,21 +73,185 @@ finding.**
 > interface "until something consumes it" — that is the defect, not a
 > simplification.
 
-## The landed surface you build on — re-measured at `164afa8a`
+## The landed surface you build on — RE-ANCHORED at `a7d3e2b0`
 
-| what | where |
-|---|---|
-| the `Lowered` specialization lattice — **21 variants** | `cranelift_backend/lowering/mod.rs:417` (`:415` is the `#[derive]`) |
-| `Store` · `intern` · `slot_id` — the **encode half only**; see the `D2` amendment | `store.rs:343`, `:360`, `:400` |
-| `AbiCarrier::ValueWord` · `GroundValueCarrier` · `ResultWord` | `planning/static_transition/abi.rs:64`, `:74`, `:76` |
-| declared ownership per carrier (`OwnedByFrame` / `BorrowedForActivation` / `TransferredToCaller`) | `abi.rs:126`–`:131` |
-| the Rust-side decode path that **does not count** | `lowering/mod.rs:290` (`result_table`), `emit_result` at `:5820` |
+⛔ **This table was re-measured by the Steward on 2026-07-26 against
+`origin/main` = `a7d3e2b0`, after `RT-VALUE-TOTALITY-P1` merged (`8f677ebc`).**
+The previous anchor was `164afa8a`. Every cell below was re-derived with
+`git show origin/main:<path>`; the **verdict** column says what moved, so you can
+see which rows you may still trust from your held branch.
 
-⚠ **Two locators were off by a line or two and are corrected above** — the ring
-re-derived them rather than silently adjusting, which is the right call: *a
-locator one reader silently corrects is a locator the next reader re-derives.*
+| what | where — measured at `a7d3e2b0` | verdict |
+|---|---|---|
+| the `Lowered` specialization lattice — **21 variants** | `cranelift_backend/lowering/mod.rs:415` (`:414` is the `#[derive]`) | ⚠ **both line cells moved −2**; the 21 count HOLDS |
+| `Store` · `intern` · `slot_id` — the **encode half only**; see the `D2` amendment | `store.rs:343`, `:360`, `:400` | ✅ exact, unchanged |
+| `AbiCarrier::ValueWord` · `GroundValueCarrier` · `ResultWord` | `cranelift_backend/planning/static_transition/abi.rs:64`, `:74`, `:76` | ❌ **PATH was wrong from birth** — lines exact |
+| declared ownership per carrier (`OwnedByFrame` / `BorrowedForActivation` / `TransferredToCaller`) | same file, `:126`–`:131` | ✅ lines exact; same path fix |
+| the Rust-side decode path that **does not count** | `lowering/mod.rs:290` (`result_table`), `emit_result` at `:5820` | ✅ exact, unchanged |
+
 ⛔ **`store.rs`'s row no longer says "subsume" — read the `D2` amendment before
 you use it.**
+
+> ### ⛔ THE `abi.rs` PATH WAS WRONG FROM BIRTH, AND A CORRECTION PASS WALKED PAST IT
+>
+> The framed path `planning/static_transition/abi.rs` **does not exist at
+> `a7d3e2b0` and did not exist at `164afa8a` either** (`git cat-file -e` fails at
+> both). The real path has always been
+> **`cranelift_backend/planning/static_transition/abi.rs`** — the frame dropped
+> the `cranelift_backend/` component. Every line number in those two rows —
+> `:64`, `:74`, `:76`, `:126`–`:131` — is **exact**. My defect; the frame is the
+> Steward's.
+>
+> ⭐ **The tell worth keeping: this survived the ring's own locator-correction
+> pass.** The note that used to sit here said *"two locators were off by a line or
+> two and are corrected above."* The ring re-derived **line offsets** and the
+> broken **path** came through untouched — because a locator with a wrong path and
+> right lines reads as *correct* to anyone who navigates by symbol search rather
+> than by opening the path. ⇒ ⛔ **A locator has two independent coordinates and
+> re-deriving one is not evidence about the other.** Check the path with
+> `git cat-file -e <base>:<path>` before you trust any line number in it.
+>
+> ⚠ It is also why the previous note's principle stands unchanged and is retained:
+> *a locator one reader silently corrects is a locator the next reader
+> re-derives.* Report the correction; do not absorb it.
+
+### ⭐ WHAT `RT-VALUE-TOTALITY-P1` PUT UNDER YOU — new surface, same premises
+
+P1 rewrote `canonical.rs` and `values.rs`, the two files `D2` builds on. **The
+`D2` amendment's load-bearing premise SURVIVES** — re-measured, there is still
+**no decoder anywhere in `ken-runtime`**: `canonical.rs`'s only non-test
+functions are `encode_canonical`, the LE writers, `minimal_limbs`,
+`child_positions::push` and `encode_header`, and a workspace grep for
+`fn decode*` / `fn from_canonical` in `crates/ken-runtime/src/` hits only
+unrelated types (`native_int`, `native_join_plan`,
+`oriented_subcontinuation_plan`). ⇒ **`D2` is still correctly scoped and still
+required.**
+
+⚠ **But the amendment's LETTER is now stale, so read it for the premise, not the
+inventory.** It says *"`canonical.rs` declares `encode_canonical` and nothing
+else."* That was true at `aecdb001`. At `a7d3e2b0` the file also carries the
+whole iterative encoder. ⛔ Do not read the stale sentence as a claim that the
+file is otherwise empty — the true claim, unchanged, is **there is no decode
+half**.
+
+New machinery you should build **with**, not around:
+
+| what | where at `a7d3e2b0` |
+|---|---|
+| `child_positions` — sealed-trait child enumeration, `pub(super) fn push` | `canonical.rs:139` |
+| `OwnedChildren::push_steps` impls (the only two: `Vec<Value>`, `BTreeMap<Vec<u8>, Value>`) | `canonical.rs:111`, `:115`, `:124` |
+| `encode_header` — the per-variant header/tag writer, exhaustive over `Value` | `canonical.rs:167` |
+| `encode_canonical_recursive_reference` — the twin reference encoder, **`#[cfg(test)]`** | `canonical.rs:362` (attr at `:361`) |
+| `detach_children` · `rebuild` — the iterative `Drop`/`Clone` worklist machinery | `values.rs:141`, `:182` |
+
+⛔ **`encode_canonical_recursive_reference` is `#[cfg(test)]` — it is NOT
+available to production code.** If a deliverable needs a recursive encoder
+outside tests, that is a frame question for the Steward, not a `cfg` edit.
+
+> ### ⛔⛔ DO NOT LEAN ON `AC-V1b`'s COVERAGE PIN — IT DOES NOT BIND
+>
+> P1's `ac_v1b_corpus_covers_every_value_variant` (`canonical.rs:750`) is the pin
+> that establishes the iterative restructuring changed no bytes. **Its coverage
+> guarantee is not real.** The doc at `:746`–`:749` says the count is *"counted
+> from the corpus itself against the enum's own arm count, so adding a variant
+> without extending the corpus reddens."* The body is
+> `assert_eq!(kinds.len(), 25)` where `kinds` comes **solely** from
+> `differential_corpus()`; the test body contains **no reference to `Value`'s
+> cardinality**, so `kinds.len()` is invariant under adding a variant *by
+> construction*.
+>
+> The adversary measured it (`evt_wv5fng3kt2yx`): a 26th variant plus only the
+> five arms the compiler demanded, corpus untouched ⇒ all three `AC-V1b` tests
+> **pass**, full `-p ken-runtime --lib` **371/371**. And the module doc at
+> `:350`–`:355` already states honestly that the differential is *not* an
+> independent byte oracle — so **coverage was its entire value**, and coverage is
+> the part that does not bind.
+>
+> ⚠ **Honest scope: exhaustiveness IS genuine.** A variant cannot enter
+> **unhandled** — the compiler named all five sites precisely. It enters
+> **unverified**. ⇒ For B2V that means: **you inherit no coverage protection from
+> `AC-V1b`.** If a B2V deliverable adds or changes anything `encode_header`
+> dispatches on, your own controls must carry the coverage claim.
+>
+> ⭐ **`D4` already does this correctly, and is the pattern:** *"the proof is the
+> exhaustive match over the 21 landed variants … so a new variant is a compile
+> error, not a silent `ValueWord`."* Bind the number to the type; never restate it
+> beside. `AC-V1b` is the same intent implemented as a frozen literal.
+>
+> ⛔ **This is NOT B2V's to fix** — it is tracked separately against
+> `RT-VALUE-TOTALITY` (P1 is closed; the repair does not reopen it). It is here
+> only so you do not build on a protection you do not have.
+
+> ### ⚠ AND THE `"will not compile"` BOUND IS SCOPED TO FIVE POSITIONS
+>
+> `values.rs:14`–`:20` states that giving a recursive child position indirection
+> *"will not compile"*. Verified, and **true for the five positions it names**:
+> `child_positions::push` is bounded on a sealed trait implemented only for
+> `Vec<Value>` and `BTreeMap<Vec<u8>, Value>`, so retyping `args` to
+> `Vec<Rc<Value>>` fails at the call site.
+>
+> ⛔ **It is not a bound on positions that do not route through `push`.**
+> `Step::Val` is constructible directly in the parent module — `canonical.rs:149`
+> does exactly that for the root — so an arm can enumerate children without ever
+> reaching the sealed bound, and the guarantee simply does not apply to it
+> (adversary, `evt_wv5fng3kt2yx`). Making `Step::Val` constructible only inside
+> `child_positions` would close it.
+>
+> ⇒ **Why B2V is told this:** `D2` adds the decode half in this exact
+> neighbourhood. ⛔ If your work introduces a child position, do **not** treat
+> `values.rs:14`–`:20` as covering it — that sentence is a claim about five
+> call sites, not about the module. Route it through `child_positions::push` or
+> say plainly in your evidence that a new position is outside the bound.
+>
+> ⚠ This is the **same defect class as the `AC-V1b` doc above and P1's
+> `breadth-first` comment**: a *correct* mechanism argument written one scope
+> wider than the mechanism it describes. All three were true of what the author
+> checked and false as stated.
+
+### ▶ YOUR HELD BRANCH — it is intact, and its base is pre-P1
+
+`wp/RT-FNSPLIT-B2V-executable-value-abi` is on `origin` at **`a7aa60eb`**, 20+
+commits deep, and **the Steward has not touched it.** ⛔ It will not be reset or
+force-moved out from under you.
+
+```
+branch          a7aa60eb   (origin, intact)
+its merge-base  aecdb001   <- PRE-P1
+origin/main     a7d3e2b0   (P1 landed at 8f677ebc, two doc PRs since)
+```
+
+⚠ **Your base predates P1**, and both sides touch `canonical.rs`: your `D2`
+decode inverse adds a region at ~`:259`, P1 rewrote the encoder. **Re-anchor onto
+`a7d3e2b0` before you resume.**
+
+**What the Steward measured for you** — read-only `git merge-tree --write-tree`,
+no ref or worktree touched:
+
+| probe | result |
+|---|---|
+| `origin/main` × `a7aa60eb` | **exit 0 — no textual conflict**, merged tree `f26ba8d9` |
+| synthetic same-line divergent control | exit 1, conflict reported |
+
+⛔ **THAT IS A TEXTUAL RESULT AND NOTHING MORE — IT IS NOT "IT STILL BUILDS".**
+A clean three-way merge means no hunk overlapped. It says nothing about whether
+your additions still *compile* against a rewritten encoder: P1 changed
+`canonical.rs`'s internals, and a call to something it renamed, narrowed to
+`#[cfg(test)]`, or removed merges **silently clean** and then fails to build.
+⇒ **Your first act after re-anchoring is `scripts/ken-cargo test -p ken-runtime`,
+and the merge probe is not a substitute for it.**
+
+⚠ **Why the probe is reported at all, given that caveat:** so that a *conflict*
+would have been known before the kick rather than discovered by you. Its value is
+entirely in the branch it rules out.
+
+> ⭐ **And note how that probe was checked, because the same trap is in your
+> `D5`.** The first "positive control" the Steward ran was `8f677ebc` × `a7aa60eb`
+> — a pair *assumed* to conflict because both touch `canonical.rs`. It returned
+> exit 0, which proves nothing: **a negative result from a case you never
+> established would fail is not a control.** The real control had to be a
+> synthetic same-line divergence, where a conflict was *known* to be the right
+> answer. ⇒ ⛔ **A control must be a case whose answer you already know** — this is
+> exactly `D5`'s mutation table, where each row names the reason it must redden.
 
 ## Deliverables
 
