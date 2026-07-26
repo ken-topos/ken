@@ -5203,7 +5203,6 @@ fn recut2_only_the_store_minted_handle_requires_the_whole_lifecycle() {
     }
 }
 
-
 /// **`RECUT 2`, causal.** The emitter CONSUMES the representation authority.
 ///
 /// ⛔ **The ruling's bar, literally:** *"mutate or bypass the authority and the
@@ -5237,6 +5236,7 @@ fn recut2_the_emitted_helper_graph_changes_when_the_authority_changes() {
         derived.admitted_classes().to_vec(),
         vec![BoundaryClass::Record],
         derived.byte_span_classes().to_vec(),
+        derived.tags().clone(),
     );
     let other = crate::boundary_value_clif::tests::capture_with_plan(&perturbed);
     assert_ne!(
@@ -5318,4 +5318,287 @@ fn recut2_the_plan_is_derived_from_the_partition_not_restated() {
              guard built from it would name nothing"
         );
     }
+}
+
+/// **`RECUT 2`, causal — the TAG axis.** The emitted helpers branch on the
+/// plan's derived tag sets, not on an ordinal band.
+///
+/// ⛔ **The ruling's bar is causation, not agreement:** *"mutate or bypass the
+/// authority and the captured/emitted helper graph must change or reject."* An
+/// assertion that the plan and the emitted bytes agree is explicitly listed as
+/// not counting, so this feeds a **perturbed tag admission** and requires the
+/// CLIF to differ.
+///
+/// ⚠ MEASURED: the emitted graph under the derived tag sets differs from the
+/// graph under tag sets that admit a different set of tags. CLAIMED: the
+/// emitted validity, handle-ness and immediacy tests are generated from the
+/// authority. THE GAP: that the derived sets are the authority's real answer —
+/// closed by `recut2_the_tag_admission_is_derived_from_the_partition_not_restated`.
+#[test]
+fn recut2_the_emitted_helper_graph_changes_when_the_tag_sets_change() {
+    use crate::boundary_value::{BoundaryEmissionPlan, BoundaryTag, BoundaryTagAdmission};
+
+    let derived = BoundaryEmissionPlan::derive();
+    let real = crate::boundary_value_clif::tests::capture_with_plan(&derived);
+    assert!(
+        real.contains("function"),
+        "RECUT 2: the capture is empty, so the difference below is not evidence"
+    );
+
+    // ⛔ Perturb ONLY the tag axis: drop one admitted tag. Nothing about the
+    // class sets, the emitter, or the module changes.
+    let dropped = *derived
+        .tags()
+        .admitted()
+        .last()
+        .expect("the partition admits at least one tag");
+    let thinner: Vec<BoundaryTag> = derived
+        .tags()
+        .admitted()
+        .iter()
+        .copied()
+        .filter(|tag| *tag != dropped)
+        .collect();
+    assert!(
+        thinner.len() + 1 == derived.tags().admitted().len(),
+        "RECUT 2: the perturbation removed nothing, so the comparison below is \
+         between two identical plans"
+    );
+    let perturbed = BoundaryEmissionPlan::new(
+        derived.admitted_classes().to_vec(),
+        derived.int_magnitude_classes().to_vec(),
+        derived.byte_span_classes().to_vec(),
+        BoundaryTagAdmission::new(
+            thinner,
+            derived.tags().immediate().to_vec(),
+            derived.tags().handle().to_vec(),
+            derived.tags().owner_bands().to_vec(),
+        ),
+    );
+    let other = crate::boundary_value_clif::tests::capture_with_plan(&perturbed);
+    assert_ne!(
+        real, other,
+        "RECUT 2: the emitted helper graph is IDENTICAL under a plan admitting \
+         one fewer tag — the emitter is not consuming the tag admission, it is \
+         only receiving it"
+    );
+
+    // ⛔ And the difference must be the DROPPED TAG's own membership tests,
+    // not something incidental. Presence/absence is the wrong needle: tag 8 is
+    // also in the handle set and in an owner band, so it keeps being compared
+    // for those. What must move is the COUNT — dropping it from exactly one
+    // derived set removes exactly the comparisons that set generates, and
+    // nothing in the perturbation can add one.
+    let compares_for = |clif: &str| {
+        let suffix = format!(", {}", dropped as i64);
+        clif.lines()
+            .filter(|line| line.contains("icmp_imm") && line.trim_end().ends_with(&suffix))
+            .count()
+    };
+    let (before, after) = (compares_for(&real), compares_for(&other));
+    assert!(
+        before > 0,
+        "RECUT 2: the real graph never compares against {dropped:?} at all, so \
+         its disappearance below would not be evidence"
+    );
+    assert!(
+        after < before,
+        "RECUT 2: the graphs differ, but the emitted membership tests for \
+         {dropped:?} did not decrease ({before} -> {after}) — the difference \
+         is not attributable to the tag the plan stopped admitting"
+    );
+
+    // ⚠ Two-sided: the SAME plan must produce the SAME graph, or `assert_ne!`
+    // above would pass for any two captures.
+    let again = crate::boundary_value_clif::tests::capture_with_plan(&derived);
+    assert_eq!(
+        real, again,
+        "RECUT 2: two captures under the same plan differ, so emission is not \
+         a function of the plan and the inequality above is noise"
+    );
+}
+
+/// **`RECUT 2`, causal — the OWNER axis.** The emitted region selection, the
+/// node's recorded owner, and the escape gate all branch on the plan's owner
+/// bands.
+///
+/// ⚠ MEASURED: moving a tag from one owner band to another changes the emitted
+/// CLIF. CLAIMED: the emitted owner decisions are generated from the authority
+/// rather than from a threshold on tag order. THE GAP: that the bands are the
+/// partition's real answer — closed by the derivation test below.
+///
+/// ⛔ This axis needs its own perturbation because the tag test above holds the
+/// bands fixed: a plan could consume the admitted set and still decide
+/// ownership from a hardcoded threshold, and every assertion there would pass.
+#[test]
+fn recut2_the_emitted_helper_graph_changes_when_the_owner_bands_change() {
+    use crate::boundary_value::{BoundaryEmissionPlan, BoundaryTagAdmission};
+
+    let derived = BoundaryEmissionPlan::derive();
+    let real = crate::boundary_value_clif::tests::capture_with_plan(&derived);
+    assert!(
+        real.contains("function"),
+        "RECUT 2: the capture is empty, so the difference below is not evidence"
+    );
+
+    // Move the first band's first tag into the second band — the owners keep
+    // their identities, only the tag-to-owner assignment moves.
+    let mut bands = derived.tags().owner_bands().to_vec();
+    assert!(
+        bands.len() >= 2 && !bands[0].1.is_empty(),
+        "RECUT 2: fewer than two non-empty owner bands, so a reassignment \
+         cannot be expressed and this test proves nothing"
+    );
+    let moved = bands[0].1.remove(0);
+    bands[1].1.push(moved);
+    bands[1].1.sort();
+    let perturbed = BoundaryEmissionPlan::new(
+        derived.admitted_classes().to_vec(),
+        derived.int_magnitude_classes().to_vec(),
+        derived.byte_span_classes().to_vec(),
+        BoundaryTagAdmission::new(
+            derived.tags().admitted().to_vec(),
+            derived.tags().immediate().to_vec(),
+            derived.tags().handle().to_vec(),
+            bands,
+        ),
+    );
+    let other = crate::boundary_value_clif::tests::capture_with_plan(&perturbed);
+    assert_ne!(
+        real, other,
+        "RECUT 2: the emitted helper graph is IDENTICAL after moving {moved:?} \
+         to another owner band — the owner decisions are not derived from the \
+         bands"
+    );
+
+    let again = crate::boundary_value_clif::tests::capture_with_plan(&derived);
+    assert_eq!(
+        real, again,
+        "RECUT 2: two captures under the same plan differ, so the inequality \
+         above is noise"
+    );
+}
+
+/// **`RECUT 2`.** The tag admission is derived from the partition, not restated
+/// beside it.
+///
+/// ⛔ The half that keeps the two causal tests honest: they would both still
+/// pass if `derive()` returned hand-written sets. Here the expected sets are
+/// recomputed from the authority *in the test*, by the same total projection —
+/// sweeping `BoundaryInput::all()` through the wildcard-free classifier — so a
+/// `derive()` that stopped consulting it reddens.
+#[test]
+fn recut2_the_tag_admission_is_derived_from_the_partition_not_restated() {
+    use crate::boundary_value::{BoundaryEmissionPlan, BoundaryReferentOwner, BoundaryTag};
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let mut immediate: BTreeSet<BoundaryTag> = BTreeSet::new();
+    let mut handle: BTreeSet<BoundaryTag> = BTreeSet::new();
+    let mut bands: BTreeMap<BoundaryReferentOwner, BTreeSet<BoundaryTag>> = BTreeMap::new();
+    for cell in BoundaryInput::all() {
+        match cell.outcome() {
+            BoundaryOutcome::ImmediateWord { tag } => {
+                immediate.insert(tag);
+            }
+            BoundaryOutcome::HandleWord { tag, owner, .. } => {
+                handle.insert(tag);
+                bands.entry(owner).or_default().insert(tag);
+            }
+            BoundaryOutcome::ProtocolOnly | BoundaryOutcome::FailClosedForbidden => {}
+        }
+    }
+    // Positive controls: each population is non-empty, so the equalities below
+    // are not agreements between empty sets.
+    assert!(
+        !immediate.is_empty() && !handle.is_empty() && bands.len() >= 2,
+        "RECUT 2: the partition yields immediate={}, handle={}, bands={} — a \
+         plan derived from it would be vacuous",
+        immediate.len(),
+        handle.len(),
+        bands.len()
+    );
+
+    let plan = BoundaryEmissionPlan::derive();
+    assert_eq!(
+        plan.tags().immediate(),
+        immediate.iter().copied().collect::<Vec<_>>(),
+        "RECUT 2: the plan's immediate tag set is not the partition's"
+    );
+    assert_eq!(
+        plan.tags().handle(),
+        handle.iter().copied().collect::<Vec<_>>(),
+        "RECUT 2: the plan's handle tag set is not the partition's"
+    );
+    assert_eq!(
+        plan.tags().admitted(),
+        immediate
+            .union(&handle)
+            .copied()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>(),
+        "RECUT 2: the plan's admitted tag set is not the union of the two"
+    );
+    assert_eq!(
+        plan.tags().owner_bands(),
+        bands
+            .into_iter()
+            .map(|(owner, tags)| (owner, tags.into_iter().collect::<Vec<_>>()))
+            .collect::<Vec<_>>(),
+        "RECUT 2: the plan's owner bands are not the partition's"
+    );
+}
+
+/// **`RECUT 2`, identity.** The predicted-and-then-measured half: emitted code
+/// makes no identity decision the authority does not supply.
+///
+/// ⚠ **The prediction, stated before it was measured** (recorded in the
+/// evidence doc at `ab11a3d2`): `HandleIdentity` is computed by
+/// `BoundaryInput::handle_identity` **from the owner alone**, so once the owner
+/// bands are derived, identity needs no separate wiring.
+///
+/// ⚠ MEASURED: identity is a total function of owner across every admitted
+/// handle outcome, and the sole identity the emitted graph can mint is the
+/// absent one — every `alloc`ed node is written `NULL_SLOT`, which this ABI
+/// reads as "no store identity". CLAIMED: no emitted decision assigns identity.
+/// ⛔ **THE GAP, stated rather than closed:** this shows emitted code cannot
+/// mint a *store* identity, not that no future helper could. The residual is
+/// review-enforced — `escape_check`'s adoption gate is the mechanism that keeps
+/// it honest at runtime, and it is tested separately.
+#[test]
+fn recut2_identity_is_a_function_of_owner_and_needs_no_second_wiring() {
+    use std::collections::BTreeMap;
+
+    let mut by_owner: BTreeMap<BoundaryReferentOwner, BTreeSet<HandleIdentity>> = BTreeMap::new();
+    for cell in BoundaryInput::all() {
+        if let BoundaryOutcome::HandleWord {
+            owner, identity, ..
+        } = cell.outcome()
+        {
+            by_owner.entry(owner).or_default().insert(identity);
+        }
+    }
+    assert!(
+        by_owner.len() >= 2,
+        "RECUT 2: fewer than two owners publish handles, so 'identity is a \
+         function of owner' cannot be distinguished from 'identity is constant'"
+    );
+    for (owner, identities) in &by_owner {
+        assert_eq!(
+            identities.len(),
+            1,
+            "RECUT 2: {owner:?} publishes {} distinct identities, so identity \
+             is NOT a function of owner and the emitted side would need a \
+             decision the bands cannot supply",
+            identities.len()
+        );
+    }
+    // ⛔ Non-vacuity: the function must actually distinguish, or a constant
+    // identity would satisfy every assertion above.
+    let distinct: BTreeSet<HandleIdentity> = by_owner.values().flatten().copied().collect();
+    assert!(
+        distinct.len() >= 2,
+        "RECUT 2: every owner yields the same identity, so the agreement above \
+         is vacuous"
+    );
 }

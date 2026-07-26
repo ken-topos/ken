@@ -218,6 +218,20 @@ pub enum BoundaryReferentOwner {
     InvocationArena = 2,
 }
 
+impl BoundaryReferentOwner {
+    /// Every owner, in declaration order.
+    ///
+    /// ⚠ **This list is not self-guarding — its consumers are.** The emitted
+    /// marker-mask selection folds over it and maps each owner through a
+    /// wildcard-free `match`, so a new variant is a compile error at that fold
+    /// rather than a silently-absent entry here.
+    pub const ALL: [BoundaryReferentOwner; 3] = [
+        BoundaryReferentOwner::NoReferent,
+        BoundaryReferentOwner::PersistentStore,
+        BoundaryReferentOwner::InvocationArena,
+    ];
+}
+
 /// One closed 64-bit boundary value.
 ///
 /// This is the meaning of `AbiCarrier::ValueWord` and of `AbiCarrier::
@@ -400,10 +414,82 @@ pub(crate) struct BoundaryEmissionPlan {
     admitted_classes: Vec<BoundaryClass>,
     int_magnitude_classes: Vec<BoundaryClass>,
     byte_span_classes: Vec<BoundaryClass>,
+    tags: BoundaryTagAdmission,
+}
+
+/// The tag half of the plan: which tags the partition admits, split by the
+/// distinctions the emitted helpers actually branch on.
+///
+/// ⛔ **Sets, never ordinal bands.** The emitter previously asked *"is this tag
+/// numerically at or below `LAST_PERSISTENT_TAG`"*, which is a second authority
+/// derived by hand from [`BoundaryTag`]'s declaration order: reordering the
+/// enum leaves both constants well-formed and silently re-points every
+/// persistent word at the invocation arena. A set has no such failure mode, and
+/// it does not require the admitted tags to be contiguous in the first place.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct BoundaryTagAdmission {
+    admitted: Vec<BoundaryTag>,
+    immediate: Vec<BoundaryTag>,
+    handle: Vec<BoundaryTag>,
+    owner_bands: Vec<(BoundaryReferentOwner, Vec<BoundaryTag>)>,
+}
+
+impl BoundaryTagAdmission {
+    /// Build the tag admission from already-derived sets.
+    pub(crate) fn new(
+        admitted: Vec<BoundaryTag>,
+        immediate: Vec<BoundaryTag>,
+        handle: Vec<BoundaryTag>,
+        owner_bands: Vec<(BoundaryReferentOwner, Vec<BoundaryTag>)>,
+    ) -> Self {
+        BoundaryTagAdmission {
+            admitted,
+            immediate,
+            handle,
+            owner_bands,
+        }
+    }
+
+    /// Every tag any admitted outcome can carry. A tag outside this set is the
+    /// third outcome that fails, never a fall-through.
+    pub(crate) fn admitted(&self) -> &[BoundaryTag] {
+        &self.admitted
+    }
+
+    /// The tags whose payload is the value itself.
+    pub(crate) fn immediate(&self) -> &[BoundaryTag] {
+        &self.immediate
+    }
+
+    /// The tags whose payload indexes a node.
+    pub(crate) fn handle(&self) -> &[BoundaryTag] {
+        &self.handle
+    }
+
+    /// Each referent owner the partition publishes handles for, paired with
+    /// exactly the tags it publishes under that owner.
+    ///
+    /// ⛔ **A relation, not a two-way split.** The emitter used to assume there
+    /// are exactly two handle owners and discriminate them with one threshold;
+    /// an owner the partition started admitting would have been silently folded
+    /// into whichever side of that threshold its tag landed on.
+    pub(crate) fn owner_bands(&self) -> &[(BoundaryReferentOwner, Vec<BoundaryTag>)] {
+        &self.owner_bands
+    }
+
+    /// The tags published under one owner — empty if the partition publishes
+    /// none, which is a legitimate answer and not a missing entry.
+    pub(crate) fn tags_owned_by(&self, owner: BoundaryReferentOwner) -> &[BoundaryTag] {
+        self.owner_bands
+            .iter()
+            .find(|(band, _)| *band == owner)
+            .map(|(_, tags)| tags.as_slice())
+            .unwrap_or(&[])
+    }
 }
 
 impl BoundaryEmissionPlan {
-    /// Build a plan from already-derived class sets.
+    /// Build a plan from already-derived class and tag sets.
     ///
     /// ⛔ Crate-private and unexported: the only caller is the derivation in
     /// `cranelift_backend::lowering`, so a second hand-written plan cannot
@@ -412,12 +498,19 @@ impl BoundaryEmissionPlan {
         admitted_classes: Vec<BoundaryClass>,
         int_magnitude_classes: Vec<BoundaryClass>,
         byte_span_classes: Vec<BoundaryClass>,
+        tags: BoundaryTagAdmission,
     ) -> Self {
         BoundaryEmissionPlan {
             admitted_classes,
             int_magnitude_classes,
             byte_span_classes,
+            tags,
         }
+    }
+
+    /// The tag sets the emitted helpers branch on.
+    pub(crate) fn tags(&self) -> &BoundaryTagAdmission {
+        &self.tags
     }
 
     /// Every class the partition admits as a published handle.

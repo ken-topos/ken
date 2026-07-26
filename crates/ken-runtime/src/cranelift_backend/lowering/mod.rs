@@ -7318,13 +7318,32 @@ impl crate::boundary_value::BoundaryEmissionPlan {
     /// [`BoundaryInput`] is `pub(in crate::cranelift_backend)`: the authority is
     /// only visible here, which is precisely why the emitter cannot restate it.
     pub(crate) fn derive() -> Self {
-        use crate::boundary_value::{BoundaryClass, BoundaryStorageShape};
-        use std::collections::BTreeSet;
+        use crate::boundary_value::{
+            BoundaryClass, BoundaryReferentOwner, BoundaryStorageShape, BoundaryTag,
+            BoundaryTagAdmission,
+        };
+        use std::collections::{BTreeMap, BTreeSet};
 
         let mut admitted: BTreeSet<BoundaryClass> = BTreeSet::new();
+        let mut immediate_tags: BTreeSet<BoundaryTag> = BTreeSet::new();
+        let mut handle_tags: BTreeSet<BoundaryTag> = BTreeSet::new();
+        let mut owner_bands: BTreeMap<BoundaryReferentOwner, BTreeSet<BoundaryTag>> =
+            BTreeMap::new();
         for cell in BoundaryInput::all() {
-            if let BoundaryOutcome::HandleWord { class, .. } = cell.outcome() {
-                admitted.insert(class);
+            // ⛔ Wildcard-free: a new outcome variant must decide here whether
+            // its tag is admitted, rather than defaulting to "not emitted".
+            match cell.outcome() {
+                BoundaryOutcome::ImmediateWord { tag } => {
+                    immediate_tags.insert(tag);
+                }
+                BoundaryOutcome::HandleWord {
+                    tag, class, owner, ..
+                } => {
+                    admitted.insert(class);
+                    handle_tags.insert(tag);
+                    owner_bands.entry(owner).or_default().insert(tag);
+                }
+                BoundaryOutcome::ProtocolOnly | BoundaryOutcome::FailClosedForbidden => {}
             }
         }
         let of_shape = |shape: BoundaryStorageShape| -> Vec<BoundaryClass> {
@@ -7336,10 +7355,28 @@ impl crate::boundary_value::BoundaryEmissionPlan {
         };
         let int_magnitude = of_shape(BoundaryStorageShape::IntMagnitude);
         let byte_span = of_shape(BoundaryStorageShape::ByteSpan);
+        // The admitted set is the union, not a range: a tag admitted as an
+        // immediate and a tag admitted as a handle are both legal words, and
+        // nothing requires the two groups to be numerically adjacent.
+        let admitted_tags: Vec<BoundaryTag> = immediate_tags
+            .union(&handle_tags)
+            .copied()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
         crate::boundary_value::BoundaryEmissionPlan::new(
             admitted.into_iter().collect(),
             int_magnitude,
             byte_span,
+            BoundaryTagAdmission::new(
+                admitted_tags,
+                immediate_tags.into_iter().collect(),
+                handle_tags.into_iter().collect(),
+                owner_bands
+                    .into_iter()
+                    .map(|(owner, tags)| (owner, tags.into_iter().collect()))
+                    .collect(),
+            ),
         )
     }
 }

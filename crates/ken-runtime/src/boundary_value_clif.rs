@@ -305,7 +305,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
         native_int_resolve: native_int.resolve,
     };
 
-    define_resolve(module, graph)?;
+    define_resolve(module, graph, plan)?;
     define_class(module, graph)?;
     define_node_word(module, graph, graph.owner, NODE_OWNER)?;
     define_node_word(module, graph, graph.slot, NODE_SLOT)?;
@@ -316,12 +316,12 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     define_record_field(module, graph)?;
     define_host_success(module, graph)?;
     define_host_payload(module, graph)?;
-    define_make_immediate(module, graph)?;
-    define_escape_check(module, graph)?;
-    define_alloc(module, graph)?;
+    define_make_immediate(module, graph, plan)?;
+    define_escape_check(module, graph, plan)?;
+    define_alloc(module, graph, plan)?;
     define_store_node_word(module, graph, graph.store_tag_id, NODE_TAG_ID)?;
     define_store_node_word(module, graph, graph.store_scalar, NODE_PAYLOAD)?;
-    define_store_field(module, graph)?;
+    define_store_field(module, graph, plan)?;
     define_store_name(module, graph)?;
     define_store_int_tag(module, graph, plan)?;
     define_seal_int(module, graph, plan)?;
@@ -448,17 +448,109 @@ fn finish<M: Module>(
         .map_err(|e| backend_module(e.to_string()))
 }
 
-/// The lowest tag whose payload is a node index rather than a value.
-const FIRST_HANDLE_TAG: i64 = BoundaryTag::PersistentGround as i64;
-/// The highest tag whose node lives in the **persistent** region.
+/// Emit `tag ∈ tags`, where `tags` is a set the plan **derived** from the
+/// representation authority.
 ///
-/// ⚠ A threshold, so it depends on the closed tag set staying grouped by
-/// referent owner. `b2v_the_region_thresholds_agree_with_referent_owner` is the
-/// pin that makes a reordering redden instead of silently re-pointing every
-/// persistent word at the arena.
-const LAST_PERSISTENT_TAG: i64 = BoundaryTag::PersistentClosure as i64;
-/// The highest tag in the closed set.
-const LAST_TAG: i64 = BoundaryTag::InvocationHostResult as i64;
+/// ⛔ **A disjunction over a set, never an ordinal band.** The three
+/// thresholds this replaces — `FIRST_HANDLE_TAG`, `LAST_PERSISTENT_TAG`,
+/// `LAST_TAG` — were each a second authority computed by hand from
+/// [`BoundaryTag`]'s declaration order. Reordering the enum left all three
+/// well-formed while silently changing what the emitted code admitted, so the
+/// property they encoded ("the tags are grouped by referent owner") had to be
+/// held up by a separate pin. A set has no ordering to depend on, and it does
+/// not require the admitted tags to be contiguous in the first place.
+///
+/// An empty set is a legitimate answer from the authority — the partition
+/// admits no tag of that kind — and yields constant false rather than a panic:
+/// nothing is a member of nothing.
+fn tag_in_set(
+    b: &mut FunctionBuilder<'_>,
+    tag: cranelift_codegen::ir::Value,
+    tags: &[BoundaryTag],
+) -> cranelift_codegen::ir::Value {
+    let mut member: Option<cranelift_codegen::ir::Value> = None;
+    for candidate in tags {
+        let hit = b.ins().icmp_imm(IntCC::Equal, tag, *candidate as i64);
+        member = Some(match member {
+            None => hit,
+            Some(prev) => b.ins().bor(prev, hit),
+        });
+    }
+    match member {
+        Some(member) => member,
+        None => b.ins().iconst(types::I8, 0),
+    }
+}
+
+/// Emit the region selection for a handle tag, driven by the plan's derived
+/// owner bands. Jumps to `selected` with the region base, or returns an exact
+/// status; the builder is left in an unreachable trailing block.
+///
+/// ⛔ **A relation over owners, not a two-way threshold.** The code this
+/// replaces asked one question — *is this tag at or below the last persistent
+/// one* — which assumes there are exactly two handle owners **and** that the
+/// tag order separates them. An owner the partition started publishing would
+/// have been folded into whichever side of that threshold its tag fell on,
+/// silently, with both constants still well-formed. Here each band is asked
+/// separately and the owner is mapped through a wildcard-free `match`, so a new
+/// [`BoundaryReferentOwner`] is a compile error at this seam.
+fn select_region_by_owner_band(
+    b: &mut FunctionBuilder<'_>,
+    ptr: cranelift_codegen::ir::Type,
+    arena: cranelift_codegen::ir::Value,
+    tag: cranelift_codegen::ir::Value,
+    selected: cranelift_codegen::ir::Block,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
+) {
+    for (owner, tags) in plan.tags().owner_bands() {
+        let hit = b.create_block();
+        let miss = b.create_block();
+        let member = tag_in_set(b, tag, tags);
+        b.ins().brif(member, hit, &[], miss, &[]);
+
+        b.switch_to_block(hit);
+        match owner {
+            BoundaryReferentOwner::InvocationArena => {
+                b.ins().jump(selected, &[arena.into()]);
+            }
+            BoundaryReferentOwner::PersistentStore => {
+                // ⛔ A persistent word resolves through PERSISTENT storage or
+                // not at all. An invocation bound to no persistent region fails
+                // closed — falling back to the arena would read the persistent
+                // index against the wrong table, which is silent corruption
+                // rather than an error.
+                let region = b
+                    .ins()
+                    .load(ptr, MemFlags::trusted(), arena, ARENA_PERSISTENT);
+                let bound = b.ins().icmp_imm(IntCC::NotEqual, region, 0);
+                let have = b.create_block();
+                let unbound = b.create_block();
+                b.ins().brif(bound, have, &[], unbound, &[]);
+
+                b.switch_to_block(unbound);
+                let err = b.ins().iconst(types::I64, BOUNDARY_ERR_BOUNDS);
+                b.ins().return_(&[err]);
+
+                b.switch_to_block(have);
+                b.ins().jump(selected, &[region.into()]);
+            }
+            BoundaryReferentOwner::NoReferent => {
+                // A handle whose referent nothing owns has no region to resolve
+                // in. The partition publishes none today; if it started to,
+                // this is an exact status rather than a silent arena read.
+                let err = b.ins().iconst(types::I64, BOUNDARY_ERR_SHAPE);
+                b.ins().return_(&[err]);
+            }
+        }
+
+        b.switch_to_block(miss);
+    }
+    // No band claimed this tag. Unreachable while the bands' union is the
+    // handle set the caller already tested — and still written, because
+    // "cannot happen" is the default that stops being true first.
+    let err = b.ins().iconst(types::I64, BOUNDARY_ERR_TAG);
+    b.ins().return_(&[err]);
+}
 
 /// Byte offset of the region base inside `resolve`'s two-word output cell.
 const RESOLVED_REGION: i32 = 8;
@@ -472,7 +564,11 @@ const RESOLVED_REGION: i32 = 8;
 /// it indexes. Handing back only the address would leave every child-word
 /// projection to guess the region, and guessing "the arena" is exactly the
 /// defect this rewrite closes.
-fn define_resolve<M: Module>(module: &mut M, graph: Graph) -> Result<(), CraneliftBackendError> {
+fn define_resolve<M: Module>(
+    module: &mut M,
+    graph: Graph,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
+) -> Result<(), CraneliftBackendError> {
     let ptr = module.target_config().pointer_type();
     let mut func = begin(module, graph.resolve, 3);
     let mut fctx = FunctionBuilderContext::new();
@@ -487,9 +583,7 @@ fn define_resolve<M: Module>(module: &mut M, graph: Graph) -> Result<(), Craneli
         let tag = b.ins().band_imm(word, BOUNDARY_TAG_MASK as i64);
         // ⛔ An unknown tag is a THIRD OUTCOME THAT FAILS, never a fall-through
         // into some default projection.
-        let known = b
-            .ins()
-            .icmp_imm(IntCC::UnsignedLessThanOrEqual, tag, LAST_TAG);
+        let known = tag_in_set(&mut b, tag, plan.tags().admitted());
         let closed = b.create_block();
         let unknown = b.create_block();
         b.ins().brif(known, closed, &[], unknown, &[]);
@@ -499,9 +593,7 @@ fn define_resolve<M: Module>(module: &mut M, graph: Graph) -> Result<(), Craneli
         b.ins().return_(&[err]);
 
         b.switch_to_block(closed);
-        let is_handle = b
-            .ins()
-            .icmp_imm(IntCC::UnsignedGreaterThanOrEqual, tag, FIRST_HANDLE_TAG);
+        let is_handle = tag_in_set(&mut b, tag, plan.tags().handle());
         let handle = b.create_block();
         let immediate = b.create_block();
         b.ins().brif(is_handle, handle, &[], immediate, &[]);
@@ -516,35 +608,7 @@ fn define_resolve<M: Module>(module: &mut M, graph: Graph) -> Result<(), Craneli
         b.switch_to_block(handle);
         let selected = b.create_block();
         b.append_block_param(selected, ptr);
-        let persistent = b
-            .ins()
-            .icmp_imm(IntCC::UnsignedLessThanOrEqual, tag, LAST_PERSISTENT_TAG);
-        let store_side = b.create_block();
-        let arena_side = b.create_block();
-        b.ins().brif(persistent, store_side, &[], arena_side, &[]);
-
-        b.switch_to_block(arena_side);
-        b.ins().jump(selected, &[arena.into()]);
-
-        b.switch_to_block(store_side);
-        // ⛔ A persistent word resolves through PERSISTENT storage or not at
-        // all. An invocation bound to no persistent region fails closed —
-        // falling back to the arena would read the persistent index against the
-        // wrong table, which is silent corruption rather than an error.
-        let region = b
-            .ins()
-            .load(ptr, MemFlags::trusted(), arena, ARENA_PERSISTENT);
-        let bound = b.ins().icmp_imm(IntCC::NotEqual, region, 0);
-        let have = b.create_block();
-        let unbound = b.create_block();
-        b.ins().brif(bound, have, &[], unbound, &[]);
-
-        b.switch_to_block(unbound);
-        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_BOUNDS);
-        b.ins().return_(&[err]);
-
-        b.switch_to_block(have);
-        b.ins().jump(selected, &[region.into()]);
+        select_region_by_owner_band(&mut b, ptr, arena, tag, selected, plan);
 
         // ── bounds, within the SELECTED region ──────────────────────────────
         b.switch_to_block(selected);
@@ -1052,6 +1116,7 @@ fn host_result_guard(
 fn define_make_immediate<M: Module>(
     module: &mut M,
     graph: Graph,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
 ) -> Result<(), CraneliftBackendError> {
     let mut func = begin(module, graph.make_immediate, 3);
     let mut fctx = FunctionBuilderContext::new();
@@ -1063,9 +1128,7 @@ fn define_make_immediate<M: Module>(
         let p = b.block_params(entry).to_vec();
         let (tag, payload, out) = (p[0], p[1], p[2]);
 
-        let immediate = b
-            .ins()
-            .icmp_imm(IntCC::UnsignedLessThan, tag, FIRST_HANDLE_TAG);
+        let immediate = tag_in_set(&mut b, tag, plan.tags().immediate());
         let ok = b.create_block();
         let bad = b.create_block();
         b.ins().brif(immediate, ok, &[], bad, &[]);
@@ -1164,6 +1227,7 @@ fn define_make_immediate<M: Module>(
 fn define_escape_check<M: Module>(
     module: &mut M,
     graph: Graph,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
 ) -> Result<(), CraneliftBackendError> {
     let ptr = module.target_config().pointer_type();
     let mut func = begin(module, graph.escape_check, 2);
@@ -1179,9 +1243,7 @@ fn define_escape_check<M: Module>(
         let word = p[1];
 
         let tag = b.ins().band_imm(word, BOUNDARY_TAG_MASK as i64);
-        let known = b
-            .ins()
-            .icmp_imm(IntCC::UnsignedLessThanOrEqual, tag, LAST_TAG);
+        let known = tag_in_set(&mut b, tag, plan.tags().admitted());
         let closed = b.create_block();
         let unknown = b.create_block();
         b.ins().brif(known, closed, &[], unknown, &[]);
@@ -1191,10 +1253,16 @@ fn define_escape_check<M: Module>(
         b.ins().return_(&[err]);
 
         b.switch_to_block(closed);
-        let borrowed = b.ins().icmp_imm(
-            IntCC::UnsignedGreaterThanOrEqual,
+        // ⛔ The escaping tags are exactly the ones the partition publishes
+        // under invocation ownership. This was an inline `tag >=
+        // InvocationBorrowed` — the same hand-derived ordinal band as the named
+        // constants, and one the located inventory missed precisely because it
+        // had no constant to grep for.
+        let borrowed = tag_in_set(
+            &mut b,
             tag,
-            BoundaryTag::InvocationBorrowed as i64,
+            plan.tags()
+                .tags_owned_by(BoundaryReferentOwner::InvocationArena),
         );
         let escaping = b.create_block();
         let permitted = b.create_block();
@@ -1216,9 +1284,7 @@ fn define_escape_check<M: Module>(
         // ⭐ The store's `adopt` mints the real `SlotId`; this is the gate that
         // makes adoption non-optional rather than advisory.
         b.switch_to_block(permitted);
-        let immediate = b
-            .ins()
-            .icmp_imm(IntCC::UnsignedLessThan, tag, FIRST_HANDLE_TAG);
+        let immediate = tag_in_set(&mut b, tag, plan.tags().immediate());
         let done = b.create_block();
         let handle = b.create_block();
         b.ins().brif(immediate, done, &[], handle, &[]);
@@ -1266,8 +1332,6 @@ fn define_escape_check<M: Module>(
 // published pointer) and never touches the frozen prefix (those nodes carry the
 // store's identity). Both ceilings fail closed with an exact status.
 
-/// The lowest invocation-owned tag.
-const FIRST_INVOCATION_TAG: i64 = BoundaryTag::InvocationBorrowed as i64;
 /// The highest class in the closed [`BoundaryClass`] set.
 const LAST_CLASS: i64 = BoundaryClass::BorrowedOpaque as i64;
 /// The largest magnitude marker in `BOUNDARY_INT_MARKER_OWNER`. Derived, so a
@@ -1283,10 +1347,9 @@ fn select_region_by_tag(
     ptr: cranelift_codegen::ir::Type,
     arena: cranelift_codegen::ir::Value,
     tag: cranelift_codegen::ir::Value,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
 ) -> cranelift_codegen::ir::Value {
-    let known = b
-        .ins()
-        .icmp_imm(IntCC::UnsignedLessThanOrEqual, tag, LAST_TAG);
+    let known = tag_in_set(b, tag, plan.tags().admitted());
     let closed = b.create_block();
     let unknown = b.create_block();
     b.ins().brif(known, closed, &[], unknown, &[]);
@@ -1299,9 +1362,7 @@ fn select_region_by_tag(
     // ⛔ An immediate has no node to allocate. `make_immediate` is its
     // constructor, and conflating the two would mint a word whose payload is
     // read as a node index.
-    let is_handle = b
-        .ins()
-        .icmp_imm(IntCC::UnsignedGreaterThanOrEqual, tag, FIRST_HANDLE_TAG);
+    let is_handle = tag_in_set(b, tag, plan.tags().handle());
     let handle = b.create_block();
     let immediate = b.create_block();
     b.ins().brif(is_handle, handle, &[], immediate, &[]);
@@ -1313,34 +1374,35 @@ fn select_region_by_tag(
     b.switch_to_block(handle);
     let selected = b.create_block();
     b.append_block_param(selected, ptr);
-    let persistent = b
-        .ins()
-        .icmp_imm(IntCC::UnsignedLessThanOrEqual, tag, LAST_PERSISTENT_TAG);
-    let store_side = b.create_block();
-    let arena_side = b.create_block();
-    b.ins().brif(persistent, store_side, &[], arena_side, &[]);
-
-    b.switch_to_block(arena_side);
-    b.ins().jump(selected, &[arena.into()]);
-
-    b.switch_to_block(store_side);
-    let region = b
-        .ins()
-        .load(ptr, MemFlags::trusted(), arena, ARENA_PERSISTENT);
-    let bound = b.ins().icmp_imm(IntCC::NotEqual, region, 0);
-    let have = b.create_block();
-    let unbound = b.create_block();
-    b.ins().brif(bound, have, &[], unbound, &[]);
-
-    b.switch_to_block(unbound);
-    let err = b.ins().iconst(types::I64, BOUNDARY_ERR_BOUNDS);
-    b.ins().return_(&[err]);
-
-    b.switch_to_block(have);
-    b.ins().jump(selected, &[region.into()]);
+    select_region_by_owner_band(b, ptr, arena, tag, selected, plan);
 
     b.switch_to_block(selected);
     b.block_params(selected)[0]
+}
+
+/// The [`BoundaryReferentOwner`] discriminant a tag implies, as a branch-free
+/// fold over the plan's bands.
+///
+/// ⛔ **Every band contributes an arm.** The innermost value is
+/// [`BoundaryReferentOwner::NoReferent`] — the owner that names no storage — so
+/// a tag in no band records "nothing owns this" rather than inheriting whatever
+/// the last comparison happened to leave. `select_region_by_tag` has already
+/// refused such a tag, which is what keeps that default unreachable rather than
+/// merely unlikely.
+fn owner_of_tag(
+    b: &mut FunctionBuilder<'_>,
+    tag: cranelift_codegen::ir::Value,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
+) -> cranelift_codegen::ir::Value {
+    let mut chain = b
+        .ins()
+        .iconst(types::I64, BoundaryReferentOwner::NoReferent as i64);
+    for (owner, tags) in plan.tags().owner_bands() {
+        let member = tag_in_set(b, tag, tags);
+        let value = b.ins().iconst(types::I64, *owner as i64);
+        chain = b.ins().select(member, value, chain);
+    }
+    chain
 }
 
 fn one_i64(b: &mut FunctionBuilder<'_>) -> cranelift_codegen::ir::Value {
@@ -1382,7 +1444,11 @@ fn relation_mask(
 /// persistent.** It indexes store-owned storage, so it stays meaningful after
 /// the invocation arena is gone — which is the whole reason the region split
 /// exists.
-fn define_alloc<M: Module>(module: &mut M, graph: Graph) -> Result<(), CraneliftBackendError> {
+fn define_alloc<M: Module>(
+    module: &mut M,
+    graph: Graph,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
+) -> Result<(), CraneliftBackendError> {
     let ptr = module.target_config().pointer_type();
     let mut func = begin(module, graph.alloc, 5);
     let mut fctx = FunctionBuilderContext::new();
@@ -1409,7 +1475,7 @@ fn define_alloc<M: Module>(module: &mut M, graph: Graph) -> Result<(), Cranelift
         b.ins().return_(&[err]);
 
         b.switch_to_block(classed);
-        let region = select_region_by_tag(&mut b, ptr, arena, tag);
+        let region = select_region_by_tag(&mut b, ptr, arena, tag, plan);
         // The eleventh writer: `alloc` takes no word, so it never reaches
         // `mutable_guard` and needs the seal check on its own path.
         seal_guard(&mut b, region);
@@ -1487,16 +1553,13 @@ fn define_alloc<M: Module>(module: &mut M, graph: Graph) -> Result<(), Cranelift
         // The owner is derived from the tag, never passed in: a node whose
         // recorded owner disagreed with the tag that reaches it would make the
         // escape check answer about the wrong lifetime.
-        let persistent = b
-            .ins()
-            .icmp_imm(IntCC::UnsignedLessThanOrEqual, tag, LAST_PERSISTENT_TAG);
-        let store_owner = b
-            .ins()
-            .iconst(types::I64, BoundaryReferentOwner::PersistentStore as i64);
-        let arena_owner = b
-            .ins()
-            .iconst(types::I64, BoundaryReferentOwner::InvocationArena as i64);
-        let owner = b.ins().select(persistent, store_owner, arena_owner);
+        //
+        // ⛔ **And "derived from the tag" now means the plan's band relation**,
+        // not a threshold plus two constants. The fold is over exactly the
+        // owners the partition publishes, so an owner it started publishing
+        // gets its own arm instead of being absorbed by the `select`'s
+        // otherwise-branch.
+        let owner = owner_of_tag(&mut b, tag, plan);
 
         let zero = b.ins().iconst(types::I64, 0);
         let null_slot = b.ins().iconst(types::I64, crate::store::NULL_SLOT as i64);
@@ -1649,6 +1712,7 @@ fn define_store_node_word<M: Module>(
 fn define_store_field<M: Module>(
     module: &mut M,
     graph: Graph,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
 ) -> Result<(), CraneliftBackendError> {
     let ptr = module.target_config().pointer_type();
     let mut func = begin(module, graph.store_field, 4);
@@ -1678,9 +1742,7 @@ fn define_store_field<M: Module>(
 
         b.switch_to_block(checked);
         let child_tag = b.ins().band_imm(child, BOUNDARY_TAG_MASK as i64);
-        let known = b
-            .ins()
-            .icmp_imm(IntCC::UnsignedLessThanOrEqual, child_tag, LAST_TAG);
+        let known = tag_in_set(&mut b, child_tag, plan.tags().admitted());
         let child_ok = b.create_block();
         let bad_child = b.create_block();
         b.ins().brif(known, child_ok, &[], bad_child, &[]);
@@ -1698,10 +1760,11 @@ fn define_store_field<M: Module>(
             owner,
             BoundaryReferentOwner::PersistentStore as i64,
         );
-        let child_dies = b.ins().icmp_imm(
-            IntCC::UnsignedGreaterThanOrEqual,
+        let child_dies = tag_in_set(
+            &mut b,
             child_tag,
-            FIRST_INVOCATION_TAG,
+            plan.tags()
+                .tags_owned_by(BoundaryReferentOwner::InvocationArena),
         );
         let dangling = b.ins().band(parent_persists, child_dies);
         let escapes = b.create_block();
@@ -2324,20 +2387,25 @@ fn define_store_int_tag<M: Module>(
         let owner = b
             .ins()
             .load(types::I64, MemFlags::trusted(), node, NODE_OWNER);
-        let persists = b.ins().icmp_imm(
-            IntCC::Equal,
-            owner,
-            BoundaryReferentOwner::PersistentStore as i64,
-        );
-        let persistent_mask = b.ins().iconst(
-            types::I64,
-            boundary_int_marker_mask(BoundaryReferentOwner::PersistentStore) as i64,
-        );
-        let invocation_mask = b.ins().iconst(
-            types::I64,
-            boundary_int_marker_mask(BoundaryReferentOwner::InvocationArena) as i64,
-        );
-        let mask = b.ins().select(persists, persistent_mask, invocation_mask);
+        // ⛔ **A fold over EVERY declared owner, not a two-way select.** The
+        // code this replaces asked *"is the owner the store"* and gave every
+        // other answer the invocation mask — so a node recording
+        // `NoReferent` was handed the invocation arena's admitted markers,
+        // while the Rust twin [`boundary_int_marker_admits`] admits only the
+        // owner-agnostic ones for it. Two implementations of one relation
+        // disagreeing on an arm neither side reaches is the shape that stops
+        // being unreachable without anything reddening.
+        //
+        // Innermost value is the empty mask: an owner with no row admits no
+        // marker at all, which is the fail-closed direction.
+        let mut mask = b.ins().iconst(types::I64, 0);
+        for candidate in BoundaryReferentOwner::ALL {
+            let is = b.ins().icmp_imm(IntCC::Equal, owner, candidate as i64);
+            let admitted = b
+                .ins()
+                .iconst(types::I64, boundary_int_marker_mask(candidate) as i64);
+            mask = b.ins().select(is, admitted, mask);
+        }
         let selected = b.ins().band(mask, bit);
         let admitted = b.ins().icmp_imm(IntCC::NotEqual, selected, 0);
         let sound = b.create_block();
@@ -2571,12 +2639,9 @@ fn define_int_part<M: Module>(
 pub(crate) mod tests {
 
     /// Capture the emitted helper graph under an injected plan (RECUT 2 causal).
-    pub(crate) fn capture_with_plan(
-        plan: &crate::boundary_value::BoundaryEmissionPlan,
-    ) -> String {
+    pub(crate) fn capture_with_plan(plan: &crate::boundary_value::BoundaryEmissionPlan) -> String {
         let mut module = jit();
-        super::capture_boundary_value_local_graph_with_plan(&mut module, plan)
-            .expect("graph emits")
+        super::capture_boundary_value_local_graph_with_plan(&mut module, plan).expect("graph emits")
     }
     use super::*;
     use crate::boundary_value::{
@@ -7056,46 +7121,71 @@ pub(crate) mod tests {
         );
     }
 
-    /// **`AC-1`/`AC-6` — the region thresholds and `referent_owner` are the
+    /// **`AC-1`/`AC-6` — the plan's owner bands and `referent_owner` are the
     /// same classification.**
     ///
-    /// ⚠ MEASURED: for every tag in the closed set, the numeric bands the CLIF
-    /// compares against classify it exactly as [`BoundaryTag::referent_owner`]
-    /// does. CLAIMED: `resolve` sends every word to the region that owns its
-    /// referent. THE GAP: that `resolve` compares against *these* constants —
-    /// which it does, textually, and which the survival control closes
-    /// behaviourally. Reordering the enum silently re-points every persistent
-    /// word at the arena, and this is what makes that redden.
+    /// ⚠ MEASURED: every tag the partition publishes as a handle sits in
+    /// exactly one band, and that band's owner is the one
+    /// [`BoundaryTag::referent_owner`] gives it. CLAIMED: emitted code sends
+    /// every word to the region that owns its referent. THE GAP: that emitted
+    /// code decides from *these bands* — which it now does because the bands
+    /// are the only tag classification the emitter can see, and which
+    /// `recut2_the_emitted_helper_graph_changes_when_the_owner_bands_change`
+    /// makes causal rather than textual.
+    ///
+    /// ⛔ **Two clauses of the predecessor were RETIRED, not quietly kept.**
+    /// It asserted the owner bands were numerically *contiguous*, and it
+    /// classified tags by comparing against `FIRST_HANDLE_TAG` /
+    /// `LAST_PERSISTENT_TAG`. Both existed only because a threshold cannot
+    /// separate bands that interleave. Nothing emitted depends on tag order
+    /// any more, so keeping a still-passing contiguity assertion would pin a
+    /// property no mechanism rests on — which reads to the next author as a
+    /// constraint they must preserve.
     #[test]
-    fn b2v_the_region_thresholds_agree_with_referent_owner() {
-        for tag in BoundaryTag::ALL {
-            let bits = tag as i64;
-            let by_threshold = if bits < FIRST_HANDLE_TAG {
-                BoundaryReferentOwner::NoReferent
-            } else if bits <= LAST_PERSISTENT_TAG {
-                BoundaryReferentOwner::PersistentStore
-            } else {
-                BoundaryReferentOwner::InvocationArena
-            };
-            assert_eq!(
-                tag.referent_owner(),
-                by_threshold,
-                "the region band for {tag:?} disagrees with its referent owner"
-            );
-        }
-        assert_eq!(
-            FIRST_INVOCATION_TAG,
-            LAST_PERSISTENT_TAG + 1,
-            "the two owner bands must stay contiguous, or a threshold test \
-             cannot separate them"
+    fn b2v_the_plan_owner_bands_agree_with_referent_owner() {
+        use std::collections::BTreeSet;
+
+        let plan = crate::boundary_value::BoundaryEmissionPlan::derive();
+        let bands = plan.tags().owner_bands();
+
+        // Positive controls FIRST: agreement over an empty relation, or one
+        // that mentions a single owner, is not evidence about a classification.
+        assert!(
+            bands.len() >= 2,
+            "AC-6: the plan names {} owner band(s), so 'the band agrees with \
+             referent_owner' cannot distinguish the owners at all",
+            bands.len()
         );
-        // Positive control: the bands are non-empty, so the agreement above is
-        // not vacuous over an empty band.
-        assert!(BoundaryTag::ALL
-            .iter()
-            .any(|t| t.referent_owner() == BoundaryReferentOwner::PersistentStore));
-        assert!(BoundaryTag::ALL
-            .iter()
-            .any(|t| t.referent_owner() == BoundaryReferentOwner::InvocationArena));
+        assert!(
+            bands.iter().all(|(_, tags)| !tags.is_empty()),
+            "AC-6: an empty band makes the agreement below vacuous over it"
+        );
+
+        let mut seen: BTreeSet<BoundaryTag> = BTreeSet::new();
+        for (owner, tags) in bands {
+            for tag in tags {
+                assert_eq!(
+                    tag.referent_owner(),
+                    *owner,
+                    "AC-6: the plan bands {tag:?} under {owner:?}, but its \
+                     referent owner is {:?}",
+                    tag.referent_owner()
+                );
+                assert!(
+                    seen.insert(*tag),
+                    "AC-6: {tag:?} appears in more than one owner band, so the \
+                     emitted fold's arms overlap and the last one silently wins"
+                );
+            }
+        }
+
+        // ⛔ And the converse, which the per-band sweep above cannot see: a
+        // handle tag in NO band would resolve nowhere, and every assertion
+        // above would still pass.
+        assert_eq!(
+            seen.iter().copied().collect::<Vec<_>>(),
+            plan.tags().handle(),
+            "AC-6: the bands' union is not the admitted handle set"
+        );
     }
 }
