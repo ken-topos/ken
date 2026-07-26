@@ -342,6 +342,100 @@ impl BoundaryClass {
     }
 }
 
+/// The in-node storage a class's payload occupies.
+///
+/// ⛔ **This is an authority, not a description.** `RECUT 2` requires the
+/// emitted helper bodies to be generated *from* the representation authority
+/// rather than to restate it; the class guards in `boundary_value_clif` used to
+/// carry a literal class list beside each body, which is the hand-maintained
+/// table the recut names. Those lists are now derived from this function.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum BoundaryStorageShape {
+    /// The payload rides in the node word itself.
+    InlineWord,
+    /// The payload is a region-owned magnitude — a limb span.
+    IntMagnitude,
+    /// The payload is a region-owned byte span.
+    ByteSpan,
+    /// The payload is references to child nodes.
+    ChildNodes,
+}
+
+impl BoundaryClass {
+    /// Which storage this class's payload occupies.
+    ///
+    /// ⛔ **Wildcard-free**, so a tenth class must declare its storage rather
+    /// than inheriting one by default — the same discipline the disposition
+    /// uses one layer up.
+    pub fn storage_shape(self) -> BoundaryStorageShape {
+        match self {
+            BoundaryClass::Bool => BoundaryStorageShape::InlineWord,
+            BoundaryClass::Int => BoundaryStorageShape::IntMagnitude,
+            BoundaryClass::Bytes | BoundaryClass::String => BoundaryStorageShape::ByteSpan,
+            BoundaryClass::Constructor
+            | BoundaryClass::Record
+            | BoundaryClass::HostResult
+            | BoundaryClass::Closure => BoundaryStorageShape::ChildNodes,
+            // A borrowed opaque names storage this ABI does not own, so it has
+            // no in-node payload of its own.
+            BoundaryClass::BorrowedOpaque => BoundaryStorageShape::InlineWord,
+        }
+    }
+}
+
+/// The emission plan — the representation authority, reduced to what the
+/// emitter needs in order to *generate* the helper bodies.
+///
+/// ⛔ **Computed once at the `lowering/core` → `emit_boundary_value_local_graph`
+/// seam and passed in.** It is deliberately data-only and crate-private: the
+/// derivation lives with the `LoweredVariant`/`BoundaryInput` authority in
+/// `cranelift_backend::lowering`, which is the only place that can see it, and
+/// the emitter may **consume** the plan but cannot restate it.
+///
+/// ⚠ **It carries no seed value and no sampled runtime value** — only the
+/// finite class sets the partition admits. A representation chosen by
+/// inspecting a value describes a program that cannot be written (`D1`/`AC-2`).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct BoundaryEmissionPlan {
+    admitted_classes: Vec<BoundaryClass>,
+    int_magnitude_classes: Vec<BoundaryClass>,
+    byte_span_classes: Vec<BoundaryClass>,
+}
+
+impl BoundaryEmissionPlan {
+    /// Build a plan from already-derived class sets.
+    ///
+    /// ⛔ Crate-private and unexported: the only caller is the derivation in
+    /// `cranelift_backend::lowering`, so a second hand-written plan cannot
+    /// appear beside the helper bodies.
+    pub(crate) fn new(
+        admitted_classes: Vec<BoundaryClass>,
+        int_magnitude_classes: Vec<BoundaryClass>,
+        byte_span_classes: Vec<BoundaryClass>,
+    ) -> Self {
+        BoundaryEmissionPlan {
+            admitted_classes,
+            int_magnitude_classes,
+            byte_span_classes,
+        }
+    }
+
+    /// Every class the partition admits as a published handle.
+    pub(crate) fn admitted_classes(&self) -> &[BoundaryClass] {
+        &self.admitted_classes
+    }
+
+    /// The classes a limb-storage helper may touch.
+    pub(crate) fn int_magnitude_classes(&self) -> &[BoundaryClass] {
+        &self.int_magnitude_classes
+    }
+
+    /// The classes a byte-span helper may touch.
+    pub(crate) fn byte_span_classes(&self) -> &[BoundaryClass] {
+        &self.byte_span_classes
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The tag × class relation
 // ---------------------------------------------------------------------------

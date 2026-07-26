@@ -7302,3 +7302,44 @@ thread_local! {
 thread_local! {
     static PX8DS_RETIRED_FLAT_ORDER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
+
+impl crate::boundary_value::BoundaryEmissionPlan {
+    /// Derive the emission plan from the representation authority.
+    ///
+    /// ⛔ **Nothing here is written down.** The admitted class set is collected
+    /// by sweeping [`BoundaryInput::all`] through the wildcard-free classifier
+    /// and keeping the classes that reach a published `HandleWord`; the
+    /// per-storage sets are that set filtered by
+    /// [`BoundaryClass::storage_shape`]. So a class the disposition stops
+    /// admitting, or a class whose storage changes, changes what the emitter
+    /// generates — which is the causal edge `RECUT 2` requires.
+    ///
+    /// ⚠ This lives in `lowering` rather than beside the struct because
+    /// [`BoundaryInput`] is `pub(in crate::cranelift_backend)`: the authority is
+    /// only visible here, which is precisely why the emitter cannot restate it.
+    pub(crate) fn derive() -> Self {
+        use crate::boundary_value::{BoundaryClass, BoundaryStorageShape};
+        use std::collections::BTreeSet;
+
+        let mut admitted: BTreeSet<BoundaryClass> = BTreeSet::new();
+        for cell in BoundaryInput::all() {
+            if let BoundaryOutcome::HandleWord { class, .. } = cell.outcome() {
+                admitted.insert(class);
+            }
+        }
+        let of_shape = |shape: BoundaryStorageShape| -> Vec<BoundaryClass> {
+            admitted
+                .iter()
+                .copied()
+                .filter(|class| class.storage_shape() == shape)
+                .collect()
+        };
+        let int_magnitude = of_shape(BoundaryStorageShape::IntMagnitude);
+        let byte_span = of_shape(BoundaryStorageShape::ByteSpan);
+        crate::boundary_value::BoundaryEmissionPlan::new(
+            admitted.into_iter().collect(),
+            int_magnitude,
+            byte_span,
+        )
+    }
+}

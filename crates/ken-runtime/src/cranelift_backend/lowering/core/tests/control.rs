@@ -5202,3 +5202,120 @@ fn recut2_only_the_store_minted_handle_requires_the_whole_lifecycle() {
         );
     }
 }
+
+
+/// **`RECUT 2`, causal.** The emitter CONSUMES the representation authority.
+///
+/// ⛔ **The ruling's bar, literally:** *"mutate or bypass the authority and the
+/// captured/emitted helper graph must change or reject; an emitter that ignores
+/// the plan must redden."* A test that only checks the plan is *passed* would be
+/// the `let _ = plan` the ruling excludes, so this feeds a **perturbed plan**
+/// and requires the emitted CLIF to differ.
+///
+/// ⚠ MEASURED: the emitted helper graph under the derived plan differs from the
+/// graph under a plan whose class sets differ. CLAIMED: the helper bodies are
+/// generated from the authority. THE GAP: that the derived plan is the
+/// authority's real answer — closed by
+/// `recut2_the_plan_is_derived_from_the_partition_not_restated` below.
+#[test]
+fn recut2_the_emitted_helper_graph_changes_when_the_authority_changes() {
+    use crate::boundary_value::{BoundaryClass, BoundaryEmissionPlan};
+
+    let derived = BoundaryEmissionPlan::derive();
+    let real = crate::boundary_value_clif::tests::capture_with_plan(&derived);
+
+    // Positive control FIRST: the capture must be non-empty, or every
+    // comparison below is between two empty strings and means nothing.
+    assert!(
+        real.contains("function"),
+        "RECUT 2: the capture is empty, so the difference below is not evidence"
+    );
+
+    // ⛔ Perturb ONLY the axis the plan names: the class set a limb helper may
+    // touch. Nothing else about the emitter or the module changes.
+    let perturbed = BoundaryEmissionPlan::new(
+        derived.admitted_classes().to_vec(),
+        vec![BoundaryClass::Record],
+        derived.byte_span_classes().to_vec(),
+    );
+    let other = crate::boundary_value_clif::tests::capture_with_plan(&perturbed);
+    assert_ne!(
+        real, other,
+        "RECUT 2: the emitted helper graph is IDENTICAL under a plan whose \
+         int-magnitude class set is different — the emitter is not consuming \
+         the authority, it is only receiving it"
+    );
+
+    // ⛔ And the difference must be the CLASS COMPARISON, not incidental. The
+    // real graph compares against `Int`; the perturbed one against `Record`.
+    assert!(
+        real.contains(&format!("{}", BoundaryClass::Int as i64))
+            && other.contains(&format!("{}", BoundaryClass::Record as i64)),
+        "RECUT 2: the graphs differ, but not in the class constant the plan \
+         supplies — the difference is not attributable to the authority"
+    );
+
+    // ⚠ Two-sided: the SAME plan must produce the SAME graph, or `assert_ne!`
+    // above would pass for any two captures and prove nothing about the plan.
+    let again = crate::boundary_value_clif::tests::capture_with_plan(&derived);
+    assert_eq!(
+        real, again,
+        "RECUT 2: two captures under the same plan differ, so emission is not \
+         a function of the plan and the inequality above is noise"
+    );
+}
+
+/// **`RECUT 2`.** The plan is derived from the partition, not restated beside it.
+///
+/// ⛔ This is the half that keeps the causal test above honest: it would still
+/// pass if `derive()` returned a hand-written set. Here the expected sets are
+/// recomputed from the authority *in the test*, by the same two total
+/// projections — the classifier and `storage_shape` — so a `derive()` that
+/// stopped consulting either reddens.
+#[test]
+fn recut2_the_plan_is_derived_from_the_partition_not_restated() {
+    use crate::boundary_value::{BoundaryClass, BoundaryEmissionPlan, BoundaryStorageShape};
+    use std::collections::BTreeSet;
+
+    let mut admitted: BTreeSet<BoundaryClass> = BTreeSet::new();
+    for cell in BoundaryInput::all() {
+        if let BoundaryOutcome::HandleWord { class, .. } = cell.outcome() {
+            admitted.insert(class);
+        }
+    }
+    assert!(
+        !admitted.is_empty(),
+        "RECUT 2: the partition admits no handle class at all, so the plan is \
+         vacuous and every set below is trivially equal"
+    );
+
+    let plan = BoundaryEmissionPlan::derive();
+    assert_eq!(
+        plan.admitted_classes(),
+        admitted.iter().copied().collect::<Vec<_>>(),
+        "RECUT 2: the plan's admitted set is not the partition's"
+    );
+    for (shape, got) in [
+        (
+            BoundaryStorageShape::IntMagnitude,
+            plan.int_magnitude_classes(),
+        ),
+        (BoundaryStorageShape::ByteSpan, plan.byte_span_classes()),
+    ] {
+        let want: Vec<BoundaryClass> = admitted
+            .iter()
+            .copied()
+            .filter(|class| class.storage_shape() == shape)
+            .collect();
+        assert_eq!(
+            got, want,
+            "RECUT 2: the plan's {shape:?} set is not the admitted classes of \
+             that storage shape"
+        );
+        assert!(
+            !want.is_empty(),
+            "RECUT 2: no admitted class has storage shape {shape:?}, so the \
+             guard built from it would name nothing"
+        );
+    }
+}

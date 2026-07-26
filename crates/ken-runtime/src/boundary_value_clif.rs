@@ -243,6 +243,7 @@ struct Graph {
 pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     module: &mut M,
     native_int: &crate::native_int_clif::NativeIntLocalFuncs,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
 ) -> Result<BoundaryLocalFuncs, CraneliftBackendError> {
     let resolve = declare(module, "ken_boundary_resolve_local", 3)?;
     let class = declare(module, "ken_boundary_class_local", 3)?;
@@ -322,16 +323,16 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     define_store_node_word(module, graph, graph.store_scalar, NODE_PAYLOAD)?;
     define_store_field(module, graph)?;
     define_store_name(module, graph)?;
-    define_store_int_tag(module, graph)?;
-    define_seal_int(module, graph)?;
-    define_store_int_limbs(module, graph)?;
-    define_store_int_limb(module, graph)?;
-    define_store_bytes_len(module, graph)?;
-    define_byte_access(module, graph, graph.store_byte, true)?;
-    define_byte_access(module, graph, graph.byte, false)?;
-    define_int_part(module, graph, graph.int_sign, IntPart::Sign)?;
-    define_int_part(module, graph, graph.int_len, IntPart::Len)?;
-    define_int_part(module, graph, graph.int_limb, IntPart::Limb)?;
+    define_store_int_tag(module, graph, plan)?;
+    define_seal_int(module, graph, plan)?;
+    define_store_int_limbs(module, graph, plan)?;
+    define_store_int_limb(module, graph, plan)?;
+    define_store_bytes_len(module, graph, plan)?;
+    define_byte_access(module, graph, graph.store_byte, true, plan)?;
+    define_byte_access(module, graph, graph.byte, false, plan)?;
+    define_int_part(module, graph, graph.int_sign, IntPart::Sign, plan)?;
+    define_int_part(module, graph, graph.int_len, IntPart::Len, plan)?;
+    define_int_part(module, graph, graph.int_limb, IntPart::Limb, plan)?;
 
     Ok(BoundaryLocalFuncs {
         class,
@@ -370,9 +371,25 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
 pub(crate) fn capture_boundary_value_local_graph<M: Module>(
     module: &mut M,
 ) -> Result<String, CraneliftBackendError> {
+    let plan = crate::boundary_value::BoundaryEmissionPlan::derive();
+    capture_boundary_value_local_graph_with_plan(module, &plan)
+}
+
+/// Capture the emitted graph under an **injected** plan.
+///
+/// ⛔ **This exists so the authority-to-emitter edge can be shown CAUSALLY.**
+/// `RECUT 2` is not discharged by an emitter that receives a plan and ignores
+/// it, so the control feeds a perturbed plan and requires the emitted CLIF to
+/// differ. Without an injection point the only available evidence would be
+/// "the plan is passed", which is the `let _ = plan` the ruling excludes.
+#[cfg(test)]
+pub(crate) fn capture_boundary_value_local_graph_with_plan<M: Module>(
+    module: &mut M,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
+) -> Result<String, CraneliftBackendError> {
     let native = crate::native_int_clif::emit_native_int_local_graph(module, false)?;
     BOUNDARY_CLIF_CAPTURE.with(|capture| *capture.borrow_mut() = Some(Vec::new()));
-    emit_boundary_value_local_graph(module, &native)?;
+    emit_boundary_value_local_graph(module, &native, plan)?;
     Ok(BOUNDARY_CLIF_CAPTURE.with(|capture| {
         capture
             .borrow_mut()
@@ -1888,6 +1905,7 @@ fn region_limb_base(
 fn define_store_int_limbs<M: Module>(
     module: &mut M,
     graph: Graph,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
 ) -> Result<(), CraneliftBackendError> {
     let ptr = module.target_config().pointer_type();
     let mut func = begin(module, graph.store_int_limbs, 5);
@@ -1902,7 +1920,7 @@ fn define_store_int_limbs<M: Module>(
         let (arena, word, sign, len, out) = (p[0], p[1], p[2], p[3], p[4]);
         let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
         mutable_guard(&mut b, word, region);
-        class_guard(&mut b, node, &[BoundaryClass::Int]);
+        class_guard(&mut b, node, plan.int_magnitude_classes());
         region_limbs_guard(&mut b, node);
 
         // ⛔ The sign is a BIT, not a number. `decode_final_export` reads `0` or
@@ -1992,7 +2010,11 @@ fn define_store_int_limbs<M: Module>(
 /// at least one limb (already held), no leading zero limb, and zero is
 /// non-negative. ⚠ A one-limb `[0]` **is** canonical — it is the value zero, and
 /// rejecting it would be an over-strengthening the contract does not entail.
-fn define_seal_int<M: Module>(module: &mut M, graph: Graph) -> Result<(), CraneliftBackendError> {
+fn define_seal_int<M: Module>(
+    module: &mut M,
+    graph: Graph,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
+) -> Result<(), CraneliftBackendError> {
     let ptr = module.target_config().pointer_type();
     let mut func = begin(module, graph.seal_int, 2);
     let resolve = module.declare_func_in_func(graph.resolve, &mut func);
@@ -2006,7 +2028,7 @@ fn define_seal_int<M: Module>(module: &mut M, graph: Graph) -> Result<(), Cranel
         let (arena, word) = (p[0], p[1]);
         let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
         mutable_guard(&mut b, word, region);
-        class_guard(&mut b, node, &[BoundaryClass::Int]);
+        class_guard(&mut b, node, plan.int_magnitude_classes());
         region_limbs_guard(&mut b, node);
 
         let sign = b
@@ -2072,6 +2094,7 @@ fn define_seal_int<M: Module>(module: &mut M, graph: Graph) -> Result<(), Cranel
 fn define_store_int_limb<M: Module>(
     module: &mut M,
     graph: Graph,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
 ) -> Result<(), CraneliftBackendError> {
     let ptr = module.target_config().pointer_type();
     let mut func = begin(module, graph.store_int_limb, 4);
@@ -2086,7 +2109,7 @@ fn define_store_int_limb<M: Module>(
         let (arena, word, index, limb) = (p[0], p[1], p[2], p[3]);
         let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
         mutable_guard(&mut b, word, region);
-        class_guard(&mut b, node, &[BoundaryClass::Int]);
+        class_guard(&mut b, node, plan.int_magnitude_classes());
         region_limbs_guard(&mut b, node);
 
         let len = b
@@ -2122,6 +2145,7 @@ fn define_store_int_limb<M: Module>(
 fn define_store_bytes_len<M: Module>(
     module: &mut M,
     graph: Graph,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
 ) -> Result<(), CraneliftBackendError> {
     let ptr = module.target_config().pointer_type();
     let mut func = begin(module, graph.store_bytes_len, 4);
@@ -2136,7 +2160,7 @@ fn define_store_bytes_len<M: Module>(
         let (arena, word, len, out) = (p[0], p[1], p[2], p[3]);
         let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
         mutable_guard(&mut b, word, region);
-        class_guard(&mut b, node, &[BoundaryClass::Bytes, BoundaryClass::String]);
+        class_guard(&mut b, node, plan.byte_span_classes());
 
         let live = b
             .ins()
@@ -2188,6 +2212,7 @@ fn define_byte_access<M: Module>(
     graph: Graph,
     id: FuncId,
     write: bool,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
 ) -> Result<(), CraneliftBackendError> {
     let ptr = module.target_config().pointer_type();
     let mut func = begin(module, id, 4);
@@ -2204,7 +2229,7 @@ fn define_byte_access<M: Module>(
         if write {
             mutable_guard(&mut b, word, region);
         }
-        class_guard(&mut b, node, &[BoundaryClass::Bytes, BoundaryClass::String]);
+        class_guard(&mut b, node, plan.byte_span_classes());
 
         let len = b
             .ins()
@@ -2251,6 +2276,7 @@ fn define_byte_access<M: Module>(
 fn define_store_int_tag<M: Module>(
     module: &mut M,
     graph: Graph,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
 ) -> Result<(), CraneliftBackendError> {
     let ptr = module.target_config().pointer_type();
     let mut func = begin(module, graph.store_int_tag, 3);
@@ -2265,7 +2291,7 @@ fn define_store_int_tag<M: Module>(
         let (arena, word, marker) = (p[0], p[1], p[2]);
         let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
         mutable_guard(&mut b, word, region);
-        class_guard(&mut b, node, &[BoundaryClass::Int]);
+        class_guard(&mut b, node, plan.int_magnitude_classes());
 
         // ⛔ **The marker is REGION-BOUND, and that is the whole check.** A
         // `Small` carries its magnitude in the node itself and is sound
@@ -2355,6 +2381,7 @@ fn define_int_part<M: Module>(
     graph: Graph,
     id: FuncId,
     part: IntPart,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
 ) -> Result<(), CraneliftBackendError> {
     use crate::native_int_clif::{VIEW_LEN, VIEW_LIMBS, VIEW_SIGN};
 
@@ -2378,7 +2405,7 @@ fn define_int_part<M: Module>(
             (None, p[2])
         };
         let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
-        class_guard(&mut b, node, &[BoundaryClass::Int]);
+        class_guard(&mut b, node, plan.int_magnitude_classes());
 
         let marker = b
             .ins()
@@ -2541,7 +2568,16 @@ fn define_int_part<M: Module>(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
+
+    /// Capture the emitted helper graph under an injected plan (RECUT 2 causal).
+    pub(crate) fn capture_with_plan(
+        plan: &crate::boundary_value::BoundaryEmissionPlan,
+    ) -> String {
+        let mut module = jit();
+        super::capture_boundary_value_local_graph_with_plan(&mut module, plan)
+            .expect("graph emits")
+    }
     use super::*;
     use crate::boundary_value::{
         boundary_code_id, boundary_immediate_admits, boundary_immediate_domain,
@@ -2600,7 +2636,12 @@ mod tests {
         let mut module = jit();
         let native = crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
             .expect("native-int graph emits");
-        let helpers = emit_boundary_value_local_graph(&mut module, &native).expect("graph emits");
+        let helpers = emit_boundary_value_local_graph(
+            &mut module,
+            &native,
+            &crate::boundary_value::BoundaryEmissionPlan::derive(),
+        )
+        .expect("graph emits");
         let ptr = module.target_config().pointer_type();
 
         let arity = match probe {
@@ -3455,7 +3496,12 @@ mod tests {
         let mut module = jit();
         let native = crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
             .expect("native-int graph emits");
-        let helpers = emit_boundary_value_local_graph(&mut module, &native).expect("graph emits");
+        let helpers = emit_boundary_value_local_graph(
+            &mut module,
+            &native,
+            &crate::boundary_value::BoundaryEmissionPlan::derive(),
+        )
+        .expect("graph emits");
         let ptr = module.target_config().pointer_type();
 
         let mut sig = module.make_signature();
