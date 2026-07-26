@@ -26,6 +26,7 @@
 | input | object | what it settles |
 |---|---|---|
 | cycle contract | `evt_5pzxf6sm4z08` | host recursion may **not** be the totality mechanism; a deep **acyclic** chain adopts **without host-stack growth** and is **not** reclassified as malformed |
+| cycle **carrier** | `evt_45x5dn9jcrhhq` | the cycle clause does **not** bind on `values::Value` — a back-edge there is **unconstructible**, not malformed. It binds on B2V's `BoundaryPersistentImage`. **And no semantic `MAX_DEPTH` is permitted.** See §5 |
 | closure boundary | `dec_3b1r19v59v20y`, landed `SPEC-CLOSURE-BOUNDARY` | ordinary closures are runtime-local and opaque — **Phase 2's** subject, not yours |
 | carrier split | `dec_1dckq8c0f9xjv` (node §3) | the canonical/operational split and its five pins — **Phase 2's** subject |
 
@@ -88,8 +89,10 @@ grep -nE "Rc<|Arc<|RefCell|Cell<|Box<|\*const|\*mut|SlotId|unsafe" values.rs
 ```
 
 Every compound child is owned by value (`Vec<Value>`,
-`BTreeMap<Vec<u8>, Value>`). ⚠ **What follows from this is HELD on the Architect
-— see §5. Do not act on your own reading of it.**
+`BTreeMap<Vec<u8>, Value>`). ✅ **The Architect has ruled on what follows from
+this — see §5.** A back-edge is **unconstructible** here, not a malformed
+inhabitant, so there is no cycle guard to build. What you owe instead is a
+**structural pin that the property cannot silently lapse** (`D2` / `AC-V2`).
 
 ### 2d. The test target you need does not exist yet, and the API reaches it
 
@@ -133,10 +136,38 @@ they are **known** to disagree with the derived `Eq`/`Ord`/`Hash` (node §3c), a
 that disagreement is **Phase 2's** to resolve. ⛔ Do not "fix" it here and do not
 change the derive list.
 
-### D2 — the cycle face — ⛔ HELD, see §5
+### D2 — pin the REASON structurally. ⛔ Build no cycle guard.
 
-Not releasable until the Architect rules. ⚠ **It does not block D1 or D3** —
-start there.
+Per `evt_45x5dn9jcrhhq`, *"pin the reason structurally, not with an inert cycle
+guard."* Three clauses, all ruled, all to be pinned:
+
+1. the canonical carrier **remains an owned finite tree**;
+2. its recursive child positions **must not acquire** reference / handle / arena /
+   slot / index indirection, or interior mutation;
+3. interning **remains whole-value canonical bytes to one slot**, never a
+   child-slot graph.
+
+⛔ **Do NOT pin this as a deny-list grep for `Rc<` / `Arc<` / `RefCell`.** That
+enumerates **spellings**, and a spelling list is not a proof of the property — a
+`type Handle = Rc<Value>` or any local wrapper walks straight past it.
+
+⇒ **Pin it as a closed ALLOW-list enforced by the compiler**, which is the
+strongest mechanism available and costs no test infrastructure:
+
+- a **private sealed marker trait** implemented **only** for the permitted owning
+  child shapes (`Vec<Value>`, `BTreeMap<Vec<u8>, Value>`);
+- an **exhaustive `match` over every `Value` variant** that hands each child
+  collection to a generic function bounded by that trait.
+
+⭐ **Why that shape and not another:** exhaustiveness makes a **new variant**
+fail to compile until it declares its child position, and the trait bound makes an
+**indirection-bearing** child position fail to compile because no impl exists.
+Together they close the category instead of enumerating its members. This is the
+same discipline as the kernel's new-`Term`-variant walker rule: the coverage is
+**designed in**, not discovered by review.
+
+⚠ **Clause 3 is not covered by the trait pin** — it is a property of
+`store.rs::intern`, not of the type. Pin it separately.
 
 ### D3 — `Clone` and DROP are total at the same depth
 
@@ -238,11 +269,38 @@ and `Value::Closure` captures (still present in Phase 1).
   step 3 is what covers depth. Say so where the corpus is defined, so a reader
   does not read this AC as covering `D`.
 
-### `AC-V2` — the cycle face. ⛔ HELD, see §5
+### `AC-V2` — the unrepresentability of cycles cannot silently LAPSE
 
-⛔ **Do not invent a control for this before the ruling lands.** With the
-population question open, the only available control is detector-side, which is
-exactly the substitution named at the head of §4.
+⛔ **There is no cycle-input arm in this AC, and adding one is a defect.** Per
+`evt_45x5dn9jcrhhq` an AC requiring a cycle **witness** on this carrier is
+**unsatisfiable**, and its only available control would be **detector-side** —
+the substitution named at the head of §4. ⭐ *"No such test"* is the honest cell
+here, and it is stated rather than left as a silent absence.
+
+Deliver `D2`'s three clauses with these controls:
+
+**`AC-V2a` — compile-fail control on the child-position pin.** Temporarily change
+one recursive child position to an indirection-bearing type (`Rc<Value>` is the
+cheapest) and show the crate **fails to compile**. Record the **exact compiler
+error**, then restore **byte-identically** and show `git diff --quiet` clean.
+⛔ **This is the load-bearing control of the whole AC** — without it the sealed
+trait may be present and bound to nothing.
+
+**`AC-V2b` — exhaustiveness control.** Add a throwaway `Value` variant with a
+`Vec<Value>` child and show the pin's `match` **fails to compile** until the arm
+exists. Restore byte-identically. ⚠ Without this arm, `AC-V2a` passes on a pin
+that a *future* variant silently bypasses — the two controls fail through
+different mechanisms and neither substitutes for the other.
+
+**`AC-V2c` — clause 3, on `intern`.** Pin that `store.rs::intern` produces **one**
+slot per whole value, with no child slot minted. ⭐ The available control is
+population-side and cheap: intern a nested compound and assert the slot count
+increases by **exactly one**, not by one-per-subvalue. ⛔ Do not pin this by
+reading the source for the absence of a recursive call.
+
+⚠ **Say plainly in the handoff that no cycle-refusal test exists on this carrier
+and why.** An unexplained absence and a ruled absence read identically to a
+reviewer, and only one of them is correct.
 
 ### `AC-V3` — `Clone` and DROP are total at `AC-V1`'s `D`
 
@@ -277,29 +335,67 @@ identically to a reviewer.
 
 ### `AC-V5` — per-pin evasion attempt, ENUMERATED
 
-For **each** of `AC-V1` step 3, `AC-V1b`, `AC-V3b`, `AC-V3c`, `AC-V3d`: attempt a
-**compile-preserving** evasion that satisfies the assertion while violating the
-property, and record the result **per AC, in a table, one row each**.
+For **each** of `AC-V1` step 3, `AC-V1b`, `AC-V2c`, `AC-V3b`, `AC-V3c`, `AC-V3d`:
+attempt a **compile-preserving** evasion that satisfies the assertion while
+violating the property, and record the result **per AC, in a table, one row
+each**.
 
-⛔ **Not "each pin" as a quantifier you resolve** — five named rows. A per-pin
+⛔ **Not "each pin" as a quantifier you resolve** — **six** named rows. A per-pin
 reminder without enumeration gets satisfied by the most salient control and
 silently skips the rest; that is measured, on `RT-FNSPLIT-B2O`.
 
-## 5. ⛔ THE ONE HELD FACE — routed, not open for you to settle
+⚠ `AC-V2a` and `AC-V2b` are **themselves** mutation controls and do not get a
+second one. Say that in the table rather than omitting them — an omitted row and a
+skipped attempt look the same.
 
-`evt_cp65d0f7rwwe` asks the Architect **one** question: does the cycle clause bind
-on `ken-runtime::values::Value`, where §2c measures that no sharing, interior
-mutability, indirection, or slot handle exists in the type — or only on a carrier
-that can hold a cycle?
+## 5. ✅ RESOLVED — the cycle clause does not bind here. `evt_45x5dn9jcrhhq`
 
-⛔ **Do not answer it, do not build either branch, and do not treat §2c's
-measurement as its answer.** The measurement is mine and it is sound; the
-**inference** from it is the Architect's, and I have explicitly asked it to
-discount mine. The frame will be amended with the ruling **before** this WP is
-released, and an amendment that is not on a fetchable ref has not happened.
+Asked at `evt_cp65d0f7rwwe`, ruled by the Architect against `7415dbd8`.
 
-Second-order, ruled in the same turn: whether `AC-V1` needs **any** depth limit.
-⛔ Until that lands, **build no `MAX_DEPTH`.**
+> **The cycle clause does not bind on `values::Value`; it binds on the carrier
+> that can actually express the forbidden graph.**
+
+**Grounding, as ruled:** `Value`'s recursive positions are `Vec<Value>` and
+`BTreeMap<Vec<u8>, Value>`, with no identity-bearing indirection, interior
+mutation, slot/index edge, or shared ownership; `Store::intern` canonicalizes the
+whole tree to one flat byte image and interns **that image as one slot**. ⇒ A
+back-edge is **not a malformed inhabitant of this carrier — it is
+unconstructible.** Tri-colour state here would be *"a vacuous defence for an input
+the type cannot carry."*
+
+### ⛔ WHERE THE OBLIGATION WENT — it was retargeted, not dropped
+
+**To B2V's sealed, emitted `BoundaryPersistentImage(BoundaryRegion)` at
+`BoundaryValueStore::adopt`.** That node-indexed region graph **is** mutable
+before sealing, its child words **can** name other persistent-region nodes, and
+**the parked evidence demonstrates that emitted code can construct a cycle
+there.** The grey/black distinction, the image-local node-index key, deterministic
+refusal **before publication**, and the shared-DAG positive control all belong at
+**that** adoption boundary.
+
+⚠ They bind on **neither** current `Value` **nor** current recursively-owned
+`RuntimeValue`. ⛔ Do not import that machinery into this WP, and do not read this
+section as the cycle contract being satisfied — it is **owed elsewhere**, and the
+Steward has recorded it on the B2V node.
+
+⚠ **And it travels with the representation:** if `Value` later changes so cycles
+become expressible, the cycle contract **moves with the new carrier** and must be
+discharged **before it publishes values.** That is the standing reason `AC-V2`
+pins the property structurally instead of assuming today's shape is permanent.
+
+### ✅ SECOND-ORDER RULING — no semantic `MAX_DEPTH`, and Clone/Drop still owed
+
+> **Yes** — for every constructible finite `Value`, deep acyclic
+> canonicalization/interning must be **iterative** and must **not** impose a
+> semantic `MAX_DEPTH`. Finite memory / allocation failure remains an **ordinary
+> resource boundary**; ⛔ **depth itself is not a validity predicate.**
+
+⛔ **Build no `MAX_DEPTH`, no depth counter, and no depth-derived rejection.**
+
+⚠ **This does NOT discharge deep `Clone`/`Drop`** — ruled explicitly: they remain
+**separately required** to avoid host-stack recursion *even though cycles are
+impossible*. `AC-V1` and `AC-V3` both remain live and neither is weakened by this
+ruling.
 
 ## 6. Validation — ⛔ TARGETED ONLY
 
@@ -328,6 +424,7 @@ GitHub**. "No regression" here means **green in CI**.
 | `ken-foundation`'s twin closure-inclusive validation model | **Phase 2** (node `AC-V10`) |
 | the operational → canonical checked projection | **Phase 2** (node `AC-V9`), which is **why this phase exists first** |
 | `ir::RuntimeValue` deriving `PartialEq`/`Eq` across `ClosureRef` | **Phase 2** — pin 2 failing on the operational carrier right now |
+| the **cycle contract itself** | ⛔ **retargeted, not discharged** — it is owed on B2V's `BoundaryPersistentImage(BoundaryRegion)` at `BoundaryValueStore::adopt` (`evt_45x5dn9jcrhhq`), where a cycle **is** constructible and the parked evidence shows emitted code building one |
 | `RECUT 2`'s phase-closure artifact re-derivation | ⛔ **unrelieved** by this node or this phase — still a hard gate on B2V |
 
 ## 8. Standing

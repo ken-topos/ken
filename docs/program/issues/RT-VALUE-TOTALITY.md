@@ -1,7 +1,7 @@
 ---
 id: RT-VALUE-TOTALITY
 title: "Make every total traversal of Value non-recursive in the host stack, and remove the closure capabilities the landed closure boundary forbids"
-status: draft
+status: ready
 owner: runtime
 size: L
 gate: none
@@ -18,24 +18,48 @@ origin: Architect cycle-contract ruling evt_5pzxf6sm4z08 ("host recursion may no
 > traversals that every consumer reaches, so a B2V-local fix leaves every other
 > caller overflowing. That is why this is its own node.
 
-> ## ⛔ THE FRAME IS NOT WRITTEN YET. The design fork IS resolved.
+> ## ✅ PHASE 1 IS FRAMED AND READY. ⛔ PHASE 2 IS NOT — its frame does not exist.
 >
-> `status: draft`, and that is the honest spelling: the blocking design fork was
-> **ruled by the Architect on 2026-07-26** (§3, `evt_4qref8hksbdyw` /
-> `dec_1dckq8c0f9xjv`), but **no shovel-ready frame exists**, so this is not
-> releasable to a ring. The Steward owns the frame from the ruling. ⛔ Do not
-> release on the strength of the ruling alone — §3c corrects a premise that a
-> reader working from §2 plus the ruling headline would still get wrong.
+> The work is **split into two phases**, and only the first is releasable:
+>
+> | phase | frame | covers |
+> |---|---|---|
+> | **P1 — totality** | ✅ `docs/program/wp/RT-VALUE-TOTALITY-P1-iterative-canonical-traversal.md` | `AC-V1` iterative encoder · `AC-V2` structural pin · `AC-V3` clone+drop |
+> | **P2 — representation** | ⛔ **NOT WRITTEN** | `AC-V4`–`AC-V6`, `AC-V8`–`AC-V10`: carrier split, derives, closure arm, `ken-foundation` twin, checked projection |
+>
+> **P1 is first because P2's checked projection must SHARE P1's mechanism**
+> (§3b pin 3 — *"no recursive adapter"*). If P2 ran first it would grow its own
+> recursive traversal, which is the same defect one layer out. **P1 is also the
+> only part on `RT-FNSPLIT-B2V`'s critical path.**
+>
+> ⛔ **Do not release P2 on the strength of the §3 ruling alone** — §3c corrects a
+> premise a reader working from §2 plus the ruling headline would still get wrong,
+> and the Steward owns that frame.
 
 ## 1. What was ruled
 
 Two rulings converge on the same shared type:
 
-- **Cycle contract** (`evt_5pzxf6sm4z08`): cycles are malformed and fail closed,
-  via **iterative tri-colour / worklist** traversal with postorder
-  canonicalization. ⛔ **Host recursion may not be the totality mechanism.** A
-  deep **acyclic** chain must adopt **without host-stack growth**, and must
-  **not** be reclassified as malformed to avoid the problem.
+- **Cycle contract** (`evt_5pzxf6sm4z08`): ⛔ **Host recursion may not be the
+  totality mechanism.** A deep **acyclic** chain must adopt **without host-stack
+  growth**, and must **not** be reclassified as malformed to avoid the problem.
+  **That half binds here and is this node's whole job.**
+
+  ⛔ **The cycle half does NOT bind on this carrier — corrected
+  `evt_45x5dn9jcrhhq`, 2026-07-26.** This bullet used to read *"cycles are
+  malformed and fail closed, via iterative tri-colour / worklist traversal with
+  postorder canonicalization."* ⚠ **Every clause of that is wrong for `Value`,**
+  and it is edited rather than annotated because it is the text a reader reaches
+  first:
+  - a cycle in `Value` is **unconstructible**, not malformed — so there is nothing
+    to fail closed on, and the obligation is **retargeted to B2V's
+    `BoundaryPersistentImage`** (see `AC-V2`, and `RT-FNSPLIT-B2V`);
+  - **no tri-colour marking** — it would be a vacuous defence for an input the
+    type cannot carry;
+  - **no postorder** — measured, `encode_canonical` is a **streaming pre-order
+    append** whose parent bytes never depend on child bytes. (`Clone` *is*
+    postorder; they are different traversals.)
+  - ⛔ **and no semantic `MAX_DEPTH`** — depth is not a validity predicate.
 - **Closure boundary** (`dec_3b1r19v59v20y`, landed as `SPEC-CLOSURE-BOUNDARY`):
   ordinary closures are runtime-local and opaque, with **no** structural
   equality, `DecEq`, ordering, canonical hash, slot identity or provenance, and
@@ -227,12 +251,41 @@ deep enough to overflow the current recursive encoder must canonicalize and adop
 depth-limit rejection does **not** discharge this — the ruling requires success,
 not a clean failure.
 
-**`AC-V2` — cycles fail closed, and the control proves the guard is load-bearing.**
-⭐ The strongest available control shape on this mechanism is known: **removing
-the cycle guard must not merely redden a test — the uninstrumented failure is a
-stack overflow that aborts the test binary.** So the control must run the
-traversal **in an isolated process** and assert on the process outcome; an
-in-process assertion cannot distinguish "guard fired" from "binary died".
+**`AC-V2` — ⛔ SUPERSEDED. THE CYCLE CLAUSE DOES NOT BIND ON THIS CARRIER, AND AN
+AC DEMANDING A CYCLE WITNESS HERE IS UNSATISFIABLE.** Ruled `evt_45x5dn9jcrhhq`
+(2026-07-26) against `7415dbd8`. Recorded rather than deleted so it cannot be
+re-read as still owed.
+
+The original AC asked for cycles to fail closed with an isolated-process control.
+⚠ **The question was wrong, not the control shape.** `Value`'s recursive positions
+are `Vec<Value>` and `BTreeMap<Vec<u8>, Value>` with **no** identity-bearing
+indirection, interior mutation, slot/index edge, or shared ownership, and
+`Store::intern` canonicalizes the whole tree to **one flat byte image interned as
+one slot**. ⇒ A back-edge is **unconstructible**, not a malformed inhabitant.
+Tri-colour state here is *"a vacuous defence for an input the type cannot
+carry."*
+
+⛔ **The obligation was RETARGETED, not dropped** — to B2V's sealed, emitted
+`BoundaryPersistentImage(BoundaryRegion)` at `BoundaryValueStore::adopt`, whose
+node-indexed region graph is mutable before sealing, whose child words can name
+other persistent-region nodes, and where **the parked evidence demonstrates
+emitted code constructing a cycle.** The grey/black distinction, image-local
+node-index key, deterministic refusal before publication, and shared-DAG positive
+control belong **there**. ⚠ They bind on **neither** current `Value` **nor**
+current recursively-owned `RuntimeValue`.
+
+⇒ **Replaced, for this node, by a structural pin** (Phase 1 `AC-V2a/b/c`): the
+canonical carrier stays an owned finite tree, its recursive child positions may
+not acquire reference/handle/arena/slot/index indirection or interior mutation,
+and interning stays whole-value-bytes-to-one-slot. ⚠ **And it travels:** if the
+representation later makes cycles expressible, the cycle contract **moves with the
+new carrier** and must be discharged **before it publishes values.**
+
+**Second-order, ruled in the same turn:** deep acyclic canonicalization/interning
+must be **iterative** with ⛔ **no semantic `MAX_DEPTH`** — finite memory is an
+ordinary resource boundary and **depth is not a validity predicate.** ⚠ This does
+**not** discharge deep `Clone`/`Drop`, which remain separately required *even
+though cycles are impossible*.
 
 **`AC-V3` — `Clone` and DROP are total at the same depth as `AC-V1`.** ⛔ A value
 that constructs and encodes must also **clone and drop** without overflow. Drop
