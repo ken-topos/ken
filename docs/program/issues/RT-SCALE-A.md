@@ -1,7 +1,7 @@
 ---
 id: RT-SCALE-A
 title: "Boundary A — re-derive the planner census for n=3..7 against the COMPLETED factored representation, superseding the provisional outer-planner numbers"
-status: ready
+status: active
 owner: runtime
 size: M
 gate: none

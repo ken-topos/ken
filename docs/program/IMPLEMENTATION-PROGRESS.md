@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-26 01:34:19Z — from 80 issue file(s) in `docs/program/issues/`.
+2026-07-26 01:42:07Z — from 80 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -108,7 +108,7 @@ the committed file matches the generator's output.
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
 | `RT-PLANNER-ATTRIB-K` | Boundary A planner: fixed K is a design invariant — move the K-exceeded rejection off the capacity channel | merged | runtime | XS | none | https://github.com/swe-toolkit/ken/pull/935 |
 | `RT-PLANNER-DIAGNOSTIC-K` | Boundary A planner: report planner-invariant failures as planner defects, and assert fixed_k CONSTANT rather than merely affine | merged | runtime | S | none | https://github.com/swe-toolkit/ken/pull/929 |
-| `RT-SCALE-A` | Boundary A — re-derive the planner census for n=3..7 against the COMPLETED factored representation, superseding the provisional outer-planner numbers | ready | runtime | M | none | — |
+| `RT-SCALE-A` | Boundary A — re-derive the planner census for n=3..7 against the COMPLETED factored representation, superseding the provisional outer-planner numbers | active | runtime | M | none | — |
 | `RT-SCALE-B` | Boundary B — the full n=3..7 emission measurement, the research-grounded analytical model, and the operator scaling verdict that gates RT-NATIVE-FNSPLIT's merge | draft | runtime | L | none | — |
 | `RT-SPLIT` | decompose cranelift_backend.rs | merged | runtime | L | none | — |
 | `RT-SRC-DISPATCH-COVER` | close the source-machine scrutinee-dispatch coverage tier surfaced by RT-SPLIT slice 4 | draft | runtime | TBD | none | — |
@@ -129,7 +129,6 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `DOC-GATE-NEEDLE` — schema-gate controls assert on a needle the test itself supplied, so one constraint class is fully vacuous
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
-- `RT-SCALE-A` — Boundary A — re-derive the planner census for n=3..7 against the COMPLETED factored representation, superseding the provisional outer-planner numbers
 - `STR-BIJ` — the String/List Char 'bijection' over-claim (adversary A1 + A2)
 
 ## Blockers
@@ -168,7 +167,7 @@ is itself not yet `merged`/`closed`:
 - `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2F` (status: ready)
 - `RT-FNSPLIT-B2F` blocked by `RT-FNSPLIT-B2V` (status: active)
 - `RT-FNSPLIT-B2O-CHECK` blocked by `RT-FNSPLIT-B2F` (status: ready)
-- `RT-SCALE-B` blocked by `RT-SCALE-A` (status: ready)
+- `RT-SCALE-B` blocked by `RT-SCALE-A` (status: active)
 - `RT-SCALE-B` blocked by `RT-FNSPLIT-B2F` (status: ready)
 
 ## Gate progress
