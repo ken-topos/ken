@@ -543,9 +543,15 @@ fn encode_canonical_recursive_reference(value: &Value, out: &mut Vec<u8>) {
 /// does not cover that tag"* exactly as it covers *"those bytes are
 /// malformed"*: an unhandled tag must never fall through to a plausible
 /// default, because a silent wrong value is worse than a refusal. The covered
-/// set is the boundary ABI's ground family — `BigInt`, `Constructor`, `Record`,
-/// `String`, `Bytes`, and the `Bool`/`SmallInt` scalars that appear in
-/// sub-value position — and every other tag is refused rather than guessed.
+/// set is the boundary ABI's persistent family — `BigInt`, `Constructor`,
+/// `Record`, `String`, `Bytes`, `Closure`, and the `Bool`/`SmallInt` scalars
+/// that appear in sub-value position — and every other tag is refused rather
+/// than guessed.
+///
+/// ⚠ `Closure` is covered because store adoption and independent recovery need
+/// it, and for no wider reason: `Array`, `Map`, `Set` and the remaining scalars
+/// are encodable and still **refused** here. Widening the decoder stays a
+/// deliberate edit at this `match`, never a side effect at a call site.
 pub fn decode_canonical(bytes: &[u8]) -> Option<(Value, usize)> {
     let (&kind, rest) = bytes.split_first()?;
     let mut at = 1usize;
@@ -598,6 +604,17 @@ pub fn decode_canonical(bytes: &[u8]) -> Option<(Value, usize)> {
             }
         }
         tag::SMALL_INT => Value::SmallInt(read_u64(bytes, &mut at)? as i64),
+        // A retained closure: authoritative code identity plus the FULL ordered
+        // captured environment, decoded inline exactly as it was encoded. The
+        // captures are values, not a digest, which is what lets a consumer
+        // recover capture content and order rather than merely comparing two
+        // closures for equality.
+        tag::CLOSURE => {
+            let code_id = read_u64(bytes, &mut at)?;
+            let arity = read_u16(bytes, &mut at)? as usize;
+            let captured = decode_children(bytes, &mut at, arity)?;
+            Value::Closure { code_id, captured }
+        }
         // ⛔ Every other tag — including the ones this crate encodes — is
         // REFUSED, not approximated. Widening the decoder is a deliberate edit
         // here, never an accident at a call site.

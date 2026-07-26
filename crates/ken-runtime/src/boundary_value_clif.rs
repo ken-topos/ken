@@ -41,13 +41,13 @@ use crate::boundary_value::{
     BoundaryImmediateDomain, BoundaryReferentOwner, BoundaryTag, ARENA_DATA, ARENA_DATA_CAPACITY,
     ARENA_DATA_COUNT, ARENA_FROZEN, ARENA_LIMBS, ARENA_LIMB_CAPACITY, ARENA_LIMB_COUNT,
     ARENA_NAMES, ARENA_NAME_COUNT, ARENA_NATIVE_INT, ARENA_NODES, ARENA_NODE_CAPACITY,
-    ARENA_NODE_COUNT, ARENA_PERSISTENT, ARENA_WORDS, ARENA_WORD_CAPACITY, ARENA_WORD_COUNT,
-    BOUNDARY_ERR_BOUNDS, BOUNDARY_ERR_CAPACITY, BOUNDARY_ERR_CLASS, BOUNDARY_ERR_ESCAPE,
-    BOUNDARY_ERR_FROZEN, BOUNDARY_ERR_RELATION, BOUNDARY_ERR_SHAPE, BOUNDARY_ERR_TAG,
-    BOUNDARY_INT_REGION_LIMBS, BOUNDARY_NODE_STRIDE, BOUNDARY_OK, BOUNDARY_TAG_BITS,
-    BOUNDARY_TAG_CLASS_RELATION, BOUNDARY_TAG_MASK, NODE_CLASS, NODE_EXTENT, NODE_FIELDS_AT,
-    NODE_FIELD_COUNT, NODE_INT_SEALED, NODE_LIMBS_AT, NODE_LIMB_COUNT, NODE_OWNER, NODE_PAYLOAD,
-    NODE_SLOT, NODE_TAG_ID,
+    ARENA_NODE_COUNT, ARENA_PERSISTENT, ARENA_SEALED, ARENA_WORDS, ARENA_WORD_CAPACITY,
+    ARENA_WORD_COUNT, BOUNDARY_ERR_BOUNDS, BOUNDARY_ERR_CAPACITY, BOUNDARY_ERR_CLASS,
+    BOUNDARY_ERR_ESCAPE, BOUNDARY_ERR_FROZEN, BOUNDARY_ERR_RELATION, BOUNDARY_ERR_SEALED,
+    BOUNDARY_ERR_SHAPE, BOUNDARY_ERR_TAG, BOUNDARY_INT_REGION_LIMBS, BOUNDARY_NODE_STRIDE,
+    BOUNDARY_OK, BOUNDARY_TAG_BITS, BOUNDARY_TAG_CLASS_RELATION, BOUNDARY_TAG_MASK, NODE_CLASS,
+    NODE_EXTENT, NODE_FIELDS_AT, NODE_FIELD_COUNT, NODE_INT_SEALED, NODE_LIMBS_AT, NODE_LIMB_COUNT,
+    NODE_OWNER, NODE_PAYLOAD, NODE_SLOT, NODE_TAG_ID,
 };
 use crate::cranelift_backend::{backend_module, CraneliftBackendError};
 
@@ -1393,6 +1393,9 @@ fn define_alloc<M: Module>(module: &mut M, graph: Graph) -> Result<(), Cranelift
 
         b.switch_to_block(classed);
         let region = select_region_by_tag(&mut b, ptr, arena, tag);
+        // The eleventh writer: `alloc` takes no word, so it never reaches
+        // `mutable_guard` and needs the seal check on its own path.
+        seal_guard(&mut b, region);
 
         // ── ⛔ the RELATION, not the two sets ────────────────────────────────
         //
@@ -1512,13 +1515,52 @@ fn define_alloc<M: Module>(module: &mut M, graph: Graph) -> Result<(), Cranelift
     finish(module, graph.alloc, func)
 }
 
+/// Return early with [`BOUNDARY_ERR_SEALED`] if the store has taken exclusive
+/// ownership of this region.
+///
+/// ⛔ **The emitted half of the seal/quiescence handoff (`AC-6`).** Adoption
+/// validates a snapshot and then canonicalizes it; a writer that can still run
+/// in between makes those two different graphs. Rust's `&mut` cannot express
+/// that exclusivity, because emitted code holds the raw region base it was
+/// published and never asks the borrow checker for permission — so the seal
+/// lives in the published header, on the path every mutator already walks.
+///
+/// ⭐ **One definition, and between its two call sites it covers EVERY emitted
+/// writer.** `mutable_guard` runs in all ten word-taking mutators and
+/// `define_alloc` calls this directly, which is the whole of `EMITTED_WRITERS`.
+/// Copying the check into eleven bodies would be a hand-maintained matrix that
+/// can drift from the inventory; one definition on a shared path cannot.
+fn seal_guard(b: &mut FunctionBuilder<'_>, region: cranelift_codegen::ir::Value) {
+    let sealed = b
+        .ins()
+        .load(types::I64, MemFlags::trusted(), region, ARENA_SEALED);
+    let open = b.ins().icmp_imm(IntCC::Equal, sealed, 0);
+    let ok = b.create_block();
+    let bad = b.create_block();
+    b.ins().brif(open, ok, &[], bad, &[]);
+
+    b.switch_to_block(bad);
+    let err = b.ins().iconst(types::I64, BOUNDARY_ERR_SEALED);
+    b.ins().return_(&[err]);
+
+    b.switch_to_block(ok);
+}
+
 /// Return early with [`BOUNDARY_ERR_FROZEN`] unless `word` names a node emitted
 /// code constructed — i.e. one at or beyond the region's frozen prefix.
+///
+/// ⛔ **Seal first, then frozen.** The seal is a statement about the whole
+/// region and about *who owns it now*; the frozen prefix is a statement about
+/// which nodes within it are emitted code's. Once the store has taken the
+/// region, no node in it is writable, including one past the prefix — so asking
+/// the narrower question first would admit exactly the write the handoff exists
+/// to exclude.
 fn mutable_guard(
     b: &mut FunctionBuilder<'_>,
     word: cranelift_codegen::ir::Value,
     region: cranelift_codegen::ir::Value,
 ) {
+    seal_guard(b, region);
     let index = b.ins().ushr_imm(word, i64::from(BOUNDARY_TAG_BITS));
     let frozen = b
         .ins()
@@ -2502,15 +2544,20 @@ fn define_int_part<M: Module>(
 mod tests {
     use super::*;
     use crate::boundary_value::{
-        boundary_immediate_admits, boundary_immediate_domain, boundary_int_marker_admits,
-        boundary_relation_admits, materialize_borrowed, materialize_ground,
-        materialize_host_result, BoundaryArenaBuilder, BoundaryArenaV1, BoundaryValueStore,
-        BoundaryWord, NodeField, RegionHeaderField, BOUNDARY_IMMEDIATE_INT_MAX,
+        boundary_code_id, boundary_immediate_admits, boundary_immediate_domain,
+        boundary_int_marker_admits, boundary_relation_admits, materialize_borrowed,
+        materialize_ground, materialize_host_result, BoundaryArenaBuilder, BoundaryArenaV1,
+        BoundaryValueStore, BoundaryWord, NodeField, RegionHeaderField, BOUNDARY_IMMEDIATE_INT_MAX,
         BOUNDARY_IMMEDIATE_INT_MIN, BOUNDARY_NODE_STRIDE, BOUNDARY_PAYLOAD_BITS,
         BOUNDARY_REGION_HEADER_BYTES,
     };
+    // Statuses only the controls assert on — the production graph never returns
+    // them from a helper, so they belong to the test scope rather than to the
+    // module's import list.
+    use crate::boundary_value::{BOUNDARY_ERR_CYCLE, BOUNDARY_ERR_UNBOUND};
     use crate::ir::RuntimeGroundValue;
     use crate::native_int::RuntimeIntV1;
+    use crate::values::Value;
     use cranelift_codegen::settings::{self, Configurable};
     use cranelift_jit::{JITBuilder, JITModule};
     use cranelift_module::default_libcall_names;
@@ -5572,7 +5619,8 @@ mod tests {
         };
         let _ = persistent;
 
-        // ── the store-owned adoption boundary ──────────────────────────────
+        // ── the sealed handoff, then the store-owned adoption boundary ─────
+        store.seal_persistent();
         let adopted = store.adopt(pending).expect("AC-10: adoption succeeds");
         let slot = store
             .image()
@@ -5663,6 +5711,7 @@ mod tests {
              convergence is trivial"
         );
 
+        store.seal_persistent();
         let a = store.adopt(first).expect("adopts");
         let b = store.adopt(second).expect("adopts");
         let c = store.adopt(other).expect("adopts");
@@ -5698,6 +5747,10 @@ mod tests {
             Err(BOUNDARY_ERR_SHAPE),
             "AC-10: only a persistent handle is adoptable"
         );
+        // ⚠ And it fails on the SHAPE before it ever looks at the seal, which is
+        // why this case still answers unsealed: a word that is not a persistent
+        // handle has no adoption boundary to hand over in the first place.
+        store.seal_persistent();
         // A persistent word naming no node cannot be validated.
         assert_eq!(
             store.adopt(BoundaryWord::handle(BoundaryTag::PersistentGround, 99)),
@@ -5785,9 +5838,15 @@ mod tests {
         );
 
         // ⭐ Adoption terminates with an exact status instead of recursing.
+        //
+        // ⛔ The status is `BOUNDARY_ERR_CYCLE`, distinct from
+        // `BOUNDARY_ERR_SHAPE`: *"this graph is not a value"* and *"this word is
+        // the wrong shape"* are different findings, and a shared status would
+        // leave this control unable to say which one it caught.
+        store.seal_persistent();
         assert_eq!(
             store.adopt(first),
-            Err(BOUNDARY_ERR_SHAPE),
+            Err(BOUNDARY_ERR_CYCLE),
             "AC-10: a cyclic graph has no canonical image and must fail closed"
         );
 
@@ -5814,9 +5873,1140 @@ mod tests {
             BOUNDARY_OK
         );
         assert_eq!(run4(store_field, g.base, root.0, 0, leaf.0), BOUNDARY_OK);
+        clean.seal_persistent();
         assert!(
             clean.adopt(root).is_ok(),
             "AC-10: the same shape without a cycle must adopt"
+        );
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // The seal/quiescence handoff — `AC-6` ownership transfer
+    // ───────────────────────────────────────────────────────────────────────
+
+    /// One probe per emitted writer: call exactly that helper on a valid
+    /// persistent node and hand back its raw status.
+    ///
+    /// ⛔ **Each probe returns the status instead of `guard`ing on it**, because
+    /// the status *is* the measurement.
+    macro_rules! seal_probe {
+        ($name:ident, $field:ident, $extra:expr) => {
+            fn $name(
+                b: &mut FunctionBuilder<'_>,
+                refs: &Refs,
+                p: &[cranelift_codegen::ir::Value],
+                _ptr: cranelift_codegen::ir::Type,
+            ) {
+                let (base, word) = (p[0], p[1]);
+                let mut args = vec![base, word];
+                for imm in $extra {
+                    let v = b.ins().iconst(types::I64, imm as i64);
+                    args.push(v);
+                }
+                let call = b.ins().call(refs.$field, &args);
+                let status = b.inst_results(call)[0];
+                b.ins().return_(&[status]);
+            }
+        };
+    }
+
+    seal_probe!(seal_probe_seal_int, seal_int, [0u64; 0]);
+    seal_probe!(seal_probe_store_tag_id, store_tag_id, [1u64]);
+    seal_probe!(seal_probe_store_scalar, store_scalar, [1u64]);
+    seal_probe!(seal_probe_store_field, store_field, [0u64, 0u64]);
+    seal_probe!(seal_probe_store_name, store_name, [0u64, 1u64]);
+    seal_probe!(
+        seal_probe_store_int_tag,
+        store_int_tag,
+        [crate::native_int::NATIVE_INT_SMALL_TAG_V1]
+    );
+    seal_probe!(
+        seal_probe_store_int_limbs,
+        store_int_limbs,
+        [0u64, 1u64, 0u64]
+    );
+    seal_probe!(seal_probe_store_int_limb, store_int_limb, [0u64, 1u64]);
+    seal_probe!(seal_probe_store_bytes_len, store_bytes_len, [0u64, 0u64]);
+    seal_probe!(seal_probe_store_byte, store_byte, [0u64, 0u64]);
+
+    /// `alloc` takes no word, so it gets a hand-written probe rather than the
+    /// macro's shape — and it is the one writer that never reaches
+    /// `mutable_guard`, which is exactly why it needs its own seal check.
+    fn seal_probe_alloc(
+        b: &mut FunctionBuilder<'_>,
+        refs: &Refs,
+        p: &[cranelift_codegen::ir::Value],
+        ptr: cranelift_codegen::ir::Type,
+    ) {
+        let base = p[0];
+        let out = cell(b, ptr);
+        let tag = b
+            .ins()
+            .iconst(types::I64, BoundaryTag::PersistentGround as i64);
+        let class = b.ins().iconst(types::I64, BoundaryClass::Int as i64);
+        let zero = b.ins().iconst(types::I64, 0);
+        let call = b.ins().call(refs.alloc, &[base, tag, class, zero, out]);
+        let status = b.inst_results(call)[0];
+        b.ins().return_(&[status]);
+    }
+
+    /// ⛔ **The allowed inventory of seal probes — one row per emitted writer.**
+    ///
+    /// Checked against [`EMITTED_WRITERS`] below, so a new writer is red until
+    /// someone gives it a seal probe. Pinning the permitted set is what makes a
+    /// writer *nobody imagined* redden too.
+    type SealProbe = fn(
+        &mut FunctionBuilder<'_>,
+        &Refs,
+        &[cranelift_codegen::ir::Value],
+        cranelift_codegen::ir::Type,
+    );
+
+    const SEAL_PROBES: &[(&str, SealProbe)] = &[
+        ("ken_boundary_alloc_local", seal_probe_alloc),
+        ("ken_boundary_seal_int_local", seal_probe_seal_int),
+        ("ken_boundary_store_tag_id_local", seal_probe_store_tag_id),
+        ("ken_boundary_store_scalar_local", seal_probe_store_scalar),
+        ("ken_boundary_store_field_local", seal_probe_store_field),
+        ("ken_boundary_store_name_local", seal_probe_store_name),
+        ("ken_boundary_store_int_tag_local", seal_probe_store_int_tag),
+        (
+            "ken_boundary_store_int_limbs_local",
+            seal_probe_store_int_limbs,
+        ),
+        (
+            "ken_boundary_store_int_limb_local",
+            seal_probe_store_int_limb,
+        ),
+        (
+            "ken_boundary_store_bytes_len_local",
+            seal_probe_store_bytes_len,
+        ),
+        ("ken_boundary_store_byte_local", seal_probe_store_byte),
+    ];
+
+    /// Every live persistent word, as a flat snapshot to compare against.
+    fn persistent_snapshot(store: &BoundaryValueStore) -> Vec<u64> {
+        let region = &store.image().0;
+        let mut out = Vec::new();
+        for index in 0..region.node_count() as u64 {
+            for field in NodeField::ALL {
+                out.push(region.node_field(index, field.offset()).unwrap_or(u64::MAX));
+            }
+        }
+        for w in 0..region.word_count() as u64 {
+            out.push(region.word_at(w).map_or(u64::MAX, |word| word.0));
+        }
+        out
+    }
+
+    /// **`AC-6` — after the sealed handoff EVERY emitted writer is refused with
+    /// the exact status, and the adopted image cannot change.**
+    ///
+    /// ⚠ MEASURED: for each of the eleven helpers in [`EMITTED_WRITERS`], the
+    /// same call returns some status before the seal and **`BOUNDARY_ERR_SEALED`
+    /// after it**, and the whole persistent region is byte-identical across the
+    /// sealed attempts. CLAIMED: adoption operates on a stable snapshot. THE
+    /// GAP: that the refusal covers *every* writer rather than the ones a test
+    /// author happened to think of — closed by driving the probe table and
+    /// asserting it equals the production partition, so a new writer without a
+    /// probe is red.
+    ///
+    /// ⭐ **The pair is the control.** A probe that returned `ERR_SEALED` in both
+    /// states would prove nothing — it could be failing for its own reasons. The
+    /// status must *change*, and it can only change to `ERR_SEALED` if the seal
+    /// check sits on that helper's path.
+    #[test]
+    fn b2v_ac6_every_emitted_writer_is_refused_after_the_sealed_handoff() {
+        // ⛔ The inventory first: the probe table must be exactly the production
+        // writer partition, not a subset someone maintained by hand.
+        let mut probed: Vec<&str> = SEAL_PROBES.iter().map(|(name, _)| *name).collect();
+        probed.sort_unstable();
+        let declared = probed.len();
+        probed.dedup();
+        assert_eq!(probed.len(), declared, "AC-6: a writer is probed twice");
+        let mut writers = EMITTED_WRITERS.to_vec();
+        writers.sort_unstable();
+        assert_eq!(
+            probed, writers,
+            "AC-6: every emitted writer needs a seal probe — a new mutator must \
+             not be able to run against a region the store has taken"
+        );
+
+        let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
+        let mut store = BoundaryValueStore::new();
+        let tag_id = store.intern_symbol("ctor:fixture::Seal::Node");
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (8, 8, 8),
+            (0, 0, 0),
+        );
+        let node = BoundaryWord(run3(alloc_ctor, f.base, BoundaryWord(tag_id), 1) as u64);
+        assert!(node.0 as i64 > 0, "the target node allocates");
+
+        let compiled: Vec<(&str, *const u8, JITModule)> = SEAL_PROBES
+            .iter()
+            .map(|(name, emit)| {
+                let (module, code) = compile_producer(2, *emit);
+                (*name, code, module)
+            })
+            .collect();
+
+        // ── before the seal: a status, and it is not ERR_SEALED ─────────────
+        let before: Vec<(&str, i64)> = compiled
+            .iter()
+            .map(|(name, code, _)| (*name, run2(*code, f.base, node)))
+            .collect();
+        for (name, status) in &before {
+            assert_ne!(
+                *status, BOUNDARY_ERR_SEALED,
+                "{name} reports SEALED on an OPEN region — the probe never \
+                 reaches the helper, so the pair below would be vacuous"
+            );
+        }
+
+        // ── the handoff ─────────────────────────────────────────────────────
+        store.seal_persistent();
+        assert!(store.is_persistent_sealed(), "the region is sealed");
+        let snapshot = persistent_snapshot(&store);
+
+        for (name, code, _) in &compiled {
+            assert_eq!(
+                run2(*code, f.base, node),
+                BOUNDARY_ERR_SEALED,
+                "AC-6: {name} must be refused once the store owns the region"
+            );
+        }
+        assert_eq!(
+            persistent_snapshot(&store),
+            snapshot,
+            "AC-6: a refused write must also be a write that DID NOT HAPPEN — \
+             the adopted image cannot change under adoption"
+        );
+    }
+
+    /// `(base, tag_id, arity) -> word` — allocate one persistent `Constructor`
+    /// with `arity` child slots.
+    fn emit_ctor_node(
+        b: &mut FunctionBuilder<'_>,
+        refs: &Refs,
+        p: &[cranelift_codegen::ir::Value],
+        ptr: cranelift_codegen::ir::Type,
+    ) {
+        let (base, tag_id, arity) = (p[0], p[1], p[2]);
+        let out = cell(b, ptr);
+        let tag = b
+            .ins()
+            .iconst(types::I64, BoundaryTag::PersistentGround as i64);
+        let class = b
+            .ins()
+            .iconst(types::I64, BoundaryClass::Constructor as i64);
+        guard(b, refs.alloc, &[base, tag, class, arity, out]);
+        let word = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
+        guard(b, refs.store_tag_id, &[base, word, tag_id]);
+        b.ins().return_(&[word]);
+    }
+
+    /// `(base, origin, arity) -> word` — allocate one persistent `Closure` with
+    /// `arity` capture slots, recording the **local origin ordinal** in
+    /// `NODE_PAYLOAD`.
+    ///
+    /// ⛔ Emitted code writes the *ordinal*, never the `code_id`. Binding the
+    /// ordinal into an artifact-scoped namespace is the store's job at adoption
+    /// — emitted code holds no artifact identity, and `B2F` dispatch stays
+    /// inert.
+    fn emit_closure_node(
+        b: &mut FunctionBuilder<'_>,
+        refs: &Refs,
+        p: &[cranelift_codegen::ir::Value],
+        ptr: cranelift_codegen::ir::Type,
+    ) {
+        let (base, origin, arity) = (p[0], p[1], p[2]);
+        let out = cell(b, ptr);
+        let tag = b
+            .ins()
+            .iconst(types::I64, BoundaryTag::PersistentClosure as i64);
+        let class = b.ins().iconst(types::I64, BoundaryClass::Closure as i64);
+        guard(b, refs.alloc, &[base, tag, class, arity, out]);
+        let word = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
+        guard(b, refs.store_scalar, &[base, word, origin]);
+        b.ins().return_(&[word]);
+    }
+
+    /// **`AC-6` — adoption REFUSES an unsealed region.**
+    ///
+    /// ⚠ Without this the seal is only half a mechanism: the emitted writers
+    /// would be shut out *once someone remembered to seal*, and nothing would
+    /// require anyone to. The handoff has two sides, and this is the one that
+    /// makes it a precondition rather than a convention.
+    ///
+    /// ⚠ POSITIVE CONTROL: the identical graph adopts once sealed, so the
+    /// refusal is about the handoff and not about the value.
+    #[test]
+    fn b2v_ac6_adoption_refuses_an_unsealed_region() {
+        let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
+        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
+
+        let mut store = BoundaryValueStore::new();
+        let tag_id = store.intern_symbol("ctor:fixture::Unsealed::Node");
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (4, 4, 0),
+            (0, 0, 0),
+        );
+        let node = BoundaryWord(run3(alloc_ctor, f.base, BoundaryWord(tag_id), 1) as u64);
+        let leaf = BoundaryWord::immediate(BoundaryTag::ImmediateInt, 4);
+        assert_eq!(run4(store_field, f.base, node.0, 0, leaf.0), BOUNDARY_OK);
+
+        assert!(!store.is_persistent_sealed(), "the region starts open");
+        assert_eq!(
+            store.adopt(node),
+            Err(BOUNDARY_ERR_SEALED),
+            "AC-6: adoption must not begin against a region emitted code can \
+             still mutate"
+        );
+
+        store.seal_persistent();
+        assert!(
+            store.adopt(node).is_ok(),
+            "AC-6: and the same graph adopts once the handoff has happened"
+        );
+    }
+
+    /// **`AC-6` — COMPLETE validation precedes any identity installation.**
+    ///
+    /// ⛔ A malformed graph must leave the store exactly as it found it. If
+    /// minting were interleaved with walking, a graph that turns out to be
+    /// cyclic three nodes in would already have installed identities for the
+    /// nodes the walk passed — the failure would be partial, and "adoption
+    /// failure occurs before publication" would be true only of the root.
+    ///
+    /// ⚠ POSITIVE CONTROL: the same shape without the back-edge mints every
+    /// node, so the emptiness below is the *refusal* and not an adoption that
+    /// mints nothing.
+    #[test]
+    fn b2v_ac6_a_refused_graph_installs_no_identity_at_all() {
+        let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
+        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
+
+        let slots = |store: &BoundaryValueStore| -> Vec<u64> {
+            let region = &store.image().0;
+            (0..region.node_count() as u64)
+                .map(|i| region.node_field(i, NODE_SLOT).unwrap_or(u64::MAX))
+                .collect()
+        };
+
+        let mut store = BoundaryValueStore::new();
+        let tag_id = store.intern_symbol("ctor:fixture::Partial::Node");
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (8, 8, 0),
+            (0, 0, 0),
+        );
+        let ring: Vec<BoundaryWord> = (0..3)
+            .map(|_| BoundaryWord(run3(alloc_ctor, f.base, BoundaryWord(tag_id), 1) as u64))
+            .collect();
+        for i in 0..3 {
+            assert_eq!(
+                run4(store_field, f.base, ring[i].0, 0, ring[(i + 1) % 3].0),
+                BOUNDARY_OK
+            );
+        }
+        store.seal_persistent();
+        let before = slots(&store);
+        assert_eq!(
+            store.adopt(ring[0]),
+            Err(BOUNDARY_ERR_CYCLE),
+            "the graph is refused"
+        );
+        assert_eq!(
+            slots(&store),
+            before,
+            "AC-6: a refused graph must install NO identity — not even for the \
+             nodes the walk reached before the fault"
+        );
+        assert!(
+            before.iter().all(|s| *s == crate::store::NULL_SLOT),
+            "and none of them was minted to begin with"
+        );
+
+        // ⚠ POSITIVE CONTROL — the acyclic twin mints every node.
+        let mut clean = BoundaryValueStore::new();
+        let clean_id = clean.intern_symbol("ctor:fixture::Partial::Node");
+        let g = bind_with(
+            &mut clean,
+            BoundaryArenaBuilder::new(),
+            (8, 8, 0),
+            (0, 0, 0),
+        );
+        let chain: Vec<BoundaryWord> = (0..3)
+            .map(|_| BoundaryWord(run3(alloc_ctor, g.base, BoundaryWord(clean_id), 1) as u64))
+            .collect();
+        for pair in chain.windows(2) {
+            assert_eq!(
+                run4(store_field, g.base, pair[0].0, 0, pair[1].0),
+                BOUNDARY_OK
+            );
+        }
+        let leaf = BoundaryWord::immediate(BoundaryTag::ImmediateInt, 1);
+        assert_eq!(
+            run4(store_field, g.base, chain[2].0, 0, leaf.0),
+            BOUNDARY_OK
+        );
+        clean.seal_persistent();
+        assert!(clean.adopt(chain[0]).is_ok());
+        assert!(
+            slots(&clean).iter().all(|s| *s != crate::store::NULL_SLOT),
+            "AC-6: every node of an admitted graph IS minted, so the refusal \
+             above is a refusal and not an adoption that does nothing"
+        );
+    }
+
+    fn fixture_artifact(tag: &str, hash: u64) -> crate::RuntimeArtifactIdentity {
+        crate::RuntimeArtifactIdentity {
+            package_identity: format!("pkg:fixture::{tag}"),
+            core_semantic_hash: 0xC0FE_0000 | hash,
+            artifact_hash: 0x0A11_0000 | hash,
+        }
+    }
+
+    /// Build one emitted closure with the given ordered immediate captures.
+    fn emitted_closure(
+        alloc_closure: *const u8,
+        store_field: *const u8,
+        base: *const u64,
+        origin: u64,
+        captures: &[i64],
+    ) -> BoundaryWord {
+        let word = BoundaryWord(run3(
+            alloc_closure,
+            base,
+            BoundaryWord(origin),
+            captures.len() as u64,
+        ) as u64);
+        assert!(word.0 as i64 > 0, "closure allocates: {}", word.0 as i64);
+        for (index, value) in captures.iter().enumerate() {
+            let capture = BoundaryWord::immediate(BoundaryTag::ImmediateInt, *value as u64);
+            assert_eq!(
+                run4(store_field, base, word.0, index as u64, capture.0),
+                BOUNDARY_OK,
+                "capture {index} stores"
+            );
+        }
+        word
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // `PersistentClosure` — the canonical image layer
+    // ───────────────────────────────────────────────────────────────────────
+
+    /// **`AC-6`/`AC-10` — an emitted `Closure` adopts, and a separately compiled
+    /// consumer recovers its identity, its artifact-scoped code identity, and
+    /// its captures IN ORDER, after the producer's arena is gone.**
+    ///
+    /// ⚠ MEASURED: the consumer reads back tag `PersistentClosure`, a non-null
+    /// `NODE_SLOT`, and the store's own `slot -> bytes -> Value` decode yields
+    /// `Value::Closure` with `boundary_code_id(identity, origin)` and the two
+    /// captures in the order they were written. CLAIMED: a closure survives the
+    /// boundary with content and identity intact. THE GAP: that the consumer is
+    /// not reading the producer's leftovers — closed by `rebind`, which gives it
+    /// a **fresh arena** sharing only the store's persistent image.
+    #[test]
+    fn b2v_ac6_an_emitted_closure_adopts_with_artifact_scoped_identity() {
+        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
+        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
+        let (_c1, class_code) = compile_probe(Probe::Unary(|h| h.class));
+        let (_c2, slot_code) = compile_probe(Probe::Unary(|h| h.slot));
+        let (_c3, escape_code) = compile_probe(Probe::Status(|h| h.escape_check));
+
+        let identity = fixture_artifact("closure", 1);
+        let origin = 7u64;
+        let mut store = BoundaryValueStore::new();
+        store.bind_artifact(identity.clone());
+
+        let pending = {
+            let f = bind_with(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (4, 8, 0),
+                (0, 0, 0),
+            );
+            let word = emitted_closure(alloc_closure, store_field, f.base, origin, &[11, 22]);
+            // ⛔ Constructed is not published: an unadopted persistent word is
+            // refused at the boundary, which is what makes adoption the only
+            // route out.
+            assert_eq!(
+                run2(escape_code, f.base, word),
+                BOUNDARY_ERR_ESCAPE,
+                "AC-6: an unadopted closure must not escape"
+            );
+            word
+        };
+
+        store.seal_persistent();
+        let adopted = store.adopt(pending).expect("AC-6: the closure adopts");
+        let slot = store
+            .image()
+            .0
+            .node_field(adopted.payload(), NODE_SLOT)
+            .expect("the adopted node is live");
+        assert_ne!(
+            slot,
+            crate::store::NULL_SLOT,
+            "AC-6: a published PersistentStore handle is StoreMinted, never \
+             NoStoreIdentity"
+        );
+
+        // ⭐ A FRESH invocation — the producer's arena is gone.
+        let g = rebind(store.image_mut().0.publish());
+        // ⛔ Both halves, because they are different authorities: the WORD's tag
+        // byte says which region and lifetime, the NODE's class says how to
+        // interpret it, and a retagging defect moves exactly one of them.
+        assert_eq!(
+            adopted.tag(),
+            Some(BoundaryTag::PersistentClosure),
+            "AC-6: the adopted WORD is still a closure handle"
+        );
+        assert_eq!(
+            run2(class_code, g.base, adopted),
+            BoundaryClass::Closure as i64,
+            "AC-6: and the consumer reads a CLOSURE node, not a retagged ground one"
+        );
+        assert_eq!(
+            run2(slot_code, g.base, adopted),
+            slot as i64,
+            "AC-6: and the same identity, not its absence"
+        );
+        assert_eq!(
+            run2(escape_code, g.base, adopted),
+            BOUNDARY_OK,
+            "AC-6: an adopted closure may cross the boundary"
+        );
+
+        assert_eq!(
+            store.decode_slot(slot),
+            Some(Value::Closure {
+                code_id: boundary_code_id(&identity, origin),
+                captured: vec![Value::SmallInt(11), Value::SmallInt(22)],
+            }),
+            "AC-6: content AND order survive, through the store's own decode path"
+        );
+    }
+
+    /// **`AC-6` — closure identity converges on equality and never aliases on a
+    /// changed code identity, a changed capture, or a changed capture ORDER.**
+    ///
+    /// ⭐ **Order is the one an equality-by-set implementation would fail**, and
+    /// it is why the captures are `[11, 22]` and `[22, 11]` rather than two
+    /// unrelated pairs: the two differ in *nothing but order*, so a canonical
+    /// form that dropped order would converge them and this would redden.
+    #[test]
+    fn b2v_ac6_closure_identity_converges_and_never_aliases() {
+        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
+        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
+
+        let identity = fixture_artifact("converge", 2);
+        let mut store = BoundaryValueStore::new();
+        store.bind_artifact(identity.clone());
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (16, 32, 0),
+            (0, 0, 0),
+        );
+        let mint = |origin, captures: &[i64]| {
+            emitted_closure(alloc_closure, store_field, f.base, origin, captures)
+        };
+        // Two independent, structurally equal closures — plus three that differ
+        // in exactly one axis each.
+        let a = mint(7, &[11, 22]);
+        let b = mint(7, &[11, 22]);
+        let other_code = mint(8, &[11, 22]);
+        let other_value = mint(7, &[11, 23]);
+        let other_order = mint(7, &[22, 11]);
+        assert_ne!(
+            a, b,
+            "the equal pair must be DISTINCT nodes before adoption, or \
+             convergence is trivial"
+        );
+
+        store.seal_persistent();
+        let slot_of = |store: &mut BoundaryValueStore, word: BoundaryWord| {
+            let adopted = store.adopt(word).expect("adopts");
+            store
+                .image()
+                .0
+                .node_field(adopted.payload(), NODE_SLOT)
+                .expect("live")
+        };
+        let sa = slot_of(&mut store, a);
+        let sb = slot_of(&mut store, b);
+        let sc = slot_of(&mut store, other_code);
+        let sv = slot_of(&mut store, other_value);
+        let so = slot_of(&mut store, other_order);
+
+        assert_eq!(
+            sa, sb,
+            "AC-6: equal code identity and equal ordered captures converge"
+        );
+        assert_ne!(sa, sc, "AC-6: a different code identity must not alias");
+        assert_ne!(sa, sv, "AC-6: a different capture VALUE must not alias");
+        assert_ne!(
+            sa, so,
+            "AC-6: a different capture ORDER must not alias — captures are an \
+             ordered environment, not a set"
+        );
+    }
+
+    /// **`AC-6` — the same ordinal in two different artifacts is two different
+    /// closures.**
+    ///
+    /// ⛔ **This is the failure Ruling B names outright**: `StaticOriginId` is a
+    /// bare `u32` that restarts at zero per artifact, so an identity keyed on it
+    /// would make two unrelated closures content-equal and hand the wrong body
+    /// to whichever consumer asked second.
+    ///
+    /// ⚠ POSITIVE CONTROL on the same line: within *one* artifact the ordinal
+    /// still discriminates, so the namespace has not simply swallowed it.
+    #[test]
+    fn b2v_ac6_equal_ordinals_in_two_artifacts_do_not_collide() {
+        let first = fixture_artifact("alpha", 3);
+        let second = fixture_artifact("beta", 4);
+        assert_ne!(
+            boundary_code_id(&first, 0),
+            boundary_code_id(&second, 0),
+            "AC-6: a bare local-origin ordinal must not collide across artifacts"
+        );
+        assert_ne!(
+            boundary_code_id(&first, 0),
+            boundary_code_id(&first, 1),
+            "AC-6: and the ordinal must still discriminate WITHIN an artifact"
+        );
+        assert_eq!(
+            boundary_code_id(&first, 5),
+            boundary_code_id(&fixture_artifact("alpha", 3), 5),
+            "AC-6: the same artifact and ordinal are the same identity"
+        );
+        // ⛔ **This pair is a DISTINCTNESS check, and nothing more — the name it
+        // used to carry was a claim it did not earn.** It was labelled as
+        // exercising the length prefix, and mutation `M48` (remove the prefix)
+        // reddened nothing: `package_identity` is the only variable-length field
+        // and the rest are fixed-width, so the encoding is injective with or
+        // without it. Relabelled rather than deleted, because the distinctness
+        // it does check is worth having.
+        let ab = crate::RuntimeArtifactIdentity {
+            package_identity: "ab".to_string(),
+            core_semantic_hash: 0,
+            artifact_hash: 0,
+        };
+        let a = crate::RuntimeArtifactIdentity {
+            package_identity: "a".to_string(),
+            core_semantic_hash: 0,
+            artifact_hash: 0,
+        };
+        assert_ne!(
+            boundary_code_id(&ab, 0),
+            boundary_code_id(&a, 0),
+            "AC-6: two package identities are two namespaces"
+        );
+    }
+
+    /// **`AC-6` — closure adoption FAILS CLOSED while the store carries no
+    /// artifact binding.**
+    ///
+    /// ⛔ The store has no artifact binding today, so this is not a hypothetical
+    /// state: it is the default one. Minting an identity from the bare ordinal
+    /// while unbound is exactly the cross-artifact collision the ruling
+    /// excludes, so the only sound answer is a refusal.
+    ///
+    /// ⚠ POSITIVE CONTROL: binding the artifact makes the *same* graph adopt, so
+    /// the refusal is about the binding and not about closures.
+    #[test]
+    fn b2v_ac6_closure_adoption_fails_closed_while_artifact_unbound() {
+        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
+        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
+
+        let mut store = BoundaryValueStore::new();
+        assert!(store.artifact().is_none(), "the store starts unbound");
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (4, 8, 0),
+            (0, 0, 0),
+        );
+        let word = emitted_closure(alloc_closure, store_field, f.base, 3, &[9]);
+        store.seal_persistent();
+        assert_eq!(
+            store.adopt(word),
+            Err(BOUNDARY_ERR_UNBOUND),
+            "AC-6: an unbound store cannot mint an artifact-scoped code identity"
+        );
+
+        // ⚠ POSITIVE CONTROL — the identical graph, with a binding.
+        store.bind_artifact(fixture_artifact("bound", 5));
+        assert!(
+            store.adopt(word).is_ok(),
+            "AC-6: the same closure adopts once the artifact is bound"
+        );
+    }
+
+    /// **`AC-6` — a NESTED closure capture adopts bottom-up and keeps its own
+    /// tag.**
+    ///
+    /// ⛔ **The retagging defect this closes was live.** Adoption rewrote a
+    /// canonicalized child as `PersistentGround`, which for a nested
+    /// `PersistentClosure` silently changes what the child *is* — a consumer
+    /// would then read a closure as a ground handle. The tag belongs to the
+    /// child; only the index is canonicalization's to move.
+    #[test]
+    fn b2v_ac6_a_nested_closure_capture_adopts_without_retagging() {
+        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
+        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
+        let (_c1, class_code) = compile_probe(Probe::Unary(|h| h.class));
+        let (_c2, field_code) = compile_probe(Probe::Binary(|h| h.field));
+
+        let identity = fixture_artifact("nested", 6);
+        let mut store = BoundaryValueStore::new();
+        store.bind_artifact(identity.clone());
+
+        let outer = {
+            let f = bind_with(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (8, 16, 0),
+                (0, 0, 0),
+            );
+            // ⚠ Two DISTINCT inner closures so the outer one has a real capture
+            // order to preserve, and so a canonicalization that collapsed them
+            // would be visible.
+            let inner_a = emitted_closure(alloc_closure, store_field, f.base, 21, &[1]);
+            let inner_b = emitted_closure(alloc_closure, store_field, f.base, 22, &[2]);
+            let outer = BoundaryWord(run3(alloc_closure, f.base, BoundaryWord(9), 2) as u64);
+            assert_eq!(
+                run4(store_field, f.base, outer.0, 0, inner_a.0),
+                BOUNDARY_OK
+            );
+            assert_eq!(
+                run4(store_field, f.base, outer.0, 1, inner_b.0),
+                BOUNDARY_OK
+            );
+            outer
+        };
+
+        store.seal_persistent();
+        let adopted = store.adopt(outer).expect("the nested closure adopts");
+
+        let g = rebind(store.image_mut().0.publish());
+        for index in 0..2u64 {
+            let child = BoundaryWord(run3(field_code, g.base, adopted, index) as u64);
+            assert_eq!(
+                child.tag(),
+                Some(BoundaryTag::PersistentClosure),
+                "AC-6: capture {index}'s WORD must still carry the closure tag — \
+                 rewriting it as PersistentGround is the retagging defect"
+            );
+            assert_eq!(
+                run2(class_code, g.base, child),
+                BoundaryClass::Closure as i64,
+                "AC-6: and its node is still a CLOSURE after adoption"
+            );
+        }
+
+        let slot = store
+            .image()
+            .0
+            .node_field(adopted.payload(), NODE_SLOT)
+            .expect("live");
+        assert_eq!(
+            store.decode_slot(slot),
+            Some(Value::Closure {
+                code_id: boundary_code_id(&identity, 9),
+                captured: vec![
+                    Value::Closure {
+                        code_id: boundary_code_id(&identity, 21),
+                        captured: vec![Value::SmallInt(1)],
+                    },
+                    Value::Closure {
+                        code_id: boundary_code_id(&identity, 22),
+                        captured: vec![Value::SmallInt(2)],
+                    },
+                ],
+            }),
+            "AC-6: the nested closures are captured as closures, in order"
+        );
+    }
+
+    /// **`AC-6` — a nested closure that CANONICALIZES ONTO ANOTHER NODE keeps
+    /// its own tag.**
+    ///
+    /// ⛔ **This is the control that actually reaches the retagging site, and
+    /// the sibling test above does not.** Canonicalization only rewrites a child
+    /// word when that child dedups onto a *different* node — `if target !=
+    /// child.payload()`. The nested test captures two **distinct** closures, so
+    /// neither dedups, the branch never runs, and mutation `M49` (hard-code the
+    /// rewritten tag back to `PersistentGround`, the historical defect) left it
+    /// green. A pin that never exercises the violating mechanism is not evidence
+    /// about it.
+    ///
+    /// Here the two captures are **structurally equal and separately
+    /// constructed**, so the second must dedup onto the first, the rewrite
+    /// fires, and the tag it writes is measured.
+    #[test]
+    fn b2v_ac6_a_deduped_closure_capture_keeps_its_tag_through_the_rewrite() {
+        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
+        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
+        let (_c1, class_code) = compile_probe(Probe::Unary(|h| h.class));
+        let (_c2, field_code) = compile_probe(Probe::Binary(|h| h.field));
+
+        let identity = fixture_artifact("dedup", 9);
+        let mut store = BoundaryValueStore::new();
+        store.bind_artifact(identity.clone());
+
+        let (outer, before) = {
+            let f = bind_with(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (8, 16, 0),
+                (0, 0, 0),
+            );
+            // ⭐ EQUAL closures, built independently — so one must canonicalize
+            // onto the other and the child word must be rewritten.
+            let inner_a = emitted_closure(alloc_closure, store_field, f.base, 31, &[5]);
+            let inner_b = emitted_closure(alloc_closure, store_field, f.base, 31, &[5]);
+            assert_ne!(
+                inner_a, inner_b,
+                "the captures must be DISTINCT nodes, or no rewrite is attempted \
+                 and this control is vacuous"
+            );
+            let outer = BoundaryWord(run3(alloc_closure, f.base, BoundaryWord(12), 2) as u64);
+            assert_eq!(
+                run4(store_field, f.base, outer.0, 0, inner_a.0),
+                BOUNDARY_OK
+            );
+            assert_eq!(
+                run4(store_field, f.base, outer.0, 1, inner_b.0),
+                BOUNDARY_OK
+            );
+            (outer, (inner_a, inner_b))
+        };
+
+        store.seal_persistent();
+        let adopted = store.adopt(outer).expect("the deduped closure adopts");
+
+        let g = rebind(store.image_mut().0.publish());
+        let first = BoundaryWord(run3(field_code, g.base, adopted, 0) as u64);
+        let second = BoundaryWord(run3(field_code, g.base, adopted, 1) as u64);
+        // ⚠ NON-VACUITY: the rewrite must actually have happened — the two
+        // captures now name ONE node, and it is not the node the second capture
+        // was written as.
+        assert_eq!(
+            first, second,
+            "AC-6: the equal captures must canonicalize onto ONE node, or the \
+             rewrite this control measures never ran"
+        );
+        assert_ne!(
+            second, before.1,
+            "AC-6: and the second capture's word must genuinely have been \
+             rewritten"
+        );
+        // ⛔ And the rewritten word still says CLOSURE.
+        assert_eq!(
+            second.tag(),
+            Some(BoundaryTag::PersistentClosure),
+            "AC-6: the rewritten child word keeps the CHILD's tag — writing \
+             PersistentGround here silently changes what the child IS"
+        );
+        assert_eq!(
+            run2(class_code, g.base, second),
+            BoundaryClass::Closure as i64,
+            "AC-6: and the node it now names is still a closure"
+        );
+    }
+
+    /// **`AC-6`/`AC-7` — an invocation-owned capture is refused BEFORE the
+    /// parent publishes.**
+    ///
+    /// The parent survives the invocation and the capture does not, so a
+    /// published parent reaching one would name freed storage.
+    #[test]
+    fn b2v_ac6_an_invocation_owned_capture_rejects_before_publication() {
+        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
+        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
+
+        let mut store = BoundaryValueStore::new();
+        store.bind_artifact(fixture_artifact("escape", 7));
+        let mut builder = BoundaryArenaBuilder::new();
+        let borrowed = materialize_borrowed(&mut builder, 0xBEEF);
+        let f = bind_with(&mut store, builder, (4, 8, 0), (0, 0, 0));
+        let word = BoundaryWord(run3(alloc_closure, f.base, BoundaryWord(4), 1) as u64);
+
+        // ⛔ The emitted store refuses it at construction — the invariant is
+        // enforced where it is created.
+        assert_eq!(
+            run4(store_field, f.base, word.0, 0, borrowed.0),
+            BOUNDARY_ERR_ESCAPE,
+            "AC-6: a persistent closure must not capture invocation-owned ingress"
+        );
+        // ⚠ POSITIVE CONTROL — the same slot takes a persistent capture, so the
+        // refusal is about the OWNER and not about the slot.
+        let ok_capture = BoundaryWord::immediate(BoundaryTag::ImmediateInt, 5);
+        assert_eq!(
+            run4(store_field, f.base, word.0, 0, ok_capture.0),
+            BOUNDARY_OK
+        );
+    }
+
+    /// **`AC-6` — `HostResult` and `BorrowedOpaque` are never placed in the
+    /// permanent store.**
+    ///
+    /// ⚠ They are **not** narrowed or reclassified: they remain admitted
+    /// invocation-owned represented arms. What is refused is *persistence*.
+    #[test]
+    fn b2v_ac6_invocation_owned_classes_are_never_persisted() {
+        let mut store = BoundaryValueStore::new();
+        store.bind_artifact(fixture_artifact("invocation", 8));
+        let mut builder = BoundaryArenaBuilder::new();
+        let borrowed = materialize_borrowed(&mut builder, 1);
+        let host = materialize_host_result(&mut builder, 1, borrowed, borrowed);
+        store.seal_persistent();
+        for word in [borrowed, host] {
+            assert_eq!(
+                store.adopt(word),
+                Err(BOUNDARY_ERR_SHAPE),
+                "AC-6: an invocation-owned word has no persistent adoption boundary"
+            );
+        }
+    }
+
+    /// **`AC-6` — the canonical `Closure` encoding round-trips, and a malformed
+    /// image is refused.**
+    ///
+    /// ⚠ MEASURED: encode-then-decode is the identity on a nested closure, and
+    /// every truncation of those bytes decodes to `None`. CLAIMED: the decode
+    /// extension is closed. THE GAP: that refusal is not merely the *absence* of
+    /// an arm — closed by the round trip, which proves the arm exists and works,
+    /// so the refusals below are decisions rather than gaps.
+    #[test]
+    fn b2v_ac6_closure_canonical_decode_round_trips_and_refuses_malformed() {
+        use crate::canonical::{decode_canonical, Canonical};
+        let value = Value::Closure {
+            code_id: 0x0123_4567_89ab_cdef,
+            captured: vec![
+                Value::SmallInt(-9),
+                Value::Closure {
+                    code_id: 4,
+                    captured: vec![Value::Bool(true)],
+                },
+            ],
+        };
+        let mut bytes = Vec::new();
+        value.encode_canonical(&mut bytes);
+        assert_eq!(
+            decode_canonical(&bytes),
+            Some((value.clone(), bytes.len())),
+            "AC-6: a canonical closure image round-trips exactly"
+        );
+
+        // ⛔ Every truncation is malformed and must be refused, not
+        // approximated into a shorter closure.
+        for cut in 1..bytes.len() {
+            assert_eq!(
+                decode_canonical(&bytes[..cut]),
+                None,
+                "AC-6: a truncated closure image must fail closed at {cut} bytes"
+            );
+        }
+        // ⚠ And the decoder stays closed at the top: `Array` is encodable and
+        // still refused, so the extension is `Closure` and nothing wider.
+        let mut array = Vec::new();
+        Value::Array {
+            elem_type_id: 1,
+            elements: vec![Value::SmallInt(1)],
+        }
+        .encode_canonical(&mut array);
+        assert_eq!(
+            decode_canonical(&array),
+            None,
+            "AC-6: the decoder was extended for Closure only"
+        );
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // The cycle / depth contract
+    // ───────────────────────────────────────────────────────────────────────
+
+    /// Allocate a chain of `depth` persistent `Constructor` nodes, each holding
+    /// the next, with an immediate leaf.
+    fn emitted_chain(
+        alloc_ctor: *const u8,
+        store_field: *const u8,
+        base: *const u64,
+        tag_id: u64,
+        depth: usize,
+    ) -> BoundaryWord {
+        let nodes: Vec<BoundaryWord> = (0..depth)
+            .map(|_| BoundaryWord(run3(alloc_ctor, base, BoundaryWord(tag_id), 1) as u64))
+            .collect();
+        for node in &nodes {
+            assert!(node.0 as i64 > 0, "chain node allocates");
+        }
+        for pair in nodes.windows(2) {
+            assert_eq!(
+                run4(store_field, base, pair[0].0, 0, pair[1].0),
+                BOUNDARY_OK
+            );
+        }
+        let leaf = BoundaryWord::immediate(BoundaryTag::ImmediateInt, 1);
+        assert_eq!(
+            run4(store_field, base, nodes[depth - 1].0, 0, leaf.0),
+            BOUNDARY_OK
+        );
+        nodes[0]
+    }
+
+    /// **`AC-10` — a deep acyclic chain adopts. Depth is not a property that
+    /// decides malformed-versus-admitted.**
+    ///
+    /// ⭐ **The number is measured, not chosen.** The former *recursive*
+    /// adoption — restored verbatim and probed on the default 8 MiB test stack —
+    /// carried depth **800** and died between **800 and 1600**. This walk is
+    /// iterative, with the frontier on the heap, and carries the depth below.
+    ///
+    /// ⛔ **AND THE REMAINING CEILING IS NOT THE WALK — read the residual.** The
+    /// landed `Value` machinery is itself recursive over value structure:
+    /// `canonical::encode_canonical`, and `Value`'s derived `Clone`/`Drop`.
+    /// Measured **with adoption entirely absent** — building a `Value` chain in
+    /// Rust and encoding it — that overflows an 8 MiB stack between depth
+    /// **2000** and **3000**. So the end-to-end bound moved from ~1600 to ~2500
+    /// and is now set by the content-addressing encoder, which is the store's
+    /// canonical-encoding surface rather than this node's. ⚠ **The clause "a
+    /// deep chain may not stack-overflow" is therefore NOT discharged**, only
+    /// moved; what *is* discharged is that a deep chain is never *reclassified
+    /// as malformed*, which is asserted below.
+    #[test]
+    fn b2v_ac10_a_deep_acyclic_chain_adopts_without_walk_recursion() {
+        // Beyond the measured former margin (dead between 800 and 1600), below
+        // the landed encoder's measured ceiling (dead between 2000 and 3000).
+        const DEPTH: usize = 2000;
+
+        let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
+        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
+        let mut store = BoundaryValueStore::new();
+        let tag_id = store.intern_symbol("ctor:fixture::Deep::Link");
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (DEPTH + 2, DEPTH + 2, 0),
+            (0, 0, 0),
+        );
+        let root = emitted_chain(alloc_ctor, store_field, f.base, tag_id, DEPTH);
+        store.seal_persistent();
+
+        let adopted = store.adopt(root);
+        assert!(
+            adopted.is_ok(),
+            "AC-10: a finite deep acyclic value is ADMITTED, so adoption must \
+             not fail on it — got {adopted:?}"
+        );
+        // ⛔ And specifically it is never confused with the malformed case.
+        assert_ne!(
+            adopted,
+            Err(BOUNDARY_ERR_CYCLE),
+            "AC-10: depth must never be reclassified as a cycle"
+        );
+        let slot = store
+            .image()
+            .0
+            .node_field(adopted.expect("adopted").payload(), NODE_SLOT)
+            .expect("live");
+        assert_ne!(slot, crate::store::NULL_SLOT, "and it is store-minted");
+    }
+
+    /// **`AC-10` — a MULTI-NODE cycle is refused deterministically, while a
+    /// shared-child DAG of the same shape adopts.**
+    ///
+    /// ⭐ **This pair is what makes the traversal tri-colour rather than a
+    /// visited set.** A second edge into a node is *malformed* when that node is
+    /// still on the stack and *legal sharing* when it is finished — a "have I
+    /// seen this?" set collapses both into one answer and would have to reject
+    /// the DAG to be safe on the cycle. The two halves differ in nothing but
+    /// which way the second edge points.
+    #[test]
+    fn b2v_ac10_a_multi_node_cycle_is_refused_while_a_shared_dag_adopts() {
+        let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
+        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
+
+        // ── a three-node cycle: a -> b -> c -> a ────────────────────────────
+        let mut store = BoundaryValueStore::new();
+        let tag_id = store.intern_symbol("ctor:fixture::Ring::Link");
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (8, 8, 0),
+            (0, 0, 0),
+        );
+        let ring: Vec<BoundaryWord> = (0..3)
+            .map(|_| BoundaryWord(run3(alloc_ctor, f.base, BoundaryWord(tag_id), 1) as u64))
+            .collect();
+        for i in 0..3 {
+            assert_eq!(
+                run4(store_field, f.base, ring[i].0, 0, ring[(i + 1) % 3].0),
+                BOUNDARY_OK,
+                "AC-10: every edge of a multi-node cycle is CONSTRUCTIBLE"
+            );
+        }
+        store.seal_persistent();
+        // Deterministic: the same input gives the same exact status, twice, and
+        // from every entry point on the ring.
+        for entry in &ring {
+            for _ in 0..2 {
+                assert_eq!(
+                    store.adopt(*entry),
+                    Err(BOUNDARY_ERR_CYCLE),
+                    "AC-10: a multi-node cycle is refused deterministically"
+                );
+            }
+        }
+
+        // ── the DAG: one child reached by TWO parents ───────────────────────
+        let mut dag = BoundaryValueStore::new();
+        let parent_id = dag.intern_symbol("ctor:fixture::Dag::Parent");
+        let shared_id = dag.intern_symbol("ctor:fixture::Dag::Shared");
+        let g = bind_with(&mut dag, BoundaryArenaBuilder::new(), (8, 16, 0), (0, 0, 0));
+        let shared = BoundaryWord(run3(alloc_ctor, g.base, BoundaryWord(shared_id), 1) as u64);
+        let leaf = BoundaryWord::immediate(BoundaryTag::ImmediateInt, 3);
+        assert_eq!(run4(store_field, g.base, shared.0, 0, leaf.0), BOUNDARY_OK);
+        let root = BoundaryWord(run3(alloc_ctor, g.base, BoundaryWord(parent_id), 2) as u64);
+        assert_eq!(run4(store_field, g.base, root.0, 0, shared.0), BOUNDARY_OK);
+        assert_eq!(run4(store_field, g.base, root.0, 1, shared.0), BOUNDARY_OK);
+        dag.seal_persistent();
+        let adopted = dag.adopt(root);
+        assert!(
+            adopted.is_ok(),
+            "AC-10: a repeated edge to a FINISHED node is legal sharing, not a \
+             cycle — got {adopted:?}"
+        );
+        // And the shared child is one canonical node, reused rather than copied.
+        let word = adopted.expect("adopted");
+        let a = dag.image().0.word_at(
+            dag.image()
+                .0
+                .node_field(word.payload(), NODE_FIELDS_AT)
+                .expect("live"),
+        );
+        let b = dag.image().0.word_at(
+            dag.image()
+                .0
+                .node_field(word.payload(), NODE_FIELDS_AT)
+                .expect("live")
+                + 1,
+        );
+        assert_eq!(
+            a, b,
+            "AC-10: the shared child resolves to ONE canonical node"
         );
     }
 

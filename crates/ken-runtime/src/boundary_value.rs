@@ -330,6 +330,16 @@ impl BoundaryClass {
         BoundaryClass::Closure,
         BoundaryClass::BorrowedOpaque,
     ];
+
+    /// Decode a class word. `None` for any value outside the closed set — an
+    /// unknown class is a **third outcome that fails**, exactly as
+    /// [`BoundaryTag::from_bits`] treats an unknown tag. Derived from
+    /// [`BoundaryClass::ALL`], so it cannot drift from the enum.
+    pub fn from_bits(bits: u64) -> Option<Self> {
+        BoundaryClass::ALL
+            .into_iter()
+            .find(|class| *class as u64 == bits)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -576,6 +586,44 @@ pub fn boundary_int_magnitude_is_canonical(sign: u64, limbs: &[u64]) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Closure code identity — artifact-bound, never a bare ordinal
+// ---------------------------------------------------------------------------
+
+/// The artifact-bound `code_id` of a callable unit.
+///
+/// ⛔ **A bare local-origin ordinal is not an identity.** `StaticOriginId` is a
+/// `u32` counter that restarts at zero in every artifact, so two independently
+/// compiled artifacts both number their first callable unit `0`. A closure
+/// keyed on that ordinal would make two *different* closures content-equal —
+/// the store would intern them to one slot and hand the wrong body to whichever
+/// consumer asked second. The ruling names this failure explicitly, and the
+/// repair is a **namespace**, not a wider integer.
+///
+/// ⚠ **The length prefix is defensive, NOT load-bearing today — and I claimed
+/// otherwise until a mutation said so.** The doc here used to argue that without
+/// it `("ab", …)` and `("a", …)` could collide. That is false as this function
+/// stands: `package_identity` is the *only* variable-length field and every
+/// other one is fixed-width, so the total length already determines where the
+/// string ends and the concatenation is injective either way. ⛔ **Mutation
+/// `M48` removes the prefix and reddens nothing, which is the correct result,
+/// not a missing control.** It is kept so that adding a *second*
+/// variable-length field cannot silently make the encoding ambiguous — but that
+/// is a future-proofing claim, and it is the only one it earns.
+///
+/// Uses the landed [`crate::hash::fnv1a_64`] rather than a second hash: it is
+/// this crate's declared content-addressing hash, deterministic across runs and
+/// documented as such. A `DefaultHasher` would be neither.
+pub fn boundary_code_id(identity: &crate::RuntimeArtifactIdentity, local_origin: u64) -> u64 {
+    let mut bytes = Vec::with_capacity(identity.package_identity.len() + 32);
+    bytes.extend_from_slice(&(identity.package_identity.len() as u64).to_le_bytes());
+    bytes.extend_from_slice(identity.package_identity.as_bytes());
+    bytes.extend_from_slice(&identity.core_semantic_hash.to_le_bytes());
+    bytes.extend_from_slice(&identity.artifact_hash.to_le_bytes());
+    bytes.extend_from_slice(&local_origin.to_le_bytes());
+    crate::hash::fnv1a_64(&bytes)
+}
+
+// ---------------------------------------------------------------------------
 // Layout: ONE authority, derived extents, real consumers
 // ---------------------------------------------------------------------------
 
@@ -727,11 +775,12 @@ pub enum RegionHeaderField {
     Limbs,
     LimbCount,
     LimbCapacity,
+    Sealed,
 }
 
 impl RegionHeaderField {
     /// Every field, in layout order.
-    pub const ALL: [RegionHeaderField; 17] = [
+    pub const ALL: [RegionHeaderField; 18] = [
         RegionHeaderField::Nodes,
         RegionHeaderField::NodeCount,
         RegionHeaderField::Words,
@@ -749,6 +798,7 @@ impl RegionHeaderField {
         RegionHeaderField::Limbs,
         RegionHeaderField::LimbCount,
         RegionHeaderField::LimbCapacity,
+        RegionHeaderField::Sealed,
     ];
 
     /// This field's byte offset — its position, times the word width.
@@ -815,6 +865,19 @@ pub const ARENA_LIMBS: i32 = RegionHeaderField::Limbs.offset();
 pub const ARENA_LIMB_COUNT: i32 = RegionHeaderField::LimbCount.offset();
 /// Limb-table capacity — the fourth ceiling construction fails closed against.
 pub const ARENA_LIMB_CAPACITY: i32 = RegionHeaderField::LimbCapacity.offset();
+/// ⛔ **`1` once the store has taken exclusive ownership of this region, `0`
+/// while emitted code may still write it** — the seal/quiescence handoff
+/// adoption begins from.
+///
+/// ⭐ **Why this is a published header field and not a Rust-side flag.** The
+/// property that has to hold is *"emitted writers can no longer mutate the
+/// snapshot"*, and emitted writers do not consult Rust state — they hold the
+/// raw region base they were published. A flag the mutators cannot see would
+/// document the handoff instead of enforcing it. Here it sits on the one path
+/// every mutator already walks, so [`ARENA_SEALED`] is checked in
+/// `mutable_guard` and in the allocator, which between them are **every**
+/// emitted writer.
+pub const ARENA_SEALED: i32 = RegionHeaderField::Sealed.offset();
 
 /// Status returned by every emitted-code helper on success.
 pub const BOUNDARY_OK: i64 = 0;
@@ -841,6 +904,39 @@ pub const BOUNDARY_ERR_RELATION: i64 = -8;
 /// Rust side materialized and whose store identity is not emitted code's to
 /// rewrite.
 pub const BOUNDARY_ERR_FROZEN: i64 = -7;
+/// ⛔ **A mutation reached a region the store has SEALED.**
+///
+/// The seal is the *ownership-transfer* half of adoption (`AC-6`). Adoption
+/// absorbs the published counts, validates the reachable graph, mints identity
+/// and publishes — and every one of those steps reads a snapshot it assumes is
+/// stable. A writer that can still run concurrently makes the snapshot a
+/// fiction: the validated graph and the canonicalized graph would be different
+/// graphs. ⛔ **Rust's `&mut` does not close this**, because emitted code holds
+/// a raw region base captured at publication and does not go through the borrow
+/// checker to use it. The seal is a field in the *published header* for exactly
+/// that reason — it is on the path emitted code actually reads.
+pub const BOUNDARY_ERR_SEALED: i64 = -9;
+/// ⛔ **A persistent graph contains a cycle, so it has no canonical image.**
+///
+/// Ken's persistent `Value` is finite and well-founded: children and captures
+/// are encoded *inline* as full canonical `Value`s, and store identity is the
+/// hash+memcmp of that finite byte image. A back-edge has no such image, so a
+/// cyclic staging graph is **malformed**, not an admitted value the ABI happens
+/// to reject (Architect, cycle contract). ⚠ Distinct from
+/// [`BOUNDARY_ERR_SHAPE`] on purpose: *"this graph is not a value"* and *"this
+/// word is the wrong shape"* are different findings, and a shared status makes
+/// the cycle control unable to say which one it caught.
+pub const BOUNDARY_ERR_CYCLE: i64 = -10;
+/// ⛔ **A `Closure` reached adoption while the store carries no artifact
+/// binding.**
+///
+/// A closure's persistent identity includes *which code* it closes over, and a
+/// bare local-origin ordinal collides across artifacts — two independently
+/// compiled artifacts both number their first callable unit `0`. Binding the
+/// ordinal into an artifact-scoped namespace is what makes the identity
+/// meaningful, so an unbound store cannot mint one and must **fail closed**
+/// rather than mint an ordinal that aliases.
+pub const BOUNDARY_ERR_UNBOUND: i64 = -11;
 
 // ---------------------------------------------------------------------------
 // The invocation-scoped arena
@@ -871,6 +967,8 @@ pub struct BoundaryRegion {
     persistent: u64,
     /// Address of the invocation's native-`Int` arena header, or `0`.
     native_int: u64,
+    /// Whether the store has taken exclusive ownership (see [`ARENA_SEALED`]).
+    sealed: bool,
 }
 
 const NODE_WORDS: usize = BOUNDARY_NODE_STRIDE as usize / 8;
@@ -931,6 +1029,35 @@ impl BoundaryRegion {
             RegionHeaderField::Limbs => self.limbs.as_ptr() as u64,
             RegionHeaderField::LimbCount => self.live_limbs as u64,
             RegionHeaderField::LimbCapacity => self.limbs.len() as u64,
+            RegionHeaderField::Sealed => u64::from(self.sealed),
+        }
+    }
+
+    /// ⛔ **Take exclusive ownership: the seal/quiescence handoff.**
+    ///
+    /// Writes the flag into the **published** header, which is the copy emitted
+    /// code reads, and not merely into the Rust-side field — otherwise the
+    /// mutators this is supposed to stop would never see it. Idempotent.
+    ///
+    /// ⚠ Sealing a region that was never published is still meaningful: there
+    /// is no published base for emitted code to hold, so the region is already
+    /// quiescent and the flag simply records it.
+    fn seal(&mut self) {
+        self.sealed = true;
+        if !self.header.is_empty() {
+            self.header[(ARENA_SEALED / 8) as usize] = 1;
+        }
+    }
+
+    /// Whether the store holds exclusive ownership of this region.
+    ///
+    /// Reads the **published** header when there is one, on the same rule as
+    /// [`Self::node_count`]: the published copy is the one a writer consults,
+    /// so it is the one that decides whether a write would have been refused.
+    pub fn is_sealed(&self) -> bool {
+        match self.header.first() {
+            None => self.sealed,
+            Some(_) => self.header[(ARENA_SEALED / 8) as usize] != 0,
         }
     }
 
@@ -1314,23 +1441,25 @@ impl BoundaryArenaV1 {
 /// invocation-arena index would be the contradiction the Architect measured: a
 /// word permitted to escape that names storage which is already freed.
 ///
-/// ## ⚠ Residual — emitted-constructed nodes are not content-addressed
+/// ## Emitted construction is content-addressed by ADOPTION, not by the allocator
 ///
-/// A node the **store** materialized carries its [`SlotId`], and equal values
-/// are one node because the store says so. A node **emitted code** constructs
-/// carries [`NULL_SLOT`]: it survives the invocation and is fully readable, but
-/// two structurally equal constructions are two nodes. Interning is a
-/// content-addressing operation over a whole value; it is not Θ(1) at a
-/// construction site, so it is not something the emitted allocator can do.
+/// A node the **store** materialized carries its [`SlotId`] on arrival. A node
+/// **emitted code** constructs carries [`NULL_SLOT`], because interning is a
+/// content-addressing operation over a whole value and is not Θ(1) at a
+/// construction site — the allocator cannot do it.
 ///
-/// Recorded rather than papered over. It does **not** make this a second
-/// identity authority — the store still mints every [`SlotId`], still governs
-/// how much space construction may take, and can walk the nodes past
-/// [`ARENA_FROZEN`] to adopt them. Closing the gap means deciding *when* an
-/// invocation's constructed nodes are interned, which is a `B2F` question about
-/// the invocation lifecycle rather than a `B2V` question about representation.
-/// `b2v_a_constructed_persistent_word_survives_the_invocation_arena` asserts the
-/// `NULL_SLOT`, so the limit is pinned instead of merely written down.
+/// ⛔ **That state is `PendingStoreAdoption`, not a published outcome.** This
+/// module's own layout contract says a null [`NODE_SLOT`] *denotes*
+/// invocation-arena ownership, so a persistent-tagged node still carrying one is
+/// internally inconsistent and must not escape. [`BoundaryValueStore::adopt`] is
+/// the store-owned boundary that resolves it: seal, validate the reachable
+/// graph, canonicalize, intern, and mint or reuse the real slot. Reserving
+/// persistent-region storage is storage *governance*; only adoption is identity.
+///
+/// ⚠ **This is therefore not a second identity authority and never was one.**
+/// The store mints every [`SlotId`], grants every byte of space, and is the only
+/// writer of [`NODE_SLOT`] — emitted code has no setter for that field and
+/// `define_store_node_word` refuses to build one.
 #[derive(Debug, Default)]
 pub struct BoundaryPersistentImage(pub BoundaryRegion);
 
@@ -1363,6 +1492,11 @@ impl BoundaryPersistentImage {
     /// The live data bytes of one node's span.
     pub fn node_data(&self, index: u64) -> Option<&[u8]> {
         self.0.node_data(index)
+    }
+
+    /// Whether the store holds exclusive ownership (see [`ARENA_SEALED`]).
+    pub fn is_sealed(&self) -> bool {
+        self.0.is_sealed()
     }
 
     /// Publish the persistent header. See [`BoundaryRegion::publish`].
@@ -1453,6 +1587,14 @@ pub struct BoundaryValueStore {
     /// materializing one value in two different invocations yields the *same*
     /// word, and the store stays the sole identity authority.
     placement: BTreeMap<SlotId, u64>,
+    /// The artifact whose callable-unit ordinals this store's closures name.
+    ///
+    /// ⛔ **`None` is a real state and it fails closed.** A closure's identity is
+    /// artifact-scoped (see [`boundary_code_id`]); an unbound store has no
+    /// namespace to scope it in, so `Closure` adoption returns
+    /// [`BOUNDARY_ERR_UNBOUND`] rather than falling back to the bare ordinal.
+    /// Ground adoption is unaffected — a ground value's identity is its content.
+    artifact: Option<crate::RuntimeArtifactIdentity>,
 }
 
 // `Store` derives neither, and widening its derives is outside this node's
@@ -1483,7 +1625,42 @@ impl BoundaryValueStore {
             symbol_ids: BTreeMap::new(),
             image: BoundaryPersistentImage::default(),
             placement: BTreeMap::new(),
+            artifact: None,
         }
+    }
+
+    /// Bind the artifact whose callable-unit ordinals this store's closures
+    /// name. Until this is called, `Closure` adoption fails closed with
+    /// [`BOUNDARY_ERR_UNBOUND`].
+    pub fn bind_artifact(&mut self, identity: crate::RuntimeArtifactIdentity) {
+        self.artifact = Some(identity);
+    }
+
+    /// The bound artifact, if any.
+    pub fn artifact(&self) -> Option<&crate::RuntimeArtifactIdentity> {
+        self.artifact.as_ref()
+    }
+
+    /// ⛔ **The seal/quiescence handoff — take exclusive ownership of the
+    /// persistent region before adopting anything out of it.**
+    ///
+    /// [`Self::adopt`] refuses to run against an unsealed region, because every
+    /// phase after it reads a snapshot: absorbing the published counts, walking
+    /// the reachable graph, minting identity and publishing all assume the graph
+    /// they are looking at is the graph that was validated. A writer still able
+    /// to run makes those two different graphs.
+    ///
+    /// ⚠ **`&mut self` is not the proof.** Emitted code holds the raw region
+    /// base it was published and never consults the borrow checker to use it, so
+    /// exclusivity has to be expressed somewhere the mutators actually read —
+    /// which is [`ARENA_SEALED`], in the published header.
+    pub fn seal_persistent(&mut self) {
+        self.image.0.seal();
+    }
+
+    /// Whether the persistent region is sealed.
+    pub fn is_persistent_sealed(&self) -> bool {
+        self.image.0.is_sealed()
     }
 
     /// The persistent region, for read-back and reservation.
@@ -1562,183 +1739,481 @@ impl BoundaryValueStore {
         if tag.referent_owner() != BoundaryReferentOwner::PersistentStore {
             return Err(BOUNDARY_ERR_SHAPE);
         }
+        // ── phase 1: the sealed handoff ─────────────────────────────────────
+        // Everything below reads a snapshot. Refuse to start unless emitted
+        // writers have already been shut out of it.
+        if !self.image.0.is_sealed() {
+            return Err(BOUNDARY_ERR_SEALED);
+        }
         // The store takes ownership of what emitted code appended before it
         // validates any of it.
         self.image.0.absorb_published_counts();
-        let mut in_progress = std::collections::BTreeSet::new();
-        let index = self.adopt_node(word.payload(), &mut in_progress)?;
-        Ok(BoundaryWord::handle(tag, index))
+
+        // ── phase 2: validate the COMPLETE reachable graph, before anything
+        //             is canonicalized, interned, minted or published ────────
+        let order = self.validate_reachable(word.payload())?;
+
+        // ── phase 3: canonicalize in postorder, then mint ───────────────────
+        let canonical = self.canonicalize(&order)?;
+        let root = canonical
+            .get(&word.payload())
+            .copied()
+            .unwrap_or_else(|| word.payload());
+        Ok(BoundaryWord::handle(tag, root))
     }
 
-    /// Adopt one node, returning the **canonical** index its value now lives at.
-    fn adopt_node(
-        &mut self,
-        index: u64,
-        in_progress: &mut std::collections::BTreeSet<u64>,
-    ) -> Result<u64, i64> {
-        // ⛔ **A NODE CYCLE IS CONSTRUCTIBLE, and unbounded recursion here would
-        // hang the compiler rather than reject the input.** Measured, not
-        // assumed: `ken_boundary_store_field_local` refuses only a persistent
-        // parent with an *invocation-owned* child, so emitted code can allocate
-        // two persistent nodes and write each as the other's child — both
-        // writes pass every guard. A content-addressed image of such a graph
-        // does not exist, so this fails closed with an exact status.
-        //
-        // ⚠ This was a live defect in the shipped ground adoption, not only a
-        // closure question. The frame told me to answer the cycle question
-        // before recursing; the answer is that they are constructible.
-        if !in_progress.insert(index) {
-            return Err(BOUNDARY_ERR_SHAPE);
-        }
-        let adopted = self.adopt_node_inner(index, in_progress);
-        in_progress.remove(&index);
-        adopted
-    }
-
-    fn adopt_node_inner(
-        &mut self,
-        index: u64,
-        in_progress: &mut std::collections::BTreeSet<u64>,
-    ) -> Result<u64, i64> {
+    /// Whether this node already carries a store-minted identity.
+    ///
+    /// Such a node is **black on arrival**: it is canonical already and its
+    /// reachable subtree was validated when it was adopted, so the walk neither
+    /// descends into it nor re-interns it.
+    fn already_owned(&self, index: u64) -> Result<bool, i64> {
         let slot = self
             .image
             .0
             .node_field(index, NODE_SLOT)
             .ok_or(BOUNDARY_ERR_BOUNDS)?;
-        if slot != NULL_SLOT {
-            // Already store-owned. Idempotent, so a graph that shares a child
-            // adopts it once.
-            return Ok(index);
+        Ok(slot != NULL_SLOT)
+    }
+
+    /// ⛔ **Validate the complete reachable graph — iteratively — and return it
+    /// in postorder.**
+    ///
+    /// ⭐ **Tri-colour, with an explicit heap stack, and both halves matter.**
+    ///
+    /// *Tri-colour* is what tells a **cycle** from a **shared DAG**, which a
+    /// visited-set cannot: a second edge into a node is legal when that node is
+    /// already finished (**black** — the sub-value is simply shared, and it
+    /// reuses one canonical child) and malformed when the node is still on the
+    /// stack (**grey** — the edge points back into the path that reached it).
+    /// A plain "have I seen this?" set collapses those two into one answer and
+    /// would have to reject every shared child to be safe.
+    ///
+    /// *Iterative* is what makes **depth** a non-property. The former recursive
+    /// walk spent one host frame per node, so a finite, perfectly well-formed
+    /// deep chain died of stack exhaustion — ⛔ **and `AC-10` admits those
+    /// values, so crashing on one is as wrong as rejecting one.** Cycle-safety
+    /// and depth-safety are different properties; a cycle guard closes only the
+    /// first. Here the frontier is a `Vec` on the heap, so the bound is the
+    /// region's own capacity rather than the thread's stack.
+    ///
+    /// ⚠ **The node-index key is sufficient only because one walk is scoped to
+    /// one persistent image** — this store's own. If a walk could ever span
+    /// images, the key would have to carry image identity too, or two nodes at
+    /// the same index in different images would read as one.
+    fn validate_reachable(&self, root: u64) -> Result<Vec<u64>, i64> {
+        #[derive(Clone, Copy, Eq, PartialEq)]
+        enum Colour {
+            /// On the stack: an edge back to one of these is a cycle.
+            Grey,
+            /// Finished: a further edge to one of these is legal sharing.
+            Black,
         }
 
-        // ── 1. the reachable graph, bottom-up ──────────────────────────────
-        let count = self
+        let mut colour: BTreeMap<u64, Colour> = BTreeMap::new();
+        let mut order: Vec<u64> = Vec::new();
+        // `(node index, next child offset)` — the frontier, on the heap.
+        let mut stack: Vec<(u64, u64)> = Vec::new();
+
+        if self.already_owned(root)? {
+            return Ok(order);
+        }
+        colour.insert(root, Colour::Grey);
+        stack.push((root, 0));
+
+        while let Some(&(index, cursor)) = stack.last() {
+            let count = self
+                .image
+                .0
+                .node_field(index, NODE_FIELD_COUNT)
+                .ok_or(BOUNDARY_ERR_BOUNDS)?;
+            if cursor >= count {
+                stack.pop();
+                colour.insert(index, Colour::Black);
+                order.push(index);
+                continue;
+            }
+            // Advance before descending, so the frame resumes at the next child
+            // rather than re-walking this one.
+            stack
+                .last_mut()
+                .expect("the frame was just read from the top of the stack")
+                .1 = cursor + 1;
+
+            let at = self
+                .image
+                .0
+                .node_field(index, NODE_FIELDS_AT)
+                .ok_or(BOUNDARY_ERR_BOUNDS)?;
+            let child = self
+                .image
+                .0
+                .word_at(at + cursor)
+                .ok_or(BOUNDARY_ERR_BOUNDS)?;
+            match child.tag().ok_or(BOUNDARY_ERR_TAG)?.referent_owner() {
+                BoundaryReferentOwner::NoReferent => {}
+                // ⛔ A persistent parent must not publish reaching a referent
+                // that dies with the invocation. Checked here, at the boundary
+                // that matters, rather than inherited from construction.
+                BoundaryReferentOwner::InvocationArena => return Err(BOUNDARY_ERR_ESCAPE),
+                BoundaryReferentOwner::PersistentStore => {
+                    let next = child.payload();
+                    match colour.get(&next) {
+                        // Back-edge into the path that reached here.
+                        Some(Colour::Grey) => return Err(BOUNDARY_ERR_CYCLE),
+                        // Shared child: legal, already finished, reused.
+                        Some(Colour::Black) => {}
+                        None => {
+                            if self.already_owned(next)? {
+                                colour.insert(next, Colour::Black);
+                            } else {
+                                colour.insert(next, Colour::Grey);
+                                stack.push((next, 0));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(order)
+    }
+
+    /// Canonicalize a validated postorder into store-owned identities.
+    ///
+    /// ⛔ **Runs only after validation is complete**, so no identity is minted
+    /// and no root is published for a graph that turns out to be malformed
+    /// further in. Postorder means every child is canonical before its parent is
+    /// read, which is what lets a parent's image be assembled from images that
+    /// already exist instead of re-walking the subtree.
+    ///
+    /// Returns `original index -> canonical index`.
+    fn canonicalize(&mut self, order: &[u64]) -> Result<BTreeMap<u64, u64>, i64> {
+        let mut canonical: BTreeMap<u64, u64> = BTreeMap::new();
+        // One image per node, dropped as soon as its last parent has consumed
+        // it: a parent's image *contains* its children's, so retaining every
+        // entry would make a deep chain quadratic in memory for no benefit.
+        let mut images: BTreeMap<u64, Value> = BTreeMap::new();
+        let mut pending_parents = self.in_degrees(order)?;
+
+        for &index in order {
+            let count = self
+                .image
+                .0
+                .node_field(index, NODE_FIELD_COUNT)
+                .ok_or(BOUNDARY_ERR_BOUNDS)?;
+            let at = self
+                .image
+                .0
+                .node_field(index, NODE_FIELDS_AT)
+                .ok_or(BOUNDARY_ERR_BOUNDS)?;
+
+            let value = self.canonical_image(index, at, count, &images)?;
+
+            // Release each child's image now that this parent has consumed it.
+            for offset in 0..count {
+                let child = self
+                    .image
+                    .0
+                    .word_at(at + offset)
+                    .ok_or(BOUNDARY_ERR_BOUNDS)?;
+                if child.tag().ok_or(BOUNDARY_ERR_TAG)?.referent_owner()
+                    != BoundaryReferentOwner::PersistentStore
+                {
+                    continue;
+                }
+                if let Some(remaining) = pending_parents.get_mut(&child.payload()) {
+                    *remaining -= 1;
+                    if *remaining == 0 {
+                        images.remove(&child.payload());
+                    }
+                }
+                // ⛔ **Preserve the child's OWN tag.** Rewriting it as
+                // `PersistentGround` would retag a nested `PersistentClosure`
+                // into a ground handle — a canonicalization that silently
+                // changes what the child *is*. The tag is the child's; only the
+                // index is this step's to move.
+                if let Some(&target) = canonical.get(&child.payload()) {
+                    if target != child.payload() {
+                        let tag = child.tag().ok_or(BOUNDARY_ERR_TAG)?;
+                        self.image
+                            .0
+                            .set_word_at(at + offset, BoundaryWord::handle(tag, target));
+                    }
+                }
+            }
+
+            let slot = self.persist_image(&value).ok_or(BOUNDARY_ERR_SHAPE)?;
+            // Mint, or reuse an identity this store already owns.
+            let placed = match self.placement.get(&slot) {
+                Some(&existing) => existing,
+                None => {
+                    self.image.0.set_node_slot(index, slot);
+                    self.placement.insert(slot, index);
+                    index
+                }
+            };
+            canonical.insert(index, placed);
+            images.insert(index, value);
+        }
+        Ok(canonical)
+    }
+
+    /// How many parents inside this walk reference each node, so an image can be
+    /// released the moment its last parent has read it.
+    fn in_degrees(&self, order: &[u64]) -> Result<BTreeMap<u64, usize>, i64> {
+        let mut degrees: BTreeMap<u64, usize> = BTreeMap::new();
+        for &index in order {
+            let count = self
+                .image
+                .0
+                .node_field(index, NODE_FIELD_COUNT)
+                .ok_or(BOUNDARY_ERR_BOUNDS)?;
+            let at = self
+                .image
+                .0
+                .node_field(index, NODE_FIELDS_AT)
+                .ok_or(BOUNDARY_ERR_BOUNDS)?;
+            for offset in 0..count {
+                let child = self
+                    .image
+                    .0
+                    .word_at(at + offset)
+                    .ok_or(BOUNDARY_ERR_BOUNDS)?;
+                if child.tag().ok_or(BOUNDARY_ERR_TAG)?.referent_owner()
+                    == BoundaryReferentOwner::PersistentStore
+                {
+                    *degrees.entry(child.payload()).or_insert(0) += 1;
+                }
+            }
+        }
+        Ok(degrees)
+    }
+
+    /// ⛔ **The closed canonical-image layer: one persistent node → the [`Value`]
+    /// that IS its content-addressed image.**
+    ///
+    /// ⭐ **Total over [`BoundaryClass`] with no `_` arm**, which is the point: a
+    /// new class is a compile error here, not a value that silently has no
+    /// canonical form. This is the *canonicalizer* phase, and it is the sole
+    /// authority for what a persistent node means — the same layer serves ground
+    /// values and closures rather than routing one through a second decoder.
+    ///
+    /// ⛔ **`Closure` deliberately does NOT go through
+    /// [`RuntimeGroundValue`].** That type has no closure arm and adding one
+    /// would be a second value taxonomy; [`Value::Closure`] already *is* the
+    /// normative image — authoritative code identity plus the full ordered
+    /// canonical captured environment — so the layer produces [`Value`] directly.
+    fn canonical_image(
+        &mut self,
+        index: u64,
+        at: u64,
+        count: u64,
+        images: &BTreeMap<u64, Value>,
+    ) -> Result<Value, i64> {
+        let class_bits = self
             .image
             .0
-            .node_field(index, NODE_FIELD_COUNT)
+            .node_field(index, NODE_CLASS)
             .ok_or(BOUNDARY_ERR_BOUNDS)?;
-        let at = self
+        let class = BoundaryClass::from_bits(class_bits).ok_or(BOUNDARY_ERR_CLASS)?;
+        let payload = self
             .image
             .0
-            .node_field(index, NODE_FIELDS_AT)
+            .node_field(index, NODE_PAYLOAD)
             .ok_or(BOUNDARY_ERR_BOUNDS)?;
+
+        match class {
+            // No handle tag admits `Bool` in `BOUNDARY_TAG_CLASS_RELATION`, so
+            // no node is ever this class; a booolean crosses as an immediate.
+            // Refused rather than given an image it could never be asked for.
+            BoundaryClass::Bool => Err(BOUNDARY_ERR_CLASS),
+            BoundaryClass::Int => {
+                let marker = self
+                    .image
+                    .0
+                    .node_field(index, NODE_EXTENT)
+                    .ok_or(BOUNDARY_ERR_BOUNDS)?;
+                if marker == crate::native_int::NATIVE_INT_SMALL_TAG_V1 {
+                    // The store interns compounds only, and `canonical_big_image`
+                    // is total over both arms — a `Value::SmallInt` would trip
+                    // the store's `is_compound` assertion.
+                    return Ok(crate::RuntimeIntV1::Small(payload as i64).canonical_big_image());
+                }
+                if marker == BOUNDARY_INT_REGION_LIMBS {
+                    let limbs = self
+                        .image
+                        .0
+                        .node_limbs(index)
+                        .ok_or(BOUNDARY_ERR_BOUNDS)?
+                        .to_vec();
+                    // The seal is what makes this readable at all, and the
+                    // canonicity law is the same one the emitted seal checks.
+                    if !boundary_int_magnitude_is_canonical(payload, &limbs) {
+                        return Err(BOUNDARY_ERR_SHAPE);
+                    }
+                    let sign = match payload {
+                        0 => crate::Sign::NonNegative,
+                        1 => crate::Sign::Negative,
+                        _ => return Err(BOUNDARY_ERR_SHAPE),
+                    };
+                    return Ok(crate::RuntimeIntV1::from_canonical_parts(sign, limbs)
+                        .canonical_big_image());
+                }
+                // A marker whose storage is invocation-scoped cannot back a
+                // persistent value; a marker with no row backs nothing at all.
+                Err(BOUNDARY_ERR_SHAPE)
+            }
+            BoundaryClass::Bytes => Ok(Value::Bytes(
+                self.image
+                    .0
+                    .node_data(index)
+                    .ok_or(BOUNDARY_ERR_BOUNDS)?
+                    .to_vec(),
+            )),
+            BoundaryClass::String => {
+                let bytes = self
+                    .image
+                    .0
+                    .node_data(index)
+                    .ok_or(BOUNDARY_ERR_BOUNDS)?
+                    .to_vec();
+                let text = String::from_utf8(bytes).map_err(|_| BOUNDARY_ERR_SHAPE)?;
+                Ok(Value::String(text))
+            }
+            BoundaryClass::Constructor => {
+                // ⭐ The node's own `NODE_TAG_ID` *is* the interned constructor
+                // id — read it rather than round-tripping through the symbol
+                // name and re-interning, which would be a second authority for
+                // the same number.
+                let constructor_id = u32::try_from(
+                    self.image
+                        .0
+                        .node_field(index, NODE_TAG_ID)
+                        .ok_or(BOUNDARY_ERR_BOUNDS)?,
+                )
+                .map_err(|_| BOUNDARY_ERR_SHAPE)?;
+                if self.symbol(u64::from(constructor_id)).is_none() {
+                    // A constructor id this store never interned names nothing,
+                    // so the node has no canonical image.
+                    return Err(BOUNDARY_ERR_SHAPE);
+                }
+                let args = self.child_images(at, count, images)?;
+                Ok(Value::Constructor {
+                    constructor_id,
+                    args,
+                })
+            }
+            BoundaryClass::Record => {
+                // `Value::Record` carries a `type_id` and positional fields — it
+                // drops names — so the record's ordered field-name list IS its
+                // type identity, interned as one symbol. Same rule the Rust-side
+                // materialization uses, so the two converge on one slot.
+                let mut names = Vec::with_capacity(count as usize);
+                for offset in 0..count {
+                    let id = self
+                        .image
+                        .0
+                        .name_at(at + offset)
+                        .ok_or(BOUNDARY_ERR_BOUNDS)?;
+                    names.push(self.symbol(id).ok_or(BOUNDARY_ERR_SHAPE)?.to_string());
+                }
+                let type_id = self.intern_symbol(&format!("record:{}", names.join(","))) as u32;
+                let fields = self.child_images(at, count, images)?;
+                Ok(Value::Record { type_id, fields })
+            }
+            BoundaryClass::Closure => {
+                // ⛔ The node carries the **local origin ordinal**; the artifact
+                // binding is what turns it into an identity. Emitted code never
+                // computes this — it has no artifact identity and B2F dispatch
+                // stays inert — so the binding happens here, at adoption, or not
+                // at all.
+                let identity = self.artifact.clone().ok_or(BOUNDARY_ERR_UNBOUND)?;
+                let code_id = boundary_code_id(&identity, payload);
+                // Captures are the full ordered canonical values, not hashes:
+                // equal code identity *and* equal ordered captures converge, and
+                // a changed capture or a changed ORDER does not alias, because
+                // the encoding is positional.
+                let captured = self.child_images(at, count, images)?;
+                Ok(Value::Closure { code_id, captured })
+            }
+            // ⛔ Invocation-owned represented arms. They are not narrowed and not
+            // reclassified — they are simply never placed in the permanent
+            // store, and their transfer is governed by the invocation arena's
+            // escape paths.
+            BoundaryClass::HostResult | BoundaryClass::BorrowedOpaque => Err(BOUNDARY_ERR_ESCAPE),
+        }
+    }
+
+    /// The ordered canonical images of one node's children.
+    fn child_images(
+        &self,
+        at: u64,
+        count: u64,
+        images: &BTreeMap<u64, Value>,
+    ) -> Result<Vec<Value>, i64> {
+        let mut out = Vec::with_capacity(count as usize);
         for offset in 0..count {
             let child = self
                 .image
                 .0
                 .word_at(at + offset)
                 .ok_or(BOUNDARY_ERR_BOUNDS)?;
-            let owner = child.tag().ok_or(BOUNDARY_ERR_TAG)?.referent_owner();
-            match owner {
-                BoundaryReferentOwner::NoReferent => {}
-                BoundaryReferentOwner::InvocationArena => return Err(BOUNDARY_ERR_ESCAPE),
-                BoundaryReferentOwner::PersistentStore => {
-                    let canonical = self.adopt_node(child.payload(), in_progress)?;
-                    if canonical != child.payload() {
-                        // ⛔ **Preserve the child's OWN tag.** Rewriting it as
-                        // `PersistentGround` would retag a nested
-                        // `PersistentClosure` into a ground handle — a
-                        // canonicalization that silently changes what the child
-                        // *is*. The tag is the child's, not the parent's to
-                        // choose.
-                        let tag = child.tag().ok_or(BOUNDARY_ERR_TAG)?;
-                        self.image
-                            .0
-                            .set_word_at(at + offset, BoundaryWord::handle(tag, canonical));
-                    }
-                }
-            }
+            out.push(self.child_image(child, images)?);
         }
-
-        // ── 2. canonicalize and intern ─────────────────────────────────────
-        let value = self.read_ground(index).ok_or(BOUNDARY_ERR_SHAPE)?;
-        let slot = self.persist(&value).ok_or(BOUNDARY_ERR_SHAPE)?;
-
-        // ── 3. mint, or reuse an identity this store already owns ───────────
-        if let Some(existing) = self.placement.get(&slot) {
-            return Ok(*existing);
-        }
-        self.image.0.set_node_slot(index, slot);
-        self.placement.insert(slot, index);
-        Ok(index)
+        Ok(out)
     }
 
-    /// Read a persistent node back as the ground value it denotes.
+    /// One child word, as the canonical image it denotes.
     ///
-    /// ⛔ **The validation half of adoption**, and it fails closed: a class this
-    /// does not read back has no canonical image, so it cannot be interned and
-    /// must not be adopted.
-    fn read_ground(&self, index: u64) -> Option<RuntimeGroundValue> {
-        let image = &self.image.0;
-        let class = image.node_field(index, NODE_CLASS)?;
-        let payload = image.node_field(index, NODE_PAYLOAD)?;
-        if class == BoundaryClass::Int as u64 {
-            let marker = image.node_field(index, NODE_EXTENT)?;
-            if marker == crate::native_int::NATIVE_INT_SMALL_TAG_V1 {
-                return Some(RuntimeGroundValue::Int(crate::RuntimeIntV1::Small(
-                    payload as i64,
-                )));
-            }
-            if marker == BOUNDARY_INT_REGION_LIMBS {
-                let limbs = image.node_limbs(index)?.to_vec();
-                let sign = match payload {
-                    0 => crate::Sign::NonNegative,
-                    1 => crate::Sign::Negative,
-                    _ => return None,
-                };
-                return Some(RuntimeGroundValue::Int(
-                    crate::RuntimeIntV1::from_canonical_parts(sign, limbs),
-                ));
-            }
-            return None;
-        }
-        if class == BoundaryClass::Bytes as u64 {
-            return Some(RuntimeGroundValue::Bytes(image.node_data(index)?.to_vec()));
-        }
-        if class == BoundaryClass::String as u64 {
-            let text = std::str::from_utf8(image.node_data(index)?).ok()?;
-            return Some(RuntimeGroundValue::String(text.to_string()));
-        }
-        let count = image.node_field(index, NODE_FIELD_COUNT)?;
-        let at = image.node_field(index, NODE_FIELDS_AT)?;
-        if class == BoundaryClass::Constructor as u64 {
-            let constructor = self
-                .symbol(image.node_field(index, NODE_TAG_ID)?)?
-                .to_string();
-            let mut args = Vec::new();
-            for offset in 0..count {
-                args.push(self.read_child(image.word_at(at + offset)?)?);
-            }
-            return Some(RuntimeGroundValue::Constructor { constructor, args });
-        }
-        if class == BoundaryClass::Record as u64 {
-            let mut fields = Vec::new();
-            for offset in 0..count {
-                let name = self.symbol(image.name_at(at + offset)?)?.to_string();
-                fields.push((name, self.read_child(image.word_at(at + offset)?)?));
-            }
-            return Some(RuntimeGroundValue::Record { fields });
-        }
-        // `Closure`, `HostResult` and `BorrowedOpaque` have no canonical store
-        // image. Conservative reject, never a silent admission.
-        None
-    }
-
-    /// One child word, as the value it denotes.
-    fn read_child(&self, word: BoundaryWord) -> Option<RuntimeGroundValue> {
-        match word.tag()? {
-            BoundaryTag::ImmediateBool => Some(RuntimeGroundValue::Bool(word.payload() == 1)),
-            BoundaryTag::ImmediateInt => Some(RuntimeGroundValue::Int(crate::RuntimeIntV1::Small(
-                word.signed_payload(),
-            ))),
-            BoundaryTag::PersistentGround => self.read_ground(word.payload()),
+    /// ⛔ Exhaustive over [`BoundaryTag`] with no `_` arm — a new tag is a
+    /// compile error here rather than a child that silently has no image.
+    fn child_image(&self, word: BoundaryWord, images: &BTreeMap<u64, Value>) -> Result<Value, i64> {
+        match word.tag().ok_or(BOUNDARY_ERR_TAG)? {
+            BoundaryTag::ImmediateBool => Ok(Value::Bool(word.payload() == 1)),
+            BoundaryTag::ImmediateInt => Ok(Value::SmallInt(word.signed_payload())),
+            // ⚠ **A measured gap, refused rather than guessed.** These three
+            // tags are constructible as children of a persistent aggregate, and
+            // `Value` has no arm that means "exit status" or "bounded Nat". The
+            // landed reader refused them too; picking a `Value` arm here would
+            // be inventing the semantics rather than encoding them, so the
+            // refusal is exact and reported instead of papered over.
             BoundaryTag::ImmediateExitStatus
             | BoundaryTag::ImmediateBoundedNat
-            | BoundaryTag::ImmediateStructuralNat
-            | BoundaryTag::PersistentClosure
-            | BoundaryTag::InvocationBorrowed
-            | BoundaryTag::InvocationHostResult => None,
+            | BoundaryTag::ImmediateStructuralNat => Err(BOUNDARY_ERR_CLASS),
+            BoundaryTag::PersistentGround | BoundaryTag::PersistentClosure => {
+                if let Some(image) = images.get(&word.payload()) {
+                    return Ok(image.clone());
+                }
+                // A node an earlier walk already adopted. ⭐ Recovered through
+                // the **store's own** `slot -> bytes -> Value` path rather than
+                // by re-reading the region, so the two paths corroborate each
+                // other instead of one path being read twice.
+                let slot = self
+                    .image
+                    .0
+                    .node_field(word.payload(), NODE_SLOT)
+                    .ok_or(BOUNDARY_ERR_BOUNDS)?;
+                if slot == NULL_SLOT {
+                    return Err(BOUNDARY_ERR_SHAPE);
+                }
+                self.decode_slot(slot).ok_or(BOUNDARY_ERR_SHAPE)
+            }
+            BoundaryTag::InvocationBorrowed | BoundaryTag::InvocationHostResult => {
+                Err(BOUNDARY_ERR_ESCAPE)
+            }
         }
+    }
+
+    /// Intern an already-canonical [`Value`] image, returning its slot.
+    ///
+    /// ⭐ **The `persist_image` seam.** [`Self::persist`] types over
+    /// [`RuntimeGroundValue`], which has no closure arm; adoption produces
+    /// [`Value`] directly, so it interns directly. Both end at the same
+    /// `Store::intern`, which is what keeps identity single-authority.
+    fn persist_image(&mut self, image: &Value) -> Option<SlotId> {
+        image
+            .is_compound()
+            .then(|| self.store.intern(image).slot_id())
     }
 
     /// Intern a symbol — a constructor name, a record type identity, or a
