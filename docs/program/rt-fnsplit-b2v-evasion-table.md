@@ -1677,3 +1677,104 @@ second emitter.
 Dead-code oracle: **18 lib warnings before and after**, same set — this fold
 introduced no new consumer-less item, and none of the items it consumed were on
 that list to begin with (they were consumed by the class fold at `720f301c`).
+
+---
+
+# The class axis, re-opened by measurement — `7d1b307b`, `1c0c1fea`
+
+⭐ **This section exists because I ran the tag axis's winning mutation against
+the class axis the Architect had already confirmed.** It won there too.
+
+## The measurement that re-opened a confirmed axis
+
+`class_guard(&mut b, node, plan.int_magnitude_classes())` appears at **five**
+sites. One was disconnected — the literal `&[BoundaryClass::Int]` it used to be
+— with the other four left consuming the plan:
+
+```
+test result: ok. 439 passed; 0 failed
+```
+
+⛔ **An emitter that ignores the plan at one site did not redden**, which is
+`R3`'s bar verbatim. Identical cause to the tag axis: the whole-graph
+differential cannot see one defector while four consumers still move the
+aggregate.
+
+⚠ **This does not say `720f301c` was wrong.** The wiring is real, the literals
+are gone, the derivation is the partition's, the behaviour is preserved. It says
+the **evidence** established *some* consumption, not per-site consumption — and
+the Architect withdrew the "closed" statement on exactly that basis
+(`evt_51xk9sxqdtzgt`, point 3), while confirming the wiring stands.
+
+⭐ **The transferable part: a confirmed deliverable is not a reason to skip the
+mutation.** The confirmation was accurate about the code it read. What it could
+not tell me was whether the pin behind it had the strength both of us were
+treating it as having — and the only thing that answers that is running the
+mutation, which cost one command.
+
+## Two mechanisms, because neither covers the surface alone
+
+| | covers | limit |
+|---|---|---|
+| `b2v_every_emitted_class_guard_is_the_plans` | behavioural, `define_int_part`'s three readers | probe shapes: 5-param and 3-param helpers do not fit |
+| `b2v_every_class_guard_call_site_takes_its_set_from_the_plan` | source scan, **all seven** call sites | a helper laundering a literal into plan-shaped text |
+
+The scan pins the **allowed form** — every argument must come from `plan` — so a
+guard spelled any other way reddens, including one nobody imagined. An
+undetermined parse **fails**, and it has a positive control on the site count,
+because a scan that matched nothing passes for any reason at all.
+
+⚠ **The scan reads its own source and matched its own needle literal on the
+first run.** It was caught by the undetermined-parse branch firing — which is
+precisely the failure that branch exists for, working as intended on its author.
+
+| # | mutation | expected | measured | caught by |
+|---|---|---|---|---|
+| `M-C1` | `define_int_part`'s guard → literal (probe-reachable) | red | red | **both** pins |
+| `M-C2` | `define_store_int_tag`'s guard → literal (unreachable) | red | red | the scan |
+
+## The immediate word's class — the site neither earlier fold could see
+
+`define_class` answered `is_bool ? BoundaryClass::Bool : BoundaryClass::Int`.
+
+⭐ **Why it escaped twice, which is the finding.** It was invisible to the tag
+inventory because **it names no threshold constant to grep for**, and invisible
+to the class fold because **that fold only ever looked at `NODE_CLASS`**. Two
+searches, each complete against its own notion of the surface, and the site was
+in neither. ⛔ *A sweep is bounded by the notion of "the surface" it was built
+from, and that notion is rarely written down anywhere it can be checked.*
+
+Ruled in scope by the Architect (`evt_51xk9sxqdtzgt`). The carrier is
+`BoundaryTag::immediate_value_class` — total, wildcard-free, the same shape as
+`referent_owner`.
+`ImmediateWord` carries it, `derive()` sweeps it, the emitter folds over the
+relation with a **fail-closed innermost value**: an immediate the authority
+gives no class returns `ERR_CLASS` rather than defaulting to `Int`.
+
+⛔ **Kept separate from `BOUNDARY_TAG_CLASS_RELATION`, and the distinction is
+named at all four places a reader can land** — the authority method, the plan
+accessor, the outcome variant, and the emitted site. That relation governs
+`NODE_CLASS` legality and correctly excludes immediate tags because an immediate
+has no node; this answers what the uniform `class` helper reports for an
+immediate *word*. Merging them would invent a fictional immediate node class and
+make the node-legality relation admit tags it must keep refusing.
+
+Behaviour-preserving, measured before rewiring: the derived relation agrees with
+the literal rule on all five immediate tags.
+
+Evidence is per-entry and three-way — the real plan must report the real class
+(the baseline, or the perturbations measure against the wrong thing), a **remap**
+must change the answer, and a **drop** must fail closed rather than default:
+
+| # | mutation | expected | measured | caught by |
+|---|---|---|---|---|
+| `M-I1` | the fold ignores the plan and re-derives `is_bool ? Bool : Int` | red | red | `b2v_the_emitted_immediate_class_is_the_plans` |
+
+The derivation pin now sweeps this relation too, so the doc comment claiming it
+does is **executable** rather than a `///` line nobody runs.
+
+## `D6` — unchanged again, checked after each fold
+
+`BOUNDARY_LOCAL_HELPERS` **28**, `declare(...)` **28**,
+`BACKEND_PRODUCTION_SOURCES` **13**, dead-code oracle **18 lib warnings, same
+set**. `define_class` gained a parameter and a fold; it did not gain a helper.
