@@ -28,20 +28,26 @@ values through the **actual** `Space`/`Store` API.
   reset space-local (B untouched while A is cleared); AC5 flips `new_id >
   old_id` (retired, never resurrected) against a recycled id. Each pair would go
   green-vs-red under the exact bug it targets, never green-vs-green.
-- **Reconciled to the landed shapes, not the F4 prose.** The error is
-  `CapacityExhausted { limit, current }` — **no `arena`/`ArenaId` field** (a
-  future addition once spaces are named, `44 §2`). The reclamation observable is
-  `StoreStats.arena_bytes → 0`, **not RSS** (allocator-dependent, `44 §3`).
-  Resize is **single-writer** rehash, not lock-free RCU (staged, `44 §1a`). The
-  `tombstone` field is reserved-but-never-set (no per-value free in X2).
+- **Expired F4/K3 draft-reconciliation record, not an authority rule.** During
+  X2 authoring, these cases reconciled the earlier F4 prose with the then-landed
+  K3 store. The resulting specification, not an implementation, governs. The
+  record retains three divergences: the store is per-`space` with a bare-hash
+  index, not a process-wide `(root, hash)` index; reclamation drops page
+  buffers, not `madvise`; and resize is single-writer rehash, not lock-free RCU
+  (`44 §1`–`§3`). The error is `CapacityExhausted { limit, current }` — **no
+  `arena`/`ArenaId` field** (a future addition once spaces are named, `44 §2`).
+  The reclamation observable is `StoreStats.arena_bytes → 0`, **not RSS**
+  (allocator-dependent, `44 §3`). The `tombstone` field is
+  reserved-but-never-set (no per-value free in X2).
 - **Accounting invariant carve-out.** `44 §2`'s `total_interns = total_slots +
   dedup_hits` holds **in the absence of `CapacityExhausted` attempts**: the
   landed `intern` increments `total_interns` on *every* call including a refused
   one (`41 §7`: "total intern() calls"), while a refusal yields neither a slot
   nor a hit. AC1 asserts the invariant only in the no-exhaustion regime; the
   accounting in AC2's exhaustion context is asserted on `total_slots`/
-  `distinct_count` alone. (Raised as a one-line spec carve-out for the merge
-  Decision — flag, not a blocker; conformance follows the landed code.)
+  `distinct_count` alone. (Raised as a one-line spec carve-out during that
+  now-expired draft reconciliation; the resulting specification, not the
+  implementation, governs this case.)
 - **Tags.** `(soundness)` — a load-bearing **loud-never-silent / no-aliasing**
   safety commitment (`OQ-5`) that must never regress (silent drop, slot-id
   resurrection, or false-merge would corrupt). `(oracle)` — confirm against the

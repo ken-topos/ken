@@ -43,7 +43,7 @@ fe4962a1f008b08a1d4ba2c049bc84e665e1eaed	docs/program/issues/CAT-CAPEX.md
 b46266d5d36d3114b112861852b679d630021f78	spec/30-surface/36-effects.md
 7a73ac349e91c4ccbae8fbe5dd9e363a1737d794	spec/40-runtime/42-evaluation.md
 ab36a26928899be4ba5027925788453b44502535	spec/40-runtime/43-termination.md
-45f0990bd959fe481f755da4f12c8bcdc9bcef4f	spec/40-runtime/44-capacity.md
+4ba8dfc853647ad6d838f65ab933a21361cfae46	spec/40-runtime/44-capacity.md
 699069154fb00819791f3f472973f7d19ea4f1d5	spec/40-runtime/45-native-backend.md
 8cdaff23476b86530b99e107dd31cd7d10d9cc7f	spec/50-stdlib/55-lawful-functors.md
 7b6b1b7299ee6438211690562167e5bf37e99316	spec/60-security/62-authority.md
