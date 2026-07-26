@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-26 07:48:08Z — from 83 issue file(s) in `docs/program/issues/`.
+2026-07-26 08:58:05Z — from 83 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -44,7 +44,7 @@ the committed file matches the generator's output.
 | `ABI-A3` | promote FsReadDirectory, FsCreateDirectory, FsRemoveFile, FsRemoveDirectory to NativeTested | draft | runtime | M | none | — |
 | `ABI-M1` | manifest v2 — family-scoped, versioned, generated from family schemas | draft | runtime | L | none | — |
 | `ABI-M2` | runtime facility/operation probes, distinct from build-time facts | draft | runtime | M | none | — |
-| `ABI-R1` | correct stale filesystem capability prose — scoped roots, rights, symlink policy and no-follow resolution have landed | ready | foundation | S | none | — |
+| `ABI-R1` | correct stale filesystem capability prose — scoped roots, rights, symlink policy and no-follow resolution have landed | active | foundation | S | none | — |
 | `ABI-R3` | generated operation inventory derived from catalog structure — a new operation must be a build break | draft | runtime | M | none | — |
 | `ABI-REVOKE` | runtime revocation membrane — the deferred runtime face of 62 §4 | draft | runtime | TBD | none | — |
 | `ABI-S1` | descriptor completion — seek, truncate, sync/data-sync, flags, duplication under explicit inheritance policy | draft | runtime | M | none | — |
@@ -127,7 +127,6 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
-- `ABI-R1` — correct stale filesystem capability prose — scoped roots, rights, symlink policy and no-follow resolution have landed
 - `DOC-ATTEST-LIVING` — attesting living tracker files makes every routine WP status flip redden the currency gate
 - `DOC-GATE-NEEDLE` — schema-gate controls assert on a needle the test itself supplied, so one constraint class is fully vacuous
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion

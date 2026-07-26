@@ -1,7 +1,7 @@
 ---
 id: ABI-R1
 title: "correct stale filesystem capability prose — scoped roots, rights, symlink policy and no-follow resolution have landed"
-status: ready
+status: active
 owner: foundation
 size: S
 gate: none
@@ -10,6 +10,28 @@ blocks: []
 github: null
 origin: docs/program/10-linux-abi-completion.md §4 (the ABI-completion program); node filed by the Steward 2026-07-25 on the operator's directive to frame the remaining program. Agents cannot create tracked work (COORDINATION §2).
 ---
+
+> ## ▶ ACTIVE — KICKED 2026-07-26 ~09:0xZ, `evt_37qes7vz8c6z0`
+>
+> Foundation ring compacted (all three seats, one pass, before the mention) and
+> kicked at `origin/main` = **`7eaa42a3`**. Branch will be
+> `wp/ABI-R1-capability-prose-currency`. ⛔ **Do not re-kick.**
+>
+> **Verified at `7eaa42a3` before the mention, one command per object:** frame
+> blob `0a28c7df`, this node `a2297870`, target
+> `catalog/packages/Capability/Filesystem/Errors.ken.md` `59fbe76d`,
+> `crates/ken-host/src/capability.rs` `5c03ed32`, plus a deliberately-absent path
+> as a control.
+>
+> ⭐ **The frame's `d3b9f36c` anchor is six `main`-SHAs stale and it does not
+> matter:** both load-bearing files are **blob-identical** at `7eaa42a3`, so the
+> verbatim quote at lines 7–10 resolves exactly and every **Fixed inputs** line pin
+> is exact. ⇒ Staleness is a question about **content**, not SHA distance.
+>
+> ⛔ **The target IS a cited source** — `library/SOURCE-ATTESTATIONS` **row 9**
+> holds that exact OID, so the ledger row moves in the same commit as the prose.
+> Frame `D4` covers it; its *"row may have drifted"* caveat is **DISCHARGED**
+> (row 9 == the live blob).
 
 > ## ✅ FRAMED AND READY — 2026-07-25
 >
