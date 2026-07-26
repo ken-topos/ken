@@ -3,9 +3,12 @@ scope: fleet
 audience: (see scope README) — anyone authoring a universal claim, a measured
   constant, or a residual: implementers, QA, frame authors, and the Steward
   routing any of them into a durable document
-source: TWO seats, same day, 2026-07-26. foundation-implementer's ABI-R1 retro
+source: THREE seats, same day, 2026-07-26. foundation-implementer's ABI-R1 retro
   carry (`evt_7pdp6bprr77z8`) supplied the rule; runtime-implementer's B2V
-  handoff supplied the mechanism that makes it fire. Both self-reported.
+  handoff supplied the mechanism that makes it fire. Both self-reported. The
+  third is the Steward's, on SPEC-STORE-SPLIT: a carried CURRENT-STATE claim
+  (not a constant) told the spec enclave to close an already-DECIDED operator
+  decision; caught by the ring, not the author.
 ---
 
 # A scope exclusion says who may EDIT it — not that you need not VERIFY it
@@ -77,8 +80,40 @@ retreat from one.** The lane divergence became a tracked node
 (`docs/program/issues/RT-SYMLINK-LANE.md`) instead of a sentence nobody could
 ground.
 
+## ★★★ A THIRD INSTANCE, AND IT SHOWS THE RULE IS NOT ONLY ABOUT NUMBERS
+
+**2026-07-26, `SPEC-STORE-SPLIT`, the Steward — the carried input was a
+CURRENT-STATE CLAIM, not a measured constant.** The frame's `AC-5` instructed the
+spec enclave to *close* open decision `OQ-Space`. At the frame's own released
+base, `spec/90-open-decisions.md:502` had read **`DECIDED`** for five weeks
+(operator, 2026-06-27), and the summary row agreed.
+
+⭐ **Provenance, exactly:** the campaign doc's §6.7 said *"`OQ-Space` remains
+open … do not close it on the strength of this deferral."* I took that sentence
+and **never opened `spec/90`.** ⇒ **An inherited premise presented as a derived
+one** — and because the frame is an instruction, it propagated as an order to
+overwrite an operator decision.
+
+⛔ **The generalization that matters: "label its provenance" applies to every
+load-bearing premise, not just constants and universals.** A number *looks* like
+it has a source; a sentence about the current state of a document reads as
+background. Both are operands. ⚠ And §6.7 was **already false when written** — a
+stale carrier does not announce itself, so *"I read it in a project doc"* is a
+provenance, never a verification.
+
+⭐ **What caught it:** not me. The frame's own perishability clause told the ring
+to escalate a false fixed input, and two seats reproduced the contradiction at the
+released base within minutes. ⇒ **Ship that clause in every frame** — it is the
+cheapest control there is for exactly this class, and it works because it invites
+the reader to disbelieve you.
+
 ## How to apply
 
+- ⛔ **Label EVERY load-bearing premise, not only numbers** — a current-state
+  claim about a document ("X is open", "Y is the carrier", "no consumer remains")
+  is an operand and needs *measured here at `<base>`* or *inherited from
+  `<source>`*. ⭐ **The tell that you are about to skip this: the premise arrived
+  as prose in a document you trust.**
 - **Write the label in the artifact, not in your head.** One clause per universal
   or constant: *measured here at `<base>`* / *inherited from `<source>`, not
   re-derived*. An unlabelled number is indistinguishable from a measured one, and

@@ -9,6 +9,7 @@ role's own mechanics (not shared reasoning) belongs in `roles/<role>` instead.
 | Lesson | One-line |
 |---|---|
 | [abstraction-visibility-feature-soundness-gate](abstraction-visibility-feature-soundness-gate.md) | Soundness-gating a namespacing/visibility/abstraction build |
+| [assembly-is-a-semantic-reconcile-gate-not-a-merge](assembly-is-a-semantic-reconcile-gate-not-a-merge.md) | When two lanes author in parallel from one frame, both can be internally coherent and still contradict each other, because the frame DEFERRED a choice and each lane resolved it — assembly must reconcile spelling currency AND decision-state currency in coupled docs one hop away, which a frame-limited repair leaves standing |
 | [attribute-a-suite-arm-reject-before-calling-it-a-gap](attribute-a-suite-arm-reject-before-calling-it-a-gap.md) | Attribute a suite-arm reject before calling it a gap |
 | [buildability-ruling-must-ground-every-axis](buildability-ruling-must-ground-every-axis.md) | A "buildable now" ruling must ground every capability axis the proof touches |
 | [capability-gate-three-state-lifecycle](capability-gate-three-state-lifecycle.md) | A capability-gate has three prose states; the middle one goes stale in both directions |
