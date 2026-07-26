@@ -5,7 +5,7 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-25 ~17:20Z. OPERATOR IS PRESENT.**
+**As of 2026-07-26 ~00:05Z. OPERATOR IS PRESENT.**
 
 > ### ⛔ THREE STALE `RESUME HERE` BLOCKS WERE REMOVED FROM THIS SPOT
 >
@@ -22,100 +22,437 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-25 ~22:10Z. `origin/main` = **`81334478`**. **TWO LANES IN FLIGHT.**
+## ▶ LIVE — 2026-07-25 ~23:50Z · `origin/main` = **`c72be0b0`**
+### **✅ KW-THEOREM LANDED. LANE 1 RECUT — predicate NAMED, frame folded.**
 
-**`steward/work` = `81334478`, clean.** Both lanes are working; neither is
-waiting on me. My own next action is **watchdog cadence** (1200s interval,
-armed) plus the queue at the bottom of this block.
+> ### ✅ OPERATOR DIRECTIVE 2026-07-25 — `lemma` retired from the language
+> entirely; permitted in comments and documentation. **VERIFIED ALREADY
+> SATISFIED on landed `main`, by POSITIVE CONTROL not by absence:**
+> `Lexer::lex("theorem lemma")` → `Token::Ident("lemma")` (ordinary identifier,
+> **not** a keyword); a `lemma` declaration head is **rejected**
+> (`RETIRED_SPELLING_SOURCE`); normative `spec/30-surface/31-lexical.md` and
+> `32-grammar.md` have **zero** occurrences; a corpus-wide source oracle permits
+> prose and forbids Ken source, probed against
+> `LEMMA lemmas lemma's lemma_identifier` so it cannot false-positive.
+> ⛔ *"Absent from the lexer"* alone would have been a **negative check that
+> passes for any reason** — the positive control is the evidence.
+> ⚠ **One deliberate residue:** `provide_lemma` remains a **normative protocol
+> enum value** (`spec/20-verification/25-protocol.md`,
+> `SuggestedAction::ProvideLemma`) — an **API token**, not a language construct;
+> the mathematical concept *lemma* is not retired. Recommended left alone;
+> **no WP opened.** ~350 other occurrences are ordinary prose, which the
+> directive permits.
 
-> ⛔ **The previous LIVE block anchored on `aecdb001` and told a resuming
-> Steward to "§2c gate, then kick Runtime on `RT-FNSPLIT-B2V`." That work is
-> DONE — the ring is four `main`-SHAs past it and `B2V` is `active` and
-> mid-repair.** Acting on it would have re-kicked a live node. That block, and
-> the ~2100 lines below it, are archived at
-> [`2026/Jul/25.md`](2026/Jul/25.md).
+> ### ⛔⛔ FIRST, TWO THINGS THAT CHANGE HOW YOU OPERATE THIS SESSION
+>
+> **1. My convo MCP connection DIED mid-session.** Every `mcp__convo__*` tool is
+> gone. ⛔ **`claude mcp list` reports `convo: ✔ Connected` — it LIES**, because
+> it health-checks by spawning a *fresh* process; it says nothing about this
+> session's stdio. **Fallback transport is live and verified:**
+> `python3 <scratchpad>/convo_post.py <body.md> <agt_id>…` posts over the HTTP
+> API with my own steward credential (endpoint `/api/spaces/{sid}/response`,
+> **singular**). Reads work the same way — `convo_read.py` in the same
+> scratchpad lists events newest-first; that is how `dec_74fwejgv6hda0` and
+> `dec_7sd3enk81maws` were verified **off the object**. ⭐ **Losing the tool must
+> not downgrade the §14 gate** — read the object, never the report.
+>
+> ⭐ **CORRECTION — mentions DO still arrive.** An earlier revision of this block
+> claimed *"I cannot see mentions arrive"*; that was **wrong**, and acting on it
+> would have meant polling blind. The `convo-channel` **subscription is a
+> separate transport from the `convo` MCP tool set** and it survived
+> (`list_subscriptions` → `spc_4q7g0se87rgje`; the Architect's recut-3 block
+> arrived on it unprompted). ⛔ **But the notification is TRUNCATED** and
+> `get_recent_context` is one of the dead tools — so treat the notification as a
+> *doorbell only* and fetch the full text with `convo_read.py --full --since`.
+> ⚠ **Two transports, two failure modes: verify which one is actually down
+> before designing around the loss.**
+>
+> **2. NOTHING IS PUBLISHING.** PR **#977** landed (`c72be0b0`, exact
+> `305dc6d5`, full CI — ⛔ **not** `--doc-only`, which merges with *no CI*).
+> Verified **by content**, because the publisher exits 0 on failure. Keep that
+> habit: the next publish inherits it, not the outcome.
 
-### ▶ LANE 1 — `RT-FNSPLIT-B2V` — ⛔ ARCHITECT-BLOCKED, RING IS FOLDING
+> ⛔ **THREE DEAD CANDIDATES ARE NAMED BELOW. None of them will ever be
+> published, and each has a *resolved or rejected* Decision attached — which is
+> exactly the shape that gets one published by accident.** Read the SHA, not
+> the Decision status.
+
+### ▶ LANE 1 — `RT-FNSPLIT-B2V` — ⛔ RECUT. The Architect NAMED the predicate.
 
 | | |
 |---|---|
-| branch on origin | `wp/RT-FNSPLIT-B2V-executable-value-abi` = **`78a57d90`** |
-| base / merge-base | `aecdb001` — 9 files, `+3002/−0`, `diff --check` clean |
-| Decision `dec_58gv9rmjqy49g` | ⛔ **REJECTED** (Architect `evt_2c6f3natxvwcm`) |
+| branch on origin | `wp/RT-FNSPLIT-B2V-executable-value-abi` = **`fd4e7f08`** — ⛔ **BLOCKED** (production block **#4**) |
+| Decision | `dec_7sd3enk81maws` **rejected on the object** — Architect, `evt_4bs6scfmt5ax0` |
+| state | runtime-leader routed the three repairs (`evt_4ms9arc37p89w`); implementer folding from `fd4e7f08`, ⛔ **no force-push of any rejected checkpoint** |
+| recut | `wp/steward-b2v-recut-5` = **`e4fa5ec5`** — fold 4 pushed (`evt_612dykrppbqme`), awaiting Architect **bind** |
 
-⛔ **`78a57d90` IS DEAD AS A MERGE CANDIDATE — PERMANENTLY.** A rejected
-Decision never becomes resolvable, so there is nothing to re-read at merge
-time. **A fresh exact SHA needs a FRESH Decision**, read `resolved` with
-non-null `resolved_by` off the object (§14). `78a57d90` stays on origin as a
-durable checkpoint — **do not force-push over it**; push the repair as a
-descendant.
+⭐⭐ **THE §5a-ii PREDICATE CHECK FIRED AND WAS ANSWERED `YES`**
+(`evt_2zxt6m9bg43r2`). The three production blocks are **not** independent: they
+are successive exposed faces of one incomplete claim — **the admitted
+disposition is not closed under emitted producer → boundary word → separately
+compiled consumer round trip.**
 
-**Two required closures, both in production bytes that were UNCHANGED from
-`c3f6da02` — so the prior QA clearance does NOT carry:**
+⛔ **The recut is authored** — read the `## RECUT` section of
+`docs/program/wp/RT-FNSPLIT-B2V-executable-value-abi.md`. RETAIN everything proved (a named predicate is **not** a licence to
+restart); REPLACE only the **shape** of the `AC` set with `AC-10`, total over the
+admitted **disposition** (not over tags — the predicate is explicitly stronger
+than *"all tags are enumerated"*); the three `NO CONTROL — open residual` rows
+are **promoted into scope** as the predicate's uncovered faces. ⛔ **It does NOT
+stop the ring** (Architect said so explicitly) and **does NOT choose a
+mechanism** — that is the Architect's call, not the frame's.
 
-1. **Persistent handle lifetime.** Every handle word stores an
-   invocation-**arena node index**, and `define_resolve` reads every payload
-   that way — but both escape checks let `PersistentGround`/`PersistentClosure`
-   leave the invocation **on the tag alone**. After the arena dies the permitted
-   word names nothing. The real `SlotId` is only *inside* the ephemeral node.
-   `D2`/`AC-6` undischarged.
-2. **`AC-4`, verbatim.** `make_immediate` is the only constructor the emitted
-   interface exposes; every live word is Rust-materialized by
-   `BoundaryArenaBuilder` before `publish`, and the emitted probes never call
-   `make_immediate` at all. Emitted code was shown to **inspect a Rust-built
-   fixture**, never to **construct** one.
+> ### ⛔ ARCHITECT **BLOCKED** the first recut — folded at `cfe05e37`
+>
+> `wp/steward-b2v-recut` = `d6026a5c` (**blocked, preserved, NOT force-pushed**)
+> → `wp/steward-b2v-recut-2` = **`cfe05e37`** (folded, rebased on `c72be0b0`).
+> runtime-leader APPROVED; Architect blocked on three clauses, all correct:
+>
+> 1. ⭐ **`AC-10`'s disjunction was on the WRONG DOMAIN — vacuously
+>    satisfiable.** I wrote *"for every admitted value, either round trip or fail
+>    closed"*, which puts the failure arm **inside the admitted subset**, makes
+>    admission non-semantic, and **goes green on an implementation that rejects
+>    every represented value.** Now: classify first into *represented immediate /
+>    represented handle / protocol-only / fail-closed forbidden*; behavior is
+>    **entailed by the class**; **no represented value may take the failure arm.**
+>    ⛔ **The lesson: the day before I OVER-strengthened a predicate; steering
+>    away from that, I UNDER-constrained. Both are the same error — the predicate
+>    written on the wrong domain. Fix the domain, not the strength.**
+> 2. **"One control total over every value" is not an executable oracle** — the
+>    domains are infinite, so it would have become *a finite case sweep wearing a
+>    universal name*, which reads as total and is worse than an honest sweep.
+>    Totality is now proved **structurally**. **One property / one `AC` — not one
+>    test function.**
+> 3. **RETAIN froze the disposition wholesale while the same recut allowed
+>    narrowing** — self-contradictory. Now retains the sealed no-wildcard
+>    *mechanism* plus classifications outside `AC-10`'s implicated domain.
+>
+> ### ⛔ BLOCKED A SECOND TIME — folded again at `8f4f0d06`
+>
+> `wp/steward-b2v-recut-3` = **`8f4f0d06`**. The whole-frame reconcile found
+> `D4`/`AC-3` classify per **variant** (static policy) while my `AC-10` classified
+> per **value** (runtime outcome). ⭐ **`Lowered::Int` proves both levels are
+> real:** `RepresentedImmediate { spill: Some(Int) }` is **one static
+> variant-level policy** — a small runtime `Int` yields an immediate word, a wide
+> one a persistent handle. ⛔ **Calling the whole `Int` population *immediate*
+> would let a proof attach handle evidence to ONE SAMPLED SPILL and never
+> establish that EVERY spill partition carries the handle obligations** — a live
+> vacuity route. Forcing the value-level `AC` to say *handle* contradicts `AC-3`.
+> **Neither level may absorb the other.** Now: variants get a static policy
+> (immediate-only / handle-only / **immediate-with-declared-handle-spill**);
+> inputs get an outcome **entailed** by it; and a handle outcome **including a
+> spill arm** must discharge class/owner/identity/lifetime.
+>
+> ### ⛔ BLOCKED A THIRD TIME — folded again at `d2fdee73`
+>
+> `wp/steward-b2v-recut-4` = **`d2fdee73`** (`evt_26ewm3bj6gqj2` → my
+> `evt_5zhtt7zjp0tnd`). ⭐⭐ **BOTH remaining defects had ONE cause, and it is a
+> method defect, not a content defect:**
+>
+> > *"A later note saying the earlier deliverable is false does not replace the
+> > deliverable."* — Architect
+>
+> I had been folding corrections in as **appended clarifications** while the
+> contradicted text stayed **operative and unedited**. `D4` still required *four*
+> dispositions and defined *represented immediate* as *"payload fits the tagged
+> word directly"*; RETAIN still froze the *64/112 layout* that the promoted
+> wide-`Int` obligation necessarily changes. ⛔ **`D4` is the construction
+> authority an implementer reads FIRST — so both readings lived in the frame and
+> the WRONG one was the one positioned to be obeyed.** Appending *feels like*
+> faithful transcription of the reviewer's words; it is leaving the defect live.
+>
+> **Folded in place:** `D4`'s table is **replaced** by five static encoding
+> policies (immediate-only · handle-only · **immediate-with-declared-handle-spill**
+> · protocol-only · fail-closed forbidden), `AC-3` names that same set and bans
+> the spill-variant→immediate-only misassignment, and RETAIN keeps the **proved
+> properties** (one derived layout · native exact-`Int` normalization dependency ·
+> distinct content table · owner-correct lifetime) and explicitly **not** the byte
+> counts — ⛔ *neither* 64/112 *nor* the successor 80/136, since the exact-SHA
+> review found the declared 136 was a **144-byte publish with no consumer**.
+> **The pin is the retained property, never the number.** Recorded: a reviewed
+> layout delta required by an `AC-10` outcome is **predicate delta, not restart**.
+>
+> ⇒ **STANDING RULE now in the recut preamble:** every fold **edits the operative
+> deliverable in place**, and a **whole-frame reconcile is part of the fold, not a
+> step after it.**
+>
+> ⚠ **SIX distinct defects in this one document across four reviews by three
+> readers** (vacuous domain · unachievable oracle · RETAIN contradiction ·
+> policy/outcome · stale `D4` table · stale RETAIN layout freeze).
+> ⇒ **A recut needs a review LOOP, not a single authoring pass.** Treat the next
+> one that way from the start.
+>
+> ### ✅ FOLD-IN, NOT A BLOCK — `d2fdee73` closed both defects
+>
+> `evt_1tdq9g139snay`. `D4`/`AC-3`/RETAIN all accepted; *"the later clarification
+> now explains rather than contradicts those authorities."* One held question
+> answered by **ruling**, folded at `wp/steward-b2v-recut-5` = **`e4fa5ec5`**.
+>
+> ⭐⭐ **THE RULING TO CARRY — the header-constant face is `AC-1`, NOT `AC-10`.**
+> `AC-10` closes an **admitted runtime value** under *emitted producer → valid
+> word → separately compiled consumer*. The `fd4e7f08` header defect **never
+> falsified that round trip**: the constant had **no consumer** and the published
+> vector was large enough for every accessed field. The real fault is **one
+> closed layout claimed while two inconsistent authorities exist, one unused** —
+> an `AC-1` face. ⛔ **Widening `AC-10` to absorb every dead or drifting
+> declaration would have destroyed the named predicate's boundary.**
+>
+> ⭐ **This cuts against the obvious instinct, so keep it.** I found an uncovered
+> face and the pull was to **widen the nearest `AC` until it covered** — which
+> quietly converts a **named** predicate back into an **enumerated** one, the
+> exact failure this recut exists to end. Raising it as a **held question** was
+> right because **the answer was a boundary, not an extension.**
+>
+> **Folded into operative `AC-1`:** the field inventory is the **sole layout
+> authority**; a declared extent is **derived and consumed, or it does not
+> exist**; publication emits exactly the derived extent; every emitted offset +
+> field width lies within it; a causal control **reddens on independent drift**
+> of inventory / published word count / declared extent / emitted offset.
+> ⛔ **Constant-vs-constant equality does not discharge it.** Also now a
+> **mandatory `AC-1` row in the QA map** — ⚠ `fd4e7f08`'s map was complete and
+> honest and had **no such row**, which is exactly how 136-vs-144 passed a full
+> `AC`→control review.
+>
+> ⚠ **RETAIN is not an acceptance control** (Architect). RETAIN keeps *"one
+> derived layout"* as the architectural property; the **enforceable** obligation
+> lives in `AC-1`, where a QA map can be held against it.
+>
+> ⚠ **Still owed:** Architect **bind** of `e4fa5ec5`; then a fresh QA
+> `AC`→control map covering `AC-10` **and** the new `AC-1` layout-closure row.
 
-⭐ **Finding #2 is not a false fixed input — the frame was RIGHT.** `AC-4`
-already said *"each `D3` operation exercised from emitted code, not from
-Rust."* The candidate cleared QA anyway, and **not through inattention**: QA
-verified every control the candidate shipped and independently reproduced both
-false-green mutations. **Nothing in the loop asks which `AC` each control
-discharges, or whether an `AC` has a control at all** — and an `AC` with zero
-controls is invisible to a review that examines controls. **Frame amended
-(2026-07-25, second): every QA verdict on this node carries an `AC` → control
-map, with `NO CONTROL — open residual` spelled out for any `AC` that has
-none.** Sibling of the `AC-8`/`AC-9` amendment one layer out.
+### ▶ B2V candidate `fd4e7f08` — ⛔ **BLOCKED**, three production defects
 
-### ▶ LANE 2 — `KW-THEOREM` — stage 3 in flight, doc ring holds the branch
+> ⭐⭐ **THE PART TO CARRY: this block landed on a candidate QA had APPROVED**,
+> with a complete `AC`→control map, a passing independent mutation proof
+> (`NODE_LIMB_COUNT` → `NODE_FIELD_COUNT` reddened exactly at limb count),
+> `ken-runtime` **398/0**, and honest residual accounting. Three production
+> defects still sat **outside** the map. ⛔ **A green `AC`→control map is not
+> coverage.**
+>
+> ⭐ **All three defects have ONE shape — the Rust side states the law and the
+> emitted side does not enforce it:**
+>
+> 1. `BOUNDARY_REGION_HEADER_BYTES = 136` vs an **18-word (144-byte)**
+>    `BoundaryRegion::publish`; the constant **has no consumer and no equality
+>    pin** anywhere in the tree, so the reviewed "112 → 136" layout claim is both
+>    false and unenforced.
+> 2. Emitted `define_store_int_limbs` admits `len = 0`, leading-zero limbs and
+>    **negative zero** — all forbidden by `RuntimeIntV1::canonical_sign_and_limbs`.
+>    Its committed control uses an arbitrary nonzero seed and **never exercises
+>    the invalid boundary.**
+> 3. The region-limb reader computes **wrapping** `end = at + region_len` and
+>    tests only `end <= live`, where the Rust oracle uses `checked_add`. A wrapped
+>    span passes and forms an address — the source comment claims fail-closed.
+>
+> ⛔ **That is `B2V`'s own founding diagnosis one layer down** — this node exists
+> because the aggregate-result path was *a Rust-side decode, not a value
+> representation.* ✅ **RULED `evt_1tdq9g139snay`:** the recut predicate reaches
+> **(2)** and **(3)**; **(1) is an `AC-1` layout-closure face, not an `AC-10`
+> one**, and is folded there. See the fold-in box above for why that boundary
+> matters more than the fix.
+
+Measured on the push, not taken:
+
+| claim | verified |
+|---|---|
+| base / merge-base `aecdb001` · 11 files `+7472/−4` · `diff --check` clean | ✅ |
+| intersection vs `c72be0b0` | ✅ **empty** |
+| fast-forward over blocked `ddff2fae` | ✅ — all four prior candidates stay reachable |
+
+⚠ QA records `AC-10` as **`NO CONTROL — open residual`** — correct, since the
+recut does not bind yet. ⛔ **Keep that row even while the `AC` is unbound:** an
+`AC` with zero controls is invisible to a review that examines controls, so
+*discharged* and *never asked* read identically. ⚠ **The last three residuals
+were honest, correct — and turned out to be the predicate's uncovered faces.
+A standing residual is a debt, not a disposition.**
+
+⛔ **DEAD, NEVER PUBLISHABLE:** `78a57d90` (`dec_58gv9rmjqy49g` rejected),
+`657f60a0` (`dec_1wpa1y2b3g7cn` rejected), and now `ddff2fae`. All stay on origin
+as durable checkpoints — every candidate has been a **fast-forward**, so
+`ea8d9824` and all three rejects remain reachable. **Do not force-push this
+branch.**
+
+⭐ **`ddff2fae`'s increment is test-layer only, VERIFIED not taken:** all hunks
+fall in `3502–3803`, inside `mod tests` (`1976`–EOF) of
+`boundary_value_clif.rs`, and only test fns/helpers are added or removed. That
+is what lets `ea8d9824`'s production review carry. ⛔ **My first check of this
+was vacuous** — it compared against the *first* `#[cfg(test)]` at line **51**,
+a bar any change clears. The real boundary is the `mod tests` block.
+⚠ Open for QA: the increment renames
+`b2v_a_separately_compiled_consumer_distinguishes_…` to
+`…constructs_…_by_content`, dropping the phrase the Architect's finding #1
+turned on. Confirm separate compilation survived; bind it to an `AC` row.
+
+The three Architect findings `ea8d9824` folds: a handle ABI lossy to emitted
+code (spilled `Int` read as `0`; `Bytes`/`String` indistinguishable at equal
+length), `ken_boundary_store_slot_local` accepting a caller-supplied `SlotId`
+(emitted code could forge store identity), and `alloc` admitting the Cartesian
+product of tag × class.
+
+⚠ **`ea8d9824` touches one path outside `crates/ken-runtime` —
+`docs/program/rt-fnsplit-b2v-evasion-table.md`. That is a DOC, so it is NOT
+hard-stop #11.** The armed condition is a *production* path outside the fence.
+Do not fire the trigger on it; equally, do not let it become the precedent that
+lets production code sit outside.
+
+### ▶ LANE 2 — `KW-THEOREM` — ✅ **MERGED** at `c72be0b0`, PR #977
+
+> ✅ **LANDED and VERIFIED BY CONTENT** — the publisher exits 0 even on failure,
+> so its own post-merge claim is not the evidence. Landed tree **`6f7cf51c`**,
+> byte-identical to the tree asserted **before** publishing; all six changed
+> files carry the candidate's exact blobs, ledger included. Tracker flipped to
+> `merged`, **body-text tail corrected** (it still read *"Now `ready`"*),
+> `gen-progress.sh` re-run.
+> ✅ **RETROS ALL IN — the node is CLOSED.** doc ring `evt_7q33mga74cn35`, spec
+> enclave `evt_12cvdyyfkpxfd`, language ring `evt_66bdnv195eaed`. Adversary
+> notified and has reported (`evt_4q06tgtrw6bv`) — **triaged into the new
+> `KW-ORACLE-CLOSURE` node**, two structural findings, both zero-live-instance.
+> ⭐ Its strongest negative result: `library/SOURCE-ATTESTATIONS` re-derived
+> **50/50 current** against the landed tree — the check it most expected to find
+> red.
+> ⚠ **I buried this landing mid-message and two leaders truncated before
+> reaching it**, then sat waiting for a report I had already sent. **A gating
+> fact must LEAD the message.** Re-sent leading with it; both picked it up.
 
 | | |
 |---|---|
-| branch on origin | `wp/KW-THEOREM-surface-keyword-rename` = **`dc5e4a39`** |
-| base | `c2c1ba9f` · 51 files (`43 crates/`, `6 spec/`, `2 library/`), `+325/−261` |
-| holder | **`doc-author`**, explicitly designated — migrating doc/catalog/library/agent/tooling |
+| branch on origin | `wp/KW-THEOREM-surface-keyword-rename` = **`305dc6d5`** |
+| base | `c2c1ba9f` · 124 files, `+1613/−1234` + a 6-file `+16/−8` repair |
+| Decision `dec_74fwejgv6hda0` | ✅ **`resolved`**, `resolved_by=agt_37reqwresqc00` @ `23:21:22Z` — **read off the OBJECT** |
+| Decision `dec_286hqjak5kjq8` | ⛔ **VOID — resolved, but bound to DEAD `963d36ac`** |
 
-Steps 1 (`spec/`) and 2 (`ken-elaborator`) are committed and **Language
-QA-approved** on the exact SHA (`AC-4` harness green, span mutation
-discriminating). Next: doc-author's commit → **report the SHA to me, I push** →
-CV conformance lane → librarian anchor review → merge candidate.
+⚠ **`proposed_by == resolved_by`** — a self-resolution, so the status field alone
+is not sufficient. Substance verified instead: three **fresh exact-SHA**
+authorities on `305dc6d5` — Librarian PASS `evt_524fj8c43q7jg`, CV APPROVE
+`evt_11tsr3hhmxfbj`, Architect APPROVE `evt_6hk6m7x8xmsn4`. Merge authority here
+is **Spec + Architect**; both present.
 
-⛔ **Base is three doc-only publishes behind `origin/main` (`81334478`) — no
-rebase needed, but re-derive the path intersection against CURRENT `main`
-before handing me a merge candidate.** Merge authority is **Spec + Architect**,
-not §14a doc-only.
+⭐ **Integration asserted, not assumed.** ⛔ A conflict-free `merge-tree` is *not*
+evidence of preservation — disjoint hunks merge as a silent union, which is
+exactly how `SOURCE-ATTESTATIONS` merged clean **and wrong** on 07-22. So the
+post-condition was predicted first, then measured blob-by-blob over all **128**
+files: 122 candidate-only → candidate's blob; 6 main-only → main's blob; both
+intersecting files → merged blob differs from **both** sides (a real merge).
+**Violations: none.** merge-base `c2c1ba9f`, tree `6f7cf51c`, intersection
+exactly the two `docs/program/` files.
 
-⚠ **This branch sat on ONE LOCAL REF with no worktree holding it and no origin
-copy**, found on a routine sweep rather than from a report. Both problems were
-routed: report-the-SHA-and-keep-going is standing, and custody is now explicit.
+⚠ **No §2a tracker-sync commit was added, deliberately** — it would move the SHA
+and void the exact-SHA Decision three authorities had just approved. Tracker
+syncs on the next batch.
 
-### ▶ ARMED COUNTERS — re-read these at every hard-stop
+⛔⛔ **THIS IS THE TRAP ON THIS BOARD: a RESOLVED Decision on a RED candidate.**
+`resolved` + non-null `resolved_by` is necessary, **never sufficient**. PR #977
+is blocked, the publisher was killed, and **nothing landed** — `main` never
+moved off `fdda953f`.
 
-- **FNSPLIT hard-stop count of record = `10`. NEXT RESEARCH PULL = `#12`.**
+```
+ken-cli::ken_fmt strict_frozen_corpus_gate_is_green   FAILED
+crates/ken-cli/tests/ken_fmt.rs:111 — frozen corpus is not canonical:
+  catalog/guide/proof-techniques.ken.md
+  catalog/packages/Core/Classes/EffectfulClasses.ken.md
+  catalog/packages/Core/Logic/Transport.ken.md
+  catalog/packages/Data/Collections/Map.ken.md
+```
+
+**Measured over the whole population, not a sample:** of the 23 changed catalog
+`.ken.md`, **all 18 passing files have a longest `theorem` line ≤ 95 columns;
+all 4 failing files are ≥ 97.** Perfect separation, boundary 96. `theorem` is
+two characters longer than `lemma`, and every file's diff is an exact N-for-N
+line swap.
+
+⭐ **CONFIRMED from the source side (operator pointed at `kenfmt`):**
+
+```
+crates/ken-elaborator/src/layout.rs:12
+pub const CANONICAL_WIDTH: usize = 96;
+```
+
+⛔ **This is corroboration, not an echo** — the empirical boundary was derived
+from file contents *before* the formatter was opened, and the constant was read
+from source. **No shared premise.** (Contrast the scanner-reproduces-the-
+documented-count trap, where both sides used the same naive match.)
+
+⇒ **Reads as the formatter being RIGHT and the corpus being STALE**: the
+migration swapped the keyword line-for-line without re-emitting through
+`ken fmt`, so lines that fit at `lemma` no longer fit at `theorem`. Remedy is
+re-canonicalization, **which the ring must confirm by RUNNING the formatter** —
+reading a constant is not observing output. ⚠ And validate against the whole
+frozen corpus, not the four filenames in the failure message; CI stops at the
+first failure, so four is a symptom count, not a scope.
+
+⛔ **A fresh descendant SHA needs a FRESH Decision.** The Architect's, CV's and
+spec-author's approvals were all **explicitly exact-SHA** and do not carry;
+merge-tree `4932d845` and the empty-intersection result are void. Push the fix
+as a descendant — **do not force over `963d36ac`.** Merge authority is
+**Spec + Architect**, not §14a doc-only.
+
+⭐ **Four independent reviews approved this SHA and every local targeted run was
+green. CI was the only thing that caught it** — which is exactly what §12
+asserts, and why *workspace-green* means green in **CI**, never a local run.
+**The frame predicted this failure by name** (coupling #3: the formatter
+keyword list *"is a canonicalization oracle that fails in CI, not in a targeted
+build"*) and it still happened, because that warning lives in a section read
+once at kickoff.
+
+### ▶ ARMED COUNTERS — the SOLE count of record. Re-read at every hard-stop.
+
+- **FNSPLIT hard-stop count of record = `10`. NEXT RESEARCH PULL = `#11`**
+  (`runtime-leader` armed it in-fold: any closure needing a path outside
+  `crates/ken-runtime` is #11).
+  > ⭐ **`#11` CONFIRMED and propagated 2026-07-25.** Three tracked files carried
+  > **`#12`** (the generic next-multiple-of-3 after the consumed `#9`) against
+  > this briefing's `#11`. The steward playbook carries an **operator override**
+  > (2026-07-24) spelling *"catch-up set to `#11`, then `#15`, `#18`, `#21`"*.
+  > The readings cannot be reconciled from the dates, so it was settled by
+  > **dominance, not guess**: `#11` is *required* under one reading and merely
+  > *early* under the other, and early is explicitly fine; `#12` is wrong under
+  > one. Operative anchors corrected in `RT-NATIVE-FNSPLIT.md` and
+  > `RT-FNSPLIT-B2V.md`; **append-only history deliberately still reads `#12`.**
 - **SYMPTOM INVENTORY = 3 entries. NEXT PREDICATE CHECK = the 6th entry.**
-- ⛔ **A review block is NOT a hard-stop.** `B2R` took two review blocks and the
-  count correctly stayed put. Inflating it pulls the research trigger early and
-  teaches the chain that *being found incomplete* and *hitting a wall* are one
+- ✅ **§5a-ii PREDICATE CHECK — FIRED 2026-07-25 AND ANSWERED `YES`.**
+  `evt_2zxt6m9bg43r2`. Three consecutive Architect production blocks
+  (`78a57d90`, `657f60a0`, `ddff2fae`) share one predicate; recut authored at
+  `4d705465`. **New armed counter lives in the `B2V` WP frame's `Standing`
+  section — it is the count of record, not this line.**
+- ⛔ **CONSECUTIVE ARCHITECT PRODUCTION BLOCKS = `4`.** `#4` is **`fd4e7f08`**
+  (`dec_7sd3enk81maws` **rejected on the object**, `evt_4bs6scfmt5ax0`).
+  **NEXT PREDICATE CHECK = block `#6`.** ⚠ Recut-frame review blocks
+  (`d6026a5c`, `cfe05e37`, `8f4f0d06`) are **NOT** production blocks and do
+  **not** move this counter — they are the Steward's document, not the ring's
+  mechanism. Keep those two populations separate or the counter stops meaning
+  anything.
+- ⛔⛔ **WHY THAT COUNTER HAD TO BE INVENTED — the lesson to carry.** §5a-ii
+  counts **hard-stops**, and a review block is correctly **not** a hard-stop. So
+  all three production blocks moved **neither** the hard-stop count **nor** the
+  symptom inventory, and **every armed line in the repo read correct and current
+  the whole time.** It fired only because it had been hand-armed here. ⇒ **A
+  counter keyed on ONE event class is blind to a different event class producing
+  the same failure.** The fix is never to loosen *"a review block is not a
+  hard-stop"* — it is a **second counter, beside the work.**
+- ⛔ **Ask the question ONLY. NEVER name a predicate** (§5a-ii) — that is the
+  Architect's call, and naming one makes the Steward the de-facto designer of
+  the recut. *"No, these are independent"* is a complete answer.
+- ⛔ **A review block is NOT a hard-stop, and a clean WP is not one either.**
+  `B2R` took two review blocks and the count correctly stayed at 10; `B2O` ran
+  clean and did not move it. Inflating the count pulls the research trigger
+  early and teaches the chain that *found incomplete* and *hit a wall* are one
   event. They are not.
-- ⛔ **Never name the shared predicate yourself** (§5a-ii) — transport and
-  framing only. Naming it makes the Steward the de-facto designer.
 
-### ▶ Durable refs pushed this window
+### ▶ Durable refs on origin
 
 ```
-architect/work                            d6179ccd   (ARCHITECT-STATE.md only)
-wp/RT-FNSPLIT-B2V-executable-value-abi    78a57d90   (superseded, kept)
-wp/KW-THEOREM-surface-keyword-rename      dc5e4a39
+wp/RT-FNSPLIT-B2V-executable-value-abi    fd4e7f08   (BLOCKED; ddff2fae, ea8d9824,
+                                                      657f60a0, 78a57d90 all reachable)
+wp/steward-b2v-recut                      d6026a5c   (blocked, preserved)
+wp/steward-b2v-recut-2                    cfe05e37   (blocked, preserved)
+wp/steward-b2v-recut-3                    bbf3c7dd   (blocked, preserved)
+wp/steward-b2v-recut-4                    20476cfb   (fold 3 @ d2fdee73 + briefing)
+wp/steward-b2v-recut-5                    e4fa5ec5   <- CURRENT, awaiting Architect bind
+wp/KW-THEOREM-surface-keyword-rename      963d36ac   (CI-RED, kept, do not force over)
+architect/work                            e560cb20
 ```
+
+⛔ **NOTHING in this list is ever force-pushed.** Every blocked candidate stays
+reachable — it is the artifact a reviewer's block is *about*.
 
 Each verified by `ls-remote` **at the exact SHA after the push**, never from
 push output.
@@ -124,24 +461,26 @@ push output.
 
 | # | item |
 |---|---|
-| — | **Publish this briefing refresh + the `B2V` frame amendment** (`wp/steward-b2v-ac-discharge`) |
-| #12 | B1R retros → playbook corpus. **Batch; do not publish singly.** |
+| #48 | ⚠ **IN PROGRESS.** Three tail corrections committed. Remaining: archive the superseded 07-21/07-22 narrative. ⛔ **Do NOT bulk-archive — ~half the tail is durable law.** |
+| #51+#12 | ⭐ **Promote the candidate-boundary-control lesson** (all three `KW-THEOREM` rings converged on it **independently**) + B1R retros → playbook corpus. **Batch; do not publish singly.** The deliverable is the **executable edge** (the language ring's post-corpus formatter return edge), not the policy sentence. |
+| #52 | Frame **`KW-ORACLE-CLOSURE`** (`draft`, filed 2026-07-25) — the adversary's two post-merge findings on the `KW-THEOREM` source oracle. Both **zero live instances**, both **structural**. ⛔ Do not close by re-running the measurements; and ⛔ **P2's fix must not be a sixth `classify` arm.** |
 | #5 | Frame `ABI-S3` shovel-ready |
-| #45 | ⚠ **PARTIALLY DONE.** The stale LIVE block is archived; the ~1040 lines *below* this block (`## Standing state` onward, much of it dated 2026-07-21) are **still unaudited** — some is durable standing discipline, some is stale. |
 | #11 | `DOC-GATE-NEEDLE` — ⛔ **operator-HELD. Do not release, do not re-ask.** |
 
 ### ▶ Environment
 
-Disk: `/` at 71%, `/workspaces/ken` at 80% after a ~64G reclaim. The mass is
-`.worktrees/*/target` plus an orphaned `~/.cache/ken-sccache`; **verify the
-live `SCCACHE_DIR` from the server's `/proc/<pid>/environ` before deleting any
-cache**, and check live processes (`ps -eo args | grep -oE
-'/workspaces/ken/\.worktrees/[a-z-]+'`) before touching any `target/` — a seat
-can read idle in tmux while 30 rustc processes run.
+Disk: `/` at 71%, `/workspaces/ken` at 80% after a ~64G reclaim. Mass is
+`.worktrees/*/target` plus an orphaned `~/.cache/ken-sccache`; **verify the live
+`SCCACHE_DIR` from the server's `/proc/<pid>/environ` before deleting any
+cache**, and check live processes before touching any `target/` — a seat can
+read idle in tmux while 30 rustc processes run.
 
-⛔ **Busy-detector regex — the spinner verb is RANDOMIZED**
-(`Hullaballooing…`). Never grep `Working (`; it produced two false IDLEs, one
-on a seat 52 minutes into a turn:
+⛔ **`pkill -f <pattern>` MATCHES YOUR OWN SHELL** if the pattern appears in its
+command line. It killed my own bash while stopping the publisher. Use `pgrep`,
+read the PID, then `kill` that PID.
+
+⛔ **Busy-detector regex — the spinner verb is RANDOMIZED** (`Booping…`,
+`Churned for…`). Never grep `Working (`:
 
 ```
 esc to interrupt|\([0-9]+m [0-9]+s|\([0-9]+s ·|[0-9.]+k tokens|Compacting|Press up to edit queued
@@ -262,34 +601,35 @@ Only a **wide** `capture-pane` shows the `at capacity` line above the composer.
   this chain ran **10 hard-stops dry**). **My tracker is the count of record**;
   the Architect re-derives its own across compactions and loses.
 
-  > ### ⛔ CORRECTED 2026-07-25 — THIS LINE ITSELF WENT STALE. Two chains, and
-  > ### the numbers below are NOT interchangeable.
+  > ### ⛔ THE NUMBERS ARE NOT HERE. **`▶ ARMED COUNTERS` in the LIVE block is
+  > ### the single count of record.** This section carries only the lessons.
   >
-  > This bullet used to read *"the issue file carries `hard-stop count = 33` /
-  > `NEXT RESEARCH PULL = #36`"*. **MEASURED:** `issues/RT-NATIVE-FNSPLIT.md`
-  > carries exactly one `NEXT RESEARCH PULL` line and it says **`#12`**, with
-  > `COUNT OF RECORD = 9` and `#9 CONSUMED`. **THE GAP:** `33`/`#36` described
-  > the **original pre-recut chain**, which was **frozen at the recut**; the
-  > **live** chain is the recut one (`wp/RT-NATIVE-FNSPLIT-recut.md` opened it
-  > at `1` on 2026-07-24, cadence `#3, #6, #9, #12, …`).
+  > **2026-07-25: this block used to restate the counters, and a briefing that
+  > states them twice has no count of record at all** — two copies drift, both
+  > read authoritative, and the reader cannot tell which is live. That is the
+  > same defect as the one below, one level up, so the duplicate is gone rather
+  > than re-synchronised.
   >
-  > ```text
-  > ORIGINAL chain  — FROZEN at 33 hard-stops. Do NOT resume this count.
-  > LIVE recut chain — COUNT OF RECORD = 9 · #3/#6/#9 consumed
-  >                    NEXT RESEARCH PULL = hard-stop #12
-  > SYMPTOM INVENTORY — ENTRIES = 3, answered at entry 2 (entry 3 = the CAUSE)
-  >                    NEXT PREDICATE CHECK = 6th entry
-  > ```
+  > ⛔ **Two chains exist and their numbers are NOT interchangeable.** The
+  > **original** chain is **FROZEN at 33 hard-stops — do not resume that
+  > count.** The **live** chain is the recut one (`wp/RT-NATIVE-FNSPLIT-recut.md`
+  > opened it at `1` on 2026-07-24, cadence `#3, #6, #9, #12, …`). This bullet
+  > once carried the frozen chain's `33`/`#36` onto the live chain.
   >
-  > ⛔ **Why this mattered more than a wrong number:** a `#36` anchor on a chain
-  > standing at **9** makes the trigger **unreachable** — 27 hard-stops of
+  > ⛔ **Why that mattered more than a wrong number:** a `#36` anchor on a chain
+  > standing at `9` makes the trigger **unreachable** — 27 hard-stops of
   > headroom on a mechanism that exists to fire every 3rd. The armed line was
-  > *present*, so every "is it armed?" check passed. **An armed trigger with a
+  > *present*, so every *"is it armed?"* check passed. **An armed trigger with a
   > stale anchor reads exactly like a working one**, which is the same defect
-  > class as the `10-hard-stops-dry` run it was written to prevent, one level up.
+  > class as the `10-hard-stops-dry` run it was written to prevent.
   >
-  > ★ **`RT-FNSPLIT-B2O` produced NO hard-stop, so the count did not move.** A
-  > clean WP never advances it — do not "catch up" the number for elapsed work.
+  > ★ **A clean WP does NOT advance the count** — `RT-FNSPLIT-B2O` produced no
+  > hard-stop and the count correctly stayed put. **Neither does a review
+  > block:** `B2R` took two and stayed at 10. A hard-stop is the implementer
+  > discovering it *cannot proceed*; a block is a candidate being *found
+  > incomplete*. ⛔ Do not "catch up" the number for elapsed work — inflating it
+  > pulls the research trigger early and teaches the chain that the two are one
+  > event.
 - **⛔ RT-NATIVE-FNSPLIT DOES NOT MERGE ON "the tests pass"** — the operator's
   scaling gate (`evt_4btfhwqhah1ye`) binds: empirical n=3..7 harness +
   research-grounded analytical growth order + a verdict. **SP-A is
@@ -407,35 +747,38 @@ where the mechanism actually lives before you route on the field.**
 `NATIVE-HANDLE-CARRIER` → `RT-NATIVE-FNSPLIT`, so the PX8 spine cannot fill this
 slot while #33 is open.
 
-### ⛔ FOUR OPERATOR DIRECTIVES ARE LAW AND ARE **NOT ON `main`**
+### ✅ CLOSED 2026-07-25 — the four operator directives ARE on `main`
 
-Found 2026-07-24 while checking `steward/work` drift. Verified **by content**
-(`git grep <phrase> origin/main`), not by branch-ahead, so the squash-merge trap
-is excluded:
+> ⛔ **This block used to read "FOUR OPERATOR DIRECTIVES ARE LAW AND ARE **NOT
+> ON `main`**" and asserted that the fleet was reviewing in series and the
+> adversary was running without its scope fence. All four have since landed.
+> The escalation it ended on — *"awaiting the operator's call"* — is
+> **DISCHARGED. Do not re-raise it.**
 
-| item | status |
+Re-measured on `origin/main` 2026-07-25:
+
+| directive | located |
 |---|---|
-| `COORDINATION §8a` — Architect/Librarian review in PARALLEL over disjoint domains | **not on main** |
-| `COORDINATION §10⁻a` — adversary channel report-only, scoped to `crates/`+catalog | **not on main** |
-| steward playbook §2d — separate judgment from action (OODA) | **not on main** |
-| steward playbook — contention has a LEDGER axis | **not on main** |
+| `COORDINATION §8a` — Architect/Librarian parallel, over disjoint domains | `agent/COORDINATION.md:455` |
+| `COORDINATION §10⁻a` — adversary channel report-only | `agent/COORDINATION.md:629` |
+| steward playbook §2d — separate judgment from action (OODA) | `agent/playbooks/federation/steward.md:1111` |
+| steward playbook — contention has a LEDGER axis | `agent/playbooks/federation/steward.md:260` |
 
-⛔ **Why this is not bookkeeping.** Every seat reads `agent/COORDINATION.md`
-**from its own worktree at `origin/main`.** After the power cycle the whole
-fleet re-oriented against a COORDINATION that is **missing two operator
-directives**. I hold them only because I read from `steward/work`. So the fleet
-is currently reviewing in series where §8a says parallel, and the adversary is
-operating without its §10⁻a scope fence.
+⛔ **The measurement itself nearly went wrong, and that is the durable part.**
+My first probe grepped the literal `in PARALLEL over disjoint` and reported §8a
+**missing**. The real heading is `PARALLEL, OVER DISJOINT` — a comma. One
+false negative would have sent a settled matter back to the operator as an open
+one. ⇒ **Probe with several short, lowercase, single-line fragments and require
+them to agree**; never one multi-word phrase, which in an 80-column file is
+odds-on to span a wrap or a punctuation mark you did not predict. The rule was
+already written ~700 lines below this line, in *Tooling traps* — **and it did
+not fire, because a rule that far from the work never does.**
 
-⚠ **`steward/work` is 70+ commits ahead of `origin/main`**, against §6a's *"at
-most the current unpublished tracker delta."* Most is the squash-merge trap —
-**do not treat branch-ahead as unmerged.** The correct route is §6a step 2: cut
-`wp/steward-<slug>` from **current** `origin/main` and apply only the intended
-changes; never publish `steward/work` itself.
-
-**Awaiting the operator's call on publishing this** (§10⁻: process work is
-subordinate to product flow — but these are the operator's own directives, and
-their absence is actively changing how the fleet behaves).
+⚠ **Still true and still load-bearing:** `steward/work` runs far ahead of
+`origin/main` against §6a's *"at most the current unpublished tracker delta"* —
+**mostly the squash-merge trap, so do not treat branch-ahead as unmerged.** The
+route is §6a step 2: cut `wp/steward-<slug>` from **current** `origin/main`,
+apply only the intended changes, and never publish `steward/work` itself.
 
 ### ▶ Doc track — IDLE
 
@@ -559,10 +902,13 @@ committed exit (PX10/PX11/PX12).
 > finding labels. **`PX9`-`PX12` keep their charter IDs.** `L` was rejected
 > as a prefix: `L1`-`L7` are existing WPs.
 
-> **★ COVERAGE ANSWER (operator asked 2026-07-21; verified file-by-file):
-> 0 of 18 items have an issue.** The only live node of §5's graph is
-> **PX8**, its *root*. Everything downstream of `PX8 -> ABI-R3` and
-> `PX8 -> PX9` is unframed. §9 of that document is the record.
+> **★ COVERAGE — CLOSED 2026-07-25. This read `0 of 18 items have an issue`;
+> it is now `18 of 18`.** Re-measured on `origin/main`: `ABI-A1/A2/A3`,
+> `ABI-M1/M2`, `ABI-R1/R3`, `ABI-REVOKE`, `ABI-S1`…`ABI-S6`, and
+> `PX9/PX10/PX11/PX12` all exist under `docs/program/issues/`. ⛔ **Do not
+> re-file them.** *Filed* is not *framed*, though — a tracked node with no
+> shovel-ready brief in `docs/program/wp/` is still not releasable, and that
+> gap is the real remaining work (`ABI-R1` is framed; `ABI-S3` is queued).
 >
 > **AND the document had a hole:** the charter's **runtime revocation
 > membrane** (`09` §5) is absent from it. `RevocationHandle { revoked: bool }`

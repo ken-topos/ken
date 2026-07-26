@@ -110,7 +110,13 @@ rejection of common aggregates, and **not** inheritance from `C4`.
 
 ## Classification — recorded exactly as ruled
 
-- Hard-stop count is **10**. **Next research pull remains `#12`.**
+- Hard-stop count is **10**. **Next research pull = `#11`** (corrected from
+  `#12` by the Steward 2026-07-25 — the operator's 2026-07-24 catch-up override
+  spells `#11, #15, #18, #21`; settled by dominance, since a pull at `#11` is
+  required under one reading and merely early under the other, and early is
+  fine). ⛔ **The count of record for this chain lives in the `B2V` WP frame's
+  *Standing* section**, together with the armed consecutive-production-block
+  counter; do not re-anchor either from prose elsewhere.
 - ⛔ **This is NOT a fourth symptom-inventory entry.** It is another missing
   prerequisite **under entry 2** — the same functionization obstruction one
   representation layer below `#9`. Record it under entry 2 / the prerequisite

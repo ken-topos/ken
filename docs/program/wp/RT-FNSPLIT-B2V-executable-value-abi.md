@@ -190,16 +190,28 @@ the defect the parent node is closing.)
 
 ### `D4` — close the transfer population STRUCTURALLY
 
-**One exhaustive, no-wildcard disposition over every `Lowered` variant that can
-reach `Parameter`, `Capture`, or `Result`.** Four dispositions, and every
-variant gets exactly one:
+**One exhaustive, no-wildcard match over every `Lowered` variant that can reach
+`Parameter`, `Capture`, or `Result`, assigning each variant exactly one STATIC
+ENCODING POLICY.** Five policies; every variant gets exactly one:
 
-| disposition | meaning |
+| static policy | what it declares about EVERY value of the variant |
 |---|---|
-| **represented immediate** | payload fits the tagged word directly |
-| **represented handle** | opaque handle, **with explicit lifetime and referent owner** |
+| **represented — immediate-only** | every value encodes in the tagged word; **no spill arm exists** |
+| **represented — handle-only** | every value encodes as an opaque handle, **with explicit lifetime and referent owner** |
+| **represented — immediate-with-declared-handle-spill** | values encode immediate **or**, on a declared closed condition, as a handle; the handle arm carries the **same** lifetime/referent-owner obligations as handle-only |
 | **protocol-only** | never a source value at a boundary |
 | **fail-closed forbidden** | rejected before emission, with an exact error |
+
+⛔ **A policy is a claim about the whole variant, never about one sampled
+value.** *Immediate-only* is the strong claim that **no** value of the variant
+spills; do not assign it to a variant that has a spill arm. `Lowered::Int` →
+`RepresentedImmediate { tag: ImmediateInt, spill: Some(Int) }` is the **third**
+row, not the first — a small `Int` yields an immediate word and a wide one
+yields a persistent handle, under **one** static policy.
+
+⚠ **The runtime OUTCOME per input is a separate, finer classification** — that is
+`AC-10`, and it is entailed by the policy rather than replacing it. Neither level
+may absorb the other; see the `D4`/`AC-3` clarification in the RECUT.
 
 ⛔ **The 41-transfer histogram is corroboration, NOT the population proof.** The
 proof is the exhaustive match over the **21 landed variants** at
@@ -264,9 +276,48 @@ constant helper declarations are **predicted before measuring** and
 
 ## Acceptance criteria
 
+> ⛔⛔ **RECUT 2026-07-25 — these `AC`s are AMENDED. Read `## RECUT` at the end
+> of this file BEFORE treating the list below as the bar.** The Architect named a
+> shared predicate across three production blocks: the defect is the **shape** of
+> this list — each `AC` below pins one **facet** of an emitted round trip, and
+> each block found a facet none of them named. `AC-10` (in the RECUT) closes it
+> structurally, and the three `NO CONTROL — open residual` rows are **promoted
+> into scope**, not carried as residuals.
+
 **AC-1 — the representation is closed and type-enforced.** One 64-bit tagged
 word serves `ValueWord` and `ResultWord`; its relation to `GroundValueCarrier`
 is stated. A new carrier or a new tag is a **compile error**, not a default.
+
+> #### `AC-1` layout closure — Architect ruling `evt_1tdq9g139snay`, 2026-07-26
+>
+> **The node/header field inventory is the SOLE layout authority.** Any
+> declared or exported extent is **mechanically derived** from that inventory
+> **and consumed** by allocation/publication, **or it does not exist**.
+> Publication emits **exactly** the derived extent, and every emitted
+> reader/writer offset **plus field width** lies within it.
+>
+> ⛔ **A committed causal control must REDDEN when the field inventory, the
+> published word count, the declared extent, or an emitted offset drifts
+> independently.** ⛔ **Checking a hand-maintained constant against another
+> hand-maintained constant does not discharge this.**
+>
+> ⚠ **The contract is one authority with real consumers** — **not** a preferred
+> spelling and **not** a frozen byte count. The implementation stays free to
+> delete the dead constant, derive it from the field inventory, or introduce a
+> typed layout object.
+>
+> ⭐ **Why this is `AC-1` and NOT `AC-10`** — the Architect ruled the boundary
+> explicitly, and it matters. `AC-10` closes an **admitted runtime value** under
+> *emitted producer → valid word → separately compiled consumer*. The `fd4e7f08`
+> header defect **did not falsify that round trip**: `BOUNDARY_REGION_HEADER_BYTES`
+> had **no consumer**, and the published vector was large enough for every
+> accessed field. ⛔ **Quietly widening `AC-10` to swallow every dead or drifting
+> declaration would have destroyed the named predicate's boundary.** The real
+> fault is that the representation claimed **one closed, type-enforced layout
+> while carrying two inconsistent authorities, one of them unused** — an `AC-1`
+> face. RETAIN's *"one derived layout"* points at the right mechanism, but
+> **RETAIN is not an acceptance control**, which is why the requirement lives
+> here.
 
 **AC-2 — the representation cannot be value-specialized.** ⭐ **Prefer the
 compiler over a test:** if `D1` is built so that no seed value or caller depth
@@ -275,9 +326,13 @@ assertion. State which mechanism enforces it. (`B2R` did exactly this for the
 seed environment and it was the strongest thing in that node.)
 
 **AC-3 — the `Lowered` disposition is exhaustive with no wildcard.** All 21
-variants, one disposition each, no `_` arm. `Constructor` and `HostResult` are
-**live represented arms**. Assert the **exact** error for every fail-closed arm
-— never `is_err`.
+variants, **exactly one of `D4`'s five static encoding policies each**
+(immediate-only · handle-only · immediate-with-declared-handle-spill ·
+protocol-only · fail-closed forbidden), no `_` arm. `Constructor` and
+`HostResult` are **live represented arms**. Assert the **exact** error for every
+fail-closed arm — never `is_err`. ⛔ **A variant carrying a declared spill must
+be assigned the spill policy, not immediate-only** — that misassignment is the
+vacuity route `AC-10` exists to close.
 
 **AC-4 — emitted code can construct, discriminate, and project.** Each `D3`
 operation exercised **from emitted code**, not from Rust.
@@ -378,6 +433,18 @@ sizes, not asserted.
 >
 > ⚠ **This is content added to a message QA already sends** — no new party, no
 > new hop, no new gate, no change to the reviewer set.
+>
+> #### ⛔ MANDATORY ROW added 2026-07-26 — `AC-1` **layout closure**
+>
+> The map's `AC-1` row must name the control discharging the **layout-closure
+> clause** (Architect `evt_1tdq9g139snay`), not only tag/carrier closure. That
+> control **reddens when the field inventory, the published word count, the
+> declared extent, or an emitted offset drifts independently.**
+> ⛔ **A row citing a constant-vs-constant equality assertion does NOT discharge
+> it** — that is two hand-maintained authorities agreeing, which is the defect.
+> ⚠ `fd4e7f08`'s map was complete and honest **and had no such row**, because
+> the clause did not exist yet; that is precisely how a 136-vs-144 mismatch
+> passed a full `AC`→control review.
 
 ## Do-not-reopen guardrails
 
@@ -409,7 +476,262 @@ inheritance from `C4`.
 - **Report an unpushed ref and KEEP GOING.** Build seats have no GitHub
   credential by design; the Steward pushes. Raising it is not gating on it.
 - **Hard-stop protocol.** Count of record is **10**; **next research pull =
-  `#12`**, armed. ⛔ **`#10` is recorded under symptom-inventory entry 2 / the
+  `#11`**, armed. ⛔ **`#10` is recorded under symptom-inventory entry 2 / the
   prerequisite chain — it is NOT a fourth entry.** Inventory stays at 3 entries;
   next predicate check at the **6th**.
+  > ⚠ **`#11`, not `#12` — corrected by the Steward 2026-07-25.** Three tracked
+  > files carried `#12` (the generic next-multiple-of-3 after the consumed `#9`);
+  > the steward playbook carries an **operator override** of *"catch-up set to
+  > `#11`, then `#15`, `#18`, `#21`"* (2026-07-24). The two cannot be reconciled
+  > from the dates, so it is settled by dominance rather than by guess: a pull at
+  > `#11` is **required** under one reading and merely **early** under the other,
+  > and early is explicitly fine — a cadence threshold is a floor on when to ask,
+  > not a bar on asking sooner. `#12` is wrong under one reading, so `#11` wins.
+- ### ⛔ ARMED — consecutive Architect PRODUCTION blocks on this node
+  ```text
+  CONSECUTIVE ARCHITECT PRODUCTION BLOCKS = 4
+    #1 78a57d90  #2 657f60a0  #3 ddff2fae  #4 fd4e7f08 (dec_7sd3enk81maws
+                                              REJECTED on the object, evt_4bs6scfmt5ax0)
+  PREDICATE CHECK AT 3 -> FIRED 2026-07-25, ANSWERED YES. See the RECUT below.
+  NEXT CHECK = block #6 on this node.
+  ```
+  ⚠ **Block #4 arrived on a candidate QA had APPROVED with a complete
+  AC→control map and a passing mutation proof.** Read that before treating a
+  green QA map as coverage: the map was honest and its residual accounting was
+  honest, and three production defects still sat outside it.
+
+  ⭐ **All three of block #4's defects have one shape — the Rust side states the
+  law and the emitted side does not enforce it.** (1) `BOUNDARY_REGION_HEADER_BYTES`
+  declares a layout no consumer checks, against an 18-word publish; (2) the
+  emitted `store_int_limbs` admits `len=0` / leading-zero / negative-zero
+  magnitudes that `RuntimeIntV1::canonical_sign_and_limbs` forbids; (3) the
+  emitted reader wraps `at + region_len` where the Rust oracle uses
+  `checked_add`. ⛔ **That is this node's own founding diagnosis one layer down**
+  — `B2V` exists because the aggregate-result path was *a Rust-side decode, not a
+  value representation*.
+
+  ✅ **RULED 2026-07-26 (`evt_1tdq9g139snay`), and the boundary is the point.**
+  The recut predicate reaches **(2)** and **(3)** — construct a *valid* word,
+  keep it *resolvable*. **(1) is NOT an `AC-10` face**: the header constant had
+  no consumer and the published vector was large enough for every accessed
+  field, so the round trip was never falsified. It is an **`AC-1` layout-closure
+  face** and is folded there. ⛔ **Widening `AC-10` to absorb it would have
+  destroyed the named predicate's boundary** — the reason to raise an uncovered
+  face as a *question* rather than patch it into the nearest `AC`.
+  ⭐ **This counter exists because §5a-ii's could not see this.** §5a-ii counts
+  **hard-stops**, and a review block is correctly **not** a hard-stop — so three
+  Architect production blocks moved neither the hard-stop count nor the symptom
+  inventory, and the chain could have gone arbitrarily deep with every armed line
+  in the repo reading correct and current. The trigger fired only because the
+  Steward had armed it by hand in a watchdog payload. ⛔ **A backstop that depends
+  on someone remembering to look is not operative** — so it now lives here, at the
+  point of work, as a counted line the next block has to walk past.
 - Read `agent/playbooks/tools/pin-a-property.md` before writing any assertion.
+
+## ⛔⛔ RECUT — 2026-07-25. The Architect NAMED the shared predicate.
+
+⛔ **Read this before reading the acceptance criteria above.** The `AC` set above
+is the thing this recut acts on.
+
+> ### ⛔ HOW THIS RECUT AMENDS — edit the OPERATIVE text, never append a correction
+>
+> **A later note saying an earlier deliverable is false does not replace the
+> deliverable.** `D4` is the construction authority an implementer reads *first*;
+> a clarification 300 lines below it is read *second, if at all*. Two consecutive
+> Architect blocks on this recut were caused by exactly this — folding a
+> correction in as a new paragraph while the contradicted `D`/`AC`/RETAIN text
+> stayed operative and unedited. Both readings then live in the frame, and the
+> **wrong one is the one positioned to be obeyed.**
+>
+> ⇒ Every fold in this recut **edits the operative deliverable in place**, and
+> the clarification blocks below **explain** that text rather than contradicting
+> it. ⛔ Before returning any folded ref, re-read `D1`–`D6`, `AC-1`–`AC-10`, and
+> RETAIN **as a whole** and confirm none of them still states the superseded
+> contract. A whole-frame reconcile is the fold, not a step after it.
+
+### The predicate — the Architect's words, `evt_2zxt6m9bg43r2`
+
+> For every boundary-reachable `Lowered` value that the exhaustive disposition
+> admits, a generated producer must be able to construct a **valid, lossless,
+> ownership-correct** fixed-width boundary word; that word must remain resolvable
+> for its declared lifetime; and a separately compiled consumer must recover the
+> same value/identity through the emitted ABI, while malformed or unrepresentable
+> inputs fail **before** publication rather than truncate, alias, forge identity,
+> or defer failure to projection.
+
+> So these are **not independent defects**. They are successive exposed faces of
+> one incomplete claim: **the admitted disposition is not yet closed under
+> emitted producer → boundary word → separately compiled consumer round trip.**
+
+⭐ **All three blocks were individually correct.** Local correctness of each is
+precisely what made the shared predicate invisible — it is the symptom, not the
+refutation. Likewise, *"the architecture is still viable"* is true here and is
+**not** an answer to the predicate question; the answer above is.
+
+### RETAIN — a named predicate is NOT a licence to restart
+
+⛔ **Everything below is PROVED and stands. Do not rebuild it, do not re-review
+it, do not let a recut become a restart.**
+
+- the tag × class relation, closed over the whole product
+- region selection / threshold agreement with referent owner
+- the native exact-`Int` **normalization dependency** — the canonical
+  sign/limb contract is authoritative wherever a word is built, including from
+  emitted code
+- **one derived layout** (a single authority computes node/header extents; no
+  second hand-maintained copy) and a **distinct content table**
+- ⛔ **NOT the byte counts.** The earlier "64/112 layout change" is
+  **superseded** and is *not* retained. The recut promotes persistent
+  arbitrary-precision `Int` into scope, and region-owned magnitude storage
+  necessarily widens node/header extents; **a sound persistent-wide-`Int`
+  representation cannot both satisfy that promoted `AC-10` obligation and hold
+  64/112 unchanged.** (Nor is the successor "80/136" retained: the exact-SHA
+  review of `fd4e7f08` found the declared 136 was actually a 144-byte publish
+  with no consumer — which is why the *pin*, not the *number*, is the retained
+  property.)
+- ⭐ **A reviewed layout delta required by an `AC-10` outcome is PREDICATE DELTA,
+  NOT RESTART.** Do not read a changed byte count as the recut having reopened
+  proved architecture; read it as the promoted obligation doing exactly what it
+  was promoted to do.
+- removal of the caller-supplied store-identity writer
+- the emitted String/Bytes reachability controls and their causal mutation
+  (`M14`, exact `BOUNDARY_ERR_CLASS = -4`)
+- the **sealed exhaustive / no-wildcard disposition MECHANISM**, and every
+  already-proved **classification outside `AC-10`'s implicated domain**.
+  ⛔ **Not the classifications wholesale.** A classification or value-band that is
+  **narrowed or reclassified in order to close `AC-10`** is reviewed as **the
+  predicate delta**: it is neither prohibited nor a restart. `Constructor` and
+  `HostResult` remain **required live represented arms**.
+  > ⚠ **This item read *"the exhaustive `Lowered` disposition"* wholesale in the
+  > first draft — self-contradictory**, because the same recut names a *narrowed
+  > disposition* as a permissible mechanism, and narrowing necessarily changes at
+  > least one current classification. A RETAIN list that forbids the mechanism the
+  > frame leaves open is a trap for the implementer, not a protection.
+
+The last clean checkpoint carries forward as a **semantic oracle, not an
+acceptance path** — it tells you what the answer looks like; it does not
+discharge anything.
+
+### REPLACE — only what the predicate names
+
+**What is defective is the SHAPE of the `AC` set, not any single `AC`.** `AC-1`,
+`AC-2`, `AC-4`, `AC-6` and `AC-7` each pin **one facet** of the round trip. Each
+block found a facet no `AC` had named. Enumerated, that yields an unbounded chain
+of individually-reasonable blocks; **named, it yields one closure.**
+
+> ### ⛔ `D4` / `AC-3` CLARIFICATION — static POLICY vs runtime OUTCOME
+>
+> The exhaustive no-wildcard match assigns every `Lowered` **variant** exactly one
+> **static disposition policy**. A *represented* policy declares a **closed
+> encoding policy**: **immediate-only**, **handle-only**, or
+> **immediate-with-declared-handle-spill**. The existing
+> `RepresentedImmediate { spill: Some(…) }` is the **third** of those — ⛔ **not a
+> claim that every runtime value of that variant is immediate.** `ProtocolOnly`
+> and `FailClosedForbidden` remain terminal static policies.
+>
+> ⚠ **Why this had to be said.** `Lowered::Int` maps to
+> `RepresentedImmediate { tag: ImmediateInt, spill: Some(Int) }` — **one static,
+> variant-level policy**. A small runtime `Int` yields an immediate word; a wide
+> one yields a **persistent handle**. `D4`'s old wording defined *represented
+> immediate* as *"payload fits the tagged word directly"*, which is **false for
+> that same arm whenever its declared spill fires**. ⛔ Calling the whole `Int`
+> population *immediate* lets a proof attach handle evidence to **one sampled
+> spill** while never establishing that **every** spill partition carries the
+> handle obligations. Forcing the value-level `AC` to say *handle* instead would
+> contradict `AC-3`'s one static disposition per variant. **Both levels are real;
+> neither may absorb the other.**
+
+**`AC-10` — total classified-domain closure.** The exhaustive disposition assigns
+every boundary-reachable **variant** one **static policy**, and the closed
+value-dependent partition assigns every boundary **input** exactly one **actual
+outcome entailed by that policy**: *immediate word*, *handle word with declared
+class/owner/lifetime*, *protocol-only*, or *fail-closed forbidden*.
+
+1. Every **well-formed value admitted by a represented policy** is constructible
+   by emitted code and recovered by a **separately compiled** consumer with
+   content/value, identity, owner, and lifetime intact.
+2. A **protocol-only** case cannot enter a source-valued slot.
+3. A **malformed, forbidden, or unrepresentable** input rejects **before
+   emission/publication** with its exact status.
+
+⛔ **No admitted well-formed represented value may reject, and no input *or
+encoding outcome* may remain unclassified.**
+
+> ### ⛔ Why `AC-10` is phrased this way — the Steward got it wrong first
+>
+> My first draft read *"for every value the disposition admits, **either** round
+> trip **or** fail closed."* The Architect blocked it, correctly: that puts the
+> failure arm **inside the admitted subset**, which makes admission
+> **non-semantic** and is **satisfied vacuously by an implementation that rejects
+> every represented value.** ⭐ **Classification happens first; the behavior is
+> then *entailed by the class*.** The predicate's failure arm is load-bearing —
+> but it belongs to the *unrepresentable* class, not to the represented one.
+>
+> ⚠ **The instructive part:** I was guarding against the opposite error — the day
+> before, I over-strengthened a correct mechanism into a post-condition that
+> failed on correct work. Steering away from *too strong*, I landed on *vacuously
+> satisfiable*. **Both failures come from writing the predicate on the wrong
+> domain**, and neither is fixed by tuning strength. Fix the domain first.
+
+⚠ **Three further things about `AC-10`:**
+
+- ⛔ **It quantifies over the DISPOSITION, not over tags.** The predicate is
+  explicitly *stronger than "all tags are enumerated"* and *stronger than
+  Rust-side materialization*. A sweep over 21 arms is not a sweep over admitted
+  values: magnitude bands and lifetime bands are part of the domain. **Total over
+  nodes is not closed under parent → child reachability.**
+- ⛔ **"One control total over every value" is NOT an executable oracle** — the
+  admitted domains include unbounded integers, byte/string contents,
+  lifetime/ownership states, and recursive parent → child reachability. **No
+  finite runtime test enumerates them.** Demanding one would produce either an
+  impossibility or *a finite case sweep wearing a universal name*, which is worse
+  than an honest sweep because it reads as total. **Totality is therefore proved
+  STRUCTURALLY:**
+  > a sealed exhaustive no-wildcard disposition, **plus** a closed finite
+  > partition of every value-dependent representation discriminator — at least
+  > **variant**, **magnitude/shape**, **lifetime/owner**, and **parent → child
+  > reachability / aggregate recursion**. Every value-dependent partition maps to
+  > exactly one **actual outcome permitted by its static policy**. ⛔ **A handle
+  > outcome — including an immediate policy's SPILL ARM — must discharge the
+  > handle class, referent-owner, identity, and lifetime obligations.** Each
+  > partition **boundary** carries a **nondegenerate witness pair** and a
+  > **causal mutation** driven through an emitted producer and a separately
+  > compiled consumer.
+
+  ⭐ **The demanded unit is one property / one `AC` — not one test function.**
+  QA's `AC-10` row names the structural closure artifact **and the complete
+  control family**; it need not pretend one dynamic test enumerates an infinite
+  domain.
+- ⛔ **`AC-10` requires an `AC` → control row like every other.** An `AC` that
+  ships **zero** controls is invisible to a review that examines controls:
+  *discharged* and *never asked* read identically in a green verdict.
+
+**The three `NO CONTROL — open residual` rows are PROMOTED into `AC-10`'s scope.**
+QA recorded them honestly and they were correct to record; the Architect's third
+block says the first of them *"is not an optional test residual."* They are not
+residuals — **they are the predicate's uncovered faces**, and they are the recut:
+
+| promoted residual | why it is in scope |
+|---|---|
+| `AC-4` Big at the persistent boundary | the disposition promises a `PersistentGround` spill for every `Int`; only `Small` can materialize |
+| `AC-1` tag reachability | review-only reachability is not a sweep over the admitted domain |
+| `AC-6` persistent content addressing | the emitted node stays `NULL_SLOT`, so identity recovery is unproved |
+
+### FREEZE
+
+The enumerated-`AC` chain is **closed at three production blocks**. The counter
+in *Standing* opens fresh. ⛔ The three blocked candidates (`78a57d90`,
+`657f60a0`, `ddff2fae`) stay reachable on origin as durable checkpoints and are
+**never publishable**.
+
+### ⚠ What this recut does NOT do
+
+⛔ **It does not stop the Runtime ring, and it adds no new constraint to the fold
+in flight** — the Architect said so explicitly, and I am taking that at face
+value. @runtime-implementer keeps folding.
+
+⛔ **It does not choose a mechanism.** *How* the disposition is closed — a real
+persistent `Big` representation, a narrowed disposition, or a grounded
+frame-boundary impossibility — is the **Architect's** call, not the frame's. This
+frame states the property and where the control must be total; it does not pick
+the implementation, and the Steward must not.
