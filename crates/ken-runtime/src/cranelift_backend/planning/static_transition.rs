@@ -8,6 +8,8 @@
 mod abi;
 mod semantic_ir;
 
+#[cfg(test)]
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
@@ -24,6 +26,62 @@ use semantic_ir::{
 pub(in crate::cranelift_backend) use semantic_ir::StaticOriginId;
 
 pub(super) const MAX_HELPERS_PER_STATIC_SOURCE: usize = 8;
+
+#[cfg(test)]
+thread_local! {
+    static ACTIVE_RECURSIVE_LOWERING_FRAMES: Cell<usize> = const { Cell::new(0) };
+    static MAX_RECURSIVE_LOWERING_FRAMES: Cell<usize> = const { Cell::new(0) };
+}
+
+/// Test-only observation of the actual `plan_expr` call stack.
+///
+/// The guard is entered inside `plan_expr`, so `Drop` runs on every `?` return
+/// as well as the ordinary path. This measures production recursion rather than
+/// deriving a proxy from bracket depth or expression-node counts.
+#[cfg(test)]
+struct RecursiveLoweringFrameGuard;
+
+#[cfg(test)]
+impl RecursiveLoweringFrameGuard {
+    fn enter() -> Self {
+        ACTIVE_RECURSIVE_LOWERING_FRAMES.with(|active| {
+            let depth = active
+                .get()
+                .checked_add(1)
+                .expect("recursive lowering frame count fits usize");
+            active.set(depth);
+            MAX_RECURSIVE_LOWERING_FRAMES.with(|maximum| {
+                maximum.set(maximum.get().max(depth));
+            });
+        });
+        Self
+    }
+}
+
+#[cfg(test)]
+impl Drop for RecursiveLoweringFrameGuard {
+    fn drop(&mut self) {
+        ACTIVE_RECURSIVE_LOWERING_FRAMES.with(|active| {
+            active.set(
+                active
+                    .get()
+                    .checked_sub(1)
+                    .expect("recursive lowering frame guard is balanced"),
+            );
+        });
+    }
+}
+
+#[cfg(test)]
+fn reset_recursive_lowering_frame_count() {
+    ACTIVE_RECURSIVE_LOWERING_FRAMES.with(|active| active.set(0));
+    MAX_RECURSIVE_LOWERING_FRAMES.with(|maximum| maximum.set(0));
+}
+
+#[cfg(test)]
+fn max_recursive_lowering_frame_count() -> usize {
+    MAX_RECURSIVE_LOWERING_FRAMES.with(Cell::get)
+}
 
 /// ⭐ The dual result of planning one expression.
 ///
@@ -280,6 +338,9 @@ struct BoundaryACensus {
     helper_key_schemas: usize,
     frame_schemas: usize,
     store_node_schemas: usize,
+    static_node_id_bytes: usize,
+    persistent_node_id_bytes: usize,
+    max_logical_chain_depth: u32,
     max_environment_depth: u32,
     max_continuation_depth: u32,
     max_path_depth: u32,
@@ -287,6 +348,9 @@ struct BoundaryACensus {
     max_affine_depth: u32,
     max_source_return_depth: u32,
     source_return_resume_nodes: usize,
+    source_return_owned_resume_edges: usize,
+    terminal_outgoing_edges: usize,
+    recursive_lowering_frames: usize,
 }
 
 #[cfg(test)]
@@ -673,6 +737,8 @@ impl<'src> Planner<'src> {
         exit_kind: EdgeKind,
         ordinal: u32,
     ) -> Result<PlannedExpr, CraneliftBackendError> {
+        #[cfg(test)]
+        let _recursive_lowering_frame = RecursiveLoweringFrameGuard::enter();
         let owner = self.source()?;
         let tag = runtime_expr_tag(expr);
         let frame = self.frame(tag, ordinal, ctx, successor)?;
@@ -1676,6 +1742,9 @@ impl<'src> StaticTransitionPlan<'src> {
             helper_key_schemas: 1,
             frame_schemas: 1,
             store_node_schemas: 1,
+            static_node_id_bytes: std::mem::size_of::<StaticNodeId>(),
+            persistent_node_id_bytes: std::mem::size_of::<PersistentNodeId>(),
+            max_logical_chain_depth: self.store_depths.iter().copied().max().unwrap_or(0),
             max_environment_depth: max_depth(StoreKind::Environment),
             max_continuation_depth: max_depth(StoreKind::Continuation),
             max_path_depth: max_depth(StoreKind::Path),
@@ -1687,6 +1756,22 @@ impl<'src> StaticTransitionPlan<'src> {
                 .iter()
                 .filter(|node| node.transition == TransitionKind::SourceReturnResume)
                 .count(),
+            source_return_owned_resume_edges: self
+                .edges
+                .iter()
+                .filter(|edge| edge.kind == EdgeKind::SourceReturnOwnedResume)
+                .count(),
+            terminal_outgoing_edges: self
+                .edges
+                .iter()
+                .filter(|edge| {
+                    matches!(
+                        self.nodes[edge.from.0 as usize].transition,
+                        TransitionKind::Terminal | TransitionKind::TrapTerminal
+                    )
+                })
+                .count(),
+            recursive_lowering_frames: max_recursive_lowering_frame_count(),
         }
     }
 
@@ -1754,6 +1839,8 @@ pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(
     entry: &'src RuntimeExpr,
     declarations: &BTreeMap<&str, &'src RuntimeDeclaration>,
 ) -> Result<StaticTransitionPlan<'src>, CraneliftBackendError> {
+    #[cfg(test)]
+    reset_recursive_lowering_frame_count();
     let mut planner = Planner::new()?;
     let empty = PersistentNodeId(0);
     let context = PlanContext {
@@ -1922,10 +2009,24 @@ mod tests {
         }
     }
 
+    fn assert_fixed_helper_identity_shape(key: PlannedHelperKey) {
+        fn require_copy<T: Copy>() {}
+        require_copy::<PlannedHelperKey>();
+        match key {
+            PlannedHelperKey::Node(_transition, StaticNodeId(_ordinal)) => {}
+            PlannedHelperKey::Edge(_kind, StaticEdgeId(_ordinal)) => {}
+        }
+    }
+
     fn census(depth: usize) -> BoundaryACensus {
         let expr = nested_resource_bracket(depth);
         plan_static_transition_graph(&expr, &BTreeMap::new())
-            .map(|plan| plan.census())
+            .map(|plan| {
+                for key in &plan.planned_helpers {
+                    assert_fixed_helper_identity_shape(*key);
+                }
+                plan.census()
+            })
             .unwrap_or_else(|error| {
                 panic!("RT_NATIVE_FNSPLIT_BOUNDARY_A could_not_determine n={depth}: {error}")
             })
@@ -3010,29 +3111,185 @@ mod tests {
 
     #[test]
     fn boundary_a_nested_resource_brackets_n3_through_n7_are_closed_and_affine() {
-        // Promise class: durable invariant. Counts remain relational; this
-        // does not freeze a current literal or infer an exponent from points.
+        const WORKER_ENV: &str = "KEN_RT_SCALE_A_CENSUS_WORKER";
+        const FORCE_INDETERMINATE_ENV: &str = "KEN_RT_SCALE_A_FORCE_INDETERMINATE";
+        const OMIT_RESULT_ENV: &str = "KEN_RT_SCALE_A_OMIT_RESULT";
+        const COMPLETE_RESULT: &str = "RT_NATIVE_FNSPLIT_BOUNDARY_A_RESULT \
+             status=measured_complete rows=5 stack_bytes=8388608";
+        if std::env::var_os(WORKER_ENV).is_none() {
+            let run_worker = |force_indeterminate: bool, omit_result: bool| {
+                let executable = std::env::current_exe().unwrap_or_else(|error| {
+                    panic!("RT_NATIVE_FNSPLIT_BOUNDARY_A could_not_determine: {error}")
+                });
+                let test_name = std::thread::current()
+                    .name()
+                    .expect("libtest names every test thread")
+                    .to_string();
+                let mut command = std::process::Command::new("prlimit");
+                command
+                    .args([
+                        "--cpu=30:30",
+                        "--as=4294967296:4294967296",
+                        "--stack=8388608:8388608",
+                        "--",
+                    ])
+                    .arg(executable)
+                    .args(["--exact", &test_name, "--nocapture", "--test-threads=1"])
+                    .env(WORKER_ENV, "1")
+                    // This isolated process's incidental libtest thread only
+                    // dispatches the deliberately-created 8 MiB planner
+                    // thread below. `prlimit` bounds the process and catches
+                    // aborts; no recursive planning runs on libtest's stack.
+                    // Do not inherit the repository's 256 MiB convention.
+                    .env_remove("RUST_MIN_STACK");
+                if force_indeterminate {
+                    command.env(FORCE_INDETERMINATE_ENV, "1");
+                }
+                if omit_result {
+                    command.env(OMIT_RESULT_ENV, "1");
+                }
+                command
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped());
+                let mut child = command.spawn().unwrap_or_else(|error| {
+                    panic!(
+                        "RT_NATIVE_FNSPLIT_BOUNDARY_A could_not_determine: \
+                         prlimit worker could not start: {error}"
+                    )
+                });
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(45);
+                loop {
+                    match child.try_wait() {
+                        Ok(Some(_)) => {
+                            break child.wait_with_output().unwrap_or_else(|error| {
+                                panic!(
+                                    "RT_NATIVE_FNSPLIT_BOUNDARY_A could_not_determine: \
+                                     worker result could not be collected: {error}"
+                                )
+                            });
+                        }
+                        Ok(None) if std::time::Instant::now() < deadline => {
+                            std::thread::sleep(std::time::Duration::from_millis(25));
+                        }
+                        Ok(None) => {
+                            let _ = child.kill();
+                            break child.wait_with_output().unwrap_or_else(|error| {
+                                panic!(
+                                    "RT_NATIVE_FNSPLIT_BOUNDARY_A could_not_determine: \
+                                     timed-out worker could not be reaped: {error}"
+                                )
+                            });
+                        }
+                        Err(error) => {
+                            let _ = child.kill();
+                            panic!(
+                                "RT_NATIVE_FNSPLIT_BOUNDARY_A could_not_determine: \
+                                 worker status could not be observed: {error}"
+                            );
+                        }
+                    }
+                }
+            };
+
+            // AC-A1 positive control: the third outcome must be observable and
+            // must fail. This is not merely a successful-worker smoke test.
+            let forced = run_worker(true, false);
+            let forced_report = format!(
+                "{}{}",
+                String::from_utf8_lossy(&forced.stdout),
+                String::from_utf8_lossy(&forced.stderr)
+            );
+            assert!(
+                !forced.status.success() && forced_report.contains("could_not_determine"),
+                "AC-A1: forced indeterminacy must fail with the stable third-outcome spelling; \
+                 status={:?}, report={forced_report}",
+                forced.status
+            );
+
+            // A zero exit is not enough: missing/malformed result data is the
+            // same third outcome, not a silent pass.
+            let omitted = run_worker(false, true);
+            let omitted_report = format!(
+                "{}{}",
+                String::from_utf8_lossy(&omitted.stdout),
+                String::from_utf8_lossy(&omitted.stderr)
+            );
+            assert!(
+                omitted.status.success() && !omitted_report.contains(COMPLETE_RESULT),
+                "AC-A1: the missing-result control must reach a zero exit without \
+                 accidentally emitting a complete census"
+            );
+
+            let measured = run_worker(false, false);
+            let measured_report = format!(
+                "{}{}",
+                String::from_utf8_lossy(&measured.stdout),
+                String::from_utf8_lossy(&measured.stderr)
+            );
+            eprint!("{measured_report}");
+            assert!(
+                measured.status.success() && measured_report.contains(COMPLETE_RESULT),
+                "RT_NATIVE_FNSPLIT_BOUNDARY_A could_not_determine: bounded worker \
+                 stack_bytes=8388608 status={:?}, complete result sentinel missing or malformed",
+                measured.status,
+            );
+            return;
+        }
+
+        if std::env::var_os(FORCE_INDETERMINATE_ENV).is_some() {
+            panic!(
+                "RT_NATIVE_FNSPLIT_BOUNDARY_A could_not_determine: \
+                 stack_bytes=8388608 forced fail-closed positive control"
+            );
+        }
+        if std::env::var_os(OMIT_RESULT_ENV).is_some() {
+            return;
+        }
+
+        let planner_worker = std::thread::Builder::new()
+            .name("rt-scale-a-planner-8-mib".to_string())
+            .stack_size(8 * 1024 * 1024)
+            .spawn(|| {
+        eprintln!(
+            "RT_NATIVE_FNSPLIT_BOUNDARY_A_STACK \
+             worker=rt-scale-a-planner-8-mib stack=nominal_8_MiB stack_bytes=8388608 \
+             process_main_stack_limit=8_MiB cpu_limit=30_s address_space_limit=4_GiB \
+             claim=explicit_product_stack_measurement"
+        );
+
+        // Promise class: durable invariant. Counts remain relational; the
+        // historic literals below are comparison data, never a re-baseline or
+        // an exponent inferred from five points.
         let rows = (3..=7).map(census).collect::<Vec<_>>();
         for (depth, row) in (3..=7).zip(&rows) {
             eprintln!(
                 "RT_NATIVE_FNSPLIT_BOUNDARY_A n={depth} static_nodes={} edges={} \
                  planned_helpers={} persistent_store_nodes={} evidence_records={} \
-                 fixed_k={} key_bytes={} frame_bytes={} store_node_bytes={} \
-                 key_schemas={} frame_schemas={} store_schemas={} env_depth={} \
-                 continuation_depth={} path_depth={} cleanup_depth={} affine_depth={} \
-                 source_return_depth={} source_return_resume_nodes={}",
+                 fixed_k={} observed_max_helpers_per_source={} key_bytes={} \
+                 key_schemas={} frame_schemas={} store_schemas={} \
+                 static_node_id_bytes={} persistent_node_id_bytes={} \
+                 max_logical_chain_depth={} env_depth={} continuation_depth={} \
+                 path_depth={} cleanup_depth={} affine_depth={} source_return_depth={} \
+                 source_return_resume_nodes={} source_return_owned_resume_edges={} \
+                 terminal_outgoing_edges={} recursive_lowering_frames={} \
+                 stack_bytes=8388608 \
+                 node_payload_width=\"DEFERRED — NEEDS B2V/B2F\" \
+                 frame_schema_width=\"DEFERRED — NEEDS B2V/B2F\" \
+                 store_node_schema_width=\"DEFERRED — NEEDS B2V/B2F\"",
                 row.static_nodes,
                 row.edges,
                 row.planned_helpers,
                 row.persistent_store_nodes,
                 row.out_of_line_evidence_records,
+                MAX_HELPERS_PER_STATIC_SOURCE,
                 row.max_helpers_per_static_source,
                 row.helper_key_bytes,
-                row.activation_frame_bytes,
-                row.store_node_bytes,
                 row.helper_key_schemas,
                 row.frame_schemas,
                 row.store_node_schemas,
+                row.static_node_id_bytes,
+                row.persistent_node_id_bytes,
+                row.max_logical_chain_depth,
                 row.max_environment_depth,
                 row.max_continuation_depth,
                 row.max_path_depth,
@@ -3040,6 +3297,9 @@ mod tests {
                 row.max_affine_depth,
                 row.max_source_return_depth,
                 row.source_return_resume_nodes,
+                row.source_return_owned_resume_edges,
+                row.terminal_outgoing_edges,
+                row.recursive_lowering_frames,
             );
         }
         for (name, values) in [
@@ -3055,15 +3315,38 @@ mod tests {
                 values(&rows, |r| r.out_of_line_evidence_records),
             ),
             (
+                "fixed_k",
+                values(&rows, |_| MAX_HELPERS_PER_STATIC_SOURCE),
+            ),
+            (
+                "observed_max_helpers_per_source",
+                values(&rows, |r| r.max_helpers_per_static_source),
+            ),
+            (
                 "source_return_resume_nodes",
                 values(&rows, |r| r.source_return_resume_nodes),
             ),
+            (
+                "source_return_owned_resume_edges",
+                values(&rows, |r| r.source_return_owned_resume_edges),
+            ),
+            (
+                "terminal_outgoing_edges",
+                values(&rows, |r| r.terminal_outgoing_edges),
+            ),
+            (
+                "recursive_lowering_frames",
+                values(&rows, |r| r.recursive_lowering_frames),
+            ),
             ("helper_key_bytes", values(&rows, |r| r.helper_key_bytes)),
             (
-                "activation_frame_bytes",
-                values(&rows, |r| r.activation_frame_bytes),
+                "static_node_id_bytes",
+                values(&rows, |r| r.static_node_id_bytes),
             ),
-            ("store_node_bytes", values(&rows, |r| r.store_node_bytes)),
+            (
+                "persistent_node_id_bytes",
+                values(&rows, |r| r.persistent_node_id_bytes),
+            ),
             (
                 "helper_key_schemas",
                 values(&rows, |r| r.helper_key_schemas),
@@ -3072,6 +3355,10 @@ mod tests {
             (
                 "store_node_schemas",
                 values(&rows, |r| r.store_node_schemas),
+            ),
+            (
+                "max_logical_chain_depth",
+                values(&rows, |r| r.max_logical_chain_depth as usize),
             ),
             (
                 "environment_depth",
@@ -3106,15 +3393,15 @@ mod tests {
         }
         for (name, field) in [
             (
-                "fixed_k",
-                (|r: &BoundaryACensus| r.max_helpers_per_static_source)
-                    as fn(&BoundaryACensus) -> usize,
+                "helper_key_bytes",
+                (|r: &BoundaryACensus| r.helper_key_bytes) as fn(&BoundaryACensus) -> usize,
             ),
-            ("helper_key_bytes", |r: &BoundaryACensus| r.helper_key_bytes),
-            ("activation_frame_bytes", |r: &BoundaryACensus| {
-                r.activation_frame_bytes
+            ("static_node_id_bytes", |r: &BoundaryACensus| {
+                r.static_node_id_bytes
             }),
-            ("store_node_bytes", |r: &BoundaryACensus| r.store_node_bytes),
+            ("persistent_node_id_bytes", |r: &BoundaryACensus| {
+                r.persistent_node_id_bytes
+            }),
             ("helper_key_schemas", |r: &BoundaryACensus| {
                 r.helper_key_schemas
             }),
@@ -3135,13 +3422,128 @@ mod tests {
         assert!(rows
             .iter()
             .zip(3..=7)
-            .all(|(row, depth)| row.source_return_resume_nodes == depth));
+            .all(|(row, depth)| {
+                row.source_return_resume_nodes == depth
+                    && row.source_return_owned_resume_edges == depth
+                    && row.terminal_outgoing_edges == 0
+                    && row.recursive_lowering_frames > depth
+            }));
         assert!(rows.iter().all(|row| {
-            row.out_of_line_evidence_records == row.edges
+            row.planned_helpers == row.static_nodes + row.edges
+                && row.out_of_line_evidence_records == row.edges
                 && row.max_environment_depth <= row.persistent_store_nodes as u32
                 && row.max_continuation_depth <= row.persistent_store_nodes as u32
                 && row.max_path_depth <= row.persistent_store_nodes as u32
+                && row.max_logical_chain_depth <= row.persistent_store_nodes as u32
         }));
+
+        let measured_static_nodes = values(&rows, |row| row.static_nodes);
+        let provisional_static_nodes = [87, 115, 143, 171, 199];
+        let static_nodes_agree = measured_static_nodes
+            .iter()
+            .copied()
+            .eq(provisional_static_nodes);
+        let measured_k_is_eight = rows
+            .iter()
+            .all(|row| row.max_helpers_per_static_source == 8);
+        let measured_key_bytes_are_twelve = rows.iter().all(|row| row.helper_key_bytes == 12);
+        eprintln!(
+            "RT_NATIVE_FNSPLIT_BOUNDARY_A_PROVISIONAL relation_static_nodes={} \
+             relation_observed_k={} relation_key_width={} \
+             provisional_frame_store_widths=32/16 \
+             current_frame_store_widths=\"DEFERRED — NEEDS B2V/B2F\" \
+             stack_bytes=8388608 verdict=agreement_is_a_finding_not_confirmation",
+            if static_nodes_agree {
+                "agrees_with_87/115/143/171/199"
+            } else {
+                "differs_from_87/115/143/171/199"
+            },
+            if measured_k_is_eight {
+                "agrees_with_8"
+            } else {
+                "differs_from_8"
+            },
+            if measured_key_bytes_are_twelve {
+                "agrees_with_12"
+            } else {
+                "differs_from_12"
+            },
+        );
+        eprintln!(
+            "RT_NATIVE_FNSPLIT_BOUNDARY_A_EXPONENT_VERDICT \
+             five_points_do_not_prove_an_exponent=true \
+             historic_n4_fits=370n,93n²,product_switching_on_at_n5 \
+             discriminator=structural_invariants table=corroboration_only \
+             stack_bytes=8388608"
+        );
+
+        const AC_CONTROLS: [(&str, &str); 8] = [
+            (
+                "AC-A1",
+                "prlimit worker plus forced failure and missing-result positive controls",
+            ),
+            (
+                "AC-A2",
+                "one emitted row per n with every due D2 field and three spelled deferrals",
+            ),
+            (
+                "AC-A3",
+                "first and second finite differences emitted for every due numeric row",
+            ),
+            (
+                "AC-A4",
+                "closed Copy helper-key patterns, constant ID/key/schema checks, affine stores/depth",
+            ),
+            (
+                "AC-A5",
+                "explicit five-points-do-not-prove-exponent verdict",
+            ),
+            (
+                "AC-A6",
+                "test-only guard measures maximum simultaneous production plan_expr calls",
+            ),
+            (
+                "AC-A7",
+                "computed provisional relation with agreement-not-confirmation verdict",
+            ),
+            (
+                "AC-A8",
+                "exact eight-row AC control inventory asserted below",
+            ),
+        ];
+        assert_eq!(
+            AC_CONTROLS.map(|(criterion, _)| criterion),
+            [
+                "AC-A1", "AC-A2", "AC-A3", "AC-A4", "AC-A5", "AC-A6", "AC-A7", "AC-A8"
+            ]
+        );
+        for (criterion, control) in AC_CONTROLS {
+            let control = if control.is_empty() {
+                "NO CONTROL — open residual"
+            } else {
+                control
+            };
+            eprintln!(
+                "RT_NATIVE_FNSPLIT_BOUNDARY_A_CONTROL criterion={criterion} control={control}"
+            );
+        }
+        eprintln!(
+            "RT_NATIVE_FNSPLIT_BOUNDARY_A_RESULT \
+             status=measured_complete rows=5 stack_bytes=8388608"
+        );
+            })
+            .unwrap_or_else(|error| {
+                panic!(
+                    "RT_NATIVE_FNSPLIT_BOUNDARY_A could_not_determine: \
+                     exact 8 MiB planner worker could not start: {error}"
+                )
+            });
+        if planner_worker.join().is_err() {
+            panic!(
+                "RT_NATIVE_FNSPLIT_BOUNDARY_A could_not_determine: \
+                 stack_bytes=8388608 exact 8 MiB planner worker panicked"
+            );
+        }
     }
 
     #[test]
