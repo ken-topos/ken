@@ -90,7 +90,35 @@ table**. If Ken does *not* mean to promise it, say so and drop it.
 complexity bound leaves the implementer to infer it from the retired mechanism,
 which is how the conflation got in.
 
-## `AC-4` — all eight conformance rows retargeted or retired, each with its reason
+## `AC-4` — every coupled conformance row retargeted or retired, each with its reason
+
+> ### ⛔ AMENDED 2026-07-26 — THIS AC SAID "ALL EIGHT" AND THAT WAS A CLOSED
+> ### POPULATION CLAIM OVER A HAND LIST. The eight are a FLOOR, not the set.
+>
+> `spec-leader` verified at `bce75fec` that further live conformance producers
+> assert the same mechanics — in the values, evaluation, capacity, and surface
+> areas — and that capacity and surface **cross-case prose** names them too. So
+> the eight below are **not** the population asserting global interning /
+> same-slot / FNV-1a / probing / load factor / page size / reset.
+>
+> ⭐ **The tell was inside the table the whole time: four of its eight "lives in"
+> cells read `(locate)`.** A table that cannot say where half its rows live was
+> never a census, and I labelled it "all eight" anyway.
+>
+> ⇒ **Required, and it is a DELIVERABLE, not a check:**
+> 1. **Retain the eight-row table below** — verified as the consistent narrow
+>    treatment — and **ground every `(locate)` cell** to a real producer.
+> 2. **Add a producer-derived expanded census** of every row asserting any demoted
+>    mechanism, and give each one a retarget-or-retire disposition **plus its
+>    cross-case prose**, in the **SAME candidate**.
+> 3. ⛔ **Absence from my table is NOT a reason to leave a mechanism assertion
+>    standing.** That is the specific failure this amendment exists to prevent.
+>
+> ⚠ **Derive the census from the PRODUCERS, not from a keyword grep.** A grep for
+> `slot|page|arena|intern` over `conformance/` returns matches in unrelated senses
+> — "page" and "slot" are both homonyms here — so a grep-derived list would trade
+> my under-count for an over-count. ⛔ **Do not replace one false population claim
+> with another.**
 
 | row | asserts | lives in |
 |---|---|---|
@@ -113,10 +141,81 @@ moved** — restate the property mechanism-independently and keep the row.
 `main`, not an oversight.** Every row gets an explicit disposition; a row you
 leave untouched is a decision and needs its one-clause reason too.
 
-⚠ `conformance/runtime/seed-runtime.md` and
-`conformance/runtime/evaluation/seed-evaluation.md` each carry more than one of
-these rows. Sweep per-**row**, not per-file — a file you have "done" can still
-hold an unretargeted row.
+> ### ⛔ CORRECTED 2026-07-26 — MY `lives in` CELLS CONFLATED A **PRODUCER** WITH
+> ### A **REFERENCE**, and the "each carry more than one row" note was FALSE.
+>
+> This section previously said *"`seed-runtime.md` and `seed-evaluation.md` each
+> carry more than one of these rows."* `conformance/README.md §Case format`
+> defines a row as a structured `##`/`###` `<case-id>` heading, and under that
+> definition:
+>
+> - `evaluation/seed-evaluation.md:189` only says its own row **extends**
+>   `dedup-shares-slot`; it does **not** produce a second `dedup-shares-slot` row.
+> - `runtime/seed-runtime.md:44–50` only **points at** the canonical capacity
+>   producer and names the old subsumed `runtime/addressing/no-lattice-on-hot-path`;
+>   it does **not** produce `runtime/capacity/no-lattice-on-hot-path`.
+>
+> ⇒ **Eight unique IDs, nine heading occurrences** — the one duplicate is
+> `dedup-shares-slot`. ⭐ **Sweep per-ROW still stands, but count producers by
+> HEADING, not by mention**, or you will "retarget" a cross-reference and believe a
+> row is done.
+>
+> **CV's producer-derived locations — these replace my four `(locate)` cells:**
+>
+> | row | exact producer(s) |
+> |---|---|
+> | `equality-is-slot-id` | `runtime/values/README.md:28–37` |
+> | `dedup-shares-slot` | `runtime/values/README.md:18–26`; `runtime/seed-runtime.md:7–15` |
+> | `structurally-equal-collections-o1-comparable` | `surface/collections/seed-collections.md:389–405` |
+> | `no-lattice-on-hot-path` | `runtime/capacity/seed-capacity.md:158–169` |
+> | `index-resize-preserves-slot-ids` | `runtime/capacity/seed-capacity.md:171–181` |
+> | `arena-spans-pages-oversized-safe` | `runtime/capacity/seed-capacity.md:183–195` |
+> | `reset-retires-ids-never-resurrected` | `runtime/capacity/seed-capacity.md:145–156` |
+> | `det-sharing-dedups-by-slot` | `runtime/evaluation/seed-evaluation.md:187–200` |
+
+### ⭐ The expanded population, as measured — start the census HERE, not from zero
+
+`conformance-validator` produced the closure below. ⛔ **It is the floor for the
+expanded census, not a substitute for it** — each row still needs its own
+retain / retarget / retire disposition **and its cross-case prose**.
+
+- **`runtime/values/README.md`** — `canonical-encoding-map-ordering`,
+  `canonical-encoding-set-ordering`, `canonical-encoding-record-field-order`,
+  `int-small-to-bignum`, `immediate-vs-interned-boundary`,
+  `bignum-minimal-limb-encoding`, `dedup-across-kinds`: all turn canonical
+  bytes / kind distinctions into same-or-different **slots**, or into mandatory
+  interning.
+- **`runtime/evaluation/seed-evaluation.md`** — the CAN2 preamble plus
+  `det-same-term-same-value` and `det-canonical-order-independent` require
+  same-slot / `O(1)` outcomes independently of the named sharing row.
+- **`runtime/capacity/seed-capacity.md`** —
+  `dedup-accounting-distinct-not-occurrences`,
+  `loud-at-limit-raises-not-silent`, `at-limit-repeat-does-not-trip`,
+  `reclamation-releases-pages`, `space-reset-is-isolated`,
+  `escape-survives-sender-reset`, `no-automatic-gc`, plus the coverage and
+  cross-case prose: these pin `Hit`-before-limit probing, page-buffer reclamation,
+  per-space arena/index reset, recipient re-interning, stable ids, and no
+  background reclamation.
+- **`surface/collections/seed-collections.md`** —
+  `string-nfc-canonically-equal-shares-slot`,
+  `array-update-shares-unchanged-structure`, and the already-superseded
+  `user-deceq-keyed-map-canonical-identity`, plus the cross-case invariant at
+  `:897–915`. ⭐ **Keep NFC equality and persistence/immutability; do not retain
+  mandatory same-slot structural sharing.**
+- **`surface/bytes-io/seed-bytes-io.md`** — `bytes-immutable-concat-allocates-fresh`
+  pins fresh/distinct slot ids. **Immutability survives; slot allocation does not.**
+- **`surface/numbers/seed-f1-bignum-int.md`** —
+  `f1-dedup-content-address-stable-across-paths`
+  correctly retains identical canonical bytes / content address, **but its
+  additional "one store slot — dedup holds" clause needs separating** from the
+  surviving part.
+
+⚠ **This is not a widening of the design.** It is the closure of the demotion
+already ruled: canonical bytes/hash, equality, no-false-merge, immutability, loud
+refusal, lifetime/isolation and non-corruption are all retainable **without**
+asserting slots, pages, probing, or interning. ⛔ **A candidate that changes only
+the eight named IDs would land normatively self-contradictory** — which is the
+whole reason this is one atomic candidate.
 
 ## `AC-5` — fork C7 is RULED here, in its durable home
 
@@ -141,10 +240,50 @@ Required:
 2. **EDIT §6.7's operative text and flip the `:221` table row.** ⛔ **Do not
    append a correction below a stale ruling** — the superseded text stays
    operative and is the one a later reader finds first.
-3. **`OQ-Space` in `spec/90-open-decisions.md`** was explicitly kept open, with
-   *"⛔ do not close it on the strength of this deferral."* The deferral is now
-   discharged, so **this WP closes `OQ-Space`** with the C7 ruling as its answer.
-   ⛔ A ruling that leaves its own open-decision carrier open has not landed.
+3. **`OQ-Space` is RECONCILED IN PLACE — ⛔ it is already `DECIDED` and you must
+   NOT fabricate a closure transition.**
+
+   > ### ⛔ AMENDED 2026-07-26 — THIS ITEM PREVIOUSLY INSTRUCTED YOU TO CLOSE
+   > ### `OQ-Space`, AND THAT INSTRUCTION WAS FALSE AGAINST THIS FRAME'S OWN BASE.
+   >
+   > `bce75fec:spec/90-open-decisions.md:502` reads **`OQ-Space — State,
+   > concurrency & isolation — DECIDED`**, operator 2026-06-27, and the summary
+   > row (≈`:825`) records the same. It has been decided for five weeks. The
+   > *campaign doc* §6.7 is what says "remains open" — and **§6.7 is the stale
+   > text**, not `spec/90`.
+   >
+   > ⭐ **The decision already contains this WP's authorization.** It settles the
+   > **logical** contract — encapsulated, non-aliased cells; bounded per-space
+   > Hoare, no separation logic; shared-nothing message-passing; closure-free
+   > content-addressed transport — and then states that the **runtime realization
+   > (process/thread/green/distributed) is deferred to `40-runtime`.** C7 is not a
+   > reopening of `OQ-Space`; **C7 IS the realization question `OQ-Space` handed
+   > to `40-runtime`,** and this WP is where it is answered.
+
+   Required, therefore:
+
+   - **PRESERVE, verbatim and unweakened:** the encapsulated / non-aliased cell
+     state, bounded per-space Hoare, and **no shared mutable authority**. ⛔ These
+     are the operator's 2026-06-27 decision — out of scope for this WP to touch.
+   - **RECORD, as the discharge of that decision's own `40-runtime` deferral:**
+     durable canonical bytes, copy/share, and per-`space` index / arena / reset
+     realization become **private**.
+   - ⛔ **Do not write an `OPEN → DECIDED` history, do not add a "closed by" line,
+     and do not re-litigate the 2026-06-27 decision.** Reconcile the entry where
+     it stands.
+4. **CORRECT the campaign's stale wording — it is the false text.** In §6.7,
+   *"Open decision `OQ-Space` already exists"* and *"`OQ-Space` remains open in
+   `spec/90-open-decisions.md` and is the durable carrier — ⛔ do not close it on
+   the strength of this deferral"* are both **wrong as written**: the entry was
+   already `DECIDED` when that ruling was recorded. EDIT both to say that
+   `OQ-Space` is decided and that C7 is the realization half it deferred to
+   `40-runtime`.
+
+⚠ **Why this defect existed, so you can catch the next one:** I took "`OQ-Space`
+is the open carrier" from §6.7 and never checked `spec/90` — an **inherited**
+premise I presented as a **derived** one. `spec-leader` reproduced the
+contradiction independently at the released base and held rather than building on
+it. **That hold was correct and is exactly what the perishability clause is for.**
 
 ## `AC-6` — the four "must not" boundaries hold, with a positive control
 
@@ -168,8 +307,25 @@ name the section you *would* have had to edit to break it. For item 1, list the
 ## `AC-7` — probe `AC-S7`, and route what it finds as a FORK
 
 `SPEC-CLOSURE-BOUNDARY`'s `AC-S7` invited the enclave to say whether a ruled
-clause was **still stronger than the mission needs**. ⚠ **Whether that invitation
-was ever exercised is unverified** — establish it, do not assume.
+clause was **still stronger than the mission needs**.
+
+> ### ✅ ANSWERED 2026-07-26 — IT **WAS** EXERCISED. This AC previously said
+> ### "unverified — establish it"; that question is now closed, by measurement.
+>
+> `conformance-validator` established it from the landed record at `bce75fec`:
+>
+> - CV's early challenge `evt_4jyaf3f36d854` rejected mandatory handle/trampoline
+>   representation, a literal `StaticCallableRef` spelling/layout, a required
+>   `FrozenClosure` feature, exhaustive/extensional application comparison, and
+>   mandatory cross-artifact exchange.
+> - The author handoff `evt_x5c47amhqdfb` states the `AC-S7` challenge was folded.
+> - The final approved contract retained the minimum constraints, rechecked in
+>   `evt_5znneqyam1fdj`.
+>
+> ⇒ ⛔ **Do NOT report the prior invitation as unexercised or silently skipped.**
+> Probing it **anew against the store split** is still required — that is a
+> different question from whether it was ever exercised — but the historical
+> answer is **YES**, and stating otherwise would misdescribe a landed record.
 
 ⛔ **Silence is not "nothing to say."** If, while writing `AC-1`, you find a
 closure clause over-strong against the relaxed store contract, **route it to the

@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-26 21:16:08Z — from 92 issue file(s) in `docs/program/issues/`.
+2026-07-26 21:31:08Z — from 92 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -126,7 +126,7 @@ the committed file matches the generator's output.
 | `SPEC-ALIGN-B1` | Split the frozen interoperability and provenance schemas into versioned protocol profiles, under a per-edge threat audit rather than a field count | draft | spec | L | none | — |
 | `SPEC-CLOSURE-BOUNDARY` | Revise the runtime value spec to remove the closure-identity inconsistency and state the closure/value boundary with minimum constraints on the implementation | merged | spec | M | none | — |
 | `SPEC-MISSION-GROUNDING` | Ground the spec as a whole against the mission — audit every retained constraint for which mission property fails without it, and relax the ones where nothing does | active | spec | L | none | — |
-| `SPEC-STORE-SPLIT` | Split durable canonical bytes from in-process maximal sharing: demote the store mechanism to private, retarget the conformance rows that assert it, and re-cut the runtime program against the relaxed contract | ready | spec-enclave | L | none | — |
+| `SPEC-STORE-SPLIT` | Split durable canonical bytes from in-process maximal sharing: demote the store mechanism to private, retarget the conformance rows that assert it, and re-cut the runtime program against the relaxed contract | active | spec-enclave | L | none | — |
 | `SRC-ATTEST` | squash-stable whole-source attestation + fresh merge-result authorization | merged | doc | M | none | — |
 | `STR-BIJ` | the String/List Char 'bijection' over-claim (adversary A1 + A2) | ready | spec-enclave | S | none | — |
 | `VIS-BR-LITERAL` | visibility walk: raw-string prefixes br and cr are unrecognized by the literal scanner | merged | runtime | XS | none | — |
@@ -141,7 +141,6 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `RT-FNSPLIT-B2E` — semantic boundary-value elimination — an opaque boundary inhabitant plus a mechanically closed operation-by-class disposition ledger over every reachable Lowered consumer, inert
 - `SPEC-31-WIDTH-ERRATUM` — spec 31-lexical mandates a 96-column canonical width while the formatting conformance suite asserts 88 in 18 places and cites 31 §1d as its source — rule the exact value and reconcile
-- `SPEC-STORE-SPLIT` — Split durable canonical bytes from in-process maximal sharing: demote the store mechanism to private, retarget the conformance rows that assert it, and re-cut the runtime program against the relaxed contract
 - `STR-BIJ` — the String/List Char 'bijection' over-claim (adversary A1 + A2)
 
 ## Blockers
