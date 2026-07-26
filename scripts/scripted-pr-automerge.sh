@@ -656,9 +656,10 @@ the defect."
       "PR #$pr_number ($head_sha) merged, but the post-merge verification worktree could not be created. The landed state was never checked." \
       "PUBLISHER ALARM: PR #$pr_number MERGED and the landed state is UNVERIFIED.
 
-Could not create the verification worktree at origin/main, so the currency
-checker never ran. This is NOT evidence that main is green -- it is the absence
-of evidence either way, after a merge that has already happened.
+Could not create the verification worktree at origin/main, so the landed tree
+was never compared with the checked tree. This is NOT evidence that main is
+green -- it is the absence of evidence either way, after a merge that has
+already happened.
 Not reverting."
   fi
 
@@ -667,7 +668,19 @@ Not reverting."
   # is no longer coupled to merges.
   release_gate_worktree
 
-  printf 'Post-merge verification: landed tree %s matches the checked tree, and the currency checker is green on origin/main.\n' \
+  # ⛔ THIS SENTENCE USED TO CLAIM "and the currency checker is green on
+  #    origin/main". The currency gate was REMOVED above on 2026-07-26, so from
+  #    that moment the claim asserted a check THAT NO LONGER RAN -- on every
+  #    publish, including `--doc-only` ones. Measured 2026-07-26: it printed
+  #    green for PR #1031 and #1034 while #1031 was invalidating twelve
+  #    attestations and a measured-token count.
+  #
+  #    ⭐ The removal was correct and is the operator's. What was wrong is that
+  #    the OUTPUT was not removed with the check, so the publisher kept sourcing
+  #    a guarantee it had stopped computing. A message is part of a gate's
+  #    surface: deleting the check and leaving the sentence converts a real
+  #    signal into a false one, which is worse than having neither.
+  printf 'Post-merge verification: landed tree %s matches the checked tree. ⚠ No currency/attestation check ran (removed 2026-07-26) -- this says NOTHING about whether main is green.\n' \
     "$(git rev-parse --short 'origin/main^{tree}')"
 }
 
