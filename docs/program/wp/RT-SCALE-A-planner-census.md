@@ -88,20 +88,60 @@ provisional run could not see the inner planner at all.
 > `crates/ken-runtime/src/`, **including `lib.rs` and
 > `cranelift_backend/lowering/mod.rs`**.
 >
-> ⇒ ⛔ **Put the harness in a NEW integration-test file under
-> `crates/ken-runtime/tests/`** (the directory does not exist yet). Cargo
-> **auto-discovers** integration tests, so this needs **no `lib.rs` edit and no
-> `mod` registration** — which makes the file-set intersection with `B2V`
-> **empty by construction rather than by luck.**
+> ### ⛔ AMENDED 2026-07-26 — MY INTEGRATION-TEST CONSTRAINT WAS UNSATISFIABLE
 >
-> ⛔ **Do NOT add a `#[cfg(test)]` module inside `src/`.** That requires a
-> parent-module edit, and the parent is a file `B2V` is rewriting.
+> **The original text demanded a new integration-test file under
+> `crates/ken-runtime/tests/`, no production visibility change, and no private
+> duplication. Those three cannot all hold** — @runtime-leader measured it at
+> the current tree (`evt_4xcrmeayx1xvp`) and was **right to refuse to build
+> around it**.
 >
-> ⚠ **`cfg(test)` build asymmetry:** an integration test compiles the crate
-> **without** `cfg(test)`, so anything reachable only under `cfg(test)` is
-> invisible to it. If a census metric needs an internal, expose it through a
-> deliberate `pub` surface and **say so** — do not reach for a `cfg(test)` hook
-> and discover the asymmetry late.
+> `plan_static_transition_graph`, `StaticTransitionPlan`, `BoundaryACensus` and
+> `StaticTransitionPlan::census()` are **all confined to
+> `crate::cranelift_backend`**, and production reaches planning only internally
+> via `lowering/core`. ⇒ **An auto-discovered integration test cannot build the
+> plan or observe `k` at all.**
+>
+> ⭐ **My reasoning was over-generalized, and this is the correction:** I wrote
+> *"a `#[cfg(test)]` module inside `src/` requires a parent-module edit."* That
+> is true for **adding a new module** and **false for extending an existing
+> suite**. It is also the `cfg(test)` asymmetry I warned about in the same
+> breath — **the warning was right and I applied it in the wrong direction.**
+>
+> ### ✅ WHERE THE HARNESS GOES
+>
+> ⛔ **Extend the EXISTING `#[cfg(test)]` suite in
+> `crates/ken-runtime/src/cranelift_backend/planning/static_transition.rs`** —
+> where the planner is legitimately test-visible and **where the current n=3..7
+> census already lives.**
+>
+> **Contention with `B2V` is still empty, and still by construction — verified,
+> not assumed:** `static_transition.rs` is **not in `B2V`'s ten-file set**
+> (`git diff --name-only aecdb001 9b254fb9`). Extending a suite that already
+> exists needs **no parent-module edit**.
+>
+> ⛔ **DO NOT widen production visibility.** No `pub` export of the planner is
+> authorized, and Verify was right to hold rather than widen unilaterally. If
+> you conclude a production seam is genuinely required, ⛔ **stop and route it**
+> — it would touch files `B2V` is rewriting, which is a sequencing decision, not
+> an implementation detail.
+>
+> ### ⚠ OPEN QUESTION FOR THE ARCHITECT — the stack axis moved, and I will not paper over it
+>
+> `D1` demands the harness run on **the product's 8 MiB stack**. A
+> `#[cfg(test)]` unit test runs on **libtest's spawned-thread stack (~2 MiB by
+> default)**, and `prlimit` governs the process's main thread, **not** libtest's
+> threads.
+>
+> ⭐ **2 MiB is STRICTER than 8 MiB, so this cannot HIDE stack growth** — which
+> is the failure `D1` exists to prevent, and it is not reintroduced. ⛔ **But
+> stricter is not the same as the stated metric**, and a run that overflows at
+> 2 MiB is not evidence it would overflow in the product.
+>
+> ⇒ **Report the stack the measurement actually ran on, name it in the census,
+> and do not convert a 2 MiB overflow into a product claim.** Whether `D1`'s
+> 8 MiB requirement is amended or the harness must pin its thread stack
+> explicitly is the **Architect's** call.
 
 ### `D1` — the harness, permanent and in-tree
 
