@@ -86,7 +86,18 @@ is not a proof of the inventory property. Routed to QA as such (`evt_73x6kv8503q
 lost three rulings to the channel in one day** — task `#107` proposes the
 structural detector instead of a fourth hand transcription.
 
-### ▶ Doc lane: `DOC-CATALOG-CONTENTS` NOT kicked, and deliberately so
+### ✅ Doc lane KICKED — `DOC-CATALOG-CONTENTS`, `evt_3cpp4bmqtr6ce`
+
+Base `f3863b48`, §2c gate run in full: retros in, quiescence checked, **all three
+compactions started BEFORE the kickoff and each verified "Context compacted"**,
+every named object `cat-file -e`'d at the base with an absent-path control, then
+the mention, then step 7. ⛔ **`doc-author` STRANDED** on `[Pasted Content 2404
+chars]` with no spinner — repaired with a bare `Enter`, re-verified `Working`.
+⇒ Step 7 is not ceremony; it caught a silent drop on this very kickoff.
+
+▶ **TWO LANES LIVE: Runtime on `B2E`, doc ring on `DOC-CATALOG-CONTENTS`.**
+
+### ⛔ SUPERSEDED — the doc lane WAS held pending the batch; it is now kicked
 
 Node + frame are in the publishing batch, **not on `origin/main`**. ⛔ The kickoff
 is gated on that batch landing (§2c step 5b — a base that lacks the artifacts it
