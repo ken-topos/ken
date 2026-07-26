@@ -22,9 +22,9 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~05:2xZ · `origin/main` = **`fc63ca65`**
-### **✅ Spec landed. Fork ruled. Two lanes live.**
-### ⛔ Runtime is IDLE and BLOCKED on a frame I owe.
+## ▶ LIVE — 2026-07-26 ~05:5xZ · `origin/main` = **`7415dbd8`**
+### **✅ Both forks ruled. P1 frame WRITTEN. PR #986 in flight.**
+### ⛔ Runtime is IDLE — the frame exists but is NOT YET PUBLISHED, so do not kick.
 
 > ### ⚠ OPERATOR AWAY until **11:30Z** — drafting **THE MISSION** then
 >
@@ -49,13 +49,64 @@
 > pages were asserting the **falsified** reading. ⛔ **Path-intersection-empty is
 > not publishable** — now §2c step 7c.
 
-### ▶ LANE 1 — `RT-VALUE-TOTALITY` — ⛔ **THE FRAME IS MINE, AND IT BLOCKS**
+### ▶ LANE 1 — `RT-VALUE-TOTALITY` — ✅ **P1 FRAME WRITTEN, ⛔ NOT PUBLISHED**
 
 ```
-node    docs/program/issues/RT-VALUE-TOTALITY.md    status: draft (honest — no frame)
-ruling  evt_4qref8hksbdyw   Decision dec_1dckq8c0f9xjv   resolved by architect 05:07Z
+node    docs/program/issues/RT-VALUE-TOTALITY.md    status: ready
+frame   docs/program/wp/RT-VALUE-TOTALITY-P1-iterative-canonical-traversal.md
+        committed f5639548 on steward/work + origin/steward/work -- NOT on main
+ruling  evt_4qref8hksbdyw   dec_1dckq8c0f9xjv   (carrier split, 05:07Z)
+ruling  evt_45x5dn9jcrhhq                       (cycle SCOPE, 05:29Z)
 blocks  RT-FNSPLIT-B2V (status active, ring IDLE)
 ```
+
+> ### ⛔ NEXT ACTION: PUBLISH THE FRAME, THEN §2c GATE, THEN KICK — in that order
+>
+> ⛔ **Do NOT kick before the frame is on `main`.** That exact failure happened on
+> 2026-07-26 (I claimed a frame was on `main` when it was on `steward/work`), and
+> it is now gate **step 5b**: `git cat-file -e <base>:<path>` per named object.
+> ⚠ I deliberately did NOT publish it alongside PR #986 — racing a second merge
+> into `main` while the publisher polls #986's checks can stale that merge.
+
+**SPLIT INTO TWO PHASES, and only P1 is framed.** P1 = totality (`AC-V1`
+iterative encoder · `AC-V2` structural pin · `AC-V3` clone+drop). P2 =
+representation (carrier split, derives, closure arm, `ken-foundation` twin,
+checked projection) — ⛔ **its frame does not exist and is mine.** P1 first
+because **P2's projection must SHARE P1's mechanism** (pin 3, *"no recursive
+adapter"*), and P1 is the only part on B2V's critical path.
+
+> ### ⭐ THE CYCLE CLAUSE DOES **NOT** BIND ON `Value` — and it was RETARGETED
+>
+> Asked `evt_cp65d0f7rwwe`, ruled `evt_45x5dn9jcrhhq`. **Measured:** `values.rs`
+> has **no** `Rc`/`Arc`/`Box`/`RefCell`/raw-pointer/`SlotId`/`unsafe`, and
+> `store.rs:230 intern()` is **FLAT** — one `encode_canonical` + hash, no child
+> interning. ⇒ A back-edge there is **unconstructible**, not malformed; tri-colour
+> would be *"a vacuous defence for an input the type cannot carry"*, and an AC
+> demanding a cycle witness is **unsatisfiable**.
+>
+> ⛔ **RETARGETED, NOT DROPPED → B2V's sealed
+> `BoundaryPersistentImage(BoundaryRegion)` at `BoundaryValueStore::adopt`** —
+> mutable before sealing, child words can name
+> other region nodes, and the **parked evidence shows emitted code building a
+> cycle there.** Grey/black, image-local node-index key, refusal before
+> publication, shared-DAG positive control all belong THERE. ⚠ **I wrote it onto
+> the B2V node, which previously did not mention the cycle contract at all.**
+>
+> **Second-order, same ruling:** ⛔ **NO semantic `MAX_DEPTH`** — depth is not a
+> validity predicate. ⚠ Deep `Clone`/`Drop` remain **separately owed**.
+>
+> ⚠ **I again handed over a measurement plus my own inference, and explicitly
+> asked the Architect to discount the inference.** It ruled my way this time —
+> which is *not* evidence the habit is unnecessary; it is why the ruling is
+> citable.
+
+⭐ **Also measured, and it shrinks the job:** encoding is a **streaming pre-order
+append** — a parent's bytes never depend on a child's. ⛔ So the ruling's phrase
+*"postorder canonicalization"* describes a machine this encoder does **not** need.
+(`Clone` *is* postorder. Different traversals.) And `crates/ken-runtime/tests/`
+does not exist — P1 creates it; the public API (`pub trait Canonical`,
+`pub use values::Value`) already reaches what the out-of-process controls need,
+so ⛔ no visibility widening.
 
 **Architect ruled (b): ordinary `Closure` leaves the canonical `Value` carrier.**
 Five representation pins in §3b, and ⭐ **§3c CORRECTS a premise** — the derives
@@ -71,11 +122,39 @@ recorded not deleted**.
 PARKED; `RECUT 2`'s phase-closure artifact must still be **re-derived** against
 the three-lifecycle partition — this node does not relieve that gate.
 
-### ▶ LANE 2 — `KW-ORACLE-CLOSURE` (Language) — ACTIVE, QA **BLOCKED** it
+### ▶ LANE 2 — `KW-ORACLE-CLOSURE` — ✅ APPROVED, **PR #986 OPEN, BRANCH FROZEN**
 
 ```
-branch  wp/KW-ORACLE-CLOSURE   tip 79acbabb ON ORIGIN (I pushed it; no PR ⇒ NOT frozen)
+PR #986   wp/KW-ORACLE-CLOSURE @ 79acbabb   -- publisher polling CI, merges on green
+Decision  dec_6nvh9tnrf970k  resolved  resolved_by agt_37reqftfe6g00 @ 05:32:09Z
+          VERIFIED FROM THE OBJECT via dec_check.py -- never from prose
+ledger    NOT a cited source. Positive control: ledger has 51 rows / 11 crates rows
+freeze    acked to the ring at evt_1zyzarvppkwgf (step 9)
 ```
+
+> ### ⛔ `--is-ancestor` FAILS ON THIS CANDIDATE AND THAT IS CORRECT
+>
+> Candidate is based on `c3b8f193`; `main` moved to `7415dbd8`. **Requiring the
+> candidate to CONTAIN `main` would force a rebase, and a rebase moves the tip and
+> VOIDS the Decision.** ⇒ For a ring candidate that sat in review while `main`
+> advanced, **ancestry is the wrong question — verify the MERGE RESULT.** Each
+> number predicted before measuring:
+>
+> | check | predicted | measured |
+> |---|---|---|
+> | candidate changed paths | 1 | 1 |
+> | overlap with `main`'s 6 changed paths | empty | **empty** |
+> | `merge-tree --write-tree` conflict | none | none (`50c485ce`) |
+> | each of `main`'s 6 paths keeps `main`'s blob | all 6 | **all 6 KEEP** |
+>
+> ⭐ That last row is the positive proof **nothing landed since is reverted.** A
+> stale base does not announce itself.
+
+⛔ **AFTER THE MERGE:** verify by blob identity → reset `steward/work` (stale
+immediately after every publish) → flip the node to `merged` + `gen-progress.sh`
+→ ⛔ **drive all three Language retros BEFORE anything compacts that ring.**
+⚠ Ask QA specifically whether my `AC-C1` row was **ambiguous about the operand**
+or **clear and skipped** — opposite repairs, and I wrote the row.
 
 ⭐ **QA found a real defect and it is the catch of the night.** `AC-C1`'s
 frame-required **corpus-side** mutation (add prose occurrence outside a `ken`
@@ -95,14 +174,37 @@ routed the repair against `79acbabb` (`evt_39cefhe39k9bw`).
 
 ### ▶ DURABILITY — measured 2026-07-26, and it is NOT just WP branches
 
-Pushed this session: `wp/KW-ORACLE-CLOSURE` (`980bb047`, then `79acbabb`) and
-**`architect/work` — 8 local-only state commits** including the B2V predicate +
-cycle rulings and the RT-SCALE-A harness ruling.
+✅ **EVERY EXPOSED TIP IS NOW DURABLE ON ORIGIN.** Pushed this session:
+`wp/KW-ORACLE-CLOSURE` (`980bb047` → `79acbabb`), `architect/work` (`1f85177d` →
+**`e3755b40`** — it reported its own unpushed ref and kept going, which is exactly
+right), `steward/work` → `f5639548`, and **nine tips under
+`refs/heads/preserved/*`** (non-destructive — no force-push, no decision baked in).
 
-⛔ **STILL OUTSTANDING:** `adversary/work` = **86** local-only, `librarian/work` =
-**9**. ⚠ Determine unmerged-work vs squash-merge leftover **before** treating
-either as loss. ⛔ And `git branch -r --contains` answers against your **stale
-local mirror** — only `ls-remote` asks origin.
+> ### ⛔ I HAD THE ADVERSARY NUMBER WRONG, AND THE ERROR WAS THE OPERAND
+>
+> I reported `adversary/work` = **86** local-only. **It is 4.** The 86 was measured
+> against `origin/adversary/work`, which is **DIVERGED** (local `43c4b5f8` vs
+> remote `960cf966`) — so it counted commits the remote branch lacks, not commits
+> **`main`** lacks. ⚠ **And "NO REMOTE BRANCH" conflates *nothing to lose* with
+> *unpushed work*** — most seat branches simply sit at an old `main` SHA.
+>
+> ⇒ **The only question that matters is
+> `git rev-list --count origin/main..<tip>`.** Ask that one.
+>
+> ⚠ Likewise `architect/work` reads **456** commits vs `main` — because it is a
+> **state branch that never merges**, not because 456 commits are at risk.
+
+**The real list (commits not on `origin/main`) → triage is task #69:**
+`adversary/work` **4** (all `agent/memory/` lessons — my lane) · `librarian/work`
+**9** (36 files under `catalog/` — needs the Librarian) · a **subagent** worktree
+holding a `.github/workflows/ci.yml` change · `wp/catalog-style-guide` **2** ·
+`wp/research-linux-abi-ii` **1** (⚠ possibly the *amendment-not-on-a-ref* shape) ·
+`ergo-leader` / `ergo-qa` / `kernel-leader` Q2 triage results ·
+`wp/RT-SCALE-A-planner-census` **1** (suspect **squash leftover** — verify by blob
+identity, ⛔ never by ancestry).
+
+⛔ **branch-ahead ⇏ unmerged**, and `git branch -r --contains` answers against your
+**stale local mirror** — only `ls-remote` asks origin.
 
 ### ▶ TRANSPORT — convo MCP mostly DEAD (`set_interval`/`subscribe` survive)
 

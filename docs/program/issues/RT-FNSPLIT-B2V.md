@@ -125,6 +125,47 @@ rejection of common aggregates, and **not** inheritance from `C4`.
   discharge text **must stop crediting it with the value half of
   representation.**
 
+## ⛔ THE CYCLE CONTRACT LANDS **HERE** — retargeted 2026-07-26, `evt_45x5dn9jcrhhq`
+
+⚠ **Added by the Steward after the fact. This node did not previously mention the
+cycle contract at all**, which is exactly why it is written down now: the
+obligation was ruled elsewhere, retargeted here, and had no home in the file this
+ring reads.
+
+The cycle contract of `evt_5pzxf6sm4z08` was **assumed** to bind on
+`ken-runtime::values::Value`. It does **not**. Ruled against `7415dbd8`:
+`Value`'s recursive positions are `Vec<Value>` and `BTreeMap<Vec<u8>, Value>` with
+no identity-bearing indirection, interior mutation, slot/index edge, or shared
+ownership, and `Store::intern` canonicalizes the whole tree to one flat byte image
+interned as **one slot**. ⇒ There, a back-edge is **unconstructible**, and
+tri-colour state would be *"a vacuous defence for an input the type cannot
+carry."*
+
+⭐ **The carrier that CAN express the forbidden graph is this node's:** the sealed,
+emitted **`BoundaryPersistentImage(BoundaryRegion)` at
+`BoundaryValueStore::adopt`**. Its node-indexed region graph **is mutable before
+sealing**, its **child words can name other persistent-region nodes**, and **the
+parked evidence demonstrates emitted code constructing a cycle there.**
+
+⇒ **What belongs at that adoption boundary, as ruled:**
+
+- the **grey/black** distinction;
+- the **image-local node-index** key;
+- **deterministic refusal before publication** — refuse the whole image before any
+  published bytes, hash, or slot exist;
+- a **shared-DAG positive control** — ⛔ a shared subgraph that is *not* a cycle
+  must still be **accepted**, or the refusal is indistinguishable from rejecting
+  all sharing.
+
+⚠ **It binds on neither current `Value` nor current recursively-owned
+`RuntimeValue`.** ⛔ Do not read `RT-VALUE-TOTALITY`'s structural pin as
+discharging this — that node pins *why cycles are impossible over there*, and
+explicitly records the obligation as **retargeted, not discharged.**
+
+⚠ **And it travels with the representation.** If a carrier later changes so cycles
+become expressible, the cycle contract **moves with it** and must be discharged
+**before it publishes values.**
+
 ## Sequencing
 
 `B2O` → `B2R` → **`B2V`** → `B2F`. Runtime is **held** and does not resume
