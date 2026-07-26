@@ -1437,3 +1437,44 @@ does **not** claim every representation authority is consumed: `tag`, `owner`
 and `identity` legality in the emitted bodies were not part of this fold, and
 the `RECUT 2` predicate names them alongside class. They are the next increment,
 not a residual being waived.
+
+## Next increment — the tag / owner / identity axis, located
+
+⭐ **Recorded so the next fold does not repeat the discovery.** The class axis
+was closed by finding the *hand-maintained thing* (seven literal class lists)
+and replacing it with a plan lookup. The same search has been run for the
+remaining axes; these are the targets.
+
+**Tag legality — four hand-picked range endpoints in `boundary_value_clif.rs`:**
+
+| const | line | what it hand-encodes |
+|---|---|---|
+| `FIRST_HANDLE_TAG` | `:452` | where the handle tags begin |
+| `LAST_PERSISTENT_TAG` | `:459` | where the persistent tags end |
+| `LAST_TAG` | `:461` | the closed tag set's upper bound |
+| `FIRST_INVOCATION_TAG` | `:1270` | where the invocation tags begin |
+
+⚠ **These are the `AC-1` defect's shape:** each is a second authority derived by
+hand from `BoundaryTag`'s declaration order, and a range check against them is
+*two hand-maintained constants agreeing*. They should come from the plan as an
+**admitted tag set** derived from the partition's `HandleWord` outcomes — the
+same sweep the class sets already use, which already carries `tag` alongside
+`class`. ⛔ An ordering-dependent range is also fragile in a way a set is not:
+reordering the enum silently changes what is admitted.
+
+**Owner legality — `boundary_value_clif.rs` `:1495`/`:1498` (the owner constants
+the helpers emit), `:1699`, and `:2330`–`:2338` (the per-owner marker masks via
+`boundary_int_marker_mask`).**
+
+**Identity** is already partly structural — `HandleIdentity` is computed by
+`BoundaryInput::handle_identity` from the owner — so the likely finding is that
+identity needs no separate wiring once owner is derived. ⚠ **That is a
+prediction, not a result:** it must be measured the same way the class sets
+were, by checking whether the emitted bodies contain an identity decision the
+authority does not supply.
+
+**The method that worked, to reuse:** derive the plan set, compare it against
+the literals *before* rewiring (they matched exactly for class, which is what
+established the change was behaviour-preserving), rewire, then prove causality
+with a perturbed plan plus a same-plan control, and prove an emitter that
+ignores the plan reddens.
