@@ -33,11 +33,60 @@ verbatim (⚠ it was only in gitignored `local/`) at
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶▶ LIVE — 2026-07-26 ~16:0xZ · TRACK C IS SETTLED; A1 IS MERGED
+## ▶▶ LIVE — 2026-07-26 ~17:1xZ · ALL EIGHT TRACK C FORKS SETTLED; A1 MERGED
 
 ⛔ **`git rev-parse origin/main` — no SHA here, by construction.**
 
-### ✅ Track C forks — FIVE OF EIGHT SETTLED, all durable in `14-…-campaign.md`
+### ⭐⭐ NEW STANDING LAW — tests may not assert facts about repository TEXT
+
+**Operator, 2026-07-26:** *"Test oracles that assert facts about source code,
+catalog, or documentation lines are an invitation for failure and delay. Tests
+should focus on behavior."* Written into **`agent/playbooks/build/qa.md`**
+(review gate) and **`implementer.md`** (authoring gate).
+
+⭐ **It had to be a SUBJECT prohibition, not a fourth promise class** — the
+existing gate's three classes ask *what a test promises*, never *what it is
+about*, so a corpus-text census self-classified as a "normative compatibility
+vector" and passed cleanly. The deciding question: *"does an edit that changes
+nothing about how any program behaves make this test fail?"*
+
+⇒ **`KW-ORACLE-REMOVE`** (node + frame written, `status: ready`, owner
+**language**, size **S**) deletes
+`crates/ken-elaborator/tests/kw_theorem_source_oracle.rs`. ⛔ **Not yet
+published and Language NOT yet kicked** — §2c gate outstanding.
+
+⭐ **Removal is safe and the proof is in the node:** the replacement keyword is
+live in the lexer and the retired token is **not a token anywhere** in
+`crates/*/src/` — so the retirement is enforced **by construction** (that source
+is a parse error). The oracle policed *prose*, not well-formedness.
+
+### ▶ Lane state
+
+- **Runtime / B2E** — WP ref `0a46f2b7` (pushed, verified). Partial checkpoint;
+  QA has BLOCKed twice on inventory pins that held a count while a consumer
+  stayed disconnected. **No Decision open.**
+- **Doc / DOC-CATALOG-CONTENTS** — ⛔ **HELD**, blocked on `KW-ORACLE-REMOVE`.
+  Complete 24-file product delta + analysis commit are durable at
+  `wp/DOC-CATALOG-CONTENTS-index-to-contents = 1e36a37d` (pushed, verified: zero
+  `crates/`). ▶ **Resumes by rebasing onto the post-removal base.**
+- **Language** — idle, retros in, owns the oracle. **The ring to kick next.**
+
+⚠ **Correction owed to the doc ring:** I told them the preflight doc must carry
+zero occurrences of the retired token. The real population is files carrying
+**Ken content** (`classify()` returns `Option` and the loop skips `None`), so a
+fence-free markdown file was never in scope — which is why this very file
+legally carries 10 occurrences on `main`. Over-strict, not wrong; they complied.
+
+### ✅ Track C forks — ALL EIGHT SETTLED, all durable in `14-…-campaign.md`
+
+**C6** deferred/unspec'd (no prover integrated; the flagged text is exactly what
+`prover.rs` marks `[placeholder — reifies in V4]`; reopens on check-time latency
+or any V4 backend WP). **C7** deferred behind the content-store fork — they are
+one mechanism seen from two ends. **C8** closed as **status quo with the
+advisory's premise measured FALSE**: `36-effects §1.4`'s `⊆`-not-`=` headroom
+rule already implements all three clauses. ▶ One **editorial** Track A follow-on
+— the carve-out that decides C8 is buried in a parenthetical inside the bullet
+about the check that *does* hard-error.
 
 | fork | disposition |
 |---|---|
