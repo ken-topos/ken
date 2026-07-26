@@ -241,6 +241,20 @@ brief** — the implementer should execute mostly mechanically, not design
 >    controls in `scripts/test-classify-pane-composer.sh`. ⛔ **Add a shape
 >    there, never by widening a regex in the sweep.**
 >
+>    ⛔ **AND ADD IT IN *EVERY PROMPT SHAPE*, NOT JUST THE ONE YOU SAW.**
+>    Measured 2026-07-26 on a live `moot-runtime-implementer` pane: Claude renders
+>    its composer as `❯` + **U+00A0 NO-BREAK SPACE** + `ESC[2m` + text, and the
+>    separator-skip loop tested `in " \t"` — which U+00A0 does not match. The loop
+>    broke *before* the dim run, so `is_dim` came back **False** and dim
+>    **suggestion text** classified as `slash:/compact`. ⚠ **That is the unsafe
+>    direction:** run without `--dry-run` and the sweep presses Enter on a healthy
+>    seat's own UI furniture, destroying its context. ⭐ **The `ghost-slash`
+>    control was correct and still blind** — it is written with the Codex `›`
+>    glyph and an ASCII space, so the Claude shape was missing from the control
+>    **population**, not from the detector. ⇒ When you extend `PROMPT`, add the
+>    matching `ghost` row in the **same commit**; an allow-listed command reaching
+>    Enter is the one outcome with no undo.
+>
 >    ⭐ **The load-bearing part is what it refuses to submit.** An idle pane
 >    renders its *own suggestion text* on the composer line, so plain
 >    `capture-pane` cannot tell a real delivery from UI furniture — and a sweep
