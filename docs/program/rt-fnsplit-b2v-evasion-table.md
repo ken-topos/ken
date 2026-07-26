@@ -1031,3 +1031,203 @@ because a taxonomy with nowhere to put the honest answer records it as covered.
 | **AC-10**/**AC-6** store adoption | `b2v_ac10_emitted_construction_publishes_only_through_store_adoption`; `b2v_ac10_adoption_converges_equal_values_and_never_aliases_unequal`; `b2v_ac10_adoption_fails_closed_before_publication` | emitted construct → seal → **store adopt** → a separately compiled consumer recovers the **real non-null identity** and the content after the producer's arena is gone; equal/unequal differential proving canonical reuse and non-aliasing; the emitted escape gate refuses a pending word; emitted `NODE_SLOT` assignment remains impossible while the store path is positively exercised. Causal: **M38/M39/M40/M41**. ⚠ Adoption refuses `Closure`/`HostResult`/`BorrowedOpaque` — a recorded gap, not a green |
 | **AC-10** total classified-domain closure | `b2v_ac10_every_boundary_input_receives_one_policy_entailed_outcome`; `b2v_ac10_the_magnitude_boundary_is_a_real_emitted_partition`; `b2v_ac3_every_variant_carries_exactly_one_of_the_five_static_policies` | the sealed wildcard-free disposition closes the variant layer; four closed finite partitions with total projections close the value layer; the sweep runs the whole 21×2×3×2 product and asserts each outcome is **permitted by its policy**, that all four outcomes are inhabited, that a policy's outcome varies only in the discriminators it declares, and that every handle outcome carries class/owner/identity/lifetime. Causal: **M34/M35/M36** on the classifier, **M37** through the emitted producer. ⚠ Identity is discharged as a *classification* — see the flagged fork |
 | **AC-10** *(superseded row)* | **`NO CONTROL — open residual`** | ⛔ **Not in this fold, and said so rather than implied.** The recut is a review ref that has not bound and the Architect stated it adds no constraint to the fold in flight. The two blocked defects are faces of the predicate and are closed as such; the structural closure that makes further faces unreachable is the next fold's deliverable |
+
+---
+
+# THE `Closure` CANONICAL IMAGE + THE CYCLE/DEPTH/SEAL CONTRACT
+
+Both Architect rulings, on a fresh descendant of `9b254fb9`. This section is
+written against the folded frame `wp/steward-scale-gate-nodes = 02272b62`
+(blob `9b45c213`), read from the file.
+
+## 1. The canonical-image layer replaces the two-hop ground decoder
+
+`read_ground` produced a `RuntimeGroundValue` and `store_image` turned that into
+a `Value`. Two hops, and the intermediate type **has no closure arm** — which is
+why `Closure` could only ever be a conservative reject there.
+
+`canonical_image` is one exhaustive, wildcard-free `match` over `BoundaryClass`
+producing `Value` directly. ⭐ **A new class does not compile** until it is given
+an image, which is strictly stronger than any test over the classes that exist
+today. `Closure` yields `Value::Closure { code_id, captured }` — the normative
+image the ruling names — and `persist_image` interns it.
+
+⛔ **`Closure` is not forced through `RuntimeGroundValue`, and that was the
+instruction.** Adding a closure arm to that type would have been a second value
+taxonomy for one call site.
+
+## 2. `code_id` is artifact-bound, and unbound adoption FAILS CLOSED
+
+The node carries the **local origin ordinal**; the store binds it. Emitted code
+never computes a `code_id` — it holds no artifact identity, and `B2F` dispatch
+stays inert.
+
+⛔ **The store has no artifact binding by default, so that is not a hypothetical
+state — it is the initial one.** Minting from the bare ordinal while unbound is
+exactly the cross-artifact collision Ruling B excludes, so `Closure` adoption
+returns `BOUNDARY_ERR_UNBOUND` until `bind_artifact` is called. Ground adoption
+is untouched: a ground value's identity is its content.
+
+## 3. Adoption is three ordered phases, and the walk is iterative
+
+| phase | what it does | why it is separate |
+|---|---|---|
+| **seal** | `ARENA_SEALED` in the published header; emitted writers refused | every later phase reads a snapshot |
+| **validate** | iterative tri-colour worklist over the complete reachable graph | a fault must be found before any identity exists |
+| **canonicalize** | postorder: image, intern, mint or reuse, repoint children | children are canonical before their parent is read |
+
+⭐ **Tri-colour rather than a visited set, and the DAG is what forces it.** A
+second edge into a node is *malformed* when that node is still on the stack
+(grey) and *legal sharing* when it is finished (black). A "have I seen this?"
+set collapses those into one answer and would have to reject every shared child
+to stay safe on the cycle. `M45` and `M46` are the two directions of that.
+
+⛔ **`BOUNDARY_ERR_CYCLE` is a distinct status from `BOUNDARY_ERR_SHAPE`**, so
+the cycle control can say which finding it caught. A shared status would have
+left that unattributable.
+
+## 4. The seal is one definition covering every writer
+
+`seal_guard` sits in `mutable_guard` — which all ten word-taking mutators
+already call — plus `define_alloc`, which takes no word and so needs its own.
+Between them that is the whole of `EMITTED_WRITERS`.
+
+⛔ **Copying the check into eleven bodies would be the hand-maintained matrix
+`RECUT 2` retires.** The control drives a probe table asserted equal to the
+production writer partition, so a new writer with no seal probe is red.
+
+⚠ **`&mut self` is not the proof, and the frame says so.** Emitted code holds
+the raw region base it was published and never consults the borrow checker; the
+seal has to live where the mutators actually read, which is the header.
+
+## The mutations
+
+| mutation | what it breaks | reddens | tests |
+|---|---|---|---|
+| **M43** | `mutable_guard` loses its seal check | the writer-totality control, naming `ken_boundary_seal_int_local` | 1 |
+| **M44** | `define_alloc` loses its seal check | the same control, naming `ken_boundary_alloc_local` | 1 |
+| **M45** | grey treated as unvisited (tri-colour → visited set) | both cycle controls **and** the no-partial-identity control | 3 |
+| **M46** | black treated as grey (any repeated edge rejected) | the shared-DAG half only | 1 |
+| **M47** | `code_id` drops the artifact fields | the cross-artifact collision control | 1 |
+| **M48** | `code_id` drops the length prefix | **none — and that is correct, see below** | 0 |
+| **M49** | canonicalization rewrites a child's tag as `PersistentGround` | the **deduped**-capture retagging control | 1 |
+| **M50** | unbound store falls back to the bare ordinal | the artifact-unbound fail-closed control | 1 |
+| **M51** | `child_images` sorts, collapsing capture order | the capture-order non-aliasing control | 1 |
+| **M52** | `adopt` drops the seal precondition | the refuses-unsealed control | 1 |
+
+Every mutation was restored with `git checkout --` and verified byte-identical
+by `git diff --quiet` **against the committed baseline**, so the check is
+meaningful rather than reporting the fold's own dirt.
+
+### ⭐ M43 and M44 redden the same test, and the attribution is checked
+
+Two mutations reddening one control is exactly the case where *"a mutation that
+reddens does not confirm which detector caught it"* bites. The failure messages
+were captured:
+
+```
+M43 -> AC-6: ken_boundary_seal_int_local must be refused once the store owns …
+M44 -> AC-6: ken_boundary_alloc_local  must be refused once the store owns …
+```
+
+Different writers, so the totality is real: `alloc` genuinely is a second path
+and is not covered by `mutable_guard`.
+
+### ⚠ M48 did not redden, and my DOC was the defect
+
+I wrote that the length prefix stops `("ab", …)` and `("a", …)` colliding.
+**That is false as the function stands.** `package_identity` is the only
+variable-length field and every other one is fixed-width, so the total length
+already determines where the string ends — the encoding is injective with or
+without the prefix.
+
+⛔ **The mutation is correct and the claim was wrong.** The prefix is kept as
+future-proofing against a *second* variable-length field, the doc now says only
+that, and the assertion that was labelled as exercising it has been relabelled
+a distinctness check. A control named for a property it does not test is the
+overclaim this corpus keeps paying for.
+
+### ⚠ M49 did not redden either — my control never reached the mutation site
+
+Canonicalization only rewrites a child word when that child dedups onto a
+**different** node (`if target != child.payload()`). My nested-closure control
+captured two **distinct** closures, so neither deduped, the branch never ran,
+and hard-coding the rewritten tag back to `PersistentGround` — the historical
+defect, restored verbatim — left it green.
+
+⛔ **That is a pin that never exercises the violating mechanism.** The added
+control captures two **structurally equal, separately constructed** closures, so
+the second must canonicalize onto the first and the rewrite fires. It carries
+its own non-vacuity assertions: the two captures must end up naming one node,
+and the second's word must genuinely have changed. `M49` then reddens it.
+
+⚠ The sibling test is kept, because it pins a different thing — that *distinct*
+nested closures survive without being merged — but it is no longer the evidence
+for tag preservation, and its doc says which control is.
+
+## ⛔ DEPTH: measured on both algorithms, and one clause is NOT discharged
+
+The ruling says a deep acyclic chain must adopt **without host-stack growth**,
+must not be reclassified as malformed, and must not stack-overflow.
+
+**Measured, on the default 8 MiB test stack:**
+
+| algorithm | carries | dies between |
+|---|---|---|
+| the **former** recursive adoption, restored verbatim and probed | depth 800 | 800 and 1600 |
+| this iterative walk | depth 2000 | 2000 and 3000 |
+| landed `Value` machinery **alone**, adoption absent entirely | depth 2000 | 2000 and 3000 |
+
+⭐ **The third row is the finding.** Building a `Value` chain in Rust and calling
+`canonical::encode_canonical` on it — no adoption, no walk, no store — overflows
+at the same place. The bound is `Value`'s own recursion over value structure:
+the canonical encoder, plus the derived `Clone` and `Drop`.
+
+⇒ **What is discharged:** the walk itself is iterative, its frontier is a heap
+`Vec`, and depth is never reclassified as malformed (asserted directly — a deep
+chain must not return `BOUNDARY_ERR_CYCLE`).
+
+⇒ ⛔ **What is NOT discharged:** *"a deep chain may not stack-overflow."* The
+end-to-end bound moved from ~1600 to ~2500 and is now set by the
+content-addressing encoder, which is the store's canonical-encoding surface
+rather than this node's. Closing it needs `encode_canonical` made iterative
+**and** a hand-written `Drop` for `Value` — a change to the crate's core value
+type with workspace-wide reach. ⛔ **That is not a `B2V`-sized change and it is
+not mine to choose.** Routed, not folded, and not narrowed into a green.
+
+⚠ **This is the same shape as `M42`, one layer further out.** A precondition
+attached to new work was worth asking of work already shipped — and asking the
+depth question literally exposed that the *landed encoder* has the same
+unbounded recursion the adoption walk just lost.
+
+## What this fold does NOT close
+
+- **`ImmediateExitStatus` / `ImmediateBoundedNat` / `ImmediateStructuralNat` as
+  children of a persistent aggregate.** They are constructible through
+  `store_field`, and `Value` has no arm meaning "exit status" or "bounded Nat".
+  The landed reader refused them too; picking a `Value` arm here would invent
+  semantics rather than encode them, so `child_image` refuses with an exact
+  status. ⚠ **Raised as a question, not folded into an AC** — whether those tags
+  are admitted in persistent child position is a representation decision.
+- **The `canonical.rs` closure-arity cap.** `encode_canonical` writes
+  `captured.len().min(65535)`, so two closures differing only above 65535
+  captures would encode alike. Pre-existing, not reachable within any region
+  reservation used here, and changing the canonical encoding is a contract
+  decision. Recorded, not touched.
+
+## AC → discharging control — rows added by this fold
+
+| AC | discharging control | evidence |
+|---|---|---|
+| **AC-6** `Closure` adoption | `b2v_ac6_an_emitted_closure_adopts_with_artifact_scoped_identity` | emitted closure with ordered captures → seal → adopt → **producer arena dropped** → a separately compiled consumer reads tag `PersistentClosure` on the word, class `Closure` on the node, and a **non-null** slot; the store's own `slot → bytes → Value` decode yields `Value::Closure` with `boundary_code_id(identity, origin)` and both captures **in order** |
+| **AC-6** closure identity | `b2v_ac6_closure_identity_converges_and_never_aliases` | equal code identity + equal ordered captures converge on one slot; a changed code identity, a changed capture **value**, and a changed capture **order** each fail to alias. ⭐ The order pair differs in *nothing but order* (`[11,22]` vs `[22,11]`), so a set-valued canonical form reddens it. Causal: **M51** |
+| **AC-6** artifact namespace | `b2v_ac6_equal_ordinals_in_two_artifacts_do_not_collide` | the same ordinal in two artifacts is two identities; the ordinal still discriminates **within** one artifact; same artifact + same ordinal is one identity. Causal: **M47**. ⚠ One assertion in it was relabelled after **M48** — see above |
+| **AC-6** unbound fail-closed | `b2v_ac6_closure_adoption_fails_closed_while_artifact_unbound` | exact `BOUNDARY_ERR_UNBOUND`; positive control is the **identical graph** adopting once bound. Causal: **M50** |
+| **AC-6** no retagging | `b2v_ac6_a_deduped_closure_capture_keeps_its_tag_through_the_rewrite`; `b2v_ac6_a_nested_closure_capture_adopts_without_retagging` | the first is the one that **reaches the rewrite** (equal captures ⇒ dedup ⇒ repoint), with non-vacuity asserted both ways; the second pins that distinct nested closures are not merged. Causal: **M49** on the first only — reported, because on the second it was green for the wrong reason |
+| **AC-6** sealed handoff | `b2v_ac6_every_emitted_writer_is_refused_after_the_sealed_handoff`; `b2v_ac6_adoption_refuses_an_unsealed_region` | the probe table is asserted **equal to `EMITTED_WRITERS`**, so a new writer without a probe is red; each writer returns a non-`SEALED` status before the seal and `BOUNDARY_ERR_SEALED` after, and the whole region is byte-identical across the refused writes. Adoption refuses an unsealed region, with the same graph adopting once sealed. Causal: **M43**/**M44**/**M52**, attribution captured |
+| **AC-6** validation precedes minting | `b2v_ac6_a_refused_graph_installs_no_identity_at_all` | a refused cyclic graph leaves **every** node at `NULL_SLOT`; the acyclic twin mints every node, so the emptiness is a refusal and not an adoption that does nothing. Causal: **M45** |
+| **AC-6** closure decode | `b2v_ac6_closure_canonical_decode_round_trips_and_refuses_malformed` | encode→decode is the identity on a **nested** closure; **every** truncation of those bytes is refused; `Array` is encodable and still refused, so the decoder was widened for `Closure` and nothing else |
+| **AC-6** invocation-owned classes | `b2v_ac6_invocation_owned_classes_are_never_persisted`; `b2v_ac6_an_invocation_owned_capture_rejects_before_publication` | `HostResult`/`BorrowedOpaque` have no persistent adoption boundary; an invocation-owned capture is refused at construction, with a persistent capture into the **same slot** as the positive control. ⚠ Neither arm is narrowed or reclassified — what is refused is *persistence* |
+| **AC-10** cycles vs sharing | `b2v_ac10_a_multi_node_cycle_is_refused_while_a_shared_dag_adopts`; `b2v_ac10_a_constructible_node_cycle_is_refused_not_recursed` | a three-node cycle is refused **deterministically** — twice, from every entry point on the ring — while a shared-child DAG of the same shape adopts and the shared child resolves to **one** canonical node. Causal: **M45** and **M46**, which are the two directions of the same discriminator |
+| **AC-10** depth | `b2v_ac10_a_deep_acyclic_chain_adopts_without_walk_recursion` | depth 2000 adopts and is store-minted, and is asserted **never** to return `BOUNDARY_ERR_CYCLE`. ⛔ **Partial** — the walk is iterative, but the landed `Value` encoder still bounds a chain at ~2500. Measured on both algorithms above; the residual is stated, not narrowed |
+| **AC-6** persistent content-addressing *(was `NO CONTROL — open residual`)* | the `AC-10`/`AC-6` adoption rows above, plus the `Closure` rows | ⭐ **Now closed for every persistent class the disposition admits.** The row above at *"an emitted-constructed node carries `NULL_SLOT`"* recorded the state before adoption existed; adoption mints for ground values and, with this fold, for closures. It is retained above as the record of what was true then |
