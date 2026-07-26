@@ -101,13 +101,17 @@ without the model changing.
 > (`42 §2`). The pieces:
 >
 > - **Value representation follows the K3 model** (`41`, `OQ-7`): scalars
->   (`Int`/`Bool`/`Float`) are **unboxed typed immediates**; compound /
->   identity-bearing values are **content-addressed heap slots** (interned, so
->   structural equality is O(1) slot-id comparison). The backend shares the
->   interpreter's value model; it does not invent a second representation.
-> - **Functions lower to closures with sharing** — application is
->   **call-by-value, strict, left-to-right** (`42 §2`, `OQ-eval-order`), results
->   shared via the content-addressed heap (equal subcomputations deduplicated).
+>   (`Int`/`Bool`/`Float`) are **unboxed typed immediates**; closure-free
+>   canonical compound data uses **content-addressed heap slots** (interned, so
+>   structural equality is O(1) slot-id comparison); ordinary closures and
+>   graphs containing them are runtime-local opaque values (`41 §2.1`). The
+>   backend shares this observable value boundary with the interpreter but is
+>   free to choose an unobservable internal closure representation.
+> - **Functions lower to ordinary closures** — application is
+>   **call-by-value, strict, left-to-right** (`42 §2`, `OQ-eval-order`).
+>   Equal subcomputations deduplicate only when their result is
+>   content-addressable canonical data. No closure identity, equality, hash, or
+>   persistence is observable.
 > - **Primitives lower to the audited runtime semantics** (`14 §5`, `18a`):
 >   each `Decl::Primitive` operation computes the value its registered
 >   interpreter dispatch defines — the backend must compute the **same** partial
@@ -146,6 +150,13 @@ every divergence from the oracle is a **loud, catchable** failure.
 > slot / same immediate). On any disagreement, **the interpreter is right by
 > definition** (`42 §5`); the backend is the defect. The backend earns trust by
 > agreement over the corpus, not by inspection.
+
+This direct identity comparison is intentionally limited to **ground** results.
+Higher-order equivalence is tested by applying the interpreter and backend
+callables to the same well-typed inputs and comparing their ground
+observations. A differential harness MUST NOT compare closure slots, pointers,
+canonical bytes, or code/environment identities. This does not require
+extensional function equality; no such generally decidable equality exists.
 
 **The layers-may-differ boundary (the discriminating line).** The backend is
 **allowed** to differ from the interpreter in **internal strategy** — a
@@ -233,7 +244,8 @@ Once `OQ-backend-target` is ratified, `X3-build` (Team Runtime) delivers:
 
 - **`ken-codegen`** — the backend lowering the model of §3 to the **ratified**
   target: value representation (K3 immediates + interned slots),
-  CBV-with-sharing closures, the audited primitives, constructor-dispatch
+  runtime-local opaque closures with CBV application, the audited primitives,
+  constructor-dispatch
   eliminators, proof erasure.
 - **The differential harness** — the real validator running the codegen output
   **against the landed interpreter** (`crates/ken-interp`), enforcing

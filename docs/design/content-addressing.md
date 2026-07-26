@@ -4,10 +4,12 @@
 > Foundation implementation · **Normative spine:**
 > `spec/40-runtime/41-values.md`, `spec/40-runtime/44-capacity.md`.
 >
-> This document realizes the content-addressing and value-model decisions at
+> This document realizes the content-addressing decisions for canonical data at
 > implementation resolution. It is the contract Foundation builds against for
-> K3 (value model) and X2 (runtime hardening). Every section ends in a
-> **concrete, implementable choice**; no settled OQ from 41/44 is reopened.
+> K3 (value model) and X2 (runtime hardening). Ordinary closures are outside
+> this store contract; their minimum observable boundary is `41 §2.1`. Every
+> section ends in a **concrete, implementable choice**; no settled OQ from 41/44
+> is reopened.
 
 ## 1. Canonical byte encoding
 
@@ -33,7 +35,7 @@ resolution. Tags are assigned from a single namespace:
 | `0x06` | `Array` |
 | `0x07` | `Map` |
 | `0x08` | `Set` |
-| `0x09` | Closure |
+| `0x09` | Unassigned (ordinary closures have no canonical encoding) |
 | `0x0A` | `Decimal` (bignum coefficient — small decimals immediate) |
 | `0x0B`–`0x0F` | Reserved (compound-kind expansion) |
 | `0x10` | `Bool` |
@@ -58,7 +60,8 @@ Immediate scalars (`0x10`–`0x1D`, `0xFE`) are never hashed as a top-level
 intern key — they never reach the interner (§5). They appear in the
 encoding only as sub-values of compounds (e.g. a record field that is a
 `SmallInt`). The tags exist so the canonical encoding is total over all
-value kinds.
+content-addressed value kinds. A graph containing an ordinary closure is
+rejected rather than encoded (`41 §2.1`).
 
 > **Float equality note:** `Float` (`0x12`) and `Float32` (`0x13`) encode
 > by raw bit pattern, so `-0.0` and `+0.0` yield distinct encodings, as
@@ -190,27 +193,14 @@ Same sort rule as `Map`: lexicographic on canonical byte encoding of each
 element. Duplicate elements are resolved at construction (a set has each
 element at most once by `../30-surface/37 §1`).
 
-### 1.9 Closures
+### 1.9 Ordinary closures have no encoding
 
-A closure captures a code pointer and an environment.
-
-```
-tag       : 1 byte  = 0x09
-code_id   : 8 bytes LE  = globally-unique code-pointer identifier
-arity     : 2 bytes LE  = number of captured variables
-captured  : arity × (encoding of each captured value, in capture order)
-```
-
-The captured environment is encoded as a **full canonical record** (§1.3)
-inline — NOT as a hash digest. The interner's `memcmp` covers every captured
-value exactly, so two closures with the same code and equal captured
-environments share a slot, and two closures with distinct environments are
-**never** conflated — the "equal slot ⇒ structurally equal" invariant holds
-for closures the same as for every other value kind.
-
-Closure equality is therefore **memcmp-exact**: the kernel fast path (§6,
-`spec/10-kernel/17 §3`) may rely on slot-id equality for closures because
-the addressing is exact (not probabilistic).
+An ordinary closure has no canonical byte form or content-addressing kind tag.
+`0x09` is unassigned. A closure or any graph containing one is rejected before
+canonicalization, hashing, persistence, serialization, or publication
+(`41 §2.1`). This document assigns no encoding to a conditional
+`StaticCallableRef`-class value and defines no future durable higher-order
+value.
 
 ### 1.10 Bignums (`Int` beyond machine word)
 
@@ -430,9 +420,8 @@ starting at 2¹⁶ buckets, doubling at 70% load) is an X2 tuning constant
 ### 3.5 Benchmark results
 
 The benchmark harness (`benches/content_addressing.rs`) exercises the
-design at 10³–10⁶ synthetic compound values with 50% duplicates,
-mixed across all 10 compound kinds (records, strings, arrays, maps,
-sets, bignums, constructors, closures, bytes). Results:
+design at 10³–10⁶ synthetic canonical compound values with 50% duplicates.
+Ordinary closures are not part of the content-addressing benchmark. Results:
 
 | Benchmark | Value | Note |
 |---|---|---|
@@ -505,15 +494,17 @@ packages.**
 
 ### 5.1 Concrete starting rule
 
-Per `OQ-7` (`41 §5`): scalars immediate, compounds interned. The concrete
-rule for Foundation's implementation:
+Per `OQ-7` (`41 §5`): scalars are immediate, closure-free canonical compounds
+are interned, and ordinary closures are runtime-local opaque callables. The
+concrete rule for Foundation's implementation:
 
 | Category | Values | Treatment |
 |---|---|---|
 | **Immediate scalars** | `Bool`, `Char`, `Float`/`Float32`, `Int8`–`Int64`, `UInt8`–`UInt64` | Stored inline in the value slot; never interned |
 | **Small `Int`** | Within `i64` range | Inline `i64`; promotes to heap bignum on overflow (`41 §1`) |
 | **Small `Decimal`** | Coefficient fits `i64`, exponent in `i32` range | Inline struct `{ i64 coeff, i32 exp }`; promotes to heap on overflow |
-| **Interned compounds** | `data` applications, records, `String`, `Bytes`, `Array`, `Map`, `Set`, closures, bignums (overflowed `Int`), big `Decimal` | Content-addressed via the intern algorithm |
+| **Interned canonical compounds** | Closure-free `data` applications, records, `String`, `Bytes`, `Array`, `Map`, `Set`, bignums (overflowed `Int`), big `Decimal` | Content-addressed via the intern algorithm |
+| **Runtime-local callable** | Ordinary `Closure`, and any aggregate graph containing one | Outside this store; opaque and non-persistable |
 
 ### 5.2 Tiny-aggregate boundary
 
@@ -521,9 +512,9 @@ The "tiny tuple" question (should `(Int, Int)` — a 2-field record — be
 interned or immediate?) is explicitly deferred to X2 empirical tuning
 (`OQ-7`). F4's recommendation:
 
-- **Start with all aggregates interned** — including tiny records. This
-  is correct-by-construction (identity follows content) and the simplest
-  starting point.
+- **Start with all closure-free canonical aggregates interned** — including
+  tiny records. This is correct-by-construction (identity follows content) and
+  the simplest starting point.
 - The X2 tuning may identify a **small-aggregate cutoff** (e.g., records
   ≤ 2 machine words + all fields scalar) that is immediate for
   performance, with the understanding that immediate aggregates compare
@@ -532,15 +523,16 @@ interned or immediate?) is explicitly deferred to X2 empirical tuning
   not change the equality story (structural equality holds either way)
   but removes the O(1) equality guarantee for immediate aggregates.
 
-**Choice: intern all records, arrays, strings, and other compounds
-initially. The immediate-vs-interned boundary for tiny aggregates is an
-X2 tuning knob, not a semantic commitment. Foundation implements the
-"intern-everything" baseline.**
+**Choice: intern all closure-free canonical records, arrays, strings, and
+other canonical compounds initially. The immediate-vs-interned boundary for
+tiny aggregates is an X2 tuning knob, not a semantic commitment. Foundation
+implements the "intern-all-canonical-aggregates" baseline.**
 
 ## 6. O(1) structural equality
 
-Per `41 §4`: structural equality of two heap values is **slot-id
-comparison — O(1)** (after construction).
+Per `41 §4`: structural equality of two content-addressed heap values is
+**slot-id comparison — O(1)** (after construction). Ordinary closures and
+closure-containing graphs are outside this operation (`41 §2.1`).
 
 ```
 fn eq(a: Value, b: Value) -> Bool {
@@ -691,8 +683,8 @@ language team — the stat-set shape is fixed.**
 
 1. Every §1–§9 section ends in a concrete implementable choice, citing
    `41`/`44` for the settled stances. **No settled OQ reopened.**
-2. Canonical encoding is deterministic and total over all value kinds in
-   `41 §1–2`. A `Map`/`Set` built in two different insertion orders
+2. Canonical encoding is deterministic and total over all content-addressed
+   value kinds in `41 §1–2`. A `Map`/`Set` built in two different insertion orders
    encodes to identical bytes (lexicographic sort by canonical key/element
    bytes).
 3. Benchmark (deliverable 2) records dedup rate matches expected within

@@ -96,7 +96,8 @@ A v0 contract has a required header:
 - `producer` identifies the tool that produced the contract.
 - `spec_ref` identifies this contract specification.
 - `target` identifies the selected closed target by stable package-bound
-  symbol or closure identity.
+  symbol or selected dependency-closure identity. This is not ordinary
+  function-value identity (`41 §2.1`).
 - `contract_hash` is the canonical hash of the full contract fields defined by
   this chapter.
 

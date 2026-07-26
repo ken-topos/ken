@@ -295,26 +295,34 @@ language fork, and Ken is **not** "a GC language."
   `reset`s a bounded unit of work (e.g. one request) — its arena is reclaimed,
   **bounding the working set** (AC4).
 
-**The reclamation / dedup boundary — resolved at the source (the load-bearing X2
-ruling).** Because dedup is **per-`space`** (§1) and spaces are
-**shared-nothing** (`36 §4.4`), the boundary is well-defined — for any value at
-a `space`'s reclamation point there are exactly two outcomes:
+**The reclamation / dedup boundary — resolved at the source (the load-bearing
+X2 ruling).** Because dedup is **per-`space`** (§1) and spaces are
+**shared-nothing** (`36 §4.4`), the content-addressed boundary is well-defined.
+For any closure-free canonical value at a `space`'s reclamation point there are
+exactly two outcomes:
 
 - A value that **does not escape** its space is **reclaimed** with the space's
   arena.
 - A value that **escapes** — passed to another space, or returned past the
-  boundary to a caller — crosses as an **immutable content-addressed value**
-  (`36 §4.4`); physically it is **interned into the recipient (surviving)
-  space's store** (the physical realization of shared-nothing value passing). It
-  lives in a surviving arena and therefore **survives** the sender's reclamation
-  (AC4: escaping values survive).
+  boundary to a caller — crosses as an **immutable content-addressed canonical
+  value** (`36 §4.4`); physically it is **interned into the recipient
+  (surviving) space's store** (the physical realization of shared-nothing value
+  passing). It lives in a surviving arena and therefore **survives** the
+  sender's reclamation (AC4: escaping canonical values survive).
 
-This makes reclamation **content-identity-preserving and observationally
-invisible** (AC5): only the dead, non-escaping values of the reset space are
-released; every **live** value sits in a surviving store with a **stable** slot
+An ordinary closure, or a graph containing one, is outside both outcomes: it
+MUST NOT enter the interning-on-escape path. The content-addressed cross-space
+boundary rejects it before publication. A separately specified live-domain
+opaque invocation may keep its owner alive, but is not store migration and
+creates no stable slot identity (`41 §2.1`).
+
+For store-managed canonical data this makes reclamation
+**content-identity-preserving and observationally invisible** (AC5): only the
+dead, non-escaping canonical values of the reset space are released; every
+**live store-managed** value sits in a surviving store with a **stable** slot
 id; the global monotonic, never-reused counter guarantees a retired id is
-**never resurrected**, so no live value is renumbered or aliased. Equality
-(`41 §4`) is a slot-id compare *within* a store and is unaffected.
+**never resurrected**, so no store-managed live value is renumbered or aliased.
+Equality (`41 §4`) is a slot-id compare *within* a store and is unaffected.
 
 - **Staging.** The per-`space` `Space` mechanism + per-space `reset` (with
   isolation and id retirement) is **landed and tested**. *Wiring* a surface

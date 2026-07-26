@@ -69,14 +69,16 @@ by default, lazy only where required or annotated.**
 
 - **Strict CBV is the default** — application arguments, `let` bindings,
   constructor arguments, and pair components are evaluated **eagerly,
-  left-to-right**; results are shared via the content-addressed heap (`41`), so
-  equal subcomputations are deduplicated (CBV's predictability + the store's
-  space efficiency, no recomputation). Chosen because, the choice being
-  meaning-preserving, strict is the most **legible and predictable**: a cost
-  model you can reason about, an order that matches how the code reads, and no
-  thunk/space-leak footguns. **Predictability is also a precondition for the
-  time/space reasoning security depends on** — the `@ct` timing discipline
-  (`../60-security/61 §5a`) and worst-case bounds need a non-data-dependent
+  left-to-right**; content-addressable results are shared via the heap (`41`),
+  so equal canonical-data subcomputations are deduplicated (CBV's
+  predictability + the store's space efficiency, no recomputation). Ordinary
+  closures and graphs containing them remain runtime-local (`41 §2.1`).
+  Chosen because, the choice being meaning-preserving, strict is the most
+  **legible and predictable**: a cost model you can reason about, an order that
+  matches how the code reads, and no thunk/space-leak footguns.
+  **Predictability is also a precondition for the time/space reasoning security
+  depends on** — the `@ct` timing discipline (`../60-security/61 §5a`) and
+  worst-case bounds need a non-data-dependent
   "when"; lazy-by-default would undermine them.
 - **Laziness where semantically required — the eliminator's branches.** The
   **one** non-strict position is an **eliminator's methods**: `elim_D M m̄ ī s`
@@ -116,9 +118,9 @@ A **value** `v` (the inhabitants of `41`'s model):
 
 ```
 v ::= n                          -- scalar immediate: Int word, Bool, Char, Float, Decimal (41 §1)
-    | cₖ v̄                        -- constructor application, saturated (data) — interned (41 §2)
-    | (v₁ , v₂)                   -- pair (Σ); a record is a right-nested pair (13 §3) — interned
-    | ⟨ λ(x:A).t ; ρ ⟩            -- closure: code + captured env — interned by (code_id, ρ) (41 §3a)
+    | cₖ v̄                        -- constructor application, saturated (data)
+    | (v₁ , v₂)                   -- pair (Σ); a record is a right-nested pair (13 §3)
+    | ⟨ λ(x:A).t ; ρ ⟩            -- ordinary closure: runtime-local and opaque (41 §2.1)
     | Type ℓ | (x:A)→B | (x:A)×B  -- type values (types ARE values; canonical type formers)
     | str | bytes | array | map | set   -- collection values (heap, 41 §2)
     | unknown                     -- the open-hole residue (41 §6, §4)
@@ -127,9 +129,11 @@ v ::= n                          -- scalar immediate: Int word, Bool, Char, Floa
 
 An **environment** `ρ` maps de Bruijn indices to values (`ρ(i)`), a persistent
 vector extended on each binder. `eval : Env → Term → Value`, `apply : Value →
-Value → Value`. Every **compound** value (`cₖ v̄`, pair, closure, collection,
-bignum) is **interned** on construction via the `41 §3b` algorithm, yielding a
-slot id; equal content ⇒ same slot ⇒ dedup (§3.4).
+Value → Value`. Every closure-free canonical compound (`cₖ v̄`, pair,
+collection, bignum) is interned on construction via the `41 §3b` algorithm,
+yielding a slot id; equal content ⇒ same slot ⇒ dedup (§3.4). An ordinary
+closure, or an aggregate containing one, is constructed as a runtime-local
+value and never reaches that interner (`41 §2.1`).
 
 ### 3.2 `eval` / `apply`
 
@@ -138,8 +142,8 @@ eval ρ (Var i)          = ρ(i)                                      -- lookup 
 eval ρ (Const c)        = eval ρ∅ (body c)            -- δ: c has a body (transparent OR opaque); bodyless c → prim/postulate (§3.3)
 eval ρ (λ(x:A).t)       = ⟨ λ(x:A).t ; ρ ⟩            -- closure; NO reduction under the binder (WHNF, §3.5)
 eval ρ (App f u)        = apply (eval ρ f) (eval ρ u)              -- CBV: force operator, then argument
-eval ρ (cₖ ā)           = intern (cₖ (map (eval ρ) ā))            -- strict constructor args
-eval ρ (a , b)          = intern (eval ρ a , eval ρ b)            -- strict pair
+eval ρ (cₖ ā)           = construct (cₖ (map (eval ρ) ā))         -- strict constructor args
+eval ρ (a , b)          = construct (eval ρ a , eval ρ b)         -- strict pair
 eval ρ (p.1)            = fst (eval ρ p)             ;   eval ρ (p.2) = snd (eval ρ p)   -- Σ-β
 eval ρ (let x = e₁ in e₂) = eval (ρ , eval ρ e₁) e₂              -- strict let; e₁ forced once, shared
 eval ρ (Type ℓ)         = Type ℓ                                   -- type value, level carried verbatim (12 §4)
@@ -154,6 +158,11 @@ apply ⟨ λ(x:A).t ; ρ' ⟩ u = eval (ρ' , u) t                       -- β b
 apply ⟨neutral n⟩       u = ⟨neutral (n · u)⟩                      -- stuck (open terms only)
 apply unknown           u = unknown                                -- strict (§4)
 ```
+
+`construct` does not prescribe an allocation strategy. It interns a
+closure-free canonical graph as required by `41 §2–§3`; if any reachable value
+is an ordinary closure, it constructs a runtime-local graph and MUST NOT submit
+that graph to canonicalization or persistence.
 
 ### 3.3 Per-form reduction (reconciled with `17 §1`)
 
@@ -211,21 +220,24 @@ apply unknown           u = unknown                                -- strict (§
 
 ### 3.4 Sharing and dedup (where the heap is consulted)
 
-Two distinct sharings, both via the content-addressed heap (`41`):
+Two distinct sharings, only one of which requires the content-addressed heap:
 
 - **Evaluation sharing** — a `let`/argument value is computed **once** and bound
   in the env (§3.2); every use reads the bound value. No recomputation (CBV +
   binding).
-- **Representation sharing (dedup)** — every compound value is **interned** at
-  construction (`41 §3b`): equal canonical content ⇒ the **same slot id** ⇒
-  stored once. Two subcomputations that produce structurally-equal results
-  resolve to the **same heap entry**.
+- **Representation sharing (dedup)** — every closure-free canonical compound
+  is interned at construction (`41 §3b`): equal canonical content ⇒ the **same
+  slot id** ⇒ stored once. Two subcomputations that produce structurally-equal
+  canonical data resolve to the **same heap entry**. Ordinary closures and
+  closure-containing graphs have no canonical representative or slot identity
+  (`41 §2.1`).
 
-Consequently **structural equality is O(1)** — a slot-id comparison (`41 §4`),
-not a deep traversal (the traversal happened once, at intern time). The
-conformance corpus asserts **dedup** (equal subcomputations share a slot), not
-merely value-equality (§3.7, AC2) — a recompute-without-dedup bug yields an
-equal value at a *different* slot, which the slot assertion catches.
+Consequently **structural equality of content-addressed data is O(1)** — a
+slot-id comparison (`41 §4`), not a deep traversal (the traversal happened
+once, at intern time). The conformance corpus asserts **dedup** for canonical
+data (equal subcomputations share a slot), not merely value-equality (§3.7,
+AC2) — a recompute-without-dedup bug yields an equal value at a *different*
+slot, which the slot assertion catches. It does not compare closure slots.
 
 ### 3.5 WHNF vs full value (the boundary)
 
@@ -279,14 +291,16 @@ the pure fragment is otherwise total.
 ### 3.7 Determinism (testable)
 
 **Determinism.** Evaluation of a closed term is a **function** — same term →
-**same value**, and (for compounds) the **same slot id**. It holds because
-reduction is confluent (`17 §1`) and CBV fixes the order; totality makes any
-order yield the same value (§2), and interning makes the representative
-canonical (§3.4). Determinism is what makes the interpreter a usable **oracle**
-(§5). The discriminating conformance case (AC2) must **flip**: a correct
-**shared** evaluation (equal subterms → one slot) versus a recompute-divergence
-(equal value at two slots) — assert the slot identity, not just value equality,
-or the case passes vacuously.
+same observable value, and for content-addressed compound data, the **same slot
+id**. It holds because reduction is confluent (`17 §1`) and CBV fixes the
+order; totality makes any order yield the same value (§2), and interning makes
+the canonical-data representative stable (§3.4). Determinism is what makes the
+interpreter a usable **oracle** (§5). The discriminating conformance case (AC2)
+must **flip** for canonical data: a correct shared evaluation (equal subterms →
+one slot) versus a recompute-divergence (equal value at two slots) — assert the
+slot identity, not just value equality, or the case passes vacuously. A
+higher-order result is compared only through ground observations of
+application, never through closure identity (`41 §2.1`).
 
 ## 4. `unknown` propagation
 
@@ -579,8 +593,9 @@ plus the primitive-value and conformance oracles.
 
 Conformance: `../../conformance/runtime/evaluation/` — canonicity of closed
 inductive/observational computations (constructor form; `cast`-refl → `a`;
-`Eq`-by-type; quotient elim), determinism + **dedup** (same term → same value at
-the same slot), short-circuit / branch laziness (untaken arm not forced), and
-`unknown` propagation (hole-present flips to `unknown`, hole-free never does).
-Each discriminating case **flips** on its targeted bug or asserts a structural
-output (slot identity, constructor head), per COORDINATION §7.
+`Eq`-by-type; quotient elim), determinism + **dedup** for closure-free canonical
+data (same term → same value at the same slot), short-circuit / branch laziness
+(untaken arm not forced), and `unknown` propagation (hole-present flips to
+`unknown`, hole-free never does). Each discriminating case **flips** on its
+targeted bug or asserts a structural output (slot identity, constructor head),
+per COORDINATION §7.

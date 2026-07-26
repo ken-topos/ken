@@ -381,12 +381,16 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
 ## D. Runtime & representation
 
 ### OQ-7 — Content-addressed boundary — **DECIDED**
-- **Fork.** Exactly which values are interned (small tuples? closures by
-  code+env hash?) vs. immediate, and the per-case equality story.
-- **Decision (operator, 2026-06-27).** **Scalars immediate; compound/identity-
-  bearing interned**, equality per case (slot-equality interned, native
-  immediate). The principle is fixed; the **small-aggregate boundary is an
-  empirical X2 tuning**, not semantics.
+- **Fork.** Exactly which canonical data values are interned (small tuples?)
+  vs. immediate, and the per-case equality story.
+- **Decision (operator, 2026-06-27; closure boundary revised by operator
+  directive 2026-07-26).** **Scalars immediate; closure-free canonical
+  compounds interned; ordinary closures runtime-local and opaque.** Equality is
+  per case (slot-equality for interned canonical data, native comparison for
+  comparable immediates, absent for closures). The **small closure-free
+  aggregate boundary** is empirical X2 tuning, not semantics. A closure or
+  closure-containing graph is never canonicalized or published; a conditional
+  stable static callable reference is explicit, capture-free, and distinct.
 - **Affects.** `40-runtime/41 §5` (updated).
 
 ### OQ-hash — Addressing & hashing functions — **DECIDED**
@@ -510,8 +514,9 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   (send/receive), IFC labels (on messages), and Ward (message events = the
   behavioral alphabet). Distribution-ready; the **runtime realization**
   (process/thread/green/distributed) is deferred to `40-runtime`. **Transport:**
-  content-addressed **immutable value passing** (cross-space dedup by hash;
-  composes with K3); labels ride; typed/session channels a later refinement.
+  content-addressed **immutable, closure-free value passing** (cross-space dedup
+  by hash; composes with K3); closure-containing graphs reject before
+  publication; labels ride; typed/session channels a later refinement.
   **Division of labor:** Ken proves **local/sequential/per-space** correctness;
   **global/concurrent/distributed/temporal** correctness is **delegated to
   Ward** (Quint/Apalache/P model-check the message protocol).
@@ -815,7 +820,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-behavioral** | 2026-06-27 — downstream complement is a **sibling** (`Ward`) fed by an assumption-boundary export; temporal obligations as **data, not kernel modalities**; one logic, two engines. | **ADR 0006** |
 | **OQ-8 / OQ-8a** | 2026-06-27 — static effect **rows** (`visits`), pure by default; **layered encoding** authority(tokens)/denotation(interaction-tree)/spec(WP) into a pure kernel; handlers tail-resumptive only; capabilities = static value tokens (attenuable/revocable/audited). Stateful verification → `OQ-Space`. | — (recorded in `30-surface/36`) |
 | **`OQ-8` child · SURF-1** | 2026-07-04 — **row-variable surface** `[e]`/`[E | e]` as an implicit param (effect polymorphism made surface-writable, statically closed at every instantiation; unblocks CAT-2) + **purity keywords** `const`/`fn`/`proc` (`view` retired; checked static-purity signal, bidirectional, mismatch a hard error; effect-polymorphic ≠ pure) + **Unicode surface** = lexer(both spellings, same token)+formatter(emits Unicode), keywords stay ASCII. Kernel-untouched. | — (recorded in `30-surface/36 §1.5`/`§1.6`, `31 §1c`/`§4`, `32`/`33 §1`) |
-| **OQ-Space** | 2026-06-27 — encapsulated non-aliased `space` cells → **bounded per-space Hoare, no separation logic**; **`old` scoped to space ops** (resolves `OQ-spec` deferral); **shared-nothing message-passing** (in-Ken), content-addressed transport; runtime realization → `40-runtime`; concurrent/temporal correctness **delegated to Ward**; FFI shared memory is the (unsafe) exception. | — (recorded in `30-surface/36 §4`); ADR when `40-runtime` settles |
+| **OQ-Space** | 2026-06-27 — encapsulated non-aliased `space` cells → **bounded per-space Hoare, no separation logic**; **`old` scoped to space ops** (resolves `OQ-spec` deferral); **shared-nothing message-passing** (in-Ken), closure-free content-addressed transport; runtime realization → `40-runtime`; concurrent/temporal correctness **delegated to Ward**; FFI shared memory is the (unsafe) exception. | — (recorded in `30-surface/36 §4`); ADR when `40-runtime` settles |
 | **OQ-ifc** | 2026-06-27 — **lattice-parametric** non-interference (proved once, any lattice); **DLM** standard; static type-index labels + first-class **boundary** labels for data-derived classification (per-tenant), no full dynamic IFC; by-typing default; lattice supplied by policy. | — (recorded in `60-security/61`) |
 | **OQ-policy** | 2026-06-27 — **policy as code**: a mandatory, static, separately-authored security-policy surface **in Ken** (role separation, not a sibling); the lattice-parametric *instantiation*; non-weakenable; governance via supply-chain. | **ADR 0007** (recorded in `60-security/65`) |
 | **OQ-provenance** | 2026-06-27 — package = (source, artifact, .keni, proof-bundle, delta, provenance); consume = **re-check**; **keyless sigstore + in-toto/SLSA**; two ladders distinct; **+ policy attestation** (governing policy in provenance, monotone-compatible consume check). Impl deferred. | — (recorded in `60-security/63`) |
@@ -829,7 +834,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-relational** | 2026-06-27 — by-proof relational = **re-checked unary obligations** (product programs; reflective embedding if ever first-class), **progress-sensitive** default, heavy machinery **deferred**. **Constant-time split out**: a distinct **opt-in `@ct` label** enforced **by typing** (taint to leakage-effect sinks; sound 2-safety enforcement, no product programs); timing guarantee **delegated to Ward** under a leakage model; policy may require `@ct` per data class. | — (recorded in `60-security/61 §5a`, `30-surface/36`, `64`, `65`) |
 | **OQ-eval-order** | 2026-06-27 — **CBV (strict) with sharing, strict by default**; totality makes eval-order meaning-preserving so pick the predictable order (cost model, reading order, no space leaks; precondition for `@ct`/bounds). Laziness only where required (branches/short-circuit) or by explicit **`Lazy a`** thunk. Distinct from kernel lazy-WHNF conversion. | — (recorded in `40-runtime/42`) |
 | **OQ-coinduction** | 2026-06-27 — **inductive/total core, deferred**: no coinductive types/productivity checker (TCB growth `OQ-temporal` declined). Infinitude routed away from the value layer (total ITree is finite; forever = per-message handler + runtime loop + Ward). Streaming via generators / `Lazy` (fuel-bounded) / the seam — finite-by-construction. Re-open → contained sized-types or reflective deep embedding. | — (recorded in `30-surface/37`, `40-runtime/43`) |
-| **OQ-7** | 2026-06-27 — scalars **immediate**, compound/identity-bearing **interned** (equality per case); small-aggregate boundary an **X2 tuning**, not semantics. | — (recorded in `40-runtime/41`) |
+| **OQ-7** | 2026-06-27, closure boundary revised 2026-07-26 — scalars **immediate**, closure-free canonical compounds **interned**, ordinary closures **runtime-local opaque** (no equality/canonical identity/persistence); small closure-free aggregate boundary is **X2 tuning**, not semantics. | — (recorded in `40-runtime/41`) |
 | **OQ-hash** | 2026-06-27 — **two hashes**: fast non-crypto + `memcmp` in-process; crypto/Merkle for serialization (`63`). Exact functions an X2 constant. | — (recorded in `40-runtime/41`) |
 | **OQ-5** | 2026-06-27 — **engineering-chosen capacity, no practical ceiling** (wide handles), **loud refusal** permanent; Leech number aesthetic. | — (recorded in `40-runtime/44`) |
 | **OQ-6** | 2026-06-27 — Leech/Golay/Co₀ machinery **out of the core**, optional research packages only, never the hot path — the lattice math kept out of the load-bearing runtime. | — (recorded in `40-runtime/44`) |

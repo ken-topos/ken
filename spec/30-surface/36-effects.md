@@ -752,7 +752,9 @@ space Counter {
   **state-passing fold** of the interaction tree (§4.2), imperative surface,
   functional denotation.
 - A `space` is the **only** place identity-bearing mutable state exists; pure
-  values are immutable and content-addressed (`../40-runtime/41-values.md`).
+  values are immutable. Closure-free canonical data is content-addressed;
+  ordinary closures and graphs containing them are runtime-local and opaque
+  (`../40-runtime/41-values.md §2.1`).
 
 State has **two surfaces over one denotation**: the imperative `space` block
 (§4.1–§4.4) and the direct monadic `[State s]` effect — `get`/`put`/`run_state`
@@ -828,18 +830,22 @@ discharged by `refl` (`16 §2`).
 ### 4.4 Concurrency & isolation — shared-nothing (`OQ-Space` DECIDED)
 
 For *in-Ken* communication, spaces are **shared-nothing**: they share no mutable
-memory and communicate only by **passing immutable, content-addressed values**
-(actor-style). Isolation is therefore a **guarantee**, not a discipline — no
-shared mutable state ⇒ no data races — on which capability revocation and
-confinement rest (`../60-security/62 §4`, ADR 0004). This pairs with the rest of
-the model: a space handle is a **capability** (§3), send/receive are **effects**
-(§2), messages carry **IFC labels** (§3), and message events are **Ward's
-behavioral alphabet** (`../70-behavioral/`). The **runtime realization** —
-process, thread, green-thread, or distributed — is deferred to `../40-runtime/`
-(the *model* is shared-nothing; the *mapping* is an implementation choice,
-distribution-ready). *(FFI is the exception: a `foreign` boundary may use shared
-memory, but it is already an explicitly unsafe/untrusted boundary, `38-ffi-io.md
-§3`, so it does not weaken the in-Ken isolation property.)*
+memory and communicate only by passing immutable, closure-free,
+content-addressed value graphs (actor-style). A message boundary rejects an
+ordinary closure nested at any depth before publication (`41 §2.1`).
+Live-domain invocation across artifacts is a distinct non-serialized boundary;
+it does not permit messaging a closure through this path. Isolation is
+therefore a **guarantee**, not a discipline — no shared mutable state ⇒ no data
+races — on which capability revocation and confinement rest
+(`../60-security/62 §4`, ADR 0004). This pairs with the rest of the model: a
+space handle is a **capability** (§3), send/receive are **effects** (§2),
+messages carry **IFC labels** (§3), and message events are **Ward's behavioral
+alphabet** (`../70-behavioral/`). The **runtime realization** — process, thread,
+green-thread, or distributed — is deferred to `../40-runtime/` (the *model* is
+shared-nothing; the *mapping* is an implementation choice,
+distribution-ready). *(FFI is the exception: a `foreign` boundary may use
+shared memory, but it is already an explicitly unsafe/untrusted boundary,
+`38-ffi-io.md §3`, so it does not weaken the in-Ken isolation property.)*
 
 ### 4.5 The direct `[State s]` effect surface (`get`/`put`/`run_state`)
 

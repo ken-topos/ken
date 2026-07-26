@@ -1,8 +1,9 @@
 # The value model
 
-> Status: **Elaborated (F4)**. Normative for the model, equality, and
-> canonical encoding. Contract for WS-X **X1/X2** and Foundation's **K3**
-> (production store, building on F4's concrete encoding + index design).
+> Status: **Elaborated (F4)**. Normative for the model, equality, the callable
+> boundary, and canonical encoding. Contract for WS-X **X1/X2** and
+> Foundation's **K3** (production store, building on F4's concrete encoding +
+> index design).
 > Encodes two design commitments: heterogeneous typed values (not uniform
 > f64, §1) and conventional content addressing (FNV-1a + memcmp, not Leech,
 > §3). The canonical byte encoding (§3a) and intern algorithm (§3b) are now
@@ -30,20 +31,87 @@ directly. A `section`/handle crossing a boundary *may* be shuttled as an
 integer- in-`f64` **wire convention**, but that is a transport detail, not the
 value model (`44`/`../30-surface/38`).
 
-## 2. Compound values and the content-addressed heap
+## 2. Runtime values and the content-addressed heap
 
-Compound and identity-bearing values — constructor applications (`data`),
-records (Σ), `String`, `Bytes`, `Array`/`Map`/`Set`, closures, and big integers
-— live in a **content-addressed heap**:
+Content addressing applies to **canonical data graphs**, not to every runtime
+value. Constructor applications (`data`), records (Σ), `String`, `Bytes`,
+`Array`/`Map`/`Set`, and big integers are content-addressable when every value
+reachable from the root has a canonical encoding:
 
 - A value is stored once, keyed by the **hash of its (canonical) content**;
   identical content ⇒ **same slot** ⇒ stored once (global **deduplication**).
-- References into the heap are compact **slot ids**; a value is a small
-  immediate (scalar) or a slot id (compound).
+- References into the content-addressed heap are compact **slot ids**; a
+  canonical data value is a small immediate or a slot id. Runtime-local opaque
+  values are outside this representation contract.
 - The heap is **append-mostly and immutable**: a stored value never changes;
   "updating" a structure allocates the changed spine and **shares** the rest
   (persistent data structures for free). Mutable state is confined to `space`
   cells (`../30-surface/36 §4`), which are *not* content-addressed.
+
+An ordinary executable **closure is different**. It is a callable,
+runtime-local opaque value. A closure, and any value graph containing one, has
+no canonical encoding and is not eligible for the content-addressed heap.
+Such an aggregate may exist as a runtime-local value; it simply is not a
+canonical data graph.
+
+### 2.1 The callable boundary
+
+The minimum observable contract for ordinary closures is:
+
+- **Opaque and without equality.** A closure has no Ken-visible structural
+  equality, `DecEq`, ordering, canonical hash, slot identity, or provenance.
+  Closure equality is absent, not extensional. Generic structural `DecEq` for
+  an aggregate is available only when every field supports it; an aggregate
+  containing a closure does not acquire equality through a hidden runtime
+  identity.
+- **Transitively non-persistable.** A persistence, canonical-store,
+  Merkle/serialization, or durable-export boundary MUST reject a closure or a
+  graph containing one before publication. It MUST NOT replace the closure
+  with a pointer, ordinal, digest, or process-local handle.
+- **Live-domain invocation only.** Separately compiled artifacts may exchange
+  an ordinary closure only within one live runtime domain, while the defining
+  owner and artifact remain live. The receiver may invoke it at its checked
+  callable type, but may not inspect, serialize, persist, reconstruct, or use
+  it as stable identity. A raw code pointer or serialized local handle is not a
+  valid cross-artifact value. A program cannot forge the callable; a
+  wrong-domain, expired, or forged representation MUST refuse before
+  invocation.
+- **Static references are distinct and explicit.** An implementation that
+  provides a stable serializable callable value MUST expose it as an explicit
+  `StaticCallableRef`-class value. Its identity is qualified by package or
+  artifact, callable unit or export, and ABI/signature, and it carries no
+  dynamic captured environment. It may participate in content addressing only
+  through those explicit static fields; this chapter assigns no encoding.
+  Empty-capture optimization MUST NOT silently convert an ordinary closure into
+  this value.
+- **A durable closure would be a separate abstraction.** This specification
+  defines no persistable closure. Any future `FrozenClosure`-class facility
+  must be specified as a distinct explicit value rather than changing the
+  meaning of ordinary `Closure`.
+
+These constraints are mission-derived, not representation-derived:
+
+| Retained constraint | Mission property that fails without it |
+|---|---|
+| Opacity and no closure equality | Code-plus-environment identity is not function equality. Exposing it would make an intensional implementation detail a false semantic claim, violating correctness and honesty about the boundary (`docs/PRINCIPLES.md` principles 4 and 8). |
+| Transitive rejection before publication | A durable artifact containing a process-local callable cannot reproduce its meaning. Substitution or late failure would be silent degradation at a security boundary (principles 8 and 12). |
+| Typed invocation only in a live runtime domain | Forged calls or calls after the defining owner is gone do not preserve the checked program's behavior or safety (principles 4 and 12). |
+| Explicit separation of static callable references | If an optimization can add identity or serializability, observable behavior depends on the implementation strategy rather than the program, violating predictability (principle 10). |
+| A separate future durable abstraction | Reusing ordinary closures would hide two different contracts behind one value and proliferate accidental mechanisms, violating subsumption and boundary honesty (principles 7 and 8). |
+
+**Constraints removed by this revision.** Ken no longer requires ordinary
+closures to be interned or deduplicated; assigns them no canonical kind tag or
+`(code_id, captured environment)` byte encoding; gives them no `memcmp`/slot
+equality, canonical or Merkle hash, persistence, or durable cross-artifact
+identity; and requires no artifact binding for their local representation. An
+implementation may use pointers, handles, hashing, memoization, or other local
+machinery for dispatch, GC, or optimization only when it cannot affect
+program-observable results.
+
+This chapter fixes the observable validity boundary, not its implementation.
+It requires no particular handle or trampoline, owner/lifetime encoding,
+allocation scheme, GC strategy, or memoization scheme. It also does not require
+that `StaticCallableRef` or a future durable higher-order abstraction exist.
 
 ## 3. Addressing: a fast hash + memcmp (NOT lattice geometry)
 
@@ -74,8 +142,8 @@ The encoding is specified in full in `docs/design/content-addressing.md
 **Kind tags.** Each encoding is prefixed by a 1-byte kind tag from a single
 namespace (see the design doc §1.1 for the full table). Currently assigned:
 `data` (`0x02`), record/Σ (`0x03`), `String` (`0x04`), `Bytes` (`0x05`),
-`Array` (`0x06`), closure (`0x09`), bignum `Int` (`0x01`), big `Decimal`
-(`0x0A`). **Kinds `0x07`/`0x08` (formerly `Map`/`Set` heap primitives) are
+`Array` (`0x06`), bignum `Int` (`0x01`), big `Decimal` (`0x0A`).
+**Kinds `0x07`/`0x08` (formerly `Map`/`Set` heap primitives) are
 retired** under OQ-A: `Map`/`Set` are now proved `data` trees
 (`../50-stdlib/52-map.md`) encoding as ordinary `data` (`0x02`); the tags are
 held reserved (a later content-addressed fast-map, `52-map §6`, would reclaim
@@ -96,18 +164,11 @@ them).
   construction time; the normalized form is stored.
 - **Bignums:** sign-magnitude, **minimal-limb** representation (no trailing
   zero limbs) — guarantees a unique encoding for every integer.
-- **Closures:** encoded as `(code_id, captured environment)` where the
-  captured environment is the **full canonical encoding of a record**
-  (not a hash digest). Closure addressing is **memcmp-exact** — two
-  closures with distinct captured environments are never conflated, so
-  the "equal slot ⇒ structurally equal" invariant holds for closures
-  the same as every other value kind. (The `env_hash` shortcut would
-  break the kernel fast path, `§6` + `../../10-kernel/17 §3`).
 - **`Array`:** elements in index order.
 
-These rules guarantee that two structurally-equal values encode to identical
-bytes regardless of construction history. In particular: a `Map` or `Set`
-built in two different insertion orders encodes identically.
+These rules guarantee that two structurally-equal, content-addressable values
+encode to identical bytes regardless of construction history. In particular:
+a `Map` or `Set` built in two different insertion orders encodes identically.
 
 **Constructor and type identity.** The elaborator assigns globally-unique
 integer identifiers to constructors (`data`) and record types. These travel
@@ -155,13 +216,15 @@ The full index data structure, arena layout, and intern pseudocode are in
 
 ## 4. Structural equality is O(1) {#equality}
 
-Because identical values share a slot, **structural equality of two heap values
-is a slot-id comparison — O(1)** (after construction). This is the headline
-runtime property of the content-addressed heap:
+Because identical content-addressed values share a slot, **structural equality
+of two content-addressed heap values is a slot-id comparison — O(1)** (after
+construction). This is the headline runtime property of the content-addressed
+heap:
 
-- `a == b` on heap values is `slot(a) == slot(b)`; on scalars it is the native
-  comparison. No deep traversal at comparison time (the traversal happened once,
-  at intern time).
+- `a == b` on content-addressed heap values is `slot(a) == slot(b)`; on
+  comparable scalars it is the native comparison. No deep traversal at
+  comparison time (the traversal happened once, at intern time). Ordinary
+  closures have no such operation (§2.1).
 - This O(1) structural equality is also a **conversion fast path** for the
   kernel (`../10-kernel/17 §3`): closed terms with equal content hashes are
   definitionally equal.
@@ -172,12 +235,13 @@ runtime property of the content-addressed heap:
 
 ## 5. Which values are content-addressed (`OQ-7` DECIDED)
 
-**Decided (operator, 2026-06-27):** **scalars are immediate**;
-**compound/identity-bearing values are content-addressed**, with the equality
-story per case (slot-equality for interned, native for immediate). The principle
-is fixed — cheap things stay immediate; shared/compared things are interned —
-and the **exact small-aggregate boundary** (are tiny tuples interned? closures
-by code+env hash?) is an **empirical X2 tuning**, not a semantic commitment.
+**Decided (operator, 2026-06-27; closure boundary revised 2026-07-26):**
+**scalars are immediate**, **canonical compound data is content-addressed**,
+and ordinary closures are runtime-local opaque callables (§2.1). Equality is
+per case: slot equality for interned canonical data, native comparison for
+comparable immediates, and no equality for closures. The exact
+**small-aggregate boundary** (are tiny closure-free tuples interned?) is an
+empirical X2 tuning, not a semantic commitment.
 
 **Concrete starting rule (F4-elaborated).** Foundation implements:
 
@@ -186,15 +250,17 @@ by code+env hash?) is an **empirical X2 tuning**, not a semantic commitment.
 | **Immediate scalars** | `Bool`, `Char`, `Float`/`Float32`, `Int8`–`Int64`, `UInt8`–`UInt64` | Stored inline; never reach the interner |
 | **Small `Int`** | Within `i64` range | Inline `i64`; promotes to heap bignum on overflow (`§1`) |
 | **Small `Decimal`** | Coefficient fits `i64`, exponent in `i32` range | Inline struct `{ i64 coeff, i32 exp }`; promotes to heap on overflow |
-| **Interned compounds** | `data` applications, records, `String`, `Bytes`, `Array`, `Map`, `Set`, closures, bignums (overflowed `Int`), big `Decimal` | Content-addressed via the intern algorithm |
+| **Interned canonical compounds** | Closure-free `data` applications, records, `String`, `Bytes`, `Array`, `Map`, `Set`, bignums (overflowed `Int`), big `Decimal` | Content-addressed via the intern algorithm |
+| **Runtime-local callable** | Ordinary `Closure`, and any aggregate graph containing one | Opaque and non-persistable; never sent to the canonical interner |
 
-**Tiny-aggregate boundary (X2 tuning).** F4's baseline interns **all**
-aggregates — including tiny records — for correctness-by-construction (identity
-follows content). X2 may identify a small-aggregate cutoff (e.g. records ≤ 2
-machine words with all scalar fields) that is immediate for performance. This is
-a **semantics-preserving optimization**: it changes the equality cost model
-(immediate aggregates compare by field traversal, not slot-id) but not the
-equality *result*. Foundation implements the "intern-everything" baseline.
+**Tiny-aggregate boundary (X2 tuning).** F4's baseline interns **all
+closure-free canonical aggregates** — including tiny records — for
+correctness-by-construction (identity follows content). X2 may identify a
+small-aggregate cutoff (e.g. records ≤ 2 machine words with all scalar fields)
+that is immediate for performance. This is a **semantics-preserving
+optimization**: it changes the equality cost model (immediate aggregates
+compare by field traversal, not slot-id) but not the equality *result*.
+Foundation implements the "intern-all-canonical-aggregates" baseline.
 
 ## 6. The `unknown` value
 
@@ -244,17 +310,21 @@ is fixed.
 
 ## 8. What WS-X must deliver here (X1/X2) and Foundation (K3)
 
-The value model: typed scalar immediates (no uniform f64); the content-addressed
-heap with FNV-1a+memcmp addressing, canonical encoding (per §3a), global dedup,
-and **O(1) structural equality**; the immediate-vs-interned boundary (OQ-7, §5
-table); the intern algorithm (§3b); the `unknown` value with propagation; and
-extensional-safe process introspection (§7). Foundation implements the canonical
-byte encoding, hashing, intern algorithm, and the `StoreStats` shape from the
-elaborated design; K3 builds the production store on this contract.
+The value model: typed scalar immediates (no uniform f64); the
+content-addressed canonical-data heap with FNV-1a+memcmp addressing, canonical
+encoding (per §3a), global dedup, and **O(1) structural equality**; the
+immediate-vs-interned-vs-local boundary (OQ-7, §5 table); the callable boundary
+and transitive publication refusal (§2.1); the intern algorithm (§3b); the
+`unknown` value with propagation; and extensional-safe process introspection
+(§7). Foundation implements the canonical byte encoding, hashing, intern
+algorithm, and the `StoreStats` shape from the elaborated design; K3 builds the
+production store on this contract.
 
 Conformance:
-- `../../conformance/runtime/values/` — dedup (equal values share a slot), O(1)
-  equality, canonical-encoding determinism (Map/Set ordering), `Int`
-  small→bignum promotion, and `unknown` propagation.
+- `../../conformance/runtime/values/` — dedup (equal closure-free canonical
+  values share a slot), O(1) equality for content-addressed data,
+  canonical-encoding determinism (Map/Set ordering), closure opacity and
+  transitive publication refusal, `Int` small→bignum promotion, and `unknown`
+  propagation.
 - `../../conformance/runtime/capacity/` — loud at-limit failure, dedup-aware
   accounting, reclamation page release, and no-lattice-on-hot-path.

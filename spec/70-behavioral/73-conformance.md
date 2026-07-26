@@ -123,10 +123,12 @@ cannot. The **locked** correlation-key set:
   **per-space trace**.
 - **Message provenance** — on a cross-space **send**/**receive** event. Spaces
   are **shared-nothing**, communicating only by passing immutable,
-  content-addressed values (`36 §4.4`); the message value's **content address**
-  (`41 §3`) is the natural provenance token, linking the sender's send event to
-  the receiver's receive event. A monitor stitches per-space traces into a
-  **global trace** along these matched provenance tokens.
+  closure-free content-addressed value graphs (`36 §4.4`); the message value's
+  **content address** (`41 §3`) is the natural provenance token, linking the
+  sender's send event to the receiver's receive event. A closure-containing
+  graph rejects before message publication and therefore emits no such token.
+  A monitor stitches per-space traces into a **global trace** along these
+  matched provenance tokens.
 
 The keys are **complete by construction (TC3):** space identity rides every
 event; message provenance rides every cross-space message event — enough to
