@@ -209,6 +209,22 @@ strongest available lever; **whether the compiled-once call boundary then closes
 is an open question for the Architect.** ⭐ Say so plainly — the previous five
 days ran on the assumption that one more layer would close it.
 
+## ⚠ On RQ links — none, and this is the stated reason
+
+`15-requirements-and-acceptance-criteria.md` rule 1 asks that every AC name its
+requirement **or that none do, with a reason.** None do here.
+
+`SPEC-STORE-SPLIT` carries no `## Requirements` block because the requirements it
+would restate are **the ones this WP changes.** The relaxation's whole content is
+that a set of currently-normative obligations stops being required; deriving RQs
+from the pre-relaxation contract would pin the ACs to the text they exist to
+move.
+
+⇒ **The RQ tier is owed by the `RT-NATIVE-FNSPLIT` re-cut** (node §7 item 1),
+where the relaxed contract is the input rather than the output. ⛔ Do not add an
+RQ block to this node to satisfy the checker — that would manufacture
+traceability to a superseded contract.
+
 ## Evidence bar
 
 - ⛔ **`git diff --stat` always exits 0** — not an emptiness test. Use `--quiet`
