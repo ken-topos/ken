@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2E
 title: "semantic boundary-value elimination — an opaque boundary inhabitant plus a mechanically closed operation-by-class disposition ledger over every reachable Lowered consumer, inert"
-status: draft
+status: ready
 owner: runtime
 size: L
 gate: none
@@ -161,10 +161,29 @@ takes the classified path — that is `B2F`'s. **The frame states that residual
 explicitly, in the frame, where the implementer opens it** — not in this node, and
 not in a kickoff message that cannot be edited afterwards.
 
-## Not yet done
+## ✅ The frame is written and on `origin/main`
 
-⚠ **The frame is not written.** `status: draft` and this node is **not
-releasable** until `docs/program/wp/RT-FNSPLIT-B2E-*.md` exists on `origin/main`
-and the §2c handoff gate has run. ⛔ Do not kick Runtime off this node alone —
-`B2F` was kicked once against a frame that did not mention `B2V`, and the
-re-anchor cost a publish.
+**`docs/program/wp/RT-FNSPLIT-B2E-boundary-value-elimination.md`**, blob
+**`20928eac`**, landed in PR #1023 — verified byte-identical candidate to `main`
+with an **absent-at-prior-main** control. 370 lines. `status: ready`.
+
+⭐ **The design call the frame makes, recorded here so this node's reader knows it
+was made:** the ruling's *completeness-critical* requirement is discharged by
+making **both** ledger axes enumerable. The value axis already exists —
+`LoweredVariant` (`lowering/mod.rs:529`), **21 arms**, with `Lowered::variant` and
+`LoweredVariant::boundary_disposition` both `match`es carrying **no `_` arm**, so a
+22nd variant is a compile error in both. The frame requires the **operation** axis
+to take that same shape, because *a ledger a human maintains is a document; a
+ledger the compiler maintains is a check.*
+
+⚠ **The frame does NOT hand the ring a consumer list.** It supplies the
+reachability definition, requires the derivation to be reported with its reading
+stated, and gives the Steward `Lowered::` occurrence counts (207 / 193) explicitly
+as a **search budget, not a population**. Rationale, in the frame: an inventory is
+bounded by an unwritten notion of the surface, and an under-derived population
+still closes the ledger over the smaller surface and reports green.
+
+⛔ **Still owed before Runtime touches this: the §2c handoff gate.** Compact all
+three Runtime seats unconditionally, verify every drop, and `git cat-file -e` every
+object the kickoff names at the base it names. `B2F` was kicked once against a
+frame that did not mention `B2V`, and the re-anchor cost a publish.
