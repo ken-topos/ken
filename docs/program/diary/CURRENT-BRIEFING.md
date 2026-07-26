@@ -33,6 +33,60 @@ verbatim (⚠ it was only in gitignored `local/`) at
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
+## ▶▶ LIVE — 2026-07-26 ~16:0xZ · TRACK C IS SETTLED; A1 IS MERGED
+
+⛔ **`git rev-parse origin/main` — no SHA here, by construction.**
+
+### ✅ Track C forks — FIVE OF EIGHT SETTLED, all durable in `14-…-campaign.md`
+
+| fork | disposition |
+|---|---|
+| **C1** runtime `unknown` | ▶ **DIRECTION: retire the runtime third value** (operator). ⛔ Not yet a released node — class-1 change, needs the §2 conformance census (~57 runtime rows) + an Architect ruling on replacement semantics. Two follow-on choices recommended, not settled: what an `unknown` verdict does operationally, and resolving `43 §2` case 2's `fault / unknown` disjunction to `fault`. |
+| **C2** `Ord`/`Map` | ✅ **RULED** (Architect): option (b) with `KeyEq` **derived from the order**. Task `#106` frames it. |
+| **C3** revocation | ✅ **CLOSED — no split.** Two editorial follow-ons in §6.3. |
+| **C4** SCT | ✅ **CLOSED** — exact SCT is deliberate source compatibility. |
+| **C5** coherence | ✅ Layer 1 CLOSED (ADR 0008) · ▶ Layer 2 DEFERRED behind Linux ABI/compiler, "probably next". |
+
+⛔ **STILL OPEN: C6** (prover portfolio), **C7** (`space` vs physical), **C8**
+(purity reverse errors — cheapest). ⛔ Do not re-ask C1's follow-ons as fresh;
+they are recommended-and-recorded, awaiting an operator word only if they differ.
+
+### ✅ `SPEC-ALIGN-A1` MERGED (PR #1028) — node flipped, retros OWED
+
+Blob-verified with a discriminating control. ⛔ **Retros still owed** from
+spec-leader, spec-author, conformance-validator, and librarian. A merged WP with
+no retro is not done — chase before compacting those seats.
+
+⭐ **`SPEC-ALIGN-B1` is now free of its A1 dependency. ⛔ DO NOT let the enclave
+pull it** — I own release sequencing and told them so; re-anchor it first.
+
+### ⚠ TWO TRAPS THAT FIRED TODAY — both caught, both worth remembering
+
+1. ⛔ **`steward/work` held the PRE-A1 blob `45f0990b`** — publishing the batch on
+   that base would have **silently reverted A1**. Caught by
+   `merge-base --is-ancestor`, rebased, re-verified. **Rebase before every batch.**
+2. ⛔ **I reported the A1 node as "flipped" when the flip was only on
+   `steward/work`.** spec-leader checked `main` and correctly saw `status: ready`.
+   **Committed is not reachable — say WHERE.**
+
+### ▶ Runtime lane: `B2E` candidate `e42aefa2`, `R3` NOW DURABLE
+
+`wp/RT-FNSPLIT-B2E-boundary-value-elimination` = **`e42aefa2`** on `origin`,
+complete candidate, QA to bind on that exact SHA with frame/node from
+`origin/main` (⛔ **not** the candidate's pre-`R1` copies). No Decision open.
+
+✅ **`R1`, `R2`, and `R3` are all transcribed** into frame + node. ⭐ **This WP
+lost three rulings to the channel in one day** — task `#107` proposes the
+structural detector instead of a fourth hand transcription.
+
+### ▶ Doc lane: `DOC-CATALOG-CONTENTS` NOT kicked, and deliberately so
+
+Node + frame are in the publishing batch, **not on `origin/main`**. ⛔ The kickoff
+is gated on that batch landing (§2c step 5b — a base that lacks the artifacts it
+names is a false fixed input). Librarian is holding its rebind and knows why.
+**Sequence: batch lands → `cat-file -e` frame+node at the landed SHA → §2c gate on
+the doc ring → kick → return the kickoff event.**
+
 ## ▶ LIVE — 2026-07-26 ~1x:xxZ · ⛔ **NO `main` SHA HERE, BY CONSTRUCTION**
 ### ⛔ **This header used to carry `origin/main`. It was ALWAYS the pre-merge**
 ### **base — stale the instant the block landed. `git rev-parse origin/main`.**
