@@ -22,30 +22,115 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~00:2xZ · `origin/main` = **`4427147d`**
-### **✅ THE B2V RECUT IS BOUND AND ON `main`. Production candidate still blocked.**
+## ▶ LIVE — 2026-07-26 ~05:2xZ · `origin/main` = **`fc63ca65`**
+### **✅ Spec landed. Fork ruled. Two lanes live.**
+### ⛔ Runtime is IDLE and BLOCKED on a frame I owe.
 
-> ### ✅ PR #978 LANDED — exact `36064740`, tree `a4c8a604`, full CI
+> ### ⚠ OPERATOR AWAY until **11:30Z** — drafting **THE MISSION** then
 >
-> **Verified by content, not the publisher's report** (it exits 0 on failure):
-> **7/7 files blob-identical**; the frame blob on `main` (`58c34ad9`) is the
-> **exact blob the Architect approved** at `e4fa5ec5`; `c72be0b0` still an
-> ancestor, so **nothing landed since was reverted**. `steward/work` reset onto
-> the squash-merged `main` — ⛔ the `wp/steward-b2v-recut-*` refs are **spent**;
-> a squash-merged branch cannot be continued. Announced `evt_3xc5kqjg8bzbx`;
-> all three receiving seats confirmed `Working`.
+> Stated 2026-07-26 ~03:50Z.
 >
-> ⭐ **NOW BINDING, and NONE of it has ever been discharged on this node:**
-> `AC-10` total classified-domain closure (variant → static policy, input →
-> entailed outcome); `D4`/`AC-3` **five** static encoding policies with the
-> spill-variant→immediate-only ban; **`AC-1` layout closure** (field inventory is
-> the sole authority; a declared extent is derived **and consumed** or does not
-> exist; a causal control reddens on independent drift; ⛔ constant-vs-constant
-> does not discharge). RETAIN keeps proved properties, **not** byte counts.
+> ⛔ **Do NOT re-ask #55's two open decisions as fresh.** ⛔ Do **not** write the
+> mission — it is the operator's. `SPEC-MISSION-GROUNDING` is on `main` as
+> `draft`, blocked on that input, **not on a seat**.
+
+> ### ✅ WHAT LANDED — verified by BLOB IDENTITY, never the publisher's report
 >
-> ⚠ **`AC-10` was `NO CONTROL — open residual` on every candidate to date and
-> `AC-1` layout closure did not exist until tonight. Neither inherits evidence
-> from any prior verdict.**
+> | PR | what | result |
+> |---|---|---|
+> | #982 | `SPEC-CLOSURE-BOUNDARY` @ `0ccca4c5` | landed tree `7188f52d`; node `merged`; **all 3 spec retros IN** |
+> | #983 | `KW-ORACLE-CLOSURE` frame + program batch | `c3b8f193` |
+> | #984 | `RT-VALUE-TOTALITY` armed triggers | `fc63ca65` |
+>
+> ⭐ **`SPEC-CLOSURE-BOUNDARY` took FOUR objects**: `10e29f48` rejected →
+> `26cfb5db` CV-blocked → `7bfd744f` **approved with a resolved Decision and then
+> UNMERGEABLE** → `0ccca4c5` landed. The publisher's library-currency gate refused
+> the third: six revised spec files are cited sources and two derived library
+> pages were asserting the **falsified** reading. ⛔ **Path-intersection-empty is
+> not publishable** — now §2c step 7c.
+
+### ▶ LANE 1 — `RT-VALUE-TOTALITY` — ⛔ **THE FRAME IS MINE, AND IT BLOCKS**
+
+```
+node    docs/program/issues/RT-VALUE-TOTALITY.md    status: draft (honest — no frame)
+ruling  evt_4qref8hksbdyw   Decision dec_1dckq8c0f9xjv   resolved by architect 05:07Z
+blocks  RT-FNSPLIT-B2V (status active, ring IDLE)
+```
+
+**Architect ruled (b): ordinary `Closure` leaves the canonical `Value` carrier.**
+Five representation pins in §3b, and ⭐ **§3c CORRECTS a premise** — the derives
+are unsound *independently of closures*, because `minimal_limbs` strips trailing
+zero limbs and `Value::String` is NFC-normalized **at encoding time** while the
+enum admits the raw forms. ⚠ **That corrected a measurement I supplied**: I
+reported zero `Value: Ord`/`Hash` consumers, which was **true and did not entail
+what it looked like it entailed.** New `AC-V8`/`V9`/`V10`; `AC-V7` **superseded,
+recorded not deleted**.
+
+⇒ **NEXT ACTION ON RESUME: author `docs/program/wp/RT-VALUE-TOTALITY-*.md` from
+§3.** ⛔ Then §2c gate the Runtime ring before kicking. ⛔ `a7aa60eb` stays
+PARKED; `RECUT 2`'s phase-closure artifact must still be **re-derived** against
+the three-lifecycle partition — this node does not relieve that gate.
+
+### ▶ LANE 2 — `KW-ORACLE-CLOSURE` (Language) — ACTIVE, QA **BLOCKED** it
+
+```
+branch  wp/KW-ORACLE-CLOSURE   tip 79acbabb ON ORIGIN (I pushed it; no PR ⇒ NOT frozen)
+```
+
+⭐ **QA found a real defect and it is the catch of the night.** `AC-C1`'s
+frame-required **corpus-side** mutation (add prose occurrence outside a `ken`
+fence) returned **exit 0 / 1 passed** — the occurrence predicate still does not
+reach the corpus. The implementer had run a **detector-side** mutation
+(*"head-only occurrence scan"*) which reddened, so its report was **true and
+about the wrong operand**. ⛔ **Detector-side and population-side mutations are
+not interchangeable controls** — now in `pin-a-property.md` §10. Leader has
+routed the repair against `79acbabb` (`evt_39cefhe39k9bw`).
+
+### ▶ ARMED COUNTERS — the SOLE count of record. Re-read at every hard-stop.
+
+- `RT-NATIVE-FNSPLIT`: **hard-stop 10** · **next research pull = #11** (catch-up)
+- Architect production blocks: **6** · next check **#9**
+- `RT-VALUE-TOTALITY`: chain **0** · next pull **3rd** · symptom inventory seeded
+  (§5 on `main`). ⛔ A fresh chain at 0 is **not** a reset of the FNSPLIT chain.
+
+### ▶ DURABILITY — measured 2026-07-26, and it is NOT just WP branches
+
+Pushed this session: `wp/KW-ORACLE-CLOSURE` (`980bb047`, then `79acbabb`) and
+**`architect/work` — 8 local-only state commits** including the B2V predicate +
+cycle rulings and the RT-SCALE-A harness ruling.
+
+⛔ **STILL OUTSTANDING:** `adversary/work` = **86** local-only, `librarian/work` =
+**9**. ⚠ Determine unmerged-work vs squash-merge leftover **before** treating
+either as loss. ⛔ And `git branch -r --contains` answers against your **stale
+local mirror** — only `ls-remote` asks origin.
+
+### ▶ TRANSPORT — convo MCP mostly DEAD (`set_interval`/`subscribe` survive)
+
+```
+SCRATCH=/tmp/claude-1000/-workspaces-ken--worktrees-steward/41772d90-7abf-4634-aa56-dc36cd7444ee/scratchpad
+READ   cd /workspaces/ken && python3 $SCRATCH/convo_read.py 20 --full
+POST   cd /workspaces/ken && python3 $SCRATCH/convo_post.py <body.md> <agt_id>...
+§14    python3 $SCRATCH/dec_check.py <dec_id>     # PASS = resolved AND resolved_by
+```
+
+⚠ Mentions **do** still arrive (separate `convo-channel` subscription) but are
+**TRUNCATED** — doorbell only, fetch the full text. ⛔ `claude mcp list` reports
+`convo: ✔ Connected` and **lies** (it health-checks a fresh process).
+
+⚠ **`moot compact` can strand `/compact` UNSUBMITTED on a Codex composer** while
+printing "Sent" — measured on the Architect this session. Repair = bare `Enter`.
+⛔ `sweep-wedged-panes.sh` cannot see it (it keys on a paste marker) — task #66.
+
+### ▶ MY QUEUE
+
+1. **Author the `RT-VALUE-TOTALITY` frame** (task #62) — the critical path.
+2. Task #66 sweep-script + playbook fix · #65 done (§2c step 5b landed) ·
+   #51, #12 promotions · #48 briefing-tail audit (⛔ NOT a bulk move — ~half is
+   durable law) · #5 frame `ABI-S3`.
+3. ⛔ `#11 DOC-GATE-NEEDLE` and `DOC-ATTEST-LIVING` are **operator-HELD** — do
+   not release, do not re-ask.
+4. ⚠ **`RT-SCALE-B` still HELD, and THE EFFORT STILL HAS NO MEASURED GROWTH
+   VERDICT.** `RT-SCALE-A` landed the instrument only.
 
 > ### ✅ OPERATOR DIRECTIVE 2026-07-25 — `lemma` retired from the language
 > entirely; permitted in comments and documentation. **VERIFIED ALREADY
@@ -65,39 +150,15 @@
 > **no WP opened.** ~350 other occurrences are ordinary prose, which the
 > directive permits.
 
-> ### ⛔⛔ FIRST, TWO THINGS THAT CHANGE HOW YOU OPERATE THIS SESSION
->
-> **1. My convo MCP connection DIED mid-session.** Every `mcp__convo__*` tool is
-> gone. ⛔ **`claude mcp list` reports `convo: ✔ Connected` — it LIES**, because
-> it health-checks by spawning a *fresh* process; it says nothing about this
-> session's stdio. **Fallback transport is live and verified:**
-> `python3 <scratchpad>/convo_post.py <body.md> <agt_id>…` posts over the HTTP
-> API with my own steward credential (endpoint `/api/spaces/{sid}/response`,
-> **singular**). Reads work the same way — `convo_read.py` in the same
-> scratchpad lists events newest-first; that is how `dec_74fwejgv6hda0` and
-> `dec_7sd3enk81maws` were verified **off the object**. ⭐ **Losing the tool must
-> not downgrade the §14 gate** — read the object, never the report.
->
-> ⭐ **CORRECTION — mentions DO still arrive.** An earlier revision of this block
-> claimed *"I cannot see mentions arrive"*; that was **wrong**, and acting on it
-> would have meant polling blind. The `convo-channel` **subscription is a
-> separate transport from the `convo` MCP tool set** and it survived
-> (`list_subscriptions` → `spc_4q7g0se87rgje`; the Architect's recut-3 block
-> arrived on it unprompted). ⛔ **But the notification is TRUNCATED** and
-> `get_recent_context` is one of the dead tools — so treat the notification as a
-> *doorbell only* and fetch the full text with `convo_read.py --full --since`.
-> ⚠ **Two transports, two failure modes: verify which one is actually down
-> before designing around the loss.**
->
-> **2. NOTHING IS PUBLISHING.** PR **#977** landed (`c72be0b0`, exact
-> `305dc6d5`, full CI — ⛔ **not** `--doc-only`, which merges with *no CI*).
-> Verified **by content**, because the publisher exits 0 on failure. Keep that
-> habit: the next publish inherits it, not the outcome.
-
 > ⛔ **THREE DEAD CANDIDATES ARE NAMED BELOW. None of them will ever be
 > published, and each has a *resolved or rejected* Decision attached — which is
 > exactly the shape that gets one published by accident.** Read the SHA, not
 > the Decision status.
+
+> ⚠ **THE LANE BLOCKS BELOW ARE SUPERSEDED HISTORY, not live state.** They
+> describe the `RT-FNSPLIT-B2V` recut arc and the closed `KW-THEOREM` lane. The
+> live lanes are the two above; the authoritative per-item state is
+> `docs/program/issues/*.md`. ⛔ Do not resume from anything below this line.
 
 ### ▶ LANE 1 — `RT-FNSPLIT-B2V` — ⛔ RECUT. The Architect NAMED the predicate.
 

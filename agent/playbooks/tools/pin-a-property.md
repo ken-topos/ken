@@ -365,6 +365,50 @@ provenance check is itself a pin, so §6's positive control and §6a's
 which-arm-fired question apply to it: **feed it a mutation you know landed and a
 mutation you know did not, and confirm it distinguishes them.**
 
+### ⛔⛔ DETECTOR-SIDE AND POPULATION-SIDE MUTATIONS ARE NOT INTERCHANGEABLE
+
+⚠ **This is NOT the "edited the DETECTOR along with its subject" row above.**
+That row is about mutating **both**. This is about mutating **the detector
+instead of the population** — and it passes every check on this page, including
+the provenance check, because the mutation genuinely applied and the intended
+named test genuinely reddened.
+
+Every control has **two** operands: the **detector**, and the **population the
+detector is claimed to reach**. They answer different questions:
+
+| you mutated | a redden proves | a redden does NOT prove |
+|---|---|---|
+| the **detector** (narrow its predicate, neuter an arm) | the detector is wired to **something** | that it reaches the population the AC names |
+| the **population** (add a real instance to a real input) | the detector **reaches that population** | which arm of the detector fired (§6a) |
+
+⛔ **An AC whose property is REACH can only be discharged population-side.** A
+detector-side mutation on such an AC can redden for the entire life of a
+detector that reaches nothing — which is precisely the defect the AC exists to
+prevent, so the control has been made blind to its own subject.
+
+★ **Measured 2026-07-26, `KW-ORACLE-CLOSURE`, and the report was TRUE.** The AC
+row read *"widen one corpus file's occurrence set beyond a declaration head
+(e.g. add `lemmas` in prose) — must redden."* The build ran a **detector-side**
+mutation (*"head-only occurrence scan"*), it reddened, and the handoff correctly
+said *"each control reddened its intended named test."* QA then ran the
+**population-side** mutation the row actually specified — one line of prose added
+to a real corpus file — and the suite came back **exit 0, 1 passed, 0 failed**.
+⚠ **The occurrence predicate was still not reaching the corpus**, the exact
+defect the WP existed to fix, with a green control sitting on top of it.
+
+⇒ **Two obligations, both mechanical:**
+
+1. **When you author the row, name the operand.** "Must redden" is
+   under-specified; *"adding an instance to `<real input file>` must redden"* is
+   not. ⛔ If the row does not name which side moves, the cheaper side will be
+   chosen and the report will be honest.
+2. **When you discharge it, quote the row and diff it against what you ran.** ⛔
+   Do not repair a population-side failure by hunting for a detector-side
+   mutation that reddens — the post-condition is the row's mutation, verbatim.
+   And pair it with §6's **positive control**: without an arm showing a real
+   instance being *found*, "found nothing" and "never looked" read identically,
+   which is exactly what a reach failure looks like from the outside.
+
 - Apply each mutation at its **natural production site**, not at a convenient
   one; a mutation the real code path never reaches proves nothing.
 - **Restore byte-identically** and verify with `git diff --quiet`.

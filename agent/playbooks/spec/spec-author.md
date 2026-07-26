@@ -35,6 +35,41 @@ too far: describe the *what*, not the *how* of any particular implementation.
   Where Ken deliberately diverges from a known reference behavior (e.g. `Int`
   from day one, checked universes, no hard slot ceiling), record the divergence
   inline with a rationale — these are Ken's own design choices, not gaps.
+- **⭐ AUTHORING A RELAXATION: write the DOMAIN-SUBTRACTION LEDGER before you
+  draft (promoted SPEC-CLOSURE-BOUNDARY, 2026-07-26 — reached independently by
+  spec-author and spec-leader in the same WP).** When a revision *narrows* a
+  semantic domain — a blanket noun stops applying to a case, a universal
+  quantifier acquires a side condition — the old premise has already **escaped
+  into downstream prose**, and it does not come back when you edit the rule.
+  ⛔ **A relaxation falsifies downstream text in a direction a strengthening does
+  not:** strengthen a constraint and the derived pages become *incomplete*;
+  relax one and they become **false**, while still reading fluently.
+
+  So before drafting, enumerate — and classify each entry **retained · narrowed
+  · historical · rejected**:
+
+  1. every **former blanket noun or quantifier** (*"all values"*, *"compound"*,
+     *"ground"*, *"witness"*, *"identical"*);
+  2. every **evidence population** any recorded measurement was taken over;
+  3. every **deliverable, diagram, index, and derived consumer**.
+
+  ⚠ **Sweep the semantic CARRIER TERMS, not the feature name.** The feature name
+  is the one word every consumer page does *not* use.
+
+  ★ **Two live instances in one WP, same shape, different carriers.** A
+  benchmark record was rewritten as though closures had never been in its
+  population — the producing generator proved they had been; *after narrowing a
+  domain, historical evidence looks as if its input domain narrowed with the
+  prose, and it did not.* Then a residual called every live payload an *"ITF
+  witness"* — **one universal noun silently preserving the superseded domain.**
+
+  ⛔ **And the ledger is not discharged by naming the coupled normative and
+  oracle paths.** Ask which consumers can make the *prior stronger reading*
+  visible — that population includes derived explanatory prose and attested
+  citations, and it is **wider than the paths your review scope covers**. Two
+  derived library pages were asserting the falsified reading, past a
+  correct-and-empty changed-path intersection. Companion:
+  [[a-multi-clause-ac-reads-as-satisfied-when-you-discharge-the-subset-you-built-for]].
 - **Resolve silences when structurally determined (§6);** record the resolution
   inline with a rationale. Escalate only genuine forks (→ Decision, → Steward
   for scope).
