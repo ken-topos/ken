@@ -178,7 +178,32 @@ operative and it is the text positioned to be believed by the next reader.
 changes.** Whichever fork branch is taken, enumerate what depends on those
 bounds. ⛔ Not a post-hoc discovery during the build.
 
-## 5. Standing
+## 5. Armed triggers — ⛔ these are LINES TO RE-READ, not a tally to reconstruct
+
+⚠ An unarmed count is not a trigger. On `RT-NATIVE-FNSPLIT` the chain reached
+**10** hard-stops with **zero** research pulls, because the count lived only as
+prose. Both lines below are re-read on **every** hard-stop.
+
+```text
+HARD-STOP COUNT (this node)  = 0
+NEXT RESEARCH PULL           = 3rd hard-stop, then 6th, 9th, …
+```
+
+```text
+SYMPTOM INVENTORY (Architect appends one line per hard-stop; NEVER rewritten)
+NEXT PREDICATE CHECK = 3rd entry, then 6th, 9th, …
+(empty)
+```
+
+⛔ **This node opening a fresh chain at 0 is a statement about a new
+implementation surface, NOT a reset of the arc it came from.** The
+`RT-NATIVE-FNSPLIT` chain stands at **10** with its catch-up pull armed at
+**#11**, and that count is unaffected by anything here. ⚠ Filing a descendant
+node must never be usable to launder a deep chain into a shallow one — if a
+hard-stop here is *the same wall* the FNSPLIT chain kept hitting, it counts on
+**both**.
+
+## 6. Standing
 
 - ⛔ **`RT-FNSPLIT-B2V` acceptance is blocked on this**, and `RECUT 2`'s
   phase-closure artifact must be **re-derived** against the settled
