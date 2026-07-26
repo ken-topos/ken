@@ -611,11 +611,18 @@ impl BoundaryEmissionPlan {
 /// which reports the wrong defect at the wrong place.
 ///
 /// ⛔ **NOT the authority, and NOT derived — a hand-written Rust MIRROR.** The
-/// authority is the `BoundaryInput → BoundaryOutcome` partition, and the emitted
-/// allocator consumes it through `BoundaryEmissionPlan::handle_class_relation`.
-/// This slice exists only because the **Rust** builders need the same legality
-/// answer before publication, and the partition is private to
-/// `cranelift_backend::lowering` where they cannot see it.
+/// **sole** representation authority is the `BoundaryInput → BoundaryOutcome`
+/// partition, and the emitted allocator consumes it through
+/// `BoundaryEmissionPlan::handle_class_relation`.
+///
+/// ⚠ **This is ONE contract with TWO ENFORCEMENT PATHS, not two authorities**
+/// (`R5` clause 3, as corrected by the Architect's erratum). The Rust builders
+/// and the emitted allocator enforce the same tag × node-class legality at
+/// different production sites; this slice exists only because the partition is
+/// private to `cranelift_backend::lowering` where the builders cannot see it.
+/// ⛔ **What is forbidden is an independently maintained or independently
+/// authoritative mirror** — which is exactly what this was before the
+/// reconciliation below existed.
 ///
 /// ⚠ Its previous doc called it *"derived from `Lowered::boundary_disposition`"*
 /// and *"the single source"*. Both were false: nothing derived it and nothing

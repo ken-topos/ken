@@ -7600,8 +7600,114 @@ pub(crate) mod tests {
                 without, BOUNDARY_ERR_RELATION,
                 "R5: `alloc` still admits {tag:?} + {class:?} after the plan \
                  dropped that exact cell — the emitted relation is not the \
-                 plan's, or its fold is not fail-closed on an absent row"
+                 plan's"
             );
+        }
+
+        // ⛔ **The REMAP half of clause 5** — it says *remap AND drop*. Dropping
+        // shows the emitted allocator stops admitting a cell the plan withdrew;
+        // remapping shows acceptance MOVES with the plan rather than merely
+        // shrinking. A relation consumer could pass every drop above by
+        // intersecting with a hardcoded table, and would fail here.
+        let (donor, moved) = plan
+            .tags()
+            .handle_class_relation()
+            .iter()
+            .find_map(|(tag, classes)| classes.first().map(|class| (*tag, *class)))
+            .expect("the relation has at least one cell");
+        let recipient = plan
+            .tags()
+            .handle_class_relation()
+            .iter()
+            .map(|(tag, _)| *tag)
+            .find(|tag| *tag != donor)
+            .expect("the relation names at least two tags");
+        assert!(
+            !plan
+                .tags()
+                .handle_class_relation()
+                .iter()
+                .any(|(t, cs)| *t == recipient && cs.contains(&moved)),
+            "R5: the recipient already admits {moved:?}, so moving the cell there \
+             would change nothing and this control would pass vacuously"
+        );
+        let remapped: Vec<(BoundaryTag, Vec<BoundaryClass>)> = plan
+            .tags()
+            .handle_class_relation()
+            .iter()
+            .map(|(t, classes)| {
+                let mut classes: Vec<BoundaryClass> = classes
+                    .iter()
+                    .copied()
+                    .filter(|c| !(*t == donor && *c == moved))
+                    .collect();
+                if *t == recipient {
+                    classes.push(moved);
+                    classes.sort();
+                }
+                (*t, classes)
+            })
+            .collect();
+        let (_xm, remap_alloc) =
+            compile_producer_with_plan(4, emit_alloc_probe, &with_relation(remapped));
+        for (tag, expected_ok) in [(donor, false), (recipient, true)] {
+            let mut store = BoundaryValueStore::new();
+            let f = bind_with(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (64, 8, 0),
+                (64, 8, 0),
+            );
+            let status = run4(remap_alloc, f.base, tag as u64, moved as u64, 0);
+            if expected_ok {
+                assert!(
+                    status >= 0,
+                    "R5: after moving {moved:?} onto {tag:?}'s row the emitted \
+                     allocator still refuses it (got {status}) — acceptance does \
+                     not follow the plan, it is only intersected with it"
+                );
+            } else {
+                assert_eq!(
+                    status, BOUNDARY_ERR_RELATION,
+                    "R5: after moving {moved:?} off {tag:?}'s row the emitted \
+                     allocator still admits it"
+                );
+            }
+        }
+
+        // ⛔ **And the ABSENT-ROW case, which neither sweep above can reach.** Dropping a cell leaves the tag's row present, so the fold
+        // still takes a `hit` arm and the seed is never read. Clause 2's
+        // requirement is about a tag with *no row at all*: with a real seed such
+        // a tag silently inherits another row's classes. Removing the row
+        // entirely is the only perturbation that reads the seed, and without
+        // this control "seeded with the empty mask" would be an untestable
+        // claim — which is what clause 2 says a fail-closed branch must not be.
+        for (tag, _) in plan.tags().handle_class_relation() {
+            let rowless: Vec<(BoundaryTag, Vec<BoundaryClass>)> = plan
+                .tags()
+                .handle_class_relation()
+                .iter()
+                .filter(|(t, _)| t != tag)
+                .map(|(t, classes)| (*t, classes.clone()))
+                .collect();
+            let (_nm, no_row_alloc) =
+                compile_producer_with_plan(4, emit_alloc_probe, &with_relation(rowless));
+            for class in BoundaryClass::ALL {
+                let mut store = BoundaryValueStore::new();
+                let f = bind_with(
+                    &mut store,
+                    BoundaryArenaBuilder::new(),
+                    (64, 8, 0),
+                    (64, 8, 0),
+                );
+                let status = run4(no_row_alloc, f.base, *tag as u64, class as u64, 0);
+                assert_eq!(
+                    status, BOUNDARY_ERR_RELATION,
+                    "R5 clause 2: with NO row for {tag:?} the emitted allocator \
+                     admitted {class:?} — the fold is seeded with a real mask, so \
+                     a row-less tag inherits another row's classes"
+                );
+            }
         }
     }
 
