@@ -787,6 +787,74 @@ by the diff-stat audit and reverted; `control.rs`'s delta is content-only under
 
 ---
 
+# ⛔ `AC-10` — total classified-domain closure
+
+Routed after I reported it as `NO CONTROL — open residual`; the landed frame
+promotes the three former residuals into its scope, so that spelling is no longer
+merge-permitted.
+
+## The claim is unenumerable, so the closure is structural — and says so
+
+⛔ **"One control total over every value" is not an executable oracle.** The
+admitted domains include unbounded integers, arbitrary byte contents, ownership
+states and recursive parent → child reachability. A finite sweep wearing a
+universal name is worse than an honest one, because it reads as total. The
+closure is therefore two layers:
+
+1. the sealed wildcard-free disposition closes the **variant** layer;
+2. every **value-dependent discriminator** is a closed finite partition —
+   *magnitude/shape*, *lifetime/owner*, *parent → child reachability*, and *which
+   producer minted the referent* — reached from a value by a **total**
+   projection: `int_fits_immediate`, `referent_owner`, and "does this aggregate
+   hold an invocation-owned child".
+
+⭐ **The infinite domain is covered by construction; only the finitely many CELLS
+need controls.** `BoundaryInput::outcome` is a total function from a cell to
+exactly one `BoundaryOutcome`, with no `_` arm anywhere, and the sweep runs the
+whole 21 × 2 × 3 × 2 product.
+
+## Classification first, behaviour entailed — not "either/or"
+
+⛔ The failure arm belongs to the **unrepresentable** class, never inside the
+admitted one. A predicate reading *"for every admitted value, either round-trip
+or fail closed"* is satisfied vacuously by an implementation that rejects
+everything, which is why the frame was rewritten and why the control asserts
+`outcome.permitted_by(policy)` **and** that all four outcomes are inhabited.
+
+## What each partition buys, and how it is falsified
+
+| discriminator | boundary | witness pair | causal mutation |
+|---|---|---|---|
+| **magnitude/shape** | `int_fits_immediate` | `MAX` vs `MAX + 1`, **adjacent**, through one emitted body making a run-time decision | **M34** (spill arm stops being a handle), **M37** (the *emitted* test drifts off the field width) |
+| **parent → child reachability** | a child that dies before its parent | the same variant with sound children is admitted | **M35** |
+| **lifetime/owner** | persistent vs invocation | the tag's `referent_owner` must equal the declared owner | folded into the sweep's handle check |
+| **producer / identity** | store-materialized vs emitted-constructed | `StoreMinted` vs `NoStoreIdentity` on one variant | **M36** |
+
+⭐ **`b2v_ac10_the_magnitude_boundary_is_a_real_emitted_partition` is the one
+that was missing.** The classifier's magnitude claim is a claim about *emitted*
+behaviour, and every prior magnitude control ran **Rust** materialization — the
+same defect QA found on the `String` arm. One compiled body now performs the
+run-time test and takes both arms; a separately compiled consumer reads back the
+spill arm's class, owner, identity and content. ⚠ On the immediate arm the
+`owner` probe **refuses** (`ERR_SHAPE`) rather than answering `NoReferent` — an
+immediate has no node to project from — and that refusal *is* the nondegenerate
+half: the same probe answers `PersistentStore` one value later.
+
+## ⚠ One classification I chose, and the fork behind it
+
+`AC-6`'s promoted residual is that an emitted-constructed node stays
+`NULL_SLOT`. I closed it by making identity an **outcome**: `HandleIdentity` is
+part of the classification, so a consumer recovers exactly the identity the
+classifier predicted rather than the question going unasked.
+
+⛔ **This is a classification, not a narrowing** — no value leaves the admitted
+domain. But it takes one reading of *"identity intact"*, and the alternative —
+the store **adopting** emitted-constructed nodes so they carry a real `SlotId` —
+is a lifecycle decision above this node and would change the answer. I am
+flagging it rather than presenting the reading as the only one.
+
+---
+
 # AC → discharging control
 
 Required by the frame's second amendment (`origin/main` = `fdda953f`): one row
@@ -826,4 +894,5 @@ because a taxonomy with nowhere to put the honest answer records it as covered.
 | **AC-1**/**AC-4** canonical emitted magnitude | `b2v_emitted_wide_int_construction_refuses_a_noncanonical_magnitude` | six magnitude shapes, one per canonicity clause, each differing from an admitted row in one component; the **unsealed-read** arm is the seal's own positive control, so a producer ignoring the status still cannot publish. ⚠ The prior control used one arbitrary nonzero seed and reached no boundary |
 | **AC-1** non-wrapping span | `b2v_a_wrapped_limb_span_fails_closed` | fault-injected directly, because **no production path can build a malformed span** and a control that cannot construct the violating input is not evidence about the guard. The Rust oracle is asserted to refuse the same span |
 | **AC-6** persistent *content-addressing* | **`NO CONTROL — open residual`** — ⛔ **promoted into `AC-10`'s scope by the RECUT** | an emitted-constructed node carries `NULL_SLOT`. The **limit** is pinned (the survival control asserts it); the property is not delivered. Identity minting is the store's alone, so closing this is a lifecycle decision, not a control I can add |
-| **AC-10** the disposition is closed under the emitted round trip | **`NO CONTROL — open residual`** | ⛔ **Not in this fold, and said so rather than implied.** The recut is a review ref that has not bound and the Architect stated it adds no constraint to the fold in flight. The two blocked defects are faces of the predicate and are closed as such; the structural closure that makes further faces unreachable is the next fold's deliverable |
+| **AC-10** total classified-domain closure | `b2v_ac10_every_boundary_input_receives_one_policy_entailed_outcome`; `b2v_ac10_the_magnitude_boundary_is_a_real_emitted_partition`; `b2v_ac3_every_variant_carries_exactly_one_of_the_five_static_policies` | the sealed wildcard-free disposition closes the variant layer; four closed finite partitions with total projections close the value layer; the sweep runs the whole 21×2×3×2 product and asserts each outcome is **permitted by its policy**, that all four outcomes are inhabited, that a policy's outcome varies only in the discriminators it declares, and that every handle outcome carries class/owner/identity/lifetime. Causal: **M34/M35/M36** on the classifier, **M37** through the emitted producer. ⚠ Identity is discharged as a *classification* — see the flagged fork |
+| **AC-10** *(superseded row)* | **`NO CONTROL — open residual`** | ⛔ **Not in this fold, and said so rather than implied.** The recut is a review ref that has not bound and the Architect stated it adds no constraint to the fold in flight. The two blocked defects are faces of the predicate and are closed as such; the structural closure that makes further faces unreachable is the next fold's deliverable |

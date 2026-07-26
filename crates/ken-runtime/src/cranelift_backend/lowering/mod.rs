@@ -22,7 +22,9 @@ pub(in crate::cranelift_backend) use std::collections::{BTreeMap, BTreeSet};
 
 // `RT-FNSPLIT-B2V` `D4`. Re-exported at facade scope like every other import in
 // this header so the `tests` subtree inherits the names.
-pub(in crate::cranelift_backend) use crate::boundary_value::{BoundaryClass, BoundaryTag};
+pub(in crate::cranelift_backend) use crate::boundary_value::{
+    BoundaryClass, BoundaryReferentOwner, BoundaryTag,
+};
 
 pub(in crate::cranelift_backend) use cranelift_codegen::ir::{
     types, AbiParam, FuncRef, Function, InstBuilder, MemFlags, StackSlotData, StackSlotKind,
@@ -664,6 +666,272 @@ impl BoundaryDisposition {
             BoundaryDisposition::FailClosedForbidden { .. } => {
                 StaticEncodingPolicy::FailClosedForbidden
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// `AC-10` — total classified-domain closure
+// ---------------------------------------------------------------------------
+//
+// ⛔ **"One control total over every value" is not an executable oracle**, and
+// the frame says so: the admitted domains include unbounded integers, arbitrary
+// byte contents, ownership states, and recursive parent → child reachability. A
+// finite runtime sweep dressed as a universal claim is worse than an honest
+// sweep, because it reads as total.
+//
+// ⭐ **So totality is proved STRUCTURALLY, in two layers.** The sealed
+// wildcard-free disposition closes the *variant* layer. Below it, every
+// **value-dependent representation discriminator** is a closed finite partition,
+// and the classifier is a total function from a cell of that product to exactly
+// one actual outcome. A value reaches its cell through a *total* projection
+// (`int_fits_immediate`, `referent_owner`, "does this aggregate hold an
+// invocation-owned child") — so the infinite domain is covered by construction
+// rather than by enumeration, and only the finitely many CELLS need controls.
+
+/// Magnitude / shape — the discriminator an immediate-with-spill policy names.
+///
+/// The projection from a value is total: `BoundaryWord::int_fits_immediate`
+/// answers for every `i64`, and there is no third answer.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum MagnitudePartition {
+    /// The payload encodes in the tagged word's 56-bit field.
+    WithinImmediateField,
+    /// The payload does not, so a declared spill arm must carry it.
+    BeyondImmediateField,
+}
+
+/// Parent → child reachability — the discriminator that decides whether an
+/// aggregate can be represented at all.
+///
+/// ⛔ **Total over nodes is not closed under parent → child reachability**, which
+/// is why this is its own partition rather than a property of the parent's
+/// variant: a persistent aggregate holding an invocation-owned child is a
+/// surviving parent naming storage that dies first.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum ReachabilityPartition {
+    /// No children — nothing to reach.
+    Leaf,
+    /// Every reachable child outlives the parent.
+    ChildrenOutliveParent,
+    /// Some reachable child dies before the parent.
+    ChildDiesBeforeParent,
+}
+
+/// Whether a handle's referent carries the store's identity of record.
+///
+/// ⛔ **Not a narrowing — a classification.** Identity minting is the store's
+/// alone (`AC-6`), so an emitted-constructed handle carries `NULL_SLOT` by
+/// design. Recording that as an *outcome* is what makes identity recoverable:
+/// a consumer recovers exactly the identity the classifier predicted, rather
+/// than the question going unasked. ⚠ Whether the store should instead *adopt*
+/// emitted nodes is a lifecycle decision above this node.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum HandleIdentity {
+    /// The store minted the referent and the node names its `SlotId`.
+    StoreMinted,
+    /// Emitted code constructed the referent; the node carries `NULL_SLOT`.
+    NoStoreIdentity,
+}
+
+/// The **actual outcome** a boundary input receives — the closed set `AC-10`
+/// quantifies over.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum BoundaryOutcome {
+    /// The value rides in the tagged word.
+    ImmediateWord { tag: BoundaryTag },
+    /// A handle, with every obligation the frame names discharged: class,
+    /// referent owner, identity, and lifetime (the owner *is* the lifetime).
+    HandleWord {
+        tag: BoundaryTag,
+        class: BoundaryClass,
+        owner: BoundaryReferentOwner,
+        identity: HandleIdentity,
+    },
+    /// Never a source value at a boundary.
+    ProtocolOnly,
+    /// Rejected before emission or publication, with an exact status.
+    FailClosedForbidden,
+}
+
+/// One cell of the closed discriminator product — a boundary **input**, reduced
+/// to the finitely many things its representation can depend on.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct BoundaryInput {
+    pub(in crate::cranelift_backend) variant: LoweredVariant,
+    pub(in crate::cranelift_backend) magnitude: MagnitudePartition,
+    pub(in crate::cranelift_backend) reachability: ReachabilityPartition,
+    pub(in crate::cranelift_backend) constructed_by_emitted_code: bool,
+}
+
+impl BoundaryInput {
+    /// Every cell of the product, in a fixed order.
+    pub(in crate::cranelift_backend) fn all() -> Vec<BoundaryInput> {
+        let mut cells = Vec::new();
+        for variant in LoweredVariant::ALL {
+            for magnitude in [
+                MagnitudePartition::WithinImmediateField,
+                MagnitudePartition::BeyondImmediateField,
+            ] {
+                for reachability in [
+                    ReachabilityPartition::Leaf,
+                    ReachabilityPartition::ChildrenOutliveParent,
+                    ReachabilityPartition::ChildDiesBeforeParent,
+                ] {
+                    for constructed_by_emitted_code in [false, true] {
+                        cells.push(BoundaryInput {
+                            variant,
+                            magnitude,
+                            reachability,
+                            constructed_by_emitted_code,
+                        });
+                    }
+                }
+            }
+        }
+        cells
+    }
+
+    /// The actual outcome this input receives.
+    ///
+    /// ⛔ **Classification happens FIRST and the behaviour is entailed by the
+    /// class.** The failure arm belongs to the *unrepresentable* class, never
+    /// inside the admitted one — a predicate reading *"either round-trip or fail
+    /// closed"* over the admitted set is satisfied vacuously by an
+    /// implementation that rejects everything.
+    ///
+    /// ⛔ **No `_` arm anywhere below**, so a new variant, a new policy, or a new
+    /// partition value is a compile error rather than a silent default.
+    pub(in crate::cranelift_backend) fn outcome(self) -> BoundaryOutcome {
+        let disposition = self.variant.boundary_disposition();
+        match disposition {
+            BoundaryDisposition::ProtocolOnly { .. } => BoundaryOutcome::ProtocolOnly,
+            BoundaryDisposition::FailClosedForbidden { .. } => BoundaryOutcome::FailClosedForbidden,
+            BoundaryDisposition::RepresentedImmediate { tag, spill } => {
+                match (spill, self.magnitude) {
+                    // Immediate-only: the outcome does not depend on magnitude,
+                    // and that constancy is asserted rather than assumed.
+                    (None, MagnitudePartition::WithinImmediateField)
+                    | (None, MagnitudePartition::BeyondImmediateField) => {
+                        BoundaryOutcome::ImmediateWord { tag }
+                    }
+                    (Some(_), MagnitudePartition::WithinImmediateField) => {
+                        BoundaryOutcome::ImmediateWord { tag }
+                    }
+                    // ⛔ **The SPILL ARM is a handle outcome**, so it discharges the
+                    // same class / owner / identity / lifetime obligations as
+                    // handle-only. This is the arm the frame says a proof may not
+                    // attach to one sampled value.
+                    (Some(class), MagnitudePartition::BeyondImmediateField) => {
+                        BoundaryOutcome::HandleWord {
+                            tag: BoundaryTag::PersistentGround,
+                            class,
+                            owner: BoundaryReferentOwner::PersistentStore,
+                            identity: self.handle_identity(BoundaryReferentOwner::PersistentStore),
+                        }
+                    }
+                }
+            }
+            BoundaryDisposition::RepresentedHandle { tag, class } => {
+                let owner = tag.referent_owner();
+                match (owner, self.reachability) {
+                    // ⛔ A surviving parent may not name storage that dies
+                    // first. Rejected before publication, with `ERR_ESCAPE`.
+                    (
+                        BoundaryReferentOwner::PersistentStore,
+                        ReachabilityPartition::ChildDiesBeforeParent,
+                    ) => BoundaryOutcome::FailClosedForbidden,
+                    (BoundaryReferentOwner::PersistentStore, ReachabilityPartition::Leaf)
+                    | (
+                        BoundaryReferentOwner::PersistentStore,
+                        ReachabilityPartition::ChildrenOutliveParent,
+                    )
+                    | (BoundaryReferentOwner::InvocationArena, ReachabilityPartition::Leaf)
+                    | (
+                        BoundaryReferentOwner::InvocationArena,
+                        ReachabilityPartition::ChildrenOutliveParent,
+                    )
+                    | (
+                        BoundaryReferentOwner::InvocationArena,
+                        ReachabilityPartition::ChildDiesBeforeParent,
+                    ) => BoundaryOutcome::HandleWord {
+                        tag,
+                        class,
+                        owner,
+                        identity: self.handle_identity(owner),
+                    },
+                    // A handle whose referent nothing owns is not representable.
+                    (BoundaryReferentOwner::NoReferent, ReachabilityPartition::Leaf)
+                    | (
+                        BoundaryReferentOwner::NoReferent,
+                        ReachabilityPartition::ChildrenOutliveParent,
+                    )
+                    | (
+                        BoundaryReferentOwner::NoReferent,
+                        ReachabilityPartition::ChildDiesBeforeParent,
+                    ) => BoundaryOutcome::FailClosedForbidden,
+                }
+            }
+        }
+    }
+
+    /// Which producer minted the referent, and therefore whether the node can
+    /// carry the store's `SlotId`.
+    fn handle_identity(self, owner: BoundaryReferentOwner) -> HandleIdentity {
+        match (owner, self.constructed_by_emitted_code) {
+            (BoundaryReferentOwner::PersistentStore, false) => HandleIdentity::StoreMinted,
+            (BoundaryReferentOwner::PersistentStore, true)
+            | (BoundaryReferentOwner::InvocationArena, false)
+            | (BoundaryReferentOwner::InvocationArena, true)
+            | (BoundaryReferentOwner::NoReferent, false)
+            | (BoundaryReferentOwner::NoReferent, true) => HandleIdentity::NoStoreIdentity,
+        }
+    }
+}
+
+impl BoundaryOutcome {
+    /// Whether this outcome is one the static policy permits.
+    ///
+    /// ⛔ The entailment `AC-10` requires: the outcome is not merely *some*
+    /// classification, it is one the variant's declared policy allows. An
+    /// immediate-only policy yielding a handle is the misassignment the frame
+    /// names, seen from the value level.
+    pub(in crate::cranelift_backend) fn permitted_by(self, policy: StaticEncodingPolicy) -> bool {
+        match (policy, self) {
+            (StaticEncodingPolicy::ImmediateOnly, BoundaryOutcome::ImmediateWord { .. }) => true,
+            (StaticEncodingPolicy::HandleOnly, BoundaryOutcome::HandleWord { .. })
+            | (StaticEncodingPolicy::HandleOnly, BoundaryOutcome::FailClosedForbidden) => true,
+            (
+                StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill,
+                BoundaryOutcome::ImmediateWord { .. },
+            )
+            | (
+                StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill,
+                BoundaryOutcome::HandleWord { .. },
+            ) => true,
+            (StaticEncodingPolicy::ProtocolOnly, BoundaryOutcome::ProtocolOnly) => true,
+            (StaticEncodingPolicy::FailClosedForbidden, BoundaryOutcome::FailClosedForbidden) => {
+                true
+            }
+            (StaticEncodingPolicy::ImmediateOnly, BoundaryOutcome::HandleWord { .. })
+            | (StaticEncodingPolicy::ImmediateOnly, BoundaryOutcome::ProtocolOnly)
+            | (StaticEncodingPolicy::ImmediateOnly, BoundaryOutcome::FailClosedForbidden)
+            | (StaticEncodingPolicy::HandleOnly, BoundaryOutcome::ImmediateWord { .. })
+            | (StaticEncodingPolicy::HandleOnly, BoundaryOutcome::ProtocolOnly)
+            | (
+                StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill,
+                BoundaryOutcome::ProtocolOnly,
+            )
+            | (
+                StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill,
+                BoundaryOutcome::FailClosedForbidden,
+            )
+            | (StaticEncodingPolicy::ProtocolOnly, BoundaryOutcome::ImmediateWord { .. })
+            | (StaticEncodingPolicy::ProtocolOnly, BoundaryOutcome::HandleWord { .. })
+            | (StaticEncodingPolicy::ProtocolOnly, BoundaryOutcome::FailClosedForbidden)
+            | (StaticEncodingPolicy::FailClosedForbidden, BoundaryOutcome::ImmediateWord { .. })
+            | (StaticEncodingPolicy::FailClosedForbidden, BoundaryOutcome::HandleWord { .. })
+            | (StaticEncodingPolicy::FailClosedForbidden, BoundaryOutcome::ProtocolOnly) => false,
         }
     }
 }

@@ -4711,3 +4711,207 @@ fn b2v_ac3_every_variant_carries_exactly_one_of_the_five_static_policies() {
         }
     }
 }
+
+// ─── RT-FNSPLIT-B2V AC-10 — total classified-domain closure ──────────────────
+
+/// **`AC-10` — every boundary input receives exactly one actual outcome, and
+/// that outcome is entailed by its variant's static policy.**
+///
+/// ⛔ **This is a STRUCTURAL totality proof, and it is not one dynamic test
+/// pretending to enumerate an infinite domain.** The admitted domains include
+/// unbounded integers, arbitrary byte contents, ownership states and recursive
+/// parent → child reachability; no finite runtime sweep covers them, and one
+/// wearing a universal name would be worse than an honest sweep. The closure has
+/// two layers:
+///
+/// 1. the sealed wildcard-free disposition closes the **variant** layer
+///    (`b2v_ac3_…`), and
+/// 2. every **value-dependent discriminator** is a closed finite partition —
+///    magnitude/shape, lifetime/owner, parent → child reachability, and the
+///    producer that minted the referent — reached from a value by a **total**
+///    projection (`int_fits_immediate`, `referent_owner`, "does this aggregate
+///    hold an invocation-owned child").
+///
+/// ⭐ **So the infinite domain is covered by construction and only the finitely
+/// many CELLS need controls.** This sweeps the whole product.
+///
+/// ⚠ MEASURED: every cell maps to exactly one outcome, permitted by its policy.
+/// CLAIMED: no input or encoding outcome is unclassified. THE GAP: that a value
+/// reaches its cell — which is the totality of the projections named above, and
+/// is why they are named rather than implied.
+#[test]
+fn b2v_ac10_every_boundary_input_receives_one_policy_entailed_outcome() {
+    use std::collections::BTreeSet;
+
+    let cells = BoundaryInput::all();
+    // The product is closed and finite: 21 variants x 2 magnitudes x 3
+    // reachabilities x 2 producers.
+    assert_eq!(
+        cells.len(),
+        21 * 2 * 3 * 2,
+        "AC-10: the cell product has moved"
+    );
+    assert_eq!(
+        cells.iter().collect::<BTreeSet<_>>().len(),
+        cells.len(),
+        "AC-10: a cell is enumerated twice, so the sweep is not over the product"
+    );
+
+    let mut outcomes = BTreeSet::new();
+    for cell in &cells {
+        let policy = cell.variant.boundary_disposition().policy();
+        let outcome = cell.outcome();
+        // ⛔ **Entailment, not merely classification.** An outcome the policy
+        // does not permit is the misassignment AC-3 names, seen from the value
+        // level.
+        assert!(
+            outcome.permitted_by(policy),
+            "AC-10: {cell:?} receives {outcome:?}, which {policy:?} does not permit"
+        );
+        // ⛔ Every handle outcome discharges class, referent owner, identity and
+        // lifetime — including the SPILL ARM of an immediate policy, which is
+        // the arm a proof may not attach to one sampled value.
+        if let BoundaryOutcome::HandleWord { tag, owner, .. } = outcome {
+            assert_eq!(
+                tag.referent_owner(),
+                owner,
+                "AC-10: {cell:?} declares an owner its tag does not carry — the \
+                 lifetime obligation is the owner"
+            );
+            assert_ne!(
+                owner,
+                BoundaryReferentOwner::NoReferent,
+                "AC-10: a handle whose referent nothing owns has no lifetime"
+            );
+        }
+        outcomes.insert(outcome);
+    }
+
+    // ⚠ POSITIVE CONTROL over the outcome set: all four actual outcomes must be
+    // inhabited. A classifier that answered `FailClosedForbidden` everywhere
+    // satisfies "exactly one outcome" and every entailment above — that is the
+    // vacuity the frame's own AC-10 wording was rewritten to exclude.
+    let kinds: BTreeSet<&str> = outcomes
+        .iter()
+        .map(|outcome| match outcome {
+            BoundaryOutcome::ImmediateWord { .. } => "immediate",
+            BoundaryOutcome::HandleWord { .. } => "handle",
+            BoundaryOutcome::ProtocolOnly => "protocol-only",
+            BoundaryOutcome::FailClosedForbidden => "fail-closed",
+        })
+        .collect();
+    assert_eq!(
+        kinds,
+        ["fail-closed", "handle", "immediate", "protocol-only"]
+            .into_iter()
+            .collect::<BTreeSet<_>>(),
+        "AC-10: an actual outcome is uninhabited, so the classification is degenerate"
+    );
+
+    // ⛔ **A policy's outcome varies ONLY in the discriminators it declares.**
+    // An immediate-only policy whose outcome moved with magnitude would be a
+    // spill arm nobody declared; a handle policy indifferent to reachability
+    // would be admitting the parent → child escape.
+    for variant in LoweredVariant::ALL {
+        let policy = variant.boundary_disposition().policy();
+        let at = |magnitude, reachability| {
+            BoundaryInput {
+                variant,
+                magnitude,
+                reachability,
+                constructed_by_emitted_code: false,
+            }
+            .outcome()
+        };
+        let within = at(
+            MagnitudePartition::WithinImmediateField,
+            ReachabilityPartition::Leaf,
+        );
+        let beyond = at(
+            MagnitudePartition::BeyondImmediateField,
+            ReachabilityPartition::Leaf,
+        );
+        match policy {
+            StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill => assert_ne!(
+                within, beyond,
+                "AC-10: {variant:?} declares a spill, so magnitude MUST change \
+                 its outcome — a constant one is a spill arm that never fires"
+            ),
+            StaticEncodingPolicy::ImmediateOnly
+            | StaticEncodingPolicy::HandleOnly
+            | StaticEncodingPolicy::ProtocolOnly
+            | StaticEncodingPolicy::FailClosedForbidden => assert_eq!(
+                within, beyond,
+                "AC-10: {variant:?} declares no spill, so magnitude must NOT \
+                 change its outcome"
+            ),
+        }
+    }
+
+    // ⛔ Parent → child reachability is a real discriminator: at least one
+    // persistent aggregate must reject the child that dies first, and the same
+    // variant must be admitted when its children outlive it. A nondegenerate
+    // pair on one variant, so "rejects everything" cannot pass.
+    let escaping = BoundaryInput {
+        variant: LoweredVariant::Constructor,
+        magnitude: MagnitudePartition::WithinImmediateField,
+        reachability: ReachabilityPartition::ChildDiesBeforeParent,
+        constructed_by_emitted_code: false,
+    };
+    let sound = BoundaryInput {
+        reachability: ReachabilityPartition::ChildrenOutliveParent,
+        ..escaping
+    };
+    assert_eq!(
+        escaping.outcome(),
+        BoundaryOutcome::FailClosedForbidden,
+        "AC-10: a persistent parent naming a child that dies first must reject"
+    );
+    assert!(
+        matches!(sound.outcome(), BoundaryOutcome::HandleWord { .. }),
+        "AC-10: the same variant with sound children must be admitted, or the \
+         rejection above is about the variant and not about reachability"
+    );
+
+    // ⛔ Identity is CLASSIFIED, not assumed. A store-materialized persistent
+    // handle carries the store's identity; an emitted-constructed one carries
+    // none, by AC-6's design — and recording which is what makes identity
+    // recoverable rather than unasked.
+    let by_store = BoundaryInput {
+        variant: LoweredVariant::Constructor,
+        magnitude: MagnitudePartition::WithinImmediateField,
+        reachability: ReachabilityPartition::Leaf,
+        constructed_by_emitted_code: false,
+    };
+    let by_emitted = BoundaryInput {
+        constructed_by_emitted_code: true,
+        ..by_store
+    };
+    assert!(
+        matches!(
+            by_store.outcome(),
+            BoundaryOutcome::HandleWord {
+                identity: HandleIdentity::StoreMinted,
+                ..
+            }
+        ),
+        "AC-10: a store-materialized persistent handle carries the store's identity"
+    );
+    assert!(
+        matches!(
+            by_emitted.outcome(),
+            BoundaryOutcome::HandleWord {
+                identity: HandleIdentity::NoStoreIdentity,
+                ..
+            }
+        ),
+        "AC-10: an emitted-constructed handle carries no store identity — AC-6 \
+         makes minting the store's alone"
+    );
+    assert_ne!(
+        by_store.outcome(),
+        by_emitted.outcome(),
+        "AC-10: the producer must change the identity, or neither assertion \
+         above means anything"
+    );
+}

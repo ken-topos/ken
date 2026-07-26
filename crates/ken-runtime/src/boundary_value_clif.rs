@@ -5327,6 +5327,161 @@ mod tests {
         );
     }
 
+    /// `(base, value) -> word` — the MAGNITUDE PARTITION, decided by emitted
+    /// code at run time.
+    ///
+    /// ⛔ One compiled body, one runtime test, both arms. The immediate arm goes
+    /// through `make_immediate`; the spill arm allocates a persistent `Int` and
+    /// records the landed native `(tag, payload)` pair. Nothing here inspects a
+    /// JIT-time value to choose a layout — that is `AC-2`, and it is why the
+    /// partition is a property of the value rather than of the compilation.
+    fn emit_magnitude_partition_producer(
+        b: &mut FunctionBuilder<'_>,
+        refs: &Refs,
+        p: &[cranelift_codegen::ir::Value],
+        ptr: cranelift_codegen::ir::Type,
+    ) {
+        let (base, value) = (p[0], p[1]);
+        let out = cell(b, ptr);
+        // The same test `BoundaryWord::int_fits_immediate` performs: sign-extend
+        // the payload field back and see whether the value survives.
+        let shift = i64::from(BOUNDARY_TAG_BITS);
+        let up = b.ins().ishl_imm(value, shift);
+        let back = b.ins().sshr_imm(up, shift);
+        let fits = b.ins().icmp(IntCC::Equal, back, value);
+        let immediate = b.create_block();
+        let spilled = b.create_block();
+        b.ins().brif(fits, immediate, &[], spilled, &[]);
+
+        b.switch_to_block(immediate);
+        let int_tag = b.ins().iconst(types::I64, BoundaryTag::ImmediateInt as i64);
+        guard(b, refs.make_immediate, &[int_tag, value, out]);
+        let word = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
+        b.ins().return_(&[word]);
+
+        b.switch_to_block(spilled);
+        let tag = b
+            .ins()
+            .iconst(types::I64, BoundaryTag::PersistentGround as i64);
+        let class = b.ins().iconst(types::I64, BoundaryClass::Int as i64);
+        let zero = b.ins().iconst(types::I64, 0);
+        guard(b, refs.alloc, &[base, tag, class, zero, out]);
+        let word = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
+        guard(b, refs.store_scalar, &[base, word, value]);
+        let small = b.ins().iconst(
+            types::I64,
+            crate::native_int::NATIVE_INT_SMALL_TAG_V1 as i64,
+        );
+        guard(b, refs.store_int_tag, &[base, word, small]);
+        b.ins().return_(&[word]);
+    }
+
+    /// **`AC-10` — the magnitude partition is a REAL emitted boundary, and its
+    /// spill arm discharges the handle obligations.**
+    ///
+    /// ⛔ The classifier says `Lowered::Int` is *immediate-with-declared-handle-
+    /// spill* and that the boundary is `int_fits_immediate`. That is a claim
+    /// about emitted behaviour, and until now the only magnitude control ran
+    /// **Rust** materialization — a different producer entirely, which is the
+    /// same defect QA found on the `String` arm.
+    ///
+    /// ⚠ The witness pair is `MAX` against `MAX + 1`: **adjacent** values, so
+    /// nothing but the partition can separate them. Both are minted by one
+    /// compiled body making a **run-time** decision, and both are read back by
+    /// separately compiled consumers.
+    #[test]
+    fn b2v_ac10_the_magnitude_boundary_is_a_real_emitted_partition() {
+        let (_pm, produce) = compile_producer(2, emit_magnitude_partition_producer);
+        let (_c1, owner_code) = compile_probe(Probe::Unary(|h| h.owner));
+        let (_c2, class_code) = compile_probe(Probe::Unary(|h| h.class));
+        let (_c3, sign_code) = compile_probe(Probe::Unary(|h| h.int_sign));
+        let (_c4, limb_code) = compile_probe(Probe::Binary(|h| h.int_limb));
+
+        for (value, expect_immediate) in [
+            (BOUNDARY_IMMEDIATE_INT_MAX, true),
+            (BOUNDARY_IMMEDIATE_INT_MAX + 1, false),
+            (BOUNDARY_IMMEDIATE_INT_MIN, true),
+            (BOUNDARY_IMMEDIATE_INT_MIN - 1, false),
+        ] {
+            // The classifier's prediction, from the same total projection the
+            // emitted body performs.
+            assert_eq!(
+                BoundaryWord::int_fits_immediate(value),
+                expect_immediate,
+                "the fixture disagrees with the partition it is testing"
+            );
+
+            let mut store = BoundaryValueStore::new();
+            let native = crate::native_int::NativeIntArenaV1::default();
+            let mut f = bind_with(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (2, 0, 0),
+                (0, 0, 0),
+            );
+            with_native_int(&mut f, &native);
+            let word = BoundaryWord(run3(produce, f.base, BoundaryWord(value as u64), 0) as u64);
+
+            if expect_immediate {
+                assert_eq!(
+                    word.tag(),
+                    Some(BoundaryTag::ImmediateInt),
+                    "AC-10: {value} is within the field, so the outcome is an \
+                     IMMEDIATE WORD"
+                );
+                assert_eq!(
+                    word.signed_payload(),
+                    value,
+                    "AC-10: the immediate arm must carry the value, not truncate it"
+                );
+                // ⛔ A separately compiled consumer agrees, and its answer is a
+                // REFUSAL rather than `NoReferent`: `owner` is a node
+                // projection, and an immediate word has no node. That is the
+                // nondegenerate half of the pair — the same probe returns
+                // `PersistentStore` one value later.
+                assert_eq!(
+                    run2(owner_code, f.base, word),
+                    BOUNDARY_ERR_SHAPE,
+                    "AC-10: an immediate word has no node to project an owner from"
+                );
+            } else {
+                // ⛔ **The SPILL ARM is a handle outcome, so it discharges class,
+                // referent owner, identity and lifetime — not merely "it did not
+                // truncate".**
+                assert_eq!(
+                    word.tag(),
+                    Some(BoundaryTag::PersistentGround),
+                    "AC-10: {value} is beyond the field, so the outcome is a HANDLE"
+                );
+                assert_eq!(
+                    run2(class_code, f.base, word),
+                    BoundaryClass::Int as i64,
+                    "AC-10: the spill arm's declared class"
+                );
+                assert_eq!(
+                    run2(owner_code, f.base, word),
+                    BoundaryReferentOwner::PersistentStore as i64,
+                    "AC-10: the spill arm's declared owner — which is its lifetime"
+                );
+                // Identity: emitted-constructed, so NO store identity, and the
+                // classifier says exactly that.
+                assert_eq!(
+                    store.image().0.node_field(word.payload(), NODE_SLOT),
+                    Some(crate::store::NULL_SLOT),
+                    "AC-10: an emitted-constructed handle carries no store identity"
+                );
+                // And the content survives, read by separately compiled bodies.
+                let sign = run2(sign_code, f.base, word);
+                let limb = run3(limb_code, f.base, word, 0);
+                let observed = if sign == 1 { -limb } else { limb };
+                assert_eq!(
+                    observed, value,
+                    "AC-10: the spill arm must recover the RUNTIME magnitude"
+                );
+            }
+        }
+    }
+
     /// **`AC-1`/`AC-6` — the region thresholds and `referent_owner` are the
     /// same classification.**
     ///
