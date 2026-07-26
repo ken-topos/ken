@@ -40,6 +40,19 @@ test result: ok. 439 passed; 0 failed
 needs its own behavioural differential, **or must be NAMED as probe-unreachable.**
 Four consumers moving an aggregate cannot prove the fifth consumes anything.
 
+⭐ **Independently corroborated within the hour, at a DIFFERENT site.** QA, gating
+the same checkpoint, ran its own compile-preserving bypass — on `store_int_limbs`,
+an *unprobed* site the implementer had not used — and reached the same verdict.
+⇒ **Two seats, two different disconnectable sites, one blind pin.** That is
+stronger evidence than a repeat of the same experiment: it shows the hole is a
+property of the pin's *shape*, not of the one site that happened to expose it.
+
+⚠ **The escalated ruling then sharpened per-SITE to per-CELL** for a relation-shaped
+authority: remap **and** drop one exact `(tag,class)` cell, and mutate the two
+sides of a mirrored pair **in opposite directions**. ⇒ Ask what the *finest*
+grain of the authority is — site, row, cell — because the aggregate can hide a
+defection at any grain coarser than the one you probe.
+
 ## How to apply
 
 - **Count the consuming sites, then ask what a control at N−1 of them looks
