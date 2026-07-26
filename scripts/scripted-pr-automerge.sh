@@ -528,25 +528,22 @@ scratch worktree is writable and that git can create a commit there."
   # true merge result and is comparable with what GitHub lands.
   checked_tree_oid="$(git -C "$gate_wt" rev-parse 'HEAD^{tree}')"
 
-  # F11: the candidate does not get to supply the checker that clears it.
-  # Otherwise a PR editing the checker can be published, skip CI, and be gated
-  # by the very code it introduces. The cost -- the candidate's own gate changes
-  # go untested here -- is the correct trade; CI covers those.
-  git show "$checked_base:scripts/gen-doc-status.sh" >"$gate_wt/scripts/gen-doc-status.sh" ||
-    die "publisher gate: could not read scripts/gen-doc-status.sh from origin/main"
-  chmod +x "$gate_wt/scripts/gen-doc-status.sh"
-
-  ( cd "$gate_wt" && ./scripts/gen-doc-status.sh --check ) ||
-    die "publisher gate: the library currency gate FAILS on the MERGE RESULT of
-$head_sha onto origin/main.
-
-Merging would leave main red for the next PR that runs the full suite -- which
-will look like that PR's failure, not this one's.
-
-Re-validate the cited sources and refresh the attestation ledger (the
-Librarian's mandate), then publish. Do not bypass: the check path is read-only
-and refuses to repair a mismatch, because the attestation IS the claim that
-someone re-validated."
+  # REMOVED 2026-07-26 (operator): the library currency gate no longer runs here.
+  #
+  #   "no remove it. it's just friction. we can generate such a document at
+  #    version release points. Including it as a CI-type system induces coupling
+  #    that causes just the sort of slowdown and waffling that we're dealing
+  #    with now."
+  #
+  # The ledger keys on the WHOLE-FILE blob OID, so any edit to a cited source
+  # invalidated it -- including edits that cannot falsify any library claim.
+  # Both recorded firings were spurious: a prose-only preamble edit in
+  # SPEC-ALIGN-A1, and a `## Index` -> `## Contents` heading rename. Each cost a
+  # full re-validation round on the publish path.
+  #
+  # `scripts/gen-source-attestations.sh` and `scripts/gen-doc-status.sh` are
+  # KEPT -- run them to produce the ledger at version release points. What is
+  # gone is the coupling of that document to every merge.
 }
 
 # Step 4: re-read origin/main after the check. If the base moved while we were
@@ -665,13 +662,9 @@ of evidence either way, after a merge that has already happened.
 Not reverting."
   fi
 
-  if ! ( cd "$gate_wt" && ./scripts/gen-doc-status.sh --check ); then
-    freeze_and_alarm \
-      "PR #$pr_number ($head_sha) landed and the tree OID matched, but origin/main's own currency checker is RED on the landed tree." \
-      "PUBLISHER ALARM: PR #$pr_number landed with the expected tree, but the
-currency checker is RED on origin/main.
-Not reverting."
-  fi
+  # REMOVED 2026-07-26 (operator) -- see the note in build_and_check_merge_result.
+  # The tree-OID match above is the post-merge verification; the currency ledger
+  # is no longer coupled to merges.
   release_gate_worktree
 
   printf 'Post-merge verification: landed tree %s matches the checked tree, and the currency checker is green on origin/main.\n' \
