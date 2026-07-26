@@ -18,17 +18,29 @@ origin: Architect cycle-contract ruling evt_5pzxf6sm4z08 ("host recursion may no
 > traversals that every consumer reaches, so a B2V-local fix leaves every other
 > caller overflowing. That is why this is its own node.
 
-> ## ▶ PHASE 1 IS IN FLIGHT with Team Runtime. ⛔ PHASE 2 has no frame yet.
+> ## ✅ PHASE 1 IS MERGED. ⛔ PHASE 2 and PHASE 3 have no frame yet.
 >
-> Split into two phases. **P1 was kicked to `runtime-leader` 2026-07-26 at
-> `evt_64xwmxt5v3qk`, base `origin/main = 63ad112c`, branch
-> `wp/RT-VALUE-TOTALITY-P1`** — handoff gate run in full (B2R retros confirmed
+> Split into three phases. **P1 merged 2026-07-26 as PR #996, squash, landing
+> `origin/main = 8f677ebc`** and carrying exact
+> `2d12a10abd4d12ba0b9350268842f9b9c8ae3c82` — the SHA `dec_10qxwx9s8wscn`
+> resolved, unchanged. Verified by **blob identity** on all five files, by
+> `landed tree == merge-tree(53dc0360, 2d12a10a) == e26cd9cc`, and by the
+> currency checker on the landed `origin/main`. ⚠ The publisher printed
+> `Publication is now FROZEN` — its post-merge `git fetch` lost a
+> compare-and-swap on the **shared** `refs/remotes/origin/main`, so verification
+> never ran and the freeze was accurate when written; both skipped clauses were
+> then discharged by hand. ⛔ `wp/RT-VALUE-TOTALITY-P1` is deleted on origin and
+> was **squash**-merged, so it cannot be continued — cut P2/P3 fresh from
+> `origin/main`.
+>
+> P1 was kicked to `runtime-leader` 2026-07-26 at `evt_64xwmxt5v3qk`, base
+> `origin/main = 63ad112c`, handoff gate run in full (B2R retros confirmed
 > `evt_v3gb9yyne1m8`/`evt_3q5d2qdnj0vsb`/`evt_5n9kybev0x9q2`; all three seats
 > compact-verified; leader observed `Working`).
 >
 > | phase | frame | covers |
 > |---|---|---|
-> | **P1 — totality** | ✅ `docs/program/wp/RT-VALUE-TOTALITY-P1-iterative-canonical-traversal.md` | `AC-V1` iterative encoder · `AC-V2` structural pin · `AC-V3` clone+drop |
+> | **P1 — totality** | ✅ **MERGED** `docs/program/wp/RT-VALUE-TOTALITY-P1-iterative-canonical-traversal.md` | `AC-V1` iterative encoder · `AC-V2` structural pin · `AC-V3` clone+drop |
 > | **P2 — representation** | ⛔ **NOT WRITTEN** | `AC-V4`–`AC-V6`, `AC-V8`–`AC-V10`: carrier split, derives, closure arm, `ken-foundation` twin, checked projection · **plus `AC-V12`**, which rides `AC-V8` and is not a reading of it |
 > | **P3 — residual totality** | ⛔ **NOT WRITTEN** | `AC-V11`: derived `Debug` is depth-total. ⚠ **Does NOT depend on P2** — releasable any time after P1 |
 >
@@ -380,6 +392,16 @@ P2's subject is representation, and depth is not representation.
   nothing reports the same green as one that renders a deep value.
 - ⚠ Do **not** accept "`Debug` output is unspecified so depth does not matter."
   The claim under test is *does it return*, not *what does it print*.
+- ⛔ **A MEASURED ABORT DEPTH IS CORROBORATION, NOT THE PIN.** The
+  `runtime-implementer` measured landed `Debug` dying of stack overflow at
+  `D = 131072`, out of process (`evt_2119bqa3tnz0a`). ⚠ That number is a **single
+  finite probe**, and the Architect's standing correction on `B2V` applies to it
+  unchanged: *a finite probe supports a structural claim and does not constitute
+  one*. ⇒ Whoever takes `AC-V11` must pin the **mechanism** — `Debug` traverses the
+  same iterative worklist, therefore its depth is heap-bounded — and cite the
+  measurement as evidence beside it. ⛔ A discharge whose whole content is "it
+  survives `D = 131072` now" is **not** this AC: it is green against one depth on
+  one platform, and it re-derives nothing if the traversal changes.
 
 **`AC-V12` — whichever `AC-V8` arm P2 picks, the resulting equality/order/hash
 is depth-total (P2).** ⛔ **This is NOT a clarification of `AC-V8` and must not
@@ -427,8 +449,21 @@ hard-stop here is *the same wall* the FNSPLIT chain kept hitting, it counts on
 
 ## 6. Standing
 
-- ⛔ **`RT-FNSPLIT-B2V` acceptance is blocked on this**, and `RECUT 2`'s
-  phase-closure artifact must be **re-derived** against the settled
+- ✅ **`RT-FNSPLIT-B2V` acceptance was blocked on this node, and that edge is
+  SATISFIED as of P1's merge (`8f677ebc`).** ⚠ **Read the granularity:** the
+  blocking part was only **P1** (see the phase table — *"P1 is also the only part
+  on `RT-FNSPLIT-B2V`'s critical path"*). ⛔ Do **not** read `B2V`'s
+  `depends_on: [… RT-VALUE-TOTALITY]` as requiring **P2 or P3** — this node stays
+  `active` until they land, and a mechanical reading of that edge would idle the
+  Runtime ring behind two phases that are not on B2V's path. Neither is the
+  converse true: P2/P3 are not thereby optional, only not prerequisite.
+- ⛔ **P1's merge is also a RE-ANCHOR EVENT for `B2V`, not just an unblock.** P1
+  rewrote `canonical.rs` and `values.rs`; the held `B2V` branch
+  (`wp/RT-FNSPLIT-B2V-executable-value-abi`) predates it and touches the **same
+  two files** (see the contention note below). Its base and its frame anchors must
+  be re-derived against `8f677ebc` **before** any resume kick. An unfreeze is a
+  semantic rebase, not a fast-forward.
+- ⛔ `RECUT 2`'s phase-closure artifact must be **re-derived** against the settled
   three-lifecycle partition regardless — that remains a hard gate and this node
   does not relieve it.
 - ⚠ **Contention:** this rewrites `crates/ken-runtime/src/canonical.rs` and

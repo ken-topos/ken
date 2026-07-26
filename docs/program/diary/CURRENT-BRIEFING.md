@@ -22,24 +22,62 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~07:0xZ · `origin/main` = **`53dc0360`**
-### **✅ #986 → #995 MERGED (ten).**
-### ▶ **PR #996 OPEN at `2d12a10a`; FROZEN.** ⛔ Resume via task **#71**.
-### ✅ THE `Debug` §7 CELL IS LANDED — `AC-V11` + `AC-V12` filed (see below).
+## ▶ LIVE — 2026-07-26 ~07:10Z · `origin/main` = **`8f677ebc`**
+### **✅ #986 → #996 MERGED (eleven).**
+### ✅ **`RT-VALUE-TOTALITY-P1` IS CLOSED** — merged **and** all three retros in.
+### ▶ **NEXT: re-anchor `B2V` → kick Runtime (#74).** Foundation lane FREE (#72).
 
-> ### ▶ CURRENT: P1 IS PUBLISHING. ⛔ Do not re-run the gates — they PASSED.
+> ### ▶ CURRENT: WHERE TO GO NEXT — two open lanes, both mine to start
+>
+> | lane | state | task |
+> |---|---|---|
+> | **Runtime** | idle, compacting. Next work is **`B2V`**, ⛔ **not** P2/P3 — and it needs a **re-anchor** first | **#74** |
+> | **Foundation** | idle. `ABI-R1` already assessed releasable (frame on `main`, disjoint from P1, no cited-source hit, ring durable) | **#72** |
+>
+> ⛔ **P2's frame is MINE and is NOT WRITTEN.** P3 (`AC-V11`) is filed and
+> independent of P2, but neither is the frontier.
+
+> ### ✅ P1 LANDED — and the publisher said `FROZEN` while doing it
 >
 > ```
-> PR       #996   wp/RT-VALUE-TOTALITY-P1 @ 2d12a10abd4d12ba0b9350268842f9b9c8ae3c82
-> §14      dec_10qxwx9s8wscn  resolved  resolved_by=agt_37reqftfe6g00  06:46:57Z
->          -- verified FRESH FROM THE OBJECT by me, not from any message
-> freeze   announced to the ring at evt_3jqydy9tvxr67
+> PR      #996   MERGED, squash.  main 53dc0360 -> 8f677ebc
+> carried exact 2d12a10abd4d12ba0b9350268842f9b9c8ae3c82 -- the resolved SHA, unchanged
+> §14     dec_10qxwx9s8wscn  resolved  resolved_by=agt_37reqftfe6g00  06:46:57Z
+> retros  leader evt_4zcygcv7f0s1g · qa evt_1mj8sh3g4f1c6 · impl evt_2119bqa3tnz0a
 > ```
 >
-> ⚠ **The publisher's exit code is the LAUNCHER's.** Confirm pid `433316` exited
-> **and** `origin/main` moved off `53dc0360`. A waiter writes `$SCRATCH/wait_p1.log`.
-> Then verify the five files by **BLOB IDENTITY** — ⛔ not ancestry, ⛔ not a
-> phrase grep. Full sequence is in task **#71**.
+> Verified three independent ways: **blob identity** on all five files;
+> `landed tree == merge-tree(53dc0360, 2d12a10a) == e26cd9cc`; currency checker
+> green on the landed `origin/main`.
+>
+> ⚠ **The publisher printed BOTH `merge command succeeded` AND `could NOT verify
+> the landed tree`, then froze.** The freeze was **accurate when written**: it
+> fired on the **first line** of `verify_landed_tree` — its `git fetch` — so the
+> tree-OID comparison and the post-merge currency check, the two clauses that
+> actually establish *landed == checked*, **never ran**. I discharged both by hand
+> (above) and only then cleared the marker (archived: `$SCRATCH/freeze-996.txt`).
+>
+> ⭐ **The cause generalises: the fetch failed while the ref held the CORRECT
+> value.** `refs/remotes/origin/main` lives in the **shared common dir** — one ref
+> for ~70 worktrees. Two concurrent fetches both read `53dc0360`, both computed the
+> same update, one won the compare-and-swap and the loser exited non-zero. The
+> loser was the publisher; **my own re-orientation `git fetch` at resume is the
+> likely racer, so this is mine.** ⇒ **A fetch's non-zero exit is not evidence the
+> ref is stale — it can mean someone else already made it current.** The merge lock
+> excludes other *publishes* and structurally cannot exclude a plain `git fetch`,
+> so **this will recur**. Hardening is task **#73**; ⛔ it is *not* licence to read
+> a freeze as noise — the gate failed **closed**, which is why I re-checked instead
+> of believing the merge line.
+>
+> ### ⛔ THE TRACKER CANNOT SEE A PHASE-LEVEL MERGE (task #75)
+>
+> `gen-progress.sh` derives every row from **frontmatter `status:`**, and phases
+> live in the node **body**. `RT-VALUE-TOTALITY` is correctly still `active`
+> (P2/P3 pending) ⇒ **P1's merge produced a timestamp-only diff.** A node with one
+> phase merged is indistinguishable from one where nothing happened — in the file
+> §2a says to read *first* on resume. The frontier moved; the frontier report did
+> not. ⛔ Do **not** "fix" it by flipping the node to `merged` — that reports P2/P3
+> as done and is worse than the blindness.
 >
 > **How it got here:** the first candidate `2b22acca` was **rejected**
 > (`dec_75wqn9tv715e9`, `evt_3xc87m7e19sqd`) over a `///` comment claiming the tree
@@ -61,6 +99,43 @@
 >
 > ⭐ **The narrow claim now holds at FOUR independent seats** — QA, the Architect's
 > block, the candidate's own evidence doc (line 180), and filed ACs on `main`.
+
+> ### ⛔⛔ MY LESSON WAS WRONG — REFUTED WITH EVIDENCE FROM THE SAME WP
+>
+> I offered the ring this: *"the only instrument that catches the `breadth-first`
+> comment is someone reading the comment against the code."* ⛔ **That is a
+> DILIGENCE answer and it is wrong.** `runtime-implementer` (`evt_2119bqa3tnz0a`)
+> produced the counter-example from the same WP: the **identical** defect class —
+> *stating what you believed the code did rather than what it does* — also landed in
+> `assert_eq!(compound_subvalues, 8)` where the subject has **7**. That one **died
+> on its first run, in under a minute, unassisted.** Same author, same minute, same
+> error, **opposite outcomes.**
+>
+> ⭐ **So the discriminator is POSITIONAL, not behavioural: whether the claim sits
+> somewhere that EXECUTES.** A doc comment on a trusted source is the one region
+> where a mechanism claim is exempt from every instrument this project owns — not
+> under-tested, **untestable in place**. ⇒ That is also why QA's approval and the
+> Architect's block were **both** defensible: QA verified everything that *could* be
+> run, and the defect sat where nothing runs. ⛔ Do not file this as a QA miss.
+>
+> **The promotable rule is a FORM rule, and it is the implementer's, not mine:**
+>
+> > **When a doc comment on a trusted source states an ORDER, a BOUND, or a
+> > COMPLEXITY CLASS, write it from the code and NAME THE OPERATION that makes it
+> > so. Adjective-only mechanism prose reads as UNSOURCED** — as this project
+> > already reads an unlabelled number as an estimate.
+>
+> ⚠ `"breadth-first"` cites nothing and needs a reviewer with the file open;
+> `"Vec::pop takes the most recently pushed, therefore depth-first"` is falsifiable
+> **in one look, by anyone**, with no test and no tooling. It converts an
+> unreachable check into a cheap one. ⛔ The rejected alternative is *"review
+> comments harder"* — refused on the `KW-ORACLE-CLOSURE` precedent that a check
+> which cannot be performed reliably at a seat belongs in the artifact's **form**.
+>
+> ⇒ **General shape worth carrying past this WP: when a lesson prescribes MORE CARE
+> at a seat, look for the position-based version of it.** Mine did; the better
+> answer was one file away and the ring found it because I published my candidate
+> as *contradictable* rather than as the finding.
 
 > ### ⛔ I ALMOST PUBLISHED A FALSE MECHANISM HERE — the corrected version
 >
