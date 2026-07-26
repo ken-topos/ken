@@ -1165,40 +1165,63 @@ and the second's word must genuinely have changed. `M49` then reddens it.
 nested closures survive without being merged — but it is no longer the evidence
 for tag preservation, and its doc says which control is.
 
-## ⛔ DEPTH: measured on both algorithms, and one clause is NOT discharged
+## ⛔ DEPTH — ***THIS SECTION WAS WRONG. Corrected in place, 2026-07-26.***
 
-The ruling says a deep acyclic chain must adopt **without host-stack growth**,
-must not be reclassified as malformed, and must not stack-overflow.
+⛔ **The text that stood here claimed AC-10's depth clause was NOT discharged**,
+that the end-to-end bound was ~2500, set by a recursive
+`canonical::encode_canonical` plus `Value`'s derived `Clone`/`Drop`, and that
+closing it was not a `B2V`-sized change. ⛔ **Every clause of that was false on
+the bytes it was attached to.** It is rewritten rather than annotated, because an
+appended correction leaves the false version in the position a reader obeys.
 
-**Measured, on the default 8 MiB test stack:**
+⭐ **Runtime QA found it** (`evt_7czz8h2r717z7`) by raising this control's `DEPTH`
+from 2000 to 3000 and watching it pass — a one-constant probe against a claim
+the candidate presented as a measured residual.
 
-| algorithm | carries | dies between |
+### What is actually true, measured on these bytes
+
+| mechanism | measured | bound |
 |---|---|---|
-| the **former** recursive adoption, restored verbatim and probed | depth 800 | 800 and 1600 |
-| this iterative walk | depth 2000 | 2000 and 3000 |
-| landed `Value` machinery **alone**, adoption absent entirely | depth 2000 | 2000 and 3000 |
+| the **former** recursive adoption, restored verbatim, 8 MiB | died between 800 and 1600 | host stack |
+| **this** iterative walk | 3000, 10000, **30000** all adopt | allocation and time (~142 s at 30000), never the host stack |
+| `canonical::encode_canonical` | **iterative** — work stack is a heap `Vec` | O(1) host stack in depth |
+| encoder + derived `Clone` + **drop glue** | `value_depth_totality` covers all three out of process at depth **131_072**, 1 MiB stated stack | closed by `RT-VALUE-TOTALITY-P1` |
 
-⭐ **The third row is the finding.** Building a `Value` chain in Rust and calling
-`canonical::encode_canonical` on it — no adoption, no walk, no store — overflows
-at the same place. The bound is `Value`'s own recursion over value structure:
-the canonical encoder, plus the derived `Clone` and `Drop`.
+⚠ And the figure the old text cited for the *pre-change* recursive encoder was
+itself low by roughly 4x: `P1`'s own bisection puts the landed pre-change
+mechanisms at **9032** / **10074** / **65486** at 8 MiB, not 2000–3000.
 
-⇒ **What is discharged:** the walk itself is iterative, its frontier is a heap
-`Vec`, and depth is never reclassified as malformed (asserted directly — a deep
-chain must not return `BOUNDARY_ERR_CYCLE`).
+⇒ ✅ **AC-10's depth clause IS discharged.** The walk is iterative with a heap
+frontier, depth is never reclassified as malformed (asserted directly), and the
+`Value` side is closed by a landed sibling WP at depth 131_072. The remaining
+bound is allocation and time — an ordinary resource boundary, which is the same
+language `P1` uses about the encoder — and **not** the host stack.
 
-⇒ ⛔ **What is NOT discharged:** *"a deep chain may not stack-overflow."* The
-end-to-end bound moved from ~1600 to ~2500 and is now set by the
-content-addressing encoder, which is the store's canonical-encoding surface
-rather than this node's. Closing it needs `encode_canonical` made iterative
-**and** a hand-written `Drop` for `Value` — a change to the crate's core value
-type with workspace-wide reach. ⛔ **That is not a `B2V`-sized change and it is
-not mine to choose.** Routed, not folded, and not narrowed into a green.
+The deep instance is kept **executable** as `#[ignore]`d
+`b2v_ac10_a_deep_acyclic_chain_adopts_at_thirty_thousand` rather than recorded as
+prose here, because a measurement that lives only in a document cannot fail.
 
-⚠ **This is the same shape as `M42`, one layer further out.** A precondition
-attached to new work was worth asking of work already shipped — and asking the
-depth question literally exposed that the *landed encoder* has the same
-unbounded recursion the adoption walk just lost.
+### ⛔ How the false claim survived — the transferable part
+
+**The measurement was inherited across a re-anchor, not re-derived.** It was
+taken on a **pre-P1** base. The branch was then re-anchored onto a base
+*containing* `RT-VALUE-TOTALITY-P1` — the WP that made the encoder iterative —
+and the number came along unre-measured.
+
+⭐ **`P1` was on this WP's explicit do-not-touch list, and "not mine to change"
+was read as "not relevant to re-check."** That is the entire error, and it is a
+cheap one to repeat: a standing constraint that keeps you *out* of a subsystem
+says nothing about whether that subsystem still bounds your claims. The
+re-anchor was the moment to re-measure every inherited number, and the
+re-anchor's own evidence went no further than proving `crates/` was
+byte-identical — which is a statement about **my** files, not about the premises
+they rest on.
+
+⚠ **The residual was persuasive precisely because it was honest.** It named a
+mechanism, gave a measured interval, declined to narrow itself into a green, and
+routed the fix as out-of-scope. Every one of those is a virtue, and together they
+made it read as settled — so nobody re-derived it, including me, twice, across a
+re-anchor and a compaction.
 
 ## What this fold does NOT close
 
@@ -1229,7 +1252,7 @@ unbounded recursion the adoption walk just lost.
 | **AC-6** closure decode | `b2v_ac6_closure_canonical_decode_round_trips_and_refuses_malformed` | encode→decode is the identity on a **nested** closure; **every** truncation of those bytes is refused; `Array` is encodable and still refused, so the decoder was widened for `Closure` and nothing else |
 | **AC-6** invocation-owned classes | `b2v_ac6_invocation_owned_classes_are_never_persisted`; `b2v_ac6_an_invocation_owned_capture_rejects_before_publication` | `HostResult`/`BorrowedOpaque` have no persistent adoption boundary; an invocation-owned capture is refused at construction, with a persistent capture into the **same slot** as the positive control. ⚠ Neither arm is narrowed or reclassified — what is refused is *persistence* |
 | **AC-10** cycles vs sharing | `b2v_ac10_a_multi_node_cycle_is_refused_while_a_shared_dag_adopts`; `b2v_ac10_a_constructible_node_cycle_is_refused_not_recursed` | a three-node cycle is refused **deterministically** — twice, from every entry point on the ring — while a shared-child DAG of the same shape adopts and the shared child resolves to **one** canonical node. Causal: **M45** and **M46**, which are the two directions of the same discriminator |
-| **AC-10** depth | `b2v_ac10_a_deep_acyclic_chain_adopts_without_walk_recursion` | depth 2000 adopts and is store-minted, and is asserted **never** to return `BOUNDARY_ERR_CYCLE`. ⛔ **Partial** — the walk is iterative, but the landed `Value` encoder still bounds a chain at ~2500. Measured on both algorithms above; the residual is stated, not narrowed |
+| **AC-10** depth | `b2v_ac10_a_deep_acyclic_chain_adopts_without_walk_recursion` (depth 3000, every run) + `#[ignore]`d `..._at_thirty_thousand` | adopts, is store-minted, and is asserted **never** to return `BOUNDARY_ERR_CYCLE`. ✅ **Closed** — the walk is iterative with a heap frontier and the `Value` side is closed by `RT-VALUE-TOTALITY-P1` at depth 131_072. The former "~2500 encoder ceiling" residual was **false**; corrected above |
 | **AC-6** persistent content-addressing *(was `NO CONTROL — open residual`)* | the `AC-10`/`AC-6` adoption rows above, plus the `Closure` rows | ⭐ **Now closed for every persistent class the disposition admits.** The row above at *"an emitted-constructed node carries `NULL_SLOT`"* recorded the state before adoption existed; adoption mints for ground values and, with this fold, for closures. It is retained above as the record of what was true then |
 
 ---

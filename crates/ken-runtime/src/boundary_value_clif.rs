@@ -7029,24 +7029,42 @@ pub(crate) mod tests {
     /// ⭐ **The number is measured, not chosen.** The former *recursive*
     /// adoption — restored verbatim and probed on the default 8 MiB test stack —
     /// carried depth **800** and died between **800 and 1600**. This walk is
-    /// iterative, with the frontier on the heap, and carries the depth below.
+    /// iterative, with the frontier on a heap `Vec`.
     ///
-    /// ⛔ **AND THE REMAINING CEILING IS NOT THE WALK — read the residual.** The
-    /// landed `Value` machinery is itself recursive over value structure:
-    /// `canonical::encode_canonical`, and `Value`'s derived `Clone`/`Drop`.
-    /// Measured **with adoption entirely absent** — building a `Value` chain in
-    /// Rust and encoding it — that overflows an 8 MiB stack between depth
-    /// **2000** and **3000**. So the end-to-end bound moved from ~1600 to ~2500
-    /// and is now set by the content-addressing encoder, which is the store's
-    /// canonical-encoding surface rather than this node's. ⚠ **The clause "a
-    /// deep chain may not stack-overflow" is therefore NOT discharged**, only
-    /// moved; what *is* discharged is that a deep chain is never *reclassified
-    /// as malformed*, which is asserted below.
+    /// ⛔ **THIS CONTROL PREVIOUSLY CARRIED A FALSE RESIDUAL, and how it got
+    /// there is the part worth keeping.** It claimed the end-to-end bound was
+    /// ~2500, set by a *recursive* `canonical::encode_canonical` plus `Value`'s
+    /// derived `Clone`/`Drop`, and that closing it was not a `B2V`-sized change.
+    /// Every clause of that is false on these bytes:
+    ///
+    /// - `encode_canonical` is **iterative** — its work stack is a heap `Vec`
+    ///   and its host-stack use is O(1) in depth.
+    /// - `RT-VALUE-TOTALITY-P1`'s `value_depth_totality` integration test covers
+    ///   the encoder, the derived `Clone`, **and** drop glue out of process at
+    ///   depth **131_072** on a *stated* 1 MiB stack.
+    /// - P1's own bisection of the **pre-change** mechanisms at 8 MiB puts them
+    ///   at **9032** / **10074** / **65486**, so even the figure this control
+    ///   cited for the old recursive encoder was low by roughly 4x.
+    ///
+    /// ⚠ **The measurement was inherited across a re-anchor, not re-derived.**
+    /// It was taken on a pre-P1 base; the branch was then re-anchored onto a
+    /// base containing P1, and the number came along unre-measured. `P1` was on
+    /// this WP's do-not-touch list, and "not mine to change" was read as "not
+    /// relevant to re-check" — which is the whole error. Runtime QA disproved it
+    /// by raising this constant and watching the test pass.
+    ///
+    /// **Measured on these bytes, this walk:** depth 3000, 10000 and 30000 all
+    /// adopt. At 30000 the cost is ~142 s of arena work — so the remaining bound
+    /// is **allocation and time, an ordinary resource boundary, never the host
+    /// stack**, which is the same thing P1 says about the encoder. The deep
+    /// instance is kept executable as the `#[ignore]`d control below rather than
+    /// asserted in prose, because a claim in a comment cannot fail.
     #[test]
     fn b2v_ac10_a_deep_acyclic_chain_adopts_without_walk_recursion() {
-        // Beyond the measured former margin (dead between 800 and 1600), below
-        // the landed encoder's measured ceiling (dead between 2000 and 3000).
-        const DEPTH: usize = 2000;
+        // Comfortably past the former recursive margin (dead between 800 and
+        // 1600) and cheap enough for the default suite. The depth that rules
+        // out hidden host-stack growth is the ignored control below.
+        const DEPTH: usize = 3000;
 
         let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
         let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
@@ -7079,6 +7097,54 @@ pub(crate) mod tests {
             .node_field(adopted.expect("adopted").payload(), NODE_SLOT)
             .expect("live");
         assert_ne!(slot, crate::store::NULL_SLOT, "and it is store-minted");
+    }
+
+    /// **`AC-10`, deep instance — the depth that rules out host-stack growth.**
+    ///
+    /// ⛔ **`#[ignore]`d on purpose, and that is a stated cost, not a hiding
+    /// place.** The run costs ~142 s of arena work at this depth, which would
+    /// more than double a targeted `-p ken-runtime` suite; the fast control
+    /// above carries depth 3000 on every run. This one exists so the deep
+    /// measurement is **executable** rather than a sentence in a doc comment
+    /// that can never fail. Run it with
+    /// `scripts/ken-cargo test -p ken-runtime --lib
+    /// b2v_ac10_a_deep_acyclic_chain_adopts_at_thirty_thousand -- --ignored`.
+    ///
+    /// ⚠ What it establishes is a **direction, not a limit**: 30000 adopts, and
+    /// the cost that stops the sweep going higher is allocation and time. It
+    /// does not name a depth at which this walk fails, because none was found —
+    /// the frontier is a heap `Vec` and host-stack use does not grow with depth.
+    /// The former recursive adoption died between 800 and 1600, so this is ~19x
+    /// beyond the mechanism it replaced.
+    #[test]
+    #[ignore = "~142s of arena work; the fast instance at depth 3000 runs by default"]
+    fn b2v_ac10_a_deep_acyclic_chain_adopts_at_thirty_thousand() {
+        const DEPTH: usize = 30_000;
+
+        let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
+        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
+        let mut store = BoundaryValueStore::new();
+        let tag_id = store.intern_symbol("ctor:fixture::Deep::Link");
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (DEPTH + 2, DEPTH + 2, 0),
+            (0, 0, 0),
+        );
+        let root = emitted_chain(alloc_ctor, store_field, f.base, tag_id, DEPTH);
+        store.seal_persistent();
+
+        let adopted = store.adopt(root);
+        assert!(
+            adopted.is_ok(),
+            "AC-10: a finite deep acyclic value is ADMITTED at depth {DEPTH} — \
+             got {adopted:?}"
+        );
+        assert_ne!(
+            adopted,
+            Err(BOUNDARY_ERR_CYCLE),
+            "AC-10: depth must never be reclassified as a cycle"
+        );
     }
 
     /// **`AC-10` — a MULTI-NODE cycle is refused deterministically, while a
