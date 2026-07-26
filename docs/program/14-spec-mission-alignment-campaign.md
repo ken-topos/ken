@@ -213,9 +213,9 @@ briefs are in §6.1–§6.8; the operator was briefed on 2026-07-26.
 | # | fork | decides | blocks |
 |---|---|---|---|
 | C1 | **Runtime `unknown` execution policy** — universal Kleene third value, or artifact status + explicit execution policy | operator (deployment policy) **then** Architect (semantics) | largest semantic radius in the advisory; crosses every evaluator, backend, FFI, effect path |
-| C2 | **`Ord`/`Map` key equality** — must order-equivalence yield kernel `Equal`? | Architect (class design), operator (commercial-data impact) | whether normalized `Decimal` can be a lawful key |
+| C2 | **`Ord`/`Map` key equality** — must order-equivalence yield kernel `Equal`? | ▶ **ROUTED to the Architect 2026-07-26** (operator) | whether normalized `Decimal` can be a lawful key |
 | C3 | **Capability revocation** — universal transitive lineage, or a revocable/non-revocable split | Architect | runtime machinery cost on every capability; `ABI-REVOKE` |
-| C4 | **SCT termination** — exact SCT as source compatibility, or a kernel-checkable termination-evidence interface with SCT as one producer | Architect | which total programs are accepted; kernel TCB surface |
+| C4 | **SCT termination** — exact SCT as source compatibility, or a kernel-checkable termination-evidence interface with SCT as one producer | ✅ **CLOSED — option (a), operator 2026-07-26** | nothing; SCT is deliberate source compatibility |
 | C5 | **Instance coherence + package admission** — keep the exact admission graph, or find the smaller invariant | Architect | multi-package resolution; needs real multi-package cases first |
 | C6 | **Prover search portfolio** — ⚠ *not in the operator's original three-way split; it belongs here* | Architect | needs a certificate interface defined **before** the route can be relaxed |
 | C7 | **Logical `space` vs physical realization** (`OQ-Space`) — ⚠ *also not in the original split* | Architect | per-space arenas, re-interning, copying; couples to the store family |
@@ -258,12 +258,32 @@ runs in production at all is a product commitment, not a semantic one.
 
 ### 6.2 C2 — `Ord`/`Map` over non-canonical carriers
 
-`spec/50-stdlib/52-map.md §2.1` requires order equivalence to yield kernel
-`Equal`. That excludes lawful key types with multiple representations —
-**including the spec's own `Decimal` example.** Rocq's `OrderedType` is a direct
-constructive counterexample: it takes an explicit `eq : t -> t -> Prop`, proves
-it an equivalence, and has comparison return equality *in that relation*, never
-representation identity.
+⛔ **The advisory over-states this one, and the corrected framing is what was
+routed.** `52-map.md §2.1` does **not** impose `antisym → Equal` globally over
+`Map`. It confines the step to **two named faces** — the overwrite/uniqueness
+law (`§5.3`) and the `Distinct`-discharge lemma — and states explicitly that the
+`lookup` laws need **no `Equal` promotion**, "keeping the canonical-carrier
+dependency **localized**." So part of the localization the advisory proposes is
+**already in the spec**.
+
+What *is* real: `§2.1` states that over a non-canonical carrier a postulated
+`antisym` proves `Equal` between distinct representations and therefore
+**inhabits `Bottom`** — the `DecEq Decimal` trap of ADR 0010 — using the spec's
+own `Decimal = MkDecimalPair coeff exp` example (`10×10⁻¹` vs `1×10⁰`). Rocq's
+`OrderedType` is a direct constructive counterexample: it takes an explicit
+`eq : t -> t -> Prop`, proves it an equivalence, and has comparison return
+equality *in that relation*, never representation identity.
+
+⇒ **The fork is therefore narrower than the advisory frames it:** does Ken need
+a non-canonical-carrier route for the **overwrite/uniqueness face specifically**?
+
+⚠ **Bounded check, stated so the next reader does not over-trust it.** The
+localization finding comes from reading `52-map.md §2.1`, `§5.2`, `§5.3`, and the
+ADR-0010 axis discussion. It is **not** an enumeration of every
+`antisym → Equal` site: the advisory names a further canonical-carrier
+obligation at `54 §5.2`, which was **not** checked. **That enumeration is what
+sizes the fix, and it is the Architect's first task on this fork** — the
+localization is measured, its completeness is not.
 
 **Options.** (a) status quo; (b) a `KeyEq`/ordered-key equivalence independent
 of kernel `Equal`, plus a proof that ordering respects it; (c) canonicalize
@@ -308,6 +328,30 @@ specify whether two routes preserve the same definitional equations.
 
 ⛔ **(b) without the evidence interface is not available** — "transparent
 unfolding is certified terminating" alone is too weak to be a spec.
+
+## ✅ C4 RULED — option (a). CLOSED (operator, 2026-07-26)
+
+**"Keep what we have. Close this."** ⇒ Exact SCT acceptance is **deliberate Ken
+source compatibility**, not over-specification. The evidence interface of option
+(b) is **not** commissioned.
+
+⛔ **Consequences that bind every later reader:**
+
+- `spec/10-kernel/17-conversion.md §4` is **correct as written**. Do not file a
+  relaxation node against it, and do not carry it as a known over-specification.
+- **Advisory item 4 is answered, not deferred.** Anyone re-reading the advisory
+  will find item 4 recommending an evidence interface; that recommendation is
+  **declined**. The advisory is not amended (it is a gitignored external input),
+  so **this section is the operative disposition** and the advisory's item 4 is
+  superseded here.
+- The accepted set of transparent definitions is now explicitly a **source
+  compatibility surface**. ⇒ A future change to SCT acceptance is a
+  **breaking language change**, not an internal mechanism swap — that is the
+  substantive content of this ruling, and it should be honoured as such.
+- ⚠ **This does not bless the algorithm's exposition.** The ruling settles
+  *which programs are accepted*; if the spec's matrix presentation is later found
+  to over-fix an implementation detail that does not change acceptance, that is a
+  Track A editorial item, not a reopening of C4.
 
 ### 6.5 C5 — instance coherence and package admission
 
