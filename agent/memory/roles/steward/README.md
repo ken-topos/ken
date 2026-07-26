@@ -6,6 +6,7 @@ into the federation.
 
 | Lesson | One-line |
 |---|---|
+| [an-out-of-band-merge-leaves-your-branch-on-a-reverting-base](an-out-of-band-merge-leaves-your-branch-on-a-reverting-base.md) | ★★★ A merge you did not perform moves `main` with no signal your watchdog sees — `git merge-base --is-ancestor origin/main HEAD` is the test, and the deleted-path control must probe the MERGE RESULT (`git merge-tree`), not your tree, or it false-alarms on every candidate whose base predates a deletion |
 | [bash-cd-main-repo-vs-steward-worktree](bash-cd-main-repo-vs-steward-worktree.md) | Bash `cd /workspaces/ken` targets the main repo, not the steward worktree |
 | [bundled-frame-doc-goes-stale-when-mechanism-flips](bundled-frame-doc-goes-stale-when-mechanism-flips.md) | A bundled frame doc goes stale when a WP's mechanism flips mid-build |
 | [entrypoint-abi-change-is-never-corpus-disjoint](entrypoint-abi-change-is-never-corpus-disjoint.md) | An entrypoint-ABI change rewrites every example's `main` — grep the touch-set before calling a lane catalog-disjoint |
