@@ -444,11 +444,14 @@ locked-granularity`).
 
 ### 3.2 The trace layer — ITF
 
-Concrete execution and counterexample **witnesses** serialize as ITF
-(Apalache/Quint's *Informal Trace Format*), a separate layer from the contract.
-This is interop currency, not part of the propositional contract: ITF traces are
-read by `Ward`'s downstream tools (Quint/Apalache/MOP) with no bespoke format to
-maintain, and — per §3 above — carry no epistemic status.
+Transitively closure-free concrete-execution and counterexample **witnesses**
+serialize as ITF (Apalache/Quint's *Informal Trace Format*), a separate layer
+from the contract. Runtime witnesshood does not make an ordinary closure
+serializable: a live trace whose op argument, response, or terminal-result graph
+contains one refuses before ITF bytes or a content hash exist (`41 §2.1`, `73
+§2.5`). This is interop currency, not part of the propositional contract: ITF
+traces are read by `Ward`'s downstream tools (Quint/Apalache/MOP) with no
+bespoke format to maintain, and — per §3 above — carry no epistemic status.
 
 ### 3.3 Content-addressing and provenance
 
@@ -630,10 +633,12 @@ trusted base and proves nothing new. The implementable deliverables:
    pinned source of truth, with the **status → field** map and the kernel-side
    **honesty discriminator** (`trusted_base()` membership + certificate
    presence, `21 §5.4`).
-2. **The two-layer serialization (§3)** — Ken-native contract + ITF traces, with
-   the **value-set and cross-field invariants I1–I5 locked** and the literal
-   field **spellings `(oracle)`-tagged** (Ward finalizes the wire token; Ken
-   locks the concept + the content-hash stability discipline).
+2. **The two-layer serialization (§3)** — Ken-native contract + ITF traces for
+   transitively closure-free witness graphs, with callable-bearing live traces
+   refusing before export; the **value-set and cross-field invariants I1–I5
+   locked** and the literal field **spellings `(oracle)`-tagged** (Ward finalizes
+   the wire token; Ken locks the concept + the content-hash stability
+   discipline).
 3. **Content-addressing + provenance (§3.3)** — a canonical-form hash,
    deterministic in the checked program, embedded in provenance (`63 §2`) and
    bound 1:1 by the discharge attestation (`63 §5a`).

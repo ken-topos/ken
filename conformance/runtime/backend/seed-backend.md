@@ -25,9 +25,10 @@ oracle.
 Grounding (landed `§`-bodies + landed code, content-reconciled — not the
 plan): `42 §5` (the interpreter as differential oracle; the native backend as
 its consumer; X1 **not** in the type-soundness TCB — runs
-already-kernel-checked terms), `42 §2` (determinism/canonicity carry;
-"different layers, allowed to differ… need only **agree on final values**" —
-the observable/unobservable boundary), `42 §1` (values realize the kernel's
+already-kernel-checked terms), `42 §2` (determinism/canonicity carry; layers
+agree on closure-free comparable ground observations, reaching
+callable-bearing results through selected probes — the
+observable/unobservable boundary), `42 §1` (values realize the kernel's
 reductions). **Landed reference:** the interpreter oracle
 `crates/ken-interp/src/lib.rs` (the differential reference; the future backend
 runs against **this**). `docs/PRINCIPLES.md` (small-auditable-TCB,
@@ -48,13 +49,14 @@ the kernel's WHNF) is
 **strategy and internal representation**: reduction/evaluation order
 (meaning-preserving in the total core, `42 §2`), closure encoding, how sharing
 is realized on the heap — the **unobservable internals**. The `42 §2` rule is
-exact: "different layers, allowed to differ… need only **agree on final
-values**." So the corpus's discriminating boundary (§BD2) is
-**observable-value divergence rejects / an unobservable-internal difference
-admits** — a non-degenerate pair on that boundary (COORDINATION §7). (`@ct`
+exact: layers may differ internally but must agree on closure-free comparable
+ground observations, directly or through selected probes. So the corpus's
+discriminating boundary (§BD2) is **observation divergence rejects / an
+unobservable-internal difference admits** — a non-degenerate pair on that
+boundary (COORDINATION §7). (`@ct`
 **timing** is order-sensitive, but that is a **separate** discipline delegated
 to `Ward` (`61 §5a.6`), not the value differential — this corpus pins
-**value** equivalence, not timing.)
+**observation** equivalence, not timing.)
 
 **The backend is a TESTED surface, not a TRUSTED one — get the trust level
 right (`42 §5`, reflect-don't-extend).** Because the backend runs
@@ -109,14 +111,14 @@ cases pin the **discipline**; the runs are the build ring's.
 ## BD2 — the observable / unobservable boundary (AC2 ★)
 
 > The non-degenerate pair is **{BD2-obs, BD2-int}** on the `42 §2`
-> observable/unobservable boundary: a divergence in the **final value**
-> rejects; a difference in **unobservable internals** with the same final
-> value admits. A corpus comparing *strategy* would over-reject valid
+> observable/unobservable boundary: a divergence in a closure-free comparable
+> ground observation rejects; a difference in **unobservable internals** with
+> the same observations admits. A corpus comparing *strategy* would over-reject valid
 > backends; one ignoring observable divergence would admit miscompiles (the
 > omission hole).
 
 ### runtime/backend/observable-value-divergence-rejected (oracle)
-- spec: `45 §4` (BE-Differential), `42 §2` (agree on final values), `42 §5`
+- spec: `45 §4` (BE-Differential), `42 §2` (observation boundary), `42 §5`
 - given: a (hypothetical) backend whose closure-free ground observation for
   `t` differs from the interpreter's — e.g. a wrong
   arithmetic result, a different constructor head from a mis-lowered `elim`,
@@ -188,7 +190,8 @@ cases pin the **discipline**; the runs are the build ring's.
   faithful differential consumer (the interpreter's own determinism is X1's
   CAN2, `../evaluation/seed-evaluation.md`; this pins the backend must
   **also** be deterministic and agree). A non-deterministic backend breaks the
-  "same term → same value" contract the differential corpus rests on.
+  "same term → same closure-free observations" contract the differential corpus
+  rests on.
   Cross-refs CAN2; does **not** re-pin the interpreter's determinism.
 
 ## BD5 — capacity / limits cross-ref (AC5)

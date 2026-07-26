@@ -243,13 +243,17 @@ is instrumented.
 - **Synthesize the monitor.** `T` projects to a runtime monitor via
   `compile : Temporal Σ → Monitor` (`73 §2.4`; a *projection* of the export's
   `T`, not a re-authored property — distinct from `71`'s `→ WardFormula`). The
-  monitor reads exactly the `73 §2.1` trace events (same alphabet). The
-  **projection** (monitor-is-image-of-`T`, over the landed `T` channel) is
+  monitor reads exactly the exportable `73 §2.1` trace events (same alphabet);
+  a callable-bearing envelope remains live but refuses before serialized
+  monitor transport (`73 §2.5`). The **projection** (monitor-is-image-of-`T`,
+  over the landed `T` channel) is
   landed; the `compile` **faithfulness lemma** + **Büchi acceptance** are
   **B2-deferred/`(oracle)`** (`71 §5.2`, `73 §2.4`) — the deferred runtime face.
-- **Catch the violation.** A monitor that **rejects** a live trace signals a
-  conformance violation (`73 §3`): the agent's actions left the model's allowed
-  behaviors, or a boundary `P` it relied on was breached. Crucially this is
+- **Catch the violation.** A monitor that **rejects** an exportable live trace
+  signals a conformance violation (`73 §3`): the agent's actions left the
+  model's allowed behaviors, or a boundary `P` it relied on was breached.
+  A callable-bearing envelope instead refuses at `73 §2.5` before monitor
+  transport. Crucially monitor rejection is
   **not a re-verdict of `Q`** — Ken's theorem is the conditional "given `P`,
   then `Q`"; a runtime violation is an assumption-side (`P`) failure, not a
   refutation of the kernel certificate (`73 §2.3`/`§3`). And it **never
@@ -264,9 +268,11 @@ status; nothing promotes it to `proved` — `73 §2.6` TC5). The **live monitor
 *rejecting* a violating trace** (`compile` faithfulness / Büchi acceptance) is
 the **named-deferred runtime face** — **`(oracle)`/B2** (`71 §5.2`, mirroring
 `seed-trace` TR-E), **not** asserted as landed "end-to-end." The case drives the
-real `Σ`/trace instrumentation (the single `Vis` site in `ken-interp`, `73 §2`),
-not a hand-built event log, and asserts the `delegated` entry **never promotes**
-(the one-way gate) — carrying the live-catch as the deferred face.
+real `Σ`/trace instrumentation (the single `Vis` site in `ken-interp`, `73
+§2`), not a hand-built event log, and asserts the `delegated` entry **never
+promotes** (the one-way gate) — carrying the live-catch as the deferred face.
+Serialized monitoring applies only after `73 §2.5`'s closure-free export gate;
+the gate does not erase the live `Vis` event.
 
 ## 6. The honesty boundary — safety, never quality
 

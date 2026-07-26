@@ -279,8 +279,8 @@ claim with no conformance case is a claim no one can rely on
   identity; interpreter right by definition, `42 §5`), the
   **observable/unobservable** discriminating pair (an observation divergence
   **rejects** / an unobservable-internal strategy difference **admits**, `42 §2`
-  layers-may-differ), the **not-in-TCB** posture (a codegen bug is a wrong value,
-  **never a false `proved`** — the trust chain kernel `Q` /
+  layers-may-differ), the **not-in-TCB** posture (a codegen bug is a wrong
+  observation, **never a false `proved`** — the trust chain kernel `Q` /
   interpreter-oracle `tested` / backend `tested`, **not** kernel-backed),
   determinism-carries, and the `44` capacity cross-ref. A design/discipline
   corpus: the interpreter half is landed (`crates/ken-interp`), the backend half
@@ -408,9 +408,12 @@ claim with no conformance case is a claim no one can rely on
 - `behavioral/trace/seed-trace.md` — B3 trace/instrumentation contract
   (`73`): the runtime companion to the B1 export — the `Σ`-event schema at the
   effect boundary, correlation keys for multi-`space` traces, the runtime
-  `Q`/`P` assertion points, and the monitor projected from `T`. An **untrusted
-  one-way projection** of already-verified content + instrumentation: adds
-  nothing to the trusted base, proves nothing new.
+  `Q`/`P` assertion points, and the monitor projected from `T`. Runtime event
+  envelopes preserve every `Vis`; only transitively closure-free envelopes
+  serialize/content-hash, with isolated op-argument/response/terminal-result
+  refusal controls. An **untrusted one-way projection** of already-verified
+  content + instrumentation: adds nothing to the trusted base, proves nothing
+  new.
 - `behavioral/resource-lifetime/seed-resource-lifetime.md` — the direct
   file-only `ResourceLifetimeObligation` body in the `T` channel: the exact
   `FsOpen` / `FsHandleMetadata` / `ResourceRelease` plan, the

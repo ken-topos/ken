@@ -13,7 +13,7 @@
 > (§2.1), the **correlation keys** for multi-`space` traces (§2.2), the runtime
 > **`Q`/`P` assertion points** (§2.3), the **monitor projection** from `T`
 > (§2.4), and **ITF serialization** (§2.5), with the **cross-field invariants
-> TC1–TC5 locked** (§2.6) and the literal wire **spellings `(oracle)`-tagged**
+> TC1–TC6 locked** (§2.6) and the literal wire **spellings `(oracle)`-tagged**
 > (Ward finalizes the token; Ken locks the concept + the content-hash discipline
 > it inherits from `71 §3.3`). **No new kernel rule** — the contract is an
 > **untrusted projection** of already-verified content plus runtime
@@ -84,16 +84,23 @@ defer-spelling-not-concept):
 |---|---|---|
 | **effect symbol** `E` | which `Σ` member fired | a member of B1's `Σ` (`71 §2.1`); **TC1** alphabet closure |
 | **operation** `op` | which `Op` of `E` (`Console.Write`, `State.Get`) | the perform-node's `Op` tag (`36 §2.1`) — the signature B1's label abstracts |
-| **op argument** | the constructor data the op carries (the `String` of `Write`, the `S` of `Put`) | an ITF **witness** value (`71 §3.2`) — no epistemic status |
-| **response** | the runtime's `E.Resp op` returned to `k` | an ITF **witness** value — no epistemic status |
+| **op argument** | the constructor data the op carries (the `String` of `Write`, the `S` of `Put`) | a runtime **witness** value; ITF-exportable only when transitively closure-free (§2.5) |
+| **response** | the runtime's `E.Resp op` returned to `k` | a runtime **witness** value; ITF-exportable only when transitively closure-free (§2.5) |
 | **correlation keys** | space identity + message provenance | §2.2 |
 | **sequence position** | per-space emission order | a monotone index within a space, so the monitor can order a per-space trace |
 
-- **The op/response carry *values*, so they are witnesses, not claims** (ITF
-  layer, `71 §3.2`): an event has **no** epistemic status — it is never tagged
-  `proved`/`tested`/`delegated`. A green trace is *evidence for* a `delegated`
-  `T`, **never a promotion** of it (the one-way gate, §3, TC5). This is the
+- **The op/response carry *values*, so they are witnesses, not claims** (`71
+  §3.2`): an event has **no** epistemic status — it is never tagged
+  `proved`/`tested`/`delegated`. Runtime witnesshood does not confer
+  serializability. A green exportable trace is *evidence for* a `delegated` `T`,
+  **never a promotion** of it (the one-way gate, §3, TC5). This is the
   load-bearing seam-soundness property of the trace layer, stated at the source.
+- **Live event versus durable envelope.** Every `Vis` still emits exactly one
+  live event even when its op argument or response contains a callable. A
+  completed run's envelope also has its terminal `Ret` result; `Ret` itself
+  emits no event (§2). The runtime compares callable-bearing payloads/results
+  only through selected well-typed probes (`42 §6.4`). Durable ITF export has
+  the stricter closure-free rule in §2.5; it never erases the live event.
 - **One concretization, no second alphabet (TC1).** The event's `effect`/`op`
   fields are the runtime image of a B1 `Σ` member's perform-node signature — the
   monitored vocabulary **is** the interaction tree's `perform` nodes
@@ -203,22 +210,34 @@ compile : Temporal Σ → Monitor       -- the monitor projection (B3's home)
 
 The trace serialization is **ITF-compatible** (`71 §3.2`, Apalache/Quint's
 *Informal Trace Format*) so the **same format spans B1's counterexamples and
-B3's live traces** — one wire form, read by Ward's downstream tools
+B3's exportable live traces** — one wire form, read by Ward's downstream tools
 (Quint/Apalache/MOP) with no bespoke format to maintain. Reuse B1's trace layer;
-do **not** invent a second. The live-trace form is **content-hashed** under the
-same canonical-form discipline as the B1 contract (`71 §3.3`): deterministic
-field/entry order, no timestamps in the hashed form — so a rename of a literal
-key after the spelling binds is a **breaking change** (a new hash). Literal
-field spellings are **`(oracle)`-tagged** — Ward finalizes the wire token; Ken
-fixes the concept, the value-set, and the stability discipline.
+do **not** invent a second.
+
+**Pre-export closure-free gate.** Before serialization begins, the exporter
+checks the complete op-argument, response, and terminal-result graphs. If any
+contains an ordinary closure, the whole trace export MUST refuse before ITF
+bytes or a content hash exist (`41 §2.1`, `42 §6.4`). It MUST NOT redact,
+replace, digest, or silently omit the payload or terminal result, and MUST NOT
+drop the corresponding live `Vis` event. This fixes the semantic boundary, not
+a traversal, serializer, or handle representation.
+
+For an exportable, transitively closure-free envelope, the ITF form is
+**content-hashed** under the same canonical-form discipline as the B1 contract
+(`71 §3.3`): deterministic field/entry order, no timestamps in the hashed form
+— so a rename of a literal key after the spelling binds is a **breaking change**
+(a new hash). Literal field spellings are **`(oracle)`-tagged** — Ward finalizes
+the wire token; Ken fixes the concept, the value-set, and the stability
+discipline.
 
 ### 2.6 Locked vs deferred, and the cross-field invariants
 
 **Locked (normative, checkable):** the five-part contract (§2.1–§2.5)
 and each part's **value-set**; the **correlation-key set** (§2.2); that runtime
 `Q`/`P` assertions and the monitor are **projections** of the B1 export (§2.3,
-§2.4); the **cross-field invariants TC1–TC5** below; the **content-hash
-stability discipline** inherited from `71 §3.3`.
+§2.4); the **cross-field invariants TC1–TC6** below; the closure-free
+pre-export gate; and the **content-hash stability discipline** inherited from
+`71 §3.3`.
 
 **Deferred (`(oracle)`-tagged):** the **literal serialized keys** for the event
 fields and the contract parts; the concrete `Temporal` **surface** + the
@@ -247,12 +266,26 @@ fields and the contract parts; the concrete `Temporal` **surface** + the
   ingest path** by which a monitor/engine verdict re-enters Ken as a `proved`
   status. A `delegated` `T` stays `delegated` regardless of monitor acceptance;
   a trace event (a witness) is never a claim. (AC6; reuses B1's §5.1 gate, I4.)
+- **TC6 — closure-safe export.** Every serialized/content-hashed op argument,
+  response, and terminal-result graph is transitively closure-free. Otherwise
+  the entire export refuses before bytes/hash while the live event envelope is
+  preserved. No redaction, substitution, local identity, or partial trace.
+  (AC1; `41 §2.1`.)
+
+TC2, TC6, and the runtime payload-observation rule are mission-minimum: one
+event per `Vis` preserves trace fidelity (principles 4 and 8); comparing
+callables only through closure-free observations avoids a false intensional
+identity (principles 4 and 8); and pre-export refusal prevents silent
+degradation at a durable security boundary (principles 8 and 12). No serializer
+layout, probe enumeration, handle scheme, or monitor transport is required.
 
 ## 3. The refinement relation and seam soundness
 
-"The implementation refines the model" means: every emitted trace is **accepted
-by the model** — it stays within the behaviors `Q`/`Σ`/`T` permit. For safety
-and the temporal obligations this is exactly **monitor acceptance** (the
+"The implementation refines the model" means: every emitted **exportable**
+trace is accepted by the model — it stays within the behaviors `Q`/`Σ`/`T`
+permit. A callable-bearing live envelope has no serialized monitor input and
+must first hit §2.5's loud export refusal. For exportable traces, safety and the
+temporal obligations use **monitor acceptance** (the
 Büchi/MOP monitor synthesized in §2.4 does not reject). Ken's contribution is to
 make this relation *checkable* — emit traces in `Σ` (§2.1) and supply the
 accepting monitor (§2.4); the *act* of checking is the engine's (§4).
@@ -261,16 +294,20 @@ accepting monitor (§2.4); the *act* of checking is the engine's (§4).
 **emit-only**, realized — like the B1 export's one-way gate (`71 §5.1`) — as the
 **absence of a code path**, not a runtime check that could be bypassed:
 
-- A trace **event** is an ITF **witness** (`71 §3.2`), carrying values, **no
-  epistemic status**. It is never a claim and never tagged `proved`.
-- A monitor that **accepts** every observed trace is **monitoring evidence** for
-  a `delegated` obligation — which stays **`delegated`**. A depth-bounded check
-  or a finite run of green traces is not a proof for **all** behaviors
+- An exportable trace **event** is an ITF **witness** (`71 §3.2`), carrying
+  transitively closure-free values and **no epistemic status**. A
+  callable-bearing live event remains a runtime witness but is not serializable
+  (§2.5). Neither form is a claim or tagged `proved`.
+- A monitor that **accepts** every observed exportable trace is **monitoring
+  evidence** for a `delegated` obligation — which stays **`delegated`**. A
+  depth-bounded check or a finite run of green traces is not a proof for **all**
+  behaviors
   (`71 §5`), so it is **never promoted to `proved`**: no function maps a
   monitor verdict to a `proved` status, and no ingest path back into the kernel.
-- A monitor that **rejects** a live trace signals a **conformance violation** to
-  the consumer (§4) — the running code left the model's allowed behaviors, or a
-  boundary `P` it relied on was breached. It does **not** disprove Ken's `Q`:
+- A monitor that **rejects** an exportable live trace signals a **conformance
+  violation** to the consumer (§4) — the running code left the model's allowed
+  behaviors, or a boundary `P` it relied on was breached. It does **not**
+  disprove Ken's `Q`:
   Ken's theorem is conditional ("given `P`, then `Q`", kernel-checked), so a
   runtime violation is an assumption-side failure, **not** a re-verdict of the
   certificate. Both monitor outcomes are pinned to their epistemic meaning here,
@@ -285,9 +322,10 @@ runtime channel and inherits the gate unchanged.
 
 Explicitly **not** Ken's, recorded here to fix the boundary:
 
-- **Where the check runs** — CI **gate** (offline, on generated/sampled traces,
-  validating the *assumed* distribution), production **monitor** (online, on
-  real traces, validating the *actual* distribution), or **both**. The two catch
+- **Where the check runs** — CI **gate** (offline, on generated/sampled
+  exportable traces, validating the *assumed* distribution), production
+  **monitor** (online, on exportable real traces, validating the *actual*
+  distribution), or **both**. The two catch
   divergence on disjoint input sets (sampled vs. real) and differ on prevent-vs-
   detect; choosing among them is a **per-deployment policy**, not a language
   decision.
@@ -326,16 +364,22 @@ choice:
 4. **The monitor projection (§2.4)** — `compile : Temporal Σ → Monitor` over the
    landed `T` channel (TC4); the `Temporal` surface + `compile` signature
    `(oracle)`-tagged, the full faithfulness lemma deferred to B2.
-5. **ITF serialization (§2.5)** — the live-trace wire form = B1's ITF layer,
-   content-hashed under `71 §3.3` discipline; literal keys `(oracle)`-tagged.
+5. **ITF serialization (§2.5)** — transitively closure-free live envelopes use
+   B1's ITF layer and are content-hashed under `71 §3.3`; a callable-bearing op
+   argument, response, or terminal result refuses before bytes/hash without
+   dropping its live event; literal keys `(oracle)`-tagged.
 
 ```mermaid
 flowchart LR
   prog["running program<br/>(denotation = ITree)"] --> perf["Vis firing<br/>36 §2 perform point<br/>(drive_H, eval.rs)"]
-  perf --> evt["Σ-event §2.1<br/>+ correlation §2.2"]
+  perf --> evt["live Σ-event §2.1<br/>+ correlation §2.2"]
+  prog --> term["terminal result<br/>trace-envelope leaf"]
   exp["B1 export 71<br/>Q / P / Σ / T"] --> qp["Q/P assertion points §2.3"]
   exp --> mon["monitor §2.4<br/>compile Temporal to Monitor"]
-  evt --> itf["ITF trace §2.5"]
+  evt --> gate{"payload/result graph<br/>transitively closure-free?"}
+  term --> gate
+  gate -->|yes| itf["ITF bytes + content hash §2.5"]
+  gate -->|no| refuse["refuse export<br/>event remains live"]
   qp --> itf
   mon --> eng["downstream engine §4<br/>(Ward — checks; NOT Ken)"]
   itf --> eng
@@ -344,12 +388,18 @@ flowchart LR
 
 **Acceptance criteria.** *Names align with the frame's AC1–AC6.*
 
-- **AC1 (generated, checkable end-to-end).** A running program emits a trace in
-  `Σ` that a monitor **synthesized from the *same* export** accepts — **no
-  separately-authored model**. **Structural** (buildable now): the monitor
+- **AC1 (generated, checkable end-to-end).** A running program with an
+  exportable closure-free envelope emits a trace in `Σ` that a monitor
+  **synthesized from the *same* export** accepts — **no separately-authored
+  model**. **Structural** (buildable now): the monitor
   derives from the export's `T`, the trace from the export's `Σ` (TC1, TC4). The
   **semantic** acceptance of a concrete Büchi monitor over a concrete trace is
   **B2-gated** (needs the `Temporal` datatype + the `compile` lemma, §2.4).
+  Serialization has a controlled boundary (TC6): a closure-free envelope
+  produces bytes/hash; an ordinary closure isolated in each of op argument,
+  response, and terminal result refuses before bytes/hash while every `Vis`
+  still emits its live event. This makes both "reject everything" and
+  "drop the offending event" fail.
 - **AC2 (effect-boundary only — bounded).** Instrumentation touches **only** the
   perform points — assert **no** trace event outside the `36 §2` effect boundary
   (a structural absence-assertion; TC2).
@@ -367,7 +417,7 @@ flowchart LR
   `delegated` `T` stays `delegated` under monitor acceptance (a guard-gated
   absence, named: no `proved`-writing edge from a monitor verdict exists; TC5).
 
-**Conformance (`../../conformance/behavioral/trace/`).** AC1–AC6 as
+**Conformance (`../../conformance/behavioral/trace/`).** AC1–AC6 and TC6 as
 discriminating cases, each **routing a real program through the actual
 instrumentation + emitter** and observing the real `Σ`-events / correlation keys
 / assertion points / monitor projection — **never** a synthetic trace literal (a
@@ -375,8 +425,9 @@ test that builds a trace and checks a field guards nothing; the QA gate is
 *real run → real instrumentation*). Each case **flips** on its bug (per-case
 verdict/structural-flip); the **cross-case sweep** groups by projection source —
 {events ↔ `Σ`} (TC1), {`Q`/`P` assertions ↔ export `Q`/`P`} (TC4), {monitor ↔
-`T`} (TC4) — with the two **boundary invariants** pinned: **no event outside the
-effect boundary** (TC2) and **no monitor verdict ever re-enters as `proved`**
-(the one-way direction, TC5). The B3 contribution is validated here; the
-consuming engine and its policy are validated in the sibling's project (Ward),
-not in this corpus.
+`T`} (TC4) — with three **boundary invariants** pinned: **no event outside the
+effect boundary** (TC2), **callable-bearing trace export refuses without
+dropping a live event** (TC6), and **no monitor verdict ever re-enters as
+`proved`** (the one-way direction, TC5). The B3 contribution is validated here;
+the consuming engine and its policy are validated in the sibling's project
+(Ward), not in this corpus.

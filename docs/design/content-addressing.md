@@ -695,9 +695,11 @@ language team — the stat-set shape is fixed.**
    value kinds in `41 §1–2`. A `Map`/`Set` built in two different insertion orders
    encodes to identical bytes (lexicographic sort by canonical key/element
    bytes).
-3. Benchmark (deliverable 2) records dedup rate matches expected within
-   tolerance, equality is slot-id (O(1)), and the at-limit case fails
-   loudly.
+3. The §3.5 closure-inclusive benchmark record is historical and is **not**
+   acceptance evidence for this revision. After the implementation excludes
+   ordinary closures and closure-containing graphs, a fresh benchmark over the
+   revised closure-free content-addressed domain records dedup rate within
+   tolerance, O(1) slot equality, and loud at-limit failure.
 4. The `mmgroup`/lattice **non-dependency** recorded with `OQ-6`
    rationale.
 5. ADR status: no new ADR needed — content-store decision is normatively

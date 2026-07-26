@@ -1230,8 +1230,9 @@ on the bug it targets, not pass vacuously):
    2-effect row; `visits` with both **accepts**, `visits` dropping one
    **rejects**, naming the dropped effect (verdict flip; ≥2 distinct effects).
 2. **Pure-kernel encoding** — an effectful program denotes to an `ITree` term
-   the kernel checks; assert the **structure of the tree** (the `Vis`-tag
-   sequence / the `Ret` leaf), not merely "elaborates."
+   the kernel checks; assert the structural `Vis` envelope and compare its
+   payloads/`Ret` result under `42 §6.4`'s closure-free observation/probe
+   boundary, not merely "elaborates" and never closure identity.
 3. **Capability gate** — the same `perform` **rejects** with no `Cap E` in scope
    and **accepts** under a handler that provides it (denial-path flip).
 4. **`space` + handler** — `run_state s₀` on an `inc`/`get` program resumes

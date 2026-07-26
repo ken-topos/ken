@@ -444,8 +444,10 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   annotation** — an opt-in **`Lazy a`** thunk (forced-on-demand, memoized;
   laziness *visible in the type*, never implicit). Distinct from the kernel's
   lazy-WHNF conversion (`OQ-eval-strategy`): runtime executes CBV, kernel
-  decides defeq lazily; they agree only on final values. Coinductive fragment,
-  if added (`OQ-coinduction`), brings its own local guarded laziness.
+  decides defeq lazily; evaluator layers agree on closure-free comparable
+  ground observations, reaching callable-bearing results only through selected
+  well-typed probes (`42 §2`). Coinductive fragment, if added
+  (`OQ-coinduction`), brings its own local guarded laziness.
 - **Affects.** `40-runtime/42` (updated), `41` (sharing). **Recorded.**
 
 ### OQ-domain — Ken's intended domain / positioning — **DECIDED**

@@ -54,8 +54,10 @@ mechanism; nothing locks a concrete syscall signature here.
 `36`).** Authored Ring-2 against spec-author's locked `42 §6`; each expected
 trace **re-derived independently** from the L5 denotation `36 §2.4` (not
 transcribed — the `conformance-reconcile-inherits-spec-metatheory-bugs` gate).
-Confirmed: the trace is the **`Vis`-tag spine order** (not a response-stream);
-handled/unhandled **is** the pure-fold-vs-driver line (`42 §6.1`/§6.2);
+Confirmed: the structural envelope is the **`Vis`-tag spine order** (not a
+response-stream), with payloads/terminal results compared under `42 §6.4`'s
+closure-free observation/probe rule; handled/unhandled **is** the
+pure-fold-vs-driver line (`42 §6.1`/§6.2);
 row-bounding is **type-level**, caught at elaboration (`42 §6.5`, `36 §1.4`),
 **no** runtime check; X1↔L5 is **definitional** (`42 §6.6`).
 Mechanism-consistency checked by **grouping cases by shared mechanism** (the
@@ -268,18 +270,30 @@ denotation, with the world's responses substituted at the `Vis` nodes via `H`.
   a **fixed** deterministic mock `H`. Representative: `let x = perform Clock now
   in perform Console (Write (show x))`, with `⟦e⟧ = Vis now (λ x. Vis (Write
   (show x)) (λ _. Ret tt))` and `H now = t0`.
-- expect: X1's **performed `Vis`-tag sequence** and **`Ret` leaf** are
-  **exactly** the **spine** and **leaf** of `⟦e⟧` instantiated at `H`'s
-  responses — here `[Clock.now, Console.Write (show t0)]`, leaf `tt`. The
-  agreement is **definitional** (`42 §6.6`): X1 runs the very term `⟦e⟧`, so the
-  run **is** the denotation with responses substituted at the `Vis` nodes.
+- expect: X1's structural event envelope is **exactly** the `Vis` spine of
+  `⟦e⟧` instantiated at `H`'s responses — one event per `Vis`, in order, with
+  the same effect symbol and operation constructor — followed by the terminal
+  result. Here it is `[Clock.now, Console.Write]`, with closure-free payload
+  observation `show t0` and terminal observation `tt`. The agreement is
+  **definitional** (`42 §6.6`): X1 runs the very term `⟦e⟧`, so the run **is**
+  the denotation with responses substituted at the `Vis` nodes.
+- controlled callable-bearing arms: repeat with exactly one callable-bearing
+  position at a time: (a) an op argument containing `f`, (b) a mock response
+  containing `f`, and (c) a terminal result containing `f`. In each arm compare
+  the same structural envelope, then project/apply `f` on selected well-typed
+  inputs until it yields a closure-free comparable ground observation. The
+  other two positions remain closure-free controls. Never compare closure
+  representation, pointer, slot, hash, code/environment identity, or
+  provenance.
 - why: the **★★ reference-correctness** property — X1 is the oracle for
   effectful programs (`42 §6.8`), so its trace **must** realize L5's denotation.
-  **Structural, handler-independent** (the `Vis`-tag sequence + `Ret` leaf — a
-  structural output the bug changes regardless of downstream typing): any driver
-  bug (reorder, drop, mis-resume, mis-tag) makes the run's trace **diverge
-  from** `⟦e⟧`'s spine — the structural identity **flips**. The load-bearing
-  property of `42 §6.9`. (property; structural; flagship.)
+  **Structural, handler-independent** (the event count/order/effect symbol/op
+  constructor — an output the bug changes regardless of payload typing): any
+  driver bug (reorder, drop, mis-resume, mis-tag) makes the run's envelope
+  **diverge from** `⟦e⟧`'s spine — the structural identity **flips**. Payload
+  and terminal-result comparisons follow `42 §6.4` and never introduce closure
+  identity. The load-bearing property of `42 §6.9`. (property; structural;
+  flagship.)
 
 ---
 
