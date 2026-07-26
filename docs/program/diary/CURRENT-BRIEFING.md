@@ -34,10 +34,11 @@ handle it."* Report + Research addendum:
 ### ✅ **`ABI-R1` CLOSED** · ✅ **`RT-FNSPLIT-B2V` CLOSED** — retros IN on both.
 ### ✅ **`DOC-GATE-NEEDLE` MERGED #1019** — blob-verified; retros + flip OWED (#93).
 ### ⛔ **ZERO LANES LIVE. `#11` IS RULED: `RT-FNSPLIT-B2E` INSERTED BEFORE `B2F`.**
-### `B2O` -> `B2R` -> `B2V` -> **`B2E`** -> `B2F`. Node `ready`, frame LANDED
-### (#1023, blob `20928eac`, 370 lines). ▶ **ONLY THING LEFT = §2c GATE + KICK**
-### Runtime on `B2E`: compact all 3 seats, verify drops, `cat-file -e` every
-### named object, then post. ⛔ Nothing else is owed before that kick.
+### `B2O` -> `B2R` -> `B2V` -> **`B2E`** -> `B2F`. ✅ **`B2E` KICKED**
+### `evt_grdw31hwhw8j` — frame blob `20928eac` (370 lines), node `8275c6c5`.
+### §2c gate ran in full: 3 compactions verified, `cat-file -e` on every named
+### object with an absent-path control, leader+QA confirmed `Working`.
+### ▶ **ONE LANE LIVE: Runtime on `B2E`.** Task `#97` carries the watch list.
 ### `crates/` byte-identical to `bb3e58ea`; nothing to unwind. Evidence on
 ### `origin`: `preserved/rt-fnsplit-b2f-hardstop-11-evidence` = `d1abbc79`.
 ### ✅ **`DOC-GATE-NEEDLE` CLOSED** — merged #1019, 3 retros in, node flipped;
