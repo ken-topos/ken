@@ -22,10 +22,51 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~07:10Z · `origin/main` = **`8f677ebc`**
-### **✅ #986 → #996 MERGED (eleven).**
+## ▶ LIVE — 2026-07-26 ~07:4xZ · `origin/main` = **`283eb20a`**
+### **✅ #986 → #998 MERGED (thirteen).**
 ### ✅ **`RT-VALUE-TOTALITY-P1` IS CLOSED** — merged **and** all three retros in.
 ### ▶ **NEXT: re-anchor `B2V` → kick Runtime (#74).** Foundation lane FREE (#72).
+### ⛔ **THE SWEEP WOULD HAVE COMPACTED A HEALTHY SEAT** — fixed in #998, below.
+
+> ### ⛔⛔ THE WEDGED-PANE SWEEP WAS UNSAFE ON *CLAUDE* PANES — FIXED (#998)
+>
+> A watchdog tick reported `moot-runtime-implementer [slash:/compact]`. It was a
+> **false positive**, and chasing it found a real hazard: **Claude renders its
+> composer as `❯` + U+00A0 NO-BREAK SPACE + `ESC[2m` + text**, while
+> `composer_content()` skipped separators with `in " \t"`. U+00A0 matches neither,
+> so the loop **broke before the dim run**, `is_dim` came back `False`, and
+> `.strip()` then removed the U+00A0 so the text matched the allow-list exactly.
+>
+> ```
+> same dim /compact, separator varied:
+>   ASCII space -> ghost           (refuses to submit)
+>   NBSP        -> slash:/compact  (WOULD BE SUBMITTED)
+> ```
+>
+> ⚠ **Unsafe direction.** Without `--dry-run`, the sweep presses Enter on a healthy
+> Claude seat's **own suggestion text** and destroys its context. Fixed with
+> `.isspace()` in both loops; the live pane now reads `ghost` and the sweep reports
+> `clear`.
+>
+> ⭐ **The load-bearing control was correct and passing the whole time.** The
+> suite's own comment calls `ghost-slash` the row *"the whole mechanism rests on"* —
+> and it fired correctly, because it is written with the Codex `›` glyph and an
+> ASCII space. **The Claude glyph+NBSP shape was absent from the control
+> POPULATION, not from the detector.** ⇒ Controls are now parameterised over both
+> prompt shapes, two-sided (dim+NBSP must be `ghost`; undimmed+NBSP must still be
+> submittable), so the fix cannot pass by suppressing real detection. 13/13.
+>
+> ⛔ **Standing rule now in the playbook: add a prompt shape to `PROMPT` and its
+> `ghost` row lands in the SAME commit.** An allow-listed command reaching Enter is
+> the one outcome with no undo.
+>
+> ⚠ **Residual, filed as #76 — the sweep still FAILS OPEN on the error path.**
+> `classify-pane-composer.py` reads **stdin**; an argv invocation reads nothing and
+> prints **`clear`** (I believed it for a turn). Worse, `sweep-wedged-panes.sh` does
+> `capture-pane … || true`, so **a tmux failure yields an empty pane string and also
+> reads as `clear`** — reached with no misuse at all. A seat whose pane cannot be
+> captured currently reports healthy. ⛔ `clear` is the permissive answer and
+> "could not observe" must not map to it.
 
 > ### ▶ CURRENT: WHERE TO GO NEXT — two open lanes, both mine to start
 >
