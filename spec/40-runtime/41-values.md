@@ -115,8 +115,9 @@ that `StaticCallableRef` or a future durable higher-order abstraction exist.
 ## 3. Durable encoding and private in-process addressing
 
 Durable canonical encoding and in-process addressing are separate contracts.
-(A cryptographic/Merkle hash is used for *serialization/verification*,
-`../30-surface/38 §1` — a separate concern from in-process addressing).
+(A cryptographic/Merkle hash is used for
+  *serialization/verification*, `../30-surface/38 §1` — a separate concern from
+  in-process addressing).
 
 `OQ-hash` is revised accordingly: this specification fixes no in-process hash,
 collision strategy, probing policy, load factor, or identifier scheme. A
