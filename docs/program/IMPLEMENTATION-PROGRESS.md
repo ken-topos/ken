@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-26 13:18:55Z — from 85 issue file(s) in `docs/program/issues/`.
+2026-07-26 13:43:08Z — from 87 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -118,8 +118,10 @@ the committed file matches the generator's output.
 | `SEAL-2` | carrier producer closure, over a derived enumeration | merged | foundation | M | none | PR #912 @ 4ac9141e (origin/main, CI green) |
 | `SPAN-SEAL` | seal the BufferSpan producer surface | merged | foundation | M | none | — |
 | `SPEC-38-ERRATUM` | spec 38-ffi-io self-contradicts on the transfer bound — rule and reconcile | closed | spec | S | none | 827 |
+| `SPEC-ALIGN-A1` | Scope the landed-code authority convention out of the normative status blocks, and census every private-mechanism constraint against its conformance consumers before relaxing any of them | ready | spec | M | none | — |
+| `SPEC-ALIGN-B1` | Split the frozen interoperability and provenance schemas into versioned protocol profiles, under a per-edge threat audit rather than a field count | draft | spec | L | none | — |
 | `SPEC-CLOSURE-BOUNDARY` | Revise the runtime value spec to remove the closure-identity inconsistency and state the closure/value boundary with minimum constraints on the implementation | merged | spec | M | none | — |
-| `SPEC-MISSION-GROUNDING` | Ground the spec as a whole against the mission — audit every retained constraint for which mission property fails without it, and relax the ones where nothing does | draft | spec | L | none | — |
+| `SPEC-MISSION-GROUNDING` | Ground the spec as a whole against the mission — audit every retained constraint for which mission property fails without it, and relax the ones where nothing does | active | spec | L | none | — |
 | `SRC-ATTEST` | squash-stable whole-source attestation + fresh merge-result authorization | merged | doc | M | none | — |
 | `STR-BIJ` | the String/List Char 'bijection' over-claim (adversary A1 + A2) | ready | spec-enclave | S | none | — |
 | `VIS-BR-LITERAL` | visibility walk: raw-string prefixes br and cr are unrecognized by the literal scanner | merged | runtime | XS | none | — |
@@ -133,6 +135,7 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `RT-FNSPLIT-B2E` — semantic boundary-value elimination — an opaque boundary inhabitant plus a mechanically closed operation-by-class disposition ledger over every reachable Lowered consumer, inert
+- `SPEC-ALIGN-A1` — Scope the landed-code authority convention out of the normative status blocks, and census every private-mechanism constraint against its conformance consumers before relaxing any of them
 - `STR-BIJ` — the String/List Char 'bijection' over-claim (adversary A1 + A2)
 
 ## Blockers
@@ -172,6 +175,7 @@ is itself not yet `merged`/`closed`:
 - `RT-FNSPLIT-B2F` blocked by `RT-FNSPLIT-B2E` (status: ready)
 - `RT-FNSPLIT-B2O-CHECK` blocked by `RT-FNSPLIT-B2F` (status: ready)
 - `RT-SCALE-B` blocked by `RT-FNSPLIT-B2F` (status: ready)
+- `SPEC-ALIGN-B1` blocked by `SPEC-ALIGN-A1` (status: ready)
 
 ## Gate progress
 

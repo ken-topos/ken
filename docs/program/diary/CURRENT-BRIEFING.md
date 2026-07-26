@@ -5,12 +5,18 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-26 ~12:5xZ. OPERATOR IS PRESENT.** ✅ **The mission has LANDED** —
-`docs/MISSION.md` on `main`. ⛔ Do not write it, do not amend it.
-⛔ **The over-specification analysis is NOT the Steward's** — the operator
-dispatched the `conformance-validator` directly on 2026-07-26 and said *"I'll
-handle it."* Report + Research addendum:
-`local/spec-mission-overspecification-review.md`.
+**As of 2026-07-26 ~13:5xZ. OPERATOR IS PRESENT.** ✅ **The mission has LANDED** —
+`docs/MISSION.md` on `main` (blob `1e52e77e`). ⛔ Do not write it, do not amend it.
+
+⛔ **SUPERSEDED — the over-specification work IS the Steward's now.** The earlier
+note here said it was not: the operator had dispatched the
+`conformance-validator` directly and said *"I'll handle it."* **That was true of
+the ANALYSIS and is now false of the DISPOSITION.** On 2026-07-26 the operator
+returned it with a three-way instruction: dispatch category 1 to the enclave,
+capture category 2 for after the ABI campaign, and brief the forks. ⇒ Program
+home: **`docs/program/14-spec-mission-alignment-campaign.md`**; advisory captured
+verbatim (⚠ it was only in gitignored `local/`) at
+**`docs/program/spec-mission-overspecification-advisory.md`**.
 
 > ### ⛔ THREE STALE `RESUME HERE` BLOCKS WERE REMOVED FROM THIS SPOT
 >
@@ -30,10 +36,10 @@ handle it."* Report + Research addendum:
 ## ▶ LIVE — 2026-07-26 ~11:1xZ · ⛔ **NO `main` SHA HERE, BY CONSTRUCTION**
 ### ⛔ **This header used to carry `origin/main`. It was ALWAYS the pre-merge**
 ### **base — stale the instant the block landed. `git rev-parse origin/main`.**
-### ✅ **#986 → #1019 ALL MERGED** — incl. #1009 (`R5` erratum), #1013 (`#82`).
+### ✅ **#986 → #1024 ALL MERGED** — incl. #1009 (`R5` erratum), #1013 (`#82`).
 ### ✅ **`ABI-R1` CLOSED** · ✅ **`RT-FNSPLIT-B2V` CLOSED** — retros IN on both.
-### ✅ **`DOC-GATE-NEEDLE` MERGED #1019** — blob-verified; retros + flip OWED (#93).
-### ⛔ **ZERO LANES LIVE. `#11` IS RULED: `RT-FNSPLIT-B2E` INSERTED BEFORE `B2F`.**
+### ✅ **`DOC-GATE-NEEDLE` CLOSED #1019** — blob-verified, 3 retros in, node flipped.
+### ⛔ **`#11` IS RULED: `RT-FNSPLIT-B2E` INSERTED BEFORE `B2F`.**
 ### `B2O` -> `B2R` -> `B2V` -> **`B2E`** -> `B2F`. ✅ **`B2E` KICKED**
 ### `evt_grdw31hwhw8j` — frame blob `20928eac` (370 lines), node `8275c6c5`.
 ### §2c gate ran in full: 3 compactions verified, `cat-file -e` on every named
@@ -41,12 +47,27 @@ handle it."* Report + Research addendum:
 ### ▶ **ONE LANE LIVE: Runtime on `B2E`.** Task `#97` carries the watch list.
 ### `crates/` byte-identical to `bb3e58ea`; nothing to unwind. Evidence on
 ### `origin`: `preserved/rt-fnsplit-b2f-hardstop-11-evidence` = `d1abbc79`.
-### ✅ **`DOC-GATE-NEEDLE` CLOSED** — merged #1019, 3 retros in, node flipped;
-### Verify ring compaction VERIFIED on all three seats. Adversary hunt out.
+### Verify ring compaction VERIFIED on all three seats. Adversary hunt reported.
 ### ⛔ **`B2F` CENSUS AMENDED: 47 events / 10 positions, NOT 41.** Ring-measured;
 ### the historic `41`/`29`/`~33 of 41` are DEAD operands. ⛔ Does NOT narrow `AC-11`.
-### ✅ **CV mission/spec over-specification review + Research prior-art addendum:**
-### `local/spec-mission-overspecification-review.md` (gitignored, 693 lines).
+### ▶ **SECOND LANE: spec enclave on `SPEC-ALIGN-A1`** (Track A of the
+### mission-alignment campaign). Contention-free by path — `spec/`+`docs/` vs
+### `crates/`. ⛔ **NOT semantically free:** A1 must NOT relax the store family
+### `B2E`/`B2F` build against, which is why it is on A1's STOP list.
+### ⭐ **THE MEASUREMENT THAT RE-CUT TRACK A:** every "private mechanism" the
+### advisory nominates has a **conformance row asserting it** (FNV-1a, 0.70 load
+### factor, same-slot, 4 MiB page, bignum tag `0x01`, indentation). ⇒ Relaxation is
+### a COUPLED `spec/`+`conformance/` change; A1's deliverable is the **census and
+### an honest stop list, NOT an edit count**. Empty edit set = A1 COMPLETE.
+### ⛔ **`SPEC-ALIGN-B1` IS DEFERRED BY OPERATOR DECISION** — after the `ABI-*` set
+### closes (13 of 14 still `draft`). Do NOT pick it up; do NOT re-ask.
+### ⛔ **8 TRACK-C FORKS NEED RULINGS, NOT EDITS** — campaign §6. `C1` (runtime
+### `unknown`) and `C8` (purity reverse errors) are the OPERATOR's; `C2`–`C7` the
+### Architect's. ⛔ None is dispatchable.
+### ⛔ **`SPEC-MISSION-GROUNDING` is `active`, NOT done** — `AC-M3` (adversary
+### refutation pass), `AC-M2` (`inherited`/`cannot-determine` cells), `AC-M6`
+### (coverage bound — **which of 63 spec files were read is UNSTATED**) are open.
+### ⚠ Absence from the advisory is NOT evidence a chapter is clean.
 ### ⛔ **2 ADVERSARY FINDINGS OPEN** — `RT-VALUE-TOTALITY` §7; unframed (#78).
 
 > ### ✅ `DOC-GATE-NEEDLE` MERGED — PR #1019. Verify lane is FREE.
