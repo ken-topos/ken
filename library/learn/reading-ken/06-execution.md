@@ -15,17 +15,20 @@ A kernel-admitted core term can go two ways: the **reference interpreter**
 (`X1`) walks it to a value directly; the **native backend** (`X3`) lowers it
 to machine code first. Neither types, elaborates, or decides anything about
 soundness — both consume a term the kernel has *already* checked, so a bug in
-either produces a **wrong value**, never a false `proved`
+either produces a **wrong result or behavior**, never a false `proved`
 ([§1](../../../spec/40-runtime/45-native-backend.md#1-why-a-native-backend-and-where-it-sits),
 [§2](../../../spec/40-runtime/45-native-backend.md#2-the-trust-posture--the-backend-is-not-in-the-tcb)).
 The interpreter is the **reference**: it defines the meaning of a Ken program,
 and everything else is judged correct by agreement with it
 ([§1](../../../spec/40-runtime/42-evaluation.md#1-relationship-to-the-kernels-reduction),
 [§5](../../../spec/40-runtime/42-evaluation.md#5-the-interpreter-as-oracle-and-the-repl)).
-The backend earns its trust the same way: not by inspection, but by producing
-**identical values** to the interpreter over a differential corpus — on any
-disagreement, the interpreter is right by definition, and the backend is the
-defect
+The backend earns its trust the same way: not by inspection, but by matching
+the interpreter over a differential corpus. Closure-free ground observations
+are compared directly. A result containing a callable is observed only through
+selected, well-typed projections or applications that produce closure-free
+ground observations; closure identity and representation are never compared.
+On any disagreement, the interpreter is right by definition, and the backend
+is the defect
 ([§4](../../../spec/40-runtime/45-native-backend.md#4-the-differential-equivalence-discipline--the-interpreter-is-the-oracle)).
 Neither is in the type-soundness TCB — the kernel already settled that; what
 both earn is **`tested`**, the same assurance word chapter
@@ -75,6 +78,12 @@ driven by `ken run` against a host, would be the **effect driver**
 performing the entry's `FS`-effect `Vis` nodes one at a time — perform,
 observe, resume, in exactly the order they appear on the tree's spine
 ([§6](../../../spec/40-runtime/42-evaluation.md#6-effect-evaluation-running-the-interaction-tree)).
+The live event and its durable trace are distinct. If an operation argument,
+response, or terminal result contains an ordinary closure, the event still
+occurs, but durable export refuses the whole trace before producing bytes or a
+content hash. It does not redact the closure, substitute an identity, or drop
+the event
+([§6.4](../../../spec/40-runtime/42-evaluation.md#64-effect-sequencing-and-ordering)).
 Nothing in this corpus exercises that path for this entry: it is a
 pure-library component, checked, never run. The entry's own word,
 "delegated," is therefore not a hedge — it is naming precisely the boundary
@@ -168,8 +177,9 @@ curriculum teaches — chapter [05](05-packages-and-provenance.md)'s citation
 chain lesson applies here too, one layer up.
 
 The differential discipline chapter
-[45](../../../spec/40-runtime/45-native-backend.md) prescribes — same term,
-interpreter and native backend, identical value — has a test for it. The
+[45](../../../spec/40-runtime/45-native-backend.md) prescribes — the same term
+through the interpreter and native backend, compared at closure-free ground
+observations — has a test for that closure-free case. The
 [native parity test](../../../crates/ken-cli/tests/rt_parity_native.rs)
 runs the same fixture
 through both executors and asserts on the exact result variant, not merely
