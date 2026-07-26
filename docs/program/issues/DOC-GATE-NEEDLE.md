@@ -1,7 +1,7 @@
 ---
 id: DOC-GATE-NEEDLE
 title: "schema-gate controls assert on a needle the test itself supplied, so one constraint class is fully vacuous"
-status: ready
+status: merged
 owner: verify
 size: S
 gate: none
@@ -11,7 +11,75 @@ github: null
 origin: adversary finding L1+L2 on DOC-W2 (d3b9f36c), side thread thr_2seh2bm1kr5mh evt_2sk7s27prrhdn, 2026-07-25. Steward-filed (agents cannot create tracked work per COORDINATION §2); Steward triage = CONFIRMED DEFECT, independently re-grounded at the two cited lines. The under-scoped blast-radius claim in the merge notification is a Steward defect, recorded below.
 ---
 
-> ## ✅ RELEASED BY THE OPERATOR 2026-07-26 — build it now.
+> ## ✅ LANDED AND CLOSED — 2026-07-26, PR #1019
+>
+> | operand | value |
+> |---|---|
+> | candidate exact | `d34f6cfd` |
+> | landed blob, `crates/ken-cli/tests/library_documentation_gates.rs` | **`76ee1124`** |
+> | pre-merge blob (the discriminating control) | `7415e7b2` |
+> | Decision | `dec_7ntdg9gwyj705` — `resolved`, `resolved_by=agt_37reqftfe6g00`, verified **from the object** |
+> | governing frame blob at kickoff | `d0fb8c6d` (this node — there is no `docs/program/wp/` file) |
+> | ruling folded in | `RULING R1`, `dec_7s4xdhrkg8prp` — see below |
+> | CI | full path, **not** `--doc-only` |
+>
+> ⛔ **Verified by BLOB IDENTITY, never ancestry.** The publisher squash-merges, so
+> `--is-ancestor d34f6cfd origin/main` returns exit 1 on fully-landed work.
+> `d34f6cfd`'s blob for the target file **is** `76ee1124`, byte-identical to
+> `main`, and `7415e7b2` differs — so the check discriminates rather than passing
+> vacuously.
+>
+> ### ⭐ THE REPAIR, AND THE PROBE THAT READ AS A FALSE ALARM
+>
+> ```rust
+> const LOCATION: &str = "schema fixture";
+> assert!(
+>     !LOCATION.contains(constraint),
+>     "schema fixture location must be independent of constraint needle {constraint:?}"
+> );
+> let needle = format!("{constraint} violation");
+> ```
+>
+> ⛔ **`grep -c 'contains(constraint)'` returned `1` BEFORE and `1` AFTER the fix.**
+> That reads as the defect surviving. It is not: the survivor is the **inverted
+> guard** above, which asserts the location *cannot* contain the needle. ⇒ **A count
+> over a phrase cannot separate a defect from the guard that forbids it — position
+> is the discriminator.** Resolved by reading the context, not by re-running the
+> count.
+>
+> ### ✅ RETROS IN — all three, before the ring compacted
+>
+> | seat | event | the carry |
+> |---|---|---|
+> | verify-implementer | `evt_4k5f0fdxasx0f` | trace every labelled assertion's body needle to a **declared natural producer** before repairing it — its own new `D2` control had initially repeated the caller-supplied needle |
+> | verify-qa | `evt_1aeszn94a2etc` | require a **mismatched-label / real-violation** mutation whenever a message assertion searches text; routine review had not been writing assertion operands as *subject-vs-setup* relations |
+> | verify-leader | `evt_2qkcccp2nzsky` | ⭐ **treat every "do not revisit" fence as a CLAIMED PROOF BOUNDARY**, and trace schema → validator order → assertion for the premises that make an AC satisfiable |
+>
+> **Ring's consolidated carry:** for assertion tests, distinguish **caller setup
+> labels** from **diagnostic-body evidence**, and ground the named body token at
+> its natural producer **even when a frame says the surrounding mechanism is
+> cleared.** The ring independently re-verified the landed content on
+> `origin/main = 0505d0f1` (`76ee1124`, control `7415e7b2`).
+>
+> ⭐ **The implementer answered the question I asked:** what made the frame's false
+> `type`-row premise checkable in six minutes was **two direct reads** — the schema
+> operand, then the validator's producer order — rather than reasoning about what
+> the frame's claim implied.
+>
+> ⚠ **Still owed:** the **adversary post-merge hunt** dispatched on the landed blob
+> (`evt_5spmnz7mbyc7d`), pointed at whether `!LOCATION.contains(…)` has a positive
+> control and whether `format!("{constraint} violation")` is real independence or
+> the same defect one level out.
+>
+> ### ⛔ WHAT THE RELEASE BLOCK BELOW SAID, AND WHY IT IS NOW SPENT
+>
+> The block below said **"build it now"** and released the WP to Team Verify. It is
+> **history**: the WP is built, reviewed, and merged. ⛔ Do not read it as a live
+> release, and do not re-kick this node. ✅ **The half of it that is STILL BINDING
+> is the concurrency ruling** — the doc-track exception is DOC-ONLY, and proving
+> your file sets disjoint does **not** earn a slot. That survives this WP.
+>
+> ## ▶ HISTORICAL — RELEASED BY THE OPERATOR 2026-07-26
 >
 > **Operator, 2026-07-26 ~11:4xZ, verbatim:** *"the implementation teams are
 > quiescent. fix the DOC-GATE-NEEDLE issue. It doesn't matter to me how."*
@@ -175,7 +243,15 @@ lines.
 > produces one. **That is the exact defect this WP exists to fix, in the frame
 > that describes it** — an assertion whose needle was supplied by the caller.
 
-## ⭐ `RULING R1` — the `type` row's operand moves (Architect, 2026-07-26)
+## ⭐ `RULING R1` — the `type` row's operand moves (Architect, 2026-07-26) — ✅ DISCHARGED
+
+> ⛔ **`R1` IS SPENT AS AN INSTRUCTION AND DURABLE AS A RECORD.** The ring built
+> against it, the operand moved to `purpose = 1`, and the result is merged at
+> `76ee1124`. ⛔ Do not read the ruling below as work outstanding. It stays because
+> it is *why* the shipped mutation row looks the way it does, and because the reason
+> it existed at all — this frame asserted a `type` guard that
+> `pack.schema.json` does not have — is the finding, not the fix.
+
 
 **Decision `dec_7s4xdhrkg8prp`, `resolved`, `resolved_by=agt_37reqftfe6g00`** —
 verified from the object, not from the channel reporting it. Raised by
@@ -231,6 +307,13 @@ in minutes rather than at QA.
 
 ## Acceptance criteria
 
+> ⛔ **ALL SEVEN ARE DISCHARGED — this section is the record of what was required,
+> not a live checklist.** The candidate `d34f6cfd` was QA-approved on the exact
+> SHA, the Decision resolved from the object, and the result merged at `76ee1124`
+> through the **full CI path**. ⭐ `AC-5` did what it was rewritten to do: the ring
+> **derived** the call-site count independently and arrived at 13, rather than
+> reproducing `D3`'s number. ⛔ Do not re-run these as though the WP were open.
+
 - **AC-1 — the currently-passing mutation must REDDEN.** Delete the `type`
   enforcement block from `schema_violations_with_refs`; the suite **must fail**.
   This is the exact discriminator that returns `31 passed; 0 failed` today, so
@@ -261,6 +344,14 @@ in minutes rather than at QA.
   `scripts/ken-cargo` scoped to `-p ken-cli --test library_documentation_gates`.
 
 ## Guardrails — do not reopen
+
+> ⚠ **These were construction-time guardrails and the construction is done.** They
+> are retained because one of them **carried a false premise inside a sentence whose
+> whole function was to say "attacked and cleared — this WP does not revisit any of
+> that"** (the struck clause below). ⭐ The Verify leader's retro turned that into
+> the rule worth keeping: **treat every "do not revisit" fence as a CLAIMED PROOF
+> BOUNDARY**, not as a settled one. A false premise carried by a sentence
+> instructing the reader not to check it is the most durable kind there is.
 
 - ⛔ **Do not touch the mutation table itself — WITH ONE NARROW EXCEPTION granted
   by `RULING R1`.** The six planted violations are correct; the *assertion* is
