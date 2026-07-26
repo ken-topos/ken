@@ -211,7 +211,7 @@ yields a persistent handle, under **one** static policy.
 
 ⚠ **The runtime OUTCOME per input is a separate, finer classification** — that is
 `AC-10`, and it is entailed by the policy rather than replacing it. Neither level
-may absorb the other; see the `D4`/`AC-3` clarification in the RECUT.
+may absorb the other; see the `D4`/`AC-3` clarification in **RECUT 1**.
 
 ⛔ **The 41-transfer histogram is corroboration, NOT the population proof.** The
 proof is the exhaustive match over the **21 landed variants** at
@@ -276,11 +276,20 @@ constant helper declarations are **predicted before measuring** and
 
 ## Acceptance criteria
 
-> ⛔⛔ **RECUT 2026-07-25 — these `AC`s are AMENDED. Read `## RECUT` at the end
-> of this file BEFORE treating the list below as the bar.** The Architect named a
+> ⛔⛔⛔ **TWO RECUTS AMEND THIS LIST. Read `## RECUT 2` (2026-07-26) FIRST,
+> then `## RECUT 1` (2026-07-25), at the end of this file — BEFORE treating the
+> list below as the bar.**
+>
+> ⛔ **RECUT 2 is a gate, not a note: no B2V acceptance candidate may bind on
+> the old per-cell proof shape.** The predicate is **representation
+> authority-to-execution closure** over blocks `#1`–`#6`, and ⛔ **a
+> hand-maintained matrix that can drift from the production enums does not
+> discharge it.** The `AC`→control map stays REQUIRED and stops being the proof.
+>
+> ⛔⛔ **RECUT 1 2026-07-25 — these `AC`s are AMENDED.** The Architect named a
 > shared predicate across three production blocks: the defect is the **shape** of
 > this list — each `AC` below pins one **facet** of an emitted round trip, and
-> each block found a facet none of them named. `AC-10` (in the RECUT) closes it
+> each block found a facet none of them named. `AC-10` (in **RECUT 1**) closes it
 > structurally, and the three `NO CONTROL — open residual` rows are **promoted
 > into scope**, not carried as residuals.
 
@@ -343,6 +352,220 @@ operation exercised **from emitted code**, not from Rust.
 
 **AC-6 — referent owner and slot owner are distinguishable.** A control that
 reddens if `ActivationFrame` is substituted for the referent owner.
+
+> ### ⛔ AC-6 IS BOUND BY TWO ARCHITECT RULINGS — 2026-07-26. READ BOTH.
+>
+> These are **operative acceptance text**, not commentary. `AC-6` above is
+> necessary and **no longer sufficient**: distinguishability alone does not
+> discharge it. Blocked candidates `81a68435` and `fe7d8a08` are preserved and
+> **neither is an acceptance candidate**.
+>
+> #### Ruling A — `evt_8851dkes0wmh`: `NoStoreIdentity` does NOT discharge
+>
+> ⭐ **The distinction is explicitness versus PRESERVATION.** A separately
+> compiled consumer can recover *the fact that no store identity exists*; it
+> cannot thereby recover **the same identity intact**. ⛔ **Renaming a residual
+> as an outcome does not discharge it.** The candidate also declared referent
+> owner `PersistentStore` while `NODE_SLOT` stayed null — and this ABI's own
+> node-layout contract says a null slot **denotes invocation-arena ownership**,
+> so the word was internally inconsistent. **Persistent-region reservation is
+> storage governance, not store adoption or content-addressed identity.**
+>
+> 1. Emitted code may construct and seal a node without a `SlotId`, but that is
+>    an internal **`PendingStoreAdoption`-equivalent** state — **not** an
+>    admitted or published persistent `HandleWord` outcome.
+> 2. Before publication or escape across the generated-function boundary, a
+>    **trusted store-owned adoption/finalization** operation validates the
+>    complete reachable value graph, canonicalizes/interns it, **mints or reuses
+>    the real `SlotId`**, installs placement, and returns the canonical
+>    store-backed word.
+> 3. ⛔ **Only the store owns mint/reuse authority.** Emitted code remains unable
+>    to write `NODE_SLOT`; that anti-forgery property carries **unchanged**.
+> 4. A successful `PersistentStore` outcome must be **`StoreMinted` with a
+>    non-`NULL_SLOT`**. `NoStoreIdentity` stays valid for **invocation-arena**
+>    handles only.
+> 5. Equal independently emitted values **converge** to the same store identity;
+>    unequal values **never alias**. Adoption failure occurs **before**
+>    publication, and ⛔ **no parent may publish with an unadopted reachable
+>    child.**
+>
+> #### Ruling B — `evt_3cw3qtmxbvmc3`: `PersistentClosure` stays ADMITTED
+>
+> ⛔ **The conservative rejection is not a residual, and it may NOT be repaired
+> by narrowing or reclassifying `Closure`/`DeclarationClosure`.** The bound `D4`
+> policy deliberately assigns them `PersistentClosure`, and `AC-10` says **no
+> admitted well-formed represented value may reject**. Moving the implementation
+> gap into the classifier would contradict that authority and **recreate the
+> higher-order wall the arm exists to prevent**.
+>
+> 1. ⛔ **Do not force `Closure` through `RuntimeGroundValue`/`read_ground`.**
+>    Adoption needs a **closed canonical-image layer** covering both the existing
+>    ground images and `Closure`. The normative image is
+>    `Value::Closure { code_id, captured }` — authoritative static code identity
+>    plus the **full ordered** canonical captured environment.
+> 2. `code_id` derives from the **B2O/B2R authoritative callable-unit/body
+>    identity**, in an **artifact-bound namespace**. ⛔ Never a runtime pointer,
+>    a cloned `RuntimeExpr`, a symbol-only alias, or caller configuration. **Two
+>    artifacts' equal local-origin ordinals must not collide merely because their
+>    numbers match.** Identity recording only — **B2F dispatch/emission stays
+>    inert and out of scope.**
+> 3. Captures adopt **recursively and in order**. **Full capture values, not
+>    hashes**, are the canonical content. Equal code identity **plus** equal
+>    ordered captures converges; a different code identity, capture value, or
+>    capture **order** does not alias.
+> 4. Child canonicalization must **preserve the child's actual boundary
+>    tag/word**. ⛔ The current hard-coded reconstruction as `PersistentGround`
+>    is invalid for a nested `PersistentClosure`.
+> 5. Extend closed canonical decode/readback for `Closure` **only as far as store
+>    adoption and independent recovery need**. Malformed/unsupported images stay
+>    **fail-closed**. ⚠ **If cyclic closure graphs are constructible, STOP and
+>    route** — the bottom-up algorithm then needs an **explicit cycle contract**,
+>    not accidental recursion.
+> 6. `HostResult` and `BorrowedOpaque` are **different**: invocation-owned
+>    represented arms. Persistent-store adoption must **continue to reject**
+>    them, governed by their invocation-arena transfer/escape paths. ⛔ **Never
+>    place either in the permanent store.**
+>
+> #### Required discriminators on the fresh descendant
+>
+> - emitted-created `Closure` with ordered captures → trusted adoption →
+>   producer arena dropped → a **separately compiled** consumer recovers
+>   `PersistentClosure`, **non-null** store identity, the same **artifact-scoped**
+>   code identity, and capture **content and order**;
+> - independent **equal** closures converge to one canonical `SlotId`/word;
+> - different code identity, capture value, or capture **order** does not alias;
+> - a **nested** `Closure` capture adopts bottom-up **without** retagging as
+>   ground;
+> - any reachable **invocation-owned** capture **rejects before** parent
+>   publication;
+> - canonical `Closure` decode **round-trips**, while malformed/unsupported
+>   images **reject**;
+> - emitted code **still cannot write `NODE_SLOT`**, and **no** B2F
+>   dispatch/body-emission surface changes;
+> - plus Ruling A's set: construct → seal → adopt → a separately compiled
+>   consumer recovers real non-null identity and content **after the producer
+>   arena is gone**; the equal/unequal adoption differential; unadopted publish
+>   **fails closed**; emitted `NODE_SLOT` assignment stays **impossible while the
+>   store-owned adoption path is positively exercised**; and owner/identity
+>   **iff** for every admitted handle graph.
+>
+> ⛔ **CORRECTED 2026-07-26 — "ground adoption at `fe7d8a08` may carry
+> unchanged" IS FALSIFIED. Do not rely on it.**
+>
+> That sentence was the Architect's, transcribed by the Steward in good faith,
+> and **measurement overturned it within the hour.** `fe7d8a08`'s ground
+> adoption recursed over `Constructor`/`Record` children **with no cycle
+> guard**, and a reachable emitted input **hung it**. ⭐ **Mutation `M42` is the
+> sharpest control on this node: remove the guard and it does not redden — it
+> stack-overflows and aborts the test binary.** The defect is demonstrated, not
+> argued. Repaired at `9b254fb9` (in-progress node-index set, exact fail-closed
+> status at any cycle length).
+>
+> ⚠ **Read the shape of this, not just the fact.** An `AC-6` ruling carved out
+> ground adoption as settled; the very next fold found a live defect inside the
+> carve-out. ⛔ **A scope exclusion in a ruling is a statement about what the
+> ruling ADDRESSES, never a warrant that the excluded region is correct.**
+>
+> ✅ Still carrying, and **not** touched by this correction: the classifier, the
+> closed partition, `AC-1`, `AC-3`, and the three block-#4 repairs.
+
+> ### ✅ RULED — THE CYCLE CONTRACT, `evt_5pzxf6sm4z08`, 2026-07-26
+>
+> **CYCLIC PERSISTENT GRAPHS ARE MALFORMED/UNREPRESENTABLE IN B2V.** They must
+> **fail closed before canonical-store publication or boundary escape.**
+> `9b254fb9` has the **correct direction** but stays **preservation evidence,
+> not an acceptance candidate**.
+>
+> ⭐ **The reason is the REPRESENTATION CONTRACT, not the guard's behaviour.**
+> Ken's persistent `Value` is a **finite, well-founded recursive value**;
+> `Constructor`/`Record` children and `Closure` captures are encoded **inline as
+> full canonical `Value`s**, and store identity is the **hash + memcmp of that
+> finite canonical byte image**. ⛔ **A back-edge has no finite `Value` and no
+> canonical byte image under this contract.**
+>
+> ⛔ **Emitted mutators can construct a STAGING GRAPH THAT IS INVALID, and that
+> ability does NOT enlarge the admitted represented-value domain.** Admitting
+> cycles would require new graph/SCC/fixed-point identity semantics and a
+> different canonical encoding — **out of B2V, and not implied by `AC-10`.**
+>
+> #### Required mechanism on the fresh descendant
+>
+> 1. Adoption begins **only after an exclusive seal/quiescence handoff**. The
+>    published counts and reachable fields must be **one stable snapshot**;
+>    emitted writers must no longer be able to mutate it.
+> 2. Validate the complete reachable graph with an **iterative tri-colour /
+>    worklist traversal**, scoped to the adopted persistent image. A **back-edge
+>    to grey** fails with the stable malformed-shape status; a **repeated edge to
+>    black is a legal shared DAG** and reuses the canonical child.
+> 3. ⛔ **Do not use host recursion as the totality mechanism.** Every finite
+>    acyclic graph admitted by the region bounds **remains admitted**; a deep
+>    chain may **not** stack-overflow and may **not** be reclassified as
+>    malformed.
+> 4. **Complete validation precedes** canonical root publication / identity
+>    installation. Then canonicalize in **postorder**, preserving each child's
+>    own tag/word and the existing **store-only** slot-mint authority.
+>    Invocation-owned reachable children still reject before parent publication.
+> 5. ⚠ **The node-index key is sufficient ONLY because one adoption walk is
+>    scoped to one persistent image.** If the walk can span images, the key
+>    **must include image identity.**
+>
+> #### Required discriminators
+>
+> Direct **and multi-node** cycles reject deterministically · the **same-shape
+> acyclic** graph and a **shared-child DAG** adopt · a **deep acyclic chain
+> beyond the former recursive margin** adopts **without host-stack growth** · a
+> **write after sealing** fails/no-ops with the exact state verdict and **cannot
+> change the adopted image** · nested canonical children **retain their actual
+> tag**.
+>
+> ⛔ **`Closure` work may resume only after this transcription AND the
+> already-planned fresh-seat gate.** QA stays held for a fresh descendant
+> closing `Closure` **plus** this cycle/depth/seal contract.
+>
+> ---
+>
+> ⭐ **How this ruling was reached matters — the precondition came back TRUE.**
+> `ken_boundary_store_field_local` refuses only a *persistent parent with an
+> invocation-owned child*, so emitted code can allocate two persistent nodes and
+> write each as the other's child — and **both writes return `OK`** through
+> bounds, tag, frozen-prefix and escape.
+>
+> ⭐ **The ring refused to infer the answer from the guard's behaviour, and that
+> refusal is why the ruling is sound.** `AC-10` forbids rejecting an admitted
+> well-formed represented value — so *"the guard rejects it"* was **the thing
+> being ruled on, never evidence for the ruling.** ⛔ **Preserve that move:** a
+> mechanism's behaviour is not testimony about whether that behaviour is
+> correct.
+>
+> ⭐ **And the reusable lesson is the implementer's, sharper than the one I first
+> wrote here** (`evt_3zmx1wa2qk1zw`): *"a precondition attached to NEW work is
+> worth asking of the work you ALREADY SHIPPED, because the two share the
+> mechanism."* The cycle precondition was written for `Closure`; asking it
+> literally is what exposed the unguarded recursion in **already-landed ground
+> adoption**. ⛔ **Do not narrow a precondition to the deliverable that
+> occasioned it.**
+
+> ### ✅ THE TWO RESIDUALS FROM `9b254fb9` — AC OWNERSHIP RULED, AND THEY SPLIT
+>
+> Reported by the implementer rather than discovered later. ⛔ **Neither is
+> discharged**, and the Architect ruled they belong to **DIFFERENT `AC`s** —
+> ⭐ **I had guessed both were `AC-10`, and that was wrong.**
+>
+> 1. **Unbounded depth ⇒ an `AC-10` DOMAIN-TOTALITY face.** `adopt` is
+>    cycle-safe but has **no depth bound**; a deep *acyclic* aggregate can
+>    overflow and the margin is unmeasured. ⛔ **Finite deep acyclic values are
+>    ADMITTED, so crashing OR rejecting them is forbidden.** Cycle-safety and
+>    depth-safety are different properties; the guard closes only the first.
+> 2. **Adoption against a live writer ⇒ an `AC-6` OWNERSHIP-TRANSFER face.**
+>    Store adoption requires an **exclusive sealed handoff** before it may
+>    absorb counts, validate, mint identity, or publish. ⛔ **Rust's `&mut` is
+>    not by itself a proof** once emitted code retains a raw region base.
+>
+> ⭐ **Why the split matters more than the labels.** Had both been filed under
+> `AC-10`, the ownership-transfer face would have been discharged by a
+> *totality* control that never exercises a concurrent writer — a green row
+> covering the wrong question. **Raising them as questions instead of folding
+> them into the nearest `AC` is what produced the split.**
 
 **AC-7 — borrowed ingress fails closed on escape.** Exact error.
 
@@ -489,12 +712,35 @@ inheritance from `C4`.
   > not a bar on asking sooner. `#12` is wrong under one reading, so `#11` wins.
 - ### ⛔ ARMED — consecutive Architect PRODUCTION blocks on this node
   ```text
-  CONSECUTIVE ARCHITECT PRODUCTION BLOCKS = 4
+  CONSECUTIVE ARCHITECT PRODUCTION BLOCKS = 6
     #1 78a57d90  #2 657f60a0  #3 ddff2fae  #4 fd4e7f08 (dec_7sd3enk81maws
                                               REJECTED on the object, evt_4bs6scfmt5ax0)
-  PREDICATE CHECK AT 3 -> FIRED 2026-07-25, ANSWERED YES. See the RECUT below.
-  NEXT CHECK = block #6 on this node.
+    #5 81a68435 (evt_8851dkes0wmh)  #6 fe7d8a08 (evt_3cw3qtmxbvmc3)
+  PREDICATE CHECK AT 3 -> FIRED 2026-07-25, ANSWERED YES -> RECUT 1.
+  PREDICATE CHECK AT 6 -> FIRED 2026-07-26, ANSWERED YES -> RECUT 2.
+  NEXT CHECK = block #9 on this node.
   ```
+  ✅ **THE `#6` CHECK IS ANSWERED: YES, one predicate over ALL SIX BLOCKS**
+  (`evt_17v000g4gmppp`) — **representation authority-to-execution closure**. See
+  **RECUT 2**. ⛔ **No B2V acceptance candidate may bind on the old per-cell
+  proof shape.**
+
+  ⭐ **Both checks this counter has fired have come back YES.** That is the
+  argument for the counter existing: `§5a-ii` counts **hard-stops**, and a
+  review block is correctly **not** a hard-stop — so six Architect production
+  blocks moved neither the hard-stop count nor the symptom inventory, and every
+  armed line in the repo read correct and current throughout. ⛔ **A backstop
+  that depends on someone remembering to look is not operative**, which is why
+  it lives here as a counted line the next block must walk past.
+
+  ⚠ **On the two readings I recorded at `#6` and deliberately did not choose:**
+  I framed them as *convergence* versus *a predicate the frame fails to name*,
+  and noted `#5`/`#6` were narrower than `#1`–`#4`. **The Architect answered
+  that this is NOT merely `#5`/`#6` convergence** — the predicate reaches back
+  to `#1`. ⛔ **The narrowing I observed was real and was not the point**;
+  had the Steward concluded from it, the answer would have been wrong.
+  `COORDINATION §5a-ii` reserves naming the predicate to the Architect, and this
+  is the case that shows why.
   ⚠ **Block #4 arrived on a candidate QA had APPROVED with a complete
   AC→control map and a passing mutation proof.** Read that before treating a
   green QA map as coverage: the map was honest and its residual accounting was
@@ -528,7 +774,84 @@ inheritance from `C4`.
   point of work, as a counted line the next block has to walk past.
 - Read `agent/playbooks/tools/pin-a-property.md` before writing any assertion.
 
-## ⛔⛔ RECUT — 2026-07-25. The Architect NAMED the shared predicate.
+## ⛔⛔⛔ RECUT 2 — 2026-07-26. A predicate over ALL SIX BLOCKS. `evt_17v000g4gmppp`
+
+> ### ⛔ NO B2V ACCEPTANCE CANDIDATE MAY BIND ON THE OLD PER-CELL PROOF SHAPE.
+>
+> That is the gate. Everything below explains it. **The `#6` §5a-ii check fired
+> and the Architect answered YES** — blocks `#1`–`#6` share one predicate, and
+> ⛔ **this is NOT merely `#5`/`#6` convergence**, which was the reading I
+> recorded as live and correctly did not choose.
+
+### The predicate — the Architect's words, `evt_17v000g4gmppp`
+
+**Representation authority-to-execution closure:**
+
+> Every B2V representation authority — layout inventory, static policy, value
+> partition, canonical form, owner/lifetime/identity rule — must be the **sole
+> authority actually consumed by the production path it governs**; and every
+> admitted partition must have **one total executable lifecycle** from emitted
+> construction through validation/sealing/adoption/publication to separately
+> compiled recovery. ⛔ **A declaration, classifier row, Rust oracle, or residual
+> label with no production consumer does not discharge the predicate.**
+
+### The six blocks are successive counterexamples — one predicate, six faces
+
+| # | SHA | the authority that had no closed execution |
+|---|---|---|
+| 1 | `78a57d90` | persistent **policy** existed; stable persistent resolution and emitted handle construction did not |
+| 2 | `657f60a0` | content, store-mint authority and tag×class legality were **declared but not enforced** by the emitted/store path |
+| 3 | `ddff2fae` | Big-`Int` spill and immediate validity were **declared** but lacked total executable encodings/checks |
+| 4 | `fd4e7f08` | one **layout authority had no consumer**, and the Rust canonicality/non-wrapping laws **were not the emitted laws** |
+| 5 | `81a68435` | `PersistentStore` was an **outcome without the adoption/mint lifecycle** that makes it true |
+| 6 | `fe7d8a08` | `PersistentClosure` was **admitted without a canonical image/adoption arm** |
+
+⇒ ⛔ **The frame still permits A TABLE TO CLOSE BEFORE ITS PRODUCTION MECHANISM
+CLOSES.** That sentence is the defect. Every one of the six was a correct local
+ruling on a real cell, and none of them reached it.
+
+### The subsuming repair
+
+**One mechanically closed artifact** over the **finite structural partition**,
+spanning every phase:
+
+```text
+authority -> producer -> validator -> canonicalizer/adopter -> publisher -> consumer
+```
+
+- Every admitted row must **name or derive ALL phases**.
+- A missing consumer, canonical image, lifecycle phase, or authority use must be
+  a **construction/compile failure** or a **named causal red control**.
+- ⛔⛔ **A HAND-MAINTAINED MATRIX THAT CAN DRIFT FROM THE PRODUCTION ENUMS IS NOT
+  ENOUGH.** This is the clause that retires the per-cell `AC`→control map as a
+  *sufficient* proof shape. The map stays required; it stops being the proof.
+
+> ⭐ **This is the `fd4e7f08` lesson stated as law.** That candidate shipped a
+> map that was complete, honest, and mutation-proved, with `ken-runtime` at
+> 398/0 — and three production defects sat outside it **because no `AC` asked
+> the closure question, so no row was missing.** A matrix cannot report a cell
+> it does not have. Derivation from the production enums can.
+
+### ⚠ What RECUT 2 does NOT do
+
+- ⛔ **It does not undo the six local rulings.** Each stands. It names the
+  structural proof they are instances of.
+- ⛔ **It adds no new constraint to the in-flight fold**, and **does not stop the
+  ring** — they continue under the Steward's standing instruction.
+- ⛔ **It is not a verdict on the ring.** Six blocks landed on work that was
+  honestly reported and correctly escalated every time; the counter measures the
+  frame's proof shape, not the ring's competence.
+
+### ✅ Transcription verified by the Architect
+
+`0525a206`/blob `3266f280` faithfully transcribed rulings A and B; `37f67afe`/
+blob `43efb676` preserves them **and correctly retracts the falsified "ground
+adoption may carry unchanged" carve-out.** ⭐ **The Architect checked the
+Steward's transcription against what they meant, because I asked them to** —
+a frame is what the implementer obeys, and a faithful-looking transcription is
+not self-verifying.
+
+## ⛔⛔ RECUT 1 — 2026-07-25. The Architect NAMED the shared predicate.
 
 ⛔ **Read this before reading the acceptance criteria above.** The `AC` set above
 is the thing this recut acts on.
@@ -716,6 +1039,14 @@ residuals — **they are the predicate's uncovered faces**, and they are the rec
 | `AC-4` Big at the persistent boundary | the disposition promises a `PersistentGround` spill for every `Int`; only `Small` can materialize |
 | `AC-1` tag reachability | review-only reachability is not a sweep over the admitted domain |
 | `AC-6` persistent content addressing | the emitted node stays `NULL_SLOT`, so identity recovery is unproved |
+
+⛔ **The `AC-6` row above is RULED, not open — 2026-07-26.** Two Architect
+rulings (`evt_8851dkes0wmh`, `evt_3cw3qtmxbvmc3`) bind the mechanism that closes
+it, and they are folded into the **operative `AC-6` text above**, which is where
+you must read them. ⚠ **Do not discharge this row from the sentence in this
+table** — the table states the *gap*; the `AC-6` block states the *obligation*,
+and the obligation is strictly larger. Two closed candidates (`81a68435`,
+`fe7d8a08`) already read as satisfying the table row while failing the ruling.
 
 ### FREEZE
 

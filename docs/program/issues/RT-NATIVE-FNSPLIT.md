@@ -50,6 +50,29 @@ harness defect.
 
 ## ⚠ SCALING GATE — operator directive 2026-07-23 (evt_4btfhwqhah1ye)
 
+> ### ▶ THE GATE NOW HAS TRACKED OWNERS — [[RT-SCALE-A]] and [[RT-SCALE-B]]
+>
+> **Filed 2026-07-26.** The three requirements below are unchanged and still the
+> merge condition; what changed is that they are now **executable nodes with
+> frames, acceptance criteria and an owner**, not prose in this file.
+>
+> | | node | frame |
+> |---|---|---|
+> | Boundary **A** — planner census, pre-lowering | [[RT-SCALE-A]] | `wp/RT-SCALE-A-planner-census.md` |
+> | Boundary **B** — full emission + model + verdict | [[RT-SCALE-B]] | `wp/RT-SCALE-B-emission-scaling-verdict.md` |
+>
+> ⛔ **Requirements 1–3 below are the SOURCE, and the frames are what gets
+> executed. If they ever disagree, this section wins and the frame is amended**
+> — do not silently follow a frame that has drifted from the operator's words.
+>
+> ⭐ **Why this was filed at all:** a merge condition that lives only in prose is
+> the `KW-THEOREM` failure shape — there, the frame *correctly named* the
+> formatter's CI-only coupling and four exact-SHA reviews still approved a
+> noncanonical corpus, because CI was the first operative control. All three
+> rings' retros converged independently on the same fix: **a requirement only a
+> distant gate can observe must become an executable step at the point of
+> work.** Nothing sequenced this gate, nothing released it, and no team held it.
+
 **"SP tests complete under a timeout" is NOT acceptance.** After the recut, a
 4-resource-bracket program still costs ~103 CPU-s / ~4 GB to compile — the operator
 ruled that unacceptable without understanding the scaling law. RT-NATIVE-FNSPLIT does

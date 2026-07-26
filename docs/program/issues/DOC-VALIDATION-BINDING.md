@@ -12,7 +12,10 @@ origin: adversary finding evt_59w0kkk1gf75e (2026-07-22), post-merge on DOC-W0 @
 ---
 
 > ✅ **MERGED `96ab2b4b`** 2026-07-24 (PR via publisher; verified on main by
-> content). ⚠ **Retros still owed** — the WP is not closed until they are in.
+> content). ✅ **Retros IN 2026-07-26** (`evt_3yth2zb8fgv90`) — WP closed from
+> Verify's side. Implementer carry: after deleting/renaming a load-bearing
+> symbol, repo-wide grep the old spelling and classify each survivor as
+> live-to-update or intentionally historical.
 
 > **Re-homed doc → verify, 2026-07-24 (Steward).** The mechanism is
 > `crates/ken-cli/tests/library_documentation_gates.rs`, a Rust gate harness —

@@ -22,8 +22,30 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-25 ~23:50Z · `origin/main` = **`c72be0b0`**
-### **✅ KW-THEOREM LANDED. LANE 1 RECUT — predicate NAMED, frame folded.**
+## ▶ LIVE — 2026-07-26 ~00:2xZ · `origin/main` = **`4427147d`**
+### **✅ THE B2V RECUT IS BOUND AND ON `main`. Production candidate still blocked.**
+
+> ### ✅ PR #978 LANDED — exact `36064740`, tree `a4c8a604`, full CI
+>
+> **Verified by content, not the publisher's report** (it exits 0 on failure):
+> **7/7 files blob-identical**; the frame blob on `main` (`58c34ad9`) is the
+> **exact blob the Architect approved** at `e4fa5ec5`; `c72be0b0` still an
+> ancestor, so **nothing landed since was reverted**. `steward/work` reset onto
+> the squash-merged `main` — ⛔ the `wp/steward-b2v-recut-*` refs are **spent**;
+> a squash-merged branch cannot be continued. Announced `evt_3xc5kqjg8bzbx`;
+> all three receiving seats confirmed `Working`.
+>
+> ⭐ **NOW BINDING, and NONE of it has ever been discharged on this node:**
+> `AC-10` total classified-domain closure (variant → static policy, input →
+> entailed outcome); `D4`/`AC-3` **five** static encoding policies with the
+> spill-variant→immediate-only ban; **`AC-1` layout closure** (field inventory is
+> the sole authority; a declared extent is derived **and consumed** or does not
+> exist; a causal control reddens on independent drift; ⛔ constant-vs-constant
+> does not discharge). RETAIN keeps proved properties, **not** byte counts.
+>
+> ⚠ **`AC-10` was `NO CONTROL — open residual` on every candidate to date and
+> `AC-1` layout closure did not exist until tonight. Neither inherits evidence
+> from any prior verdict.**
 
 > ### ✅ OPERATOR DIRECTIVE 2026-07-25 — `lemma` retired from the language
 > entirely; permitted in comments and documentation. **VERIFIED ALREADY
@@ -84,7 +106,35 @@
 | branch on origin | `wp/RT-FNSPLIT-B2V-executable-value-abi` = **`fd4e7f08`** — ⛔ **BLOCKED** (production block **#4**) |
 | Decision | `dec_7sd3enk81maws` **rejected on the object** — Architect, `evt_4bs6scfmt5ax0` |
 | state | runtime-leader routed the three repairs (`evt_4ms9arc37p89w`); implementer folding from `fd4e7f08`, ⛔ **no force-push of any rejected checkpoint** |
-| recut | `wp/steward-b2v-recut-5` = **`e4fa5ec5`** — fold 4 pushed (`evt_612dykrppbqme`), awaiting Architect **bind** |
+| recut | ✅ **BOUND AND MERGED** — read the frame on `origin/main`, never a `wp/steward-b2v-recut-*` ref |
+| **fresh candidate** | `wp/RT-FNSPLIT-B2V-executable-value-abi` = **`81a68435`** — pushed 00:3xZ, `ls-remote`-verified. **Preservation only; NO Decision open, NOT a publish request.** |
+| **held on** | ⛔ Architect ruling `evt_hxns0g9zcjzk` — **QA has not started, deliberately** |
+
+> ### ⛔ THE OPEN QUESTION — `AC-6` identity inside bound `AC-10`
+>
+> May an emitted-constructed handle with **no `SlotId`** satisfy *"identity
+> intact"* through an explicit `HandleIdentity::NoStoreIdentity` outcome that a
+> separately compiled consumer recovers and the classifier predicts — **or does
+> `AC-6` require store adoption / minting a real `SlotId`** for
+> emitted-constructed nodes?
+>
+> ⭐ **The ring HELD rather than deciding, and that was right.** The alternative
+> is a **lifecycle choice above the prior mechanism**, and they named it as one
+> instead of picking it. Same shape the recut taught twice: an uncovered face is
+> **raised as a question**, never resolved by widening the nearest `AC` — the
+> answer may be a **boundary** (that is how the header constant landed in `AC-1`
+> instead of destroying `AC-10`'s boundary).
+>
+> ⚠ **Which way this one cuts:** the implementation *"keeps every admitted value
+> represented; it does not narrow the domain"* — so it is **not** the vacuity
+> route `AC-10` closes. The live question is narrower: **is `NoStoreIdentity` an
+> identity OUTCOME or an identity ABSENCE?** ⛔ Those read identically in a green
+> verdict.
+>
+> **`81a68435` verified independently before the push:** base/merge-base
+> `aecdb001` ✅ · 11 files ✅ · `+9608/−22` ✅ · `diff --check` zero bytes ✅ ·
+> intersection vs `4427147d` **empty** ✅ · fast-forward from `fd4e7f08`, so
+> `fd4e7f08`/`ddff2fae`/`ea8d9824`/`657f60a0`/`78a57d90` **all** stay reachable.
 
 ⭐⭐ **THE §5a-ii PREDICATE CHECK FIRED AND WAS ANSWERED `YES`**
 (`evt_2zxt6m9bg43r2`). The three production blocks are **not** independent: they
@@ -442,11 +492,9 @@ once at kickoff.
 ```
 wp/RT-FNSPLIT-B2V-executable-value-abi    fd4e7f08   (BLOCKED; ddff2fae, ea8d9824,
                                                       657f60a0, 78a57d90 all reachable)
-wp/steward-b2v-recut                      d6026a5c   (blocked, preserved)
-wp/steward-b2v-recut-2                    cfe05e37   (blocked, preserved)
-wp/steward-b2v-recut-3                    bbf3c7dd   (blocked, preserved)
-wp/steward-b2v-recut-4                    20476cfb   (fold 3 @ d2fdee73 + briefing)
-wp/steward-b2v-recut-5                    e4fa5ec5   <- CURRENT, awaiting Architect bind
+wp/steward-b2v-recut-1..5                 SPENT      (squash-merged as PR #978;
+                                                      cannot be continued -- the
+                                                      frame lives on origin/main)
 wp/KW-THEOREM-surface-keyword-rename      963d36ac   (CI-RED, kept, do not force over)
 architect/work                            e560cb20
 ```
@@ -462,6 +510,8 @@ push output.
 | # | item |
 |---|---|
 | #48 | ⚠ **IN PROGRESS.** Three tail corrections committed. Remaining: archive the superseded 07-21/07-22 narrative. ⛔ **Do NOT bulk-archive — ~half the tail is durable law.** |
+| ⭐ **OPEN WITH THE OPERATOR** | **A consolidated AC list — decision pending, resume HERE.** Asked 2026-07-26; I recommended **two steps** and they had not yet chosen. **(1)** A **GENERATED** AC inventory (like `gen-progress.sh`), ⛔ **never hand-maintained** — a written index is a second source of truth, and this file already deleted its duplicated armed counters on the grounds that *stating them twice means having no count of record at all*. It would immediately expose three coexisting spellings (`AC-1` / `AC1.1′` / `AC-A1`) and per-frame numbering where `AC-10` means two unrelated things. **(2)** ⭐ **The valuable half — require the QA `AC`→control map to land as a FILE on the WP branch, not only as a convo message.** Today the frames are in-tree and discharge status is in chat, which is why `AC-10` sat `NO CONTROL — open residual` across FOUR candidates before anyone treated it as a debt. Step 2 touches every ring's verdict discipline ⇒ Architect + build leaders weigh in, do not impose it. ⚠ **Risk to state either way: an index reads as a coverage claim when it is only an inventory** — `fd4e7f08`'s map was complete and every row honest, and three defects sat outside it because no `AC` asked the question. Fold into #51. |
+| #54 | ✅ **DONE** — ⛔⛔ **THE SCALING GATE HAD NO TRACKED NODE.** `RT-NATIVE-FNSPLIT`'s merge condition — Boundary A's planner census **and** the n=3..7 empirical harness + analytical model + verdict — exists **only as prose inside `RT-NATIVE-FNSPLIT.md` and the recut frame.** ⚠ **That is the KW-THEOREM failure shape exactly: a requirement stated in a document nobody executes against.** Frame both as real nodes **before `B2F` lands**, so the gate is not discovered at the end. Carry into them: workers on the **product's 8 MiB stack** (not the 256 MiB `ken-cli` convention — 6 sites already blind); **`k` (recursive lowering frames) is UNKNOWN and must be measured** before the model can consume it; ⛔ **there is NO baseline** — report absolute values, and the historic n=4 `1,482 states` figure is **non-comparable**. |
 | #51+#12 | ⭐ **Promote the candidate-boundary-control lesson** (all three `KW-THEOREM` rings converged on it **independently**) + B1R retros → playbook corpus. **Batch; do not publish singly.** The deliverable is the **executable edge** (the language ring's post-corpus formatter return edge), not the policy sentence. |
 | #52 | Frame **`KW-ORACLE-CLOSURE`** (`draft`, filed 2026-07-25) — the adversary's two post-merge findings on the `KW-THEOREM` source oracle. Both **zero live instances**, both **structural**. ⛔ Do not close by re-running the measurements; and ⛔ **P2's fix must not be a sixth `classify` arm.** |
 | #5 | Frame `ABI-S3` shovel-ready |
