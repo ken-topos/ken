@@ -33,7 +33,9 @@ handle it."* Report + Research addendum:
 ### ✅ **#986 → #1019 ALL MERGED** — incl. #1009 (`R5` erratum), #1013 (`#82`).
 ### ✅ **`ABI-R1` CLOSED** · ✅ **`RT-FNSPLIT-B2V` CLOSED** — retros IN on both.
 ### ✅ **`DOC-GATE-NEEDLE` MERGED #1019** — blob-verified; retros + flip OWED (#93).
-### ▶ **ONE LANE LIVE: Runtime on `B2F`** — building `D1`–`D8`, no hard stop.
+### ⛔ **ZERO LANES LIVE — `B2F` IS HARD-STOPPED AT `#11`, with the Architect.**
+### `crates/` byte-identical to `bb3e58ea`; nothing to unwind. Evidence on
+### `origin`: `preserved/rt-fnsplit-b2f-hardstop-11-evidence` = `a376bf65`.
 ### ⛔ **`B2F` CENSUS AMENDED: 47 events / 10 positions, NOT 41.** Ring-measured;
 ### the historic `41`/`29`/`~33 of 41` are DEAD operands. ⛔ Does NOT narrow `AC-11`.
 ### ✅ **CV mission/spec over-specification review + Research prior-art addendum:**
@@ -94,6 +96,77 @@ handle it."* Report + Research addendum:
 > ⚠ **Residual I stated to the ring:** a carrier *exists* and the ABI *is* emitted;
 > I did **not** verify each transfer is representable end-to-end. That is `AC-11`
 > clause 1's producer-tracing walk. **Task `#94` carries the full state.**
+>
+> > ### ⛔ HARD-STOP `#11` — `B2V` LANDED A REPRESENTATION WITH NO CONSUMER
+>
+> **Raised 2026-07-26 ~13:00Z by `runtime-implementer`, before any production
+> edit.** `crates/` byte-identical to `bb3e58ea`; **nothing to unwind.** Evidence
+> **`d1abbc79`**, on `origin` at `preserved/rt-fnsplit-b2f-hardstop-11-evidence`
+> (`preserved/`, not `wp/…-recut` as requested — a `wp/` name reads as a
+> production candidate; siblings `…-hardstop-9-…` and `…-hardstop-10-…` use this
+> namespace). **The Architect is already ruling** — captured mid-turn,
+> post-compaction, on the representation-versus-elimination boundary. ⛔ Do not
+> route it again.
+>
+> **The stop:** a value can be *written* into a tagged boundary word; nothing can
+> *read* one back into a `Lowered` the lowering can eliminate. Every aggregate
+> `Lowered` carries compile-time structure (`DynamicConstructor` is **not** the
+> escape — its alternatives carry `fields: Vec<Lowered>`, so it is a runtime
+> choice among compile-time-enumerated alternatives), **all THREE eliminators**
+> require that template — `Match` `core.rs:4697`, `ComputationalMatch`
+> `core.rs:1387`, **`Project` `core.rs:4754`** — and a landed test **defends**
+> the refusal. ⛔ The first evidence push (`a376bf65`) named only two; the ref is
+> fast-forwarded to `d1abbc79`, which names all three. **A reader who fetched the
+> stale ref would have under-scoped `B2E` by one eliminator.**
+>
+> Meanwhile every `LexicalClosure` body is its own unit
+> (`static_transition.rs:961`), so under `D1` its args arrive through
+> `Parameter`/`ValueWord` slots — and **31 of the 47 transfers are `Constructor`.**
+>
+> ⭐ **Falsified, not argued:** stripping `Constructor.args` reddens; renaming
+> `Constructor.constructor` reddens; stripping `HostResult.{ok,error}` is **444/0
+> green** ⇒ `HostResult`, named beside `Constructor` in `#10`, is measurably **not**
+> a blocker. ⚠ Both reddenings are the **same single test** of 444 — thin coverage
+> is not grounds to dismiss it, but it is exactly why a partial switch-over would
+> look green.
+>
+> **Implementer's proposed prerequisite (its proposal, not a Steward design
+> call):** a `B2E` elimination node between `B2V` and `B2F` — an inhabitant for an
+> opaque word of known class, tag-dispatching eliminators projecting fields **as
+> boundary words** (the recursive case is what makes it value-general rather than
+> scalar-only), fail-closed per class. `B2O` → `B2R` → `B2V` → **`B2E`** → `B2F`.
+>
+> ### ⛔ MY OWN STALE CLAIM, FIXED IN PLACE
+>
+> This header said *"building `D1`–`D8`, **no hard stop**."* The implementer's
+> grounding report said *"no hard stop: this node is satisfiable"* — **true of the
+> three axes it had measured, and read as a verdict on the node.** The leader
+> relayed *"Runtime continues"*; I published a frame amendment on it. Neither was
+> wrong given what we were told.
+>
+> ⭐⭐ **AND THE RING SHARPENED MY FRAMING INTO THE POSITION-BASED FORM.** I wrote
+> *"a coordinator cannot see the scope of a clearance from its wording"* — which
+> prescribes **more care with words.** The implementer's stronger version:
+>
+> > **A clearance names the axes it covers, because the reader's question is always
+> > *"is the node OK?"* and yours is only ever *"did axis N hold?"* Those two
+> > questions have different ARITIES, and prose silently collapses the second into
+> > the first.**
+>
+> ⇒ Nothing in the clearance decayed and nothing was mis-worded; **the evidence base
+> under it grew.** ⛔ So the repair is a *reported field* — the axis list — not
+> better phrasing. Second instance of the meta-lesson: **publish a retro candidate
+> as contradictable and the receiving ring supplies the position-based form.**
+> Promotion candidate; the implementer named the original on itself.
+>
+> ### ⭐⭐ THIRD INSTANCE OF ONE PATTERN — a framing obligation, not a retro note
+>
+> `B2O` shipped a partition and could not check one-for-one consumption. `B2R`
+> declared ownership modes and could not check obedience. `B2V` landed a
+> representation and cannot check consumption. **Each node's residual is exactly
+> the half its own inertness made unverifiable, and each was found by the node
+> downstream.** ⇒ ⛔ **When a node ships a representation, its frame names who
+> eliminates it, in the same breath.** Binding on the next frame I write.
 >
 > ### ⭐ THE RING RE-DERIVED THE SPLIT AND IT MOVED — 47, not 41
 >
