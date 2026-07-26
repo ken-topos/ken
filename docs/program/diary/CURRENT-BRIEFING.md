@@ -71,9 +71,16 @@ pull it** — I own release sequencing and told them so; re-anchor it first.
 
 ### ▶ Runtime lane: `B2E` candidate `e42aefa2`, `R3` NOW DURABLE
 
-`wp/RT-FNSPLIT-B2E-boundary-value-elimination` = **`e42aefa2`** on `origin`,
-complete candidate, QA to bind on that exact SHA with frame/node from
-`origin/main` (⛔ **not** the candidate's pre-`R1` copies). No Decision open.
+`wp/RT-FNSPLIT-B2E-boundary-value-elimination` = **`aeaec7ea`** on `origin`
+(⛔ **PARTIAL checkpoint, not a candidate** — the leader states the computational
+consumer-inventory control is unproven and a test-only evidence fold is owed).
+Lineage `e42aefa2` → `be87e5e8` → `aeaec7ea`, all reachable, all fast-forward.
+QA binds on the exact remote SHA with frame/node from `origin/main` (⛔ **not**
+the candidate's pre-`R1` copies). ⛔ **No Decision open, and do not open one.**
+
+⚠ **Do NOT clear the leader's 4-vs-5 route-count pin claim** — a mutation that
+reddens does not confirm which detector caught it, and a pin enumerating counts
+is not a proof of the inventory property. Routed to QA as such (`evt_73x6kv8503qgs`).
 
 ✅ **`R1`, `R2`, and `R3` are all transcribed** into frame + node. ⭐ **This WP
 lost three rulings to the channel in one day** — task `#107` proposes the
