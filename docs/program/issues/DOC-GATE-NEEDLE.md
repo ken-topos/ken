@@ -11,25 +11,45 @@ github: null
 origin: adversary finding L1+L2 on DOC-W2 (d3b9f36c), side thread thr_2seh2bm1kr5mh evt_2sk7s27prrhdn, 2026-07-25. Steward-filed (agents cannot create tracked work per COORDINATION §2); Steward triage = CONFIRMED DEFECT, independently re-grounded at the two cited lines. The under-scoped blast-radius claim in the merge notification is a Steward defect, recorded below.
 ---
 
-> ## ⛔ OPERATOR RULING 2026-07-25 — HELD. Fleet stays FNSPLIT-only. SETTLED.
+> ## ✅ RELEASED BY THE OPERATOR 2026-07-26 — build it now.
 >
-> I put the concurrency fork to the operator with this WP as the strongest case
-> for widening (a **live** false-green in a shipped gate, an **idle** Verify ring
-> with retros already in, and file sets verified disjoint from everything in
-> flight). **Ruling: hold. The fleet remains strictly single-threaded on
-> `RT-NATIVE-FNSPLIT`.**
+> **Operator, 2026-07-26 ~11:4xZ, verbatim:** *"the implementation teams are
+> quiescent. fix the DOC-GATE-NEEDLE issue. It doesn't matter to me how."*
 >
-> ★ **This also settles the standing ambiguity, and that is the durable part:**
-> the doc-track concurrency exception is **DOC-ONLY**. Its stated basis —
-> contention-free-ness — explains *why doc got the exception*; it is **not** a
-> general licence for any contention-free WP to run concurrently. ⇒ **Proving
-> your file sets disjoint does NOT earn a slot.**
+> The slot the 2026-07-25 hold was waiting for is open: `RT-FNSPLIT-B2V` merged
+> (#1014) and **every implementation ring is idle with its retros in.** ⇒ This WP
+> is released to Team Verify. `RT-FNSPLIT-B2F` is the FNSPLIT frontier and is
+> **not** yet kicked, so this is not competing with a live lane.
 >
-> ⛔ **Do not re-ask.** A settled operator ruling is a fixed input. This WP stays
-> `ready` until the FNSPLIT chain closes and a slot genuinely opens.
+> ### ⚠ WHAT THE SUPERSEDED HOLD SAID, AND WHICH HALF SURVIVES
 >
-> ⚠ **The frame below is complete and shovel-ready** — nothing about it is
-> pending. The only thing missing is a slot.
+> The 2026-07-25 ruling **held** this WP and, in doing so, settled a standing
+> ambiguity. **The hold is spent; the ambiguity ruling is NOT.** They must not be
+> discarded together:
+>
+> - ⛔ **STILL BINDING:** the doc-track concurrency exception is **DOC-ONLY**. Its
+>   basis — contention-free-ness — explains *why doc got the exception*; it is
+>   **not** a general licence for any contention-free WP to run concurrently. ⇒
+>   **Proving your file sets disjoint does NOT earn a slot.** This WP did not earn
+>   its slot by being disjoint; it was **granted** one by the operator when the
+>   fleet went quiescent.
+> - ✅ **SPENT:** *"stays `ready` until the FNSPLIT chain closes"* and *"do not
+>   re-ask"*. The operator reopened it directly. ⛔ Nobody needs to re-ask, and
+>   nobody should cite the old hold to refuse this kickoff.
+>
+> ⭐ **Why this block was EDITED rather than annotated:** the previous text said
+> *"do not re-ask, this WP stays `ready`"*, positioned at the top of the frame.
+> A reader who found that and stopped would have refused the kickoff on the
+> authority of a superseded ruling. **A later note saying a deliverable is
+> obsolete does not replace the deliverable — the superseded text stays operative
+> and is the one positioned to be obeyed.**
+>
+> ⚠ **The frame below is complete and shovel-ready**, and its locators were
+> **re-verified against current `origin/main` on release**: the blob for
+> `crates/ken-cli/tests/library_documentation_gates.rs` is `7415e7b2` at **both**
+> `d3b9f36c` (where the finding was measured) and current `main` — **byte-identical,
+> so every line number cited below is still exact.** One count was wrong and is
+> corrected in `D3`/`AC-5`.
 
 > ## The assertion cannot fail, because the needle is the label the test passed in
 >
@@ -115,12 +135,36 @@ extend enforcement to the schema form, or reject the unsupported form loudly.
 
 **D3 — a regression control for the systemic cause, not just the instance.**
 D1 fixes two call sites by hand; nothing stops the shape returning at the 3rd.
-There are **14 `schema_violations` call sites** in this file. Add a check that
-fails if an assertion's needle is derivable from the `location` that call
-passed — or restructure so `location` is not caller-chosen at the assertion
-sites at all. **A hand-enumerated fix to a category needs a structural
+Add a check that fails if an assertion's needle is derivable from the `location`
+that call passed — or restructure so `location` is not caller-chosen at the
+assertion sites at all. **A hand-enumerated fix to a category needs a structural
 closure**; grep the shared tell and derive the count rather than listing two
 lines.
+
+> ⛔ **CORRECTED ON RELEASE 2026-07-26 — this frame previously asserted "there are
+> 14 `schema_violations` call sites" and that number is NOT REPRODUCIBLE.**
+> Re-measured on the byte-identical blob `7415e7b2`, and the decomposition is the
+> point, because "call site" was never defined:
+>
+> ```
+> 19  occurrences of the string `schema_violations`
+>  2  fn DEFINITIONS                          :2883, :2956
+>  4  internal/recursive calls INSIDE them     :2889, :2975, :3052, :3074
+> 13  call sites in TEST functions             :3359 :3418 :3554 :3582 :3610
+>                                              :3622 :3639 :3655 :3673 :3694
+>                                              :3711 :3728 :3751
+> ```
+>
+> ⇒ **13, not 14, under the only reading that matters for `D3`** (a site where a
+> caller chooses a `location` and an assertion then picks a needle). ⚠ **Do not
+> take 13 on this frame's authority either** — it is stated here so it is
+> *checkable*, not so it can be inherited. `AC-5` requires you to derive it.
+>
+> ⭐ **Why a wrong count in an AC is worse than no count:** an implementer who
+> reads *"a grep over all 14 call sites"* has been handed the answer, so the grep
+> becomes a formality that confirms a number rather than a measurement that
+> produces one. **That is the exact defect this WP exists to fix, in the frame
+> that describes it** — an assertion whose needle was supplied by the caller.
 
 ## Acceptance criteria
 
@@ -140,9 +184,14 @@ lines.
 - **AC-4 — all six constraint classes still redden individually**, each mutation
   applied at its **natural production site** in the validator (not at an
   artificial injection point), each restored byte-identically.
-- **AC-5 — D3's closure is structural.** Name the predicate and derive the
-  affected count from a grep over all 14 call sites. "We fixed the two we knew
-  about" does not discharge this.
+- **AC-5 — D3's closure is structural, and the count is DERIVED not quoted.**
+  Name the predicate, then derive the affected count yourself from a grep over
+  every `schema_violations` call site, **stating the reading of "call site" you
+  used** (this frame's own count was wrong until release because that reading was
+  never written down — see `D3`). ⛔ "We fixed the two we knew about" does not
+  discharge this, and ⛔ neither does reproducing the number in `D3`: report what
+  your grep returns, and if it disagrees with `D3`'s 13, **your measurement wins
+  and you say so.**
 - **AC-6 — no-regression in CI.** The workspace build, `--locked`, and the
   conformance suite are **CI's** job on GitHub. ⛔ Do **not** run
   `--workspace`/`--locked` locally (COORDINATION §12); test with
