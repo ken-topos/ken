@@ -46,21 +46,45 @@ verbatim (⚠ it was only in gitignored `local/`) at
 ### §2c gate ran in full: 3 compactions verified, `cat-file -e` on every named
 ### object with an absent-path control, leader+QA confirmed `Working`.
 ### ▶ **ONE LANE LIVE: Runtime on `B2E`.** Task `#97` carries the watch list.
-### ✅ **`B2E` REVIEW CANDIDATE `3f7f2255` IS DURABLE ON `origin`** — branch
-### `wp/RT-FNSPLIT-B2E-boundary-value-elimination`, `ls-remote`-verified; it did
-### NOT exist on `origin` before, so 7 commits had ZERO off-box copies. NOT a
+### ▶ **`B2E` BIND IS `46ed5c97`** on `origin`
+### (`wp/RT-FNSPLIT-B2E-boundary-value-elimination`), `ls-remote`-verified. NOT a
 ### merge request — no Decision, no publish.
-### ⛔ **AND THE CANDIDATE CARRIES THE PRE-`R1` FRAME.** Its tree has frame
-### `20928eac` / node `8275c6c5`; the governing `e86c5331` / `c947dc77` landed at
-### `4297e55c`, which is **NOT an ancestor** of `3f7f2255` (base `9410d7b8`
+### ⛔ **`3f7f2255` IS SUPERSEDED — DO NOT REVIEW IT.** It bakes the numeric
+### store-local id at `lowering/mod.rs:2486` (`store_local_id() as i64`), which
+### `R1` forbids in as many words. Verified present there, gone from production at
+### `46ed5c97`. Strict fast-forward (`3f7f2255` IS its ancestor), 1 commit, 3 files
+### +207 −66. Repair = **`BoundaryNameSlot`**, an opaque newtype for the
+### artifact-static table POSITION; the emitter takes a slot and **loads**, so no
+### `u64` is in scope to bake. ⚠ The only remaining `store_local_id() as i64` hit
+### is a `///` comment — ⛔ **QA may not accept that as evidence.**
+### ⛔ **MY OWN "NO NEW SHA" NEEDED CORRECTING** (`evt_4es0jndag4bn6`): it was
+### scoped to refusing a FRAME FOLD and I did not say so. ⇒ **It does NOT freeze
+### the ring's own forward repair of a code defect.** "Keep it moving" is satisfied
+### by ADVANCING, not by freezing on a SHA with a known violation.
+### ▶ **OPEN WITH THE ARCHITECT, NOT BLOCKING** (`evt_6t3t89exkbr37`): does a
+### TYPE-LEVEL connection with **NO production caller** discharge `D5`/`AC-E5`?
+### `R1` sanctions "one INERT path now, `B2F` ACTIVATES later" **and** says a
+### newtype alone is "necessary but not sufficient". The implementer declines to
+### claim it and invites a block. QA records `D5`/`AC-E5` **CONDITIONAL** on the
+### ruling. ⛔ I have NOT assumed either reading.
+### ⛔ **THE CANDIDATE CARRIES THE PRE-`R1` FRAME — still true at `46ed5c97`.** Its
+### tree has frame `20928eac` / node `8275c6c5`; the governing `e86c5331` /
+### `c947dc77` landed at `4297e55c`, which is **NOT an ancestor** (base `9410d7b8`
 ### predates it). `diff` = **86 lines**, and the candidate's copy still literally
 ### reads *"ONE artifact-static name derivation"* — the premise `R1` ruled FALSE.
 ### ⇒ A QA seat reading the frame from its own checkout reviews `D5`/`AC-E5`
-### against the wrong contract. Routed `evt_5nkj13260m0t5`: bind CODE at
-### `3f7f2255`, read the FRAME from `origin/main`, and ⛔ **NAME THE BLOB** in the
-### QA assignment. ⭐ This is task `#88`'s lesson recurring: **an erratum on `main`
-### does not reach a branch cut before it, and the reviewer's checkout is the
-### stale copy.**
+### against the wrong contract. **Bind CODE at the candidate, read the FRAME from
+### `origin/main`, and ⛔ NAME THE BLOB** in the QA assignment.
+### ✅ **OPERATOR DISPOSITIONED THE RACE:** *"Keep it moving. If there is a defect
+### due to the race with `R1`, we can handle it in a subsequent WP."* ⇒ ⛔ NO fold,
+### NO re-cut, NO hard-stop on the race; a race-caused defect is a follow-up WP.
+### ⚠ **But that quote covers a defect ARISING FROM THE RACE — it is NOT a licence
+### to defer `D5`'s SUBSTANCE**, which `R1` forbids carrying as a `B2F` residual
+### ("would reproduce hard-stop `#11` one layer later"). Bridge present-but-wrong
+### => deferrable; bridge ABSENT => routes to me, I take it to the operator. ⛔ Two
+### cells, opposite dispositions — do not collapse them.
+### ⭐ Task `#88`'s lesson recurring: **an erratum on `main` does not reach a branch
+### cut before it, and the reviewer's checkout is the stale copy.**
 ### `crates/` byte-identical to `bb3e58ea`; nothing to unwind. Evidence on
 ### `origin`: `preserved/rt-fnsplit-b2f-hardstop-11-evidence` = `d1abbc79`.
 ### Verify ring compaction VERIFIED on all three seats. Adversary hunt reported.
