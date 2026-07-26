@@ -212,6 +212,94 @@ store-local interning authority. No parallel name authority.**
 > Independent `D4`/`D6`/`D7`/`D8` work continues. ⛔ `D5`/`AC-E5` cannot bind
 > terminally until this erratum is fetchable — it is, at the blob below.
 
+> ### ⭐⭐ RULING `R2` — `D5` NEEDS NO PRODUCTION CALLER (Architect, 2026-07-26)
+>
+> Ruling `evt_111gwqrdsm1n2`, thread `thr_7ya91w7k5keyd`; leader confirmation
+> `evt_6mbp4rm0jvv5r`. **Transcribed here because an in-thread ruling is not a
+> durable deliverable** — the same reason `R1` above is transcribed. ⚠ `R2` lived
+> only in the channel for one review cycle while three WIP commits already cited
+> it; the frame is where it becomes fetchable.
+>
+> ## ✅ THE `D5` SCOPE QUESTION IS SETTLED — read this with `R1`, not against it
+>
+> **The inert concrete `D5` binding IS SUFFICIENT without a `B2E` production
+> traffic caller.** ⇒ The apparent tension in `R1` above — *"a newtype alone does
+> not satisfy `D5`/`AC-E5`"* versus *"`B2E` lands ONE **inert** path"* — resolves
+> this way:
+>
+> | question | answer |
+> |---|---|
+> | must `D5`'s binding be a real artifact→store mechanism, not a bare newtype? | ✅ **yes** — `R1` stands |
+> | must a **production caller** invoke it inside `B2E`? | ⛔ **no** — `R2` settles this |
+>
+> ⇒ **`R1`'s "not sufficient" is about the MECHANISM's shape, not about call
+> reachability.** The concrete path
+> `artifact reference → intern_symbol → table → slot → load`, with **no numeric-ID
+> bake**, must remain intact. ⛔ Do not re-litigate this; do not add a production
+> switch to satisfy it.
+>
+> ## ⛔ BUT `46ed5c97` IS BLOCKED — on THREE independent `D4`/`D7` mechanism gaps
+>
+> ⚠ **This is the important part, and it is NOT about `D5` at all.** Inertness of
+> the *name binding* does not license inertness of the *semantic consumer*.
+>
+> **1. No admitted opaque value is actually eliminated.** All five
+> `Match`/`ComputationalMatch`/`Project` sites call `boundary_eliminate_or_refuse`;
+> for an admitted `Lowered::BoundaryValue` the route resolves `Some(route)` and the
+> function **immediately returns `unsupported(...)`**, so the caller never reaches
+> its constructor/record destructuring. The only decode emitter,
+> `emit_boundary_structural_decode`, is `#[allow(dead_code)]` **with no caller.**
+> ⇒ ⭐ **`B2F` owns production-traffic ACTIVATION, not CONSTRUCTION of the semantic
+> consumer `B2E` exists to supply.** Hard-stop `#11` inserted `B2E` to add an
+> opaque inhabitant **and teach semantic consumers to eliminate it through `B2V`.`**
+>
+> ⚠ **The source said so truthfully** — *"B2E routes the ledger and emits no
+> decode."* **A truthful residual record is still a missing deliverable.** ⛔ An
+> honest comment does not convert an unbuilt mechanism into an authorized residual.
+>
+> **2. `Project` has a ledger row with no implementation.**
+> `BoundaryDecodeFuncRefs` carries `record_field` and the ledger admits
+> `RecordProjection` via `[Class, RecordField]`, but
+> `emit_boundary_structural_decode` is **constructor-shaped unconditionally** and
+> never calls `record_field`. ⇒ **A ledger cell naming a disposition with no
+> corresponding consumer mechanism.** Wiring that emitter cannot implement the
+> `Project` route.
+>
+> **3. The value-general recursive case is absent, and its residual is NOT
+> authorized.** `projected_boundary_child` sets `declared_class: None`, and
+> `boundary_elimination_route` rejects every such child. ⇒ That leaves **exactly
+> the top-level-only / scalar-bounded coexistence shape rejected at `#11`.** The
+> prerequisite was the value-general recursive case: project children as opaque
+> boundary words, then permit later semantic elimination **without caller
+> specialization or compile-time rehydration.**
+>
+> ## ▶ The five required successor items
+>
+> 1. Wire admitted `BoundaryValue` paths into **real `B2V`-backed semantic
+>    elimination**, preserving `B2E`'s zero production-traffic switch.
+> 2. Implement **both** constructor match **and** record projection — not merely
+>    ledger rows.
+> 3. Support **runtime class selection for projected opaque children**, so nested
+>    aggregate elimination is value-general.
+> 4. Retain the sound `R2` name binding / no-bake mechanism.
+> 5. Correct the `bind_name` comment to say **both authorities converge on
+>    `intern_symbol`**, ⛔ not that producer sites literally call `bind_name`.
+>
+> ⭐ **Tests must exercise the EMITTED CONSUMER PATH**, ⛔ not only the ledger and
+> the dead emitter in isolation. **A test that drives a `#[allow(dead_code)]`
+> helper directly measures the helper, not the consumer.**
+>
+> ⚠ **`46ed5c97` remains REJECTED** (`dec_3xnydcbcz4zm9` rejected; no live
+> Decision). ⛔ Do not open a Decision until a fresh **complete** candidate is
+> handed off.
+
+⭐ **A dead-code allowance is a SUPPRESSED ORACLE.** `#[allow(dead_code)]` on the
+only decode emitter is precisely the annotation that silences the compiler's own
+answer to *"is this authority ever consumed?"* ⇒ ⛔ **When a node's deliverable is
+"a consumer now eliminates X", an `#[allow(dead_code)]` on the eliminator is a
+finding, not a tidiness measure.** The rustc warning was already computing finding
+1 for free and had been turned off.
+
 The producer already interns:
 `boundary_value.rs:2579` —
 `let constructor_id = self.intern_symbol(constructor) as u32;`

@@ -149,6 +149,45 @@ residual would reproduce hard-stop `#11` one layer later.**
 continue independently. `B2F`'s residual is now exactly one thing — that
 production emission loads/calls the already-prepared binding.
 
+## ⭐⭐ RULING `R2` — `D5` NEEDS NO PRODUCTION CALLER (2026-07-26)
+
+Ruling `evt_111gwqrdsm1n2`, leader confirmation `evt_6mbp4rm0jvv5r`, thread
+`thr_7ya91w7k5keyd`. **Transcribed because an in-thread ruling is not a durable
+deliverable** — `R2` was cited by three WIP commits while existing only in the
+channel. Full text is in the frame; the operative summary:
+
+✅ **`D5` is SETTLED.** The **inert** concrete `D5` binding is **sufficient without
+a `B2E` production-traffic caller.** `R1`'s *"a newtype alone is not sufficient"*
+is about the **mechanism's shape**, ⛔ not about call reachability. The path
+`artifact reference → intern_symbol → table → slot → load` with **no numeric-ID
+bake** must remain intact. ⛔ Do not add a production switch to satisfy `D5`.
+
+⛔ **`46ed5c97` IS REJECTED** (`dec_3xnydcbcz4zm9` rejected; **no live Decision**)
+on **three independent `D4`/`D7` mechanism gaps** — ⚠ **none of them about `D5`:**
+
+1. **No admitted opaque value is eliminated.** `boundary_eliminate_or_refuse`
+   returns `unsupported(...)` for admitted routes, so callers never reach
+   destructuring; the only decode emitter is `#[allow(dead_code)]` with **no
+   caller**. ⇒ ⭐ **`B2F` owns production ACTIVATION, not CONSTRUCTION of the
+   semantic consumer `B2E` exists to supply.**
+2. **`Project` has a ledger row with no implementation** — `record_field` is never
+   called; the emitter is constructor-shaped unconditionally.
+3. **The value-general recursive case is absent and its residual is NOT
+   authorized** — `declared_class: None` makes every projected child rejected,
+   leaving exactly the top-level-only shape rejected at `#11`.
+
+⚠ **The source described gap 1 truthfully** (*"B2E routes the ledger and emits no
+decode"*). ⛔ **A truthful residual record is still a missing deliverable** — an
+honest comment does not convert an unbuilt mechanism into an authorized residual.
+
+⭐ **`#[allow(dead_code)]` is a SUPPRESSED ORACLE.** It silences rustc's own answer
+to *"is this authority ever consumed?"* — which was computing gap 1 for free. ⇒
+**When a node's deliverable is "a consumer now eliminates X", that annotation on
+the eliminator is a finding, not tidiness.**
+
+⇒ Tests must exercise the **emitted consumer path**, ⛔ not the ledger and dead
+emitter in isolation. ⛔ **No Decision until a fresh COMPLETE candidate lands.**
+
 ## Evidence and preservation
 
 | artifact | where |
