@@ -32,9 +32,11 @@ flowchart TD
   core --> kernel["kernel check (TCB)<br/>admits a well-typed core term"]
   kernel --> interp["interpreter X1 (oracle)<br/>reference value"]
   kernel --> backend["native backend X3<br/>native value"]
-  interp -. "differential agreement<br/>identical K3 value; interpreter right by definition" .- backend
-  interp --> val["the observable value"]
-  backend --> val
+  interp -->|"direct closure-free result"| iobs["closure-free comparable<br/>ground observation"]
+  backend -->|"direct closure-free result"| bobs["closure-free comparable<br/>ground observation"]
+  interp -. "callable-bearing result<br/>selected well-typed projection/application probes" .-> iobs
+  backend -. "callable-bearing result<br/>selected well-typed projection/application probes" .-> bobs
+  iobs -. "differential agreement<br/>identical observations; interpreter right by definition" .- bobs
 ```
 
 Adding the backend grows the system's **tested** surface (a new evaluator and
