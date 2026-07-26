@@ -60,9 +60,22 @@ const CHAIN_LEAF: i64 = 7;
 /// of it. If production changes a tag, this reddens — deliberately: these bytes
 /// are a normative compatibility vector, not an incidental detail.
 mod expected_format {
+    pub const TAG_DATA: u8 = 0x02;
     pub const TAG_RECORD: u8 = 0x03;
+    pub const TAG_ARRAY: u8 = 0x06;
+    pub const TAG_MAP: u8 = 0x07;
+    pub const TAG_CLOSURE: u8 = 0x09;
     pub const TAG_SMALL_INT: u8 = 0x1C;
 }
+
+// Distinct ids per child-position kind, so a mis-ordered or mis-attributed
+// header shows up as a byte difference rather than coincidentally matching.
+const MIXED_RECORD_TYPE_ID: u32 = 0x1111_1111;
+const MIXED_CTOR_ID: u32 = 0x2222_2222;
+const MIXED_ARRAY_ELEM_TYPE_ID: u32 = 0x3333_3333;
+const MIXED_MAP_KEY_TYPE_ID: u32 = 0x4444_4444;
+const MIXED_MAP_VALUE_TYPE_ID: u32 = 0x5555_5555;
+const MIXED_CLOSURE_CODE_ID: u64 = 0x6666_6666_7777_7777;
 
 /// Build a unary `Record` chain of `depth` nestings around a scalar leaf.
 ///
@@ -92,6 +105,143 @@ fn expected_chain_bytes(depth: usize) -> Vec<u8> {
     expected.push(expected_format::TAG_SMALL_INT);
     expected.extend_from_slice(&CHAIN_LEAF.to_le_bytes());
     expected
+}
+
+/// Build a deep chain that **cycles through every one of the five child
+/// positions** — `Record.fields`, `Constructor.args`, `Array.elements`,
+/// `Map`'s entry values, and `Closure.captured`.
+///
+/// ⭐ **Why this exists, and it is not redundant with [`unary_chain`]:** a
+/// unary-`Record` chain is the only population the depth controls would
+/// otherwise have, and a *hybrid* encoder — iterative for `Record`, still
+/// host-recursive for the other four — passes every one of those controls while
+/// leaving four of the five original recursion sites intact. This chain is what
+/// makes the depth claim cover the whole child-position surface rather than one
+/// fifth of it. Found by attempting that exact evasion (`AC-V5`, row 1).
+fn mixed_chain(depth: usize) -> Value {
+    let mut v = Value::SmallInt(CHAIN_LEAF);
+    for j in 0..depth {
+        v = match j % 5 {
+            0 => Value::Record {
+                type_id: MIXED_RECORD_TYPE_ID,
+                fields: vec![v],
+            },
+            1 => Value::Constructor {
+                constructor_id: MIXED_CTOR_ID,
+                args: vec![v],
+            },
+            2 => Value::Array {
+                elem_type_id: MIXED_ARRAY_ELEM_TYPE_ID,
+                elements: vec![v],
+            },
+            3 => {
+                let mut entries = std::collections::BTreeMap::new();
+                entries.insert(mixed_map_key(), v);
+                Value::Map {
+                    key_type_id: MIXED_MAP_KEY_TYPE_ID,
+                    value_type_id: MIXED_MAP_VALUE_TYPE_ID,
+                    entries,
+                }
+            }
+            _ => Value::Closure {
+                code_id: MIXED_CLOSURE_CODE_ID,
+                captured: vec![v],
+            },
+        };
+    }
+    v
+}
+
+/// The single `Map` key used by [`mixed_chain`] — the canonical encoding of
+/// `SmallInt(0)`, spelled out here rather than obtained from the encoder so the
+/// expectation stays independent of the subject.
+fn mixed_map_key() -> Vec<u8> {
+    let mut key = vec![expected_format::TAG_SMALL_INT];
+    key.extend_from_slice(&0i64.to_le_bytes());
+    key
+}
+
+/// The closed-form canonical encoding of [`mixed_chain`], derived from the
+/// format alone. Encoding is pre-order, so the outermost wrapper's header comes
+/// first: headers run from `j = depth-1` down to `j = 0`, then the leaf.
+fn expected_mixed_chain_bytes(depth: usize) -> Vec<u8> {
+    let mut expected = Vec::new();
+    for j in (0..depth).rev() {
+        match j % 5 {
+            0 => {
+                expected.push(expected_format::TAG_RECORD);
+                expected.extend_from_slice(&MIXED_RECORD_TYPE_ID.to_le_bytes());
+                expected.extend_from_slice(&1u16.to_le_bytes());
+            }
+            1 => {
+                expected.push(expected_format::TAG_DATA);
+                expected.extend_from_slice(&MIXED_CTOR_ID.to_le_bytes());
+                expected.extend_from_slice(&1u16.to_le_bytes());
+            }
+            2 => {
+                expected.push(expected_format::TAG_ARRAY);
+                expected.extend_from_slice(&MIXED_ARRAY_ELEM_TYPE_ID.to_le_bytes());
+                expected.extend_from_slice(&1u32.to_le_bytes());
+            }
+            3 => {
+                let key = mixed_map_key();
+                expected.push(expected_format::TAG_MAP);
+                expected.extend_from_slice(&MIXED_MAP_KEY_TYPE_ID.to_le_bytes());
+                expected.extend_from_slice(&MIXED_MAP_VALUE_TYPE_ID.to_le_bytes());
+                expected.extend_from_slice(&1u32.to_le_bytes());
+                expected.extend_from_slice(&(key.len() as u32).to_le_bytes());
+                expected.extend_from_slice(&key);
+            }
+            _ => {
+                expected.push(expected_format::TAG_CLOSURE);
+                expected.extend_from_slice(&MIXED_CLOSURE_CODE_ID.to_le_bytes());
+                expected.extend_from_slice(&1u16.to_le_bytes());
+            }
+        }
+    }
+    expected.push(expected_format::TAG_SMALL_INT);
+    expected.extend_from_slice(&CHAIN_LEAF.to_le_bytes());
+    expected
+}
+
+/// A **host-recursive** traversal of the real `Value` population, covering
+/// **every** child position rather than only `Record`.
+fn recursive_encode_mixed(value: &Value, out: &mut Vec<u8>) {
+    match value {
+        Value::Record { fields, .. } => {
+            out.push(expected_format::TAG_RECORD);
+            out.extend_from_slice(&MIXED_RECORD_TYPE_ID.to_le_bytes());
+            out.extend_from_slice(&1u16.to_le_bytes());
+            for f in fields {
+                recursive_encode_mixed(f, out);
+            }
+        }
+        Value::Constructor { args, .. } => {
+            out.push(expected_format::TAG_DATA);
+            for a in args {
+                recursive_encode_mixed(a, out);
+            }
+        }
+        Value::Array { elements, .. } => {
+            out.push(expected_format::TAG_ARRAY);
+            for e in elements {
+                recursive_encode_mixed(e, out);
+            }
+        }
+        Value::Map { entries, .. } => {
+            out.push(expected_format::TAG_MAP);
+            for v in entries.values() {
+                recursive_encode_mixed(v, out);
+            }
+        }
+        Value::Closure { captured, .. } => {
+            out.push(expected_format::TAG_CLOSURE);
+            for c in captured {
+                recursive_encode_mixed(c, out);
+            }
+        }
+        leaf => leaf.encode_canonical(out),
+    }
 }
 
 /// A **host-recursive** traversal of the real `Value` population.
@@ -236,6 +386,51 @@ fn run_scenario(scenario: &str) {
             println!("OK drop_only depth={D}");
         }
 
+        // --- AC-V1 step 3, over EVERY child position ---
+        "new_encoder_exact_bytes_mixed" => {
+            let chain = mixed_chain(D);
+            let mut out = Vec::new();
+            chain.encode_canonical(&mut out);
+            assert_eq!(
+                out,
+                expected_mixed_chain_bytes(D),
+                "iterative encoder must emit the closed-form bytes at depth {D} \
+                 through all five child positions"
+            );
+            println!("OK new_encoder_exact_bytes_mixed bytes={}", out.len());
+        }
+
+        // --- AC-V1 step 2, over EVERY child position ---
+        "recursive_encoder_dies_mixed" => {
+            let chain = mixed_chain(D);
+            let mut out = Vec::new();
+            recursive_encode_mixed(&chain, &mut out);
+            println!("UNEXPECTED recursive_encoder_mixed survived {}", out.len());
+        }
+
+        // --- AC-V3b, over EVERY child position ---
+        "clone_then_drop_both_mixed" => {
+            let chain = mixed_chain(D);
+            let copy = chain.clone();
+            let mut a = Vec::new();
+            let mut b = Vec::new();
+            chain.encode_canonical(&mut a);
+            copy.encode_canonical(&mut b);
+            assert_eq!(a, b, "clone must be byte-identical at depth {D}");
+            assert_eq!(a, expected_mixed_chain_bytes(D));
+            drop(chain);
+            drop(copy);
+            println!("OK clone_then_drop_both_mixed bytes={}", a.len());
+        }
+
+        // --- AC-V3d, over EVERY child position ---
+        "drop_only_mixed" => {
+            let chain = mixed_chain(D);
+            assert!(chain.is_compound());
+            drop(chain);
+            println!("OK drop_only_mixed depth={D}");
+        }
+
         // --- harness positive control: the parent CAN observe a survivor ---
         "harness_survives" => {
             println!("OK harness_survives");
@@ -344,4 +539,36 @@ fn ac_v3c_derived_drop_glue_dies_on_the_analogue_at_depth_d() {
 #[test]
 fn ac_v3d_drop_alone_is_total_at_depth_d() {
     assert_survives("drop_only");
+}
+
+// ---------------------------------------------------------------------------
+// The same four claims, over a chain that cycles through ALL FIVE child
+// positions. ⭐ Without these, a hybrid encoder that stayed host-recursive for
+// `Constructor` / `Array` / `Map` / `Closure` — four of the five original
+// recursion sites — passes every control above. See `mixed_chain`.
+// ---------------------------------------------------------------------------
+
+/// `AC-V1` step 3 across every child position.
+#[test]
+fn ac_v1_new_encoder_exact_bytes_at_depth_d_through_all_child_positions() {
+    assert_survives("new_encoder_exact_bytes_mixed");
+}
+
+/// `AC-V1` step 2 across every child position — the population-side control
+/// that makes the claim above cover the whole surface.
+#[test]
+fn ac_v1_host_recursion_dies_at_depth_d_through_all_child_positions() {
+    assert_dies_of_stack_overflow("recursive_encoder_dies_mixed");
+}
+
+/// `AC-V3b` across every child position.
+#[test]
+fn ac_v3b_clone_then_drop_both_at_depth_d_through_all_child_positions() {
+    assert_survives("clone_then_drop_both_mixed");
+}
+
+/// `AC-V3d` across every child position.
+#[test]
+fn ac_v3d_drop_alone_is_total_at_depth_d_through_all_child_positions() {
+    assert_survives("drop_only_mixed");
 }
