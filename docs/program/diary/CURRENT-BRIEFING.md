@@ -5,8 +5,12 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-26 ~11:1xZ. OPERATOR IS PRESENT** — status reported; mission
-expected ~11:30Z. ⛔ Do not write the mission.
+**As of 2026-07-26 ~12:5xZ. OPERATOR IS PRESENT.** ✅ **The mission has LANDED** —
+`docs/MISSION.md` on `main`. ⛔ Do not write it, do not amend it.
+⛔ **The over-specification analysis is NOT the Steward's** — the operator
+dispatched the `conformance-validator` directly on 2026-07-26 and said *"I'll
+handle it."* Report + Research addendum:
+`local/spec-mission-overspecification-review.md`.
 
 > ### ⛔ THREE STALE `RESUME HERE` BLOCKS WERE REMOVED FROM THIS SPOT
 >
@@ -26,15 +30,30 @@ expected ~11:30Z. ⛔ Do not write the mission.
 ## ▶ LIVE — 2026-07-26 ~11:1xZ · ⛔ **NO `main` SHA HERE, BY CONSTRUCTION**
 ### ⛔ **This header used to carry `origin/main`. It was ALWAYS the pre-merge**
 ### **base — stale the instant the block landed. `git rev-parse origin/main`.**
-### ✅ **#986 → #1014 ALL MERGED** — incl. #1009 (`R5` erratum), #1013 (`#82`).
+### ✅ **#986 → #1019 ALL MERGED** — incl. #1009 (`R5` erratum), #1013 (`#82`).
 ### ✅ **`ABI-R1` CLOSED** · ✅ **`RT-FNSPLIT-B2V` CLOSED** — retros IN on both.
-### ▶ **TWO LANES LIVE: Verify on `DOC-GATE-NEEDLE`, Runtime on `B2F`.**
-### ✅ `B2F` KICKED — hard-stop #10 cleared, frame re-anchored onto landed `B2V`.
-### ✅ **`docs/MISSION.md` EXISTS AND IS ON `main`** — `SPEC-MISSION-GROUNDING`
-### unblocked in substance; ⚠ `AC-M1` not met (commitments are unnumbered).
+### ✅ **`DOC-GATE-NEEDLE` MERGED #1019** — blob-verified; retros + flip OWED (#93).
+### ▶ **ONE LANE LIVE: Runtime on `B2F`** — building `D1`–`D8`, no hard stop.
+### ⛔ **`B2F` CENSUS AMENDED: 47 events / 10 positions, NOT 41.** Ring-measured;
+### the historic `41`/`29`/`~33 of 41` are DEAD operands. ⛔ Does NOT narrow `AC-11`.
+### ✅ **CV mission/spec over-specification review + Research prior-art addendum:**
+### `local/spec-mission-overspecification-review.md` (gitignored, 693 lines).
 ### ⛔ **2 ADVERSARY FINDINGS OPEN** — `RT-VALUE-TOTALITY` §7; unframed (#78).
 
-> ### ▶ TWO LANES LIVE — Verify on `DOC-GATE-NEEDLE`, Runtime on `B2F`.
+> ### ✅ `DOC-GATE-NEEDLE` MERGED — PR #1019. Verify lane is FREE.
+>
+> Landed blob `76ee1124` on `main`, byte-identical to the candidate, with old
+> `7415e7b2` as the discriminating control. ⛔ **STILL OWED (`#93`): adversary pass
+> on the landed SHA, THREE Verify retros *before any Verify-ring compaction*, and
+> the node flipped `ready → merged` with its body tail swept.**
+>
+> ⚠ **A count-based probe read as a false alarm here.** `grep -c
+> 'contains(constraint)'` was **1 before AND after** the fix — because the survivor
+> is the **inverted guard** the fix introduced: `assert!(!LOCATION.contains(
+> constraint), …)`. ⇒ A count over a phrase cannot separate a defect from the guard
+> that forbids it; **position is the discriminator.**
+>
+> ### ▶ HISTORICAL — the release that produced it
 >
 > **Operator released `DOC-GATE-NEEDLE` 2026-07-26 ~11:4xZ** — *"the
 > implementation teams are quiescent. fix the DOC-GATE-NEEDLE issue. It doesn't
@@ -73,9 +92,28 @@ expected ~11:30Z. ⛔ Do not write the mission.
 > *"INERT but EXECUTABLE"* state `B2V` was scoped to deliver. `B2F` makes it live.
 >
 > ⚠ **Residual I stated to the ring:** a carrier *exists* and the ABI *is* emitted;
-> I did **not** verify each of the ~33 of 41 transfers is representable end-to-end.
-> That is `AC-11` clause 1's producer-tracing walk. The ring re-derives the split
-> and its measurement wins. **Task `#94` carries the full state.**
+> I did **not** verify each transfer is representable end-to-end. That is `AC-11`
+> clause 1's producer-tracing walk. **Task `#94` carries the full state.**
+>
+> ### ⭐ THE RING RE-DERIVED THE SPLIT AND IT MOVED — 47, not 41
+>
+> `Constructor` **31** (was 29) · `Int` **8** · `HostResult` **4** ·
+> `CapabilityToken` **2** · `BorrowedNativeValue` **2** = **47 events / 10 distinct
+> positions**, censused at `call_env == args ++ captures` — the actual transfer
+> boundary, not a top-level-shape proxy. **0 of 47** reach `FailClosedForbidden` or
+> `ProtocolOnly`; every one lands on an exhaustive `Represented*` arm. Amended into
+> the frame + node on the operator's fetchable ref at `runtime-leader`'s request,
+> **labelled as a ring measurement, not Steward-re-derived.**
+>
+> ⛔ **The amendment does NOT narrow `AC-11`** — a census of what today's corpus
+> *happens to* transfer is not a proof about what `B2F` *may* emit, and "0 of 47"
+> is not a licence to omit the fail-closed guard. #10's own history is the argument:
+> the same population was measured once already and the figure moved.
+>
+> ⚠ Every frame anchor the ring checked had moved by **exactly `+22`** (`B2V`'s
+> `boundary_plan` block landing above `:188`), and `identifier_occurrences` is at
+> `control.rs:3667`, not the frame's `:3635`. Uniform shift ⇒ evidence, not licence;
+> the ring re-derived each class.
 >
 > ```
 > wp/RT-FNSPLIT-B2V-executable-value-abi          a5c8ba73   MERGED #1014 - branch GONE from origin
