@@ -396,18 +396,61 @@ to a real corpus file — and the suite came back **exit 0, 1 passed, 0 failed**
 ⚠ **The occurrence predicate was still not reaching the corpus**, the exact
 defect the WP existed to fix, with a green control sitting on top of it.
 
-⇒ **Two obligations, both mechanical:**
+⇒ **Three obligations, all mechanical:**
 
 1. **When you author the row, name the operand.** "Must redden" is
    under-specified; *"adding an instance to `<real input file>` must redden"* is
-   not. ⛔ If the row does not name which side moves, the cheaper side will be
-   chosen and the report will be honest.
+   not. ⚠ **Necessary, and measured NOT sufficient — see the next block.**
 2. **When you discharge it, quote the row and diff it against what you ran.** ⛔
    Do not repair a population-side failure by hunting for a detector-side
    mutation that reddens — the post-condition is the row's mutation, verbatim.
    And pair it with §6's **positive control**: without an arm showing a real
    instance being *found*, "found nothing" and "never looked" read identically,
    which is exactly what a reach failure looks like from the outside.
+3. **Report WHICH OPERAND MOVED as its own field of the handoff** — not as
+   something a reader can infer from the mutation you describe. See below for
+   why this is the load-bearing one.
+
+#### ⛔⛔ NAMING THE OPERAND IN THE ROW IS NOT ENOUGH — THE CODE SEAM NAMES ONE TOO, AND IT WINS
+
+★ **The three `KW-ORACLE-CLOSURE` retros (2026-07-26) refuted the natural reading
+of obligation 1.** I wrote that row, so I asked the ring the one question I could
+not answer myself: **was the row ambiguous about which operand moves, or clear
+and skipped?** — because those need **opposite** repairs, and a softened answer
+would have had me fix the wrong one.
+
+**QA answered: clear and skipped.** The row *did* name the corpus-side operand.
+⛔ So "author it more precisely" is **not** the repair, and reaching for it would
+have hardened prose that was already correct.
+
+⭐ **The implementer supplied the mechanism, and it is the reusable part:** the
+implementation seam in front of them was a `declaration_lines` helper. Mutating
+*that* was **cheap, isolated, compile-preserving, and it reddened the correctly
+named test** — four properties that each independently read as *"good control."*
+In their words, they *varied the operand named by the code seam rather than the
+operand named by the reach claim.* ⚠ Note what is **not** in that sentence:
+carelessness, haste, or a misread row. The seam you are standing in front of
+**supplies a default operand**, that default is **not** the AC's, and it is
+selected by locally sound reasoning.
+
+⇒ **A property named at authoring time competes with an operand named by the
+code, at the point of work — and the code is closer.** Sibling of *"a rule far
+from the point of work does not fire"*: the row was correct **and** it was not
+where the choice got made.
+
+**And the leader seat cannot close this gap by reviewing harder.** Asked what was
+visible at their seat that could have distinguished the first candidate from a
+correct discharge, the leader answered **"nothing"** — they bound branch, tree,
+scope and diff hygiene, and confirmed a named test reddened, *and none of those
+facts say which operand the AC requires to move.* ⛔ Do not install a
+leader-review step here; it provably cannot work. ⭐ That plain "nothing" is worth
+more than a hedge would have been — it is what rules the wrong repair out.
+
+⇒ **Which is why obligation 3 is a REPORTED FIELD.** Every AC→control handoff
+carries **(the property · the operand that moved · the observed boundary)**
+together, stated, not inferable. That makes the distinction visible at a seat
+that otherwise has no instrument for it — and it is the only one of the three
+obligations that changes what a reviewer can *see*.
 
 - Apply each mutation at its **natural production site**, not at a convenient
   one; a mutation the real code path never reaches proves nothing.
