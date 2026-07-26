@@ -236,10 +236,22 @@ brief** — the implementer should execute mostly mechanically, not design
 >    billing stale context and nothing reports it.
 >
 >    ✅ **FIXED 2026-07-26 — `scripts/sweep-wedged-panes.sh` now catches both.**
->    Classification moved into `scripts/classify-pane-composer.py`
->    (`paste` · `slash:<cmd>` · `ghost` · `other` · `queued` · `clear`), with
->    controls in `scripts/test-classify-pane-composer.sh`. ⛔ **Add a shape
->    there, never by widening a regex in the sweep.**
+>    Classification moved into `scripts/classify-pane-composer.py` (`paste` ·
+>    `slash:<cmd>` · `ghost` · `other` · `queued` · `clear` · **`busy`** ·
+>    **`unreadable`**), with controls in
+>    `scripts/test-classify-pane-composer.sh`. ⛔ **Add a shape there, never by
+>    widening a regex in the sweep.**
+>
+>    ⛔ **The last two verdicts are the safety ones, and they are why the
+>    `--dry-run` gate could be lifted.** `busy` fires on a spinner + elapsed
+>    counter **anywhere in the capture** and is never repaired — a stranded
+>    delivery on a busy seat is real, and this script will not fix it. See the
+>    honest residual in the script header: *a run reporting four `busy` seats has
+>    answered nothing about those four.* `unreadable` replaces a fail-open
+>    `clear` on an empty capture, because ⭐ **`clear` asserts the composer was
+>    seen and held nothing, while an empty buffer asserts only that the probe saw
+>    nothing at all** — reading the second as the first is how a failed capture
+>    becomes "nothing to repair".
 >
 >    ⛔ **AND ADD IT IN *EVERY PROMPT SHAPE*, NOT JUST THE ONE YOU SAW.**
 >    Measured 2026-07-26 on a live `moot-runtime-implementer` pane: Claude renders
@@ -1996,8 +2008,10 @@ backstop depends on you remembering to look, convert it into a check.*
 
 ⭐ **It now handles TWO stranding shapes, and the interesting part is the one it
 refuses to touch.** Classification lives in `scripts/classify-pane-composer.py`
-— verdicts `paste` · `slash:<cmd>` · `ghost` · `other` · `queued` · `clear` —
-with controls in `scripts/test-classify-pane-composer.sh`. Besides a stranded
+— verdicts `paste` · `slash:<cmd>` · `ghost` · `other` · `queued` · `clear` ·
+`busy` · `unreadable` — with controls in
+`scripts/test-classify-pane-composer.sh` (**27 rows**, and the depth-invariance
+rows are what stop the fix from passing by going blind). Besides a stranded
 paste it now also submits a stranded **allow-listed slash command** (`/compact`),
 the shape `moot compact` leaves behind. ⛔ But an **idle pane renders its own
 suggestion text on the composer line**, so with colour stripped a suggestion is
