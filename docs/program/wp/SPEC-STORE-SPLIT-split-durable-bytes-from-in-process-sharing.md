@@ -90,6 +90,77 @@ table**. If Ken does *not* mean to promise it, say so and drop it.
 complexity bound leaves the implementer to infer it from the retired mechanism,
 which is how the conflation got in.
 
+## ⭐ `RULING R1` — Map/Set byte canonicity is a DEMOTED mechanism
+
+**Steward, 2026-07-26.** `OQ-A` already settled this.
+
+**Transcribed from `evt_2rhq0daf2yzzz`, in response to the Architect BLOCK
+`evt_4s7cf48fwqayx` on candidate `0642915f`.** ⛔ It is recorded here because a
+ruling that lives only in the channel is not a deliverable.
+
+**The contradiction the Architect found is real:** `41 §3a` said proved Map/Set
+trees encode as ordinary topology-preserving `data`, while `41 §3a:169` and three
+live producers required equal maps/sets built in different insertion orders to
+have **identical bytes**, while `52-map §1.1` says the transparent `Tree` carrier
+is **not insertion-order canonical**. Those cannot all hold.
+
+> ### ⭐⭐ IT IS NOT A LIVE DESIGN FORK — `OQ-A` TRADED THE PROPERTY AWAY
+>
+> `spec/50-stdlib/52-map.md:65–72`, verbatim: *"The retired primitive was
+> **genuinely runtime**: an O(1) content-addressed, insertion-order-independent
+> canonical form (`30 §6`, `41 §3a`). A program-level tree cannot match that — it
+> is O(log n) and **not insertion-order canonical**. `OQ-A` **chooses proved +
+> pure + zero-TCB over the runtime-O(1) heap form**."* It then **parks** the
+> alternative: the content-addressed heap map *"would itself be proved if it ever
+> lands."*
+>
+> ⇒ **The byte promise is exactly what `OQ-A` gave up.** `41 §3a:169` has been
+> false since `52-map` landed. ⭐ And `52-map` **cites `41 §3a` as the carrier** —
+> it knew where the stale promise lived and did not reconcile it.
+
+### The ruling
+
+1. ✅ **Remove the Map/Set insertion-order byte promise; retarget its producers.**
+   **Not a weakening and not a scope cut** — it makes the text true about a landed
+   operator decision, and it is the same act `AC-2` already mandates seven times.
+2. ⛔ **Do NOT define an extensional Map/Set codec, and do not invent a
+   discriminator from raw `Tree` data.** That re-acquires the property `OQ-A`
+   traded away, partially reverses a landed operator decision, and *is* the parked
+   later fast-map — which carries its own proof obligation and is a separate WP.
+3. ⚠ **Scope the retarget by PROPERTY.** `41-values.md:153` says a `record`
+   encodes in **definition** order, *"never alphabetical or insertion order"* — a
+   **different claim, still true**. ⛔ Kill only the Map/Set entry-sorting promise.
+
+### ⭐ The carrier population is SEVEN, not the three the BLOCK named
+
+Swept by property across the candidate tree, not by subject area:
+
+| carrier | status |
+|---|---|
+| `spec/40-runtime/41-values.md:169` | ⛔ the promise itself |
+| `conformance/runtime/values/` — `canonical-encoding-map-ordering`, `-set-ordering` | ⛔ producers |
+| `conformance/runtime/evaluation/seed-evaluation.md:204,209` | ⛔ producer + its verdict-flip rationale |
+| `spec/30-surface/30-taxonomy.md:175` | ⛔ the `30 §6` carrier `52-map` cites |
+| `conformance/stdlib/map/seed-map.md:69` | ⛔ names kinds `0x07`/`0x08` + the promise |
+| `conformance/surface/collections/seed-collections.md:28,51` | ⛔ two sites |
+| `conformance/stdlib/collections/seed-cat4-maps-sets-relations.md:427` | ⚠ **CLASSIFY — likely a homonym** (`isSorted leq (keys m)` is a `keys`-ordering claim, not byte canonicity). ⛔ Do not retarget if it is a different property |
+
+⛔ **Fourth expansion of this WP's population** (eight named → expanded census →
+`+minimality.md` → these four). ⇒ **Enumerate by row kind and property across the
+corpus, never by subject area** — every previous expansion felt like closure.
+
+### The residual — state it plainly in `41 §3a` and `AC-9`
+
+⭐ **Extensionally-equal `Map`/`Set` values may have different durable bytes**, so
+durable bytes are **not a canonical form for `Map`/`Set`**. Extensional equality,
+`to_list` observation, and durable round-trip are preserved; content-addressed
+dedup for those types is not guaranteed — consistent, since this WP makes dedup
+private. **This is `OQ-A`'s cost, now visible instead of contradicted.**
+
+⛔ **If the Architect judges `OQ-A` does NOT settle this** — that the byte promise
+is load-bearing for something `OQ-A` did not weigh — **that escalates to the
+operator.** This ruling declines to open a design fork; it does not overrule one.
+
 ## `AC-4` — every coupled conformance row retargeted or retired, each with its reason
 
 > ### ⛔ AMENDED 2026-07-26 — THIS AC SAID "ALL EIGHT" AND THAT WAS A CLOSED
