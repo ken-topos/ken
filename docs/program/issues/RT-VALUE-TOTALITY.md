@@ -29,7 +29,8 @@ origin: Architect cycle-contract ruling evt_5pzxf6sm4z08 ("host recursion may no
 > | phase | frame | covers |
 > |---|---|---|
 > | **P1 — totality** | ✅ `docs/program/wp/RT-VALUE-TOTALITY-P1-iterative-canonical-traversal.md` | `AC-V1` iterative encoder · `AC-V2` structural pin · `AC-V3` clone+drop |
-> | **P2 — representation** | ⛔ **NOT WRITTEN** | `AC-V4`–`AC-V6`, `AC-V8`–`AC-V10`: carrier split, derives, closure arm, `ken-foundation` twin, checked projection |
+> | **P2 — representation** | ⛔ **NOT WRITTEN** | `AC-V4`–`AC-V6`, `AC-V8`–`AC-V10`: carrier split, derives, closure arm, `ken-foundation` twin, checked projection · **plus `AC-V12`**, which rides `AC-V8` and is not a reading of it |
+> | **P3 — residual totality** | ⛔ **NOT WRITTEN** | `AC-V11`: derived `Debug` is depth-total. ⚠ **Does NOT depend on P2** — releasable any time after P1 |
 >
 > **P1 is first because P2's checked projection must SHARE P1's mechanism**
 > (§3b pin 3 — *"no recursive adapter"*). If P2 ran first it would grow its own
@@ -358,6 +359,46 @@ closure-content-addressing tests go, or the crate's stale model is **explicitly
 retired** with that stated. ⚠ Non-production, but a **shipped public validation
 model**: leaving it is a second, contradictory answer to the question this node
 settles, and the next reader has no way to tell which one binds.
+
+**`AC-V11` — derived `Debug` is depth-total (P3).** After P1, `Debug` is the
+**only** remaining `Value` traversal that is both host-recursive *and* reachable
+from code written for an unrelated purpose: a `{:?}` in a panic handler, a log
+line, or an `assert_eq!` failure message. ⇒ The abort fires **while a maintainer
+is diagnosing something else**, which is what separates it from the identity
+comparisons behind deliberate call sites.
+
+⛔ **`Debug` is named by no other `AC` in this node** — it appears exactly once,
+inside a quoted derive line — so unlike the identity comparisons it has **no
+P2 edit to ride on**. That is why it is its own item rather than folded into P2:
+P2's subject is representation, and depth is not representation.
+
+- Discharge: hand-write `Debug` over the same iterative worklist P1's encoder and
+  `Clone`/`Drop` use. ⛔ **Not** a second traversal mechanism beside it (the
+  `AC-V9` prohibition applies here for the same reason).
+- Control: assert a `{:?}` at the **same `D` `AC-V1` exercises**, out-of-process,
+  and ⚠ **state the depth as a number before running** — a control that renders
+  nothing reports the same green as one that renders a deep value.
+- ⚠ Do **not** accept "`Debug` output is unspecified so depth does not matter."
+  The claim under test is *does it return*, not *what does it print*.
+
+**`AC-V12` — whichever `AC-V8` arm P2 picks, the resulting equality/order/hash
+is depth-total (P2).** ⛔ **This is NOT a clarification of `AC-V8` and must not
+be folded into its text.** `AC-V8` pins *agreement*; it pins it correctly; and
+**exactly one of its two permitted arms also delivers totality**:
+
+| `AC-V8` discharge | agreement | totality |
+|---|---|---|
+| **canonical-by-construction carrier** | ✅ | ⛔ agreement is bought by constraining the *carrier* — the comparison still walks structurally |
+| **sealed witness defined FROM the canonical contract** | ✅ | ✅ inherits P1's iterative encoder |
+
+⇒ A P2 author can discharge `AC-V8` **completely, on the arm listed first**, and
+leave identity comparison process-aborting — and it is invisible because the AC
+it would ride is already green. ★ **A frame that leaves this implicit has chosen
+the first arm by default.** So `AC-V12` must name the requirement independently:
+either mandate the witness arm, or require iterativeness explicitly on whichever
+arm is chosen, with a control at `AC-V1`'s `D` per comparison operation
+(`==`, `<`, `hash`) — ⛔ not one arm standing in for the other three, which is
+the `AC-V8` two-pair lesson applied to a different axis.
 
 ## 5. Armed triggers — ⛔ these are LINES TO RE-READ, not a tally to reconstruct
 
