@@ -523,17 +523,52 @@ brief** — the implementer should execute mostly mechanically, not design
 >    already red, you have found a *pre-existing* defect and the fix is not yours
 >    to fold. ⛔ Do not route repair work before you know which one it is.
 >
->    ⛔ **The repair does NOT sequence — it must fold into the SAME candidate.**
->    Landing a ledger refresh first is circular: the attestation must name the
->    candidate's blobs, and those do not exist on `main` until the candidate
->    lands. So the revalidation rides the candidate branch — which **moves the
->    tip** and therefore **voids the Decision**. A fresh Decision on the successor
->    SHA is part of the cost, not an afterthought.
+>    ⛔⛔ **AND THEN KEEP IT OUT OF THE RING'S FRAME — THE LEDGER IS NEVER A RIDER
+>    ON A BUILD OR ENCLAVE CANDIDATE.**
 >
->    ⚠ **You may not install the attestation yourself.**
+>    > **Operator ruling, 2026-07-26, verbatim:** *"The librarian's
+>    > responsibilities are a distraction to the spec enclave and the
+>    > implementation teams. For them, the librarian is not a concern, downstream,
+>    > and unobserved."*
+>
+>    ⇒ You may find the blast radius (that is what the check above is for) and you
+>    route it **downstream, to the Librarian, after the fact.** ⛔ You do **not**
+>    write it into an AC, do **not** ask a ring to coordinate with the Librarian,
+>    and do **not** ask a ring to touch `library/`. A build or enclave candidate is
+>    `crates/` / `spec/` / `conformance/` — **the ledger is somebody else's plane.**
+>
+>    ⛔ **This corrects text that used to live here**, which said the repair *"must
+>    fold into the SAME candidate"* because the attestation names blobs that do not
+>    exist on `main` until the candidate lands. **The circularity is real and the
+>    conclusion was wrong**: it resolves by letting the ledger lag one merge, not by
+>    conscripting the ring. The old rule also charged the ring a **voided Decision**
+>    on a moved tip for a ledger row.
+>
+>    ⭐ **Why it was wrong in a way worth remembering — I re-created a gate the
+>    operator had just removed.** The 2026-07-26 gate ruling made the currency
+>    ledger a **release-point artifact, explicitly not enforced per merge**
+>    (*"remove the CI coupling"*). Hours later I wrote a same-candidate fold into
+>    `SPEC-STORE-SPLIT`'s `AC-8` and a leader tasked the Librarian on it. ⇒ ⛔ **A
+>    gate deleted in one carrier and re-created in another has not been removed** —
+>    when a gate is retired, sweep the *frames* too, not just the CI config.
+>
+>    ⚠ **And check the alarm before you write it LOUD.** That AC claimed to be
+>    *"the only thing standing where a red test used to be."* Measured at
+>    `ad1b9a01`: **no CI step invokes** `gen-doc-status.sh` or
+>    `gen-source-attestations.sh`, and the live-corpus gates
+>    (`check_source_currency`, `check_source_anchors`, `check_generated_current`)
+>    survive only as functions wired into `VALIDATION_GATES`
+>    (`crates/ken-cli/tests/library_documentation_gates.rs:577`) whose **sole other
+>    mention in the workspace is a comment** — zero consumers. **There was no red at
+>    either gate.** ⭐ The near-miss: eleven live `#[test]`s there are named
+>    `content_currency_gate_rejects_…` / `ledger_set_mismatch_when_…` and run
+>    **green in CI**, but each builds a **fixture repo in a temp dir**. *A test named
+>    after the corpus is not a check on it.*
+>
+>    ⚠ **You may not install an attestation yourself in any case.**
 >    `gen-source-attestations.sh` writes only a `.proposed` sibling, by
 >    construction — two file paths instead of one flag, because **the attestation
->    IS the claim that someone re-validated.** Route it to the **Librarian**, and
+>    IS the claim that someone re-validated.** When the Librarian does pick it up,
 >    expect **real page edits, not a blob bump**: if the change altered meaning,
 >    corpus prose is now **false**, not merely stale.
 >
@@ -1850,14 +1885,41 @@ columns** (codepoints, not bytes) before routing.
 > grep proves *one* string landed; it says nothing about whether the change
 > landed **whole**.
 >
+> ⛔ **SWEEP EVERY SCOPE DIRECTORY, NOT THE ONES YOUR ROLE LOADS.** Run it over
+> the whole corpus in one command — never `<dir>`-at-a-time:
+>
 > ```sh
-> # rows vs files, and BOTH orphan directions
-> grep -c '^| \[' <dir>/README.md;  ls <dir>/*.md | grep -vc README
-> grep -o '^| \[[^]]*\]' <dir>/README.md | sed 's/^| \[//;s/\]$//' \
->   | while read n; do [ -f "<dir>/$n.md" ] || echo "ORPHAN ROW: $n"; done
-> for f in <dir>/*.md; do b=$(basename $f .md); [ "$b" = README ] && continue
->   grep -q "\[$b\]" <dir>/README.md || echo "ORPHAN FILE: $b"; done
+> # rows vs files, BOTH orphan directions, EVERY scope
+> for d in $(find agent/memory -type d | sort); do
+>   ls $d/*.md >/dev/null 2>&1 || continue; [ -f $d/README.md ] || { echo "$d NO README"; continue; }
+>   files=$(ls $d/*.md | xargs -n1 basename | sed 's/\.md$//' | grep -v '^README$' | sort)
+>   rows=$(grep -oE '\]\(([A-Za-z0-9._-]+)\.md\)' $d/README.md | sed 's/](//;s/\.md)//' | sort -u)
+>   echo "$d files=$(echo "$files"|grep -c .) rows=$(echo "$rows"|grep -c .)"
+>   comm -23 <(echo "$files") <(echo "$rows") | sed "s|^|  ORPHAN FILE: $d/|"
+>   comm -13 <(echo "$files") <(echo "$rows") | sed "s|^|  ORPHAN ROW:  $d/|"
+> done
 > ```
+>
+> ⭐ **Three defects this replaces, all measured 2026-07-26 on one run of the old
+> snippet, and each was invisible to the run that had it:**
+>
+> 1. ⛔ **I ran it on the two scopes I load** (`fleet`, `roles/steward`) **and
+>    reported "8 orphans" as the population.** The real count was **10** —
+>    `enclave` and `build` each had one, and I load `enclave`. A `<dir>`-shaped
+>    command invites a `<dir>`-shaped population, and **the report says nothing
+>    about the scopes it never visited.** *An inventory is bounded by an unwritten
+>    notion of the surface.*
+> 2. ⛔ **My ad-hoc regex used a lowercase-only class**, so two `enclave` rows
+>    whose filenames carry capitals (`soundness-AC-…`,
+>    `trusted-by-typing-…-Q`) read as **FALSE orphans**. ⇒ **The character class
+>    must admit every filename shape actually on disk** — derive it from the
+>    corpus, do not assume kebab-case. ⭐ Note the direction: this one **over**-
+>    reported while defect 1 **under**-reported, in the same run, so the totals
+>    partly cancelled and both looked plausible.
+> 3. ⚠ **`agent/memory/MIGRATION-LOG.md` is not a lesson** and is referenced in
+>    the root README's prose, so it reports as a permanent orphan. **Exempt known
+>    non-lesson files explicitly**, because a standing false positive is how you
+>    learn to skim past real ones.
 >
 > ⛔ **`git checkout <ref> -- <path>` is a CHECKOUT, NOT A MERGE.** It takes the
 > ref's blob **wholesale** and destroys what was there — including step 3's own
