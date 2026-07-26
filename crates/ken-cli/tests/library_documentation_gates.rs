@@ -2889,6 +2889,25 @@ fn schema_violations(
     schema_violations_with_refs(schema, instance, schema_root, location, &mut Vec::new())
 }
 
+fn assert_schema_constraint_violation(
+    schema: &serde_json::Value,
+    instance: &serde_json::Value,
+    schema_root: &serde_json::Value,
+    constraint: &str,
+) {
+    const LOCATION: &str = "schema fixture";
+    assert!(
+        !LOCATION.contains(constraint),
+        "schema fixture location must be independent of constraint needle {constraint:?}"
+    );
+    let violations = schema_violations(schema, instance, schema_root, LOCATION);
+    let needle = format!("{constraint} violation");
+    assert!(
+        violations.iter().any(|message| message.contains(&needle)),
+        "planted {constraint} violation did not fail at that constraint: {violations:?}"
+    );
+}
+
 fn decode_json_pointer_component(component: &str) -> Result<String, String> {
     let mut decoded = String::new();
     let mut chars = component.chars();
@@ -3059,6 +3078,17 @@ fn schema_violations_with_refs(
         }
     }
 
+    let deny_additional_properties = match schema.get("additionalProperties") {
+        Some(serde_json::Value::Bool(false)) => true,
+        Some(serde_json::Value::Bool(true)) | None => false,
+        Some(other) => {
+            bad.push(format!(
+                "{location}: unsupported additionalProperties form {other}"
+            ));
+            false
+        }
+    };
+
     if let Some(object) = instance.as_object() {
         if let Some(required) = schema.get("required").and_then(serde_json::Value::as_array) {
             for field in required {
@@ -3068,7 +3098,10 @@ fn schema_violations_with_refs(
                 }
             }
         }
-        if let Some(properties) = schema.get("properties").and_then(serde_json::Value::as_object) {
+        let properties = schema
+            .get("properties")
+            .and_then(serde_json::Value::as_object);
+        if let Some(properties) = properties {
             for (field, field_schema) in properties {
                 if let Some(value) = object.get(field) {
                     bad.extend(schema_violations_with_refs(
@@ -3080,13 +3113,13 @@ fn schema_violations_with_refs(
                     ));
                 }
             }
-            if schema.get("additionalProperties") == Some(&serde_json::Value::Bool(false)) {
-                for field in object.keys() {
-                    if !properties.contains_key(field) {
-                        bad.push(format!(
-                            "{location}: additionalProperties violation: unknown field {field:?}"
-                        ));
-                    }
+        }
+        if deny_additional_properties {
+            for field in object.keys() {
+                if properties.is_none_or(|declared| !declared.contains_key(field)) {
+                    bad.push(format!(
+                        "{location}: additionalProperties violation: unknown field {field:?}"
+                    ));
                 }
             }
         }
@@ -3568,7 +3601,7 @@ fn agent_schema_contract_rejects_each_declared_constraint_class() {
         ),
         (
             "type",
-            clean.replace("schema_version = 1", "schema_version = \"1\""),
+            clean.replace("purpose = \"Write Ken\"", "purpose = 1"),
         ),
         ("pattern", clean.replace("id = \"write-pure\"", "id = \"WritePure\"")),
         ("minItems", clean.replace("triggers = [\"write\"]", "triggers = []")),
@@ -3579,15 +3612,11 @@ fn agent_schema_contract_rejects_each_declared_constraint_class() {
         ),
     ];
     for (constraint, source) in mutations {
-        let violations = schema_violations(
+        assert_schema_constraint_violation(
             &pack_schema,
             &controlled_record_value(&parse_pack_file(&source)),
             &pack_schema,
             constraint,
-        );
-        assert!(
-            violations.iter().any(|message| message.contains(constraint)),
-            "planted {constraint} violation did not fail at that constraint: {violations:?}"
         );
     }
 
@@ -3607,15 +3636,40 @@ fn agent_schema_contract_rejects_each_declared_constraint_class() {
         "validation": ["schema"],
         "measured_tokens": 0
     });
-    let minimum = schema_violations(
+    assert_schema_constraint_violation(
         &manifest_schema["$defs"]["module"],
         &module,
         &manifest_schema,
-        "module minimum",
+        "minimum",
+    );
+
+    let closed_without_properties = serde_json::json!({
+        "type": "object",
+        "additionalProperties": false
+    });
+    assert_schema_constraint_violation(
+        &closed_without_properties,
+        &serde_json::json!({"unknown": "field"}),
+        &closed_without_properties,
+        "additionalProperties",
+    );
+
+    let unsupported_additional_properties = serde_json::json!({
+        "type": "object",
+        "additionalProperties": {"type": "string"}
+    });
+    let unsupported_form = schema_violations(
+        &unsupported_additional_properties,
+        &serde_json::json!({"field": "value"}),
+        &unsupported_additional_properties,
+        "schema fixture",
     );
     assert!(
-        minimum.iter().any(|message| message.contains("minimum")),
-        "planted minimum violation did not fail at that constraint: {minimum:?}"
+        unsupported_form
+            .iter()
+            .any(|message| message.contains("unsupported additionalProperties form")),
+        "unsupported additionalProperties schema form was not rejected loudly: \
+         {unsupported_form:?}"
     );
 
     let required_source = clean.replace("purpose = \"Write Ken\"\n", "");
