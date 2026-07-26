@@ -50,9 +50,9 @@ and private runtime representation); `41 §3a` (durable kind tags
 construction**. The former heap `Map 0x07`/`Set 0x08`
 kinds + their canonical-byte-encoding insertion-order-independent identity are
 **retired** by OQ-A — `Map`/`Set` are proved `Ord k`-keyed trees with
-extensional identity. Their topology-preserving ordinary `data` bytes
-round-trip, but equal maps or sets may have different durable bytes and have no
-content-addressed dedup guarantee (`../../stdlib/map/seed-map.md`); `34 §1`/`§3`
+extensional identity. Durable round-trip preserves that identity and ordered
+observations; internal bytes, hashes, and deduplication outcomes are not
+observable (`../../stdlib/map/seed-map.md`); `34 §1`/`§3`
 (`List`/`Option`/`Result` inductive `data` + `elim_List`, **landed L2**);
 `34 §5` (refinement types — the `sort` carrier); `33 §4` (a type exported
 **abstractly** — name only, constructors hidden — the `Array`

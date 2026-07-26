@@ -199,19 +199,19 @@ results.
   semantic; physical sharing is private. (oracle; extends the values anchor.)
 
 ### runtime/evaluation/det-map-observation-independent-of-insertion-order (oracle)
-- spec: `41 §3a` (`Map`/`Set` durable-byte residual), `§4`; `42 §3.7`;
+- spec: `41 §3a` (`Map`/`Set` non-observable transport), `§4`; `42 §3.7`;
   `52 §1.1,§5.3`
 - given: a `Map` (or `Set`) value produced by two evaluation paths with
   **different insertion orders**, e.g. `{1↦a, 2↦b}` built insert-1-then-2 vs
   insert-2-then-1.
 - expect: `==` is **true** and ordered `to_list` observations are identical.
-  Each result independently survives a durable encode/decode round-trip. The
-  case does not compare the two byte strings: topology-preserving bytes may
-  differ across insertion histories.
+  Each result independently survives a durable write/read round-trip to an
+  extensionally equal value. The case has no access to internal byte strings
+  and asserts neither equality nor inequality across insertion histories.
 - why: **verdict-flip**: a value-semantics bug that exposes insertion history
   produces unequal maps or different ordered observations. Correct → equal
-  observations; bug → unequal/different. A byte difference alone conforms
-  under OQ-A. The `values/` corpus owns the durable round-trip boundary.
+  observations; bug → unequal/different. No byte outcome is a conformance
+  verdict under R2. The `values/` corpus owns the durable round-trip boundary.
   (oracle; verdict-flip.)
 
 ---

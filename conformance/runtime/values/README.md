@@ -6,9 +6,9 @@ data, private in-process representation, the runtime-local opaque callable
 boundary, `Int` promotion, and `unknown` propagation.
 
 The proved `Map`/`Set` package trees are the explicit durable-byte exception:
-their ordinary topology-preserving `data` bytes round-trip, but are not
-canonical for extensional equality (`41 §3a`, OQ-A). No case requires
-content-addressed deduplication across extensionally equal Map/Set values.
+their durable round-trip preserves extensional equality and ordered contents,
+but the internal bytes are not observable (`41 §3a`, OQ-A, R2). No case
+observes a hash or content-addressed-deduplication outcome.
 
 **Realization status.** This revision is a spec/conformance boundary, not its
 runtime implementation. The current `ken-foundation` and `ken-runtime`
@@ -45,11 +45,12 @@ explicitly RED-UNTIL the implementation follow-on removes that route.
 - given: a `Map` constructed by inserting entries `{k2→v2, k1→v1, k3→v3}`
   and the same `Map` constructed by inserting `{k1→v1, k2→v2, k3→v3}`
 - expect: the maps compare equal extensionally and have identical ordered
-  `to_list` observations. Each independently round-trips through its own
-  topology-preserving ordinary-`data` bytes. The case requires neither equal
-  nor unequal byte strings across the two insertion histories.
-- why: OQ-A preserves extensional Map behavior and durable round-trip while
-  trading away insertion-order-independent byte canonicity.
+  `to_list` observations. Each independently survives a durable write/read
+  round-trip to an extensionally equal map. The case has no access to internal
+  byte strings and asserts neither equality nor inequality across the two
+  insertion histories.
+- why: OQ-A and R2 preserve extensional Map behavior and durable round-trip
+  while keeping internal transport outside the observation model.
 
 ## runtime/values/set-extensional-observation-and-durable-roundtrip
 - spec: `spec/40-runtime/41-values.md §3a,§4`;
@@ -57,11 +58,12 @@ explicitly RED-UNTIL the implementation follow-on removes that route.
 - given: a `Set` built by inserting `{c, a, b}` and the same `Set` built
   by inserting `{a, b, c}`
 - expect: the sets compare equal extensionally and have identical ordered
-  element observations. Each independently round-trips through its own
-  topology-preserving ordinary-`data` bytes. The case requires neither equal
-  nor unequal byte strings across the two insertion histories.
-- why: `Set a = Map a Unit` inherits OQ-A's extensional behavior and its
-  non-canonical durable-byte cost.
+  element observations. Each independently survives a durable write/read
+  round-trip to an extensionally equal set. The case has no access to internal
+  byte strings and asserts neither equality nor inequality across the two
+  insertion histories.
+- why: `Set a = Map a Unit` inherits OQ-A and R2's extensional behavior and
+  non-observable transport boundary.
 
 ## runtime/values/canonical-encoding-record-field-order
 - spec: `spec/40-runtime/41-values.md §3a`

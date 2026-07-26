@@ -47,11 +47,11 @@ reachable from the root is closure-free and has a canonical encoding:
   Mutable state remains confined to `space` cells
   (`../30-surface/36 §4`).
 
-The proved `Map`/`Set` package trees are closure-free and durably encodable as
-ordinary `data`, but they are not durably canonicalizable in the sense above.
-Their extensional equality observes ordered contents, while ordinary `data`
-bytes preserve the transparent tree topology. Extensionally equal maps or sets
-may therefore have different durable bytes (§3a).
+The proved `Map`/`Set` package trees are closure-free and may cross a durable
+boundary, but they are not durably canonicalizable in the sense above. Their
+internal transport bytes are not a Ken observation. The specified observations
+are extensional equality, ordered `to_list`, and durable round-trip to an
+extensionally equal value (§3a).
 
 An ordinary executable **closure is different**. It is a callable,
 runtime-local opaque value. A closure, and any graph containing one, is outside
@@ -138,9 +138,10 @@ data structures remain separate from this contract.
 ### 3a. Canonical byte encoding (F4-elaborated)
 
 Every durably canonicalizable value has a deterministic canonical byte form.
-Closure-free `Map`/`Set` trees also have durable bytes, but those bytes are not
-canonical for their extensional equality. This section is the normative
-authority for both boundaries. The earlier implementation profile in
+Closure-free `Map`/`Set` trees may also cross a durable boundary, but their
+internal bytes are not part of the Ken value model and no portable operation
+exposes them. This section is the normative authority for both boundaries. The
+earlier implementation profile in
 `../../docs/design/content-addressing.md §1` is derived; its byte-layout details
 apply only where they agree with this chapter, and its interning, slot, and
 storage language is superseded.
@@ -151,9 +152,9 @@ namespace (see the design doc §1.1 for the full table). Currently assigned:
 `Array` (`0x06`), bignum `Int` (`0x01`), big `Decimal` (`0x0A`).
 **Kinds `0x07`/`0x08` (formerly `Map`/`Set` heap primitives) are
 retired** under OQ-A: `Map`/`Set` are now proved `data` trees
-(`../50-stdlib/52-map.md`) encoding as ordinary `data` (`0x02`); the tags are
-held reserved (a later content-addressed fast-map, `52-map §6`, would reclaim
-them).
+(`../50-stdlib/52-map.md`). This chapter assigns them no Map-specific runtime
+kind; their internal durable transport is outside the observable kind-tag
+contract.
 
 **Determinism rules (the correctness bar):**
 
@@ -170,18 +171,18 @@ them).
 These rules guarantee that two equal values in the durable canonicalization
 domain encode to identical bytes regardless of construction history.
 
-**`Map`/`Set` residual (OQ-A).** The transparent package carrier encodes through
-the ordinary `data` rule above: constructor identity and positional children
-preserve its tree topology. The encoding does not sort entries, add a
-Map-specific discriminator, or define a separate extensional codec. Each
-closure-free tree must round-trip through its own durable bytes, and extensional
-equality plus ordered `to_list` observation remain unchanged. However, two
-extensionally equal `Map`/`Set` values built with different insertion histories
-may have different tree topologies and therefore different durable bytes.
-Durable bytes are not a canonical form for their extensional equality, and
-content-addressed deduplication of those values is not guaranteed. A later
-proved fast-map may supersede this representation (`../50-stdlib/52-map.md
-§6`); this chapter does not define it.
+**`Map`/`Set` residual (OQ-A, R2).** A closure-free package value may be written
+to and read from a durable boundary. Reading MUST produce an extensionally
+equal `Map`/`Set` with the same ordered `to_list` observation. The runtime's
+internal bytes, kind discriminator, tree topology, hash, and deduplication
+result are not Ken observations. No conformance case may compare internal
+encodings from different insertion histories for either equality or
+inequality.
+
+This chapter defines no Map-specific codec or discriminator. If a portable
+canonical serialization is later required, it belongs in ordinary package Ken,
+out of `trusted_base()`, under a separate WP; it is not a runtime primitive or
+part of this revision.
 
 **Constructor and type identity.** The elaborator assigns globally-unique
 integer identifiers to constructors (`data`) and record types. These travel
@@ -235,7 +236,7 @@ The immediate/boxed/shared boundary is private runtime tuning, not semantics.
 | **Small `Int`** | Within `i64` range | May use inline `i64`; arithmetic still promotes without overflow (`§1`) |
 | **Small `Decimal`** | Coefficient fits `i64`, exponent in `i32` range | May use an inline coefficient/exponent pair |
 | **Canonical compounds** | Closure-free structural `data` applications, records, `String`, `Bytes`, `Array`, bignums, big `Decimal` | Deterministic canonical bytes under §3a; runtime representation private |
-| **Durably encodable package trees** | Closure-free proved `Map`/`Set` trees | Ordinary topology-preserving `data` bytes round-trip; extensionally equal values may have different bytes (§3a) |
+| **Durably transportable package trees** | Closure-free proved `Map`/`Set` trees | Extensional equality, ordered `to_list`, and durable round-trip; internal bytes, hashes, and deduplication are not observable (§3a) |
 | **Runtime-local callable** | Ordinary `Closure`, and any aggregate graph containing one | Opaque and non-persistable; refused before durable bytes exist |
 
 An implementation may tune the immediate/boxed/shared boundary without
