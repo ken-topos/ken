@@ -507,10 +507,38 @@ under adding a variant by construction.** (Steward re-confirmed by reading; no
 mutation needed.)
 
 **Measured:** a 26th variant `Value::AdvProbe(bool)` plus **only** the five arms
-the compiler demanded — `canonical.rs:168` `encode_header`, `canonical.rs:~530`
-`encode_canonical_recursive_reference` (`#[cfg(test)]`), `values.rs:141`
-`detach_children`, `values.rs:182` `rebuild`, `values.rs:311` `Clone`'s `Visit`
-match — with `differential_corpus()` **untouched**:
+the compiler demanded, with `differential_corpus()` **untouched**:
+
+> #### ⛔ THE ADVERSARY'S LINES ARE COORDINATES ON ITS **MUTANT**, NOT ON `main`
+>
+> Its report locates the five arms at `canonical.rs:168` / `:~530`,
+> `values.rs:141` / `:182` / `:311`. **Not one of those resolves against
+> `f87adc3f`**, because they were read off the tree *with the 26th variant
+> already inserted* — and the insertion shifted each file by a different amount:
+>
+> | site | as reported (mutant) | TRUE at `f87adc3f` |
+> |---|---|---|
+> | `canonical.rs` `encode_header` | `:168` | **`:167`** |
+> | `canonical.rs` `encode_canonical_recursive_reference` (`#[cfg(test)]`) | `:~530` | **`:362`** |
+> | `values.rs` `detach_children` | `:141` | **`:138`** |
+> | `values.rs` `rebuild` | `:182` | **`:179`** |
+> | `values.rs` `Clone`'s `Visit` arm | `:311` | **`:309`** (`Job` enum at `:299`) |
+>
+> ⛔ **A mutation proof's locators are measurements of the mutant. They are
+> evidence about the finding and are NOT locators against `main`** — transcribing
+> them as such imports the mutation's line shift as a silent error.
+>
+> ⚠ **I did exactly that, and it reached a live kickoff.** I copied
+> `values.rs:141`/`:182` into `RT-FNSPLIT-B2V`'s new-machinery table and re-quoted
+> them in the resume kick; the `runtime-implementer` caught both at `f87adc3f`
+> (uniform **`+3`**, *"one derivation, not two typos"*). ⭐ **And it names the shape
+> better than I did: both wrong lines land INSIDE the correct function body** —
+> `:141` is a `Record` arm within `detach_children`, `:182` a `Constructor` arm
+> within `rebuild` — *"so anyone who opens the file sees plausible code and reads
+> the locator as good."* Path right, line wrong, and **nothing looks off**.
+> ⇒ Sibling of the `abi.rs` defect in the same frame, inverted: there the path was
+> wrong and every line exact; here the path is right and the line is wrong. **Both
+> coordinates must be checked, and neither one vouches for the other.**
 
 | check | result |
 |---|---|
