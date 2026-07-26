@@ -93,9 +93,18 @@ the `type` case — relabelling the `minItems` row to plant an
 
 1. **Systemic:** the needle is the caller-supplied label, so the assertion has
    no discriminating power at any row.
-2. **What makes it bite today:** `schema_version = "1"` violates **both**
-   `const: 1` and `type: integer`. With `type` enforcement deleted, the `const`
-   violation still fires and satisfies the prefix match.
+2. **What makes it bite today:** the `type` row's planted value trips a
+   **neighbouring** constraint as well, so the prefix match is satisfied by the
+   neighbour even when `type` enforcement is gone.
+
+   > ⛔ **CORRECTED BY `RULING R1` — the original wording of this clause was
+   > FALSE.** It said `schema_version = "1"` violates **both** `const: 1` and
+   > `type: integer`. Verified on base `57a05000`:
+   > `library/agents/schemas/pack.schema.json` declares
+   > `"schema_version": {"const": 1}` with **no sibling `type` at all**, so there
+   > was never a `type` constraint on that field to violate. ⇒ The row could not
+   > discriminate `type` under **any** assertion, and no fix to the assertion
+   > could have made it. See `RULING R1` for the replacement operand.
 
 ⚠ **The other five rows are sound only because their mutations happen to isolate
 a single constraint** — not because the assertion discriminates. **A future
@@ -166,6 +175,60 @@ lines.
 > produces one. **That is the exact defect this WP exists to fix, in the frame
 > that describes it** — an assertion whose needle was supplied by the caller.
 
+## ⭐ `RULING R1` — the `type` row's operand moves (Architect, 2026-07-26)
+
+**Decision `dec_7s4xdhrkg8prp`, `resolved`, `resolved_by=agt_37reqftfe6g00`** —
+verified from the object, not from the channel reporting it. Raised by
+@verify-implementer (`evt_6p0r46xnwkmg2`) as an implementation fork; ruled at
+`evt_4gyta88b9y8k9`. Transcribed here **because an in-thread ruling is not a
+durable deliverable** — terminal QA must bind a fetchable governing operand
+rather than an exception living in a thread.
+
+**THE RULING — option (b). Change only the `type` row's mutation:**
+
+```
+purpose = "Write Ken"   →   purpose = 1
+```
+
+**Steward re-derivation on base `57a05000`, independently and not on report:**
+
+| operand | measured | verdict |
+|---|---|---|
+| `pack.schema.json` `.properties.schema_version` | `{"const": 1}` | ⛔ **no sibling `type`** |
+| `pack.schema.json` `.properties.purpose` | `{"type":"string","minLength":1}` | ✅ declares a type |
+| `schema_violations_with_refs` order | `:44` reads `type` → `:57` emits `type violation` → **`:59` `return`**, before `:68`'s `minLength` | ✅ isolates `type` |
+
+⇒ **The frame's premise was false, not merely awkward.** `schema_version` had no
+`type` constraint to violate, so **no** repair to the assertion could ever have
+made that row discriminate `type`. The row was untestable by construction.
+
+**Rejected alternatives, and why they matter beyond this WP:**
+
+- ⛔ **(a) add `"type":"integer"` to the shipped schema** — changes the shipped
+  library contract to repair a test oracle, with no independent product
+  requirement, and widens a test-only WP into production reach.
+- ⛔ **(c) infer type-from-`const`** — JSON Schema declares no such rule.
+  Inventing validator semantics would make diagnostic attribution disagree with
+  the schema.
+
+**Scope of the exception is NARROW: only the `type` row moves.** The six-class
+table, `D1`'s body match, `D3`'s closure, and `AC-1`'s whole-type-block deletion
+are all unchanged.
+
+⚠ **`AC-1`'s "31 passed / 0 failed" is HISTORY, not a prediction.** That figure
+was measured against the **old** operand. Under `R1` the `purpose` row is exactly
+what makes `AC-1` satisfiable: with the `type` block deleted, no `type violation`
+is emitted, so a body-matching assertion fails as intended.
+
+⭐ **What this cost, and where the defect was positioned.** Two of the frame's
+false claims — the `const`+`type` premise and the "every keyword has a sibling
+`type` guard" clause — were **mine**, and the second sat inside a bullet whose
+whole function was to tell the reader *this was attacked and cleared, do not
+revisit*. **A false premise carried by a sentence instructing the reader not to
+check it is the most durable kind.** The implementer escalated instead of
+inventing a rule, which is the correct behaviour and the reason this was caught
+in minutes rather than at QA.
+
 ## Acceptance criteria
 
 - **AC-1 — the currently-passing mutation must REDDEN.** Delete the `type`
@@ -199,19 +262,31 @@ lines.
 
 ## Guardrails — do not reopen
 
-- ⛔ **Do not touch the mutation table itself.** The six planted violations are
-  correct; the *assertion* is the defect. Rewriting the table would hide the
-  bug rather than fix it.
+- ⛔ **Do not touch the mutation table itself — WITH ONE NARROW EXCEPTION granted
+  by `RULING R1`.** The six planted violations are correct; the *assertion* is
+  the defect. Rewriting the table would hide the bug rather than fix it.
+  **EXCEPTION: the `type` row's operand moves** from `schema_version = "1"` to
+  `purpose = "Write Ken" → purpose = 1`, because the original operand declared no
+  `type` at all. ⛔ **Only that one row moves.** The six-class table, `D1`'s body
+  match, `D3`'s closure and `AC-1`'s whole-type-block deletion are unchanged.
 - ⛔ **Do not weaken AC-1 to a smaller mutation.** Deleting the whole `type`
   enforcement block is the measured discriminator; a narrower mutation may
   redden for an unrelated reason.
 - The recursion, `$ref` cycle detection, keyword-audit descent, and
   unknown-keyword fail-closed behaviour were **attacked and cleared** — the
   Adversary confirmed enforcement genuinely descends through `properties`,
-  `items`, and `$ref`, and that every constraint keyword in both shipped schemas
-  has a sibling `type` guard. **This WP does not revisit any of that.** It is
-  narrowly the assertion's discriminating power plus the two
-  `additionalProperties` gaps.
+  `items`, and `$ref`. **This WP does not revisit any of that.** It is narrowly
+  the assertion's discriminating power plus the two `additionalProperties` gaps.
+
+  > ⛔ **ONE CLAUSE OF THIS BULLET WAS FALSE AND `RULING R1` STRUCK IT.** It also
+  > asserted that *"every constraint keyword in both shipped schemas has a sibling
+  > `type` guard."* Verified false on base `57a05000`:
+  > `"schema_version": {"const": 1}` has **no sibling `type`**. ⚠ The clause sat
+  > inside a bullet whose subject is *"attacked and cleared … does not revisit"* —
+  > so a false premise was carried by a sentence telling the reader **not to
+  > check it.** That is the most effective possible position for a wrong claim,
+  > and it is why the implementer had to escalate rather than being able to read
+  > the answer here.
 
 ## ⚠ A Steward defect recorded here, because it changes how this file is bounded
 
