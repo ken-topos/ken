@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-26 02:19:51Z — from 81 issue file(s) in `docs/program/issues/`.
+2026-07-26 02:32:56Z — from 81 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -108,7 +108,7 @@ the committed file matches the generator's output.
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
 | `RT-PLANNER-ATTRIB-K` | Boundary A planner: fixed K is a design invariant — move the K-exceeded rejection off the capacity channel | merged | runtime | XS | none | https://github.com/swe-toolkit/ken/pull/935 |
 | `RT-PLANNER-DIAGNOSTIC-K` | Boundary A planner: report planner-invariant failures as planner defects, and assert fixed_k CONSTANT rather than merely affine | merged | runtime | S | none | https://github.com/swe-toolkit/ken/pull/929 |
-| `RT-SCALE-A` | Boundary A — re-derive the planner census for n=3..7 against the COMPLETED factored representation, superseding the provisional outer-planner numbers | active | runtime | M | none | — |
+| `RT-SCALE-A` | Boundary A — re-derive the planner census for n=3..7 against the COMPLETED factored representation, superseding the provisional outer-planner numbers | merged | runtime | M | none | — |
 | `RT-SCALE-B` | Boundary B — the full n=3..7 emission measurement, the research-grounded analytical model, and the operator scaling verdict that gates RT-NATIVE-FNSPLIT's merge | draft | runtime | L | none | — |
 | `RT-SPLIT` | decompose cranelift_backend.rs | merged | runtime | L | none | — |
 | `RT-SRC-DISPATCH-COVER` | close the source-machine scrutinee-dispatch coverage tier surfaced by RT-SPLIT slice 4 | draft | runtime | TBD | none | — |
@@ -169,7 +169,6 @@ is itself not yet `merged`/`closed`:
 - `RT-FNSPLIT-B2F` blocked by `RT-FNSPLIT-B2V` (status: active)
 - `RT-FNSPLIT-B2O-CHECK` blocked by `RT-FNSPLIT-B2F` (status: ready)
 - `RT-FNSPLIT-B2V` blocked by `SPEC-CLOSURE-BOUNDARY` (status: active)
-- `RT-SCALE-B` blocked by `RT-SCALE-A` (status: active)
 - `RT-SCALE-B` blocked by `RT-FNSPLIT-B2F` (status: ready)
 
 ## Gate progress

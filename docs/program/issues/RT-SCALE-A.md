@@ -1,7 +1,7 @@
 ---
 id: RT-SCALE-A
 title: "Boundary A — re-derive the planner census for n=3..7 against the COMPLETED factored representation, superseding the provisional outer-planner numbers"
-status: active
+status: merged
 owner: runtime
 size: M
 gate: none
@@ -60,3 +60,17 @@ complete."* ⚠ **If the ring determines the planner representation is complete
 earlier than `B2F`** — Boundary A is a planner census and `B2F` is the emission
 switch-over — **that is a re-sequencing question for the Steward, not a judgment
 call to make in-flight** (COORDINATION §2). Come back and I will re-sequence.
+
+## ✅ MERGED 2026-07-26 — PR #979, retros in, closed
+
+`origin/main` `4427147d` → **`e39e11a4`**. Verified by **blob identity**, not
+ancestry — this repo **squash-merges**, so the approved SHA `385e15c6` is
+correctly *not* an ancestor and checking that would be the wrong test. The
+`static_transition.rs` blob `81423ed9…` is byte-identical on `main`; exactly one
+file changed; nothing reverted.
+
+Retros in from all three Verify seats (`evt_59fdebb7wb3a7`).
+
+⛔ **This landed the INSTRUMENT, not the verdict.** [[RT-SCALE-B]] stays held
+pending a **Steward + Architect read of the LANDED census numbers**. The effort
+still has **no measured growth verdict**.
