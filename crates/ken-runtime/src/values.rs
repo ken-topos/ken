@@ -261,8 +261,19 @@ fn rebuild(proto: &Value, kids: Vec<Value>) -> Value {
 /// deallocation total: automatic drop glue recurses through the nested
 /// `Vec<Value>` / `BTreeMap<_, Value>` owners, and a value shallow enough to
 /// construct can overflow while being *dropped*. This dismantles the tree
-/// breadth-first onto an explicit heap stack instead, so host-stack usage is
-/// O(1) in depth.
+/// against an explicit heap worklist instead, so host-stack usage is O(1) in
+/// depth.
+///
+/// **The traversal is depth-first, not breadth-first.** `detach_children` moves
+/// a node's children onto `pending`, and `Vec::pop` takes the most recently
+/// pushed, so the walk descends the *last* child first and only then unwinds to
+/// its siblings — a LIFO worklist, not a FIFO frontier. ⚠ That distinction is
+/// part of the mechanism contract rather than a wording preference: a LIFO
+/// worklist holds the unvisited siblings along the current root-to-node path,
+/// whereas a FIFO frontier holds an entire level of the tree. Those are
+/// different live-frontier memory bounds, and neither dominates the other for
+/// every shape — so a maintainer reasoning about teardown memory needs to know
+/// which one this is.
 impl Drop for Value {
     fn drop(&mut self) {
         let mut pending: Vec<Value> = Vec::new();
