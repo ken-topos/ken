@@ -1050,6 +1050,39 @@ impl BoundaryRegion {
         self.nodes[base + (offset as usize / 8)] = value;
     }
 
+    /// Take Rust-side ownership of everything emitted code appended.
+    ///
+    /// ⛔ **Part of adoption, and not optional.** The emitted allocator bumps the
+    /// *published header's* live counts; the Rust-side counts still describe the
+    /// region as it was at publication. Re-publishing without this would reset
+    /// the counts and truncate exactly the nodes the store is adopting — the
+    /// referent would vanish from under its own new identity.
+    fn absorb_published_counts(&mut self) {
+        if self.header.is_empty() {
+            return;
+        }
+        self.live_nodes = self.header[(ARENA_NODE_COUNT / 8) as usize] as usize;
+        self.live_words = self.header[(ARENA_WORD_COUNT / 8) as usize] as usize;
+        self.live_data = self.header[(ARENA_DATA_COUNT / 8) as usize] as usize;
+        self.live_limbs = self.header[(ARENA_LIMB_COUNT / 8) as usize] as usize;
+    }
+
+    /// Install a node's `SlotId`. ⛔ **Store-owned.** This is the only writer
+    /// of [`NODE_SLOT`] outside `push_node`, it is private to this module, and
+    /// the only caller is [`BoundaryValueStore::adopt`]. Emitted code has no
+    /// setter for this field and gains none —
+    /// `EMITTED_WRITABLE_NODE_OFFSETS` makes emitting one a panic.
+    fn set_node_slot(&mut self, index: u64, slot: SlotId) {
+        let base = index as usize * NODE_WORDS;
+        self.nodes[base + (NodeField::Slot as usize)] = slot;
+    }
+
+    /// Repoint one child word — used when adoption canonicalizes a child onto
+    /// an existing store-owned node.
+    fn set_word_at(&mut self, index: u64, word: BoundaryWord) {
+        self.words[index as usize] = word.0;
+    }
+
     /// Append `limbs` to the limb table, returning its start index.
     fn push_limbs(&mut self, limbs: &[u64]) -> u64 {
         let at = self.live_limbs as u64;
@@ -1486,6 +1519,193 @@ impl BoundaryValueStore {
     /// The persistent node index a slot occupies, if it has been materialized.
     pub fn placement(&self, slot: SlotId) -> Option<u64> {
         self.placement.get(&slot).copied()
+    }
+
+    /// ⛔ **The store-owned ADOPTION boundary — the only way an emitted-
+    /// constructed node becomes a published persistent handle.**
+    ///
+    /// Emitted code can construct and seal a persistent node, but the node it
+    /// leaves behind carries [`NULL_SLOT`], and **this module's own layout
+    /// contract says a null slot denotes invocation-arena ownership.** So such a
+    /// node is not a persistent `HandleWord` at all — it is an internal
+    /// *pending-adoption* state, and classifying it as a published outcome with
+    /// "no store identity" was the defect this closes: a consumer can recover
+    /// the *absence* of an identity, which is not recovering the same identity
+    /// intact. Reserving persistent-region storage is storage governance, never
+    /// adoption.
+    ///
+    /// What this does, in order:
+    ///
+    /// 1. **Bottom-up over the reachable graph**, so no parent is adopted while
+    ///    a reachable child is still pending. An invocation-owned child is
+    ///    [`BOUNDARY_ERR_ESCAPE`] — the same rule, re-checked at the boundary
+    ///    that matters rather than inherited from construction.
+    /// 2. **Canonicalize and intern** through [`BoundaryValueStore::persist`],
+    ///    the landed content-addressed path — so equal values independently
+    ///    emitted converge on one `SlotId` and unequal values cannot alias,
+    ///    because that is what `Store::intern` already guarantees.
+    /// 3. **Mint or reuse.** A slot already placed returns the *existing*
+    ///    store-owned word and the pending node is abandoned; otherwise the slot
+    ///    is installed on this node and its placement recorded.
+    ///
+    /// ⭐ **Mint authority stays the store's.** `set_node_slot` is private to
+    /// this module and this is its only caller; emitted code has no setter for
+    /// `NODE_SLOT` and the emission latch keeps it that way.
+    ///
+    /// ⚠ Fails closed with an exact status, **before** the word can be
+    /// published or escape, for anything it cannot validate — including a class
+    /// this decoder does not read back (`Closure`, `HostResult`,
+    /// `BorrowedOpaque`), which is a conservative reject rather than a silent
+    /// admission.
+    pub fn adopt(&mut self, word: BoundaryWord) -> Result<BoundaryWord, i64> {
+        let tag = word.tag().ok_or(BOUNDARY_ERR_TAG)?;
+        if tag.referent_owner() != BoundaryReferentOwner::PersistentStore {
+            return Err(BOUNDARY_ERR_SHAPE);
+        }
+        // The store takes ownership of what emitted code appended before it
+        // validates any of it.
+        self.image.0.absorb_published_counts();
+        let index = self.adopt_node(word.payload())?;
+        Ok(BoundaryWord::handle(tag, index))
+    }
+
+    /// Adopt one node, returning the **canonical** index its value now lives at.
+    fn adopt_node(&mut self, index: u64) -> Result<u64, i64> {
+        let slot = self
+            .image
+            .0
+            .node_field(index, NODE_SLOT)
+            .ok_or(BOUNDARY_ERR_BOUNDS)?;
+        if slot != NULL_SLOT {
+            // Already store-owned. Idempotent, so a graph that shares a child
+            // adopts it once.
+            return Ok(index);
+        }
+
+        // ── 1. the reachable graph, bottom-up ──────────────────────────────
+        let count = self
+            .image
+            .0
+            .node_field(index, NODE_FIELD_COUNT)
+            .ok_or(BOUNDARY_ERR_BOUNDS)?;
+        let at = self
+            .image
+            .0
+            .node_field(index, NODE_FIELDS_AT)
+            .ok_or(BOUNDARY_ERR_BOUNDS)?;
+        for offset in 0..count {
+            let child = self
+                .image
+                .0
+                .word_at(at + offset)
+                .ok_or(BOUNDARY_ERR_BOUNDS)?;
+            let owner = child.tag().ok_or(BOUNDARY_ERR_TAG)?.referent_owner();
+            match owner {
+                BoundaryReferentOwner::NoReferent => {}
+                BoundaryReferentOwner::InvocationArena => return Err(BOUNDARY_ERR_ESCAPE),
+                BoundaryReferentOwner::PersistentStore => {
+                    let canonical = self.adopt_node(child.payload())?;
+                    if canonical != child.payload() {
+                        // The child canonicalized onto an existing store node,
+                        // so the parent must name that one.
+                        self.image.0.set_word_at(
+                            at + offset,
+                            BoundaryWord::handle(BoundaryTag::PersistentGround, canonical),
+                        );
+                    }
+                }
+            }
+        }
+
+        // ── 2. canonicalize and intern ─────────────────────────────────────
+        let value = self.read_ground(index).ok_or(BOUNDARY_ERR_SHAPE)?;
+        let slot = self.persist(&value).ok_or(BOUNDARY_ERR_SHAPE)?;
+
+        // ── 3. mint, or reuse an identity this store already owns ───────────
+        if let Some(existing) = self.placement.get(&slot) {
+            return Ok(*existing);
+        }
+        self.image.0.set_node_slot(index, slot);
+        self.placement.insert(slot, index);
+        Ok(index)
+    }
+
+    /// Read a persistent node back as the ground value it denotes.
+    ///
+    /// ⛔ **The validation half of adoption**, and it fails closed: a class this
+    /// does not read back has no canonical image, so it cannot be interned and
+    /// must not be adopted.
+    fn read_ground(&self, index: u64) -> Option<RuntimeGroundValue> {
+        let image = &self.image.0;
+        let class = image.node_field(index, NODE_CLASS)?;
+        let payload = image.node_field(index, NODE_PAYLOAD)?;
+        if class == BoundaryClass::Int as u64 {
+            let marker = image.node_field(index, NODE_EXTENT)?;
+            if marker == crate::native_int::NATIVE_INT_SMALL_TAG_V1 {
+                return Some(RuntimeGroundValue::Int(crate::RuntimeIntV1::Small(
+                    payload as i64,
+                )));
+            }
+            if marker == BOUNDARY_INT_REGION_LIMBS {
+                let limbs = image.node_limbs(index)?.to_vec();
+                let sign = match payload {
+                    0 => crate::Sign::NonNegative,
+                    1 => crate::Sign::Negative,
+                    _ => return None,
+                };
+                return Some(RuntimeGroundValue::Int(
+                    crate::RuntimeIntV1::from_canonical_parts(sign, limbs),
+                ));
+            }
+            return None;
+        }
+        if class == BoundaryClass::Bytes as u64 {
+            return Some(RuntimeGroundValue::Bytes(image.node_data(index)?.to_vec()));
+        }
+        if class == BoundaryClass::String as u64 {
+            let text = std::str::from_utf8(image.node_data(index)?).ok()?;
+            return Some(RuntimeGroundValue::String(text.to_string()));
+        }
+        let count = image.node_field(index, NODE_FIELD_COUNT)?;
+        let at = image.node_field(index, NODE_FIELDS_AT)?;
+        if class == BoundaryClass::Constructor as u64 {
+            let constructor = self
+                .symbol(image.node_field(index, NODE_TAG_ID)?)?
+                .to_string();
+            let mut args = Vec::new();
+            for offset in 0..count {
+                args.push(self.read_child(image.word_at(at + offset)?)?);
+            }
+            return Some(RuntimeGroundValue::Constructor { constructor, args });
+        }
+        if class == BoundaryClass::Record as u64 {
+            let mut fields = Vec::new();
+            for offset in 0..count {
+                let name = self.symbol(image.name_at(at + offset)?)?.to_string();
+                fields.push((name, self.read_child(image.word_at(at + offset)?)?));
+            }
+            return Some(RuntimeGroundValue::Record { fields });
+        }
+        // `Closure`, `HostResult` and `BorrowedOpaque` have no canonical store
+        // image. Conservative reject, never a silent admission.
+        None
+    }
+
+    /// One child word, as the value it denotes.
+    fn read_child(&self, word: BoundaryWord) -> Option<RuntimeGroundValue> {
+        match word.tag()? {
+            BoundaryTag::ImmediateBool => Some(RuntimeGroundValue::Bool(word.payload() == 1)),
+            BoundaryTag::ImmediateInt => Some(RuntimeGroundValue::Int(crate::RuntimeIntV1::Small(
+                word.signed_payload(),
+            ))),
+            BoundaryTag::PersistentGround => self.read_ground(word.payload()),
+            BoundaryTag::ImmediateExitStatus
+            | BoundaryTag::ImmediateBoundedNat
+            | BoundaryTag::ImmediateStructuralNat
+            | BoundaryTag::PersistentClosure
+            | BoundaryTag::InvocationBorrowed
+            | BoundaryTag::InvocationHostResult => None,
+        }
     }
 
     /// Intern a symbol — a constructor name, a record type identity, or a

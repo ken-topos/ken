@@ -4819,7 +4819,7 @@ fn b2v_ac10_every_boundary_input_receives_one_policy_entailed_outcome() {
                 variant,
                 magnitude,
                 reachability,
-                constructed_by_emitted_code: false,
+                adoption: AdoptionPartition::StoreAdopted,
             }
             .outcome()
         };
@@ -4856,7 +4856,7 @@ fn b2v_ac10_every_boundary_input_receives_one_policy_entailed_outcome() {
         variant: LoweredVariant::Constructor,
         magnitude: MagnitudePartition::WithinImmediateField,
         reachability: ReachabilityPartition::ChildDiesBeforeParent,
-        constructed_by_emitted_code: false,
+        adoption: AdoptionPartition::StoreAdopted,
     };
     let sound = BoundaryInput {
         reachability: ReachabilityPartition::ChildrenOutliveParent,
@@ -4877,41 +4877,51 @@ fn b2v_ac10_every_boundary_input_receives_one_policy_entailed_outcome() {
     // handle carries the store's identity; an emitted-constructed one carries
     // none, by AC-6's design — and recording which is what makes identity
     // recoverable rather than unasked.
-    let by_store = BoundaryInput {
+    let adopted = BoundaryInput {
         variant: LoweredVariant::Constructor,
         magnitude: MagnitudePartition::WithinImmediateField,
         reachability: ReachabilityPartition::Leaf,
-        constructed_by_emitted_code: false,
+        adoption: AdoptionPartition::StoreAdopted,
     };
-    let by_emitted = BoundaryInput {
-        constructed_by_emitted_code: true,
-        ..by_store
+    let pending = BoundaryInput {
+        adoption: AdoptionPartition::PendingStoreAdoption,
+        ..adopted
     };
     assert!(
         matches!(
-            by_store.outcome(),
+            adopted.outcome(),
             BoundaryOutcome::HandleWord {
                 identity: HandleIdentity::StoreMinted,
                 ..
             }
         ),
-        "AC-10: a store-materialized persistent handle carries the store's identity"
+        "AC-10: an adopted persistent handle carries the store's identity"
     );
-    assert!(
-        matches!(
-            by_emitted.outcome(),
-            BoundaryOutcome::HandleWord {
-                identity: HandleIdentity::NoStoreIdentity,
-                ..
-            }
-        ),
-        "AC-10: an emitted-constructed handle carries no store identity — AC-6 \
-         makes minting the store's alone"
+    // ⛔ **A pending node is not a published handle at all.** Classifying it as
+    // one with `NoStoreIdentity` was the defect: a consumer recovering the
+    // ABSENCE of an identity has not recovered the same identity intact, and a
+    // null `NODE_SLOT` denotes invocation ownership in this very layout.
+    assert_eq!(
+        pending.outcome(),
+        BoundaryOutcome::FailClosedForbidden,
+        "AC-10: a persistent node the store has not adopted must not publish"
     );
-    assert_ne!(
-        by_store.outcome(),
-        by_emitted.outcome(),
-        "AC-10: the producer must change the identity, or neither assertion \
-         above means anything"
-    );
+
+    // ⛔ **owner ⟺ identity, over the WHOLE product**: every published handle
+    // declaring `PersistentStore` carries a real store identity, and no other
+    // owner does.
+    for cell in &cells {
+        if let BoundaryOutcome::HandleWord {
+            owner, identity, ..
+        } = cell.outcome()
+        {
+            assert_eq!(
+                owner == BoundaryReferentOwner::PersistentStore,
+                identity == HandleIdentity::StoreMinted,
+                "AC-10: {cell:?} publishes owner {owner:?} with identity \
+                 {identity:?} — a persistent handle has a store identity and \
+                 nothing else does"
+            );
+        }
+    }
 }

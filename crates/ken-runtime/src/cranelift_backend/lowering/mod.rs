@@ -720,18 +720,40 @@ pub(in crate::cranelift_backend) enum ReachabilityPartition {
 
 /// Whether a handle's referent carries the store's identity of record.
 ///
-/// ⛔ **Not a narrowing — a classification.** Identity minting is the store's
-/// alone (`AC-6`), so an emitted-constructed handle carries `NULL_SLOT` by
-/// design. Recording that as an *outcome* is what makes identity recoverable:
-/// a consumer recovers exactly the identity the classifier predicted, rather
-/// than the question going unasked. ⚠ Whether the store should instead *adopt*
-/// emitted nodes is a lifecycle decision above this node.
+/// ⛔ **`NoStoreIdentity` is NOT a valid outcome for a persistent handle**, and
+/// classifying it as one was the defect the Architect ruled on. A consumer can
+/// recover the *absence* of an identity; it cannot thereby recover the same
+/// identity **intact**. Worse, this ABI's own node contract says a null
+/// `NODE_SLOT` denotes *invocation-arena* ownership — so a word claiming
+/// `PersistentStore` over a null slot contradicts the layout it is written in.
+/// Reserving persistent-region storage is storage governance, never adoption.
+///
+/// ⭐ An emitted-constructed persistent node is therefore a **pending** internal
+/// state, not a published outcome: [`crate::boundary_value::BoundaryValueStore::adopt`]
+/// validates the reachable graph, interns it, and mints or reuses the real
+/// `SlotId` before the word can escape. `NoStoreIdentity` remains correct for an
+/// **invocation** handle, where there is no store identity to have.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(in crate::cranelift_backend) enum HandleIdentity {
-    /// The store minted the referent and the node names its `SlotId`.
+    /// The store minted or reused the referent's `SlotId` and the node names it.
     StoreMinted,
-    /// Emitted code constructed the referent; the node carries `NULL_SLOT`.
+    /// An invocation-owned referent, which has no store identity by design.
     NoStoreIdentity,
+}
+
+/// Whether a persistent node has passed the store-owned adoption boundary.
+///
+/// ⛔ A closed partition, and the one that decides whether a persistent handle is
+/// **published at all**. Emitted construction alone leaves
+/// `PendingStoreAdoption`; only the store's `adopt` moves a node to
+/// `StoreAdopted`, and the emitted escape gate refuses to let a pending word
+/// cross a generated-function boundary.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum AdoptionPartition {
+    /// The store has minted or reused this referent's `SlotId`.
+    StoreAdopted,
+    /// Constructed and sealed by emitted code, but not adopted by the store.
+    PendingStoreAdoption,
 }
 
 /// The **actual outcome** a boundary input receives — the closed set `AC-10`
@@ -761,7 +783,7 @@ pub(in crate::cranelift_backend) struct BoundaryInput {
     pub(in crate::cranelift_backend) variant: LoweredVariant,
     pub(in crate::cranelift_backend) magnitude: MagnitudePartition,
     pub(in crate::cranelift_backend) reachability: ReachabilityPartition,
-    pub(in crate::cranelift_backend) constructed_by_emitted_code: bool,
+    pub(in crate::cranelift_backend) adoption: AdoptionPartition,
 }
 
 impl BoundaryInput {
@@ -778,12 +800,15 @@ impl BoundaryInput {
                     ReachabilityPartition::ChildrenOutliveParent,
                     ReachabilityPartition::ChildDiesBeforeParent,
                 ] {
-                    for constructed_by_emitted_code in [false, true] {
+                    for adoption in [
+                        AdoptionPartition::StoreAdopted,
+                        AdoptionPartition::PendingStoreAdoption,
+                    ] {
                         cells.push(BoundaryInput {
                             variant,
                             magnitude,
                             reachability,
-                            constructed_by_emitted_code,
+                            adoption,
                         });
                     }
                 }
@@ -822,12 +847,21 @@ impl BoundaryInput {
                     // same class / owner / identity / lifetime obligations as
                     // handle-only. This is the arm the frame says a proof may not
                     // attach to one sampled value.
+                    // ⛔ The spill arm is a PERSISTENT handle, so it publishes
+                    // only once the store owns its identity.
                     (Some(class), MagnitudePartition::BeyondImmediateField) => {
-                        BoundaryOutcome::HandleWord {
-                            tag: BoundaryTag::PersistentGround,
-                            class,
-                            owner: BoundaryReferentOwner::PersistentStore,
-                            identity: self.handle_identity(BoundaryReferentOwner::PersistentStore),
+                        match self.adoption {
+                            AdoptionPartition::PendingStoreAdoption => {
+                                BoundaryOutcome::FailClosedForbidden
+                            }
+                            AdoptionPartition::StoreAdopted => BoundaryOutcome::HandleWord {
+                                tag: BoundaryTag::PersistentGround,
+                                class,
+                                owner: BoundaryReferentOwner::PersistentStore,
+                                identity: Self::handle_identity(
+                                    BoundaryReferentOwner::PersistentStore,
+                                ),
+                            },
                         }
                     }
                 }
@@ -841,12 +875,28 @@ impl BoundaryInput {
                         BoundaryReferentOwner::PersistentStore,
                         ReachabilityPartition::ChildDiesBeforeParent,
                     ) => BoundaryOutcome::FailClosedForbidden,
+                    // ⛔ A persistent handle publishes only after the store has
+                    // adopted it. Until then the node carries `NULL_SLOT`, which
+                    // this ABI reads as invocation ownership — a word claiming
+                    // otherwise contradicts its own layout.
                     (BoundaryReferentOwner::PersistentStore, ReachabilityPartition::Leaf)
                     | (
                         BoundaryReferentOwner::PersistentStore,
                         ReachabilityPartition::ChildrenOutliveParent,
-                    )
-                    | (BoundaryReferentOwner::InvocationArena, ReachabilityPartition::Leaf)
+                    ) => match self.adoption {
+                        AdoptionPartition::PendingStoreAdoption => {
+                            BoundaryOutcome::FailClosedForbidden
+                        }
+                        AdoptionPartition::StoreAdopted => BoundaryOutcome::HandleWord {
+                            tag,
+                            class,
+                            owner,
+                            identity: Self::handle_identity(owner),
+                        },
+                    },
+                    // An invocation handle has no store identity to have, and
+                    // adoption is not its boundary.
+                    (BoundaryReferentOwner::InvocationArena, ReachabilityPartition::Leaf)
                     | (
                         BoundaryReferentOwner::InvocationArena,
                         ReachabilityPartition::ChildrenOutliveParent,
@@ -858,7 +908,7 @@ impl BoundaryInput {
                         tag,
                         class,
                         owner,
-                        identity: self.handle_identity(owner),
+                        identity: Self::handle_identity(owner),
                     },
                     // A handle whose referent nothing owns is not representable.
                     (BoundaryReferentOwner::NoReferent, ReachabilityPartition::Leaf)
@@ -875,16 +925,17 @@ impl BoundaryInput {
         }
     }
 
-    /// Which producer minted the referent, and therefore whether the node can
-    /// carry the store's `SlotId`.
-    fn handle_identity(self, owner: BoundaryReferentOwner) -> HandleIdentity {
-        match (owner, self.constructed_by_emitted_code) {
-            (BoundaryReferentOwner::PersistentStore, false) => HandleIdentity::StoreMinted,
-            (BoundaryReferentOwner::PersistentStore, true)
-            | (BoundaryReferentOwner::InvocationArena, false)
-            | (BoundaryReferentOwner::InvocationArena, true)
-            | (BoundaryReferentOwner::NoReferent, false)
-            | (BoundaryReferentOwner::NoReferent, true) => HandleIdentity::NoStoreIdentity,
+    /// The identity a **published** handle of this owner carries.
+    ///
+    /// ⛔ A persistent handle is only ever published `StoreMinted` — a pending
+    /// one is not a handle outcome at all, and `outcome` routes it to
+    /// `FailClosedForbidden` before reaching here.
+    fn handle_identity(owner: BoundaryReferentOwner) -> HandleIdentity {
+        match owner {
+            BoundaryReferentOwner::PersistentStore => HandleIdentity::StoreMinted,
+            BoundaryReferentOwner::InvocationArena | BoundaryReferentOwner::NoReferent => {
+                HandleIdentity::NoStoreIdentity
+            }
         }
     }
 }
@@ -908,6 +959,15 @@ impl BoundaryOutcome {
             | (
                 StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill,
                 BoundaryOutcome::HandleWord { .. },
+            )
+            // ⛔ A spill arm is a PERSISTENT handle, so an unadopted one fails
+            // closed before publication. That is an *unrepresentable-input*
+            // outcome, not admission of a represented value — the vacuity guard
+            // is that all four outcomes stay inhabited and that magnitude still
+            // changes this policy's outcome.
+            | (
+                StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill,
+                BoundaryOutcome::FailClosedForbidden,
             ) => true,
             (StaticEncodingPolicy::ProtocolOnly, BoundaryOutcome::ProtocolOnly) => true,
             (StaticEncodingPolicy::FailClosedForbidden, BoundaryOutcome::FailClosedForbidden) => {
@@ -921,10 +981,6 @@ impl BoundaryOutcome {
             | (
                 StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill,
                 BoundaryOutcome::ProtocolOnly,
-            )
-            | (
-                StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill,
-                BoundaryOutcome::FailClosedForbidden,
             )
             | (StaticEncodingPolicy::ProtocolOnly, BoundaryOutcome::ImmediateWord { .. })
             | (StaticEncodingPolicy::ProtocolOnly, BoundaryOutcome::HandleWord { .. })

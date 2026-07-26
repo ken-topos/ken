@@ -855,6 +855,79 @@ flagging it rather than presenting the reading as the only one.
 
 ---
 
+# ⛔ ARCHITECT RULING — `NoStoreIdentity` does not satisfy `AC-10`/`AC-6`
+
+`81a68435` is preserved as a checkpoint, not a candidate. I had flagged the
+identity reading as a fork and asked for a ruling; the ruling went against my
+reading, and the reasoning is decisive.
+
+## Why my closure was wrong
+
+⛔ **Explicitness is not preservation.** A separately compiled consumer can
+recover the *fact that no store identity exists*. It cannot thereby recover
+**the same identity intact**, which is what `AC-10` requires of a handle
+outcome. Renaming a residual as an outcome does not discharge the residual.
+
+⛔ **And it contradicted its own layout.** The candidate declared the referent
+owner `PersistentStore` while `NODE_SLOT` stayed null — and this ABI's node
+contract says a null slot **denotes invocation-arena ownership**. The word was
+internally inconsistent, and I did not notice because I was reading the identity
+question as a lifecycle *preference* rather than as a fact the layout already
+fixed. Reserving persistent-region storage is **storage governance, not
+adoption**.
+
+## The mechanism
+
+`BoundaryValueStore::adopt` is the trusted store-owned boundary:
+
+1. **Bottom-up over the reachable graph**, so no parent is adopted while a
+   reachable child is still pending; an invocation-owned child is `ERR_ESCAPE`.
+2. **Canonicalize and intern** through the landed `persist` path — so equal
+   values independently emitted converge on one `SlotId` and unequal values
+   cannot alias, *because `Store::intern` already guarantees exactly that*. No
+   second identity mechanism.
+3. **Mint or reuse.** An already-placed slot returns the existing store-owned
+   word and abandons the pending node; otherwise the slot is installed here.
+
+⭐ **Mint authority stays the store's.** `set_node_slot` is module-private with
+one caller; emitted code still has no `NODE_SLOT` setter and the emission latch
+keeps it that way. The control asserts both halves together, so "adoption works"
+and "forgery is impossible" cannot be confused for one another.
+
+⛔ **The emitted escape gate now requires adoption**, which is what makes it
+non-optional rather than advisory: a pending persistent word cannot cross a
+generated-function boundary. `AdoptionPartition` joins the closed partitions, and
+a pending persistent node classifies as `FailClosedForbidden` — *not published*
+— rather than as a handle with a missing identity.
+
+⚠ **One thing adoption had to do that I did not anticipate.** The emitted
+allocator bumps the *published header's* live counts; the Rust-side counts still
+describe the region as it was at publication. Re-publishing without absorbing
+them **truncates exactly the nodes being adopted** — the referent vanishes from
+under its own new identity. `absorb_published_counts` is part of adoption for
+that reason, and the control caught it: the consumer read `ERR_BOUNDS` where it
+expected a slot.
+
+## The mutations
+
+| # | mutation | reddens | collateral |
+|---|---|---|---|
+| **M38** | the emitted escape gate stops requiring adoption | the adoption round trip | **none — 1** |
+| **M39** | adoption mints again instead of reusing an interned identity | the convergence differential | **none — 1** |
+| **M40** | adoption installs no identity | both adoption controls | 2 |
+| **M41** | a pending persistent node classifies as a published handle | the `AC-10` sweep | **none — 1** |
+
+⚠ **Honest residual, stated rather than discovered:** `read_ground` decodes
+`Int`, `Bytes`, `String`, `Constructor` and `Record`. `Closure`, `HostResult` and
+`BorrowedOpaque` have no canonical store image, so adoption **refuses** them with
+an exact status. That is a conservative reject, not a silent admission — but it
+does mean an emitted-constructed persistent `Closure` cannot be published, and
+`PersistentClosure` is a live represented arm of the disposition. **That is a
+real gap in the represented population**, and it belongs on the record rather
+than inside a green.
+
+---
+
 # AC → discharging control
 
 Required by the frame's second amendment (`origin/main` = `fdda953f`): one row
@@ -894,5 +967,6 @@ because a taxonomy with nowhere to put the honest answer records it as covered.
 | **AC-1**/**AC-4** canonical emitted magnitude | `b2v_emitted_wide_int_construction_refuses_a_noncanonical_magnitude` | six magnitude shapes, one per canonicity clause, each differing from an admitted row in one component; the **unsealed-read** arm is the seal's own positive control, so a producer ignoring the status still cannot publish. ⚠ The prior control used one arbitrary nonzero seed and reached no boundary |
 | **AC-1** non-wrapping span | `b2v_a_wrapped_limb_span_fails_closed` | fault-injected directly, because **no production path can build a malformed span** and a control that cannot construct the violating input is not evidence about the guard. The Rust oracle is asserted to refuse the same span |
 | **AC-6** persistent *content-addressing* | **`NO CONTROL — open residual`** — ⛔ **promoted into `AC-10`'s scope by the RECUT** | an emitted-constructed node carries `NULL_SLOT`. The **limit** is pinned (the survival control asserts it); the property is not delivered. Identity minting is the store's alone, so closing this is a lifecycle decision, not a control I can add |
+| **AC-10**/**AC-6** store adoption | `b2v_ac10_emitted_construction_publishes_only_through_store_adoption`; `b2v_ac10_adoption_converges_equal_values_and_never_aliases_unequal`; `b2v_ac10_adoption_fails_closed_before_publication` | emitted construct → seal → **store adopt** → a separately compiled consumer recovers the **real non-null identity** and the content after the producer's arena is gone; equal/unequal differential proving canonical reuse and non-aliasing; the emitted escape gate refuses a pending word; emitted `NODE_SLOT` assignment remains impossible while the store path is positively exercised. Causal: **M38/M39/M40/M41**. ⚠ Adoption refuses `Closure`/`HostResult`/`BorrowedOpaque` — a recorded gap, not a green |
 | **AC-10** total classified-domain closure | `b2v_ac10_every_boundary_input_receives_one_policy_entailed_outcome`; `b2v_ac10_the_magnitude_boundary_is_a_real_emitted_partition`; `b2v_ac3_every_variant_carries_exactly_one_of_the_five_static_policies` | the sealed wildcard-free disposition closes the variant layer; four closed finite partitions with total projections close the value layer; the sweep runs the whole 21×2×3×2 product and asserts each outcome is **permitted by its policy**, that all four outcomes are inhabited, that a policy's outcome varies only in the discriminators it declares, and that every handle outcome carries class/owner/identity/lifetime. Causal: **M34/M35/M36** on the classifier, **M37** through the emitted producer. ⚠ Identity is discharged as a *classification* — see the flagged fork |
 | **AC-10** *(superseded row)* | **`NO CONTROL — open residual`** | ⛔ **Not in this fold, and said so rather than implied.** The recut is a review ref that has not bound and the Architect stated it adds no constraint to the fold in flight. The two blocked defects are faces of the predicate and are closed as such; the structural closure that makes further faces unreachable is the next fold's deliverable |

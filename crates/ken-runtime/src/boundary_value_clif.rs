@@ -1148,7 +1148,9 @@ fn define_escape_check<M: Module>(
     module: &mut M,
     graph: Graph,
 ) -> Result<(), CraneliftBackendError> {
+    let ptr = module.target_config().pointer_type();
     let mut func = begin(module, graph.escape_check, 2);
+    let resolve = module.declare_func_in_func(graph.resolve, &mut func);
     let mut fctx = FunctionBuilderContext::new();
     {
         let mut b = FunctionBuilder::new(&mut func, &mut fctx);
@@ -1156,6 +1158,7 @@ fn define_escape_check<M: Module>(
         b.append_block_params_for_function_params(entry);
         b.switch_to_block(entry);
         let p = b.block_params(entry).to_vec();
+        let arena = p[0];
         let word = p[1];
 
         let tag = b.ins().band_imm(word, BOUNDARY_TAG_MASK as i64);
@@ -1184,7 +1187,41 @@ fn define_escape_check<M: Module>(
         let err = b.ins().iconst(types::I64, BOUNDARY_ERR_ESCAPE);
         b.ins().return_(&[err]);
 
+        // ⛔ **A PERSISTENT word may not escape UNADOPTED.** Emitted code can
+        // construct and seal a persistent node, but the node it leaves carries
+        // `NULL_SLOT` — and this ABI's own layout contract says a null slot
+        // denotes invocation-arena ownership. Such a word is a *pending
+        // adoption*, not a published persistent handle: letting it cross the
+        // generated-function boundary would publish a handle whose declared
+        // owner is the store while the store has never heard of it, and a
+        // consumer could recover only the ABSENCE of an identity.
+        //
+        // ⭐ The store's `adopt` mints the real `SlotId`; this is the gate that
+        // makes adoption non-optional rather than advisory.
         b.switch_to_block(permitted);
+        let immediate = b
+            .ins()
+            .icmp_imm(IntCC::UnsignedLessThan, tag, FIRST_HANDLE_TAG);
+        let done = b.create_block();
+        let handle = b.create_block();
+        b.ins().brif(immediate, done, &[], handle, &[]);
+
+        b.switch_to_block(handle);
+        let Resolved { node, .. } = resolve_prologue(&mut b, ptr, resolve, arena, word);
+        let slot = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_SLOT);
+        let adopted = b
+            .ins()
+            .icmp_imm(IntCC::NotEqual, slot, crate::store::NULL_SLOT as i64);
+        let pending = b.create_block();
+        b.ins().brif(adopted, done, &[], pending, &[]);
+
+        b.switch_to_block(pending);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_ESCAPE);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(done);
         let z = b.ins().iconst(types::I64, BOUNDARY_OK);
         b.ins().return_(&[z]);
 
@@ -3275,13 +3312,20 @@ mod tests {
                 }
             }
 
+            // ⚠ The persistent arm's expectation moved when `escape_check`
+            // gained the ADOPTION gate: it now resolves the node, because a
+            // persistent word may not escape while its node still carries
+            // `NULL_SLOT`. These fixtures carry a deliberately out-of-range
+            // index, so a persistent word cannot be shown adopted and does not
+            // escape — reported as `ERR_BOUNDS`, because a malformed word and a
+            // lifetime violation are different answers and this one is
+            // malformed.
             let expected_escape = match known {
                 None => BOUNDARY_ERR_TAG,
                 Some(tag) => match tag.referent_owner() {
                     BoundaryReferentOwner::InvocationArena => BOUNDARY_ERR_ESCAPE,
-                    BoundaryReferentOwner::NoReferent | BoundaryReferentOwner::PersistentStore => {
-                        BOUNDARY_OK
-                    }
+                    BoundaryReferentOwner::PersistentStore => BOUNDARY_ERR_BOUNDS,
+                    BoundaryReferentOwner::NoReferent => BOUNDARY_OK,
                 },
             };
             assert_eq!(
@@ -5480,6 +5524,195 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// **`AC-10`/`AC-6` — emitted construct → seal → STORE ADOPT → a separately
+    /// compiled consumer recovers the real identity and the content, after the
+    /// producer's arena is gone.**
+    ///
+    /// ⛔ The prior candidate classified an emitted-constructed persistent node
+    /// as a published handle with "no store identity". The Architect ruled that
+    /// out and the reasoning is decisive: a consumer can recover the *absence*
+    /// of an identity, which is not recovering the same identity **intact** —
+    /// and a null `NODE_SLOT` denotes *invocation-arena* ownership in this very
+    /// layout, so the word contradicted itself. Reserving persistent-region
+    /// storage is storage governance, not adoption.
+    #[test]
+    fn b2v_ac10_emitted_construction_publishes_only_through_store_adoption() {
+        let (_pm, produce) = compile_producer(4, emit_wide_int_producer);
+        let (_c1, escape_code) = compile_probe(Probe::Status(|h| h.escape_check));
+        let (_c2, slot_code) = compile_probe(Probe::Unary(|h| h.slot));
+        let (_c3, len_code) = compile_probe(Probe::Unary(|h| h.int_len));
+        let (_c4, limb_code) = compile_probe(Probe::Binary(|h| h.int_limb));
+
+        let len = 3u64;
+        let seed = 0x00ff_0000_0000_0001u64;
+        let mut store = BoundaryValueStore::new();
+        let (pending, persistent) = {
+            let f = bind_limbs(
+                &mut store,
+                BoundaryArenaBuilder::new(),
+                (4, 0, 0),
+                (0, 0, 0),
+                (16, 0),
+            );
+            let produced = run4(produce, f.base, 0, len, seed);
+            assert!(produced > 0, "emitted construction succeeds: {produced}");
+            let word = BoundaryWord(produced as u64);
+            // ⛔ **Constructed and sealed is NOT published.** The escape gate
+            // refuses to let a pending persistent word cross a generated
+            // function boundary — that is what makes adoption non-optional
+            // rather than advisory.
+            assert_eq!(
+                run2(escape_code, f.base, word),
+                BOUNDARY_ERR_ESCAPE,
+                "AC-10: an unadopted persistent word must not escape"
+            );
+            (word, f.persistent)
+        };
+        let _ = persistent;
+
+        // ── the store-owned adoption boundary ──────────────────────────────
+        let adopted = store.adopt(pending).expect("AC-10: adoption succeeds");
+        let slot = store
+            .image()
+            .0
+            .node_field(adopted.payload(), NODE_SLOT)
+            .expect("the adopted node is live");
+        assert_ne!(
+            slot,
+            crate::store::NULL_SLOT,
+            "AC-10: adoption must mint a REAL identity, not merely record one"
+        );
+        assert_eq!(
+            store.placement(slot),
+            Some(adopted.payload()),
+            "AC-10: adoption installs the placement, so the identity resolves back"
+        );
+
+        // ⭐ A FRESH invocation: the producer's arena is gone, and a separately
+        // compiled consumer recovers the identity AND the content.
+        let g = rebind(store.image_mut().0.publish());
+        assert_eq!(
+            run2(slot_code, g.base, adopted),
+            slot as i64,
+            "AC-10: the consumer recovers the SAME identity, not its absence"
+        );
+        assert_eq!(
+            run2(escape_code, g.base, adopted),
+            BOUNDARY_OK,
+            "AC-10: an adopted persistent word may now cross the boundary"
+        );
+        assert_eq!(
+            run2(len_code, g.base, adopted),
+            len as i64,
+            "content: length"
+        );
+        let read: Vec<u64> = (0..len)
+            .map(|i| run3(limb_code, g.base, adopted, i) as u64)
+            .collect();
+        assert_eq!(
+            read,
+            (0..len).map(|i| seed + i).collect::<Vec<_>>(),
+            "AC-10: content survives adoption and the arena drop"
+        );
+
+        // ⛔ **Emitted code still cannot assign identity** while this
+        // store-owned path is positively exercised — the anti-forgery property
+        // carries unchanged, and the pair proves the two are not the same
+        // capability.
+        assert_eq!(
+            EMITTED_WRITABLE_NODE_OFFSETS,
+            &[NODE_TAG_ID, NODE_PAYLOAD],
+            "AC-6: emitted code gained a writable node word"
+        );
+        assert!(
+            !BOUNDARY_LOCAL_HELPERS
+                .iter()
+                .any(|name| name.contains("adopt")),
+            "AC-6: adoption is the STORE's operation and has no emitted helper"
+        );
+    }
+
+    /// **`AC-10` — equal emitted values converge on one store identity, and
+    /// unequal values never alias.**
+    ///
+    /// ⚠ The pair is the whole control: convergence alone is satisfied by a
+    /// store that gives everything one slot, and non-aliasing alone by one that
+    /// never reuses. Both are asserted on independently emitted values.
+    #[test]
+    fn b2v_ac10_adoption_converges_equal_values_and_never_aliases_unequal() {
+        let (_pm, produce) = compile_producer(4, emit_wide_int_producer);
+        let len = 2u64;
+        let mut store = BoundaryValueStore::new();
+        let f = bind_limbs(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (8, 0, 0),
+            (0, 0, 0),
+            (32, 0),
+        );
+        // Three independent emitted constructions: two equal, one different.
+        let mint = |base, seed| BoundaryWord(run4(produce, base, 0, len, seed) as u64);
+        let first = mint(f.base, 0x0abc_0000_0000_0011);
+        let second = mint(f.base, 0x0abc_0000_0000_0011);
+        let other = mint(f.base, 0x0abc_0000_0000_0012);
+        assert_ne!(
+            first, second,
+            "the two equal values must be DISTINCT nodes before adoption, or \
+             convergence is trivial"
+        );
+
+        let a = store.adopt(first).expect("adopts");
+        let b = store.adopt(second).expect("adopts");
+        let c = store.adopt(other).expect("adopts");
+        let slot_of = |store: &BoundaryValueStore, word: BoundaryWord| {
+            store
+                .image()
+                .0
+                .node_field(word.payload(), NODE_SLOT)
+                .expect("live")
+        };
+        assert_eq!(
+            a, b,
+            "AC-10: equal independently emitted values converge on ONE canonical word"
+        );
+        assert_eq!(slot_of(&store, a), slot_of(&store, b), "and one identity");
+        assert_ne!(
+            slot_of(&store, a),
+            slot_of(&store, c),
+            "AC-10: unequal values must never alias onto one identity"
+        );
+        assert_ne!(a, c, "AC-10: and must not share a canonical word");
+    }
+
+    /// **`AC-10` — no parent adopts while a reachable child is invocation-owned,
+    /// and adoption fails closed with an exact status.**
+    #[test]
+    fn b2v_ac10_adoption_fails_closed_before_publication() {
+        let mut store = BoundaryValueStore::new();
+        // A word whose tag is not persistent has no adoption boundary.
+        let immediate = BoundaryWord::immediate(BoundaryTag::ImmediateInt, 7);
+        assert_eq!(
+            store.adopt(immediate),
+            Err(BOUNDARY_ERR_SHAPE),
+            "AC-10: only a persistent handle is adoptable"
+        );
+        // A persistent word naming no node cannot be validated.
+        assert_eq!(
+            store.adopt(BoundaryWord::handle(BoundaryTag::PersistentGround, 99)),
+            Err(BOUNDARY_ERR_BOUNDS),
+            "AC-10: adoption fails closed on a word it cannot resolve"
+        );
+        // ⚠ POSITIVE CONTROL: a store-materialized node is already adopted, so
+        // adoption is idempotent rather than refusing everything.
+        let word = materialize_ground(&mut store, &RuntimeGroundValue::Bytes(vec![1, 2, 3]))
+            .expect("materializes");
+        assert_eq!(
+            store.adopt(word),
+            Ok(word),
+            "AC-10: an already-adopted node adopts idempotently"
+        );
     }
 
     /// **`AC-1`/`AC-6` — the region thresholds and `referent_owner` are the
