@@ -47,11 +47,22 @@ an *unprobed* site the implementer had not used — and reached the same verdict
 stronger evidence than a repeat of the same experiment: it shows the hole is a
 property of the pin's *shape*, not of the one site that happened to expose it.
 
-⚠ **The escalated ruling then sharpened per-SITE to per-CELL** for a relation-shaped
-authority: remap **and** drop one exact `(tag,class)` cell, and mutate the two
-sides of a mirrored pair **in opposite directions**. ⇒ Ask what the *finest*
-grain of the authority is — site, row, cell — because the aggregate can hide a
-defection at any grain coarser than the one you probe.
+⚠ **The escalated ruling then showed what the per-site principle looks like on a
+*relation*-shaped authority — and ⛔ NOT as "one mutation per cell".** For the
+single relation consumer it required a **cell-specific discriminator**: remap and
+drop **one exact** `(tag,class)` cell and observe *that cell's* emitted acceptance
+change. **Population closure came from a different mechanism** — a full-product
+both-direction reconciliation between the authority and its mirror, plus
+opposite-direction drift mutations on each side.
+
+⇒ ★ **That is the reusable shape, and it is the answer to the obvious objection
+("so must I mutate all N?"): NO.** Pair a **discriminator** that proves the
+consumer is causally wired at a named grain with a **closure mechanism** that
+covers the population exhaustively. ⛔ **The error to avoid is generalizing a
+discriminator into an N-mutations rule** — I did exactly that when first
+summarizing this ruling and the Architect corrected it. One mutation per cell is
+neither required nor what makes the evidence sound; the reconciliation is what
+closes the population.
 
 ## How to apply
 

@@ -1,7 +1,7 @@
 ---
 id: ABI-R1
 title: "correct stale filesystem capability prose — scoped roots, rights, symlink policy and no-follow resolution have landed"
-status: merged
+status: closed
 owner: foundation
 size: S
 gate: none
@@ -11,11 +11,35 @@ github: null
 origin: docs/program/10-linux-abi-completion.md §4 (the ABI-completion program); node filed by the Steward 2026-07-25 on the operator's directive to frame the remaining program. Agents cannot create tracked work (COORDINATION §2).
 ---
 
-> ## ✅ MERGED — 2026-07-26 ~09:33Z, PR #1006, `origin/main` = `499ff468`
+> ## ✅ CLOSED — 2026-07-26 ~09:36Z. Merged PR #1006 (`main` = `499ff468`), retros IN
 >
 > Kicked ~09:0xZ, QA-approved candidate ~20 minutes later, merged on the third
-> candidate. ⚠ **Retros are NOT yet in** — the WP is merged, not closed
-> (COORDINATION §10). Chased from the Steward at ~09:3xZ.
+> candidate, **all three retros posted ~09:36Z** ⇒ closed under COORDINATION §10.
+> Retros: leader `evt_6dhfygx4sns0p`, QA `evt_61qnh1qjetmbw`, implementer
+> `evt_7pdp6bprr77z8`.
+>
+> ### ⭐ THE THREE RETRO CARRIES — all three are about the SAME defect class
+>
+> **Implementer (the sharpest, and it answers the question I asked):** *before
+> authoring any universal prose clause, record its provenance as **measured here**
+> or **inherited**.* An inherited universal needs a producer/consumer closure sweep
+> across **every** production lane; if that closure is not required by the
+> deliverable or cannot be proven cheaply, **omit the universal** and state only
+> the common grounded boundary. ⇒ It names why the borrowed premise was invisible:
+> *"I treated the routing evidence as already closed instead of labelling it
+> inherited, not re-derived."*
+>
+> **QA:** when the shared invariant is only *carried/expressible*, **stop there** —
+> do not infer an enforcement behaviour from one lane's resolver. Plus: **preserve
+> blocked SHAs before force-moving a replacement, because review evidence cites
+> them.**
+>
+> **Leader:** for a **cited-source** prose WP, treat the attestation row and the
+> generated status digest as **coupled deliverables from the first edit** —
+> re-derive at pickup, regenerate in every candidate fold, bind review to the
+> resulting blob/digest. ⇒ Answering my question directly: the `D4` caveat **did**
+> do work here, keeping currency explicit across three candidate rewrites rather
+> than letting a prose-only frame hide a ledger mismatch.
 >
 > **Merged exact `d265172624b19afcaef636c07aee5b37207b2416`.** Decision
 > `dec_7ayj9fy85kjhw`, verified `resolved` **from the object** with a non-null
