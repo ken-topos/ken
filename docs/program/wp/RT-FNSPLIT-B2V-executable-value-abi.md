@@ -1186,6 +1186,90 @@ derived tag→value-class relation is sound.
 derivation **plus** per-site class evidence; Runtime Leader reviews the resulting
 clean checkpoint **before** any QA routing.
 
+### ⛔⛔⛔ RULING R5 — 2026-07-26. The relation seam: PLAN-DERIVED, mirror RECONCILED
+
+**`dec_7qv8nkx71vwvs`** · Architect `evt_4xb522q6vqqxw` · verified `resolved`
+**from the object**, `resolved_by` = the Architect's actor, `resolved_at`
+`2026-07-26T09:43:08Z`. Raised by `runtime-implementer` `evt_5d966t3v7aj5a`
+(Finding 1), escalated by `runtime-leader` `evt_7t4nn3yk5d0y0`, who **held the ring
+off the fold** until it was ruled.
+
+⛔ **Transcribed here for the same reason as `R3` and `R4`.**
+
+**What was asked.** Production `relation_mask` folds directly over
+`BOUNDARY_TAG_CLASS_RELATION`, a `pub const` hand-maintained table whose doc-comment
+says *"derived from `Lowered::boundary_disposition`"*. ⛔ **That derivation exists
+ONLY as a comment — structurally exempt from execution.** The table has Rust-side
+consumers (`boundary_class_mask`, `boundary_class_admits`) while the partition is
+private to lowering, so the emitter consumes a **table**, not the plan's derived
+relation. Partition and table contents **agree today**.
+
+**The ruling — the Architect's words, `evt_4xb522q6vqqxw`:** *use the proposed
+split, with one load-bearing qualification — **retain the Rust-side relation
+contract, not a second hand-maintained authority.***
+
+> 1. **Emitter authority.** Extend `BoundaryEmissionPlan` with the normalized
+>    handle `BoundaryTag → set<BoundaryClass>` relation. Derive it in the existing
+>    single `BoundaryInput::all()` sweep, **exclusively** from
+>    `BoundaryOutcome::HandleWord { tag, class, .. }`. ⛔ `ImmediateWord` **remains
+>    excluded** — this is node `NODE_CLASS` legality, not immediate value
+>    classification.
+> 2. **Emission consumer.** `relation_mask` takes `&BoundaryEmissionPlan` and folds
+>    **only** the plan-derived relation. An absent tag/row yields a **zero mask**
+>    and therefore exact `BOUNDARY_ERR_RELATION`. ⛔ **Do not seed the fold with a
+>    real last-row mask, and do not rely on an earlier tag guard to make absence
+>    unreachable. The allocator's relation decision must be self-fail-closed.**
+> 3. **Rust-side contract.** Rust builders still need fail-before-publication
+>    legality checking. `BOUNDARY_TAG_CLASS_RELATION` may survive **only** as the
+>    **smallest-visibility** Rust projection/mirror that production path needs, with
+>    its docs no longer calling a hand-written slice *"derived"* or the sole
+>    authority. It must be **mechanically reconciled** to the partition-derived plan
+>    over the full finite `BoundaryTag::ALL × BoundaryClass::ALL` product **in both
+>    directions**. A shared backend-neutral authority deriving both is **stronger
+>    and permitted**; moving the private lowering authority outward is **not
+>    required** for this fold.
+> 4. **Delete dead surface.** Once the emitter stops using `boundary_class_mask` /
+>    the public table directly, delete any accessor or constant with **no non-test
+>    production consumer**. The `admitted_classes()` deletion remains correct.
+>    ⛔ **Public visibility alone is not a reason to preserve a consumerless
+>    mirror.**
+> 5. **Evidence.** ⛔ **Aggregate CLIF inequality is insufficient.** For the single
+>    relation consumer, **remap and drop one exact `(tag,class)` cell** and observe
+>    the corresponding emitted `alloc` acceptance change / `ERR_RELATION`; bypassing
+>    the plan in `relation_mask` **must red**. Independently mutate the Rust mirror
+>    and the partition-derived relation **in opposite directions**; the full-product
+>    reconciliation **must red on either drift**, with **non-empty positive
+>    controls**. **This is the executable form of today's measured agreement.**
+
+⭐ **Clause 3 is the whole ruling, and it is a `coexist`, not a `subsume`.** The
+obvious repair — delete the table, make the plan the only authority — was **not**
+ruled, because the Rust builders have their own fail-before-publication contract
+that the emitter's plan does not serve. ⇒ **Two authorities are permitted where
+they answer different questions; what is forbidden is two *hand-maintained*
+authorities.** The mirror survives only with reduced visibility, corrected docs,
+and a **mechanical both-directions reconciliation** standing in for the comment.
+
+⭐ **Clause 5 states `R4`'s per-site rule as law for this seam, and sharpens it
+from "per site" to "per CELL":** remap **and** drop **one exact `(tag,class)`
+cell**. ⇒ *"Measured agreement today"* is not evidence — it is a **claim awaiting
+an executable form**, and the ruling names that form rather than accepting the
+agreement.
+
+⛔ **Clause 2's anti-patterns are the two ways this fold silently keeps working
+while losing its fail-closed property:** seeding the fold with a real mask, or
+leaning on an upstream tag guard so the absent-row branch is unreachable. Either
+one makes the *absence* case untestable, and an untestable fail-closed branch is
+not one.
+
+⚠ **What this ruling does NOT change:** `D6`, the helper population, the semantic
+call topology, and **every census**. Finding 2 (delete the unconsumed test-only
+`admitted_classes()`) and **QA's `AC-10` depth-evidence correction** are separate
+**required** folds; neither alters this ruling.
+
+**Next move, as ruled:** fold this relation seam plus the already-routed
+corrections, return **one fresh clean SHA** to the Runtime Leader for review
+**before** QA.
+
 ## ⛔⛔ RECUT 1 — 2026-07-25. The Architect NAMED the shared predicate.
 
 ⛔ **Read this before reading the acceptance criteria above.** The `AC` set above

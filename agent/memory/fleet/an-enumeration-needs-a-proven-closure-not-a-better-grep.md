@@ -116,6 +116,58 @@ through, and how do I know nothing bypasses it?***
 CLOSED — and if you cannot answer, you do not have an inventory, you have a
 sample.** *"I named a place. He found the closure."*
 
+## ★★ THE FIFTH INSTANCE — TWO searches, each EXHAUSTIVE, neither complete
+
+**Measured 2026-07-26, `runtime-implementer` on `RT-FNSPLIT-B2V`, reported against
+itself.** The rule above was already in the corpus. This instance matters because
+**nothing about it looks like a lazy grep** — and it names the operational form of
+*"population from the gate."*
+
+The task was to inventory the sites consuming a representation authority. The
+located list missed **two**:
+
+| missed site | why the search could not see it |
+|---|---|
+| `:1194` | **same defect, but no constant to grep for** — the search keyed on a *name* the defect happened to spell at the other sites |
+| `:715` | not a `NODE_CLASS`, so it fell **outside the fold's private notion of "class"** |
+
+⇒ ⛔ **Two searches, each exhaustive within a boundary neither search wrote down.**
+Not carelessness — each was *complete* against the domain its author had in mind.
+The domains were never stated, so they were never checked.
+
+⭐ **The operational rule, and it is one keystroke different from the failing one:**
+
+```console
+grep 'BoundaryTag::'      # ✅ uses of the AUTHORITY  -> found the missing site instantly
+grep 'FIRST_HANDLE_TAG'   # ⛔ occurrences of the DEFECT'S NAME -> never could
+```
+
+**Enumerate uses of the AUTHORITY, not occurrences of the DEFECT'S NAME.** This is
+*"population from the gate, verdict from the property"* made concrete: the
+authority's type/module path **is** the gate, and it is greppable. The defect's
+name is a property of the sites you already found — so keying on it can only
+re-find them. ⇒ **When you catch yourself grepping the string that appears in the
+bug you just fixed, you are enumerating from the property.**
+
+⚠ **And write the domain down.** The cheap fix for two unstated boundaries is one
+sentence per search saying what population it claims to cover. An unstated domain
+cannot be wrong, which is exactly why it cannot be checked.
+
+⭐ **A control that fires on its own author is the cheapest evidence it is real:**
+the source scan built for this inventory **matched its own needle literal** on the
+first run, and was caught by its own *undetermined-parse ⇒ fail* branch. That is
+the fail-closed branch working, on the person who wrote it, before anyone else saw
+it. ⇒ **A scanner that searches source it is itself part of must exclude itself,
+and the exclusion is a case worth a control** — the related trap is an assertion
+whose needle is **caller-supplied**, which passes by construction because the
+caller hands in the very string being sought.
+
+⇒ Per-site coverage is downstream of this: see
+[[a-differential-over-an-aggregate-is-an-existential-not-a-universal]]. **You
+cannot per-site anything until the site count is closed** — an existential pin and
+an unstated enumeration domain hide each other, because the pin stays green while
+the inventory stays short.
+
 ## Where this bites hardest
 
 **Any claim of the form "we checked all of X."** Security audits (every FFI
