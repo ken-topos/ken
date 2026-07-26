@@ -33,9 +33,9 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## ▶▶ LIVE — 2026-07-26 ~19:4xZ · ⛔ `main` IS RED; ONE WP CLEARS IT
+## ▶▶ LIVE — 2026-07-26 ~20:2xZ · ⛔ `main` IS RED; ONE WP CLEARS IT
 
-**`origin/main` at last check: `e9987c6a`.** ⛔ Verify it; do not trust this line.
+**`origin/main` at last check: `3b979305`.** ⛔ Verify it; do not trust this line.
 
 ### ⛔⛔ THE ONE THING THAT MATTERS
 
@@ -69,28 +69,69 @@ considered and rejected.
 |---|---|
 | **Verify** | ▶ **LIVE** on `LIB-GATE-DECOUPLE`, kicked at `e9987c6a` (`evt_1bhzvkrc1gmm0`), leader confirmed `Working` |
 | **Runtime** | ⛔ **STOPPED by operator order.** No node. `B2F` held. ⛔ Do NOT re-anchor `B2E`/`B2F` — retire them and write fresh |
-| **Language** | idle, correct. Candidate approved and queued; told it is innocent of the red (`evt_6fp26ys3h0r5f`) |
+| **Language** | ✅ **CLOSED** — `KW-ORACLE-REMOVE` merged, all three retros in |
 | **Spec enclave** | idle, correct. Next work = the `SPEC-STORE-SPLIT` frame (unwritten) |
 | **Doc · Foundation · Kernel · Ergo** | idle |
 
-### ▶ Queued behind the red
+### ✅ `KW-ORACLE-REMOVE` LANDED — ⛔ and it did NOT clear the red
 
-- **`KW-ORACLE-REMOVE`** exact `68c3d870`, base `720b0e17`. `dec_200k7z471z9x6`
-  **resolved** by the Architect. PR #1035 failed CI **on the pre-existing red, not
-  on the candidate.** ⇒ Republish **WITHOUT `--doc-only`** once `main` is green.
+**`origin/main = 3b979305`** — *"KW-ORACLE-REMOVE: delete source-text oracle
+(#1035)"*. ⭐ **Merged by the OPERATOR directly, not through the publisher** — ⛔ so
+there is no publisher log and no `wp/scripted-merge-*` branch for it.
+
+Verified by **blob absence**:
+`git cat-file -e origin/main:crates/ken-elaborator/tests/kw_theorem_source_oracle.rs`
+→ exit 1. ⭐ Control: the same probe returned **present** at base `720b0e17`, so the
+absence is the change landing, not a path that never existed.
+
+⚠ **Its PR shows red checks and they were never the candidate's.** `test shard 1/4`,
+`test shard 4/4`, `build + test` = the `library_documentation_gates` failures above.
+**Passed:** `conformance suite`, `path-guard`, `clean-room provenance check`,
+`work-item tracker`, shards `2/4` + `3/4`, all three `native-slow` jobs.
+
+⇒ **One blocker removed, not the blockage.** `main` stays red until
+`LIB-GATE-DECOUPLE` lands.
+
+### ▶ Still queued behind the red
+
 - **Publisher message fix** — `preserved/steward-publisher-msg-fix = 921e042b`
-  (also `steward/work` HEAD). ⛔ Touches `scripts/`, so it **must clear CI** and
-  ⛔ **must not ride a `--doc-only` merge.**
+  (also `steward/work` HEAD, one file, blob `76afaf31`). ⛔ Touches `scripts/`, so
+  it **must clear CI** and ⛔ **must not ride a `--doc-only` merge.**
+  ⚠ **Twice on 2026-07-26 `git diff origin/main..steward/work` included this file
+  and a `--doc-only` publish would have skipped CI on it.** ⛔ **Re-check the diff
+  before every `--doc-only`.**
 
 ### ▶ What I owe next, in order
 
 1. Verify's candidate → Decision → publish → blob-verify → retros.
-2. Republish `68c3d870` **without** `--doc-only`.
-3. Publish the publisher message fix (needs CI).
-4. Author the `SPEC-STORE-SPLIT` frame shovel-ready; **§2c gate — compact all
+2. Publish the publisher message fix (needs CI, so it waits for green).
+3. Author the `SPEC-STORE-SPLIT` frame shovel-ready; **§2c gate — compact all
    three enclave seats unconditionally** — then kick the enclave.
-5. Fold task `#94`'s hard-stop-`#11` measurements into a durable node, then delete
+4. Fold task `#94`'s hard-stop-`#11` measurements into a durable node, then delete
    the task.
+5. **Land the promotion batch (task `#113`).** ⚠ Its strongest entries exist **only
+   in the convo channel and a task description** — the exact undurability that task
+   `#107` tracks.
+
+### ⭐⭐ The carry from the closed Language ring — stronger than my own framing
+
+`runtime`-style retros usually restate process. This one supplied a mechanism I did
+not have. **A CORRECTION RESETS THE FIXED-INPUT AUDIT** (`evt_5h11p8gjjswmp`):
+
+> *"The first measurement validated cardinality; it did not validate pass state, and
+> no amount of confidence in the corrected prose could bridge that gap. … Re-read
+> every executable operand at the corrected exact object, **including facts that
+> were introduced by the correction itself**. A correction explains why the prior
+> claim was wrong; it does not make its replacement observed."*
+
+⭐ **That is why my second `AC-4` error lived INSIDE the fix for the first.** ⭐⭐ And
+it is the **same property** as *a clearance names the axes it covers*, seen from the
+other end — an arity mismatch that prose collapses. ⇒ ⛔ Promote them as **one**
+entry, not two.
+
+⭐ Also load-bearing: *"the 'measure before any edit' boundary kept the red
+attributable to `main`."* ⇒ **A deletion that lands without a pre-measurement
+destroys the evidence that the base was already broken.**
 
 ### ⛔ Still operator-HELD
 

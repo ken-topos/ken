@@ -1,28 +1,49 @@
 ---
 id: KW-ORACLE-REMOVE
 title: "Delete the whole-tree source-text oracle: it asserts facts about repository text, which is now a prohibited test subject"
-status: ready
+status: merged
 owner: language
 size: S
 gate: none
 depends_on: []
-blocks: [DOC-CATALOG-CONTENTS]
-github: null
+blocks: []
+github: 1035
 origin: Operator ruling 2026-07-26 — "That test should not exist. Remove it. It should be a violation of our testing policies," followed by the general rule "Test oracles that assert facts about source code, catalog, or documentation lines are an invitation for failure and delay. Tests should focus on behavior." Surfaced when the librarian's DOC-CATALOG-CONTENTS preflight found the oracle blocking a doc-only WP. Steward-filed per COORDINATION §2.
 ---
 
-> ## ⛔⛔ `main` IS RED ON THIS ORACLE. This WP is the fix, not a cleanup.
+> ## ✅ MERGED 2026-07-26 — PR #1035, `origin/main = 3b979305`
 >
-> **Measured by `language-implementer` at `origin/main = f52b0f61`:**
-> `exact_candidate_has_no_unclassified_retired_occurrences` **FAILS**. The landed
-> catalog change (`95bc855c`) moved lines in
+> ⭐ **Merged by the OPERATOR directly, not through the publisher** — ⛔ so there is
+> no publisher log and no `wp/scripted-merge-*` branch for this one.
+>
+> **Verified by blob ABSENCE, with a control:**
+> `git cat-file -e origin/main:crates/ken-elaborator/tests/kw_theorem_source_oracle.rs`
+> → exit 1 (absent); the same probe at base `720b0e17` returned **present**. ⇒ The
+> absence is this change landing, not a path that never existed.
+>
+> **Retros in, ring closed:** `evt_14tgfydxmg2f4` (leader),
+> `evt_5h11p8gjjswmp` (implementer), `evt_780k8hnjjmp44` (QA).
+
+> ## ⚠ THIS WP DID NOT CLEAR THE RED — and my claim that it would was WRONG
+>
+> **What was measured (by `language-implementer`, and it was correct):**
+> `exact_candidate_has_no_unclassified_retired_occurrences` **FAILED** at `main`.
+> The catalog change `95bc855c` moved lines in
 > `catalog/packages/Core/Classes/EffectfulClasses.ken.md` and `Derived.ken.md`,
-> **both pinned by the oracle's frozen line-number allow-list**
-> (`kw_theorem_source_oracle.rs:93`, `:113`). Corroborated structurally.
+> both pinned by the oracle's frozen line-number allow-list
+> (`kw_theorem_source_oracle.rs:93`, `:113`).
 >
-> ⇒ **Every non-doc-only merge is now blocked behind this deletion**, because the
-> publisher polls CI and CI is red. That includes Runtime's `B2E` when it
-> becomes a candidate.
+> ⛔ **What I then wrote here was:** *"Every non-doc-only merge is now blocked
+> behind this deletion."* **True, and INCOMPLETE — necessary, not sufficient.**
+> `95bc855c` broke **three** things; this oracle was the only one that *reported*.
+> The other two (12 drifted cited-source attestations, a stale `measured_tokens`
+> census) surfaced on PR #1035's own CI, where they read as this candidate's
+> failure. They are [`LIB-GATE-DECOUPLE`](LIB-GATE-DECOUPLE.md).
+>
+> ⭐ **The generalizable defect: a diagnosis keyed on ONE reporting mechanism is
+> blind to every other consumer of the same change.** ⇒ After any `--doc-only`
+> merge, **enumerate consumers of the touched paths** — do not wait to be told
+> which one shouts.
 >
 > ⭐ **A doc-only merge reddened a Rust test suite.** That is the coupling the
 > operator was describing when he removed the library currency gate hours
