@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-26 04:14:30Z — from 83 issue file(s) in `docs/program/issues/`.
+2026-07-26 04:24:50Z — from 83 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -72,7 +72,7 @@ the committed file matches the generator's output.
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
 | `F3-39` | F3 [task-list #39] — reducer: degrade-not-wrap + retire legacy arms | draft | runtime | TBD | none | — |
 | `F4` | content-addressing + value-model design (aka PX8-F-PROOF) | draft | foundation+spec-enclave | M | none | — |
-| `KW-ORACLE-CLOSURE` | close the KW-THEOREM source oracle structurally — the occurrence sweep is never applied, and the file population is a five-arm hand enumeration | draft | language | S | none | — |
+| `KW-ORACLE-CLOSURE` | close the KW-THEOREM source oracle structurally — the occurrence sweep is never applied, and the file population is a five-arm hand enumeration | ready | language | S | none | — |
 | `KW-THEOREM` | rename the surface keyword `lemma` to `theorem` | merged | language | M | none | — |
 | `LOADER-CITE-ANCHOR` | LOADER-STALE-PREMISE cites the spec by line number (:147-158) — rots silently in the one catalog file outside the currency gate | merged | doc | XS | none | — |
 | `LOADER-STALE-PREMISE` | \"no disk loader yet\" is stale in 9 places — including already-landed library/ content | merged | doc | S | none | — |
@@ -131,6 +131,7 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `DOC-ATTEST-LIVING` — attesting living tracker files makes every routine WP status flip redden the currency gate
 - `DOC-GATE-NEEDLE` — schema-gate controls assert on a needle the test itself supplied, so one constraint class is fully vacuous
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
+- `KW-ORACLE-CLOSURE` — close the KW-THEOREM source oracle structurally — the occurrence sweep is never applied, and the file population is a five-arm hand enumeration
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `STR-BIJ` — the String/List Char 'bijection' over-claim (adversary A1 + A2)
 
