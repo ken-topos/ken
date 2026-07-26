@@ -29,6 +29,17 @@ origin: docs/program/10-linux-abi-completion.md §4 (the ABI-completion program)
 > *"I treated the routing evidence as already closed instead of labelling it
 > inherited, not re-derived."*
 >
+> ✅ **PROMOTED to the fleet corpus** as
+> `agent/memory/fleet/a-scope-exclusion-bounds-edits-not-verification.md`.
+> ⭐ **It needed a second instance to become actionable, and got one the same
+> day:** `RT-FNSPLIT-B2V` carried a depth constant measured *before*
+> `RT-VALUE-TOTALITY-P1`, re-anchored onto a base **containing** P1, and carried
+> the stale number across — low by **~4×**. Its root cause supplies the mechanism
+> this carry was missing: *"P1 was on this WP's do-not-touch list and I read 'not
+> mine to change' as 'not relevant to re-check'."* ⇒ **A frame's excluded-scope
+> list is about EDIT AUTHORITY; it says nothing about whether your inputs are
+> still true at your base** — and a re-anchor is precisely when they stop being.
+>
 > **QA:** when the shared invariant is only *carried/expressible*, **stop there** —
 > do not infer an enforcement behaviour from one lane's resolver. Plus: **preserve
 > blocked SHAs before force-moving a replacement, because review evidence cites
