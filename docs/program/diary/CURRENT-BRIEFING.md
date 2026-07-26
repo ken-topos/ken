@@ -50,6 +50,20 @@ verbatim (⚠ it was only in gitignored `local/`) at
 ### Verify ring compaction VERIFIED on all three seats. Adversary hunt reported.
 ### ⛔ **`B2F` CENSUS AMENDED: 47 events / 10 positions, NOT 41.** Ring-measured;
 ### the historic `41`/`29`/`~33 of 41` are DEAD operands. ⛔ Does NOT narrow `AC-11`.
+### ⭐ **TWO PREMISE CORRECTIONS LANDED #1026** — both found by the RECEIVING seat,
+### not by review. ⛔ **REBIND:** `B2E` frame `20928eac`->`e86c5331`, node
+### `8275c6c5`->`c947dc77`; `A1` frame `5f1e1659`->`db4fe0f0`.
+### ✅ **`RULING R1` `dec_6r447gawdp6hy` TRANSCRIBED** — `B2E` `D5` is a TWO-STAGE
+### authority. ⛔ There is NO artifact-static `u64` name ID; the frame collapsed the
+### artifact name REFERENCE with the store-local `intern_symbol` ID. ⛔ A NEWTYPE
+### ALONE DOES NOT DISCHARGE `D5`/`AC-E5`. Architect record preserved on `origin`:
+### `preserved/architect-state-1d9a6f86`. `B2F` residual is now ONE thing.
+### ⛔ **NEW: `SPEC-31-WIDTH-ERRATUM`** (`aa3d32d4`) — spec `31 §1d`+`layout.rs:12`
+### say **96** columns; the formatting seed says **88** 18x and CITES `31 §1d`.
+### Latent ONLY because those rows are `RED-UNTIL-BUILT`. ⛔ Do NOT treat 18-vs-1
+### as the argument — `git log` on both files is the undone discriminator.
+### ⛔ **MY `A1` §2 TABLE IS NOT RELIABLE PER-CELL** — it cited a FILE and inherited
+### the claim from its subject matter. A locator has TWO coordinates.
 ### ▶ **SECOND LANE: spec enclave on `SPEC-ALIGN-A1`** (Track A of the
 ### mission-alignment campaign). Contention-free by path — `spec/`+`docs/` vs
 ### `crates/`. ⛔ **NOT semantically free:** A1 must NOT relax the store family
