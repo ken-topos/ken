@@ -174,6 +174,26 @@ mis-set path, or a fixture that never exercised the mechanism. So:
 - ⚠ **Positive controls can themselves be spelling-scoped.** Having one is
   necessary, not sufficient.
 
+### ⛔ AND READ THE TEST COUNT — a run that executed NOTHING reports GREEN
+
+★ **Measured 2026-07-26, `RT-SCALE-A` QA.** An incomplete exact-test path
+**silently ran 0 tests** and the invocation came back green. ⛔ *A green run that
+executed nothing is indistinguishable from a green run that passed* — the exit
+code cannot tell you which, and a filter typo, a renamed target, or a
+`--test <name>` that matches no file all land here.
+
+⇒ Every reported run carries its **executed count**, and the count is asserted
+against a number you **stated before running** — `running 7 tests` /
+`test result: ok. 7 passed`, not just `ok`. **0 passed is a FAILED measurement**,
+not a pass. Same family as the negative-check rule above: *silence is scoped to
+the question the tool actually asked*, and a filter that matched nothing asked
+nothing.
+
+⚠ **Corollary — bind each measurement to its PRODUCER, with an independently
+derived mutation.** A table of numbers that agree with each other **corroborates**;
+it never proves a live sensor was attached. Change the thing the number measures
+and require the number to move.
+
 ## 6a. ⭐ A checker's ADVERTISED law count is a claim, not a guarantee
 
 §6 asks whether the detector was **reached**. This asks **which arm fired** — a

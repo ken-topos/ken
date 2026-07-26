@@ -348,6 +348,31 @@ brief** — the implementer should execute mostly mechanically, not design
 >    sequence them and **re-derive the consumer population after the first
 >    lands** — it will have changed, which is the point.
 >
+>    ⛔ **THIRD AXIS — REACHABILITY/VISIBILITY. A placement can be
+>    contention-free and still IMPOSSIBLE.** Contention asks *who else touches
+>    this file*; it never asks *can the code I am framing SEE what it must
+>    measure*. When a frame names where a test or probe lives, write **both** maps
+>    — the contention map **and** the reachability map — and treat **either one's
+>    failure as a PRE-CODE HARD STOP.**
+>
+>    ★ **Measured 2026-07-26, `RT-SCALE-A`, and the leader held instead of
+>    building.** My "low-contention placement" — a new integration-test file,
+>    no `lib.rs` edit — was plausible on the contention axis and
+>    **contradicted the planner's real visibility boundary**:
+>    `plan_static_transition_graph`, `StaticTransitionPlan`, `BoundaryACensus`
+>    and `census()` are all `pub(in crate::cranelift_backend)`. An integration
+>    test is an **external crate**, so the three constraints I imposed were
+>    **jointly unsatisfiable** — and the only way to satisfy them would have been
+>    a permanent **public** measurement API whose sole consumer is a test, i.e.
+>    widening the production surface to fit a placement I chose for contention
+>    reasons. ⭐ The leader routed it *before* writing code, which is what made it
+>    cheap.
+>
+>    ⇒ **"Committed and auto-run" does NOT imply an integration-test crate** —
+>    that conflates *permanence* with *placement*. Prove the constraints
+>    **jointly satisfiable against the real visibility graph** before naming the
+>    location, and if they are not, say so rather than reaching for `pub`.
+>
 > 7c. **★★ A SOLO WP WITH NO CONTENDER CAN STILL BE BLOCKED BY THE LEDGER —
 >    intersect your own file set against the CITED-SOURCE list on every
 >    publish.** Step 7b asks whether two WPs collide *through* the ledger. This
