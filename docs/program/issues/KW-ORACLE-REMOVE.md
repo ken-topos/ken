@@ -75,7 +75,7 @@ removal, not repair.
 
 ## What goes
 
-**The entire file.** All 12 test functions and every helper are scaffolding for
+**The entire file.** All 7 test functions and every helper are scaffolding for
 the census — `candidate_inputs`, `classify`, `markdown_ken_lines`,
 `occurrence_lines`, `retired_occurrences`, `retired_occurrence_offsets`,
 `retired_findings`, `occurrence_census`, `allowed_occurrence_census`,
