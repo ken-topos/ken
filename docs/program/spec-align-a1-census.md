@@ -7,15 +7,21 @@
 >
 > **Campaign blob:** `3d3d326a6162c9833b097eb9a1c510589aff382d`
 >
+> **Width-ruling node blob:**
+> `8442453ba7773e870ddf89e2b672f1b7397c7bce`
+> (`SPEC-31-WIDTH-ERRATUM`; supersedes the A1 frame's stale value-choice
+> wording)
+>
 > **Scope:** the candidate families nominated by the campaign and advisory,
 > classified by the assertions their conformance consumers actually make.
 
 ## Reading and closure bound
 
-Governance is read from `origin/main=4297e55c`, while the candidate source is
-the assigned base above. This split is safe by object identity: `spec/`,
-`conformance/`, and `crates/` have the same respective trees at both commits
-(`7fce4373`, `00850b58`, and `15296a2a`). The `docs/` control differs.
+Governance is read from
+`origin/main=870f5b65fa815d1305a1fdd87593ed5ec81868a0`, while the candidate
+source is the assigned base above. This split is safe by object identity:
+`spec/`, `conformance/`, and `crates/` have the same respective trees at both
+commits (`7fce4373`, `00850b58`, and `15296a2a`). The `docs/` control differs.
 
 The population is the union of:
 
@@ -59,7 +65,7 @@ candidate below has that verdict.
 | Bignum canonical tag `0x01` | `35 §2.1`; `41 §3a` | 4, private kind discriminator | `surface/numbers/int-arbitrary-precision-above-2^53`; `surface/numbers/f1-store-roundtrip-above-i128-byte-identical` | both canonical encoders fix `BIG_INT = 0x01`; boundary/native integer paths consume it | None found. CheckedCore/package encoders do not call the runtime value encoder, and `41 §3` separates serialization from in-process addressing | **STOP-4** — live rows require an Architect-owned conformance-granularity ruling; no class-2 consumer was derived |
 | Sign-magnitude, `u64` limbs, minimal-limb/one-zero-limb canonicalization | `35 §2.1`; `41 §3a` | 4 for the exact sign/limb layout and normalization mechanism; 1/4 for one value having one content identity | `runtime/values/bignum-minimal-limb-encoding`; `surface/numbers/{f1-store-roundtrip-above-i128-byte-identical,f1-dedup-content-address-stable-across-paths}`; `conformance/README.md` F1 row | `ken-runtime/src/{canonical,native_int}.rs`; Foundation canonical encoder | None found beyond internal store/boundary read-back. No durable package-hash edge consumes these runtime bytes at the bound base | **STOP-4/1** — exact minimal limbs are asserted by live rows; unique content identity remains protected, but this WP cannot retarget those rows |
 | `Decimal` inline `{i64 coeff, i32 exp}` fast path and heap tag `0x0A` | `35 §2,§2.3`; `41 §3a,§5`, contradicted by normative `18a §5.6.1` | 4 for runtime cutoff, layout, and tag; 1 for coefficient/exponent semantics and whether `Decimal` is primitive | `surface/numbers/seed-numbers.md` repeats the old lowering; `runtime/values/immediate-vs-interned-boundary` asserts the small/immediate split; `surface/numbers/demote-removes-decimal-char-primitives` instead requires derived `(coeff : Int, exp : Int)` and removal of primitive Decimal representation | runtime/Foundation still define `SmallDecimal` and `BIG_DECIMAL`; interpreter Decimal is constructor-derived, so occurrence cannot select authority | None found for the primitive tag or inline struct; CheckedCore/package encoders use a separate byte domain | **STOP-1/4** — live normative/conformance contradiction across type/producer, coefficient carrier, tag, and fast-path axes; occurrence cannot select authority, so a separately tracked reconcile is required |
-| Formatter width | `31 §1d` | Not an A1 relaxation candidate; exact-value erratum axis | `surface/formatting/seed-canonical-format.md:169`–`:187` and `:610`–`:658` assert 88 while citing `31 §1d`; `surface/elaboration/seed-multi-binding-let.md` asserts 96 | `ken-elaborator/src/layout.rs` fixes `CANONICAL_WIDTH = 96` | Canonical source bytes and formatter clients | **STOP-ERRATUM** — non-empty consumer and live 96-vs-88 contradiction; `SPEC-31-WIDTH-ERRATUM` owns derivation and value choice |
+| Formatter width | `31 §1d` | Not an A1 relaxation candidate; 96 is settled and the losing-side conformance reconcile is the remaining axis | `surface/formatting/seed-canonical-format.md:169`–`:187` and `:610`–`:658` assert 88 while citing `31 §1d`; `surface/elaboration/seed-multi-binding-let.md` asserts 96 | `ken-elaborator/src/layout.rs` fixes `CANONICAL_WIDTH = 96` | Canonical source bytes and formatter clients | **STOP-ERRATUM** — 96 is ruled normative by node blob `8442453ba7773e870ddf89e2b672f1b7397c7bce`; `SPEC-31-WIDTH-ERRATUM` owns only the losing-side conformance reconcile. A1 still does not touch that row |
 | Exactly two ASCII spaces per indentation level | `31 §1d` | 4, layout policy | `surface/formatting/{breakable-syntax-never-exceeds-88-columns,indent-is-two-space-enclosing-relative}`; `surface/formatting/{let4-long-group-uses-one-flat-level,let4-compound-match-rhs-nests-under-binding,let4-group-in-match-arm-has-disjoint-semicolons}` | `ken-elaborator/src/layout.rs` fixes `INDENT_WIDTH = 2` | Canonical source bytes | **STOP-4** — multiple live exact-byte consumers |
 | Four literate fence roles and exact formatter splicing/exemption policy | `31 §1d` | 1 for role meaning; 4 for formatting/splicing mechanics | `surface/formatting/{canonical-form-is-idempotent,whole-catalog-preservation-and-fixed-point,literate-prose-is-byte-identical,four-fence-roles-and-narrow-exemption}` | `ken-elaborator/src/literate.rs` and `format.rs` | `.ken.md` producers/readers and catalog validation | **STOP-1/4** — role semantics and private formatter policy are not separable inside the live rows |
 
