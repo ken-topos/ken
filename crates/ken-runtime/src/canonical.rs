@@ -68,193 +68,461 @@ fn minimal_limbs(limbs: &[u64]) -> &[u64] {
     &limbs[..end]
 }
 
+/// One unit of pending emission work for the iterative encoder (`D1`).
+///
+/// Encoding is a **streaming pre-order append**: every arm writes its own header
+/// (tag, ids, arity/length) and children append after it, so a parent's bytes
+/// never depend on a child's. That is precisely what lets one explicit work
+/// stack replace host recursion here without any postorder fold.
+enum Step<'a> {
+    /// Emit this value's own header bytes, then push its children.
+    Val(&'a Value),
+    /// Emit a `u32` length prefix followed by these already-canonical bytes.
+    /// Needed only for the `Map` key that must precede each entry value.
+    Raw(&'a [u8]),
+}
+
+/// The closed **allow-list** of child-position shapes — `D2` clauses 1 and 2.
+///
+/// This is deliberately not a deny-list of spellings (`Rc<`, `RefCell`, …): a
+/// spelling list is not a proof of the property, and `type Handle = Rc<Value>`
+/// walks straight past one. Instead the permitted owning shapes are enumerated
+/// positively and the compiler rejects everything else.
+mod child_positions {
+    use super::{Step, Value};
+    use std::collections::BTreeMap;
+
+    /// Sealed, so no downstream crate can widen the allow-list from outside.
+    mod sealed {
+        pub trait Sealed {}
+        impl Sealed for Vec<super::Value> {}
+        impl Sealed for std::collections::BTreeMap<Vec<u8>, super::Value> {}
+    }
+
+    /// Implemented **only** for the permitted *owning* child-collection shapes.
+    ///
+    /// A recursive child position that acquires reference / handle / arena /
+    /// slot / index indirection, or interior mutation (`Rc<Value>`,
+    /// `&'a Value`, `SlotId`, `RefCell<Value>`, …) has no impl here, so
+    /// [`push`] below fails to compile for it and the encoder cannot be built.
+    /// That is what makes the unrepresentability of cycles unable to silently
+    /// lapse: the property is enforced by the bound, not by review.
+    pub(super) trait OwnedChildren: sealed::Sealed {
+        fn push_steps<'a>(&'a self, stack: &mut Vec<Step<'a>>);
+    }
+
+    impl OwnedChildren for Vec<Value> {
+        fn push_steps<'a>(&'a self, stack: &mut Vec<Step<'a>>) {
+            // Reversed: LIFO pops then restore declaration order.
+            for child in self.iter().rev() {
+                stack.push(Step::Val(child));
+            }
+        }
+    }
+
+    impl OwnedChildren for BTreeMap<Vec<u8>, Value> {
+        fn push_steps<'a>(&'a self, stack: &mut Vec<Step<'a>>) {
+            // Each entry emits its len-prefixed canonical key, then its value.
+            // Reversing the entry order makes the pops interleave
+            // key, value, key, value — matching the recursive encoder exactly.
+            for (key_bytes, val) in self.iter().rev() {
+                stack.push(Step::Val(val));
+                stack.push(Step::Raw(key_bytes));
+            }
+        }
+    }
+
+    /// Hand a child collection to the allow-list.
+    ///
+    /// Generic and **bounded** — the bound is the half of `D2` that rejects an
+    /// indirection-bearing child position.
+    pub(super) fn push<'a, C: OwnedChildren>(children: &'a C, stack: &mut Vec<Step<'a>>) {
+        children.push_steps(stack);
+    }
+}
+
 impl Canonical for Value {
     fn encode_canonical(&self, out: &mut Vec<u8>) {
-        match self {
-            // --- interned compounds ---
-            Value::BigInt { sign, limbs } => {
-                out.push(tag::BIG_INT);
-                out.push(*sign as u8);
-                let minimal = minimal_limbs(limbs);
-                write_u32_le(minimal.len() as u32, out);
-                for &limb in minimal {
-                    write_u64_le(limb, out);
+        // The one iterative driver. Host-stack usage is O(1) in value depth;
+        // the work stack lives on the heap, so depth is bounded by allocation
+        // (an ordinary resource boundary) and never by the host stack.
+        let mut stack: Vec<Step<'_>> = vec![Step::Val(self)];
+        while let Some(step) = stack.pop() {
+            match step {
+                Step::Raw(bytes) => {
+                    write_u32_le(bytes.len() as u32, out);
+                    out.extend_from_slice(bytes);
                 }
+                Step::Val(value) => encode_header(value, out, &mut stack),
             }
+        }
+    }
+}
 
-            Value::BigDecimal {
-                sign,
-                coefficient,
-                exponent,
-            } => {
-                out.push(tag::BIG_DECIMAL);
-                out.push(*sign as u8);
-                write_i32_le(*exponent, out);
-                let minimal = minimal_limbs(coefficient);
-                write_u32_le(minimal.len() as u32, out);
-                for &limb in minimal {
-                    write_u64_le(limb, out);
-                }
+/// Emit `value`'s own bytes, then push its children onto `stack`.
+///
+/// ⛔ **Exhaustive over every `Value` variant, with no `_` arm** — `D2`
+/// clause 1. A new variant fails to compile until it declares its child
+/// position here, so coverage is designed in rather than discovered by review.
+fn encode_header<'a>(value: &'a Value, out: &mut Vec<u8>, stack: &mut Vec<Step<'a>>) {
+    match value {
+        // --- interned compounds ---
+        Value::BigInt { sign, limbs } => {
+            out.push(tag::BIG_INT);
+            out.push(*sign as u8);
+            let minimal = minimal_limbs(limbs);
+            write_u32_le(minimal.len() as u32, out);
+            for &limb in minimal {
+                write_u64_le(limb, out);
             }
+        }
 
-            Value::Constructor {
-                constructor_id,
-                args,
-            } => {
-                out.push(tag::DATA);
-                write_u32_le(*constructor_id, out);
-                let arity = args.len().min(65535) as u16;
-                write_u16_le(arity, out);
-                for arg in args {
-                    arg.encode_canonical(out);
-                }
+        Value::BigDecimal {
+            sign,
+            coefficient,
+            exponent,
+        } => {
+            out.push(tag::BIG_DECIMAL);
+            out.push(*sign as u8);
+            write_i32_le(*exponent, out);
+            let minimal = minimal_limbs(coefficient);
+            write_u32_le(minimal.len() as u32, out);
+            for &limb in minimal {
+                write_u64_le(limb, out);
             }
+        }
 
-            Value::Record { type_id, fields } => {
-                out.push(tag::RECORD);
-                write_u32_le(*type_id, out);
-                let arity = fields.len().min(65535) as u16;
-                write_u16_le(arity, out);
-                for field in fields {
-                    field.encode_canonical(out);
-                }
-            }
+        Value::Constructor {
+            constructor_id,
+            args,
+        } => {
+            out.push(tag::DATA);
+            write_u32_le(*constructor_id, out);
+            let arity = args.len().min(65535) as u16;
+            write_u16_le(arity, out);
+            child_positions::push(args, stack);
+        }
 
-            Value::String(s) => {
-                // K3: NFC-normalize at encoding time (design doc §1.4 note).
-                // The normalized form is what gets hashed and stored.
-                out.push(tag::STRING);
-                let nfc: std::string::String = s.chars().nfc().collect();
-                let utf8 = nfc.as_bytes();
-                write_u32_le(utf8.len() as u32, out);
-                out.extend_from_slice(utf8);
-            }
+        Value::Record { type_id, fields } => {
+            out.push(tag::RECORD);
+            write_u32_le(*type_id, out);
+            let arity = fields.len().min(65535) as u16;
+            write_u16_le(arity, out);
+            child_positions::push(fields, stack);
+        }
 
-            Value::Bytes(data) => {
-                out.push(tag::BYTES);
-                write_u32_le(data.len() as u32, out);
-                out.extend_from_slice(data);
-            }
+        Value::String(s) => {
+            // K3: NFC-normalize at encoding time (design doc §1.4 note).
+            // The normalized form is what gets hashed and stored.
+            out.push(tag::STRING);
+            let nfc: std::string::String = s.chars().nfc().collect();
+            let utf8 = nfc.as_bytes();
+            write_u32_le(utf8.len() as u32, out);
+            out.extend_from_slice(utf8);
+        }
 
-            Value::Array {
-                elem_type_id,
-                elements,
-            } => {
-                out.push(tag::ARRAY);
-                write_u32_le(*elem_type_id, out);
-                write_u32_le(elements.len() as u32, out);
-                for elem in elements {
-                    elem.encode_canonical(out);
-                }
-            }
+        Value::Bytes(data) => {
+            out.push(tag::BYTES);
+            write_u32_le(data.len() as u32, out);
+            out.extend_from_slice(data);
+        }
 
-            Value::Map {
-                key_type_id,
-                value_type_id,
-                entries,
-            } => {
-                out.push(tag::MAP);
-                write_u32_le(*key_type_id, out);
-                write_u32_le(*value_type_id, out);
-                write_u32_le(entries.len() as u32, out);
-                // BTreeMap iterates in key-canonical-bytes lexicographic order.
-                for (key_bytes, val) in entries {
-                    write_u32_le(key_bytes.len() as u32, out);
-                    out.extend_from_slice(key_bytes);
-                    val.encode_canonical(out);
-                }
-            }
+        Value::Array {
+            elem_type_id,
+            elements,
+        } => {
+            out.push(tag::ARRAY);
+            write_u32_le(*elem_type_id, out);
+            write_u32_le(elements.len() as u32, out);
+            child_positions::push(elements, stack);
+        }
 
-            Value::Set {
-                elem_type_id,
-                elements,
-            } => {
-                out.push(tag::SET);
-                write_u32_le(*elem_type_id, out);
-                write_u32_le(elements.len() as u32, out);
-                // BTreeSet iterates in element-canonical-bytes lexicographic order.
-                for elem_bytes in elements {
-                    write_u32_le(elem_bytes.len() as u32, out);
-                    out.extend_from_slice(elem_bytes);
-                }
-            }
+        Value::Map {
+            key_type_id,
+            value_type_id,
+            entries,
+        } => {
+            out.push(tag::MAP);
+            write_u32_le(*key_type_id, out);
+            write_u32_le(*value_type_id, out);
+            write_u32_le(entries.len() as u32, out);
+            // BTreeMap iterates in key-canonical-bytes lexicographic order;
+            // the allow-list impl preserves that, emitting each entry as a
+            // len-prefixed `Step::Raw` key followed by its value.
+            child_positions::push(entries, stack);
+        }
 
-            Value::Closure { code_id, captured } => {
-                out.push(tag::CLOSURE);
-                write_u64_le(*code_id, out);
-                let arity = captured.len().min(65535) as u16;
-                write_u16_le(arity, out);
-                // Full canonical encoding of captured values (design doc §1.9):
-                // memcmp-exact, NOT a hash digest.
-                for val in captured {
-                    val.encode_canonical(out);
-                }
+        Value::Set {
+            elem_type_id,
+            elements,
+        } => {
+            out.push(tag::SET);
+            write_u32_le(*elem_type_id, out);
+            write_u32_le(elements.len() as u32, out);
+            // BTreeSet iterates in element-canonical-bytes lexicographic order.
+            for elem_bytes in elements {
+                write_u32_le(elem_bytes.len() as u32, out);
+                out.extend_from_slice(elem_bytes);
             }
+        }
 
-            // --- immediate scalars (encoded when sub-values of compounds) ---
-            Value::Bool(b) => {
-                out.push(tag::BOOL);
-                out.push(*b as u8);
+        Value::Closure { code_id, captured } => {
+            out.push(tag::CLOSURE);
+            write_u64_le(*code_id, out);
+            let arity = captured.len().min(65535) as u16;
+            write_u16_le(arity, out);
+            // Full canonical encoding of captured values (design doc §1.9):
+            // memcmp-exact, NOT a hash digest.
+            child_positions::push(captured, stack);
+        }
+
+        // --- immediate scalars (encoded when sub-values of compounds) ---
+        Value::Bool(b) => {
+            out.push(tag::BOOL);
+            out.push(*b as u8);
+        }
+        Value::Char(c) => {
+            out.push(tag::CHAR);
+            write_u32_le(*c as u32, out);
+        }
+        Value::Float(f) => {
+            out.push(tag::FLOAT);
+            write_u64_le(*f, out);
+        }
+        Value::Float32(f) => {
+            out.push(tag::FLOAT32);
+            write_u32_le(*f, out);
+        }
+        Value::Int8(v) => {
+            out.push(tag::INT8);
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::Int16(v) => {
+            out.push(tag::INT16);
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::Int32(v) => {
+            out.push(tag::INT32);
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::Int64(v) => {
+            out.push(tag::INT64);
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::UInt8(v) => {
+            out.push(tag::UINT8);
+            out.push(*v);
+        }
+        Value::UInt16(v) => {
+            out.push(tag::UINT16);
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::UInt32(v) => {
+            out.push(tag::UINT32);
+            write_u32_le(*v, out);
+        }
+        Value::UInt64(v) => {
+            out.push(tag::UINT64);
+            write_u64_le(*v, out);
+        }
+        Value::SmallInt(v) => {
+            out.push(tag::SMALL_INT);
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::SmallDecimal {
+            coefficient,
+            exponent,
+        } => {
+            out.push(tag::SMALL_DECIMAL);
+            out.extend_from_slice(&coefficient.to_le_bytes());
+            write_i32_le(*exponent, out);
+        }
+        Value::Unknown => {
+            out.push(tag::UNKNOWN);
+        }
+    }
+}
+
+/// `AC-V1b` — a frozen replica of the **pre-change recursive** encoder, kept as
+/// the differential reference for the iterative one.
+///
+/// It deliberately uses the production `tag` constants and [`minimal_limbs`] so
+/// it is a faithful *pre-change* replica: its job is to pin that restructuring
+/// the **traversal** changed no bytes. ⚠ It is therefore **not** an independent
+/// oracle for the byte *values* — a mutation to a `tag` constant moves both
+/// sides and this differential stays green. The independent oracle for the
+/// actual bytes is the integration test `value_depth_totality`, which carries
+/// its own copy of the format, plus the landed conformance tests below.
+///
+/// ⚠ This replica **cannot** run at the integration test's depth `D` — it
+/// overflows by construction, which is exactly what `AC-V1` step 2 asserts. The
+/// corpus it is applied to is therefore **shallow-to-moderate on purpose**;
+/// depth coverage lives in `value_depth_totality`, not here.
+#[cfg(test)]
+fn encode_canonical_recursive_reference(value: &Value, out: &mut Vec<u8>) {
+    match value {
+        Value::BigInt { sign, limbs } => {
+            out.push(tag::BIG_INT);
+            out.push(*sign as u8);
+            let minimal = minimal_limbs(limbs);
+            write_u32_le(minimal.len() as u32, out);
+            for &limb in minimal {
+                write_u64_le(limb, out);
             }
-            Value::Char(c) => {
-                out.push(tag::CHAR);
-                write_u32_le(*c as u32, out);
+        }
+        Value::BigDecimal {
+            sign,
+            coefficient,
+            exponent,
+        } => {
+            out.push(tag::BIG_DECIMAL);
+            out.push(*sign as u8);
+            write_i32_le(*exponent, out);
+            let minimal = minimal_limbs(coefficient);
+            write_u32_le(minimal.len() as u32, out);
+            for &limb in minimal {
+                write_u64_le(limb, out);
             }
-            Value::Float(f) => {
-                out.push(tag::FLOAT);
-                write_u64_le(*f, out);
+        }
+        Value::Constructor {
+            constructor_id,
+            args,
+        } => {
+            out.push(tag::DATA);
+            write_u32_le(*constructor_id, out);
+            write_u16_le(args.len().min(65535) as u16, out);
+            for arg in args {
+                encode_canonical_recursive_reference(arg, out);
             }
-            Value::Float32(f) => {
-                out.push(tag::FLOAT32);
-                write_u32_le(*f, out);
+        }
+        Value::Record { type_id, fields } => {
+            out.push(tag::RECORD);
+            write_u32_le(*type_id, out);
+            write_u16_le(fields.len().min(65535) as u16, out);
+            for field in fields {
+                encode_canonical_recursive_reference(field, out);
             }
-            Value::Int8(v) => {
-                out.push(tag::INT8);
-                out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::String(s) => {
+            out.push(tag::STRING);
+            let nfc: std::string::String = s.chars().nfc().collect();
+            let utf8 = nfc.as_bytes();
+            write_u32_le(utf8.len() as u32, out);
+            out.extend_from_slice(utf8);
+        }
+        Value::Bytes(data) => {
+            out.push(tag::BYTES);
+            write_u32_le(data.len() as u32, out);
+            out.extend_from_slice(data);
+        }
+        Value::Array {
+            elem_type_id,
+            elements,
+        } => {
+            out.push(tag::ARRAY);
+            write_u32_le(*elem_type_id, out);
+            write_u32_le(elements.len() as u32, out);
+            for elem in elements {
+                encode_canonical_recursive_reference(elem, out);
             }
-            Value::Int16(v) => {
-                out.push(tag::INT16);
-                out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::Map {
+            key_type_id,
+            value_type_id,
+            entries,
+        } => {
+            out.push(tag::MAP);
+            write_u32_le(*key_type_id, out);
+            write_u32_le(*value_type_id, out);
+            write_u32_le(entries.len() as u32, out);
+            for (key_bytes, val) in entries {
+                write_u32_le(key_bytes.len() as u32, out);
+                out.extend_from_slice(key_bytes);
+                encode_canonical_recursive_reference(val, out);
             }
-            Value::Int32(v) => {
-                out.push(tag::INT32);
-                out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::Set {
+            elem_type_id,
+            elements,
+        } => {
+            out.push(tag::SET);
+            write_u32_le(*elem_type_id, out);
+            write_u32_le(elements.len() as u32, out);
+            for elem_bytes in elements {
+                write_u32_le(elem_bytes.len() as u32, out);
+                out.extend_from_slice(elem_bytes);
             }
-            Value::Int64(v) => {
-                out.push(tag::INT64);
-                out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::Closure { code_id, captured } => {
+            out.push(tag::CLOSURE);
+            write_u64_le(*code_id, out);
+            write_u16_le(captured.len().min(65535) as u16, out);
+            for val in captured {
+                encode_canonical_recursive_reference(val, out);
             }
-            Value::UInt8(v) => {
-                out.push(tag::UINT8);
-                out.push(*v);
-            }
-            Value::UInt16(v) => {
-                out.push(tag::UINT16);
-                out.extend_from_slice(&v.to_le_bytes());
-            }
-            Value::UInt32(v) => {
-                out.push(tag::UINT32);
-                write_u32_le(*v, out);
-            }
-            Value::UInt64(v) => {
-                out.push(tag::UINT64);
-                write_u64_le(*v, out);
-            }
-            Value::SmallInt(v) => {
-                out.push(tag::SMALL_INT);
-                out.extend_from_slice(&v.to_le_bytes());
-            }
-            Value::SmallDecimal {
-                coefficient,
-                exponent,
-            } => {
-                out.push(tag::SMALL_DECIMAL);
-                out.extend_from_slice(&coefficient.to_le_bytes());
-                write_i32_le(*exponent, out);
-            }
-            Value::Unknown => {
-                out.push(tag::UNKNOWN);
-            }
+        }
+        Value::Bool(b) => {
+            out.push(tag::BOOL);
+            out.push(*b as u8);
+        }
+        Value::Char(c) => {
+            out.push(tag::CHAR);
+            write_u32_le(*c as u32, out);
+        }
+        Value::Float(f) => {
+            out.push(tag::FLOAT);
+            write_u64_le(*f, out);
+        }
+        Value::Float32(f) => {
+            out.push(tag::FLOAT32);
+            write_u32_le(*f, out);
+        }
+        Value::Int8(v) => {
+            out.push(tag::INT8);
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::Int16(v) => {
+            out.push(tag::INT16);
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::Int32(v) => {
+            out.push(tag::INT32);
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::Int64(v) => {
+            out.push(tag::INT64);
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::UInt8(v) => {
+            out.push(tag::UINT8);
+            out.push(*v);
+        }
+        Value::UInt16(v) => {
+            out.push(tag::UINT16);
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::UInt32(v) => {
+            out.push(tag::UINT32);
+            write_u32_le(*v, out);
+        }
+        Value::UInt64(v) => {
+            out.push(tag::UINT64);
+            write_u64_le(*v, out);
+        }
+        Value::SmallInt(v) => {
+            out.push(tag::SMALL_INT);
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        Value::SmallDecimal {
+            coefficient,
+            exponent,
+        } => {
+            out.push(tag::SMALL_DECIMAL);
+            out.extend_from_slice(&coefficient.to_le_bytes());
+            write_i32_le(*exponent, out);
+        }
+        Value::Unknown => {
+            out.push(tag::UNKNOWN);
         }
     }
 }
@@ -269,6 +537,229 @@ mod tests {
         let mut out = Vec::new();
         v.encode_canonical(&mut out);
         out
+    }
+
+    fn encode_reference(v: &Value) -> Vec<u8> {
+        let mut out = Vec::new();
+        encode_canonical_recursive_reference(v, &mut out);
+        out
+    }
+
+    /// The `AC-V1b` differential corpus.
+    ///
+    /// Covers every variant, both compound orderings, empty *and* non-empty
+    /// collections, nested `Map` values, and `Closure` captures (still present
+    /// in Phase 1). ⚠ Shallow-to-moderate depth on purpose — see the note on
+    /// [`encode_canonical_recursive_reference`].
+    fn differential_corpus() -> Vec<Value> {
+        let key_a = encode(&Value::String("a".into()));
+        let key_b = encode(&Value::String("b".into()));
+
+        let mut map_nested = BTreeMap::new();
+        map_nested.insert(
+            key_a.clone(),
+            Value::Record {
+                type_id: 9,
+                fields: vec![Value::SmallInt(1), Value::Bytes(vec![0xAA])],
+            },
+        );
+        map_nested.insert(
+            key_b.clone(),
+            Value::Array {
+                elem_type_id: 3,
+                elements: vec![Value::Bool(true), Value::Unknown],
+            },
+        );
+
+        let mut set_ne = BTreeSet::new();
+        set_ne.insert(key_a.clone());
+        set_ne.insert(key_b.clone());
+
+        vec![
+            // --- scalars, every one ---
+            Value::Bool(false),
+            Value::Bool(true),
+            Value::Char('ß'),
+            Value::Float(0f64.to_bits()),
+            Value::Float((-0f64).to_bits()),
+            Value::Float32(1.5f32.to_bits()),
+            Value::Int8(-8),
+            Value::Int16(-16),
+            Value::Int32(-32),
+            Value::Int64(-64),
+            Value::UInt8(8),
+            Value::UInt16(16),
+            Value::UInt32(32),
+            Value::UInt64(64),
+            Value::SmallInt(-1),
+            Value::SmallDecimal {
+                coefficient: -12345,
+                exponent: -3,
+            },
+            Value::Unknown,
+            // --- bignums, incl. the minimal-limb path ---
+            Value::BigInt {
+                sign: Sign::NonNegative,
+                limbs: vec![0, 0, 0],
+            },
+            Value::BigInt {
+                sign: Sign::Negative,
+                limbs: vec![7, 1],
+            },
+            Value::BigDecimal {
+                sign: Sign::Negative,
+                coefficient: vec![5, 0],
+                exponent: 4,
+            },
+            // --- flat data, empty and non-empty ---
+            Value::String(String::new()),
+            Value::String("e\u{0301}".into()), // decomposed: exercises NFC
+            Value::Bytes(vec![]),
+            Value::Bytes(vec![0, 1, 2, 255]),
+            // --- compounds, empty and non-empty, both orderings ---
+            Value::Constructor {
+                constructor_id: 1,
+                args: vec![],
+            },
+            Value::Constructor {
+                constructor_id: 1,
+                args: vec![Value::SmallInt(1), Value::String("x".into())],
+            },
+            Value::Record {
+                type_id: 2,
+                fields: vec![],
+            },
+            Value::Record {
+                type_id: 2,
+                fields: vec![Value::SmallInt(1), Value::String("x".into())],
+            },
+            // the reversed ordering — a distinct value, must encode distinctly
+            Value::Record {
+                type_id: 2,
+                fields: vec![Value::String("x".into()), Value::SmallInt(1)],
+            },
+            Value::Array {
+                elem_type_id: 3,
+                elements: vec![],
+            },
+            Value::Array {
+                elem_type_id: 3,
+                elements: vec![Value::UInt8(1), Value::UInt8(2)],
+            },
+            Value::Map {
+                key_type_id: 4,
+                value_type_id: 5,
+                entries: BTreeMap::new(),
+            },
+            Value::Map {
+                key_type_id: 4,
+                value_type_id: 5,
+                entries: map_nested,
+            },
+            Value::Set {
+                elem_type_id: 6,
+                elements: BTreeSet::new(),
+            },
+            Value::Set {
+                elem_type_id: 6,
+                elements: set_ne,
+            },
+            // --- closures, incl. captures (Phase 2 removes these, not us) ---
+            Value::Closure {
+                code_id: 0xDEAD_BEEF,
+                captured: vec![],
+            },
+            Value::Closure {
+                code_id: 0xFEED_FACE,
+                captured: vec![
+                    Value::SmallInt(3),
+                    Value::Record {
+                        type_id: 7,
+                        fields: vec![Value::Bool(true)],
+                    },
+                ],
+            },
+            // --- moderate nesting through several child-position kinds ---
+            Value::Constructor {
+                constructor_id: 8,
+                args: vec![Value::Array {
+                    elem_type_id: 3,
+                    elements: vec![Value::Record {
+                        type_id: 2,
+                        fields: vec![Value::Closure {
+                            code_id: 1,
+                            captured: vec![Value::Unknown],
+                        }],
+                    }],
+                }],
+            },
+        ]
+    }
+
+    /// `AC-V1b` — the iterative emitter is byte-identical to the frozen
+    /// recursive one across the whole corpus.
+    ///
+    /// **Operand: the SUBJECT** (the new emitter), not the detector. Perturbing
+    /// the new emitter — dropping an arity prefix, reordering two children,
+    /// dropping a `Map` key — reddens this.
+    #[test]
+    fn ac_v1b_iterative_encoding_is_byte_identical_to_the_recursive_reference() {
+        let corpus = differential_corpus();
+        // Non-vacuity: the corpus must actually cover every variant, or a
+        // missing arm would make this differential silently narrow.
+        assert_eq!(
+            corpus.len(),
+            38,
+            "corpus size changed — re-check variant coverage before editing"
+        );
+        for value in &corpus {
+            assert_eq!(
+                encode(value),
+                encode_reference(value),
+                "iterative and recursive encodings diverged for {value:?}"
+            );
+        }
+    }
+
+    /// Non-vacuity for the differential: the corpus must contain values whose
+    /// encodings actually **differ** from one another. A corpus that collapsed
+    /// to one byte string would make the equality above pass trivially.
+    #[test]
+    fn ac_v1b_corpus_is_non_vacuous_and_discriminating() {
+        let corpus = differential_corpus();
+        let mut seen = std::collections::BTreeSet::new();
+        for value in &corpus {
+            let bytes = encode(value);
+            assert!(!bytes.is_empty(), "no value may encode to zero bytes");
+            seen.insert(bytes);
+        }
+        // Every corpus member is a distinct value, so every encoding must be
+        // distinct: the encoder is injective on this corpus.
+        assert_eq!(
+            seen.len(),
+            corpus.len(),
+            "two distinct corpus values collided — the differential would then \
+             pass while covering less than it claims"
+        );
+    }
+
+    /// `AC-V1b` reaches every variant. Counted from the corpus itself against
+    /// the enum's own arm count, so adding a variant without extending the
+    /// corpus reddens rather than silently narrowing coverage.
+    #[test]
+    fn ac_v1b_corpus_covers_every_value_variant() {
+        let corpus = differential_corpus();
+        let mut kinds = std::collections::BTreeSet::new();
+        for value in &corpus {
+            // The leading tag byte is the variant discriminator.
+            kinds.insert(encode(value)[0]);
+        }
+        // 25 distinct kind tags: 10 compounds + 14 scalars + Unknown.
+        assert_eq!(
+            kinds.len(),
+            25,
+            "corpus does not reach every kind tag; reached {kinds:?}"
+        );
     }
 
     // --- conformance: runtime/values/canonical-encoding-map-ordering ---

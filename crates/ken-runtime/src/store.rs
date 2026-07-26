@@ -426,6 +426,99 @@ mod tests {
     use super::*;
     use crate::values::Sign;
 
+    /// `AC-V2c` — `D2` clause 3: interning is **whole-value canonical bytes to
+    /// one slot**, never a child-slot graph.
+    ///
+    /// **Operand: the POPULATION.** The subject value carries several *compound*
+    /// subvalues (seven, as measured below), each of which would itself be
+    /// interned by a child-recursive implementation. So the two worlds are
+    /// numerically far apart — one slot if interning is flat, eight if it mints a
+    /// slot per compound subvalue — and the assertion discriminates them.
+    ///
+    /// ⛔ Deliberately not pinned by reading the source for the absence of a
+    /// recursive call: that would be a detector-side claim about the text, and it
+    /// would survive any refactor that reintroduced child interning elsewhere.
+    #[test]
+    fn ac_v2c_interning_a_nested_compound_mints_exactly_one_slot() {
+        let mut store = Store::new();
+
+        let inner_record = Value::Record {
+            type_id: 11,
+            fields: vec![Value::SmallInt(1), Value::Bytes(vec![0xAA, 0xBB])],
+        };
+        let inner_array = Value::Array {
+            elem_type_id: 12,
+            elements: vec![Value::String("a".into()), Value::String("b".into())],
+        };
+        let subject = Value::Constructor {
+            constructor_id: 13,
+            args: vec![
+                inner_record,
+                inner_array,
+                Value::Closure {
+                    code_id: 99,
+                    captured: vec![Value::Bytes(vec![0x01])],
+                },
+            ],
+        };
+
+        // Non-vacuity: the subject really does contain multiple compound
+        // subvalues, so "one slot" is a claim with content. Counted from the
+        // value itself rather than asserted as a literal.
+        // Asserted as a floor on the property, not as a frozen snapshot of an
+        // incidental number: what matters is that the flat and child-slot worlds
+        // are far enough apart to be told apart.
+        let compound_subvalues = count_compound_subvalues(&subject) - 1; // exclude root
+        assert!(
+            compound_subvalues >= 4,
+            "the subject must carry several compound subvalues or this pin \
+             cannot distinguish flat interning from a child-slot graph; got {compound_subvalues}"
+        );
+
+        assert_eq!(store.distinct_count(), 0);
+        let result = store.intern(&subject);
+        assert!(matches!(result, InternResult::New(_)));
+
+        assert_eq!(
+            store.distinct_count(),
+            1,
+            "interning must mint exactly ONE slot for the whole value; \
+             a child-slot graph would have minted {}",
+            1 + compound_subvalues
+        );
+
+        // And re-interning the same whole value hits that one slot rather than
+        // adding another — the flatness is stable, not a first-call artifact.
+        let again = store.intern(&subject);
+        assert!(matches!(again, InternResult::Hit(_)));
+        assert_eq!(again.slot_id(), result.slot_id());
+        assert_eq!(store.distinct_count(), 1);
+    }
+
+    /// Counts `self` plus every compound in the subtree. Used only to prove the
+    /// pin above is non-vacuous.
+    fn count_compound_subvalues(value: &Value) -> usize {
+        let mut total = usize::from(value.is_compound());
+        let mut stack = vec![value];
+        while let Some(v) = stack.pop() {
+            let children: Vec<&Value> = match v {
+                Value::Constructor { args, .. } => args.iter().collect(),
+                Value::Record { fields, .. } => fields.iter().collect(),
+                Value::Array { elements, .. } => elements.iter().collect(),
+                Value::Closure { captured, .. } => captured.iter().collect(),
+                Value::Map { entries, .. } => entries.values().collect(),
+                _ => Vec::new(),
+            };
+            for child in children {
+                if child.is_compound() {
+                    total += 1;
+                }
+                stack.push(child);
+            }
+        }
+        total
+    }
+
     // --- conformance: runtime/values/dedup-shares-slot ---
     #[test]
     fn dedup_shares_slot() {
@@ -602,7 +695,9 @@ mod tests {
         match store.intern(&existing) {
             InternResult::Hit(_) => {} // correct
             InternResult::CapacityExhausted { .. } => {
-                panic!("repeat at limit must not trip CapacityExhausted (dedup short-circuits first)")
+                panic!(
+                    "repeat at limit must not trip CapacityExhausted (dedup short-circuits first)"
+                )
             }
             InternResult::New(_) => panic!("expected Hit for existing value"),
         }
