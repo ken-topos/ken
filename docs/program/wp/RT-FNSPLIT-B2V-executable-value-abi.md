@@ -209,41 +209,45 @@ outside tests, that is a frame question for the Steward, not a `cfg` edit.
 > wider than the mechanism it describes. All three were true of what the author
 > checked and false as stated.
 
-### ▶ YOUR HELD BRANCH — it is intact, and its base is pre-P1
+### ▶ YOUR HELD BRANCH — RE-ANCHORED; the pre-anchor tip is preserved on `origin`
 
-`wp/RT-FNSPLIT-B2V-executable-value-abi` is on `origin` at **`a7aa60eb`**, 20+
-commits deep, and **the Steward has not touched it.** ⛔ It will not be reset or
-force-moved out from under you.
+⛔ **THE RE-ANCHOR THIS SECTION USED TO PRESCRIBE HAS HAPPENED. The text below was
+edited on 2026-07-26 because it named `a7aa60eb` as the live tip and told you to
+re-anchor — both were true when written and are now false.** Verified with
+`git ls-remote origin` (read-only):
 
 ```
-branch          a7aa60eb   (origin, intact)
-its merge-base  aecdb001   <- PRE-P1
-origin/main     a7d3e2b0   (P1 landed at 8f677ebc, two doc PRs since)
+wp/RT-FNSPLIT-B2V-executable-value-abi     fed42481   <- live tip, HELD CHECKPOINT
+preserved/rt-fnsplit-b2v-prereanchor-a7aa60eb  a7aa60eb   <- the old tip, on origin
+preserved/rt-fnsplit-b2v-ab11a3d2          ab11a3d2   <- intermediate, on origin
+re-anchored base                           69750fa3
 ```
 
-⚠ **Your base predates P1**, and both sides touch `canonical.rs`: your `D2`
-decode inverse adds a region at ~`:259`, P1 rewrote the encoder. **Re-anchor onto
-`a7d3e2b0` before you resume.**
+⚠ **`fed42481` is a held checkpoint, NOT a QA candidate** — see `RULING R4`. It is
+**four commits past `69750fa3`** and ⛔ **not** an ancestor-descendant continuation
+of `ab11a3d2` (`git merge-base --is-ancestor ab11a3d2 fed42481` exits **1**). ⇒ A
+commit *distance* is not a fast-forward; check any preservation claim against the
+operation it is meant to protect against, before that operation runs.
 
-**What the Steward measured for you** — read-only `git merge-tree --write-tree`,
-no ref or worktree touched:
+⭐ **Both preserved tips are on `origin`, not merely local.** A single local ref is
+zero off-box copies — a preservation claim that names one has not preserved
+anything a force-move can't take.
 
-| probe | result |
-|---|---|
-| `origin/main` × `a7aa60eb` | **exit 0 — no textual conflict**, merged tree `f26ba8d9` |
-| synthetic same-line divergent control | exit 1, conflict reported |
+**Why the pre-anchor re-anchor was needed at all**, retained because the reasoning
+still governs your next rebase: the old base predated `RT-VALUE-TOTALITY-P1` and
+both sides touched `canonical.rs` — the `D2` decode inverse added a region at
+~`:259`, P1 rewrote the encoder. The Steward's read-only
+`git merge-tree --write-tree` probe reported **exit 0, no textual conflict**
+(merged tree `f26ba8d9`), against a synthetic same-line control that correctly
+reported exit 1.
 
-⛔ **THAT IS A TEXTUAL RESULT AND NOTHING MORE — IT IS NOT "IT STILL BUILDS".**
+⛔ **THAT WAS A TEXTUAL RESULT AND NOTHING MORE — IT IS NOT "IT STILL BUILDS".**
 A clean three-way merge means no hunk overlapped. It says nothing about whether
-your additions still *compile* against a rewritten encoder: P1 changed
-`canonical.rs`'s internals, and a call to something it renamed, narrowed to
-`#[cfg(test)]`, or removed merges **silently clean** and then fails to build.
-⇒ **Your first act after re-anchoring is `scripts/ken-cargo test -p ken-runtime`,
-and the merge probe is not a substitute for it.**
-
-⚠ **Why the probe is reported at all, given that caveat:** so that a *conflict*
-would have been known before the kick rather than discovered by you. Its value is
-entirely in the branch it rules out.
+additions still *compile* against a rewritten encoder: a call to something P1
+renamed, narrowed to `#[cfg(test)]`, or removed merges **silently clean** and then
+fails to build. ⇒ **After any re-anchor, your first act is
+`scripts/ken-cargo test -p ken-runtime`, and a merge probe is never a substitute
+for it.**
 
 > ⭐ **And note how that probe was checked, because the same trap is in your
 > `D5`.** The first "positive control" the Steward ran was `8f677ebc` × `a7aa60eb`
@@ -450,6 +454,14 @@ constant helper declarations are **predicted before measuring** and
 > authority-to-execution closure** over blocks `#1`–`#6`, and ⛔ **a
 > hand-maintained matrix that can drift from the production enums does not
 > discharge it.** The `AC`→control map stays REQUIRED and stops being the proof.
+>
+> ⛔ **AND `RULING R4` (2026-07-26, inside `RECUT 2`) SETS THE EVIDENCE BAR FOR
+> EVERY `AC` BELOW: causal coverage is PER-SITE.** A whole-graph differential is
+> green while one consuming site is disconnected from the authority — measured,
+> **439 passed / 0 failed** with one of five `class_guard` sites reverted to its
+> literal. ⇒ Each consuming site needs its own behavioural differential or must be
+> **named** probe-unreachable. Read `R3` **and** `R4` before treating any control
+> below as discharging its `AC`.
 >
 > ⛔⛔ **RECUT 1 2026-07-25 — these `AC`s are AMENDED.** The Architect named a
 > shared predicate across three production blocks: the defect is the **shape** of
@@ -1089,6 +1101,90 @@ tests as closure.
 
 **Mechanism latitude, as ruled:** the Architect fixed the **component seam**; the
 **exact Rust carrier and CLIF spelling inside it are the ring's.**
+
+### ⛔⛔⛔ RULING R4 — 2026-07-26. Immediate tag→class IN SCOPE; `R3`'s bar is PER-SITE
+
+Architect `evt_51xk9sxqdtzgt`, answering **two** questions at once — the
+implementer's standing non-blocking question (`define_class:715`) and its own
+offer to sequence the class-axis repair separately. Raised by
+`runtime-implementer` `evt_3kpwxwrs8bty0`; checkpoint record corrected by
+`runtime-leader` `evt_1kedhmyapcvf7`.
+
+⛔ **Transcribed here for the same reason `R3` was: an in-thread ruling is not a
+durable deliverable, and the ring's next compaction will not carry the channel.**
+
+**What was asked.** (1) `define_class`'s immediate result is computed by a
+hand-written `is_bool ? Bool : Int` branch, because `ImmediateWord` carries no
+class — **in scope, or a named residual?** (2) The implementer then *measured*
+that the class axis has the same per-site hole as the tag axis, offered
+`fed42481` as a clean boundary, and asked whether to sequence the repair
+separately.
+
+**The ruling — the Architect's words, `evt_51xk9sxqdtzgt`:**
+
+> 1. `define_class`'s immediate result is observable helper behaviour governed by
+>    `R3`'s sole representation authority. The current `is_bool ? Bool : Int`
+>    branch is **a second hand-maintained mapping beside the helper body, so it
+>    cannot remain as a named residual.** The exhaustive authority must carry
+>    enough information to derive the returned class for **every admitted
+>    `ImmediateWord`**, and the emission plan must deliver that projection to the
+>    helper.
+> 2. Keep that projection **separate from `BOUNDARY_TAG_CLASS_RELATION`.** That
+>    relation governs node `NODE_CLASS` legality and **correctly** excludes
+>    immediate tags because immediates have no node. The new datum is the uniform
+>    `class` helper's **boundary-value classification**, not a fictional immediate
+>    node class. ⛔ **Name that distinction in source and evidence so a later
+>    reader cannot merge the two contracts.**
+> 3. The measured one-site disconnect answers the evidence question: **`R3`
+>    requires per-site causal coverage.** Four remaining consumers changing an
+>    aggregate graph **cannot prove the fifth consumes authority.** The wiring at
+>    `720f301c` was real, but **my earlier statement that the class axis was
+>    closed is withdrawn**; it is only *structurally* wired pending the per-site
+>    behavioural differentials. **Repair this now in the same `B2V` increment** —
+>    this is the already-required acceptance evidence for one mechanism, **not a
+>    separate WP and not a reason to preserve `fed42481` as a QA candidate.**
+
+⭐ **Clause 1 is `R3`'s "another hand-maintained table beside the helper bodies"
+clause reaching a case nobody had named.** The residual was not a table — it was
+a two-arm `if` — and it still counts. ⇒ Read that `DO NOT COUNT` bullet as being
+about **who maintains the mapping**, not about its shape or size.
+
+⛔ **Clause 3 STRENGTHENS the `R3` evidence bar, and it is retroactive.** `R3`
+says an emitter that ignores the plan must redden; the frame's generic pin
+language (*"a named causal red control"*) permitted reading that as satisfied by
+a whole-graph differential. It is not — the standing pin
+
+```
+recut2_the_emitted_helper_graph_changes_when_the_authority_changes
+```
+
+is an **aggregate** differential, and the implementer measured that disconnecting
+**one** of five `class_guard` sites back to its literal leaves it at
+**439 passed / 0 failed**. ⇒ ⛔ **Every consuming site needs its own behavioural
+differential, or must be NAMED as probe-unreachable.** An aggregate differential
+cannot answer a per-site question — it is green while a site is disconnected.
+
+⚠ **`fed42481` is a HELD CHECKPOINT, NOT a QA candidate**, and — per
+`evt_1kedhmyapcvf7` — it is **four commits past re-anchored `69750fa3`**, *not* an
+ancestor-descendant continuation of `ab11a3d2`. `ab11a3d2` and `a7aa60eb` are
+preserved independently on `origin`. ⛔ **A commit distance is not a
+fast-forward:** `git merge-base --is-ancestor ab11a3d2 fed42481` exits **1**.
+Verify any such claim against the operation it is protecting.
+
+⭐ **Clause 3 is the Architect withdrawing its OWN confirmation on measured
+evidence supplied by the ring it had confirmed to.** The wiring it read was
+accurate; the pin standing behind it was weaker than either party treated it as.
+⇒ A confirmed axis can carry an overclaim, and the seat best placed to find it is
+the one that already proved the same shape elsewhere.
+
+**Unchanged:** `D6`, the fixed helper population, the census set, and the
+`RECUT 2` subsuming repair. **Ring latitude, as ruled:** an
+`ImmediateWord { tag, value_class }` field **or** an equivalently **total**
+derived tag→value-class relation is sound.
+
+**Next move, as ruled:** Runtime Implementer completes the immediate-class
+derivation **plus** per-site class evidence; Runtime Leader reviews the resulting
+clean checkpoint **before** any QA routing.
 
 ## ⛔⛔ RECUT 1 — 2026-07-25. The Architect NAMED the shared predicate.
 

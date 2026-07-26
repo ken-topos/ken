@@ -236,10 +236,22 @@ brief** — the implementer should execute mostly mechanically, not design
 >    billing stale context and nothing reports it.
 >
 >    ✅ **FIXED 2026-07-26 — `scripts/sweep-wedged-panes.sh` now catches both.**
->    Classification moved into `scripts/classify-pane-composer.py`
->    (`paste` · `slash:<cmd>` · `ghost` · `other` · `queued` · `clear`), with
->    controls in `scripts/test-classify-pane-composer.sh`. ⛔ **Add a shape
->    there, never by widening a regex in the sweep.**
+>    Classification moved into `scripts/classify-pane-composer.py` (`paste` ·
+>    `slash:<cmd>` · `ghost` · `other` · `queued` · `clear` · **`busy`** ·
+>    **`unreadable`**), with controls in
+>    `scripts/test-classify-pane-composer.sh`. ⛔ **Add a shape there, never by
+>    widening a regex in the sweep.**
+>
+>    ⛔ **The last two verdicts are the safety ones, and they are why the
+>    `--dry-run` gate could be lifted.** `busy` fires on a spinner + elapsed
+>    counter **anywhere in the capture** and is never repaired — a stranded
+>    delivery on a busy seat is real, and this script will not fix it. See the
+>    honest residual in the script header: *a run reporting four `busy` seats has
+>    answered nothing about those four.* `unreadable` replaces a fail-open
+>    `clear` on an empty capture, because ⭐ **`clear` asserts the composer was
+>    seen and held nothing, while an empty buffer asserts only that the probe saw
+>    nothing at all** — reading the second as the first is how a failed capture
+>    becomes "nothing to repair".
 >
 >    ⛔ **AND ADD IT IN *EVERY PROMPT SHAPE*, NOT JUST THE ONE YOU SAW.**
 >    Measured 2026-07-26 on a live `moot-runtime-implementer` pane: Claude renders
@@ -626,11 +638,26 @@ brief** — the implementer should execute mostly mechanically, not design
 >
 > **The script SENDS the compaction; it does NOT confirm the drop — gate step 5
 > is still yours.** After it returns, `capture-pane` each member and confirm ctx
-> actually fell (or a live `Compacting…` / a queued `❯ /compact`). Capture
-> **WIDE** (`tail -20`, not `tail -5`): the `Compacting…` progress bar renders a
-> few lines **above** the input, so a narrow tail shows only a stale `❯` + the
-> pre-compaction ctx and reads as a false "did not land" (observed 2026-07-09 —
-> a pane at 4% Compacting looked idle under `tail -5`). A pane whose ctx truly
+> actually fell (or a live `Compacting…` / a queued `❯ /compact`).
+>
+> ⛔ **DRAW NO NEGATIVE CONCLUSION FROM A TRUNCATED BUFFER.** The `Compacting…`
+> progress bar renders a few lines **above** the input, so a narrow tail shows a
+> stale `❯` + the pre-compaction ctx and reads as a confident *"did not land"*
+> (observed 2026-07-09 — a pane at 4% `Compacting` looked idle under `tail -5`).
+>
+> ⚠ **The fix is NOT "use a bigger number."** This instruction used to say
+> `tail -20, not tail -5`, and a bigger `N` only moves the cliff — a `-2000`
+> capture of a long turn truncates too. The rule is **positional**: if the
+> evidence you need renders *above* the region your window covers, that window
+> **structurally cannot answer the question**, and it does not return "unknown" —
+> it returns a confident wrong answer. ⇒ **Search the full stream and truncate
+> the RESULT, never the input**: `capture-pane -p -S -50 | grep -c Compacting`,
+> not `capture-pane -p | tail -5 | grep …`. Same defect one layer down from
+> [[a-probe-truncated-before-the-grep-is-not-a-measurement]], which was measured
+> on a build gate that reported `0 compiler warnings` because `| tail -60` had
+> already discarded all 35 of them.
+>
+> A pane whose ctx truly
 > did not move did not compact — resend the manual sequence to **that one pane**
 > and re-verify. Then handle the **post-compaction mention rouse** (a
 > just-compacted agent may not auto-pick-up a mention posted *after* its
@@ -1981,8 +2008,10 @@ backstop depends on you remembering to look, convert it into a check.*
 
 ⭐ **It now handles TWO stranding shapes, and the interesting part is the one it
 refuses to touch.** Classification lives in `scripts/classify-pane-composer.py`
-— verdicts `paste` · `slash:<cmd>` · `ghost` · `other` · `queued` · `clear` —
-with controls in `scripts/test-classify-pane-composer.sh`. Besides a stranded
+— verdicts `paste` · `slash:<cmd>` · `ghost` · `other` · `queued` · `clear` ·
+`busy` · `unreadable` — with controls in
+`scripts/test-classify-pane-composer.sh` (**27 rows**, and the depth-invariance
+rows are what stop the fix from passing by going blind). Besides a stranded
 paste it now also submits a stranded **allow-listed slash command** (`/compact`),
 the shape `moot compact` leaves behind. ⛔ But an **idle pane renders its own
 suggestion text on the composer line**, so with colour stripped a suggestion is
@@ -2018,10 +2047,29 @@ statuses (from `orientation` / `list_participants`) and the tmux `❯` **ghost-t
 suggestion** are **point-in-time and can be >1 day stale** — an agent's status
 can still say "awaiting X's re-run" a full day after X landed and the arc closed.
 So: **(1)** a status/ghost line is a *hint to verify*, **never evidence** of a
-stall. **(2)** Ghost text (gray `❯ <suggestion>`) is a next-prompt suggestion,
-not state; an idle `❯` often has the **live work-spinner one line above the
-`tail -6` cutoff** — capture **wider** (`tail -20+`) and look for
-`Frolicking…`/`Perusing…`/`esc to interrupt` before calling it idle. **(3)**
+stall. **(2)** Ghost text (dim `❯ <suggestion>`) is a next-prompt suggestion,
+not state; an idle-looking `❯` often has the **live work-spinner rendered ABOVE
+the window you captured**.
+>
+> ⛔ **Two ways this instruction used to be wrong, both measured 2026-07-26.**
+> **(a) It said "capture wider (`tail -20+`)".** A bigger `N` only moves the
+> cliff. The rule is positional: **if the evidence renders above your window,
+> that window cannot answer the question, and it returns a confident IDLE rather
+> than an unknown.** Search the full stream and truncate the *result*, never the
+> input — see
+> [[a-probe-truncated-before-the-grep-is-not-a-measurement]].
+> **(b) It told you to look for `Frolicking…`/`Perusing…`/`esc to interrupt`.**
+> ⛔ **The spinner VERB is randomized** — never key on a word list. And a
+> **high-effort turn prints NEITHER `Working` NOR `esc to interrupt`**, only a
+> glyph and an elapsed counter, so that affordance is not a reliable tell either.
+> ⇒ Key on the **shape** `<glyph> <verb>… (<elapsed>` — and ⚠ note the
+> past-tense forms (`Worked for 1m 47s`, `Cogitated for 34m 18s`) are what a
+> **finished** turn leaves behind, not a live one. ⭐ **The decisive test is the
+> elapsed counter's CONTINUITY across two captures:** `14m 22s` then `32m 16s` is
+> ONE turn; a genuinely new turn restarts near zero. Mechanised in
+> `scripts/classify-pane-composer.py` (verdict `busy`).
+>
+> **(3)**
 Verify WP/arc closure by **content on `origin/main`** (grep the landed change, or
 `is-ancestor` the **MERGED** SHA), **never a specific local branch SHA** — a
 rebased merge lands under a *different* SHA, so checking the **pre-rebase tip**
