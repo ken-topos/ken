@@ -212,11 +212,11 @@ briefs are in §6.1–§6.8; the operator was briefed on 2026-07-26.
 
 | # | fork | decides | blocks |
 |---|---|---|---|
-| C1 | **Runtime `unknown` execution policy** — universal Kleene third value, or artifact status + explicit execution policy | operator (deployment policy) **then** Architect (semantics) | largest semantic radius in the advisory; crosses every evaluator, backend, FFI, effect path |
-| C2 | **`Ord`/`Map` key equality** — must order-equivalence yield kernel `Equal`? | Architect (class design), operator (commercial-data impact) | whether normalized `Decimal` can be a lawful key |
-| C3 | **Capability revocation** — universal transitive lineage, or a revocable/non-revocable split | Architect | runtime machinery cost on every capability; `ABI-REVOKE` |
-| C4 | **SCT termination** — exact SCT as source compatibility, or a kernel-checkable termination-evidence interface with SCT as one producer | Architect | which total programs are accepted; kernel TCB surface |
-| C5 | **Instance coherence + package admission** — keep the exact admission graph, or find the smaller invariant | Architect | multi-package resolution; needs real multi-package cases first |
+| C1 | **Runtime `unknown` execution policy** — universal Kleene third value, or artifact status + explicit execution policy | ▶ **DIRECTION SET 2026-07-26** — retire the runtime value (operator); §6.1 | needs §2 census + Architect ruling on replacement semantics before any edit |
+| C2 | **`Ord`/`Map` key equality** — must order-equivalence yield kernel `Equal`? | ✅ **RULED 2026-07-26** — option (b), key relation derived from the order; §6.2 | ▶ needs framing as a localized Map/Set key-interface split |
+| C3 | **Capability revocation** — universal transitive lineage, or a revocable/non-revocable split | ✅ **CLOSED — option (a), NO SPLIT, operator 2026-07-26** | nothing; two small editorial follow-ons in §6.3 |
+| C4 | **SCT termination** — exact SCT as source compatibility, or a kernel-checkable termination-evidence interface with SCT as one producer | ✅ **CLOSED — option (a), operator 2026-07-26** | nothing; SCT is deliberate source compatibility |
+| C5 | **Instance coherence + package admission** — keep the exact admission graph, or find the smaller invariant | ✅ **Layer 1 CLOSED** (ADR 0008) · ▶ **Layer 2 DEFERRED** behind Linux ABI/compiler, probably next | Layer 2 gates on the package-manager round |
 | C6 | **Prover search portfolio** — ⚠ *not in the operator's original three-way split; it belongs here* | Architect | needs a certificate interface defined **before** the route can be relaxed |
 | C7 | **Logical `space` vs physical realization** (`OQ-Space`) — ⚠ *also not in the original split* | Architect | per-space arenas, re-interning, copying; couples to the store family |
 | C8 | **Purity keyword reverse-direction errors** — is `proc`-becomes-pure a reviewed promise or refactoring churn? | operator (review-policy call) | small; cheapest fork to close |
@@ -256,23 +256,206 @@ only in domains that specify it.
 implement, but they change what Ken *is for*: whether partially-verified code
 runs in production at all is a product commitment, not a semantic one.
 
+## ▶ C1 DIRECTION — retire the runtime third value (operator, 2026-07-26)
+
+> *"`unknown` seems expensive as a development-enabling tool, something that
+> would better be handled by carefully crafted error messages."*
+
+⇒ **Option (b).** The epistemic classification stays; the **universal runtime
+third value goes**. The hole diagnostic carries the information instead.
+
+⚠ **This is a direction with two follow-on choices it does not settle** (below).
+It is **not yet a released node** — it is a class-1 language-semantics change
+with live conformance consumers, so it needs the §2 census and an Architect
+ruling on the replacement semantics before any `spec/` edit.
+
+### ⭐ The measurement — and it makes the direction *cheaper* than it looks
+
+`unknown` appears at **323 sites across 31 `spec/` files** and **283
+`conformance/` rows across 20 files**. ⛔ **Those totals are misleading, and the
+disaggregation is the whole point:**
+
+| surface | size | does the direction touch it? |
+|---|---|---|
+| **verdict / epistemic status / diagnostics / protocol** — `24-diagnostics.md` (60 sites) + `seed-diagnostics.md` (71 rows); `25-protocol.md` (34) + `seed-protocol.md` (36); `21 §5` (16) + `seed-spec-syntax.md` (16); `23-prover.md` (12) + `seed-prover.md` (40) | the **majority** | ⛔ **NO — it all stays** |
+| **the runtime value** — `41 §6` (8), `42 §4` (43), `43 §2` cases 1–2 (7); `conformance/runtime/evaluation/seed-evaluation.md` (37 rows), `runtime/effects/seed-effects.md` (16), `runtime/values/README.md` (4) | ~**57 conformance rows** | ✅ yes — this is the change |
+
+⭐ **The vehicle the operator wants to lean on already exists and is already the
+larger surface.** `24 §2` specifies `TypedHole { id, goal, context, origin }` —
+precisely located, carrying its goal and context and its `22 §1` provenance — and
+**71 conformance rows already assert the diagnostics.** ⇒ "Carefully crafted error
+messages" is not a thing to build; it is the part of `unknown` that is *most*
+thoroughly specified. The runtime value is the thinner half.
+
+⭐ **And `tested` already serves the "run it anyway" workflow.** `21 §5.2`'s
+`assume`/`test` status lowers `requires`/`ensures` to a **runtime assertion**,
+registers a test/generator obligation, is **visible in the source**, and is
+**exported in the assumption boundary**. ⇒ There is already a sanctioned,
+explicit path for running code you could not prove — with strictly better honesty
+properties than a value that propagates silently.
+
+### ▶ Recommended replacement semantics — the spec's own preferred idiom
+
+⭐ **`43 §2` case 5 already names the shape, and praises it.**
+`CapacityExhausted` is specified as a **loud, catchable** fault at the `space`
+boundary "**rather than returning a wrong or `unknown` value**." The spec, in its
+own voice, already treats returning `unknown` as the worse of the two.
+
+⇒ **Recommendation: hole-dependent evaluation raises a loud, catchable fault
+carrying the `TypedHole` payload** — same shape as `CapacityExhausted`. That
+keeps the development loop (the artifact builds and runs), is fail-closed, gives
+per-run localization, and needs **no inhabitant of any ordinary type**.
+
+⛔ **Two follow-on decisions, with my recommendation on each:**
+
+1. **What an `unknown` verdict does operationally.** `21 §5.1` currently says it
+   "leaves the program **running**." Under the direction that sentence must
+   change to either *refuse to produce a runnable artifact* or *build, and fault
+   if a hole is reached*. ⇒ **Recommend the latter** — refusing to build kills
+   incremental verification outright, which is the one benefit worth keeping.
+2. **`43 §2` case 2's undecided disjunction.** Unguarded partial primitives
+   (div-by-zero, non-wrapping overflow, out-of-bounds) currently produce "a
+   **runtime fault / `unknown`**" — the spec does not say which. ⇒ **Recommend
+   resolving to `fault`.** It follows immediately from the direction and removes
+   an undecided disjunction from a normative section. Free.
+
+### ⚠ The honest cost of the direction, stated plainly
+
+**Two things are genuinely lost, and neither is recovered by better messages:**
+
+1. **Simultaneous localization across many results.** The third value let one run
+   mark *which of 200 outputs* depend on the hole. A fault ends the run, so you
+   learn about holes one at a time (or batched, if a harness catches and
+   continues). ⇒ The per-result measurement becomes a per-run one.
+2. **The absorbing connectives stop being a guarantee.** `42 §4` specifies
+   `unknown ∧ false = false` decided "without forcing the `unknown` one" — so a
+   partially-verified contract can still **conclusively fail**. Under faults that
+   outcome survives only as a consequence of evaluation order, not as a stated
+   law. Determinate under CBV, but a weaker kind of promise.
+
+⇒ Both are acceptable if incremental verification is a development convenience
+rather than a product claim. **That is exactly the judgement the operator made**,
+and it is recorded here so the trade is visible to whoever implements it rather
+than being rediscovered as a regression.
+
 ### 6.2 C2 — `Ord`/`Map` over non-canonical carriers
 
-`spec/50-stdlib/52-map.md §2.1` requires order equivalence to yield kernel
-`Equal`. That excludes lawful key types with multiple representations —
-**including the spec's own `Decimal` example.** Rocq's `OrderedType` is a direct
-constructive counterexample: it takes an explicit `eq : t -> t -> Prop`, proves
-it an equivalence, and has comparison return equality *in that relation*, never
-representation identity.
+⛔ **The advisory over-states this one, and the corrected framing is what was
+routed.** `52-map.md §2.1` does **not** impose `antisym → Equal` globally over
+`Map`. It confines the step to **two named faces** — the overwrite/uniqueness
+law (`§5.3`) and the `Distinct`-discharge lemma — and states explicitly that the
+`lookup` laws need **no `Equal` promotion**, "keeping the canonical-carrier
+dependency **localized**." So part of the localization the advisory proposes is
+**already in the spec**.
 
-**Options.** (a) status quo; (b) a `KeyEq`/ordered-key equivalence independent
-of kernel `Equal`, plus a proof that ordering respects it; (c) canonicalize
-before keying; (d) a stronger `CanonicalOrd` only where kernel equality is
-genuinely needed.
+What *is* real: `§2.1` states that over a non-canonical carrier a postulated
+`antisym` proves `Equal` between distinct representations and therefore
+**inhabits `Bottom`** — the `DecEq Decimal` trap of ADR 0010 — using the spec's
+own `Decimal = MkDecimalPair coeff exp` example (`10×10⁻¹` vs `1×10⁰`). Rocq's
+`OrderedType` is a direct constructive counterexample: it takes an explicit
+`eq : t -> t -> Prop`, proves it an equivalence, and has comparison return
+equality *in that relation*, never representation identity.
 
-⭐ **This one is not ergonomics.** It decides whether ordinary normalized
-commercial values are lawful map keys without lying about representation
-equality. Prior-art support is the strongest in the advisory.
+⇒ **The fork was therefore narrower than the advisory frames it:** does Ken need
+a non-canonical-carrier route for the **overwrite/uniqueness face specifically**?
+
+## ✅ C2 RULED — Architect, 2026-07-26 (`evt_7jppg10gk983`)
+
+⭐ **Transcribed here because an in-thread ruling is not a durable deliverable.**
+Bound to `origin/main = 870f5b65`; the Architect states it did not bind the
+advisory, consult a reference implementation, or fold in C4/C5.
+
+### The census — every `antisym → Equal` site, in three classes
+
+⭐ **The classification is the load-bearing part**: separating the law
+declaration from its semantic consumers stops the same dependency being counted
+several times, which is what made the advisory's count look global.
+
+| # | site | class |
+|---|---|---|
+| 1 | `spec/50-stdlib/51-lawful-classes.md:90` — `Ord.antisym` declared with kernel `Equal` as its conclusion | **the source contract**, not a consumer; it is what makes every lawful `Ord` carrier canonical w.r.t. its order |
+| 2 | `catalog/packages/Core/Classes/LawfulClasses.ken.md:548-709` — `compare … = ord_eq` implies kernel `Equal`; load-bearing call to `d.antisym` at `:709` | **non-Map consumer**; stays canonical-carrier-only |
+| 3 | pair `Ord` via `pair_compare` equality soundness (`LawfulClasses.ken.md:1253`); list `Ord` calls `d.antisym` (`:1674`) | **instance-construction** sites — closure of canonical `Ord` under compound carriers, lawful only when every component `Ord` is |
+| 4 | `spec/50-stdlib/57-collections-and-views.md:213-224` `eq_from_ord`; shipped comparator `catalog/packages/Data/Collections/Derived.ken.md:864` | **non-Map consumer** (sort's permutation comparator); unchanged by C2 |
+| 5 | `spec/50-stdlib/52-map.md:386-394` — overwrite/uniqueness promotes mutual order to `Equal k k'` | ▶ **C2 target 1** |
+| 6 | `52-map.md:389-394` + `54-map-verified-laws.md:331-344,459-469` — the `Distinct` discharge | ▶ **C2 target 2** |
+
+✅ **My named gap is closed, and the answer is that it was not a gap.** `54 §5.2`
+is **not** an extra site: law 5's own proof is antisym-free — given `Distinct`,
+agreement is by `refl`; only the separate `Distinct` discharge uses antisym.
+`52 §5.2` lookup/found/locality are likewise antisym-free.
+`spec/30-surface/37-strings-collections.md:372` merely repeats the Map boundary,
+and `58-maps-sets-relations.md:117-130` supplies the canonical `Nat` witness for
+the same discharge — **neither adds a semantic use site.** The lattice law in
+`61-information-flow.md` is a distinct interface, not an `Ord`/Map consumer.
+
+### The ruling — option (b), with the key relation DERIVED from the order
+
+**Ken needs the non-canonical-carrier route.** But ⛔ **do not add an
+independent `KeyEq`** that can drift from the order — derive it:
+
+```text
+KeyEq x y := IsTrue (leq x y) ∧ IsTrue (leq y x)
+```
+
+The route is a **total-preorder / key-order dictionary** with `leq`, `refl`,
+`trans`, `total`, and **no** theorem from mutual order to kernel `Equal`.
+
+⭐ **Why no second field and no postulated compatibility theorem:** `KeyEq` is an
+equivalence from `refl` + `trans`, and its *compatibility with the order* is
+**also** derived from `trans` — if `x ≈ y`, substituting either side of `leq`
+preserves the result. ⇒ **One order remains the authority.**
+
+⛔ **Do not weaken `Ord.antisym`, and do not create a parallel `CanonicalOrd`**
+merely to restate what `Ord` already guarantees. `Ord` stays unchanged as the
+**canonical refinement** and continues to serve every consumer whose result
+really is kernel identity — sites 2, 3, and 4 above. Existing `Ord` adapts to the
+new route by *forgetting* `antisym`.
+
+**Binding rules for the relation-keyed route:**
+
+- lookup and overwrite use `KeyEq`, **never** kernel `Equal`;
+- `Distinct` means no two stored entries are `KeyEq`-equivalent;
+- insert/from-list discharge `Distinct` **directly** from the overwrite branch
+  and preorder compatibility — **no `Equal k k'` step**;
+- the overwrite/uniqueness law concludes **one entry per `KeyEq` class**, not
+  equality of representatives;
+- ⛔ **no theorem may convert `KeyEq x y` to `Equal k x y`** unless the stronger
+  canonical `Ord` evidence is explicitly supplied.
+
+### ⚠ The stored-representative policy is OBSERVABLE and must be pinned
+
+The current implementation already replaces **both key and value** in the equal
+branch (`Map.ken.md:108-118`) ⇒ **last inserted representative and last inserted
+value win**, and `to_list` exposes that representative.
+
+⛔ Structural kernel equality of two `Map` values stays
+**representation-sensitive**. Any API-level extensional map equivalence over this
+route must compare keys by `KeyEq` — it may **not** claim the two
+representatives are kernel-equal.
+
+### The counterexample, closed
+
+Take `x = (10,-1)`, `y = (1,0)` in the non-canonical `Decimal` carrier under a
+semantic numeric order, so `x ≤ y` and `y ≤ x`:
+
+- **Today:** `Ord.antisym` produces `Equal Decimal x y`; constructor injectivity
+  refutes the unequal fields and **inhabits `Bottom`**.
+- **Under the ruled route:** `KeyEq x y` is inhabited and **no kernel equality
+  follows**. Inserting `x` then `y` takes the overwrite branch, leaves one node,
+  stores representative `y`, and lookup by *either* representation returns the
+  last value.
+
+⇒ **The counterexample is excluded without a representation lie.**
+Canonicalization-before-keying (option c) remains a valid *adapter* where a
+canonical key type is desirable, but it is not the only lawful route. Status quo
+would unnecessarily exclude ordinary quotient-like commercial values, and a
+renamed stronger class alone (option d) would **preserve** that exclusion.
+
+### ▶ Framing instruction
+
+Frame C2 as a **localized Map/Set key-interface split**. ⛔ Do not reopen the
+antisym-free lookup laws, C4, or C5.
 
 ### 6.3 C3 — capability revocation
 
@@ -288,6 +471,78 @@ synchronization, and failure contract.
 
 ⛔ **Either way, keep:** no ambient authority, and fail-closed use after an
 actual revocation. Only the *universality* is in question.
+
+## ✅ C3 CLOSED — option (a), NO SPLIT (operator concurred, 2026-07-26)
+
+**Keep universal transitive revocation.** ⇒ The advisory's item 9 is **answered,
+not deferred**; this section is the operative disposition and supersedes it.
+
+⭐ **The three efficiency arguments for splitting each dissolve on measurement,
+and one of them inverts.**
+
+**1. Runtime efficiency — the spec already leaves the mechanism free.**
+`62-authority.md §4.3` is explicit: *"A controlling space cell, forwarder,
+validity index, or region lifetime is **not normative** here. Whatever mechanism
+is chosen must preserve the lineage, descendant closure, admission boundary, two
+`Revoked` projections, and settlement observations."* ⇒ **No spec change is
+needed to make the common path cheap.**
+
+⭐ **And rarity is an argument for universality, not against it.** Because
+revocation is rare in Ken's target class, the cost can be paid *at revoke time*:
+on `revoke(X)`, walk X's descendants once and mark each dead — O(descendants),
+paid almost never. The **use path** then becomes a single liveness-bit read, with
+**no ancestor walk**. That preserves all five `§4.3` observables and is
+CHERIvoke's own shape (pay at revocation, not at dereference). ⇒ The universal
+design costs *one bit check* per capability-consuming operation, and a split
+would buy removing that bit check.
+
+**2. Compiler efficiency — there is no compiler cost to split away from.**
+`§4` makes `attenuate`/`revoke` **management semantics, not Ken terms**: "absent
+from the Ken name environment, as is every public `Cap` constructor or producer."
+The source path stays `ProgramCaps`/`readFile`/`writeFile`. ⇒ The compiler sees
+**nothing** about revocation — no lineage tracking, no type-level revocability,
+no dataflow.
+
+⛔ **A compiler-side win would require making revocability static — i.e. putting
+it in the type — which makes revocation Ken-visible and reverses the design that
+keeps it out of the language.** That is a coherence cost paid to optimize a path
+that currently costs nothing.
+
+**3. Linearization — real, but not where the phrasing suggests.** `§4.2`'s
+admission point separates exactly two outcomes. The expensive part is the
+**atomicity** of the liveness check against a concurrent marking, not an O(depth)
+traversal. ⛔ **And a split does not remove it** — every revocable capability
+still needs the full admission barrier; the split only excuses capabilities that
+were already down to a bit check.
+
+### ⛔ The soundness seam that decides it
+
+`§4` requires that revoking withdraws everything attenuated from it **to any
+depth**, and that consuming a resource token cannot bypass revocation. A split
+must answer: **can a non-revocable capability be derived from a revocable one?**
+
+- **Yes** ⇒ the derivation *escapes* revocation and transitive withdrawal is gone.
+  That is the entire guarantee.
+- **No** ⇒ you need a one-way monotonicity rule, which means tracking lineage and
+  revocability across every attenuation **anyway**.
+
+⇒ **The split's soundness rests on a rule that reintroduces the machinery it was
+meant to avoid.**
+
+### ▶ Two small follow-ons this ruling does authorize
+
+1. ⚠ **An editorial note at `§4.2`.** *"Every ancestor are live"* reads as an
+   algorithm and invites an implementer to write the ancestor walk. It is an
+   **observable property**, and `§4.3` frees the mechanism — say so, so nobody
+   implements the slow version from a correct spec.
+2. **Confirm `ABI-REVOKE` is scoped to the bit-check design**, not a
+   validity-index walk. That is where this decision actually cashes out.
+
+⚠ **Axes this covers.** The analysis binds `62-authority.md §4`–`§4.3` only. It
+does **not** cover `44 §3`'s store-`Space` realization or the `ABI-REVOKE` node,
+and `§4.3` explicitly disclaims cross-space and distributed revocation — so the
+clearance is for the **single-space OS-operation face**. Distributed revocation
+could change the cost picture, and it is out of scope by the spec's own words.
 
 ### 6.4 C4 — SCT termination
 
@@ -309,6 +564,30 @@ specify whether two routes preserve the same definitional equations.
 ⛔ **(b) without the evidence interface is not available** — "transparent
 unfolding is certified terminating" alone is too weak to be a spec.
 
+## ✅ C4 RULED — option (a). CLOSED (operator, 2026-07-26)
+
+**"Keep what we have. Close this."** ⇒ Exact SCT acceptance is **deliberate Ken
+source compatibility**, not over-specification. The evidence interface of option
+(b) is **not** commissioned.
+
+⛔ **Consequences that bind every later reader:**
+
+- `spec/10-kernel/17-conversion.md §4` is **correct as written**. Do not file a
+  relaxation node against it, and do not carry it as a known over-specification.
+- **Advisory item 4 is answered, not deferred.** Anyone re-reading the advisory
+  will find item 4 recommending an evidence interface; that recommendation is
+  **declined**. The advisory is not amended (it is a gitignored external input),
+  so **this section is the operative disposition** and the advisory's item 4 is
+  superseded here.
+- The accepted set of transparent definitions is now explicitly a **source
+  compatibility surface**. ⇒ A future change to SCT acceptance is a
+  **breaking language change**, not an internal mechanism swap — that is the
+  substantive content of this ruling, and it should be honoured as such.
+- ⚠ **This does not bless the algorithm's exposition.** The ruling settles
+  *which programs are accepted*; if the spec's matrix presentation is later found
+  to over-fix an implementation detail that does not change acceptance, that is a
+  Track A editorial item, not a reopening of C4.
+
 ### 6.5 C5 — instance coherence and package admission
 
 `spec/30-surface/33-declarations.md §5.5` fixes one canonical structure
@@ -323,6 +602,70 @@ legible deterministic resolution — but ⛔ *"one deterministic instance"* and 
 open-world ownership rule need an **alternative coherence proof** before
 relaxation. Prerequisite either way: test the accumulated rules against real
 multi-package cases, which do not exist yet.
+
+## ✅ C5 SPLIT AND HALF-CLOSED (operator, 2026-07-26)
+
+⭐ **C5 was never one item. It is two layers, and only one was ever open.**
+
+### ✅ Layer 1 — the coherence policy: CLOSED, keep as-is
+
+`§5.5`'s heading already carries **`(OQ-classes, ADR 0008 — do not reopen)`**.
+Property classes get coherence free from proof irrelevance; structure classes get
+one canonical instance per `(class, head-type)`, no overlap (ambiguity is a
+compile error **naming both** candidates), orphans rejected at declaration.
+
+⭐ **ADR 0008's reason is stronger than the compatibility argument the advisory
+offers.** The resolved dictionary is **semantically load-bearing — it carries law
+proofs the prover uses.** If `Monoid A` could denote different dictionaries at
+different sites, *"a lemma proved about 'the `Monoid A`' could be unsoundly
+combined with data built from a different `Monoid A`."* The ADR calls coherence
+**"a soundness-adjacent property of client reasoning, not merely an ergonomic
+preference."** ⇒ Rust's orphan rules protect an *ecosystem*; Ken's protect *proof
+validity*. Different arguments, and the stronger one applies here.
+
+⛔ **So Layer 1 was never a relaxation candidate**, and the advisory's "may still
+be over-detailed" does not reach it.
+
+⭐ **The escape hatch already answers the commercial-data worry.** Named
+instances are first-class values: define a non-canonical `byLength : Ord String`
+and pass it explicitly (`sortBy byLength xs`). Explicit passing is ordinary value
+application, **bypasses search**, and does not perturb canonicity — implicit
+`Ord String` still resolves to the canonical one. ⇒ **Coherence constrains
+implicit search, not what you can express.**
+
+### ▶ Layer 2 — package admission: DEFERRED behind the Linux ABI / compiler work
+
+`§5.5.1` (MRES-4d/4e) is the newer, much more detailed half: the **coherence
+set** (unfiltered transitive closure of the source graph) versus the
+**direct-use set** (self-admitted package + `admits` roots + canonical instances
+carried by re-exported public surfaces), with `UnadmittedInstance` as the hard
+error and observable provenance on success.
+
+⭐ **The audit's prerequisite is not effort — it is a whole unbuilt subsystem, and
+`§5.5.1` says so itself.** Its `SPEC-NOW / BUILD-LATER` block declares
+normative-but-unbuilt: package member lists, **compiled instance manifests**,
+cross-package collision errors at the manifest boundary, registries, lockfiles,
+and test-scoped admission — all *"deferred to the package-manager round,"* with
+the gate meanwhile operating over the existing path-based source graph. ⇒ **You
+cannot audit the admission graph against real multi-package cases before the
+package-manager round, because the mechanism those cases would exercise is itself
+deferred.**
+
+**Sequencing (operator):** package management is **lower priority than the Linux
+ABI and compiler work — but probably next after it.** ⇒ Layer 2's audit is a
+**gate on the package-manager round**, not available work now.
+
+### ⚠ The risk to carry forward into that round
+
+`§5.5.1` specifies a **detailed** admission graph `SPEC-NOW` for delivery that is
+`BUILD-LATER`, with an observable error and observable provenance already
+normative. If the package-manager round finds these rules do not fit real
+dependency graphs, they will by then be normative **with conformance rows
+attached**.
+
+⭐ **That is the same shape as the authority-reversal defect §3 is fixing** — a
+spec surface committed ahead of the implementation that would have contradicted
+it. Recorded now because it is cheap to note and expensive to rediscover late.
 
 ### 6.6 C6 — prover search portfolio
 

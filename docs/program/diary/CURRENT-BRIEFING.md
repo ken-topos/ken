@@ -33,10 +33,11 @@ verbatim (⚠ it was only in gitignored `local/`) at
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~11:1xZ · ⛔ **NO `main` SHA HERE, BY CONSTRUCTION**
+## ▶ LIVE — 2026-07-26 ~1x:xxZ · ⛔ **NO `main` SHA HERE, BY CONSTRUCTION**
 ### ⛔ **This header used to carry `origin/main`. It was ALWAYS the pre-merge**
 ### **base — stale the instant the block landed. `git rev-parse origin/main`.**
-### ✅ **#986 → #1024 ALL MERGED** — incl. #1009 (`R5` erratum), #1013 (`#82`).
+### ✅ **#986 → #1027 ALL MERGED** — incl. #1009 (`R5` erratum), #1013 (`#82`),
+### #1025/#1026 (campaign+premise corrections), **#1027 (the REQUIREMENTS tier)**.
 ### ✅ **`ABI-R1` CLOSED** · ✅ **`RT-FNSPLIT-B2V` CLOSED** — retros IN on both.
 ### ✅ **`DOC-GATE-NEEDLE` CLOSED #1019** — blob-verified, 3 retros in, node flipped.
 ### ⛔ **`#11` IS RULED: `RT-FNSPLIT-B2E` INSERTED BEFORE `B2F`.**
@@ -45,6 +46,55 @@ verbatim (⚠ it was only in gitignored `local/`) at
 ### §2c gate ran in full: 3 compactions verified, `cat-file -e` on every named
 ### object with an absent-path control, leader+QA confirmed `Working`.
 ### ▶ **ONE LANE LIVE: Runtime on `B2E`.** Task `#97` carries the watch list.
+### ▶ **`B2E` BRANCH = `adb0c672`** on `origin`
+### (`wp/RT-FNSPLIT-B2E-boundary-value-elimination`), `ls-remote`-verified.
+### ⛔ **IT IS A WIP CHECKPOINT, NOT A CANDIDATE. No Decision is open.**
+### ⛔ **`46ed5c97` REJECTED** (`dec_3xnydcbcz4zm9` rejected); **`3f7f2255`
+### SUPERSEDED** (baked the numeric id at `lowering/mod.rs:2486`). Each move was a
+### pure fast-forward, ancestry verified, nothing orphaned.
+### ✅ **`RULING R2` TRANSCRIBED into frame + node** — it existed ONLY in the
+### channel (`evt_111gwqrdsm1n2`) while THREE WIP commits already cited it by
+### name; measured absent from both artifacts at the tip AND on `main`. Same
+### undurable state `R1` was in. ⛔ Publish is PENDING (blocked on the A1 window).
+### ✅ **`D5` IS SETTLED: the INERT binding is sufficient with NO production
+### caller.** This ANSWERS my `evt_6t3t89exkbr37` question — ⛔ **CLOSED, do not
+### pursue.** ⭐ `R1` and `R2` read as contradictory unless you hold this: **`R1`'s
+### "a newtype alone is not sufficient" is about the MECHANISM'S SHAPE, not about
+### call reachability.** ⛔ Do NOT add a production switch to satisfy `D5`.
+### ⛔ **THE BLOCK IS THREE `D4`/`D7` GAPS, NONE ABOUT `D5`:** (1) no admitted
+### opaque value is actually eliminated — the only decode emitter is
+### `#[allow(dead_code)]` with NO caller; (2) `Project` has a ledger row with no
+### implementation; (3) the value-general recursive case is absent, leaving exactly
+### the top-level-only shape rejected at `#11` — **that residual is NOT
+### authorized.** ⚠ The source described (1) TRUTHFULLY — ⛔ **a truthful residual
+### record is still a MISSING DELIVERABLE.**
+### ⭐ **`#[allow(dead_code)]` IS A SUPPRESSED ORACLE** — rustc was computing gap 1
+### for free and the annotation turned it off. ⚠ **This is MY inference, not the
+### Architect's words**; recorded as frame guidance, contradictable.
+### ▶ **Items 1 and 6 OPEN, leader-routed, I have NOT assessed them.** Item 1 needs
+### the name table MATERIALIZED; item 6 reports `push_node` appears not to expose
+### `tag_id` — possibly blocked on a MISSING API, not effort.
+### ⛔ **MY OWN "NO NEW SHA" NEEDED CORRECTING** (`evt_4es0jndag4bn6`): it was
+### scoped to refusing a FRAME FOLD and I did not say so. ⇒ **It does NOT freeze
+### the ring's own forward repair of a code defect.**
+### ⛔ **THE CANDIDATE CARRIES THE PRE-`R1` FRAME — still true at `46ed5c97`.** Its
+### tree has frame `20928eac` / node `8275c6c5`; the governing `e86c5331` /
+### `c947dc77` landed at `4297e55c`, which is **NOT an ancestor** (base `9410d7b8`
+### predates it). `diff` = **86 lines**, and the candidate's copy still literally
+### reads *"ONE artifact-static name derivation"* — the premise `R1` ruled FALSE.
+### ⇒ A QA seat reading the frame from its own checkout reviews `D5`/`AC-E5`
+### against the wrong contract. **Bind CODE at the candidate, read the FRAME from
+### `origin/main`, and ⛔ NAME THE BLOB** in the QA assignment.
+### ✅ **OPERATOR DISPOSITIONED THE RACE:** *"Keep it moving. If there is a defect
+### due to the race with `R1`, we can handle it in a subsequent WP."* ⇒ ⛔ NO fold,
+### NO re-cut, NO hard-stop on the race; a race-caused defect is a follow-up WP.
+### ⚠ **But that quote covers a defect ARISING FROM THE RACE — it is NOT a licence
+### to defer `D5`'s SUBSTANCE**, which `R1` forbids carrying as a `B2F` residual
+### ("would reproduce hard-stop `#11` one layer later"). Bridge present-but-wrong
+### => deferrable; bridge ABSENT => routes to me, I take it to the operator. ⛔ Two
+### cells, opposite dispositions — do not collapse them.
+### ⭐ Task `#88`'s lesson recurring: **an erratum on `main` does not reach a branch
+### cut before it, and the reviewer's checkout is the stale copy.**
 ### `crates/` byte-identical to `bb3e58ea`; nothing to unwind. Evidence on
 ### `origin`: `preserved/rt-fnsplit-b2f-hardstop-11-evidence` = `d1abbc79`.
 ### Verify ring compaction VERIFIED on all three seats. Adversary hunt reported.
@@ -58,12 +108,32 @@ verbatim (⚠ it was only in gitignored `local/`) at
 ### artifact name REFERENCE with the store-local `intern_symbol` ID. ⛔ A NEWTYPE
 ### ALONE DOES NOT DISCHARGE `D5`/`AC-E5`. Architect record preserved on `origin`:
 ### `preserved/architect-state-1d9a6f86`. `B2F` residual is now ONE thing.
-### ⛔ **NEW: `SPEC-31-WIDTH-ERRATUM`** (`aa3d32d4`) — spec `31 §1d`+`layout.rs:12`
-### say **96** columns; the formatting seed says **88** 18x and CITES `31 §1d`.
-### Latent ONLY because those rows are `RED-UNTIL-BUILT`. ⛔ Do NOT treat 18-vs-1
-### as the argument — `git log` on both files is the undone discriminator.
+### ✅ **`SPEC-31-WIDTH-ERRATUM` RULED BY THE OPERATOR: 96 IS NORMATIVE.** Blob
+### `8442453b`, status `ready`, sequenced BEHIND `A1` (same ring). *"96 is what it
+### should be. It was an incomplete revision."* ⇒ `spec/` + `layout.rs` DO NOT
+### CHANGE; **`conformance/` moves.** ⛔ The value question is CLOSED — do not
+### re-ask, and ⛔ do NOT re-argue from the 18-vs-1 count; the count was never the
+### argument. ⛔ **AND IT IS NOT A `sed`:** `FMT7`'s eight `88`/`89` fixture PAIRS
+### become `96`/`97` and must be **re-authored** (a number-only edit leaves them
+### silently vacuous while READING as updated); the comment-threshold arithmetic
+### must re-derive to sum to 96; the false `spec: 31 §1d (88 …)` attributions at
+### `:173`/`:384` are part of the defect. ⭐ Control: the `96` arm stays flat and
+### the `97` arm breaks.
 ### ⛔ **MY `A1` §2 TABLE IS NOT RELIABLE PER-CELL** — it cited a FILE and inherited
 ### the claim from its subject matter. A locator has TWO coordinates.
+### ⛔ **`SPEC-ALIGN-A1` PR #1028 DID NOT MERGE — CI FAILED.** `build + test` and
+### `test shard 1/4` both failed; the publisher **correctly refused to merge** and
+### `main` did NOT move. ⭐ **This is why the full CI path was right over
+### `--doc-only`** — doc-only skips exactly these checks.
+### ✅ Candidate is SAFE and durable: `wp/SPEC-ALIGN-A1` = `a31c927c` on `origin`.
+### ⚠ **OWNERSHIP IS AN OPEN QUESTION, not obviously the ring's.** Measured
+### locally: the conformance diff changes **ZERO** AC/assert/expect/verdict/stimulus
+### lines — it is prose-only. #1027 merged green on the full path shortly before, so
+### CI was green at `870f5b65`'s content. ⇒ Candidate suspects are a **spec↔
+### conformance currency/citation gate** tripped by the `44-capacity.md` authority
+### repair, or an infra flake. ⛔ Do NOT assume the ring broke a test.
+### ⛔ **A FRESH SHA NEEDS A FRESH DECISION** — `dec_65kgppyq7151m` approved exact
+### `a31c927c`; no predecessor approval carries (Architect, this thread).
 ### ▶ **SECOND LANE: spec enclave on `SPEC-ALIGN-A1`** (Track A of the
 ### mission-alignment campaign). Contention-free by path — `spec/`+`docs/` vs
 ### `crates/`. ⛔ **NOT semantically free:** A1 must NOT relax the store family
@@ -83,6 +153,26 @@ verbatim (⚠ it was only in gitignored `local/`) at
 ### (coverage bound — **which of 63 spec files were read is UNSTATED**) are open.
 ### ⚠ Absence from the advisory is NOT evidence a chapter is clean.
 ### ⛔ **2 ADVERSARY FINDINGS OPEN** — `RT-VALUE-TOTALITY` §7; unframed (#78).
+### ✅ **THE REQUIREMENTS TIER IS LAW — landed #1027.**
+### `docs/program/15-requirements-and-acceptance-criteria.md` (`0a5d6333`) +
+### `scripts/check-rq-ac-links.sh` (`6de23a45`). Tiers are
+### **`conformance/` → `PROGRAM.RQ-n` → `WP.AC-n`, ONE direction.** Naming is
+### MANDATORY: `<WP-id>.AC-<n>` / `<PROGRAM-id>.RQ-<n>`. ⛔ Do NOT renumber
+### in-flight ACs (`B2E.AC-E5` is cited by `dec_6r447gawdp6hy` and uneditable
+### channel traffic). Operator scope: RQs retroactive for **in-progress** work,
+### ⛔ NOT for completed work, required for all future work. `none` cells are
+### legitimate both ways (AC with no RQ = a process/inertness control; RQ with no
+### conformance row = a program NFR).
+### ⭐ **THE PAYOFF: a residual is not a new object — it is an RQ no AC references
+### yet.** That withdrew the `.R-n` and `.EX-n` objects I had proposed.
+### ⛔ **THE CHECK IS RED ON PURPOSE (`exit=1`), and it is WEAKER than it reads:**
+### it verifies a reference EXISTS, never that the AC is strong enough to discharge
+### the RQ. Current: `TABLE-ONLY` `RQ-1`/`2`/`4`, `UNREFERENCED` `RQ-3`/`5`/`6`,
+### `NO-RQ-BLOCK` `RT-VALUE-TOTALITY`. Task `#104` wires the frames.
+### ⚠ **`RQ-0` is the GRADE:** the check would PROBABLY have caught `#11`, but the
+### load-bearing part is **Rule 1 at AUTHORING time, not the report** — and Rule 1
+### is satisfiable by pointing a weak AC at an RQ. ⛔ Do NOT describe the check as
+### preventing this class of hard stop.
 
 > ### ✅ `DOC-GATE-NEEDLE` MERGED — PR #1019. Verify lane is FREE.
 >
