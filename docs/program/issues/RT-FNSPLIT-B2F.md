@@ -11,6 +11,20 @@ github: null
 origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answering Steward Q1-Q3 on merits (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the D1/D2 half of the retired RT-FNSPLIT-B2A frame. RE-SLICED 2026-07-25 by Architect ruling evt_842spc7t6js1 on hard-stop #9 (research advisory evt_531c4k52mshrn) plus addendum evt_t4fykh52ncb: this node is NOT buildable as one unit and now depends on two inert prerequisites. Steward-filed; Steward owns the replacement frame and AC/control placement.
 ---
 
+> ## ✅ HARD-STOP #10 IS CLEARED — `B2V` MERGED, THIS NODE IS RELEASED (2026-07-26)
+>
+> **The hold below is SPENT. Both of its conditions are met:** `B2V`'s frame is on
+> `origin/main` and `B2V` itself is **merged** (`a5c8ba73`, PR #1014, retros in),
+> and this node has been **explicitly kicked** by the Steward. ⛔ **Do not cite the
+> hold text below to refuse work on this node** — it is retained because the gate
+> record is real, not because it is still operative.
+>
+> ⭐ **The `AC-11` re-scoping in this block IS still operative, and it is now folded
+> into the frame** (`docs/program/wp/RT-FNSPLIT-B2F-functionization.md`), which
+> previously did not mention `B2V` at all. Bind the frame; this node is the record.
+>
+> ### Historical — the ruling that inserted `B2V`
+>
 > ## ⛔ HELD AT HARD-STOP #10 — a NEW PREREQUISITE `RT-FNSPLIT-B2V` IS INSERTED
 >
 > **Architect ruling `evt_28cnmxf6ncghn`, 2026-07-25.** This node was kicked
