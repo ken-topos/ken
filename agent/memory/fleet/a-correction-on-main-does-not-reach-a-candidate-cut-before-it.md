@@ -124,6 +124,38 @@ hits and stops looking.**
   does not solve the in-flight problem either. It is honesty for future readers,
   not delivery to current ones.
 
+## ★★ The generalization the receiving ring supplied: bind the whole TUPLE
+
+The Steward routed **two** anchors (code SHA + frame blob) and the runtime-leader
+returned the general form in its retro — **three immutable operands, stated in
+every terminal handoff**:
+
+```
+code      the exact candidate SHA
+contract  the governing frame/ruling BLOB OID     <- not "current origin/main"
+verdict   the exact Decision object id            <- re-read for resolved + non-null resolved_by
+```
+
+⭐ **The leader's diagnosis of why it needed saying:** *"I treated the candidate
+checkout as a natural review bundle until the erratum made the split explicit —
+code and governing contract can live at different immutable objects."* A checkout
+**looks** like one coherent thing, so the default assumption is that reviewing it
+reviews the contract too. ⇒ **A tree is one object; the authorities it is judged
+against are several, and nothing in the tree tells you which of them it carries
+stale.**
+
+⚠ **Why the third operand belongs in the same rule.** The same failure shape
+reaches verdicts: a Decision cited in prose can have been rejected, superseded, or
+resolved by nobody — and the citing message reads identically in all three cases.
+This WP ran with a **dead** `dec_2wjkw8exc5y1g` alongside a live
+`dec_1b2z52mkbqj8h`. ⇒ **Read the verdict from the OBJECT, never from the channel
+asserting it** — same discipline as reading the contract from a blob rather than
+from a ref.
+
+⛔ **And the pairing that makes it operational: name the operand in the AC, then
+check that the code seam names the same one.** A binding stated only in prose is
+a claim; a binding restated at the seam is an artifact.
+
 ## Positioning
 
 - **The diff-claim sibling:** *state a claim about a change against the anchor your

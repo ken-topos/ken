@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2V
 title: "executable boundary-value ABI — one closed 64-bit tagged word for ValueWord/ResultWord plus the emitted-code interface to construct, discriminate and project it"
-status: active
+status: merged
 owner: runtime
 size: L
 gate: none
@@ -10,6 +10,70 @@ blocks: [RT-FNSPLIT-B2F]
 github: null
 origin: Architect ruling evt_28cnmxf6ncghn on hard-stop #10 of RT-FNSPLIT-B2F (raised by runtime-implementer evt_71d2jg83z2yt4, leader escalation evt_r7797bd7bzk3, evidence 49e24b59..1b789817 on origin wp/RT-FNSPLIT-B2F-functionization). The ruling found #10 VALID and STRUCTURAL and required exactly ONE new prerequisite inserted between B2R and B2F, delivering an INERT but EXECUTABLE boundary-value ABI. It explicitly forbade splitting the value contract from its access interface, on the ground that a second slot-only declaration would reproduce #9/#10 one layer down. Architect durable checkpoint at ARCHITECT-STATE.md commit 74b4f51b. Steward owns the ID, the frame, and the AC/control placement.
 ---
+
+## ✅ LANDED AND CLOSED — 2026-07-26
+
+```
+merged exact   a5c8ba736fbe663f5ab85616a78864e95c162924
+PR             #1014     origin/main at merge = 81913aa98ef1b261d3dd501ce5fa0f6aed23d85f
+Decision       dec_1b2z52mkbqj8h   resolved / resolved_by = agt_37reqftfe6g00 (Architect)
+QA             evt_45467w9e89ca9   exact-SHA APPROVE
+retros in      leader evt_66s6qynk98xk3 · qa evt_371hdrvj0vzrh · impl evt_151ah0ecn38bw
+```
+
+**Verified by BLOB IDENTITY, not ancestry** — the two production files are
+byte-identical between the candidate and `origin/main`:
+
+| path | blob |
+|---|---|
+| `crates/ken-runtime/src/boundary_value.rs` | `d152dc41` |
+| `crates/ken-runtime/src/boundary_value_clif.rs` | `c380cc5f` |
+
+⛔ **`git merge-base --is-ancestor a5c8ba73 origin/main` returns EXIT 1, and that
+is not a problem — it is what a squash-merge looks like.** The publisher squashes,
+so no candidate SHA is ever an ancestor of `main`. A reader who reaches for
+ancestry to answer *"did this land?"* gets a confident **no** about work that is
+fully landed. ⇒ **Ancestry answers reachability; blob identity answers
+landed-ness. They are different questions and only one of them is this one.**
+
+⛔ **AND `a5c8ba73` IS NOT ON `origin` AT ALL — the squash-merge auto-deleted the
+WP branch.** It survives only as a **local** ref in the Steward worktree, plus a
+**stale `refs/remotes/origin/…` tracking ref that a plain `git fetch` does not
+prune.** ⚠ I first wrote the opposite in this block, having asked
+`git for-each-ref --contains`, which reported
+`refs/remotes/origin/wp/RT-FNSPLIT-B2V-executable-value-abi` — **a false claim
+about the remote, phrased in the remote's own namespace.**
+`git ls-remote --heads origin 'wp/RT-FNSPLIT-B2V*'` returns **empty**, and the
+positive control `preserved/rt-fnsplit-b2v-dc35c12d` returns a row, so the probe
+discriminates. ⇒ ⛔ **Only `ls-remote` asks the remote. `for-each-ref`,
+`branch -r`, and `origin/<x>` all read a local cache the merge invalidated.**
+
+⇒ **Nothing is lost and no preservation ref is warranted:** this SHA's content is
+on `main` byte-for-byte (above), and branch deletion is the *normal* end state of
+every merged WP, not a B2V anomaly. ⇒ **Read the SHA above as a historical label
+for a reviewed candidate, not as a fetchable object.**
+
+⚠ **One locator defect found while writing this block, worth the line.** My own
+merge report recorded the second file as
+`crates/ken-runtime/src/cranelift_backend/lowering/boundary_value_clif.rs`. The
+real path is `crates/ken-runtime/src/boundary_value_clif.rs` — **the blob
+`c380cc5f` was exact and the path was wrong**, so every check that re-derived the
+hash passed and nothing looked off. ⇒ **A locator has two coordinates; verifying
+one is not evidence about the other.**
+
+> ### ⛔ THE GOVERNING FRAME WAS BOUND SEPARATELY FROM THE CODE — two anchors
+>
+> The candidate is based on `ee226c5e`, which **predates** the `RULING R5`
+> erratum (#1009), and this node's work does not touch the frame — so the
+> candidate tree carried the **superseded** frame blob `61af6841` *correctly*,
+> with no conflict and nothing to notice. Authoritative frame blob on `main` is
+> `0728ce37`, and it was identical at every `main` across three publishes.
+>
+> ⇒ Review was bound as **code at `a5c8ba73`, frame at blob `0728ce37`**. ⭐ A
+> binding phrased against a moving ref is invalidated by any publish; one phrased
+> against a **blob OID** survives a change to the very ref it was written
+> against. Promoted to
+> `agent/memory/fleet/a-correction-on-main-does-not-reach-a-candidate-cut-before-it`.
 
 > ## ⛔ WHY THIS NODE EXISTS — `B2R` DECLARED THE SLOT; NOTHING DEFINED THE VALUE
 >
@@ -168,9 +232,14 @@ become expressible, the cycle contract **moves with it** and must be discharged
 
 ## Sequencing
 
-`B2O` → `B2R` → **`B2V`** → `B2F`. Runtime is **held** and does not resume
-`B2F` construction until this node's frame is fetchable on `origin/main` **and**
-explicitly kicked (Architect condition, `evt_28cnmxf6ncghn`).
+`B2O` → `B2R` → **`B2V` ✅ merged** → `B2F` ◀ **the frontier**.
+
+The Architect's two-part resume condition on `B2F` (`evt_28cnmxf6ncghn`) is now
+**half discharged**: this node's frame *is* fetchable on `origin/main`, and its
+work is landed. ⛔ **The second half stands — `B2F` construction does not resume
+until it is EXPLICITLY KICKED**, which is the Steward's act after a §2c handoff
+gate and a re-anchor check of the `B2F` frame against landed `B2V`. **Runtime
+going idle between the two is correct, not a stall.**
 
 ⚠ `RT-FNSPLIT-B2O-CHECK` remains sequenced behind `B2F` on **file contention**;
 this insertion does not change that, but its anchors now have one more merge to
