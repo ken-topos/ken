@@ -271,7 +271,7 @@ classify it, it is not ready (Block):**
   event that retires it, sits beside the authoritative owner, and enumerates its
   blast-radius consumers.
 
-### ⛔⛔ PROHIBITED SUBJECT — a test may not assert facts about the TEXT of source, catalog, or documentation
+### ⛔⛔ PROHIBITED SUBJECT — never assert facts about repository TEXT
 
 **Operator rule, 2026-07-26:** *"Test oracles that assert facts about source
 code, catalog, or documentation lines are an invitation for failure and delay.

@@ -2181,11 +2181,16 @@ status string tells you neither.
 > [[mcp-stdio-can-die-mid-session-while-the-health-check-reports-connected]] and
 > [[get-transcript-limit-does-not-bound-the-response]].
 >
-> ⚠ **Scope caveat, flagged not assumed:** this prohibition is written here
-> because the operator directed it here, but **`get_transcript` is exposed to
-> every seat in the fleet**, and any of them can take out its own transport the
-> same way. Whether it belongs in `agent/COORDINATION.md` or `agent/memory/fleet/`
-> as well is an open placement question — ⛔ do not silently widen it; raise it.
+> ✅ **Placement settled (operator, 2026-07-26): the prohibition is FLEET-WIDE and
+> lives in `AGENTS.md`** (which `CLAUDE.md` symlinks to), so every seat loads it
+> every session — `get_transcript` is exposed to all of them and any one can take
+> out its own transport the same way. This copy is the Steward's operational
+> detail; ⛔ **`AGENTS.md` is the authority — edit there first**, and keep the two
+> from drifting.
+>
+> ⚠ **Temporary pending a new convo release** — the operator is raising the
+> method's utility with the convo team. ⛔ Until then it is absolute: a possibly
+> fixed `get_transcript` is not a reason to try it and find out.
 
 **SINCE-WINDOW BLINDNESS — a `get_recent_context(since_event_id=X)` shows only
 events AFTER X; anchoring X on a *recent* event hides all EARLIER activity
