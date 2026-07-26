@@ -217,9 +217,9 @@ briefs are in §6.1–§6.8; the operator was briefed on 2026-07-26.
 | C3 | **Capability revocation** — universal transitive lineage, or a revocable/non-revocable split | ✅ **CLOSED — option (a), NO SPLIT, operator 2026-07-26** | nothing; two small editorial follow-ons in §6.3 |
 | C4 | **SCT termination** — exact SCT as source compatibility, or a kernel-checkable termination-evidence interface with SCT as one producer | ✅ **CLOSED — option (a), operator 2026-07-26** | nothing; SCT is deliberate source compatibility |
 | C5 | **Instance coherence + package admission** — keep the exact admission graph, or find the smaller invariant | ✅ **Layer 1 CLOSED** (ADR 0008) · ▶ **Layer 2 DEFERRED** behind Linux ABI/compiler, probably next | Layer 2 gates on the package-manager round |
-| C6 | **Prover search portfolio** — ⚠ *not in the operator's original three-way split; it belongs here* | Architect | needs a certificate interface defined **before** the route can be relaxed |
-| C7 | **Logical `space` vs physical realization** (`OQ-Space`) — ⚠ *also not in the original split* | Architect | per-space arenas, re-interning, copying; couples to the store family |
-| C8 | **Purity keyword reverse-direction errors** — is `proc`-becomes-pure a reviewed promise or refactoring churn? | operator (review-policy call) | small; cheapest fork to close |
+| C6 | **Prover search portfolio** — ⚠ *not in the operator's original three-way split; it belongs here* | ✅ **DEFERRED, unspec'd — status quo, operator 2026-07-26** | nothing today; ▶ **reopens on check-time latency** OR on any V4 prover-backend WP; §6.6 |
+| C7 | **Logical `space` vs physical realization** (`OQ-Space`) — ⚠ *also not in the original split* | ✅ **DEFERRED — operator concurred 2026-07-26** | ▶ gates on the **content-store fork**; they are one mechanism — §6.7 |
+| C8 | **Purity keyword reverse-direction errors** — is `proc`-becomes-pure a reviewed promise or refactoring churn? | ✅ **CLOSED — status quo, operator 2026-07-26.** The spec is ALREADY one-way; the advisory's premise is false | nothing; ▶ one **editorial** Track A follow-on (the carve-out is buried in a parenthetical) — §6.8 |
 
 ### ⚠ On C6, C7, C8 — my own three-kind summary under-covered the advisory
 
@@ -700,6 +700,60 @@ if it is how classical certificates enter Ken's intuitionistic logic.
 `proved` only after kernel certificate acceptance; honest `disproved`/`unknown`;
 and no silent promotion of a search failure or unsupported fragment to `proved`.
 
+## ✅ C6 CLOSED AS DEFERRED — status quo, unspec'd (operator, 2026-07-26)
+
+**Ruling.** *"Currently we only use the kernel to check correctness and we have
+not integrated a prover, and until there is a need for it (reduce check-time
+latency), then it should remain deferred and unspec'd. Status quo, remains
+deferred."*
+
+⇒ **No certificate interface is commissioned, and no relaxation is authorized.**
+`23 §2`–`§4` stays exactly as written. Advisory item 3 (*automated-prover
+architecture*) is **deferred, not declined** — unlike C4, this fork can be
+reopened without a breaking change, because nothing depends on the answer yet.
+
+### ⭐ The measurement — the premise is right, and sharper than stated
+
+⚠ A later reader will find `crates/ken-elaborator/src/prover.rs` (392 lines) and
+may conclude the ruling's premise was false. **It was not.** What exists is the
+*classifier scaffold*, not a prover:
+
+| element | state, measured 2026-07-26 |
+|---|---|
+| D/FO/HO route classifier, exhaustive (no `_ ⇒ skip`) | ✅ **built** |
+| IPC backend — Pi-intro, Sigma-intro, assumption lookup | ✅ **built** |
+| **Z3 as a dependency** — any `crates/*/Cargo.toml` | ⛔ **absent** |
+| **any external solver process** — `Command::new` in the elaborator | ⛔ **absent** |
+| Z3 decision route, Kripke embedding, adequacy proof | ⛔ `[placeholder — reifies in V4]` |
+| kernel re-checks every certificate; `proved` only on acceptance | ✅ **operative** |
+
+⭐ **The over-specified text and the unbuilt text are the SAME text.** The
+normative material C6 flags as an exclusive search route — the Z3 decision
+procedure, the Kripke translation, the adequacy theorem — is precisely the
+material `prover.rs` marks `[placeholder — reifies in V4]`. ⇒ The
+over-specification is **inert today**: there is no implementation for it to
+constrain, and no alternative backend being excluded, because there is no
+backend at all.
+
+### ▶ The trigger that reopens this — named, so it is not left to notice
+
+⛔ **Deferral is not closure, and this one has a specific waking condition:**
+**check-time latency.** The moment proof search becomes a latency cost worth
+attacking, the exclusive-route text becomes live — it will then constrain the
+very thing being optimized, and the certificate-language + verified-checker
+interface (§6.6 above) is what must be commissioned *first*.
+
+⚠ **Second, quieter trigger:** anyone reifying the V4 backends. Building the Z3
+route *as specified* silently converts today's inert text into a load-bearing
+architecture commitment without anyone deciding to make it one. ⇒ **Route a V4
+prover-backend WP through this fork before it is framed**, not after.
+
+⛔ **Unchanged and non-negotiable regardless of the deferral:** exhaustive
+obligation accounting; `proved` only after kernel certificate acceptance; honest
+`disproved`/`unknown`; no silent promotion of a search failure or unsupported
+fragment to `proved`. These are the kernel-authority guarantees, not portfolio
+policy, and C6 never touched them.
+
 ### 6.7 C7 — logical `space` vs physical structure
 
 `spec/30-surface/36-effects.md §4` + `44-capacity.md §1`–`§3` couple the logical
@@ -717,6 +771,47 @@ order **are** observable. Relaxing "shared-nothing storage" must not
 accidentally relax no-shared-mutable-authority. ⇒ Couples tightly to the store
 family in §2 — do not decide C7 and the store separately.
 
+## ✅ C7 DEFERRED — concurred (operator, 2026-07-26)
+
+**Ruling.** *"concur, defer for now."* — concurring with the recommendation to
+hold C7 until the content-store question lands.
+
+⇒ **`36-effects §4` and `44-capacity.md §1`–`§3` stay as written.** Advisory
+items 1 (*same-slot conformance + O(1) equality as a promise*) and 5 (*logical
+`space` → physical structure*) are **deferred, not declined**. `OQ-Space`
+remains open in `spec/90-open-decisions.md` and is the durable carrier — ⛔ do
+not close it on the strength of this deferral.
+
+### ⭐ Why deferral is the *substantive* answer here, not a postponement
+
+C6 defers because nothing is built. **C7 defers for the opposite reason:
+deciding it alone would decide something else by accident.**
+
+The logical-`space` guarantee and the content-addressed store are **one
+mechanism seen from two ends** — per-space arenas, re-interning, and
+copy-on-send are simultaneously the store's representation policy and the
+space's isolation story. ⇒ Ruling C7 first would silently fix the store's
+degrees of freedom before the store fork is even framed, and the constraint
+would arrive unlabelled: a later reader would find the store's options already
+narrowed with no record of who narrowed them or why.
+
+⭐ **This is the `[[dont-preempt-technical-fork-with-sequencing]]` shape** —
+except the preemption here would come from *answering* rather than from
+sequencing, which makes it harder to see.
+
+### ▶ The ordering constraint this creates — binding on whoever frames the store
+
+⛔ **The store fork must be framed as the JOINT fork, or it must state which
+`space` guarantees it is holding fixed.** Whichever lands first owns the
+coupling; it cannot be left for the second one to discover.
+
+⚠ **And the guarantee that is NOT deferred:** failure isolation and message
+order are **observable**, and no-shared-mutable-authority is a security
+invariant, not a representation choice. A future relaxation of "shared-nothing
+*storage*" must be shown not to relax those — the Erlang precedent (refcounted
+binaries shared on a node, invisible to the process model) is a proof that the
+split is *possible*, ⛔ **not** evidence that any particular split preserves it.
+
 ### 6.8 C8 — purity keyword reverse errors
 
 `spec/30-surface/36-effects.md §1.6` makes every `const`/`fn`/`proc` mismatch a
@@ -730,6 +825,70 @@ perform undeclared effects, and a `proc` body may become pure.
 
 ⛔ **Not a soundness question either way.** It is a review-policy call, which is
 why it is the operator's and why it is cheap.
+
+## ✅ C8 CLOSED — status quo. The advisory's premise is FALSE (operator, 2026-07-26)
+
+**Ruling.** *"A `proc` that does not use one or more of its stated capabilities
+is not an error (e.g. a CLI option that was not selected — say opting for stdout
+rather than write-to-file). `const`/`fn` may never have an effect row. `proc`
+must, but it need not use all of the capabilities given to it."*
+
+⭐⭐ **The spec already says exactly this — all three clauses, today.** I read
+`36-effects §1.4` and `§1.6.1`–`§1.6.2` against the ruling clause by clause:
+
+| ruling clause | spec today | verdict |
+|---|---|---|
+| `const`/`fn` may **never** have an effect row | `§1.6.1`: pure ⟺ `ρ_decl = ∅`; `§1.6.2`: "`fn`/`const` carry **no `visits` clause**" | ✅ **already law** |
+| `proc` **must** have one | `§1.6.2`: "`proc` must carry a non-empty row, a row variable, **or a `space` op**" | ✅ already law — ⚠ **one carve-out the ruling did not name**, below |
+| a `proc` **need not use** all its declared capabilities | `§1.4`: "`⊆`, **not** `=`: a function may **declare more than it uses** (a stable interface that reserves headroom)" | ✅ **already law**, and named as such |
+
+⇒ **Option (b) was never needed: the spec is already one-way.** Advisory item
+*purity keywords as bidirectional hard errors* is **DECLINED on a measurement,
+not deferred** — its factual premise is false. No `spec/` change is authorized.
+
+### ⛔ The one place the ruling and the spec differ — stated, not papered over
+
+*"`proc` must [have an effect row]"* is true with **one exception**: a
+**`space` operation** classifies as `proc` on the strength of being a `space` op,
+even with an empty declared row (`§1.6.1`, `§1.6.2`). ⇒ The rule as spoken is
+right for ordinary definitions; the complete rule is **"non-empty row, or a row
+variable, or a `space` op."** Anyone quoting this disposition as the rule must
+carry the third disjunct.
+
+### ⭐ Where the ruling's own example lands — a granularity worth naming
+
+The stdout-vs-write-to-file case is a **runtime path** question, and the row is
+**static**. A `proc` containing both branches infers `FS` into `ρ_inf` whether or
+not the flag selects that branch at run time — so the example never reaches the
+checker at all. Its *static* analogue is a capability declared and performed
+**nowhere** in the body, and that is precisely the `§1.4` headroom rule. ⇒ Both
+are legal, by two different mechanisms; ⛔ do not cite the runtime example as
+evidence about the static check.
+
+### ⭐⭐ The real defect this fork exposed is EDITORIAL — and it is not nothing
+
+⛔ **The advisory was written by a T1 reader who read `§1.6` and concluded the
+opposite of what it says.** That is evidence about the *text*, not about the
+reader. The carve-out that decides the whole question is a **parenthetical
+nested inside a bullet about a different check**:
+
+> *"(A `proc` that declares `visits [FS]` yet whose body is now pure is **not**
+> this — its declared row is non-empty, so `proc` is honest; declaring more than
+> you use is the §1.4 headroom rule, a legitimate stable interface.)"*
+
+The bullet it hides in is titled *"`proc` claims impurity — the signature must
+earn it,"* which is the check that **does** hard-error. A reader scanning for
+"is the reverse direction an error?" finds a bullet saying yes and a parenthesis
+saying not-in-this-case. ⇒ **The rule is right and its position is wrong.**
+
+▶ **Authorized as a Track A editorial follow-on** (⛔ no semantic change, no
+relaxation): promote the headroom carve-out out of the parenthetical into its
+own stated rule under `§1.6.2`, and cross-reference `§1.4`'s `⊆`-not-`=` line
+from it. **This is the second measured instance of the same shape in this
+campaign** — see `§6.2`, where the advisory's `Ord`/`Map` claim was also
+over-broad against text that was already narrower. Two independent
+mis-readings by capable readers is a signal about the spec's *exposition*, and
+Track A is where exposition is fixed.
 
 ## 7. Disposition ledger — every advisory item, accounted for
 

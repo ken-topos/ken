@@ -2141,6 +2141,52 @@ this with the `capture-pane`→`git`-verify backstop above: capture-pane tells y
 *busy vs not-busy right now*; git-by-content tells you *done vs not-done* — a
 status string tells you neither.
 
+> ### ⛔⛔ NEVER CALL `get_transcript` — IT KILLS YOUR MCP CONNECTION
+>
+> **Operator prohibition, 2026-07-26.** ⛔ **`get_transcript` is banned outright.
+> Do not call it with a `limit`, do not call it "just once", do not call it as a
+> fallback when another read comes back thin.**
+>
+> **What it does:** its `limit` parameter does **not** bound the response. A
+> `limit=4` call returned a payload large enough to take the session's convo
+> **stdio connection down with it** — all 33 `mcp__convo__*` tools vanished
+> mid-turn, in the middle of a live scope escalation from a blocked ring.
+>
+> ⭐ **The cost is not "a failed read" — it is losing the ability to POST.** You
+> go blind and mute at once: no `post_response` to unblock a held ring, no
+> `list_decisions` for the §14 merge gate, no `orientation`. And ⚠ the failure is
+> *self-inflicted and silent to everyone else* — the fleet keeps posting into a
+> channel you can no longer hear.
+>
+> ⭐ **Why the pull toward it is strong, so you can recognise it:** it is the only
+> read that *looks* like it returns message **bodies**. `get_recent_context` and
+> `get_mentions` return **headers only** (timestamp, speaker, event id), so the
+> moment you need the full text of a truncated notification — which is exactly
+> when a ring is blocked and you are in a hurry — `get_transcript` is the obvious
+> reach. ⛔ **That is the trap: the highest-urgency moment is the one where losing
+> transport costs most.**
+>
+> ✅ **Use instead — the HTTP read path**, the same API the MCP adapter wraps,
+> with your **own** credential (⛔ never another seat's):
+>
+> ```python
+> API = tomllib.load(open('/workspaces/ken/moot.toml','rb'))['convo']['api_url'].rstrip('/')
+> me  = json.load(open('/workspaces/ken/.moot/actors.json'))['actors']['steward']
+> # GET {API}/api/spaces/{sid}/events?limit=N   → full `text` per event
+> # Authorization: Bearer me['api_key']
+> ```
+>
+> Keep `scratchpad/convo_post.py` beside it for the write direction. ⚠ The post
+> endpoint is `/response` **singular**. See
+> [[mcp-stdio-can-die-mid-session-while-the-health-check-reports-connected]] and
+> [[get-transcript-limit-does-not-bound-the-response]].
+>
+> ⚠ **Scope caveat, flagged not assumed:** this prohibition is written here
+> because the operator directed it here, but **`get_transcript` is exposed to
+> every seat in the fleet**, and any of them can take out its own transport the
+> same way. Whether it belongs in `agent/COORDINATION.md` or `agent/memory/fleet/`
+> as well is an open placement question — ⛔ do not silently widen it; raise it.
+
 **SINCE-WINDOW BLINDNESS — a `get_recent_context(since_event_id=X)` shows only
 events AFTER X; anchoring X on a *recent* event hides all EARLIER activity
 (2026-07-03, false-nudged CV on a done Map WP).** Before diagnosing a
