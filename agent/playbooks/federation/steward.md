@@ -226,15 +226,37 @@ brief** — the implementer should execute mostly mechanically, not design
 >    post the kickoff/handoff until every required pane is compacted, compacting,
 >    or queued.
 >
->    ⚠ **And a stranded `/compact` is invisible to the sweep.** On a Codex pane
+>    ⚠ **A stranded `/compact` is a SECOND stranding shape.** On a Codex pane
 >    `moot compact <role>` can leave `› /compact` sitting **unsubmitted** on the
 >    composer while printing `Sent /compact to moot-<role>` — measured
->    2026-07-26 on the Architect. The repair is a bare `Enter` to that pane.
->    ⛔ `scripts/sweep-wedged-panes.sh` will **not** catch it: the sweep keys on
->    a `[Pasted Content …]` marker, and a slash command has none. **A backstop
->    keyed to ONE stranding shape is blind to another that causes the same
->    failure** — and this failure is quieter than a stranded mention, because
->    the seat keeps billing stale context and nothing reports it.
+>    2026-07-26 on the Architect. It carries **no `[Pasted Content …]` marker**,
+>    so the sweep's original detector walked straight past it. **A backstop keyed
+>    to ONE stranding shape is blind to another that causes the same failure** —
+>    and this one is *quieter* than a stranded mention, because the seat keeps
+>    billing stale context and nothing reports it.
+>
+>    ✅ **FIXED 2026-07-26 — `scripts/sweep-wedged-panes.sh` now catches both.**
+>    Classification moved into `scripts/classify-pane-composer.py`
+>    (`paste` · `slash:<cmd>` · `ghost` · `other` · `queued` · `clear`), with
+>    controls in `scripts/test-classify-pane-composer.sh`. ⛔ **Add a shape
+>    there, never by widening a regex in the sweep.**
+>
+>    ⭐ **The load-bearing part is what it refuses to submit.** An idle pane
+>    renders its *own suggestion text* on the composer line, so plain
+>    `capture-pane` cannot tell a real delivery from UI furniture — and a sweep
+>    that submits furniture sends an agent an instruction **nobody wrote**.
+>    Measured discriminator: suggestions are wrapped in `ESC[2m` (dim), real
+>    content is not, so the sweep captures with **`-e`** and reads the escape
+>    stream. ⛔ `other` — undimmed text that is neither a paste nor an
+>    allow-listed command — is **never** submitted; it could be half-typed
+>    operator input. The allow-list is `{/compact}`; widening it widens what the
+>    fleet can be made to run unattended.
+>
+>    ⚠ **Honest residual:** a *short* delivery that lands as raw composer text
+>    rather than a `[Pasted Content …]` marker classifies as `other`, so the
+>    sweep reports it but does **not** repair it. That is deliberate — it is
+>    indistinguishable from half-typed input — and it means **the sweep is not a
+>    substitute for step 7's per-seat `Working` check.**
 > 5b. **★★ VERIFY EVERY OBJECT YOU ARE ABOUT TO NAME EXISTS AT THE BASE YOU ARE
 >    ABOUT TO NAME. One command per object, before the mention leaves your
 >    hands.**
@@ -1867,7 +1889,7 @@ posts) before treating the work as in-flight; if it parked, re-rouse. Never carr
 a "producing X" belief on the strength of the mention merely having been posted.
 This binds the kicking leader too (build/leader `## Own the watchdog`).
 
-**★★ THE STRANDED-PASTE SWEEP — run `scripts/sweep-wedged-panes.sh` as the
+**★★ THE STRANDED-DELIVERY SWEEP — run `scripts/sweep-wedged-panes.sh` as the
 FIRST action of EVERY tick. It is a CHECK; do not re-derive it as vigilance.**
 The single most common transport failure in this federation is a convo mention
 that lands in a seat's composer as `› [Pasted Content NNNN chars]` and is **never
@@ -1882,14 +1904,33 @@ scripts/sweep-wedged-panes.sh            # detect + repair + VERIFY the repair l
 scripts/sweep-wedged-panes.sh --dry-run  # report only
 ```
 
-It sweeps every `moot-*` session, submits any paste still sitting on the `›`
-composer line, re-reads each pane to confirm the paste actually cleared, and
-reports any that did **not** take the `Enter` (those need a human). It **skips**
-a paste already marked *"Messages to be submitted after next tool call"* — that
-one is **queued and healthy**, and re-sending would double-deliver — and it never
-touches `moot-steward`, whose composer is your own. **A tick that has not run the
-sweep is an incomplete tick.** This is the same lesson as the ctx%-scan: *where a
+It sweeps every `moot-*` session, submits any stranded delivery on the composer
+line, re-reads each pane to confirm it actually cleared, and reports any that did
+**not** take the `Enter` (those need a human). It **skips** anything already
+marked *"Messages to be submitted after next tool call"* — that one is **queued
+and healthy**, and re-sending would double-deliver — and it never touches
+`moot-steward`, whose composer is your own. **A tick that has not run the sweep
+is an incomplete tick.** This is the same lesson as the ctx%-scan: *where a
 backstop depends on you remembering to look, convert it into a check.*
+
+⭐ **It now handles TWO stranding shapes, and the interesting part is the one it
+refuses to touch.** Classification lives in `scripts/classify-pane-composer.py`
+— verdicts `paste` · `slash:<cmd>` · `ghost` · `other` · `queued` · `clear` —
+with controls in `scripts/test-classify-pane-composer.sh`. Besides a stranded
+paste it now also submits a stranded **allow-listed slash command** (`/compact`),
+the shape `moot compact` leaves behind. ⛔ But an **idle pane renders its own
+suggestion text on the composer line**, so with colour stripped a suggestion is
+indistinguishable from a real delivery — and submitting one sends an agent an
+instruction **nobody wrote**. The measured discriminator is the escape stream:
+suggestions are wrapped in `ESC[2m` (dim), real content is not, so the sweep
+captures with **`-e`**. **Mutation-proved:** replacing that dim test with a naïve
+`'2m'` substring check reddens the `dim-off` control (`ESC[22m` is dim *off*),
+and deleting the ghost branch makes the classifier return `slash:/compact` on
+**suggestion text** — i.e. it would compact healthy seats. ⚠ **Honest residual:**
+a short delivery landing as raw text rather than a paste marker classifies
+`other` and is reported but **not** repaired — indistinguishable from half-typed
+operator input — so the sweep does **not** replace §2c step 7's per-seat
+`Working` check.
 
 **The comms-drop backstop — `capture-pane` → `git`-verify → relay.** The
 federation's recurring defect is dropped notifications: a handoff / retro /

@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
-# Sweep every `moot-<role>` pane for a STRANDED PASTE and submit it.
+# Sweep every `moot-<role>` pane for a STRANDED DELIVERY and submit it.
+#
+# ⚠ TWO stranding shapes, not one. This script originally keyed only on the
+# `[Pasted Content …]` marker. On 2026-07-26 `moot compact <role>` was measured
+# leaving `› /compact` sitting UNSUBMITTED on the Architect's composer while
+# printing `Sent /compact to moot-architect`. That shape has no paste marker, so
+# the sweep walked straight past it — and it is the QUIETER failure: the seat
+# keeps billing stale context through every later turn and nothing reports it,
+# whereas a stranded mention at least blocks a ring visibly.
+# ⇒ **A backstop keyed to ONE stranding shape is blind to another that causes the
+# same failure.** Classification now lives in `classify-pane-composer.py`, which
+# is controlled by `test-classify-pane-composer.sh` — add a shape there, not by
+# widening a regex here.
 #
 # The failure this repairs: a convo mention is delivered into a seat's composer
 # as `› [Pasted Content NNNN chars] …` and is NEVER SUBMITTED. `post_response`
@@ -26,46 +38,65 @@ DRY_RUN=0
 # Never Enter our own pane — that would submit the Steward's own composer.
 SELF="moot-steward"
 
+CLASSIFY="$(dirname "$0")/classify-pane-composer.py"
+
 wedged=()
+verdicts=()
 
 while read -r session; do
     [[ "$session" == "$SELF" ]] && continue
 
-    pane="$(tmux capture-pane -t "$session" -p 2>/dev/null || true)"
+    # ⛔ `-e` is REQUIRED. Without the escape sequences an idle pane's own
+    # suggestion text ("Explain this codebase") is indistinguishable from a real
+    # delivery, and submitting it sends the agent an instruction nobody wrote.
+    pane="$(tmux capture-pane -e -t "$session" -p 2>/dev/null || true)"
     [[ -z "$pane" ]] && continue
 
-    # Already queued behind an active turn: the seat WILL consume it. Leave it.
-    if grep -qF 'Messages to be submitted after next tool call' <<<"$pane"; then
-        continue
-    fi
+    verdict="$(printf '%s' "$pane" | python3 "$CLASSIFY" 2>/dev/null || echo error)"
 
-    # A paste still on the composer prompt line has never been submitted.
-    if grep -qE '^[[:space:]]*›[[:space:]]*\[Pasted Content' <<<"$pane"; then
-        wedged+=("$session")
-        [[ "$DRY_RUN" == 1 ]] && continue
-        tmux send-keys -t "$session" Enter
-    fi
+    case "$verdict" in
+        paste|slash:*)
+            wedged+=("$session")
+            verdicts+=("$verdict")
+            [[ "$DRY_RUN" == 1 ]] && continue
+            tmux send-keys -t "$session" Enter
+            ;;
+        error)
+            echo "sweep: $session — classifier FAILED; treating as unknown, not touching it"
+            ;;
+        *)
+            # queued (healthy, will be consumed) · ghost (the UI's own text) ·
+            # other (⛔ unattributable — never submit) · clear.
+            ;;
+    esac
 done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^moot-')
 
 if [[ ${#wedged[@]} -eq 0 ]]; then
-    echo "sweep: clear — no stranded pastes"
+    echo "sweep: clear — no stranded deliveries"
     exit 0
 fi
 
 if [[ "$DRY_RUN" == 1 ]]; then
-    printf 'sweep: WEDGED (dry-run, not repaired): %s\n' "${wedged[*]}"
+    for i in "${!wedged[@]}"; do
+        printf 'sweep: WEDGED (dry-run, not repaired): %s [%s]\n' "${wedged[$i]}" "${verdicts[$i]}"
+    done
     exit 0
 fi
 
-# Verify the repair landed — an unsubmitted paste that is still there did not
-# take the Enter, and needs a human. Reporting "repaired" without re-reading the
-# pane would be exactly the fabricated-confidence bug this fleet keeps hitting.
+# Verify the repair landed — a delivery still sitting there did not take the
+# Enter and needs a human. Reporting "repaired" without re-reading the pane would
+# be exactly the fabricated-confidence bug this fleet keeps hitting.
 sleep 3
-for session in "${wedged[@]}"; do
-    pane="$(tmux capture-pane -t "$session" -p 2>/dev/null || true)"
-    if grep -qE '^[[:space:]]*›[[:space:]]*\[Pasted Content' <<<"$pane"; then
-        echo "sweep: $session — STILL WEDGED after Enter; needs manual attention"
-    else
-        echo "sweep: $session — repaired (paste submitted)"
-    fi
+for i in "${!wedged[@]}"; do
+    session="${wedged[$i]}"
+    pane="$(tmux capture-pane -e -t "$session" -p 2>/dev/null || true)"
+    after="$(printf '%s' "$pane" | python3 "$CLASSIFY" 2>/dev/null || echo error)"
+    case "$after" in
+        paste|slash:*)
+            echo "sweep: $session — STILL WEDGED after Enter (${after}); needs manual attention"
+            ;;
+        *)
+            echo "sweep: $session — repaired (${verdicts[$i]} submitted)"
+            ;;
+    esac
 done
