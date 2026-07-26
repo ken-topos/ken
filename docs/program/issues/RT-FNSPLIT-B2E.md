@@ -108,6 +108,47 @@ closure.** This is the same discipline that `B2V`'s exhaustive
 depending on **the closed `B2E` artifact**. **Count #11 stands** — the hard-stop
 numbering does not reset. ⛔ **No research pull is due until #12.**
 
+## ⭐⭐ RULING `R1` — `D5` IS A TWO-STAGE SINGLE AUTHORITY (2026-07-26)
+
+**Decision `dec_6r447gawdp6hy`** — `resolved`. Ruling `evt_5p1w8vq3b6q5s` in
+thread `thr_7ya91w7k5keyd`. Architect durable record **`1d9a6f86`** on
+`architect/work`, preserved off-box by the Steward. Transcribed here **and** into
+the frame's operative text because **an in-thread ruling is not a durable
+deliverable.**
+
+⛔ **THE FRAME CARRIED A FALSE PREMISE AND THE IMPLEMENTER'S MEASUREMENT KILLED
+IT.** *"One artifact-static name **ID** derivation"* — **there is no
+artifact-static `u64` name ID to share.** The phrase collapsed two identities:
+
+| identity | what it is |
+|---|---|
+| artifact-static name **reference** | semantic-plane name bytes/span (`SemanticPlane.names`) — stable in the artifact, ⛔ **not a store ID** |
+| **store-local** name ID | dense ID minted by `BoundaryValueStore::intern_symbol`; insertion-order numbering + `symbol(id)` reverse lookup are part of landed `B2V` |
+
+**Superseding wording** (now in the frame): *"one artifact-static name
+**reference resolved through the producer's store-local interning
+authority**."*
+
+- ✅ **Preserve dense interning** — ⛔ no hash substitute, no change to the
+  persistent name-ID space, no break of `symbol(id)`.
+- ▶ **`B2E` lands ONE inert artifact/store binding path**: resolve the artifact
+  name reference through `intern_symbol` into an opaque `BoundaryNameId` whose
+  **only** minting path is producer interning; producer materialization and
+  semantic elimination both use that resolver.
+- ▶ **`B2F` activates it** — loads the resolved store-local ID from the
+  binding/table. ⛔ No baked `u64`, no recomputed hash, no second authority.
+- ✅ **Runtime owns carrier and table spelling.** The contract is ownership and
+  dataflow, ⛔ not a Rust layout.
+
+⛔ **A NEWTYPE ALONE DOES NOT SATISFY `D5`/`AC-E5`** — necessary, not sufficient.
+It blocks a Rust-side constructor but leaves the artifact→store bridge unbuilt
+and the **CLIF ABI forgeable as raw bits**. ⭐ **Carrying that bridge as a `B2F`
+residual would reproduce hard-stop `#11` one layer later.**
+
+⚠ **Scope: a premise correction, NOT a `B2V` reopening.** `D4`/`D6`/`D7`/`D8`
+continue independently. `B2F`'s residual is now exactly one thing — that
+production emission loads/calls the already-prepared binding.
+
 ## Evidence and preservation
 
 | artifact | where |

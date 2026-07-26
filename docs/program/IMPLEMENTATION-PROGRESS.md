@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-26 13:43:08Z — from 87 issue file(s) in `docs/program/issues/`.
+2026-07-26 14:02:10Z — from 88 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -117,6 +117,7 @@ the committed file matches the generator's output.
 | `RT-VALUE-TOTALITY` | Make every total traversal of Value non-recursive in the host stack, and remove the closure capabilities the landed closure boundary forbids | active | runtime | L | none | — |
 | `SEAL-2` | carrier producer closure, over a derived enumeration | merged | foundation | M | none | PR #912 @ 4ac9141e (origin/main, CI green) |
 | `SPAN-SEAL` | seal the BufferSpan producer surface | merged | foundation | M | none | — |
+| `SPEC-31-WIDTH-ERRATUM` | spec 31-lexical mandates a 96-column canonical width while the formatting conformance suite asserts 88 in 18 places and cites 31 §1d as its source — rule the exact value and reconcile | draft | spec | S | none | — |
 | `SPEC-38-ERRATUM` | spec 38-ffi-io self-contradicts on the transfer bound — rule and reconcile | closed | spec | S | none | 827 |
 | `SPEC-ALIGN-A1` | Scope the landed-code authority convention out of the normative status blocks, and census every private-mechanism constraint against its conformance consumers before relaxing any of them | ready | spec | M | none | — |
 | `SPEC-ALIGN-B1` | Split the frozen interoperability and provenance schemas into versioned protocol profiles, under a per-edge threat audit rather than a field count | draft | spec | L | none | — |

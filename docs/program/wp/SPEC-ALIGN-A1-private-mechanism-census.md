@@ -62,7 +62,60 @@ Measured on `origin/main=9410d7b8`, `spec/` tree `7fce4373`:
 | bignum tag `0x01`, inline-`i64` fast path | `surface/numbers/seed-numbers.md:49`, `:68`; `runtime/values/README.md:76` |
 | minimal-limb sign-magnitude encoding | `runtime/values/README.md:154`–`:161`; `conformance/README.md:124` |
 | canonical two-space indentation, byte-identity | `surface/elaboration/seed-multi-binding-let.md:363`, `:393`, `:585` |
-| formatter line width (96 columns, `31-lexical.md:123`) | `surface/formatting/seed-canonical-format.md:10` — **`RED-UNTIL-BUILT`** |
+| formatter line width | ⛔ **SEE §2a — THIS ROW WAS WRONG AND THE CANDIDATE IS NOT A RELAXATION CANDIDATE AT ALL** |
+
+### ⛔ 2a. SUPERSEDED ROW — the formatter width is a spec↔conformance CONTRADICTION
+
+**Raised by `conformance-validator` (`evt_3jpxb2qhkx2d0`), Steward-verified at
+`cf8924a8`, and it is a better finding than the row it replaces.**
+
+**What the original row said:** *formatter line width (96 columns,
+`31-lexical.md:123`)*, consumer `seed-canonical-format.md:10`,
+`RED-UNTIL-BUILT`.
+
+⛔ **My locator was wrong in the way that matters.** Right file, wrong lines:
+`:10` states only the **`RED-UNTIL-BUILT` status** of the width cases. It does
+not assert a width. It is topically adjacent enough to *read* as supporting the
+row, which is precisely why a citation must be checked at its lines and not at
+its file.
+
+**Measured, at exact `cf8924a8`:**
+
+| artifact | value | note |
+|---|---|---|
+| `spec/30-surface/31-lexical.md:124` (in **§1d**, heading at `:121`) | **96** display columns | also `:332` for the comment-fit rule |
+| `crates/ken-elaborator/src/layout.rs:12` | **96** — `pub const CANONICAL_WIDTH: usize = 96;` | the landed formatter |
+| `conformance/surface/formatting/seed-canonical-format.md` | **88** | `18` occurrences; **`0`** occurrences of `96` |
+| — and it cites its source as | `31 §1d` at `:173`, `:384` | ⛔ **the very section that says 96** |
+
+⇒ ⛔ **The formatting gate is grounded, in 18 places, on a value the spec
+section it cites contradicts.** `FMT7` (`:169`–`:187`) and the comment-threshold
+property (`:610`–`:658`) build paired `88`/`89` boundary fixtures whose entire
+purpose is to fix the boundary orientation — at the wrong boundary.
+
+⚠ **It is latent, not failing, and that is the hazard.** Those rows are
+`RED-UNTIL-BUILT`, so nothing reddens today. When the formatter gate goes live
+against a `CANONICAL_WIDTH` of 96, `FMT7` fails — and it will present as an
+implementation bug rather than as a stale conformance value.
+
+### ⇒ Disposition: ⛔ STOP, and it is NOT an A1 candidate
+
+1. ⛔ **A1 does not touch it.** Not a relaxation (nothing is over-specified
+   here — one canonical width is mission-aligned tool policy); not a row move
+   (A1 is forbidden from moving rows); and **which value is correct is not the
+   enclave's to decide unilaterally**, because `layout.rs` already implements
+   one of them.
+2. ✅ **A1 records the formatter-width consumer as NON-EMPTY** — with the
+   corrected locators above, not `:10`.
+3. ▶ **Tracked separately as `SPEC-31-WIDTH-ERRATUM`**
+   (`docs/program/issues/SPEC-31-WIDTH-ERRATUM.md`), sibling of the closed
+   `SPEC-38-ERRATUM`. ⭐ A finding this good must not live only in a channel
+   message.
+
+⭐ **And the transferable part, because it is the second instance today:** the
+census's value is in *what a row asserts at its lines*. My table cited a file
+and inherited a claim from its subject matter. **A locator has two coordinates,
+and re-deriving the file is not evidence about the lines.**
 
 ⚠ **THIS TABLE IS A SEARCH BUDGET, NOT A POPULATION.** It is a Steward keyword
 grep over `conformance/` for the mechanisms the advisory happened to name. **An
@@ -153,8 +206,41 @@ constraint is **not** cleared, whatever the census said.
 ## 6. Deliverable 4 — the stop list
 
 Every candidate with a live consumer, named with: its spec site, the rows that
-assert it, and **which class (1/2/3) it turned out to be**. A stop is a
-first-class deliverable here, not a failure to relax.
+assert it, and its class. A stop is a first-class deliverable here, not a
+failure to relax.
+
+### ⛔ 6a. SUPERSEDED — the class domain is `{1,2,3,4}`, not `{1,2,3}`
+
+**Raised by `conformance-validator` (`evt_3jpxb2qhkx2d0`); the objection is
+correct and the repair is theirs.**
+
+**What this section said:** *"name which class **1/2/3** it turned out to be."*
+
+⛔ **That domain cannot classify this WP's own expected stop population.** The
+campaign deliberately keeps the in-process FNV / load-factor / page-size
+mechanisms at **class 4** and routes them here as expected stops *solely because
+a live conformance row asserts them*. ⭐ **A live row does not turn a private
+mechanism into semantics, protocol, or a security binding.** So the expected
+answer — *class 4, and stopped anyway* — had **no cell**, and an implementer
+forced to pick from `{1,2,3}` would have had to misclassify the store family to
+satisfy the criterion.
+
+**The corrected domain, with two distinct class-4 verdicts:**
+
+| census result | verdict |
+|---|---|
+| class 1 / 2 / 3 | ⛔ **STOP** — out of A1's scope; route to Track B or Track C |
+| class 4 **+ live conformance row** | ⛔ **STOP — conformance-granularity ruling required** (Architect). ⚠ **This is the expected verdict for the whole store family.** |
+| class 4 + **empty** rows + no external consumer | ✅ **eligible for `AC-A4`** — relax, with the five-item record |
+| cannot determine | ⛔ **report as a method finding**, never as a silent omission |
+
+⭐ **This is my own `AC-M2` criticism landing on me, in the same document.** I
+wrote that the advisory's taxonomy *"has no cell for the honest answer"* and
+then shipped a stop-class domain with no cell for the honest answer. **A
+taxonomy with no cell for the expected result reads as complete and forces a
+misclassification** — and the misclassification would have been *upward*, making
+private machinery look like semantics, which is the exact error this campaign
+exists to reverse.
 
 **Expected stops, so you can tell a surprise from a confirmation:** the whole
 content-store family (FNV-1a, load factor, same-slot, page size), because it is

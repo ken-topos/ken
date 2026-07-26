@@ -163,8 +163,56 @@ or `Lowered::Record` from a boundary word **is** compile-time rehydration — th
 `D6` escape — and it is the precise wall #11 found. If projection is easier that
 way, that is the signal you are about to violate the ruling.
 
-**(b) ONE artifact-static name derivation, shared with producers. No parallel
-name authority.** The producer already interns:
+**(b) ONE artifact-static name reference RESOLVED THROUGH the producer's
+store-local interning authority. No parallel name authority.**
+
+> ### ⭐⭐ RULING `R1` — `D5` IS A TWO-STAGE SINGLE AUTHORITY (Architect, 2026-07-26)
+>
+> **Decision `dec_6r447gawdp6hy` — `resolved`.** Ruling `evt_5p1w8vq3b6q5s`,
+> thread `thr_7ya91w7k5keyd`. Architect durable record `1d9a6f86` on
+> `architect/work`, preserved off-box by the Steward. Transcribed here because
+> **an in-thread ruling is not a durable deliverable.**
+>
+> ⛔ **THE FRAME'S PREMISE WAS WRONG AND THIS IS THE CORRECTION.** The phrase
+> *"artifact-static name **ID**"* is superseded by *"artifact-static name
+> **reference resolved through the producer's store-local interning
+> authority**."* **The implementer's measurement is correct: there is no
+> artifact-static `u64` name ID to share.** My text collapsed **two distinct
+> identities**:
+>
+> | identity | what it is |
+> |---|---|
+> | **artifact-static name reference** | the existing semantic-plane name bytes/span (`SemanticPlane.names` / its `DenseRange`-equivalent) — stable in the artifact, ⛔ **not a store ID** |
+> | **store-local name ID** | the dense ID minted by `BoundaryValueStore::intern_symbol` — insertion-order numbering and reverse lookup are part of the landed `B2V` representation |
+>
+> **The ruling:**
+>
+> - ✅ **Preserve dense interning.** ⛔ Do not replace it with a hash, do not
+>   change the persistent name-ID space, do not break `symbol(id)` reverse
+>   lookup.
+> - ▶ **`B2E` lands ONE inert artifact/store binding path now.** It resolves the
+>   artifact name reference through `intern_symbol` into an **opaque
+>   `BoundaryNameId` whose only minting path is producer interning.** Producer
+>   materialization **and** semantic elimination consumers both use that same
+>   resolver/binding.
+> - ▶ **`B2F` later ACTIVATES the prepared binding.** Emitted code loads the
+>   resolved store-local ID from that binding/table. ⛔ It may not bake a numeric
+>   `u64`, recompute a hash, or introduce a second name authority.
+> - ✅ **Runtime owns the exact carrier and table spelling.** The contract is the
+>   ownership and dataflow, ⛔ **not a mandated Rust layout.**
+>
+> ⛔ **A NEWTYPE ALONE DOES NOT SATISFY `D5`/`AC-E5`.** It is **necessary but not
+> sufficient**: it prevents a Rust-side constructor, but it **does not connect an
+> artifact reference to the runtime store**, and the CLIF ABI **remains forgeable
+> as raw bits**. ⭐ **Carrying that missing bridge as a `B2F` residual would
+> reproduce hard-stop `#11` one layer later** — which is the whole reason this
+> node exists.
+>
+> ⚠ **Scope:** this is a **premise correction, not a `B2V` reopening.**
+> Independent `D4`/`D6`/`D7`/`D8` work continues. ⛔ `D5`/`AC-E5` cannot bind
+> terminally until this erratum is fetchable — it is, at the blob below.
+
+The producer already interns:
 `boundary_value.rs:2579` —
 `let constructor_id = self.intern_symbol(constructor) as u32;`
 — and the CLIF helpers consume a `name_id`. ⇒ ⛔ **The consumer must go through
@@ -208,7 +256,11 @@ green build — that is what makes this the cell most likely to be skipped.
 - **`D4` — structural elimination through `B2V`.** Tag/name comparison and child
   projection routed to `B2V`'s interface; projected children opaque, with
   region/lifetime context retained.
-- **`D5` — one name-ID derivation**, shared with the producer's interning path.
+- **`D5` — one artifact-static name *reference*, resolved through the producer's
+  store-local interning authority** (`RULING R1`, `dec_6r447gawdp6hy`). ⛔ **Not**
+  "one name-ID derivation" — that premise was false; there is no artifact-static
+  `u64` to share. `B2E` lands the inert binding path; `B2F` activates it. ⛔ A
+  newtype alone does not discharge this.
 - **`D6` — `ComputationalMatch` recursive positions** preserved against the
   static-origin ownership contract, no caller specialization.
 - **`D7` — the three eliminators** (`Match`, `ComputationalMatch`, `Project`)
@@ -250,12 +302,28 @@ classification**. The control: a mutation that *deletes* that cell must break th
 build (`AC-E2`'s mechanism, applied to the specific cell most likely to be
 omitted).
 
-**`AC-E5` — no parallel name authority.** Show that consumer-side name
-resolution goes through the producer's interning path. ⛔ The control that
-discriminates is a **relocation, not a removal**: change what the producer
-interns to and show the consumer follows. A consumer that computes an
-intersection with a hardcoded table passes every *removal* and fails only a
-*move*.
+**`AC-E5` — no parallel name authority.** ⭐ **Control shape SET BY `RULING R1`,
+and it is stricter than what stood here:**
+
+> A relocation of the canonical **artifact name reference** must move
+> **producer materialization and consumer lookup together, through the one
+> resolver.** A bypass that supplies a literal / store ID, or derives a second
+> value, **must fail.**
+
+⛔ The control that discriminates is a **relocation, not a removal** — change
+what the producer interns to and show the consumer follows. A consumer that
+computes an intersection with a hardcoded table passes every *removal* and fails
+only a *move*.
+
+⛔ **AND A NEWTYPE DOES NOT DISCHARGE `AC-E5`.** Per `R1`: necessary, not
+sufficient. It blocks a Rust-side constructor while leaving the
+artifact→store bridge unbuilt and the **CLIF ABI forgeable as raw bits**. ⇒ The
+evidence must show the **binding path**, not just an opaque type.
+
+⭐ **`B2F`'s remaining residual is now exactly one thing** — that production
+emission actually **loads/calls the already-prepared binding**. `R1` deliberately
+shrank it to that, because carrying the *bridge* as a `B2F` residual would
+reproduce hard-stop `#11` one layer later.
 
 **`AC-E6` — projection does not rehydrate.** Prove that a projected child is
 still an opaque boundary word and still carries its region/lifetime context.
