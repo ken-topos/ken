@@ -141,10 +141,50 @@ Required:
 2. **EDIT §6.7's operative text and flip the `:221` table row.** ⛔ **Do not
    append a correction below a stale ruling** — the superseded text stays
    operative and is the one a later reader finds first.
-3. **`OQ-Space` in `spec/90-open-decisions.md`** was explicitly kept open, with
-   *"⛔ do not close it on the strength of this deferral."* The deferral is now
-   discharged, so **this WP closes `OQ-Space`** with the C7 ruling as its answer.
-   ⛔ A ruling that leaves its own open-decision carrier open has not landed.
+3. **`OQ-Space` is RECONCILED IN PLACE — ⛔ it is already `DECIDED` and you must
+   NOT fabricate a closure transition.**
+
+   > ### ⛔ AMENDED 2026-07-26 — THIS ITEM PREVIOUSLY INSTRUCTED YOU TO CLOSE
+   > ### `OQ-Space`, AND THAT INSTRUCTION WAS FALSE AGAINST THIS FRAME'S OWN BASE.
+   >
+   > `bce75fec:spec/90-open-decisions.md:502` reads **`OQ-Space — State,
+   > concurrency & isolation — DECIDED`**, operator 2026-06-27, and the summary
+   > row (≈`:825`) records the same. It has been decided for five weeks. The
+   > *campaign doc* §6.7 is what says "remains open" — and **§6.7 is the stale
+   > text**, not `spec/90`.
+   >
+   > ⭐ **The decision already contains this WP's authorization.** It settles the
+   > **logical** contract — encapsulated, non-aliased cells; bounded per-space
+   > Hoare, no separation logic; shared-nothing message-passing; closure-free
+   > content-addressed transport — and then states that the **runtime realization
+   > (process/thread/green/distributed) is deferred to `40-runtime`.** C7 is not a
+   > reopening of `OQ-Space`; **C7 IS the realization question `OQ-Space` handed
+   > to `40-runtime`,** and this WP is where it is answered.
+
+   Required, therefore:
+
+   - **PRESERVE, verbatim and unweakened:** the encapsulated / non-aliased cell
+     state, bounded per-space Hoare, and **no shared mutable authority**. ⛔ These
+     are the operator's 2026-06-27 decision — out of scope for this WP to touch.
+   - **RECORD, as the discharge of that decision's own `40-runtime` deferral:**
+     durable canonical bytes, copy/share, and per-`space` index / arena / reset
+     realization become **private**.
+   - ⛔ **Do not write an `OPEN → DECIDED` history, do not add a "closed by" line,
+     and do not re-litigate the 2026-06-27 decision.** Reconcile the entry where
+     it stands.
+4. **CORRECT the campaign's stale wording — it is the false text.** In §6.7,
+   *"Open decision `OQ-Space` already exists"* and *"`OQ-Space` remains open in
+   `spec/90-open-decisions.md` and is the durable carrier — ⛔ do not close it on
+   the strength of this deferral"* are both **wrong as written**: the entry was
+   already `DECIDED` when that ruling was recorded. EDIT both to say that
+   `OQ-Space` is decided and that C7 is the realization half it deferred to
+   `40-runtime`.
+
+⚠ **Why this defect existed, so you can catch the next one:** I took "`OQ-Space`
+is the open carrier" from §6.7 and never checked `spec/90` — an **inherited**
+premise I presented as a **derived** one. `spec-leader` reproduced the
+contradiction independently at the released base and held rather than building on
+it. **That hold was correct and is exactly what the perishability clause is for.**
 
 ## `AC-6` — the four "must not" boundaries hold, with a positive control
 
