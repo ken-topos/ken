@@ -40,13 +40,14 @@ use crate::boundary_value::{
     boundary_class_mask, boundary_domain_mask, boundary_int_marker_mask, BoundaryClass,
     BoundaryImmediateDomain, BoundaryReferentOwner, BoundaryTag, ARENA_DATA, ARENA_DATA_CAPACITY,
     ARENA_DATA_COUNT, ARENA_FROZEN, ARENA_LIMBS, ARENA_LIMB_CAPACITY, ARENA_LIMB_COUNT,
-    ARENA_NAMES, ARENA_NATIVE_INT, ARENA_NODES, ARENA_NODE_CAPACITY, ARENA_NODE_COUNT,
-    ARENA_PERSISTENT, ARENA_WORDS, ARENA_WORD_CAPACITY, ARENA_WORD_COUNT, BOUNDARY_ERR_BOUNDS,
-    BOUNDARY_ERR_CAPACITY, BOUNDARY_ERR_CLASS, BOUNDARY_ERR_ESCAPE, BOUNDARY_ERR_FROZEN,
-    BOUNDARY_ERR_RELATION, BOUNDARY_ERR_SHAPE, BOUNDARY_ERR_TAG, BOUNDARY_INT_REGION_LIMBS,
-    BOUNDARY_NODE_STRIDE, BOUNDARY_OK, BOUNDARY_TAG_BITS, BOUNDARY_TAG_CLASS_RELATION,
-    BOUNDARY_TAG_MASK, NODE_CLASS, NODE_EXTENT, NODE_FIELDS_AT, NODE_FIELD_COUNT, NODE_INT_SEALED,
-    NODE_LIMBS_AT, NODE_LIMB_COUNT, NODE_OWNER, NODE_PAYLOAD, NODE_SLOT, NODE_TAG_ID,
+    ARENA_NAMES, ARENA_NAME_COUNT, ARENA_NATIVE_INT, ARENA_NODES, ARENA_NODE_CAPACITY,
+    ARENA_NODE_COUNT, ARENA_PERSISTENT, ARENA_WORDS, ARENA_WORD_CAPACITY, ARENA_WORD_COUNT,
+    BOUNDARY_ERR_BOUNDS, BOUNDARY_ERR_CAPACITY, BOUNDARY_ERR_CLASS, BOUNDARY_ERR_ESCAPE,
+    BOUNDARY_ERR_FROZEN, BOUNDARY_ERR_RELATION, BOUNDARY_ERR_SHAPE, BOUNDARY_ERR_TAG,
+    BOUNDARY_INT_REGION_LIMBS, BOUNDARY_NODE_STRIDE, BOUNDARY_OK, BOUNDARY_TAG_BITS,
+    BOUNDARY_TAG_CLASS_RELATION, BOUNDARY_TAG_MASK, NODE_CLASS, NODE_EXTENT, NODE_FIELDS_AT,
+    NODE_FIELD_COUNT, NODE_INT_SEALED, NODE_LIMBS_AT, NODE_LIMB_COUNT, NODE_OWNER, NODE_PAYLOAD,
+    NODE_SLOT, NODE_TAG_ID,
 };
 use crate::cranelift_backend::{backend_module, CraneliftBackendError};
 
@@ -2467,8 +2468,9 @@ mod tests {
         boundary_immediate_admits, boundary_immediate_domain, boundary_int_marker_admits,
         boundary_relation_admits, materialize_borrowed, materialize_ground,
         materialize_host_result, BoundaryArenaBuilder, BoundaryArenaV1, BoundaryValueStore,
-        BoundaryWord, BOUNDARY_IMMEDIATE_INT_MAX, BOUNDARY_IMMEDIATE_INT_MIN, BOUNDARY_NODE_FIELDS,
-        BOUNDARY_PAYLOAD_BITS, BOUNDARY_REGION_HEADER_BYTES, BOUNDARY_REGION_HEADER_FIELDS,
+        BoundaryWord, NodeField, RegionHeaderField, BOUNDARY_IMMEDIATE_INT_MAX,
+        BOUNDARY_IMMEDIATE_INT_MIN, BOUNDARY_NODE_STRIDE, BOUNDARY_PAYLOAD_BITS,
+        BOUNDARY_REGION_HEADER_BYTES,
     };
     use crate::ir::RuntimeGroundValue;
     use crate::native_int::RuntimeIntV1;
@@ -4967,59 +4969,117 @@ mod tests {
         );
     }
 
-    /// **`AC-1` — the declared layout IS the published layout, in both
-    /// directions.**
+    /// **`AC-1` layout closure — one authority, derived extents, real
+    /// consumers.**
     ///
-    /// ⛔ It was not. `BOUNDARY_REGION_HEADER_BYTES` said 136 while `publish`
-    /// emitted 18 words (144 bytes), and the constant had **no consumer
-    /// anywhere in the tree** — so the reviewed "112 → 136" layout claim was
-    /// false *and* unenforced, and the mismatch was invisible from either side.
+    /// ⛔ The bound clause is explicit that *checking a hand-maintained constant
+    /// against another hand-maintained constant does not discharge this*, and my
+    /// first repair did exactly that. **The mechanism chosen is derivation:**
+    /// [`NodeField`] and [`RegionHeaderField`] are the inventories, every
+    /// offset is `position × 8`, both extents are `ALL.len() × 8`, and the two
+    /// consumers — `publish` and `push_node` — place each word through a
+    /// `match` with **no `_` arm**. A new field is therefore a **compile
+    /// error**, which is the strongest available mechanism and is why the
+    /// checks below are about *drift that remains possible* rather than about
+    /// re-deriving the same arithmetic twice.
     ///
-    /// ⚠ MEASURED: the named field offsets are exactly the 8-byte slots of the
-    /// declared size, and a published header has exactly that many words.
-    /// CLAIMED: emitted code and Rust agree about where every header and node
-    /// field lives. THE GAP: that `publish` *writes through* these constants
-    /// rather than positionally — which it now does, so a stale constant is an
-    /// out-of-bounds panic and this pin closes the other direction.
+    /// ⚠ MEASURED: a **published** region's word count, the emitted-side offset
+    /// constants, and the derived extents. CLAIMED: no consumer can read or
+    /// write outside the extent the inventory defines. THE GAP: field *width* —
+    /// every access is an 8-byte word, so an offset within the extent is not
+    /// enough; `offset + 8 <= extent` is the clause's own wording and is
+    /// asserted here.
     #[test]
-    fn b2v_the_declared_layout_is_the_published_layout() {
-        for (what, fields, bytes) in [
-            (
-                "region header",
-                BOUNDARY_REGION_HEADER_FIELDS,
-                BOUNDARY_REGION_HEADER_BYTES,
-            ),
-            ("node", BOUNDARY_NODE_FIELDS, BOUNDARY_NODE_STRIDE),
+    fn b2v_the_layout_inventory_is_the_sole_authority() {
+        // ── the extents are derived, and the offsets are the slots ──────────
+        let header: Vec<i32> = RegionHeaderField::ALL.iter().map(|f| f.offset()).collect();
+        let node: Vec<i32> = NodeField::ALL.iter().map(|f| f.offset()).collect();
+        for (what, offsets, extent) in [
+            ("region header", &header, BOUNDARY_REGION_HEADER_BYTES),
+            ("node", &node, BOUNDARY_NODE_STRIDE),
         ] {
-            // ⭐ The ALLOWED inventory: the offsets must be exactly the slots of
-            // the declared size — no gap, no duplicate, nothing past the end.
-            // A new field without a size bump and a size bump without a field
-            // both redden, and so does a field nobody listed.
-            let declared: Vec<i32> = (0..bytes).step_by(8).collect();
-            let mut offsets: Vec<i32> = fields.iter().map(|(_, at)| *at).collect();
-            let named = offsets.len();
-            offsets.sort_unstable();
-            offsets.dedup();
-            assert_eq!(offsets.len(), named, "{what}: an offset is listed twice");
             assert_eq!(
-                offsets, declared,
-                "{what}: the field offsets are not exactly the declared \
-                 {bytes}-byte layout"
+                *offsets,
+                (0..extent).step_by(8).collect::<Vec<i32>>(),
+                "{what}: the offsets are not exactly the slots of the extent"
             );
-            assert!(!fields.is_empty(), "{what}: the inventory may not be empty");
+            // ⛔ Offset PLUS WIDTH. Every access is an 8-byte word, so the last
+            // field's offset must leave a whole word inside the extent.
+            for at in offsets {
+                assert!(
+                    at + 8 <= extent,
+                    "{what}: a field at {at} reads past the {extent}-byte extent"
+                );
+            }
+            assert!(
+                !offsets.is_empty(),
+                "{what}: the inventory may not be empty"
+            );
         }
 
-        // And the published bytes agree with the declaration, measured on a
-        // real region rather than derived from the same constant twice.
+        // ── the emitted side reads the SAME constants, so name them ─────────
+        //
+        // ⚠ This is the drift the clause names as "emitted offset". There is no
+        // second emitted authority — the CLIF loads at these very constants —
+        // and pinning the correspondence keeps that true if someone introduces
+        // one.
+        for (at, field) in [
+            (NODE_CLASS, NodeField::Class),
+            (NODE_OWNER, NodeField::Owner),
+            (NODE_SLOT, NodeField::Slot),
+            (NODE_TAG_ID, NodeField::TagId),
+            (NODE_PAYLOAD, NodeField::Payload),
+            (NODE_FIELD_COUNT, NodeField::FieldCount),
+            (NODE_FIELDS_AT, NodeField::FieldsAt),
+            (NODE_EXTENT, NodeField::Extent),
+            (NODE_LIMBS_AT, NodeField::LimbsAt),
+            (NODE_LIMB_COUNT, NodeField::LimbCount),
+            (NODE_INT_SEALED, NodeField::IntSealed),
+        ] {
+            assert_eq!(at, field.offset(), "an emitted node offset has drifted");
+        }
+        for (at, field) in [
+            (ARENA_NODES, RegionHeaderField::Nodes),
+            (ARENA_NODE_COUNT, RegionHeaderField::NodeCount),
+            (ARENA_WORDS, RegionHeaderField::Words),
+            (ARENA_WORD_COUNT, RegionHeaderField::WordCount),
+            (ARENA_NAMES, RegionHeaderField::Names),
+            (ARENA_NAME_COUNT, RegionHeaderField::NameCount),
+            (ARENA_NODE_CAPACITY, RegionHeaderField::NodeCapacity),
+            (ARENA_WORD_CAPACITY, RegionHeaderField::WordCapacity),
+            (ARENA_PERSISTENT, RegionHeaderField::Persistent),
+            (ARENA_FROZEN, RegionHeaderField::Frozen),
+            (ARENA_DATA, RegionHeaderField::Data),
+            (ARENA_DATA_COUNT, RegionHeaderField::DataCount),
+            (ARENA_DATA_CAPACITY, RegionHeaderField::DataCapacity),
+            (ARENA_NATIVE_INT, RegionHeaderField::NativeInt),
+            (ARENA_LIMBS, RegionHeaderField::Limbs),
+            (ARENA_LIMB_COUNT, RegionHeaderField::LimbCount),
+            (ARENA_LIMB_CAPACITY, RegionHeaderField::LimbCapacity),
+        ] {
+            assert_eq!(at, field.offset(), "an emitted header offset has drifted");
+        }
+
+        // ── and PUBLICATION emits exactly the derived extent ────────────────
+        //
+        // ⭐ The one quantity that is not derivable by inspection: what
+        // `publish` actually wrote. Measured on a real region, not restated.
         let mut store = BoundaryValueStore::new();
         materialize_ground(&mut store, &RuntimeGroundValue::Bool(true));
         let f = bind(&mut store, BoundaryArenaBuilder::new());
-        assert_eq!(
-            store.image().0.published_header_len() * std::mem::size_of::<u64>(),
-            BOUNDARY_REGION_HEADER_BYTES as usize,
-            "AC-1: the published region header is not the declared size"
-        );
-        let _ = f;
+        for (what, words) in [
+            ("persistent image", store.image().0.published_header_len()),
+            ("invocation arena", f.arena.0.published_header_len()),
+        ] {
+            assert_eq!(
+                words * std::mem::size_of::<u64>(),
+                BOUNDARY_REGION_HEADER_BYTES as usize,
+                "{what}: publication did not emit exactly the derived extent"
+            );
+        }
+        // ⚠ POSITIVE CONTROL — a region that never published would report 0 and
+        // satisfy nothing, so assert the measurement is of a real header.
+        assert!(store.image().0.published_header_len() > 0);
     }
 
     /// `(base, sign, len, seed, top) -> word` — the wide-`Int` producer with the

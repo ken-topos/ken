@@ -549,6 +549,178 @@ stop.
 
 ---
 
+# ⛔ FOURTH ARCHITECT BLOCK of `fd4e7f08` — three production defects
+
+All three were real and all three are closed. ⭐ **What is different about this
+block is that every finding is a property the previous fold *asserted in prose*
+and did not enforce** — a size constant with no consumer, a "fails closed before
+publication" comment above a check that could not see the thing it claimed to
+check, and a "before any address is formed" comment above an address formed from
+an unchecked operand.
+
+## ⛔ REPAIR #1 WAS REDONE — the bound `AC-1` layout-closure clause excludes it
+
+The recut bound mid-fold (`e4fa5ec5`) with a clause my first repair does **not**
+discharge:
+
+> The node/header field inventory is the **sole layout authority**. Any
+> declared/exported extent is **mechanically derived** from that inventory **and
+> is consumed** by allocation/publication, **or it does not exist**. ⛔ Checking
+> a hand-maintained constant against another hand-maintained constant does not
+> discharge this.
+
+⚠ **My first repair was exactly the excluded shape** — I kept
+`BOUNDARY_REGION_HEADER_BYTES` as a hand-written `136` and added a hand-written
+`BOUNDARY_REGION_HEADER_FIELDS` list to check it against. Two authorities cannot
+check each other; whichever one a future editor updates, the other silently
+becomes the wrong one, which is precisely how 136-vs-144 happened.
+
+**Mechanism chosen: derivation, backed by exhaustiveness.**
+
+| what | before | now |
+|---|---|---|
+| inventory | a hand-written `&[(&str, i32)]` list | `NodeField` / `RegionHeaderField` enums |
+| offsets | hand-written literals `0, 8, 16, …` | `position × 8`, from the enum |
+| extents | hand-written `88` / `136` | `ALL.len() × 8` |
+| publication | positional `vec![…]` | sized from `ALL`, each word placed at its own field's offset |
+| node construction | positional array literal | placed by field |
+| a new field | a list entry someone must remember | a **compile error** in `publish` / `push_node` |
+
+⭐ **Both consumers place every word through a `match` with no `_` arm**, so the
+inventory is not merely *declared* to be the authority — a field that exists and
+has no value does not build. That is the exhaustive-by-construction rule the
+federation already holds, applied to layout.
+
+⛔ Two axes therefore **cannot drift**, and I would rather say so than
+manufacture a mutation for them: the declared extent is `ALL.len() × 8` and the
+offsets are `position × 8`, so neither has an independent value to drift *to*.
+What remains falsifiable is what publication actually emitted and whether an
+emitted-side constant still names its own field — and those are M29 and M30.
+
+## 1. The declared layout was not the published layout — in both directions
+
+`BOUNDARY_REGION_HEADER_BYTES = 136`; `publish` emitted **18** words = 144 bytes;
+the constant had **no consumer anywhere in the tree**. So the reviewed
+"112 → 136" claim was false *and* unenforced, and neither half could detect the
+other.
+
+⚠ **I introduced the discrepancy by copying a pattern I had not read.** The
+previous header ended in a trailing `0` and I kept it, reasoning "mirror the
+existing spare." The old form was 14 named fields for a 112-byte constant plus
+one pad; mine was 17 named for 136 plus one pad. **The pad was never load-bearing
+— it was the residue of a positional literal nobody derived**, and preserving it
+carried the defect forward one layout at a time.
+
+`publish` now sizes its vector *from* the constant and writes *through* the
+offset constants, so a stale constant is an out-of-bounds panic.
+`BOUNDARY_REGION_HEADER_FIELDS` and `BOUNDARY_NODE_FIELDS` close the other
+direction: the offsets must be exactly the 8-byte slots of the declared size. A
+**new field without a size bump**, a **size bump without a field**, and a **field
+nobody listed** all redden.
+
+## 2. Emitted wide-`Int` construction could publish a word denoting no integer
+
+`store_int_limbs` checked `sign <= 1` and capacity. It admitted `len = 0`, a
+leading zero limb, and negative zero — a leading zero gives one value two
+encodings and negative zero gives zero a second one, both against
+`RuntimeIntV1::canonical_sign_and_limbs`.
+
+⚠ **And my control could not have caught it**: it used an arbitrary nonzero seed
+and a fixed length, so it never went near any of the three boundaries. This is
+[the boundary-testing rule] and the *shape* of QA's earlier finding — a property
+asserted about inputs the control never supplied.
+
+⭐ **The clauses are not checkable where the span is claimed**, because no limb
+exists yet. The Architect said so explicitly (*"cannot be placed before the limbs
+exist unless the interface changes"*), and the interface change is a completion
+step: `ken_boundary_seal_int_local` checks the finished magnitude and **every
+reader requires the seal**. An unsealed node denotes nothing — which is the only
+operative meaning of "before publication" once `alloc` has handed a word back.
+Claiming a span **unseals**, so a stale canonicity proof cannot survive a
+reclaim.
+
+⚠ A one-limb `[0]` **is** canonical — it is the value zero. Rejecting it would be
+an over-strengthening the contract does not entail, and the case list includes it
+on the admitted side.
+
+## 3. The span check wrapped
+
+`end = at + len` with CLIF's wrapping `iadd`, accepted on `end <= live`, then the
+address formed from the **unchecked** `at`. A start near `u64::MAX` wraps to a
+small sum and passes.
+
+★ **The Rust oracle three hundred lines away used `checked_add` and was
+correct.** Two halves of one property, written to different standards, in one
+candidate — and the CLIF half carried a comment asserting the property the Rust
+half actually had. `region_limb_base` is now the one non-wrapping form
+(`at <= live && len <= live - at`), shared by the reader and the seal.
+
+## And the writer inventory was a prefix scan
+
+Adding `seal_int` reddened `b2v_emitted_code_cannot_assign_store_identity` —
+because the pin discovered writers by `name.starts_with("ken_boundary_store_")`,
+and `seal_int` writes `NODE_INT_SEALED` under a name that does not match.
+
+⛔ **That is the forbidden-needle defect wearing an allowed-inventory costume.**
+The *comparison* was against a permitted list, which is right; the *discovery*
+was a spelling rule, which is not, and a discovery rule keyed on spelling cannot
+enumerate an inventory. It is now a **total partition** — every helper is a
+declared reader or a declared writer and the union must equal
+`BOUNDARY_LOCAL_HELPERS` — so a new helper of any name reddens until someone
+classifies it.
+
+⭐ My own change surfaced this, which is the pin working; but it had been true
+since the writer list was written.
+
+## The mutations
+
+| # | mutation (compile-preserving) | reddens | collateral |
+|---|---|---|---|
+| **M23** | the shipped **wrapping** span check, restored verbatim | the wraparound control | **none — 1 test** |
+| **M24** | the declared header size drifts from the named fields | the layout inventory | **none — 1** |
+| **M25** | the seal accepts every magnitude | the canonicity control | **none — 1** |
+| **M26** | readers stop requiring the seal | the canonicity control | **none — 1** |
+| **M27** | the length floor is dropped where the span is claimed | the canonicity control | **none — 1** |
+| **M28c** | the inventory grows without a distinct field | the layout control | **none — 1** |
+| **M29** | publication emits one word more than the derived extent | the layout control | **none — 1** |
+| **M30** | an emitted offset constant names another field | the layout control **and** the wide-`Int` read | 2 |
+
+### ⚠ Two more mutations that did not measure what they aimed at
+
+**M28** (first form) added an eighteenth entry to a `[…; 17]` array. It is a
+compile error — but the mechanism that fired was the **array length**, not the
+`match` exhaustiveness I was aiming at, and saying "compile error" without
+saying *which* one would credit the wrong closure. **M28c** grows the inventory
+in a form that compiles and reddens the control.
+
+**M31** halved the derived offset stride. The harness **SIGSEGV**s: every emitted
+read lands in the wrong place and the process dies before an assertion runs. That
+demonstrates the offsets are genuinely consumed rather than decorative, which is
+worth something — but it is **not** evidence that a control catches the drift,
+and it is the same class as M17's 142-test redden: the mutation destroyed the
+artifact instead of exercising the detector.
+
+M23 is the record for defect 3: it is the **exact prior code**, so its redden is
+the discriminator rather than an argument about one.
+
+### ⚠ The restore check was wrong for this fold, and I am saying so
+
+Every run printed `!! NOT RESTORED`. The harness tests `git diff --quiet`, which
+answers *"is the tree dirty"* — true throughout, because **the fold was
+uncommitted while the mutations ran.** The restore itself was byte-exact (the
+harness writes back the captured original), and I confirmed it two ways: each
+mutation site greps back to its production form exactly once, and the suite
+returns 401/0. The mutations were then **re-run against the committed baseline**,
+where `git diff --quiet` is meaningful and reports `BYTE-IDENTICAL`.
+
+⛔ Two lessons, both mine. **`git diff --quiet` is a claim about the whole
+worktree, not about the file you mutated** — its scope silently stopped matching
+its question the moment the baseline was dirty. And I ran mutations before
+committing the fix, which is the ordering my own notes forbid *precisely because
+it destroys the baseline the check depends on*.
+
+---
+
 # AC → discharging control
 
 Required by the frame's second amendment (`origin/main` = `fdda953f`): one row
@@ -573,13 +745,18 @@ because a taxonomy with nowhere to put the honest answer records it as covered.
 | **AC-6** owner distinguishable | `b2v_referent_owner_distinguishes_persistent_from_borrowed` | `BoundaryReferentOwner` is a **distinct type** from `AbiStorageOwner`; the pair is non-degenerate (`left: 1, right: 2`) |
 | **AC-6** persistent identity | `b2v_a_constructed_persistent_word_survives_the_invocation_arena`; `b2v_the_frozen_prefix_refuses_emitted_mutation`; `b2v_equal_values_share_one_persistent_referent` | the arena is **dropped** and a second invocation resolves the same word; orphan-arena positive control returns `ERR_BOUNDS`; one slot ⇒ one word, byte-identical across invocations |
 | **AC-7** escape, exact error | `b2v_borrowed_ingress_fails_closed_on_escape_with_an_exact_error`; `b2v_a_persistent_node_refuses_an_invocation_owned_child` | exact `ERR_ESCAPE`; malformed ⇒ `ERR_TAG`, not `ERR_ESCAPE`; the construction-time invariant the Θ(1) check rests on is itself pinned, with both mirrors as positive controls |
-| **AC-8** INERT | `correspondence_adds_no_emitted_unit_to_the_production_census`; `the_backend_production_surface_inventory_is_closed`; `px8i_…identical_local_helper_clif` | all three **unchanged and re-run**; `lowering/mod.rs` census stays `0`/`0`/`0`. ⚠ **Helper delta re-baselined: 13 → 19 → 25 → 27** (`store_int_limbs`, `store_int_limb`) — `alloc`, `store_tag_id`, `store_scalar`, `store_field`, `store_name`. Stated here before the verdict, not discovered in it |
+| **AC-8** INERT | `correspondence_adds_no_emitted_unit_to_the_production_census`; `the_backend_production_surface_inventory_is_closed`; `px8i_…identical_local_helper_clif` | all three **unchanged and re-run**; `lowering/mod.rs` census stays `0`/`0`/`0`. ⚠ **Helper delta re-baselined: 13 → 19 → 25 → 27 → 28** (`seal_int`) — `alloc`, `store_tag_id`, `store_scalar`, `store_field`, `store_name`. Stated here before the verdict, not discovered in it |
 | **AC-9** Θ(1) per module | `b2v_helper_population_does_not_grow_with_the_value_population`; `b2v_the_helper_inventory_is_closed_and_named` | two module emissions compared, and the value population varied ×1024 with the helper count fixed; the inventory pin reads the **module's actually declared** `ken_boundary_*` symbols against the permitted set. ⚠ first form was **defeated** — it only read the list |
 | **AC-1** tag × class relation | `b2v_the_tag_class_relation_is_closed_over_the_whole_product` | all 81 `tag × class` pairs through the emitted allocator, expectations from `boundary_relation_admits`; admitted **and** rejected counts asserted; the CLIF's mask re-checked against the table per pair |
+| **AC-6** writer/reader partition | `b2v_emitted_code_cannot_assign_store_identity` | every helper is a declared reader **or** a declared writer and the union must equal `BOUNDARY_LOCAL_HELPERS`. ⚠ The prior form discovered writers by a `ken_boundary_store_` **prefix**, so `seal_int` — which writes `NODE_INT_SEALED` — was invisible to it: a forbidden-needle defect wearing an allowed-inventory costume |
 | **AC-6** no forged identity | `b2v_emitted_code_cannot_assign_store_identity`; `b2v_a_persistent_int_refuses_an_invocation_scoped_big` | `store_slot` **removed**; the allowed-writer inventory is pinned; every writer is exercised on a fresh node and the slot still reads `NULL_SLOT`, with the written fields checked as the positive control. ⚠ The emission latch is proved by **M13b**, not by the predicate |
 | **AC-1** tag *reachability* | **`NO CONTROL — open residual`** — ⛔ **promoted into `AC-10`'s scope by the RECUT** | a tag no disposition can produce is caught by review, not by CI. The marker sweep now pins the tag set that admits `Int`, which is **one axis** of reachability and not the sweep over the admitted domain `AC-10` asks for |
 | **AC-4** wide `Int` at a persistent boundary | `b2v_a_wide_persistent_int_materializes_and_reads_back_by_content`; `b2v_emitted_code_constructs_a_wide_persistent_int_that_outlives_the_arena`; `b2v_the_magnitude_marker_relation_is_closed_over_owner_and_marker` | **the residual is CLOSED, not carried.** The magnitude lives in the region's own limb table; the oracle is `RuntimeIntV1::canonical_sign_and_limbs`, not the emitted answer re-read. The producer is emitted CLIF and the read happens after the arena is **dropped**. The `(owner, marker)` product is swept with both counts asserted |
 | **AC-1**/**AC-2** emitted immediate construction | `b2v_emitted_immediate_construction_refuses_what_it_cannot_represent` | every immediate tag × nine boundary-straddling payloads, expectations from `BOUNDARY_IMMEDIATE_DOMAIN`; the **round-trip** is the positive control, so the pin is about truncation and not about a status code; `ERR_SHAPE` and `ERR_BOUNDS` asserted as *distinct* refusals. ⚠ The prior form was **absent** — the only magnitude control exercised Rust materialization |
 | **AC-5** M17b/M18/M19/M20/M21/M22 | the third block's mutation table | ⚠ **M17's first form is reported as uninformative**: it reddened 142 tests by making the graph type-invalid, so it measured the CLIF **verifier**, not the range check |
+| **AC-5** M23/M24/M25/M26/M27 | the fourth block's mutation table | each reddens **exactly one** control; **M23 is the shipped wrapping check restored verbatim**, so its redden is the discriminator rather than an argument about one. ⚠ The restore check printed `NOT RESTORED` on every run — `git diff --quiet` asks about the *worktree*, and the fold was uncommitted; re-run against the committed baseline it reports byte-identical |
+| **AC-1** layout closure | `b2v_the_layout_inventory_is_the_sole_authority` | ⛔ **Derivation, not constant-vs-constant** — the bound clause excludes the latter and my first repair was it. `NodeField`/`RegionHeaderField` are the sole authority; offsets are `position × 8`, extents are `ALL.len() × 8`, and `publish`/`push_node` place every word through a `match` with **no `_` arm**, so a new field does not build. The control measures a **published** header, asserts `offset + 8 <= extent` (the clause's width clause), and pins each emitted-side constant to its own field. Causal on the two axes that can still drift: **M29** (published word count) and **M30** (emitted offset); the other two are derived and have no independent value to drift to |
+| **AC-1**/**AC-4** canonical emitted magnitude | `b2v_emitted_wide_int_construction_refuses_a_noncanonical_magnitude` | six magnitude shapes, one per canonicity clause, each differing from an admitted row in one component; the **unsealed-read** arm is the seal's own positive control, so a producer ignoring the status still cannot publish. ⚠ The prior control used one arbitrary nonzero seed and reached no boundary |
+| **AC-1** non-wrapping span | `b2v_a_wrapped_limb_span_fails_closed` | fault-injected directly, because **no production path can build a malformed span** and a control that cannot construct the violating input is not evidence about the guard. The Rust oracle is asserted to refuse the same span |
 | **AC-6** persistent *content-addressing* | **`NO CONTROL — open residual`** — ⛔ **promoted into `AC-10`'s scope by the RECUT** | an emitted-constructed node carries `NULL_SLOT`. The **limit** is pinned (the survival control asserts it); the property is not delivered. Identity minting is the store's alone, so closing this is a lifecycle decision, not a control I can add |
 | **AC-10** the disposition is closed under the emitted round trip | **`NO CONTROL — open residual`** | ⛔ **Not in this fold, and said so rather than implied.** The recut is a review ref that has not bound and the Architect stated it adds no constraint to the fold in flight. The two blocked defects are faces of the predicate and are closed as such; the structural closure that makes further faces unreachable is the next fold's deliverable |

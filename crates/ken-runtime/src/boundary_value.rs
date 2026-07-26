@@ -575,26 +575,81 @@ pub fn boundary_int_magnitude_is_canonical(sign: u64, limbs: &[u64]) -> bool {
     top_ok && !(zero && sign == 1)
 }
 
-/// Byte stride of one arena node.
-pub const BOUNDARY_NODE_STRIDE: i32 = 88;
+// ---------------------------------------------------------------------------
+// Layout: ONE authority, derived extents, real consumers
+// ---------------------------------------------------------------------------
+
+/// ⛔ **The node's field inventory — the sole authority for node layout.**
+///
+/// Every offset, the stride, and the words `push_node` writes are **derived
+/// from this enum**; nothing about node layout is stated twice. Adding a variant
+/// moves every derived quantity at once and is a **compile error** in
+/// `push_node`, whose `match` has no `_` arm — so a field cannot be half-added.
+///
+/// ⚠ **A hand-maintained constant checked against a hand-maintained list does
+/// not close this**, and that is not hypothetical: the shipped candidate
+/// declared a 136-byte header, published 144 bytes, and had **no consumer of
+/// the constant anywhere in the tree**. Two authorities cannot check each
+/// other; the fix is to have one. Each variant's meaning is documented on the
+/// offset constant derived from it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(usize)]
+pub enum NodeField {
+    Class,
+    Owner,
+    Slot,
+    TagId,
+    Payload,
+    FieldCount,
+    FieldsAt,
+    Extent,
+    LimbsAt,
+    LimbCount,
+    IntSealed,
+}
+
+impl NodeField {
+    /// Every field, in layout order.
+    pub const ALL: [NodeField; 11] = [
+        NodeField::Class,
+        NodeField::Owner,
+        NodeField::Slot,
+        NodeField::TagId,
+        NodeField::Payload,
+        NodeField::FieldCount,
+        NodeField::FieldsAt,
+        NodeField::Extent,
+        NodeField::LimbsAt,
+        NodeField::LimbCount,
+        NodeField::IntSealed,
+    ];
+
+    /// This field's byte offset — its position, times the word width.
+    pub const fn offset(self) -> i32 {
+        (self as i32) * 8
+    }
+}
+
+/// Byte stride of one arena node, **derived** from the field inventory.
+pub const BOUNDARY_NODE_STRIDE: i32 = (NodeField::ALL.len() * 8) as i32;
 
 /// `BoundaryClass` of this node.
-pub const NODE_CLASS: i32 = 0;
+pub const NODE_CLASS: i32 = NodeField::Class.offset();
 /// `BoundaryReferentOwner` of this node's referent.
-pub const NODE_OWNER: i32 = 8;
+pub const NODE_OWNER: i32 = NodeField::Owner.offset();
 /// The `SlotId` that owns this node's value, or `NULL_SLOT` when the owner is
 /// the invocation arena. **This field is what makes `AC-6` observable.**
-pub const NODE_SLOT: i32 = 16;
+pub const NODE_SLOT: i32 = NodeField::Slot.offset();
 /// Interned constructor symbol / record type identity, or `0`.
-pub const NODE_TAG_ID: i32 = 24;
+pub const NODE_TAG_ID: i32 = NodeField::TagId.offset();
 /// Scalar payload: bool bit, small-int value, `HostResult` success flag, or the
 /// byte length of a `Bytes`/`String`.
-pub const NODE_PAYLOAD: i32 = 32;
+pub const NODE_PAYLOAD: i32 = NodeField::Payload.offset();
 /// Number of child words this node has.
-pub const NODE_FIELD_COUNT: i32 = 40;
+pub const NODE_FIELD_COUNT: i32 = NodeField::FieldCount.offset();
 /// Index into the word table of this node's first child word. Field *names*
 /// live at the same index in the name table.
-pub const NODE_FIELDS_AT: i32 = 48;
+pub const NODE_FIELDS_AT: i32 = NodeField::FieldsAt.offset();
 /// A second scalar whose meaning the **class** determines, exactly as
 /// [`NODE_PAYLOAD`]'s already does:
 ///
@@ -607,7 +662,7 @@ pub const NODE_FIELDS_AT: i32 = 48;
 /// ⚠ Every reader of this field is **class-guarded**, so a caller cannot read
 /// one class's meaning out of another's node. A single un-guarded reader would
 /// make the two meanings collide, which is why there is no generic accessor.
-pub const NODE_EXTENT: i32 = 56;
+pub const NODE_EXTENT: i32 = NodeField::Extent.offset();
 /// Index into the region's **limb table** of a spilled `Int`'s first limb.
 ///
 /// ⛔ A dedicated field and a dedicated table, deliberately — not a reuse of
@@ -617,10 +672,10 @@ pub const NODE_EXTENT: i32 = 56;
 /// returned where a tagged `BoundaryWord` is expected. Two meanings for one
 /// table is exactly the collision `NODE_EXTENT`'s note warns about, and the
 /// cheap fix is storage that cannot be reached by the wrong reader at all.
-pub const NODE_LIMBS_AT: i32 = 64;
+pub const NODE_LIMBS_AT: i32 = NodeField::LimbsAt.offset();
 /// Number of limbs a spilled `Int` node's magnitude has. Zero for every other
 /// class and for a `Small`.
-pub const NODE_LIMB_COUNT: i32 = 72;
+pub const NODE_LIMB_COUNT: i32 = NodeField::LimbCount.offset();
 /// ⛔ **`1` once a region-limbed `Int`'s magnitude has been checked CANONICAL,
 /// `0` while it is still being written.** Every reader of a region-limbed
 /// magnitude requires it, so an unsealed node **denotes nothing**.
@@ -637,7 +692,7 @@ pub const NODE_LIMB_COUNT: i32 = 72;
 /// than aspirational.** The node exists and its word is in the producer's hand
 /// the moment `alloc` returns; what a consumer can do with it is the only
 /// meaningful sense of published, and until the seal a consumer can do nothing.
-pub const NODE_INT_SEALED: i32 = 80;
+pub const NODE_INT_SEALED: i32 = NodeField::IntSealed.offset();
 
 /// Byte size of a **region header**.
 ///
@@ -645,27 +700,85 @@ pub const NODE_INT_SEALED: i32 = 80;
 /// image publish the *same* header shape, which is what lets a single
 /// `resolve` select a region at run time and then read it with one set of
 /// offsets. A second layout would be a second place for the offsets to drift.
-pub const BOUNDARY_REGION_HEADER_BYTES: i32 = 136;
+/// ⛔ **The region header's field inventory — the sole authority for header
+/// layout.** Same closure as [`NodeField`]: every offset and the header extent
+/// derive from it, and `BoundaryRegion::header_value`'s `match` has no `_` arm,
+/// so a new field is a compile error until it is given a value.
+///
+/// ⭐ One layout serves both regions, which is what lets a single `resolve`
+/// select a region at run time and then read it with one set of offsets.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(usize)]
+pub enum RegionHeaderField {
+    Nodes,
+    NodeCount,
+    Words,
+    WordCount,
+    Names,
+    NameCount,
+    NodeCapacity,
+    WordCapacity,
+    Persistent,
+    Frozen,
+    Data,
+    DataCount,
+    DataCapacity,
+    NativeInt,
+    Limbs,
+    LimbCount,
+    LimbCapacity,
+}
+
+impl RegionHeaderField {
+    /// Every field, in layout order.
+    pub const ALL: [RegionHeaderField; 17] = [
+        RegionHeaderField::Nodes,
+        RegionHeaderField::NodeCount,
+        RegionHeaderField::Words,
+        RegionHeaderField::WordCount,
+        RegionHeaderField::Names,
+        RegionHeaderField::NameCount,
+        RegionHeaderField::NodeCapacity,
+        RegionHeaderField::WordCapacity,
+        RegionHeaderField::Persistent,
+        RegionHeaderField::Frozen,
+        RegionHeaderField::Data,
+        RegionHeaderField::DataCount,
+        RegionHeaderField::DataCapacity,
+        RegionHeaderField::NativeInt,
+        RegionHeaderField::Limbs,
+        RegionHeaderField::LimbCount,
+        RegionHeaderField::LimbCapacity,
+    ];
+
+    /// This field's byte offset — its position, times the word width.
+    pub const fn offset(self) -> i32 {
+        (self as i32) * 8
+    }
+}
+
+/// Byte size of a region header, **derived** from the field inventory.
+pub const BOUNDARY_REGION_HEADER_BYTES: i32 = (RegionHeaderField::ALL.len() * 8) as i32;
 
 /// Pointer to the node table.
-pub const ARENA_NODES: i32 = 0;
+pub const ARENA_NODES: i32 = RegionHeaderField::Nodes.offset();
 /// Number of **live** nodes. ⚠ Mutable: the emitted allocator bumps it.
-pub const ARENA_NODE_COUNT: i32 = 8;
+pub const ARENA_NODE_COUNT: i32 = RegionHeaderField::NodeCount.offset();
 /// Pointer to the child-word table.
-pub const ARENA_WORDS: i32 = 16;
+pub const ARENA_WORDS: i32 = RegionHeaderField::Words.offset();
 /// Number of **live** child words. ⚠ Mutable: the emitted allocator bumps it.
-pub const ARENA_WORD_COUNT: i32 = 24;
+pub const ARENA_WORD_COUNT: i32 = RegionHeaderField::WordCount.offset();
 /// Pointer to the field-name-id table, parallel to the word table.
-pub const ARENA_NAMES: i32 = 32;
+pub const ARENA_NAMES: i32 = RegionHeaderField::Names.offset();
 /// Number of field-name ids.
-pub const ARENA_NAME_COUNT: i32 = 40;
+pub const ARENA_NAME_COUNT: i32 = RegionHeaderField::NameCount.offset();
 /// Node capacity — the ceiling the emitted allocator fails closed against.
-pub const ARENA_NODE_CAPACITY: i32 = 48;
+pub const ARENA_NODE_CAPACITY: i32 = RegionHeaderField::NodeCapacity.offset();
 /// Child-word capacity — the other ceiling.
-pub const ARENA_WORD_CAPACITY: i32 = 56;
+pub const ARENA_WORD_CAPACITY: i32 = RegionHeaderField::WordCapacity.offset();
 /// Pointer to the **persistent region's** header, or `0` when this invocation
 /// is bound to no persistent storage. Read from the *arena* header only.
-pub const ARENA_PERSISTENT: i32 = 64;
+pub const ARENA_PERSISTENT: i32 = RegionHeaderField::Persistent.offset();
 /// Nodes present when the region was published.
 ///
 /// ⛔ **The frozen prefix.** Emitted code may construct nodes at or beyond this
@@ -673,14 +786,14 @@ pub const ARENA_PERSISTENT: i32 = 64;
 /// the store's [`SlotId`], and letting emitted code rewrite that field would let
 /// it forge persistent identity — the store must remain the sole identity
 /// authority, so the boundary is a bounds check rather than a convention.
-pub const ARENA_FROZEN: i32 = 72;
+pub const ARENA_FROZEN: i32 = RegionHeaderField::Frozen.offset();
 /// Pointer to the region's **data table** — the byte span backing `Bytes` and
 /// `String` contents.
-pub const ARENA_DATA: i32 = 80;
+pub const ARENA_DATA: i32 = RegionHeaderField::Data.offset();
 /// Number of **live** data bytes. ⚠ Mutable: the emitted allocator bumps it.
-pub const ARENA_DATA_COUNT: i32 = 88;
+pub const ARENA_DATA_COUNT: i32 = RegionHeaderField::DataCount.offset();
 /// Data-table capacity — the third ceiling construction fails closed against.
-pub const ARENA_DATA_CAPACITY: i32 = 96;
+pub const ARENA_DATA_CAPACITY: i32 = RegionHeaderField::DataCapacity.offset();
 /// Pointer to the invocation's [`crate::native_int::NativeIntArenaV1`] header,
 /// or `0`.
 ///
@@ -691,70 +804,17 @@ pub const ARENA_DATA_CAPACITY: i32 = 96;
 /// integer representation, which is the thing `docs/PRINCIPLES.md` calls
 /// subsume-don't-proliferate. Read from the *arena* header only — the native
 /// arena is invocation state.
-pub const ARENA_NATIVE_INT: i32 = 104;
+pub const ARENA_NATIVE_INT: i32 = RegionHeaderField::NativeInt.offset();
 /// Pointer to the region's **limb table** — the `u64` magnitude storage backing
 /// a spilled `Int` whose marker is [`BOUNDARY_INT_REGION_LIMBS`].
 ///
 /// ⭐ Region-owned, which is the whole point: a persistent `Int`'s limbs outlive
 /// every invocation because they live where the persistent nodes do.
-pub const ARENA_LIMBS: i32 = 112;
+pub const ARENA_LIMBS: i32 = RegionHeaderField::Limbs.offset();
 /// Number of **live** limbs. ⚠ Mutable: the emitted allocator bumps it.
-pub const ARENA_LIMB_COUNT: i32 = 120;
+pub const ARENA_LIMB_COUNT: i32 = RegionHeaderField::LimbCount.offset();
 /// Limb-table capacity — the fourth ceiling construction fails closed against.
-pub const ARENA_LIMB_CAPACITY: i32 = 128;
-
-/// ⛔ **Every region-header field, named, in one list.**
-///
-/// The declared size and the published bytes were allowed to disagree once —
-/// `publish` emitted 18 words against a 136-byte (17-word) constant that had **no
-/// consumer anywhere in the tree**, so the layout claim was unenforced in both
-/// directions at once. `publish` now writes *through* these offsets (a stale
-/// constant is an out-of-bounds panic), and this list closes the other
-/// direction: the pin asserts the offsets are exactly `0, 8, …` up to
-/// [`BOUNDARY_REGION_HEADER_BYTES`], so a **new field without a size bump** and a
-/// **size bump without a field** both redden.
-///
-/// ⭐ The allowed inventory, not a forbidden list: any addition must appear here
-/// to pass, including one nobody imagined.
-pub const BOUNDARY_REGION_HEADER_FIELDS: &[(&str, i32)] = &[
-    ("ARENA_NODES", ARENA_NODES),
-    ("ARENA_NODE_COUNT", ARENA_NODE_COUNT),
-    ("ARENA_WORDS", ARENA_WORDS),
-    ("ARENA_WORD_COUNT", ARENA_WORD_COUNT),
-    ("ARENA_NAMES", ARENA_NAMES),
-    ("ARENA_NAME_COUNT", ARENA_NAME_COUNT),
-    ("ARENA_NODE_CAPACITY", ARENA_NODE_CAPACITY),
-    ("ARENA_WORD_CAPACITY", ARENA_WORD_CAPACITY),
-    ("ARENA_PERSISTENT", ARENA_PERSISTENT),
-    ("ARENA_FROZEN", ARENA_FROZEN),
-    ("ARENA_DATA", ARENA_DATA),
-    ("ARENA_DATA_COUNT", ARENA_DATA_COUNT),
-    ("ARENA_DATA_CAPACITY", ARENA_DATA_CAPACITY),
-    ("ARENA_NATIVE_INT", ARENA_NATIVE_INT),
-    ("ARENA_LIMBS", ARENA_LIMBS),
-    ("ARENA_LIMB_COUNT", ARENA_LIMB_COUNT),
-    ("ARENA_LIMB_CAPACITY", ARENA_LIMB_CAPACITY),
-];
-
-/// Every node field, named, in one list — the node's half of the same closure.
-///
-/// `push_node` writes exactly `NODE_WORDS` entries, and `NODE_WORDS` is derived
-/// from [`BOUNDARY_NODE_STRIDE`]; the pin ties this list to both, so a field
-/// added to the node without a stride bump is a compile-time length mismatch or
-/// a red test rather than a silently truncated write.
-pub const BOUNDARY_NODE_FIELDS: &[(&str, i32)] = &[
-    ("NODE_CLASS", NODE_CLASS),
-    ("NODE_OWNER", NODE_OWNER),
-    ("NODE_SLOT", NODE_SLOT),
-    ("NODE_TAG_ID", NODE_TAG_ID),
-    ("NODE_PAYLOAD", NODE_PAYLOAD),
-    ("NODE_FIELD_COUNT", NODE_FIELD_COUNT),
-    ("NODE_FIELDS_AT", NODE_FIELDS_AT),
-    ("NODE_EXTENT", NODE_EXTENT),
-    ("NODE_LIMBS_AT", NODE_LIMBS_AT),
-    ("NODE_LIMB_COUNT", NODE_LIMB_COUNT),
-    ("NODE_INT_SEALED", NODE_INT_SEALED),
-];
+pub const ARENA_LIMB_CAPACITY: i32 = RegionHeaderField::LimbCapacity.offset();
 
 /// Status returned by every emitted-code helper on success.
 pub const BOUNDARY_OK: i64 = 0;
@@ -845,8 +905,37 @@ impl BoundaryRegion {
         }
     }
 
+    /// One header field's published value.
+    ///
+    /// ⛔ **Exhaustive, no `_` arm** — that is the mechanism, not a style
+    /// choice. A new [`RegionHeaderField`] variant fails to compile here, which
+    /// is strictly stronger than any test could be.
+    fn header_value(&self, field: RegionHeaderField) -> u64 {
+        match field {
+            RegionHeaderField::Nodes => self.nodes.as_ptr() as u64,
+            RegionHeaderField::NodeCount => self.live_nodes as u64,
+            RegionHeaderField::Words => self.words.as_ptr() as u64,
+            RegionHeaderField::WordCount => self.live_words as u64,
+            RegionHeaderField::Names => self.names.as_ptr() as u64,
+            RegionHeaderField::NameCount => self.names.len() as u64,
+            RegionHeaderField::NodeCapacity => (self.nodes.len() / NODE_WORDS) as u64,
+            RegionHeaderField::WordCapacity => self.words.len() as u64,
+            RegionHeaderField::Persistent => self.persistent,
+            // Everything materialized before publication is frozen; emitted
+            // code constructs strictly beyond it.
+            RegionHeaderField::Frozen => self.live_nodes as u64,
+            RegionHeaderField::Data => self.data.as_ptr() as u64,
+            RegionHeaderField::DataCount => self.live_data as u64,
+            RegionHeaderField::DataCapacity => self.data.len() as u64,
+            RegionHeaderField::NativeInt => self.native_int,
+            RegionHeaderField::Limbs => self.limbs.as_ptr() as u64,
+            RegionHeaderField::LimbCount => self.live_limbs as u64,
+            RegionHeaderField::LimbCapacity => self.limbs.len() as u64,
+        }
+    }
+
     /// Words in the published header, or `0` before publication. The layout
-    /// pin measures this rather than re-deriving the constant it is checking.
+    /// control measures this rather than re-deriving the constant it checks.
     pub fn published_header_len(&self) -> usize {
         self.header.len()
     }
@@ -1057,22 +1146,28 @@ impl BoundaryRegion {
         if self.nodes.len() < base + NODE_WORDS {
             self.nodes.resize(base + NODE_WORDS, 0);
         }
-        self.nodes[base..base + NODE_WORDS].copy_from_slice(&[
-            class as u64,
-            tag.referent_owner() as u64,
-            slot,
-            tag_id,
-            payload,
-            children.len() as u64,
-            fields_at,
-            extent,
-            limbs_at,
-            limbs.len() as u64,
-            // Rust-materialized magnitudes come from `canonical_sign_and_limbs`
-            // and are asserted canonical above, so they are born sealed. Emitted
-            // construction earns the seal from `ken_boundary_seal_int_local`.
-            u64::from(extent == BOUNDARY_INT_REGION_LIMBS),
-        ]);
+        // ⛔ Placed by field, not by position, through a `match` with no `_`
+        // arm: a new `NodeField` is a compile error here until it is given a
+        // value, so a node word can never be silently written as a zero.
+        for field in NodeField::ALL {
+            self.nodes[base + (field as usize)] = match field {
+                NodeField::Class => class as u64,
+                NodeField::Owner => tag.referent_owner() as u64,
+                NodeField::Slot => slot,
+                NodeField::TagId => tag_id,
+                NodeField::Payload => payload,
+                NodeField::FieldCount => children.len() as u64,
+                NodeField::FieldsAt => fields_at,
+                NodeField::Extent => extent,
+                NodeField::LimbsAt => limbs_at,
+                NodeField::LimbCount => limbs.len() as u64,
+                // Rust-materialized magnitudes come from
+                // `canonical_sign_and_limbs` and are asserted canonical above,
+                // so they are born sealed. Emitted construction earns the seal
+                // from `ken_boundary_seal_int_local`.
+                NodeField::IntSealed => u64::from(extent == BOUNDARY_INT_REGION_LIMBS),
+            };
+        }
         self.live_nodes = index as usize + 1;
         BoundaryWord::handle(tag, index)
     }
@@ -1096,32 +1191,23 @@ impl BoundaryRegion {
     /// bytes are correct only if a reader counted the lines. Indexing by the
     /// offsets makes a stale constant an out-of-bounds panic, and
     /// [`BOUNDARY_REGION_HEADER_FIELDS`] closes the other direction.
+    /// ⛔ **The inventory is the sole authority and this is its consumer.** The
+    /// vector is sized from [`RegionHeaderField::ALL`], each word is placed at
+    /// its own field's offset, and [`BoundaryRegion::header_value`]'s `match`
+    /// has **no `_` arm** — so a field added to the inventory is a compile error
+    /// here until it is given a value, and can never be silently published as a
+    /// zero.
+    ///
+    /// ⚠ The previous form was a positional `vec![…]` whose length nobody
+    /// derived: it published **18** words against a **17**-word declared extent,
+    /// and the constant had no consumer anywhere in the tree. Checking one
+    /// hand-maintained number against another cannot detect that — there has to
+    /// be one number.
     pub fn publish(&mut self) -> *mut u64 {
-        let mut header = vec![0u64; (BOUNDARY_REGION_HEADER_BYTES / 8) as usize];
-        header[(ARENA_NODES / 8) as usize] = self.nodes.as_ptr() as u64;
-        header[(ARENA_NODE_COUNT / 8) as usize] = self.live_nodes as u64;
-        header[(ARENA_WORDS / 8) as usize] = self.words.as_ptr() as u64;
-        header[(ARENA_WORD_COUNT / 8) as usize] = self.live_words as u64;
-        header[(ARENA_NAMES / 8) as usize] = self.names.as_ptr() as u64;
-        header[(ARENA_NAME_COUNT / 8) as usize] = self.names.len() as u64;
-        header[(ARENA_NODE_CAPACITY / 8) as usize] = (self.nodes.len() / NODE_WORDS) as u64;
-        header[(ARENA_WORD_CAPACITY / 8) as usize] = self.words.len() as u64;
-        header[(ARENA_PERSISTENT / 8) as usize] = self.persistent;
-        // Everything materialized before publication is frozen; emitted code
-        // constructs strictly beyond it.
-        header[(ARENA_FROZEN / 8) as usize] = self.live_nodes as u64;
-        header[(ARENA_DATA / 8) as usize] = self.data.as_ptr() as u64;
-        header[(ARENA_DATA_COUNT / 8) as usize] = self.live_data as u64;
-        header[(ARENA_DATA_CAPACITY / 8) as usize] = self.data.len() as u64;
-        header[(ARENA_NATIVE_INT / 8) as usize] = self.native_int;
-        header[(ARENA_LIMBS / 8) as usize] = self.limbs.as_ptr() as u64;
-        header[(ARENA_LIMB_COUNT / 8) as usize] = self.live_limbs as u64;
-        header[(ARENA_LIMB_CAPACITY / 8) as usize] = self.limbs.len() as u64;
-        debug_assert_eq!(
-            header.len() * std::mem::size_of::<u64>(),
-            BOUNDARY_REGION_HEADER_BYTES as usize,
-            "the published header must be exactly the declared layout"
-        );
+        let mut header = vec![0u64; RegionHeaderField::ALL.len()];
+        for field in RegionHeaderField::ALL {
+            header[field as usize] = self.header_value(field);
+        }
         self.header = header;
         self.header.as_mut_ptr()
     }
