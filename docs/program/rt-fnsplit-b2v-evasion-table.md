@@ -1478,3 +1478,202 @@ the literals *before* rewiring (they matched exactly for class, which is what
 established the change was behaviour-preserving), rewire, then prove causality
 with a perturbed plan plus a same-plan control, and prove an emitter that
 ignores the plan reddens.
+
+---
+
+# The tag / owner / identity fold — `184ec6f9`, `4b064718`, `6fa674f2`
+
+⭐ **Read the mutation table first.** Three of the five mutations run against
+the first commit's evidence went **green**, and all three were the exact shape
+`RULING R3` says must redden. The fold is not the interesting part; the two
+rounds of repair it took to make the evidence real are.
+
+## What the authority now supplies, and what was deleted
+
+`BoundaryEmissionPlan` gained a `BoundaryTagAdmission` derived from the same
+`BoundaryInput::all() → outcome()` sweep the class sets already used:
+
+| derived | from | replaces |
+|---|---|---|
+| `admitted()` | every `ImmediateWord`/`HandleWord` tag | `tag <= LAST_TAG` ×4 |
+| `immediate()` | `ImmediateWord` tags | `tag < FIRST_HANDLE_TAG` ×2 |
+| `handle()` | `HandleWord` tags | `tag >= FIRST_HANDLE_TAG` ×2 |
+| `owner_bands()` | `HandleWord` grouped by `owner` | `tag <= LAST_PERSISTENT_TAG` ×3, `tag >= FIRST_INVOCATION_TAG` ×2 |
+
+All four constants are **deleted**, not left beside the new mechanism. The
+emitted code tests set membership (`tag_in_set`, a disjunction) instead of an
+ordinal band, so the property the old pin had to defend — *the closed tag set
+stays grouped by referent owner* — is no longer a property anything depends on.
+
+⛔ **An ordinal range is strictly weaker than a derived set**, and the weakness
+is silent: reorder `BoundaryTag` and every constant stays well-formed while the
+admitted region changes underneath them.
+
+## The located inventory was incomplete — a fifth site, and a sixth still open
+
+The `ab11a3d2` inventory named four constants. It missed two things.
+
+**`:1194`, found and closed in this fold.** `define_escape_check` compared
+`tag >= BoundaryTag::InvocationBorrowed as i64` **inline**. Identical defect,
+identical repair — and it was missed for a structural reason worth naming:
+⚠ **the inventory was built by grepping for the constants, so a site that
+spells the same band without one is invisible to it.** The sweep that found it
+was `grep BoundaryTag::` over the whole emitter, which enumerates *uses of the
+authority* rather than *names the defect gave itself*.
+
+**`:715`, found and NOT closed — routed, not silently absorbed.**
+`define_class` decides an immediate's class with
+`is_bool ? BoundaryClass::Bool : BoundaryClass::Int`. That is a hand-maintained
+immediate-tag → class map beside the helper bodies, which is `R3`'s third
+excluded discharge. ⛔ **It cannot be derived today**, because
+`BoundaryOutcome::ImmediateWord { tag }` carries **no class** — and
+`BOUNDARY_TAG_CLASS_RELATION` says so on purpose: *"Immediate tags are absent by
+construction — they have no node, so they have no class."* Closing it means
+extending the authority's shape, which is the Architect's call and not a
+spelling choice. It is stated here as open.
+
+## Behaviour preservation, measured before rewiring
+
+The method from the class axis, reapplied: derive the sets, compare them to the
+literals **before** touching the emitter.
+
+```
+immediate  = {0,1,2,3,4}  == tag <  FIRST_HANDLE_TAG
+handle     = {5,6,7,8}    == tag >= FIRST_HANDLE_TAG
+persistent = {5,6}        == FIRST_HANDLE_TAG ..= LAST_PERSISTENT_TAG
+invocation = {7,8}        == FIRST_INVOCATION_TAG ..= LAST_TAG
+admitted   = {0..8}       == tag <= LAST_TAG
+```
+
+Exact match on every set, so the rewiring changes no admitted word — and the
+256-byte emitted-interface sweep `b2v_emitted_code_admits_exactly_the_closed_tag_set`
+still passes, which is the behavioural confirmation rather than the argument.
+
+⭐ **One live divergence was closed as a side effect.** The old marker-mask
+`select` asked *"is the owner the store"* and gave every other answer the
+invocation arena's mask — so a node recording `NoReferent` was handed the
+invocation markers, while the Rust twin `boundary_int_marker_admits` admits only
+the owner-agnostic ones for it. Two implementations of one relation disagreeing
+on an arm neither reaches today. The fold over `BoundaryReferentOwner::ALL`
+makes them agree.
+
+## ⛔ The mutation table, and the two rounds of repair
+
+Round 1, against `184ec6f9`'s evidence:
+
+| # | mutation | expected | **measured** |
+|---|---|---|---|
+| `M-T1` | `define_resolve`'s validity test hardcoded `tag <= 8` | red | ⛔ **GREEN** |
+| `M-T2` | region selection's band test hardcoded `tag <= 6` | red | ⛔ **GREEN** |
+| `M-T3` | the node's recorded owner hardcoded | red | red (8 tests) |
+| `M-T4` | `derive()` restating the immediate set | red | red (4 tests) |
+| `M-T5` | `escape_check`'s invocation band hardcoded `tag >= 7` | red | ⛔ **GREEN** |
+
+⭐ **Three defeats sharing a structure is a granularity fault, not three
+missing cases.** `recut2_the_emitted_helper_graph_changes_when_the_tag_sets_change`
+compares the **entire** captured CLIF. Four sites consume the admitted set;
+disconnect one and the other three still move the aggregate, so the difference
+the test demands is still there and it stays green. **The pin's granularity was
+the graph. The property is per-site.**
+
+The repair is behavioural and **total over the tag dimension** rather than a
+hand-listed set of sites. `compile_probe_with_plan` compiles the helpers against
+a caller-supplied plan, so a helper can be asked what it **answers**:
+
+- `b2v_every_emitted_tag_admission_test_is_the_plans` — sweep every admitted
+  tag, remove it from the plan, require each probed helper to go from its real
+  status to `ERR_TAG`. A hardcoded constant cannot follow.
+- `b2v_every_emitted_owner_band_test_is_the_plans` — sweep every handle tag,
+  move it to the other band, require each probed helper's answer to change.
+
+Both are two-sided: the real plan's answer must **not already** be `ERR_TAG`, or
+the perturbation could not change it and the pin would pass vacuously.
+
+Round 2, against `4b064718`:
+
+| # | expected | **measured** | caught by |
+|---|---|---|---|
+| `M-T1` | red | red | `b2v_every_emitted_tag_admission_test_is_the_plans` |
+| `M-T2` | red | red | `b2v_every_emitted_owner_band_test_is_the_plans` |
+| `M-T5` | red | ⛔ **STILL GREEN** | — |
+
+⚠ **`M-T5` survived the repair too, and the reason is one level down from the
+first.** The band pin drove only the `class` probe, and `class` never reaches
+`escape_check`'s gate — so the site was uncovered by the very test named for
+covering every band decision. Coarse granularity blinded round 1; an incomplete
+**probe set** blinded round 2. ⛔ *A probe that never exercises the mechanism is
+not evidence about it, whatever the test is called.*
+
+Round 3, against `6fa674f2` (band sweep drives both probes):
+
+| # | expected | **measured** | caught by |
+|---|---|---|---|
+| `M-T1` | red | red | tag-admission pin |
+| `M-T2` | red | red | owner-band pin |
+| `M-T3` | red | red | 8 behavioural tests |
+| `M-T4` | red | red | derivation pin + 3 behavioural |
+| `M-T5` | red | red | owner-band pin |
+
+Every mutation restored with `cp`, never `git checkout -- <path>`, and each
+restore verified with `git diff --quiet`.
+
+⛔ **The residual is named in the test's own doc comment, not left implied by
+its name.** `store_field`'s child-tag check and `make_immediate`'s immediate-set
+check are not reached by these probes; for those two the evidence is the
+whole-graph pin plus review. A test called *"every emitted tag test"* that
+silently meant *"every one I could reach"* is the overclaim this WP keeps paying
+for.
+
+## Identity — the prediction, discharged by measurement
+
+⚠ The `ab11a3d2` prediction, **labelled as one**: identity needs no separate
+wiring, because `HandleIdentity` is computed by `BoundaryInput::handle_identity`
+from the owner alone.
+
+**MEASURED and TRUE.** The pin
+`recut2_identity_is_a_function_of_owner_and_needs_no_second_wiring`
+sweeps every admitted handle outcome and finds each owner yields exactly one
+identity, with non-vacuity checked in both directions (≥2 owners publish, and
+≥2 distinct identities occur — a constant identity would satisfy the first
+assertion alone).
+
+⛔ **THE GAP, stated rather than closed:** this shows emitted code cannot mint a
+*store* identity — every `alloc`ed node is written `NULL_SLOT`, which this ABI
+reads as *no store identity*. It does **not** show no future helper could. The
+residual is review-enforced, with `escape_check`'s adoption gate as the runtime
+mechanism, and it is tested separately.
+
+## A pin was RETIRED rather than left passing
+
+`b2v_the_region_thresholds_agree_with_referent_owner` is renamed to
+`b2v_the_plan_owner_bands_agree_with_referent_owner` and re-asserted against the
+bands, with two clauses **deleted**: the threshold-based classification, and the
+assertion that the two owner bands are numerically **contiguous**. Both existed
+only because a threshold cannot separate bands that interleave.
+
+⚠ **Keeping a still-green assertion about a property no mechanism rests on is
+not free** — it reads to the next author as a constraint they must preserve, and
+it would have made a legitimate non-contiguous tag set look like a regression.
+
+The replacement adds the clause the per-band sweep could not see on its own: the
+bands' **union** must be the admitted handle set, because a handle tag in *no*
+band would resolve nowhere and every per-band assertion would still pass.
+
+## `D6` — predicted before measuring, not adjusted
+
+| row | predicted | measured |
+|---|---|---|
+| `BOUNDARY_LOCAL_HELPERS` | 28 | **28** |
+| `declare(...)` in the emitter | 28 | **28** |
+| `BACKEND_PRODUCTION_SOURCES` | 13 | **13** |
+| `LOCAL_HELPER_COUNT` | 6 | **6** |
+| `lowering/mod.rs` census | 0/0/0 | **0/0/0** |
+| non-test emitter call sites | 1 (`lowering/core.rs:87`) | **1** |
+
+Helper **bodies** changed; the helper **population** did not. No new module, no
+new generated semantic function, no semantic-body call to a boundary helper, no
+second emitter.
+
+Dead-code oracle: **18 lib warnings before and after**, same set — this fold
+introduced no new consumer-less item, and none of the items it consumed were on
+that list to begin with (they were consumed by the class fold at `720f301c`).
