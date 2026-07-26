@@ -31,9 +31,9 @@ transport detail, not the value model (`44`/`../30-surface/38`).
 ## 2. Runtime values and durable canonical data
 
 Ken separates a value's semantics from its in-process representation.
-Constructor applications (`data`), records (Σ), `String`, `Bytes`,
-`Array`/`Map`/`Set`, and big integers are **durably canonicalizable** when every
-value reachable from the root is closure-free and has a canonical encoding:
+Structural constructor applications (`data`), records (Σ), `String`, `Bytes`,
+`Array`, and big integers are **durably canonicalizable** when every value
+reachable from the root is closure-free and has a canonical encoding:
 
 - Equal durably canonicalizable values have identical canonical bytes (§3a).
 - Unequal values MUST NOT be merged merely because a private hash, pointer, or
@@ -46,6 +46,12 @@ value reachable from the root is closure-free and has a canonical encoding:
   and leaves the old value unchanged; physical structural sharing is optional.
   Mutable state remains confined to `space` cells
   (`../30-surface/36 §4`).
+
+The proved `Map`/`Set` package trees are closure-free and durably encodable as
+ordinary `data`, but they are not durably canonicalizable in the sense above.
+Their extensional equality observes ordered contents, while ordinary `data`
+bytes preserve the transparent tree topology. Extensionally equal maps or sets
+may therefore have different durable bytes (§3a).
 
 An ordinary executable **closure is different**. It is a callable,
 runtime-local opaque value. A closure, and any graph containing one, is outside
@@ -132,10 +138,12 @@ data structures remain separate from this contract.
 ### 3a. Canonical byte encoding (F4-elaborated)
 
 Every durably canonicalizable value has a deterministic canonical byte form.
-This section is the normative authority for that encoding. The earlier
-implementation profile in `../../docs/design/content-addressing.md §1` is
-derived; its byte-layout details apply only where they agree with this chapter,
-and its interning, slot, and storage language is superseded.
+Closure-free `Map`/`Set` trees also have durable bytes, but those bytes are not
+canonical for their extensional equality. This section is the normative
+authority for both boundaries. The earlier implementation profile in
+`../../docs/design/content-addressing.md §1` is derived; its byte-layout details
+apply only where they agree with this chapter, and its interning, slot, and
+storage language is superseded.
 
 **Kind tags.** Each encoding is prefixed by a 1-byte kind tag from a single
 namespace (see the design doc §1.1 for the full table). Currently assigned:
@@ -151,11 +159,6 @@ them).
 
 - **Records:** fields encode in **declaration order** (the order in the
   `record` definition), never alphabetical or insertion order.
-- **`Map`:** entries sorted by the **lexicographic order of the canonical
-  byte encoding of each key**. Duplicate keys resolved at construction time
-  (last-write-wins).
-- **`Set`:** elements sorted by the **lexicographic order of the canonical
-  byte encoding of each element**.
 - **`data`:** constructor identified by a **global elaborator-assigned id**
   (not a per-type de Bruijn index); arguments encode in positional order.
 - **`String`:** **NFC-normalized** UTF-8. Normalization is performed at
@@ -164,9 +167,21 @@ them).
   zero limbs) — guarantees a unique encoding for every integer.
 - **`Array`:** elements in index order.
 
-These rules guarantee that two structurally-equal, durably canonicalizable values
-encode to identical bytes regardless of construction history. In particular:
-a `Map` or `Set` built in two different insertion orders encodes identically.
+These rules guarantee that two equal values in the durable canonicalization
+domain encode to identical bytes regardless of construction history.
+
+**`Map`/`Set` residual (OQ-A).** The transparent package carrier encodes through
+the ordinary `data` rule above: constructor identity and positional children
+preserve its tree topology. The encoding does not sort entries, add a
+Map-specific discriminator, or define a separate extensional codec. Each
+closure-free tree must round-trip through its own durable bytes, and extensional
+equality plus ordered `to_list` observation remain unchanged. However, two
+extensionally equal `Map`/`Set` values built with different insertion histories
+may have different tree topologies and therefore different durable bytes.
+Durable bytes are not a canonical form for their extensional equality, and
+content-addressed deduplication of those values is not guaranteed. A later
+proved fast-map may supersede this representation (`../50-stdlib/52-map.md
+§6`); this chapter does not define it.
 
 **Constructor and type identity.** The elaborator assigns globally-unique
 integer identifiers to constructors (`data`) and record types. These travel
@@ -219,7 +234,8 @@ The immediate/boxed/shared boundary is private runtime tuning, not semantics.
 | **Immediate scalars** | `Bool`, `Char`, `Float`/`Float32`, `Int8`–`Int64`, `UInt8`–`UInt64` | May be stored inline |
 | **Small `Int`** | Within `i64` range | May use inline `i64`; arithmetic still promotes without overflow (`§1`) |
 | **Small `Decimal`** | Coefficient fits `i64`, exponent in `i32` range | May use an inline coefficient/exponent pair |
-| **Canonical compounds** | Closure-free `data` applications, records, `String`, `Bytes`, `Array`, `Map`, `Set`, bignums, big `Decimal` | Deterministic durable bytes under §3a; runtime representation private |
+| **Canonical compounds** | Closure-free structural `data` applications, records, `String`, `Bytes`, `Array`, bignums, big `Decimal` | Deterministic canonical bytes under §3a; runtime representation private |
+| **Durably encodable package trees** | Closure-free proved `Map`/`Set` trees | Ordinary topology-preserving `data` bytes round-trip; extensionally equal values may have different bytes (§3a) |
 | **Runtime-local callable** | Ordinary `Closure`, and any aggregate graph containing one | Opaque and non-persistable; refused before durable bytes exist |
 
 An implementation may tune the immediate/boxed/shared boundary without

@@ -25,7 +25,7 @@ registered for L6 (`../bytes-io/seed-bytes-io.md`).
 (`../../stdlib/map/seed-map.md`), not a heap primitive (OQ-A, 2026-07-03).** The
 Map-container WP retires the opaque `DecEq`-keyed content-addressed heap
 `Map`/`Set` this file originally pinned (kinds `0x07`/`0x08`,
-insertion-order-independent canonical identity, O(1) slot-id equality). Under
+insertion-order-independent canonical bytes, O(1) slot-id equality). Under
 the landed `52-map.md` + the `37 §3.3` flip, `Map k v` and `Set a` are **proved,
 pure `catalog/packages/` trees keyed on `Ord k`**, with **extensional** identity via
 ordered `toList` (not O(1)-slot), **out of `trusted_base()`** (net-negative
@@ -50,7 +50,9 @@ and private runtime representation); `41 §3a` (durable kind tags
 construction**. The former heap `Map 0x07`/`Set 0x08`
 kinds + their canonical-byte-encoding insertion-order-independent identity are
 **retired** by OQ-A — `Map`/`Set` are proved `Ord k`-keyed trees with
-extensional identity, `../../stdlib/map/seed-map.md`); `34 §1`/`§3`
+extensional identity. Their topology-preserving ordinary `data` bytes
+round-trip, but equal maps or sets may have different durable bytes and have no
+content-addressed dedup guarantee (`../../stdlib/map/seed-map.md`); `34 §1`/`§3`
 (`List`/`Option`/`Result` inductive `data` + `elim_List`, **landed L2**);
 `34 §5` (refinement types — the `sort` carrier); `33 §4` (a type exported
 **abstractly** — name only, constructors hidden — the `Array`
@@ -378,8 +380,7 @@ the proved `Map`/`Set` carrier is keyed by lawful `Ord` (`52 §2`). The former
 not live producers.
 
 ### surface/collections/structurally-equal-collections-compare-equal
-- spec: `37 §6`/`§3.3`, `41 §4`, `41 §3a`
-  (insertion-order-independent canonical form)
+- spec: `37 §6`/`§3.3`, `41 §4`, `52 §5.3`
 - given: two `List` values built by different expressions but **structurally
   equal**; and (richer) two `Map` values built in **different insertion orders**
   with the same key→value content.

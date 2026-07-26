@@ -5,6 +5,11 @@ durable canonical bytes and extensional equality for closure-free canonical
 data, private in-process representation, the runtime-local opaque callable
 boundary, `Int` promotion, and `unknown` propagation.
 
+The proved `Map`/`Set` package trees are the explicit durable-byte exception:
+their ordinary topology-preserving `data` bytes round-trip, but are not
+canonical for extensional equality (`41 §3a`, OQ-A). No case requires
+content-addressed deduplication across extensionally equal Map/Set values.
+
 **Realization status.** This revision is a spec/conformance boundary, not its
 runtime implementation. The current `ken-foundation` and `ken-runtime`
 `values.rs`/`canonical.rs` still encode `Value::Closure`, and
@@ -34,21 +39,29 @@ explicitly RED-UNTIL the implementation follow-on removes that route.
 - why: equality is extensional; a pointer, slot, or construction path cannot
   change it.
 
-## runtime/values/canonical-encoding-map-ordering
-- spec: `spec/40-runtime/41-values.md §3a`
+## runtime/values/map-extensional-observation-and-durable-roundtrip
+- spec: `spec/40-runtime/41-values.md §3a,§4`;
+  `spec/50-stdlib/52-map.md §1.1,§5.3`
 - given: a `Map` constructed by inserting entries `{k2→v2, k1→v1, k3→v3}`
   and the same `Map` constructed by inserting `{k1→v1, k2→v2, k3→v3}`
-- expect: both produce **identical canonical bytes** (entries sorted
-  lexicographically by canonical key bytes) and compare equal
-- why: canonical ordering makes Map encoding deterministic.
+- expect: the maps compare equal extensionally and have identical ordered
+  `to_list` observations. Each independently round-trips through its own
+  topology-preserving ordinary-`data` bytes. The case requires neither equal
+  nor unequal byte strings across the two insertion histories.
+- why: OQ-A preserves extensional Map behavior and durable round-trip while
+  trading away insertion-order-independent byte canonicity.
 
-## runtime/values/canonical-encoding-set-ordering
-- spec: `spec/40-runtime/41-values.md §3a`
+## runtime/values/set-extensional-observation-and-durable-roundtrip
+- spec: `spec/40-runtime/41-values.md §3a,§4`;
+  `spec/50-stdlib/52-map.md §1.1,§4.4`
 - given: a `Set` built by inserting `{c, a, b}` and the same `Set` built
   by inserting `{a, b, c}`
-- expect: both produce identical canonical bytes (elements sorted
-  lexicographically by canonical element bytes) and compare equal
-- why: canonical ordering makes Set encoding deterministic.
+- expect: the sets compare equal extensionally and have identical ordered
+  element observations. Each independently round-trips through its own
+  topology-preserving ordinary-`data` bytes. The case requires neither equal
+  nor unequal byte strings across the two insertion histories.
+- why: `Set a = Map a Unit` inherits OQ-A's extensional behavior and its
+  non-canonical durable-byte cost.
 
 ## runtime/values/canonical-encoding-record-field-order
 - spec: `spec/40-runtime/41-values.md §3a`

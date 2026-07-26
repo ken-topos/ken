@@ -73,7 +73,10 @@ ordered `toList`, out of `trusted_base()`). The superseded heap-`Map`/`Set`
 cases in `seed-collections.md` are reconciled to this model in the **same
 branch** (else the corpus self-contradicts the spec on merge — the
 internal-consistency gate); see that file's supersession note. There are **not
-two `Map`s**.
+two `Map`s**. The proved tree's ordinary `data` bytes preserve topology and
+round-trip, but are not canonical for extensional Map/Set equality: different
+insertion histories may produce different durable bytes, and no
+content-addressed dedup guarantee survives OQ-A.
 
 ---
 

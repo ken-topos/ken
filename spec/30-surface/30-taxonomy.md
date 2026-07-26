@@ -180,7 +180,10 @@ coincide.
   `data` + `view` defs, re-checked, out of `trusted_base()`** — the opaque
   `Map`/`Set` primitive is **retired**, shrinking `trusted_base()` (a
   net-negative delta; "proved" *requires* a transparent carrier, since an opaque
-  primitive has no eliminator and its laws could only be `Axiom`). The
+  primitive has no eliminator and its laws could only be `Axiom`). The ordinary
+  tree bytes preserve topology: they round-trip, but extensionally equal
+  `Map`/`Set` values may have different bytes, so insertion-order-independent
+  byte canonicity and content-addressed dedup are not promised. The
   content-addressed heap form is **parked** as a possible later fast-map
   (the "HAMT-later" analog, `37 §3.2`), proved if it lands. (The item-2/item-3
   audited-vs-assumed accounting distinction below still governs the entries that
