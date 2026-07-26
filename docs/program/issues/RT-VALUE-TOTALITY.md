@@ -11,6 +11,109 @@ github: null
 origin: Architect cycle-contract ruling evt_5pzxf6sm4z08 ("host recursion may not be the totality mechanism -- a deep acyclic chain must adopt without host-stack growth and must not be reclassified as malformed") plus closure-identity ruling dec_3b1r19v59v20y / SPEC-CLOSURE-BOUNDARY. Steward-filed 2026-07-26 per COORDINATION §2 as move 2 of three from the closure-identity ruling: the repair is a BLOCKING DEPENDENCY for RT-FNSPLIT-B2V acceptance but a SEPARATE implementation slice, and must not be built as a B2V-local adapter. Scope was re-derived against the landed code rather than taken from the ruling's prose, which surfaced three mechanisms the ruling did not name.
 ---
 
+> ## ⭐⭐ OPERATOR RULING 2026-07-26 — THIS NODE IS NOW THE RUNTIME TEAM'S DIRECTION
+>
+> **Operator, verbatim:** *"the full linux abi campaign is stalled by a
+> particular spec relaxation that triggered the general spec relaxation effort.
+> The particular one should be carried through the enclave, and redirect the
+> runtime team so they can complete their work."*
+>
+> **The particular relaxation is `SPEC-CLOSURE-BOUNDARY`** — and that it is *the*
+> trigger is recorded, not inferred:
+> `14-spec-mission-alignment-campaign.md` opens *"`SPEC-CLOSURE-BOUNDARY` removed
+> persistent content-addressed closure identity from observable semantics… **This
+> campaign is that WP's generalization.**"* Its own `origin:` names the cause —
+> **six consecutive Architect production blocks on `RT-FNSPLIT-B2V`.**
+>
+> ### ⛔ AND IT WAS NEVER CARRIED THROUGH. That is this node.
+>
+> `SPEC-CLOSURE-BOUNDARY`'s closing line, in its own words: *"it settles the
+> **contract**, not the implementation. `crates/` still contradicts it."*
+> Measured, still true: `canonical.rs:182` encodes closures **memcmp-exact**, and
+> `Value`'s derive list still grants `Closure` the structural equality, ordering
+> and hashing **the landed boundary forbids** (§2c, §2d — these are *spec
+> violations* now, not robustness gaps).
+>
+> ⇒ **P1 landed the totality half. The representation half — the half the
+> relaxation was actually about — has no frame.**
+>
+> ### ▶ THE REDIRECT, CONCRETELY
+>
+> | | |
+> |---|---|
+> | **Runtime goes to** | **`P2` + `P3` of this node** — the carry-through |
+> | **`RT-FNSPLIT-B2F` stays** | ⛔ **HELD at hard-stop #11.** Do not resume it |
+> | **`RT-FNSPLIT-B2E`** | ▶ **land it** — candidate under QA, inert infrastructure, zero `B2F` population. ⛔ Do **not** discard a nearly-complete unit |
+>
+> ⭐ **Why the redirect is right and not merely a re-prioritisation.** `B2F`'s
+> wall is that every eliminator needs a compile-time template, and all three
+> escapes are closed by settled authority. **Runtime has been building
+> increasingly elaborate machinery to satisfy a representation the spec has
+> already relaxed** — `B2E` exists solely to bridge it. ⛔ **That is designing
+> compliance around a constraint instead of asking whether it should still
+> bind** — the same error the Steward made twice on 2026-07-26 (the source-text
+> oracle, the currency gate), and the operator has now called it a third time on
+> a far more expensive lane.
+>
+> ### ⛔⛔ THREE OTHER CAMPAIGN ITEMS LAND ON `P2`. The frame must carry them as inputs.
+>
+> **Answering the operator's question of 2026-07-26 — *"do any of the other spec
+> relaxation items impact the work in front of the runtime team?"* Measured
+> against `spec-align-a1-census.md` and the Track C dispositions: yes, three.**
+>
+> **1. ⛔ A live conformance row says equality IS SLOT ID. `AC-V8` says equality
+> agrees with CANONICAL identity.** A1 census row: *"Same-slot dedup,
+> slot-observable structural sharing, O(1) equality"* — `41 §2,§4`; `42 §3.4`;
+> `44 §1` — with live rows `runtime/values/equality-is-slot-id`,
+> `runtime/values/dedup-shares-slot`,
+> `surface/collections/structurally-equal-collections-o1-comparable`. Verdict
+> **`STOP-1/4` — exactly fork C7.**
+> ⇒ **`AC-V8` cannot be discharged without saying how canonical agreement relates
+> to slot-id equality**, and a live row asserts the latter. ⛔ **This is a real
+> possible collision, not a wording problem** — surface it to the Architect
+> *before* P2 picks an arm, not at review.
+>
+> **2. ⚠ C2 already ruled the key interface `AC-V8` is choosing inside.** The
+> Architect ruled C2 as option (b), **`KeyEq` derived from the order**
+> (task `#106`). `AC-V8`/`AC-V12` pick an equality/order/hash arm for `Value`.
+> ⇒ **P2 must not pick an arm that contradicts C2.** ⛔ Do not let P2 re-decide
+> a ruled question by arriving at it from the other side.
+>
+> **3. ⚠ `canonical.rs` is under live A1 stops.** Bignum tag `0x01`
+> (`STOP-4`) and sign-magnitude minimal-limb normalization (`STOP-4/1`) both have
+> live conformance rows over the exact bytes. P2 edits that file. ⇒ **P2 may not
+> alter those encodings as a side effect of the closure-arm work**; it is a
+> refusal at one arm, not an encoder redesign.
+>
+> ### ⭐⭐ AND THE REDIRECT MOVES A PREMISE THAT A1 RELIED ON
+>
+> **A1's cleared set is EMPTY — every candidate stopped.** Three of those stops
+> name **`B2E` itself** as part of the reason:
+> - open addressing / bucket layout — *"the store family is C7-coupled and **live
+>   `B2E` infrastructure consumes it**"*
+> - 4 MiB pages / bump allocation — *"**C7/`B2E` entanglement**"*
+> - FNV-1a / `memcmp` / monotonic slots — *"live rows and **C7/`B2E`
+>   entanglement**"*
+> - and the summary: *"clearance because C7 and **live `B2E` work own the physical
+>   store boundary**"*
+>
+> ⇒ ⛔ **A load-bearing premise of A1's stop list is that `B2E`/`B2F` is actively
+> building against the store family. The redirect changes that.**
+>
+> ⚠ **It does NOT clear them, and I am not treating it as though it does.** Each
+> of those stops rests on **two or three** independent reasons — live conformance
+> rows and the open **C7** fork — and only the `B2E` one moved. ⭐ **But a stop
+> whose stated justification has partially expired must be re-read rather than
+> inherited**, and A1's census is the artifact a later relaxation will cite. ⇒
+> Recorded here as a **premise to re-examine when the redirect settles**, owned
+> by the Steward, not by P2's author.
+>
+> ⚠ **Honest residual: it is NOT established that landing `P2` dissolves `#11`.**
+> The wall is stated in terms of the `Lowered` lattice, not `Value`'s derives.
+> ⇒ **Do not write "P2 unblocks B2F" into any frame.** When `P2` lands, `#11` is
+> **re-put to the Architect** against the new representation. That re-ask is the
+> deliverable; a dissolved wall would be a welcome outcome, not a premise.
+
 > ## ⛔ THIS IS NOT A B2V-LOCAL ADAPTER
 >
 > `RT-FNSPLIT-B2V` cannot discharge its acceptance by wrapping a deep-value
