@@ -1,22 +1,46 @@
 ---
 id: KW-ORACLE-CLOSURE
 title: "close the KW-THEOREM source oracle structurally — the occurrence sweep is never applied, and the file population is a five-arm hand enumeration"
-status: active
+status: merged
 owner: language
 size: S
 gate: none
 depends_on: [KW-THEOREM]
 blocks: []
-github: null
+github: 986
 origin: Adversary post-merge hunt on landed `origin/main` = `c72be0b0`, evt_4q06tgtrw6bv (thr_2seh2bm1kr5mh). Two findings, both in `crates/ken-elaborator/tests/kw_theorem_source_oracle.rs`, **both with zero live instances** — the adversary ran each missing check itself against the full landed population and the corpus is clean. Filed anyway because each is one call site / one predicate wide, and because `RT-FNSPLIT-B2F` is not the only consumer that will lean on this oracle. Steward triage 2026-07-25.
 ---
 
-> ## ▶ THE FRAME IS WRITTEN — read it, not this file
+> ## ✅ MERGED — PR #986, `origin/main` = `9b6d4d16`, landed tree `50c485ce`
 >
-> `docs/program/wp/KW-ORACLE-CLOSURE-structural-population.md`. It carries the
-> re-derived anchors, the AC→control map, and ⭐ the measured design fact that
-> makes P2 small: `candidate_inputs()` **already** enumerates the whole tree via
-> `git ls-tree -r`, so the narrow part is `classify`, not the enumeration.
+> ⚠ **The title and §P1 below are in the PRESENT TENSE and describe the DEFECT, not
+> current state.** Both are now historical: the occurrence sweep **is** applied to
+> the corpus, and the population **is** derived structurally. Verified by blob
+> identity — `crates/ken-elaborator/tests/kw_theorem_source_oracle.rs` =
+> `c2119e62` on `main`, identical to candidate `79acbabb`.
+>
+> ⭐ **It took two candidates, and the reason is the reusable part.** `980bb047`
+> was **BLOCKED by QA**: `AC-C1`'s required **population-side** mutation (one line
+> of ordinary prose outside a `ken` fence in a real corpus file) returned **exit 0
+> / 1 passed**. The build had run a **detector-side** mutation instead (*"head-only
+> occurrence scan"*), which reddened — so its report that *"each control reddened
+> its intended named test"* was **literally true** while the exact defect this WP
+> exists to close sat under a green control. `79acbabb` discharges it
+> population-side: **exit 101** at
+> `exact_candidate_has_no_unclassified_retired_occurrences`.
+>
+> ⇒ Promoted to `agent/playbooks/tools/pin-a-property.md §10`: **detector-side and
+> population-side mutations are not interchangeable controls.** ⛔ Deliberately
+> distinguished from the existing *"edited the detector along with its subject"*
+> row — that is mutating **both**; this is mutating the detector **instead of** the
+> population, and it reports clean.
+>
+> **Frame:** `docs/program/wp/KW-ORACLE-CLOSURE-structural-population.md` — the
+> re-derived anchors, the AC→control map, and ⭐ the measured design fact that made
+> P2 small: `candidate_inputs()` **already** enumerated the whole tree via
+> `git ls-tree -r`, so the narrow part was `classify`, not the enumeration.
+>
+> ⛔ **Retros are the only thing still open on this node.**
 
 > ## ⚠ THERE IS NOTHING HIDING TODAY — THAT IS NOT THE POINT
 >
