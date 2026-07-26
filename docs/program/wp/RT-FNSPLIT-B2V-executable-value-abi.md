@@ -440,10 +440,63 @@ reddens if `ActivationFrame` is substituted for the referent owner.
 >   store-owned adoption path is positively exercised**; and owner/identity
 >   **iff** for every admitted handle graph.
 >
-> ✅ **Ground adoption already implemented at `fe7d8a08` may carry unchanged.**
-> The classifier, the closed partition, `AC-1`, `AC-3` and the three block-#4
-> repairs all carry. These rulings bind **only** the persistent
-> emitted-constructed identity cell and the `Closure` arm of it.
+> ⛔ **CORRECTED 2026-07-26 — "ground adoption at `fe7d8a08` may carry
+> unchanged" IS FALSIFIED. Do not rely on it.**
+>
+> That sentence was the Architect's, transcribed by the Steward in good faith,
+> and **measurement overturned it within the hour.** `fe7d8a08`'s ground
+> adoption recursed over `Constructor`/`Record` children **with no cycle
+> guard**, and a reachable emitted input **hung it**. ⭐ **Mutation `M42` is the
+> sharpest control on this node: remove the guard and it does not redden — it
+> stack-overflows and aborts the test binary.** The defect is demonstrated, not
+> argued. Repaired at `9b254fb9` (in-progress node-index set, exact fail-closed
+> status at any cycle length).
+>
+> ⚠ **Read the shape of this, not just the fact.** An `AC-6` ruling carved out
+> ground adoption as settled; the very next fold found a live defect inside the
+> carve-out. ⛔ **A scope exclusion in a ruling is a statement about what the
+> ruling ADDRESSES, never a warrant that the excluded region is correct.**
+>
+> ✅ Still carrying, and **not** touched by this correction: the classifier, the
+> closed partition, `AC-1`, `AC-3`, and the three block-#4 repairs.
+
+> ### ⛔ OPEN — THE CYCLE CONTRACT IS ROUTED AND UNANSWERED (2026-07-26)
+>
+> ⭐ **Ruling B item 5's stop-and-route fired, exactly as written, and the
+> precondition came back TRUE: persistent cycles ARE constructible.**
+> `ken_boundary_store_field_local` refuses only a *persistent parent with an
+> invocation-owned child*, so emitted code can allocate two persistent nodes and
+> write each as the other's child — and **both writes return `OK`** through
+> bounds, tag, frozen-prefix and escape.
+>
+> **The question with the Architect** (`evt_5wfk22smnakh9`): are cyclic
+> persistent graphs **malformed/unrepresentable**, so failing closed before
+> publication is the correct contract — or are they **admitted well-formed
+> values** requiring a canonical cyclic store representation?
+>
+> ⛔ **Do not infer the answer from the guard's behaviour.** `AC-10` forbids
+> rejecting an admitted well-formed represented value, so *"the guard rejects
+> it"* is the thing being ruled on, **not evidence for the ruling**. The ring
+> was right to refuse to infer it.
+>
+> ⛔ **`Closure` canonical-image work is STOPPED pending this ruling** — that is
+> the frame's own instruction, followed correctly, not a stall.
+
+> ### ⚠ TWO UNMEASURED RESIDUALS CARRIED FORWARD FROM `9b254fb9`
+>
+> Reported by the implementer rather than discovered later, and **neither is
+> discharged**:
+>
+> 1. ⛔ **`adopt` recursion is cycle-safe but has NO DEPTH BOUND.** A deep
+>    *acyclic* aggregate can still overflow, and **the margin is unmeasured.**
+>    Cycle-safety and depth-safety are different properties; the guard closes
+>    only the first.
+> 2. ⛔ **`absorb_published_counts` means `adopt` must not run against a region a
+>    live invocation is still writing.** No control currently pins that.
+>
+> ⚠ These are **`AC-10` domain-closure faces, not test residuals.** Per this
+> frame's standing rule they are raised as questions and recorded here — ⛔ **do
+> not fold either into the nearest `AC` without a ruling.**
 
 **AC-7 — borrowed ingress fails closed on escape.** Exact error.
 
