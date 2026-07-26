@@ -1,7 +1,7 @@
 ---
 id: RT-VALUE-TOTALITY
 title: "Make every total traversal of Value non-recursive in the host stack, and remove the closure capabilities the landed closure boundary forbids"
-status: ready
+status: active
 owner: runtime
 size: L
 gate: none
@@ -18,9 +18,13 @@ origin: Architect cycle-contract ruling evt_5pzxf6sm4z08 ("host recursion may no
 > traversals that every consumer reaches, so a B2V-local fix leaves every other
 > caller overflowing. That is why this is its own node.
 
-> ## ✅ PHASE 1 IS FRAMED AND READY. ⛔ PHASE 2 IS NOT — its frame does not exist.
+> ## ▶ PHASE 1 IS IN FLIGHT with Team Runtime. ⛔ PHASE 2 has no frame yet.
 >
-> The work is **split into two phases**, and only the first is releasable:
+> Split into two phases. **P1 was kicked to `runtime-leader` 2026-07-26 at
+> `evt_64xwmxt5v3qk`, base `origin/main = 63ad112c`, branch
+> `wp/RT-VALUE-TOTALITY-P1`** — handoff gate run in full (B2R retros confirmed
+> `evt_v3gb9yyne1m8`/`evt_3q5d2qdnj0vsb`/`evt_5n9kybev0x9q2`; all three seats
+> compact-verified; leader observed `Working`).
 >
 > | phase | frame | covers |
 > |---|---|---|
