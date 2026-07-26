@@ -22,20 +22,62 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~09:0xZ · `origin/main` = **`7eaa42a3`**
-### **✅ #986 → #1003 MERGED (eighteen).**
-### ✅ **`B2V` BUILDING, three folds deep** — `RULING R3` transcribed (#1003).
-### ✅ **`ABI-R1` KICKED — Foundation live** `evt_37qes7vz8c6z0` (#72 DONE).
+## ▶ LIVE — 2026-07-26 ~09:2xZ · ⛔ **NO `main` SHA HERE, BY CONSTRUCTION**
+### ⛔ **This header used to carry `origin/main`. It was ALWAYS the pre-merge**
+### **base — stale the instant the block landed. `git rev-parse origin/main`.**
+### ✅ **#986 → #1004 MERGED.** ▶ **#1005 in CI** — the sweep fix (#79 + #76).
+### ✅ **BOTH LANES FILLED** — Runtime `B2V`, Foundation `ABI-R1`. #72 #74 DONE.
+### ⛔ **`ABI-R1` IS ON ITS THIRD CANDIDATE — and MY overclaim caused one.**
 ### ⛔ **2 ADVERSARY FINDINGS OPEN** — `RT-VALUE-TOTALITY` §7; unframed (#78).
-### ⛔ **SWEEP IS `--dry-run` ONLY UNTIL #79** — it flags BUSY seats wedged.
 
 > ### ▶ BOTH LANES ARE FILLED — Runtime on `B2V`, Foundation on `ABI-R1`
 >
 > ```
 > wp/RT-FNSPLIT-B2V-executable-value-abi          ab11a3d2   contains 481b2fea 720f301c 5e6b0945 3025713c
 > preserved/rt-fnsplit-b2v-prereanchor-a7aa60eb   a7aa60eb   <- created BEFORE the force-move
-> ABI-R1                                          no branch yet; ring kicked at 7eaa42a3
+> wp/ABI-R1-capability-prose-currency             0c8b77fc   pushed; BLOCKED, superseded twice
 > ```
+>
+> ⛔ **These are the only two live lanes. Do not open a third** — `#78` is
+> sequenced *behind* `B2V` (same files) and the doc lane is operator-HELD.
+
+> ### ⛔⛔ I OVERCLAIMED FROM A `| head -20` GREP AND IT COST THE RING A FOLD
+>
+> I audited `ABI-R1`'s first candidate and found a real defect: the new prose said
+> *"the downstream resolver enforces … the scope's `SymlinkPolicy`."* The Architect
+> independently **BLOCKED** on exactly that clause, so the finding was right.
+>
+> ⛔ **But my supporting claim — "no production consumer branches on the policy" —
+> was FALSE, and I stated it as a universal.** `foundation-qa` refuted it with its
+> own trace: `ken-interp/src/eval.rs:4040` passes `scope.symlink` in, and `:2608`,
+> `:2631`, `:3356`, `:3371` branch on it. **The interpreter and virtual lanes
+> honour the policy; only the NATIVE lane rejects unconditionally.**
+>
+> **Two mechanisms, and both are reusable:**
+>
+> 1. ⛔ **My grep ran through `| head -20`.** Six production reads; the window cut
+>    `eval.rs:4040` off the bottom. ⇒ **This is the exact defect I promoted into
+>    the playbook corpus 40 minutes earlier** (#81, filed off the
+>    `runtime-implementer`'s `| tail -60` retraction). Two instances in one day,
+>    opposite ends of the pipe. **It is positional, not a matter of care.**
+> 2. ⛔ **The untruncated grep still could not have answered it.** My
+>    `FollowWithinScope` grep was **complete** and found no consumer — because the
+>    consuming code tests `== NoFollow` and treats follow as the **fall-through**,
+>    so the variant never appears textually. ★ **A grep for a SPELLING is not a
+>    measurement of a PROPERTY.**
+>
+> ⚠ **And the cost was not the wrong sentence.** The implementer adopted my
+> universal and wrote the **inverse** universal into `f93a81bd`, which QA blocked.
+> ⇒ ⛔ **An overclaim in a routing message becomes the next candidate's premise.**
+> A truncated probe in a *report* is worse than in your own notes, because
+> downstream seats cannot see the pipe you used.
+>
+> ⭐ **The review worked because QA did not adopt my framing.** Two seats read the
+> same code and the one who had not written the routing message got it right. The
+> landed answer — **lane-dependent, neither universal enforcement nor universal
+> non-consultation** — is strictly better than mine. Corrected in the channel
+> (`evt_483neyt7w3fx3`) and in task **#83**, whose question is now the sharper
+> one: *why is the native lane not closed over a policy the interpreter honours?*
 >
 > ⛔ **These are the only two live lanes. Do not open a third** — `#78` is
 > sequenced *behind* `B2V` (same files) and the doc lane is operator-HELD.
