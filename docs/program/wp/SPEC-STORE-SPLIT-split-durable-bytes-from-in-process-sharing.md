@@ -331,31 +331,52 @@ clause was **still stronger than the mission needs**.
 closure clause over-strong against the relaxed store contract, **route it to the
 Steward as a fork.** ⛔ Do not fold a closure relaxation into this candidate.
 
-## `AC-8` — ⚠ THE LEDGER RIDER, and after `LIB-GATE-DECOUPLE` NOTHING REPORTS IT
+## `AC-8` — ⛔ WITHDRAWN. The ledger is NOT this candidate's concern.
 
-**13 `spec/` files are attested cited sources in `library/SOURCE-ATTESTATIONS`**,
-including files this WP edits — `40-runtime/44-capacity.md`,
-`40-runtime/42-evaluation.md`, `30-surface/36-effects.md`,
-`40-runtime/45-native-backend.md`, and `90-open-decisions.md`.
+> ### ⛔ WITHDRAWN 2026-07-26 BY OPERATOR RULING — AND THE WITHDRAWAL IS THE
+> ### POINT, SO IT IS RECORDED RATHER THAN DELETED.
+>
+> **Operator, verbatim:** *"The librarian's responsibilities are a distraction to
+> the spec enclave and the implementation teams. For them, the librarian is not a
+> concern, downstream, and unobserved."*
+>
+> This AC previously required the `library/SOURCE-ATTESTATIONS` fold to ride the
+> same SHA, and `spec-leader` had already tasked the Librarian inside this WP's
+> thread on the strength of it. **That coordination is cancelled.** It is recorded
+> here because the instruction went out; a reader who finds only silence cannot
+> tell a withdrawn obligation from one nobody thought of.
 
-⛔ **Editing one moves its blob OID — a locator-only edit does it too.** So this
-candidate **owes the `library/SOURCE-ATTESTATIONS` fold in the same SHA.**
+⛔ **Do not touch `library/`. Do not generate, diff, or report an attestation
+row. Do not coordinate with the Librarian.** If a `spec/` edit changes an
+attested source's blob OID — it will — **that is downstream and not yours.**
 
-> ⭐ **Why this AC is written louder than it looks.** Until 2026-07-26 a CI gate
-> caught a missing fold. `LIB-GATE-DECOUPLE` removes that gate by operator
-> ruling — the generator is kept and runs at **release points**, so between
-> releases **a missing fold is silent.** This AC is now the only thing standing
-> where a red test used to be. ⛔ Treat a skipped fold as landing a known-stale
-> ledger, not as a deferred chore.
+⇒ **This candidate is `spec/` + `conformance/` only.** The one-candidate
+constraint is unchanged and unrelated: it exists so a spec relaxation never lands
+while conformance rows still assert the demoted mechanism.
 
-⛔ **Never bump a row without diffing the CITED ANCHORS.** `library/manifest.toml`
-and `library/learn/reading-ken/06-execution.md` cite `44-capacity.md` and
-`42-evaluation.md`; `library/learn/exercises/solutions.md` and
-`06-execution.md` cite `90-open-decisions.md`. A demotion that deletes or renames
-an anchored section **breaks the citing page**, and the OID bump hides it. ⭐ The
-recurring case is benign, which is exactly what trains the rubber stamp.
-
-⇒ Report: rows bumped, and for each, whether the cited anchor still resolves.
+> ⭐ **Why the original AC was wrong, not merely noisy.** The operator's own
+> 2026-07-26 gate ruling made the currency ledger a **release-point artifact,
+> explicitly not enforced per merge** — *"remove the CI coupling."* Writing a
+> same-candidate fold into this frame **re-introduced per-merge ledger
+> enforcement in a WP frame hours after it was removed from CI.** A gate deleted
+> in one carrier and re-created in another has not been removed.
+>
+> ⚠ **And the alarm it raised was false.** The withdrawn text argued the AC was
+> *"the only thing standing where a red test used to be"* and that a miss would
+> surface as the next PR's red. **Measured at `ad1b9a01`, neither holds:** no CI
+> step invokes `gen-doc-status.sh` or `gen-source-attestations.sh`; the live-corpus
+> gates `check_source_currency` / `check_source_anchors` /
+> `check_generated_current` survive as functions wired into `VALIDATION_GATES`
+> (`crates/ken-cli/tests/library_documentation_gates.rs:577`) whose **only other
+> mention in the workspace is a comment** — zero consumers. ⇒ **There is no red at
+> either gate, so there was never a failure for this ring to prevent.**
+>
+> ⛔ **The trap for the next reader, since it nearly caught me:** eleven live
+> `#[test]` functions in that file are named `content_currency_gate_rejects_…` and
+> `ledger_set_mismatch_when_a_citation_is_added_without_a_ledger_row`, and they
+> run green in CI. **Every one builds a fixture repo in a temp dir.** They test the
+> detector, not the corpus. **A name that describes the corpus is not a check on
+> it.**
 
 ## `AC-9` — the residual is stated
 
@@ -400,9 +421,17 @@ traceability to a superseded contract.
 
 Return **one exact candidate SHA** with the branch freed, plus: the `--name-only`
 diff; the `AC-2` demotion table; the `AC-4` per-row disposition table with
-reasons; the C7 ruling text and the `OQ-Space` closure; the `AC-6` positive
-controls; the `AC-8` ledger report with anchor resolution; and the `AC-9`
-residual.
+reasons; the C7 ruling text and the **`OQ-Space` in-place reconciliation**; the
+`AC-6` positive controls; and the `AC-9` residual. ⛔ **No `AC-8` ledger report —
+that AC is withdrawn.**
+
+> ⛔ **CORRECTED 2026-07-26 — this list said *"the `OQ-Space` closure"*, which
+> `AC-5` forbids.** The amendment that rewrote `AC-5` to *reconcile in place* left
+> this restatement of it standing, so the frame instructed both at once and the
+> **Handoff is the section an author reads last.** ⭐ The general shape:
+> **amending an AC does not sweep the sections that RESTATE it** — and a handoff
+> checklist is exactly such a section, which is why it is the most dangerous place
+> for a stale duplicate.
 
 ⛔ **No Decision is opened by the enclave** — that is the Steward's. Diff-scope
 will pull the **Spec vote** (conformance-validator) and the **Architect**.
