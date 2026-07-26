@@ -255,9 +255,11 @@ predecessors are retired here to avoid two homes per property:
   refusal`, `runtime/addressing/no-lattice-on-hot-path`) are subsumed by
   `loud-at-limit-raises-not-silent` and `no-lattice-on-hot-path` here; that file
   now points to this seed for capacity.
-- Dedup **correctness** (the `memcmp` no-false-merge guard, distinct-env
-  closures) is pinned in `runtime/values/` and is **not** duplicated here; AC1
-  above pins only the dedup **accounting** (distinct-count occupancy).
+- Dedup **correctness** (the `memcmp` no-false-merge guard over closure-free
+  canonical data) is pinned in `runtime/values/` and is **not** duplicated
+  here. That corpus separately pins refusal before a closure-containing graph
+  can reach this store; AC1 above pins only dedup **accounting**
+  (distinct-count occupancy).
 
 ## Build-sequencing note
 

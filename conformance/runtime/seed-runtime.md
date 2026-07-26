@@ -1,15 +1,18 @@
 # Runtime conformance — seed cases
 
 Format: `../README.md`. These pin the runtime corrections (typed values, not
-uniform f64; conventional content addressing) and the content-addressed
-properties.
+uniform f64), conventional content addressing for closure-free canonical data,
+and the runtime-local opaque callable boundary.
 
 ## runtime/values/dedup-shares-slot
 - spec: `spec/40-runtime/41-values.md §2,§4`
-- given: two independently-constructed structurally-equal compound values
+- given: two independently-constructed structurally-equal closure-free
+  canonical compound values
 - expect: they occupy the **same slot** (global dedup); `==` is O(1) (slot-id
   comparison)
-- why: content addressing gives sharing + O(1) structural equality.
+- why: content addressing gives canonical-data sharing + O(1) structural
+  equality. Ordinary closures and aggregates containing them are outside this
+  identity contract; `values/README.md` pins that boundary.
 
 ## runtime/values/scalars-are-typed-immediates
 - spec: `spec/40-runtime/41-values.md §1`

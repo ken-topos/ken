@@ -119,8 +119,9 @@ signature / Büchi-monitor acceptance (B2).
 - spec: `spec/70-behavioral/73-conformance.md §2.2` (TC3), `36 §4/§4.1/§4.4`,
   `41 §3`
 - given: **two distinct `space`s** each performing an op, plus a **cross-space
-  message** (a `send` in space A of a content-addressed value, a `receive` of it
-  in space B, `36 §4.4`); run through the instrumentation
+  message** (a `send` in space A of the closure-free canonical record
+  `{ sequence = 7, payload = "ok" }`, and a `receive` of it in space B,
+  `36 §4.4`); run through the instrumentation
 - expect: (a) **every** event carries its **space identity** (the space's single
   effect label, `36 §4.1`); (b) the `send`/`receive` events carry **matching
   message provenance** (the message value's content address, `41 §3`) that

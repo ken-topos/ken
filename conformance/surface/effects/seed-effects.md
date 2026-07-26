@@ -349,8 +349,8 @@ tail-resumptive fold (`§4.2`). Handlers are `elim_ITree` folds,
 ### surface/effects/space-shared-nothing-no-cross-space-alias (oracle)
 - spec: `36 §4.4` (shared-nothing message-passing; isolation **guarantee**)
 - given: two spaces `A`, `B`; (a) `A` **directly** reads/writes `B`'s `mut` cell
-  (aliases `B`'s `n`); (b) `A` **sends** an immutable, content-addressed value
-  to `B` by message-passing.
+  (aliases `B`'s `n`); (b) `A` **sends** an immutable, closure-free canonical
+  record `{ sequence = 7, payload = "ok" }` to `B` by message-passing.
 - expect: (a) **static error** `CrossSpaceAlias` (kind `(oracle)`); (b)
   **accepts**.
 - why: the **shared-nothing isolation** guarantee — no shared mutable state ⇒ no
@@ -359,6 +359,21 @@ tail-resumptive fold (`§4.2`). Handlers are `elim_ITree` folds,
   bug permitting cross-space aliasing breaks isolation **silently** (the program
   still kernel-checks — each space's `State S` is well-typed) — caught only
   here. (isolation guardrail.)
+
+### surface/effects/space-message-rejects-callable-transitively (oracle)
+- spec: `36 §4.4`, `41 §2.1` (transitive publication refusal)
+- given: a constructible message carrier
+  `data Payload = Data Int | Callback (Int -> Int)`; `A` sends (a) `Data 7`
+  and (b) `Callback (\x. x + 1)` to `B`
+- expect: (a) accepts and publishes normally; (b) is rejected at the message
+  publication boundary **before** canonical bytes, hash, slot, message
+  provenance, or send event exist. The failure MUST NOT depend merely on trying
+  to synthesize `DecEq`, and MUST NOT substitute a pointer, ordinal, digest, or
+  local handle.
+- status: **RED-UNTIL runtime message publication follows `41 §2.1`**
+- why: the two values share one legal carrier, so the nested callable alone
+  flips the verdict. This is the cross-space edge of the transitive
+  persistence boundary; well-typed construction is not permission to publish.
 
 ### surface/effects/handler-tail-resumptive-folds (oracle)
 - spec: `36 §5.1` (handler = `elim_ITree` fold), `§5.2` (resume once, tail
