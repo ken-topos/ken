@@ -1241,19 +1241,30 @@ contract, not a second hand-maintained authority.***
 >    reconciliation **must red on either drift**, with **non-empty positive
 >    controls**. **This is the executable form of today's measured agreement.**
 
-⭐ **Clause 3 is the whole ruling, and it is a `coexist`, not a `subsume`.** The
-obvious repair — delete the table, make the plan the only authority — was **not**
-ruled, because the Rust builders have their own fail-before-publication contract
-that the emitter's plan does not serve. ⇒ **Two authorities are permitted where
-they answer different questions; what is forbidden is two *hand-maintained*
-authorities.** The mirror survives only with reduced visibility, corrected docs,
-and a **mechanical both-directions reconciliation** standing in for the comment.
+> ### ⚠ ERRATUM 2026-07-26 — the two reader aids below were CORRECTED by the
+> ### Architect (`evt_yrkdhrx1yra9`), grounded against `origin/main=ee226c5e`
+>
+> ⛔ **The verbatim ruling clauses above were faithful; MY two added emphases
+> overstated them, and this is the corrected text — supplied by the Architect,
+> landed verbatim.** What I wrote said *"two authorities are permitted"* and that
+> clause 5 *"sharpens per-site to per-CELL"*. Both are wrong in the same
+> direction: they license more than the ruling grants. ⇒ ⭐ **A faithful
+> transcription plus an unfaithful gloss is not a faithful record — the gloss is
+> the part a hurried reader acts on.**
 
-⭐ **Clause 5 states `R4`'s per-site rule as law for this seam, and sharpens it
-from "per site" to "per CELL":** remap **and** drop **one exact `(tag,class)`
-cell**. ⇒ *"Measured agreement today"* is not evidence — it is a **claim awaiting
-an executable form**, and the ruling names that form rather than accepting the
-agreement.
+⭐ **Clause 3 preserves two enforcement paths, not two authorities.** Rust builders
+and emitted allocation both enforce the same tag×node-class legality contract at
+different production sites. The partition-derived relation is the sole
+representation authority. A Rust projection/mirror may coexist only at the smallest
+required visibility and only with full both-direction reconciliation to that
+authority; a shared backend-neutral derivation is stronger and permitted. What is
+forbidden is an independently maintained or independently authoritative mirror.
+
+⭐ **Clause 5 applies `R4`'s causal principle to the single relation consumer with a
+cell-specific discriminator:** remap and drop one exact `(tag,class)` cell and
+observe that cell's emitted acceptance change or `ERR_RELATION`. The full-product
+both-direction reconciliation, plus opposite-side drift mutations, supplies
+population closure. This is not a requirement to run one mutation per cell.
 
 ⛔ **Clause 2's anti-patterns are the two ways this fold silently keeps working
 while losing its fail-closed property:** seeding the fold with a real mask, or
