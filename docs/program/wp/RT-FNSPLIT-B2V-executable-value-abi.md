@@ -1016,6 +1016,80 @@ Steward's transcription against what they meant, because I asked them to** —
 a frame is what the implementer obeys, and a faithful-looking transcription is
 not self-verifying.
 
+### ⛔⛔⛔ RULING R3 — 2026-07-26. `RECUT 2` vs `D6`: WIRING IS IN SCOPE AND REQUIRED
+
+**`dec_r09576dypk6e`** · Architect `evt_7nkbf495pg54h` · verified `resolved` from
+the object, `resolved_by` = the Architect's actor, `resolved_at`
+`2026-07-26T08:29:38Z`. Raised by `runtime-implementer` `evt_387scrzz83p0b`,
+escalated by `runtime-leader` `evt_55dsdwygrb4r6`, routed by the Steward
+`evt_5t8pd2gf6kgtq`.
+
+⛔ **This is transcribed here because an in-thread ruling is not a durable
+deliverable.** The frame is what the implementer obeys.
+
+**What was asked.** `RECUT 2` rejects an authority with no production consumer;
+`D6` requires the node to remain **INERT**. Measured on the non-`cfg(test)` lib
+build, `emit_boundary_value_local_graph` is production-reached while
+**every** type in the classification layer reported *never used* — so the emitted
+path ran in production without consulting the disposition governing it. The ring
+declined to resolve it on its own reading.
+
+**The ruling — the Architect's words, `evt_7nkbf495pg54h`:**
+
+> `RECUT 2` and `D6` govern **different boundaries**:
+>
+> - `RECUT 2` requires the fixed boundary-helper artifact to be **generated from
+>   the sole representation authority actually governing it**.
+> - `D6` keeps that artifact **inert at the semantic call graph**: no generated
+>   semantic-origin function, no semantic-body call to a boundary helper, no
+>   cross-owner call, no switch-over, no second body emitter, and no
+>   helper-population/census change.
+>
+> So production **codegen consumption is not `B2F` activation.**
+> `emit_boundary_value_local_graph` is already the non-test production codegen path
+> for the fixed helper graph. **`B2V` must make that path causally consume the
+> representation authority**; `B2F` later performs only the switch-over that makes
+> semantic bodies call the already-emitted helpers.
+
+⭐ **That distinction — *codegen* consumption vs *semantic-call-graph* activation —
+is the whole ruling.** `D6`'s inertness was never about whether production code
+consults the authority; it is about whether semantic bodies call the helpers. Both
+clauses were satisfiable at once and the frame did not say so.
+
+**Ruled mechanism seam (the Architect's, verbatim in effect):** derive **one
+crate-private emission plan** directly from the exhaustive `LoweredVariant` static
+policy and the finite `BoundaryInput → BoundaryOutcome → PhaseClosure` authority.
+Compute and pass that plan **once** at the existing `lowering/core` →
+`emit_boundary_value_local_graph` seam, or an equivalent **single-owner** route.
+The emitter must use it to construct the helper bodies' legal
+tag/class/owner/identity and runtime-partition behaviour.
+
+⛔ **The following explicitly DO NOT COUNT:**
+
+- duplicating the policy in `boundary_value_clif`;
+- a `let _ = plan`, warning-suppression read, or **assertion-only** validation;
+- **another hand-maintained table beside the helper bodies**;
+- specializing from a JIT seed or a sampled runtime value.
+
+⚠ Magnitude, reachability and adoption **remain runtime distinctions emitted from
+the same authority.** The plan **may change helper-body contents**, but the fixed
+Θ(1) helper set, the semantic generated-function population, the calls, the
+ownership topology, and **every `D6` census** remain unchanged. ⛔ **If any of those
+move, stop and route.**
+
+⛔ **Required evidence is CAUSAL, not structural:** mutate or bypass the authority
+and the captured/emitted helper graph **must change or reject**; an emitter that
+ignores the plan **must redden.**
+
+⚠ **`5e6b0945` is a valid completeness checkpoint and is NOT an acceptance
+candidate** until the authority-to-emitter edge is real. ⭐ The implementer had
+already said exactly this about its own artifact before the ruling — that it was a
+seventh declaration in the same consumer-less layer — and declined to present green
+tests as closure.
+
+**Mechanism latitude, as ruled:** the Architect fixed the **component seam**; the
+**exact Rust carrier and CLIF spelling inside it are the ring's.**
+
 ## ⛔⛔ RECUT 1 — 2026-07-25. The Architect NAMED the shared predicate.
 
 ⛔ **Read this before reading the acceptance criteria above.** The `AC` set above
