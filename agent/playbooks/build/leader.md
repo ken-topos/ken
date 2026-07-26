@@ -24,7 +24,10 @@ load and follow it after this generic archetype.
   always-on sessions — **not sub-agents you launch.** Kick off a WP / assign a
   task by **posting a convo message that mentions them** (`post_response`,
   `mentions: ["<actor_id>"]` — resolve each actor_id from `list_participants` or
-  your `orientation()`). **NEVER** use the `Agent`/Task tool, a subprocess, or
+  your `orientation()`; ⛔ **if the MCP is dead, use
+  `scripts/moot-actor-id.sh <role>` — NEVER open `.moot/actors.json` yourself and
+  never dump it to see its shape: it holds every seat's `api_key` and that is what
+  leaks, COORDINATION §2**). **NEVER** use the `Agent`/Task tool, a subprocess, or
   `claude(prompt)` to reach a teammate — that spawns a **fresh, unconfigured
   Claude** that fails with "503 provider not configured" and is not how this
   federation delegates. All delegation, queries, and handoffs are mootup mentions;

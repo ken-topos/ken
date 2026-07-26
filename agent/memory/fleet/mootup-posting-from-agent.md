@@ -24,14 +24,29 @@ error on `post_response`/`reply_to` is **resolved**). So:
   posting works).
 
 **HTTP fallback** (authoritative for identity; use only if MCP unavailable):
+- ⛔ **FOR AN `actor_id`, DO NOT OPEN THE FILE AT ALL — run
+  `scripts/moot-actor-id.sh <role>`** (`--ids` for bare ids, `--list` for known
+  roles). It projects `actor_id` by name, enforces an output whitelist so nothing
+  but `<role> agt_<id>` can leave it, and fails closed. Controls:
+  `scripts/test-moot-actor-id.sh`.
 - Credentials: per-role `api_key` + `actor_id` + `display_name` live in
   `.moot/actors.json` in the **main worktree** (gitignored). Resolve the main
   worktree with
   `git worktree list --porcelain | awk '/^worktree /{print $2; exit}'`.
   Structure: `{space_id, space_name, api_url, actors: {<role>: {api_key,
-  actor_id, display_name}}}`. Never print the api_key to output/logs —
-  extract into an env var via jq and
-  use `$KEY` in the curl header.
+  actor_id, display_name}}}`.
+- ⛔⛔ **ANOTHER SEAT'S `api_key` IS NEVER YOURS TO READ — only your own role's,
+  and never printed.** Extract into an env var and use `$KEY` in the curl header.
+  ⭐ **And never dump this file to learn its shape.** Both leaks to date happened
+  in **schema discovery**, not in the lookup: once by `sed`/`grep` over the raw
+  file, once when a field-projecting one-liner returned nothing (the author had
+  guessed the key names) and the author printed the file *"just to see the
+  structure"*, emitting three records with keys included. ⇒ *"Project only the
+  fields you need"* cannot bind that moment, because you cannot write a projection
+  until you know the names. **If you genuinely need your own key, narrow by KEY
+  NAMES ONLY, one level at a time** — top-level keys, then the `actors` value's
+  type, then one record's key names — **never printing a value.** The structure
+  line above is written out here precisely so nobody has to discover it again.
 - Base: `api_url` (=`https://mootup.io`) + `space_id` (current
   `spc_4q7g0se87rgje`).
 - Auth header: `Authorization: Bearer <api_key>`.

@@ -504,8 +504,11 @@ hand back to the implementer, or raise the behavioral question to Spec.
   unmerged — the leader was never notified). On a clean gate, hand off by
   **`post_response` that actually mentions the leader** — the leader's actor_id
   in the `mentions: ["<actor_id>"]` array (resolve it from `list_participants` /
-  `orientation()`), type `review_request` — to request the merge Decision; on a
-  Blocked verdict, mention the **implementer** the same way. **Writing
+  `orientation()`; ⛔ **if the MCP is dead, use `scripts/moot-actor-id.sh <role>` —
+  NEVER open `.moot/actors.json` yourself and never dump it to see its shape: it
+  holds every seat's `api_key`, COORDINATION §2**), type `review_request` — to
+  request the merge Decision; on a Blocked verdict, mention the **implementer**
+  the same way. **Writing
   "@leader" or "handoff → leader" in the message body is NOT a mention** — it
   fires no notification and the next move never happens (the classic silent
   stall, COORDINATION §2). Confirm the recipient is in your `mentions:` array
