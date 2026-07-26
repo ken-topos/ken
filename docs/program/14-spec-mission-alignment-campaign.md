@@ -213,7 +213,7 @@ briefs are in §6.1–§6.8; the operator was briefed on 2026-07-26.
 | # | fork | decides | blocks |
 |---|---|---|---|
 | C1 | **Runtime `unknown` execution policy** — universal Kleene third value, or artifact status + explicit execution policy | operator (deployment policy) **then** Architect (semantics) | largest semantic radius in the advisory; crosses every evaluator, backend, FFI, effect path |
-| C2 | **`Ord`/`Map` key equality** — must order-equivalence yield kernel `Equal`? | ▶ **ROUTED to the Architect 2026-07-26** (operator) | whether normalized `Decimal` can be a lawful key |
+| C2 | **`Ord`/`Map` key equality** — must order-equivalence yield kernel `Equal`? | ✅ **RULED 2026-07-26** — option (b), key relation derived from the order; §6.2 | ▶ needs framing as a localized Map/Set key-interface split |
 | C3 | **Capability revocation** — universal transitive lineage, or a revocable/non-revocable split | Architect | runtime machinery cost on every capability; `ABI-REVOKE` |
 | C4 | **SCT termination** — exact SCT as source compatibility, or a kernel-checkable termination-evidence interface with SCT as one producer | ✅ **CLOSED — option (a), operator 2026-07-26** | nothing; SCT is deliberate source compatibility |
 | C5 | **Instance coherence + package admission** — keep the exact admission graph, or find the smaller invariant | Architect | multi-package resolution; needs real multi-package cases first |
@@ -274,25 +274,106 @@ own `Decimal = MkDecimalPair coeff exp` example (`10×10⁻¹` vs `1×10⁰`). R
 `eq : t -> t -> Prop`, proves it an equivalence, and has comparison return
 equality *in that relation*, never representation identity.
 
-⇒ **The fork is therefore narrower than the advisory frames it:** does Ken need
+⇒ **The fork was therefore narrower than the advisory frames it:** does Ken need
 a non-canonical-carrier route for the **overwrite/uniqueness face specifically**?
 
-⚠ **Bounded check, stated so the next reader does not over-trust it.** The
-localization finding comes from reading `52-map.md §2.1`, `§5.2`, `§5.3`, and the
-ADR-0010 axis discussion. It is **not** an enumeration of every
-`antisym → Equal` site: the advisory names a further canonical-carrier
-obligation at `54 §5.2`, which was **not** checked. **That enumeration is what
-sizes the fix, and it is the Architect's first task on this fork** — the
-localization is measured, its completeness is not.
+## ✅ C2 RULED — Architect, 2026-07-26 (`evt_7jppg10gk983`)
 
-**Options.** (a) status quo; (b) a `KeyEq`/ordered-key equivalence independent
-of kernel `Equal`, plus a proof that ordering respects it; (c) canonicalize
-before keying; (d) a stronger `CanonicalOrd` only where kernel equality is
-genuinely needed.
+⭐ **Transcribed here because an in-thread ruling is not a durable deliverable.**
+Bound to `origin/main = 870f5b65`; the Architect states it did not bind the
+advisory, consult a reference implementation, or fold in C4/C5.
 
-⭐ **This one is not ergonomics.** It decides whether ordinary normalized
-commercial values are lawful map keys without lying about representation
-equality. Prior-art support is the strongest in the advisory.
+### The census — every `antisym → Equal` site, in three classes
+
+⭐ **The classification is the load-bearing part**: separating the law
+declaration from its semantic consumers stops the same dependency being counted
+several times, which is what made the advisory's count look global.
+
+| # | site | class |
+|---|---|---|
+| 1 | `spec/50-stdlib/51-lawful-classes.md:90` — `Ord.antisym` declared with kernel `Equal` as its conclusion | **the source contract**, not a consumer; it is what makes every lawful `Ord` carrier canonical w.r.t. its order |
+| 2 | `catalog/packages/Core/Classes/LawfulClasses.ken.md:548-709` — `compare … = ord_eq` implies kernel `Equal`; load-bearing call to `d.antisym` at `:709` | **non-Map consumer**; stays canonical-carrier-only |
+| 3 | pair `Ord` via `pair_compare` equality soundness (`LawfulClasses.ken.md:1253`); list `Ord` calls `d.antisym` (`:1674`) | **instance-construction** sites — closure of canonical `Ord` under compound carriers, lawful only when every component `Ord` is |
+| 4 | `spec/50-stdlib/57-collections-and-views.md:213-224` `eq_from_ord`; shipped comparator `catalog/packages/Data/Collections/Derived.ken.md:864` | **non-Map consumer** (sort's permutation comparator); unchanged by C2 |
+| 5 | `spec/50-stdlib/52-map.md:386-394` — overwrite/uniqueness promotes mutual order to `Equal k k'` | ▶ **C2 target 1** |
+| 6 | `52-map.md:389-394` + `54-map-verified-laws.md:331-344,459-469` — the `Distinct` discharge | ▶ **C2 target 2** |
+
+✅ **My named gap is closed, and the answer is that it was not a gap.** `54 §5.2`
+is **not** an extra site: law 5's own proof is antisym-free — given `Distinct`,
+agreement is by `refl`; only the separate `Distinct` discharge uses antisym.
+`52 §5.2` lookup/found/locality are likewise antisym-free.
+`spec/30-surface/37-strings-collections.md:372` merely repeats the Map boundary,
+and `58-maps-sets-relations.md:117-130` supplies the canonical `Nat` witness for
+the same discharge — **neither adds a semantic use site.** The lattice law in
+`61-information-flow.md` is a distinct interface, not an `Ord`/Map consumer.
+
+### The ruling — option (b), with the key relation DERIVED from the order
+
+**Ken needs the non-canonical-carrier route.** But ⛔ **do not add an
+independent `KeyEq`** that can drift from the order — derive it:
+
+```text
+KeyEq x y := IsTrue (leq x y) ∧ IsTrue (leq y x)
+```
+
+The route is a **total-preorder / key-order dictionary** with `leq`, `refl`,
+`trans`, `total`, and **no** theorem from mutual order to kernel `Equal`.
+
+⭐ **Why no second field and no postulated compatibility theorem:** `KeyEq` is an
+equivalence from `refl` + `trans`, and its *compatibility with the order* is
+**also** derived from `trans` — if `x ≈ y`, substituting either side of `leq`
+preserves the result. ⇒ **One order remains the authority.**
+
+⛔ **Do not weaken `Ord.antisym`, and do not create a parallel `CanonicalOrd`**
+merely to restate what `Ord` already guarantees. `Ord` stays unchanged as the
+**canonical refinement** and continues to serve every consumer whose result
+really is kernel identity — sites 2, 3, and 4 above. Existing `Ord` adapts to the
+new route by *forgetting* `antisym`.
+
+**Binding rules for the relation-keyed route:**
+
+- lookup and overwrite use `KeyEq`, **never** kernel `Equal`;
+- `Distinct` means no two stored entries are `KeyEq`-equivalent;
+- insert/from-list discharge `Distinct` **directly** from the overwrite branch
+  and preorder compatibility — **no `Equal k k'` step**;
+- the overwrite/uniqueness law concludes **one entry per `KeyEq` class**, not
+  equality of representatives;
+- ⛔ **no theorem may convert `KeyEq x y` to `Equal k x y`** unless the stronger
+  canonical `Ord` evidence is explicitly supplied.
+
+### ⚠ The stored-representative policy is OBSERVABLE and must be pinned
+
+The current implementation already replaces **both key and value** in the equal
+branch (`Map.ken.md:108-118`) ⇒ **last inserted representative and last inserted
+value win**, and `to_list` exposes that representative.
+
+⛔ Structural kernel equality of two `Map` values stays
+**representation-sensitive**. Any API-level extensional map equivalence over this
+route must compare keys by `KeyEq` — it may **not** claim the two
+representatives are kernel-equal.
+
+### The counterexample, closed
+
+Take `x = (10,-1)`, `y = (1,0)` in the non-canonical `Decimal` carrier under a
+semantic numeric order, so `x ≤ y` and `y ≤ x`:
+
+- **Today:** `Ord.antisym` produces `Equal Decimal x y`; constructor injectivity
+  refutes the unequal fields and **inhabits `Bottom`**.
+- **Under the ruled route:** `KeyEq x y` is inhabited and **no kernel equality
+  follows**. Inserting `x` then `y` takes the overwrite branch, leaves one node,
+  stores representative `y`, and lookup by *either* representation returns the
+  last value.
+
+⇒ **The counterexample is excluded without a representation lie.**
+Canonicalization-before-keying (option c) remains a valid *adapter* where a
+canonical key type is desirable, but it is not the only lawful route. Status quo
+would unnecessarily exclude ordinary quotient-like commercial values, and a
+renamed stronger class alone (option d) would **preserve** that exclusion.
+
+### ▶ Framing instruction
+
+Frame C2 as a **localized Map/Set key-interface split**. ⛔ Do not reopen the
+antisym-free lookup laws, C4, or C5.
 
 ### 6.3 C3 — capability revocation
 
