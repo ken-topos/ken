@@ -22,12 +22,70 @@
 > state is the block immediately below. If you are resuming, read that and
 > nothing above it.**
 
-## ▶ LIVE — 2026-07-26 ~06:3xZ · `origin/main` = **`48cc267d`**
+## ▶ LIVE — 2026-07-26 ~06:4xZ · `origin/main` = **`adc9d563`**
 ### **✅ #986 · #987 · #988 · #989 · #990 · #991 MERGED.**
-### ▶ P1 IS BUILT + COMMITTED (`cb33c729`), NOW DURABLE ON ORIGIN
-### ⚠ …but its turn ended MID-SEQUENCE and the branch is still HELD.
+### ▶ P1 IS HANDED OFF AND WITH QA. `2b22acca` pushed and verified on origin.
+### ⛔ ONE THING IS OWED BY ME: a §7 cell for `Debug` totality (see below).
 
-> ### ⛔⛔ READ THIS FIRST — RUNTIME'S P1 WORK EXISTED ON NO REMOTE
+> ### ▶ CURRENT: `RT-VALUE-TOTALITY-P1` IS WITH QA at `2b22acca`
+>
+> ```
+> handoff  runtime-implementer  evt_dyn90nq2fza5   merge_ready
+> routed   runtime-leader -> runtime-qa            evt_5pv4sacp8p67k
+> origin   refs/heads/wp/RT-VALUE-TOTALITY-P1 = 2b22accae35809ef92f5d227d78fae
+>          38fcbb0fb1  -- PUSHED BY ME, cb33c729..2b22acca fast-forward,
+>          --force-with-lease honoured, verified by ls-remote
+> scope    VERIFIED by me vs b445cd15: 5 files, +1797/-164 == stated figures
+> base     b445cd15 (implementer fast-forwarded from the cut base 63ad112c)
+> tests    -p ken-runtime 371/0 lib + 12/0 new target - -p ken-interp green
+> D        131072, MEASURED by bisection (1122/1253/8143 @1MiB;
+>          9032/10075/65487 @8MiB) - each control pins its own 1MiB stack
+> ```
+>
+> ⚠ **The leader routed QA to `@2b22acca` while the branch was still UNPUSHED.**
+> I pushed it and told QA to re-fetch and bind the SHA itself
+> (`evt_4e8kz3znhw8y6`). ⛔ Custody branch must be on origin or the reviewer
+> cannot fetch it — that is why the push is a Steward duty, not a courtesy.
+>
+> ⭐ **`AC-V3a` falsified MY frame's population in BOTH directions**, exactly
+> because I labelled my own grep an *estimate, not a measurement*: `ken-foundation`
+> is **not** a consumer (no `[dependencies]` at all, std-only, own twin), and
+> `ken-cli` + `ken-elaborator` **are** and I omitted them. Measured **0 `E0509`
+> sites** with a two-sided control ⇒ D3 family 1, cost **zero**.
+>
+> ⭐ **`AC-V5` row 1 caught a hole in the ring's own controls, pre-review.** Every
+> depth control used a **unary `Record` chain**, so a hybrid encoder (iterative for
+> `Record`, recursive for the other four positions) **passes all of them** while
+> leaving **4 of 5** recursion sites intact. Closed with `mixed_chain` and proved
+> two-sided. Same shape as the sibling ring's defect: the detector reddened, the
+> population was one-fifth of the claim.
+
+> ### ⛔ OWED BY ME — a §7 cell for `Debug`. It is a FRAME defect, not a build one.
+>
+> Derived **`Debug`, `PartialEq`, `Ord`, `Hash` remain host-recursive and
+> measurably die at `D`**, so *"`Value` traversals are total"* is **FALSE** after
+> P1 — and **`Debug` has no cell in §7 at all**. §7's identity-derive cell is
+> scoped to *disagreement with canonical identity*, not *totality*. ⚠ `Debug` is
+> reachable from ordinary diagnostic code — a `{:?}` in a panic or log line can
+> abort the process — so this is not cosmetic.
+>
+> ⇒ **Add the §7 cell and route the scope decision (P2, or its own node).** ⛔ Do
+> **not** widen the live WP, and QA was told not to block on it. ⚠ **Do hold the
+> ring to the narrow Phase-1 claim** and refuse any wording reading *"all `Value`
+> traversals are now total"* — that sentence is false and would be the lasting
+> damage.
+
+> ### ⚠ MY MISROUTING, REPAIRED — read the participant id AT POST TIME
+>
+> I sent the P1 review notice to **language-qa** (`agt_37reqtw4b8w00`) intending
+> **runtime-qa** (`agt_37reqvb6ce400`) — a remembered id from an unrelated thread.
+> ⛔ The transport returned **200**; delivery success says nothing about *whom* it
+> reached. Re-delivered (`evt_4e8kz3znhw8y6`) and an explicit disregard posted to
+> language-qa (`evt_wr73b3vt1q7h`). ⇒ Look the id up from `.moot/actors.json` per
+> post; role suffixes repeat across teams, so a remembered id is a **plausible**
+> wrong answer.
+
+> ### ⛔ HISTORICAL — the durability exposure that is now CLOSED
 >
 > ```
 > branch  wp/RT-VALUE-TOTALITY-P1   tip cb33c72980fafd3be0075ec6a33592a693b1f4f1
