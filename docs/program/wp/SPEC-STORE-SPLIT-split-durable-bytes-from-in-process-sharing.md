@@ -141,10 +141,81 @@ moved** — restate the property mechanism-independently and keep the row.
 `main`, not an oversight.** Every row gets an explicit disposition; a row you
 leave untouched is a decision and needs its one-clause reason too.
 
-⚠ `conformance/runtime/seed-runtime.md` and
-`conformance/runtime/evaluation/seed-evaluation.md` each carry more than one of
-these rows. Sweep per-**row**, not per-file — a file you have "done" can still
-hold an unretargeted row.
+> ### ⛔ CORRECTED 2026-07-26 — MY `lives in` CELLS CONFLATED A **PRODUCER** WITH
+> ### A **REFERENCE**, and the "each carry more than one row" note was FALSE.
+>
+> This section previously said *"`seed-runtime.md` and `seed-evaluation.md` each
+> carry more than one of these rows."* `conformance/README.md §Case format`
+> defines a row as a structured `##`/`###` `<case-id>` heading, and under that
+> definition:
+>
+> - `evaluation/seed-evaluation.md:189` only says its own row **extends**
+>   `dedup-shares-slot`; it does **not** produce a second `dedup-shares-slot` row.
+> - `runtime/seed-runtime.md:44–50` only **points at** the canonical capacity
+>   producer and names the old subsumed `runtime/addressing/no-lattice-on-hot-path`;
+>   it does **not** produce `runtime/capacity/no-lattice-on-hot-path`.
+>
+> ⇒ **Eight unique IDs, nine heading occurrences** — the one duplicate is
+> `dedup-shares-slot`. ⭐ **Sweep per-ROW still stands, but count producers by
+> HEADING, not by mention**, or you will "retarget" a cross-reference and believe a
+> row is done.
+>
+> **CV's producer-derived locations — these replace my four `(locate)` cells:**
+>
+> | row | exact producer(s) |
+> |---|---|
+> | `equality-is-slot-id` | `runtime/values/README.md:28–37` |
+> | `dedup-shares-slot` | `runtime/values/README.md:18–26`; `runtime/seed-runtime.md:7–15` |
+> | `structurally-equal-collections-o1-comparable` | `surface/collections/seed-collections.md:389–405` |
+> | `no-lattice-on-hot-path` | `runtime/capacity/seed-capacity.md:158–169` |
+> | `index-resize-preserves-slot-ids` | `runtime/capacity/seed-capacity.md:171–181` |
+> | `arena-spans-pages-oversized-safe` | `runtime/capacity/seed-capacity.md:183–195` |
+> | `reset-retires-ids-never-resurrected` | `runtime/capacity/seed-capacity.md:145–156` |
+> | `det-sharing-dedups-by-slot` | `runtime/evaluation/seed-evaluation.md:187–200` |
+
+### ⭐ The expanded population, as measured — start the census HERE, not from zero
+
+`conformance-validator` produced the closure below. ⛔ **It is the floor for the
+expanded census, not a substitute for it** — each row still needs its own
+retain / retarget / retire disposition **and its cross-case prose**.
+
+- **`runtime/values/README.md`** — `canonical-encoding-map-ordering`,
+  `canonical-encoding-set-ordering`, `canonical-encoding-record-field-order`,
+  `int-small-to-bignum`, `immediate-vs-interned-boundary`,
+  `bignum-minimal-limb-encoding`, `dedup-across-kinds`: all turn canonical
+  bytes / kind distinctions into same-or-different **slots**, or into mandatory
+  interning.
+- **`runtime/evaluation/seed-evaluation.md`** — the CAN2 preamble plus
+  `det-same-term-same-value` and `det-canonical-order-independent` require
+  same-slot / `O(1)` outcomes independently of the named sharing row.
+- **`runtime/capacity/seed-capacity.md`** —
+  `dedup-accounting-distinct-not-occurrences`,
+  `loud-at-limit-raises-not-silent`, `at-limit-repeat-does-not-trip`,
+  `reclamation-releases-pages`, `space-reset-is-isolated`,
+  `escape-survives-sender-reset`, `no-automatic-gc`, plus the coverage and
+  cross-case prose: these pin `Hit`-before-limit probing, page-buffer reclamation,
+  per-space arena/index reset, recipient re-interning, stable ids, and no
+  background reclamation.
+- **`surface/collections/seed-collections.md`** —
+  `string-nfc-canonically-equal-shares-slot`,
+  `array-update-shares-unchanged-structure`, and the already-superseded
+  `user-deceq-keyed-map-canonical-identity`, plus the cross-case invariant at
+  `:897–915`. ⭐ **Keep NFC equality and persistence/immutability; do not retain
+  mandatory same-slot structural sharing.**
+- **`surface/bytes-io/seed-bytes-io.md`** — `bytes-immutable-concat-allocates-fresh`
+  pins fresh/distinct slot ids. **Immutability survives; slot allocation does not.**
+- **`surface/numbers/seed-f1-bignum-int.md`** —
+  `f1-dedup-content-address-stable-across-paths`
+  correctly retains identical canonical bytes / content address, **but its
+  additional "one store slot — dedup holds" clause needs separating** from the
+  surviving part.
+
+⚠ **This is not a widening of the design.** It is the closure of the demotion
+already ruled: canonical bytes/hash, equality, no-false-merge, immutability, loud
+refusal, lifetime/isolation and non-corruption are all retainable **without**
+asserting slots, pages, probing, or interning. ⛔ **A candidate that changes only
+the eight named IDs would land normatively self-contradictory** — which is the
+whole reason this is one atomic candidate.
 
 ## `AC-5` — fork C7 is RULED here, in its durable home
 
@@ -236,8 +307,25 @@ name the section you *would* have had to edit to break it. For item 1, list the
 ## `AC-7` — probe `AC-S7`, and route what it finds as a FORK
 
 `SPEC-CLOSURE-BOUNDARY`'s `AC-S7` invited the enclave to say whether a ruled
-clause was **still stronger than the mission needs**. ⚠ **Whether that invitation
-was ever exercised is unverified** — establish it, do not assume.
+clause was **still stronger than the mission needs**.
+
+> ### ✅ ANSWERED 2026-07-26 — IT **WAS** EXERCISED. This AC previously said
+> ### "unverified — establish it"; that question is now closed, by measurement.
+>
+> `conformance-validator` established it from the landed record at `bce75fec`:
+>
+> - CV's early challenge `evt_4jyaf3f36d854` rejected mandatory handle/trampoline
+>   representation, a literal `StaticCallableRef` spelling/layout, a required
+>   `FrozenClosure` feature, exhaustive/extensional application comparison, and
+>   mandatory cross-artifact exchange.
+> - The author handoff `evt_x5c47amhqdfb` states the `AC-S7` challenge was folded.
+> - The final approved contract retained the minimum constraints, rechecked in
+>   `evt_5znneqyam1fdj`.
+>
+> ⇒ ⛔ **Do NOT report the prior invitation as unexercised or silently skipped.**
+> Probing it **anew against the store split** is still required — that is a
+> different question from whether it was ever exercised — but the historical
+> answer is **YES**, and stating otherwise would misdescribe a landed record.
 
 ⛔ **Silence is not "nothing to say."** If, while writing `AC-1`, you find a
 closure clause over-strong against the relaxed store contract, **route it to the
