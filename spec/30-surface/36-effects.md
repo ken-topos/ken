@@ -832,9 +832,12 @@ discharged by `refl` (`16 §2`).
 
 For *in-Ken* communication, spaces are **shared-nothing**: they share no mutable
 memory and communicate only by passing immutable, closure-free value graphs
-(actor-style). A durable message boundary applies deterministic canonical bytes
-to admitted values and rejects an ordinary closure nested at any depth before
-publication (`41 §2.1`).
+(actor-style). At a durable message boundary, admitted values in the durably
+canonicalizable domain use deterministic canonical bytes. Proved `Map`/`Set`
+package trees instead preserve extensional equality, ordered `to_list`, and
+durable round-trip; their internal bytes are not observable (`41 §3a`). An
+ordinary closure nested at any depth is rejected before publication (`41
+§2.1`).
 Live-domain invocation across artifacts is a distinct non-serialized boundary;
 it does not permit messaging a closure through this path. Isolation is
 therefore a **guarantee**, not a discipline — no shared mutable state ⇒ no data

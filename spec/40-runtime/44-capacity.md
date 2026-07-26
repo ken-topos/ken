@@ -14,9 +14,12 @@ store.
 - A runtime MAY copy, share, intern, deduplicate, hash-cons, or directly embed
   closure-free values. It MAY choose different policies for different value
   kinds or execution domains.
-- Those choices MUST NOT change equality results, evaluation results, durable
-  canonical bytes, authority, or failure behavior. No program can observe a
-  per-value slot, allocation address, insertion order, or physical provenance.
+- Those choices MUST NOT change equality results, evaluation results, authority,
+  or failure behavior. For values in the durably canonicalizable domain, they
+  also MUST NOT change canonical bytes. For proved `Map`/`Set` package trees,
+  only extensional equality, ordered `to_list`, and durable round-trip are
+  observed; internal bytes are not. No program can observe a per-value slot,
+  allocation address, insertion order, or physical provenance.
 - Equal values need not share storage, and shared storage is not evidence that
   two values are equal. An implementation that uses hashing MUST resolve
   collisions without false merges.
@@ -75,8 +78,11 @@ particular storage or reclamation mechanism is required.
 
 - A runtime MAY use regions, tracing GC, reference counting, manual reset,
   process lifetime allocation, or a combination.
-- Reclamation MUST NOT change the observable value, equality result, durable
-  canonical bytes, or authority of any live value.
+- Reclamation MUST NOT change the observable value, equality result, or
+  authority of any live value. It also MUST NOT change canonical bytes for a
+  value in the durably canonicalizable domain. For proved `Map`/`Set` package
+  trees, extensional equality, ordered `to_list`, and durable round-trip remain
+  unchanged; internal bytes are not observable.
 - Ending or resetting a logical `space` affects only that space's encapsulated
   mutable cells and private resources. Other spaces remain valid.
 - An immutable closure-free value that escaped a space before reclamation

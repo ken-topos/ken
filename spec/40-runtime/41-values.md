@@ -240,8 +240,10 @@ The immediate/boxed/shared boundary is private runtime tuning, not semantics.
 | **Runtime-local callable** | Ordinary `Closure`, and any aggregate graph containing one | Opaque and non-persistable; refused before durable bytes exist |
 
 An implementation may tune the immediate/boxed/shared boundary without
-changing equality, canonical bytes at a durable boundary, or any observable
-result.
+changing equality or any observable result. For the durably canonicalizable
+domain, that includes canonical bytes at a durable boundary. For proved
+`Map`/`Set` package trees, it includes extensional equality, ordered `to_list`,
+and durable round-trip; internal bytes remain unobservable (§3a).
 
 ## 6. The `unknown` value
 

@@ -138,10 +138,13 @@ v ::= n                          -- typed scalar: Int, Bool, Char, Float, Decima
 
 An **environment** `ρ` maps de Bruijn indices to values (`ρ(i)`), a persistent
 vector extended on each binder. `eval : Env → Term → Value`, `apply : Value →
-Value → Value`. Every closure-free canonical compound (`cₖ v̄`, pair,
-collection, bignum) has the extensional value and durable encoding specified
-by `41`; its in-process representation is private. An ordinary closure, or an
-aggregate containing one, is a runtime-local value (`41 §2.1`).
+Value → Value`. Every closure-free durably canonicalizable compound (`cₖ v̄`,
+pair, `String`, `Bytes`, `Array`, bignum) has the extensional value and canonical
+encoding specified by `41`. Proved `Map`/`Set` package trees instead have the
+extensional equality, ordered `to_list`, and durable round-trip specified by
+`41 §3a`; their internal bytes are not observable. In-process representation
+is private. An ordinary closure, or an aggregate containing one, is a
+runtime-local value (`41 §2.1`).
 
 ### 3.2 `eval` / `apply`
 
@@ -235,8 +238,11 @@ rejects it before bytes exist.
 - **Representation sharing** — a runtime MAY deduplicate equal closure-free
   values, share persistent substructure, or keep distinct representations.
   These strategies are private and MUST NOT change extensional equality,
-  durable canonical bytes, capacity-failure semantics, or evaluation results
-  (`41 §2`, `44 §1`).
+  capacity-failure semantics, or evaluation results. For values in the durably
+  canonicalizable domain, they also MUST NOT change canonical bytes. For proved
+  `Map`/`Set` package trees, only extensional equality, ordered `to_list`, and
+  durable round-trip are observed; internal bytes are not (`41 §2`, `41 §3a`,
+  `44 §1`).
 
 The conformance corpus asserts evaluation-once for bindings and equal
 observations for equal subcomputations. It does not assert slot identity,
@@ -304,9 +310,11 @@ observations, never through closure identity or representation (`41 §2.1`).
 This holds because reduction is confluent (`17 §1`) and CBV fixes the order;
 totality makes any order preserve the same observations (§2). Determinism is
 what makes the interpreter a usable **oracle** (§5). The discriminating
-conformance case (AC2) compares the full closure-free observable value and, at
-a durable boundary, its canonical bytes. It deliberately ignores private
-sharing and allocation identity.
+conformance case (AC2) compares the full closure-free observable value. At a
+durable boundary it also compares canonical bytes when the result is in the
+durably canonicalizable domain. For proved `Map`/`Set` package trees it compares
+extensional equality, ordered `to_list`, and durable round-trip, never internal
+bytes. It deliberately ignores private sharing and allocation identity.
 
 ## 4. `unknown` propagation
 

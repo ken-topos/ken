@@ -426,8 +426,11 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
 - **Decision (operator, 2026-06-27; realization revised 2026-07-26).**
   Reclamation is semantics-invisible and private. Regions, reset, tracing GC,
   reference counting, process-lifetime allocation, and compaction are all
-  permitted when live values, equality, authority, and durable bytes are
-  preserved. There is no language fork and no mandatory collector.
+  permitted when live observable values, equality, and authority are preserved.
+  Canonical bytes are also preserved for the durably canonicalizable domain;
+  proved `Map`/`Set` package trees instead preserve extensional equality,
+  ordered `to_list`, and durable round-trip while their internal bytes remain
+  unobservable. There is no language fork and no mandatory collector.
 - **Affects.** `40-runtime/44 §3` (updated).
 
 ### OQ-eval-order — Strictness — **DECIDED**
@@ -522,9 +525,12 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   behavioral alphabet). Distribution-ready; the **runtime realization**
   (process/thread/green/distributed) is deferred to `40-runtime`. **Transport:**
   **immutable, closure-free value passing**; durable publication uses
-  deterministic canonical bytes, while physical copy/share/storage policy is
-  private. Closure-containing graphs reject before bytes exist; labels ride;
-  typed/session channels are a later refinement.
+  deterministic canonical bytes for the durably canonicalizable domain.
+  Proved `Map`/`Set` package trees preserve extensional equality, ordered
+  `to_list`, and durable round-trip; their internal bytes are not observable.
+  Physical copy/share/storage policy is private. Closure-containing graphs
+  reject before bytes exist; labels ride; typed/session channels are a later
+  refinement.
   **Division of labor:** Ken proves **local/sequential/per-space** correctness;
   **global/concurrent/distributed/temporal** correctness is **delegated to
   Ward** (Quint/Apalache/P model-check the message protocol).

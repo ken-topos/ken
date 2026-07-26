@@ -16,8 +16,10 @@ profile, but no case observes a per-value runtime identity.
   resource and limit it is testing. It does not infer a capacity unit from an
   implementation's current store.
 - **Observe values and typed outcomes.** Tests compare extensional values,
-  durable canonical bytes where publication is requested, and named errors.
-  Allocation counters are admissible only when a profile declares them.
+  named errors, and canonical bytes only for the durably canonicalizable
+  domain. For proved `Map`/`Set` package trees they compare extensional equality,
+  ordered `to_list`, and durable round-trip, never internal bytes. Allocation
+  counters are admissible only when a profile declares them.
 - **No hidden representation oracle.** A pointer, slot, table bucket, page,
   arena, allocation order, or collector schedule is not a Ken observation.
 - **Keep the closure boundary stronger.** Making storage private does not grant
@@ -54,9 +56,11 @@ profile, but no case observes a per-value runtime identity.
 - given: run the same closure-free value and equality corpus through one
   configuration that copies equal values and another that shares or interns
   them
-- expect: both configurations produce the same extensional values, equality
-  results, and durable canonical bytes. Neither exposes a representation
-  identity.
+- expect: both configurations produce the same extensional values and equality
+  results. Values in the durably canonicalizable domain also produce the same
+  canonical bytes. Proved `Map`/`Set` package trees retain extensional equality,
+  ordered `to_list`, and durable round-trip; the case compares no internal
+  bytes. Neither configuration exposes a representation identity.
 - why: copying and sharing are private. A result that changes with the storage
   policy would make an implementation choice semantic.
 
@@ -84,9 +88,12 @@ profile, but no case observes a per-value runtime identity.
 - spec: `spec/40-runtime/44-capacity.md §3`, `36 §4.4` (AC4)
 - given: publish a closure-free immutable value from space A to space B through
   the message boundary, then reset or terminate A
-- expect: B retains the same extensional value and, if it republishes the value,
-  produces the same durable canonical bytes. A closure-containing value is
-  refused before publication and is not a positive witness for this case.
+- expect: B retains the same extensional value. If it republishes a value in the
+  durably canonicalizable domain, the canonical bytes are unchanged. A proved
+  `Map`/`Set` package tree retains extensional equality, ordered `to_list`, and
+  durable round-trip; the case compares no internal bytes. A closure-containing
+  value is refused before publication and is not a positive witness for this
+  case.
 - why: recipient-visible value lifetime is independent of sender storage.
   Copying, sharing, or re-interning on transfer is not prescribed.
 
@@ -102,11 +109,13 @@ profile, but no case observes a per-value runtime identity.
 
 ## runtime/capacity/no-semantic-lattice-dependency (oracle)
 - spec: `spec/40-runtime/44-capacity.md §4`, `41 §3b` (OQ-6)
-- given: evaluate and durably encode representative closure-free values in a
-  build with no Leech/Co₀/Golay runtime facility available
-- expect: evaluation, extensional equality, and durable encoding succeed with
-  the same observations. No semantic rule or required runtime dependency
-  invokes lattice machinery.
+- given: evaluate representative closure-free values and cross a durable
+  write/read boundary in a build with no Leech/Co₀/Golay runtime facility
+  available
+- expect: evaluation, extensional equality, and durable round-trip succeed with
+  the same observations. Canonical bytes are compared only for values in the
+  durably canonicalizable domain; no `Map`/`Set` internal bytes are observed.
+  No semantic rule or required runtime dependency invokes lattice machinery.
 - why: lattice machinery is optional and cannot be a semantic dependency. The
   case does not substitute a required FNV/memcmp path for the retired lattice
   path.
@@ -116,8 +125,11 @@ profile, but no case observes a per-value runtime identity.
 - spec: `spec/40-runtime/44-capacity.md §1,§3`
 - given: retain early closure-free values while creating enough later values to
   force whatever growth path the implementation uses
-- expect: every retained value preserves its extensional observation and
-  durable canonical bytes; no value is lost or falsely merged
+- expect: every retained value preserves its extensional observation; values in
+  the durably canonicalizable domain also preserve canonical bytes. Proved
+  `Map`/`Set` package trees preserve extensional equality, ordered `to_list`,
+  and durable round-trip while the case compares no internal bytes. No value is
+  lost or falsely merged.
 - why: growth is representation-private. The case does not require a table,
   initial size, load factor, rehash, locator, or stable slot id.
 
@@ -161,8 +173,11 @@ profile, but no case observes a per-value runtime identity.
 - Every limit case uses the resource and accounting unit declared by its
   profile; no case silently promotes a current storage statistic into universal
   semantics.
-- Every lifetime case compares extensional values and durable bytes, never
-  pointer, slot, page, arena, allocation-order, or collector identity.
+- Every lifetime case compares extensional values and canonical bytes only for
+  the durably canonicalizable domain. Proved `Map`/`Set` package trees are
+  compared by extensional equality, ordered `to_list`, and durable round-trip,
+  never internal bytes. No case observes pointer, slot, page, arena,
+  allocation-order, or collector identity.
 - Loud refusal, no false merge, no stale aliasing, escape survival, and
   no-shared-mutable-authority remain positive obligations.
 - Ordinary closures remain outside equality, canonicalization, slot identity,
