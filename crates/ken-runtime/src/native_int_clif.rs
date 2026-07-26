@@ -37,10 +37,10 @@ const ENTRY_SIGN: i32 = 16;
 const ENTRY_LEN: i32 = 24;
 const ENTRY_LIMBS: i32 = 32;
 
-const VIEW_SIGN: i32 = 0;
-const VIEW_LEN: i32 = 8;
-const VIEW_LIMBS: i32 = 16;
-const VIEW_SMALL: i32 = 24;
+pub(crate) const VIEW_SIGN: i32 = 0;
+pub(crate) const VIEW_LEN: i32 = 8;
+pub(crate) const VIEW_LIMBS: i32 = 16;
+pub(crate) const VIEW_SMALL: i32 = 24;
 
 #[derive(Clone, Copy)]
 pub(crate) struct NativeIntLocalFuncs {
@@ -49,6 +49,14 @@ pub(crate) struct NativeIntLocalFuncs {
     pub intern: FuncId,
     pub narrow: FuncId,
     pub export: FuncId,
+    /// `(arena, tag, payload, out_view) -> status` — decode a `NativeIntV1`
+    /// pair into `{sign, len, limbs, small}`.
+    ///
+    /// ⭐ Exposed so `boundary_value_clif` can decode a spilled boundary `Int`
+    /// through **this** representation instead of deriving a second one. Adding
+    /// a reader here is strictly cheaper than a parallel limb encoding, which is
+    /// what `docs/PRINCIPLES.md` means by subsume-don't-proliferate.
+    pub resolve: FuncId,
 }
 
 #[derive(Clone, Copy)]
@@ -110,6 +118,7 @@ pub(crate) fn emit_native_int_local_graph<M: Module>(
         intern,
         narrow,
         export,
+        resolve,
     })
 }
 

@@ -262,8 +262,12 @@ fn run_px8j_malformed_recursor_consumer(
     };
     match consumer {
         Px8jDirectRecursorConsumer::PendingLetProducer
-        | Px8jDirectRecursorConsumer::ProducerCall => compiler
-            .lower_computational_producer_expr(&mut builder, occurrence, &env, &active_frames),
+        | Px8jDirectRecursorConsumer::ProducerCall => compiler.lower_computational_producer_expr(
+            &mut builder,
+            occurrence,
+            &env,
+            &active_frames,
+        ),
         Px8jDirectRecursorConsumer::OrdinaryCall => {
             compiler.lower_expr(&mut builder, occurrence, &env)
         }
@@ -572,8 +576,12 @@ fn run_px8ds_edge_consumer(
     };
     match consumer {
         Px8jDirectRecursorConsumer::PendingLetProducer
-        | Px8jDirectRecursorConsumer::ProducerCall => compiler
-            .lower_computational_producer_expr(&mut builder, occurrence, &env, &active_frames),
+        | Px8jDirectRecursorConsumer::ProducerCall => compiler.lower_computational_producer_expr(
+            &mut builder,
+            occurrence,
+            &env,
+            &active_frames,
+        ),
         Px8jDirectRecursorConsumer::OrdinaryCall => {
             compiler.lower_expr(&mut builder, occurrence, &env)
         }
@@ -2987,7 +2995,9 @@ fn expression_children(expr: &RuntimeExpr) -> Vec<&RuntimeExpr> {
             captures,
             params: _,
             body,
-        } => std::iter::once(body.as_ref()).chain(captures.iter()).collect(),
+        } => std::iter::once(body.as_ref())
+            .chain(captures.iter())
+            .collect(),
         RuntimeExpr::DeclarationRef { symbol: _ } => Vec::new(),
         RuntimeExpr::ImportedDeclarationRef {
             symbol: _,
@@ -3236,7 +3246,10 @@ fn every_expression_typed_field_is_a_reachable_positional_child_origin() {
 #[cfg(test)]
 fn one_child_record() -> RuntimeExpr {
     RuntimeExpr::Record {
-        fields: vec![("l".to_string(), RuntimeExpr::Value(RuntimeValue::Bool(true)))],
+        fields: vec![(
+            "l".to_string(),
+            RuntimeExpr::Value(RuntimeValue::Bool(true)),
+        )],
     }
 }
 
@@ -3244,8 +3257,14 @@ fn one_child_record() -> RuntimeExpr {
 fn two_child_record() -> RuntimeExpr {
     RuntimeExpr::Record {
         fields: vec![
-            ("l".to_string(), RuntimeExpr::Value(RuntimeValue::Bool(true))),
-            ("r".to_string(), RuntimeExpr::Value(RuntimeValue::Bool(false))),
+            (
+                "l".to_string(),
+                RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            ),
+            (
+                "r".to_string(),
+                RuntimeExpr::Value(RuntimeValue::Bool(false)),
+            ),
         ],
     }
 }
@@ -3272,11 +3291,27 @@ fn swapping_two_same_shaped_children_swaps_their_derived_origins() {
     let straight = branch(one_child_record(), two_child_record());
     let swapped = branch(two_child_record(), one_child_record());
 
-    assert_eq!(arity_at(&straight, 1), 1, "then_expr is the one-child record");
-    assert_eq!(arity_at(&straight, 2), 2, "else_expr is the two-child record");
+    assert_eq!(
+        arity_at(&straight, 1),
+        1,
+        "then_expr is the one-child record"
+    );
+    assert_eq!(
+        arity_at(&straight, 2),
+        2,
+        "else_expr is the two-child record"
+    );
     // The children swapped in the source; the derived origins swapped with them.
-    assert_eq!(arity_at(&swapped, 1), 2, "then_expr is now the two-child record");
-    assert_eq!(arity_at(&swapped, 2), 1, "else_expr is now the one-child record");
+    assert_eq!(
+        arity_at(&swapped, 1),
+        2,
+        "then_expr is now the two-child record"
+    );
+    assert_eq!(
+        arity_at(&swapped, 2),
+        1,
+        "else_expr is now the one-child record"
+    );
 }
 
 #[test]
@@ -3629,9 +3664,6 @@ fn the_retained_body_helper_carries_no_visibility_qualifier() {
     }
 }
 
-
-
-
 fn identifier_occurrences(source: &str, identifier: &str) -> usize {
     source
         .lines()
@@ -3830,8 +3862,12 @@ fn the_bare_source_term_detector_catches_the_shape_it_is_looking_for() {
             "the AC-1 detector must catch {pre_amendment:?}"
         );
     }
-    assert!(!is_bare_source_term_field("        expr: OwnedSourceOccurrence,"));
-    assert!(!is_bare_source_term_field("    // a comment naming RuntimeExpr"));
+    assert!(!is_bare_source_term_field(
+        "        expr: OwnedSourceOccurrence,"
+    ));
+    assert!(!is_bare_source_term_field(
+        "    // a comment naming RuntimeExpr"
+    ));
 }
 
 #[test]
@@ -4254,7 +4290,8 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
     // this, "use the tokenizer" is advice rather than a checked property — and a
     // positive control that only exercises `self.` would be spelling-scoped in
     // exactly the way that produced 58.
-    let both_receivers = "let a = self.lower_expr(b, o, e)?;\nlet c = compiler.lower_expr(b, o, e)?;\n";
+    let both_receivers =
+        "let a = self.lower_expr(b, o, e)?;\nlet c = compiler.lower_expr(b, o, e)?;\n";
     assert_eq!(
         identifier_occurrences(both_receivers, "lower_expr"),
         2,
@@ -4420,5 +4457,1168 @@ fn the_owner_classification_has_a_closed_production_naming_inventory() {
         identifier_occurrences(plane, "SemanticOwner") > 0,
         "the owner classification is not in the plane at all, so this pin is \
          measuring nothing"
+    );
+}
+
+// ─── RT-FNSPLIT-B2V AC-3 — the Lowered disposition is exhaustive, no wildcard ─
+//
+// **MEASURED:** the `boundary_disposition` region of `lowering/mod.rs` contains
+// no `_ =>` arm and names all 21 `Lowered` variants.
+// **CLAIMED:** adding a 22nd variant is a COMPILE ERROR, so the transfer
+// population is closed structurally rather than by the `#10` histogram.
+// **THE GAP:** the compiler already guarantees exhaustiveness — what it cannot
+// guarantee is that nobody *silences* it. A `_ =>` arm would make a new variant
+// compile straight into whatever that arm returned. This pin exists for that
+// one job, and it also checks the dispatch is single, since a second
+// wildcarded dispatch elsewhere would be outside the compiler's guarantee too.
+
+#[test]
+fn b2v_ac3_the_lowered_boundary_disposition_has_no_wildcard_arm() {
+    let source = include_str!("../../mod.rs");
+    let region = source
+        .split_once("fn boundary_disposition(self) -> BoundaryDisposition {")
+        .map(|(_, after)| after)
+        .and_then(|after| {
+            after
+                .split_once("#[derive(Clone)]\nstruct ActiveRecursiveDeclarationV1")
+                .map(|(body, _)| body)
+        })
+        .expect("AC-3: the disposition region was not found, so every check below is vacuous");
+
+    // ⚠ POSITIVE CONTROL FIRST. A negative check passes for any reason,
+    // including an extractor that returned an empty region.
+    assert!(
+        region.contains("LoweredVariant::Constructor"),
+        "AC-3: the extracted region does not contain a token that is certainly \
+         in it, so its silence about `_ =>` means nothing"
+    );
+
+    // ⛔ Every arm head must name a `Lowered` variant.
+    //
+    // ⚠ This started as `!region.contains("_ =>")` and a compile-preserving
+    // evasion DEFEATED it in one line: `unhandled => ...` is a binding
+    // catch-all, so it silences exhaustiveness exactly like `_` while matching
+    // no `_ =>` substring. The pin was green with the catch-all in place. What
+    // the two evasions share is a GRANULARITY error — the check was a claim
+    // about one spelling where the property is about the SHAPE of every arm —
+    // so the repair is to enumerate arm heads rather than to add the second
+    // spelling to a forbidden list that is open at the top.
+    for line in region.lines() {
+        let trimmed = line.trim();
+        if !trimmed.contains("=>") {
+            continue;
+        }
+        assert!(
+            trimmed.starts_with("LoweredVariant::") || trimmed.starts_with('|'),
+            "AC-3: `{trimmed}` is a match arm whose head does not name a \
+             `LoweredVariant`. A catch-all — `_` or a binding — silences \
+             exhaustiveness, so a new variant would compile into it instead of \
+             failing until someone dispositions it."
+        );
+    }
+
+    // Every one of the 21 landed variants is named. Pinned as the ALLOWED
+    // inventory: a variant renamed or removed reddens here with its own name in
+    // the message, where a bare count would only say that something moved.
+    for variant in [
+        "Int",
+        "Bool",
+        "ProcessExitStatus",
+        "CapabilityToken",
+        "ResourceToken",
+        "BoundedNat",
+        "StructuralNat",
+        "ResponseBytes",
+        "HostResult",
+        "DynamicConstructor",
+        "Bytes",
+        "BorrowedNativeValue",
+        "BorrowedOption",
+        "String",
+        "Constructor",
+        "Record",
+        "Closure",
+        "DeclarationClosure",
+        "ComputationalRecursorClosure",
+        "RecursiveBackedge",
+        "Trap",
+    ] {
+        assert!(
+            region.contains(&format!("LoweredVariant::{variant}")),
+            "AC-3: `LoweredVariant::{variant}` has no disposition"
+        );
+    }
+
+    // ⛔ `Constructor` and `HostResult` are REQUIRED LIVE ARMS. A disposition
+    // that parked either in `FailClosedForbidden` would reject the dominant
+    // measured population — sound, and unable to satisfy `B2F`'s `D6`/`D7`.
+    // Checked positionally, so moving one into the forbidden block reddens.
+    let forbidden_block = region
+        .split_once("FailClosedForbidden {")
+        .map(|(_, after)| after)
+        .expect("AC-3: there is no fail-closed arm at all, which is itself wrong");
+    for required_live in ["Constructor", "HostResult"] {
+        assert!(
+            !forbidden_block.contains(&format!("LoweredVariant::{required_live}")),
+            "AC-3: `LoweredVariant::{required_live}` is a REQUIRED LIVE ARM and has \
+             been moved behind the fail-closed boundary"
+        );
+    }
+
+    // The dispatch is single: one definition, so the compiler's exhaustiveness
+    // guarantee covers the whole question and not just this copy of it.
+    assert_eq!(
+        source.matches("fn boundary_disposition(self)").count(),
+        1,
+        "AC-3: a second disposition exists, and the compiler cannot promise \
+         the two agree"
+    );
+}
+
+// ─── RT-FNSPLIT-B2V AC-3 — exactly one of the FIVE static encoding policies ───
+
+/// **`AC-3` — every `Lowered` variant carries exactly one of `D4`'s five static
+/// encoding policies, and a declared spill is the SPILL policy.**
+///
+/// ⛔ The prior control proved wildcard-freedom and nothing else. Exhaustiveness
+/// says every variant has *a* disposition; it says nothing about *which*, and
+/// the frame names the misassignment it cares about: a variant with a declared
+/// spill arm assigned *immediate-only* would let a proof attach handle evidence
+/// to one sampled spill while never establishing the handle obligations for the
+/// whole partition. That is the vacuity route `AC-10` exists to close, and no
+/// amount of "no `_` arm" detects it.
+///
+/// ⚠ MEASURED: the policy of every one of the 21 variant **tags**. CLAIMED:
+/// each variant has exactly one of five policies. THE GAP: that a policy is a
+/// claim about the *variant* and not about a sampled value — closed structurally
+/// rather than asserted, because `boundary_disposition` now takes
+/// `LoweredVariant` and has no value to sample.
+#[test]
+fn b2v_ac3_every_variant_carries_exactly_one_of_the_five_static_policies() {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    // ⛔ The sweep is over the tag set, so it is TOTAL by construction — there
+    // are no 21 values to build and therefore no sampling to get wrong.
+    let assigned: BTreeMap<LoweredVariant, StaticEncodingPolicy> = LoweredVariant::ALL
+        .iter()
+        .map(|variant| (*variant, variant.boundary_disposition().policy()))
+        .collect();
+    assert_eq!(
+        assigned.len(),
+        LoweredVariant::ALL.len(),
+        "AC-3: a variant is listed twice, so the sweep is not over the tag set"
+    );
+    assert_eq!(
+        assigned.len(),
+        21,
+        "AC-3: the landed variant count has moved"
+    );
+
+    // Every assigned policy is one of the five, and the five are the closed set.
+    let five: BTreeSet<StaticEncodingPolicy> = StaticEncodingPolicy::ALL.iter().copied().collect();
+    assert_eq!(
+        five.len(),
+        5,
+        "AC-3: the policy set is not five distinct policies"
+    );
+    for (variant, policy) in &assigned {
+        assert!(
+            five.contains(policy),
+            "AC-3: {variant:?} carries a policy outside the closed set"
+        );
+    }
+
+    // ⛔ **THE misassignment the frame names.** A disposition that declares a
+    // spill must be the third policy, never the first.
+    for variant in LoweredVariant::ALL {
+        let disposition = variant.boundary_disposition();
+        if let BoundaryDisposition::RepresentedImmediate { spill, .. } = disposition {
+            let expected = if spill.is_some() {
+                StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill
+            } else {
+                StaticEncodingPolicy::ImmediateOnly
+            };
+            assert_eq!(
+                disposition.policy(),
+                expected,
+                "AC-3: {variant:?} declares spill {spill:?} and must carry the \
+                 matching policy — assigning immediate-only to a variant with a \
+                 spill arm is the vacuity route AC-10 exists to close"
+            );
+        }
+    }
+    // ⚠ NON-DEGENERATE PAIR on that exact boundary: `Int` declares a spill and
+    // `Bool` does not, and they must land in DIFFERENT policies. A checker that
+    // ignored `spill` would put both in one and pass the loop above.
+    assert_eq!(
+        assigned[&LoweredVariant::Int],
+        StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill,
+        "AC-3: Int declares a PersistentGround/Int spill, so it is the third policy"
+    );
+    assert_eq!(
+        assigned[&LoweredVariant::Bool],
+        StaticEncodingPolicy::ImmediateOnly,
+        "AC-3: Bool has no spill arm, so it is the first policy"
+    );
+    assert_ne!(
+        assigned[&LoweredVariant::Int],
+        assigned[&LoweredVariant::Bool],
+        "AC-3: the spill boundary must separate them, or neither assertion means \
+         anything"
+    );
+
+    // `Constructor` and `HostResult` are REQUIRED LIVE arms — represented, in
+    // policy terms, not merely absent from the forbidden block.
+    for required in [LoweredVariant::Constructor, LoweredVariant::HostResult] {
+        assert_eq!(
+            assigned[&required],
+            StaticEncodingPolicy::HandleOnly,
+            "AC-3: {required:?} is a required LIVE represented arm"
+        );
+    }
+
+    // ⚠ POSITIVE CONTROL over the policy set: every policy the frame declares
+    // must actually be inhabited. A policy nobody uses is unreachable surface
+    // that reads as supported — the same defect that removed `ImmediateCapability`
+    // from the tag set — and a policy holding all 21 would make every check
+    // above vacuous.
+    let mut population: BTreeMap<StaticEncodingPolicy, usize> = BTreeMap::new();
+    for policy in assigned.values() {
+        *population.entry(*policy).or_default() += 1;
+    }
+    for policy in StaticEncodingPolicy::ALL {
+        let count = population.get(&policy).copied().unwrap_or(0);
+        assert!(
+            count > 0,
+            "AC-3: no variant carries {policy:?}, so it is unreachable surface"
+        );
+        assert!(
+            count < LoweredVariant::ALL.len(),
+            "AC-3: {policy:?} holds every variant, so the assignment is degenerate"
+        );
+    }
+
+    // ⛔ Every fail-closed arm names an EXACT reason, never a bare rejection.
+    for variant in LoweredVariant::ALL {
+        match variant.boundary_disposition() {
+            BoundaryDisposition::FailClosedForbidden { why }
+            | BoundaryDisposition::ProtocolOnly { why } => assert!(
+                !why.is_empty(),
+                "AC-3: {variant:?} rejects without an exact reason"
+            ),
+            BoundaryDisposition::RepresentedImmediate { .. }
+            | BoundaryDisposition::RepresentedHandle { .. } => {}
+        }
+    }
+}
+
+// ─── RT-FNSPLIT-B2V AC-10 — total classified-domain closure ──────────────────
+
+/// **`AC-10` — every boundary input receives exactly one actual outcome, and
+/// that outcome is entailed by its variant's static policy.**
+///
+/// ⛔ **This is a STRUCTURAL totality proof, and it is not one dynamic test
+/// pretending to enumerate an infinite domain.** The admitted domains include
+/// unbounded integers, arbitrary byte contents, ownership states and recursive
+/// parent → child reachability; no finite runtime sweep covers them, and one
+/// wearing a universal name would be worse than an honest sweep. The closure has
+/// two layers:
+///
+/// 1. the sealed wildcard-free disposition closes the **variant** layer
+///    (`b2v_ac3_…`), and
+/// 2. every **value-dependent discriminator** is a closed finite partition —
+///    magnitude/shape, lifetime/owner, parent → child reachability, and the
+///    producer that minted the referent — reached from a value by a **total**
+///    projection (`int_fits_immediate`, `referent_owner`, "does this aggregate
+///    hold an invocation-owned child").
+///
+/// ⭐ **So the infinite domain is covered by construction and only the finitely
+/// many CELLS need controls.** This sweeps the whole product.
+///
+/// ⚠ MEASURED: every cell maps to exactly one outcome, permitted by its policy.
+/// CLAIMED: no input or encoding outcome is unclassified. THE GAP: that a value
+/// reaches its cell — which is the totality of the projections named above, and
+/// is why they are named rather than implied.
+#[test]
+fn b2v_ac10_every_boundary_input_receives_one_policy_entailed_outcome() {
+    use std::collections::BTreeSet;
+
+    let cells = BoundaryInput::all();
+    // The product is closed and finite: 21 variants x 2 magnitudes x 3
+    // reachabilities x 2 producers.
+    assert_eq!(
+        cells.len(),
+        21 * 2 * 3 * 2,
+        "AC-10: the cell product has moved"
+    );
+    assert_eq!(
+        cells.iter().collect::<BTreeSet<_>>().len(),
+        cells.len(),
+        "AC-10: a cell is enumerated twice, so the sweep is not over the product"
+    );
+
+    let mut outcomes = BTreeSet::new();
+    for cell in &cells {
+        let policy = cell.variant.boundary_disposition().policy();
+        let outcome = cell.outcome();
+        // ⛔ **Entailment, not merely classification.** An outcome the policy
+        // does not permit is the misassignment AC-3 names, seen from the value
+        // level.
+        assert!(
+            outcome.permitted_by(policy),
+            "AC-10: {cell:?} receives {outcome:?}, which {policy:?} does not permit"
+        );
+        // ⛔ Every handle outcome discharges class, referent owner, identity and
+        // lifetime — including the SPILL ARM of an immediate policy, which is
+        // the arm a proof may not attach to one sampled value.
+        if let BoundaryOutcome::HandleWord { tag, owner, .. } = outcome {
+            assert_eq!(
+                tag.referent_owner(),
+                owner,
+                "AC-10: {cell:?} declares an owner its tag does not carry — the \
+                 lifetime obligation is the owner"
+            );
+            assert_ne!(
+                owner,
+                BoundaryReferentOwner::NoReferent,
+                "AC-10: a handle whose referent nothing owns has no lifetime"
+            );
+        }
+        outcomes.insert(outcome);
+    }
+
+    // ⚠ POSITIVE CONTROL over the outcome set: all four actual outcomes must be
+    // inhabited. A classifier that answered `FailClosedForbidden` everywhere
+    // satisfies "exactly one outcome" and every entailment above — that is the
+    // vacuity the frame's own AC-10 wording was rewritten to exclude.
+    let kinds: BTreeSet<&str> = outcomes
+        .iter()
+        .map(|outcome| match outcome {
+            BoundaryOutcome::ImmediateWord { .. } => "immediate",
+            BoundaryOutcome::HandleWord { .. } => "handle",
+            BoundaryOutcome::ProtocolOnly => "protocol-only",
+            BoundaryOutcome::FailClosedForbidden => "fail-closed",
+        })
+        .collect();
+    assert_eq!(
+        kinds,
+        ["fail-closed", "handle", "immediate", "protocol-only"]
+            .into_iter()
+            .collect::<BTreeSet<_>>(),
+        "AC-10: an actual outcome is uninhabited, so the classification is degenerate"
+    );
+
+    // ⛔ **A policy's outcome varies ONLY in the discriminators it declares.**
+    // An immediate-only policy whose outcome moved with magnitude would be a
+    // spill arm nobody declared; a handle policy indifferent to reachability
+    // would be admitting the parent → child escape.
+    for variant in LoweredVariant::ALL {
+        let policy = variant.boundary_disposition().policy();
+        let at = |magnitude, reachability| {
+            BoundaryInput {
+                variant,
+                magnitude,
+                reachability,
+                adoption: AdoptionPartition::StoreAdopted,
+            }
+            .outcome()
+        };
+        let within = at(
+            MagnitudePartition::WithinImmediateField,
+            ReachabilityPartition::Leaf,
+        );
+        let beyond = at(
+            MagnitudePartition::BeyondImmediateField,
+            ReachabilityPartition::Leaf,
+        );
+        match policy {
+            StaticEncodingPolicy::ImmediateWithDeclaredHandleSpill => assert_ne!(
+                within, beyond,
+                "AC-10: {variant:?} declares a spill, so magnitude MUST change \
+                 its outcome — a constant one is a spill arm that never fires"
+            ),
+            StaticEncodingPolicy::ImmediateOnly
+            | StaticEncodingPolicy::HandleOnly
+            | StaticEncodingPolicy::ProtocolOnly
+            | StaticEncodingPolicy::FailClosedForbidden => assert_eq!(
+                within, beyond,
+                "AC-10: {variant:?} declares no spill, so magnitude must NOT \
+                 change its outcome"
+            ),
+        }
+    }
+
+    // ⛔ Parent → child reachability is a real discriminator: at least one
+    // persistent aggregate must reject the child that dies first, and the same
+    // variant must be admitted when its children outlive it. A nondegenerate
+    // pair on one variant, so "rejects everything" cannot pass.
+    let escaping = BoundaryInput {
+        variant: LoweredVariant::Constructor,
+        magnitude: MagnitudePartition::WithinImmediateField,
+        reachability: ReachabilityPartition::ChildDiesBeforeParent,
+        adoption: AdoptionPartition::StoreAdopted,
+    };
+    let sound = BoundaryInput {
+        reachability: ReachabilityPartition::ChildrenOutliveParent,
+        ..escaping
+    };
+    assert_eq!(
+        escaping.outcome(),
+        BoundaryOutcome::FailClosedForbidden,
+        "AC-10: a persistent parent naming a child that dies first must reject"
+    );
+    assert!(
+        matches!(sound.outcome(), BoundaryOutcome::HandleWord { .. }),
+        "AC-10: the same variant with sound children must be admitted, or the \
+         rejection above is about the variant and not about reachability"
+    );
+
+    // ⛔ Identity is CLASSIFIED, not assumed. A store-materialized persistent
+    // handle carries the store's identity; an emitted-constructed one carries
+    // none, by AC-6's design — and recording which is what makes identity
+    // recoverable rather than unasked.
+    let adopted = BoundaryInput {
+        variant: LoweredVariant::Constructor,
+        magnitude: MagnitudePartition::WithinImmediateField,
+        reachability: ReachabilityPartition::Leaf,
+        adoption: AdoptionPartition::StoreAdopted,
+    };
+    let pending = BoundaryInput {
+        adoption: AdoptionPartition::PendingStoreAdoption,
+        ..adopted
+    };
+    assert!(
+        matches!(
+            adopted.outcome(),
+            BoundaryOutcome::HandleWord {
+                identity: HandleIdentity::StoreMinted,
+                ..
+            }
+        ),
+        "AC-10: an adopted persistent handle carries the store's identity"
+    );
+    // ⛔ **A pending node is not a published handle at all.** Classifying it as
+    // one with `NoStoreIdentity` was the defect: a consumer recovering the
+    // ABSENCE of an identity has not recovered the same identity intact, and a
+    // null `NODE_SLOT` denotes invocation ownership in this very layout.
+    assert_eq!(
+        pending.outcome(),
+        BoundaryOutcome::FailClosedForbidden,
+        "AC-10: a persistent node the store has not adopted must not publish"
+    );
+
+    // ⛔ **owner ⟺ identity, over the WHOLE product**: every published handle
+    // declaring `PersistentStore` carries a real store identity, and no other
+    // owner does.
+    for cell in &cells {
+        if let BoundaryOutcome::HandleWord {
+            owner, identity, ..
+        } = cell.outcome()
+        {
+            assert_eq!(
+                owner == BoundaryReferentOwner::PersistentStore,
+                identity == HandleIdentity::StoreMinted,
+                "AC-10: {cell:?} publishes owner {owner:?} with identity \
+                 {identity:?} — a persistent handle has a store identity and \
+                 nothing else does"
+            );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// `RECUT 2` — representation authority-to-execution closure
+// ---------------------------------------------------------------------------
+
+/// **`RECUT 2`.** Every admitted row closes every phase its outcome requires.
+///
+/// ⛔ **This is the artifact RECUT 2 demands, and its row set is DERIVED.**
+/// Nothing here enumerates rows: the cells come from [`BoundaryInput::all`], the
+/// outcome from the wildcard-free classifier, the required phases from the
+/// outcome's own class, and the bindings from a struct with six mandatory
+/// fields. A hand-maintained matrix can drift from the production enums; this
+/// cannot, because there is no matrix to maintain.
+///
+/// ⚠ MEASURED: for all 252 cells, every phase the outcome's class requires is
+/// bound to a named production anchor, and every phase it does not require is
+/// `StructurallyAbsent`. CLAIMED: every admitted partition has one total
+/// executable lifecycle. THE GAP: that each anchor **is** the production item it
+/// names — closed for five anchors by `derived_witness` below, and for the other
+/// three by the named controls in `ProductionAnchor::CONTROL_CLOSED`.
+#[test]
+fn recut2_every_admitted_row_closes_every_required_phase() {
+    use std::collections::BTreeSet;
+
+    let cells = BoundaryInput::all();
+    // Positive control FIRST: an empty sweep satisfies every `for` below.
+    assert_eq!(
+        cells.len(),
+        21 * 2 * 3 * 2,
+        "RECUT 2: the cell product moved, so this sweep is not over the partition"
+    );
+
+    let mut bound_anchors = BTreeSet::new();
+    let mut absent_seen = false;
+    for cell in &cells {
+        let outcome = cell.outcome();
+        let closure = outcome.phase_closure();
+        for phase in LifecyclePhase::ALL {
+            match (outcome.requires(phase), closure.binding(phase)) {
+                // Required and bound — the row closes this phase.
+                (true, PhaseBinding::Closed(anchor)) => {
+                    bound_anchors.insert(anchor);
+                }
+                // Not required and absent — a contract, derived from the class.
+                (false, PhaseBinding::StructurallyAbsent) => absent_seen = true,
+                // ⛔ The two failures RECUT 2 exists to make loud.
+                (true, PhaseBinding::StructurallyAbsent) => panic!(
+                    "RECUT 2: {cell:?} receives {outcome:?}, whose class REQUIRES \
+                     {phase:?}, but the row declares it structurally absent — an \
+                     authority with no closed execution is the named predicate's \
+                     failure"
+                ),
+                (false, PhaseBinding::Closed(anchor)) => panic!(
+                    "RECUT 2: {cell:?} receives {outcome:?}, whose class does not \
+                     require {phase:?}, yet the row binds {anchor:?} — a phase \
+                     nothing entails is a claim with no authority behind it"
+                ),
+            }
+        }
+    }
+
+    // ⚠ TWO-SIDED. Without these, a `requires` that answered `false` everywhere
+    // would pass the loop above with every row structurally absent, and a
+    // `requires` that answered `true` everywhere would pass a row that bound one
+    // anchor to all six phases. Both must be inhabited.
+    assert!(
+        absent_seen,
+        "RECUT 2: no phase is ever structurally absent, so `requires` is constant \
+         and the derivation is degenerate"
+    );
+    assert!(
+        bound_anchors.len() >= 5,
+        "RECUT 2: only {} distinct anchors are reachable across the whole \
+         partition, so most of the lifecycle is closed by one item standing in \
+         for the rest",
+        bound_anchors.len()
+    );
+}
+
+/// **`RECUT 2`.** The phase inventory is bound to the type, not restated beside it.
+///
+/// ⛔ **This is the `AC-V1b` defect, refused.** That pin froze `25` next to an
+/// enum and was invariant under adding a variant by construction. Here the
+/// index is produced by a wildcard-free match on the enum, so a seventh phase
+/// is a compile error there, and this control proves `ALL` did not silently
+/// drop one.
+#[test]
+fn recut2_the_phase_inventory_is_bound_to_the_type() {
+    for (position, phase) in LifecyclePhase::ALL.into_iter().enumerate() {
+        assert_eq!(
+            phase.index(),
+            position,
+            "RECUT 2: {phase:?} sits at {position} in ALL but indexes {}",
+            phase.index()
+        );
+    }
+    let distinct: std::collections::BTreeSet<_> = LifecyclePhase::ALL.into_iter().collect();
+    assert_eq!(
+        distinct.len(),
+        LifecyclePhase::ALL.len(),
+        "RECUT 2: ALL repeats a phase, so a missing one is masked by a duplicate"
+    );
+}
+
+/// **`RECUT 2`.** No anchor is silently unclosed.
+///
+/// ⛔ **"Cannot determine" is a third outcome that must be ACCOUNTED FOR**, not
+/// one that falls through to pass. An anchor with no derived witness must name
+/// the causal control that closes its identity instead; an anchor that does
+/// neither is the residual with no cell.
+#[test]
+fn recut2_every_anchor_is_closed_by_a_witness_or_a_named_control() {
+    use std::collections::BTreeSet;
+
+    let mut anchors = BTreeSet::new();
+    for cell in BoundaryInput::all() {
+        let closure = cell.outcome().phase_closure();
+        for phase in LifecyclePhase::ALL {
+            if let PhaseBinding::Closed(anchor) = closure.binding(phase) {
+                anchors.insert(anchor);
+            }
+        }
+    }
+    assert!(
+        !anchors.is_empty(),
+        "RECUT 2: no anchor is bound anywhere, so every check below is vacuous"
+    );
+
+    let control_closed: BTreeSet<_> = ProductionAnchor::CONTROL_CLOSED
+        .iter()
+        .map(|(anchor, _)| *anchor)
+        .collect();
+    for anchor in &anchors {
+        match anchor.derived_witness() {
+            Some(_) => assert!(
+                !control_closed.contains(anchor),
+                "RECUT 2: {anchor:?} has BOTH a derived witness and a control \
+                 row — one of the two is not describing this anchor"
+            ),
+            None => assert!(
+                control_closed.contains(anchor),
+                "RECUT 2: {anchor:?} has no derived witness and names no causal \
+                 control, so nothing closes its identity — this is exactly the \
+                 residual that reads as enforcement"
+            ),
+        }
+    }
+
+    // ⛔ Every declared control row must correspond to an anchor the partition
+    // actually reaches. A control for a dead anchor is a row that can never fail.
+    for (anchor, control) in ProductionAnchor::CONTROL_CLOSED {
+        assert!(
+            anchors.contains(anchor),
+            "RECUT 2: {anchor:?} names control `{control}` but is bound by no row \
+             in the partition, so that control guards nothing"
+        );
+    }
+}
+
+/// **`RECUT 2`.** The derived witnesses are computed by production, not restated.
+///
+/// ⛔ **A witness that agrees with a constant written beside it proves nothing**
+/// — that is two hand-maintained authorities agreeing, the `AC-1` defect. Each
+/// value below is checked against the *behaviour* of the authority that
+/// produces it, so rewiring the authority moves the witness.
+#[test]
+fn recut2_derived_witnesses_come_from_the_production_authority() {
+    // The layout witness is the node extent DERIVED from the field inventory.
+    // ⛔ Asserted as a relation to the inventory, never as a frozen byte count:
+    // a reviewed layout delta is predicate delta, not a regression.
+    let extent = ProductionAnchor::LayoutFieldInventory
+        .derived_witness()
+        .expect("the layout authority is evaluable without a JIT");
+    assert!(
+        extent > 0,
+        "RECUT 2: the derived node extent is {extent}, so the field inventory \
+         computes nothing and the layout authority has no content"
+    );
+
+    // ⛔ **The expected value is COMPUTED BY the authority here, not written as
+    // a literal.** Mutation `M-E` deleted the production call inside
+    // `derived_witness` and replaced it with `Some(1)`; against a frozen `1`
+    // that evasion stayed green, because a hardcoded constant and a live call
+    // are indistinguishable while they happen to agree. Computing the expected
+    // side from the authority does not make them distinguishable *today* — see
+    // the residual below — but it does mean the two diverge the moment the
+    // contract moves, which is the drift a frozen literal cannot see.
+    let normalization_rejects_leading_zero =
+        !crate::boundary_value::boundary_int_magnitude_is_canonical(0, &[1, 0]);
+    assert_eq!(
+        ProductionAnchor::IntNormalizationAuthority.derived_witness(),
+        Some(i64::from(normalization_rejects_leading_zero)),
+        "RECUT 2: the normalization witness no longer tracks the canonical \
+         sign/limb authority, so it is measuring its own spelling"
+    );
+    // ⚠ The two-sided half: the same authority must ACCEPT a canonical
+    // magnitude, or "rejects a leading zero" is just "rejects everything" and
+    // the witness above is `1` for a reason that has nothing to do with the
+    // contract.
+    assert!(
+        crate::boundary_value::boundary_int_magnitude_is_canonical(0, &[1]),
+        "RECUT 2: the normalization authority rejects a canonical magnitude too, \
+         so its rejection above is not discriminating"
+    );
+    assert!(
+        normalization_rejects_leading_zero,
+        "RECUT 2: the authority now ACCEPTS a leading-zero magnitude — the \
+         canonical sign/limb contract has changed and this anchor's meaning \
+         changed with it"
+    );
+
+    // The status witnesses are the exact codes the production paths return.
+    assert_eq!(
+        ProductionAnchor::EmittedEscapeGate.derived_witness(),
+        Some(crate::boundary_value::BOUNDARY_ERR_ESCAPE)
+    );
+    assert_eq!(
+        ProductionAnchor::ReachableGraphValidator.derived_witness(),
+        Some(crate::boundary_value::BOUNDARY_ERR_CYCLE)
+    );
+    assert_eq!(
+        ProductionAnchor::RegionPublication.derived_witness(),
+        Some(crate::boundary_value::BOUNDARY_ERR_SEALED)
+    );
+    // ⛔ And the statuses must be DISTINCT: three phases sharing one code would
+    // make a control that fires for one indistinguishable from the others.
+    let statuses = [
+        crate::boundary_value::BOUNDARY_ERR_ESCAPE,
+        crate::boundary_value::BOUNDARY_ERR_CYCLE,
+        crate::boundary_value::BOUNDARY_ERR_SEALED,
+    ];
+    let distinct: std::collections::BTreeSet<_> = statuses.iter().collect();
+    assert_eq!(
+        distinct.len(),
+        statuses.len(),
+        "RECUT 2: two lifecycle phases report the same exact status, so a \
+         control cannot tell which one fired"
+    );
+}
+
+/// **`RECUT 2`.** The store-minted handle is the only outcome requiring all six.
+///
+/// ⛔ **This is the row the six blocks kept failing**, so it is pinned as a
+/// relation to the phase inventory rather than as the number six — the count is
+/// derived from `LifecyclePhase::ALL`, so adding a phase strengthens this
+/// automatically instead of leaving a stale literal behind.
+#[test]
+fn recut2_only_the_store_minted_handle_requires_the_whole_lifecycle() {
+    let full: Vec<BoundaryOutcome> = BoundaryInput::all()
+        .into_iter()
+        .map(|cell| cell.outcome())
+        .filter(|outcome| {
+            LifecyclePhase::ALL
+                .into_iter()
+                .all(|phase| outcome.requires(phase))
+        })
+        .collect();
+    assert!(
+        !full.is_empty(),
+        "RECUT 2: no outcome requires the whole lifecycle, so the artifact never \
+         asks the question the six blocks failed"
+    );
+    for outcome in full {
+        assert!(
+            matches!(
+                outcome,
+                BoundaryOutcome::HandleWord {
+                    identity: HandleIdentity::StoreMinted,
+                    ..
+                }
+            ),
+            "RECUT 2: {outcome:?} requires every phase, but only a store-minted \
+             handle should — a non-persistent outcome demanding adoption means \
+             the requirement is not derived from the class"
+        );
+    }
+}
+
+/// **`RECUT 2`, causal.** The emitter CONSUMES the representation authority.
+///
+/// ⛔ **The ruling's bar, literally:** *"mutate or bypass the authority and the
+/// captured/emitted helper graph must change or reject; an emitter that ignores
+/// the plan must redden."* A test that only checks the plan is *passed* would be
+/// the `let _ = plan` the ruling excludes, so this feeds a **perturbed plan**
+/// and requires the emitted CLIF to differ.
+///
+/// ⚠ MEASURED: the emitted helper graph under the derived plan differs from the
+/// graph under a plan whose class sets differ. CLAIMED: the helper bodies are
+/// generated from the authority. THE GAP: that the derived plan is the
+/// authority's real answer — closed by
+/// `recut2_the_plan_is_derived_from_the_partition_not_restated` below.
+#[test]
+fn recut2_the_emitted_helper_graph_changes_when_the_authority_changes() {
+    use crate::boundary_value::{BoundaryClass, BoundaryEmissionPlan};
+
+    let derived = BoundaryEmissionPlan::derive();
+    let real = crate::boundary_value_clif::tests::capture_with_plan(&derived);
+
+    // Positive control FIRST: the capture must be non-empty, or every
+    // comparison below is between two empty strings and means nothing.
+    assert!(
+        real.contains("function"),
+        "RECUT 2: the capture is empty, so the difference below is not evidence"
+    );
+
+    // ⛔ Perturb ONLY the axis the plan names: the class set a limb helper may
+    // touch. Nothing else about the emitter or the module changes.
+    let perturbed = BoundaryEmissionPlan::new(
+        vec![BoundaryClass::Record],
+        derived.byte_span_classes().to_vec(),
+        derived.tags().clone(),
+    );
+    let other = crate::boundary_value_clif::tests::capture_with_plan(&perturbed);
+    assert_ne!(
+        real, other,
+        "RECUT 2: the emitted helper graph is IDENTICAL under a plan whose \
+         int-magnitude class set is different — the emitter is not consuming \
+         the authority, it is only receiving it"
+    );
+
+    // ⛔ And the difference must be the CLASS COMPARISON, not incidental. The
+    // real graph compares against `Int`; the perturbed one against `Record`.
+    assert!(
+        real.contains(&format!("{}", BoundaryClass::Int as i64))
+            && other.contains(&format!("{}", BoundaryClass::Record as i64)),
+        "RECUT 2: the graphs differ, but not in the class constant the plan \
+         supplies — the difference is not attributable to the authority"
+    );
+
+    // ⚠ Two-sided: the SAME plan must produce the SAME graph, or `assert_ne!`
+    // above would pass for any two captures and prove nothing about the plan.
+    let again = crate::boundary_value_clif::tests::capture_with_plan(&derived);
+    assert_eq!(
+        real, again,
+        "RECUT 2: two captures under the same plan differ, so emission is not \
+         a function of the plan and the inequality above is noise"
+    );
+}
+
+/// **`RECUT 2`.** The plan is derived from the partition, not restated beside it.
+///
+/// ⛔ This is the half that keeps the causal test above honest: it would still
+/// pass if `derive()` returned a hand-written set. Here the expected sets are
+/// recomputed from the authority *in the test*, by the same two total
+/// projections — the classifier and `storage_shape` — so a `derive()` that
+/// stopped consulting either reddens.
+#[test]
+fn recut2_the_plan_is_derived_from_the_partition_not_restated() {
+    use crate::boundary_value::{BoundaryClass, BoundaryEmissionPlan, BoundaryStorageShape};
+    use std::collections::BTreeSet;
+
+    let mut admitted: BTreeSet<BoundaryClass> = BTreeSet::new();
+    for cell in BoundaryInput::all() {
+        if let BoundaryOutcome::HandleWord { class, .. } = cell.outcome() {
+            admitted.insert(class);
+        }
+    }
+    assert!(
+        !admitted.is_empty(),
+        "RECUT 2: the partition admits no handle class at all, so the plan is \
+         vacuous and every set below is trivially equal"
+    );
+
+    let plan = BoundaryEmissionPlan::derive();
+    // ⛔ There is no whole-admitted-class assertion here, because the plan no
+    // longer carries that set: no emitted helper ever read it. The per-shape
+    // sets below are recomputed from `admitted` in this test, so the classifier
+    // is still the thing being pinned — dropping an unconsumed accessor removed
+    // a declaration, not a control.
+    for (shape, got) in [
+        (
+            BoundaryStorageShape::IntMagnitude,
+            plan.int_magnitude_classes(),
+        ),
+        (BoundaryStorageShape::ByteSpan, plan.byte_span_classes()),
+    ] {
+        let want: Vec<BoundaryClass> = admitted
+            .iter()
+            .copied()
+            .filter(|class| class.storage_shape() == shape)
+            .collect();
+        assert_eq!(
+            got, want,
+            "RECUT 2: the plan's {shape:?} set is not the admitted classes of \
+             that storage shape"
+        );
+        assert!(
+            !want.is_empty(),
+            "RECUT 2: no admitted class has storage shape {shape:?}, so the \
+             guard built from it would name nothing"
+        );
+    }
+}
+
+/// **`RECUT 2`, causal — the TAG axis.** The emitted helpers branch on the
+/// plan's derived tag sets, not on an ordinal band.
+///
+/// ⛔ **The ruling's bar is causation, not agreement:** *"mutate or bypass the
+/// authority and the captured/emitted helper graph must change or reject."* An
+/// assertion that the plan and the emitted bytes agree is explicitly listed as
+/// not counting, so this feeds a **perturbed tag admission** and requires the
+/// CLIF to differ.
+///
+/// ⚠ MEASURED: the emitted graph under the derived tag sets differs from the
+/// graph under tag sets that admit a different set of tags. CLAIMED: the
+/// emitted validity, handle-ness and immediacy tests are generated from the
+/// authority. THE GAP: that the derived sets are the authority's real answer —
+/// closed by `recut2_the_tag_admission_is_derived_from_the_partition_not_restated`.
+#[test]
+fn recut2_the_emitted_helper_graph_changes_when_the_tag_sets_change() {
+    use crate::boundary_value::{BoundaryEmissionPlan, BoundaryTag, BoundaryTagAdmission};
+
+    let derived = BoundaryEmissionPlan::derive();
+    let real = crate::boundary_value_clif::tests::capture_with_plan(&derived);
+    assert!(
+        real.contains("function"),
+        "RECUT 2: the capture is empty, so the difference below is not evidence"
+    );
+
+    // ⛔ Perturb ONLY the tag axis: drop one admitted tag. Nothing about the
+    // class sets, the emitter, or the module changes.
+    let dropped = *derived
+        .tags()
+        .admitted()
+        .last()
+        .expect("the partition admits at least one tag");
+    let thinner: Vec<BoundaryTag> = derived
+        .tags()
+        .admitted()
+        .iter()
+        .copied()
+        .filter(|tag| *tag != dropped)
+        .collect();
+    assert!(
+        thinner.len() + 1 == derived.tags().admitted().len(),
+        "RECUT 2: the perturbation removed nothing, so the comparison below is \
+         between two identical plans"
+    );
+    let perturbed = BoundaryEmissionPlan::new(
+        derived.int_magnitude_classes().to_vec(),
+        derived.byte_span_classes().to_vec(),
+        BoundaryTagAdmission::new(
+            thinner,
+            derived.tags().immediate().to_vec(),
+            derived.tags().handle().to_vec(),
+            derived.tags().owner_bands().to_vec(),
+            derived.tags().immediate_value_classes().to_vec(),
+            derived.tags().handle_class_relation().to_vec(),
+        ),
+    );
+    let other = crate::boundary_value_clif::tests::capture_with_plan(&perturbed);
+    assert_ne!(
+        real, other,
+        "RECUT 2: the emitted helper graph is IDENTICAL under a plan admitting \
+         one fewer tag — the emitter is not consuming the tag admission, it is \
+         only receiving it"
+    );
+
+    // ⛔ And the difference must be the DROPPED TAG's own membership tests,
+    // not something incidental. Presence/absence is the wrong needle: tag 8 is
+    // also in the handle set and in an owner band, so it keeps being compared
+    // for those. What must move is the COUNT — dropping it from exactly one
+    // derived set removes exactly the comparisons that set generates, and
+    // nothing in the perturbation can add one.
+    let compares_for = |clif: &str| {
+        let suffix = format!(", {}", dropped as i64);
+        clif.lines()
+            .filter(|line| line.contains("icmp_imm") && line.trim_end().ends_with(&suffix))
+            .count()
+    };
+    let (before, after) = (compares_for(&real), compares_for(&other));
+    assert!(
+        before > 0,
+        "RECUT 2: the real graph never compares against {dropped:?} at all, so \
+         its disappearance below would not be evidence"
+    );
+    assert!(
+        after < before,
+        "RECUT 2: the graphs differ, but the emitted membership tests for \
+         {dropped:?} did not decrease ({before} -> {after}) — the difference \
+         is not attributable to the tag the plan stopped admitting"
+    );
+
+    // ⚠ Two-sided: the SAME plan must produce the SAME graph, or `assert_ne!`
+    // above would pass for any two captures.
+    let again = crate::boundary_value_clif::tests::capture_with_plan(&derived);
+    assert_eq!(
+        real, again,
+        "RECUT 2: two captures under the same plan differ, so emission is not \
+         a function of the plan and the inequality above is noise"
+    );
+}
+
+/// **`RECUT 2`, causal — the OWNER axis.** The emitted region selection, the
+/// node's recorded owner, and the escape gate all branch on the plan's owner
+/// bands.
+///
+/// ⚠ MEASURED: moving a tag from one owner band to another changes the emitted
+/// CLIF. CLAIMED: the emitted owner decisions are generated from the authority
+/// rather than from a threshold on tag order. THE GAP: that the bands are the
+/// partition's real answer — closed by the derivation test below.
+///
+/// ⛔ This axis needs its own perturbation because the tag test above holds the
+/// bands fixed: a plan could consume the admitted set and still decide
+/// ownership from a hardcoded threshold, and every assertion there would pass.
+#[test]
+fn recut2_the_emitted_helper_graph_changes_when_the_owner_bands_change() {
+    use crate::boundary_value::{BoundaryEmissionPlan, BoundaryTagAdmission};
+
+    let derived = BoundaryEmissionPlan::derive();
+    let real = crate::boundary_value_clif::tests::capture_with_plan(&derived);
+    assert!(
+        real.contains("function"),
+        "RECUT 2: the capture is empty, so the difference below is not evidence"
+    );
+
+    // Move the first band's first tag into the second band — the owners keep
+    // their identities, only the tag-to-owner assignment moves.
+    let mut bands = derived.tags().owner_bands().to_vec();
+    assert!(
+        bands.len() >= 2 && !bands[0].1.is_empty(),
+        "RECUT 2: fewer than two non-empty owner bands, so a reassignment \
+         cannot be expressed and this test proves nothing"
+    );
+    let moved = bands[0].1.remove(0);
+    bands[1].1.push(moved);
+    bands[1].1.sort();
+    let perturbed = BoundaryEmissionPlan::new(
+        derived.int_magnitude_classes().to_vec(),
+        derived.byte_span_classes().to_vec(),
+        BoundaryTagAdmission::new(
+            derived.tags().admitted().to_vec(),
+            derived.tags().immediate().to_vec(),
+            derived.tags().handle().to_vec(),
+            bands,
+            derived.tags().immediate_value_classes().to_vec(),
+            derived.tags().handle_class_relation().to_vec(),
+        ),
+    );
+    let other = crate::boundary_value_clif::tests::capture_with_plan(&perturbed);
+    assert_ne!(
+        real, other,
+        "RECUT 2: the emitted helper graph is IDENTICAL after moving {moved:?} \
+         to another owner band — the owner decisions are not derived from the \
+         bands"
+    );
+
+    let again = crate::boundary_value_clif::tests::capture_with_plan(&derived);
+    assert_eq!(
+        real, again,
+        "RECUT 2: two captures under the same plan differ, so the inequality \
+         above is noise"
+    );
+}
+
+/// **`RECUT 2`.** The tag admission is derived from the partition, not restated
+/// beside it.
+///
+/// ⛔ The half that keeps the two causal tests honest: they would both still
+/// pass if `derive()` returned hand-written sets. Here the expected sets are
+/// recomputed from the authority *in the test*, by the same total projection —
+/// sweeping `BoundaryInput::all()` through the wildcard-free classifier — so a
+/// `derive()` that stopped consulting it reddens.
+#[test]
+fn recut2_the_tag_admission_is_derived_from_the_partition_not_restated() {
+    use crate::boundary_value::{BoundaryEmissionPlan, BoundaryReferentOwner, BoundaryTag};
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let mut immediate: BTreeSet<BoundaryTag> = BTreeSet::new();
+    let mut handle: BTreeSet<BoundaryTag> = BTreeSet::new();
+    let mut bands: BTreeMap<BoundaryReferentOwner, BTreeSet<BoundaryTag>> = BTreeMap::new();
+    let mut value_classes: BTreeMap<BoundaryTag, crate::boundary_value::BoundaryClass> =
+        BTreeMap::new();
+    for cell in BoundaryInput::all() {
+        match cell.outcome() {
+            BoundaryOutcome::ImmediateWord { tag, value_class } => {
+                immediate.insert(tag);
+                if let Some(class) = value_class {
+                    value_classes.insert(tag, class);
+                }
+            }
+            BoundaryOutcome::HandleWord { tag, owner, .. } => {
+                handle.insert(tag);
+                bands.entry(owner).or_default().insert(tag);
+            }
+            BoundaryOutcome::ProtocolOnly | BoundaryOutcome::FailClosedForbidden => {}
+        }
+    }
+    // Positive controls: each population is non-empty, so the equalities below
+    // are not agreements between empty sets.
+    assert!(
+        !immediate.is_empty() && !handle.is_empty() && bands.len() >= 2,
+        "RECUT 2: the partition yields immediate={}, handle={}, bands={} — a \
+         plan derived from it would be vacuous",
+        immediate.len(),
+        handle.len(),
+        bands.len()
+    );
+
+    let plan = BoundaryEmissionPlan::derive();
+    assert_eq!(
+        plan.tags().immediate(),
+        immediate.iter().copied().collect::<Vec<_>>(),
+        "RECUT 2: the plan's immediate tag set is not the partition's"
+    );
+    assert_eq!(
+        plan.tags().handle(),
+        handle.iter().copied().collect::<Vec<_>>(),
+        "RECUT 2: the plan's handle tag set is not the partition's"
+    );
+    assert_eq!(
+        plan.tags().admitted(),
+        immediate
+            .union(&handle)
+            .copied()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>(),
+        "RECUT 2: the plan's admitted tag set is not the union of the two"
+    );
+    assert_eq!(
+        plan.tags().owner_bands(),
+        bands
+            .into_iter()
+            .map(|(owner, tags)| (owner, tags.into_iter().collect::<Vec<_>>()))
+            .collect::<Vec<_>>(),
+        "RECUT 2: the plan's owner bands are not the partition's"
+    );
+    // ⛔ The immediate-class projection, swept from the same outcomes. Kept
+    // separate from the node-class relation on purpose: this is what the
+    // `class` helper reports for an immediate word, not a node's `NODE_CLASS`.
+    assert!(
+        !value_classes.is_empty(),
+        "RECUT 2: the partition classifies no immediate, so the equality below \
+         is between empty relations"
+    );
+    assert_eq!(
+        plan.tags().immediate_value_classes(),
+        value_classes.into_iter().collect::<Vec<_>>(),
+        "RECUT 2: the plan's immediate value-class relation is not the \
+         partition's"
+    );
+}
+
+/// **`RECUT 2`, identity.** The predicted-and-then-measured half: emitted code
+/// makes no identity decision the authority does not supply.
+///
+/// ⚠ **The prediction, stated before it was measured** (recorded in the
+/// evidence doc at `ab11a3d2`): `HandleIdentity` is computed by
+/// `BoundaryInput::handle_identity` **from the owner alone**, so once the owner
+/// bands are derived, identity needs no separate wiring.
+///
+/// ⚠ MEASURED: identity is a total function of owner across every admitted
+/// handle outcome, and the sole identity the emitted graph can mint is the
+/// absent one — every `alloc`ed node is written `NULL_SLOT`, which this ABI
+/// reads as "no store identity". CLAIMED: no emitted decision assigns identity.
+/// ⛔ **THE GAP, stated rather than closed:** this shows emitted code cannot
+/// mint a *store* identity, not that no future helper could. The residual is
+/// review-enforced — `escape_check`'s adoption gate is the mechanism that keeps
+/// it honest at runtime, and it is tested separately.
+#[test]
+fn recut2_identity_is_a_function_of_owner_and_needs_no_second_wiring() {
+    use std::collections::BTreeMap;
+
+    let mut by_owner: BTreeMap<BoundaryReferentOwner, BTreeSet<HandleIdentity>> = BTreeMap::new();
+    for cell in BoundaryInput::all() {
+        if let BoundaryOutcome::HandleWord {
+            owner, identity, ..
+        } = cell.outcome()
+        {
+            by_owner.entry(owner).or_default().insert(identity);
+        }
+    }
+    assert!(
+        by_owner.len() >= 2,
+        "RECUT 2: fewer than two owners publish handles, so 'identity is a \
+         function of owner' cannot be distinguished from 'identity is constant'"
+    );
+    for (owner, identities) in &by_owner {
+        assert_eq!(
+            identities.len(),
+            1,
+            "RECUT 2: {owner:?} publishes {} distinct identities, so identity \
+             is NOT a function of owner and the emitted side would need a \
+             decision the bands cannot supply",
+            identities.len()
+        );
+    }
+    // ⛔ Non-vacuity: the function must actually distinguish, or a constant
+    // identity would satisfy every assertion above.
+    let distinct: BTreeSet<HandleIdentity> = by_owner.values().flatten().copied().collect();
+    assert!(
+        distinct.len() >= 2,
+        "RECUT 2: every owner yields the same identity, so the agreement above \
+         is vacuous"
     );
 }

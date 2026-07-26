@@ -67,6 +67,28 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         &mut module,
         native_int_wrapping_mutation,
     )?;
+    // `RT-FNSPLIT-B2V` `D3` — the boundary-value interface is declared and
+    // defined in EVERY module, a fixed Θ(1) population, so a unit can project a
+    // transfer wherever it is emitted rather than only where some caller
+    // arranged a decoder.
+    //
+    // ⛔ `D6` INERT: nothing calls these yet. This adds no generated function
+    // for any semantic origin, no cross-owner call and no second body-emission
+    // authority — `RT-FNSPLIT-B2F` performs the switch-over that consumes them.
+    // The population is emitted unconditionally so that B2F's switch-over is a
+    // change of caller, never a change of what a module contains.
+    // ⛔ `RECUT 2` — the emission plan is DERIVED from the representation
+    // authority here, at the single-owner seam, and passed into the emitter.
+    // The emitter consumes it to build the helper bodies' legal class sets; it
+    // does not restate the authority and cannot reach it (`BoundaryInput` is
+    // private to `cranelift_backend::lowering`). Ruled in scope and required by
+    // the Architect: production codegen consumption is not `B2F` activation.
+    let boundary_plan = crate::boundary_value::BoundaryEmissionPlan::derive();
+    let _boundary_value_abi = crate::boundary_value_clif::emit_boundary_value_local_graph(
+        &mut module,
+        &native_int,
+        &boundary_plan,
+    )?;
     let host_dispatch = if process_mode {
         let mut host_sig = module.make_signature();
         host_sig

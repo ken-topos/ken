@@ -527,6 +527,141 @@ fn encode_canonical_recursive_reference(value: &Value, out: &mut Vec<u8>) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// `RT-FNSPLIT-B2V` `D2` — the decode inverse
+// ---------------------------------------------------------------------------
+
+/// Decode one canonical value, returning it and the bytes consumed.
+///
+/// ⭐ **Why this exists.** `Canonical` had an `encode_canonical` and no inverse,
+/// so a `SlotId` was an identity you could mint and never redeem — which is
+/// what made a handle-shaped boundary word unprojectable and what the frame's
+/// `D2` amendment corrected. `Space::canonical_bytes` finds a slot's bytes;
+/// this turns them back into a value.
+///
+/// ⛔ **Fail-closed, three outcomes not two.** `None` covers *"this decoder
+/// does not cover that tag"* exactly as it covers *"those bytes are
+/// malformed"*: an unhandled tag must never fall through to a plausible
+/// default, because a silent wrong value is worse than a refusal. The covered
+/// set is the boundary ABI's persistent family — `BigInt`, `Constructor`,
+/// `Record`, `String`, `Bytes`, `Closure`, and the `Bool`/`SmallInt` scalars
+/// that appear in sub-value position — and every other tag is refused rather
+/// than guessed.
+///
+/// ⚠ `Closure` is covered because store adoption and independent recovery need
+/// it, and for no wider reason: `Array`, `Map`, `Set` and the remaining scalars
+/// are encodable and still **refused** here. Widening the decoder stays a
+/// deliberate edit at this `match`, never a side effect at a call site.
+pub fn decode_canonical(bytes: &[u8]) -> Option<(Value, usize)> {
+    let (&kind, rest) = bytes.split_first()?;
+    let mut at = 1usize;
+    let value = match kind {
+        tag::BIG_INT => {
+            let sign = decode_sign(*rest.first()?)?;
+            at += 1;
+            let count = read_u32(bytes, &mut at)? as usize;
+            let mut limbs = Vec::with_capacity(count);
+            for _ in 0..count {
+                limbs.push(read_u64(bytes, &mut at)?);
+            }
+            Value::BigInt { sign, limbs }
+        }
+        tag::DATA => {
+            let constructor_id = read_u32(bytes, &mut at)?;
+            let arity = read_u16(bytes, &mut at)? as usize;
+            let args = decode_children(bytes, &mut at, arity)?;
+            Value::Constructor {
+                constructor_id,
+                args,
+            }
+        }
+        tag::RECORD => {
+            let type_id = read_u32(bytes, &mut at)?;
+            let arity = read_u16(bytes, &mut at)? as usize;
+            let fields = decode_children(bytes, &mut at, arity)?;
+            Value::Record { type_id, fields }
+        }
+        tag::STRING => {
+            let len = read_u32(bytes, &mut at)? as usize;
+            let utf8 = bytes.get(at..at.checked_add(len)?)?;
+            at += len;
+            Value::String(std::str::from_utf8(utf8).ok()?.to_string())
+        }
+        tag::BYTES => {
+            let len = read_u32(bytes, &mut at)? as usize;
+            let data = bytes.get(at..at.checked_add(len)?)?;
+            at += len;
+            Value::Bytes(data.to_vec())
+        }
+        tag::BOOL => {
+            let bit = *bytes.get(at)?;
+            at += 1;
+            match bit {
+                0 => Value::Bool(false),
+                1 => Value::Bool(true),
+                // Not "truthy": a byte outside {0,1} is a corrupt encoding.
+                _ => return None,
+            }
+        }
+        tag::SMALL_INT => Value::SmallInt(read_u64(bytes, &mut at)? as i64),
+        // A retained closure: authoritative code identity plus the FULL ordered
+        // captured environment, decoded inline exactly as it was encoded. The
+        // captures are values, not a digest, which is what lets a consumer
+        // recover capture content and order rather than merely comparing two
+        // closures for equality.
+        tag::CLOSURE => {
+            let code_id = read_u64(bytes, &mut at)?;
+            let arity = read_u16(bytes, &mut at)? as usize;
+            let captured = decode_children(bytes, &mut at, arity)?;
+            Value::Closure { code_id, captured }
+        }
+        // ⛔ Every other tag — including the ones this crate encodes — is
+        // REFUSED, not approximated. Widening the decoder is a deliberate edit
+        // here, never an accident at a call site.
+        _ => return None,
+    };
+    Some((value, at))
+}
+
+fn decode_children(bytes: &[u8], at: &mut usize, arity: usize) -> Option<Vec<Value>> {
+    let mut children = Vec::with_capacity(arity);
+    for _ in 0..arity {
+        let (child, used) = decode_canonical(bytes.get(*at..)?)?;
+        *at += used;
+        children.push(child);
+    }
+    Some(children)
+}
+
+fn decode_sign(byte: u8) -> Option<crate::values::Sign> {
+    match byte {
+        0 => Some(crate::values::Sign::NonNegative),
+        1 => Some(crate::values::Sign::Negative),
+        _ => None,
+    }
+}
+
+fn read_u16(bytes: &[u8], at: &mut usize) -> Option<u16> {
+    let end = at.checked_add(2)?;
+    let raw: [u8; 2] = bytes.get(*at..end)?.try_into().ok()?;
+    *at = end;
+    Some(u16::from_le_bytes(raw))
+}
+
+fn read_u32(bytes: &[u8], at: &mut usize) -> Option<u32> {
+    let end = at.checked_add(4)?;
+    let raw: [u8; 4] = bytes.get(*at..end)?.try_into().ok()?;
+    *at = end;
+    Some(u32::from_le_bytes(raw))
+}
+
+fn read_u64(bytes: &[u8], at: &mut usize) -> Option<u64> {
+    let end = at.checked_add(8)?;
+    let raw: [u8; 8] = bytes.get(*at..end)?.try_into().ok()?;
+    *at = end;
+    Some(u64::from_le_bytes(raw))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

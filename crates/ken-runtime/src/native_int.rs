@@ -94,6 +94,18 @@ impl RuntimeIntV1 {
         }
     }
 
+    /// The canonical `(sign_bit, limbs)` view, in the encoding the emitted
+    /// exact-`Int` decoder writes: `0` non-negative, `1` negative, limbs
+    /// least-significant first with no leading zero limb.
+    ///
+    /// ⭐ Shares [`RuntimeIntV1::sign_magnitude`] with every other consumer, so
+    /// a boundary node's persisted magnitude and `ken_native_int_resolve_local`'s
+    /// view are the same normalization rather than two that agree today.
+    pub fn canonical_sign_and_limbs(&self) -> (u64, Vec<u64>) {
+        let (sign, limbs) = self.sign_magnitude();
+        (u64::from(sign == Sign::Negative), limbs)
+    }
+
     fn sign_magnitude(&self) -> (Sign, Vec<u64>) {
         match self {
             Self::Small(value) if *value < 0 => (Sign::Negative, vec![value.unsigned_abs()]),
