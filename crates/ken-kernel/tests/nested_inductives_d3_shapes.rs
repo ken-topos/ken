@@ -3,8 +3,8 @@ use ken_kernel::inductive::{
     RecursiveShape,
 };
 use ken_kernel::{
-    declare_inductive, ConstructorDecl, CtorSpec, GlobalEnv, GlobalId, InductiveSpec, KernelError,
-    Level, LevelVar, Term,
+    declare_def, declare_inductive, declare_postulate, ConstructorDecl, CtorSpec, GlobalEnv,
+    GlobalId, InductiveSpec, KernelError, Level, LevelVar, Term,
 };
 
 const U: LevelVar = LevelVar(0);
@@ -123,6 +123,82 @@ fn primitive_sigma_preserves_topology_and_both_motive_leaves() {
         shapes[0].shape.as_legacy().is_none(),
         "structured Sigma cannot collapse into a legacy flat IH"
     );
+}
+
+#[test]
+fn transparent_aliases_preserve_former_topology_and_fail_closed_otherwise() {
+    // Durable invariant: transparent delta reduction is spelling-invariant for
+    // recursive topology, including universe instantiation. Opaque and missing
+    // heads remain the fail-closed boundary.
+    let mut env = GlobalEnv::new();
+    let carrier = declare_positive_carrier(&mut env);
+    let alias_ty = Term::pi(Term::Type(Level::Var(U)), Term::Type(Level::Var(U)));
+    let alias = declare_def(
+        &mut env,
+        vec![U],
+        alias_ty.clone(),
+        Term::indformer(carrier, vec![Level::Var(U)]),
+    )
+    .expect("transparent alias of the positive carrier");
+    let chained_alias = declare_def(
+        &mut env,
+        vec![U],
+        alias_ty.clone(),
+        Term::const_(alias, vec![Level::Var(U)]),
+    )
+    .expect("transparent alias chain");
+    let opaque_alias = declare_postulate(
+        &mut env,
+        "opaque carrier alias".to_string(),
+        vec![U],
+        alias_ty,
+    )
+    .expect("opaque alias declaration");
+    let d = GlobalId(u32::MAX);
+    let direct = constructor(vec![Term::app(
+        Term::indformer(carrier, vec![Level::zero()]),
+        former(d),
+    )]);
+    let through_alias = constructor(vec![Term::app(
+        Term::const_(alias, vec![Level::zero()]),
+        former(d),
+    )]);
+    let through_chain = constructor(vec![Term::app(
+        Term::const_(chained_alias, vec![Level::zero()]),
+        former(d),
+    )]);
+    let direct_shape = recursive_shapes(&env, &direct, d, 0).expect("direct former shape");
+
+    assert_eq!(
+        recursive_shapes(&env, &through_alias, d, 0).expect("transparent alias shape"),
+        direct_shape,
+        "transparent aliases must preserve the exact instantiated Former topology"
+    );
+    assert_eq!(
+        recursive_shapes(&env, &through_chain, d, 0).expect("transparent alias-chain shape"),
+        direct_shape,
+        "finite transparent alias chains must preserve the same topology"
+    );
+
+    let opaque = constructor(vec![Term::app(
+        Term::const_(opaque_alias, vec![Level::zero()]),
+        former(d),
+    )]);
+    assert!(matches!(
+        recursive_shapes(&env, &opaque, d, 0),
+        Err(KernelError::PositivityViolation(message))
+            if message.contains("opaque or unresolved application head")
+    ));
+
+    let unresolved = constructor(vec![Term::app(
+        Term::const_(GlobalId(u32::MAX - 2), vec![Level::zero()]),
+        former(d),
+    )]);
+    assert!(matches!(
+        recursive_shapes(&env, &unresolved, d, 0),
+        Err(KernelError::PositivityViolation(message))
+            if message.contains("opaque or unresolved application head")
+    ));
 }
 
 #[test]
