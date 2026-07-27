@@ -440,6 +440,21 @@ partial emission. The refusal arms must isolate **each independent position**
 that can carry a closure, because a single value with closures in every position
 cannot prove the check is per-position.
 
+> ⚖️ **AMENDED at the carrier boundary — Architect Decision `dec_1dccecns4c2fr`
+> (`resolved` 2026-07-27T13:23:47Z), transcribed in
+> `docs/program/wp/RT-VALUE-TOTALITY-P2-representation-split.md` under `AC-V5`.**
+> **Direct, record-field, and constructor-argument** are the complete
+> constructible closure-bearing positions today and carry behavioral controls.
+> **Array-element and primitive-map-value are discharged STRUCTURALLY** for this
+> phase: the closure-bearing carriers have no Array/Map child positions, `D1`
+> removes the closure variant from canonical `Value`, and the proved package
+> `Map` is constructor data routing through the already-covered
+> constructor-argument path.
+> ⛔ **Not a permanent waiver** — any future closure-capable operational
+> Array/Map position **reopens `AC-V5`** and requires its own refusal arm plus a
+> closure-free positive control before that carrier may publish. The normative
+> transitive-refusal contract is unchanged.
+
 **`AC-V6` — the false doc text is EDITED, not annotated.** The `values.rs` and
 `canonical.rs` comments asserting memcmp-exact inline capture encoding must be
 **replaced**. ⛔ An appended "see the new boundary" note leaves the false text
