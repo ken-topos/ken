@@ -105,6 +105,49 @@ Two clauses, both load-bearing, both learned the hard way:
 > PX8 stays `active`; **ABI-R3 and PX9 stay held.** This IS the artifact-backed
 > gate working — a list-green close would have shipped three real defects.
 
+> ## ⚖️ CLAUSE-(a) SCOPE RULED 2026-07-27 — Architect `evt_5h884g6xhtts3`
+>
+> **Question routed** (Steward `evt_2bh3tqwcvyb7n`, corrected by
+> `evt_7aeprfb7qrwfh`): does clause (a)'s **universal** absolute-evidence claim
+> bind a value population with **no production route on one engine**? Raised
+> because the interpreter capped-short `Wrote` value looked unreachable.
+>
+> ### ⛔ ANSWER: it BINDS. No exclusion, no seam.
+>
+> - ⛔ **No named durable exclusion.** It would let an **admitted closed-sum
+>   arm** escape the very absolute oracle this property exists to require. *"If a
+>   future backend produces a short write, the same reifier runs; correctness
+>   cannot begin only when that environment becomes convenient to reproduce."*
+> - ⛔ **No production seam** — and none is needed.
+> - ✅ **The discharge is component-boundary evidence:** a test-local
+>   `HostEffectBackendV1` → the real `dispatch_host_op_v1` → the real minted
+>   `TransferCountV1` → the existing reifier → the `§38`-derived literal.
+>   Production unchanged. See [[PX8-WROTE-ABS]].
+>
+> **Three durable boundaries decided it:** this node defines closure over every
+> value the path **reifies**, derived from the **closed Rust sums** and not from
+> whichever end-to-end fixtures are convenient; LOCKED `§38.1.7.2` explicitly
+> admits `write returns 0 < n <= effective request -> Wrote n, including a short
+> write`, with `remaining = effective - n`; and the shared dispatcher accepts
+> exactly that range and mints the private count itself.
+>
+> ### ⭐⭐⭐ The generalizable rule — it governs the other three instances too
+>
+> **Evidence must distinguish every normatively different behavior over the
+> component's ADMITTED SEMANTIC DOMAIN.** Mutations that are *extensionally
+> equal over that domain* need no discriminator. ⛔ Conversely, a genuinely
+> uninhabited value — excluded by the **closed type / validator / contract
+> itself** — does not bind merely because one can write suggestive prose about
+> it.
+>
+> ⇒ ⛔ **Derive the domain from the authoritative constructor and admission
+> boundary FIRST, then ask reachability. Never infer semantic absence from the
+> lack of a convenient top-level producer.** ⭐ Carry this to
+> [[CONF-FMT8-LEVELTOK]], [[SEC1-IFC-R3]], and [[CONF-SEC4-REFL-PAIR]] — the
+> other three instances of *"an operand I cannot construct is byte-identical, to
+> any reader, to one not yet built."* **Three of the four sit under universally
+> quantified properties, and this ruling is the test for all of them.**
+
 ### ⚠ RT-SPLIT is bundled into PX8 by the docs, and probably should not be
 
 `RT-SPLIT` is a **pure maintainability decomposition** of
