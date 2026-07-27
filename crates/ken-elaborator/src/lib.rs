@@ -38,6 +38,7 @@ pub mod program_admission;
 pub mod protocol;
 pub mod prover;
 pub mod resolve;
+pub mod strings;
 pub mod temporal;
 pub mod trace;
 
@@ -79,6 +80,7 @@ pub use literate::{
     KenMdFenceRole,
 };
 pub use numbers::{NumericEnv, NumericLitVal};
+pub use strings::NfcString;
 pub use prelude::PreludeEnv;
 pub use protocol::{
     hole_id_string, obligation_id_string, project_obligation_status, project_wire_verdict,

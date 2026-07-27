@@ -144,6 +144,18 @@ fn ac1_s2l_witness_is_always_a_valid_scalar() {
 
 // ── AC2: String-side retraction and derived s2l injectivity ────────────────
 
+/// `surface/strings/nfc-source-literal-identity` — canonically equivalent
+/// source spellings construct the same semantic String.
+#[test]
+fn ac2_source_literals_merge_at_nfc_construction() {
+    let mut env = ElabEnv::new().expect("base env");
+    let mut store = make_store(&env);
+    let nfd = eval_view(&mut env, &mut store, "t_nfc_nfd", "String", "\"e\u{301}\"");
+    let nfc = eval_view(&mut env, &mut store, "t_nfc_nfc", "String", "\"\u{E9}\"");
+
+    assert_eq!(nfd, nfc, "NFC-equivalent source literals must be one String value");
+}
+
 /// `surface/strings/roundtrip-l2s-s2l` — `list_char_to_string
 /// (string_to_list_char s) ≡ s` for the boundary corpus.
 #[test]
@@ -161,6 +173,7 @@ fn ac2_round_trip_l2s_s2l_identity() {
         "\u{FFFF}",
         "\u{10000}",
         "\u{10FFFF}",
+        "e\u{301}",
         "hello, \u{4e16}\u{754c}! \u{10000}\u{1F600}",
     ];
     for s in corpus {
@@ -173,23 +186,20 @@ fn ac2_round_trip_l2s_s2l_identity() {
         );
         assert_eq!(
             v,
-            EvalVal::Str(s.to_string()),
+            EvalVal::Str(s.into()),
             "round-trip failed for {s:?}"
         );
     }
 }
 
-/// `surface/strings/s2l-injectivity-current-nfc-stub-tripwire` — the landed
-/// String-side retraction makes `string_to_list_char` injective. Under the
-/// current NFC stub (`37 §9`; `dec_ppakqc11kffh`), this direct `List Char`
-/// operand remains decomposed. That is a transition tripwire, not normative
-/// `String` semantics: real NFC must break this expectation.
+/// `surface/strings/s2l-injectivity` — the landed String-side retraction makes
+/// `string_to_list_char` injective over normalized `String` values.
 #[test]
-fn ac2_s2l_injectivity_current_nfc_stub_tripwire() {
+fn ac2_s2l_injectivity_over_normalized_strings() {
     let mut env = ElabEnv::new().expect("base env");
     let mut store = make_store(&env);
 
-    // `[U+0065, U+0301]` as an explicit List Char under the current NFC stub.
+    // `[U+0065, U+0301]` normalizes to precomposed U+00E9 at String construction.
     let cs_expr = "Cons Char 101 (Cons Char 769 (Nil Char))";
     let v = eval_view(
         &mut env,
@@ -200,10 +210,13 @@ fn ac2_s2l_injectivity_current_nfc_stub_tripwire() {
     );
     assert_eq!(
         list_char_codepoints(&env, &v),
+        vec![233],
+        "NFC-at-construction must expose one precomposed scalar"
+    );
+    assert_ne!(
+        list_char_codepoints(&env, &v),
         vec![101, 769],
-        "STR-BIJ-TEST-CARRIER / dec_ppakqc11kffh transition tripwire: \
-         the current §37.9 NFC stub preserves [101,769]; real NFC must break \
-         this expectation"
+        "l2s is a retraction, not an injection on List Char"
     );
 }
 
@@ -310,7 +323,7 @@ fn ac4_l2s_totality_on_nontrivial_list() {
         !matches!(v, EvalVal::Neutral),
         "l2s must not get stuck on a non-trivial List Char"
     );
-    assert_eq!(v, EvalVal::Str("Ken".to_string()));
+    assert_eq!(v, EvalVal::Str("Ken".into()));
 }
 
 // ── Out-of-scope guard (verify by absence) ──────────────────────────────────

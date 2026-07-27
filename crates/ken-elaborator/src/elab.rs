@@ -2704,7 +2704,7 @@ fn elab_str_lit(
             span: span.clone(),
         })?;
     cx.num_values
-        .insert(lit_id, NumericLitVal::Str(s.to_owned()));
+        .insert(lit_id, NumericLitVal::Str(crate::NfcString::new(s)));
     Ok((Term::const_(lit_id, vec![]), str_ty))
 }
 
