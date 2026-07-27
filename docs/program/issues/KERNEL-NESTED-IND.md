@@ -1,7 +1,7 @@
 ---
 id: KERNEL-NESTED-IND
 title: "admit nested strictly-positive inductives in the kernel — structural positivity through declared parameter positions, generated and checked dependent eliminators with one lifted IH per contained recursive occurrence, iota, and surface consumability"
-status: ready
+status: active
 owner: kernel
 size: L
 gate: none
@@ -11,6 +11,46 @@ github: null
 origin: Architect ruling evt_55k9f9efvd8jk, Decision dec_13af1mercv2m0 resolved. Demand-pulled by DS-9, which blocked at its first deliverable on `JsonArray (List Json)`; fork raised by the Steward as evt_1ykvpj7yvtg18. The five-point prerequisite contract below is the Architect's, transcribed verbatim in substance. Steward-filed; Steward owns the frame and AC/control placement.
 ---
 
+> ## ⭐ `D1a` LANDED — PR #1077, `main = 88196527`. `D1b` IS NOW UNGATED.
+>
+> ⛔ **The node is NOT complete.** `D1a` is one of eight deliverables; `D3`–`D7`
+> remain. A nested inductive is still **rejected** on `origin/main` — the
+> non-`D`-head `occurs` guard is byte-identical to base by design.
+>
+> **`D1a` = per-parameter polarity, derived at admission and consumed by the
+> positivity gate.** Candidate `e685570c1b8403c38af7ed0f45c205a6bc2eeb90`, **CI
+> checks passed**, five `ken-kernel` paths, +463/−2. Verified by blob identity:
+> `src/inductive.rs` `e37e906f`, `tests/nested_inductives_d1a.rs` `280025f1`, with
+> discriminating controls at `b5c448d1`. Decision `dec_3k5rnnx0e04nz` read
+> `resolved` from the object (07:39:48Z).
+>
+> ⭐ **`SPEC-NESTED-IND` merged (PR #1076), so the `D1b` gate is lifted.** The
+> governing chapter is `spec/10-kernel/14-inductive.md` blob **`4dab9d0e`** on
+> `origin/main` — ⛔ re-bind from the object, never from a worktree copy.
+> ⚠ **Un-gating `D1b` does not reorder the work:** frame §4 still puts `D3` first,
+> because `D1b` opens admittance and is the change that yields the inert outcome
+> with nothing red to say so.
+>
+> ### ⚠ Three candidates, two rejections, and the fault was in this frame
+>
+> | candidate | Decision | outcome |
+> |---|---|---|
+> | `83d6a7c3` | `dec_3g5qg6f9hzge5` | **rejected** — `Pol::Minus` used for "unknown" is not absorbing (`Minus.flip() == Plus`), so a nested `Pi` laundered it positive |
+> | `6103d321` | `dec_2r7xykp0aswe5` | **rejected** — the producer was not total: `declare_inductive` **panicked** on an accepted field type, violating `18 §4` |
+> | `e685570c` | `dec_3k5rnnx0e04nz` | **resolved** — landed |
+>
+> ⛔ **Both rejections landed on an axis this frame never named.** `D1a` as
+> originally written specified a polarity notion *derived, recorded, readable* —
+> all three about the **record** — and `AC-K11` guarded **consumption**. Nothing
+> specified the **producer**, so no control existed that could have failed.
+> `AC-K13` is that specification, added after the fact.
+>
+> ⭐ **`AC-K13` was then discharged by closing the class, not the instance:** Pi,
+> Sigma, Lam and Let are `Term`'s complete syntactic binder set, each given a
+> depth-aware arm, and every fallback-traversed `children()` form adds no binder —
+> *"thus no differing-depth fallback edge remains."* That is the standard for
+> `D3`–`D5` as well.
+
 > ## ▶ THE KERNEL HALF OF A TWO-STAGE PREREQUISITE
 >
 > **Frame:** [`kernel-nested-inductives.md`][f], under `docs/program/wp/`. The
@@ -19,12 +59,12 @@ origin: Architect ruling evt_55k9f9efvd8jk, Decision dec_13af1mercv2m0 resolved.
 >
 > **Sequence:** `SPEC-NESTED-IND` → **`KERNEL-NESTED-IND`** → `DS-9`.
 >
-> ⭐ **`ready` for `D1a` ONLY — `D1b` onward waits for `SPEC-NESTED-IND`.**
-> `D1a` derives and records per-parameter polarity; it **admits nothing new**, so
-> the nested declaration stays rejected throughout and the inert outcome is
-> unreachable. `D1b` opens admittance, which is the rule the spec enclave is
-> writing now — ⛔ starting there first implements a contract that does not yet
-> exist. Frame §4 carries the release decision and the re-read instruction.
+> ✅ **`D1a` is landed and `SPEC-NESTED-IND` has merged, so the `D1b` gate is
+> lifted** (see the banner above for the evidence). `D1a` was released alone
+> because it **admits nothing new** — the nested declaration stayed rejected
+> throughout, making the inert outcome unreachable while the rule was still being
+> written. ⚠ That gate is now discharged; ⛔ the **slicing order is not**. Frame §4
+> still puts `D3` before `D1b`.
 >
 > ⚠ **This node changes the TCB.** Read `docs/PRINCIPLES.md` on the small
 > auditable trusted base before slicing it.
@@ -32,7 +72,8 @@ origin: Architect ruling evt_55k9f9efvd8jk, Decision dec_13af1mercv2m0 resolved.
 ## Why this exists
 
 `DS-9` blocked at `D1` on `JsonArray (List Json)` — the `List (Rose A)` class that
-`spec/10-kernel/14-inductive.md` §8.5 defers. The Architect ruled **B,
+`spec/10-kernel/14-inductive.md` §8.5 **deferred at the time** (it now states the
+nested rule; `SPEC-NESTED-IND` merged 2026-07-27). The Architect ruled **B,
 nested-only**: preserve DS-9's ordinary six-constructor `Json` and lift the
 kernel restriction, rather than re-encode the value model.
 
@@ -46,10 +87,14 @@ unsound kernel result**."* This node adds capability; it does not fix a bug.
 a distinct extension, are not required by DS-9, and would enlarge the trusted
 change without present demand."*
 
-⛔ Mutual is **out**. §8.5 defers nested and mutual in one clause, which makes
-"un-defer §8.5" read as both — it is not. ⚠ If a slice finds mutual machinery
-falling out for free, that is **not** authorization to land it; bring it back to
-the Steward as a separate node.
+⛔ Mutual is **out**, and the landed spec now says so in its own place: `14 §8.5`
+is *"Nested inductives — structural parameter polarity"* and **`14 §8.6` is
+*"Mutually-defined inductives — still deferred"***, with its own reason
+(simultaneous-block positivity, jointly generated eliminators, joint termination,
+no present consumer). ⚠ Before `SPEC-NESTED-IND` merged, one §8.5 clause deferred
+both, so "un-defer §8.5" read as both; that ambiguity is now removed in the text.
+⚠ If a slice finds mutual machinery falling out for free, that is **not**
+authorization to land it; bring it back to the Steward as a separate node.
 
 ## ⛔ THE FIVE-POINT CONTRACT — complete only when ALL FIVE hold
 
