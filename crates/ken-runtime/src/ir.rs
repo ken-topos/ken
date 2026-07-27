@@ -488,27 +488,242 @@ pub struct RuntimeComputationalMatchCase {
     pub body: RuntimeExpr,
 }
 
+/// The closure-free **header** of one ordinary eliminator case.
+///
+/// ⭐ This carrier exists so the frame-fingerprint core has a parameter type
+/// that **excludes closures by construction** (`dec_16n1t4b92463g`, route C).
+/// It deliberately has **no `body` field** — a [`RuntimeMatchCase`]'s `body` is
+/// an unrestricted [`RuntimeExpr`] and may contain `Closure`,
+/// `LexicalClosure`, or `Value(ClosureRef)`, and
+/// `spec/40-runtime/41-values.md §2.1` denies ordinary closures structural
+/// equality, ordering, and a canonical hash. Hashing a `Debug` rendering of a
+/// full case is that same forbidden equality verdict under another spelling.
+///
+/// ⚠ Adding a body-bearing field here re-opens the defect. See
+/// [`MatchFrameHeaders`] for the `AC-F4` controls that make that a **compile**
+/// failure rather than a review obligation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OrdinaryFrameHeader<'a> {
+    pub constructor: &'a RuntimeSymbol,
+    pub binders: usize,
+}
+
+/// The closure-free **header** of one computational eliminator case.
+///
+/// See [`OrdinaryFrameHeader`] — same rationale, plus the recursive-position
+/// vector that distinguishes a computational frame's induction hypotheses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ComputationalFrameHeader<'a> {
+    pub constructor: &'a RuntimeSymbol,
+    pub argument_binders: usize,
+    pub recursive_positions: &'a [usize],
+}
+
+/// The fingerprint core's **only** input shape, and its explicit
+/// ordinary/computational domain separator.
+///
+/// ⛔ **No [`RuntimeExpr`], [`RuntimeValue`], case `body`, full case value, or
+/// `Debug` rendering of any such value may reach the core.** The enum has
+/// exactly two arms, each carrying a closure-free header slice, so that
+/// requirement is discharged by the type rather than by a convention.
+///
+/// # `AC-F4` — a full case CANNOT reach the core
+///
+/// ⚠ **These blocks carry no `EXXXX` code, and that is deliberate.** A
+/// ```` ```compile_fail,E0277 ```` fence passes when the block fails to compile
+/// for **any** reason — rustdoc does not bind the code — so an error-code
+/// annotation reads as a reason-pin and is only documentation. Attribution
+/// here comes from the **compiling sibling** in the last block, which shares
+/// every import and constructor with the negatives and differs from them by
+/// exactly the forbidden operation.
+///
+/// **MEASURED:** each negative block fails to compile, for some reason.
+/// **CLAIMED:** it fails *because a body-bearing type is not a header*.
+/// **THE GAP:** closed by the sibling — a malformed fixture (bad path, missing
+/// import, wrong literal) reddens *it* instead of silently greening these.
+///
+/// An ordinary **case slice** is not a header slice:
+///
+/// ```compile_fail
+/// use ken_runtime::{MatchFrameHeaders, RuntimeMatchCase, RuntimeTrap, RuntimeTrapCode};
+/// let cases: Vec<RuntimeMatchCase> = Vec::new();
+/// let default = RuntimeTrap {
+///     code: RuntimeTrapCode::PatternMatchFailure,
+///     message: String::new(),
+/// };
+/// let _ = ken_runtime::compiler_private_match_frame_header_fingerprint(
+///     MatchFrameHeaders::Ordinary(&cases),
+///     &default,
+/// );
+/// ```
+///
+/// A computational **case slice** is not a header slice:
+///
+/// ```compile_fail
+/// use ken_runtime::{MatchFrameHeaders, RuntimeComputationalMatchCase, RuntimeTrap, RuntimeTrapCode};
+/// let cases: Vec<RuntimeComputationalMatchCase> = Vec::new();
+/// let default = RuntimeTrap {
+///     code: RuntimeTrapCode::PatternMatchFailure,
+///     message: String::new(),
+/// };
+/// let _ = ken_runtime::compiler_private_match_frame_header_fingerprint(
+///     MatchFrameHeaders::Computational(&cases),
+///     &default,
+/// );
+/// ```
+///
+/// The header carrier has **no body-bearing field** to smuggle one through:
+///
+/// ```compile_fail
+/// use ken_runtime::{OrdinaryFrameHeader, RuntimeExpr, RuntimeTrapCode, RuntimeTrap};
+/// let constructor = String::from("Cons");
+/// let _ = OrdinaryFrameHeader {
+///     constructor: &constructor,
+///     binders: 2,
+///     body: RuntimeExpr::Trap(RuntimeTrap {
+///         code: RuntimeTrapCode::ExplicitTrap,
+///         message: String::new(),
+///     }),
+/// };
+/// ```
+///
+/// ⭐ **The sibling** — identical imports and constructors, differing only in
+/// that the operand is a genuine header sequence. It **must compile and run**:
+///
+/// ```
+/// use ken_runtime::{MatchFrameHeaders, OrdinaryFrameHeader, RuntimeTrap, RuntimeTrapCode};
+/// let constructor = String::from("Cons");
+/// let headers = vec![OrdinaryFrameHeader { constructor: &constructor, binders: 2 }];
+/// let default = RuntimeTrap {
+///     code: RuntimeTrapCode::PatternMatchFailure,
+///     message: String::new(),
+/// };
+/// let _ = ken_runtime::compiler_private_match_frame_header_fingerprint(
+///     MatchFrameHeaders::Ordinary(&headers),
+///     &default,
+/// );
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub enum MatchFrameHeaders<'a> {
+    Ordinary(&'a [OrdinaryFrameHeader<'a>]),
+    Computational(&'a [ComputationalFrameHeader<'a>]),
+}
+
+fn push_u64(out: &mut Vec<u8>, value: u64) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+/// Length-prefixed, so no two distinct field sequences can share an encoding by
+/// running their bytes together at a boundary.
+fn push_len_prefixed(out: &mut Vec<u8>, bytes: &[u8]) {
+    push_u64(out, bytes.len() as u64);
+    out.extend_from_slice(bytes);
+}
+
+/// Exhaustive and **wildcard-free**: a new [`RuntimeTrapCode`] variant must
+/// stop this compiling rather than silently colliding with an existing tag.
+fn runtime_trap_code_tag(code: &RuntimeTrapCode) -> u64 {
+    match code {
+        RuntimeTrapCode::UnsupportedErasure => 0,
+        RuntimeTrapCode::UnsupportedPrimitivePartiality => 1,
+        RuntimeTrapCode::MissingRuntimeMetadata => 2,
+        RuntimeTrapCode::PatternMatchFailure => 3,
+        RuntimeTrapCode::ExplicitTrap => 4,
+    }
+}
+
+/// The frame-fingerprint **core** — the operation that forms the equality
+/// verdict, and the only place the hash is computed.
+///
+/// It consumes one ordered [`MatchFrameHeaders`] sequence plus the closure-free
+/// [`RuntimeTrap`] default. ⛔ Nothing body-bearing can be passed; see
+/// [`MatchFrameHeaders`] for the `AC-F4` compile-failure controls.
+///
+/// ⚠ **Body-change staleness is deliberately NOT an invariant of this
+/// fingerprint** (`dec_16n1t4b92463g`). `site_id` plus the closure-free checked
+/// occurrence binding remains the authoritative identity; this value checks
+/// only eliminator-family / header / default compatibility. A body change at
+/// the same checked occurrence is program semantics, not a licence to inspect
+/// forbidden closure structure.
+#[doc(hidden)]
+pub fn compiler_private_match_frame_header_fingerprint(
+    headers: MatchFrameHeaders<'_>,
+    default: &RuntimeTrap,
+) -> u64 {
+    let mut encoded = Vec::new();
+    match headers {
+        MatchFrameHeaders::Ordinary(headers) => {
+            push_len_prefixed(&mut encoded, b"ordinary");
+            push_u64(&mut encoded, headers.len() as u64);
+            for header in headers {
+                push_len_prefixed(&mut encoded, header.constructor.as_bytes());
+                push_u64(&mut encoded, header.binders as u64);
+            }
+        }
+        MatchFrameHeaders::Computational(headers) => {
+            push_len_prefixed(&mut encoded, b"computational");
+            push_u64(&mut encoded, headers.len() as u64);
+            for header in headers {
+                push_len_prefixed(&mut encoded, header.constructor.as_bytes());
+                push_u64(&mut encoded, header.argument_binders as u64);
+                push_u64(&mut encoded, header.recursive_positions.len() as u64);
+                for position in header.recursive_positions {
+                    push_u64(&mut encoded, *position as u64);
+                }
+            }
+        }
+    }
+    push_u64(&mut encoded, runtime_trap_code_tag(&default.code));
+    push_len_prefixed(&mut encoded, default.message.as_bytes());
+    crate::fnv1a_64(&encoded)
+}
+
 /// Compiler-private structural identity for one erased ordinary eliminator
 /// frame.  The checked join plan binds this fingerprint to a distinct checked
 /// occurrence; native lowering refuses ambiguity rather than treating equal
 /// frame shapes as interchangeable sites.
+///
+/// ⭐ **This is the projecting wrapper, and it keeps the existing signature.**
+/// It accepts the full case slice **solely to project** each case into
+/// [`OrdinaryFrameHeader`] and call
+/// [`compiler_private_match_frame_header_fingerprint`]. ⛔ It must not itself
+/// serialize, hash, or compare full cases.
 #[doc(hidden)]
 pub fn compiler_private_ordinary_match_frame_fingerprint(
     cases: &[RuntimeMatchCase],
     default: &RuntimeTrap,
 ) -> u64 {
-    crate::fnv1a_64(format!("ordinary\0{cases:?}\0{default:?}").as_bytes())
+    let headers = cases
+        .iter()
+        .map(|case| OrdinaryFrameHeader {
+            constructor: &case.constructor,
+            binders: case.binders,
+        })
+        .collect::<Vec<_>>();
+    compiler_private_match_frame_header_fingerprint(MatchFrameHeaders::Ordinary(&headers), default)
 }
 
 /// Compiler-private structural identity for one erased computational
 /// eliminator frame.  See
-/// [`compiler_private_ordinary_match_frame_fingerprint`].
+/// [`compiler_private_ordinary_match_frame_fingerprint`] — this is the same
+/// projecting wrapper for the computational domain.
 #[doc(hidden)]
 pub fn compiler_private_computational_match_frame_fingerprint(
     cases: &[RuntimeComputationalMatchCase],
     default: &RuntimeTrap,
 ) -> u64 {
-    crate::fnv1a_64(format!("computational\0{cases:?}\0{default:?}").as_bytes())
+    let headers = cases
+        .iter()
+        .map(|case| ComputationalFrameHeader {
+            constructor: &case.constructor,
+            argument_binders: case.argument_binders,
+            recursive_positions: &case.recursive_positions,
+        })
+        .collect::<Vec<_>>();
+    compiler_private_match_frame_header_fingerprint(
+        MatchFrameHeaders::Computational(&headers),
+        default,
+    )
 }
 
 /// The **operational** carrier — where an ordinary closure lives.
@@ -851,5 +1066,259 @@ mod tests {
 
         assert_eq!(program.package_identity, "module:fixture::nc5");
         assert_eq!(program.declarations[0].symbol, "decl:fixture::Main::f");
+    }
+
+    // ---- RT-MATCH-FRAME-FP: `AC-F1`–`AC-F3` --------------------------------
+    //
+    // `AC-F4` is a *compile* failure and therefore cannot live here; it is the
+    // doc-test block on `MatchFrameHeaders`, which `--doc` runs.
+
+    /// A body that genuinely contains a closure — the value class
+    /// `spec/40-runtime/41-values.md §2.1` denies structural equality.
+    fn closure_body(param: &str) -> RuntimeExpr {
+        RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec![param.to_string()],
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Int((0).into()))),
+        }
+    }
+
+    fn trap(message: &str) -> RuntimeTrap {
+        RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: message.to_string(),
+        }
+    }
+
+    fn ordinary_case(constructor: &str, binders: usize, body: RuntimeExpr) -> RuntimeMatchCase {
+        RuntimeMatchCase {
+            constructor: constructor.to_string(),
+            binders,
+            body,
+        }
+    }
+
+    fn computational_case(
+        constructor: &str,
+        argument_binders: usize,
+        recursive_positions: Vec<usize>,
+        body: RuntimeExpr,
+    ) -> RuntimeComputationalMatchCase {
+        RuntimeComputationalMatchCase {
+            constructor: constructor.to_string(),
+            argument_binders,
+            recursive_positions,
+            body,
+        }
+    }
+
+    /// The **retired** route, kept only as this file's non-vacuity oracle: it
+    /// is what the fingerprint used to be, and it *is* sensitive to the body.
+    ///
+    /// ⛔ Not a production path. It exists so `AC-F1` can prove its two frames
+    /// genuinely differ — otherwise "the body is ignored" and "the fixture
+    /// never varied the body" are the same green.
+    fn debug_rendering_differs<T: std::fmt::Debug>(left: &T, right: &T) -> bool {
+        format!("{left:?}") != format!("{right:?}")
+    }
+
+    #[test]
+    fn acf1_ordinary_frames_differing_only_in_a_closure_body_share_a_fingerprint() {
+        let left = vec![ordinary_case("Cons", 2, closure_body("x"))];
+        let right = vec![ordinary_case("Cons", 2, closure_body("y"))];
+        assert!(
+            debug_rendering_differs(&left, &right),
+            "positive control: the two bodies must actually differ, or AC-F1 is vacuous"
+        );
+
+        let default = trap("no match");
+        assert_eq!(
+            compiler_private_ordinary_match_frame_fingerprint(&left, &default),
+            compiler_private_ordinary_match_frame_fingerprint(&right, &default),
+            "AC-F1: the header carrier must not observe a closure-bearing body"
+        );
+    }
+
+    #[test]
+    fn acf1_computational_frames_differing_only_in_a_closure_body_share_a_fingerprint() {
+        let left = vec![computational_case("Succ", 1, vec![0], closure_body("x"))];
+        let right = vec![computational_case("Succ", 1, vec![0], closure_body("y"))];
+        assert!(
+            debug_rendering_differs(&left, &right),
+            "positive control: the two bodies must actually differ, or AC-F1 is vacuous"
+        );
+
+        let default = trap("no match");
+        assert_eq!(
+            compiler_private_computational_match_frame_fingerprint(&left, &default),
+            compiler_private_computational_match_frame_fingerprint(&right, &default),
+            "AC-F1: the header carrier must not observe a closure-bearing body"
+        );
+    }
+
+    // `AC-F2` — one mutation per load-bearing field, each fired SEPARATELY.
+    // ⛔ Deliberately not an aggregate "the header matters" pass: a single
+    // field silently dropped from the encoding survives that.
+
+    #[test]
+    fn acf2_ordinary_constructor_is_load_bearing() {
+        let base = vec![ordinary_case("Cons", 2, closure_body("x"))];
+        let mutated = vec![ordinary_case("Nil", 2, closure_body("x"))];
+        let default = trap("no match");
+        assert_ne!(
+            compiler_private_ordinary_match_frame_fingerprint(&base, &default),
+            compiler_private_ordinary_match_frame_fingerprint(&mutated, &default),
+        );
+    }
+
+    #[test]
+    fn acf2_ordinary_binders_is_load_bearing() {
+        let base = vec![ordinary_case("Cons", 2, closure_body("x"))];
+        let mutated = vec![ordinary_case("Cons", 3, closure_body("x"))];
+        let default = trap("no match");
+        assert_ne!(
+            compiler_private_ordinary_match_frame_fingerprint(&base, &default),
+            compiler_private_ordinary_match_frame_fingerprint(&mutated, &default),
+        );
+    }
+
+    #[test]
+    fn acf2_ordinary_case_order_is_load_bearing() {
+        let base = vec![
+            ordinary_case("Cons", 2, closure_body("x")),
+            ordinary_case("Nil", 0, closure_body("x")),
+        ];
+        let mutated = vec![
+            ordinary_case("Nil", 0, closure_body("x")),
+            ordinary_case("Cons", 2, closure_body("x")),
+        ];
+        let default = trap("no match");
+        assert_ne!(
+            compiler_private_ordinary_match_frame_fingerprint(&base, &default),
+            compiler_private_ordinary_match_frame_fingerprint(&mutated, &default),
+        );
+    }
+
+    #[test]
+    fn acf2_ordinary_case_count_is_load_bearing() {
+        let base = vec![ordinary_case("Cons", 2, closure_body("x"))];
+        let mutated = vec![
+            ordinary_case("Cons", 2, closure_body("x")),
+            ordinary_case("Nil", 0, closure_body("x")),
+        ];
+        let default = trap("no match");
+        assert_ne!(
+            compiler_private_ordinary_match_frame_fingerprint(&base, &default),
+            compiler_private_ordinary_match_frame_fingerprint(&mutated, &default),
+        );
+    }
+
+    #[test]
+    fn acf2_default_trap_code_is_load_bearing() {
+        let cases = vec![ordinary_case("Cons", 2, closure_body("x"))];
+        let base = trap("no match");
+        let mutated = RuntimeTrap {
+            code: RuntimeTrapCode::ExplicitTrap,
+            message: base.message.clone(),
+        };
+        assert_ne!(
+            compiler_private_ordinary_match_frame_fingerprint(&cases, &base),
+            compiler_private_ordinary_match_frame_fingerprint(&cases, &mutated),
+            "AC-F2: the default trap's CODE is a load-bearing field"
+        );
+    }
+
+    #[test]
+    fn acf2_default_trap_message_is_load_bearing() {
+        let cases = vec![ordinary_case("Cons", 2, closure_body("x"))];
+        assert_ne!(
+            compiler_private_ordinary_match_frame_fingerprint(&cases, &trap("no match")),
+            compiler_private_ordinary_match_frame_fingerprint(&cases, &trap("other")),
+            "AC-F2: the default trap's MESSAGE is a load-bearing field"
+        );
+    }
+
+    #[test]
+    fn acf2_computational_constructor_is_load_bearing() {
+        let base = vec![computational_case("Succ", 1, vec![0], closure_body("x"))];
+        let mutated = vec![computational_case("Zero", 1, vec![0], closure_body("x"))];
+        let default = trap("no match");
+        assert_ne!(
+            compiler_private_computational_match_frame_fingerprint(&base, &default),
+            compiler_private_computational_match_frame_fingerprint(&mutated, &default),
+        );
+    }
+
+    #[test]
+    fn acf2_computational_argument_binders_is_load_bearing() {
+        let base = vec![computational_case("Succ", 1, vec![0], closure_body("x"))];
+        let mutated = vec![computational_case("Succ", 2, vec![0], closure_body("x"))];
+        let default = trap("no match");
+        assert_ne!(
+            compiler_private_computational_match_frame_fingerprint(&base, &default),
+            compiler_private_computational_match_frame_fingerprint(&mutated, &default),
+        );
+    }
+
+    #[test]
+    fn acf2_computational_recursive_position_values_are_load_bearing() {
+        let base = vec![computational_case("Node", 2, vec![0], closure_body("x"))];
+        let mutated = vec![computational_case("Node", 2, vec![1], closure_body("x"))];
+        let default = trap("no match");
+        assert_ne!(
+            compiler_private_computational_match_frame_fingerprint(&base, &default),
+            compiler_private_computational_match_frame_fingerprint(&mutated, &default),
+        );
+    }
+
+    #[test]
+    fn acf2_computational_recursive_position_arity_is_load_bearing() {
+        let base = vec![computational_case("Node", 2, vec![0], closure_body("x"))];
+        let mutated = vec![computational_case("Node", 2, vec![0, 1], closure_body("x"))];
+        let default = trap("no match");
+        assert_ne!(
+            compiler_private_computational_match_frame_fingerprint(&base, &default),
+            compiler_private_computational_match_frame_fingerprint(&mutated, &default),
+        );
+    }
+
+    #[test]
+    fn acf3_ordinary_and_computational_frames_are_domain_separated() {
+        // Coinciding field-for-field: same constructor, `binders ==
+        // argument_binders`, no recursive positions, same default.
+        let default = trap("no match");
+        let ordinary = vec![ordinary_case("Cons", 2, closure_body("x"))];
+        let computational = vec![computational_case("Cons", 2, Vec::new(), closure_body("x"))];
+        assert_ne!(
+            compiler_private_ordinary_match_frame_fingerprint(&ordinary, &default),
+            compiler_private_computational_match_frame_fingerprint(&computational, &default),
+            "AC-F3: the two eliminator families must not collide"
+        );
+    }
+
+    #[test]
+    fn frame_header_encoding_is_unambiguous_at_field_boundaries() {
+        // A count-and-concatenate encoding would let `["ab"]` and `["a","b"]`
+        // (or a constructor absorbing the next field's bytes) collide. The
+        // length prefix is what forbids that, so pin it directly rather than
+        // trusting that no such pair exists.
+        let default = trap("");
+        let joined = vec![ordinary_case("ab", 0, closure_body("x"))];
+        let split = vec![
+            ordinary_case("a", 0, closure_body("x")),
+            ordinary_case("b", 0, closure_body("x")),
+        ];
+        assert_ne!(
+            compiler_private_ordinary_match_frame_fingerprint(&joined, &default),
+            compiler_private_ordinary_match_frame_fingerprint(&split, &default),
+        );
+
+        // The constructor must not be able to swallow the default message.
+        let short = vec![ordinary_case("Cons", 0, closure_body("x"))];
+        let absorbed = vec![ordinary_case("Constail", 0, closure_body("x"))];
+        assert_ne!(
+            compiler_private_ordinary_match_frame_fingerprint(&short, &trap("tail")),
+            compiler_private_ordinary_match_frame_fingerprint(&absorbed, &trap("")),
+        );
     }
 }
