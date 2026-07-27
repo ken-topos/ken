@@ -25,6 +25,34 @@ origin: "Split out of PX8-WROTE-ABS by the Steward 2026-07-27 when framing its A
 > out as [[PX8-ERRID-ALLOC]] (Foundation, **released**). This node is now
 > `depends_on: [PX8-ERRID-ALLOC]`.
 
+> ## ✅ FRAMED 2026-07-27 — shovel-ready; blocked ONLY on `PX8-ERRID-ALLOC`
+>
+> **Frame:** `docs/program/wp/PX8-ERRID-SCOPE.md`, inputs pinned by blob at
+> `origin/main = 012aa56d`. Owner **Verify**, size **L**.
+>
+> ### ⭐ Two premise corrections the frame carries
+>
+> **1. The locator below is stale.** `seed-buffer-io.md:619-645` is **PR-B**.
+> The real row is `buffer-io/transfer-failures-remain-errors` at **`:653-676`**.
+>
+> **2. The row is a PARTIAL, not a zero.** Its status is
+> `RED-UNTIL-REMAINING-PR-C-ARMS — partial reaching evidence only`, and **five
+> of its ten arms already reach independently**, with the seed naming where:
+> `Closed`, `ResourceKindMismatch`, `RightNotHeld`, and `BufferLimit` at
+> `effect_v1.rs:3764`, and `Interrupted` at `px8f_write_partition.rs:339`.
+>
+> ⇒ ⭐ **This WP extends an established pattern rather than inventing one**, and
+> those two tests are required reading before writing anything.
+>
+> ### ⛔ And the row flips GREEN only when all five land
+>
+> Four of five leaves the row exactly as red as it is today — a clause whose
+> whole point is universality, quietly half-closed. An unreachable row is a
+> **hard stop with a named mechanism**, not a partial delivery.
+>
+> ⭐ **Status stays `draft` because `depends_on` is unmet**, not because it is
+> unframed.
+
 ## Per-row constraints the Architect fixed — ⛔ settled inputs, do not re-derive
 
 1. **`MalformedResource`** — a real `ResourceErrorV1` identity emitted by
