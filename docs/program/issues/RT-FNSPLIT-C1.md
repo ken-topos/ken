@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-C1
 title: "operational carrier + three executable eliminators — a runtime-general carrier at the Lowered/lowering boundary with a real producer -> validator -> eliminator edge, grounded on artifact-static semantic identity"
-status: ready
+status: active
 owner: runtime
 size: L
 gate: none
@@ -107,5 +107,40 @@ the parent `RT-NATIVE-FNSPLIT`, `NATIVE-HANDLE-CARRIER`, `PX8-F-CAP-41`
 ⭐ **That chain is the reason this node is the highest-leverage frame in the
 tracker:** as of `a31bb7b6` every releasable node in the DAG is Runtime-owned or
 enclave-owned, and Foundation's only path to tracked work runs through here.
+
+> ### ⭐ SYMPTOM INVENTORY + RESEARCH COUNT — armed 2026-07-27 at release
+>
+> **This is a FRESH chain.** `RT-NATIVE-FNSPLIT`'s pre-recut chain is **frozen
+> at 33 hard-stops** and its post-recut chain carries its own counts on that
+> node. ⛔ Do **not** resume either count here, and do not read an anchor for
+> this node out of the parent's prose.
+>
+> **Why both lines exist:** the parent ran to **33** hard-stops with the
+> research-escalation trigger and the symptom inventory *both* silently
+> unarmed — the Architect's self-trigger lapsed across its compactions and the
+> Steward's backstop lapsed because the count lived only as prose, never as a
+> line anyone re-read. ⭐ **An unarmed count is not a trigger.** Re-read the two
+> lines below on **every** hard-stop.
+>
+> The Architect appends one entry per hard-stop **before it rules**, and at
+> each predicate check answers whether the entries **share a predicate**
+> (architect §1b, steward §5a-ii). A shared predicate is not another ruling —
+> it says the *representation* is the defect, and it comes to the Steward as a
+> recut. ⛔ *"The architecture is still viable"* is **not** an answer to the
+> predicate question, and *"every ruling so far was correct"* is the symptom
+> rather than the refutation.
+>
+> ```text
+> SYMPTOM INVENTORY (append only; never rewritten)
+> NEXT PREDICATE CHECK = 3rd entry, then 6th, 9th, …
+> NEXT RESEARCH PULL   = 3rd hard-stop, then 6th, 9th, …
+> ENTRIES = 0
+> (empty)
+> ```
+>
+> ⚠ A deep chain carrying **zero** research advisories is itself the tell that
+> both the self-trigger and the backstop have lapsed. If that is ever true
+> here, apply the catch-up rule — fire at the **very next** hard-stop and
+> re-anchor the cadence from there; do not wait for the next clean multiple.
 
 [f]: ../wp/RT-FNSPLIT-C1-operational-carrier.md
