@@ -2078,6 +2078,11 @@ pub struct CoproductIds {
 pub struct ClockIds {
     pub wall_now_id: GlobalId,
     pub mkinstant_id: GlobalId,
+    pub monotonic_now_id: GlobalId,
+    pub sleep_until_id: GlobalId,
+    pub mk_monotonic_instant_id: GlobalId,
+    pub mk_deadline_id: GlobalId,
+    pub random_bytes_id: GlobalId,
 }
 
 impl ClockIds {
@@ -2087,6 +2092,11 @@ impl ClockIds {
         Some(Self {
             wall_now_id: get("WallNow")?,
             mkinstant_id: get("MkInstant")?,
+            monotonic_now_id: get("MonotonicNow")?,
+            sleep_until_id: get("SleepUntil")?,
+            mk_monotonic_instant_id: get("MkMonotonicInstant")?,
+            mk_deadline_id: get("MkDeadline")?,
+            random_bytes_id: get("RandomBytes")?,
         })
     }
 }
@@ -2129,6 +2139,8 @@ pub enum ConsoleTrace {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClockTrace {
     WallNow { nanoseconds: BigInt },
+    MonotonicNow { nanoseconds: BigInt },
+    SleepUntil { deadline: BigInt },
 }
 
 /// Create policy carried by `WriteFile` after decoding its Ken constructor.
@@ -2270,6 +2282,22 @@ pub trait HostHandler {
     /// Read wall-clock nanoseconds. This is ambient process context, carries
     /// no capability, and intentionally promises no ordering law.
     fn clock_wall_now(&mut self) -> BigInt;
+
+    /// Read monotonic-clock nanoseconds. Unlike `clock_wall_now` this DOES
+    /// promise an ordering law: successive readings are non-decreasing, and
+    /// no wall-clock adjustment may perturb them. That law is the whole
+    /// reason ABI-S3 D1 makes this a separate operation.
+    fn clock_monotonic_now(&mut self) -> BigInt;
+
+    /// Suspend until an absolute monotonic deadline. A deadline already
+    /// reached completes immediately (dec_50pzvb14nnbt0 D2). This operation
+    /// is uncancellable; PX12 owns cancellation.
+    fn clock_sleep_until(&mut self, deadline: BigInt);
+
+    /// Read `count` bytes from the kernel CSPRNG. An implementation with no
+    /// kernel source must fail rather than substitute a userspace PRNG, a
+    /// seeded generator, or a cached weak source (ABI-S3 D3).
+    fn entropy_random_bytes(&mut self, count: u64) -> io::Result<Vec<u8>>;
 
     /// Observation hook for an exact pre-operation capability denial.
     fn fs_denied(&mut self, _denial: CapabilityDenied) {}
@@ -2570,6 +2598,36 @@ impl HostHandler for PosixHost {
         match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
             Ok(duration) => BigInt::from(duration.as_nanos()),
             Err(error) => -BigInt::from(error.duration().as_nanos()),
+        }
+    }
+
+    fn clock_monotonic_now(&mut self) -> BigInt {
+        BigInt::from(process_monotonic_baseline().elapsed().as_nanos())
+    }
+
+    fn entropy_random_bytes(&mut self, count: u64) -> io::Result<Vec<u8>> {
+        // The kernel CSPRNG, read directly. Not a userspace PRNG, not a
+        // seeded substitute, and no fallback: if the kernel source cannot be
+        // read the error propagates and the operation reports unavailable
+        // (ABI-S3 D3).
+        use std::io::Read;
+        let mut bytes = vec![0u8; usize::try_from(count).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidInput, "entropy request too large")
+        })?];
+        std::fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
+        Ok(bytes)
+    }
+
+    fn clock_sleep_until(&mut self, deadline: BigInt) {
+        let now = self.clock_monotonic_now();
+        // An already-reached deadline completes immediately rather than
+        // underflowing into a very long sleep.
+        if deadline <= now {
+            return;
+        }
+        let remaining = deadline - now;
+        if let Ok(nanoseconds) = u64::try_from(remaining) {
+            std::thread::sleep(std::time::Duration::from_nanos(nanoseconds));
         }
     }
 
@@ -2935,6 +2993,8 @@ pub struct CaptureHost {
     trace: Vec<ConsoleTrace>,
     clock_script: Vec<BigInt>,
     clock_cursor: usize,
+    monotonic_script: Vec<BigInt>,
+    monotonic_cursor: usize,
     clock_trace: Vec<ClockTrace>,
     fs_nodes: BTreeMap<VfsNodeId, VirtualFsNode>,
     fs_modes: BTreeMap<VfsNodeId, u16>,
@@ -2966,6 +3026,8 @@ impl CaptureHost {
             trace: Vec::new(),
             clock_script: vec![BigInt::from(0)],
             clock_cursor: 0,
+            monotonic_script: vec![BigInt::from(0)],
+            monotonic_cursor: 0,
             clock_trace: Vec::new(),
             fs_nodes: [(0, VirtualFsNode::Directory)].into_iter().collect(),
             fs_modes: [(0, 0o755)].into_iter().collect(),
@@ -3013,6 +3075,19 @@ impl CaptureHost {
     /// Configure one fixed wall-clock value for every read.
     pub fn set_fixed_clock(&mut self, nanoseconds: i128) {
         self.set_clock_script([nanoseconds]);
+    }
+
+    /// Script the monotonic source independently of the wall clock. The two
+    /// are separate scripts precisely so a test can move the wall clock
+    /// BACKWARDS while the monotonic readings keep advancing -- the
+    /// observation AC-2 requires.
+    pub fn set_monotonic_script(&mut self, nanoseconds: impl IntoIterator<Item = i128>) {
+        self.monotonic_script = nanoseconds.into_iter().map(BigInt::from).collect();
+        if self.monotonic_script.is_empty() {
+            self.monotonic_script.push(BigInt::from(0));
+        }
+        self.monotonic_cursor = 0;
+        self.clock_trace.clear();
     }
 
     pub fn clock_trace(&self) -> &[ClockTrace] {
@@ -3298,6 +3373,31 @@ impl HostHandler for CaptureHost {
             nanoseconds: nanoseconds.clone(),
         });
         nanoseconds
+    }
+
+    fn clock_monotonic_now(&mut self) -> BigInt {
+        let index = self
+            .monotonic_cursor
+            .min(self.monotonic_script.len() - 1);
+        let nanoseconds = self.monotonic_script[index].clone();
+        self.monotonic_cursor = self.monotonic_cursor.saturating_add(1);
+        self.clock_trace.push(ClockTrace::MonotonicNow {
+            nanoseconds: nanoseconds.clone(),
+        });
+        nanoseconds
+    }
+
+    fn clock_sleep_until(&mut self, deadline: BigInt) {
+        // A scripted host never really suspends; it records the deadline so a
+        // test can assert the value the caller passed was the value honoured.
+        self.clock_trace.push(ClockTrace::SleepUntil { deadline });
+    }
+
+    fn entropy_random_bytes(&mut self, count: u64) -> io::Result<Vec<u8>> {
+        // Deterministic stand-in for the kernel source. It is NOT a PRNG the
+        // production path could ever reach -- it exists only so a test can
+        // bind an exact byte string.
+        Ok((0..count).map(|index| index as u8).collect())
     }
 
     fn fs_denied(&mut self, denial: CapabilityDenied) {
@@ -4011,6 +4111,95 @@ fn decode_stream(value: &EvalVal, ids: &ConsoleIds) -> Option<ConsoleStream> {
     }
 }
 
+/// Process-wide monotonic origin. `std::time::Instant` is monotonic by
+/// construction, so elapsed nanoseconds from a single fixed origin cannot be
+/// moved by any wall-clock adjustment.
+fn process_monotonic_baseline() -> std::time::Instant {
+    static BASELINE: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    *BASELINE.get_or_init(std::time::Instant::now)
+}
+
+/// Decode the surface `Deadline` into absolute monotonic nanoseconds.
+///
+/// Deliberately fails closed on any other shape: a `Deadline` is the only
+/// thing that may reach `ClockSleepUntil`, and in particular an `Instant`
+/// (the WALL clock's response) decodes to `None` rather than being read as a
+/// monotonic value.
+fn decode_deadline(value: &EvalVal, clock: &ClockIds) -> Option<u64> {
+    let EvalVal::Ctor { id, args, .. } = value else {
+        return None;
+    };
+    if *id != clock.mk_deadline_id {
+        return None;
+    }
+    // EXACTLY one argument, at both levels. A `MkDeadline` (or a
+    // `MkMonotonicInstant`) carrying a second field -- a cancellation token,
+    // status, or anything else -- is REFUSED, never silently truncated to its
+    // first argument. Reading `args.first()` would discard the extra field
+    // here, before any wire or C-record control downstream could observe it,
+    // so this is the boundary where AC-3b's "no cancellation surface on the
+    // Deadline type" is actually enforced.
+    let [instant] = args.as_slice() else {
+        return None;
+    };
+    let EvalVal::Ctor {
+        id: instant_id,
+        args: instant_args,
+        ..
+    } = instant
+    else {
+        return None;
+    };
+    if *instant_id != clock.mk_monotonic_instant_id {
+        return None;
+    }
+    let [nanoseconds] = instant_args.as_slice() else {
+        return None;
+    };
+    u64::try_from(eval_to_bigint(nanoseconds)?).ok()
+}
+
+/// The complete set of surface clock operations, with their canonical host
+/// requests. Returning `None` for an unrecognised identity keeps an unknown
+/// constructor an `UnknownEffect` rather than a silently mis-dispatched op.
+fn decode_clock_request(
+    op_id: GlobalId,
+    op_args: &[EvalVal],
+    clock: &ClockIds,
+) -> Option<(ken_host::HostOpV1, ken_host::CanonicalRequestV1)> {
+    if op_id == clock.wall_now_id && op_args.is_empty() {
+        Some((
+            ken_host::HostOpV1::ClockWallNow,
+            ken_host::CanonicalRequestV1::ClockWallNow,
+        ))
+    } else if op_id == clock.monotonic_now_id && op_args.is_empty() {
+        Some((
+            ken_host::HostOpV1::ClockMonotonicNow,
+            ken_host::CanonicalRequestV1::ClockMonotonicNow,
+        ))
+    } else if op_id == clock.sleep_until_id {
+        let [deadline_value] = op_args else {
+            return None;
+        };
+        let deadline = decode_deadline(deadline_value, clock)?;
+        Some((
+            ken_host::HostOpV1::ClockSleepUntil,
+            ken_host::CanonicalRequestV1::ClockSleepUntil { deadline },
+        ))
+    } else if op_id == clock.random_bytes_id {
+        let [count_value] = op_args else {
+            return None;
+        };
+        let count = u64::try_from(eval_to_bigint(count_value)?).ok()?;
+        Some((
+            ken_host::HostOpV1::EntropyRandomBytes,
+            ken_host::CanonicalRequestV1::EntropyRandomBytes { count },
+        ))
+    } else {
+        None
+    }
+}
+
 fn read_limit(value: &EvalVal) -> Option<usize> {
     const MAX_CONSOLE_READ: usize = 64 * 1024;
     let n = eval_to_bigint(value)?;
@@ -4158,6 +4347,23 @@ impl<H: HostHandler> ken_host::HostEffectBackendV1 for InterpreterHostBackend<'_
 
     fn clock_wall_now(&mut self) -> Vec<u8> {
         self.handler.clock_wall_now().to_signed_bytes_be()
+    }
+
+    fn clock_monotonic_now(&mut self) -> Vec<u8> {
+        self.handler.clock_monotonic_now().to_signed_bytes_be()
+    }
+
+    fn clock_sleep_until(&mut self, deadline: u64) {
+        self.handler.clock_sleep_until(BigInt::from(deadline));
+    }
+
+    fn entropy_random_bytes(
+        &mut self,
+        count: u64,
+    ) -> Result<Vec<u8>, ken_host::IoErrorIdentityV1> {
+        self.handler
+            .entropy_random_bytes(count)
+            .map_err(|error| ken_host::io_error_identity_v1(&error))
     }
 
     fn fs_read_file(
@@ -5108,6 +5314,19 @@ fn ambient_dispatch<H: HostHandler>(
                 store,
             ))
         }
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::Bytes(bytes)) => {
+            Ok(make_result(true, EvalVal::Bytes(bytes), ids, store))
+        }
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::MonotonicInstant(
+            bytes,
+        )) => {
+            let clock = clock_ids.ok_or(())?;
+            Ok(make_ctor(
+                clock.mk_monotonic_instant_id,
+                vec![bigint_to_int_val(BigInt::from_signed_bytes_be(&bytes))],
+                store,
+            ))
+        }
         ken_host::CanonicalOutcomeV1::Error(ken_host::SemanticErrorV1::Io(error)) => {
             let error = io_error_identity_value(error, ids, store);
             Ok(make_result(false, error, ids, store))
@@ -5453,12 +5672,15 @@ fn run_io_with_effect_recorder<H: HostHandler>(
                                 args: op_args,
                                 ..
                             } => {
-                                if let Some(clock) = clock_ids.filter(|clock| {
-                                    *op_id == clock.wall_now_id && op_args.is_empty()
-                                }) {
+                                if let Some((clock, (operation, request))) =
+                                    clock_ids.and_then(|clock| {
+                                        decode_clock_request(*op_id, op_args, clock)
+                                            .map(|decoded| (clock, decoded))
+                                    })
+                                {
                                     ambient_dispatch(
-                                        ken_host::HostOpV1::ClockWallNow,
-                                        ken_host::CanonicalRequestV1::ClockWallNow,
+                                        operation,
+                                        request,
                                         handler,
                                         &mut resources,
                                         ids,
@@ -6793,12 +7015,305 @@ mod px5b_effect_observation_tests {
         assert_eq!(recorder.events.len(), 1);
     }
 
+    fn abi_s3_clock_ids() -> ClockIds {
+        ClockIds {
+            wall_now_id: GlobalId(400),
+            mkinstant_id: GlobalId(401),
+            monotonic_now_id: GlobalId(402),
+            sleep_until_id: GlobalId(403),
+            mk_monotonic_instant_id: GlobalId(404),
+            mk_deadline_id: GlobalId(405),
+            random_bytes_id: GlobalId(406),
+        }
+    }
+
+    /// ABI-S3 AC-2. A test that only reads the monotonic clock passes whether
+    /// or not D1 was honoured, so the observation here is differential: the
+    /// wall clock is scripted to step BACKWARDS while the monotonic source
+    /// advances, and the wall-clock step is asserted first as a positive
+    /// control. Without that control a green monotonic result would be
+    /// vacuous -- it would equally mean the harness cannot perturb the wall
+    /// clock at all.
+    #[test]
+    fn ac2_monotonic_readings_survive_a_wall_clock_step_backwards() {
+        let ids = console_ids();
+        let clock = abi_s3_clock_ids();
+        let mut host = CaptureHost::new(Vec::new());
+        let mut store = EvalStore::new();
+        let mut resources = ken_host::ResourceTableV1::default();
+
+        host.set_clock_script([3_000, 1_000]);
+        host.set_monotonic_script([10, 20]);
+
+        let mut read = |operation, request| {
+            ambient_dispatch(
+                operation,
+                request,
+                &mut host,
+                &mut resources,
+                &ids,
+                Some(&clock),
+                &mut store,
+                None,
+            )
+            .expect("clock reifies")
+        };
+
+        let wall_first = read(
+            ken_host::HostOpV1::ClockWallNow,
+            ken_host::CanonicalRequestV1::ClockWallNow,
+        );
+        let wall_second = read(
+            ken_host::HostOpV1::ClockWallNow,
+            ken_host::CanonicalRequestV1::ClockWallNow,
+        );
+        let monotonic_first = read(
+            ken_host::HostOpV1::ClockMonotonicNow,
+            ken_host::CanonicalRequestV1::ClockMonotonicNow,
+        );
+        let monotonic_second = read(
+            ken_host::HostOpV1::ClockMonotonicNow,
+            ken_host::CanonicalRequestV1::ClockMonotonicNow,
+        );
+
+        let nanoseconds = |value: &EvalVal| -> BigInt {
+            let EvalVal::Ctor { args, .. } = value else {
+                panic!("clock reply is a constructor");
+            };
+            eval_to_bigint(args.first().expect("clock reply carries a reading"))
+                .expect("clock reading is an integer")
+        };
+        let constructor = |value: &EvalVal| -> GlobalId {
+            let EvalVal::Ctor { id, .. } = value else {
+                panic!("clock reply is a constructor");
+            };
+            *id
+        };
+
+        // POSITIVE CONTROL: the probe must actually observe the wall clock
+        // moving backwards, or the monotonic assertion below proves nothing.
+        assert!(
+            nanoseconds(&wall_second) < nanoseconds(&wall_first),
+            "positive control failed: the harness could not step the wall clock backwards, \
+             so the monotonic result is vacuous"
+        );
+
+        // The property under test: the same perturbation leaves monotonic
+        // readings non-decreasing.
+        assert!(nanoseconds(&monotonic_second) >= nanoseconds(&monotonic_first));
+
+        // D1 at the type layer: the two clocks do not merely differ in value,
+        // they reify to DIFFERENT constructors, so a wall reading cannot be
+        // substituted where a monotonic one is required.
+        assert_eq!(constructor(&wall_first), clock.mkinstant_id);
+        assert_eq!(
+            constructor(&monotonic_first),
+            clock.mk_monotonic_instant_id
+        );
+        assert_ne!(constructor(&wall_first), constructor(&monotonic_first));
+    }
+
+    /// ABI-S3 AC-3. The deadline is a value, demonstrated by use rather than
+    /// by showing a field exists: a caller passes one, and the host observes
+    /// exactly that value. The second half is the discriminator -- a different
+    /// deadline must produce a different observation, otherwise the assertion
+    /// would hold for a host that ignored the argument entirely.
+    #[test]
+    fn ac3_the_deadline_a_caller_passes_is_the_deadline_honoured() {
+        let ids = console_ids();
+        let clock = abi_s3_clock_ids();
+        let mut store = EvalStore::new();
+
+        let mut sleep_with = |deadline: u64| -> Vec<ClockTrace> {
+            let mut host = CaptureHost::new(Vec::new());
+            let mut resources = ken_host::ResourceTableV1::default();
+            ambient_dispatch(
+                ken_host::HostOpV1::ClockSleepUntil,
+                ken_host::CanonicalRequestV1::ClockSleepUntil { deadline },
+                &mut host,
+                &mut resources,
+                &ids,
+                Some(&clock),
+                &mut store,
+                None,
+            )
+            .expect("sleep reifies");
+            host.clock_trace().to_vec()
+        };
+
+        assert_eq!(
+            sleep_with(4_242),
+            vec![ClockTrace::SleepUntil {
+                deadline: BigInt::from(4_242),
+            }]
+        );
+        // Discriminator: the observation tracks the argument.
+        assert_ne!(sleep_with(4_242), sleep_with(9_999));
+    }
+
+    /// ABI-S3 AC-3b at the DECODE boundary — a `Deadline` carrying a second
+    /// argument is refused, not silently truncated.
+    ///
+    /// This is the arm `runtime-qa` found open on `c7ffb0d7`. The host-side
+    /// triad inspects the canonical request, the wire image, and the C record;
+    /// all three sit DOWNSTREAM of this decode. Reading `args.first()` here
+    /// would discard a cancellation/status/token argument before any of them
+    /// could observe it, so a surface
+    /// `MkDeadline MonotonicInstant <cancellation>` would keep the forbidden
+    /// surface while every downstream control stayed green.
+    ///
+    /// MEASURED: `decode_deadline` and `decode_clock_request` return `None` for
+    /// any arity other than exactly one, at every level.
+    /// CLAIMED: an extra field on the Deadline surface cannot reach the ABI.
+    /// THE GAP: refusal is only evidence if the same decoder ACCEPTS the
+    /// well-formed shape — otherwise a decoder that rejects everything would
+    /// pass. Each rejection below is paired with its acceptance.
+    #[test]
+    fn ac3b_the_deadline_decoder_refuses_a_second_argument() {
+        let clock = abi_s3_clock_ids();
+        let ctor = |id: GlobalId, args: Vec<EvalVal>| EvalVal::Ctor {
+            id,
+            args: Rc::new(args),
+            slot: NULL_SLOT,
+        };
+        let instant = |args: Vec<EvalVal>| ctor(clock.mk_monotonic_instant_id, args);
+        let cancellation = EvalVal::Int(1);
+
+        // POSITIVE CONTROL — the well-formed shape decodes.
+        assert_eq!(
+            decode_deadline(
+                &ctor(clock.mk_deadline_id, vec![instant(vec![EvalVal::Int(77)])]),
+                &clock
+            ),
+            Some(77)
+        );
+
+        // A second argument on MkDeadline is REFUSED, not truncated to the
+        // first. This is the cancellation surface D2 forbids.
+        assert_eq!(
+            decode_deadline(
+                &ctor(
+                    clock.mk_deadline_id,
+                    vec![instant(vec![EvalVal::Int(77)]), cancellation.clone()],
+                ),
+                &clock
+            ),
+            None,
+            "a Deadline carrying a second field must be refused, not silently \
+             truncated to its first argument"
+        );
+
+        // ...and at the inner level too.
+        assert_eq!(
+            decode_deadline(
+                &ctor(
+                    clock.mk_deadline_id,
+                    vec![instant(vec![EvalVal::Int(77), cancellation.clone()])],
+                ),
+                &clock
+            ),
+            None,
+            "a MonotonicInstant carrying a second field must be refused"
+        );
+
+        // Zero arguments fail closed as well, at both levels.
+        assert_eq!(
+            decode_deadline(&ctor(clock.mk_deadline_id, vec![]), &clock),
+            None
+        );
+        assert_eq!(
+            decode_deadline(
+                &ctor(clock.mk_deadline_id, vec![instant(vec![])]),
+                &clock
+            ),
+            None
+        );
+
+        // The same closure holds one layer up, where the surface operation is
+        // decoded: a SleepUntil carrying an extra operand is not an operation.
+        let good = ctor(clock.mk_deadline_id, vec![instant(vec![EvalVal::Int(5)])]);
+        // POSITIVE CONTROL — one operand decodes to the sleep request.
+        assert!(matches!(
+            decode_clock_request(clock.sleep_until_id, &[good.clone()], &clock),
+            Some((
+                ken_host::HostOpV1::ClockSleepUntil,
+                ken_host::CanonicalRequestV1::ClockSleepUntil { deadline: 5 },
+            ))
+        ));
+        assert!(
+            decode_clock_request(
+                clock.sleep_until_id,
+                &[good, cancellation.clone()],
+                &clock
+            )
+            .is_none(),
+            "a SleepUntil carrying a second operand must not decode"
+        );
+
+        // And for the entropy operation, closing the same class rather than
+        // only the instance the block named.
+        assert!(matches!(
+            decode_clock_request(clock.random_bytes_id, &[EvalVal::Int(8)], &clock),
+            Some((ken_host::HostOpV1::EntropyRandomBytes, _))
+        ));
+        assert!(decode_clock_request(
+            clock.random_bytes_id,
+            &[EvalVal::Int(8), cancellation],
+            &clock
+        )
+        .is_none());
+    }
+
+    /// ABI-S3 D1 at the decode boundary. `ClockSleepUntil` consumes an
+    /// absolute MONOTONIC deadline; a wall-clock `Instant` must not be
+    /// readable as one. The positive control is the adjacent assertion that a
+    /// real `Deadline` does decode -- without it this negative check would
+    /// pass for a decoder that rejected everything.
+    #[test]
+    fn d1_a_wall_instant_is_not_decodable_as_a_monotonic_deadline() {
+        let clock = abi_s3_clock_ids();
+        let reading = |id: GlobalId, inner: GlobalId| EvalVal::Ctor {
+            id,
+            args: Rc::new(vec![EvalVal::Ctor {
+                id: inner,
+                args: Rc::new(vec![EvalVal::Int(77)]),
+                slot: NULL_SLOT,
+            }]),
+            slot: NULL_SLOT,
+        };
+
+        // POSITIVE CONTROL: a genuine Deadline decodes.
+        assert_eq!(
+            decode_deadline(
+                &reading(clock.mk_deadline_id, clock.mk_monotonic_instant_id),
+                &clock
+            ),
+            Some(77)
+        );
+
+        // A wall-clock Instant wrapped as if it were a deadline is refused.
+        assert_eq!(
+            decode_deadline(&reading(clock.mk_deadline_id, clock.mkinstant_id), &clock),
+            None
+        );
+        // And a bare Instant is refused outright.
+        assert_eq!(
+            decode_deadline(&reading(clock.mkinstant_id, clock.mkinstant_id), &clock),
+            None
+        );
+    }
+
     #[test]
     fn ambient_dispatches_append_canonical_events_in_order() {
         let ids = console_ids();
         let clock = ClockIds {
             wall_now_id: GlobalId(400),
             mkinstant_id: GlobalId(401),
+            monotonic_now_id: GlobalId(402),
+            sleep_until_id: GlobalId(403),
+            mk_monotonic_instant_id: GlobalId(404),
+            mk_deadline_id: GlobalId(405),
+            random_bytes_id: GlobalId(406),
         };
         let mut host = CaptureHost::new(Vec::new());
         host.set_fixed_clock(17);

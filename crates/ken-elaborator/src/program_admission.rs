@@ -85,7 +85,12 @@ pub fn admit_checked_main(env: &ElabEnv) -> Result<CheckedMainDescriptor, Progra
 
     if let Some(row) = env.effect_rows.get("main") {
         let granted =
-            EffectRow::from_effects(["Console".to_string(), "Clock".to_string(), "FS".to_string()]);
+            EffectRow::from_effects([
+                "Console".to_string(),
+                "Clock".to_string(),
+                "Entropy".to_string(),
+                "FS".to_string(),
+            ]);
         if !row.row_vars().is_empty() || !row.concrete_effects().is_subset_of(&granted) {
             return Err(ProgramAdmissionError::UnsupportedEffectRow);
         }

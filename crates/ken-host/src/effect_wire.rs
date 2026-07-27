@@ -112,6 +112,15 @@ fn put_request(
             put_u8(out, stream_tag(*stream));
         }
         CanonicalRequestV1::ClockWallNow => put_u8(out, 4),
+        CanonicalRequestV1::ClockMonotonicNow => put_u8(out, 22),
+        CanonicalRequestV1::ClockSleepUntil { deadline } => {
+            put_u8(out, 23);
+            put_u64(out, *deadline);
+        }
+        CanonicalRequestV1::EntropyRandomBytes { count } => {
+            put_u8(out, 24);
+            put_u64(out, *count);
+        }
         CanonicalRequestV1::FsReadFile { path } => {
             put_u8(out, 5);
             put_bytes(out, path)?;
@@ -252,6 +261,10 @@ fn put_reply(out: &mut Vec<u8>, reply: &CanonicalReplyV1) -> Result<(), EffectTr
         CanonicalReplyV1::ReadEof => put_u8(out, 4),
         CanonicalReplyV1::Instant(bytes) => {
             put_u8(out, 5);
+            put_bytes(out, bytes)?;
+        }
+        CanonicalReplyV1::MonotonicInstant(bytes) => {
+            put_u8(out, 12);
             put_bytes(out, bytes)?;
         }
         CanonicalReplyV1::FileMetadata(metadata) => {
@@ -619,6 +632,13 @@ fn get_request(cursor: &mut Cursor<'_>) -> Result<CanonicalRequestV1, EffectTrac
             stream: get_stream(cursor)?,
         },
         4 => CanonicalRequestV1::ClockWallNow,
+        22 => CanonicalRequestV1::ClockMonotonicNow,
+        23 => CanonicalRequestV1::ClockSleepUntil {
+            deadline: cursor.u64()?,
+        },
+        24 => CanonicalRequestV1::EntropyRandomBytes {
+            count: cursor.u64()?,
+        },
         5 => CanonicalRequestV1::FsReadFile {
             path: cursor.bytes()?,
         },
@@ -739,6 +759,7 @@ fn get_reply(cursor: &mut Cursor<'_>) -> Result<CanonicalReplyV1, EffectTraceWir
         3 => CanonicalReplyV1::ReadChunk(cursor.bytes()?),
         4 => CanonicalReplyV1::ReadEof,
         5 => CanonicalReplyV1::Instant(cursor.bytes()?),
+        12 => CanonicalReplyV1::MonotonicInstant(cursor.bytes()?),
         6 => CanonicalReplyV1::FileMetadata(FileMetadataV1 {
             size: cursor.u64()?,
             kind: get_node_kind(cursor)?,
@@ -1000,6 +1021,148 @@ pub fn decode_linked_effect_trace(bytes: &[u8]) -> Result<LinkedEffectTrace, Eff
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ABI-S3 AC-3b. No cancellation surface exists on the sleep operation --
+    /// no field, token, or status, INCLUDING an unused or reserved one (D2;
+    /// PX12 owns cancellation).
+    ///
+    /// MEASURED: (a) the complete wire image of a ClockSleepUntil request is
+    /// exactly one tag byte plus one little-endian u64, with every byte
+    /// attributed; (b) the probed C record holds exactly one u64; and (c) the
+    /// variant destructures with an exhaustive struct pattern binding exactly
+    /// one field.
+    /// CLAIMED: the request carries a deadline and nothing else.
+    /// THE GAP: (a) alone would miss a field that exists but is not encoded,
+    /// and (b) alone would miss one carried outside the C record. (c) closes
+    /// the reserved/unused case, because a struct pattern with no `..` fails
+    /// to COMPILE if any field is added. The three together leave no shape for
+    /// a cancellation surface to occupy.
+    ///
+    /// ⚠ This is a NEGATIVE claim, so every part carries a positive control:
+    /// the probe is shown to find the field that IS present, otherwise "found
+    /// no cancellation surface" would be indistinguishable from a probe that
+    /// inspects nothing.
+    #[test]
+    fn ac3b_the_sleep_request_carries_a_deadline_and_no_cancellation_surface() {
+        const DEADLINE: u64 = 0x0102_0304_0506_0708;
+
+        let encode = |deadline: u64| {
+            let mut out = Vec::new();
+            put_request(&mut out, &CanonicalRequestV1::ClockSleepUntil { deadline })
+                .expect("the sleep request encodes");
+            out
+        };
+
+        // POSITIVE CONTROL 1 -- the probe finds the field that IS present: the
+        // deadline appears in the image, and changing it changes the image.
+        let image = encode(DEADLINE);
+        assert_eq!(image[0], 23, "sleep carries its wire tag");
+        assert_eq!(
+            &image[1..9],
+            &DEADLINE.to_le_bytes(),
+            "the deadline is present in the wire image"
+        );
+        assert_ne!(image, encode(0), "the image tracks the deadline");
+
+        // Every byte is now attributed to the tag or the deadline, so an
+        // encoded cancellation token or status has nowhere to sit.
+        assert_eq!(
+            image.len(),
+            1 + 8,
+            "the sleep request is exactly a tag and a deadline; any additional \
+             encoded cancellation field would lengthen this image"
+        );
+
+        // POSITIVE CONTROL 2 -- the layout probe reads real records, shown by a
+        // record that is genuinely larger.
+        let fact = |name: &str| {
+            crate::HOST_EFFECT_ABI_V1_FACTS
+                .iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| *value)
+                .unwrap_or_else(|| panic!("probed layout fact {name}"))
+        };
+        assert_eq!(fact("OFFSET_ClockDeadlineRequestV1_deadline"), 0);
+        assert!(
+            fact("SIZE_HostReplyV1") > fact("SIZE_ClockDeadlineRequestV1"),
+            "the layout probe distinguishes record sizes"
+        );
+        assert_eq!(
+            fact("SIZE_ClockDeadlineRequestV1"),
+            8,
+            "the deadline record is exactly one u64; a cancellation token or \
+             status field would enlarge it"
+        );
+
+        // POSITIVE CONTROL 3 + the reserved-field closure. This pattern has no
+        // `..`, so it binds the fields that exist -- proving it inspects the
+        // variant -- and adding ANY field, including an unused or reserved
+        // one, makes this fail to compile.
+        let CanonicalRequestV1::ClockSleepUntil { deadline } = encode_roundtrip(&image) else {
+            panic!("the sleep request decodes to its own variant");
+        };
+        assert_eq!(deadline, DEADLINE);
+    }
+
+    fn encode_roundtrip(bytes: &[u8]) -> CanonicalRequestV1 {
+        let mut cursor = Cursor {
+            bytes,
+            position: 0,
+        };
+        get_request(&mut cursor).expect("decodes")
+    }
+
+    /// ABI-S3 AC-1. Encode -> decode returns the identical canonical request
+    /// for every operation added by this WP.
+    ///
+    /// The existing arity assert is explicitly NOT this test: a catalog closed
+    /// at 25 says nothing about whether a request survives a round trip. The
+    /// deadline and count are given distinct non-zero values so a codec that
+    /// dropped a payload, or crossed the two u64 fields, cannot pass.
+    #[test]
+    fn ac1_every_new_request_survives_an_encode_decode_round_trip() {
+        let requests = [
+            CanonicalRequestV1::ClockMonotonicNow,
+            CanonicalRequestV1::ClockSleepUntil {
+                deadline: 0x0123_4567_89ab_cdef,
+            },
+            CanonicalRequestV1::EntropyRandomBytes { count: 977 },
+        ];
+
+        for request in &requests {
+            let mut encoded = Vec::new();
+            put_request(&mut encoded, request).expect("new requests encode");
+            let mut cursor = Cursor {
+                bytes: &encoded,
+                position: 0,
+            };
+            let decoded = get_request(&mut cursor).expect("new requests decode");
+            assert_eq!(&decoded, request);
+        }
+
+        // Non-vacuity: the three encodings are mutually distinct, so the
+        // round trip above is not passing because every request encodes to
+        // the same bytes.
+        let encodings = requests
+            .iter()
+            .map(|request| {
+                let mut out = Vec::new();
+                put_request(&mut out, request).expect("encodes");
+                out
+            })
+            .collect::<Vec<_>>();
+        for (index, left) in encodings.iter().enumerate() {
+            for right in &encodings[index + 1..] {
+                assert_ne!(left, right);
+            }
+        }
+
+        // And the wall clock, whose request carries no payload, does not
+        // collide with the new monotonic read -- D1 on the wire.
+        let mut wall = Vec::new();
+        put_request(&mut wall, &CanonicalRequestV1::ClockWallNow).expect("encodes");
+        assert_ne!(wall, encodings[0]);
+    }
 
     fn representative_trace() -> LinkedEffectTrace {
         LinkedEffectTrace {

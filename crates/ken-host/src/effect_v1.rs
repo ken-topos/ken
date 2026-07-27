@@ -19,6 +19,8 @@ pub enum HostOpV1 {
     ConsoleFlush = 0x0103,
     ConsoleIsTerminal = 0x0104,
     ClockWallNow = 0x0201,
+    ClockMonotonicNow = 0x0202,
+    ClockSleepUntil = 0x0203,
     FsReadFile = 0x0301,
     FsWriteFile = 0x0302,
     FsAppendFile = 0x0303,
@@ -36,15 +38,18 @@ pub enum HostOpV1 {
     ResourceRelease = 0x0401,
     BufferAllocate = 0x0402,
     BufferFreeze = 0x0403,
+    EntropyRandomBytes = 0x0501,
 }
 
 impl HostOpV1 {
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 25] = [
         Self::ConsoleRead,
         Self::ConsoleWrite,
         Self::ConsoleFlush,
         Self::ConsoleIsTerminal,
         Self::ClockWallNow,
+        Self::ClockMonotonicNow,
+        Self::ClockSleepUntil,
         Self::FsReadFile,
         Self::FsWriteFile,
         Self::FsAppendFile,
@@ -62,6 +67,7 @@ impl HostOpV1 {
         Self::ResourceRelease,
         Self::BufferAllocate,
         Self::BufferFreeze,
+        Self::EntropyRandomBytes,
     ];
 
     pub const fn availability(self) -> HostOpAvailabilityV1 {
@@ -95,9 +101,18 @@ impl HostOpV1 {
                 | Self::ConsoleFlush
                 | Self::ConsoleIsTerminal
                 | Self::ClockWallNow
+                | Self::ClockMonotonicNow
+                | Self::ClockSleepUntil
+                | Self::EntropyRandomBytes
         )
     }
 }
+
+/// Upper bound on a single kernel-entropy request. ABI-S3 D3 requires a
+/// bounded requested byte count; an over-large request is refused rather
+/// than truncated, so a caller never receives fewer bytes than it asked for
+/// while believing it received all of them.
+pub const MAX_ENTROPY_REQUEST_BYTES_V1: u64 = 1024;
 
 /// PX5's intended promotion set. Membership is a plan, not evidence: every
 /// operation remains `RepresentedUnavailable` until its artifact differential
@@ -1214,6 +1229,20 @@ pub trait HostEffectBackendV1 {
     fn clock_wall_now(&mut self) -> Vec<u8> {
         Vec::new()
     }
+    fn clock_monotonic_now(&mut self) -> Vec<u8> {
+        Vec::new()
+    }
+    fn clock_sleep_until(&mut self, _deadline: u64) {}
+    /// Read `count` bytes from the kernel CSPRNG.
+    ///
+    /// The default is the UNAVAILABLE outcome rather than an empty or
+    /// substitute buffer: ABI-S3 D3 forbids a userspace PRNG, a seeded
+    /// substitute, a cached weak source, and any silent fallback, so a
+    /// backend that has not wired a kernel source must report unavailable
+    /// and return no bytes at all.
+    fn entropy_random_bytes(&mut self, _count: u64) -> Result<Vec<u8>, IoErrorIdentityV1> {
+        Err(IoErrorIdentityV1::Unsupported)
+    }
     fn fs_read_file(
         &mut self,
         grant: &CapabilityGrantV1,
@@ -1466,6 +1495,9 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
                 | HostOpV1::ConsoleFlush
                 | HostOpV1::ConsoleIsTerminal
                 | HostOpV1::ClockWallNow
+                | HostOpV1::ClockMonotonicNow
+                | HostOpV1::ClockSleepUntil
+                | HostOpV1::EntropyRandomBytes
                 | HostOpV1::FsReadFile
                 | HostOpV1::FsWriteFile
                 | HostOpV1::FsAppendFile
@@ -1506,6 +1538,23 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
         }
         (HostOpV1::ClockWallNow, CanonicalRequestV1::ClockWallNow) => {
             Ok(CanonicalReplyV1::Instant(backend.clock_wall_now()))
+        }
+        (HostOpV1::ClockMonotonicNow, CanonicalRequestV1::ClockMonotonicNow) => Ok(
+            CanonicalReplyV1::MonotonicInstant(backend.clock_monotonic_now()),
+        ),
+        (HostOpV1::ClockSleepUntil, CanonicalRequestV1::ClockSleepUntil { deadline }) => {
+            backend.clock_sleep_until(*deadline);
+            Ok(CanonicalReplyV1::Unit)
+        }
+        (HostOpV1::EntropyRandomBytes, CanonicalRequestV1::EntropyRandomBytes { count }) => {
+            if *count > MAX_ENTROPY_REQUEST_BYTES_V1 {
+                Err(SemanticErrorV1::Io(IoErrorIdentityV1::InvalidInput))
+            } else {
+                backend
+                    .entropy_random_bytes(*count)
+                    .map(CanonicalReplyV1::Bytes)
+                    .map_err(SemanticErrorV1::Io)
+            }
         }
         (HostOpV1::FsReadFile, CanonicalRequestV1::FsReadFile { path }) => backend
             .fs_read_file(grant.expect("validated FS capability"), path)
@@ -1939,6 +1988,13 @@ pub enum CanonicalRequestV1 {
         stream: ConsoleStreamV1,
     },
     ClockWallNow,
+    ClockMonotonicNow,
+    ClockSleepUntil {
+        deadline: u64,
+    },
+    EntropyRandomBytes {
+        count: u64,
+    },
     FsReadFile {
         path: Vec<u8>,
     },
@@ -2100,6 +2156,7 @@ pub enum CanonicalReplyV1 {
     ResourceSettlement(ResourceSettlementObservationV1),
     ReadProgress(ReadProgressV1),
     WriteProgress(WriteProgressV1),
+    MonotonicInstant(Vec<u8>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2207,7 +2264,8 @@ impl CanonicalOutcomeV1 {
                 | CanonicalReplyV1::FileMetadata(_)
                 | CanonicalReplyV1::DirectoryEntries(_)
                 | CanonicalReplyV1::ResourceAcquired { .. }
-                | CanonicalReplyV1::ResourceSettlement(_) => None,
+                | CanonicalReplyV1::ResourceSettlement(_)
+                | CanonicalReplyV1::MonotonicInstant(_) => None,
                 CanonicalReplyV1::ReadProgress(progress) => match progress {
                     ReadProgressV1::ReadEof => None,
                     ReadProgressV1::ReadSome { transferred, .. } => {
@@ -2359,7 +2417,17 @@ mod tests {
     use sha2::{Digest, Sha256};
 
     #[derive(Default)]
-    struct AllOpsBackend(Vec<HostOpV1>);
+    struct AllOpsBackend(Vec<HostOpV1>, EntropySource);
+
+    /// Whether the test backend has a kernel entropy source wired.
+    /// `Unavailable` returns the exact value the production default returns,
+    /// so the unavailable path under test is the real one.
+    #[derive(Default, Clone, Copy, PartialEq, Eq)]
+    enum EntropySource {
+        #[default]
+        Wired,
+        Unavailable,
+    }
 
     impl HostEffectBackendV1 for AllOpsBackend {
         fn console_read(
@@ -2385,6 +2453,20 @@ mod tests {
         fn clock_wall_now(&mut self) -> Vec<u8> {
             self.0.push(HostOpV1::ClockWallNow);
             vec![1]
+        }
+        fn clock_monotonic_now(&mut self) -> Vec<u8> {
+            self.0.push(HostOpV1::ClockMonotonicNow);
+            vec![1]
+        }
+        fn clock_sleep_until(&mut self, _deadline: u64) {
+            self.0.push(HostOpV1::ClockSleepUntil);
+        }
+        fn entropy_random_bytes(&mut self, count: u64) -> Result<Vec<u8>, IoErrorIdentityV1> {
+            self.0.push(HostOpV1::EntropyRandomBytes);
+            if self.1 == EntropySource::Unavailable {
+                return Err(IoErrorIdentityV1::Unsupported);
+            }
+            Ok((0..count).map(|index| index as u8).collect())
         }
         fn fs_read_file(
             &mut self,
@@ -2523,6 +2605,14 @@ mod tests {
             ),
             (HostOpV1::ClockWallNow, CanonicalRequestV1::ClockWallNow),
             (
+                HostOpV1::ClockMonotonicNow,
+                CanonicalRequestV1::ClockMonotonicNow,
+            ),
+            (
+                HostOpV1::ClockSleepUntil,
+                CanonicalRequestV1::ClockSleepUntil { deadline: 0 },
+            ),
+            (
                 HostOpV1::FsReadFile,
                 CanonicalRequestV1::FsReadFile {
                     path: b"a".to_vec(),
@@ -2589,6 +2679,10 @@ mod tests {
                     mode: 0o640,
                 },
             ),
+            (
+                HostOpV1::EntropyRandomBytes,
+                CanonicalRequestV1::EntropyRandomBytes { count: 8 },
+            ),
         ];
         let mut backend = AllOpsBackend::default();
         let mut resources = ResourceTableV1::default();
@@ -2605,12 +2699,221 @@ mod tests {
             )
             .unwrap();
         }
-        assert_eq!(backend.0, HostOpV1::ALL[..15]);
+        const RESOURCE_BEARING: [HostOpV1; 7] = [
+            HostOpV1::FsOpen,
+            HostOpV1::FsHandleMetadata,
+            HostOpV1::FsReadAt,
+            HostOpV1::FsWriteAt,
+            HostOpV1::ResourceRelease,
+            HostOpV1::BufferAllocate,
+            HostOpV1::BufferFreeze,
+        ];
+        let pre_resource = HostOpV1::ALL
+            .into_iter()
+            .filter(|operation| !RESOURCE_BEARING.contains(operation))
+            .collect::<Vec<_>>();
+        assert_eq!(backend.0, pre_resource);
+    }
+
+    /// ABI-S3 AC-4. The two halves are not equally load-bearing.
+    ///
+    /// "two requests do not return identical bytes" passes for a userspace
+    /// PRNG too, so it cannot on its own establish the D3 trust boundary. The
+    /// half that matters is the second: when the secure source is
+    /// UNAVAILABLE, the operation must report unavailable and return no bytes
+    /// -- never a substitute, a cached weak source, or a silent downgrade.
+    #[test]
+    fn ac4_entropy_reports_unavailable_rather_than_supplying_bytes_from_elsewhere() {
+        let capabilities = CapabilityTableV1::default();
+
+        let dispatch = |source: EntropySource, count: u64| {
+            let mut backend = AllOpsBackend(Vec::new(), source);
+            let mut resources = ResourceTableV1::default();
+            dispatch_host_op_v1(
+                &mut backend,
+                &capabilities,
+                &mut resources,
+                HostOpV1::EntropyRandomBytes,
+                None,
+                ResourceInputsV1::None,
+                &CanonicalRequestV1::EntropyRandomBytes { count },
+            )
+            .expect("entropy dispatch is total")
+            .outcome
+        };
+
+        // Weak half, recorded for completeness: distinct requests differ.
+        let CanonicalOutcomeV1::Success(CanonicalReplyV1::Bytes(eight)) =
+            dispatch(EntropySource::Wired, 8)
+        else {
+            panic!("a wired kernel source yields bytes");
+        };
+        let CanonicalOutcomeV1::Success(CanonicalReplyV1::Bytes(four)) =
+            dispatch(EntropySource::Wired, 4)
+        else {
+            panic!("a wired kernel source yields bytes");
+        };
+        assert_ne!(eight, four);
+
+        // THE LOAD-BEARING HALF: an unavailable source reports unavailable and
+        // yields no bytes at all.
+        let unavailable = dispatch(EntropySource::Unavailable, 8);
+        assert!(
+            matches!(
+                unavailable,
+                CanonicalOutcomeV1::Error(SemanticErrorV1::Io(IoErrorIdentityV1::Unsupported))
+            ),
+            "an unavailable secure source must report unavailable, got {unavailable:?}"
+        );
+        assert!(
+            !matches!(unavailable, CanonicalOutcomeV1::Success(_)),
+            "an unavailable secure source must not return bytes from anywhere else"
+        );
+
+        // D3 also bounds the requested byte count: an over-large request is
+        // refused rather than truncated, so a caller never silently receives
+        // fewer bytes than it asked for.
+        assert!(matches!(
+            dispatch(EntropySource::Wired, MAX_ENTROPY_REQUEST_BYTES_V1 + 1),
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Io(IoErrorIdentityV1::InvalidInput))
+        ));
+        assert!(matches!(
+            dispatch(EntropySource::Wired, MAX_ENTROPY_REQUEST_BYTES_V1),
+            CanonicalOutcomeV1::Success(_)
+        ));
+    }
+
+    /// ABI-S3 AC-3c, host half. Entropy is ambient AT DISPATCH: no capability
+    /// token appears in the host request, and no ProgramCaps/EntropyCap field
+    /// gates it.
+    ///
+    /// MEASURED: the entropy operation dispatches successfully with NO
+    /// capability token, its probed C record is exactly one u64 (the count),
+    /// and its wire image is exactly a tag plus that count.
+    /// CLAIMED: nothing capability-shaped rides the entropy request.
+    /// THE GAP: "dispatch succeeded without a token" is only meaningful if the
+    /// dispatcher can refuse for want of a token at all -- so the positive
+    /// control below withholds the token from an operation that DOES require
+    /// one and shows it is denied.
+    ///
+    /// The other half of AC-3c -- that Entropy is VISIBLE in the program
+    /// effect row -- is not observable from this crate and is discharged by
+    /// ken-elaborator's abi_s3_entropy_effect_row test. Both halves are
+    /// required: showing only this one is compatible with a hidden ambient
+    /// read, which the ruling forbids.
+    #[test]
+    fn ac3c_entropy_needs_no_capability_token_while_a_gated_op_still_does() {
+        let capabilities = CapabilityTableV1::default();
+        let dispatch = |operation, request: &CanonicalRequestV1| {
+            let mut backend = AllOpsBackend::default();
+            let mut resources = ResourceTableV1::default();
+            dispatch_host_op_v1(
+                &mut backend,
+                &capabilities,
+                &mut resources,
+                operation,
+                // No capability token supplied, for either operation.
+                None,
+                ResourceInputsV1::None,
+                request,
+            )
+            .expect("dispatch is total")
+            .outcome
+        };
+
+        // Entropy carries no token and is served.
+        assert!(
+            matches!(
+                dispatch(
+                    HostOpV1::EntropyRandomBytes,
+                    &CanonicalRequestV1::EntropyRandomBytes { count: 8 },
+                ),
+                CanonicalOutcomeV1::Success(_)
+            ),
+            "entropy is ambient at dispatch and must need no capability token"
+        );
+
+        // POSITIVE CONTROL -- the dispatcher CAN refuse for want of a token, so
+        // the success above is evidence about entropy rather than about a
+        // dispatcher that never checks.
+        let gated = dispatch(
+            HostOpV1::FsReadFile,
+            &CanonicalRequestV1::FsReadFile {
+                path: b"a".to_vec(),
+            },
+        );
+        assert!(
+            !matches!(gated, CanonicalOutcomeV1::Success(_)),
+            "a capability-gated operation must be refused without a token, \
+             otherwise the entropy result proves nothing; got {gated:?}"
+        );
+
+        // Entropy is in the ambient class, the same class the wall clock is in.
+        assert!(HostOpV1::EntropyRandomBytes.is_ambient());
+        assert!(!HostOpV1::FsReadFile.is_ambient());
+
+        // The request record is exactly the count: no token field rides along.
+        let fact = |name: &str| {
+            HOST_EFFECT_ABI_V1_FACTS
+                .iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| *value)
+                .unwrap_or_else(|| panic!("probed layout fact {name}"))
+        };
+        assert_eq!(fact("OFFSET_EntropyRequestV1_count"), 0);
+        assert_eq!(
+            fact("SIZE_EntropyRequestV1"),
+            8,
+            "the entropy request record is exactly its count; a capability \
+             token field would enlarge it"
+        );
+        // Control: the probe distinguishes sizes, so 8 is a reading and not a
+        // constant it would report for anything.
+        assert!(fact("SIZE_FsReadFileRequestV1") > fact("SIZE_EntropyRequestV1"));
+    }
+
+    /// ABI-S3 AC-5. Every operation this WP adds is RepresentedUnavailable
+    /// (D4), and the PX5 promotion set is untouched -- asserted by CONTENTS,
+    /// not by length, so swapping a member for another cannot pass.
+    ///
+    /// ⚠ Read this together with
+    /// all_pre_resource_operations_share_one_semantic_dispatch. Availability
+    /// alone is a WEAK signal here: a new operation that were never wired at
+    /// all would also report RepresentedUnavailable, because that is the
+    /// default every unhandled operation falls to. This test therefore
+    /// establishes the D4 property but is NOT evidence that the operations
+    /// are reachable; the dispatch test is what establishes that, by driving
+    /// each one through the real semantic dispatch and requiring the backend
+    /// to have observed it.
+    #[test]
+    fn ac5_new_operations_are_unavailable_and_the_promotion_set_is_untouched() {
+        for operation in [
+            HostOpV1::ClockMonotonicNow,
+            HostOpV1::ClockSleepUntil,
+            HostOpV1::EntropyRandomBytes,
+        ] {
+            assert_eq!(
+                operation.availability(),
+                HostOpAvailabilityV1::RepresentedUnavailable,
+                "{operation:?} must land RepresentedUnavailable per D4"
+            );
+        }
+
+        assert_eq!(
+            PX5_PLANNED_NATIVE_TARGETS,
+            [
+                HostOpV1::ConsoleWrite,
+                HostOpV1::ConsoleFlush,
+                HostOpV1::ConsoleIsTerminal,
+                HostOpV1::FsReadFile,
+                HostOpV1::FsWriteFile,
+            ]
+        );
     }
 
     #[test]
     fn catalog_is_closed_and_availability_is_exact() {
-        assert_eq!(HostOpV1::ALL.len(), 22);
+        assert_eq!(HostOpV1::ALL.len(), 25);
         assert_eq!(
             HostOpV1::ALL
                 .into_iter()

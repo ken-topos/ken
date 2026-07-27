@@ -749,6 +749,7 @@ fn collect_checked_perform_nodes(
         fs_family: StableSymbol,
         console_family: StableSymbol,
         clock_family: StableSymbol,
+        entropy_family: StableSymbol,
         followable_declarations: BTreeSet<GlobalId>,
         source_declarations: BTreeSet<GlobalId>,
         nodes: BTreeSet<CheckedPerformNodeV1>,
@@ -838,12 +839,15 @@ fn collect_checked_perform_nodes(
                         .cloned()
                         .ok_or(CompilerDriverError::MissingStableSymbol { id: constructor })?;
                     if let Some(operation) = self.operations.get(&constructor).copied() {
-                        let family_symbol = if operation == ken_host::HostOpV1::ClockWallNow {
-                            self.clock_family.clone()
-                        } else if operation.is_ambient() {
-                            self.console_family.clone()
-                        } else {
-                            self.fs_family.clone()
+                        let family_symbol = match crate::export::host_operation_family_v1(
+                            operation,
+                        ) {
+                            crate::export::HostOpFamilyV1::Clock => self.clock_family.clone(),
+                            crate::export::HostOpFamilyV1::Console => self.console_family.clone(),
+                            crate::export::HostOpFamilyV1::Fs => self.fs_family.clone(),
+                            crate::export::HostOpFamilyV1::Entropy => {
+                                self.entropy_family.clone()
+                            }
                         };
                         self.nodes.insert(CheckedPerformNodeV1::Host {
                             family_symbol,
@@ -1055,6 +1059,7 @@ fn collect_checked_perform_nodes(
         fs_family: spine.fs_family.clone(),
         console_family: spine.console_family.clone(),
         clock_family: spine.clock_family.clone(),
+        entropy_family: spine.entropy_family.clone(),
         followable_declarations: env
             .env
             .decls()
@@ -3218,6 +3223,9 @@ fn checked_host_spine_v1(
         ("Flush", ken_host::HostOpV1::ConsoleFlush),
         ("IsTerminal", ken_host::HostOpV1::ConsoleIsTerminal),
         ("WallNow", ken_host::HostOpV1::ClockWallNow),
+        ("MonotonicNow", ken_host::HostOpV1::ClockMonotonicNow),
+        ("SleepUntil", ken_host::HostOpV1::ClockSleepUntil),
+        ("RandomBytes", ken_host::HostOpV1::EntropyRandomBytes),
         ("ReadFile", ken_host::HostOpV1::FsReadFile),
         ("WriteFile", ken_host::HostOpV1::FsWriteFile),
         ("AppendFile", ken_host::HostOpV1::FsAppendFile),
@@ -3271,6 +3279,7 @@ fn checked_host_spine_v1(
         fs_family: resolve("FSOp")?,
         console_family: resolve("ConsoleOp")?,
         clock_family: resolve("ClockOp")?,
+        entropy_family: resolve("EntropyOp")?,
         capability: resolve("Cap")?,
         result_err: resolve("Err")?,
         result_ok: resolve("Ok")?,
@@ -3333,6 +3342,7 @@ fn canonical_checked_host_spine_v1_bytes(spine: &crate::erasure::CheckedHostSpin
         &spine.fs_family,
         &spine.console_family,
         &spine.clock_family,
+        &spine.entropy_family,
         &spine.capability,
         &spine.result_err,
         &spine.result_ok,

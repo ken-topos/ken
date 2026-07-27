@@ -51,6 +51,9 @@ operation|ConsoleWrite|0102|native|ConsoleWriteRequestV1|2|HostReplyV1|1
 operation|ConsoleFlush|0103|native|ConsoleStreamRequestV1|1|HostReplyV1|1
 operation|ConsoleIsTerminal|0104|native|ConsoleStreamRequestV1|1|HostReplyV1|0
 operation|ClockWallNow|0201|unavailable|UnitRequestV1|0|HostReplyV1|1
+operation|ClockMonotonicNow|0202|unavailable|UnitRequestV1|0|HostReplyV1|1
+operation|ClockSleepUntil|0203|unavailable|ClockDeadlineRequestV1|1|HostReplyV1|1
+operation|EntropyRandomBytes|0501|unavailable|EntropyRequestV1|1|HostReplyV1|1
 operation|FsReadFile|0301|native|FsReadFileRequestV1|2|HostReplyV1|1
 operation|FsWriteFile|0302|native|FsWriteFileRequestV1|4|HostReplyV1|1
 operation|FsAppendFile|0303|unavailable|FsAppendFileRequestV1|3|HostReplyV1|1

@@ -564,13 +564,40 @@ fn effect_label_for_family(symbol: &str) -> String {
         .to_string()
 }
 
-fn host_operation_family(operation: ken_host::HostOpV1) -> (&'static str, &'static str) {
+/// The closed set of checked host-operation families.
+///
+/// This is the single authority for "which family does this operation belong
+/// to". It is a sealed enum matched without a catch-all everywhere it is
+/// consumed, so adding a `HostOpV1` operation without classifying it -- or
+/// adding a family without routing it at every consumer -- is a compile error
+/// rather than a silent misfiling.
+///
+/// It replaces a proxy that three sites previously replicated:
+/// `if op == ClockWallNow { clock } else if op.is_ambient() { console } else
+/// { fs }`. That cascade was correct only because the ambient set happened to
+/// be the four console operations plus `ClockWallNow`; any further ambient or
+/// clock-family operation was misfiled silently, and no `if`/`else` can be
+/// made exhaustive by the compiler.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HostOpFamilyV1 {
+    Console,
+    Clock,
+    Fs,
+    Entropy,
+}
+
+pub(crate) const fn host_operation_family_v1(
+    operation: ken_host::HostOpV1,
+) -> HostOpFamilyV1 {
     match operation {
         ken_host::HostOpV1::ConsoleRead
         | ken_host::HostOpV1::ConsoleWrite
         | ken_host::HostOpV1::ConsoleFlush
-        | ken_host::HostOpV1::ConsoleIsTerminal => ("ConsoleOp", "Console"),
-        ken_host::HostOpV1::ClockWallNow => ("ClockOp", "Clock"),
+        | ken_host::HostOpV1::ConsoleIsTerminal => HostOpFamilyV1::Console,
+        ken_host::HostOpV1::ClockWallNow
+        | ken_host::HostOpV1::ClockMonotonicNow
+        | ken_host::HostOpV1::ClockSleepUntil => HostOpFamilyV1::Clock,
+        ken_host::HostOpV1::EntropyRandomBytes => HostOpFamilyV1::Entropy,
         ken_host::HostOpV1::FsReadFile
         | ken_host::HostOpV1::FsWriteFile
         | ken_host::HostOpV1::FsAppendFile
@@ -585,10 +612,21 @@ fn host_operation_family(operation: ken_host::HostOpV1) -> (&'static str, &'stat
         | ken_host::HostOpV1::FsHandleMetadata
         | ken_host::HostOpV1::FsReadAt
         | ken_host::HostOpV1::FsWriteAt
-        | ken_host::HostOpV1::ResourceRelease => ("FSOp", "FS"),
-        ken_host::HostOpV1::BufferAllocate | ken_host::HostOpV1::BufferFreeze => ("FSOp", "FS"),
+        | ken_host::HostOpV1::ResourceRelease
+        | ken_host::HostOpV1::BufferAllocate
+        | ken_host::HostOpV1::BufferFreeze => HostOpFamilyV1::Fs,
     }
 }
+
+fn host_operation_family(operation: ken_host::HostOpV1) -> (&'static str, &'static str) {
+    match host_operation_family_v1(operation) {
+        HostOpFamilyV1::Console => ("ConsoleOp", "Console"),
+        HostOpFamilyV1::Clock => ("ClockOp", "Clock"),
+        HostOpFamilyV1::Fs => ("FSOp", "FS"),
+        HostOpFamilyV1::Entropy => ("EntropyOp", "Entropy"),
+    }
+}
+
 
 /// Injective canonical wire spelling for one typed perform identity.
 ///
@@ -630,6 +668,9 @@ pub const fn canonical_host_perform_signature_v1(operation: ken_host::HostOpV1) 
         ken_host::HostOpV1::ConsoleFlush => "ConsoleFlush",
         ken_host::HostOpV1::ConsoleIsTerminal => "ConsoleIsTerminal",
         ken_host::HostOpV1::ClockWallNow => "ClockWallNow",
+        ken_host::HostOpV1::ClockMonotonicNow => "ClockMonotonicNow",
+        ken_host::HostOpV1::ClockSleepUntil => "ClockSleepUntil",
+        ken_host::HostOpV1::EntropyRandomBytes => "EntropyRandomBytes",
         ken_host::HostOpV1::FsReadFile => "FsReadFile",
         ken_host::HostOpV1::FsWriteFile => "FsWriteFile",
         ken_host::HostOpV1::FsAppendFile => "FsAppendFile",
@@ -1578,6 +1619,16 @@ proc second (_value : Unit)
                 "ConsoleIsTerminal",
             ),
             (ken_host::HostOpV1::ClockWallNow, 0x0201, "ClockWallNow"),
+            (
+                ken_host::HostOpV1::ClockMonotonicNow,
+                0x0202,
+                "ClockMonotonicNow",
+            ),
+            (
+                ken_host::HostOpV1::ClockSleepUntil,
+                0x0203,
+                "ClockSleepUntil",
+            ),
             (ken_host::HostOpV1::FsReadFile, 0x0301, "FsReadFile"),
             (ken_host::HostOpV1::FsWriteFile, 0x0302, "FsWriteFile"),
             (ken_host::HostOpV1::FsAppendFile, 0x0303, "FsAppendFile"),

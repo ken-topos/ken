@@ -23,6 +23,8 @@ pub struct AmbientScript {
     pub stdout_is_terminal: bool,
     pub stderr_is_terminal: bool,
     pub wall_clock_nanoseconds: Vec<BigInt>,
+    pub monotonic_clock_nanoseconds: Vec<BigInt>,
+    pub entropy_bytes: Vec<Vec<u8>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -75,6 +77,9 @@ pub struct ScriptedPosixHost {
     stderr: Vec<u8>,
     terminals: [bool; 3],
     wall_clock_nanoseconds: VecDeque<BigInt>,
+    monotonic_clock_nanoseconds: VecDeque<BigInt>,
+    entropy_bytes: VecDeque<Vec<u8>>,
+    sleep_deadlines: Vec<BigInt>,
     denials: Vec<CapabilityDenied>,
     fs_actions_after_resolve: u64,
     expected_fs: VecDeque<ExpectedFsEffect>,
@@ -96,6 +101,9 @@ impl ScriptedPosixHost {
                 script.stderr_is_terminal,
             ],
             wall_clock_nanoseconds: script.wall_clock_nanoseconds.into(),
+            monotonic_clock_nanoseconds: script.monotonic_clock_nanoseconds.into(),
+            entropy_bytes: script.entropy_bytes.into(),
+            sleep_deadlines: Vec::new(),
             denials: Vec::new(),
             fs_actions_after_resolve: 0,
             expected_fs: VecDeque::new(),
@@ -243,6 +251,28 @@ impl HostHandler for ScriptedPosixHost {
         self.wall_clock_nanoseconds
             .pop_front()
             .expect("PX6 Clock.WallNow requires an explicit scripted response")
+    }
+
+    fn clock_monotonic_now(&mut self) -> BigInt {
+        self.monotonic_clock_nanoseconds
+            .pop_front()
+            .expect("PX6 Clock.MonotonicNow requires an explicit scripted response")
+    }
+
+    fn clock_sleep_until(&mut self, deadline: BigInt) {
+        // A verification host never suspends; it records the deadline so a
+        // scripted expectation can bind the value the program passed.
+        self.sleep_deadlines.push(deadline);
+    }
+
+    fn entropy_random_bytes(&mut self, _count: u64) -> std::io::Result<Vec<u8>> {
+        // Scripted, like every other source here: an unscripted read is a
+        // test authoring error, never an invented value.
+        self.entropy_bytes.pop_front().ok_or_else(|| {
+            std::io::Error::other(
+                "ABI-S3 Entropy.RandomBytes requires an explicit scripted response",
+            )
+        })
     }
 
     fn fs_denied(&mut self, denial: CapabilityDenied) {
