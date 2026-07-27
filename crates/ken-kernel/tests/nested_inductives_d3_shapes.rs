@@ -1,5 +1,5 @@
 use ken_kernel::inductive::{
-    recursive_args, recursive_shapes, recursive_shapes_equivalent, RecursiveShape,
+    recursive_args, recursive_shapes, RecursiveArgumentShape, RecursiveShape,
 };
 use ken_kernel::{
     convert_type, declare_def, declare_inductive, declare_postulate, ConstructorDecl, Context,
@@ -26,6 +26,130 @@ fn constructor(args: Vec<Term>) -> ConstructorDecl {
     }
 }
 
+fn optional_topology_equivalent(
+    left: &Option<Box<RecursiveShape>>,
+    right: &Option<Box<RecursiveShape>>,
+) -> bool {
+    match (left, right) {
+        (None, None) => true,
+        (Some(left), Some(right)) => topology_equivalent(left, right),
+        _ => false,
+    }
+}
+
+fn topology_equivalent(left: &RecursiveShape, right: &RecursiveShape) -> bool {
+    match (left, right) {
+        (
+            RecursiveShape::Direct { index_exprs: left },
+            RecursiveShape::Direct { index_exprs: right },
+        ) => left.len() == right.len(),
+        (
+            RecursiveShape::Pi {
+                domains: left_domains,
+                body: left_body,
+            },
+            RecursiveShape::Pi {
+                domains: right_domains,
+                body: right_body,
+            },
+        ) => {
+            left_domains.len() == right_domains.len() && topology_equivalent(left_body, right_body)
+        }
+        (
+            RecursiveShape::Sigma {
+                domain: left_domain,
+                codomain: left_codomain,
+            },
+            RecursiveShape::Sigma {
+                domain: right_domain,
+                codomain: right_codomain,
+            },
+        ) => {
+            optional_topology_equivalent(left_domain, right_domain)
+                && optional_topology_equivalent(left_codomain, right_codomain)
+        }
+        (
+            RecursiveShape::Former {
+                former: left_former,
+                level_args: left_levels,
+                arguments: left_arguments,
+            },
+            RecursiveShape::Former {
+                former: right_former,
+                level_args: right_levels,
+                arguments: right_arguments,
+            },
+        ) => {
+            left_former == right_former
+                && left_levels.len() == right_levels.len()
+                && left_levels
+                    .iter()
+                    .zip(right_levels)
+                    .all(|(left, right)| left.equiv(right))
+                && left_arguments.len() == right_arguments.len()
+                && left_arguments.iter().zip(right_arguments).all(
+                    |(left_argument, right_argument)| {
+                        optional_topology_equivalent(&left_argument.shape, &right_argument.shape)
+                    },
+                )
+        }
+        _ => false,
+    }
+}
+
+fn descriptors_equivalent(
+    env: &GlobalEnv,
+    base_ctx: &Context,
+    left_constructor: &ConstructorDecl,
+    right_constructor: &ConstructorDecl,
+    left: &[RecursiveArgumentShape],
+    right: &[RecursiveArgumentShape],
+) -> bool {
+    left.len() == right.len()
+        && left.iter().zip(right).all(|(left, right)| {
+            if left.position != right.position
+                || left.position >= left_constructor.args.len()
+                || right.position >= right_constructor.args.len()
+                || !topology_equivalent(&left.shape, &right.shape)
+            {
+                return false;
+            }
+            let mut field_ctx = base_ctx.clone();
+            for (left_prefix, right_prefix) in left_constructor.args[..left.position]
+                .iter()
+                .zip(&right_constructor.args[..right.position])
+            {
+                if !convert_type(env, &field_ctx, left_prefix, right_prefix) {
+                    return false;
+                }
+                field_ctx.push(left_prefix.clone());
+            }
+            convert_type(
+                env,
+                &field_ctx,
+                &left_constructor.args[left.position],
+                &right_constructor.args[right.position],
+            )
+        })
+}
+
+fn constructor_shapes_equivalent(
+    env: &GlobalEnv,
+    ctx: &Context,
+    left: &ConstructorDecl,
+    right: &ConstructorDecl,
+    d: GlobalId,
+    parameter_count: usize,
+) -> bool {
+    let Ok(left_shapes) = recursive_shapes(env, left, d, parameter_count) else {
+        return false;
+    };
+    let Ok(right_shapes) = recursive_shapes(env, right, d, parameter_count) else {
+        return false;
+    };
+    descriptors_equivalent(env, ctx, left, right, &left_shapes, &right_shapes)
+}
+
 fn assert_equivalent_shapes(
     env: &GlobalEnv,
     left: &ConstructorDecl,
@@ -41,12 +165,8 @@ fn assert_equivalent_shapes(
         convert_type(env, &ctx, &left.args[0], &right.args[0]),
         "property precondition failed: field types are not definitionally equal"
     );
-    let left_shapes =
-        recursive_shapes(env, left, d, parameter_count).expect("left recursive shape");
-    let right_shapes =
-        recursive_shapes(env, right, d, parameter_count).expect("right recursive shape");
     assert!(
-        recursive_shapes_equivalent(env, &ctx, &left_shapes, &right_shapes),
+        constructor_shapes_equivalent(env, &ctx, left, right, d, parameter_count),
         "{message}"
     );
 }
@@ -402,28 +522,22 @@ fn descriptor_equivalence_validates_dependent_telescope_prefixes_in_lockstep() {
         .expect("admitted family metadata")
         .constructors
         .clone();
-    let type_prefix =
-        recursive_shapes(&env, &constructors[0], d, 0).expect("Type-prefix recursive shape");
-    let equivalent_type_prefix = recursive_shapes(&env, &constructors[1], d, 0)
-        .expect("semilattice-equivalent Type-prefix recursive shape");
-    let omega_prefix =
-        recursive_shapes(&env, &constructors[2], d, 0).expect("Omega-prefix recursive shape");
     let ctx = Context::new();
 
     assert!(
-        recursive_shapes_equivalent(&env, &ctx, &type_prefix, &equivalent_type_prefix,),
+        constructor_shapes_equivalent(&env, &ctx, &constructors[0], &constructors[1], d, 0,),
         "convertible dependent prefixes must establish a shared field context"
     );
     assert!(
-        !recursive_shapes_equivalent(&env, &ctx, &type_prefix, &omega_prefix),
+        !constructor_shapes_equivalent(&env, &ctx, &constructors[0], &constructors[2], d, 0,),
         "non-convertible dependent prefixes must reject before field comparison"
     );
     assert!(
-        recursive_shapes_equivalent(&env, &ctx, &equivalent_type_prefix, &type_prefix,),
+        constructor_shapes_equivalent(&env, &ctx, &constructors[1], &constructors[0], d, 0,),
         "the shared dependent context must be valid in either comparison direction"
     );
     assert!(
-        !recursive_shapes_equivalent(&env, &ctx, &omega_prefix, &type_prefix),
+        !constructor_shapes_equivalent(&env, &ctx, &constructors[2], &constructors[0], d, 0,),
         "prefix rejection must not depend on which telescope is left"
     );
 }

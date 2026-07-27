@@ -24,7 +24,7 @@
 //! the sole structural admission test. The eliminator and ι handle the
 //! Π-abstracted IH and the λ-threaded recursive call (`14 §3.1`, `14 §7.7`).
 
-use crate::conv::{convert_type, normalize};
+use crate::conv::normalize;
 use crate::env::{ConstructorDecl, Context, GlobalEnv, InductiveDecl, ParameterPolarity};
 use crate::error::{KernelError, KernelResult};
 use crate::subst::{apply_args, shift, subst_levels, subst_outer, subst_tel, weaken};
@@ -345,17 +345,6 @@ pub fn recursive_args(
 #[derive(Clone, Debug)]
 pub struct RecursiveArgumentShape {
     pub position: usize,
-    /// The complete constructor field type from which `shape` was derived.
-    ///
-    /// Descriptor equivalence compares this term with kernel conversion, so
-    /// retained subterms are interpreted in their original dependent context
-    /// rather than compared as Rust syntax.
-    pub field_type: Term,
-    /// Constructor fields preceding this one, in telescope order.
-    ///
-    /// These extend the caller-supplied parameter context when comparing the
-    /// dependent `field_type`.
-    pub prior_field_types: Vec<Term>,
     pub shape: RecursiveShape,
 }
 
@@ -366,9 +355,9 @@ pub struct RecursiveArgumentShape {
 /// and applications of an admitted former through checked positive parameter
 /// positions. Field terms are normalized through the kernel's established
 /// terminating δ+β semantics before this structural classification.
-/// Definitional identity is exposed by [`recursive_shapes_equivalent`], not
-/// Rust structural equality: conversion also includes semantic level equality
-/// and type-directed rules that do not have a unique [`Term`] representative.
+/// Retained [`Term`] and [`Level`] values are semantic payloads, not Rust
+/// identity: normalization is not a canonical representative of conversion,
+/// so the descriptor deliberately does not implement `PartialEq`/`Eq`.
 /// A D-free field contributes no [`RecursiveArgumentShape`].
 #[derive(Clone, Debug)]
 pub enum RecursiveShape {
@@ -403,60 +392,6 @@ pub struct RecursiveFormerArgument {
 }
 
 impl RecursiveShape {
-    fn same_topology(&self, other: &RecursiveShape) -> bool {
-        match (self, other) {
-            (
-                RecursiveShape::Direct { index_exprs: left },
-                RecursiveShape::Direct { index_exprs: right },
-            ) => left.len() == right.len(),
-            (
-                RecursiveShape::Pi {
-                    domains: left_domains,
-                    body: left_body,
-                },
-                RecursiveShape::Pi {
-                    domains: right_domains,
-                    body: right_body,
-                },
-            ) => left_domains.len() == right_domains.len() && left_body.same_topology(right_body),
-            (
-                RecursiveShape::Sigma {
-                    domain: left_domain,
-                    codomain: left_codomain,
-                },
-                RecursiveShape::Sigma {
-                    domain: right_domain,
-                    codomain: right_codomain,
-                },
-            ) => {
-                optional_topology_eq(left_domain, right_domain)
-                    && optional_topology_eq(left_codomain, right_codomain)
-            }
-            (
-                RecursiveShape::Former {
-                    former: left_former,
-                    level_args: left_levels,
-                    arguments: left_arguments,
-                },
-                RecursiveShape::Former {
-                    former: right_former,
-                    level_args: right_levels,
-                    arguments: right_arguments,
-                },
-            ) => {
-                left_former == right_former
-                    && level_spines_equivalent(left_levels, right_levels)
-                    && left_arguments.len() == right_arguments.len()
-                    && left_arguments.iter().zip(right_arguments).all(
-                        |(left_argument, right_argument)| {
-                            optional_topology_eq(&left_argument.shape, &right_argument.shape)
-                        },
-                    )
-            }
-            _ => false,
-        }
-    }
-
     /// Number of syntactic motive leaves represented by this recipe.
     ///
     /// Runtime multiplicity is supplied by the containing value's topology:
@@ -492,25 +427,6 @@ impl RecursiveShape {
             }
             RecursiveShape::Sigma { .. } | RecursiveShape::Former { .. } => None,
         }
-    }
-}
-
-fn level_spines_equivalent(left: &[Level], right: &[Level]) -> bool {
-    left.len() == right.len()
-        && left
-            .iter()
-            .zip(right)
-            .all(|(left, right)| left.equiv(right))
-}
-
-fn optional_topology_eq(
-    left: &Option<Box<RecursiveShape>>,
-    right: &Option<Box<RecursiveShape>>,
-) -> bool {
-    match (left, right) {
-        (None, None) => true,
-        (Some(left), Some(right)) => left.same_topology(right),
-        _ => false,
     }
 }
 
@@ -656,55 +572,14 @@ pub fn recursive_shapes(
     parameter_count: usize,
 ) -> KernelResult<Vec<RecursiveArgumentShape>> {
     let mut shapes = Vec::new();
-    let mut prior_field_types = Vec::new();
     for (position, argument) in c.args.iter().enumerate() {
         if let ShapeDerivation::Recursive(shape) =
             derive_recursive_shape(env, argument, d, parameter_count)?
         {
-            shapes.push(RecursiveArgumentShape {
-                position,
-                field_type: argument.clone(),
-                prior_field_types: prior_field_types.clone(),
-                shape,
-            });
+            shapes.push(RecursiveArgumentShape { position, shape });
         }
-        prior_field_types.push(argument.clone());
     }
     Ok(shapes)
-}
-
-/// Compare recursive descriptors in the kernel's definitional-equality
-/// quotient.
-///
-/// Topology is compared structurally, including semantic [`Level::equiv`] for
-/// former instantiations. Each complete source field is compared with
-/// [`convert_type`], which checks every retained term in its original binder
-/// structure using the context- and type-aware conversion relation. Callers
-/// supply the context in which the constructor field telescope is interpreted.
-pub fn recursive_shapes_equivalent(
-    env: &GlobalEnv,
-    ctx: &Context,
-    left: &[RecursiveArgumentShape],
-    right: &[RecursiveArgumentShape],
-) -> bool {
-    left.len() == right.len()
-        && left.iter().zip(right).all(|(left, right)| {
-            if left.prior_field_types.len() != right.prior_field_types.len() {
-                return false;
-            }
-            let mut field_ctx = ctx.clone();
-            for (left_prefix, right_prefix) in
-                left.prior_field_types.iter().zip(&right.prior_field_types)
-            {
-                if !convert_type(env, &field_ctx, left_prefix, right_prefix) {
-                    return false;
-                }
-                field_ctx.push(left_prefix.clone());
-            }
-            left.position == right.position
-                && left.shape.same_topology(&right.shape)
-                && convert_type(env, &field_ctx, &left.field_type, &right.field_type)
-        })
 }
 
 /// The dependent eliminator's method type for constructor `k`:
