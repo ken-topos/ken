@@ -11,6 +11,27 @@ github: 41
 origin: charter backlog (#41); RE-GROUNDED as a live PX8 clause-(a) blocker by architect verdict evt_163mfgjs7fkh8 (2026-07-23); RE-SCOPED spec-first by architect ruling evt_xnkrzjy1c8br (2026-07-23)
 ---
 
+> ## ⭐⭐ 2026-07-27 — Phase 2 IS FRAMED, and it is NOT a separate WP
+>
+> **Phase 2 and [[NATIVE-HANDLE-CARRIER]] are ONE deliverable and close in ONE
+> merge.** The frame is `docs/program/wp/NATIVE-HANDLE-CARRIER.md` (owner
+> **Runtime**, size **M**), measured at `origin/main = 5404108a`.
+>
+> ⛔ **Do not frame or release Phase 2 separately.** The carrier fix is
+> meaningless without the fixture it unblocks, and the fixture cannot land
+> without the fix — the Architect ruled an honest partial inadmissible here
+> because the candidate *regresses* an already-GREEN native row. ⇒ Flip **both**
+> nodes on the same merge.
+>
+> ⭐ **The Phase 2 WIP is the frame's input**, and it needs no separate fold:
+> `f0eb65ce` is the **parent** of the carrier's `c07e63c2`, so `c07e63c2` alone
+> already carries the handle/admission impl. The text below says to "fold with
+> `f0eb65ce`" — that is a measured premise error; there is nothing to fold.
+>
+> ⚠ Both refs are durable on origin as `preserved/*`. They were **local-ref
+> only** until 2026-07-27; a handoff-gate "preserved at …" line is **not**
+> off-box durability.
+
 > ## ⚠ STATUS CORRECTED `active` → `draft` — 2026-07-25 (Steward, tracker honesty)
 >
 > **Nothing is building this, and its `depends_on` is unmet** (NATIVE-HANDLE-CARRIER (draft)). The tracker's own
