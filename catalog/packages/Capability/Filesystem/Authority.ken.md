@@ -13,8 +13,7 @@ proc capability_read
   read_bytes a cap path
 
 proc full_authority_write
-      (cap : Cap AFull) (path : Bytes)
-      (policy : CreatePolicy) (contents : Bytes)
+      (cap : Cap AFull) (path : Bytes) (policy : CreatePolicy) (contents : Bytes)
     : FS AFull (Result FileError Unit)
     visits [FS] =
   write_file AFull cap path policy contents
