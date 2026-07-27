@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-27 13:56:42Z — from 102 issue file(s) in `docs/program/issues/`.
+2026-07-27 14:14:30Z — from 103 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -138,6 +138,7 @@ the committed file matches the generator's output.
 | `SRC-ATTEST` | squash-stable whole-source attestation + fresh merge-result authorization | merged | doc | M | none | — |
 | `STR-BIJ-TEST-CARRIER` | The AC2 reverse-direction test claims a universal inverse and its sole operand is an NFC fixed point — it is green under the correct law AND under the false one it pins | ready | language | S | none | — |
 | `STR-BIJ` | the String/List Char 'bijection' over-claim (adversary A1 + A2) | merged | spec-enclave | S | none | https://github.com/swe-toolkit/ken/pull/1096 |
+| `STR-NFC-CONSTRUCTION` | NFC-at-construction is normative and unimplemented: all three `EvalVal::Str` ingresses store the raw string, so `char_length`/`byte_length`/`s2l`/`==` observe unnormalized values and the interp carrier disagrees with the runtime carrier | draft | language | L | none | — |
 | `V3-RESIDUAL` | V3's suite has FOUR assertion-free placeholder tests carrying ordinary names — `disproved_carries_countermodel` asserts nothing, passes, and reads in cargo output exactly like a real pin | ready | verify | L | G2-G3 | — |
 | `VIS-BR-LITERAL` | visibility walk: raw-string prefixes br and cr are unrecognized by the literal scanner | merged | runtime | XS | none | — |
 
@@ -191,6 +192,7 @@ is itself not yet `merged`/`closed`:
 - `RT-FNSPLIT-B2O-CHECK` blocked by `RT-FNSPLIT-B2F` (status: ready)
 - `RT-FNSPLIT-C1` blocked by `RT-VALUE-TOTALITY` (status: active)
 - `RT-SCALE-B` blocked by `RT-FNSPLIT-B2F` (status: ready)
+- `STR-NFC-CONSTRUCTION` blocked by `STR-BIJ-TEST-CARRIER` (status: ready)
 
 ## Gate progress
 
