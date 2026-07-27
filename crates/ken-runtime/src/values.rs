@@ -15,13 +15,19 @@
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::fmt;
 
 /// A Ken value.  Scalars are immediate; compounds are content-addressed.
 ///
 /// ⛔ `Clone` is **not** derived — see the hand-written iterative
 /// [`Clone`] impl below. The derived one recursed through the nested child
-/// collections and overflowed the host stack on a deep value; `Drop` has the
-/// same hazard and the same treatment.
+/// collections and overflowed the host stack on a deep value; `Drop` and
+/// [`fmt::Debug`] have the same hazard and the same treatment.
+///
+/// ⛔ **`Debug` is not derived either** (`AC-V11`), and that is the one most
+/// easily re-added by reflex: a `#[derive(Debug)]` here compiles, reads as
+/// harmless, and silently restores a host-recursive traversal reachable from
+/// every `{:?}` in a panic handler or log line.
 ///
 /// ⚠ The recursive **child positions** of this enum (`args`, `fields`,
 /// `elements`, and `Map`'s entry values) are governed by the closed allow-list
@@ -127,7 +133,6 @@ use std::collections::BTreeSet;
 /// assert_eq!(w, CanonicalWitness::of(&v));
 /// assert_ne!(w, CanonicalWitness::of(&Value::Bool(true)));
 /// ```
-#[derive(Debug)]
 pub enum Value {
     // --- immediate scalars (§1, §5 table) ---
     Bool(bool),
@@ -464,5 +469,238 @@ impl Clone for Value {
 
         done.pop()
             .expect("the traversal assembles exactly one root clone")
+    }
+}
+
+/// One unit of pending rendering work for the iterative [`fmt::Debug`] impl
+/// (`AC-V11` / `AC-P3a`).
+///
+/// ⭐ **This is P1's *encoder* shape, deliberately — not `Clone`'s.** The three
+/// existing traversals are not interchangeable, and picking the wrong one to
+/// mirror would have cost a postorder fold this rendering does not need:
+///
+/// | traversal | receiver | needs a `Finish` fold? |
+/// |---|---|---|
+/// | `Drop` | `&mut self`, destructive | no — plain LIFO |
+/// | `Clone` | `&self`, **constructive** | **yes** — a parent cannot be built before its children |
+/// | `canonical::encode_canonical` | `&self`, **streaming emit** | no — headers are length/arity-prefixed |
+/// | **this** | `&self`, **streaming emit** | **no** — see below |
+///
+/// A parent's rendered text never depends on a child's, exactly as with the
+/// canonical encoder: the opening text is written on the way *down*, and the
+/// closing delimiter is scheduled as a pending literal that pops after the
+/// children. So one explicit work stack replaces host recursion with **no
+/// completed-children buffer** — the `Lit` arm is what the encoder's
+/// [`Raw`](crate::canonical) arm is for it.
+enum DebugStep<'a> {
+    /// Render this value's own header, then push its children.
+    Val(&'a Value),
+    /// Emit this literal delimiter text. Scheduled *before* a node's children
+    /// are pushed, so LIFO pops it *after* them — that is what closes brackets
+    /// without a postorder fold.
+    Lit(&'static str),
+    /// Emit a `Map` key's already-canonical bytes. Flat: keys are `Vec<u8>`,
+    /// never `Value`, so this arm cannot recurse on value depth.
+    Key(&'a [u8]),
+}
+
+/// Push `kids` so they pop in declaration order, comma-separated.
+///
+/// ⚠ The reversal is the same LIFO discipline `Clone` and the encoder document:
+/// `Vec::pop` takes the most recently pushed, so pushing in reverse restores
+/// declaration order on the way out.
+fn push_debug_children<'a>(kids: &'a [Value], stack: &mut Vec<DebugStep<'a>>) {
+    for (i, kid) in kids.iter().enumerate().rev() {
+        stack.push(DebugStep::Val(kid));
+        if i > 0 {
+            stack.push(DebugStep::Lit(", "));
+        }
+    }
+}
+
+/// Write `value`'s own opening text, then push its children and its closer.
+///
+/// ⛔ **Exhaustive over every variant with no `_` arm** — the same discipline
+/// `detach_children`, `rebuild` and `canonical::encode_header` carry, and for
+/// the same reason: a new variant carrying a child position fails to compile
+/// until it is handled here, so `Debug` cannot silently regain a recursive leg.
+///
+/// ⚠ **Honest residual:** exhaustiveness forces a *new variant* to get an arm;
+/// it does not force that arm to route its children through `stack` rather than
+/// recursing. That gap is closed behaviourally instead, by the depth controls in
+/// `tests/value_depth_totality.rs`, which render at `D` out of process and
+/// assert the output actually scales with `D`.
+fn debug_header<'a>(
+    value: &'a Value,
+    f: &mut fmt::Formatter<'_>,
+    stack: &mut Vec<DebugStep<'a>>,
+) -> fmt::Result {
+    match value {
+        // --- child-bearing compounds: opening text now, closer scheduled ---
+        Value::Constructor {
+            constructor_id,
+            args,
+        } => {
+            write!(f, "Constructor {{ constructor_id: {constructor_id}, args: [")?;
+            stack.push(DebugStep::Lit("] }"));
+            push_debug_children(args, stack);
+            Ok(())
+        }
+
+        Value::Record { type_id, fields } => {
+            write!(f, "Record {{ type_id: {type_id}, fields: [")?;
+            stack.push(DebugStep::Lit("] }"));
+            push_debug_children(fields, stack);
+            Ok(())
+        }
+
+        Value::Array {
+            elem_type_id,
+            elements,
+        } => {
+            write!(f, "Array {{ elem_type_id: {elem_type_id}, elements: [")?;
+            stack.push(DebugStep::Lit("] }"));
+            push_debug_children(elements, stack);
+            Ok(())
+        }
+
+        Value::Map {
+            key_type_id,
+            value_type_id,
+            entries,
+        } => {
+            write!(
+                f,
+                "Map {{ key_type_id: {key_type_id}, value_type_id: {value_type_id}, entries: {{"
+            )?;
+            stack.push(DebugStep::Lit("} }"));
+            for (i, (key, val)) in entries.iter().enumerate().rev() {
+                stack.push(DebugStep::Val(val));
+                stack.push(DebugStep::Lit(": "));
+                stack.push(DebugStep::Key(key.as_slice()));
+                if i > 0 {
+                    stack.push(DebugStep::Lit(", "));
+                }
+            }
+            Ok(())
+        }
+
+        // --- childless: rendered flat, cannot recurse on value depth ---
+        // `BigInt`/`BigDecimal` hold limbs, `String`/`Bytes` hold flat data,
+        // `Set` holds already-canonical element bytes, and the scalars are
+        // immediate. Each delegates to the derived `Debug` of a non-`Value` type.
+        Value::BigInt { sign, limbs } => {
+            write!(f, "BigInt {{ sign: {sign:?}, limbs: {limbs:?} }}")
+        }
+        Value::BigDecimal {
+            sign,
+            coefficient,
+            exponent,
+        } => write!(
+            f,
+            "BigDecimal {{ sign: {sign:?}, coefficient: {coefficient:?}, exponent: {exponent:?} }}"
+        ),
+        Value::String(s) => write!(f, "String({s:?})"),
+        Value::Bytes(b) => write!(f, "Bytes({b:?})"),
+        Value::Set {
+            elem_type_id,
+            elements,
+        } => write!(
+            f,
+            "Set {{ elem_type_id: {elem_type_id}, elements: {elements:?} }}"
+        ),
+        Value::Bool(v) => write!(f, "Bool({v:?})"),
+        Value::Char(v) => write!(f, "Char({v:?})"),
+        Value::Float(v) => write!(f, "Float({v:?})"),
+        Value::Float32(v) => write!(f, "Float32({v:?})"),
+        Value::Int8(v) => write!(f, "Int8({v:?})"),
+        Value::Int16(v) => write!(f, "Int16({v:?})"),
+        Value::Int32(v) => write!(f, "Int32({v:?})"),
+        Value::Int64(v) => write!(f, "Int64({v:?})"),
+        Value::UInt8(v) => write!(f, "UInt8({v:?})"),
+        Value::UInt16(v) => write!(f, "UInt16({v:?})"),
+        Value::UInt32(v) => write!(f, "UInt32({v:?})"),
+        Value::UInt64(v) => write!(f, "UInt64({v:?})"),
+        Value::SmallInt(v) => write!(f, "SmallInt({v:?})"),
+        Value::SmallDecimal {
+            coefficient,
+            exponent,
+        } => write!(
+            f,
+            "SmallDecimal {{ coefficient: {coefficient:?}, exponent: {exponent:?} }}"
+        ),
+        Value::Unknown => f.write_str("Unknown"),
+    }
+}
+
+/// Iterative rendering (`AC-V11`).
+///
+/// ⛔ **`Debug` is not derived**, because the derived impl recursed through the
+/// nested child collections and aborted the process on a deep value. That is a
+/// worse failure than it first reads: every *other* deep traversal left on this
+/// carrier is reached from a deliberate call — an identity comparison, an encode
+/// — whereas `{:?}` is reached from a **panic handler, a log line, or an
+/// `assert_eq!` failure message**. ⇒ The abort fires while a maintainer is
+/// diagnosing something else, and it destroys the diagnostic being produced.
+///
+/// ⭐ **The mechanism, which is the claim — not any particular depth.** The only
+/// stack frames here are `fmt` → `debug_header`, one deep, for *every* node: a
+/// node's children are pushed onto the heap-allocated `stack` and popped by the
+/// same loop, never visited by a nested call. Host-stack usage is therefore
+/// O(1) in value depth, and depth is bounded by allocation — an ordinary
+/// resource boundary — exactly as it is for `Clone`, `Drop` and the canonical
+/// encoder. ⛔ There is no `MAX_DEPTH`.
+///
+/// ⚠ Corroboration, **not** the pin: the landed derived impl was measured dying
+/// of stack overflow at `D = 131072` out of process, and the replacement returns
+/// at that same `D`. A finite probe supports a structural claim; it does not
+/// constitute one.
+///
+/// ⚠ **The rendered text is unspecified and must not be pinned.** It is kept
+/// byte-identical to the derived rendering for `{:?}` as a courtesy to existing
+/// logs, but the claim under test is *does it return*, not *what does it print*.
+///
+/// ⛔ **One deliberate, stated difference: `{:#?}` is no longer pretty-printed.**
+/// [`fmt::Formatter::alternate`] is not consulted, so the alternate flag renders
+/// the same single-line text as `{:?}`. This is a **degradation, not a
+/// regression**: before this impl, `{:#?}` on a deep value aborted the process
+/// rather than printing anything at all.
+///
+/// ⛔ **This is NOT because honoring `alternate` is impossible here** — it is
+/// not. Carrying a depth field on each [`DebugStep`] and pushing indent literals
+/// would do it; nothing about the worklist precludes it. An earlier draft of
+/// this comment argued impossibility, and that claim was false.
+///
+/// ⭐ The real ground, ruled by the Steward on `RT-VALUE-TOTALITY-P3`: this is a
+/// capability the rewrite **did not carry forward, on a surface with no
+/// consumers**. Re-measured independently at `0031dd6a`, excluding `local/` and
+/// `target/`: **no call site anywhere in the repo requests alternate `Debug`
+/// formatting**, and **no `.rs` file under `crates/` consults
+/// `Formatter::alternate`** — the one other hand-written `Debug` in this crate
+/// (`boundary_value.rs`) does not either. So the degradation is unconsumed and
+/// consistent with workspace precedent.
+///
+/// ⚠ If you re-run those probes on *this* tree they will not come back empty:
+/// this comment is itself prose containing the pattern. Measure at a commit
+/// without it, or match call sites rather than the raw token — the same
+/// grep-fires-on-the-prose-that-denies-it trap the fleet has hit before.
+///
+/// ⚠ What *would* be a mistake is restoring a pretty layout by guesswork:
+/// reconstructing the derive's exact newline and indent placement has no
+/// verifiable oracle short of a snapshot, and inventing a *different* layout
+/// would mint new unspecified surface during a totality WP. If pretty-printing
+/// is wanted back, it is a separate change that must first decide whether the
+/// layout is specified.
+impl fmt::Debug for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut stack: Vec<DebugStep<'_>> = vec![DebugStep::Val(self)];
+        while let Some(step) = stack.pop() {
+            match step {
+                DebugStep::Lit(text) => f.write_str(text)?,
+                DebugStep::Key(bytes) => write!(f, "{bytes:?}")?,
+                DebugStep::Val(value) => debug_header(value, f, &mut stack)?,
+            }
+        }
+        Ok(())
     }
 }
