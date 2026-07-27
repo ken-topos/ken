@@ -5534,6 +5534,18 @@ impl<'a> Lowering<'a> {
                 resource_held,
                 resource_expected_kind,
                 resource_actual_kind,
+                [
+                    wire.resource_error_closed,
+                    wire.resource_error_malformed,
+                    wire.resource_error_right_not_held,
+                    wire.resource_error_release_failed,
+                    wire.resource_error_kind_mismatch,
+                    wire.resource_error_buffer_limit,
+                    wire.resource_error_invalid_offset,
+                    wire.resource_error_invalid_bounds,
+                    wire.resource_error_no_progress,
+                    wire.resource_error_allocation_failed,
+                ],
                 wire.resource_error_reply_schema,
                 wire.resource_kind_fs_handle,
                 wire.resource_kind_buffer,
@@ -5657,6 +5669,9 @@ impl<'a> Lowering<'a> {
                         ],
                     })
                 };
+                let checked_resource_tag = |wire_tag: u64| {
+                    i64::try_from(wire_tag).expect("resource error tag fits i64") + 1
+                };
                 Lowered::DynamicConstructor(DynamicConstructorV1 {
                     discriminator: surface_tag,
                     alternatives: vec![
@@ -5666,22 +5681,22 @@ impl<'a> Lowering<'a> {
                             fields: vec![surface_io_error.clone()],
                         },
                         DynamicConstructorAlternativeV1 {
-                            tag: 1,
+                            tag: checked_resource_tag(wire.resource_error_closed),
                             constructor: self.process_symbols.resource_closed.clone(),
                             fields: Vec::new(),
                         },
                         DynamicConstructorAlternativeV1 {
-                            tag: 2,
+                            tag: checked_resource_tag(wire.resource_error_malformed),
                             constructor: self.process_symbols.resource_malformed.clone(),
                             fields: Vec::new(),
                         },
                         DynamicConstructorAlternativeV1 {
-                            tag: 3,
+                            tag: checked_resource_tag(wire.resource_error_right_not_held),
                             constructor: self.process_symbols.resource_right_not_held.clone(),
                             fields: vec![resource_required_int, resource_held_int],
                         },
                         DynamicConstructorAlternativeV1 {
-                            tag: 4,
+                            tag: checked_resource_tag(wire.resource_error_release_failed),
                             constructor: self.process_symbols.resource_release_failed.clone(),
                             fields: vec![
                                 resource_kind_value(resource_kind),
@@ -5696,7 +5711,7 @@ impl<'a> Lowering<'a> {
                             ],
                         },
                         DynamicConstructorAlternativeV1 {
-                            tag: 5,
+                            tag: checked_resource_tag(wire.resource_error_kind_mismatch),
                             constructor: self.process_symbols.resource_kind_mismatch.clone(),
                             fields: vec![
                                 resource_kind_value(resource_expected_kind),
@@ -5704,28 +5719,28 @@ impl<'a> Lowering<'a> {
                             ],
                         },
                         DynamicConstructorAlternativeV1 {
-                            tag: 6,
+                            tag: checked_resource_tag(wire.resource_error_buffer_limit),
                             constructor: self.process_symbols.resource_buffer_limit.clone(),
                             fields: Vec::new(),
                         },
                         DynamicConstructorAlternativeV1 {
-                            tag: 7,
-                            constructor: self.process_symbols.resource_allocation_failed.clone(),
-                            fields: Vec::new(),
-                        },
-                        DynamicConstructorAlternativeV1 {
-                            tag: 8,
+                            tag: checked_resource_tag(wire.resource_error_invalid_offset),
                             constructor: self.process_symbols.resource_invalid_offset.clone(),
                             fields: Vec::new(),
                         },
                         DynamicConstructorAlternativeV1 {
-                            tag: 9,
+                            tag: checked_resource_tag(wire.resource_error_invalid_bounds),
                             constructor: self.process_symbols.resource_invalid_bounds.clone(),
                             fields: Vec::new(),
                         },
                         DynamicConstructorAlternativeV1 {
-                            tag: 10,
+                            tag: checked_resource_tag(wire.resource_error_no_progress),
                             constructor: self.process_symbols.resource_no_progress.clone(),
+                            fields: Vec::new(),
+                        },
+                        DynamicConstructorAlternativeV1 {
+                            tag: checked_resource_tag(wire.resource_error_allocation_failed),
+                            constructor: self.process_symbols.resource_allocation_failed.clone(),
                             fields: Vec::new(),
                         },
                     ],
