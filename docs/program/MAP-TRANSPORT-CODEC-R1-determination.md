@@ -31,7 +31,9 @@ The search covered the current tracked `spec/`, `catalog/`, `examples/`,
 the current strategy, roadmap, and program-of-work documents. Historical diary
 entries and closed WP frames were not treated as consumers. The live R1 frame
 and node were excluded from the candidate search because they restate the
-questions being measured.
+questions being measured. The exact broad command includes the fixed input's
+`SPEC-STORE-SPLIT` frame solely as the known-present positive-control fixture;
+its hits are reported separately and are not classified as consumers.
 
 The first pass searched for wants rather than only codec terminology:
 
@@ -41,12 +43,14 @@ git grep -nEI \
   -- spec catalog examples crates conformance docs/adr docs/design \
      docs/program/issues docs/program/01-strategy.md \
      docs/program/02-roadmap.md docs/program/03-program-of-work.md \
+     docs/program/wp/SPEC-STORE-SPLIT-split-durable-bytes-from-in-process-sharing.md \
      ':!docs/program/issues/MAP-TRANSPORT-CODEC.md'
 ```
 
-That broad pass returned 391 lines. Each hit was classified as a mechanism,
-test, design statement, or consumer requirement. Two narrower passes then
-tested the candidate-specific claims:
+That exact broad pass returned 414 lines: 391 candidate-corpus hits and 23
+positive-control-fixture hits. The 391 candidate hits were each classified as
+a mechanism, test, design statement, or consumer requirement. Two narrower
+passes then tested the candidate-specific claims:
 
 ```text
 git grep -nEI \
@@ -71,9 +75,8 @@ characters of `to_list` or `set_to_list`.
 
 ### Positive control
 
-The broad method located the known OQ-Space cross-space value-passing path.
-Replaying the same expression against the fixed input's tracked
-`SPEC-STORE-SPLIT` frame produced the requested positive control:
+The documented exact broad command itself located the known OQ-Space
+cross-space value-passing and dedup path. Its actual output included:
 
 ```text
 docs/program/wp/SPEC-STORE-SPLIT-split-durable-bytes-from-in-process-sharing.md:207:`spec/90-open-decisions.md` `OQ-Space` reads: **`Transport:` content-addressed
