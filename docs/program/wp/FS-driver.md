@@ -363,7 +363,7 @@ ambient file-read sits on `main` transiently between merges.
 
 - **Gate:** /spec + /conformance touching → spec enclave elaborates semantics +
   capability model on this WP branch (may split into a WP series), merges to
-  `main` via the Integrator, then Runtime/Sec are kicked. Architect (totality +
+  `main` via the Steward, then Runtime/Sec are kicked. Architect (totality +
   kernel-untouched + capability soundness) + Spec review (conformance-validator) +
   team QA + CI.
 - **Suggested decomposition (enclave's call — propose the series back to

@@ -226,6 +226,6 @@ Conformance-validator reviews only if the build changes conformance. The
 expected build should not edit `conformance/`; it should make the existing
 red-until-built CAT-5 seed green through package/test implementation.
 
-Integrator merge uses the normal build/test, conformance, clean-room
+Steward merge uses the normal build/test, conformance, clean-room
 provenance, and path-guard gates. After merge, Language posts implementer, QA,
 and leader retros before Steward closes CAT-5 build.

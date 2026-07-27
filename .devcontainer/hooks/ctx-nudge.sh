@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ken context-awareness — PreToolUse nudge (in-house; no external dependency).
 #
-# Nudges ONLY the self-compacting singletons (steward/architect/integrator/
-# librarian) — the roles that compact via request_context_reset. Team roles
+# Nudges ONLY the self-compacting singletons (steward/architect/librarian) —
+# the roles that compact at their own task boundaries. Team roles
 # compact via `moot` at WP boundaries, so they are gated out (silent no-op);
 # they still get the statusline readout, just no nudge.
 #
@@ -23,7 +23,7 @@ if [ -z "$role" ]; then
           | grep -oE '\.worktrees/[^/]+' | head -1 | sed 's#.*/##')"
 fi
 case "$role" in
-  steward|architect|integrator|librarian) ;;
+  steward|architect|librarian) ;;
   *) exit 0 ;;    # not a self-compacting singleton → no nudge
 esac
 

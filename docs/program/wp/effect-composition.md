@@ -178,7 +178,7 @@ State-and-FS no-regression face; the totality face.
    the surface form (D2), conformance-validator D5. If D2's
    surface-expressibility forks the design (new surface syntax) → **route back
    to Steward → operator.**
-3. **Elaborated spec merges to `main`** (spec-leader → Integrator).
+3. **Elaborated spec merges to `main`** (spec-leader → Steward).
 4. **Runtime build** — ⛔ handoff gate first (compact the team, unconditional).
    Kick off leader-only. One branch, one merge Decision. Gate: Architect
    soundness + Runtime-QA + Verify-QA + CI.

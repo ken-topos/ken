@@ -295,9 +295,9 @@ entry-point path** (manifest → minted-exactly cap → `apply` → `run_io` →
    **enclave-owned**, not left to the build model. **If the manifest mechanism
    surfaces a genuine sub-fork** (e.g. it needs new surface syntax that itself
    forks the design), **route back to Steward → operator** — do not pick.
-2. Gate Architect + CV → merge the elaborated frame/spec to `main` (Integrator).
+2. Gate Architect + CV → merge the elaborated frame/spec to `main` (Steward).
 3. **Runtime build** (single team, single branch): D1–D5, kernel-clean, one merge
-   Decision (Runtime-leader → Integrator), gate Architect + Runtime-QA + Verify-QA
+   Decision (Runtime-leader → Steward), gate Architect + Runtime-QA + Verify-QA
    + CI. Compact-gate the team first (§2c handoff gate, unconditional for build
    teams).
 

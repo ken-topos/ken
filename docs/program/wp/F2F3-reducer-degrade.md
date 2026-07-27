@@ -91,6 +91,6 @@ degrade rule — a defining behavior, non-circular. F3's oracle is the
 ## Flow (thin — COORDINATION §9)
 
 `runtime-leader → runtime-implementer → runtime-qa → Architect (soundness) + CV
-(conformance) → Integrator`. One pass each. A mid-WP soundness fork → Architect;
+(conformance) → Steward`. One pass each. A mid-WP soundness fork → Architect;
 a conformance fork → CV; a scope/lane fork → Steward. No new parties, no
 verbatim relays, no cc-the-room.

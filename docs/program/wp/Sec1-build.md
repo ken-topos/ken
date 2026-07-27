@@ -134,5 +134,5 @@ semantics → Spec; trust-model/TCB → Architect. **Clean-room:** landed
 (`CLEAN-ROOM.md`). **Mechanism:** rebase → cut `wp/Sec1-build` off `origin/main`
 → assign implementer → ring → QA (verify BOTH trusted surfaces' flip cases) →
 diff-scope (crates-only ⇒ Architect + CI, the trust model is load-bearing so
-Architect is required regardless) → `propose_decision` → standalone Integrator
+Architect is required regardless) → `propose_decision` → standalone Steward
 `git_request` after the vote → retros.

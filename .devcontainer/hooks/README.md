@@ -24,8 +24,8 @@ surface that carries it is the **statusLine** stdin JSON
   climb re-nudges.
 
 **Role-scoped:** the nudge fires **only for the self-compacting singletons**
-(`steward`, `architect`, `integrator`, `librarian` — they compact via
-`request_context_reset`). Team roles compact via `moot` at WP boundaries, so
+(`steward`, `architect`, `librarian` — they compact at their own task
+boundaries). Team roles compact via `moot` at WP boundaries, so
 they are gated out (they still get the harmless statusline readout, no nudge).
 Role is read from `CONVO_ROLE`, falling back to the worktree name in `.cwd`.
 

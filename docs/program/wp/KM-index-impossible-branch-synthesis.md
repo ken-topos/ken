@@ -220,7 +220,7 @@ Kernel owns D0. If D0 selects route 1 or route 2 with a kernel/conversion diff,
 route:
 
 ```text
-kernel-implementer -> kernel-qa -> Architect -> Integrator
+kernel-implementer -> kernel-qa -> Architect -> Steward
 ```
 
 If D0 selects an elaborator-only implementation after Architect approval, route

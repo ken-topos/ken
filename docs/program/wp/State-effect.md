@@ -106,7 +106,7 @@ this line*.
 ## Sequencing
 
 - **Gate:** /spec + /conformance touching → spec enclave elaborates the
-  semantics on this WP branch, merges to `main` via the Integrator, then the
+  semantics on this WP branch, merges to `main` via the Steward, then the
   build teams are kicked. Architect soundness (purity/totality + kernel-untouched)
   + Spec review (conformance-validator) + team QA + CI.
 - **Lane:** Runtime (owns the `ITree` interpreter/handler) + Language (surface).

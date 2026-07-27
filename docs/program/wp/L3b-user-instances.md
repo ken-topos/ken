@@ -113,7 +113,7 @@ dictionary or the VC is green-vs-green.
 2. **Team Language** builds the wiring (collection ops → `instance_search` for
    user types) against the merged conformance; **QA** producer-greps the real
    resolver call (not a built-in table) + the emitted `sort` VC; build merge
-   Decision on **Architect soundness**. Integrator merges.
+   Decision on **Architect soundness**. Steward merges.
 3. Retros in → Steward. Unblocks L8 (stdlib over user-keyed collections) and the
    "test language functionality" phase.
 

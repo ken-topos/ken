@@ -165,4 +165,4 @@ under-determined for implementation, that is a **`question` to the Spec leader**
   Architect. The Architect reviews the merge Decision (where the `60-security`
   /design invariants are checked) — no pre-review edge.
 - **Done:** acceptance §5 met + retro in (COORDINATION §10). Hand `merge_ready`
-  to the Integrator as `message_type: git_request` (Bug 13 mapping).
+  to the Steward as `message_type: git_request` (Bug 13 mapping).

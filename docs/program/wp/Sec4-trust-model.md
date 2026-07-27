@@ -175,7 +175,7 @@ the verdict is green-vs-green and does not net the claim.
    authorship-independence, and the trusting-trust invariant are the
    soundness-critical faces; AC2 + AC4 are the untrusted-omission nets); **CV —
    Spec** on `/spec §64`; **spec-author — Fidelity** on the `/conformance` seed.
-3. Integrator merges on green (3-way merge / rebase onto current `main`; spec +
+3. Steward merges on green (3-way merge / rebase onto current `main`; spec +
    conformance + docs only, no crates — clean disjoint paths).
 4. Retros in → Steward. This closes the machine-checkable G5 security
    deliverable; the Steward then surfaces the external-audit-report governance

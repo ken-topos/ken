@@ -106,7 +106,7 @@ fault-line:
 - Branch `wp/map-convoy-idiom` off `origin/main`. Steward runs the Handoff Gate
   (compact spec-leader + spec-author + CV, verify ctx→0), then routes **spec-leader
   only** (§9). Enclave elaborates on the branch; spec-leader opens the merge
-  Decision (touches `/spec` → Spec paths) → Integrator merges to `main`.
+  Decision (touches `/spec` → Spec paths) → Steward merges to `main`.
 - **On merge:** Steward signals Foundation to resume `map-verified-laws` on the
   held branch (rebased onto the new `main`) and build **Unit 1** (law 4 + non-
   inductive laws) as one green unit. Held helpers ride.

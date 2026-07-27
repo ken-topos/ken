@@ -284,7 +284,7 @@ authority-non-laundering gate placement is his cert, my face its
 executable discriminator. On
 elaboration-complete, spec-leader assembles and opens the merge Decision;
 **both** the Architect's soundness vote and my Spec-fidelity vote must be
-recorded, and the Decision `resolved`, before the Integrator merges
+recorded, and the Decision `resolved`, before the Steward merges
 (COORDINATION §14). At vote time I reconcile every structural token — the
 `resp_sum` reduction shape, the `injectL`→`InL` tag, the peel's
 effect-blindness — against the
