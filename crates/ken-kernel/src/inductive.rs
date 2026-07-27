@@ -137,8 +137,12 @@ fn parameter_index(
     prior_constructor_args: usize,
     parameter_count: usize,
 ) -> Option<usize> {
-    let relative = var.checked_sub(local_depth + prior_constructor_args)?;
-    (relative < parameter_count).then_some(parameter_count - 1 - relative)
+    let cutoff = local_depth.checked_add(prior_constructor_args)?;
+    let relative = var.checked_sub(cutoff)?;
+    if relative >= parameter_count {
+        return None;
+    }
+    Some(parameter_count - 1 - relative)
 }
 
 struct ParameterPolarityDeriver<'a> {
@@ -158,6 +162,15 @@ impl ParameterPolarityDeriver<'_> {
             Term::Sigma(dom, cod) => {
                 self.visit(local_depth, pol, dom);
                 self.visit(local_depth + 1, pol, cod);
+            }
+            Term::Lam(dom, body) => {
+                self.visit(local_depth, Pol::Unknown, dom);
+                self.visit(local_depth + 1, Pol::Unknown, body);
+            }
+            Term::Let { ty, val, body } => {
+                self.visit(local_depth, Pol::Unknown, ty);
+                self.visit(local_depth, Pol::Unknown, val);
+                self.visit(local_depth + 1, Pol::Unknown, body);
             }
             Term::App(_, _) => {
                 let (head, args) = peel_app(term);
@@ -194,6 +207,9 @@ impl ParameterPolarityDeriver<'_> {
             | Term::Const { .. }
             | Term::Constructor { .. } => {}
             _ => {
+                // Pi, Sigma, Lam, and Let are Term's complete binder set and
+                // have depth-aware arms above. Every remaining child stays at
+                // the current depth.
                 // Any parameter below a type form not covered by the D1a
                 // grammar is unknown, hence not declared strictly positive.
                 for child in term.children() {

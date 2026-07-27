@@ -60,6 +60,11 @@ fn admission_records_positive_and_non_positive_parameters() {
     // of a particular family name.
     let mut env = GlobalEnv::new();
     let bool_id = declare_bool(&mut env);
+    let false_id = env
+        .inductive(bool_id)
+        .expect("Bool declaration recorded")
+        .constructors[1]
+        .id;
     let list_id = declare_list(&mut env);
     let contra_id = declare_inductive(&mut env, |_| InductiveSpec {
         level_params: vec![U],
@@ -103,6 +108,52 @@ fn admission_records_positive_and_non_positive_parameters() {
         }],
     })
     .expect("foreign carrier use remains admissible while its polarity fails closed");
+    let unknown_double_negative_id = declare_inductive(&mut env, |_| InductiveSpec {
+        level_params: vec![U],
+        params: vec![Term::Type(level_u())],
+        indices: vec![],
+        level: level_u(),
+        constructors: vec![CtorSpec {
+            args: vec![Term::app(
+                Term::indformer(list_id, vec![level_u()]),
+                Term::pi(
+                    Term::pi(Term::var(0), Term::indformer(bool_id, vec![])),
+                    Term::indformer(bool_id, vec![]),
+                ),
+            )],
+            target_indices: vec![],
+        }],
+    })
+    .expect("unknown remains absorbing across multiple polarity flips");
+    let ordinary_double_negative_id = declare_inductive(&mut env, |_| InductiveSpec {
+        level_params: vec![U],
+        params: vec![Term::Type(level_u())],
+        indices: vec![],
+        level: level_u(),
+        constructors: vec![CtorSpec {
+            args: vec![Term::pi(
+                Term::pi(Term::var(0), Term::indformer(bool_id, vec![])),
+                Term::indformer(bool_id, vec![]),
+            )],
+            target_indices: vec![],
+        }],
+    })
+    .expect("ordinary double-negative parameter use is strictly positive");
+    let let_hidden_negative_id = declare_inductive(&mut env, |_| InductiveSpec {
+        level_params: vec![U],
+        params: vec![Term::Type(level_u())],
+        indices: vec![],
+        level: level_u(),
+        constructors: vec![CtorSpec {
+            args: vec![Term::Let {
+                ty: Box::new(Term::indformer(bool_id, vec![])),
+                val: Box::new(Term::constructor(false_id, vec![])),
+                body: Box::new(Term::pi(Term::var(1), Term::indformer(bool_id, vec![]))),
+            }],
+            target_indices: vec![],
+        }],
+    })
+    .expect("the reducible let field type A -> Bool is admitted");
 
     assert_eq!(
         env.inductive(list_id)
@@ -132,6 +183,46 @@ fn admission_records_positive_and_non_positive_parameters() {
         vec![ParameterPolarity::NonPositive],
         "unknown carrier positions must absorb nested polarity flips"
     );
+    assert_eq!(
+        env.inductive(unknown_double_negative_id)
+            .expect("recorded unknown double-negative use")
+            .parameter_polarities,
+        vec![ParameterPolarity::NonPositive],
+        "unknown must remain absorbing across every nested Pi"
+    );
+    assert_eq!(
+        env.inductive(ordinary_double_negative_id)
+            .expect("recorded ordinary double-negative use")
+            .parameter_polarities,
+        vec![ParameterPolarity::StrictlyPositive],
+        "ordinary contravariance must retain its two-flip positive result"
+    );
+    assert_eq!(
+        env.inductive(let_hidden_negative_id)
+            .expect("recorded let-hidden negative use")
+            .parameter_polarities,
+        vec![ParameterPolarity::NonPositive],
+        "let bodies must shift de Bruijn depth before classifying parameters"
+    );
+}
+
+#[test]
+fn parameter_index_derivation_is_total_for_out_of_scope_variables() {
+    // Durable invariant: metadata derivation must not panic even when the
+    // later signature check will reject an out-of-scope de Bruijn index.
+    let mut env = GlobalEnv::new();
+    let result = declare_inductive(&mut env, |_| InductiveSpec {
+        level_params: vec![U],
+        params: vec![Term::Type(level_u())],
+        indices: vec![],
+        level: level_u(),
+        constructors: vec![CtorSpec {
+            args: vec![Term::var(usize::MAX)],
+            target_indices: vec![],
+        }],
+    });
+
+    assert!(matches!(result, Err(KernelError::IllFormedDecl(_))));
 }
 
 #[test]
