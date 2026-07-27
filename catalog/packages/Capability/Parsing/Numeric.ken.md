@@ -3,7 +3,7 @@
 `Capability.Parsing.Numeric` parses decimal characters into arbitrary-precision `Int` values
 and reports the exact character index of the first failure. Its formatting
 floor is structural: decimal digits convert to characters and back without
-crossing the opaque `String`/`List Char` bijection.
+crossing the opaque `String`/`List Char` conversion-and-retraction boundary.
 
 ## Contents
 

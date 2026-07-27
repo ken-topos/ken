@@ -1,4 +1,4 @@
-# String/List-Char bijection certificate
+# String/List-Char retraction and injectivity certificate
 
 `String` is opaque, so its total conversion to `List Char` does not by itself
 prove extensionality. This prerequisite names the single irreducible
