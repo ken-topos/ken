@@ -1,0 +1,224 @@
+# PX8-WROTE-ABS — the interpreter's capped-short `Wrote` oracle
+
+**The interpreter has capped-full read, capped-short read, and capped-full
+write. The fourth cell — capped-short write — does not exist. Native has both
+write cells. The corpus's own comment, twelve lines above the gap, says
+capped-short is *"the load-bearing pair member."***
+
+**Owner:** Team Verify (`verify-leader` + `verify-implementer` + `verify-qa`).
+**Branch:** `wp/PX8-WROTE-ABS`. **Size:** S.
+**Risk:** low — one test added to an existing module, no `src` behavior change.
+
+**Status:** Steward frame, shovel-ready. ⭐ **On the Linux ABI I critical
+path** — `PX8` does not close until this and `PX8-F-CAP-41` discharge, and 15
+of the program's 19 nodes descend from `PX8`.
+
+---
+
+## 1. Fixed inputs
+
+| path | blob at `origin/main = 12a5ef4f` |
+|---|---|
+| `crates/ken-interp/src/eval.rs` | `8ecf5d4b7ce063fa060c57411a6abd5c3ca2c797` |
+| `crates/ken-runtime/src/cranelift_backend/lowering/core/tests/effects.rs` | `24edfa47e17f386d99c66ad2d22992ed9bc4dd91` |
+| `spec/30-surface/38-ffi-io.md` | `56c3b3d5f1090f8920cc66286e0d7ba3729f0113` |
+| `conformance/behavioral/buffer-io/seed-buffer-io.md` | `0364b230742e08f67fc59a2c2421221744b051e0` |
+
+⚠ `38-ffi-io.md` is **LOCKED** and is the absolute oracle. ⛔ This WP does not
+edit `spec/`, `conformance/`, or any `src/**` behavior.
+
+---
+
+## 2. The measurement
+
+The `budget_eff_*` oracle family in `crates/ken-interp/src/eval.rs`:
+
+| cell | interpreter | native |
+|---|---|---|
+| capped-**full** read | ✅ `:6469` | ✅ `effects.rs:~430` |
+| capped-**short** read | ✅ `:6554` | ✅ `effects.rs:~440` |
+| capped-**full** write | ✅ `:6629` | ✅ `effects.rs:453` |
+| capped-**short** write | ⛔ **ABSENT** | ✅ `effects.rs:453` |
+
+Native's `budget_eff_native_wrote_capped_full_and_short_reify_effective_not_raw_remaining`
+asserts both write cells in one test, the short one being
+`raw 8 / effective 4 / count 2 -> remaining 2`, labelled in-source
+*"NOT 6 == raw 8 - count 2, the pre-fix defect this WP closes."*
+
+⇒ **The interpreter has no corresponding assertion.**
+
+### ⭐ The corpus already argues for this test, in its own words
+
+`eval.rs:6461-6467`, the comment introducing the whole family:
+
+> *"capped-full ALONE is satisfiable by the wrong shortcut `effective :=
+> count` (both diverge from raw budget only because they happen to equal the
+> count in the full-buffer case). capped-short is the load-bearing pair member
+> — it is the only shape where `effective` and `count` differ, so it is the
+> only shape that can catch an implementation that quietly substitutes one for
+> the other."*
+
+That reasoning was applied to the read pair and **not** to the write pair.
+The wrong shortcut on the write side is the same one: the reifier arm at
+`eval.rs:4981-4997` is green under capped-full because both formulae yield
+`remaining == 0`.
+
+⚠ **The source formula is presently right.** This is an *evidence* gap, not a
+behavior gap — the Architect's clause-(a) verdict (`evt_163mfgjs7fkh8`)
+classes it as *absolute-not-differential evidence not discharged*. ⛔ Do not
+open this expecting to find a bug in `eval.rs`; expect to find that nothing
+would notice if one appeared.
+
+---
+
+## 3. ⭐⭐ Steward-discharged — and one question I deliberately did NOT answer
+
+### 3a. Scope is **A2a only**. A2b is split out.
+
+`docs/program/issues/PX8-WROTE-ABS.md` carries two gaps. **A2b** — the five
+PR-C error identities (`MalformedResource`, `InvalidBounds`,
+allocation-failure-distinct-from-`BufferLimit`, unsupported-nonblocking
+posture, host-I/O-failure-distinct-from-`Interrupted`) with no independent
+reaching evidence — **needs a normative scoping call before it can be sized**,
+per the Architect's own second route. It is filed as `PX8-ERRID-SCOPE` and is
+**not yours**. ⛔ Do not widen into it, and ⛔ do not treat its absence as a
+reason this WP cannot close.
+
+### 3b. ⛔ The fixture construction is the WP, and I am not prescribing it
+
+The discriminating shape requires **`count < effective < requested`**. On the
+read path that is produced by a short source file (`:6554` reads 2 bytes into
+a capacity-4 buffer against a length-8 request).
+
+⚠ **I have not verified that the write path can produce it**, and I am not
+going to guess in a frame. The open question is exactly:
+
+> On `PrivateFsWriteAt`, is `effective` the buffer's **capacity** or its
+> **installed window length**?
+
+- If **capacity**: install a 2-byte window in a capacity-4 buffer, request 8
+  ⇒ `count 2`, `effective 4`, `remaining 2` — discriminating, and the test is
+  a direct mirror of `:6554`.
+- If **installed window length**: `count == effective == 2 ⇒ remaining 0`, the
+  same coincidence that makes capped-full non-discriminating, and **the cell
+  is not merely missing — it is inexpressible on this path.**
+
+⭐ **Both outcomes are acceptable deliverables.** See `§5 D3`.
+
+### 3c. ⭐ If it is inexpressible, that is a FINDING, not a failure
+
+⚠ A test cell that *cannot* be constructed is byte-identical, to any reader,
+to one that simply has not been written yet. This corpus has two other
+instances of exactly that class already filed (`CONF-FMT8-LEVELTOK`, and
+`SEC1-IFC-R3`'s synthetic `Disproved` verdicts).
+
+⇒ If you establish that `count < effective` is unconstructible on the write
+path, **say so with the measurement and stop** — do not manufacture a fixture
+that reaches the shape by some other route, and ⛔ do not weaken the assertion
+to something the coincidental shape can satisfy. Route it to me under `§8`.
+
+---
+
+## 4. ⛔ Banned shapes
+
+- ⛔ **No change to any `crates/**/src/**` behavior.** The formula is correct;
+  you are adding the assertion that would notice if it stopped being.
+- ⛔ **Do not edit `spec/` or `conformance/`.** `38-ffi-io.md` is LOCKED and is
+  the oracle you assert *against*. Editing a cited source moves its OID.
+- ⛔ **Do not touch the three existing `budget_eff_*` tests**, their shared
+  helpers (`nat_value`, `allocate_buffer`, `open_file`, `release_resource`,
+  `rt_parity_root`), or the `:6450-6467` comment block beyond appending to it.
+- ⛔ **Do not assert differentially against the native test.** Clause (a) is
+  *absolute-not-differential*: the expected `remaining` must be stated as a
+  literal derived from `38`, not as "whatever native produced." ⭐ A
+  cross-lane equality check is a different property and does not discharge
+  this one.
+- ⛔ **No `--workspace` run.** Targeted only (`COORDINATION §12`).
+
+---
+
+## 5. Deliverables
+
+- **`D1`** — the interpreter capped-short `Wrote` absolute oracle, in the same
+  module and following `:6554`'s shape, asserting `remaining` as a literal
+  with an in-source line naming the rejected pre-fix formula (mirror
+  `:6554`'s *"not requested(8) - count(2) = 6"* phrasing against the write
+  path's own numbers).
+- **`D2`** — the `§38` clause the literal is derived from, cited by section in
+  a comment. ⭐ A reader must be able to check the number against the spec
+  without re-deriving it.
+- **`D3`** — **one of two**, whichever the measurement supports: either `D1`
+  landed and green, **or** a written measurement showing `count < effective`
+  is unconstructible on the write path, with the mechanism that forces
+  `effective` to the installed window. ⛔ `D3` is not optional in either
+  branch — the second form is a full deliverable, not an abandonment.
+- **`D4`** — a one-line statement of whether the `:6450-6467` comment's
+  "load-bearing pair member" reasoning is now true of **both** pairs, or
+  remains true of the read pair only and why.
+
+---
+
+## 6. Acceptance criteria
+
+- **`AC-1`** ⭐ **(load-bearing)** — the new test **discriminates**. **Control:**
+  mutate the reifier arm at `eval.rs:4981-4997` to the wrong shortcut
+  (`effective := count`, or `remaining := requested - count`), show the new
+  test **reddens**, and restore byte-identically. ⛔ A test that stays green
+  under that mutation has measured nothing and does not discharge clause (a).
+  ⚠ Confirm the redden is **your** test and not a build break — report the
+  failing test name from the run output, not the exit code.
+
+- **`AC-2`** — the capped-**full** write test, unmodified, **stays green**
+  under the same mutation is **not** required and must not be claimed. ⭐ It is
+  expected to stay green — that is the entire premise of this WP. **Control:**
+  report its behavior under the mutation either way; if capped-full *also*
+  reddens, the mutation was wider than intended and `AC-1` is unproven.
+
+- **`AC-3`** — the asserted `remaining` is an **absolute literal** traceable to
+  `38-ffi-io.md`. **Control:** quote the governing clause. ⛔ "Matches native"
+  fails this AC.
+
+- **`AC-4`** — scope. **Control:** `git diff --name-only` shows
+  `crates/ken-interp/src/eval.rs` and nothing else.
+
+- **`AC-5`** — targeted green. **Control:**
+  `scripts/ken-cargo test -p ken-interp --lib` — the whole lib test suite, not
+  a single `--test` filter, because these tests live in `src/eval.rs`'s inline
+  module. ⚠ Re-derive build-slot availability first; `ken-cargo` blocks
+  silently up to 30 minutes on lock contention.
+
+- **`AC-6`** — if `D3` takes its second form, the measurement names **the
+  code** that forces `effective` to the installed window, by file and line.
+  ⛔ A prose assertion that it "appears not to be possible" does not discharge
+  this.
+
+---
+
+## 7. Contention
+
+`crates/ken-interp/src/eval.rs` — **no live WP branch touches it.** Checked:
+the three branches with `ken-interp` deltas (`wp/ABI-S3`, `wp/BUDGET-EFF`,
+`wp/BUDGET-EXHAUST`) are all **merged** nodes. The seven active rings are on
+`ken-runtime`/cranelift (Runtime), surface spaces (Language), `ken-kernel`
+(Kernel), `ken-elaborator/tests` (Verify's current WP, Ergo), `spec/30`
+(enclave), and `library/` (Doc).
+
+⚠ **Re-measure at pickup** — `origin/main` moves.
+
+---
+
+## 8. Hard stop
+
+⛔ Route to the Steward if:
+
+- `count < effective` is unconstructible on the write path — ⭐ that is `D3`'s
+  second form and a real result; deliver the measurement, do not improvise a
+  fixture around it; **or**
+- the mutation in `AC-1` reddens the capped-full test too, or reddens nothing
+  — either means the control is not measuring the arm you think it is; **or**
+- discharging `D1` appears to require editing `spec/`, `conformance/`, or any
+  `src/**` behavior — it does not, and if it does, the gap is not the one this
+  frame describes; **or**
+- you find the source formula is actually **wrong** (not merely unasserted).
+  ⭐ That would be a behavior gap, which is `PX8-F-CAP-41`'s class, not this
+  one — stop and route it rather than fixing it here.

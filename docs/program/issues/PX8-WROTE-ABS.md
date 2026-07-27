@@ -1,15 +1,37 @@
 ---
 id: PX8-WROTE-ABS
 title: "PX8 clause-(a) evidence gap — interpreter capped-short Wrote lacks an absolute oracle; PR-C error identities unreached"
-status: draft
-owner: TBD
-size: TBD
+status: ready
+owner: verify
+size: S
 gate: none
 depends_on: []
 blocks: [PX8]
 github: null
 origin: architect PX8 closure-property verdict evt_163mfgjs7fkh8 (2026-07-23); Steward-filed (agents cannot create tracked work per COORDINATION §2)
 ---
+
+## ⭐⭐ SCOPED AND FRAMED 2026-07-27 — A2a only; A2b split to `PX8-ERRID-SCOPE`
+
+**Frame:** `docs/program/wp/PX8-WROTE-ABS.md`, inputs pinned by blob at
+`origin/main = 12a5ef4f`. **Owner Verify** — `BUDGET-EFF`, the WP that authored
+this oracle family and whose in-source comment states the discipline, was
+`owner: verify`.
+
+⭐ **This is the only unblocked node on the Linux ABI I critical path.** `PX8`
+gates 15 of that program's 19 nodes; `PX8` needs this, [[PX8-ERRID-SCOPE]], and
+[[PX8-F-CAP-41]]. The other two are blocked — `PX8-F-CAP-41` behind
+[[NATIVE-HANDLE-CARRIER]] ← [[RT-NATIVE-FNSPLIT]], and `PX8-ERRID-SCOPE` behind
+a normative call. **This one depends on nothing and sat unowned and unframed.**
+
+⛔ **A2b below is NOT in the framed scope.** It needs the Architect's route-2
+normative call before it can be sized, and is filed as [[PX8-ERRID-SCOPE]].
+
+⚠ **The frame does not prescribe the fixture.** Whether `effective` on the
+write path is the buffer's capacity or its installed window length decides
+whether `count < effective` is constructible at all — and if it is not, the
+cell is **inexpressible**, not merely missing, which is a full deliverable
+(same class as [[CONF-FMT8-LEVELTOK]] and [[CONF-SEC4-REFL-PAIR]]).
 
 Surfaced by the **Architect's PX8 closure-property verdict** (`evt_163mfgjs7fkh8`)
 — clause (a) *absolute-not-differential* evidence is **not** discharged for two

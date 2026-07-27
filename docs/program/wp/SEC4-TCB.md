@@ -114,6 +114,67 @@ a moved line as a semantic change, and ⛔ do not edit the seed to repair them �
 
 ---
 
+## 3e. ⚖️ AMENDMENT 2026-07-27 — the C1/C2 pair is stale; re-scoped
+
+**Ruled `evt_ff4m551h40fz` on the ring's hard stop (`a78a7dae`). Durable here
+because a ruling that lives only in the channel is not an input.**
+
+Verified independently at `crates/ken-kernel/src/obs.rs:113`,
+`eq_at_registered_literal` (ADR-0013 Layer 2):
+
+```
+Eq ty (IntLit m) (IntLit n)  ⇝  Top     if m == n
+                             ⇝  Bottom  if m != n
+```
+
+### ⛔ C2 is unreachable — and that is not a kernel bug
+
+`Eq Nat 0 0` ⇝ `Top`, so `check.rs:434`'s `Term::Eq(a_ty, x, y)` arm never
+fires and `Refl` cannot be offered at it. **The seed's C2 operand can never
+accept.** ⛔ Do not "fix" the kernel; the reduction is ADR-0013 as designed.
+
+### ⭐⭐ C1 is the worse half — it is GREEN and measures the wrong mechanism
+
+`Eq Nat 0 1` ⇝ `Bottom` — also not `Eq`-shaped. So C1 rejects, but the seed's
+`expect` claims *"conversion fails, `0 ≢ 1`"* and **conversion is never
+reached**.
+
+⇒ ⭐ **C2 fails loudly; C1 passes silently while measuring something else.** A
+rejection control that passes for any reason is not a control, and the green
+arm is the one that would have shipped unexamined.
+
+⇒ **The defect is the pair, not the row.** The seed's own `why` asserts *"the
+only difference is the proposition's truth"*; in landed behavior both arms
+bypass `Refl` entirely and differ only in which constant the reducer picks.
+
+### ✅ Authorized re-scope
+
+`eq_at_registered_literal` returns **neutral** when either operand is not a
+literal, so abstract binders keep the goal unreduced, and
+`ds6c_intlit_elaborator_emission.rs::refl_still_accepted_on_a_genuinely_abstract_eq_shaped_goal`
+proves the accept arm is reachable.
+
+- **accept** `Equal Int x x`; **reject** `Equal Int x y` (distinct binders).
+  Both reach `check.rs:434`'s `Term::Eq` arm and flip on `convert` alone.
+- ⭐ **Retain** the closed `Id Nat 0 1` arm, asserting what it actually does
+  (rejects via the `Bottom` collapse) — real landed behavior, just not under a
+  `why` that names conversion.
+
+### ⛔ And report the difference — this is checked
+
+⚠ `Equal Int x y` is **unprovable, not false.** The seed is framed on truth;
+the re-scoped pair flips on *convertibility at a genuinely Eq-shaped goal*.
+⛔ Do not gloss that. **`D4` must carry all three:** (1) C2's operand is
+unreachable, naming `obs.rs:113`; (2) **C1 passes via `Bottom`, not
+conversion**; (3) how the re-scoped pair's claim differs from the seed's.
+
+⭐ The substitution is authorized; **concealing it was what was forbidden.**
+
+⇒ Seed defect filed as `CONF-SEC4-REFL-PAIR` (owner `spec-enclave`).
+⛔ `conformance/` stays theirs; its absence does not gate this WP's close.
+
+---
+
 ## 4. ⛔ Banned shapes
 
 - ⛔ **No new CI gate or test asserting facts about source, catalog, doc, or

@@ -348,23 +348,41 @@ path.** PX8 makes **15 of 19** items unblock, so the campaign is not "before the
 ABI program" — it *is* the ABI program's first gate. That is the strongest
 available argument for the operator's standing priority on closing it.
 
-### ⭐ Only TWO nodes are startable before PX8 closes
+### ⛔ SUPERSEDED 2026-07-27 — both "free" nodes are DONE, and one was missed
 
-Everything in §5 descends from `PX8` **except**:
+**Re-measured at `origin/main = 990cc827`, operator-directed.** The claim below
+("only TWO nodes are startable") was true when written and is now false in both
+directions.
 
-| node | size | owner | why it is free |
-|---|---|---|---|
-| **ABI-R1** | S | Foundation | documentation-only; depends on nothing (§5:223) |
-| **ABI-S3** | M | Runtime | no inbound edge; but it **gates `PX12`**, so landing it early removes an input to the committed exit |
+| node | §9's status | actual |
+|---|---|---|
+| **ABI-R1** | free, startable | ✅ **closed** |
+| **ABI-S3** | free, startable | ✅ **merged** |
 
-⇒ **The fleet's single-threading on FNSPLIT is largely DAG-forced, not a
-sequencing failure** — but these two are genuine parallel work available now, and
-leaving them idle while rings sit idle is a real loss.
+And the four WPs §9 called PX8's live tranche — `BUDGET-EFF`, `SEAL-2`,
+`RT-ESCAPE`, `RT-SPLIT` — are **all merged**.
 
-The only node of §5's graph with live *build* work is **PX8**, its root, in
-flight as `BUDGET-EFF` / `SEAL-2` / `RT-ESCAPE` / `RT-SPLIT` (+ merged
-`SPAN-SEAL`, `RT-PARITY`, `PX8-SPAN-PROV`), and **blocked on the
-`RT-NATIVE-FNSPLIT` chain above.**
+⭐⭐ **The survey's blind spot: it enumerated §5's graph, and §5's graph does
+not contain PX8's own blockers.** `PX8` needs three nodes, and one of them —
+**`PX8-WROTE-ABS`** — has `depends_on: []`. It was startable the entire time,
+and it sat `owner: TBD`, `size: TBD`, unframed. ⇒ **An inventory is bounded by
+the notion of "the surface" it was built against**; a graph of the program's
+own items cannot see a blocker of that graph's root.
+
+`PX8`'s three blockers, re-measured:
+
+| node | state | why |
+|---|---|---|
+| **PX8-WROTE-ABS** | ✅ **framed + released** (Verify, S) | `depends_on: []` — nothing ever blocked it |
+| **PX8-ERRID-SCOPE** | blocked | needs the Architect's route-2 normative call before sizing |
+| **PX8-F-CAP-41** | blocked | behind `NATIVE-HANDLE-CARRIER` ← `RT-NATIVE-FNSPLIT` |
+
+⇒ **The fleet's single-threading on FNSPLIT is DAG-forced for the §5 items,
+but it was not forced for `PX8-WROTE-ABS`.** That one is framing debt, not
+sequencing.
+
+⚠ **Do not re-derive startability from §5's graph alone.** Ask what `PX8`
+itself is waiting on.
 
 ### 9.1 ✅ CLOSED — the revocation-membrane gap is now framed and in the graph
 
