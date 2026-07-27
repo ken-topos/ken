@@ -452,6 +452,7 @@ fn put_error(out: &mut Vec<u8>, error: &SemanticErrorV1) -> Result<(), EffectTra
                 ResourceErrorV1::InvalidOffset => put_u8(out, 6),
                 ResourceErrorV1::InvalidBounds => put_u8(out, 7),
                 ResourceErrorV1::NoProgress => put_u8(out, 8),
+                ResourceErrorV1::AllocationFailed => put_u8(out, 9),
             }
         }
     }
@@ -927,6 +928,7 @@ fn get_error(cursor: &mut Cursor<'_>) -> Result<SemanticErrorV1, EffectTraceWire
             6 => ResourceErrorV1::InvalidOffset,
             7 => ResourceErrorV1::InvalidBounds,
             8 => ResourceErrorV1::NoProgress,
+            9 => ResourceErrorV1::AllocationFailed,
             _ => return Err(EffectTraceWireError),
         }),
         _ => return Err(EffectTraceWireError),
@@ -1320,6 +1322,26 @@ mod tests {
     #[test]
     fn linked_trace_codec_roundtrips_identity_bytes_and_outcomes() {
         let expected = representative_trace();
+        let encoded = encode_linked_effect_trace(&expected).unwrap();
+        assert_eq!(decode_linked_effect_trace(&encoded), Ok(expected));
+    }
+
+    #[test]
+    fn linked_trace_codec_preserves_allocation_failure_identity() {
+        let mut expected = representative_trace();
+        expected.effect_trace.push(EffectEvent {
+            sequence: 9,
+            operation: HostOpV1::BufferAllocate,
+            capability: None,
+            resource_bindings: Vec::new(),
+            request: CanonicalRequestV1::BufferAllocate {
+                capacity: u64::MAX,
+            },
+            outcome: CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(
+                ResourceErrorV1::AllocationFailed,
+            )),
+        });
+
         let encoded = encode_linked_effect_trace(&expected).unwrap();
         assert_eq!(decode_linked_effect_trace(&encoded), Ok(expected));
     }

@@ -1045,6 +1045,7 @@ fn set_reply(reply: &mut HostReplyV1, outcome: CanonicalOutcomeV1, context: &mut
                 crate::ResourceErrorV1::InvalidOffset => reply.detail = 6,
                 crate::ResourceErrorV1::InvalidBounds => reply.detail = 7,
                 crate::ResourceErrorV1::NoProgress => reply.detail = 8,
+                crate::ResourceErrorV1::AllocationFailed => reply.detail = 9,
             }
         }
         CanonicalOutcomeV1::Error(error) => {
@@ -1166,6 +1167,7 @@ fn decode_resource_error_reply(
         6 if all_zero => Some(crate::ResourceErrorV1::InvalidOffset),
         7 if all_zero => Some(crate::ResourceErrorV1::InvalidBounds),
         8 if all_zero => Some(crate::ResourceErrorV1::NoProgress),
+        9 if all_zero => Some(crate::ResourceErrorV1::AllocationFailed),
         _ => None,
     }
 }
@@ -1792,6 +1794,7 @@ mod tests {
         assert_eq!(effect_binding("error", "resource.InvalidOffset"), 6);
         assert_eq!(effect_binding("error", "resource.InvalidBounds"), 7);
         assert_eq!(effect_binding("error", "resource.NoProgress"), 8);
+        assert_eq!(effect_binding("error", "resource.AllocationFailed"), 9);
         assert_eq!(effect_binding("tag", "resource_kind.FsHandle"), 0);
         assert_eq!(effect_binding("tag", "resource_kind.Buffer"), 1);
         assert_eq!(effect_binding("lifetime", "resource_error_reply_schema"), 1);
@@ -1881,6 +1884,7 @@ mod tests {
             (6, crate::ResourceErrorV1::InvalidOffset),
             (7, crate::ResourceErrorV1::InvalidBounds),
             (8, crate::ResourceErrorV1::NoProgress),
+            (9, crate::ResourceErrorV1::AllocationFailed),
         ] {
             assert_eq!(decode_resource_error_reply(tag, zero), Some(expected));
         }
@@ -2068,6 +2072,7 @@ mod tests {
             (crate::ResourceErrorV1::InvalidOffset, 6),
             (crate::ResourceErrorV1::InvalidBounds, 7),
             (crate::ResourceErrorV1::NoProgress, 8),
+            (crate::ResourceErrorV1::AllocationFailed, 9),
         ] {
             assert_eq!(
                 project(error),

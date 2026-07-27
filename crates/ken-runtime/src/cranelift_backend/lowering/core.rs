@@ -5710,16 +5710,21 @@ impl<'a> Lowering<'a> {
                         },
                         DynamicConstructorAlternativeV1 {
                             tag: 7,
-                            constructor: self.process_symbols.resource_invalid_offset.clone(),
+                            constructor: self.process_symbols.resource_allocation_failed.clone(),
                             fields: Vec::new(),
                         },
                         DynamicConstructorAlternativeV1 {
                             tag: 8,
-                            constructor: self.process_symbols.resource_invalid_bounds.clone(),
+                            constructor: self.process_symbols.resource_invalid_offset.clone(),
                             fields: Vec::new(),
                         },
                         DynamicConstructorAlternativeV1 {
                             tag: 9,
+                            constructor: self.process_symbols.resource_invalid_bounds.clone(),
+                            fields: Vec::new(),
+                        },
+                        DynamicConstructorAlternativeV1 {
+                            tag: 10,
                             constructor: self.process_symbols.resource_no_progress.clone(),
                             fields: Vec::new(),
                         },
