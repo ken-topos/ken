@@ -1830,12 +1830,19 @@ impl ComputationalIHTemplateCollector<'_> {
                         .enumerate()
                 {
                     let method_type = ken_kernel::inductive::method_type(
+                        self.env,
                         inductive,
                         branch_ordinal,
                         motive,
                         params,
                         level_args,
-                    );
+                    )
+                    .map_err(|_| {
+                        Self::runtime_shape_mismatch(
+                            owner,
+                            "kernel method type generation failed",
+                        )
+                    })?;
                     prepared_methods.push(self.prepare_method(
                         owner,
                         match_ordinal,

@@ -552,7 +552,7 @@ fn infer_elim(
         )));
     }
     for (k, m) in methods.iter().enumerate() {
-        let mt = method_type(ind, k, motive, params, level_args);
+        let mt = method_type(env, ind, k, motive, params, level_args)?;
         check(env, ctx, m, &mt)?;
     }
 

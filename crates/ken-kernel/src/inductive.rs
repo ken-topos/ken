@@ -338,10 +338,9 @@ pub fn recursive_args(
 /// One constructor argument whose type contains structurally recursive
 /// occurrences of the family being described.
 ///
-/// This is preparation for the nested eliminator of `14 §3.2`. It is
-/// deliberately inert: [`method_type`] and [`iota_reduct`] continue to consume
-/// [`recursive_args`], whose direct/Π-bound result is unchanged. The first
-/// semantic consumer of this descriptor must land atomically with nested ι.
+/// [`method_type`] and [`iota_reduct`] consume this descriptor as one atomic
+/// semantic unit: every generated structured binder has a matching lifted
+/// ι-term.
 #[derive(Clone, Debug)]
 pub struct RecursiveArgumentShape {
     pub position: usize,
@@ -413,9 +412,9 @@ impl RecursiveShape {
         }
     }
 
-    /// Project the legacy direct/Π-bound class consumed by the landed
-    /// eliminator. Structured Sigma/former recipes intentionally return
-    /// `None` until method generation and ι land together.
+    /// Project the legacy direct/Π-bound class for consumers which have not
+    /// moved to structured lifts. Structured Sigma/former recipes return
+    /// `None`.
     pub fn as_legacy(&self) -> Option<(Vec<Term>, Vec<Term>)> {
         match self {
             RecursiveShape::Direct { index_exprs } => Some((Vec::new(), index_exprs.clone())),
@@ -561,10 +560,8 @@ fn derive_recursive_shape(
 
 /// Describe every positive recursive shape in a constructor telescope.
 ///
-/// Unlike [`recursive_args`], this preparatory API represents primitive Sigma
-/// and checked-positive former nesting. It does not alter admission or
-/// eliminator behavior; semantic consumers remain on the legacy projection
-/// until method generation and ι are landed atomically.
+/// Unlike [`recursive_args`], this API represents primitive Sigma and
+/// checked-positive former nesting for the atomic method/ι consumers.
 pub fn recursive_shapes(
     env: &GlobalEnv,
     c: &ConstructorDecl,
@@ -582,6 +579,519 @@ pub fn recursive_shapes(
     Ok(shapes)
 }
 
+fn apply_motive(motive: &Term, indices: &[Term], value: Term) -> Term {
+    let mut result = motive.clone();
+    for index in indices {
+        result = Term::app(result, index.clone());
+    }
+    Term::app(result, value)
+}
+
+fn package_lift_type(
+    env: &GlobalEnv,
+    shape: &RecursiveShape,
+    value_type: &Term,
+    motive: &Term,
+    d: GlobalId,
+    parameter_count: usize,
+) -> KernelResult<Term> {
+    let lifted = structured_lift_type(
+        env,
+        shape,
+        &weaken(value_type, 1),
+        &Term::var(0),
+        &weaken(motive, 1),
+        d,
+        parameter_count,
+    )?;
+    Ok(Term::sigma(value_type.clone(), lifted))
+}
+
+fn transformed_former_type(
+    env: &GlobalEnv,
+    former: GlobalId,
+    level_args: &[Level],
+    arguments: &[RecursiveFormerArgument],
+    motive: &Term,
+    d: GlobalId,
+    parameter_count: usize,
+) -> KernelResult<Term> {
+    let mut transformed = Term::indformer(former, level_args.to_vec());
+    for argument in arguments {
+        let argument_type = match argument.shape.as_deref() {
+            Some(shape) => {
+                package_lift_type(env, shape, &argument.term, motive, d, parameter_count)?
+            }
+            None => argument.term.clone(),
+        };
+        transformed = Term::app(transformed, argument_type);
+    }
+    Ok(transformed)
+}
+
+/// Build `Lift_D(M, A, a)` from the D3a skeleton (`14 §3.2`).
+///
+/// `field_type`, `value`, and `motive` are already instantiated in one common
+/// caller context.  Reading indices back from `field_type` is intentional: the
+/// retained terms in [`RecursiveShape`] are semantic payloads rather than a
+/// canonical representative of conversion.
+fn structured_lift_type(
+    env: &GlobalEnv,
+    shape: &RecursiveShape,
+    field_type: &Term,
+    value: &Term,
+    motive: &Term,
+    d: GlobalId,
+    parameter_count: usize,
+) -> KernelResult<Term> {
+    let field_type = normalize(env, &Context::new(), field_type);
+    match shape {
+        RecursiveShape::Direct { .. } => {
+            let (head, arguments) = peel_app(&field_type);
+            match head {
+                Term::IndFormer { id, .. } if id == d && arguments.len() >= parameter_count => Ok(
+                    apply_motive(motive, &arguments[parameter_count..], value.clone()),
+                ),
+                _ => Err(unsupported_recursive_shape(
+                    "direct lift no longer has the recursive family at its head",
+                )),
+            }
+        }
+        RecursiveShape::Pi { domains, body } => {
+            let (actual_domains, actual_body) = peel_pi(&field_type);
+            if actual_domains.len() != domains.len() {
+                return Err(unsupported_recursive_shape(
+                    "Pi lift skeleton and normalized field arity disagree",
+                ));
+            }
+            let binder_count = actual_domains.len();
+            let mut applied_value = weaken(value, binder_count as i64);
+            for binder in 0..binder_count {
+                applied_value = Term::app(applied_value, Term::var(binder_count - 1 - binder));
+            }
+            let mut lifted = structured_lift_type(
+                env,
+                body,
+                &actual_body,
+                &applied_value,
+                &weaken(motive, binder_count as i64),
+                d,
+                parameter_count,
+            )?;
+            for domain in actual_domains.into_iter().rev() {
+                lifted = Term::pi(domain, lifted);
+            }
+            Ok(lifted)
+        }
+        RecursiveShape::Sigma { domain, codomain } => {
+            let Term::Sigma(actual_domain, actual_codomain) = field_type else {
+                return Err(unsupported_recursive_shape(
+                    "Sigma lift skeleton no longer has a normalized Sigma field",
+                ));
+            };
+            let first_value = normalize(env, &Context::new(), &Term::proj1(value.clone()));
+            let second_value = normalize(env, &Context::new(), &Term::proj2(value.clone()));
+            let first = domain
+                .as_deref()
+                .map(|shape| {
+                    structured_lift_type(
+                        env,
+                        shape,
+                        &actual_domain,
+                        &first_value,
+                        motive,
+                        d,
+                        parameter_count,
+                    )
+                })
+                .transpose()?;
+            let second_type = crate::subst::subst0(&actual_codomain, &first_value);
+            let second = codomain
+                .as_deref()
+                .map(|shape| {
+                    structured_lift_type(
+                        env,
+                        shape,
+                        &second_type,
+                        &second_value,
+                        motive,
+                        d,
+                        parameter_count,
+                    )
+                })
+                .transpose()?;
+            match (first, second) {
+                (Some(first), Some(second)) => Ok(Term::sigma(first, weaken(&second, 1))),
+                (Some(only), None) | (None, Some(only)) => Ok(only),
+                (None, None) => Err(unsupported_recursive_shape(
+                    "Sigma lift skeleton contains no recursive component",
+                )),
+            }
+        }
+        RecursiveShape::Former {
+            former,
+            level_args: former_level_args,
+            arguments,
+        } => {
+            let (actual_head, actual_arguments) = peel_app(&field_type);
+            if !matches!(actual_head, Term::IndFormer { id, .. } if id == *former)
+                || actual_arguments.len() != arguments.len()
+            {
+                return Err(unsupported_recursive_shape(
+                    "declared-former lift skeleton and normalized field disagree",
+                ));
+            }
+            let actual_arguments = arguments
+                .iter()
+                .zip(actual_arguments)
+                .map(|(shape_argument, term)| RecursiveFormerArgument {
+                    term,
+                    shape: shape_argument.shape.clone(),
+                })
+                .collect::<Vec<_>>();
+            transformed_former_type(
+                env,
+                *former,
+                former_level_args,
+                &actual_arguments,
+                motive,
+                d,
+                parameter_count,
+            )
+        }
+    }
+}
+
+fn structured_lift_term(
+    env: &GlobalEnv,
+    shape: &RecursiveShape,
+    field_type: &Term,
+    value: &Term,
+    motive: &Term,
+    methods: &[Term],
+    d: GlobalId,
+    parameter_count: usize,
+    level_args: &[Level],
+    params: &[Term],
+) -> KernelResult<Term> {
+    let field_type = normalize(env, &Context::new(), field_type);
+    match shape {
+        RecursiveShape::Direct { .. } => {
+            let (head, arguments) = peel_app(&field_type);
+            match head {
+                Term::IndFormer { id, .. } if id == d && arguments.len() >= parameter_count => {
+                    Ok(Term::Elim {
+                        fam: d,
+                        level_args: level_args.to_vec(),
+                        params: params.to_vec(),
+                        motive: Box::new(motive.clone()),
+                        methods: methods.to_vec(),
+                        indices: arguments[parameter_count..].to_vec(),
+                        scrut: Box::new(value.clone()),
+                    })
+                }
+                _ => Err(unsupported_recursive_shape(
+                    "direct lifted term no longer has the recursive family at its head",
+                )),
+            }
+        }
+        RecursiveShape::Pi { domains, body } => {
+            let (actual_domains, actual_body) = peel_pi(&field_type);
+            if actual_domains.len() != domains.len() {
+                return Err(unsupported_recursive_shape(
+                    "Pi lifted term skeleton and normalized field arity disagree",
+                ));
+            }
+            let binder_count = actual_domains.len();
+            let mut applied_value = weaken(value, binder_count as i64);
+            for binder in 0..binder_count {
+                applied_value = Term::app(applied_value, Term::var(binder_count - 1 - binder));
+            }
+            let mut lifted = structured_lift_term(
+                env,
+                body,
+                &actual_body,
+                &applied_value,
+                &weaken(motive, binder_count as i64),
+                &methods
+                    .iter()
+                    .map(|method| weaken(method, binder_count as i64))
+                    .collect::<Vec<_>>(),
+                d,
+                parameter_count,
+                level_args,
+                &params
+                    .iter()
+                    .map(|param| weaken(param, binder_count as i64))
+                    .collect::<Vec<_>>(),
+            )?;
+            for domain in actual_domains.into_iter().rev() {
+                lifted = Term::lam(domain, lifted);
+            }
+            Ok(lifted)
+        }
+        RecursiveShape::Sigma { domain, codomain } => {
+            let Term::Sigma(actual_domain, actual_codomain) = field_type else {
+                return Err(unsupported_recursive_shape(
+                    "Sigma lifted term skeleton no longer has a normalized Sigma field",
+                ));
+            };
+            let first_value = normalize(env, &Context::new(), &Term::proj1(value.clone()));
+            let second_value = normalize(env, &Context::new(), &Term::proj2(value.clone()));
+            let first = domain
+                .as_deref()
+                .map(|shape| {
+                    structured_lift_term(
+                        env,
+                        shape,
+                        &actual_domain,
+                        &first_value,
+                        motive,
+                        methods,
+                        d,
+                        parameter_count,
+                        level_args,
+                        params,
+                    )
+                })
+                .transpose()?;
+            let second_type = crate::subst::subst0(&actual_codomain, &first_value);
+            let second = codomain
+                .as_deref()
+                .map(|shape| {
+                    structured_lift_term(
+                        env,
+                        shape,
+                        &second_type,
+                        &second_value,
+                        motive,
+                        methods,
+                        d,
+                        parameter_count,
+                        level_args,
+                        params,
+                    )
+                })
+                .transpose()?;
+            match (first, second) {
+                (Some(first), Some(second)) => Ok(Term::pair(first, second)),
+                (Some(only), None) | (None, Some(only)) => Ok(only),
+                (None, None) => Err(unsupported_recursive_shape(
+                    "Sigma lifted term skeleton contains no recursive component",
+                )),
+            }
+        }
+        RecursiveShape::Former {
+            former,
+            level_args: former_level_args,
+            arguments,
+        } => {
+            let (actual_head, actual_arguments) = peel_app(&field_type);
+            if !matches!(actual_head, Term::IndFormer { id, .. } if id == *former)
+                || actual_arguments.len() != arguments.len()
+            {
+                return Err(unsupported_recursive_shape(
+                    "declared-former lifted term skeleton and normalized field disagree",
+                ));
+            }
+            let actual_arguments = arguments
+                .iter()
+                .zip(actual_arguments)
+                .map(|(shape_argument, term)| RecursiveFormerArgument {
+                    term,
+                    shape: shape_argument.shape.clone(),
+                })
+                .collect::<Vec<_>>();
+            structured_former_lift_term(
+                env,
+                *former,
+                former_level_args,
+                &actual_arguments,
+                value,
+                motive,
+                methods,
+                d,
+                parameter_count,
+                level_args,
+                params,
+            )
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn structured_former_lift_term(
+    env: &GlobalEnv,
+    former: GlobalId,
+    former_level_args: &[Level],
+    arguments: &[RecursiveFormerArgument],
+    value: &Term,
+    motive: &Term,
+    methods: &[Term],
+    d: GlobalId,
+    parameter_count: usize,
+    d_level_args: &[Level],
+    d_params: &[Term],
+) -> KernelResult<Term> {
+    let former_decl = env.inductive(former).ok_or_else(|| {
+        unsupported_recursive_shape("declared-former lift lost its admitted declaration")
+    })?;
+    if arguments.len() < former_decl.params.len() {
+        return Err(unsupported_recursive_shape(
+            "declared-former lift is under-saturated",
+        ));
+    }
+
+    let mut source_type = Term::indformer(former, former_level_args.to_vec());
+    for argument in arguments {
+        source_type = Term::app(source_type, argument.term.clone());
+    }
+    let target_type = transformed_former_type(
+        env,
+        former,
+        former_level_args,
+        arguments,
+        motive,
+        d,
+        parameter_count,
+    )?;
+    let target_level = subst_levels(
+        &Term::Type(former_decl.level.clone()),
+        &former_decl.level_params,
+        former_level_args,
+    );
+    let host_motive = Term::Ascript(
+        Box::new(Term::lam(source_type.clone(), weaken(&target_type, 1))),
+        Box::new(Term::pi(source_type, target_level)),
+    );
+
+    let source_params = arguments[..former_decl.params.len()]
+        .iter()
+        .map(|argument| argument.term.clone())
+        .collect::<Vec<_>>();
+    let target_params = arguments[..former_decl.params.len()]
+        .iter()
+        .map(|argument| match argument.shape.as_deref() {
+            Some(shape) => {
+                package_lift_type(env, shape, &argument.term, motive, d, parameter_count)
+            }
+            None => Ok(argument.term.clone()),
+        })
+        .collect::<KernelResult<Vec<_>>>()?;
+
+    let mut host_methods = Vec::with_capacity(former_decl.constructors.len());
+    for (constructor_index, constructor) in former_decl.constructors.iter().enumerate() {
+        let host_recursive = recursive_shapes(env, constructor, former, former_decl.params.len())?;
+        if host_recursive
+            .iter()
+            .any(|argument| argument.shape.as_legacy().is_none())
+        {
+            return Err(unsupported_recursive_shape(
+                "nested lift through a former with structured recursive fields is unsupported",
+            ));
+        }
+        let host_method_type = method_type(
+            env,
+            former_decl,
+            constructor_index,
+            &host_motive,
+            &source_params,
+            former_level_args,
+        )?;
+        let (method_domains, _) = peel_pi(&host_method_type);
+        let field_count = constructor.args.len();
+        let ih_count = host_recursive.len();
+        if method_domains.len() != field_count + ih_count {
+            return Err(unsupported_recursive_shape(
+                "host former method binder count disagrees with its recursive skeleton",
+            ));
+        }
+
+        let mut rebuilt = Term::Constructor {
+            id: constructor.id,
+            level_args: former_level_args.to_vec(),
+        };
+        for parameter in &target_params {
+            rebuilt = Term::app(rebuilt, weaken(parameter, method_domains.len() as i64));
+        }
+
+        for position in 0..field_count {
+            let original = Term::var(ih_count + field_count - 1 - position);
+            let mapped = if let Some((ih_ordinal, recursive)) = host_recursive
+                .iter()
+                .enumerate()
+                .find(|(_, recursive)| recursive.position == position)
+            {
+                if recursive.shape.as_legacy().is_none() {
+                    return Err(unsupported_recursive_shape(
+                        "host former structured recursive field cannot be rebuilt",
+                    ));
+                }
+                Term::var(ih_count - 1 - ih_ordinal)
+            } else {
+                let instantiated_field = shift(
+                    &subst_levels(
+                        &subst_outer(
+                            &constructor.args[position],
+                            former_decl.params.len(),
+                            &source_params,
+                            position,
+                        ),
+                        &former_decl.level_params,
+                        former_level_args,
+                    ),
+                    (field_count - position + ih_count) as i64,
+                    0,
+                );
+                match derive_recursive_shape(env, &instantiated_field, d, parameter_count)? {
+                    ShapeDerivation::DFree => original,
+                    ShapeDerivation::Recursive(shape) => {
+                        let binder_count = method_domains.len() as i64;
+                        let lifted = structured_lift_term(
+                            env,
+                            &shape,
+                            &instantiated_field,
+                            &original,
+                            &weaken(motive, binder_count),
+                            &methods
+                                .iter()
+                                .map(|method| weaken(method, binder_count))
+                                .collect::<Vec<_>>(),
+                            d,
+                            parameter_count,
+                            d_level_args,
+                            &d_params
+                                .iter()
+                                .map(|parameter| weaken(parameter, binder_count))
+                                .collect::<Vec<_>>(),
+                        )?;
+                        Term::pair(original, lifted)
+                    }
+                }
+            };
+            rebuilt = Term::app(rebuilt, mapped);
+        }
+
+        for domain in method_domains.into_iter().rev() {
+            rebuilt = Term::lam(domain, rebuilt);
+        }
+        host_methods.push(rebuilt);
+    }
+
+    Ok(Term::Elim {
+        fam: former,
+        level_args: former_level_args.to_vec(),
+        params: source_params,
+        motive: Box::new(host_motive),
+        methods: host_methods,
+        indices: arguments[former_decl.params.len()..]
+            .iter()
+            .map(|argument| argument.term.clone())
+            .collect(),
+        scrut: Box::new(value.clone()),
+    })
+}
+
 /// The dependent eliminator's method type for constructor `k`:
 /// `Π Δₖ. Π (IH₁…IH_p). M t̄ₖ (cₖ p̄ ā)` (`14 §3`, `14 §3.1`), in the
 /// caller's context Γ.
@@ -593,16 +1103,17 @@ pub fn recursive_shapes(
 /// instance at the use site (terms in Γ); `level_args` instantiate the
 /// family's level parameters (used in the constructor reference).
 pub fn method_type(
+    env: &GlobalEnv,
     ind: &InductiveDecl,
     k: usize,
     motive: &Term,
     params: &[Term],
     level_args: &[Level],
-) -> Term {
+) -> KernelResult<Term> {
     let c = &ind.constructors[k];
     let m = ind.params.len();
     let n = c.args.len();
-    let rec = recursive_args(c, ind.id, m);
+    let rec = recursive_shapes(env, c, ind.id, m)?;
     let p = rec.len();
 
     // Conclusion `M t̄ₖ (cₖ p̄ ā')` in context [Γ, a₁'..aₙ', ih₁..ih_p]
@@ -644,61 +1155,26 @@ pub fn method_type(
     //     — a Π-type over the branching telescope (`14 §3.1`).
     let mut ty = conclusion;
     for j in (0..p).rev() {
-        let (pos, branching_tel, idxs) = &rec[j];
-        let nb = branching_tel.len();
-        // Context when building IH_j: [Γ, args, ih₁..ih_{j-1}] (depth n+j from Γ).
-        // Inside the nb Π-binders of the IH: [Γ, args, ih₁..ih_{j-1}, b₁..b_{nb}].
-        let m_w_body = weaken(motive, (n + j + nb) as i64);
-        // Index exprs are in [Δ_p, args_before_pos, b₁..b_{nb}].
-        // subst_outer replaces m params (inner_depth = pos+nb).
-        // shift with cutoff=nb lifts args_before_pos and Γ vars past the n-pos
-        // remaining args and j preceding IHs, while PRESERVING the branch binders
-        // b₁..b_{nb} at indices 0..nb-1 (they are bound by the Π-wrap below).
-        let idxs_in_body: Vec<Term> = idxs
-            .iter()
-            .map(|t| {
-                shift(
-                    &subst_levels(
-                        &subst_outer(t, m, params, *pos + nb),
-                        &ind.level_params,
-                        level_args,
-                    ),
-                    (n - pos + j) as i64,
-                    nb,
-                )
-            })
-            .collect();
-        // a_pos under nb extra binders: index n - 1 - pos + j + nb.
-        // Apply to b₁..b_{nb}: Var(nb-1)=b₁, ..., Var(0)=b_{nb}.
-        let mut scrut_body = Term::var(n - 1 - pos + j + nb);
-        for bk in 0..nb {
-            scrut_body = Term::app(scrut_body, Term::var(nb - 1 - bk));
-        }
-        // Assemble IH body: M idxs (a_pos b₁..b_{nb}).
-        let mut ih_inner = m_w_body;
-        for ix in &idxs_in_body {
-            ih_inner = Term::app(ih_inner, ix.clone());
-        }
-        ih_inner = Term::app(ih_inner, scrut_body);
-        // Wrap in Π-binders from innermost (B_{nb}) to outermost (B₁).
-        // B_k is in [Δ_p, args_before_pos, b₁..b_{k-1}] (under bk extra binders;
-        // branching_tel[bk] has bk Pi-binders above it from peel_pi).
-        let mut ih_ty = ih_inner;
-        for bk in (0..nb).rev() {
-            // branching_tel[bk] is in context [Δ_p, args_before_pos, b₁..b_{bk}].
-            // shift with cutoff=bk lifts args_before_pos and Γ vars while PRESERVING
-            // b₁..b_{bk} at indices 0..bk-1 (bound by the Π-binders already added).
-            let b_dom = shift(
-                &subst_levels(
-                    &subst_outer(&branching_tel[bk], m, params, *pos + bk),
-                    &ind.level_params,
-                    level_args,
-                ),
-                (n - pos + j) as i64,
-                bk,
-            );
-            ih_ty = Term::pi(b_dom, ih_ty);
-        }
+        let pos = rec[j].position;
+        let field_type = shift(
+            &subst_levels(
+                &subst_outer(&c.args[pos], m, params, pos),
+                &ind.level_params,
+                level_args,
+            ),
+            (n - pos + j) as i64,
+            0,
+        );
+        let field_value = Term::var(n - 1 - pos + j);
+        let ih_ty = structured_lift_type(
+            env,
+            &rec[j].shape,
+            &field_type,
+            &field_value,
+            &weaken(motive, (n + j) as i64),
+            ind.id,
+            m,
+        )?;
         ty = Term::pi(ih_ty, ty);
     }
 
@@ -711,7 +1187,7 @@ pub fn method_type(
         ); // in [Γ, a₁'..a_j']
         ty = Term::pi(a_ty, ty);
     }
-    ty
+    Ok(ty)
 }
 
 /// The ι-reduct of an eliminator applied to a constructor-headed scrutinee
@@ -721,6 +1197,7 @@ pub fn method_type(
 /// then args), already peeled from the scrutinee. Returns the reduct, or an
 /// error if the spine does not match the constructor's arity.
 pub fn iota_reduct(
+    env: &GlobalEnv,
     ind: &InductiveDecl,
     k: usize,
     level_args: &[Level],
@@ -767,95 +1244,33 @@ pub fn iota_reduct(
     let ctor_args = &ctor_all_args[m..]; // ā (the actual constructor args)
     let method = &methods[k];
 
-    let rec = recursive_args(c, ind.id, m);
+    let rec = recursive_shapes(env, c, ind.id, m)?;
     // Induction hypotheses for each recursive arg (`14 §7.3`, `14 §7.7`):
     //   - Direct (nb=0):    `elim_D p̄ M m̄ idx(a_j) a_j`
     //   - W-style (nb≥1):  `λ(b₁:B₁)...(b_{nb}:B_{nb}). elim_D p̄ M m̄ idx(a_j b₁..b_{nb}) (a_j b₁..b_{nb})`
     let mut ihs: Vec<Term> = Vec::new();
-    for (pos, branching_tel, idxs) in &rec {
-        let a_j = &ctor_args[*pos];
-        let nb = branching_tel.len();
-        if nb == 0 {
-            // Direct case: elim applied to a_j itself.
-            let idx_vals: Vec<Term> = idxs
-                .iter()
-                .map(|t| {
-                    subst_levels(
-                        &subst_tel(&subst_outer(t, m, params, *pos), &ctor_args[..*pos]),
-                        &ind.level_params,
-                        level_args,
-                    )
-                })
-                .collect();
-            ihs.push(Term::Elim {
-                fam: ind.id,
-                level_args: level_args.to_vec(),
-                params: params.to_vec(),
-                motive: Box::new(motive.clone()),
-                methods: methods.to_vec(),
-                indices: idx_vals,
-                scrut: Box::new(a_j.clone()),
-            });
-        } else {
-            // W-style case: build λ(b₁:B₁)...(b_{nb}:B_{nb}). elim_D … (a_j b₁..b_{nb}).
-            // Inside nb lambda binders, context extends by b₁..b_{nb}.
-            // a_j weakened by nb to sit inside the binders.
-            let a_j_inner = weaken(a_j, nb as i64);
-            // a_j b₁ b₂ ... b_{nb}: b_k = Var(nb-1-k) under the lambdas.
-            let mut scrut_inner = a_j_inner;
-            for bk in 0..nb {
-                scrut_inner = Term::app(scrut_inner, Term::var(nb - 1 - bk));
-            }
-            // Index vals in [Γ, b₁..b_{nb}]:
-            // idxs[i] in [Δ_p, args_before_pos, b₁..b_{nb}]; subst_outer replaces
-            // m params (inner_depth=pos+nb), then subst_tel substitutes pos args
-            // (weakened by nb to sit inside the binders).
-            let ctor_args_inner: Vec<Term> = ctor_args[..*pos]
-                .iter()
-                .map(|t| weaken(t, nb as i64))
-                .collect();
-            let idx_vals_inner: Vec<Term> = idxs
-                .iter()
-                .map(|t| {
-                    subst_levels(
-                        &subst_tel(&subst_outer(t, m, params, *pos + nb), &ctor_args_inner),
-                        &ind.level_params,
-                        level_args,
-                    )
-                })
-                .collect();
-            // Build the elim call inside the lambdas (all Γ-terms weakened by nb).
-            let elim_inner = Term::Elim {
-                fam: ind.id,
-                level_args: level_args.to_vec(),
-                params: params.iter().map(|p| weaken(p, nb as i64)).collect(),
-                motive: Box::new(weaken(motive, nb as i64)),
-                methods: methods.iter().map(|mth| weaken(mth, nb as i64)).collect(),
-                indices: idx_vals_inner,
-                scrut: Box::new(scrut_inner),
-            };
-            // Wrap in λ-binders from innermost (B_{nb}) to outermost (B₁).
-            // B_k (branching_tel[bk]) in [Δ_p, args_before_pos, b₁..b_{bk}].
-            // subst_outer with inner_depth=pos+bk, then subst_tel with ctor_args
-            // weakened by bk → result in [Γ, b₁..b_{bk}].
-            let mut ih_term = elim_inner;
-            for bk in (0..nb).rev() {
-                let ctor_args_k: Vec<Term> = ctor_args[..*pos]
-                    .iter()
-                    .map(|t| weaken(t, bk as i64))
-                    .collect();
-                let b_dom = subst_levels(
-                    &subst_tel(
-                        &subst_outer(&branching_tel[bk], m, params, *pos + bk),
-                        &ctor_args_k,
-                    ),
-                    &ind.level_params,
-                    level_args,
-                );
-                ih_term = Term::lam(b_dom, ih_term);
-            }
-            ihs.push(ih_term);
-        }
+    for argument in &rec {
+        let pos = argument.position;
+        let field_type = subst_levels(
+            &subst_tel(
+                &subst_outer(&c.args[pos], m, params, pos),
+                &ctor_args[..pos],
+            ),
+            &ind.level_params,
+            level_args,
+        );
+        ihs.push(structured_lift_term(
+            env,
+            &argument.shape,
+            &field_type,
+            &ctor_args[pos],
+            motive,
+            methods,
+            ind.id,
+            m,
+            level_args,
+            params,
+        )?);
     }
 
     // `mₖ ā [IHs]` — method applied to the constructor args then the IHs.
@@ -1111,6 +1526,7 @@ mod tests {
         // only ONE method (Nat has two constructors) → must error, not panic.
         let motive = Term::lam(Term::indformer(d(0), vec![]), Term::indformer(d(0), vec![]));
         let res = iota_reduct(
+            &GlobalEnv::new(),
             &ind,
             0,
             &[],
@@ -1132,6 +1548,7 @@ mod tests {
             Term::lam(Term::indformer(d(0), vec![]), Term::indformer(d(0), vec![])),
         );
         let res = iota_reduct(
+            &GlobalEnv::new(),
             &ind,
             1, // suc
             &[],
@@ -1150,6 +1567,7 @@ mod tests {
         ind.level_params = vec![LevelVar(0)]; // one level param
         let motive = Term::lam(Term::indformer(d(0), vec![]), Term::indformer(d(0), vec![]));
         let res = iota_reduct(
+            &GlobalEnv::new(),
             &ind,
             0,
             &[Level::zero(), Level::zero()], // 2 level args, expected 1
