@@ -282,6 +282,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude Deadline failed: {}", e)))?;
     elab.elaborate_decl("data ClockOp = WallNow | MonotonicNow | SleepUntil Deadline")
         .map_err(|e| ElabError::Internal(format!("prelude ClockOp failed: {}", e)))?;
+    elab.elaborate_decl("data EntropyOp = RandomBytes Int")
+        .map_err(|e| ElabError::Internal(format!("prelude EntropyOp failed: {}", e)))?;
     elab.elaborate_decl("data ReadResult = Chunk Bytes | Eof")
         .map_err(|e| ElabError::Internal(format!("prelude ReadResult failed: {}", e)))?;
     elab.elaborate_decl(
@@ -1225,6 +1227,25 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     )
     .map_err(|e| ElabError::Internal(format!("prelude sleep_until failed: {}", e)))?;
 
+    // Entropy is ambient at the host-dispatch layer (no capability token --
+    // the kernel CSPRNG exposes no scoped object to attenuate) but remains an
+    // EXPLICIT operation in the program type and trace: code without the
+    // Entropy effect cannot perform it.
+    elab.elaborate_decl(
+        "fn entropy_resp (op : EntropyOp) : Type = match op { \
+           RandomBytes count |-> Result IOError Bytes \
+         }",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude entropy_resp failed: {}", e)))?;
+    elab.elaborate_decl("const EntropyIO (a : Type) : Type = ITree EntropyOp entropy_resp a")
+        .map_err(|e| ElabError::Internal(format!("prelude EntropyIO failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc random_bytes (count : Int) : EntropyIO (Result IOError Bytes) visits [Entropy] = \
+         Vis EntropyOp entropy_resp (Result IOError Bytes) (RandomBytes count) \
+           (\\r. Ret EntropyOp entropy_resp (Result IOError Bytes) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude random_bytes failed: {}", e)))?;
+
     elab.elaborate_decl(
         "proc read (stream : Stream) (limit : Int) : IO (Result IOError ReadResult) visits [Console] = \
          Vis ConsoleOp console_resp (Result IOError ReadResult) (Read stream limit) \
@@ -1744,13 +1765,45 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // The resource bracket is a HostIO surface rather than a nested FS tree:
     // the delayed body may compose ambient effects while the private resource
     // operations remain ordinary FS-family nodes in the existing coproduct.
-    elab.elaborate_decl("const AmbientOp : Type = Coproduct ConsoleOp ClockOp")
+    // The ambient algebra is the ONE closed three-way sum Console + Clock +
+    // Entropy, represented as a nested binary coproduct. The nesting is a
+    // representation detail: production callers reach it only through the
+    // named ambient_console / ambient_clock / ambient_entropy injections
+    // below, so no caller spells raw InL/InR topology.
+    elab.elaborate_decl("const AmbientTailOp : Type = Coproduct ClockOp EntropyOp")
+        .map_err(|e| ElabError::Internal(format!("prelude AmbientTailOp failed: {}", e)))?;
+    elab.elaborate_decl(
+        "fn ambient_tail_resp (op : AmbientTailOp) : Type = \
+         resp_coproduct ClockOp EntropyOp clock_resp entropy_resp op",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude ambient_tail_resp failed: {}", e)))?;
+    elab.elaborate_decl("const AmbientOp : Type = Coproduct ConsoleOp AmbientTailOp")
         .map_err(|e| ElabError::Internal(format!("prelude AmbientOp failed: {}", e)))?;
     elab.elaborate_decl(
         "fn ambient_resp (op : AmbientOp) : Type = \
-         resp_coproduct ConsoleOp ClockOp console_resp clock_resp op",
+         resp_coproduct ConsoleOp AmbientTailOp console_resp ambient_tail_resp op",
     )
     .map_err(|e| ElabError::Internal(format!("prelude ambient_resp failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc ambient_console (r : Type) (action : IO r) \
+         : ITree AmbientOp ambient_resp r visits [Console] = \
+         inject_l ConsoleOp AmbientTailOp console_resp ambient_tail_resp r action",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude ambient_console failed: {e}")))?;
+    elab.elaborate_decl(
+        "proc ambient_clock (r : Type) (action : ClockIO r) \
+         : ITree AmbientOp ambient_resp r visits [Clock] = \
+         inject_r ConsoleOp AmbientTailOp console_resp ambient_tail_resp r \
+           (inject_l ClockOp EntropyOp clock_resp entropy_resp r action)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude ambient_clock failed: {e}")))?;
+    elab.elaborate_decl(
+        "proc ambient_entropy (r : Type) (action : EntropyIO r) \
+         : ITree AmbientOp ambient_resp r visits [Entropy] = \
+         inject_r ConsoleOp AmbientTailOp console_resp ambient_tail_resp r \
+           (inject_r ClockOp EntropyOp clock_resp entropy_resp r action)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude ambient_entropy failed: {e}")))?;
     elab.elaborate_decl(
         "fn HostIO (a : Auth) (r : Type) : Type = \
          ITree (Coproduct (FSOp a) AmbientOp) \
@@ -2224,16 +2277,23 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         "proc host_console (a : Auth) (r : Type) (action : IO r) \
          : HostIO a r visits [Console] = \
          inject_r (FSOp a) AmbientOp (fs_resp a) ambient_resp r \
-           (inject_l ConsoleOp ClockOp console_resp clock_resp r action)",
+           (ambient_console r action)",
     )
     .map_err(|e| ElabError::Internal(format!("prelude host_console failed: {}", e)))?;
     elab.elaborate_decl(
         "proc host_clock (a : Auth) (r : Type) (action : ClockIO r) \
          : HostIO a r visits [Clock] = \
          inject_r (FSOp a) AmbientOp (fs_resp a) ambient_resp r \
-           (inject_r ConsoleOp ClockOp console_resp clock_resp r action)",
+           (ambient_clock r action)",
     )
     .map_err(|e| ElabError::Internal(format!("prelude host_clock failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc host_entropy (a : Auth) (r : Type) (action : EntropyIO r) \
+         : HostIO a r visits [Entropy] = \
+         inject_r (FSOp a) AmbientOp (fs_resp a) ambient_resp r \
+           (ambient_entropy r action)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude host_entropy failed: {}", e)))?;
     elab.elaborate_decl(
         "proc host_program_then (a : Auth) (action : IO Unit) (code : ExitCode) \
          : HostIO a ExitCode visits [Console] = \

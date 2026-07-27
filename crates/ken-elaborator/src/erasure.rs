@@ -481,6 +481,7 @@ pub(crate) struct CheckedHostSpineV1 {
     pub fs_family: StableSymbol,
     pub console_family: StableSymbol,
     pub clock_family: StableSymbol,
+    pub entropy_family: StableSymbol,
     pub capability: StableSymbol,
     pub result_err: StableSymbol,
     pub result_ok: StableSymbol,
@@ -3271,6 +3272,7 @@ fn decode_checked_host_operation<'a>(
         crate::export::HostOpFamilyV1::Clock => &spine.clock_family,
         crate::export::HostOpFamilyV1::Console => &spine.console_family,
         crate::export::HostOpFamilyV1::Fs => &spine.fs_family,
+        crate::export::HostOpFamilyV1::Entropy => &spine.entropy_family,
     };
     if &constructor.family_symbol != expected_family {
         return Err(expression_lowering_error(
@@ -3369,6 +3371,7 @@ fn lower_runtime_selected_host_operation(
                     crate::export::HostOpFamilyV1::Clock => &spine.clock_family,
                     crate::export::HostOpFamilyV1::Console => &spine.console_family,
                     crate::export::HostOpFamilyV1::Fs => &spine.fs_family,
+                    crate::export::HostOpFamilyV1::Entropy => &spine.entropy_family,
                 };
             if family != expected_family {
                 return Err(expression_lowering_error(
@@ -3443,6 +3446,31 @@ fn lower_runtime_selected_host_operation(
     let fs = leaf_dispatch(&spine.fs_family, RuntimeExpr::Var(0), 1)?;
     let console = leaf_dispatch(&spine.console_family, RuntimeExpr::Var(0), 2)?;
     let clock = leaf_dispatch(&spine.clock_family, RuntimeExpr::Var(0), 2)?;
+    let entropy = leaf_dispatch(&spine.entropy_family, RuntimeExpr::Var(0), 2)?;
+    // The ambient algebra is the closed three-way sum Console + Clock +
+    // Entropy, represented as Coproduct ConsoleOp (Coproduct ClockOp
+    // EntropyOp). The elimination mirrors that nesting exactly, and lives
+    // only here so no other consumer reproduces the topology.
+    let clock_or_entropy = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Var(0)),
+        cases: vec![
+            RuntimeMatchCase {
+                constructor: spine.in_l.to_string(),
+                binders: 1,
+                body: clock,
+            },
+            RuntimeMatchCase {
+                constructor: spine.in_r.to_string(),
+                binders: 1,
+                body: entropy,
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "runtime-selected ambient tail operation had malformed coproduct identity"
+                .to_string(),
+        },
+    };
     let ambient = RuntimeExpr::Match {
         scrutinee: Box::new(RuntimeExpr::Var(0)),
         cases: vec![
@@ -3454,7 +3482,7 @@ fn lower_runtime_selected_host_operation(
             RuntimeMatchCase {
                 constructor: spine.in_r.to_string(),
                 binders: 1,
-                body: clock,
+                body: clock_or_entropy,
             },
         ],
         default: RuntimeTrap {
@@ -6194,6 +6222,7 @@ mod px7l_tests {
         let fs_family = family("FSOp");
         let console_family = family("ConsoleOp");
         let clock_family = family("ClockOp");
+        let entropy_family = family("EntropyOp");
         let coproduct = family("Coproduct");
         let in_l = StableSymbol::constructor(&coproduct, "InL");
         let in_r = StableSymbol::constructor(&coproduct, "InR");
@@ -6206,6 +6235,7 @@ mod px7l_tests {
             fs_family,
             console_family,
             clock_family,
+            entropy_family,
             capability: family("Cap"),
             result_err: StableSymbol::constructor(&family("Result"), "Err"),
             result_ok: StableSymbol::constructor(&family("Result"), "Ok"),

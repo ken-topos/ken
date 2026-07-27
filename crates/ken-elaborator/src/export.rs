@@ -583,6 +583,7 @@ pub(crate) enum HostOpFamilyV1 {
     Console,
     Clock,
     Fs,
+    Entropy,
 }
 
 pub(crate) const fn host_operation_family_v1(
@@ -596,6 +597,7 @@ pub(crate) const fn host_operation_family_v1(
         ken_host::HostOpV1::ClockWallNow
         | ken_host::HostOpV1::ClockMonotonicNow
         | ken_host::HostOpV1::ClockSleepUntil => HostOpFamilyV1::Clock,
+        ken_host::HostOpV1::EntropyRandomBytes => HostOpFamilyV1::Entropy,
         ken_host::HostOpV1::FsReadFile
         | ken_host::HostOpV1::FsWriteFile
         | ken_host::HostOpV1::FsAppendFile
@@ -621,6 +623,7 @@ fn host_operation_family(operation: ken_host::HostOpV1) -> (&'static str, &'stat
         HostOpFamilyV1::Console => ("ConsoleOp", "Console"),
         HostOpFamilyV1::Clock => ("ClockOp", "Clock"),
         HostOpFamilyV1::Fs => ("FSOp", "FS"),
+        HostOpFamilyV1::Entropy => ("EntropyOp", "Entropy"),
     }
 }
 
@@ -667,6 +670,7 @@ pub const fn canonical_host_perform_signature_v1(operation: ken_host::HostOpV1) 
         ken_host::HostOpV1::ClockWallNow => "ClockWallNow",
         ken_host::HostOpV1::ClockMonotonicNow => "ClockMonotonicNow",
         ken_host::HostOpV1::ClockSleepUntil => "ClockSleepUntil",
+        ken_host::HostOpV1::EntropyRandomBytes => "EntropyRandomBytes",
         ken_host::HostOpV1::FsReadFile => "FsReadFile",
         ken_host::HostOpV1::FsWriteFile => "FsWriteFile",
         ken_host::HostOpV1::FsAppendFile => "FsAppendFile",
