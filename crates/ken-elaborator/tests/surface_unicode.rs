@@ -1,6 +1,11 @@
 //! SURF-1 D3 Unicode surface acceptance.
 
-use ken_elaborator::{format::canonical_unicode, lexer::Lexer, ElabEnv};
+use ken_elaborator::{
+    error::{ElabError, Span},
+    format::canonical_unicode,
+    lexer::Lexer,
+    ElabEnv,
+};
 use ken_kernel::Decl;
 
 fn token_kinds(src: &str) -> Vec<ken_elaborator::lexer::Token> {
@@ -18,6 +23,26 @@ fn transparent_debug(src: &str) -> (String, String) {
         Some(Decl::Transparent { ty, body, .. }) => (format!("{ty:?}"), format!("{body:?}")),
         other => panic!("expected transparent decl, got {other:?}"),
     }
+}
+
+fn non_ascii_identifier_error(src: &str, character: char) -> ElabError {
+    let error = Lexer::lex(src).expect_err("non-ASCII identifier must be rejected");
+    let start = src
+        .find(character)
+        .expect("fixture must contain the rejected character");
+    assert!(matches!(
+        &error,
+        ElabError::NonAsciiIdentifierCharacter {
+            character: actual,
+            span: Span {
+                start: actual_start,
+                end: actual_end,
+            },
+        } if *actual == character
+            && *actual_start == start
+            && *actual_end == start + character.len_utf8()
+    ));
+    error
 }
 
 #[test]
@@ -49,17 +74,24 @@ foreign call : Int -> Int = \"keep -> and not in level\" \"lib|->l\" [pure]\n\
 }
 
 #[test]
-fn surf1_d3_rejects_unbounded_unicode_identifiers() {
-    for src in [
-        "fn surf1_bad (а : Type) : Type = Type",  // Cyrillic small a
-        "fn surf1_bad (xа : Type) : Type = Type", // ASCII start, Cyrillic continuation
-        "fn Ｔ : Type = Type",                    // fullwidth capital T
+fn surf1_d3_ascii_identifier_boundary_rejects_non_ascii_letters() {
+    for (src, character) in [
+        ("fn surf1_bad (а : Type) : Type = Type", 'а'), // Cyrillic small a
+        ("fn surf1_bad (xа : Type) : Type = Type", 'а'), // continuation
+        ("fn Ｔ : Type = Type", 'Ｔ'),                  // fullwidth capital T
     ] {
-        assert!(
-            Lexer::lex(src).is_err(),
-            "unbounded Unicode identifier accepted: {src}"
-        );
+        non_ascii_identifier_error(src, character);
     }
+}
+
+#[test]
+fn surf_ident_tr39_shape_b_names_the_ascii_only_identifier_rule() {
+    let cyrillic = non_ascii_identifier_error("fn surf_ident_bad (а : Type) : Type = Type", 'а');
+    let non_confusable =
+        non_ascii_identifier_error("fn surf_ident_bad (字 : Type) : Type = Type", '字');
+
+    eprintln!("Cyrillic control: {cyrillic}");
+    eprintln!("non-confusable control: {non_confusable}");
 }
 
 #[test]
