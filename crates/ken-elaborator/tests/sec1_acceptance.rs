@@ -12,19 +12,20 @@
 
 use ken_elaborator::{
     attempt_obligation, attempt_with_cert,
+    effects::{bind, handler_fold, incl, HandlerCase, ITree},
     extract::{ObligationId, ObligationTriple, ProvKind, Provenance},
     error::Span,
     ifc::{
         check_declassify_in_delta, check_no_laundering,
         check_reduction_faithfulness, CtHook, CtLabel, DeclassifyCap, FlowCtx,
         LeakageSink, RelationalClaim, BOTTOM, INTERNAL, PUBLIC, SECRET,
-        TRIGGER_REL_DEFERRED, TRIGGER_SEC1CT, TRIGGER_SEC1_DUAL,
-        TRIGGER_SEC1_LAUNDER, TRIGGER_SEC1_REDUCE, TRIGGER_WARD,
-        TRUSTED, UNTRUSTED,
+        TRIGGER_REL_DEFERRED, TRIGGER_SEC1_REDUCE, TRIGGER_WARD, TRUSTED,
+        UNTRUSTED,
     },
     prover::{Countermodel, ProverResult, Verdict},
 };
 use ken_kernel::{declare_postulate, GlobalEnv, Level, Term};
+use std::rc::Rc;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -99,16 +100,11 @@ fn secret_to_public_rejected() {
     assert!(accept_pub.is_accept(), "Public @ Public sink must accept");
 }
 
-/// A2. Integrity lattice (dual): Untrusted ⋢ Trusted sink — scalar-correct.
+/// A2. Integrity lattice (dual): Untrusted ⋢ Trusted sink.
 /// Flip: Trusted data into a Trusted sink accepts.
 ///
-/// **`[Sec1-dual]` stub notice:** `UNTRUSTED=Label(2)` and `TRUSTED=Label(0)` are
-/// the same scalars as `SECRET` and `PUBLIC`. `l_sink(UNTRUSTED,TRUSTED)` is
-/// numerically byte-identical to `l_sink(SECRET,PUBLIC)` in A1 — the integrity
-/// order-dual is NOT a separate implementation path. A bug that applied the wrong
-/// order *specifically* to the IntegLabel carrier (leaving ConfLabel unaffected)
-/// cannot be caught here; A2 cannot flip while A1 stays green. The genuine
-/// `(Conf×Integ)` product + lattice-parametric rules are deferred to `[Sec1-dual]`.
+/// Confidentiality and integrity use separate, oppositely ordered carriers,
+/// so mutations to A1 and A2 are independently observable.
 #[test]
 fn integrity_taint_rejected() {
     let ctx = FlowCtx::new();
@@ -128,8 +124,6 @@ fn integrity_taint_rejected() {
     let accept_down = ctx.l_sink(TRUSTED, UNTRUSTED, "log.any");
     assert!(accept_down.is_accept(), "Trusted flows to Untrusted context (downgrade OK)");
 
-    // [Sec1-dual] trigger — stub named, not silent.
-    assert_eq!(TRIGGER_SEC1_DUAL, "[Sec1-dual]");
 }
 
 /// A3. Implicit flow: `if (secret @ Secret) then send s 1 else send s 0`
@@ -253,54 +247,40 @@ fn declassify_absent_from_delta_is_infidelity() {
 
 // ─── C. No laundering through effects (AC2) — load-bearing guard ─────────────
 
-/// C1. Label-equality check for no-laundering — concept-correct, routing stub.
-///
-/// **`[Sec1-launder]` stub notice:** `check_no_laundering(a,b)=(a==b)` is a
-/// label-equality predicate over hand-assigned literals. No real `bind`/`incl`/
-/// `handler_fold` on `itree::ITree` is invoked — the actual trusted surface
-/// (`36 §2.2/§2.4`: `bind (Vis e f) k = Vis e (λr.…)` must preserve the label
-/// index) is untested. The test verifies the CONCEPT (label-equality is the right
-/// invariant) but not KEN'S ROUTING. A label-dropping `bind` in `itree.rs` would
-/// not be caught until `[Sec1-launder]` wires C1 through real effect routing.
-///
-/// Doubly load-bearing under N1: the kernel is blind to label drops (labels
-/// erased before kernel), so C1 — once wired to real routing — is the sole net.
+/// C1. A real `Vis` label survives bind, inclusion, and handler routing.
 #[test]
 fn label_survives_effect_routing() {
-    // Concept check: label-equality is the correct no-laundering invariant.
-    let original_label = SECRET;
-    let after_bind = original_label; // preserved (correct bind/incl)
+    let original = ITree::vis_labeled("Net", SECRET, |r| ITree::ret(r as i64));
+    assert_eq!(original.label(), Some(SECRET), "fixture is a Secret Vis");
+
+    let after_bind = bind(original, Rc::new(ITree::ret));
+    let after_bind_label = after_bind.label().expect("bind preserves Vis");
     assert!(
-        check_no_laundering(original_label, after_bind),
-        "correct bind: label preserved → no-laundering invariant holds"
+        check_no_laundering(SECRET, after_bind_label),
+        "bind reconstructs the same Secret-indexed Vis"
     );
 
-    // With preserved label, the flow pass still sees Secret at the Public sink:
-    let ctx = FlowCtx::new();
-    let reject = ctx.l_sink(after_bind, PUBLIC, "chan.public");
+    let after_incl = incl(after_bind, Rc::new(|effect| format!("Caller::{effect}")));
+    assert_eq!(after_incl.effect_name().map(String::as_str), Some("Caller::Net"));
+    let after_incl_label = after_incl.label().expect("incl preserves Vis");
+    assert!(
+        check_no_laundering(SECRET, after_incl_label),
+        "incl retags only the effect and preserves the Secret index"
+    );
+
+    let cases: Rc<[HandlerCase]> = vec![HandlerCase::new("Caller::FS", 0)].into();
+    let after_handler = handler_fold(after_incl, cases);
+    let routed_label = after_handler.label().expect("unhandled Vis survives");
+    assert!(
+        check_no_laundering(SECRET, routed_label),
+        "handler reconstruction preserves the Secret index"
+    );
+
+    let reject = FlowCtx::new().l_sink(routed_label, PUBLIC, "chan.public");
     assert!(
         reject.is_reject(),
-        "preserved Secret label @ Public sink → rejects (correct behaviour)"
+        "routed Secret label still rejects at a Public sink"
     );
-
-    // Concept of the flip-bug: a bind/incl that DROPS the label index (→ PUBLIC).
-    let after_bind_bug = PUBLIC; // dropped to Public (the bug we target)
-    assert!(
-        !check_no_laundering(original_label, after_bind_bug),
-        "bug: label-dropping bind → no-laundering invariant FAILS"
-    );
-
-    // Under the bug, the flow pass sees Public at the Public sink — wrongly accepts:
-    let wrongly_accept = ctx.l_sink(after_bind_bug, PUBLIC, "chan.public");
-    assert!(
-        wrongly_accept.is_accept(),
-        "bug: dropped label → wrongly accepts (concept: green-vs-red on label equality)"
-    );
-    // NOTE: the above is concept-level only. Real routing (itree::bind/incl) must
-    // be the discriminant — see [Sec1-launder].
-
-    // [Sec1-launder] trigger — stub named, not silent.
-    assert_eq!(TRIGGER_SEC1_LAUNDER, "[Sec1-launder]");
 }
 
 // ─── D. Non-interference by proof — relational verdict mapping (AC3) ──────────
@@ -679,23 +659,19 @@ fn by_proof_trichotomy_cross_case_sweep() {
     assert!(!check_reduction_faithfulness(&d3.verdict), "D3: Unknown does not pass faithfulness predicate");
 }
 
-/// Honest limits: N1/N2 stub gaps carry named reify-triggers — never silent.
+/// Honest limits: delivered N1 surfaces move out of the deferred inventory.
 ///
-/// This WP delivers the scalar IFC discipline-library with correct flow-rule
-/// logic. Three N1/N2 surfaces are STUB-TESTED (the logic is right; the real
-/// Ken routing/reduction machinery is not yet wired):
-/// - `[Sec1-dual]`: A2 is scalar-identical to A1; the integrity order-dual is
-///   not independently discriminating. Genuine (Conf×Integ) product deferred.
-/// - `[Sec1-launder]`: C1 checks label-equality over literals; no real
-///   `bind`/`incl`/`Vis` routing is invoked. Real effect routing deferred.
+/// The remaining N2 surface is explicitly deferred:
 /// - `[Sec1-reduce]`: D5 checks verdict shape over synthetic obligations; no
 ///   real `product(c,ζ)` reduction is implemented. Real reduction deferred.
 #[test]
 fn n1_n2_stub_gaps_carry_reify_triggers() {
-    // Each trigger is a named non-silent gap (LP-2 honest-limits discipline
-    // applies to BUILD claims exactly as it applies to spec claims).
-    assert_eq!(TRIGGER_SEC1_DUAL, "[Sec1-dual]");
-    assert_eq!(TRIGGER_SEC1_LAUNDER, "[Sec1-launder]");
+    // Delivered: separate Conf/Integ carriers and real Vis routing.
+    assert_ne!(SECRET.conf, PUBLIC.conf);
+    assert_ne!(UNTRUSTED.integ, TRUSTED.integ);
+
+    // Still deferred: the landed prover has no product-program producer or
+    // refutation backend, so the N2 gap remains named rather than faked.
     assert_eq!(TRIGGER_SEC1_REDUCE, "[Sec1-reduce]");
 
     // What IS delivered (real, not stubs):
@@ -704,8 +680,6 @@ fn n1_n2_stub_gaps_carry_reify_triggers() {
     // - Declassification capability-gated + strictly-lower + delta-audited
     // - @ct hook parses, carries, rejects at leakage sinks
     // - Deferred cases carry triggers: [rel-deferred], [Sec1ct], [Ward]
-    // What is NOT yet delivered (stub, pending the three triggers above):
-    // - Independent integrity dual (A2 ≡ A1 at scalar level)
-    // - Real Vis-routing for no-laundering (C1 is label-equality only)
+    // What is NOT yet delivered:
     // - Real product-program reduction for faithfulness (D5 is verdict-shape only)
 }

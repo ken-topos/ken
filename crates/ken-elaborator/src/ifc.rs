@@ -15,11 +15,30 @@ use crate::prover::{attempt_obligation, ProverResult, Verdict};
 
 // ─── §2 Label lattice (DLM instance) ─────────────────────────────────────────
 
-/// A security label — a product of three factors (§2.2, §5a.1).
+/// Confidentiality carrier: reader count, ordered in reverse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ConfLabel(pub u8);
+
+impl ConfLabel {
+    fn join(self, other: Self) -> Self { Self(self.0.min(other.0)) }
+    fn meet(self, other: Self) -> Self { Self(self.0.max(other.0)) }
+    fn flows_to(self, clearance: Self) -> bool { self.0 >= clearance.0 }
+}
+
+/// Integrity carrier: influencer count, ordered ordinarily.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct IntegLabel(pub u8);
+
+impl IntegLabel {
+    fn join(self, other: Self) -> Self { Self(self.0.max(other.0)) }
+    fn meet(self, other: Self) -> Self { Self(self.0.min(other.0)) }
+    fn flows_to(self, clearance: Self) -> bool { self.0 <= clearance.0 }
+}
+
+/// A security label — a product of three independent factors (§2.2, §5a.1).
 ///
-/// - `conf`: confidentiality — `Public(0) ⊑ Internal(1) ⊑ Secret(2)`.
-/// - `integ`: integrity (scalar; `[Sec1-dual]` defers the true order-dual carrier) —
-///   `Trusted(0) ⊑ Untrusted(2)`.
+/// - `conf`: confidentiality — `Public(2) ⊑ Internal(1) ⊑ Secret(0)`.
+/// - `integ`: integrity — `Trusted(0) ⊑ Untrusted(2)`.
 /// - `ct`: constant-time taint (`§5a.1`) — `ct⊥=false` (safe), `ct⊤=true` (@ct,
 ///   timing-sensitive). **Taint orientation**: sink demands `ct⊥`; `ct⊤ ⋢ ct⊥` → reject.
 ///   Join (`⊔`) is logical-OR (any `@ct` input ⇒ `@ct` result).
@@ -28,34 +47,34 @@ use crate::prover::{attempt_obligation, ProverResult, Verdict};
 /// Labels are **erased** before the kernel (§3); no kernel primitive introduced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Label {
-    pub conf:  u8,   // confidentiality: 0=PUBLIC/⊥, 1=INTERNAL, 2=SECRET/⊤
-    pub integ: u8,   // integrity: 0=TRUSTED/⊥, 2=UNTRUSTED/⊤ ([Sec1-dual]: scalar only)
-    pub ct:    bool, // CT taint: false=ct⊥ (safe), true=ct⊤ (@ct, timing-sensitive)
+    pub conf:  ConfLabel,
+    pub integ: IntegLabel,
+    pub ct:    bool,
 }
 
 // DLM standard lattice — named constants (§2.1).
-pub const PUBLIC:   Label = Label { conf: 0, integ: 0, ct: false }; // ⊥_conf (readable by all)
-pub const INTERNAL: Label = Label { conf: 1, integ: 0, ct: false }; // intermediate confidentiality
-pub const SECRET:   Label = Label { conf: 2, integ: 0, ct: false }; // ⊤_conf (readable by few)
+pub const PUBLIC:   Label = Label { conf: ConfLabel(2), integ: IntegLabel(0), ct: false };
+pub const INTERNAL: Label = Label { conf: ConfLabel(1), integ: IntegLabel(0), ct: false };
+pub const SECRET:   Label = Label { conf: ConfLabel(0), integ: IntegLabel(0), ct: false };
 
-pub const TRUSTED:   Label = Label { conf: 0, integ: 0, ct: false }; // ⊥_integ (most trustworthy)
-pub const UNTRUSTED: Label = Label { conf: 0, integ: 2, ct: false }; // ⊤_integ (attacker-influenced)
+pub const TRUSTED:   Label = Label { conf: ConfLabel(2), integ: IntegLabel(0), ct: false };
+pub const UNTRUSTED: Label = Label { conf: ConfLabel(2), integ: IntegLabel(2), ct: false };
 
-pub const BOTTOM: Label = Label { conf: 0, integ: 0, ct: false }; // ⊥ (pure context, no taint)
-pub const TOP:    Label = Label { conf: 2, integ: 2, ct: true  }; // ⊤ (fully secret+untrusted+ct)
+pub const BOTTOM: Label = Label { conf: ConfLabel(2), integ: IntegLabel(0), ct: false };
+pub const TOP:    Label = Label { conf: ConfLabel(0), integ: IntegLabel(2), ct: true  };
 
 /// `ct⊥` — the safe CT level; what a leakage sink demands as its clearance.
-pub const CT_BOT: Label = Label { conf: 0, integ: 0, ct: false };
+pub const CT_BOT: Label = BOTTOM;
 /// `ct⊤` — the `@ct` taint; a timing-sensitive value that must not steer a `LeakSink`.
-pub const CT_TOP: Label = Label { conf: 0, integ: 0, ct: true  };
+pub const CT_TOP: Label = Label { conf: ConfLabel(2), integ: IntegLabel(0), ct: true };
 
 /// `ℓ ⊔ κ` — componentwise join (§2.2 product lattice + §5a.1 CT axis).
-/// - conf/integ: `max` (raises to the more sensitive).
+/// - conf: minimum reader count; integ: maximum influencer count.
 /// - ct: logical-OR (any `@ct` input ⇒ `@ct` result; cannot compute `@ct` away).
 pub fn join(a: Label, b: Label) -> Label {
     Label {
-        conf:  a.conf.max(b.conf),
-        integ: a.integ.max(b.integ),
+        conf:  a.conf.join(b.conf),
+        integ: a.integ.join(b.integ),
         ct:    a.ct || b.ct,
     }
 }
@@ -63,20 +82,20 @@ pub fn join(a: Label, b: Label) -> Label {
 /// `ℓ ⊓ κ` — componentwise meet (§2.2).
 pub fn meet(a: Label, b: Label) -> Label {
     Label {
-        conf:  a.conf.min(b.conf),
-        integ: a.integ.min(b.integ),
+        conf:  a.conf.meet(b.conf),
+        integ: a.integ.meet(b.integ),
         ct:    a.ct && b.ct,
     }
 }
 
 /// `ℓ ⊑ κ` — componentwise "flows to" (§2.2 product order).
 /// True iff every component flows to the corresponding clearance component:
-/// - conf: `ℓ.conf ≤ κ.conf`  (`Public ⊑ Secret` ✓, `Secret ⊑ Public` ✗)
-/// - integ: `ℓ.integ ≤ κ.integ` (`Trusted ⊑ Untrusted` ✓, reverse ✗)
+/// - conf: reverse numeric order (`Public ⊑ Secret` ✓, reverse ✗)
+/// - integ: ordinary numeric order (`Trusted ⊑ Untrusted` ✓, reverse ✗)
 /// - ct: `!ℓ.ct || κ.ct`  (`ct⊥ ⊑ ct⊥` ✓, `ct⊤ ⊑ ct⊥` ✗ — taint → safe is blocked)
 pub fn flows_to(label: Label, clearance: Label) -> bool {
-    label.conf  <= clearance.conf
-        && label.integ <= clearance.integ
+    label.conf.flows_to(clearance.conf)
+        && label.integ.flows_to(clearance.integ)
         && (!label.ct   || clearance.ct)
 }
 
@@ -357,21 +376,6 @@ pub fn check_declassify_in_delta(authority_id: &str, delta: &[String]) -> bool {
 pub const TRIGGER_REL_DEFERRED: &str = "[rel-deferred]";
 pub const TRIGGER_SEC1CT: &str = "[Sec1ct]";
 pub const TRIGGER_WARD: &str = "[Ward]";
-
-/// `[Sec1-dual]`: genuine `(Conf×Integ)` product lattice + lattice-parametric
-/// flow rules, with an A2 that flips on the dual-order independently of A1.
-/// Currently `UNTRUSTED=Label(2)=SECRET` and `TRUSTED=Label(0)=PUBLIC` — one
-/// scalar; a bug specific to the IntegLabel ordering cannot be distinguished
-/// from a ConfLabel bug. The real integrity dual (separate carrier, dual `⊑`)
-/// must make A2 flip while A1 stays green.
-pub const TRIGGER_SEC1_DUAL: &str = "[Sec1-dual]";
-
-/// `[Sec1-launder]`: wire `check_no_laundering` to real `bind`/`incl`/
-/// `handler_fold` in `effects::itree`. The C1 test currently checks
-/// label-equality over hand-assigned literals — the actual trusted surface
-/// (`36 §2.2/§2.4`: `bind (Vis e f) k = Vis e (λr.…)` preserving the label
-/// index) is not exercised. A real `Vis`-routed tree must be the discriminant.
-pub const TRIGGER_SEC1_LAUNDER: &str = "[Sec1-launder]";
 
 /// `[Sec1-reduce]`: implement `product(c, ζ)` (variable renaming, `lowEq_ζ`,
 /// `coterminates_ζ` conjunct) and tie D5 to a genuine product-program

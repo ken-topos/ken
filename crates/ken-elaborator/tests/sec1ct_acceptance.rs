@@ -15,7 +15,7 @@ use ken_elaborator::ifc::{
     CtGuaranteeQ, CtHook, CtPromise, DeclassifyCap, DeclassifyResult,
     FlowCtx, FlowResult, LeakageSink, VisOpClass,
     CT_BOT, CT_TOP, SECRET,
-    TRIGGER_SEC1_DUAL, TRIGGER_SEC1_LAUNDER, TRIGGER_SEC1_REDUCE, TRIGGER_WARD,
+    TRIGGER_SEC1_REDUCE, TRIGGER_WARD,
 };
 
 // ─── CT-A. @ct steers a leakage sink → reject (AC1, AC2, AC3) ───────────────
@@ -158,9 +158,8 @@ fn secret_not_ct_branches_freely_accepted() {
     assert!(reject.is_reject(), "AC4 pair: @ct at BranchGuard → reject (CT-A1)");
 
     // Only difference: p.ct = false vs k.ct = true. Axes are orthogonal (§5a.1).
-    assert_eq!(p.conf, k.conf + 2, "demo: conf(Secret)=2, conf(CT_TOP)=0 — distinct components");
-    // The pair makes the orientation non-degenerate and guards [Sec1-dual].
-    assert_eq!(TRIGGER_SEC1_DUAL, "[Sec1-dual]");
+    assert_ne!(p.conf, k.conf, "Secret and CT_TOP differ on confidentiality");
+    // The pair makes the orientation non-degenerate.
 }
 
 // ─── CT-C. Declassify ends the @ct span — the sole terminator (AC5) ──────────
@@ -248,9 +247,7 @@ fn ct_in_parameter_promise_checked_emits_q() {
 /// The three `[Sec1-*]` triggers are present, not silent (AC7).
 #[test]
 fn timing_guarantee_delegated_not_claimed() {
-    // The three kernel-blind surfaces remain named as scoped work (§H).
-    assert_eq!(TRIGGER_SEC1_DUAL,    "[Sec1-dual]");
-    assert_eq!(TRIGGER_SEC1_LAUNDER, "[Sec1-launder]");
+    // The unreified kernel-blind reduction surface remains named (§H).
     assert_eq!(TRIGGER_SEC1_REDUCE,  "[Sec1-reduce]");
 
     // The binary timing guarantee is delegated to [Ward].

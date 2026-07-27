@@ -20,6 +20,8 @@
 
 use std::rc::Rc;
 
+use crate::ifc::{Label, BOTTOM};
+
 use super::row::EffectName;
 
 /// The response value type (models `Nat` from the kernel's simplified ITree).
@@ -42,6 +44,8 @@ pub enum ITree {
     /// runtime's response. The continuation is a pure function into the tree.
     Vis {
         effect: EffectName,
+        /// IFC index on the operation/response boundary.
+        label: Label,
         cont: Cont,
     },
 }
@@ -57,8 +61,18 @@ impl ITree {
         effect: impl Into<EffectName>,
         cont: impl Fn(Response) -> ITree + 'static,
     ) -> Self {
+        Self::vis_labeled(effect, BOTTOM, cont)
+    }
+
+    /// Construct a `Vis` carrying an IFC label index.
+    pub fn vis_labeled(
+        effect: impl Into<EffectName>,
+        label: Label,
+        cont: impl Fn(Response) -> ITree + 'static,
+    ) -> Self {
         Self::Vis {
             effect: effect.into(),
+            label,
             cont: Rc::new(cont),
         }
     }
@@ -85,6 +99,14 @@ impl ITree {
     pub fn effect_name(&self) -> Option<&EffectName> {
         match self {
             Self::Vis { effect, .. } => Some(effect),
+            _ => None,
+        }
+    }
+
+    /// The IFC label index, if this is a `Vis`.
+    pub fn label(&self) -> Option<Label> {
+        match self {
+            Self::Vis { label, .. } => Some(*label),
             _ => None,
         }
     }
@@ -117,9 +139,22 @@ pub fn perform(effect: impl Into<EffectName>) -> ITree {
 pub fn bind(tree: ITree, f: Rc<dyn Fn(Value) -> ITree>) -> ITree {
     match tree {
         ITree::Ret(v) => f(v),
-        ITree::Vis { effect, cont } => {
+        ITree::Vis { effect, label, cont } => {
             let f2 = Rc::clone(&f);
-            ITree::vis(effect, move |r| bind(cont(r), Rc::clone(&f2)))
+            ITree::vis_labeled(effect, label, move |r| bind(cont(r), Rc::clone(&f2)))
+        }
+    }
+}
+
+/// Re-tag a tree along an effect-signature inclusion, preserving `Vis` labels.
+pub fn incl(tree: ITree, inject: Rc<dyn Fn(EffectName) -> EffectName>) -> ITree {
+    match tree {
+        ITree::Ret(v) => ITree::ret(v),
+        ITree::Vis { effect, label, cont } => {
+            let inject2 = Rc::clone(&inject);
+            ITree::vis_labeled(inject(effect), label, move |r| {
+                incl(cont(r), Rc::clone(&inject2))
+            })
         }
     }
 }
@@ -161,7 +196,7 @@ impl HandlerCase {
 pub fn handler_fold(tree: ITree, cases: Rc<[HandlerCase]>) -> ITree {
     match tree {
         ITree::Ret(v) => ITree::ret(v),
-        ITree::Vis { effect, cont } => {
+        ITree::Vis { effect, label, cont } => {
             if let Some(case) = cases.iter().find(|c| c.effect == effect) {
                 // Tail-resumptive: provide the response, continue the fold.
                 let resp = case.response;
@@ -169,7 +204,7 @@ pub fn handler_fold(tree: ITree, cases: Rc<[HandlerCase]>) -> ITree {
             } else {
                 // Unhandled effect: re-emit the Vis node; fold recursively.
                 let cases2 = Rc::clone(&cases);
-                ITree::vis(effect, move |r| {
+                ITree::vis_labeled(effect, label, move |r| {
                     handler_fold(cont(r), Rc::clone(&cases2))
                 })
             }
