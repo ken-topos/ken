@@ -166,25 +166,99 @@ substring replacement is never an acceptable witness.
 
 ---
 
-## FMT7 — deterministic 88-column property (gate 7)
+## FMT7 — deterministic 96-column property (gate 7)
 
-### surface/formatting/breakable-syntax-never-exceeds-88-columns (property)
+### surface/formatting/breakable-syntax-never-exceeds-96-columns (property)
 
-- spec: `31 §1d` (88 display columns, two-space indentation, deterministic
+- spec: `31 §1d` (96 display columns, two-space indentation, deterministic
   group breaking), WP S gate 7
-- given: paired fixtures at display widths 88 and 89 for a declaration header,
+- given: paired fixtures at display widths 96 and 97 for a declaration header,
   arrow chain, application, match arm, effect row, contract, refinement, and
-  record/class/instance field; include Unicode glyphs whose UTF-8 byte length
-  differs from display width
-- expect: **RED-UNTIL-BUILT (B3/C)** — the 88-column form remains flat when its
-  group fits; adding the one display-column token makes that same breakable
-  group choose its specified multiline layout. Every output line over 88 is
+  record/class/instance field. Each displayed group is embedded in the smallest
+  complete source that preserves that spelling; the wrapper is excluded from
+  the measurement. In every block below, the first line is the 96-column arm
+  and the second adds exactly one identifier character:
+
+  Declaration header:
+
+  ```text
+  fn declaration_header_boundary (α : Type) (value : Vector α n) : Result α = valuexxxxxxxxxxxxxxx
+  fn declaration_header_boundary (α : Type) (value : Vector α n) : Result α = valuexxxxxxxxxxxxxxxx
+  ```
+
+  Arrow chain:
+
+  ```text
+  const arrow_chain_boundary : Alpha → Beta → Gamma → Delta → Epsilon → Zeta = witnessxxxxxxxxxxxx
+  const arrow_chain_boundary : Alpha → Beta → Gamma → Delta → Epsilon → Zeta = witnessxxxxxxxxxxxxx
+  ```
+
+  Application:
+
+  ```text
+  apply α first_argument second_argument third_argument fourth_argumentxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  apply α first_argument second_argument third_argument fourth_argumentxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  ```
+
+  Match arm:
+
+  ```text
+  ExtremelyLongPattern α pattern_argument ↦ apply handler α pattern_argument additional_argumentxx
+  ExtremelyLongPattern α pattern_argument ↦ apply handler α pattern_argument additional_argumentxxx
+  ```
+
+  Effect row:
+
+  ```text
+  proc effect_row_boundary (α : Type) : IO α visits [Console, FileSystem, Network, Clock] = runxxx
+  proc effect_row_boundary (α : Type) : IO α visits [Console, FileSystem, Network, Clock] = runxxxx
+  ```
+
+  Contract:
+
+  ```text
+  space proc contract_boundary (x : Int) : Int requires zero ≤ x ensures result == x = xxxxxxxxxxx
+  space proc contract_boundary (x : Int) : Int requires zero ≤ x ensures result == x = xxxxxxxxxxxx
+  ```
+
+  Refinement:
+
+  ```text
+  const refinement_boundary : {x : Int | lower_bound ≤ x ∧ x ≤ upper_bound} = witnessxxxxxxxxxxxxx
+  const refinement_boundary : {x : Int | lower_bound ≤ x ∧ x ≤ upper_bound} = witnessxxxxxxxxxxxxxx
+  ```
+
+  Record/class/instance field:
+
+  ```text
+  field_boundary : Container α beta_argument gamma_argument delta_argument epsilon_argumentxxxxxxx
+  field_boundary : Container α beta_argument gamma_argument delta_argument epsilon_argumentxxxxxxxx
+  ```
+
+  Unicode display-width measurement gives the following discriminating
+  controls. Byte counts deliberately exceed display widths wherever a
+  multibyte glyph occurs:
+
+  | form | 96 arm | 97 arm |
+  |---|---|---|
+  | declaration header | 96 display / 99 bytes → flat | 97 display / 100 bytes → broken |
+  | arrow chain | 96 display / 106 bytes → flat | 97 display / 107 bytes → broken |
+  | application | 96 display / 97 bytes → flat | 97 display / 98 bytes → broken |
+  | match arm | 96 display / 100 bytes → flat | 97 display / 101 bytes → broken |
+  | effect row | 96 display / 98 bytes → flat | 97 display / 99 bytes → broken |
+  | contract | 96 display / 98 bytes → flat | 97 display / 99 bytes → broken |
+  | refinement | 96 display / 102 bytes → flat | 97 display / 103 bytes → broken |
+  | record/class/instance field | 96 display / 97 bytes → flat | 97 display / 98 bytes → broken |
+- expect: **RED-UNTIL-BUILT (B3/C)** — each 96-column form remains flat when
+  its group fits; the paired 97-column form makes that same breakable group
+  choose its specified multiline layout. Every output line over 96 is
   classified by a span wholly containing one indivisible identifier/literal or
-  a specified verbatim region; no line exceeds 88 solely because breakable
+  a specified verbatim region; no line exceeds 96 solely because breakable
   syntax was left flat. Indentation is two ASCII spaces per level, never tabs.
-- why: the 88/89 pair fixes both boundary orientation and display-width
-  counting. A byte-counting implementation or a vague best-effort wrapper
-  flips one arm and fails.
+- why: every 96/97 pair fixes both boundary orientation and display-width
+  counting. The paired arms differ by one ASCII identifier character while
+  retaining multibyte Unicode syntax, so a byte-counting implementation or a
+  vague best-effort wrapper flips at least one arm and fails.
 
 ---
 
@@ -381,28 +455,28 @@ and those displayed bytes must format to themselves. Every assertion is
 
 ### surface/formatting/fit-breaks-at-display-width-boundary (property)
 
-- spec: `31 §1d` (88 display columns and deterministic fit), B3 AC1/AC3
-- given: the following 88-display-column source, the same source with one
+- spec: `31 §1d` (96 display columns and deterministic fit), B3 AC1/AC3
+- given: the following 96-display-column source, the same source with one
   additional `d` in its final identifier, and each expected output below as a
   canonical input:
 
   ```ken
-  apply aaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbb cccccccccccccccccccc ddddddddddddddddddd
+  apply aaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbb cccccccccccccccccccc ddddddddddddddddddddddddddd
   ```
-- expect: the 88-column group and its canonical input both produce one line:
+- expect: the 96-column group and its canonical input both produce one line:
 
   ```ken
-  apply aaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbb cccccccccccccccccccc ddddddddddddddddddd
+  apply aaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbb cccccccccccccccccccc ddddddddddddddddddddddddddd
   ```
 
-  The 89-column source and its canonical input both produce:
+  The 97-column source and its canonical input both produce:
 
   ```ken
   apply
     aaaaaaaaaaaaaaaaaaaa
     bbbbbbbbbbbbbbbbbbbb
     cccccccccccccccccccc
-    dddddddddddddddddddd
+    dddddddddddddddddddddddddddd
   ```
 
   The decision counts display columns after canonical token spelling, not
@@ -476,7 +550,7 @@ and those displayed bytes must format to themselves. Every assertion is
   ```
 
   Each displayed block is unchanged by another formatting pass, even though
-  every line would fit within 88 columns.
+  every line would fit within 96 columns.
 - why: this isolates all four mandatory-break families and the nonempty-block
   rule. A fit-only printer would
   incorrectly flatten at least one narrow first orientation; a printer with
@@ -607,7 +681,7 @@ and those displayed bytes must format to themselves. Every assertion is
   the first arm; strip-all fails three distinct ownership rules; adding extra
   clarity pairs fails the canonical-input orientation.
 
-### surface/formatting/comments-pin-hard-lines-and-the-88-threshold (property)
+### surface/formatting/comments-pin-hard-lines-and-the-96-threshold (property)
 
 - spec: `31 §1d` (comments), B3 AC5
 - given: four paired fixtures, each once in a non-canonical placement and once
@@ -615,7 +689,7 @@ and those displayed bytes must format to themselves. Every assertion is
   line between the leading comment and declaration, keep the interstitial
   comment inside the flat spelling
   `combine left -- keep this edge` with `right` on the following line, place
-  the 88-column comment above its node, and leave the 89-column comment inline.
+  the 96-column comment above its node, and leave the 97-column comment inline.
 - expect: the leading-comment fixture formats to:
 
   ```ken
@@ -635,26 +709,27 @@ and those displayed bytes must format to themselves. Every assertion is
 
   The comment remains between `left` and `right`, forces the enclosing
   application group to break, and cannot be flattened even when the whole
-  expression is narrow. For the EOL boundary, the 61-character identifier
-  makes `code + two spaces + comment` exactly 88 display columns, so the
-  comment remains inline:
+  expression is narrow. For the EOL boundary, the 67-character identifier
+  makes the code 87 columns; `87 + 2 + 7 = 96` for the code, two separating
+  spaces, and seven-column `-- note`, so the comment remains inline:
 
   ```ken
-  const nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn : Nat = value  -- note
+  const nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn : Nat = value  -- note
   ```
 
-  With one additional identifier character, the same attached comment moves
-  immediately above its node:
+  With one additional identifier character, the sum becomes
+  `87 + 1 + 2 + 7 = 97`, so the attached comment moves immediately above its
+  node:
 
   ```ken
   -- note
-  const nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn : Nat = value
+  const nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn : Nat = value
   ```
 
   Comment text is byte-identical, except that trailing horizontal whitespace
   is removed. Every displayed output formats to itself.
 - why: attachment identity plus exact bytes distinguishes relocation from mere
-  retention. The 88/89 pair proves the threshold's two orientations, while
+  retention. The 96/97 pair proves the threshold's two orientations, while
   the leading and interstitial pairs directly pin the no-flatten invariant.
 
 ### FMT9 reachability method and result
@@ -672,7 +747,7 @@ for all four record-surface orientations:
 | Fixture family | Non-canonical | Canonical | Gate disposition |
 |---|---|---|---|
 | blank runs, reachable class sibling control | parses | parses | B3 |
-| 88/89 fit and indentation | parses | parses | B3 |
+| 96/97 fit and indentation | parses | parses | B3 |
 | match, nested match, compound `let`, sum | parses | parses | B3 |
 | class/instance alignment and block separators | parses | parses | B3 |
 | named-field constructor commas | parses | parses | B3 |
@@ -695,7 +770,7 @@ oracles remain dormant until real source parsing can produce their input.
 | 4. Whole catalog | `whole-catalog-preservation-and-fixed-point` | C |
 | 5. Prose identity | `literate-prose-is-byte-identical` | B4/C |
 | 6. Trivia/literals | `comments-retain-text-and-attachment`, `all-literal-lexemes-are-verbatim` | B2/B3/B4/C |
-| 7. Width | `breakable-syntax-never-exceeds-88-columns` | B3/C |
+| 7. Width | `breakable-syntax-never-exceeds-96-columns` | B3/C |
 | 8. Ambiguity | all FMT8 cases | B2/B3/B4/C |
 | B3 layout axes | all FMT9 cases | B3; record inputs also require record-surface |
 
