@@ -7,7 +7,43 @@ Covers `AC-V4`, `AC-V5`, `AC-V6`, `AC-V8`, `AC-V9`, `AC-V10`, `AC-V12`.
 ⛔ Not `AC-V11` — that is `P3`, it does **not** depend on this phase, and it is
 releasable independently.
 
-> ## ⭐⭐ READ THIS FIRST — your acceptance oracle already exists and is RED
+> ## ⛔⛔ CORRECTED — THE THREE ROWS DO NOT EXECUTE. STAGE 1 IS **AUTHOR**.
+>
+> **The heading below said your acceptance oracle "already exists and is RED."
+> That was wrong, and the instruction it produced — *"do not build a new
+> oracle"* — would have blocked necessary work.** Measured by
+> `runtime-implementer` on the branch tip: the realization convention here is a
+> marker comment `// --- conformance: runtime/values/<row> ---`, and all three
+> rows have **ZERO** realizations in `crates/`.
+>
+> | row | executable realizations |
+> |---|---|
+> | `closure-containing-aggregate-has-no-deceq` | **0** |
+> | `closure-publication-rejected-transitively` | **0** |
+> | `empty-capture-closure-is-not-static-reference` | **0** |
+>
+> ⭐ **With a positive control, because three zeroes pass for any reason:** the
+> identical probe over the identical tree **does** find realized rows —
+> `canonical.rs:900/931/960/982/1004`, `store.rs:571/592/602/617/638`, and
+> `store.rs:875`. So the probe works and the absence is real.
+>
+> ⇒ **The three rows are behavior CONTRACTS, not runnable tests.** They exist as
+> **rows**, not as **code**. ✅ **Corrected instruction:** author faithful
+> realizations **under their exact conformance names**, covering **only** their
+> stated behavior. ⭐ That is *completing* the existing oracle — ⛔ not
+> substituting for it and ⛔ not front-running it. Keep the realization-census
+> positive control, and keep `AC-V15`'s positive control independently.
+>
+> ⚠ **The general defect, and it is the fourth of this shape on my frames today:
+> I asserted a thing EXISTS without checking it is EXECUTABLE.** A conformance
+> row, a status marker, and a runnable test are three different objects. ⛔ Before
+> a frame tells a ring *"the oracle already exists"*, grep for its **realization**
+> and pair the count with a positive control.
+>
+> ---
+>
+> **Superseded heading, kept so the correction is legible:** *"your acceptance
+> oracle already exists and is RED."*
 >
 > This is **not** a WP whose tests you invent. `SPEC-CLOSURE-BOUNDARY` and
 > `SPEC-STORE-SPLIT` both landed, and the conformance corpus already names this
@@ -19,7 +55,9 @@ releasable independently.
 > | `runtime/values/closure-publication-rejected-transitively` | **RED-UNTIL runtime publication is reconciled to `41 §2.1`** |
 > | `runtime/values/empty-capture-closure-is-not-static-reference` | **RED-UNTIL empty-capture publication follows `41 §2.1`** |
 >
-> ⇒ **`P2` is the work that turns those three rows green.** All three are in
+> ⇒ **`P2` is the work that turns those three rows green** — which, per the
+> correction above, means **authoring their realizations and then making them
+> pass**, not finding existing failures. All three are in
 > `conformance/runtime/values/README.md`, and the same file's *Realization
 > status* block names the exact sites (§2 below reproduces them measured).
 >
@@ -27,6 +65,26 @@ releasable independently.
 > structural restatement of them. Operator test policy, 2026-07-26: *"Test
 > oracles that assert facts about source code, catalog, or documentation lines
 > are an invitation for failure and delay. Tests should focus on behavior."*
+
+## ⚠ 0. RE-BIND AT POINT OF USE — a blob id in a message has a shelf life
+
+⭐ **Second `runtime-implementer` finding, 2026-07-27, and it sharpens the rule
+rather than contradicting it.** The release mention handed over node blob
+`a7e7e47a`. By the time the ring read it, `origin/main` had advanced to
+`dae0a7b3` and the node was **`5d062c38`** — because the Steward's *own*
+bookkeeping commit edited exactly that file, **between the bind and the post**.
+
+⚠ Direction: **immaterial here.** The advance was 6 insertions replacing the
+node's *"has no frame"* sentence with a pointer to this frame — zero AC,
+deliverable, or substrate change — and the **frame** blob was unchanged at
+`b5e79055` across both SHAs.
+
+⇒ **Binding by blob is necessary and not sufficient.** A blob id quoted in a
+message is a **snapshot**, and the coordinator can invalidate it seconds later.
+⛔ Do not treat a handed-over blob as the governing value; **re-derive it at the
+point of use** (`git show origin/main:<path>`) and again whenever you resume.
+⭐ The implementer's phrasing is the durable form: *"the habit is right; the
+re-bind has to be at point of use, not once at kickoff."*
 
 ## 1. Fixed inputs — settled, ⛔ do not reopen
 
