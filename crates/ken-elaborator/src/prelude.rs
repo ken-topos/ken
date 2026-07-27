@@ -276,7 +276,11 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     .map_err(|e| ElabError::Internal(format!("prelude ConsoleOp failed: {}", e)))?;
     elab.elaborate_decl("data Instant = MkInstant Int")
         .map_err(|e| ElabError::Internal(format!("prelude Instant failed: {}", e)))?;
-    elab.elaborate_decl("data ClockOp = WallNow")
+    elab.elaborate_decl("data MonotonicInstant = MkMonotonicInstant Int")
+        .map_err(|e| ElabError::Internal(format!("prelude MonotonicInstant failed: {}", e)))?;
+    elab.elaborate_decl("data Deadline = MkDeadline MonotonicInstant")
+        .map_err(|e| ElabError::Internal(format!("prelude Deadline failed: {}", e)))?;
+    elab.elaborate_decl("data ClockOp = WallNow | MonotonicNow | SleepUntil Deadline")
         .map_err(|e| ElabError::Internal(format!("prelude ClockOp failed: {}", e)))?;
     elab.elaborate_decl("data ReadResult = Chunk Bytes | Eof")
         .map_err(|e| ElabError::Internal(format!("prelude ReadResult failed: {}", e)))?;
@@ -1192,8 +1196,14 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
 
     // Clock is an ambient host effect, parallel to Console rather than an FS
     // capability. Its structural Instant response adds no primitive or trust.
-    elab.elaborate_decl("fn clock_resp (op : ClockOp) : Type = match op { WallNow |-> Instant }")
-        .map_err(|e| ElabError::Internal(format!("prelude clock_resp failed: {}", e)))?;
+    elab.elaborate_decl(
+        "fn clock_resp (op : ClockOp) : Type = match op { \
+           WallNow |-> Instant; \
+           MonotonicNow |-> MonotonicInstant; \
+           SleepUntil deadline |-> Unit \
+         }",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude clock_resp failed: {}", e)))?;
     elab.elaborate_decl("const ClockIO (a : Type) : Type = ITree ClockOp clock_resp a")
         .map_err(|e| ElabError::Internal(format!("prelude ClockIO failed: {}", e)))?;
     elab.elaborate_decl(
@@ -1202,6 +1212,18 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            (\\r. Ret ClockOp clock_resp Instant r)",
     )
     .map_err(|e| ElabError::Internal(format!("prelude wall_now failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc monotonic_now : ClockIO MonotonicInstant visits [Clock] = \
+         Vis ClockOp clock_resp MonotonicInstant MonotonicNow \
+           (\\r. Ret ClockOp clock_resp MonotonicInstant r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude monotonic_now failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc sleep_until (deadline : Deadline) : ClockIO Unit visits [Clock] = \
+         Vis ClockOp clock_resp Unit (SleepUntil deadline) \
+           (\\r. Ret ClockOp clock_resp Unit r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude sleep_until failed: {}", e)))?;
 
     elab.elaborate_decl(
         "proc read (stream : Stream) (limit : Int) : IO (Result IOError ReadResult) visits [Console] = \

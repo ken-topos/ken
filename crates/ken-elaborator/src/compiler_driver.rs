@@ -838,12 +838,12 @@ fn collect_checked_perform_nodes(
                         .cloned()
                         .ok_or(CompilerDriverError::MissingStableSymbol { id: constructor })?;
                     if let Some(operation) = self.operations.get(&constructor).copied() {
-                        let family_symbol = if operation == ken_host::HostOpV1::ClockWallNow {
-                            self.clock_family.clone()
-                        } else if operation.is_ambient() {
-                            self.console_family.clone()
-                        } else {
-                            self.fs_family.clone()
+                        let family_symbol = match crate::export::host_operation_family_v1(
+                            operation,
+                        ) {
+                            crate::export::HostOpFamilyV1::Clock => self.clock_family.clone(),
+                            crate::export::HostOpFamilyV1::Console => self.console_family.clone(),
+                            crate::export::HostOpFamilyV1::Fs => self.fs_family.clone(),
                         };
                         self.nodes.insert(CheckedPerformNodeV1::Host {
                             family_symbol,

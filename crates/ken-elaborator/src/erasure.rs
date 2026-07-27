@@ -3267,12 +3267,10 @@ fn decode_checked_host_operation<'a>(
                 format!("unrecognized checked host operation {}", constructor.symbol),
             )
         })?;
-    let expected_family = if operation == ken_host::HostOpV1::ClockWallNow {
-        &spine.clock_family
-    } else if operation.is_ambient() {
-        &spine.console_family
-    } else {
-        &spine.fs_family
+    let expected_family = match crate::export::host_operation_family_v1(operation) {
+        crate::export::HostOpFamilyV1::Clock => &spine.clock_family,
+        crate::export::HostOpFamilyV1::Console => &spine.console_family,
+        crate::export::HostOpFamilyV1::Fs => &spine.fs_family,
     };
     if &constructor.family_symbol != expected_family {
         return Err(expression_lowering_error(
@@ -3366,13 +3364,12 @@ fn lower_runtime_selected_host_operation(
                     "host operation arity does not fit runtime IR",
                 )
             })?;
-            let expected_family = if host_operation == ken_host::HostOpV1::ClockWallNow {
-                &spine.clock_family
-            } else if host_operation.is_ambient() {
-                &spine.console_family
-            } else {
-                &spine.fs_family
-            };
+            let expected_family =
+                match crate::export::host_operation_family_v1(host_operation) {
+                    crate::export::HostOpFamilyV1::Clock => &spine.clock_family,
+                    crate::export::HostOpFamilyV1::Console => &spine.console_family,
+                    crate::export::HostOpFamilyV1::Fs => &spine.fs_family,
+                };
             if family != expected_family {
                 return Err(expression_lowering_error(
                     root,
