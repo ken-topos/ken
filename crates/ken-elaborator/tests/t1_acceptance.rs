@@ -83,7 +83,7 @@ fn synthetic_disproved(
     let result = ProverResult {
         obligation_id: ObligationId(id.to_owned()),
         verdict: Verdict::Disproved {
-            countermodel: Countermodel { description: description.to_owned() },
+            countermodel: Countermodel::root(description),
         },
     };
     (result, triple)
@@ -96,12 +96,10 @@ fn concrete_countermodel_false() -> KripkeCountermodel {
         verdict: DiagnosticTag::False,
         worlds: vec![WorldId("w0".into()), WorldId("w1".into())],
         order: vec![(WorldId("w0".into()), WorldId("w1".into()))],
-        forcing: vec![
-            (WorldId("w1".into()), AtomId("d ≠ 0".into())),
-        ],
+        forcing: vec![(WorldId("w1".into()), AtomId::Named("d ≠ 0".into()))],
         failure: Some(FailureWitness {
             world: WorldId("w0".into()),
-            subformula: FormRef("result * d == n".into()),
+            subformula: FormRef::root(),
         }),
     }
 }
@@ -204,7 +202,10 @@ fn countermodel_kind_round_trips_lossless() {
     assert!(diag_val["forcing"].is_object(), "forcing present");
     assert!(!diag_val["failure"].is_null(), "failure present");
     assert_eq!(diag_val["failure"]["world"].as_str().unwrap(), "w0");
-    assert_eq!(diag_val["failure"]["subformula"].as_str().unwrap(), "result * d == n");
+    assert_eq!(
+        diag_val["failure"]["subformula"],
+        serde_json::json!({"root": "obligation", "steps": []})
+    );
 
     // Round-trip: deserialize∘serialize is identity
     let rt = round_trip(&diag_val);
@@ -441,7 +442,9 @@ fn false_unknown_non_confusable_roundtrip() {
 
     // document status also differs
     assert_ne!(
-        project_wire_verdict(&Verdict::Disproved { countermodel: Countermodel { description: String::new() } }),
+        project_wire_verdict(&Verdict::Disproved {
+            countermodel: Countermodel::root(""),
+        }),
         project_wire_verdict(&Verdict::Unknown { hole_id: ken_kernel::GlobalId(0) }),
         "B3: wire verdict projections are distinct"
     );
@@ -502,7 +505,7 @@ fn glivenko_wire_sweep_classically_valid_never_false() {
 
     // Contrast: the genuinely-refutable p ∧ ¬p → False
     let false_verdict = project_wire_verdict(&Verdict::Disproved {
-        countermodel: Countermodel { description: "¬(p∧¬p) is provable".into() },
+        countermodel: Countermodel::root("¬(p∧¬p) is provable"),
     });
     assert_eq!(false_verdict, Some(WireVerdict::False),
                "B4: genuinely-refutable goal → WireVerdict::False");
@@ -525,7 +528,7 @@ fn three_renderings_agree_one_source() {
     // false case: Disproved → refuted / disproved / verdict:"false"
     {
         let v = Verdict::Disproved {
-            countermodel: Countermodel { description: "test".into() },
+            countermodel: Countermodel::root("test"),
         };
         let ob_s = project_obligation_status(&v);
         let wire_v = project_wire_verdict(&v);

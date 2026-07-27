@@ -83,14 +83,16 @@ pub use numbers::{NumericEnv, NumericLitVal};
 pub use strings::NfcString;
 pub use prelude::PreludeEnv;
 pub use protocol::{
-    hole_id_string, obligation_id_string, project_obligation_status, project_wire_verdict,
-    rollup_doc_status, round_trip, serialize_action, serialize_countermodel,
-    serialize_decomposition, serialize_diagnostic, serialize_document, serialize_hole,
+    deserialize_atom_id, deserialize_formula_path, hole_id_string, obligation_id_string,
+    project_obligation_status, project_wire_verdict, rollup_doc_status, round_trip,
+    serialize_action, serialize_atom_id, serialize_countermodel, serialize_decomposition,
+    serialize_diagnostic, serialize_document, serialize_formula_path, serialize_hole,
     serialize_obligation, serialize_slice, trusted_base_entry, validate_document, DocStatus,
     ObligationStatus, WireVerdict,
 };
 pub use prover::{
-    attempt_obligation, attempt_with_cert, classify, Countermodel, ProverResult, Route, Verdict,
+    attempt_obligation, attempt_with_cert, classify, Countermodel, FormulaPath, FormulaStep,
+    ProverResult, Route, StructuralRefutation, Verdict,
 };
 pub use resolve::{RDecl, RDeclKind, RExpr, RType};
 pub use temporal::{

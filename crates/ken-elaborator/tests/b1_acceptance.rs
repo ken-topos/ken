@@ -550,9 +550,9 @@ fn disproved_claim_never_exported() {
     // "refuted" means a model where P doesn't hold; the test just needs the
     // Disproved variant to be passed, which is the conformance-observable).
     let verdict = Verdict::Disproved {
-        countermodel: ken_elaborator::prover::Countermodel {
-            description: "P does not hold in the empty model".to_string(),
-        },
+        countermodel: ken_elaborator::prover::Countermodel::root(
+            "P does not hold in the empty model",
+        ),
     };
 
     let tb = trusted_base_set(&ke.env);

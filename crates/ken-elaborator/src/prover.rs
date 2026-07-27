@@ -47,13 +47,57 @@ pub enum Route {
 
 // ─── Verdict ────────────────────────────────────────────────────────────────
 
-/// A Kripke countermodel witnessing that `φ` is forced nowhere.
+/// One child step in a structural, root-relative reference into an obligation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FormulaStep {
+    PiDomain,
+    PiCodomain,
+    SigmaFirst,
+    SigmaSecond,
+    AppFunction,
+    AppArgument,
+    EqType,
+    EqLeft,
+    EqRight,
+}
+
+/// A structural reference into an obligation formula.
 ///
-/// Diagnostic shape is `(oracle)` — `24`'s structured schema has not landed;
-/// the field carries a human-readable description pending `24`.
+/// The empty path denotes the root. Unlike rendered formula text, a path has
+/// stable node identity and distinguishes repeated subformulas.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FormulaPath(pub Vec<FormulaStep>);
+
+impl FormulaPath {
+    pub fn root() -> Self {
+        Self(Vec::new())
+    }
+}
+
+/// V3 evidence consumed by V4's structured countermodel renderer.
+#[derive(Debug, Clone)]
+pub struct StructuralRefutation {
+    /// The subformula refuted by the kernel-checked `q : ¬φ`.
+    pub formula: FormulaPath,
+}
+
+/// A kernel-backed refutation plus an advisory description.
 #[derive(Debug, Clone)]
 pub struct Countermodel {
     pub description: String,
+    pub refutation: StructuralRefutation,
+}
+
+impl Countermodel {
+    /// Construct evidence for a refutation of the obligation root.
+    pub fn root(description: impl Into<String>) -> Self {
+        Self {
+            description: description.into(),
+            refutation: StructuralRefutation {
+                formula: FormulaPath::root(),
+            },
+        }
+    }
 }
 
 /// The verdict trichotomy (`23 §1.2`, `21 §5.1`).
@@ -255,9 +299,9 @@ fn attempt_d(
         if let (Term::IntLit(left), Term::IntLit(right)) = (lhs.as_ref(), rhs.as_ref()) {
             if left != right {
                 let refutation = Term::lam(phi.clone(), Term::var(0));
-                let countermodel = Countermodel {
-                    description: format!("Int literal equality fails: {left} != {right}"),
-                };
+                let countermodel = Countermodel::root(format!(
+                    "Int literal equality fails: {left} != {right}"
+                ));
                 return attempt_with_refutation(
                     env,
                     ctx,

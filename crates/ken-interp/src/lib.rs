@@ -1492,9 +1492,19 @@ mod tests {
     ///
     /// ⇒ `Array` and `Map` exist **only** on the canonical carrier, and that
     /// carrier has no closure variant at all, so "a closure in an array element"
-    /// names no constructible value. The two rows are discharged by
-    /// unrepresentability rather than by a test — which is strictly stronger,
-    /// and is why `AC-V4`'s `compile_fail` block is their real evidence.
+    /// names no constructible value. The two rows are discharged structurally
+    /// by the current carrier shape rather than by a running test.
+    ///
+    /// ⚠ **Acceptance-evidence inventory:** `ken-runtime` has ten
+    /// `compile_fail` fences: six in `ir.rs` and four in `values.rs`. Three
+    /// `ir.rs` fences serve `AC-F4`; the other three and all four `values.rs`
+    /// fences serve `AC-V4`. CI runs nextest and therefore executes **none** of
+    /// the ten rustdoc fences. Their `EXXXX` annotations are not enforced by
+    /// rustdoc even when doctests are run. The seven V4 fences document the
+    /// intended structural boundary, but are not mechanized acceptance
+    /// evidence: if the forbidden capabilities became available, these fences
+    /// would contribute no CI-red signal. The present unrepresentability claim
+    /// remains a source-review obligation.
     ///
     /// ⚠ **This is reported to the frame as an amendment request, not settled
     /// unilaterally** — the row was written against the canonical carrier's

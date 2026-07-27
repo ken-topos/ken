@@ -15,10 +15,11 @@
 use serde_json::{json, Value};
 
 use crate::diagnostics::{
-    Diagnostic, DiagnosticTag, KripkeCountermodel, Region, SuggestedAction, TypedHole,
+    AtomId, Diagnostic, DiagnosticTag, FormRef, KripkeCountermodel, Region, SuggestedAction,
+    TypedHole,
 };
 use crate::extract::{ObligationId, ObligationTriple};
-use crate::prover::Verdict;
+use crate::prover::{FormulaPath, FormulaStep, Verdict};
 
 // ─── Cardinal-rule cross-walk types (§wire-contract) ─────────────────────────
 
@@ -163,6 +164,105 @@ pub fn serialize_action(action: &SuggestedAction) -> Value {
 
 // ─── Diagnostic serialization (§5 shapes, four `24` mechanisms) ──────────────
 
+fn formula_step_tag(step: &FormulaStep) -> &'static str {
+    match step {
+        FormulaStep::PiDomain => "pi_domain",
+        FormulaStep::PiCodomain => "pi_codomain",
+        FormulaStep::SigmaFirst => "sigma_first",
+        FormulaStep::SigmaSecond => "sigma_second",
+        FormulaStep::AppFunction => "app_function",
+        FormulaStep::AppArgument => "app_argument",
+        FormulaStep::EqType => "eq_type",
+        FormulaStep::EqLeft => "eq_left",
+        FormulaStep::EqRight => "eq_right",
+    }
+}
+
+fn formula_step_from_tag(tag: &str) -> Result<FormulaStep, String> {
+    match tag {
+        "pi_domain" => Ok(FormulaStep::PiDomain),
+        "pi_codomain" => Ok(FormulaStep::PiCodomain),
+        "sigma_first" => Ok(FormulaStep::SigmaFirst),
+        "sigma_second" => Ok(FormulaStep::SigmaSecond),
+        "app_function" => Ok(FormulaStep::AppFunction),
+        "app_argument" => Ok(FormulaStep::AppArgument),
+        "eq_type" => Ok(FormulaStep::EqType),
+        "eq_left" => Ok(FormulaStep::EqLeft),
+        "eq_right" => Ok(FormulaStep::EqRight),
+        _ => Err(format!("unknown formula path step tag: {tag}")),
+    }
+}
+
+/// Encode a root-relative formula path with stable, typed step tags.
+pub fn serialize_formula_path(path: &FormulaPath) -> Value {
+    let steps: Vec<&str> = path.0.iter().map(formula_step_tag).collect();
+    json!({
+        "root": "obligation",
+        "steps": steps,
+    })
+}
+
+/// Decode the stable wire representation of a root-relative formula path.
+pub fn deserialize_formula_path(value: &Value) -> Result<FormulaPath, String> {
+    let root = value
+        .get("root")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "formula path missing root tag".to_owned())?;
+    if root != "obligation" {
+        return Err(format!("unknown formula path root tag: {root}"));
+    }
+    let steps = value
+        .get("steps")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "formula path missing steps array".to_owned())?;
+    let mut decoded = Vec::with_capacity(steps.len());
+    for step in steps {
+        let tag = step
+            .as_str()
+            .ok_or_else(|| "formula path step tag must be a string".to_owned())?;
+        decoded.push(formula_step_from_tag(tag)?);
+    }
+    Ok(FormulaPath(decoded))
+}
+
+/// Encode a forcing atom without collapsing its structural identity to text.
+pub fn serialize_atom_id(atom: &AtomId) -> Value {
+    match atom {
+        AtomId::Formula(formula) => json!({
+            "kind": "formula",
+            "path": serialize_formula_path(&formula.0),
+        }),
+        AtomId::Named(name) => json!({
+            "kind": "named",
+            "name": name,
+        }),
+    }
+}
+
+/// Decode a typed forcing atom from its stable wire representation.
+pub fn deserialize_atom_id(value: &Value) -> Result<AtomId, String> {
+    let kind = value
+        .get("kind")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "forcing atom missing kind tag".to_owned())?;
+    match kind {
+        "formula" => {
+            let path = value
+                .get("path")
+                .ok_or_else(|| "formula forcing atom missing path".to_owned())?;
+            Ok(AtomId::Formula(FormRef(deserialize_formula_path(path)?)))
+        }
+        "named" => {
+            let name = value
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "named forcing atom missing name".to_owned())?;
+            Ok(AtomId::Named(name.to_owned()))
+        }
+        _ => Err(format!("unknown forcing atom kind tag: {kind}")),
+    }
+}
+
 /// Serialize a `KripkeCountermodel` to wire JSON (`25 §5`, `24 §1`).
 ///
 /// `verdict` is **copied** from V3's verdict via `DiagnosticTag`, never
@@ -180,13 +280,16 @@ pub fn serialize_countermodel(cm: &KripkeCountermodel, actions: &[SuggestedActio
         .collect();
 
     // forcing: BTreeMap<world → [atoms]> (sorted for determinism)
-    let mut forcing_map: std::collections::BTreeMap<String, Vec<String>> =
+    let mut forcing_map: std::collections::BTreeMap<String, Vec<Value>> =
         std::collections::BTreeMap::new();
     for w in &cm.worlds {
         forcing_map.insert(w.0.clone(), vec![]);
     }
     for (world, atom) in &cm.forcing {
-        forcing_map.entry(world.0.clone()).or_default().push(atom.0.clone());
+        forcing_map
+            .entry(world.0.clone())
+            .or_default()
+            .push(serialize_atom_id(atom));
     }
     let forcing = serde_json::to_value(forcing_map).unwrap_or(json!({}));
 
@@ -196,7 +299,7 @@ pub fn serialize_countermodel(cm: &KripkeCountermodel, actions: &[SuggestedActio
         .map(|f| {
             json!({
                 "world": f.world.0,
-                "subformula": f.subformula.0
+                "subformula": serialize_formula_path(&f.subformula.0)
             })
         })
         .unwrap_or(Value::Null);

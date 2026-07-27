@@ -15,9 +15,9 @@
 //! ## Mechanisms at V4 (per `24 §7`)
 //!
 //! 1. **Kripke countermodels** (`24 §1`) with the `false`-vs-`unknown`
-//!    discriminator read faithfully from V3's verdict. Countermodel worlds /
-//!    forcing / failure are `[placeholder — reifies in V4-backend]` pending Z3 +
-//!    Kripke backend.
+//!    discriminator read faithfully from V3's verdict. A checked V3
+//!    refutation is rendered as a two-stage monotone model; later solver
+//!    backends may supply larger models without changing the verdict boundary.
 //! 2. **Typed holes** (`24 §2`) as opaque postulates in `trusted_base()`, with
 //!    **`unknown` runtime propagation** per the Kleene/Heyting table (`41 §6`).
 //!    The `ThirdValue` type and its Kleene operations are the concrete runtime
@@ -40,7 +40,7 @@
 use ken_kernel::{GlobalId, Term};
 
 use crate::extract::{ObligationId, ObligationTriple, Provenance};
-use crate::prover::{Countermodel, ProverResult, Verdict};
+use crate::prover::{Countermodel, FormulaPath, FormulaStep, ProverResult, Verdict};
 
 // ─── Kripke model types (24 §1) ──────────────────────────────────────────────
 
@@ -48,13 +48,31 @@ use crate::prover::{Countermodel, ProverResult, Verdict};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorldId(pub String);
 
-/// Opaque identifier for an atomic proposition.
+/// Structural identity for an atomic proposition.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AtomId(pub String);
+pub enum AtomId {
+    /// An atom identified by its structural path in the obligation formula.
+    Formula(FormRef),
+    /// Uninterpreted display text. Validation rejects this variant; it exists
+    /// only so wire/display data cannot masquerade as semantic evidence.
+    Named(String),
+}
 
-/// A reference to a subformula of φ (the point where φ breaks in the model).
+/// A reference to a proposition occurrence in φ.
+///
+/// The empty path inherits proposition role from [`ObligationTriple::phi`].
+/// Child steps through binders are preserved as wire identities but rejected
+/// by semantic resolution until V4 has typed valuations and substitution.
+/// Raw term children such as equality operands are never atoms.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FormRef(pub String);
+pub struct FormRef(pub FormulaPath);
+
+/// A formula query interpreted by the Kripke forcing relation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KripkeFormula {
+    Node(FormRef),
+    Not(FormRef),
+}
 
 /// The world + subformula witnessing where φ fails in the Kripke model.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,43 +90,233 @@ pub struct FailureWitness {
 /// the `verdict` field, projected from V3.  `disproved` holds iff some world
 /// forces `¬φ`; otherwise `unknown`.
 ///
-/// `worlds`/`forcing`/`failure` are `[placeholder — reifies in V4-backend]`
-/// pending Z3 + Kripke backend.
+/// Checked V3 refutations carry a minimal two-stage model. A future solver
+/// backend may replace that model with a larger one without changing the
+/// verdict boundary.
 #[derive(Debug, Clone)]
 pub struct KripkeCountermodel {
     /// Copied from V3's verdict (the cardinal rule — never recomputed from
     /// `worlds`/`forcing`).
     pub verdict: DiagnosticTag,
-    /// Finite world set; w0 the root. `[placeholder — V4-backend]`
+    /// Finite world set; w0 the root.
     pub worlds: Vec<WorldId>,
-    /// The ≤ preorder on worlds. `[placeholder — V4-backend]`
+    /// The ≤ preorder on worlds.
     pub order: Vec<(WorldId, WorldId)>,
-    /// Which atoms hold where (monotone in ≤). `[placeholder — V4-backend]`
+    /// Which atoms hold where (monotone in ≤).
     pub forcing: Vec<(WorldId, AtomId)>,
-    /// World + subformula where φ breaks. `None` until backend supplies it.
-    /// `[placeholder — V4-backend]`
+    /// World + subformula where φ breaks.
     pub failure: Option<FailureWitness>,
 }
 
 impl KripkeCountermodel {
-    /// Build from V3's `Countermodel { description }` — the cardinal-rule
-    /// constructor.  The `verdict` field is taken from `tag`; model structure
-    /// is scaffold (`[placeholder — V4-backend]`).
-    pub fn from_v3(tag: DiagnosticTag, v3: &Countermodel) -> Self {
-        Self {
+    /// Build a two-stage model from a V3 refutation.
+    ///
+    /// V3 supplies the structural formula reference carried beside its
+    /// kernel-checked `q : ¬φ`. Atomic forcing is empty for the present unequal
+    /// equality: recursive negation holds because no accessible world forces
+    /// that equality atom.
+    pub fn from_v3(
+        tag: DiagnosticTag,
+        v3: &Countermodel,
+        formula: &Term,
+    ) -> Result<Self, String> {
+        let root = WorldId("w0".to_owned());
+        let extension = WorldId("w1".to_owned());
+        let model = Self {
             verdict: tag,
-            worlds: vec![WorldId("w0".to_owned())],  // minimal scaffold
-            order: vec![],
+            worlds: vec![root.clone(), extension.clone()],
+            order: vec![
+                (root.clone(), root.clone()),
+                (root.clone(), extension.clone()),
+                (extension.clone(), extension),
+            ],
             forcing: vec![],
-            // [placeholder — V4-backend]: failure.world names the refuting
-            // world and failure.subformula names the subformula of φ not
-            // forced there.  Until backend supplies this, emit None.
             failure: Some(FailureWitness {
-                world: WorldId("w0".to_owned()),
-                subformula: FormRef(v3.description.clone()),
+                world: root,
+                subformula: FormRef(v3.refutation.formula.clone()),
             }),
+        };
+        model.validate(formula)?;
+        Ok(model)
+    }
+
+    /// Evaluate a supported formula under the model's Kripke semantics.
+    ///
+    /// The evaluator is side-effect free and advisory. Its result is never
+    /// consulted to choose or alter [`Self::verdict`].
+    pub fn forces(
+        &self,
+        world: &WorldId,
+        query: &KripkeFormula,
+        root: &Term,
+    ) -> Result<bool, String> {
+        if !self.worlds.contains(world) {
+            return Err(format!("unknown Kripke world {}", world.0));
+        }
+        match query {
+            KripkeFormula::Not(formula) => {
+                formula.resolve(root)?;
+                for accessible in self.accessible_from(world) {
+                    if self.forces(accessible, &KripkeFormula::Node(formula.clone()), root)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            KripkeFormula::Node(formula) => match formula.resolve(root)? {
+                Term::Eq(_, _, _) => Ok(self
+                    .forcing
+                    .contains(&(world.clone(), AtomId::Formula(formula.clone())))),
+                Term::Pi(_, _) => Err(
+                    "unsupported Kripke formula node: Pi requires a typed valuation, \
+                     domain, and binder substitution"
+                        .to_owned(),
+                ),
+                Term::Sigma(_, _) => Err(
+                    "unsupported Kripke formula node: Sigma requires a typed domain \
+                     and existential witness"
+                        .to_owned(),
+                ),
+                _ => unreachable!("nested FormRef paths accept only proposition nodes"),
+            },
         }
     }
+
+    /// Check the structural Kripke invariants rendered by V4.
+    ///
+    /// This is an advisory-data validator only. Its result must never be used
+    /// to change [`Self::verdict`].
+    pub fn validate(&self, root: &Term) -> Result<(), String> {
+        if self.worlds.is_empty() {
+            return Err("Kripke model has no worlds".to_owned());
+        }
+        for (index, world) in self.worlds.iter().enumerate() {
+            if self.worlds[..index].contains(world) {
+                return Err(format!("duplicate Kripke world {}", world.0));
+            }
+            if !self.order.contains(&(world.clone(), world.clone())) {
+                return Err(format!("Kripke preorder is not reflexive at {}", world.0));
+            }
+        }
+        for (lower, upper) in &self.order {
+            if !self.worlds.contains(lower) || !self.worlds.contains(upper) {
+                return Err("Kripke order references a world outside the model".to_owned());
+            }
+        }
+        for (lower, middle) in &self.order {
+            for (same_middle, upper) in &self.order {
+                if middle == same_middle
+                    && !self.order.contains(&(lower.clone(), upper.clone()))
+                {
+                    return Err(format!(
+                        "Kripke preorder is not transitive: {} <= {} <= {}",
+                        lower.0, middle.0, upper.0
+                    ));
+                }
+            }
+        }
+        for (world, atom) in &self.forcing {
+            if !self.worlds.contains(world) {
+                return Err(format!("Kripke forcing references unknown world {}", world.0));
+            }
+            match atom {
+                AtomId::Formula(formula) => {
+                    formula.resolve(root)?;
+                }
+                AtomId::Named(name) => {
+                    return Err(format!(
+                        "Kripke forcing atom is not structural: {name}"
+                    ));
+                }
+            }
+        }
+        for (lower, upper) in &self.order {
+            for (_, atom) in self.forcing.iter().filter(|(world, _)| world == lower) {
+                if !self.forcing.contains(&(upper.clone(), atom.clone())) {
+                    return Err(format!(
+                        "Kripke forcing is not monotone: {} forces {:?} but {} does not",
+                        lower.0, atom, upper.0
+                    ));
+                }
+            }
+        }
+
+        let failure = self
+            .failure
+            .as_ref()
+            .ok_or_else(|| "Kripke refutation has no failure witness".to_owned())?;
+        if !self.worlds.contains(&failure.world) {
+            return Err("Kripke failure witness references an unknown world".to_owned());
+        }
+        failure.subformula.resolve(root)?;
+        if !self.forces(
+            &failure.world,
+            &KripkeFormula::Not(failure.subformula.clone()),
+            root,
+        )? {
+            return Err("Kripke witness world does not force the negated formula".to_owned());
+        }
+        Ok(())
+    }
+
+    fn accessible_from<'a>(&'a self, world: &'a WorldId) -> impl Iterator<Item = &'a WorldId> {
+        self.order
+            .iter()
+            .filter_map(move |(lower, upper)| (lower == world).then_some(upper))
+    }
+}
+
+impl FormRef {
+    pub fn root() -> Self {
+        Self(FormulaPath::root())
+    }
+
+    pub fn child(&self, step: FormulaStep) -> Self {
+        let mut path = self.0.clone();
+        path.0.push(step);
+        Self(path)
+    }
+
+    fn resolve<'a>(&self, root: &'a Term) -> Result<&'a Term, String> {
+        for step in &self.0.0 {
+            match (step, root) {
+                (FormulaStep::PiDomain, Term::Pi(_, _))
+                | (FormulaStep::PiCodomain, Term::Pi(_, _))
+                | (FormulaStep::SigmaFirst, Term::Sigma(_, _))
+                | (FormulaStep::SigmaSecond, Term::Sigma(_, _)) => {
+                    return Err(format!(
+                        "formula path enters unsupported binder role {step:?}"
+                    ));
+                }
+                (FormulaStep::AppFunction, Term::App(_, _))
+                | (FormulaStep::AppArgument, Term::App(_, _))
+                | (FormulaStep::EqType, Term::Eq(_, _, _))
+                | (FormulaStep::EqLeft, Term::Eq(_, _, _))
+                | (FormulaStep::EqRight, Term::Eq(_, _, _)) => {
+                    return Err(format!(
+                        "formula path enters non-proposition role {step:?}"
+                    ));
+                }
+                _ => {
+                    return Err(format!(
+                        "invalid formula path {:?} at term {root:?}",
+                        self.0
+                    ));
+                }
+            }
+        }
+        if !is_proposition_node(root) {
+            return Err(format!(
+                "formula path {:?} resolves to a non-proposition term {root:?}",
+                self.0
+            ));
+        }
+        Ok(root)
+    }
+}
+
+fn is_proposition_node(term: &Term) -> bool {
+    matches!(term, Term::Eq(_, _, _) | Term::Pi(_, _) | Term::Sigma(_, _))
 }
 
 // ─── Typed hole (24 §2) ──────────────────────────────────────────────────────
@@ -208,7 +416,9 @@ pub struct Diagnostic {
     pub tag: DiagnosticTag,
     /// The three-region Heyting decomposition (`24 §3`), keyed to the tag.
     pub region: Region,
-    /// Kripke countermodel (present for `disproved` / `False`).  `24 §1`.
+    /// Kripke countermodel when the disproved formula is in V4's supported
+    /// diagnostic fragment. Unsupported formulas retain the copied false tag
+    /// and fall back to an explicit pending explanation. `24 §1`.
     pub countermodel: Option<KripkeCountermodel>,
     /// Typed hole (present for `unknown`).  `24 §2`.
     pub typed_hole: Option<TypedHole>,
@@ -226,10 +436,7 @@ pub struct Diagnostic {
 ///
 /// This is the soundness bridge of V4: if this function projects faithfully,
 /// no V4 bug can relabel a verdict.
-pub fn project_diagnostic(
-    result: &ProverResult,
-    triple: &ObligationTriple,
-) -> Option<Diagnostic> {
+pub fn project_diagnostic(result: &ProverResult, triple: &ObligationTriple) -> Option<Diagnostic> {
     match &result.verdict {
         // proved → no diagnostic (24 §7 AC5, 24 preamble table row 1)
         Verdict::Proved { .. } => None,
@@ -237,12 +444,13 @@ pub fn project_diagnostic(
         // disproved → false tag, S_{¬φ} region, countermodel (24 §1)
         Verdict::Disproved { countermodel } => {
             let tag = DiagnosticTag::False;
-            let cm = KripkeCountermodel::from_v3(tag.clone(), countermodel);
+            let cm =
+                KripkeCountermodel::from_v3(tag.clone(), countermodel, &triple.phi).ok();
             Some(Diagnostic {
                 obligation_id: result.obligation_id.clone(),
                 tag,
                 region: Region::Refuted,
-                countermodel: Some(cm),
+                countermodel: cm,
                 typed_hole: None,
                 // false-region only: fix_counterexample (24 §5)
                 // NO add_precondition / strengthen_refinement / etc.
@@ -283,10 +491,7 @@ pub fn project_diagnostic(
 ///
 /// `proved` results contribute `None` and are filtered; the returned `Vec`
 /// contains only non-proved verdicts (`24 §7` AC5).
-pub fn project_all(
-    results: &[ProverResult],
-    triples: &[ObligationTriple],
-) -> Vec<Diagnostic> {
+pub fn project_all(results: &[ProverResult], triples: &[ObligationTriple]) -> Vec<Diagnostic> {
     results
         .iter()
         .zip(triples.iter())
@@ -320,9 +525,7 @@ pub enum ThirdValue {
 /// the CBV-laziness carry): `unknown ∧ false` does NOT force the hole.
 pub fn tv_and(a: ThirdValue, b: ThirdValue) -> ThirdValue {
     match (a, b) {
-        (ThirdValue::Known(false), _) | (_, ThirdValue::Known(false)) => {
-            ThirdValue::Known(false)
-        }
+        (ThirdValue::Known(false), _) | (_, ThirdValue::Known(false)) => ThirdValue::Known(false),
         (ThirdValue::Known(true), ThirdValue::Known(true)) => ThirdValue::Known(true),
         _ => ThirdValue::Unknown,
     }
@@ -337,9 +540,7 @@ pub fn tv_and(a: ThirdValue, b: ThirdValue) -> ThirdValue {
 /// ```
 pub fn tv_or(a: ThirdValue, b: ThirdValue) -> ThirdValue {
     match (a, b) {
-        (ThirdValue::Known(true), _) | (_, ThirdValue::Known(true)) => {
-            ThirdValue::Known(true)
-        }
+        (ThirdValue::Known(true), _) | (_, ThirdValue::Known(true)) => ThirdValue::Known(true),
         (ThirdValue::Known(false), ThirdValue::Known(false)) => ThirdValue::Known(false),
         _ => ThirdValue::Unknown,
     }

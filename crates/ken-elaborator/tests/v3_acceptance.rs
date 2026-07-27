@@ -424,9 +424,7 @@ fn disproved_carries_countermodel() {
         &phi,
         &phi,
         invalid_refutation,
-        Countermodel {
-            description: "must not be believed without checked negation".into(),
-        },
+        Countermodel::root("must not be believed without checked negation"),
     );
     assert!(
         matches!(invalid, Verdict::Unknown { .. }),
