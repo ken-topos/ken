@@ -394,6 +394,38 @@ reasons; an aggregate *"negatives still rejected"* pass hides one defecting.
 > a chosen dependent crate**, not a wider one. ⚠ And if you leave the question to
 > CI, **say so** — an unmeasured blast radius reported as "targeted run green" is
 > the defect this note exists to prevent.
+>
+> ### ⛔ THIRD INSTRUMENT FINDING — a cargo re-run is NOT idempotent for REPORTING
+>
+> Measured by `runtime-implementer` mid-census, 2026-07-27: a per-crate loop
+> reported **2** sites for `ken-elaborator`; the raw uncached run showed **4**.
+> **Cargo had cached the failed `lib test` target and did not re-emit its
+> diagnostics on the second invocation.**
+>
+> ⇒ ⛔ **A second `cargo`/`ken-cargo` invocation can report FEWER failures than
+> the first while nothing changed**, because diagnostics are not replayed from
+> cache. **A census must read raw first-run output — never a re-filtered second
+> pass.**
+>
+> ⚠ This defeats the ordinary habit of *re-run and grep*: the grep is correct, the
+> input is silently truncated, and the result looks like a smaller problem rather
+> than a broken measurement. ⭐ If you must filter, `tee` the first run and grep
+> the file.
+>
+> ---
+>
+> ⭐⭐ **Three instruments, three different blind spots, all found by measuring the
+> measurement rather than trusting it:**
+>
+> | instrument | cannot see |
+> |---|---|
+> | `-p <crate>` | dependent crates |
+> | `--lib` | test targets |
+> | a re-run | diagnostics the first run already consumed |
+>
+> ⇒ **State what each named build ANSWERS and what it CANNOT SEE.** A validation
+> list that names commands without naming their blind spots is a list of
+> instruments, not a measurement plan.
 
 
 ⛔ **NEVER `--workspace`** (operator hard rule, `agent/COORDINATION.md §12`).
