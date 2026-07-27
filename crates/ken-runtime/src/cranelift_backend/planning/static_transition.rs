@@ -2720,15 +2720,22 @@ mod tests {
         for (origin, _) in origins(&first_plan) {
             if let Ok(term) = first_plan.source_occurrence(origin) {
                 let other = second_plan.source_occurrence(origin).unwrap();
-                // ⛔ Same `D2` substitution, same reason a `Debug`-text proxy
-                // is not used. The property is that the two plans resolve the
-                // same origin to the same SHAPE — a direct planner property —
-                // while remaining distinct allocations, which the pointer check
-                // below establishes.
+                // ⛔ This asserted only `discriminant` equality, which CANNOT
+                // establish the property: it passes if `Var(0)` were resolved
+                // as `Var(3)`, or if the two equal-shaped `Let` children were
+                // exchanged — the exact occurrence-identity defects this
+                // fixture exists to catch. Recursive comparison is genuinely
+                // required here, through the closure-refusing witness.
+                let (lhs, rhs) = (fixture_witness(term), fixture_witness(other));
+                assert!(
+                    lhs.is_some() && rhs.is_some(),
+                    "both occurrences must lie in the fixture grammar; a \
+                     refusal is a failure, not a skip"
+                );
                 assert_eq!(
-                    std::mem::discriminant(term),
-                    std::mem::discriminant(other),
-                    "equal trees resolve to terms of the same shape"
+                    lhs, rhs,
+                    "equal trees resolve to structurally identical terms, \
+                     including every Var index and child position"
                 );
                 assert!(
                     !std::ptr::eq(term, other),
@@ -2777,6 +2784,107 @@ mod tests {
 
     /// Two `Let` occurrences of identical shape and counts whose positional
     /// children are different occurrences.
+    /// ⛔ **Test-local, closure-REFUSING witness for exactly this fixture's
+    /// grammar** — `If`, the unit `Construct`, `Let`, and `Var(index)`.
+    ///
+    /// `D2` removed `RuntimeExpr: PartialEq` because it reached
+    /// `RuntimeValue::ClosureRef`. The address-independence control below
+    /// genuinely needs **recursive** comparison — `discriminant` cannot express
+    /// it — so this is the narrow route the Architect's ruling permits: an input
+    /// grammar that **refuses** anything closure-capable before producing a
+    /// verdict.
+    ///
+    /// ⛔ Deliberately NOT a shared `RuntimeExpr` projection. It lives in this
+    /// test module, covers four forms, and every other variant — including
+    /// `Closure`, `LexicalClosure`, and `Value(ClosureRef)` — returns `None`.
+    /// `None` is a **refusal that fails the test**, never a skip.
+    #[derive(Debug, PartialEq, Eq)]
+    enum FixtureWitness {
+        Unit,
+        Var(u32),
+        Let(Box<FixtureWitness>, Box<FixtureWitness>),
+        If(
+            Box<FixtureWitness>,
+            Box<FixtureWitness>,
+            Box<FixtureWitness>,
+        ),
+    }
+
+    fn fixture_witness(expr: &RuntimeExpr) -> Option<FixtureWitness> {
+        Some(match expr {
+            RuntimeExpr::Construct { constructor, args }
+                if constructor == "ctor:prelude::Unit::MkUnit" && args.is_empty() =>
+            {
+                FixtureWitness::Unit
+            }
+            RuntimeExpr::Var(index) => FixtureWitness::Var(*index),
+            RuntimeExpr::Let { value, body } => FixtureWitness::Let(
+                Box::new(fixture_witness(value)?),
+                Box::new(fixture_witness(body)?),
+            ),
+            RuntimeExpr::If {
+                scrutinee,
+                then_expr,
+                else_expr,
+            } => FixtureWitness::If(
+                Box::new(fixture_witness(scrutinee)?),
+                Box::new(fixture_witness(then_expr)?),
+                Box::new(fixture_witness(else_expr)?),
+            ),
+            // ⛔ Every other form REFUSES. Closure-bearing ones are the reason
+            // this arm exists, and `p2_the_fixture_witness_refuses_closures`
+            // is the negative control proving they cannot slip through.
+            _ => return None,
+        })
+    }
+
+    /// ⚠ **NEGATIVE CONTROL for [`fixture_witness`]** — without it, "the
+    /// witnesses compared equal" and "the witness silently admitted a closure"
+    /// are indistinguishable.
+    #[test]
+    fn p2_the_fixture_witness_refuses_closures() {
+        // Promise class: durable invariant.
+        assert!(
+            fixture_witness(&RuntimeExpr::Closure {
+                captures: vec![],
+                params: vec!["x".to_string()],
+                body: Box::new(RuntimeExpr::Var(0)),
+            })
+            .is_none(),
+            "a Closure must not produce a witness"
+        );
+        assert!(
+            fixture_witness(&RuntimeExpr::Value(RuntimeValue::ClosureRef {
+                symbol: "decl:fixture::f".to_string(),
+                captured: vec![],
+            }))
+            .is_none(),
+            "a ClosureRef value must not produce a witness"
+        );
+        // ⛔ And transitively: a closure NESTED inside admitted grammar refuses
+        // the whole tree, rather than the parent succeeding around it.
+        assert!(
+            fixture_witness(&RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::Closure {
+                    captures: vec![],
+                    params: vec!["x".to_string()],
+                    body: Box::new(RuntimeExpr::Var(0)),
+                }),
+                body: Box::new(RuntimeExpr::Var(0)),
+            })
+            .is_none(),
+            "refusal is transitive through admitted parents"
+        );
+
+        // ⚠ POSITIVE CONTROL — the fixture grammar itself DOES produce a
+        // witness, so the three refusals above are not a witness that refuses
+        // everything.
+        assert!(
+            fixture_witness(&equal_shaped_child_fixture()).is_some(),
+            "the fixture grammar produces a witness"
+        );
+    }
+
     fn equal_shaped_child_fixture() -> RuntimeExpr {
         RuntimeExpr::If {
             scrutinee: Box::new(unit()),

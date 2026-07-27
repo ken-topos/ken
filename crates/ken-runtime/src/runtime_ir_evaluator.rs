@@ -1115,17 +1115,23 @@ fn select_bound_runtime_example<'p>(
     // through four layers of derive — exactly what
     // `spec/40-runtime/41-values.md §2.1` denies and what `D2` removes.
     //
-    // ⚠ **This is a NARROWING, and it is recorded rather than hidden.** Two
-    // examples agreeing on name, shape and expected observation but differing
-    // in `ir` now compare as the same binding. `observation` is the example's
-    // expected result and is itself closure-free, so the key stays
-    // discriminating on what an example *means*; but the residual is real, and
-    // it is review-enforced rather than mechanically guarded.
+    // ⭐ **The injection defect the narrower key would otherwise open is closed
+    // MECHANICALLY here, not by review.** The key alone is weaker than whole-
+    // example equality: two examples agreeing on name, shape and expected
+    // observation but differing in `ir` share a key. The guard is that the key
+    // only ever *selects*, and what runs is the **selected program-owned
+    // `ir`** — so a caller presenting a matching key beside a different body
+    // has that body ignored, not executed.
     //
-    // ⭐ Recovering the exact check needs the sealed closure-free witness the
-    // Architect describes in `dec_7ptkf05j884ae` — a comparison that refuses a
-    // closure-containing input rather than answering. That is P3's shape, not
-    // this phase's.
+    // ⛔ Uniqueness is the other half, and it is why this returns a reference
+    // rather than a bool: zero matches refuse, and so do two or more. Resolving
+    // an ambiguous key to the first hit would let a caller choose which of two
+    // program-owned examples runs by depending on `Vec` order.
+    //
+    // ⇒ Together those two properties are the invariant: *the caller names an
+    // example; the program supplies the body.* Controls:
+    // `p2_selection_evaluates_the_program_owned_ir_not_the_callers` and
+    // `p2_an_ambiguous_example_key_is_refused_rather_than_resolved_by_order`.
     let mut matches = program.examples.iter().filter(|candidate| {
         candidate.name == example.name
             && candidate.checked_core_shape == example.checked_core_shape
