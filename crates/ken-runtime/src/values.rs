@@ -666,13 +666,31 @@ fn debug_header<'a>(
 /// regression**: before this impl, `{:#?}` on a deep value aborted the process
 /// rather than printing anything at all.
 ///
-/// ⭐ It is not implemented because doing so would *require* the pinned-text test
-/// `AC-P3e` forbids. Matching the derived pretty layout means reproducing its
-/// exact newline and indent placement, and the only way to know that layout is
-/// right is to snapshot it — which would freeze an explicitly unspecified
-/// surface. Emitting a wrong-but-plausible layout silently is worse than
-/// emitting the compact one visibly. If pretty-printing is wanted back, it is a
-/// separate change that must first decide whether the layout is specified.
+/// ⛔ **This is NOT because honoring `alternate` is impossible here** — it is
+/// not. Carrying a depth field on each [`DebugStep`] and pushing indent literals
+/// would do it; nothing about the worklist precludes it. An earlier draft of
+/// this comment argued impossibility, and that claim was false.
+///
+/// ⭐ The real ground, ruled by the Steward on `RT-VALUE-TOTALITY-P3`: this is a
+/// capability the rewrite **did not carry forward, on a surface with no
+/// consumers**. Re-measured independently at `0031dd6a`, excluding `local/` and
+/// `target/`: **no call site anywhere in the repo requests alternate `Debug`
+/// formatting**, and **no `.rs` file under `crates/` consults
+/// `Formatter::alternate`** — the one other hand-written `Debug` in this crate
+/// (`boundary_value.rs`) does not either. So the degradation is unconsumed and
+/// consistent with workspace precedent.
+///
+/// ⚠ If you re-run those probes on *this* tree they will not come back empty:
+/// this comment is itself prose containing the pattern. Measure at a commit
+/// without it, or match call sites rather than the raw token — the same
+/// grep-fires-on-the-prose-that-denies-it trap the fleet has hit before.
+///
+/// ⚠ What *would* be a mistake is restoring a pretty layout by guesswork:
+/// reconstructing the derive's exact newline and indent placement has no
+/// verifiable oracle short of a snapshot, and inventing a *different* layout
+/// would mint new unspecified surface during a totality WP. If pretty-printing
+/// is wanted back, it is a separate change that must first decide whether the
+/// layout is specified.
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut stack: Vec<DebugStep<'_>> = vec![DebugStep::Val(self)];

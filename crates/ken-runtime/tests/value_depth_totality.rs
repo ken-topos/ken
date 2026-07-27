@@ -190,6 +190,135 @@ fn mixed_chain_with_leaf(depth: usize, leaf: i64) -> Value {
     v
 }
 
+/// The child-bearing `Value` arms, as same-variant chain kinds.
+///
+/// ⭐ **This is an inventory, not a list I remembered.** [`chain_variant_of`]
+/// below is exhaustive and wildcard-free over `Value`, so a new child-bearing
+/// variant cannot be added without being classified here — and every control
+/// that iterates [`ALL_CHAIN_VARIANTS`] then covers it with no new test code.
+/// Enumerating the arms that happen to exist today is the same defect one level
+/// up, and it is the one this file already paid for once.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChainVariant {
+    Record,
+    Constructor,
+    Array,
+    Map,
+}
+
+/// Every chain kind in one place. Paired with [`chain_variant_of`]'s
+/// exhaustiveness, this is what closes the same-variant population.
+const ALL_CHAIN_VARIANTS: [ChainVariant; 4] = [
+    ChainVariant::Record,
+    ChainVariant::Constructor,
+    ChainVariant::Array,
+    ChainVariant::Map,
+];
+
+const SAME_SURVIVE_PREFIX: &str = "debug_at_depth_d_same_";
+const SAME_DIES_PREFIX: &str = "recursive_debug_dies_same_";
+
+impl ChainVariant {
+    /// The scenario-name suffix this arm's controls are spelled with.
+    fn tag(self) -> &'static str {
+        match self {
+            ChainVariant::Record => "record",
+            ChainVariant::Constructor => "constructor",
+            ChainVariant::Array => "array",
+            ChainVariant::Map => "map",
+        }
+    }
+
+    fn from_tag(tag: &str) -> ChainVariant {
+        *ALL_CHAIN_VARIANTS
+            .iter()
+            .find(|variant| variant.tag() == tag)
+            .unwrap_or_else(|| panic!("unknown chain-variant tag {tag}"))
+    }
+}
+
+/// Classify a value's child-bearing arm.
+///
+/// ⛔ **Exhaustive over every `Value` variant with no `_` arm.** This is the
+/// compile-time link between the enum and the same-variant depth population: a
+/// new variant carrying a child position fails to compile until it is
+/// classified, at which point [`ChainVariant`] must gain a case and
+/// [`same_variant_chain`] must learn to build it.
+fn chain_variant_of(value: &Value) -> Option<ChainVariant> {
+    match value {
+        Value::Record { .. } => Some(ChainVariant::Record),
+        Value::Constructor { .. } => Some(ChainVariant::Constructor),
+        Value::Array { .. } => Some(ChainVariant::Array),
+        Value::Map { .. } => Some(ChainVariant::Map),
+
+        Value::BigInt { .. }
+        | Value::BigDecimal { .. }
+        | Value::String(_)
+        | Value::Bytes(_)
+        | Value::Set { .. }
+        | Value::Bool(_)
+        | Value::Char(_)
+        | Value::Float(_)
+        | Value::Float32(_)
+        | Value::Int8(_)
+        | Value::Int16(_)
+        | Value::Int32(_)
+        | Value::Int64(_)
+        | Value::UInt8(_)
+        | Value::UInt16(_)
+        | Value::UInt32(_)
+        | Value::UInt64(_)
+        | Value::SmallInt(_)
+        | Value::SmallDecimal { .. }
+        | Value::Unknown => None,
+    }
+}
+
+/// A chain of `depth` nestings of **one** arm inside itself.
+///
+/// ⭐ **Why this exists and neither [`unary_chain`] nor [`mixed_chain`] replaces
+/// it.** `mixed_chain` *cycles* the four arms, so no variant is ever its own
+/// child. A per-arm host-recursive leg therefore descends exactly **one** level
+/// there before the next, iterative, arm queues the rest — and the control stays
+/// green. Measured live by `runtime-qa`: replacing only the `Constructor` arm's
+/// worklist enqueue with direct descent left the mixed control passing.
+/// `unary_chain` supplies same-variant nesting for `Record` alone, so before
+/// this the other three arms had **no same-variant population at all**.
+///
+/// ⚠ The general lesson, since it outlives this fixture: "deep" was being read
+/// as *depth of the value*, when the property under test needs *depth of nesting
+/// within a single arm*. A mutation that reddens proves a detector fired; it
+/// says nothing about the arms the population never exercised.
+fn same_variant_chain(variant: ChainVariant, depth: usize, leaf: i64) -> Value {
+    let mut v = Value::SmallInt(leaf);
+    for _ in 0..depth {
+        v = match variant {
+            ChainVariant::Record => Value::Record {
+                type_id: MIXED_RECORD_TYPE_ID,
+                fields: vec![v],
+            },
+            ChainVariant::Constructor => Value::Constructor {
+                constructor_id: MIXED_CTOR_ID,
+                args: vec![v],
+            },
+            ChainVariant::Array => Value::Array {
+                elem_type_id: MIXED_ARRAY_ELEM_TYPE_ID,
+                elements: vec![v],
+            },
+            ChainVariant::Map => {
+                let mut entries = std::collections::BTreeMap::new();
+                entries.insert(mixed_map_key(), v);
+                Value::Map {
+                    key_type_id: MIXED_MAP_KEY_TYPE_ID,
+                    value_type_id: MIXED_MAP_VALUE_TYPE_ID,
+                    entries,
+                }
+            }
+        };
+    }
+    v
+}
+
 /// The single `Map` key used by [`mixed_chain`] — the canonical encoding of
 /// `SmallInt(0)`, spelled out here rather than obtained from the encoder so the
 /// expectation stays independent of the subject.
@@ -840,6 +969,24 @@ fn run_scenario(scenario: &str) {
             println!("OK harness_survives");
         }
 
+        // --- AC-P3b/AC-P3c per child-bearing arm, SAME-VARIANT nesting ---
+        s if s.starts_with(SAME_SURVIVE_PREFIX) => {
+            let variant = ChainVariant::from_tag(&s[SAME_SURVIVE_PREFIX.len()..]);
+            let chain = same_variant_chain(variant, D, DEBUG_PROBE_LEAF);
+            let rendered = format!("{chain:?}");
+            assert_rendered_to_depth_d(&rendered, s);
+            println!("OK {s} len={}", rendered.len());
+        }
+
+        // --- AC-P3a population control per arm: recursion DIES on this shape ---
+        s if s.starts_with(SAME_DIES_PREFIX) => {
+            let variant = ChainVariant::from_tag(&s[SAME_DIES_PREFIX.len()..]);
+            let chain = same_variant_chain(variant, D, DEBUG_PROBE_LEAF);
+            let mut out = String::new();
+            recursive_debug_mixed(&chain, &mut out);
+            println!("UNEXPECTED {s} survived len={}", out.len());
+        }
+
         other => panic!("unknown scenario {other}"),
     }
 }
@@ -940,6 +1087,57 @@ fn ac_p3b_debug_returns_and_renders_at_depth_d() {
 #[test]
 fn ac_p3b_debug_returns_and_renders_at_depth_d_through_all_child_positions() {
     assert_survives("debug_at_depth_d_mixed");
+}
+
+// --------------------------------------------- same-variant depth, per arm
+//
+// ⛔ **These are not redundant with the two controls above, and the gap they
+// close was a live false green** (`runtime-qa`, BLOCK on `82918ace`).
+//
+// `mixed_chain` cycles the four arms, so no variant is ever its own child: a
+// recursive leg in one arm descends a single level before the next, iterative,
+// arm queues the rest. `unary_chain` supplies same-variant nesting for `Record`
+// only. ⇒ `Constructor`, `Array` and `Map` each had a host-recursive leg that
+// **no control could observe**.
+//
+// ⭐ Both tests iterate `ALL_CHAIN_VARIANTS` rather than naming arms, so a new
+// child-bearing variant — which `chain_variant_of` will not compile without —
+// is covered with no new test code.
+
+/// Non-vacuity for the population itself: each chain kind really builds **its
+/// own** arm. ⛔ Without this, a copy-paste making the `Array` chain build
+/// `Record`s would leave both controls below green and `Array` unexercised —
+/// the same false-green shape one level down.
+#[test]
+fn every_chain_variant_builds_a_chain_of_that_variant() {
+    for variant in ALL_CHAIN_VARIANTS {
+        let built = same_variant_chain(variant, 1, CHAIN_LEAF);
+        assert_eq!(
+            chain_variant_of(&built),
+            Some(variant),
+            "same_variant_chain({variant:?}) built a different arm, so that \
+             arm's depth controls would exercise the wrong shape"
+        );
+    }
+}
+
+/// `AC-P3a` population control, per arm — a host-recursive renderer dies at `D`
+/// on a same-variant chain of **each** child-bearing arm.
+#[test]
+fn ac_p3a_host_recursive_debug_dies_at_depth_d_for_every_same_variant_chain() {
+    for variant in ALL_CHAIN_VARIANTS {
+        assert_dies_of_stack_overflow(&format!("{SAME_DIES_PREFIX}{}", variant.tag()));
+    }
+}
+
+/// `AC-P3b`+`AC-P3c`, per arm — `{:?}` returns and renders at `D` on a
+/// same-variant chain of **each** child-bearing arm. This is the control that
+/// reddens under a single-arm worklist bypass.
+#[test]
+fn ac_p3b_debug_returns_and_renders_at_depth_d_for_every_same_variant_chain() {
+    for variant in ALL_CHAIN_VARIANTS {
+        assert_survives(&format!("{SAME_SURVIVE_PREFIX}{}", variant.tag()));
+    }
 }
 
 /// `AC-V1` step 3 — the new encoder succeeds at `D` and emits exactly the
