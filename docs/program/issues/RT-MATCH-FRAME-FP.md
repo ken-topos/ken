@@ -1,7 +1,7 @@
 ---
 id: RT-MATCH-FRAME-FP
 title: "match-frame fingerprints must hash a dedicated closure-free header carrier, not a Debug rendering of closure-capable cases"
-status: ready
+status: active
 owner: runtime
 size: M
 gate: none
