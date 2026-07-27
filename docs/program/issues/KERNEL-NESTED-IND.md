@@ -89,10 +89,63 @@ of that edge observable.
 
 ⇒ **The AC that discharges this node is `AC-K3`**, not `AC-K1`.
 
+## ⭐⭐ MEASURED SUBSTRATE — and it makes contract point 1 bigger than it looks
+
+Measured at `origin/main = 6f1eeda1`. ⚠ Re-derive before starting; these move.
+
+**The single line that rejects nesting** — `crates/ken-kernel/src/inductive.rs`,
+inside `check_pos_arg` (`:86`, the `14 §8.2` judgment):
+
+```rust
+Term::IndFormer { .. } | Term::Const { .. } | Term::Constructor { .. } | Term::Var(_) => {
+    // `C u` with a non-`D` head: recurse into the (atomic) head
+    // and `occurs`-guard every argument.
+    check_pos_arg(d, pol, &head) && args.iter().all(|x| !occurs(d, x))
+}
+```
+
+For `List Json` the head is `List` and the args are `[Json]`, so
+`!occurs(Json, Json)` is `false` and the declaration is rejected. **That
+`args.iter().all(|x| !occurs(d, x))` is the whole mechanism.**
+
+⛔⛔ **And this is precisely why "relax that line" is not delivery.** Replacing it
+with `args.iter().all(|x| check_pos_arg(d, pol, x))` would admit `List Json`
+**today**, in one line, with no eliminator, no lifted IH, and no iota — the exact
+inert outcome contract point 2 forbids. ⚠ **Expect this to be tempting: it is a
+one-line diff that makes the blocked declaration type-check.**
+
+### ⭐ The machinery contract point 1 requires DOES NOT EXIST YET
+
+The ruling requires positivity *"structural through **declared** strictly-positive
+type-parameter positions"*, with unknown and non-positive positions failing
+closed. To honour that, the kernel must be able to ask *"is `List`'s first
+parameter declared strictly positive?"* — **it cannot.**
+
+| measured | consequence |
+|---|---|
+| `InductiveDecl` (`crates/ken-kernel/src/env.rs:144-159`) carries `params: Vec<Term>` — parameter **types** only, **no polarity** | there is nowhere to read a declared parameter polarity from |
+| `Pol` (`inductive.rs:43-46`) is a **private**, two-valued enum used only *within* one `check_pos_arg` traversal | polarity is a transient of the check, not a recorded property of a declaration |
+
+⇒ **A per-parameter polarity notion — computed at admission, recorded on the
+declaration, and consulted when checking a nested occurrence — is a deliverable
+of this node, not a given.** `D1` is written accordingly.
+
+⚠ **This is also what makes `AC-K2`'s control meaningful.** Declaring a *new*
+container and nesting `Json` in it must work with **no kernel change** — which is
+only possible if polarity is derived from the container's own declaration. If
+`AC-K2` requires a code change, the implementation has hardcoded a set of known
+containers, which is the allow-list the ruling forbids.
+
 ## Deliverables
 
-- **`D1`** — structural positivity through declared strictly-positive parameter
-  positions, replacing the blanket nested rejection. ⛔ Keyed on **declared
+- **`D1a`** — ⭐ **the missing machinery**: a per-parameter polarity notion for an
+  inductive family — derived at admission, recorded on the declaration, and
+  readable when checking a nested occurrence. ⚠ Sizing input: this does not exist
+  today (see the substrate section), so `D1` cannot be a local edit to
+  `check_pos_arg`.
+- **`D1b`** — structural positivity through those declared strictly-positive
+  parameter positions, replacing the blanket nested rejection at
+  `inductive.rs` `check_pos_arg`'s non-`D`-head arm. ⛔ Keyed on **declared
   parameter polarity**, never on a type-constructor name.
 - **`D2`** — fail-closed handling for unknown and non-positive parameter
   positions.
