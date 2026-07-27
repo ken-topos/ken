@@ -208,8 +208,10 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   A starter glyph↔ASCII table is in `30-surface/31 §1b`.
 - **Resolved sub-item (SURF-IDENT-TR39 / SPEC-IDENT-BLESSED, 2026-07-27):**
   principle 5's boundedness is preserved and binds the §1b notation set. The
-  identifier surface is ASCII-only (`30-surface/31 §1e/§2`); there is no TR39
-  identifier profile, normalization, or repair.
+  identifier surface has stored ASCII names after the fixed, closed §1b alias
+  expansion (`30-surface/31 §1e/§2`); each glyph and ASCII spelling is one
+  binding, and there is no general TR39 identifier profile, normalization, or
+  repair.
 - **Still iterating (team, under the principles):** the exact glyph for each
   construct (notably `≡`-vs-`==` equality and the lattice-op/`ℓ` ASCII),
   layout-vs-brace details, the keyword set — **except** the **definition
