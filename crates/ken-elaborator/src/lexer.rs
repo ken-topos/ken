@@ -145,7 +145,7 @@ impl<'s> Lexer<'s> {
         }
     }
 
-    fn is_ident_continue(c: char) -> bool {
+    fn is_ascii_ident_continue(c: char) -> bool {
         c.is_ascii_alphanumeric() || c == '_' || c == '\''
     }
 
@@ -419,7 +419,11 @@ impl<'s> Lexer<'s> {
         // Identifiers and keywords
         if c.is_ascii_alphabetic() || c == '_' {
             let mut s = String::new();
-            while self.cur().map(Self::is_ident_continue).unwrap_or(false) {
+            while self
+                .cur()
+                .map(Self::is_ascii_ident_continue)
+                .unwrap_or(false)
+            {
                 s.push(self.advance().unwrap());
             }
             let tok = match s.as_str() {
@@ -470,6 +474,17 @@ impl<'s> Lexer<'s> {
                 }
             };
             return Ok((tok, Span::new(start, self.pos)));
+        }
+
+        // Shape B (`SURF-IDENT-TR39-R1`): identifier letters remain ASCII-only
+        // deliberately. Blessed Unicode notation has already been recognized by
+        // the operator cases above; any other alphabetic scalar is an identifier
+        // candidate and receives a typed error rather than a generic parse error.
+        if c.is_alphabetic() {
+            return Err(ElabError::NonAsciiIdentifierCharacter {
+                character: c,
+                span: Span::new(start, start + c.len_utf8()),
+            });
         }
 
         Err(ElabError::ParseError {
@@ -524,7 +539,7 @@ impl<'s> Lexer<'s> {
             && !self.src[self.pos + 1..]
                 .chars()
                 .next()
-                .map(Self::is_ident_continue)
+                .map(Self::is_ascii_ident_continue)
                 .unwrap_or(false)
         {
             self.advance(); // consume 'd'
@@ -542,7 +557,7 @@ impl<'s> Lexer<'s> {
             && !self.src[self.pos + 3..]
                 .chars()
                 .next()
-                .map(Self::is_ident_continue)
+                .map(Self::is_ascii_ident_continue)
                 .unwrap_or(false)
         {
             self.advance();

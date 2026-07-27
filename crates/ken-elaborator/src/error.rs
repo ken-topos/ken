@@ -31,6 +31,8 @@ impl Span {
 pub enum ElabError {
     /// A lexer/parser failure (`31 §8`, `32 §8`).
     ParseError { msg: String, span: Span },
+    /// A non-ASCII letter appeared where an identifier could begin or continue.
+    NonAsciiIdentifierCharacter { character: char, span: Span },
     /// A forbidden documentary name in an anonymous boundary header.
     NamedBoundaryHeader { name: String, span: Span },
     /// A `capabilities` item named no supported effect family.
@@ -158,6 +160,11 @@ impl fmt::Display for ElabError {
             ElabError::ParseError { msg, span } => {
                 write!(f, "parse error at {}-{}: {}", span.start, span.end, msg)
             }
+            ElabError::NonAsciiIdentifierCharacter { character, span } => write!(
+                f,
+                "non-ASCII identifier character '{}' at {}-{}: identifiers are ASCII-only",
+                character, span.start, span.end,
+            ),
             ElabError::NamedBoundaryHeader { name, span } => write!(
                 f,
                 "named boundary header at {}-{}: '{}' is forbidden; \
