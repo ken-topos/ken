@@ -1,7 +1,7 @@
 ---
 id: CAT-CAPEX
 title: "catalog exhibits no checked capability/authority exemplar — write one against the landed Cap/Auth surface"
-status: ready
+status: merged
 owner: ergo
 size: M
 gate: none
