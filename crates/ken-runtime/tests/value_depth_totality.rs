@@ -843,6 +843,25 @@ fn ac_v3d_drop_alone_is_total_at_depth_d_through_all_child_positions() {
 // ---------------------------------------------------------------------------
 // `RT-VALUE-TOTALITY-P2` — `AC-V9` (the checked projection) and `AC-V12` (the
 // sealed witness's comparison), both at the same `D` the controls above use.
+//
+// ⭐ **CAUSAL MUTATION EVIDENCE.** Each arm below was proven to fail for its own
+// reason by perturbing the production mechanism at its natural site, confirming
+// the redness, and restoring byte-identically (`git diff --quiet`, exit 0):
+//
+// | mutation, in `canonical.rs` | what reddened |
+// |---|---|
+// | `minimal_limbs` bypassed at the `BigInt` encode site | `AC-V8`'s bigint arm, on its **premise**; ⭐ the NFC arm stayed **green** |
+// | `CanonicalWitness::of` appends `{value:?}`, so the witness is no longer the bytes | **both** `AC-V8` arms, each on its **agreement** assertion, both premises intact |
+// | the `ClosureRef` refusal fires only when `ptr::eq(value, root)` | all three transitivity controls, incl. the depth-`D-1` arm below |
+// | `Rv::Record` projected by self-recursion instead of the worklist | ⛔ **only the two depth arms below** |
+//
+// ⛔ **Read the last row before deleting anything here.** Under a *recursive*
+// projection — the exact hazard `D4` exists to prevent — **all 443 lib tests
+// stayed green** and only the two out-of-process arms in this file caught it,
+// dying of a confirmed `fatal runtime error: stack overflow`. ⇒ The in-process
+// controls in `canonical.rs` are structurally blind to iterativeness, so these
+// arms are the only thing standing between the codebase and a silent
+// reintroduction of P1's overflow one layer out.
 // ---------------------------------------------------------------------------
 
 /// `AC-V9`, positive arm — the operational → canonical projection completes at
