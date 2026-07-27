@@ -13,23 +13,48 @@
 > until the elaborated package is on `main` and the WP is kicked off. Supersedes
 > the terse recap in `03-program-of-work.md` (F4).
 
-## 0. Read this first — the design is already decided; you are not re-deciding it
+> ## ⛔⛔ STOP — THIS FRAME IS STALE AND MUST NOT BE BUILT. Steward, 2026-07-27
+>
+> **`SPEC-STORE-SPLIT` (merged `c631841d`) retired the normative claims this
+> frame calls fixed inputs.** ⛔ Do not release, do not elaborate, do not queue
+> `A3` in front of it. It needs a **re-cut against the relaxed contract**, which
+> is Steward-owned and not yet done.
+>
+> ⭐ **The dangerous part is §0's own instruction** — *"Your job is **not** to
+> re-open them"* — which **pre-forbids exactly the correction this frame now
+> needs.** A team following it faithfully would build against retired normative
+> text and read the frame's prohibition as authority not to check. That is why
+> this banner replaces the table rather than sitting beside it.
+>
+> ### What died, measured at `origin/main = 7d87904f`
+>
+> | this frame's fixed input | the landed contract |
+> |---|---|
+> | `OQ-hash` — in-process addressing **IS** FNV-1a + `memcmp` | `41 §3`: the spec *"fixes **no** in-process hash, collision strategy, probing policy, load factor, or identifier scheme."* `§3b` names **FNV-1a, linear probing, table growth, arena allocation, slot numbering** as *"examples of **private choices, not conformance requirements**."* |
+> | `OQ-7` — compound/identity-bearing values **content-addressed** | `41 §5`: canonical compounds have deterministic canonical bytes and *"runtime representation **private**."* Content-addressing is no longer required. |
+> | `OQ-witness` — process-level store stats *(slots, dedup rate, arena bytes, Merkle root)* | `41 §7` is *"realization **revised by `SPEC-STORE-SPLIT`**"*: the stat set is profile-specific and *"**none is a portable required field**."* |
+> | §3's mandated outline: encode **closures by code-pointer/id + captured-env hash** | ⛔ `41 §2.1` — closures have **no** canonical hash and publication **refuses before bytes exist**. Directly forbidden, not merely optional. |
+> | §3's open-addressing index, monotonic slot-id counter, slot-id width | `41 §3b` — all private, non-conformance. |
+> | `OQ-6` — no Leech/Golay/Co₀ on the hot path | ✅ **survives** (`41 §3`). |
+> | `OQ-5`, `OQ-gc` | ⚠ **not re-read.** They cite `44 §2`/`§3`, which the split rewrote heavily. ⛔ Do not assume they survive because they are not listed as dead.
+>
+> ⚠ **`A3` (catalog-coverage walker) exists ONLY to be queued in front of this
+> node** — it feeds no gate and has no other dependant. Its urgency is entirely
+> derived from `F4`, so it is on hold with it. ⛔ Do not frame `A3` as idle-team
+> filler; that would be building a road to a retired destination.
+>
+> ⇒ **What is actually owed:** decide whether a node about *content-addressing as
+> a value-model requirement* still has a subject once content-addressing is a
+> private runtime choice — and if it does, what its subject now is. That is a
+> re-cut, not an edit.
 
-The hard design forks for F4 were **already resolved by the spec enclave + the
-operator (2026-06-27)** and are normative in `spec/40-runtime/41-values.md` and
-`spec/40-runtime/44-capacity.md`. Your job is **not** to re-open them — it is to
-turn those settled stances into a **concrete, implementable module design + a
-small benchmark** that K3/X2 can build against. Treat the following as **fixed
-inputs** (cite them; do not relitigate):
+## 0. ⛔ SUPERSEDED — the "already decided" inputs below are RETIRED
 
-| Decision | Resolution (normative source) |
-|---|---|
-| `OQ-hash` | In-process addressing = **FNV-1a (non-crypto) + `memcmp`** on collision. A crypto/Merkle hash is a *separate* concern for serialization only (`38 §1`). Two hashes, two jobs. (`41 §3`) |
-| `OQ-5` (capacity) | **Engineering-chosen** capacity with **wide handles** (48-/64-bit slot field) → **no practical ceiling**; **loud refusal** at any limit (never silent drop/alias/corrupt). No Leech 196,560 ceiling. (`44 §2`) |
-| `OQ-6` (lattice) | Leech/Golay/Co₀ math is **NOT in the core and NEVER on the allocation hot path**. It exists only as optional research/stdlib packages (WS-R). (`44 §4`) |
-| `OQ-7` (interning boundary) | **Scalars immediate; compound/identity-bearing values content-addressed.** Exact tiny-aggregate boundary is empirical X2 tuning. (`41 §5`) |
-| `OQ-gc` (reclamation) | **Manual + region-scoped now**; automatic GC is a deferred, semantics-invisible implementation detail (no language fork). (`44 §3`) |
-| `OQ-witness` (introspection) | Process-level store stats only (slots, dedup rate, arena bytes, Merkle root); **never** per-value identity/provenance. (`41 §7`) |
+⛔ **Read the banner above first. The table that stood here is retired and has
+been removed rather than annotated**, because it was a list of things a reader
+was instructed not to question. Its contents are reproduced in the banner's
+comparison table with the landed contract beside each row, which is the only
+form in which they are still safe to read.
 
 **The stale `mmgroup` question is therefore answered:** because the lattice
 machinery is out of the core (`OQ-6`), Ken takes **no `mmgroup`/lattice
