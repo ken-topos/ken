@@ -1127,6 +1127,105 @@ mod tests {
         .collect()
     }
 
+    // ─── D4 / AC-V9 — the projection is TRANSITIVE and FAIL-CLOSED ───────────
+
+    /// ⛔ **A closure nested BELOW the root refuses the whole projection.**
+    ///
+    /// ⚠ A refusal at depth 1 would not establish transitivity, so the closure
+    /// here sits under three admitted parents. The parent must not succeed
+    /// "around" its unprojectable child.
+    ///
+    /// ⚠ **POSITIVE CONTROL:** the byte-identical graph with the closure replaced
+    /// by a ground leaf **projects**. Without it, "closures refuse" and "this
+    /// fixture refuses everything" are the same green.
+    #[test]
+    fn ac_v9_projection_refuses_a_closure_nested_below_the_root() {
+        use crate::ir::RuntimeValue as Rv;
+        let mut intern = |symbol: &str| symbol.len() as u32;
+
+        // depth 3: Constructor > Record > Constructor > <leaf>
+        let nest = |leaf: Rv| Rv::Constructor {
+            constructor: "ctor:fixture::Outer".to_string(),
+            args: vec![Rv::Record {
+                fields: vec![(
+                    "inner".to_string(),
+                    Rv::Constructor {
+                        constructor: "ctor:fixture::Inner".to_string(),
+                        args: vec![leaf],
+                    },
+                )],
+            }],
+        };
+
+        let closure_leaf = Rv::ClosureRef {
+            symbol: "decl:fixture::f".to_string(),
+            captured: vec![],
+        };
+        // ⚠ `matches!`, not `assert_eq!`: `Result<Value, _>` cannot be compared
+        // because `D3` removed `Value: PartialEq`. The refusal VARIANT is
+        // asserted specifically, not merely `is_err()`.
+        assert!(
+            matches!(
+                project_operational_to_canonical(&nest(closure_leaf), &mut intern),
+                Err(CanonicalProjectionRefusal::OrdinaryClosure)
+            ),
+            "a closure three levels down refuses the WHOLE projection"
+        );
+
+        // ⚠ POSITIVE CONTROL — same shape, ground leaf.
+        assert!(
+            project_operational_to_canonical(&nest(Rv::Bool(true)), &mut intern).is_ok(),
+            "the identical graph projects when its leaf is closure-free"
+        );
+
+        // ⛔ And directly, so the depth case is not the only arm.
+        assert!(
+            matches!(
+                project_operational_to_canonical(
+                    &Rv::ClosureRef {
+                        symbol: "decl:fixture::g".to_string(),
+                        captured: vec![],
+                    },
+                    &mut intern
+                ),
+                Err(CanonicalProjectionRefusal::OrdinaryClosure)
+            ),
+            "and a bare closure refuses too"
+        );
+    }
+
+    /// ⛔ **A refusal yields NOTHING that could be published** — no bytes, no
+    /// witness, no slot.
+    ///
+    /// ⭐ This is a type-level property, and stating it that way is the point:
+    /// the projection's `Err` carries no `Value`, so there is no image for a
+    /// caller to encode. `CanonicalWitness::of` and the store both require a
+    /// `Value`, so the refusal is upstream of every byte-producing operation
+    /// rather than a check performed alongside them.
+    #[test]
+    fn ac_v9_a_refusal_carries_no_projectable_image() {
+        use crate::ir::RuntimeValue as Rv;
+        let mut intern = |symbol: &str| symbol.len() as u32;
+        let refused = project_operational_to_canonical(
+            &Rv::Record {
+                fields: vec![(
+                    "f".to_string(),
+                    Rv::ClosureRef {
+                        symbol: "decl:fixture::h".to_string(),
+                        captured: vec![],
+                    },
+                )],
+            },
+            &mut intern,
+        );
+        assert!(refused.is_err());
+        // ⚠ POSITIVE CONTROL — an accepted projection DOES yield a witness, so
+        // the absence above is a refusal and not an inert harness.
+        let accepted = project_operational_to_canonical(&Rv::Bool(false), &mut intern)
+            .expect("a ground value projects");
+        assert!(!CanonicalWitness::of(&accepted).bytes().is_empty());
+    }
+
     // ─── D3 / AC-V8 — the witness AGREES with canonical identity ────────────
     //
     // ⛔ BOTH pairs are required. They fail through different mechanisms — limb
