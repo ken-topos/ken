@@ -142,7 +142,7 @@ fn ac1_s2l_witness_is_always_a_valid_scalar() {
     }
 }
 
-// ── AC2: round-trip identity (non-circular defining oracle) ────────────────
+// ── AC2: String-side retraction and derived s2l injectivity ────────────────
 
 /// `surface/strings/roundtrip-l2s-s2l` — `list_char_to_string
 /// (string_to_list_char s) ≡ s` for the boundary corpus.
@@ -179,18 +179,18 @@ fn ac2_round_trip_l2s_s2l_identity() {
     }
 }
 
-/// `surface/strings/roundtrip-s2l-l2s` — `string_to_list_char
-/// (list_char_to_string cs) ≡ cs` for a well-formed `cs`, built directly as a
-/// Ken `List Char` literal expression (not via `s2l`, so this is a genuinely
-/// independent direction from AC2's first test — a round-trip pinned from
-/// both ends nets the inverse-error pair a one-directional check would miss).
+/// `surface/strings/s2l-injectivity-current-nfc-stub-tripwire` — the landed
+/// String-side retraction makes `string_to_list_char` injective. Under the
+/// current NFC stub (`37 §9`; `dec_ppakqc11kffh`), this direct `List Char`
+/// operand remains decomposed. That is a transition tripwire, not normative
+/// `String` semantics: real NFC must break this expectation.
 #[test]
-fn ac2_round_trip_s2l_l2s_identity() {
+fn ac2_s2l_injectivity_current_nfc_stub_tripwire() {
     let mut env = ElabEnv::new().expect("base env");
     let mut store = make_store(&env);
 
-    // `Cons Char 65 (Cons Char 66 (Nil Char))` — "AB" as an explicit List Char.
-    let cs_expr = "Cons Char 65 (Cons Char 66 (Nil Char))";
+    // `[U+0065, U+0301]` as an explicit List Char under the current NFC stub.
+    let cs_expr = "Cons Char 101 (Cons Char 769 (Nil Char))";
     let v = eval_view(
         &mut env,
         &mut store,
@@ -200,8 +200,10 @@ fn ac2_round_trip_s2l_l2s_identity() {
     );
     assert_eq!(
         list_char_codepoints(&env, &v),
-        vec![65, 66],
-        "s2l(l2s cs) must reproduce cs's codepoints exactly"
+        vec![101, 769],
+        "STR-BIJ-TEST-CARRIER / dec_ppakqc11kffh transition tripwire: \
+         the current §37.9 NFC stub preserves [101,769]; real NFC must break \
+         this expectation"
     );
 }
 
