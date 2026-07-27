@@ -2783,6 +2783,45 @@ mod tests {
         ));
     }
 
+    /// ABI-S3 AC-5. Every operation this WP adds is RepresentedUnavailable
+    /// (D4), and the PX5 promotion set is untouched -- asserted by CONTENTS,
+    /// not by length, so swapping a member for another cannot pass.
+    ///
+    /// ⚠ Read this together with
+    /// all_pre_resource_operations_share_one_semantic_dispatch. Availability
+    /// alone is a WEAK signal here: a new operation that were never wired at
+    /// all would also report RepresentedUnavailable, because that is the
+    /// default every unhandled operation falls to. This test therefore
+    /// establishes the D4 property but is NOT evidence that the operations
+    /// are reachable; the dispatch test is what establishes that, by driving
+    /// each one through the real semantic dispatch and requiring the backend
+    /// to have observed it.
+    #[test]
+    fn ac5_new_operations_are_unavailable_and_the_promotion_set_is_untouched() {
+        for operation in [
+            HostOpV1::ClockMonotonicNow,
+            HostOpV1::ClockSleepUntil,
+            HostOpV1::EntropyRandomBytes,
+        ] {
+            assert_eq!(
+                operation.availability(),
+                HostOpAvailabilityV1::RepresentedUnavailable,
+                "{operation:?} must land RepresentedUnavailable per D4"
+            );
+        }
+
+        assert_eq!(
+            PX5_PLANNED_NATIVE_TARGETS,
+            [
+                HostOpV1::ConsoleWrite,
+                HostOpV1::ConsoleFlush,
+                HostOpV1::ConsoleIsTerminal,
+                HostOpV1::FsReadFile,
+                HostOpV1::FsWriteFile,
+            ]
+        );
+    }
+
     #[test]
     fn catalog_is_closed_and_availability_is_exact() {
         assert_eq!(HostOpV1::ALL.len(), 25);

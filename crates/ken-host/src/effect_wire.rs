@@ -1022,6 +1022,58 @@ pub fn decode_linked_effect_trace(bytes: &[u8]) -> Result<LinkedEffectTrace, Eff
 mod tests {
     use super::*;
 
+    /// ABI-S3 AC-1. Encode -> decode returns the identical canonical request
+    /// for every operation added by this WP.
+    ///
+    /// The existing arity assert is explicitly NOT this test: a catalog closed
+    /// at 25 says nothing about whether a request survives a round trip. The
+    /// deadline and count are given distinct non-zero values so a codec that
+    /// dropped a payload, or crossed the two u64 fields, cannot pass.
+    #[test]
+    fn ac1_every_new_request_survives_an_encode_decode_round_trip() {
+        let requests = [
+            CanonicalRequestV1::ClockMonotonicNow,
+            CanonicalRequestV1::ClockSleepUntil {
+                deadline: 0x0123_4567_89ab_cdef,
+            },
+            CanonicalRequestV1::EntropyRandomBytes { count: 977 },
+        ];
+
+        for request in &requests {
+            let mut encoded = Vec::new();
+            put_request(&mut encoded, request).expect("new requests encode");
+            let mut cursor = Cursor {
+                bytes: &encoded,
+                position: 0,
+            };
+            let decoded = get_request(&mut cursor).expect("new requests decode");
+            assert_eq!(&decoded, request);
+        }
+
+        // Non-vacuity: the three encodings are mutually distinct, so the
+        // round trip above is not passing because every request encodes to
+        // the same bytes.
+        let encodings = requests
+            .iter()
+            .map(|request| {
+                let mut out = Vec::new();
+                put_request(&mut out, request).expect("encodes");
+                out
+            })
+            .collect::<Vec<_>>();
+        for (index, left) in encodings.iter().enumerate() {
+            for right in &encodings[index + 1..] {
+                assert_ne!(left, right);
+            }
+        }
+
+        // And the wall clock, whose request carries no payload, does not
+        // collide with the new monotonic read -- D1 on the wire.
+        let mut wall = Vec::new();
+        put_request(&mut wall, &CanonicalRequestV1::ClockWallNow).expect("encodes");
+        assert_ne!(wall, encodings[0]);
+    }
+
     fn representative_trace() -> LinkedEffectTrace {
         LinkedEffectTrace {
             plan_hash: 7,
