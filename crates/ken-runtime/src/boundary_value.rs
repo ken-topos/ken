@@ -2060,6 +2060,13 @@ impl BoundaryValueStore {
     /// Two hand-written lists would be free to drift, and the drift would be
     /// silent — the phase-3 list alone was the `AC-V5` defect (below).
     ///
+    /// ⚠ **This sentence was once false on one path, and the correction is the
+    /// point.** An earlier revision placed the phase-2 call *after* both
+    /// `already_owned` fast paths, so on the already-owned path phase 2 did not
+    /// read this predicate at all and a closure with a pre-existing `NODE_SLOT`
+    /// was admitted. ⇒ *"Both phases read one predicate"* is a claim about
+    /// **every** path through each phase, not about the predicate existing.
+    ///
     /// ⛔ Exhaustive with no `_` arm on purpose: a new [`BoundaryClass`] must
     /// decide here whether it is persistable rather than inheriting an answer.
     fn class_is_persistable(class: BoundaryClass) -> bool {
@@ -2146,11 +2153,21 @@ impl BoundaryValueStore {
         // `(node index, next child offset)` — the frontier, on the heap.
         let mut stack: Vec<(u64, u64)> = Vec::new();
 
+        // Admission site 1 of 2 — the root.
+        //
+        // ⛔ **BEFORE the already-owned fast path, and the order is the
+        // deliverable.** `already_owned` skips a node on the grounds that "its
+        // reachable subtree was validated when it was adopted" — an *inductive*
+        // argument that presupposes adoption always refused this class. For the
+        // closure class that premise is exactly what was broken, so trusting a
+        // pre-existing `NODE_SLOT` here is circular: a closure-classed node
+        // carrying a non-`NULL_SLOT` would be waved through as already
+        // canonical, preserving a store-resident ordinary closure — the outcome
+        // `41 §2.1` forbids outright.
+        self.admit_persistable(root)?;
         if self.already_owned(root)? {
             return Ok(order);
         }
-        // Admission site 1 of 2 — the root.
-        self.admit_persistable(root)?;
         colour.insert(root, Colour::Grey);
         stack.push((root, 0));
 
@@ -2197,15 +2214,20 @@ impl BoundaryValueStore {
                         // Shared child: legal, already finished, reused.
                         Some(Colour::Black) => {}
                         None => {
+                            // Admission site 2 of 2 — every descendant. ⭐ The
+                            // transitive half: a closure nested at any depth is
+                            // refused here, while the walk is still read-only
+                            // and nothing has been interned or minted.
+                            //
+                            // ⛔ Again BEFORE `already_owned`, for the reason
+                            // given at the root: the fast path's soundness is
+                            // inductive on adoption having refused this class,
+                            // so it cannot be the thing that decides whether
+                            // this class is admitted.
+                            self.admit_persistable(next)?;
                             if self.already_owned(next)? {
                                 colour.insert(next, Colour::Black);
                             } else {
-                                // Admission site 2 of 2 — every descendant. ⭐
-                                // This is the transitive half: a closure nested
-                                // at any depth is refused here, while the walk
-                                // is still read-only and nothing has been
-                                // interned or minted.
-                                self.admit_persistable(next)?;
                                 colour.insert(next, Colour::Grey);
                                 stack.push((next, 0));
                             }
@@ -2647,6 +2669,20 @@ impl BoundaryValueStore {
     #[cfg(test)]
     pub(crate) fn node_slot_of(&self, index: u64) -> Option<u64> {
         self.image.0.node_field(index, NODE_SLOT)
+    }
+
+    /// Install a `NODE_SLOT` on a node, so a control can exercise the
+    /// **already-owned fast path** in `validate_reachable`.
+    ///
+    /// ⚠ Test-only. ⛔ There is no production route to this: a slot is minted
+    /// by `canonicalize` and by nothing else. It exists because the fast path
+    /// is reachable *by construction* — a node's `NODE_SLOT` is an ordinary
+    /// field of the emitted image — and "no producer sets it today" is a claim
+    /// about callers, not about reachability, which is the distinction `AC-V4`
+    /// already turns on.
+    #[cfg(test)]
+    pub(crate) fn install_node_slot_for_test(&mut self, index: u64, slot: SlotId) {
+        self.image.0.set_node_slot(index, slot);
     }
 
     /// Take persistent ownership of a ground value, returning its slot id.

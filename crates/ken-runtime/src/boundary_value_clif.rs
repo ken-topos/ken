@@ -6462,6 +6462,10 @@ pub(crate) mod tests {
     }
 
     /// Build one emitted closure with the given ordered immediate captures.
+    /// An arbitrary non-`NULL_SLOT` identity, used to put a node on the
+    /// already-owned fast path. Its value is irrelevant; only `!= NULL_SLOT` is.
+    const PREOWNED_SLOT: crate::store::SlotId = 4242;
+
     fn emitted_closure(
         alloc_closure: *const u8,
         store_field: *const u8,
@@ -6713,6 +6717,147 @@ pub(crate) mod tests {
             store.node_slot_of(closure.payload()),
             Some(crate::store::NULL_SLOT),
             "AC-V5: and so must the closure's own"
+        );
+    }
+
+    /// ⛔ **`AC-V5` — an ALREADY-OWNED closure ROOT is still refused.**
+    ///
+    /// ⭐ **The fast path cannot be the thing that decides this class.**
+    /// `validate_reachable` skips a node carrying a non-`NULL_SLOT` on the
+    /// grounds that "its reachable subtree was validated when it was adopted" —
+    /// an *inductive* argument presupposing adoption always refused closures.
+    /// For this class that premise is precisely what was broken, so consulting
+    /// the slot first is circular and lets a store-resident ordinary closure
+    /// through as "already canonical".
+    ///
+    /// ⚠ Found by @runtime-qa and @architect independently on `deea772f`, where
+    /// the predicate was placed *after* both fast paths while its own doc
+    /// claimed it guarded both admission sites.
+    // --- conformance: runtime/values/closure-publication-rejected-transitively ---
+    #[test]
+    fn b2v_acv5_an_already_owned_closure_root_is_still_refused() {
+        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
+
+        let mut store = BoundaryValueStore::new();
+        store.bind_artifact(fixture_artifact("refused", 3));
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (8, 16, 0),
+            (0, 0, 0),
+        );
+        let closure = BoundaryWord(run3(alloc_closure, f.base, BoundaryWord(3), 0) as u64);
+        assert!(closure.0 as i64 > 0, "closure allocates: {}", closure.0 as i64);
+
+        // The pre-existing identity that triggers the already-owned fast path.
+        store.install_node_slot_for_test(closure.payload(), PREOWNED_SLOT);
+        store.seal_persistent();
+
+        let slots_before = store.store_resident_slots();
+        assert_eq!(
+            store.adopt(closure),
+            Err(BOUNDARY_ERR_ESCAPE),
+            "AC-V5: a closure carrying a pre-existing NODE_SLOT must still be \
+             refused — the fast path must not launder it into a store-owned \
+             ordinary closure"
+        );
+        assert_eq!(
+            store.store_resident_slots(),
+            slots_before,
+            "and the refusal has no further store side effect"
+        );
+    }
+
+    /// ⛔ **`AC-V5` — an ALREADY-OWNED closure DESCENDANT is still refused.**
+    ///
+    /// The root arm exercises the early `return Ok(order)`; this one exercises
+    /// the separate descendant branch that marks an owned child black. ⛔ They
+    /// are different code paths and neither implies the other.
+    // --- conformance: runtime/values/closure-publication-rejected-transitively ---
+    #[test]
+    fn b2v_acv5_an_already_owned_closure_descendant_is_still_refused() {
+        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
+        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
+        let (_cm, alloc_ctor) = compile_producer(5, emit_ctor_node);
+
+        let mut store = BoundaryValueStore::new();
+        store.bind_artifact(fixture_artifact("refused", 3));
+        let tag_id = store.intern_symbol("ctor:fixture::Ground::Leaf");
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (8, 16, 0),
+            (0, 0, 0),
+        );
+
+        let closure = BoundaryWord(run3(alloc_closure, f.base, BoundaryWord(3), 0) as u64);
+        assert!(closure.0 as i64 > 0, "closure allocates: {}", closure.0 as i64);
+        let parent = BoundaryWord(run3(alloc_ctor, f.base, BoundaryWord(tag_id), 1) as u64);
+        assert!(parent.0 as i64 > 0, "ctor allocates: {}", parent.0 as i64);
+        assert_eq!(
+            run4(store_field, f.base, parent.0, 0, closure.0),
+            BOUNDARY_OK,
+            "the closure is stored as the ctor's field"
+        );
+
+        store.install_node_slot_for_test(closure.payload(), PREOWNED_SLOT);
+        store.seal_persistent();
+
+        let slots_before = store.store_resident_slots();
+        assert_eq!(
+            store.adopt(parent),
+            Err(BOUNDARY_ERR_ESCAPE),
+            "AC-V5: a NESTED closure carrying a pre-existing NODE_SLOT must \
+             still be refused, transitively"
+        );
+        assert_eq!(
+            store.store_resident_slots(),
+            slots_before,
+            "and the parent must not have been interned on the way"
+        );
+        assert_eq!(
+            store.node_slot_of(parent.payload()),
+            Some(crate::store::NULL_SLOT),
+            "and the parent's own NODE_SLOT is untouched"
+        );
+    }
+
+    /// ⚠ **POSITIVE CONTROL for both already-owned arms — the fast path still
+    /// WORKS for a persistable class.**
+    ///
+    /// ⛔ Without this, *"an already-owned closure is refused"* and *"admission
+    /// now rejects everything already-owned"* are the same green, and the two
+    /// arms above would be satisfied by a change that simply broke the
+    /// optimization for every class.
+    #[test]
+    fn b2v_acv5_an_already_owned_ground_root_still_takes_the_fast_path() {
+        let (_cm, alloc_ctor) = compile_producer(5, emit_ctor_node);
+
+        let mut store = BoundaryValueStore::new();
+        store.bind_artifact(fixture_artifact("refused", 3));
+        let tag_id = store.intern_symbol("ctor:fixture::Ground::Leaf");
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (8, 16, 0),
+            (0, 0, 0),
+        );
+        let child = BoundaryWord(run3(alloc_ctor, f.base, BoundaryWord(tag_id), 0) as u64);
+
+        store.install_node_slot_for_test(child.payload(), PREOWNED_SLOT);
+        store.seal_persistent();
+
+        let slots_before = store.store_resident_slots();
+        assert!(
+            store.adopt(child).is_ok(),
+            "a GROUND node with a pre-existing slot still adopts — the class \
+             check admits it and the fast path then short-circuits"
+        );
+        assert_eq!(
+            store.store_resident_slots(),
+            slots_before,
+            "and, being already owned, it is not re-interned — so the fast path \
+             is genuinely still taken rather than merely tolerated"
         );
     }
 
