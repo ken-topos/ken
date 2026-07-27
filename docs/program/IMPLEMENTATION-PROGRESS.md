@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-27 15:31:11Z — from 104 issue file(s) in `docs/program/issues/`.
+2026-07-27 15:36:49Z — from 104 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -138,7 +138,7 @@ the committed file matches the generator's output.
 | `SRC-ATTEST` | squash-stable whole-source attestation + fresh merge-result authorization | merged | doc | M | none | — |
 | `STR-BIJ-TEST-CARRIER` | The AC2 reverse-direction test claims a universal inverse and its sole operand is an NFC fixed point — it is green under the correct law AND under the false one it pins | merged | language | S | none | https://github.com/swe-toolkit/ken/pull/1102 |
 | `STR-BIJ` | the String/List Char 'bijection' over-claim (adversary A1 + A2) | merged | spec-enclave | S | none | https://github.com/swe-toolkit/ken/pull/1096 |
-| `STR-NFC-CONSTRUCTION` | NFC-at-construction is normative and unimplemented: all three `EvalVal::Str` ingresses store the raw string, so `char_length`/`byte_length`/`s2l`/`==` observe unnormalized values and the interp carrier disagrees with the runtime carrier | active | language | L | none | — |
+| `STR-NFC-CONSTRUCTION` | NFC-at-construction is normative and unimplemented: all three `EvalVal::Str` ingresses store the raw string, so `char_length`/`byte_length`/`s2l`/`==` observe unnormalized values and the interp carrier disagrees with the runtime carrier | merged | language | L | none | https://github.com/swe-toolkit/ken/pull/1109 |
 | `V3-RESIDUAL` | V3's suite has FOUR assertion-free placeholder tests carrying ordinary names — `disproved_carries_countermodel` asserts nothing, passes, and reads in cargo output exactly like a real pin | merged | verify | L | G2-G3 | https://github.com/swe-toolkit/ken/pull/1103 |
 | `V4-RESIDUAL` | The Kripke countermodel is an inert shell: it is never related to `φ` at all — no interpretation of the formula, no recursive forcing evaluator — and V3's prose `description` is stuffed into `FormRef`, a slot meant for a structural subformula reference | active | verify | L | G2-G3 | — |
 | `VIS-BR-LITERAL` | visibility walk: raw-string prefixes br and cr are unrecognized by the literal scanner | merged | runtime | XS | none | — |

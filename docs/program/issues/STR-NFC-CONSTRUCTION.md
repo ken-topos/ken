@@ -1,13 +1,13 @@
 ---
 id: STR-NFC-CONSTRUCTION
 title: "NFC-at-construction is normative and unimplemented: all three `EvalVal::Str` ingresses store the raw string, so `char_length`/`byte_length`/`s2l`/`==` observe unnormalized values and the interp carrier disagrees with the runtime carrier"
-status: active
+status: merged
 owner: language
 size: L
 gate: none
 depends_on: [STR-BIJ-TEST-CARRIER]
 blocks: []
-github: null
+github: https://github.com/swe-toolkit/ken/pull/1109
 origin: "Architect Decision dec_ppakqc11kffh disposition (b), 2026-07-27: NFC-at-construction REMAINS Ken's normative String contract; 37 §9's 'deferred behavior — currently stubbed' is an honest staging disclosure, not authority to weaken it. Measured by the Steward at origin/main a8b632f0. Blocked on STR-BIJ-TEST-CARRIER, whose AC-C7 tripwire this WP is required to trip."
 ---
 
