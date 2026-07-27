@@ -1,6 +1,6 @@
 ---
 id: SEC1-IFC
-title: "IFC by typing — the label lattice, the flow-typing pass, and no-laundering at the Vis boundary (WS-Sec increment 1)"
+title: "Reify the three named Sec1 stubs — two of them are the SOLE NETS for Sec1's two trusted surfaces, and both are placeholders under a green suite"
 status: ready
 owner: verify
 size: M
@@ -8,135 +8,141 @@ gate: G-Sec
 depends_on: []
 blocks: []
 github: null
-origin: DAG WP Sec1 (docs/program/05-implementation-dag.md). Frame docs/program/wp/Sec1-build.md, authored by the Steward and re-pinned 2026-07-27 after spec 61 drifted under it. Owner is operator-decided — WS-Sec build is a scope extension of Team Verify, not a new team. Spec 61 elaborated impl-ready by the spec enclave; conformance seed landed.
+origin: Corrected 2026-07-27 by the Steward after a mis-release. Sec1 is BUILT (crates/ken-elaborator/src/ifc.rs + tests/sec1_acceptance.rs, 20 tests green); the residual is the three reify triggers the source itself names at ifc.rs:361-381. Frame docs/program/wp/Sec1-build.md. Owner operator-decided — WS-Sec build is a scope extension of Team Verify.
 ---
 
-> ## ▶ WHY THIS NODE EXISTS AT ALL — read this, it is the finding
+> ## ⛔⛔ READ FIRST — THIS NODE WAS MIS-RELEASED ONCE. Sec1 IS ALREADY BUILT.
 >
-> ⛔ **Six WS-Sec frames have existed in `docs/program/wp/` for weeks with zero
-> tracker nodes** — `Sec1-build`, `Sec1-ifc-by-typing`, `Sec1ct-constant-time`,
-> `Sec2-capabilities`, `Sec4-trust-model`, `Sec5-policy`. The spec was
-> implementation-ready, the conformance seed was landed, the owning team was
-> operator-decided, and **every dependency was on `main`** — and none of it was
-> releasable, because **nothing was `ready`, because there was no node.**
+> ⛔ **Do not implement IFC-by-typing.** It exists:
+> `crates/ken-elaborator/src/ifc.rs` plus
+> `crates/ken-elaborator/tests/sec1_acceptance.rs` — **711 lines, 20 tests,
+> green** — and **all 16** seed cases in
+> `conformance/security/ifc/seed-ifc.md` have implementing tests, name for name.
+> Sec1ct (`sec1ct_acceptance.rs`, 9 tests) and Sec2 (`sec2_acceptance.rs`, 12
+> tests) are built too.
 >
-> ⭐ **The release mechanism reads `issues/`, not `wp/`.** A frame without a node
-> is invisible to it. Team Verify sat idle holding zero ready nodes while its
-> next WP was fully written and sitting one directory over.
+> ⚠ **The first cut of this node asked for all of that to be written.** It was
+> released to Team Verify and withdrawn minutes later. The error: I verified the
+> frame existed, the node did not, the spec was implementation-ready and the deps
+> were on `main` — then probed the crates with the wrong grep key
+> (`noninterference|ifc_label`, zero hits) and read that as "unbuilt". The real
+> spelling was `sec1_acceptance.rs`, one `find -iname '*sec1*'` away.
 >
-> ⭐ **`blocks:` is empty above for the same reason, and that is a symptom, not a
-> choice.** This node's real successors are **Sec1ct** (`@ct` timing) and
-> **Sec5** (policy-as-code), whose frames exist at `wp/Sec1ct-constant-time.md`
-> and `wp/Sec5-policy.md` — but ⛔ **neither has a node to reference**, so the
-> schema check correctly refused the edge. ⇒ The downstream is recorded in prose
-> here until those nodes are filed. ⚠ **Do not read `blocks: []` as "nothing
-> depends on this"** — two tier-1 WPs do. ⇒ ⛔ **A written
-> frame is not a released WP.** File the node when you write the frame.
+> ⭐⭐ **The upstream error is the one to keep: "a frame with no tracker node" has
+> TWO causes** — never released, **or built and completed while the node was
+> never filed.** ⛔ Node absence is *equally consistent with done.* Discriminate
+> before releasing anything: **is there a landed acceptance suite whose name
+> matches the frame's?**
 
 ## Objective
 
-Implement **IFC-by-typing** in `ken-elaborator` per landed `61`: the
-lattice-parametric label interface + its DLM instance, the flow-typing pass, and
-the **no-laundering** guarantee at the `Vis` boundary — then make the Sec1 half
-of `conformance/security/ifc/seed-ifc.md` pass.
+**Reify the three deferred capabilities the Sec1 source names itself** — the
+`[Sec1-dual]`, `[Sec1-launder]`, and `[Sec1-reduce]` triggers at
+`crates/ken-elaborator/src/ifc.rs:361–381`.
 
-⛔ **This node is increment 1 of 2** and carries **`N1` — the by-typing trusted
-surface — only.** `N2` (the by-proof product-program reduction) is increment 2
-and is **`not-ready`**: see the frame's §Slicing.
+⭐⭐ **Why this is worth a WP rather than cleanup: two of the three are the SOLE
+NETS for Sec1's two trusted surfaces, and both are currently placeholders under
+a green suite.** The frame states that `N1`'s only protection is the flip cases
+`{A1–A4, C1}` and `N2`'s only protection is `D5`. ⛔ **`C1` is label-equality
+over hand-assigned literals and `D5` is a verdict-shape predicate over a
+synthetic obligation.** ⇒ The guarantees the suite appears to establish are not
+established, and nothing about the green run says so.
 
-## Fixed inputs (measured at `origin/main = 4be827eb`; ⛔ re-derive at point of use)
+## ⭐ The unifying property — each stub is its own surface's discriminator
+
+| trigger | what is stubbed | ⛔ what the stub CANNOT SEE |
+|---|---|---|
+| `[Sec1-dual]` | integrity is a **scalar** `integ: u8` (`ifc.rs:32`), with `UNTRUSTED = Label(2) = SECRET` and `TRUSTED = Label(0) = PUBLIC` — one axis doing two jobs | ⛔ **a bug specific to the `IntegLabel` ordering is indistinguishable from a `ConfLabel` bug.** A2 cannot flip independently of A1 |
+| `[Sec1-launder]` | `check_no_laundering` compares **label equality over hand-assigned literals** | ⛔ **the actual trusted surface is never exercised** — `36 §2.2/§2.4`'s `bind (Vis e f) k = Vis e (λr.…)` index preservation. C1 is `N1`'s sole net and it does not route a `Vis` |
+| `[Sec1-reduce]` | `check_reduction_faithfulness` is a **verdict-shape predicate** over a synthetic obligation; `product(c, ζ)` does not exist | ⛔ **the `N2` failure mode — a too-weak `Φ_post` — cannot be detected, because nothing constructs `Φ_post`.** D5 is `N2`'s sole net |
+
+⇒ ⭐ **All three are the same defect in three places: a control named for a
+property it cannot observe.** That is what makes them reifiable as one unit and
+what makes each one's acceptance a *discrimination* requirement, not a feature
+requirement.
+
+## Fixed inputs (measured at `origin/main = fe543c93`; ⛔ re-derive at point of use)
 
 | input | pin |
 |---|---|
-| frame | `docs/program/wp/Sec1-build.md` |
+| production | `crates/ken-elaborator/src/ifc.rs` — triggers at **:361–381**, scalar `integ` at **:32**, doc at **:21** |
+| tests | `crates/ken-elaborator/tests/sec1_acceptance.rs` (**20** tests, incl. `n1_n2_stub_gaps_carry_reify_triggers` which enumerates these gaps) |
 | spec | `spec/60-security/61-information-flow.md` blob **`e6c91f50`** |
-| conformance seed | `conformance/security/ifc/seed-ifc.md` blob **`45160418`** (**16** Sec1 cases) |
-| L5 (ITree denotation) | **built** — `ken-elaborator/src/effects/{lower,extract}.rs`, `capabilities.rs` |
-| K1.5 (kernel admission) | `f037451`, **verified ancestor of `origin/main`** |
+| seed | `conformance/security/ifc/seed-ifc.md` blob **`45160418`** (**16** Sec1 cases) |
+| ITree contract | `spec/30-surface/36-effects.md §2.2`/`§2.4` (`bind`/`incl` reconstruct the same `Vis e`) |
 
-⚠ **Settled — do not reopen:** `OQ-ifc` DECIDED (lattice-parametric + DLM);
-`OQ-relational` DECIDED (by-proof = re-checked product programs,
-progress-sensitive; heavy machinery deferred); `@ct` = an opt-in label whose
-timing guarantee is delegated to `Ward`.
-
-## ⛔ The trusted surface this node carries — `N1`
-
-**IFC labels are erased before the kernel** (`61 §3`: "at the kernel it *is*
-`A`"). ⇒ A flow-typing bug — a wrong `⊑` in `L-SINK`, a dropped `pc`-join, a
-label-dropping `bind`/`incl` — emits a **well-typed core term the kernel
-accepts** while non-interference is violated. ⛔ **The kernel is blind to it.**
-
-⭐ **The sole net is the `§H` meta-theorem plus the discriminating flip cases
-`{A1–A4, C1}`** — five cases, and never the kernel. ⇒ Treat the flow pass with
-trust-root discipline: each flip case must genuinely **redden** under its exact
-named bug, not pass green-vs-green.
-
-⚠ **`F1` used to be in this net and is not available to it** — the seed moved F1
-to Sec1ct. ⛔ Do not substitute a Sec1ct case into a Sec1 trust-root net.
+⭐ **Prior fleet knowledge exists — read it, do not re-derive:**
+`agent/memory/build/qa/taint-axis-orientation-needs-distinguishing-pair.md`
+(`[Sec1-dual]`) and
+`agent/memory/build/qa/composition-wp-real-producer-may-be-deferred-engine.md`
+(`[Sec1-reduce]`).
 
 ## Acceptance criteria
 
 | AC | claim | control |
 |---|---|---|
-| `AC-S1` | The `§2` lattice interface (carrier + `⊑`/`⊔`/`⊓`/`⊥`/`⊤` + laws-as-Ω-obligations) and the **DLM instance** are lattice-**parametric**: confidentiality = reader-sets by reverse inclusion (`⊔ = ∩`), integrity the order-dual, products componentwise. | instantiate the interface **twice** (DLM + one non-DLM lattice) and run the same flow-typing case through both. ⛔ A single-instance pass cannot distinguish parametric from hardcoded |
-| `AC-S2` | The four `§3` rules `L-PURE`/`L-COMBINE`/`L-OBSERVE`/`L-SINK` fire, with `L-SINK` joining `pc` (`(ℓ ⊔ pc) ⊑ κ`). | seed A1–A4, B1–B3 accept/reject. ⛔ Test at **non-empty Γ** and **non-degenerate labels** — an all-`⊥`/all-`⊤` fixture makes `⊑` vacuous and passes for any rule |
-| `AC-S3` | ⭐⭐ **No laundering through effects:** the label rides the `Vis` op/resp, and `bind`/`incl` reconstructing the **same** `Vis e` node **preserve** the index. | seed C1, which must **redden** under a label-dropping `bind`/`incl`/handler at the `Vis` boundary. ⛔ This is the case `N1` is most blind to — the kernel accepts the laundered term |
-| `AC-S4` | Labels are **erased** before the kernel and add **no kernel former and no new level rule**; the `ℓ_carrier ≤ ℓ_ITree` side-condition on the parametric `Lattice` holds. | assert the **erased core shape**, not merely that elaboration succeeded; plus seed E1's **forged-label** half — a forged label is kernel-rejected |
-| `AC-S5` | Honest limits are surfaced, not silent: the four-way status shows the termination-(in)sensitivity choice, and the deferred machinery carries its `[rel-deferred]` trigger. | seed G1, G2. ⛔ A deferred capability is **named with its trigger**, never faked and never silently omitted |
-| `AC-S6` | The flow-rule and lattice-op dispatch is **exhaustive by construction** (COORDINATION §7) — a single no-`_ =>` match, so a new rule or lattice case is a **compile error**. | add a variant locally and confirm it **fails to compile**. ⛔ A runtime `todo!()`/fallback does not discharge this |
+| `AC-R1` | `[Sec1-dual]` — integrity is a **separate carrier with a dual `⊑`**, giving a genuine `(Conf × Integ)` product lattice with lattice-**parametric** flow rules. | ⭐⭐ **A2 must flip while A1 stays green**, and vice versa. ⛔ An aggregate "labels still work" pass does not discharge this — the whole point is that the two axes become **independently** falsifiable. Both directions required |
+| `AC-R2` | `[Sec1-launder]` — `check_no_laundering` is wired to the **real** `bind`/`incl`/`handler_fold` in `effects::itree`. | ⭐ **A real `Vis`-routed tree is the discriminant**: build a tree, route it through `bind`/`incl`, and show the label index survives. ⛔ Then **redden it** by perturbing the routing to drop the index — a label-equality assertion that passes without a `Vis` in play does not discharge this row |
+| `AC-R3` | `[Sec1-reduce]` — `product(c, ζ)` exists (variable renaming, `lowEq_ζ`, the `coterminates_ζ` conjunct) and **D5 is tied to a genuine product-program reduction**. | ⭐⭐ **A too-weak `Φ_post` must be DETECTED.** Construct one deliberately and show D5 reports `disproved`/failure rather than a false `proved`. ⛔ A verdict-shape assertion cannot discharge this — the row exists because nothing currently builds `Φ_post` |
+| `AC-R4` | The three triggers are **removed from the deferred set** exactly where they are reified, and any that remain still name a live gap. | `n1_n2_stub_gaps_carry_reify_triggers` (`sec1_acceptance.rs`) must be **updated, not deleted**: a reified capability moves out of the "NOT yet delivered" list into the delivered one. ⛔ Deleting the test would erase the fleet's only inventory of these gaps |
+| `AC-R5` | No over-claim: whatever is **not** reified in this WP still carries a named, non-silent trigger (`§H`/LP-2). | ⛔ Silence is the failure mode this whole node exists to correct. If a trigger survives, it must survive **explicitly** |
+| `AC-R6` | No regression in the landed Sec1/Sec1ct/Sec2 behaviour, and **no kernel enlargement** — labels stay `Vis` indices. | the three existing suites stay green (**20 + 9 + 12**); "no-regression" means **green in CI**, never a local `--workspace` run |
 
-⛔ **`AC4` of the frame is deliberately absent here.** Sec1's `@ct` AC was
-elaborated into the Sec1ct discipline; F1/F2 now live in
-`conformance/security/ct/seed-ct.md` as `CT-A1/A2/A3`, `CT-A4`, `CT-E1` under
-Sec1ct's **own** `AC1`–`AC7` namespace. ⇒ **Discharge nothing `@ct` here.**
+## Slicing — `AC-R3` is separable and may need `V3`
+
+⭐ `AC-R1` + `AC-R2` are the **`N1`** surface and need **no prover** — they are
+elaborator-local and independently releasable. `AC-R3` is the **`N2`** surface
+and reaches the product-program/obligation path.
+
+⚠ **`V3`'s delivered state is NOT verified in this node.** ⇒ If `AC-R3` turns
+out to need prover work that is not present, **land `AC-R1`+`AC-R2` and re-raise
+`AC-R3` to the Steward with what you measured** — ⛔ do not stub it further, and
+⛔ do not infer V3's state from a DAG table or a tracker row.
 
 ## Scope
 
-**IN:** `§2` lattice + DLM · `§3` flow-typing (four rules, explicit `pc`) ·
-`§3.2` no-laundering at `Vis` · `§H`/`§9` honest limits · seed E1's
-**forged-label** half.
+**IN:** `crates/ken-elaborator/src/ifc.rs`, its `effects::itree` wiring for
+`AC-R2`, and the three suites' controls.
 
 ⛔ **OUT:**
-- ⛔ **The entire `@ct` discipline — label, `L-CT-SINK`, the sealed `LeakSink`
-  set, the CT-promise/`P` export, declassify-ends-span** → `[Sec1ct]`. **None of
-  `§5a` is this node's.** ⚠ The frame's §The `@ct` boundary explains why this
-  changed; a spec section was re-elaborated under the frame and its **title**
-  had been carrying the boundary.
-- ⛔ **`§5.3` by-proof / product programs** (seed D1–D5, E1's cert half) →
-  increment 2, which needs `V3` and is **`not-ready`**.
-- ⛔ Heavy value-dependent relational machinery (seed D3/D4) → `[rel-deferred]`.
-- ⛔ Authority/capabilities (`62`, Sec2) · policy-as-code (`65`) · supply-chain
-  (`63`).
-- ⛔ **No kernel enlargement.** Labels are `Vis` indices; if this node needs a
-  kernel change, **stop and re-raise** — that is a finding about the spec's
-  premise, not a licence.
+- ⛔ **Re-implementing anything already green** — the four flow rules,
+  `flows_to`, join/meet, declassification's capability gate / strictly-lower /
+  delta-audit, the `@ct` hook. ⚠ They are **delivered**; the suite says so
+  explicitly.
+- ⛔ **The `@ct` discipline** → Sec1ct, which is **built**
+  (`sec1ct_acceptance.rs`). ⚠ Two stale `ct_*` hook tests still sit in
+  `sec1_acceptance.rs` although the seed moved F1/F2 to Sec1ct — that is a
+  **currency drift, not a gap**; ⛔ do not "fix" it by deleting coverage. Report
+  it and leave it.
+- ⛔ Heavy value-dependent relational machinery → `[rel-deferred]`.
+- ⛔ Sec2/Sec4/Sec5 (`62`/`64`/`65`).
+- ⛔ **No kernel enlargement.** If this needs a kernel change, **stop and
+  re-raise** — that is a finding about the spec's premise, not a licence.
 
 ## Validation — ⛔ TARGETED ONLY
 
 ⛔ **NEVER `--workspace`** (operator, `agent/COORDINATION.md §12`). `-p
-ken-elaborator`, plus `--test` for the named suites. The full-workspace build,
-the `--locked` gate, and the conformance suite run **in CI on GitHub**; the
-"no-regression" criterion means **green in CI**, never a local workspace run.
+ken-elaborator`, plus `--test sec1_acceptance` / `--test sec1ct_acceptance` /
+`--test sec2_acceptance`. Workspace, `--locked` and conformance run **in CI**.
 
-⚠ **Read RAW first-run output** — a `cargo`/`ken-cargo` re-run is **not
-idempotent for error reporting**; a second invocation can report *fewer*
-failures than the first while nothing changed. `tee` the first run and grep the
-file.
+⚠ **Read RAW first-run output** — a re-run is **not idempotent for error
+reporting** and can report *fewer* failures than the first while nothing
+changed. `tee` the first run and grep the file.
 
-⚠ `ken-cargo` is a **single machine-wide `flock`, slots == 1.** Another ring
-building means you wait, legitimately — coordinate a **seat-to-seat yield** in
-thread rather than sampling `ps` for the lock.
+⚠ `ken-cargo` is a **single machine-wide `flock`, slots == 1.** Kernel and
+Runtime are both active — coordinate a **seat-to-seat yield in-thread**, ⛔ never
+by sampling `ps`.
 
 ## Clean-room
 
 ⛔ Copyleft security references (**jif, DCC, FaCT**) are **Spec-enclave-only —
-never vendored, never consulted by the implementer** (`CLEAN-ROOM.md`). Build
-from landed `61`/`36` and first principles.
+never vendored, never consulted by the implementer** (`CLEAN-ROOM.md`).
 
 ## Reporting
 
-Return exact SHA/tree/base, per-AC evidence, **the redden result for each of the
-five `{A1–A4, C1}` flip cases**, the `AC-S6` compile-failure result, and branch
-freedom. Security semantics → Spec; trust-model/TCB → Architect. ⚠ The trust
-model is load-bearing, so **Architect review is required regardless of diff
-scope**.
+Return exact SHA/tree/base, per-AC evidence, and specifically: **the
+independent-flip evidence for `AC-R1` in both directions**, **the redden result
+for `AC-R2`'s perturbed `Vis` routing**, and **the detected too-weak `Φ_post`
+for `AC-R3`**. ⚠ Architect review is required regardless of diff scope — the
+trust model is load-bearing. Security semantics → Spec; trust-model/TCB →
+Architect.
