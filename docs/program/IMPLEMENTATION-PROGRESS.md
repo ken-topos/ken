@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-27 12:45:02Z — from 99 issue file(s) in `docs/program/issues/`.
+2026-07-27 13:38:18Z — from 101 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -124,6 +124,7 @@ the committed file matches the generator's output.
 | `RT-SYMLINK-LANE` | SymlinkPolicy is honoured by the interpreter lane and unreachable in the native lane — FollowWithinScope has no native behaviour | draft | runtime | TBD | none | — |
 | `RT-VALUE-TOTALITY` | Make every total traversal of Value non-recursive in the host stack, and remove the closure capabilities the landed closure boundary forbids | active | runtime | L | none | — |
 | `SEAL-2` | carrier producer closure, over a derived enumeration | merged | foundation | M | none | PR #912 @ 4ac9141e (origin/main, CI green) |
+| `SEC1-IFC-R3` | [Sec1-reduce] cannot be reified yet: NO production path can return Verdict::Disproved, so the verdict D5 requires is unreachable and every Disproved in sec1_acceptance is hand-rigged | draft | verify | M | G-Sec | — |
 | `SEC1-IFC` | Reify the three named Sec1 stubs — two of them are the SOLE NETS for Sec1's two trusted surfaces, and both are placeholders under a green suite | ready | verify | M | G-Sec | — |
 | `SPAN-SEAL` | seal the BufferSpan producer surface | merged | foundation | M | none | — |
 | `SPEC-31-WIDTH-ERRATUM` | spec 31-lexical mandates a 96-column canonical width while the formatting conformance suite asserts 88 in 18 places and cites 31 §1d as its source — rule the exact value and reconcile | closed | spec | S | none | https://github.com/swe-toolkit/ken/pull/1054 |
@@ -135,6 +136,7 @@ the committed file matches the generator's output.
 | `SPEC-NESTED-IND` | un-defer nested strictly-positive inductives in 14 §8.5 — state structural positivity through declared strictly-positive type-parameter positions, the lifted induction hypotheses, and the iota rules, WITHOUT mutual families | merged | spec-enclave | M | none | — |
 | `SPEC-STORE-SPLIT` | Split durable canonical bytes from in-process maximal sharing: demote the store mechanism to private, retarget the conformance rows that assert it, and re-cut the runtime program against the relaxed contract | merged | spec-enclave | L | none | — |
 | `SRC-ATTEST` | squash-stable whole-source attestation + fresh merge-result authorization | merged | doc | M | none | — |
+| `STR-BIJ-TEST-CARRIER` | The AC2 reverse-direction test claims a universal inverse and its sole operand is an NFC fixed point — it is green under the correct law AND under the false one it pins | ready | language | S | none | — |
 | `STR-BIJ` | the String/List Char 'bijection' over-claim (adversary A1 + A2) | ready | spec-enclave | S | none | — |
 | `VIS-BR-LITERAL` | visibility walk: raw-string prefixes br and cr are unrecognized by the literal scanner | merged | runtime | XS | none | — |
 
@@ -188,6 +190,7 @@ is itself not yet `merged`/`closed`:
 - `RT-FNSPLIT-B2O-CHECK` blocked by `RT-FNSPLIT-B2F` (status: ready)
 - `RT-FNSPLIT-C1` blocked by `RT-VALUE-TOTALITY` (status: active)
 - `RT-SCALE-B` blocked by `RT-FNSPLIT-B2F` (status: ready)
+- `STR-BIJ-TEST-CARRIER` blocked by `STR-BIJ` (status: ready)
 
 ## Gate progress
 
@@ -195,7 +198,7 @@ Work items grouped by the gate (`05-implementation-dag.md`) they
 feed; `none`/`TBD` gates are omitted here (see the status table above
 for every item, gated or not):
 
-- **G-Sec**: `SEC1-IFC` (ready)
+- **G-Sec**: `SEC1-IFC-R3` (draft) `SEC1-IFC` (ready)
 
 ## Archive & diary
 

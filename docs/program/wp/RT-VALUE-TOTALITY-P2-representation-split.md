@@ -393,6 +393,62 @@ emission.
   **succeeds**. That is what proves the boundary — rather than the carrier shape
   — causes the refusal.
 
+#### ⚖️ `AC-V5` CARRIER-DOMAIN AMENDMENT — Architect Decision `dec_1dccecns4c2fr`
+
+**Resolved `resolved` by the Architect 2026-07-27T13:23:47Z; transcribed here
+from the Decision object** (`RT-VALUE-TOTALITY-P2` exact `0d431840`, whose merge
+Decision `dec_7bxah5q76mw6v` cites it). This **amends the five-position list
+above**; it does not amend the normative transitive-refusal contract, which is
+unchanged.
+
+| position | disposition under this amendment |
+|---|---|
+| **direct** | **behavioral control required** — constructible today |
+| **record field** | **behavioral control required** — constructible today |
+| **constructor argument** | **behavioral control required** — constructible today |
+| **array element** | **discharged STRUCTURALLY for this phase** |
+| **primitive map value** | **discharged STRUCTURALLY for this phase** |
+
+⇒ Direct, record-field, and constructor-argument are **the complete constructible
+closure-bearing publication positions today**, and they require the isolated
+behavioral controls now present.
+
+**Why the last two discharge structurally** — three independent legs, all named
+in the ruling:
+
+1. the only closure-bearing carriers (`RuntimeValue`, `BoundaryClass`) have **no
+   Array/Map child positions**;
+2. canonical `Value::Array` / `Value::Map` **cannot contain an ordinary closure,
+   because `D1` removes the closure variant**;
+3. the **proved package `Map` is constructor data**, so its current operational
+   child edge is the **already-covered constructor-argument path** — not a
+   separate runtime `Map` producer.
+
+⭐ Leg 3 is the one that closes the route a carrier-shape argument alone does not
+reach: it answers *"what about the `Map` that demonstrably exists?"* by showing
+that its child edge is a position already under control, rather than by asserting
+no `Map` exists.
+
+> ### ⛔ THIS IS NOT A PERMANENT WAIVER — the reopening trigger is normative
+>
+> **Adding any closure-capable operational Array/Map position REOPENS `AC-V5`**
+> and requires **its own refusal arm plus a closure-free positive control**
+> before that carrier may publish.
+
+⚠ **The trigger does not live next to the code it governs.** A reader adding a
+`Map` arm to `RuntimeValue` is standing in `ken-interp/src/lib.rs`, not in this
+frame — so the obligation above is, today, reachable only from the frame and the
+Decision. ⇒ Carrying it into the source is folded into the next Runtime WP that
+touches that file (recorded by `runtime-implementer`, `evt_3hc3gxbt8jbdr`); it is
+**not** a defect in `0d431840` and did not gate its publication.
+
+⚠ Also stale-on-transcription, by construction: the candidate's in-source
+realization note reads *"reported to the frame as an amendment request, not
+settled unilaterally"* — true when written, and **this transcription is what
+makes it stale.** The ruling explicitly sanctions the note as-is meanwhile
+(*"the exact candidate's explicit realization note is acceptable meanwhile"*), so
+⛔ no branch change was required and none was made.
+
 ### `AC-V5b` — empty capture does not promote
 
 Green on `runtime/values/empty-capture-closure-is-not-static-reference`. An
