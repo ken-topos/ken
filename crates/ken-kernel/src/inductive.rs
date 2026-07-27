@@ -24,7 +24,8 @@
 //! the sole structural admission test. The eliminator and ι handle the
 //! Π-abstracted IH and the λ-threaded recursive call (`14 §3.1`, `14 §7.7`).
 
-use crate::env::{ConstructorDecl, InductiveDecl, ParameterPolarity};
+use crate::conv::normalize;
+use crate::env::{ConstructorDecl, Context, GlobalEnv, InductiveDecl, ParameterPolarity};
 use crate::error::{KernelError, KernelResult};
 use crate::subst::{apply_args, shift, subst_levels, subst_outer, subst_tel, weaken};
 use crate::term::{GlobalId, Level, Term};
@@ -332,6 +333,253 @@ pub fn recursive_args(
         }
     }
     out
+}
+
+/// One constructor argument whose type contains structurally recursive
+/// occurrences of the family being described.
+///
+/// This is preparation for the nested eliminator of `14 §3.2`. It is
+/// deliberately inert: [`method_type`] and [`iota_reduct`] continue to consume
+/// [`recursive_args`], whose direct/Π-bound result is unchanged. The first
+/// semantic consumer of this descriptor must land atomically with nested ι.
+#[derive(Clone, Debug)]
+pub struct RecursiveArgumentShape {
+    pub position: usize,
+    pub shape: RecursiveShape,
+}
+
+/// Structural recipe for lifting a motive through one recursive argument.
+///
+/// The variants exhaust the positive recursive shapes in the core grammar:
+/// direct occurrences, Π-bound/W-style occurrences, primitive dependent Σ,
+/// and applications of an admitted former through checked positive parameter
+/// positions. Field terms are normalized through the kernel's established
+/// terminating δ+β semantics before this structural classification.
+/// Retained [`Term`] and [`Level`] values are semantic payloads, not Rust
+/// identity: normalization is not a canonical representative of conversion,
+/// so the descriptor deliberately does not implement `PartialEq`/`Eq`.
+/// A D-free field contributes no [`RecursiveArgumentShape`].
+#[derive(Clone, Debug)]
+pub enum RecursiveShape {
+    /// `D Δ_p t̄`: one motive leaf, indexed by `t̄`.
+    Direct { index_exprs: Vec<Term> },
+    /// `(b₁:B₁)…(bₙ:Bₙ) → A`: preserve the branching telescope and lift `A`.
+    Pi {
+        domains: Vec<Term>,
+        body: Box<RecursiveShape>,
+    },
+    /// `(x:A) × B`: preserve dependent Sigma topology. A D-free component is
+    /// `None`; a recursive component retains its complete nested shape.
+    Sigma {
+        domain: Option<Box<RecursiveShape>>,
+        codomain: Option<Box<RecursiveShape>>,
+    },
+    /// `F a₁…aₙ`: preserve the former and application spine. Each argument
+    /// records its original term plus a lift only when its checked parameter
+    /// position contains recursive content.
+    Former {
+        former: GlobalId,
+        level_args: Vec<Level>,
+        arguments: Vec<RecursiveFormerArgument>,
+    },
+}
+
+/// One argument in a [`RecursiveShape::Former`] application spine.
+#[derive(Clone, Debug)]
+pub struct RecursiveFormerArgument {
+    pub term: Term,
+    pub shape: Option<Box<RecursiveShape>>,
+}
+
+impl RecursiveShape {
+    /// Number of syntactic motive leaves represented by this recipe.
+    ///
+    /// Runtime multiplicity is supplied by the containing value's topology:
+    /// e.g. the single leaf recipe under `List` occurs once per list element.
+    pub fn leaf_count(&self) -> usize {
+        match self {
+            RecursiveShape::Direct { .. } => 1,
+            RecursiveShape::Pi { body, .. } => body.leaf_count(),
+            RecursiveShape::Sigma { domain, codomain } => domain
+                .iter()
+                .chain(codomain)
+                .map(|shape| shape.leaf_count())
+                .sum(),
+            RecursiveShape::Former { arguments, .. } => arguments
+                .iter()
+                .filter_map(|argument| argument.shape.as_deref())
+                .map(RecursiveShape::leaf_count)
+                .sum(),
+        }
+    }
+
+    /// Project the legacy direct/Π-bound class consumed by the landed
+    /// eliminator. Structured Sigma/former recipes intentionally return
+    /// `None` until method generation and ι land together.
+    pub fn as_legacy(&self) -> Option<(Vec<Term>, Vec<Term>)> {
+        match self {
+            RecursiveShape::Direct { index_exprs } => Some((Vec::new(), index_exprs.clone())),
+            RecursiveShape::Pi { domains, body } => {
+                let (mut inner_domains, index_exprs) = body.as_legacy()?;
+                let mut all_domains = domains.clone();
+                all_domains.append(&mut inner_domains);
+                Some((all_domains, index_exprs))
+            }
+            RecursiveShape::Sigma { .. } | RecursiveShape::Former { .. } => None,
+        }
+    }
+}
+
+enum ShapeDerivation {
+    DFree,
+    Recursive(RecursiveShape),
+}
+
+fn unsupported_recursive_shape(message: impl Into<String>) -> KernelError {
+    KernelError::PositivityViolation(message.into())
+}
+
+fn derive_recursive_shape(
+    env: &GlobalEnv,
+    term: &Term,
+    d: GlobalId,
+    parameter_count: usize,
+) -> KernelResult<ShapeDerivation> {
+    let normalized = normalize(env, &Context::new(), term);
+    let term = &normalized;
+    if !occurs(d, term) {
+        return Ok(ShapeDerivation::DFree);
+    }
+
+    match term {
+        Term::Pi(_, _) => {
+            let (domains, body) = peel_pi(term);
+            if domains.iter().any(|domain| occurs(d, domain)) {
+                return Err(unsupported_recursive_shape(
+                    "recursive occurrence in a Pi domain is not positive",
+                ));
+            }
+            match derive_recursive_shape(env, &body, d, parameter_count)? {
+                ShapeDerivation::DFree => Err(unsupported_recursive_shape(
+                    "Pi field contains an unclassified recursive occurrence",
+                )),
+                ShapeDerivation::Recursive(body) => {
+                    Ok(ShapeDerivation::Recursive(RecursiveShape::Pi {
+                        domains,
+                        body: Box::new(body),
+                    }))
+                }
+            }
+        }
+        Term::Sigma(domain, codomain) => {
+            let domain = match derive_recursive_shape(env, domain, d, parameter_count)? {
+                ShapeDerivation::DFree => None,
+                ShapeDerivation::Recursive(shape) => Some(Box::new(shape)),
+            };
+            let codomain = match derive_recursive_shape(env, codomain, d, parameter_count)? {
+                ShapeDerivation::DFree => None,
+                ShapeDerivation::Recursive(shape) => Some(Box::new(shape)),
+            };
+            Ok(ShapeDerivation::Recursive(RecursiveShape::Sigma {
+                domain,
+                codomain,
+            }))
+        }
+        Term::App(_, _) | Term::IndFormer { .. } => {
+            let (head, arguments) = peel_app(term);
+            match head {
+                Term::IndFormer { id, level_args: _ } if id == d => {
+                    if arguments.len() < parameter_count
+                        || arguments.iter().any(|argument| occurs(d, argument))
+                    {
+                        return Err(unsupported_recursive_shape(
+                            "recursive family parameters or indices contain the family",
+                        ));
+                    }
+                    Ok(ShapeDerivation::Recursive(RecursiveShape::Direct {
+                        index_exprs: arguments[parameter_count..].to_vec(),
+                    }))
+                }
+                Term::IndFormer { id, level_args } => {
+                    let former = env.inductive(id).ok_or_else(|| {
+                        unsupported_recursive_shape(
+                            "nested occurrence has no admitted former metadata",
+                        )
+                    })?;
+                    if arguments.len() < former.params.len() {
+                        return Err(unsupported_recursive_shape(
+                            "nested former application is under-saturated",
+                        ));
+                    }
+
+                    let mut shaped_arguments = Vec::with_capacity(arguments.len());
+                    for (position, argument) in arguments.into_iter().enumerate() {
+                        let shape = if occurs(d, &argument) {
+                            if position >= former.params.len()
+                                || former.parameter_polarities.get(position)
+                                    != Some(&ParameterPolarity::StrictlyPositive)
+                            {
+                                return Err(unsupported_recursive_shape(
+                                    "recursive occurrence is not in a checked positive parameter",
+                                ));
+                            }
+                            match derive_recursive_shape(env, &argument, d, parameter_count)? {
+                                ShapeDerivation::DFree => {
+                                    return Err(unsupported_recursive_shape(
+                                        "positive parameter lost a recursive occurrence",
+                                    ))
+                                }
+                                ShapeDerivation::Recursive(shape) => Some(Box::new(shape)),
+                            }
+                        } else {
+                            None
+                        };
+                        shaped_arguments.push(RecursiveFormerArgument {
+                            term: argument,
+                            shape,
+                        });
+                    }
+                    Ok(ShapeDerivation::Recursive(RecursiveShape::Former {
+                        former: id,
+                        level_args,
+                        arguments: shaped_arguments,
+                    }))
+                }
+                Term::Const { .. } => Err(unsupported_recursive_shape(
+                    "recursive occurrence has an opaque or unresolved application head",
+                )),
+                _ => Err(unsupported_recursive_shape(
+                    "recursive occurrence has an unresolved application head",
+                )),
+            }
+        }
+        _ => Err(unsupported_recursive_shape(
+            "recursive occurrence is in an unsupported type form",
+        )),
+    }
+}
+
+/// Describe every positive recursive shape in a constructor telescope.
+///
+/// Unlike [`recursive_args`], this preparatory API represents primitive Sigma
+/// and checked-positive former nesting. It does not alter admission or
+/// eliminator behavior; semantic consumers remain on the legacy projection
+/// until method generation and ι are landed atomically.
+pub fn recursive_shapes(
+    env: &GlobalEnv,
+    c: &ConstructorDecl,
+    d: GlobalId,
+    parameter_count: usize,
+) -> KernelResult<Vec<RecursiveArgumentShape>> {
+    let mut shapes = Vec::new();
+    for (position, argument) in c.args.iter().enumerate() {
+        if let ShapeDerivation::Recursive(shape) =
+            derive_recursive_shape(env, argument, d, parameter_count)?
+        {
+            shapes.push(RecursiveArgumentShape { position, shape });
+        }
+    }
+    Ok(shapes)
 }
 
 /// The dependent eliminator's method type for constructor `k`:
