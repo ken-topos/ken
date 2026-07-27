@@ -1,6 +1,8 @@
 //! `SURF-SPACE-CELLS-P1` — behavioral pins for `36 §4` cell surface.
 
-use ken_elaborator::{parser::parse_decls, Decl as SurfaceDecl, ElabEnv, ElabError, NumericLitVal};
+use ken_elaborator::{
+    effects::RowType, parser::parse_decls, Decl as SurfaceDecl, ElabEnv, ElabError, NumericLitVal,
+};
 use ken_interp::eval::{eval, EvalStore, EvalVal};
 use ken_kernel::{Decl, GlobalId, Term};
 
@@ -213,7 +215,16 @@ fn ac_s4_write_core_is_bind_get_then_put() {
 }
 
 #[test]
-fn ac_s5_cell_access_requires_the_space_row() {
+fn ac_s5_space_label_is_emitted_and_required() {
+    let mut env = ElabEnv::new().expect("prelude");
+    env.elaborate_file(THREE_CELLS)
+        .expect("three-cell space must elaborate");
+    assert_eq!(
+        env.effect_rows.get("Registers.write_middle"),
+        Some(&RowType::singleton("Registers")),
+        "the emitted operation row must carry its space label"
+    );
+
     let mut env = ElabEnv::new().expect("prelude");
     let error = env
         .elaborate_file("space MissingRow { mut n : Int = 0 proc read () : Int = n }")
