@@ -37,7 +37,10 @@
 //! is a property of a **stated** stack rather than of the ambient `ulimit -s`
 //! (8192 KiB on the measuring box, and not guaranteed equal in CI).
 
-use ken_runtime::{Canonical, Value};
+use ken_runtime::canonical::{
+    project_operational_to_canonical, CanonicalProjectionRefusal, CanonicalWitness,
+};
+use ken_runtime::{Canonical, RuntimeValue, Value};
 use std::process::{Command, Output};
 
 /// Chosen above every measured landed threshold — see the module header.
@@ -67,6 +70,8 @@ mod expected_format {
     // ⛔ `0x09` (the retired closure tag) is deliberately absent: the canonical
     // carrier has no closure variant, so no encoding can emit it.
     pub const TAG_SMALL_INT: u8 = 0x1C;
+    /// The leaf of the operational chains `AC-V9` projects.
+    pub const TAG_BOOL: u8 = 0x10;
 }
 
 // Distinct ids per child-position kind, so a mis-ordered or mis-attributed
@@ -82,7 +87,14 @@ const MIXED_MAP_VALUE_TYPE_ID: u32 = 0x5555_5555;
 /// Construction is a **loop**, so it never recurses; only teardown and the
 /// traversals under test can.
 fn unary_chain(depth: usize) -> Value {
-    let mut v = Value::SmallInt(CHAIN_LEAF);
+    unary_chain_with_leaf(depth, CHAIN_LEAF)
+}
+
+/// [`unary_chain`] over a chosen leaf. `AC-V12`'s ordering arm needs two chains
+/// that are identical except for one field, so that the comparison's verdict is
+/// attributable to a known difference rather than to two unrelated values.
+fn unary_chain_with_leaf(depth: usize, leaf: i64) -> Value {
+    let mut v = Value::SmallInt(leaf);
     for _ in 0..depth {
         v = Value::Record {
             type_id: CHAIN_TYPE_ID,
@@ -96,6 +108,10 @@ fn unary_chain(depth: usize) -> Value {
 /// format alone — `depth` repetitions of `[tag, type_id_le, arity=1_le]`, then
 /// the leaf. ⛔ Deliberately does **not** call the production encoder.
 fn expected_chain_bytes(depth: usize) -> Vec<u8> {
+    expected_chain_bytes_with_leaf(depth, CHAIN_LEAF)
+}
+
+fn expected_chain_bytes_with_leaf(depth: usize, leaf: i64) -> Vec<u8> {
     let mut expected = Vec::with_capacity(7 * depth + 9);
     for _ in 0..depth {
         expected.push(expected_format::TAG_RECORD);
@@ -103,7 +119,7 @@ fn expected_chain_bytes(depth: usize) -> Vec<u8> {
         expected.extend_from_slice(&1u16.to_le_bytes());
     }
     expected.push(expected_format::TAG_SMALL_INT);
-    expected.extend_from_slice(&CHAIN_LEAF.to_le_bytes());
+    expected.extend_from_slice(&leaf.to_le_bytes());
     expected
 }
 
@@ -202,6 +218,105 @@ fn expected_mixed_chain_bytes(depth: usize) -> Vec<u8> {
     expected
 }
 
+// ------------------------------------------------- RT-VALUE-TOTALITY-P2 D4/D3
+// Builders and oracles for the operational carrier and the sealed witness.
+// `AC-V9` (projection is transitive/iterative/fail-closed at depth) and
+// `AC-V12` (the comparison is depth-total) both need a *deep* population that
+// P1's controls above do not supply, because they only ever build `Value`.
+
+/// The single record field name used by every operational chain below.
+const RT_FIELD: &str = "f";
+
+/// The intern key the projection is *required* to derive for [`RT_FIELD`] —
+/// `record:` followed by the field names in order (`canonical.rs`'s stated
+/// convention). ⭐ [`strict_intern`] asserts on it, so these scenarios pin the
+/// **interning convention** as well as the bytes; a projection that interned
+/// the bare field name, or the type's name, reddens here rather than silently
+/// producing a differently-keyed record.
+const RT_RECORD_KEY: &str = "record:f";
+
+/// Deliberately not derivable from [`RT_RECORD_KEY`] by any expression the
+/// production code also evaluates — an oracle that recomputed the id the way
+/// production does would be a restatement of it, not a check on it.
+const RT_TYPE_ID: u32 = 0x6060_6060;
+
+/// The leaf of the operational chains. `Bool` rather than an integer so the
+/// projected leaf tag differs from [`CHAIN_LEAF`]'s, and a scenario that
+/// silently fell back to the `Value` builders would not match.
+const RT_LEAF: bool = true;
+
+fn strict_intern(name: &str) -> u32 {
+    assert_eq!(
+        name, RT_RECORD_KEY,
+        "the projection interned an unexpected key — the `record:<fields>` \
+         convention this oracle depends on has changed"
+    );
+    RT_TYPE_ID
+}
+
+/// A unary `RuntimeValue::Record` chain of `depth` nestings around a `Bool`.
+/// Built by **loop**, so construction never recurses.
+fn runtime_unary_chain(depth: usize) -> RuntimeValue {
+    let mut v = RuntimeValue::Bool(RT_LEAF);
+    for _ in 0..depth {
+        v = RuntimeValue::Record {
+            fields: vec![(RT_FIELD.to_string(), v)],
+        };
+    }
+    v
+}
+
+/// The same chain, but the innermost node is an **ordinary closure** — so the
+/// closure sits at depth `depth` from the root.
+///
+/// ⛔ It carries no captures on purpose: an empty capture must not change an
+/// ordinary closure's class (`AC-V5b`, ruling pin 5), so this is the *weakest*
+/// closure the refusal has to catch.
+fn runtime_chain_with_closure_at(depth: usize) -> RuntimeValue {
+    let mut v = RuntimeValue::ClosureRef {
+        symbol: RT_FIELD.to_string(),
+        captured: vec![],
+    };
+    for _ in 0..depth {
+        v = RuntimeValue::Record {
+            fields: vec![(RT_FIELD.to_string(), v)],
+        };
+    }
+    v
+}
+
+/// The closed-form canonical encoding of the *projection* of
+/// [`runtime_unary_chain`] — derived from the byte format alone, not by calling
+/// the encoder. The operational record is named-field and the canonical one is
+/// positional, so the projection collapses `{f: _}` onto a one-field `Record`
+/// whose `type_id` is the interned [`RT_RECORD_KEY`].
+fn expected_projected_chain_bytes(depth: usize) -> Vec<u8> {
+    let mut expected = Vec::with_capacity(7 * depth + 1);
+    for _ in 0..depth {
+        expected.push(expected_format::TAG_RECORD);
+        expected.extend_from_slice(&RT_TYPE_ID.to_le_bytes());
+        expected.extend_from_slice(&1u16.to_le_bytes());
+    }
+    expected.push(expected_format::TAG_BOOL);
+    expected.push(u8::from(RT_LEAF));
+    expected
+}
+
+/// ⛔ **`RuntimeValue` has ordinary derived drop glue and is NOT depth-total.**
+/// P1 made the *canonical* carrier total; the operational carrier was never in
+/// that scope, and `scenario_runtime_drop_glue_dies` measures it rather than
+/// leaving it as an assumption. Every scenario that builds a deep
+/// `RuntimeValue` therefore ends with `std::mem::forget`.
+///
+/// ⚠ This is a leak, and it is correct here for a stated reason: the child
+/// process calls `exit(0)` immediately after, and the subject under test is the
+/// **projection**, not the input carrier's teardown. ⛔ It is not a workaround
+/// concealing a defect — the defect is measured, and named as a residual in the
+/// handoff.
+fn forget_deep(value: RuntimeValue) {
+    std::mem::forget(value);
+}
+
 /// A **host-recursive** traversal of the real `Value` population, covering
 /// **every** child position rather than only `Record`.
 fn recursive_encode_mixed(value: &Value, out: &mut Vec<u8>) {
@@ -296,6 +411,45 @@ fn twin_chain(depth: usize) -> GlueTwin {
     t
 }
 
+/// Two witnesses of *identical* depth-`D` chains, plus one whose chain differs
+/// only in its leaf — the fixture every `AC-V12` arm shares.
+///
+/// ⭐ Returning both an equal pair and a differing one is what makes each arm
+/// two-sided. A single pair leaves *"the operation agrees"* indistinguishable
+/// from *"the operation returns the same answer for everything."*
+///
+/// The chains are dropped here: `Value`'s teardown is iterative (P1), so only
+/// the three flat byte vectors survive into the scenario.
+fn witness_trio() -> ((CanonicalWitness, CanonicalWitness), CanonicalWitness) {
+    let a = CanonicalWitness::of(&unary_chain(D));
+    let b = CanonicalWitness::of(&unary_chain(D));
+    let c = CanonicalWitness::of(&unary_chain_with_leaf(D, CHAIN_LEAF + 1));
+    ((a, b), c)
+}
+
+/// ⛔ **Every `AC-V12` arm asserts this, and none may inherit it from another.**
+/// The witness must genuinely BE the depth-`D` canonical encoding — otherwise a
+/// witness of an empty value satisfies `==`, `<` and `hash` alike, and each arm
+/// reports the same green it would report having exercised nothing.
+///
+/// ⚠ Deliberately not hoisted into [`witness_trio`]: an arm run in isolation
+/// must still carry its own evidence, and a shared fixture that asserted once
+/// would leave two of the three arms silently depending on the first.
+fn assert_depth_d_witness(witness: &CanonicalWitness) {
+    assert_eq!(
+        witness.bytes(),
+        expected_chain_bytes(D).as_slice(),
+        "the witness must be the depth-{D} canonical encoding"
+    );
+}
+
+fn hash_of(witness: &CanonicalWitness) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    witness.hash(&mut hasher);
+    hasher.finish()
+}
+
 // ---------------------------------------------------------------- child worker
 
 /// Runs one scenario in a child process. Inert in the parent (no env var set).
@@ -387,7 +541,7 @@ fn run_scenario(scenario: &str) {
                 out,
                 expected_mixed_chain_bytes(D),
                 "iterative encoder must emit the closed-form bytes at depth {D} \
-                 through all five child positions"
+                 through all four child positions"
             );
             println!("OK new_encoder_exact_bytes_mixed bytes={}", out.len());
         }
@@ -421,6 +575,123 @@ fn run_scenario(scenario: &str) {
             assert!(chain.is_compound());
             drop(chain);
             println!("OK drop_only_mixed depth={D}");
+        }
+
+        // -------------------------------------------------------------------
+        // `AC-V9` — the projection is transitive, iterative and fail-closed AT
+        // DEPTH. ⚠ `D` is stated as a number in every marker below, because a
+        // control that projected *nothing* would report the same bare green as
+        // one that projected a 131072-deep value.
+        // -------------------------------------------------------------------
+
+        // Positive arm: the projection completes at D and yields exactly the
+        // closed-form canonical bytes. ⛔ Not "returned Ok": that is a negative
+        // check a projection emitting an empty record would also pass.
+        "projection_succeeds_at_depth" => {
+            let chain = runtime_unary_chain(D);
+            let mut intern = strict_intern;
+            let projected = project_operational_to_canonical(&chain, &mut intern)
+                .expect("a closure-free operational chain must project");
+            let mut bytes = Vec::new();
+            projected.encode_canonical(&mut bytes);
+            assert_eq!(
+                bytes,
+                expected_projected_chain_bytes(D),
+                "the projection of a depth-{D} operational chain must encode to \
+                 the closed-form bytes"
+            );
+            forget_deep(chain);
+            println!("OK projection_succeeds_at_depth D={D} bytes={}", bytes.len());
+        }
+
+        // Negative arm: a closure at depth D-1 is refused, transitively.
+        // ⛔ A refusal at depth 1 establishes nothing about transitivity — the
+        // whole point is that 131071 ancestors were already visited and the
+        // projection still produced NO image.
+        "projection_refuses_closure_at_depth" => {
+            let closure_depth = D - 1;
+            let chain = runtime_chain_with_closure_at(closure_depth);
+            let mut intern = strict_intern;
+            let outcome = project_operational_to_canonical(&chain, &mut intern);
+            assert!(
+                matches!(outcome, Err(CanonicalProjectionRefusal::OrdinaryClosure)),
+                "a closure at depth {closure_depth} must be refused as \
+                 OrdinaryClosure, not merely as some error"
+            );
+            // ⭐ "Refuses WITHOUT having produced bytes" is enforced by the
+            // signature, and this line is what makes that visible: the only way
+            // to obtain bytes is to encode a `Value`, and the `Err` arm holds
+            // none. There is no partial image to inspect because none can exist.
+            assert!(outcome.is_err());
+            forget_deep(chain);
+            println!("OK projection_refuses_closure_at_depth D={D} closure_at={closure_depth}");
+        }
+
+        // Population-side control, and the residual measurement that justifies
+        // `forget_deep`: the OPERATIONAL carrier's derived drop glue dies on
+        // this very population. ⇒ The chains above are genuinely deep, and
+        // `RuntimeValue` is not depth-total.
+        "runtime_drop_glue_dies" => {
+            let chain = runtime_unary_chain(D);
+            assert!(matches!(chain, RuntimeValue::Record { .. }));
+            drop(chain);
+            println!("UNEXPECTED runtime_drop_glue survived D={D}");
+        }
+
+        // -------------------------------------------------------------------
+        // `AC-V12` — the chosen `AC-V8` mechanism is DEPTH-TOTAL, one arm per
+        // comparison operation. ⛔ One arm does not stand in for the others.
+        //
+        // ⭐ The CLAIM is the mechanism: a `CanonicalWitness` *is* the canonical
+        // bytes, which P1's iterative encoder produces, so `==` / `<` / `hash`
+        // walk a flat `Vec<u8>` and do not recurse on value depth at all. These
+        // measurements are corroboration beside that claim, not the claim —
+        // they are green against one depth on one platform and would re-derive
+        // nothing if the traversal changed.
+        // -------------------------------------------------------------------
+        "witness_eq_at_depth" => {
+            let (same, other) = witness_trio();
+            assert_depth_d_witness(&same.0);
+            assert!(same.0 == same.1, "equal chains must have equal witnesses");
+            assert!(
+                same.0 != other,
+                "chains differing in their leaf must NOT have equal witnesses — \
+                 without this arm, a witness that ignored its input passes"
+            );
+            println!("OK witness_eq_at_depth D={D} bytes={}", same.0.bytes().len());
+        }
+
+        "witness_ord_at_depth" => {
+            let (same, other) = witness_trio();
+            assert_depth_d_witness(&same.0);
+            // The two encodings are the same length and differ only in the
+            // final 8 leaf bytes (`CHAIN_LEAF` vs `CHAIN_LEAF + 1`, LE), so
+            // lexicographic order is decided there and the direction is known.
+            assert!(same.0 < other, "leaf {CHAIN_LEAF} must order before its successor");
+            assert!(!(other < same.0), "and the order must be antisymmetric");
+            assert!(!(same.0 < same.1), "equal witnesses must not order strictly");
+            assert_eq!(same.0.cmp(&same.1), std::cmp::Ordering::Equal);
+            println!("OK witness_ord_at_depth D={D} bytes={}", same.0.bytes().len());
+        }
+
+        "witness_hash_at_depth" => {
+            let (same, other) = witness_trio();
+            assert_depth_d_witness(&same.0);
+            assert_eq!(
+                hash_of(&same.0),
+                hash_of(&same.1),
+                "the `Hash`/`Eq` contract: equal witnesses must hash equal"
+            );
+            // ⚠ Non-vacuity, with a stated caveat: hash inequality is not part
+            // of the contract, so this arm could in principle red on a genuine
+            // collision (~2^-64). It is here because "equal hashes equal" alone
+            // is satisfied by a hasher that returns a constant.
+            assert_ne!(
+                hash_of(&same.0),
+                hash_of(&other),
+                "witnesses of different chains must not hash alike"
+            );
+            println!("OK witness_hash_at_depth D={D} bytes={}", same.0.bytes().len());
         }
 
         // --- harness positive control: the parent CAN observe a survivor ---
@@ -534,10 +805,14 @@ fn ac_v3d_drop_alone_is_total_at_depth_d() {
 }
 
 // ---------------------------------------------------------------------------
-// The same four claims, over a chain that cycles through ALL FIVE child
+// The same four claims, over a chain that cycles through ALL FOUR child
 // positions. ⭐ Without these, a hybrid encoder that stayed host-recursive for
-// `Constructor` / `Array` / `Map` / `Closure` — four of the five original
-// recursion sites — passes every control above. See `mixed_chain`.
+// `Constructor` / `Array` / `Map` — three of the four surviving recursion sites
+// — passes every control above. See `mixed_chain`.
+//
+// ⚠ Said "five" until `RT-VALUE-TOTALITY-P2` `D1` removed `Closure.captured`
+// with the variant that owned it. Four is now the whole surface, not four
+// fifths of it.
 // ---------------------------------------------------------------------------
 
 /// `AC-V1` step 3 across every child position.
@@ -563,4 +838,63 @@ fn ac_v3b_clone_then_drop_both_at_depth_d_through_all_child_positions() {
 #[test]
 fn ac_v3d_drop_alone_is_total_at_depth_d_through_all_child_positions() {
     assert_survives("drop_only_mixed");
+}
+
+// ---------------------------------------------------------------------------
+// `RT-VALUE-TOTALITY-P2` — `AC-V9` (the checked projection) and `AC-V12` (the
+// sealed witness's comparison), both at the same `D` the controls above use.
+// ---------------------------------------------------------------------------
+
+/// `AC-V9`, positive arm — the operational → canonical projection completes at
+/// `D = 131072` and emits exactly the closed-form bytes.
+///
+/// ⚠ `D` is stated as a number in the scenario's marker, per the AC: a control
+/// that projected nothing would otherwise report the same green as this one.
+#[test]
+fn ac_v9_projection_completes_at_depth_d_with_exact_closed_form_bytes() {
+    assert_survives("projection_succeeds_at_depth");
+}
+
+/// `AC-V9`, negative arm — a closure at depth `D-1` is refused **transitively**,
+/// with no image produced. ⛔ A refusal at depth 1 does not establish this.
+#[test]
+fn ac_v9_a_closure_at_depth_d_minus_one_is_refused_transitively() {
+    assert_survives("projection_refuses_closure_at_depth");
+}
+
+/// The population-side control for both arms above: the **operational**
+/// carrier's derived drop glue dies on this very chain.
+///
+/// ⭐ Without it, the two `AC-V9` arms are compatible with `D` being too shallow
+/// to have exercised anything — this is the `AC-V1` step-2 discipline applied to
+/// `RuntimeValue`.
+///
+/// ⚠ **It also records a residual, and that is deliberate.** `RuntimeValue` is
+/// *not* depth-total: P1 made the canonical carrier total and the operational
+/// carrier was never in that scope. Making the fact a green control means the
+/// next reader inherits a measurement instead of an assumption, and it is why
+/// the projection scenarios `std::mem::forget` their input.
+#[test]
+fn the_operational_carriers_drop_glue_dies_on_this_population_at_depth_d() {
+    assert_dies_of_stack_overflow("runtime_drop_glue_dies");
+}
+
+/// `AC-V12` arm 1 of 3 — `==` is total at `D`.
+#[test]
+fn ac_v12_witness_equality_is_total_at_depth_d() {
+    assert_survives("witness_eq_at_depth");
+}
+
+/// `AC-V12` arm 2 of 3 — `<` is total at `D`. ⛔ Not implied by the `==` arm:
+/// they are separate trait methods over the same bytes, and only one of them
+/// was measured by the other.
+#[test]
+fn ac_v12_witness_ordering_is_total_at_depth_d() {
+    assert_survives("witness_ord_at_depth");
+}
+
+/// `AC-V12` arm 3 of 3 — `hash` is total at `D`.
+#[test]
+fn ac_v12_witness_hashing_is_total_at_depth_d() {
+    assert_survives("witness_hash_at_depth");
 }
