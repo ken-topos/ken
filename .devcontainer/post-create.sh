@@ -118,7 +118,7 @@ DETACH_MD
 # Context-awareness hooks (self-compact signal). Deploy the in-house scripts and
 # register them in the global Claude Code settings: the statusline extracts the
 # context-window %, and a PreToolUse hook nudges the self-compacting singletons
-# (steward/architect/integrator/librarian) to checkpoint + compact at a clean
+# (steward/architect/librarian) to checkpoint + compact at a clean
 # seam. Role-scoped (teams get only the statusline) and fail-safe. Source of
 # truth is .devcontainer/hooks/; see its README.md.
 HOOKS_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/hooks"

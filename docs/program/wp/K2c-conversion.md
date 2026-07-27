@@ -140,6 +140,6 @@ K1 hid two soundness bugs behind a green suite that exercised only single-variab
 Branch `wp/K2c-conversion` cut from `origin/main` (after K2 merges). M–L — split
 into a series if it helps (e.g. conversion-hardening → SCT). `scripts/ken-cargo
 -p ken-kernel`. Ring: implementer builds → QA verifies independently (vary every
-degree of freedom) → merge Decision (**Architect** always + **Spec**) → Integrator
+degree of freedom) → merge Decision (**Architect** always + **Spec**) → Steward
 → retros. K2c/K-api boundary or SCT-design Qs → Architect; behavioral-contract Qs
 → Spec.

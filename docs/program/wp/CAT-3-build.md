@@ -161,7 +161,7 @@ green-vs-green checks that would pass before the new code is wired.
 ## 4. Review routing
 
 Language leader routes implementation and QA through the normal build loop.
-Architect final review is required before Integrator merge for:
+Architect final review is required before Steward merge for:
 
 - CB1/CB3 trust and kernel-boundary confirmation;
 - CB4 `Perm`/`Ω` soundness;

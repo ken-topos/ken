@@ -6,7 +6,7 @@ It continues VAL1 (`docs/program/wp/VAL1-rosetta-surface.md`) — its rulings
 (dir-per-item self-checking regressions, gaps-are-the-output, cross-lane routing
 to the Steward) carry unchanged. Owner: **language-leader → language-implementer
 (runner + examples) → language-qa (run + verify + confirm idiomatic).** Gate:
-**light** — Steward-approved, Integrator merges (examples + a black-box test
+**light** — Steward-approved, Steward merges (examples + a black-box test
 runner; no kernel/`trusted_base` surface). Findings → **Steward**.
 
 ## Why

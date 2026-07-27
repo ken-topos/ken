@@ -186,7 +186,7 @@ families/GADTs are excluded (a distinct later WP).
   flip + discrepancy reconcile on this WP branch (spec-leader may judge the frame
   sufficient and pass straight to Foundation, or elaborate a proof skeleton
   first — their call, given proof difficulty). Merges to `main` via the
-  Integrator, then **Foundation** builds the proofs. **Architect** (soundness:
+  Steward, then **Foundation** builds the proofs. **Architect** (soundness:
   real proof terms, zero delta, kernel-checked) + **Spec review / CV** (seed flip
   faithful) + Foundation QA + CI.
 - **Lane:** Foundation (proofs in `map.ken`) + conformance (`seed-map.md`) +

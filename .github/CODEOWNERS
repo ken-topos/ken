@@ -1,6 +1,6 @@
 # INERT IN THE CURRENT MODEL. Ken uses the single-publisher model
 # (docs/adr/0003-credential-free-publisher.md): agents do local git only, review
-# is a mootup Decision (not a GitHub PR approval), and the Integrator is the sole
+# is a mootup Decision (not a GitHub PR approval), and the Steward is the sole
 # pusher/merger. GitHub requests CODEOWNERS reviews only on PRs the teams would
 # open — which they don't. Kept as ownership DOCUMENTATION and the graduation
 # artifact: it becomes active when per-team GitHub-PR review is enabled
@@ -17,8 +17,8 @@
 #     conformance CI is Spec's automated gate on every PR.
 #   - Owning-team review is NOT a GitHub gate to start — domain correctness is
 #     gated pre-PR by each team's QA in the ring.
-#   - The Integrator is NOT a reviewer; it is the sole merger, enforced by a
-#     branch-protection merge restriction to the `integration` identity.
+#   - The Steward is NOT a reviewer; it is the sole merger, enforced by a
+#     branch-protection merge restriction to the publisher identity.
 #
 # Authors are typically the `ken-ci` App (not a code owner → no self-approval
 # conflict). Reviewer/merger handles must be GitHub teams with member accounts.

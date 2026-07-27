@@ -49,7 +49,7 @@ dispatch arms are additive (no re-architecture), **not** silently in scope and
     branch**, sequenced *after* the spine by the Runtime-leader.
   - Conformance fixtures (D4) land on the same branch (CV reviews fidelity at
     the gate; she authored the plan and does **not** self-review it).
-- **Single merge Decision**, opened by **Runtime-leader → Integrator**.
+- **Single merge Decision**, opened by **Runtime-leader → Steward**.
 
 **Why one atomic merge (the load-bearing reason — do not split):** the runtime
 driver must **never** sit on `main` without its capability gate live. Landing D1
@@ -128,8 +128,8 @@ Phase-1 soundness review** (they gate this build; do not treat as prose):
   (Spec/conformance fidelity; CV's authored D4 goes to Architect's soundness lane,
   not self-reviewed) + **Runtime-QA** + **Verify-QA** + **CI**. Findings →
   **Steward**.
-- **Single merge:** Runtime-leader opens the merge Decision → **Integrator** (only
-  the Integrator touches `main`). Closes VAL2's `read_bytes` reduction gap — the
+- **Single merge:** Runtime-leader opens the merge Decision → **Steward** (only
+  the Steward touches `main`). Closes VAL2's `read_bytes` reduction gap — the
   **runtime substrate** (real reduction + driver + capability enforcement +
   fixtures, D1–D4) — not the `read-file-lines` example end-to-end. The example
   itself (`examples/rosetta/read-file-lines/`) is untouched by this WP: it

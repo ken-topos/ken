@@ -75,5 +75,5 @@ but genuine trusted operations remain accounted.
 Language implementer builds the mechanism and focused tests. Language QA
 re-derives the trust-accounting discriminator in both directions:
 literal-neutral and real-primitive-still-counted. Architect reviews the
-trusted-base boundary before Integrator merge. After merge and retros, Steward
+trusted-base boundary before Steward merge. After merge and retros, Steward
 releases CAT-5 D3 unchanged from its existing package-owned grammar contract.

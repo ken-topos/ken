@@ -183,5 +183,5 @@ Spec-leader routes spec-author and conformance-validator. Architect reviews the
 source/span identity, parser/printer law shape, and diagnostic-validity seam.
 
 After elaboration merges to `main`, Steward compact-gates Team Language and
-releases the build from the merged spec. Integrator merge uses normal
+releases the build from the merged spec. Steward merge uses normal
 build/test, conformance, clean-room, and path-guard gates.

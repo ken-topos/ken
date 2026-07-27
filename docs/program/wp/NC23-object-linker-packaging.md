@@ -1,6 +1,6 @@
 # NC23 - Object and Linker Packaging
 
-**Owner:** Runtime/Integrator-led. **Branch:**
+**Owner:** Runtime/Steward-led. **Branch:**
 `wp/NC23-object-linker-packaging`. **Size:** L. **Risk:** high.
 
 ## Objective

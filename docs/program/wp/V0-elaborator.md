@@ -70,6 +70,6 @@ Branch `wp/V0-elaborator` cut from `origin/main`. Verify team (`verify-leader` +
 `verify-implementer` [Sonnet, **high** effort — Verify is soundness-adjacent] +
 `verify-qa`). `scripts/ken-cargo -p <elaborator-crate>`. Ring: implementer builds
 → QA verifies independently → merge Decision (**Architect** + **Spec** on `/spec`
-+`/conformance`) → Integrator → retros. Elaboration-strategy / surface-subset Qs →
++`/conformance`) → Steward → retros. Elaboration-strategy / surface-subset Qs →
 Architect; behavioral-contract Qs → Spec. Coordinate the **G1 slice** join with
 Team Runtime's X1 when both land.

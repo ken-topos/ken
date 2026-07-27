@@ -82,7 +82,7 @@ invariant to prove. Hence tree-first, HAMT-as-later-fast-map — both proved.
 ## Sequencing
 
 - **Gate:** /spec + /conformance touching → spec enclave elaborates the API +
-  proof shape on this WP branch, merges to `main` via the Integrator, then
+  proof shape on this WP branch, merges to `main` via the Steward, then
   Foundation is kicked. Architect (structure + proof soundness + zero-TCB) + Spec
   review (conformance-validator) + team QA + CI.
 - **Lane:** Foundation (catalog/packages/Data/Collections/Map.ken.md). Branch off `origin/main`.

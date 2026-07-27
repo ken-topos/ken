@@ -120,7 +120,7 @@ required to land (the boundary values are objective; CV owns the corpus).
 
 `runtime-leader → runtime-implementer → runtime-qa → Architect (soundness — the
 witness posture is THE gate) + CV (conformance — boundary corpus + round-trip +
-witness validation) → Integrator`. One pass each. Crates-only (spec `37` already
+witness validation) → Steward`. One pass each. Crates-only (spec `37` already
 defines this; implementing, not changing spec) unless CV lands a corpus seed
 (`conformance/` → still CV's gate, no spec-author vote). A soundness fork
 (esp. the witness mechanism) → Architect; conformance fork → CV; scope fork →

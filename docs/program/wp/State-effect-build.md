@@ -178,7 +178,7 @@ authored with the spec.
 
 - **Gate:** Architect approach-review + soundness (kernel-untouched + derived-
   not-primitive + C3-forbidden) + Spec review (conformance-validator: EFF6 driven
-  for real, not hand-fed) + Language QA + Runtime QA + CI. Merge via Integrator.
+  for real, not hand-fed) + Language QA + Runtime QA + CI. Merge via Steward.
 - **Lane:** Language (lead, `ken-elaborator`) + Runtime (pair, `ken-interp`).
   Branch `wp/State-effect-build` off `origin/main@2bed9da`, pre-staged by Steward.
 - **Relation to siblings:** shares the `ITree`/effect-dispatch machinery with the

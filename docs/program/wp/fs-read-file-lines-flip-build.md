@@ -269,7 +269,7 @@ At the gap site (`run_file`, ~`:133`, before `run_io`):
    two merged spec docs + this build frame on `main`. Leader assigns
    implementer/QA internally.
 3. **Runtime builds D1–D5** on `wp/fs-read-file-lines-flip-build`, kernel-clean,
-   **one merge Decision** (Runtime-leader → Integrator).
+   **one merge Decision** (Runtime-leader → Steward).
 4. **Gate: Architect** (soundness re-affirm on the built diff — AC1/AC5/α
    preserved; the D3 `EvalVal::Cap` decode fail-closed; BV2/BV3 correct) **+
    Runtime-QA + Verify-QA + CI**. Findings → Steward.

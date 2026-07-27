@@ -180,7 +180,7 @@ verdict is green-vs-green.
    stamps: AC4 `[structural]`, AC5 static-vs-runtime split, nothing over-claimed
    "kernel-backed"); **CV — Spec** on `/spec §65`; **spec-author — Fidelity** on
    the `/conformance` seed.
-3. Integrator merges on green (spec + conformance + docs only, no crates).
+3. Steward merges on green (spec + conformance + docs only, no crates).
 4. Retros in → Steward. With Sec5, the enclave's G5 security spine is Sec1/Sec2/
    Sec4/Sec5 (+ Sec3 supply-chain, which carries the 33↔63 package-format locus —
    sequence with L4b / operator input, flagged separately).

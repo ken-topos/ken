@@ -125,7 +125,7 @@ instances are honestly not zero-delta.
 ## Flow (thin — COORDINATION §9)
 
 `language-leader → language-implementer → language-qa → Architect (soundness) +
-CV (conformance) → Integrator`. One pass each. Soundness fork → Architect;
+CV (conformance) → Steward`. One pass each. Soundness fork → Architect;
 conformance/honesty-discriminator fork → CV; scope → Steward. No new parties,
 no verbatim relays.
 

@@ -102,9 +102,8 @@ control. It is the federation's whole GitHub-network surface — pushing
 **All merge requests route to the Steward.** A ready WP branch (deps merged,
 gates green, merge Decision resolved) is handed off with a `git_request` to the
 **Steward**, who operates the publisher path — verify base/scope → push → CI
-gate → merge → relay the merge + retro routing. There is **no separate
-Integrator role** (retired 2026-07-09, operator directive); the Steward is the
-sole merge router.
+gate → merge → relay the merge + retro routing. The Steward is the **sole merge
+router**, and no other seat holds a GitHub credential.
 
 - **Why one identity.** It collapses the per-team-account apparatus to a single
   account, removes the secret-exposure surface across the fleet, and lets every
@@ -156,12 +155,12 @@ review decision.
 
 ### 3.2 PR description standard (Steward-owned; restored 2026-07-11)
 
-With the integrator role retired, the Steward authors every PR body via
-`--description-file`. A PR description is **not** a one-line what/why — it is the
+The Steward authors every PR body via `--description-file`. A PR description is
+**not** a one-line what/why — it is the
 **self-contained provenance record** for the permanent GitHub history, carrying
 what the mootup coordination thread holds so the PR stands on its own once the
-thread scrolls away. The discipline (which the integrator used to enforce and
-which must not lapse) is a fixed structure for every non-trivial PR body:
+thread scrolls away. The discipline, which must not lapse, is a fixed structure
+for every non-trivial PR body:
 
 - **`## Summary`** — what changed and why, 1–3 sentences.
 - **`## Scope`** — files with per-file `+ins/−del`, additive-vs-rewrite, and the

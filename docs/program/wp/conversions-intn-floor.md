@@ -120,7 +120,7 @@ against the native *semantics they replace*, not against themselves.
 ## Flow (thin — COORDINATION §9)
 
 `runtime-leader → runtime-implementer → runtime-qa → Architect (soundness) + CV
-(conformance) → Integrator`. One pass each. Crates-only diff (no `spec/` or
+(conformance) → Steward`. One pass each. Crates-only diff (no `spec/` or
 `conformance/` *spec* change — the seed cases already exist), so the review gate
 is **Architect + CV-conformance + CI**. A mid-WP soundness fork → Architect; a
 conformance fork → CV; a scope/lane fork → Steward. No new parties, no verbatim

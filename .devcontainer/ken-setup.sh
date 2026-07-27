@@ -6,7 +6,7 @@
 #
 # What lives where:
 #   - Rust toolchain, clippy, rustfmt ........ `rust` devcontainer feature
-#   - gh (Integrator) ........................ `github-cli` feature
+#   - gh (publisher path) .................... `github-cli` feature
 #   - tmux, Claude Code, mootup, uv, MCP ..... moot post-create.sh
 #   - everything below ....................... here
 set -euo pipefail

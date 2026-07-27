@@ -8,7 +8,7 @@ approach-review — the central soundness gate — is **DONE, APPROVE**
 lane, ZERO kernel change, ZERO `trusted_base` delta** — see the ratified
 decomposition below. Owner: **Language**. Gate: Architect approach-review (DONE) →
 **spec-leader elaborates ONE `/spec/30-surface` typing rule** → merge to `main`
-(Integrator) → Language builds → **Architect soundness** on the candidate +
+(Steward) → Language builds → **Architect soundness** on the candidate +
 **Language QA** + **CI** + **CV reviews `/spec`**. Findings → **Steward**.
 
 Base: `origin/main`. Branch (pre-staged by Steward): **`wp/surface-transport`**.
@@ -253,7 +253,7 @@ executes it mechanically.
 
 - **Gate:** **Architect approach-review — DONE, APPROVE** (`evt_1g5bx52mdv5g6`) →
   **spec-leader elaborates the ONE `/spec/30-surface` `J`-former typing rule** (+
-  the `50-stdlib` prelude listing) on this branch → merge to `main` (Integrator) →
+  the `50-stdlib` prelude listing) on this branch → merge to `main` (Steward) →
   **Language builds** (one infer-mode `J` former ~the `absurd` pattern + the derived
   `.ken` transport prelude) → **Architect soundness** on the candidate + **Language
   QA** + **CI** + **CV reviews `/spec`**. **No Kernel lane.**

@@ -86,7 +86,7 @@ language (L1–L4/L6).
 Branch `wp/L5-effects` cut from `origin/main`. Team Language (`language-leader` +
 `language-implementer` [Sonnet, medium effort] + `language-qa`). `scripts/ken-cargo
 -p <crate>`. Ring: implementer builds → QA verifies independently → merge Decision
-(**Architect** always + **Spec** on `/spec`+`/conformance`) → Integrator → retros.
+(**Architect** always + **Spec** on `/spec`+`/conformance`) → Steward → retros.
 The effect-row / capability *interface* is a cross-workstream contract → raise
 design Qs to the **Architect** early so Sec/B aren't built on a moving target;
 behavioral-contract Qs → Spec.

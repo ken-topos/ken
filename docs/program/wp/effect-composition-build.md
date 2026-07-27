@@ -149,6 +149,6 @@ what the reviewer re-derives on the **built diff**, not the prose.
    ctor-arity / sole-net checks — trace them, don't trust the report).
 3. **Architect re-certifies AC1/AC4 on the built diff** (BV1/BV6) + the cap-gate
    placement (BV3) + COEXIST (BV4).
-4. Verify-QA + CI (`cargo test --workspace`); merge Decision → Integrator.
+4. Verify-QA + CI (`cargo test --workspace`); merge Decision → Steward.
 5. On merge: retires read-file-lines' honesty asterisk; rosetta stays 16/0 (or
    +1 if a new composed example is added). Effect-composition capability closed.

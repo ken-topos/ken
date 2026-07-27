@@ -101,7 +101,7 @@ Out of scope:
 ## 6. Review Path
 
 Language leader routes implementer/QA. Architect reviews D0 export/hash policy
-and any source-identity seam. Kernel review is not expected. Integrator merge
+and any source-identity seam. Kernel review is not expected. Steward merge
 uses the normal build/test, conformance, clean-room, and path-guard gates.
 
 ## 7. Downstream

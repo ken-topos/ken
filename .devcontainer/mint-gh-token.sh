@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mint a short-lived GitHub App installation token for the Integrator — the
+# Mint a short-lived GitHub App installation token for the publisher path — the
 # federation's sole GitHub identity (04-git-and-integration.md §3). Prints the
 # token to stdout; nothing is persisted.
 #
@@ -7,7 +7,7 @@
 #   /home/node/.secrets/github-app-private-key.pem   the App private key (.pem)
 #   /home/node/.secrets/github-app.env               GITHUB_APP_ID + GITHUB_APP_INSTALLATION_ID
 #
-# Usage (Integrator only):
+# Usage (Steward only — no other seat has a GitHub credential):
 #   export GH_TOKEN="$(.devcontainer/mint-gh-token.sh)"
 #   gh auth setup-git           # once — makes git reuse GH_TOKEN for github.com
 #   git push / gh pr / gh ...   # token is valid ~1h; re-run before a long gap

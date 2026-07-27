@@ -4,7 +4,7 @@
 as `VAL2-rosetta-pangram.md`: **no `§2c` pipeline, no `/spec` elaboration, no
 Architect/CV gate** unless a genuinely-new capability gap surfaces). Owner:
 **language-implementer** (re-author examples + oracles) → **language-qa** (run +
-verify + confirm idiomatic). Gate: **light** — Steward-approved, Integrator
+verify + confirm idiomatic). Gate: **light** — Steward-approved, Steward
 merges. Findings → **Steward**.
 
 ## Why

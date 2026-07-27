@@ -88,5 +88,5 @@ Branch `wp/K3-value-model` cut from `origin/main`. Runtime team (`runtime-leader
 + `runtime-implementer` [Sonnet, medium effort] + `runtime-qa`). `scripts/ken-cargo
 -p <runtime-crate>`. Ring: implementer builds → QA verifies independently →
 merge Decision (**Architect** + **Spec** on `/spec`+`/conformance` paths) →
-Integrator → retros. Value-representation / store design Qs → Architect;
+Steward → retros. Value-representation / store design Qs → Architect;
 behavioral-contract Qs → Spec.

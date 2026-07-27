@@ -97,7 +97,7 @@ memory model.
   soundness gate as a normal `/spec` Decision. **No build team** (spec-only).
 - **Branch:** `wp/44-capacity-restate` off `origin/main`.
 - **Pipeline:** Steward frame (this) → spec-leader elaboration → merge Decision
-  (touches `/spec` → Architect soundness + CV Spec) → Integrator merge to
+  (touches `/spec` → Architect soundness + CV Spec) → Steward merge to
   `main`. Ends at merge (no downstream build).
 - **Priority:** **low, non-blocking** — runs in parallel with the F1 build;
   nothing depends on it. The operator flagged §44 as at odds with their

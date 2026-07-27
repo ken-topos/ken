@@ -3,7 +3,7 @@
 **Steward frame → Team Runtime. Small mechanical cross-lane fix — same shape,
 same lane, same light gate as `console-harvest-fix`.** VAL2 finding #7. Owner:
 **runtime-leader → runtime-implementer → runtime-qa.** Gate: **light** —
-Runtime QA + CI, Integrator merges. No spec/Architect/CV (no `/spec`, no
+Runtime QA + CI, Steward merges. No spec/Architect/CV (no `/spec`, no
 kernel/`trusted_base` surface — CLI driver wiring only). Findings → **Steward**.
 
 ## Why
@@ -62,7 +62,7 @@ durable fix if the shared setup is clean to factor. Not mandated — your judgme
   green; `cargo test --workspace` green.
 
 ## Gate & sequencing
-- **Gate:** light — Runtime QA + CI; Integrator merges. No spec/Architect/CV.
+- **Gate:** light — Runtime QA + CI; Steward merges. No spec/Architect/CV.
 - **Lane:** Team Runtime (owns `ken-cli`). Branch off `origin/main`.
 - **Sequencing — NON-URGENT, leader's call.** VAL2 is **not** fully blocked
   (`hello-world` verifies; String-op examples are confirmed correct in-process;

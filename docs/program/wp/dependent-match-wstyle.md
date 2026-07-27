@@ -2,7 +2,7 @@
 
 **Steward frame → spec enclave (elaborate) → Team Language (build).** Full
 `§2c` pipeline: spec-leader elaborates this brief to team-ready rigor, the
-Integrator merges the elaborated brief to `main`, then Team Language builds
+Steward merges the elaborated brief to `main`, then Team Language builds
 under the **Architect + CV gate** (soundness-adjacent — IH construction). Owner
 of the build: **language-implementer** → **language-qa**. Findings → **Steward**.
 

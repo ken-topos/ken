@@ -1,6 +1,6 @@
 name: CI
 
-# Pre-merge gate. The Integrator (sole publisher) pushes each wp/<ID> branch and
+# Pre-merge gate. The Steward (sole publisher) pushes each wp/<ID> branch and
 # opens a PR; these checks are REQUIRED status checks in branch protection, so a
 # branch can't merge until they're green (docs/ops/github-setup.md, WP F1). This
 # is the compute offload: the heavy jobs run on GitHub runners, not the laptop.

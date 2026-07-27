@@ -137,6 +137,6 @@ the no-regression AC `cargo test --workspace`, never `-p ken-interp`.
   rather than green-vs-green) + conformance-validator oracle/burden (the
   independent-reference discipline, the boundary corpus) — both hard ACs.
 - **Pipeline:** Steward frame (this doc) → spec-leader elaboration →
-  Integrator merge to `main` → Runtime team kickoff. Cites **ADR 0009** (the
+  Steward merge to `main` → Runtime team kickoff. Cites **ADR 0009** (the
   curate-not-construct decision is the first Phase-2 instance of the ratified
   supply strategy).

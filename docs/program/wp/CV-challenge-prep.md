@@ -2,7 +2,7 @@
 
 **Steward frame → conformance-validator (direct, operator-mandated).** A
 **PREPARE-only** authoring task, not a merge WP: no gate, no `/spec` change, no
-Integrator. Owner: **conformance-validator** (the durable independent checker).
+Steward. Owner: **conformance-validator** (the durable independent checker).
 This aligns with CV's already-tracked task *"Verified-showcase examples: propose
 selection, then author."* Findings / questions → **Steward**.
 
