@@ -222,6 +222,9 @@ it does not make is not an acceptable outcome of this WP.**
 - **`D5`** — a **closed completeness report**: every site in the corpus that
   asserts or cites identifier-level confusable-resistance, each with its
   disposition. Closed over the whole corpus, complement named.
+- **`D6`** ⭐ **(added by Steward ruling `evt_7m5mgy8ne2pxz`, 2026-07-27)** —
+  `spec/90-open-decisions.md` reconciled, bounded to **exactly two repairs**.
+  See `§7a`.
 
 ---
 
@@ -257,12 +260,32 @@ it does not make is not an acceptable outcome of this WP.**
   row is now owed. **Control:** a follow-on framer can read `AC-5` and know
   whether Ergo has work.
 
+  ⭐ **AMENDED 2026-07-27 (Steward, `evt_7m5mgy8ne2pxz`), and this clause is
+  now positive, not optional:** a conformance row **is** owed, and `AC-5` must
+  say so at the spec's **locked granularity** — ASCII `ident`/`conid`
+  acceptance and non-ASCII alphabetic rejection, with confusable **and**
+  non-confusable controls that distinguish the ASCII wall from a TR39 gate.
+  ⛔ The row is **staged, not authored here**, and ⛔ **do not invent a row
+  id** — the Steward tracks the follow-on. ⚠ `crates/ken-elaborator/tests/
+  surface_unicode.rs` is implementation evidence and does **not** discharge
+  it; a crate test is not the corpus the build fleet codes against.
+
+- **`AC-6`** ⭐ **(added with `D6`)** — the two `90` repairs are made **and
+  bounded**. **Control:** show that the **claims** of `90`'s operator decision
+  for principles 1–5 are unchanged apart from the removed `64` citation, and
+  that the mechanism update is carried by a **`Resolved sub-item`** entry.
+  ⛔ A diff that **reworks the operator's decision into different claims**
+  fails this even if the resulting prose is more accurate. ⚠ Deliberately a
+  test on **claims, not bytes** — a whitespace reflow to 80 columns is
+  permitted and must not be reported as a violation.
+
 ---
 
 ## 7. Scope
 
 **In:** `spec/30-surface/31-lexical.md`, `spec/60-security/64-trust-model.md`
-(only if `§3b` outcome 1 is selected), and this frame's tracker node.
+(only if `§3b` outcome 1 is selected), **`spec/90-open-decisions.md` (bounded
+— see `§7a`)**, and this frame's tracker node.
 
 **Out:** ⛔ `crates/**`, ⛔ `conformance/**` (there is nothing to retract; a
 *new* row may be **proposed** in `D5` but is not authored here), ⛔ the
@@ -273,6 +296,66 @@ formatter, ⛔ the notation table `§1b`, ⛔ `catalog/**`.
 `crates/ken-runtime/**`; Verify holds `crates/**` test paths. **No live ring
 holds any `spec/` path.** The spec enclave is idle and clear as of
 `e23e5bc1`.
+
+---
+
+## 7a. ⭐ `spec/90-open-decisions.md` — the atomic-boundary ruling
+
+**Steward ruling, `evt_7m5mgy8ne2pxz`, 2026-07-27**, on a scope fork raised by
+the conformance validator and routed by the spec leader. Recorded here because
+a channel post is not a durable deliverable.
+
+**Fixed input:** `spec/90-open-decisions.md`, blob
+`bceabd9776126e93eba17404e90b18be9311b9a0` at `origin/main = e700b861`.
+
+### Why it is atomic and not a follow-on
+
+`90:205-208` asserts **both** defects this WP exists to fix, in the register
+`31` itself names as governing — *"a bounded, confusable-resistant blessed set
+with lexer normalization/rejection of Unicode look-alikes (TR39) …
+`60-security/64`"*. ⇒ Correcting `31` alone **moves** the defect rather than
+fixing it: the corpus still promises a blessed Unicode identifier set and
+still dangles into `64`. ⚠ A follow-on is the worse shape specifically because
+the two chapters would be **provably inconsistent for the whole gap**, which
+is harder to review than either endpoint.
+
+⭐ **My `§1` fixed inputs did not enumerate `90`. That census was incomplete**
+— `AC-4` is what caught it, working as intended.
+
+### ✅ Authorized — exactly two repairs
+
+1. **Remove the `60-security/64` citation.** It was dangling the day it was
+   written; `64` has never carried an identifier claim. Identical in kind to
+   the repair already authorized in `31`. ⛔ Not a decision change.
+2. **Record the mechanism as settled** using **the file's own idiom** — a
+   `**Resolved sub-item (…)**` entry, as already used at `90:215` (SURF-1 D3)
+   and `90:221` (ES3). Name `SURF-IDENT-TR39` and this WP, and state what
+   landed: boundedness is preserved and binds the **§1b notation** set; the
+   identifier surface is ASCII-only; there is no TR39 identifier profile,
+   normalization, or repair.
+
+### ⛔ Not authorized
+
+- ⛔ **Do not edit, reword, or delete the operator's 2026-06-27 decision
+  text.** Principles 1–5 stand. The operator's *property* — bounded,
+  confusable-resistant, no homoglyph backdoor — is **preserved** by the
+  selected shape, not overturned; ASCII-only is strictly stronger on it. Only
+  the **mechanism** changed, and the resolved-sub-item idiom is precisely how
+  this file records that.
+- ⛔ Do not reopen the token-table iteration, the glyph set, or any other
+  `OQ-syntax` item in `90`.
+- ⛔ **`docs/PRINCIPLES.md:230-231` is excluded** — measured: it states the
+  *property* ("confusable-resistant character set"), which the selected shape
+  preserves, and it cites **`31 §1a`, not `64`**. Neither dangling nor
+  falsified.
+- ⛔ **`spec/20-verification/25-protocol.md:302,329` and
+  `conformance/verify/protocol/false-unknown-non-confusable-roundtrip` are
+  excluded** — "non-confusable **messages**" is verdict distinguishability, a
+  different axis.
+
+⇒ **The complete normative carrier set for this defect is `31` + `90`.**
+Measured corpus-wide for `confusab|homoglyph|TR39|look-alike|blessed`; every
+other hit is `docs/program/**` non-normative or the protocol axis above.
 
 ---
 
