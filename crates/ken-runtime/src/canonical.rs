@@ -60,6 +60,142 @@ impl CanonicalWitness {
     }
 }
 
+/// Why a value could not be projected onto the canonical carrier (`D4`).
+///
+/// ⛔ A refusal, never a substitution. `41 §2.1` forbids standing a closure in
+/// for itself with a pointer, ordinal, digest or handle, so there is deliberately
+/// no variant here carrying a partial or redacted image.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CanonicalProjectionRefusal {
+    /// An ordinary closure was reached, at any depth.
+    OrdinaryClosure,
+}
+
+/// One unit of pending work for the iterative projection.
+enum ProjectStep<'a> {
+    /// Inspect this operational value: refuse it, emit a leaf, or push children.
+    Visit(&'a crate::ir::RuntimeValue),
+    /// Its `children` projections are the last `children` entries of `done`.
+    Finish {
+        proto: &'a crate::ir::RuntimeValue,
+        children: usize,
+    },
+}
+
+/// ⭐ **The ONLY route from the operational carrier to the canonical one
+/// (`D4`).**
+///
+/// Transitive, **iterative**, and **fail-closed**: it proves the whole graph
+/// closure-free *before* any byte, hash, slot or publication exists, because it
+/// returns a `Value` at all only once every node has been projected. A caller
+/// holding `Err` holds nothing it could publish.
+///
+/// ⛔ **No recursion, and no second traversal mechanism beside P1's.** This is
+/// the same explicit `Visit`/`Finish` postorder worklist as
+/// [`crate::values::Value`]'s hand-written `Clone` — a parent cannot be built
+/// until its children exist, so the shape is forced, and a private recursive
+/// adapter here would reintroduce the exact host-stack overflow P1 removed, one
+/// layer out. ⛔ There is no `MAX_DEPTH`: depth is bounded by the heap, not by a
+/// semantic limit.
+///
+/// `intern` maps a runtime symbol to the numeric id the canonical carrier uses,
+/// following the established convention (`boundary_value.rs`): a constructor
+/// interns its own symbol, and a record's `type_id` interns `record:` followed
+/// by its field names in order — which is how a *named*-field operational record
+/// collapses onto the canonical carrier's positional one without losing the
+/// distinction between two records that differ only in field names.
+pub fn project_operational_to_canonical<F>(
+    root: &crate::ir::RuntimeValue,
+    intern: &mut F,
+) -> Result<Value, CanonicalProjectionRefusal>
+where
+    F: FnMut(&str) -> u32,
+{
+    use crate::ir::RuntimeValue as Rv;
+
+    let mut work: Vec<ProjectStep<'_>> = vec![ProjectStep::Visit(root)];
+    let mut done: Vec<Value> = Vec::new();
+
+    while let Some(step) = work.pop() {
+        match step {
+            ProjectStep::Visit(value) => match value {
+                // ⛔ THE REFUSAL, and it is the first arm on purpose: reached at
+                // any depth, it aborts the whole projection. Nothing partial has
+                // been emitted, because `done` is discarded with the `Err`.
+                Rv::ClosureRef { .. } => {
+                    return Err(CanonicalProjectionRefusal::OrdinaryClosure)
+                }
+
+                // Child-bearing: push a frame, then the children in reverse so
+                // LIFO pops restore declaration order.
+                Rv::Constructor { args, .. } => {
+                    work.push(ProjectStep::Finish {
+                        proto: value,
+                        children: args.len(),
+                    });
+                    for arg in args.iter().rev() {
+                        work.push(ProjectStep::Visit(arg));
+                    }
+                }
+                Rv::Record { fields } => {
+                    work.push(ProjectStep::Finish {
+                        proto: value,
+                        children: fields.len(),
+                    });
+                    for (_, field) in fields.iter().rev() {
+                        work.push(ProjectStep::Visit(field));
+                    }
+                }
+
+                // Leaves. ⛔ Exhaustive with no `_` arm, so a new operational
+                // variant must decide here whether it is projectable rather than
+                // inheriting a silent answer.
+                Rv::Bool(b) => done.push(Value::Bool(*b)),
+                Rv::Bytes(bytes) => done.push(Value::Bytes(bytes.clone())),
+                Rv::String(text) => done.push(Value::String(text.clone())),
+                Rv::Int(int) => done.push(match int {
+                    crate::RuntimeIntV1::Small(n) => Value::SmallInt(*n),
+                    crate::RuntimeIntV1::Big { sign, limbs } => Value::BigInt {
+                        sign: *sign,
+                        limbs: limbs.clone(),
+                    },
+                }),
+                Rv::Unknown => done.push(Value::Unknown),
+            },
+            ProjectStep::Finish { proto, children } => {
+                let kids = done.split_off(done.len() - children);
+                done.push(match proto {
+                    Rv::Constructor { constructor, .. } => Value::Constructor {
+                        constructor_id: intern(constructor),
+                        args: kids,
+                    },
+                    Rv::Record { fields } => {
+                        let names = fields
+                            .iter()
+                            .map(|(name, _)| name.as_str())
+                            .collect::<Vec<_>>()
+                            .join(",");
+                        Value::Record {
+                            type_id: intern(&format!("record:{names}")),
+                            fields: kids,
+                        }
+                    }
+                    // Only the two child-bearing arms above ever push a `Finish`.
+                    other => unreachable!("non-parent pushed a Finish frame: {other:?}"),
+                });
+            }
+        }
+    }
+
+    // ⛔ NOT `ok_or(OrdinaryClosure)`: an empty `done` would be a broken
+    // invariant in this function, not a closure in the input, and reporting it
+    // as a refusal would attribute an internal bug to the caller's value. The
+    // loop pushes exactly one root, exactly as P1's `Clone` does.
+    Ok(done
+        .pop()
+        .expect("the traversal assembles exactly one projected root"))
+}
+
 /// Kind tags (design doc §1.1).
 mod tag {
     pub const BIG_INT: u8 = 0x01;
