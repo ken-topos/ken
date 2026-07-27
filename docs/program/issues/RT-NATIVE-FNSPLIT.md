@@ -11,6 +11,110 @@ github: null
 origin: PX8-SPAN-PROV Phase 2 native reachability wall (runtime-implementer measured repro evt_7qhtk8w489am4; CV option-(c) ruling evt_77q2tc5dh1kzj; Steward scope ruling evt_7c160ej3bwz4; Architect means/layer ruling evt_7gkn3g4tsvgb9, 2026-07-23). Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
+## ⛔⛔ GOVERNING RULING 2026-07-27 — `#11` STILL BINDS, and the lever is NAMED
+
+**Decision `dec_45aa2gngjc79z` — RESOLVED.** Architect ruling `evt_7ay6s5s79awz8`,
+on the Steward's re-put (`evt_70jp2sk4by7t8`) required by `SPEC-STORE-SPLIT` §7
+item 2. **Transcribed here because an in-thread ruling is not a durable
+deliverable — and this chain has already lost three rulings to the channel.**
+
+⭐ **Read this before anything below it.** It supersedes the re-cut's *shape*,
+not the viability ruling's retain/replace lists.
+
+### 1. ⛔ The answer: `#11` still binds. The relaxation did NOT dissolve it
+
+> *"The compile-time-template wall is **independent of persistent-store/sharing
+> policy**. `SPEC-STORE-SPLIT` removes obligations that were **accidentally
+> attached to storage** — stable `SlotId`, mandatory interning/sharing,
+> canonical-byte adoption, and store-local identity/name binding — but it does
+> **not** remove the semantic specialization in `Lowered`."*
+
+Grounded on the preserved evidence at exact `d1abbc79`. The three eliminators
+consume **recursive compile-time structure**: `Match` (the `Lowered::Constructor`
+arm) selects a constructor case and binds its arguments; `ComputationalMatch`
+selects a case and recursive positions; `Project` (`Lowered::Record`) selects a
+named field.
+
+⭐ **The reason, in one sentence:** *"none of those decisions is obtained from a
+slot, canonical bytes, interning, hashing, or a sharing rule. A body compiled
+once may receive different constructors and records on different invocations,
+and changing whether those values are copied, shared, interned, arena-held, or
+privately handled cannot make their invocation-specific shape
+compile-time-known."*
+
+### 2. ⭐⭐ THE ASSERTED ROOT CAUSE WAS TESTED AND IS OVER-BROAD
+
+`SPEC-STORE-SPLIT` §1 claims the conflation is *"why every eliminator needed a
+compile-time template."* **Ruled:** *"store/sharing conflation **enlarged** the
+old prerequisite, but it did **not cause** the template requirement itself."*
+
+⚠ **The ruling cites this sentence as `RT-VALUE-TOTALITY` §1; it is
+`SPEC-STORE-SPLIT` §1.** The claim ruled on is the one quoted above — a
+mis-citation of location, not of content.
+
+⛔ **This is why the re-put was framed as a test rather than a premise.** Had the
+node's causal sentence been carried in as given, the answer would have been
+decided before the question was asked, and the re-cut would have been built on a
+dissolution that never happened.
+
+### 3. ⛔ No old escape reopens
+
+Caller specialization still violates compile-once authority; static-template /
+scalar coexistence still creates two representation authorities; compile-time
+rehydration still requires invocation-specific shape and violates the same
+boundary. ⇒ `D1`, the `#9` coexistence rejection, and `D6` all stand.
+
+### 4. ▶ THE LEVER IS KNOWN — a runtime-general OPERATIONAL CARRIER
+
+The re-cut needs *"a runtime-general operational carrier at the
+`Lowered`/lowering boundary, **distinct from durable canonical storage**, and
+**executable** semantic consumers for all three eliminators"*:
+
+1. `Match` and `ComputationalMatch` **discriminate runtime constructor identity
+   against the artifact-static case set**, then project children back into **the
+   same operational carrier**.
+2. `Project` selects a runtime record field using **artifact-static field
+   identity** and returns **that same carrier**.
+3. Constructor and field identity come from **artifact/module semantic
+   authority shared by producer and consumer** — ⛔ **not** from persistent-store
+   identity.
+4. Every reachable consumer outcome is **structurally closed**; unsupported
+   forms **fail closed at the typed boundary**.
+
+### 5. ⭐⭐⭐ THE INERTNESS RULE THAT ENDS THE B2O→B2R→B2V PATTERN
+
+> *"A prerequisite may be inert **only** in the sense that production function
+> routing has not switched to it yet. Its **producer → validator → eliminator
+> edge must nevertheless be real and executable.** A representation-only
+> artifact with the semantic consumers deferred **does not discharge `#11`**."*
+
+⛔ **This is binding on every node of the re-cut.** `B2O` shipped a partition it
+could not check consumption of; `B2R` declared modes it could not check
+obedience to; `B2V` landed a representation nothing consumes — **three nodes,
+each residual found by the node downstream.** ⇒ The standing lesson
+`a-representation-node-must-name-who-eliminates-it` now has a **ruled**
+formulation, and "inert" is no longer available as cover for a deferred
+consumer.
+
+### 6. `RT-VALUE-TOTALITY` P2 — not causal, but integration-relevant
+
+⛔ **P2 is NOT on this critical path and cannot dissolve `#11`.** This ruling did
+not wait on it. But the eventual carrier **must respect P2's canonical /
+operational split**, ordinary closures stay runtime-local and live-domain only,
+and ⛔ **the re-cut must not restore a durable `PersistentClosure` lane.**
+
+⭐ That independently confirms the scoping in
+`wp/RT-VALUE-TOTALITY-P2-representation-split.md` §5, which routes B2V's
+`PersistentClosure` lane out of P2 and to this re-cut.
+
+### 7. ▶ What the Steward owes from this ruling
+
+Preserve `#11` **as the prerequisite boundary**, but **re-cut it around the
+operational carrier plus the three semantic eliminators**, and **remove the old
+store-identity/adoption substrate from the prerequisite contract.** ⛔ The
+re-slice and its transcription are the Steward's; the Architect ruled the
+mechanism, not a work plan.
+
 ## ⭐⭐ Requirements (`RQ`) — retroactive, per `docs/program/15-*.md`
 
 > **This program is the RETROFIT.** Operator, 2026-07-26: *"we should establish
