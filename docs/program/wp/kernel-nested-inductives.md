@@ -261,7 +261,7 @@ enumeration converges one block at a time.
 PROPERTY.** Architect, verbatim: *"topology classification is still
 spelling-dependent."* That is the defect, stated exactly.
 
-| `AC-K15` | ⭐⭐ **CLASSIFICATION IS INVARIANT UNDER DEFINITIONAL EQUALITY.** Any two constructor field types that are definitionally equal must yield the **identical** `RecursiveShape`. | ⛔ **Not an enumeration.** Satisfy it by classifying the **normal form** — resolve the head through the kernel's *established terminating weak-head δ+β semantics*, retaining declared/use-site level substitution — ⛔ not by adding arms per spelling. **Controls:** `F D`, eta-short `Alias := F`, lambda-bodied `Alias A := F A`, and finite transparent chains must all produce the same instantiated `Former` topology; independently disable the β/head-reduction step and prove the lambda-alias control reddens. **Fail-closed edge:** opaque, missing, or genuinely unresolvable heads stay rejected |
+| `AC-K15` | ⭐⭐ **CLASSIFICATION IS INVARIANT UNDER DEFINITIONAL EQUALITY.** Any two definitionally equal constructor field types must classify the same. | ⛔ **Not an enumeration**, and ⛔ **not raw structural identity** — see the amendment below for the three-way split, which is binding |
 
 ⇒ **The test that this AC is met is not a case list. It is:** *given a set of
 spellings the kernel already considers definitionally equal, is every
@@ -269,6 +269,42 @@ classification equal?* ⛔ If the answer depends on which spelling was written,
 the producer is not done regardless of how many arms it has.
 
 ⚠ **`AC-K13` still stands for what it actually proves** — producer totality and
+### ⛔⛔ `AC-K15` AMENDED — THREE PLACES (`dec_rn8krqyyeq33`)
+
+⚠ **Raised by the Steward as a placement concern after FIVE blocks**, with `D3a`
+at `+793/−1` and carrying a **conversion-quotient comparator over dependent
+telescopes** inside a slice defined as *inert preparation*. Architect: *"yes on
+placement, no on deferring the whole property."*
+
+⛔ **My proposed rationale was FALSE and is withdrawn.** I argued *"classify the
+normal form ⇒ invariance holds by construction."* Architect: **full `Term`
+normalization is NOT a canonical representative of Ken's complete definitional
+equality** — already proven by `Level::equiv` (`0 ≡ max 0 0`) and by proof
+irrelevance. ⇒ ⛔ **Raw `RecursiveShape` structural identity cannot be the
+contract either.** The invariance genuinely needs a **quotient**; only its
+*oracle* moves.
+
+| where | what, transcribed |
+|---|---|
+| **`D3a` production** | derive the recursive **lift skeleton** through the established terminating δ+β path. Definitionally equal spellings must classify to the same **variants, former identity, recursive/nonrecursive argument positions, arities, and leaf topology**. ⭐ Retained `Term`/`Level` values are **semantic payloads, not Rust identity**. ⛔ No `PartialEq`/`Eq` on descriptors. ⛔ **No unused production equivalence function** — an unconsumed comparator in a kernel module grows the audited surface *for a test oracle* |
+| **`D3a` `AC-K15` evidence** | the quotient checker is **TEST-LOCAL**: topology structurally, levels via `Level::equiv`, retained telescope prefixes **in lockstep**, retained fields via context-aware `convert_type`. ⛔ Must include **both** the **positive convertible** dependent-prefix pair **and** the **negative `Type 0` vs `Omega 0`** pair |
+| **atomic `D3b`+`D4`** | ⭐ the load-bearing semantic consequence: for definitionally equal field spellings, **generated method/lift terms must be definitionally equal**, the **matching iota terms must inhabit them**, and **the kernel must check the pair**. ⛔ Not claimable by `D3a` |
+
+⭐⭐ **The generalisation worth keeping past this node:** an invariance can be
+*correct* as a property and still be **misplaced as a deliverable**. Asking a
+slice to *prove* an invariance can force it to build machinery its production
+path does not need — here, a comparator with **zero production consumers** living
+in the TCB to satisfy a test. ⇒ **Ask where the property is OBSERVED, not just
+whether it holds:** the oracle belongs where it is tested, the semantic
+consequence belongs where consumers exist.
+
+⚠ **And the boundary that caught my error:** I raised *placement* and explicitly
+did not rule *mechanism*. Had I ruled it, I would have prescribed a structural
+comparison that **cannot express the property** — because normalization does not
+quotient by level-equivalence or proof irrelevance. **Second time today that
+division saved a wrong instruction from reaching a ring.**
+
+`AC-K13` still stands for what it actually proves — producer totality and
 non-panicking over syntactic forms. `AC-K15` is the exhaustiveness criterion it
 was mistaken for.
 
