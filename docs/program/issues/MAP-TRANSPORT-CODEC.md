@@ -1,9 +1,10 @@
 ---
 id: MAP-TRANSPORT-CODEC
 title: "If Map/Set need a portable canonical serialization, it is ordinary package Ken — not a runtime primitive: settle whether a codec is required at all, and if so place it out of trusted_base()"
-status: ready
+status: closed
 owner: ergo
 size: TBD
+resolution: not-needed — R1 determination landed PR #1114 (`origin/main` 78f1f74b, blob c2651ea6); candidate 3 carried to the operator as an open roadmap item
 gate: none
 depends_on: [SPEC-STORE-SPLIT]
 blocks: []
@@ -21,24 +22,36 @@ origin: Operator ruling 2026-07-26 (`RULING R2` on SPEC-STORE-SPLIT) — "Map/Se
 > every generic closure-free byte clause now dispatch by value domain, and Map/Set
 > expose only extensional equality, ordered `to_list`, and durable round-trip.
 >
-> ## ⭐ RELEASED 2026-07-27 — but ONLY §2, and §2 is not a build
+> ## ✅ CLOSED 2026-07-27 — NOT NEEDED. Answered, not abandoned.
 >
-> **This block replaces the prior "still not released" statement, which is no
-> longer true and must not be read as operative.**
+> **This block replaces the prior "RELEASED — but ONLY §2" statement, which is
+> no longer true and must not be read as operative.**
 >
-> ⛔ **What is released is `§2` alone** — the determination of whether a codec is
-> required at all — as **`MAP-TRANSPORT-CODEC-R1-requirement`**
-> ([frame](../wp/MAP-TRANSPORT-CODEC-R1-requirement.md)),
-> owned by **Ergo**. Its entire deliverable is one evidence-backed document under
-> `docs/program/`. **Zero code, zero spec, zero conformance.**
+> `MAP-TRANSPORT-CODEC-R1` ran and returned. The deliverable is
+> [`MAP-TRANSPORT-CODEC-R1-determination.md`](../MAP-TRANSPORT-CODEC-R1-determination.md),
+> landed **PR #1114** at `origin/main = 78f1f74b`, doc blob
+> `c2651ea6510958d41e6988b8914bfdcb28640aa3`. Its finding:
 >
-> ⛔ **Designing or building a codec is NOT released and is not in that WP's
-> scope.** If R1 returns *yes, a requirement exists*, the build is a successor WP
-> with its own frame. If R1 returns *no*, this node closes as **not needed** —
-> ⭐ a complete outcome, and the one the Steward considers most likely.
+> > **No Map/Set transport codec is required by a current consumer.** No
+> > cross-space workload requires an extensional-equality dedup *hit*, and no
+> > caller constructs a stable map name for caching, memoization, or a durable
+> > index.
 >
-> ⚠ `§5`'s `C2` key-interface coupling stays **not a dependency edge** until R1
-> returns yes. `§6`'s do-not-reopen list is unchanged.
+> ⭐ **The negative is trustworthy because `AC-R1a` forced a positive control.**
+> A "no consumers found" passes for any reason, including a broken search — so
+> the frame required the exact search method be run first against a
+> known-present consumer. Ergo QA located the `OQ-Space` dedup path (414 hits,
+> the dedup lines at 207–208) before reporting any absence. ⇒ The silence is a
+> measurement, not an artifact of the instrument.
+>
+> ⚠ **`§2` candidate 3 is NOT answered and is NOT closed by this.** A wire
+> format for a non-Ken peer is a roadmap call, correctly marked *operator input
+> needed* rather than inferred from the corpus. **It is carried to the operator
+> as an open item.** If it comes back *yes*, this node reopens with a fresh
+> frame — it does not resume from here.
+>
+> ⛔ `§5`'s `C2` key-interface coupling **never became a dependency edge** and
+> must not be re-derived speculatively. `§6`'s do-not-reopen list stands.
 
 ## 1. The operator ruling, verbatim
 
@@ -51,6 +64,10 @@ Two clauses, and **the second is conditional.** The ruling settles **where** a
 codec lives if one is wanted. ⛔ It does **not** assert one is needed.
 
 ## 2. ⭐ THE FIRST QUESTION IS WHETHER THIS WP EXISTS AT ALL
+
+> ✅ **ANSWERED 2026-07-27 — this section is the record of the question, not an
+> open ask.** Candidates 1 and 2: **no**, measured. Candidate 3: **operator input
+> needed**, still open. See the CLOSED block above.
 
 ⛔ **Do not open this as "design the codec."** The premise *"if a codec is
 required"* is itself unresolved, and it is the cheapest thing on the node to
@@ -76,9 +93,9 @@ established today:
 - **A wire format for a counterparty that is not Ken.** Two Ken spaces can agree
   on tree bytes; an external peer cannot be assumed to.
 
-⇒ **The first deliverable is a ruling on whether any of these is a real
-requirement.** If none is, this node closes as *not needed* and that is a
-complete outcome, not a failure.
+⇒ **The first deliverable was a ruling on whether any of these is a real
+requirement.** ✅ It ran, none of the measurable candidates is, and this node
+closed as *not needed* — a complete outcome, not a failure.
 
 ## 3. Placement — settled, and this is the whole of what the ruling fixes
 
