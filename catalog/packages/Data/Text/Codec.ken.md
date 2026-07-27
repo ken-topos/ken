@@ -85,7 +85,7 @@ const utf8_lead_view : Option Bool = ascii_view (bytes_encode "é") (0 : Int)
 `bytes_decode`, `bytes_at`, `uint8_to_int`, and `leq_int` operations. The
 round-trip anchor consumes the already-landed `BytesRoundTripLaw`; it does not
 mint a replacement and does not cross the unrelated `String`/`List Char`
-bijection boundary.
+conversion-and-retraction boundary.
 
 **Trust delta:** zero. The checked fences contain no `Axiom`, primitive,
 postulate, or opaque declaration.

@@ -1377,11 +1377,11 @@ whose decreasing argument is a strict subterm of a matched argument (the
 checker's sound zone, never leaning on its unapplied-self-reference /
 recursion-through-opaque-map over-accept hole.
 
-**Deliverability honesty.** `String` is canonical with respect to `List Char`
-(the `string_to_list_char`/`list_char_to_string` round trip is a bijection
-on scalar sequences, ADR 0010 §2), so `DecEq String`/`Ord String` instances
-are soundly deliverable later — but that transport additionally needs a
-lawful `DecEq Char`, which is now landed in `Core/Classes/LawfulClasses`. Filing
+**Deliverability honesty.** `String` is canonical with respect to `List Char`:
+the landed String-side retraction makes `string_to_list_char` injective
+(ADR 0010 §2). Therefore `DecEq String`/`Ord String` instances are soundly
+deliverable later — but that transport additionally needs a lawful `DecEq
+Char`, which is now landed in `Core/Classes/LawfulClasses`. Filing
 `eq`/`compare` as proof-carrying instances here would still over-claim the
 trust level; this package ships the functions only, honestly.
 

@@ -581,10 +581,11 @@ reconciled them, `§4.1`/`§2.5.1`, Architect `evt_1stp9sspm6ag8`):**
 instances (the trust level, `§2.5`).** `eq : String → String → Bool` and
 `compare : String → String → OrdResult` are Boolean/decision operations in the
 **tested-not-trusted** interpreter ring ("a wrong value, never a false proof").
-`String` **is** canonical w.r.t. `List Char` (the `s2l`/`l2s` round-trip is a
-bijection on scalar sequences, ADR 0010 §2), so `DecEq String`/`Ord String`
-**instances** are *soundly deliverable* later — unlike `Decimal`, whose non-
-canonical carrier makes `DecEq Decimal` inhabit `Bottom`
+`String` **is** canonical w.r.t. `List Char`: the landed String-side
+`l2s (s2l s) ≡ s` retraction makes `s2l` injective (ADR 0010 §2), so
+`DecEq String`/`Ord String` **instances** are *soundly deliverable* later —
+unlike `Decimal`, whose non-canonical carrier makes `DecEq Decimal` inhabit
+`Bottom`
 (`../numbers/seed-numbers.md`, `../10-kernel/18a §5.6.1(4)`,
 `deceq-on-noncanonical-carrier-inhabits-bottom`). But that transport
 additionally needs a **lawful `DecEq Char`**, which is **not yet landed** (only

@@ -2,6 +2,9 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-02
+- **Amended:** 2026-07-27 — §2 now names the landed String-side
+  retraction and derived injectivity instead of a stronger two-sided
+  round-trip claim; the decision and mechanism are unchanged.
 - **Deciders:** Architect (soundness ruling), Steward (commissioned the record)
 
 ## Context
@@ -58,8 +61,10 @@ depends entirely on which equality `String` carries.
 
 2. **String equality is codepoint-wise (scalar-sequence).** This is the default
    and normative choice for `eq`/`compare`. It makes `String` **canonical** with
-   respect to `List Char` — the round-trip is the identity on scalar sequences —
-   so `DecEq String` / `Ord String` are genuinely **deliverable**, by transport
+   respect to `List Char`: the landed String-side retraction
+   `list_char_to_string (string_to_list_char s) ≡ s` implies that
+   `string_to_list_char` is injective. That is the exact property needed for
+   `DecEq String` / `Ord String` to be genuinely **deliverable**, by transport
    from the canonical `DecEq Char` / `Ord Char` (`Char = {c : Int | isScalar c}`
    is itself canonical: one carrier value per codepoint under erasure). The
    value-level `compare`/`leq`/`eq` on `String` are available now (derived over

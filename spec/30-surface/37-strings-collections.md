@@ -182,13 +182,14 @@ primitive `Op` normalizes under kernel conversion (§2.4).
 - **`eq` is codepoint-wise and rides the landed `eqChar`.** `eq a b` decides
   equality of the two scalar sequences via `list_eq` threading the landed
   `eqChar : Char → Char → Bool` (`= eq_int` under `Char`'s `Int` erasure,
-  `decimal_char.rs`). This is the **normative default** (ADR 0010 §2): because
-  `s2l`/`l2s` are a round-trip bijection on scalar sequences, `String` is
-  **canonical** w.r.t. `List Char`, so codepoint-wise `eq` is sound. **NFC-
-  normalization equality is OUT** (`§6`, ADR 0010 §3): it identifies distinct
-  scalar sequences, so over the codepoint carrier it is *non-canonical* — a
-  lawful `DecEq` for it would inhabit `Bottom`; if ever wanted it is a
-  separately-named `Eq`/setoid in a later WP, **never** a `DecEq`/`Ord` here.
+  `decimal_char.rs`). This is the **normative default** (ADR 0010 §2):
+  `l2s (s2l s) ≡ s` is the landed String-side retraction, so `s2l` is
+  injective and `String` is **canonical** w.r.t. `List Char`; therefore
+  codepoint-wise `eq` is sound. **NFC-normalization equality is OUT** (`§6`,
+  ADR 0010 §3): it identifies distinct scalar sequences, so over the codepoint
+  carrier it is *non-canonical* — a lawful `DecEq` for it would inhabit
+  `Bottom`; if ever wanted it is a separately-named `Eq`/setoid in a later WP,
+  **never** a `DecEq`/`Ord` here.
 - **`compare` is 3-way, codepoint-wise (`§2.5.1`).** `compare a b : OrdResult`
   (`Lt` / `Eq` / `Gt`) is the lexicographic order of the two scalar sequences
   via `list_compare` threading `compare_char`. The landed `Ord Char` is
