@@ -7,9 +7,12 @@
 > artifact: measured substrate, slicing, controls, validation.
 >
 > **Sequence:** `SPEC-NESTED-IND` → **`KERNEL-NESTED-IND`** → `DS-9`.
-> ⛔ **The node is `draft` until `SPEC-NESTED-IND` merges.** The spec enclave is
-> authoring the rules now. ⛔ Do not start `D1b` before those rules exist — you
-> would be implementing a contract that is still being written.
+> ✅ **`SPEC-NESTED-IND` MERGED 2026-07-27 and the node is `active`** — `D1a` has
+> landed and the `D1b` gate is lifted. The governing chapter is
+> `spec/10-kernel/14-inductive.md`; ⛔ re-derive its blob at point of use.
+> ⚠ **This banner previously said the node was `draft` pending that merge** —
+> edited, not annotated. ⛔ **Un-gating `D1b` did NOT reorder the work:** §4 puts
+> `D3a`, then the atomic `D3b`+`D4`, ahead of it.
 >
 > ⚠ **This node changes the TCB.** `docs/PRINCIPLES.md`, small auditable trusted
 > base. `K1p5-wstyle-inductives.md` is the direct precedent — the last time this
@@ -361,6 +364,37 @@ quietly weakening the other widens the TCB for nothing.
 reasons; an aggregate *"negatives still rejected"* pass hides one defecting.
 
 ## §6 Validation — ⛔ TARGETED ONLY
+> ### ⛔⛔ ADDED 2026-07-27 — `-p <crate>` IS NOT A BLAST-RADIUS ORACLE
+>
+> ⚠ **This section conflated two different questions under one instrument, and a
+> ring paid for it.** Measured by `runtime-implementer` on `P2`:
+>
+> `scripts/ken-cargo check -p <crate> --all-targets` builds that crate and **its
+> own** targets. ⛔ **It does not rebuild dependent crates** — so a downstream
+> derive that can no longer be satisfied is **invisible** to it. On `P2` a
+> `-p ken-runtime` check reported clean while `ken-elaborator` was left red; the
+> failure surfaced only under `-p ken-interp` / `-p ken-verify`, which pull
+> `ken-elaborator` in. The measured claim *"entirely inside `ken-runtime`"* was
+> produced by an instrument that could not see outside `ken-runtime`.
+>
+> ⇒ **Two questions, and `-p` answers only the first:**
+>
+> | question | instrument |
+> |---|---|
+> | *does this crate still build?* | ✅ `-p <crate>` |
+> | *does anything that DEPENDS on it still build?* | ⛔ **not `-p <crate>`** — build a **dependent** crate, or state that CI answers it |
+>
+> ⭐ **Trigger:** any change to a **public type**, or to a **derive on one**. A
+> derive is part of a type's public contract, so removing one is a breaking change
+> to every dependent crate — and its cost is carried by **reachability**, not by
+> call sites.
+>
+> ⛔ **This does NOT relax the resource rule.** `--workspace` remains forbidden
+> (operator, `COORDINATION §12`). The correct move is **one more targeted build of
+> a chosen dependent crate**, not a wider one. ⚠ And if you leave the question to
+> CI, **say so** — an unmeasured blast radius reported as "targeted run green" is
+> the defect this note exists to prevent.
+
 
 ⛔ **NEVER `--workspace`** (operator hard rule, `agent/COORDINATION.md §12`).
 **The full build, `--locked`, and the conformance suite run in CI on GitHub.**
