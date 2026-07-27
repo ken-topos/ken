@@ -447,6 +447,42 @@ frame, where you are standing.
 | the two adversary findings on P1 (`AC-V1b`'s frozen `25`; `Step::Val` constructible in-module) | node §7; separate repairs, ⛔ they do **not** reopen P1 |
 | ⛔ whether landing this dissolves FNSPLIT hard-stop `#11` | **nobody, yet.** ⛔ Do **not** write *"P2 unblocks B2F"* anywhere. `#11` is re-put to the Architect against the new representation **after** this lands; that re-ask is a deliverable, not a premise |
 
+### 5b. ✅ `AC-V15` DISCHARGED — not production-reachable; ONE compile-forced edit
+
+**Measured by `runtime-implementer`, ruled by `runtime-leader`.** ⛔ No stop-report
+trigger: §5a's trigger is *"if it turns out reachable"*, and by the strongest
+available measurement it is not.
+
+⭐ **The verdict is per-half, deliberately — a single verdict would have hidden that
+the three halves differ:**
+
+| half | status | how measured |
+|---|---|---|
+| **producers** — CLIF emitters building `BoundaryClass::Closure` (`emit_closure_node`), and every `store.adopt(…)` caller in the repo | **test-only** | all inside `boundary_value_clif.rs`'s `#[cfg(test)]` mod, brace-matched span `2681–8117`; all 6 `emit_closure_node` callers at `:6504`–`:6921` |
+| **classifier** — `boundary_disposition` mapping `LoweredVariant::Closure` → `RepresentedHandle{PersistentClosure, Closure}` | **production code, but DEAD** | ⭐ **rustc, not grep**: `ken-cargo check -p ken-runtime --lib` reports *"method `boundary_disposition` is never used"*, with the whole phase model alongside it |
+| **consumer** — `BoundaryValueStore::adopt` (`pub fn`) → `canonicalize` → `canonical_image`'s `Closure` arm | **live production code, zero in-repo production callers** | `boundary_value.rs` has no `cfg(test)` mod at all; every `.adopt(` caller is in the test mod above |
+
+⭐ **Positive control, because "never used" and "nothing reached it" pass for any
+reason:** the same `--lib` build emits **17** warnings naming specific dead items
+while leaving the rest of the crate's items un-warned. ⇒ It is not a build that
+warns about everything.
+
+⚠ **A dead classifier is not evidence of a live path** — and that is why the three
+rows are reported separately rather than aggregated.
+
+> ### ⛔ TRANSCRIBED RULING — `D1` owns ONE construction inside the scoped-out lane
+>
+> ⚠ **My §2g said "scoped out" without noting what crosses that boundary by
+> necessity.** `D1` removes `Closure` from the canonical carrier, so
+> `canonical_image`'s `BoundaryClass::Closure` construction **cannot compile** and
+> `D1` owns it.
+>
+> ✅ **Replace only that construction** with the existing fail-closed escape/error
+> shape. ⛔ **Do NOT alter** the tag/class/storage taxonomy, the disposition model,
+> or the CLIF emitters. ⭐ *"This is a compilation consequence of the
+> canonical-carrier split, not a re-cut of the B2V lane."*
+> **Record the exact error path and the residual handoff.**
+
 ### 5a. ⛔ The `AC-V15` you owe on the B2V lane, because scoping it out is a claim
 
 Scoping §2g out is only honest if the lane is **unreachable from a production
