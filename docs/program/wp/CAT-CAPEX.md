@@ -111,8 +111,30 @@ cause was not.
   authority-indexed `Cap a`, and `write_at` rather than the landed
   `write_file`. Copying it produces a fragment that cannot check. Write
   against the **prelude** signatures in `§2`, which are the landed truth.
-- ⛔ **Do not edit `spec/` or `crates/`.** `62 §7`'s staleness is real and is a
-  **separate enclave WP** — the Steward files it. Your job is the exemplar.
+- ⚠ **AMENDED 2026-07-27 (`evt_5h83ctgbajqk4`) — `crates/` is TEST-ONLY, and
+  one new file only.** ⛔ ~~"Do not edit `spec/` or `crates/`."~~ — that flat
+  ban blocked `AC-1`/`AC-2`, which demand a named harness. A frame cannot
+  require "name the test" while banning every file a test can live in.
+
+  ✅ **Authorized:** **one new** `crates/ken-elaborator/tests/cat_capex_*.rs`,
+  following the shape of `cat3_collections_package.rs:15` — a `mk_env()`-style
+  **fresh `ElabEnv` per test** (`ElabEnv::new()`, then
+  `elaborate_ken_md_file`). ⭐ That pattern is already used by `cat1`, `cat3`,
+  `cat5`, and `either_catalog_package_acceptance`; per-program env isolation is
+  how catalog packages are covered here. Asserting a specific `ElabError`
+  variant structurally is precedented at `surface_unicode.rs:35`.
+
+  ⛔ **Not authorized:** editing `ken_md_literate.rs` or **any** existing
+  shared harness — it discards `ElabError` and reuses one mutable `ElabEnv`
+  (so a twin built on it is contaminated by the negative program's `main`
+  registration), and it has other consumers. ⛔ **Nothing under
+  `crates/**/src/**`.** If the diagnostic `AC-2` needs does not exist in
+  `ElabError`, ⛔ **do not add it — stop and route to the Steward**; that is an
+  implementation gap and a different WP.
+
+- ⛔ **Do not edit `spec/`.** `62 §7`'s staleness is real and is a **separate
+  enclave WP** (`SPEC-AUTH-EX`) — the Steward files it. Your job is the
+  exemplar.
 - ⛔ **Do not invent a new package.** Use the existing
   `catalog/packages/Capability/` tree.
 
