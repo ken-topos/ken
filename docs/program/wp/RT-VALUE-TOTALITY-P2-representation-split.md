@@ -530,6 +530,37 @@ comes back into scope.
 own authority. That is a Steward sizing call.
 
 ## 6. Validation — ⛔ TARGETED ONLY
+> ### ⛔⛔ ADDED 2026-07-27 — `-p <crate>` IS NOT A BLAST-RADIUS ORACLE
+>
+> ⚠ **This section conflated two different questions under one instrument, and a
+> ring paid for it.** Measured by `runtime-implementer` on `P2`:
+>
+> `scripts/ken-cargo check -p <crate> --all-targets` builds that crate and **its
+> own** targets. ⛔ **It does not rebuild dependent crates** — so a downstream
+> derive that can no longer be satisfied is **invisible** to it. On `P2` a
+> `-p ken-runtime` check reported clean while `ken-elaborator` was left red; the
+> failure surfaced only under `-p ken-interp` / `-p ken-verify`, which pull
+> `ken-elaborator` in. The measured claim *"entirely inside `ken-runtime`"* was
+> produced by an instrument that could not see outside `ken-runtime`.
+>
+> ⇒ **Two questions, and `-p` answers only the first:**
+>
+> | question | instrument |
+> |---|---|
+> | *does this crate still build?* | ✅ `-p <crate>` |
+> | *does anything that DEPENDS on it still build?* | ⛔ **not `-p <crate>`** — build a **dependent** crate, or state that CI answers it |
+>
+> ⭐ **Trigger:** any change to a **public type**, or to a **derive on one**. A
+> derive is part of a type's public contract, so removing one is a breaking change
+> to every dependent crate — and its cost is carried by **reachability**, not by
+> call sites.
+>
+> ⛔ **This does NOT relax the resource rule.** `--workspace` remains forbidden
+> (operator, `COORDINATION §12`). The correct move is **one more targeted build of
+> a chosen dependent crate**, not a wider one. ⚠ And if you leave the question to
+> CI, **say so** — an unmeasured blast radius reported as "targeted run green" is
+> the defect this note exists to prevent.
+
 
 ```
 scripts/ken-cargo test -p ken-runtime
