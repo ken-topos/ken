@@ -233,6 +233,42 @@ the shape that hits them.
    same morning — fix the **class**, because a re-review scoped to the named
    trace passes either way.
 
+## ⛔⛔ §2h STOP ENUMERATING SPELLINGS — `AC-K15`, added after FOUR blocks
+
+⚠ **Four consecutive Architect blocks have landed on this producer, and the last
+two are the same defect at different depths.** That is a signal about the
+**acceptance criterion**, not about the ring — which has repaired correctly and
+fast each time.
+
+| # | Decision | missed case |
+|---|---|---|
+| 1 | `dec_3g5qg6f9hzge5` | `Pol::Minus` used for "unknown" is not absorbing |
+| 2 | `dec_2r7xykp0aswe5` | producer not total — `Term::Let` depth, eager `then_some` panic |
+| 3 | `dec_4ph659v1q4cq2` | transparent `Alias := F` head not unfolded before classification |
+| 4 | `dec_56wzhbds88jad` | lambda-bodied `Alias A := F A` → `(λA. F A) D`; no β/weak-head step, unresolved head |
+
+⛔ **`AC-K13`'s "enumerate by `Term` form, not by example" was NECESSARY AND NOT
+SUFFICIENT, and my wording sent the ring down an enumeration path.** Enumerating
+binder forms exhausts *syntax*. It says nothing about whether an application head
+**resolves**, and nothing about whether it resolves **after β**. ⇒ Against a
+reviewer who can always write one more definitionally-equal spelling,
+enumeration converges one block at a time.
+
+⭐⭐ **A structural pin that enumerates SPELLINGS is not a proof of the
+PROPERTY.** Architect, verbatim: *"topology classification is still
+spelling-dependent."* That is the defect, stated exactly.
+
+| `AC-K15` | ⭐⭐ **CLASSIFICATION IS INVARIANT UNDER DEFINITIONAL EQUALITY.** Any two constructor field types that are definitionally equal must yield the **identical** `RecursiveShape`. | ⛔ **Not an enumeration.** Satisfy it by classifying the **normal form** — resolve the head through the kernel's *established terminating weak-head δ+β semantics*, retaining declared/use-site level substitution — ⛔ not by adding arms per spelling. **Controls:** `F D`, eta-short `Alias := F`, lambda-bodied `Alias A := F A`, and finite transparent chains must all produce the same instantiated `Former` topology; independently disable the β/head-reduction step and prove the lambda-alias control reddens. **Fail-closed edge:** opaque, missing, or genuinely unresolvable heads stay rejected |
+
+⇒ **The test that this AC is met is not a case list. It is:** *given a set of
+spellings the kernel already considers definitionally equal, is every
+classification equal?* ⛔ If the answer depends on which spelling was written,
+the producer is not done regardless of how many arms it has.
+
+⚠ **`AC-K13` still stands for what it actually proves** — producer totality and
+non-panicking over syntactic forms. `AC-K15` is the exhaustiveness criterion it
+was mistaken for.
+
 ## §3 Deliverables
 
 Node text is authoritative; this is the slicing view.
