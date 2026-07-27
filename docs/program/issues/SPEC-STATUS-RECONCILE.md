@@ -1,7 +1,7 @@
 ---
 id: SPEC-STATUS-RECONCILE
 title: "the spec's two status vocabularies do not correspond — define the correspondence (or replace the ladder), then apply it"
-status: ready
+status: merged
 owner: spec-enclave
 size: M
 gate: none
@@ -10,6 +10,45 @@ blocks: []
 github: null
 origin: Steward-filed 2026-07-27, measured at origin/main 94c2e67d. The backbone status file contradicts the chapters it indexes at scale, and it is a false input to the Steward's own sequencing — it already caused one mis-release (SEC1, released against a DRAFT row for a chapter that was in fact elaborated and seeded). Steward owns the frame and AC/control placement.
 ---
+
+> ## ✅ MERGED 2026-07-27 — PR #1122, `origin/main` = `bf6ba7e4`
+>
+> Squash of the exact approved SHA `7b180e2c` (tree `8ae4d3f6`). Sole path
+> `spec/SPEC-PROGRESS.md`, blob-verified identical on `main`. Architect Decision
+> `dec_57h5aasy5gy1g` resolved APPROVE for that exact SHA/tree; CV approved the
+> same successor. CI green.
+>
+> **`D1` separates the axes rather than mapping between them:** reproducible
+> provenance / delivery-stage predicates on one side, independently qualified
+> binding force on the other. The unsupported maturity ladder is **retired**
+> rather than given a contrived use for `REVISED` — ⭐ a rung nobody reached
+> despite a standing instruction to reach it was evidence the ladder was wrong,
+> not that everything was a draft.
+>
+> ⭐ **The operative rule, and the reason this is worth more than a row sweep:**
+>
+> > *"A `DRAFT` marker does not weaken an explicitly normative contract, and an
+> > `impl-ready` or `elaborated` marker does not strengthen a proposal-level
+> > spelling."*
+>
+> ⇒ `DRAFT` went 52 → 31 occurrences — **not to zero**, because it is now a real
+> provenance marker where a chapter actually declares it, instead of a blanket
+> default applied to 47 of 48 rows.
+>
+> ⭐ **`AC-4` was the load-bearing control and it held.** The inventory closes over
+> all 63 inputs **and reports the exact three-file complement** — the chapters
+> carrying no `> Status:` declaration — with what the rule assigns them. An empty
+> unclassifiable report is otherwise indistinguishable from a thorough one, so
+> reporting zero while three declaration-less files exist would have been a
+> **failed measurement, not a clean result**.
+>
+> ✅ **No checker, no gate** (`AC-5`), including the weak "reports drift" form,
+> which is still a gate if it can go red.
+>
+> ⚠ **Standing caveat, recorded deliberately:** the index is an **honest
+> snapshot**, ⛔ not a next-action or releasability oracle. That limitation is the
+> point — a false releasability signal from this file is what caused the `SEC1`
+> mis-release that made this WP necessary.
 
 > ## ▶ THE INSTRUMENT THE SEQUENCING PASS READS IS WRONG
 >
