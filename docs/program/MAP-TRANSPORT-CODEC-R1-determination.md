@@ -152,20 +152,30 @@ on recovering that hit rate.
 
 ## Candidate 2 — a stable name for a map
 
-### Existing composition
+### Caller-visible boundary
 
 The proved Map carrier is ordinary `data Tree k v`, and `to_list` is a total
 in-order traversal to `List (Pair k v)`
-(`catalog/packages/Data/Collections/Map.ken.md:79-92`). The runtime contract
-requires durable round-trip to an extensionally equal Map/Set with the same
-ordered `to_list` observation
-(`spec/40-runtime/41-values.md:50-54`,
+(`catalog/packages/Data/Collections/Map.ken.md:79-92`). That ordered list is
+caller-visible. The runtime's separate durable round-trip contract produces an
+extensionally equal Map/Set with the same observation, but its bytes and hashes
+remain private (`spec/40-runtime/41-values.md:50-54`,
 `spec/40-runtime/41-values.md:174-180`).
 
-Consequently, a caller that controls a naming scheme can derive its input from
-the ordered list and the ordinary positional encoding of its `data` values
-(`spec/40-runtime/41-values.md:159-172`). The question for R1 is whether a
-current caller needs a shared, named operation for that composition.
+At this SHA, the public surface exposes no generic arbitrary-data encoder. It
+explicitly leaves generic `Serialize`/`encode`/`decode` derivation to a
+follow-on (`spec/30-surface/38-ffi-io.md:282-288`), and the current catalog
+contains no such API. This declaration search returned no lines:
+
+```text
+git grep -nE '^(class|record|data) Serialize\b|^(fn|const) (encode|decode)\b' -- catalog/packages
+```
+
+A caller with known key and value types could define a concrete package-level
+positional encoder over the ordered list. That is a possible caller-owned
+function, not an existing generic composition and not access to the runtime's
+private canonicalization. The question for R1 remains whether a current caller
+asks for a shared operation.
 
 ### Consumer finding
 
@@ -197,9 +207,10 @@ index, artifact identity, or package identity consumes Map `to_list`.
 ### Verdict
 
 **Not a requirement today.** Stable content names are real elsewhere in the
-corpus, but no such consumer is fed by a Map/Set. Ordered `to_list` plus
-ordinary data encoding remains sufficient substrate if a caller-specific need
-appears; the corpus does not justify standardizing a codec now.
+corpus, but no such consumer is fed by a Map/Set. Ordered `to_list` supplies a
+stable element order, not bytes. A future caller may define a concrete
+package-level encoder for known key/value types, but the corpus neither exposes
+a generic arbitrary-data encoder nor justifies standardizing one now.
 
 ## Candidate 3 — a wire format for a non-Ken peer
 
