@@ -11,6 +11,33 @@ github: null
 origin: discovered under [[PX8-F-CAP-41]] Phase 2 impl (foundation-implementer hard-stop evt_563ss8821n7f); Architect means/representation ruling evt_2zkjr68y1sdgf (thr_570t9qzcthjv9, 2026-07-23). Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
+> ## ✅ FRAMED 2026-07-27 — shovel-ready; blocked ONLY on `RT-NATIVE-FNSPLIT`
+>
+> **Frame:** `docs/program/wp/NATIVE-HANDLE-CARRIER.md`, measured at
+> `origin/main = 5404108a`. Owner **Runtime**, size **M**.
+>
+> ⭐ **This WP closes [[PX8-F-CAP-41]] Phase 2 in the same merge** — one
+> deliverable, two nodes. Flip both together.
+>
+> ### ⛔ Premise correction the frame carries: there is ONE input ref
+>
+> The text below says to "fold `c07e63c2` with `f0eb65ce`". **Measured: there is
+> nothing to fold** — `f0eb65ce` is `c07e63c2`'s parent. Take `c07e63c2` alone
+> (`origin/preserved/native-handle-carrier-c07e63c2`); it already carries the
+> handle/admission impl *and* the elaborator slice.
+>
+> ### ⚠ And the rebase is real work, not a preliminary
+>
+> `c07e63c2` is based at `8ebe370a`; **`origin/main` is 215 commits ahead**, and
+> `prelude.rs`, `erasure.rs`, and `compiler_driver.rs` — all three production
+> files of the elaborator slice — were **also edited on `main`** (+224 lines
+> there against the branch's +188). A side-preference conflict resolution
+> silently reverts landed work. That is `AC-1`.
+>
+> ⭐ **Status stays `draft` because `depends_on` is unmet**, not because it is
+> unframed. Flip to `ready` when [[RT-NATIVE-FNSPLIT]] merges, then kick Runtime
+> with a full handoff gate.
+
 ## ⚙ RE-HOMED to Runtime 2026-07-23 (elaborator slice DONE; continuation is native)
 
 The **elaborator half is complete** — Foundation de-erased the driver error and fixed
