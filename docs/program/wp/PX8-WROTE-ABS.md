@@ -84,11 +84,13 @@ let remaining = buffer_nat_value(effective.checked_sub(count)…)?;  // :5324
 > **`:5303` is the `ReadSome` arm and carries a byte-identical expression** —
 > `let effective = transferred.effective_request();`. ⇒ A ring that mutates
 > "the `effective` computation" and sees red may have hit the **read** arm and
-> reddened the **pre-existing** read tests (`:6469`, `:6554`), concluding
-> `AC-1` discharged while the new write test never discriminated anything.
+> reddened the **pre-existing** read tests (`:6469`, `:6554`), concluding the
+> control discharged while the write arm was never exercised at all.
 >
 > ⛔ **The mutation must be on the `Wrote` arm at `:5322`, and the redden must
-> be attributed by test name.** See `AC-1`.
+> be attributed by test name.** ⚠ **This hazard is unchanged and still
+> load-bearing** — but see **`AC-1″`**, not `AC-1`: there is no new test, `AC-1`
+> is superseded, and the control is now a **pair** of mutations.
 
 ⚠ **The source formula is presently right.** This is an *evidence* gap, not a
 behavior gap — the Architect's clause-(a) verdict (`evt_163mfgjs7fkh8`)
@@ -238,34 +240,78 @@ to something the coincidental shape can satisfy. Route it to me under `§8`.
   ⛔ The clause *"the mechanism that forces `effective` to the installed
   window"* is **withdrawn** — that mechanism does not exist. ⭐ The second form
   is a full deliverable, not an abandonment.
+  ⭐ **AMENDED — a sixth fact is now required, and it is the only *executed*
+  one:** record the `AC-1″` mutation-pair result. The four static citations are
+  a **comment**, and a mechanism claim in a comment is structurally exempt from
+  execution; the pair is what makes the unreachability claim *measured* rather
+  than merely cited.
 - **`D4`** — a one-line statement of whether the `:6450-6467` comment's
   "load-bearing pair member" reasoning is now true of **both** pairs, or
   remains true of the read pair only and why.
+  ⭐ **AMENDED — `D4` now also records the two-shortcut split** in `AC-1″`: the
+  `:6456-6465` comment's reasoning is about `effective := count`, and it is
+  **correct about reads** (where the capped-short read cell kills it). On writes
+  that shortcut is not merely unkilled by the capped-full cell — it is
+  **unkillable**, while the *historical* shortcut `effective := requested`
+  **is** killed by that cell. ⇒ ⛔ Do not write `D4` as "the write pair has no
+  load-bearing member"; it has one, against a different shortcut.
 
 ---
 
 ## 6. Acceptance criteria
 
-- **`AC-1`** ⭐ **(load-bearing)** — the new test **discriminates**. **Control:**
-  mutate the **`Wrote`** reifier arm at **`eval.rs:5322`** to the wrong shortcut
-  (`let effective = count;`, or `remaining := requested - count`), show the new
-  test **reddens**, and restore byte-identically. ⛔ A test that stays green
-  under that mutation has measured nothing and does not discharge clause (a).
-  ⚠ Confirm the redden is **your** test and not a build break — report the
-  failing test name from the run output, not the exit code.
-  ⛔⛔ **And confirm you mutated the WRITE arm.** `:5303` is the `ReadSome` arm
-  and carries the **identical** expression; mutating it reddens the
-  pre-existing read tests (`:6469`, `:6554`) and says **nothing** about your
-  new write test. **Control:** name the failing test, and report that the
-  capped-short *read* test at `:6554` is **unaffected** by your mutation.
-  ⭐ A redden you cannot attribute to a named test is not evidence about your
-  detector.
+- **`AC-1`** ⛔ **SUPERSEDED AS WRITTEN 2026-07-27** (`evt_5m964d2fygxpj`, this
+  amendment). It required *"show the **new test** reddens"* — and `D3` withdrew
+  the new test. ⚠ **It is also vacuous on its own terms**, which is the part the
+  earlier note got wrong: the shortcut it names (`let effective = count;`) is a
+  **semantic no-op** on every reachable write, because `D3` proves `count ==
+  effective` there. ⇒ No test could redden under it, and **the prior claim that
+  this control "still applies and still matters" was false.**
 
-- **`AC-2`** — the capped-**full** write test, unmodified, **stays green**
-  under the same mutation is **not** required and must not be claimed. ⭐ It is
-  expected to stay green — that is the entire premise of this WP. **Control:**
-  report its behavior under the mutation either way; if capped-full *also*
-  reddens, the mutation was wider than intended and `AC-1` is unproven.
+  ### ⭐⭐ Because there are TWO wrong shortcuts, with opposite detectability
+
+  | mutation of `:5322` | on the write path | caught by |
+  |---|---|---|
+  | `effective := requested` — **the historical defect** | `remaining` becomes `requested - count` = **4**, not 0 | ✅ the capped-**full** write test, `:6629` |
+  | `effective := count` — the `:6456-6465` shortcut | identity; `remaining` is 0 either way | ⛔ **nothing, ever** — by `D3` |
+
+  ⇒ ⭐ **The write cell is NOT evidence-free.** It has real discriminating power
+  against the shortcut that actually occurred in this codebase — the test's own
+  comment at `:6689-6690` predicts `remaining` 4 — and provably none against the
+  one `D3` rules unreachable. `AC-1` named **only the second**, i.e. the one of
+  the two that is unfalsifiable here.
+
+- **`AC-1″`** ⭐ **(load-bearing — REPLACES `AC-1`)** — run **both** mutations of
+  `eval.rs:5322`, each alone, each restored byte-identically, and report each
+  outcome **by failing test name**:
+
+  1. `let effective = count;` ⇒ **green is the correct and predicted result.**
+     ⛔ This is *not* a `§8` stop — see the `§8` amendment. Report the suite
+     total and that no test reddened.
+  2. `let effective = <the raw `FsWriteAt` length>` ⇒ the capped-**full** write
+     test **`budget_eff_capped_full_write_reifies_effective_not_raw_remaining`**
+     (`:6629`) **MUST redden**, at its `assert_eq!(remaining, 0, …)`.
+     ⭐ `request: &CanonicalRequestV1` is already a parameter of
+     `reify_host_reply_v1` (`:5219`), so this stays a **`Wrote`-arm-only** edit —
+     destructure `CanonicalRequestV1::FsWriteAt { length, .. }` in the arm.
+
+  ⛔⛔ **Mutation 2 is the load-bearing half, and mutation 1 alone is not
+  evidence.** A green under mutation 1 is equally consistent with *"no test
+  executes `:5322`"*. Mutation 2 is the **positive control** that separates
+  *"no test can tell"* from *"no test looks"* — it proves the line is executed
+  and its value observed. ⭐ Without it, `D3`'s unreachability claim is cited but
+  never exercised.
+
+  ⛔ **Both mutations: confirm `:5303` is byte-identical** (it is the `ReadSome`
+  arm with the same expression) and report the capped-short **read** test
+  `:6554` **unaffected** in both runs.
+
+- **`AC-2`** — the capped-**full** write test's behavior is **reported, not
+  asserted green**. Under mutation 1 it stays green (entailed by `D3`); under
+  mutation 2 it **must** redden. ⛔ If it reddens under mutation **1**, the
+  mutation was wider than intended and `AC-1″` is unproven. ⛔ If it stays green
+  under mutation **2**, stop and route — that would mean the arm is not reached
+  by the suite at all, and `D3` would be recorded but unexercised.
 
 - **`AC-3`** — the asserted `remaining` is an **absolute literal** traceable to
   `38-ffi-io.md`. **Control:** quote the governing clause. ⛔ "Matches native"
@@ -316,8 +362,15 @@ the three branches with `ken-interp` deltas (`wp/ABI-S3`, `wp/BUDGET-EFF`,
 - `count < effective` is unconstructible on the write path — ⭐ that is `D3`'s
   second form and a real result; deliver the measurement, do not improvise a
   fixture around it; **or**
-- the mutation in `AC-1` reddens the capped-full test too, or reddens nothing
-  — either means the control is not measuring the arm you think it is; **or**
+- ⛔ **AMENDED 2026-07-27** — the original bullet made *"reddens nothing"* an
+  unconditional stop, which contradicted `D3` and blocked the ring. **The
+  no-redden stop now reads:** a mutation that reddens nothing is a hard stop
+  **unless a companion mutation on the same line reddens by name.** ⭐ That is
+  what keeps the bullet's teeth: the pair distinguishes *"the property is
+  genuinely indistinguishable here"* from *"the suite never runs this line."*
+  ⇒ Concretely — stop if mutation **1** of `AC-1″` reddens the capped-full test,
+  or if mutation **2** reddens **nothing**; ⛔ do **not** stop merely because
+  mutation 1 is green; **or**
 - discharging `D1` appears to require editing `spec/`, `conformance/`, or any
   `src/**` behavior — it does not, and if it does, the gap is not the one this
   frame describes; **or**
