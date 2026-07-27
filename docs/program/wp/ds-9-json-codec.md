@@ -4,6 +4,40 @@
 `docs/program/wp/catalog-data-structures-program.md` §"Phase 3 — the driver
 validates the tier". **Charter:** `docs/program/06-catalog-campaign.md`.
 
+> ## ⛔⛔ BLOCKED 2026-07-27 — READ THIS BEFORE ANYTHING ELSE
+>
+> **`Json` is not expressible in the current kernel.** `D1`'s ordinary spelling
+>
+> ```ken
+> data Json = ... | JsonArray (List Json) | JsonObject (List (Pair String Json)) | ...
+> ```
+>
+> is rejected as a **nested inductive** — the `List (Rose A)` class that
+> `spec/10-kernel/14-inductive.md` §8.5 defers. Diagnostic scaffold preserved at
+> **`4dfdb21d`**; it is evidence only, ⛔ **not** a QA or merge candidate.
+>
+> **Architect `dec_13af1mercv2m0` (`evt_55k9f9efvd8jk`) — option B, nested-only.**
+> DS-9's ordinary **six-constructor** `Json` is **preserved**. The kernel
+> restriction is lifted instead, via `SPEC-NESTED-IND` → `KERNEL-NESTED-IND`.
+>
+> ### ⛔ Substitutes the ruling rejects BY NAME — do not reach for any of them
+>
+> | rejected | why, per the ruling |
+> |---|---|
+> | `JsonArray Nat (Nat -> Json)` (W-shaped) | *"not the same carrier"* — values beyond the declared length are **semantically ignored**, so exact round-trip/equality depends on **function extensionality and a noncanonical suffix** |
+> | `Fin n` instead of `Nat` | *"imports the deferred length-indexed carrier that the DS-9 frame expressly excludes"* |
+> | splitting the **object** arm into functions | the object arm *"still nests `Json` through `Pair`"* — same finite-index and equality problem |
+> | dropping arrays | *"removes JSON arrays and therefore fails `D1` and the purpose of DS-9"* |
+> | flattening · Church encodings · postulates · extra malformed internal spine states | *"likewise not authorized substitutes"* |
+>
+> ⭐ **Why the W-shape is not a near-miss but a different thing:** it would
+> *"replace the composition target rather than discharge it."* DS-9's whole purpose
+> is to find out whether the **landed tier** composes. Re-encoding the value model
+> to dodge the kernel would answer a question nobody asked.
+>
+> ⚠ **§3's carrier ruling is UNCHANGED** — `List Char` still stands. This block
+> concerns the **value type**, not the codec's carrier. ⛔ Do not conflate them.
+
 > ## ▶ READ THIS FIRST — what makes this WP different
 >
 > DS-1 … DS-8 each *added* a component. **DS-9 adds nothing the tier does not

@@ -1,15 +1,46 @@
 ---
 id: DS-9
 title: "lawful JSON codec — the data-structures tier's acceptance test: a Json value type, encode/decode, and the proved round-trip law, assembled entirely from the landed Core/Data sections"
-status: ready
+status: draft
 owner: foundation
 size: L
 gate: none
-depends_on: []
+depends_on: [KERNEL-NESTED-IND]
 blocks: []
 github: null
-origin: Phase 3 of the catalog data-structures enrichment program (docs/program/wp/catalog-data-structures-program.md), under the catalog campaign charter (docs/program/06-catalog-campaign.md), which homes catalog authoring in Foundation. Steward-filed; Steward owns the frame and AC/control placement. Carrier design fork put to the Architect as evt_46z6m4mcpdbj4 — the node stays draft until that ruling is transcribed into frame §3.
+origin: Phase 3 of the catalog data-structures enrichment program (docs/program/wp/catalog-data-structures-program.md), under the catalog campaign charter (docs/program/06-catalog-campaign.md), which homes catalog authoring in Foundation. Steward-filed; Steward owns the frame and AC/control placement. Carrier design fork ruled by the Architect as dec_3n1pp559pxrrw and transcribed into frame §3. The node is now draft because it is BLOCKED on KERNEL-NESTED-IND — see the banner.
 ---
+
+> ## ⛔⛔ BLOCKED 2026-07-27 — `Json` IS NOT EXPRESSIBLE IN THE CURRENT KERNEL
+>
+> **Released, started, and blocked at `D1` inside half an hour.** Foundation
+> found that the ordinary spelling
+>
+> ```ken
+> data Json = ... | JsonArray (List Json) | JsonObject (List (Pair String Json)) | ...
+> ```
+>
+> is **rejected by the kernel** as a nested inductive — the `List (Rose A)` class
+> that `spec/10-kernel/14-inductive.md` §8.5 defers (`:126-128`, `:569-570`,
+> `:709`). Diagnostic scaffold preserved at **`4dfdb21d`**.
+>
+> ⭐ **This is DS-9 succeeding, not failing.** The frame's premise was that DS-9
+> adds no component and exists to discover whether the tier composes, with
+> friction as the deliverable. It found a real kernel limit at the first
+> deliverable — a better result than a clean landing.
+>
+> **Architect ruling `dec_13af1mercv2m0` (`evt_55k9f9efvd8jk`): option B,
+> nested-only.** DS-9's ordinary six-constructor `Json` is **preserved**; the
+> kernel restriction is lifted instead. ⇒ `depends_on: [KERNEL-NESTED-IND]`,
+> behind `SPEC-NESTED-IND`.
+>
+> ⛔ **Foundation stands down.** ⛔ Do not re-encode `JsonArray` to get moving —
+> the ruling rejects W-shaped, `Fin n`, flattening, Church encodings, postulates,
+> and extra malformed internal spine states **by name**. The scaffold is
+> diagnostic evidence only, ⛔ **not** a QA or merge candidate.
+>
+> ⚠ **The carrier ruling below is UNCHANGED** — `List Char` still stands. This
+> block is about the *value type*, not the codec's carrier.
 
 > ## ▶ THE TIER'S ACCEPTANCE TEST
 >
@@ -65,8 +96,16 @@ spec-gated** on a `spec/50-stdlib/` `Vector` chapter that has no author and no
 node, and its own program text lists it under "Deferred / prerequisites."
 
 ⇒ Honoring that edge would park the tier's acceptance test behind a spec gap it
-has no need of. DS-9 uses `List`, complete since DS-4. `depends_on` is therefore
-empty: every real prerequisite is already **merged**.
+has no need of. DS-9 uses `List`, complete since DS-4.
+
+⚠ **That cut still holds, and it is not what blocks the node.** `depends_on` was
+empty when this was written — every *catalog* prerequisite was already merged, and
+that is still true. The single dependency now recorded,
+`KERNEL-NESTED-IND`, is a **kernel expressiveness** prerequisite discovered during
+execution, ⛔ not a revival of the `Vector` edge. Introducing a length-indexed
+carrier would still be wrong, and the Architect's ruling says so explicitly:
+substituting `Fin n` *"imports the deferred length-indexed carrier that the DS-9
+frame expressly excludes."*
 
 ## What the tier supplies
 
