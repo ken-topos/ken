@@ -8,7 +8,7 @@ gate: G-Sec
 depends_on: []
 blocks: []
 github: null
-origin: "verify-implementer's authorized hard-stop on SEC1-IFC AC-R3 (2026-07-27), Steward-authorized evt_1g1tq7ybc92hj. R1+R2 landed as PR #1094 (main tree 8229a811). Measured by the Steward at origin/main 4d15002d: no crates/*/src/ path constructs Verdict::Disproved. Blocked on the prover refutation backend, which prover.rs names V4 (7 placeholders) — NOT V3."
+origin: "verify-implementer authorized hard-stop on SEC1-IFC AC-R3 (2026-07-27), Steward-authorized evt_1g1tq7ybc92hj. R1+R2 landed as PR #1094 (main tree 8229a811). Measured by the Steward at origin/main 4d15002d: no crates/*/src/ path constructs Verdict::Disproved. Blocked on BOTH V3 (prover, a route that can refute) and V4 (diagnostics, whose DAG deliverables are countermodels+holes+unknown) -- prover.rs names V4 seven times; neither has a tracker node."
 ---
 
 > ## ⛔ STATUS IS `draft` DELIBERATELY — THIS IS NOT RELEASABLE AND MUST NOT BE PULLED
@@ -18,7 +18,8 @@ origin: "verify-implementer's authorized hard-stop on SEC1-IFC AC-R3 (2026-07-27
 > **durable and named** rather than living in a channel message.
 >
 > ⭐ It flips to `ready` only when a prover **refutation backend** exists — see
-> §"The blocking dependency", which is **`V4`, not `V3`.**
+> §"The blocking dependency": **`V3` AND `V4`**, which carry different halves of
+> it and are both required.
 
 ## What happened
 
@@ -65,7 +66,8 @@ attempt_obligation  → classify → { Route::D, Route::FO, Route::HO }   -- exh
 ### ⛔ Positive control on that negative claim — the grep key is not the wrong key
 
 A zero-hit grep proves nothing by itself. **The identical pattern finds a genuine
-construction** in the test tree — `crates/ken-elaborator/tests/sec1_acceptance.rs:70`,
+construction** in the test tree —
+`crates/ken-elaborator/tests/sec1_acceptance.rs:70`,
 `verdict: Verdict::Disproved {` inside the helper documented at `:52` as
 *"Synthetic `Disproved` result (for cases where the prover lacks the backend)"*.
 
@@ -99,25 +101,42 @@ these is disclosed **in source**, at the point of work, in the trigger comments
 and the stub-inventory test. ⛔ This is not a hidden over-claim; it is a declared
 one, and the declaration is what makes it fixable.
 
-## The blocking dependency — ⛔ `V4`, NOT `V3`
+## The blocking dependency — ⭐ `V3` **AND** `V4`, and the two carry different halves
 
-⛔ **Correcting a premise carried in the Steward's own queue:** this was recorded
-as blocked on `V3`. The source says otherwise. `prover.rs` carries **seven**
-`[placeholder — reifies in V4]` markers and **zero** naming `V3`:
+⚠ **Two premises about this were wrong, in opposite directions, and both are
+corrected here.** It was first recorded as blocked on `V3` alone; the source's
+own labels say `V4`; ⛔ **neither alone is right.**
+
+`prover.rs` carries **seven** `[placeholder — reifies in V4]` markers and **zero**
+naming `V3`:
 
 | route | what is deferred | named target |
 |---|---|---|
 | `attempt_d` | kernel `whnf` + decision procedure (`23 §3.1`), Z3-backed arithmetic search + `Decidable` constructor extraction (`23 §3.2`) | **`V4`** |
 | `attempt_fo` | the Kripke embedding `φ ↦ φ#`, `World` sort, adequacy lemma `classically_valid(φ#) → φ`, `check_cert` soundness (`23 §4`) | **`V4`** |
 
-⇒ A refutation requires a **countermodel producer** — a Kripke model forcing
-`¬φ` at some world (`24 §1`) — which is precisely the `attempt_fo` Kripke
-embedding. **`AC-R3` therefore sequences after the prover backend WP, and no
-amount of `ken-elaborator` work reaches it.**
+**But the DAG (`docs/program/05-implementation-dag.md`) splits the work across
+two WPs, and the split is meaningful:**
 
-⚠ ⛔ **There is no `V4` tracker node yet**, so `depends_on` is `[]` — that is a
-schema limitation, ⛔ **not** an assertion that nothing blocks this. The blocker
-is stated here in prose and must be read as binding.
+| WP | DAG scope | the half it supplies |
+|---|---|---|
+| **`V3`** | the **prover** (frame `V3-prover.md`, plus `V3-z3-throughput-evaluation.md`) | a route that can **reach a refutation** at all — the decision procedure and the Z3-backed search behind `attempt_d`/`attempt_fo` |
+| **`V4`** | proof-failure **diagnostics** (`24`); DAG row `:167` lists its deliverables as ***"countermodels, holes, `unknown`"*** | the **`Countermodel`** a `Disproved` verdict must carry |
+
+⇒ ⭐ **`Verdict::Disproved { countermodel }` needs both halves**: `V3` to decide
+that `φ` is refutable, and `V4`'s countermodel machinery (a Kripke model forcing
+`¬φ` at some world, `24 §1`) to be the payload. **`AC-R3` sequences after both,
+and no amount of `ken-elaborator`-local work reaches it.**
+
+⚠ **Why the source's labels read `V4` even for the `attempt_d` arithmetic search:**
+those placeholders are written from the *verdict's* point of view — what they are
+missing is the thing that lets a route answer "refuted" with evidence. ⛔ Do not
+read the seven `V4` markers as evidence that `V3` is not also required; read the
+DAG for sequencing and the markers for what is absent.
+
+⚠ ⛔ **Neither `V3` nor `V4` has a tracker node**, so `depends_on` is `[]` — that
+is a schema limitation, ⛔ **not** an assertion that nothing blocks this. The
+blockers are stated here in prose and must be read as binding.
 
 ## Acceptance criteria — ⛔ apply only AFTER the backend lands
 
