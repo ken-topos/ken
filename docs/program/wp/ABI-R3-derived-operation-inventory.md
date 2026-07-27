@@ -1,4 +1,4 @@
-# ABI-R3 — an operation inventory derived from the enum, so a new operation is a build break
+# ABI-R3 — a derived operation inventory: a new operation is a build break
 
 **The catalog's closure is real, and it is closed against `HostOpV1::ALL` — a
 hand-maintained array that nothing ties to the `HostOpV1` enum. Adding a variant
@@ -34,7 +34,7 @@ hand-maintained list.
 
 ---
 
-## 2. ⭐⭐ The measurement — what is closed, and what the closure is closed *against*
+## 2. ⭐⭐ The measurement — what the closure is closed *against*
 
 **Give the landed work its due: the cross-checks are real.** `effect_v1.rs`'s
 `generated_manifest_closes_catalog_observer_and_consumer_sets` compares the
