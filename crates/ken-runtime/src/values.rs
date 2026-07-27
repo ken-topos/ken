@@ -24,12 +24,27 @@ use std::collections::BTreeSet;
 /// same hazard and the same treatment.
 ///
 /// ⚠ The recursive **child positions** of this enum (`args`, `fields`,
-/// `elements`, `captured`, and `Map`'s entry values) are governed by the closed
-/// allow-list in `canonical::child_positions`. Giving one of them reference /
-/// handle / arena / slot / index indirection, or interior mutation, **will not
-/// compile** — that is deliberate, and it is what keeps the unrepresentability
-/// of cycles on this carrier from silently lapsing.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// `elements`, and `Map`'s entry values) are governed by the closed allow-list
+/// in `canonical::child_positions`. Giving one of them reference / handle /
+/// arena / slot / index indirection, or interior mutation, **will not compile**
+/// — that is deliberate, and it is what keeps the unrepresentability of cycles
+/// on this carrier from silently lapsing.
+///
+/// ⛔ **`PartialEq`/`Eq`/`PartialOrd`/`Ord`/`Hash` are NOT derived, and that is
+/// `D3`.** They were, and they were **unsound** — independently of closures.
+/// Two `BigInt`s `{limbs: [5]}` and `{limbs: [5, 0]}` encode to *identical*
+/// canonical bytes (`minimal_limbs` strips trailing zero limbs) and compared
+/// **unequal** under the derive; two NFC-distinct spellings of one `String` did
+/// the same. ⇒ The derived relations **disagreed with canonical identity**,
+/// which is exactly what `AC-V8` forbids.
+///
+/// ⭐ Equality, order and hash are therefore exposed **only** on
+/// [`CanonicalWitness`], which *is* the canonical bytes. Agreement is
+/// **definitional** rather than asserted — there is no second definition of
+/// identity to keep in step — and comparison is **depth-total** because the
+/// bytes come from P1's iterative encoder and comparing a flat `Vec<u8>`
+/// recurses not at all (`AC-V12`).
+#[derive(Debug)]
 pub enum Value {
     // --- immediate scalars (§1, §5 table) ---
     Bool(bool),
@@ -93,11 +108,11 @@ pub enum Value {
         elem_type_id: u32,
         elements: BTreeSet<Vec<u8>>,
     },
-    // ⛔ **No `Closure` variant, and this absence is the deliverable.** It is
-    // what makes the derives on this enum sound: `41 §2.1` forbids ordinary
-    // closures structural equality, ordering and canonical hashing, and a
-    // variant here would grant all three by construction. An ordinary closure
-    // is `ir::RuntimeValue::ClosureRef`; a future `FrozenClosure` /
+    // ⛔ **No `Closure` variant, and this absence is the deliverable.**
+    // `41 §2.1` forbids ordinary closures structural equality, ordering and
+    // canonical hashing, and a variant here would have granted all three the
+    // moment anything derived them. An ordinary closure is
+    // `ir::RuntimeValue::ClosureRef`; a future `FrozenClosure` /
     // `StaticCallableRef` is a *separate explicit type*, never a re-added arm.
 
     // --- special (§6) ---

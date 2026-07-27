@@ -3337,7 +3337,10 @@ pub(crate) mod tests {
         // Positive control: an id the store never minted resolves to nothing,
         // so the successes above are not a function that returns Some for
         // anything.
-        assert_eq!(store.decode_slot(u64::MAX), None);
+        // ⛔ `Value: PartialEq` is gone (`D3`): equality, order and hash live
+        // only on the sealed canonical witness. This assertion only needs
+        // *absence*, which needs no equality at all.
+        assert!(store.decode_slot(u64::MAX).is_none());
     }
 
     /// Equal values share one referent, because identity is the STORE's answer

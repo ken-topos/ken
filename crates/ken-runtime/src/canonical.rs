@@ -12,6 +12,54 @@ pub trait Canonical {
     fn encode_canonical(&self, out: &mut Vec<u8>);
 }
 
+/// ⭐ **The sealed canonical witness — the ONLY surface exposing equality,
+/// order, and hash for a canonical value (`D3`, `AC-V8`, `AC-V12`).**
+///
+/// It **is** the canonical bytes. That single fact discharges both ACs:
+///
+/// - **`AC-V8` — agreement is DEFINITIONAL, not asserted.** The old derives on
+///   [`Value`] disagreed with canonical identity: `BigInt{limbs:[5]}` and
+///   `BigInt{limbs:[5,0]}` encode identically (`minimal_limbs` strips trailing
+///   zero limbs) yet compared unequal, and two NFC-distinct spellings of one
+///   `String` did the same. A witness that *is* the encoding cannot disagree
+///   with it, because there is no second definition of identity to keep in step.
+/// - **`AC-V12` — the comparison is DEPTH-TOTAL by construction.** The bytes are
+///   produced by P1's **iterative** encoder, and `==` / `<` / `hash` over a flat
+///   `Vec<u8>` do not recurse on value depth at all. ⭐ **The claim is the
+///   mechanism, not a measured depth**: a passing `D = 131_072` corroborates it
+///   and would re-derive nothing if the traversal changed.
+///
+/// ⛔ **Sealed:** the byte vector is private and there is no constructor taking
+/// bytes. The only way to obtain one is [`CanonicalWitness::of`], which encodes.
+/// So a caller cannot mint a witness that is not some value's true encoding, and
+/// cannot reach in and perturb one.
+///
+/// ⛔ **Not a general escape hatch for [`Value`] comparison.** Obtaining a
+/// witness means *encoding*, which is exactly the operation `41 §2.1` denies
+/// ordinary closures — and the carrier has no closure arm, so there is nothing
+/// here for a closure to ride.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CanonicalWitness {
+    bytes: Vec<u8>,
+}
+
+impl CanonicalWitness {
+    /// The witness of `value` — its canonical encoding.
+    pub fn of(value: &Value) -> Self {
+        let mut bytes = Vec::new();
+        value.encode_canonical(&mut bytes);
+        Self { bytes }
+    }
+
+    /// The canonical bytes this witness is.
+    ///
+    /// ⚠ Borrowed, not owned: a caller may read the encoding but cannot
+    /// construct a witness from bytes it chose.
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
 /// Kind tags (design doc §1.1).
 mod tag {
     pub const BIG_INT: u8 = 0x01;
@@ -941,6 +989,92 @@ mod tests {
         ]
         .into_iter()
         .collect()
+    }
+
+    // ─── D3 / AC-V8 — the witness AGREES with canonical identity ────────────
+    //
+    // ⛔ BOTH pairs are required. They fail through different mechanisms — limb
+    // truncation vs character normalization — so a passing arm on one says
+    // nothing about the other.
+
+    /// `AC-V8` pair 1 — trailing-zero limbs.
+    ///
+    /// `minimal_limbs` strips them, so these two encode **identically**. Under
+    /// the old derives on `Value` they compared **unequal**: the relation
+    /// disagreed with canonical identity, which is the defect `AC-V8` names.
+    #[test]
+    fn ac_v8_bigint_trailing_zero_limbs_agree_with_canonical_identity() {
+        let short = Value::BigInt {
+            sign: Sign::NonNegative,
+            limbs: vec![5],
+        };
+        let padded = Value::BigInt {
+            sign: Sign::NonNegative,
+            limbs: vec![5, 0],
+        };
+
+        // The premise: the encodings are identical.
+        assert_eq!(
+            encode(&short),
+            encode(&padded),
+            "premise: minimal-limb encoding makes these one canonical value"
+        );
+
+        // ⭐ And the verdict AGREES with that, on all three operations.
+        let (a, b) = (CanonicalWitness::of(&short), CanonicalWitness::of(&padded));
+        assert_eq!(a, b, "equality agrees with canonical identity");
+        assert_eq!(a.cmp(&b), std::cmp::Ordering::Equal, "order agrees");
+        assert_eq!(hash_of(&a), hash_of(&b), "hash agrees");
+
+        // ⚠ POSITIVE CONTROL — a genuinely different magnitude does NOT collapse,
+        // so the agreement above is not a witness that equates everything.
+        let other = Value::BigInt {
+            sign: Sign::NonNegative,
+            limbs: vec![6],
+        };
+        let c = CanonicalWitness::of(&other);
+        assert_ne!(a, c, "distinct magnitudes stay distinct");
+        assert_ne!(hash_of(&a), hash_of(&c));
+    }
+
+    /// `AC-V8` pair 2 — NFC-distinct spellings of one string.
+    ///
+    /// Encoding normalizes to NFC, so these are one canonical value. The old
+    /// derives compared the un-normalized Rust `String`s and disagreed.
+    #[test]
+    fn ac_v8_nfc_distinct_spellings_agree_with_canonical_identity() {
+        // "é" precomposed (U+00E9) vs decomposed (U+0065 U+0301).
+        let precomposed = Value::String("\u{00e9}".to_string());
+        let decomposed = Value::String("e\u{0301}".to_string());
+        assert_ne!(
+            "\u{00e9}", "e\u{0301}",
+            "premise: the two Rust strings really are distinct byte sequences"
+        );
+
+        assert_eq!(
+            encode(&precomposed),
+            encode(&decomposed),
+            "premise: NFC normalization at encoding time makes these one value"
+        );
+
+        let (a, b) = (
+            CanonicalWitness::of(&precomposed),
+            CanonicalWitness::of(&decomposed),
+        );
+        assert_eq!(a, b, "equality agrees with canonical identity");
+        assert_eq!(a.cmp(&b), std::cmp::Ordering::Equal, "order agrees");
+        assert_eq!(hash_of(&a), hash_of(&b), "hash agrees");
+
+        // ⚠ POSITIVE CONTROL — a different string stays different.
+        let c = CanonicalWitness::of(&Value::String("e".to_string()));
+        assert_ne!(a, c, "distinct strings stay distinct");
+    }
+
+    fn hash_of(witness: &CanonicalWitness) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        witness.hash(&mut hasher);
+        hasher.finish()
     }
 
     // --- conformance: runtime/values/canonical-encoding-map-ordering ---
