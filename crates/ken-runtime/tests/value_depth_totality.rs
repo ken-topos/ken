@@ -155,6 +155,16 @@ fn mixed_chain(depth: usize) -> Value {
     mixed_chain_with_leaf(depth, CHAIN_LEAF)
 }
 
+/// How many arms [`mixed_chain_with_leaf`] cycles through before repeating —
+/// the `j % 4` in its body.
+///
+/// ⛔ **This describes the FIXTURE, not [`ALL_CHAIN_VARIANTS`], and the
+/// distinction is the whole point.** The coverage control keyed on it must not
+/// iterate the inventory it is auditing: a 4→3 omission would shrink the loop
+/// and the omitted arm would never be looked at. An independent authority has to
+/// supply the trip count.
+const MIXED_CHAIN_CYCLE: usize = 4;
+
 /// [`mixed_chain`] over a chosen leaf, mirroring [`unary_chain_with_leaf`].
 ///
 /// `AC-P3c` needs a leaf it can *recognise in the rendered string*, so that
@@ -192,12 +202,30 @@ fn mixed_chain_with_leaf(depth: usize, leaf: i64) -> Value {
 
 /// The child-bearing `Value` arms, as same-variant chain kinds.
 ///
-/// ⭐ **This is an inventory, not a list I remembered.** [`chain_variant_of`]
-/// below is exhaustive and wildcard-free over `Value`, so a new child-bearing
-/// variant cannot be added without being classified here — and every control
-/// that iterates [`ALL_CHAIN_VARIANTS`] then covers it with no new test code.
-/// Enumerating the arms that happen to exist today is the same defect one level
-/// up, and it is the one this file already paid for once.
+/// ⛔ **This is a CURRENT-POPULATION inventory. It is NOT compiler-enforced, and
+/// an earlier revision of this comment claimed it was.** That claim was false
+/// and `runtime-qa` disproved it by mutation: dropping `ChainVariant::Array`
+/// from [`ALL_CHAIN_VARIANTS`] *and* classifying `Value::Array` as `None` in
+/// [`chain_variant_of`] **compiles**, and left every control here green.
+///
+/// ⚠ The reasoning error is worth keeping, because it is subtle and this file
+/// contains the correct version of it a few hundred lines away (on
+/// `debug_header`): **an exhaustive match forces a new variant to receive *an*
+/// arm; it does not force the *right* arm.** `None` is a legal answer. And
+/// nothing links this array to the classifier at all — so the inventory can omit
+/// a real child-bearing arm and then certify itself.
+///
+/// ⭐ **What actually guards it** is
+/// [`all_chain_variants_covers_every_arm_the_mixed_fixture_nests`], which keys
+/// off `mixed_chain` — a fixture authored by P1, independently of this list —
+/// and reddens under exactly the omission above.
+///
+/// ⚠ **Residual, stated rather than implied:** that control pins this inventory
+/// against *today's* `mixed_chain`. If a future child-bearing variant is added
+/// and **neither** `mixed_chain` nor this list learns about it, nothing reddens.
+/// Rust has no reflection over enum variants, so any in-test "list of
+/// child-bearing arms" is ultimately another hand-written match a future author
+/// can mis-answer. That gap is **review-enforced, not mechanically guarded**.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ChainVariant {
     Record,
@@ -239,11 +267,11 @@ impl ChainVariant {
 
 /// Classify a value's child-bearing arm.
 ///
-/// ⛔ **Exhaustive over every `Value` variant with no `_` arm.** This is the
-/// compile-time link between the enum and the same-variant depth population: a
-/// new variant carrying a child position fails to compile until it is
-/// classified, at which point [`ChainVariant`] must gain a case and
-/// [`same_variant_chain`] must learn to build it.
+/// ⛔ **Exhaustive over every `Value` variant with no `_` arm — and that buys
+/// LESS than it looks like.** A new variant is forced to receive *an* arm here;
+/// it is **not** forced to receive the *correct* one, because `None` compiles.
+/// ⇒ This match is a prompt to classify, not a proof of classification. See
+/// [`ALL_CHAIN_VARIANTS`] for the mutation that demonstrated the difference.
 fn chain_variant_of(value: &Value) -> Option<ChainVariant> {
     match value {
         Value::Record { .. } => Some(ChainVariant::Record),
@@ -1100,9 +1128,11 @@ fn ac_p3b_debug_returns_and_renders_at_depth_d_through_all_child_positions() {
 // only. ⇒ `Constructor`, `Array` and `Map` each had a host-recursive leg that
 // **no control could observe**.
 //
-// ⭐ Both tests iterate `ALL_CHAIN_VARIANTS` rather than naming arms, so a new
-// child-bearing variant — which `chain_variant_of` will not compile without —
-// is covered with no new test code.
+// ⭐ Both tests iterate `ALL_CHAIN_VARIANTS` rather than naming arms, so an arm
+// added to that inventory is covered with no new test code. ⛔ That is a
+// convenience, **not** a guarantee that the inventory is complete — the
+// inventory is audited separately, and only against today's population, by
+// `all_chain_variants_covers_every_arm_the_mixed_fixture_nests`.
 
 /// Non-vacuity for the population itself: each chain kind really builds **its
 /// own** arm. ⛔ Without this, a copy-paste making the `Array` chain build
@@ -1119,6 +1149,78 @@ fn every_chain_variant_builds_a_chain_of_that_variant() {
              arm's depth controls would exercise the wrong shape"
         );
     }
+}
+
+/// ⭐ **The inventory audit — this is what `ALL_CHAIN_VARIANTS` is actually
+/// guarded by**, since the exhaustive match is not the guarantee an earlier
+/// revision claimed.
+///
+/// **MEASURED:** every arm that `mixed_chain` nests is classified by
+/// [`chain_variant_of`] as child-bearing *and* appears in
+/// [`ALL_CHAIN_VARIANTS`], with no duplicates and none left over.
+/// **CLAIMED:** every child-bearing `Value` arm has a same-variant depth
+/// control.
+/// **THE GAP:** `mixed_chain` must itself nest every child-bearing arm. It does
+/// today, and it is P1's fixture — authored before this WP and independently of
+/// this inventory, which is what makes it a usable authority rather than a
+/// restatement. ⚠ If a future variant is added and **neither** `mixed_chain`
+/// nor `ALL_CHAIN_VARIANTS` learns about it, nothing here reddens. That arm is
+/// **review-enforced, not mechanically guarded** — see [`ALL_CHAIN_VARIANTS`].
+///
+/// ⭐ **Why it iterates [`MIXED_CHAIN_CYCLE`] and never
+/// `ALL_CHAIN_VARIANTS.len()`:** iterating the list under audit lets an omission
+/// shrink the loop and hide itself. The trip count must come from the authority,
+/// not from the subject.
+///
+/// Reddens under the exact mutation that defeated the previous revision
+/// (`runtime-qa`): drop `Array` from the inventory **and** classify
+/// `Value::Array` as `None`. Cycle position 2 then classifies as childless and
+/// this fails, naming that position.
+#[test]
+fn all_chain_variants_covers_every_arm_the_mixed_fixture_nests() {
+    // `mixed_chain_with_leaf` wraps with `j % MIXED_CHAIN_CYCLE`, so the
+    // OUTERMOST node of `mixed_chain(j + 1)` is the arm at cycle position `j`.
+    // Reading the outermost node needs no child-enumerator of our own — which
+    // matters, because a private enumerator would be one more hand-written
+    // match able to make the same mistake this control exists to catch.
+    let mut seen: Vec<ChainVariant> = Vec::new();
+
+    for j in 0..MIXED_CHAIN_CYCLE {
+        let node = mixed_chain(j + 1);
+        let variant = chain_variant_of(&node).unwrap_or_else(|| {
+            panic!(
+                "mixed_chain nests a child-bearing arm at cycle position {j} \
+                 that chain_variant_of reports as CHILDLESS. That arm is \
+                 invisible to ALL_CHAIN_VARIANTS, so it has no same-variant \
+                 depth control and a host-recursive leg in it would not be \
+                 observed by any test in this file."
+            )
+        });
+        assert!(
+            ALL_CHAIN_VARIANTS.contains(&variant),
+            "cycle position {j} is {variant:?}, a child-bearing arm absent from \
+             ALL_CHAIN_VARIANTS — the per-arm controls never build a \
+             same-variant chain for it"
+        );
+        assert!(
+            !seen.contains(&variant),
+            "cycle position {j} repeats {variant:?}; the fixture is no longer \
+             covering one arm per position, so this audit is measuring fewer \
+             arms than it appears to"
+        );
+        seen.push(variant);
+    }
+
+    assert_eq!(
+        seen.len(),
+        ALL_CHAIN_VARIANTS.len(),
+        "ALL_CHAIN_VARIANTS lists {} arms but the mixed fixture nests {}: \
+         {seen:?} vs {ALL_CHAIN_VARIANTS:?}. A listed arm the fixture never \
+         nests is unaudited by this control; an arm the fixture nests that is \
+         not listed has no same-variant depth control at all.",
+        ALL_CHAIN_VARIANTS.len(),
+        seen.len()
+    );
 }
 
 /// `AC-P3a` population control, per arm — a host-recursive renderer dies at `D`
