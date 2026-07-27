@@ -4992,8 +4992,8 @@ fn first_old_span(expr: &RExpr) -> Option<Span> {
 /// Elaborate a `space` surface block onto the already-built `State` effect.
 ///
 /// The emitted kernel objects are ordinary transparent definitions:
-/// `S : Type := T₁ × … × Tₘ`, `S.initial : S`, and one qualified operation
-/// `S.op : Π params. ITree (State S ⊕ Empty) ... R`.
+/// `S : Type := T₁ × … × Tₘ`, a private initial-state definition, and one
+/// qualified operation `S.op : Π params. ITree (State S ⊕ Empty) ... R`.
 pub(crate) fn elaborate_space_decl(
     elab: &mut crate::ElabEnv,
     space: &RSpaceDecl,
@@ -5038,7 +5038,6 @@ pub(crate) fn elaborate_space_decl(
     }];
 
     let state_type = Term::const_(state_id, vec![]);
-    let initial_name = format!("{}.initial", space.name);
     let initial_id = declare_def(
         &mut elab.env,
         vec![],
@@ -5049,15 +5048,9 @@ pub(crate) fn elaborate_space_decl(
         error,
         span: space.span.clone(),
     })?;
-    elab.globals.insert(initial_name.clone(), initial_id);
-    results.push(ElabResult {
-        name: initial_name,
-        def_id: initial_id,
-        obligations: vec![],
-        foreign_binding: None,
-        temporal_obligations: vec![],
-        effect_row_type: None,
-    });
+    elab.space_metadata
+        .initial_states
+        .insert(space.name.clone(), initial_id);
 
     let prelude = elab.prelude_env.clone();
     let empty_id = *elab.globals.get("Empty").ok_or_else(|| {
@@ -5090,14 +5083,18 @@ pub(crate) fn elaborate_space_decl(
                     space.name, operation.name, space.name
                 ),
             })?;
-        if visits.tail.is_some()
-            || visits.heads.len() != 1
-            || visits.heads.first() != Some(&space.name)
-        {
+        let row_vars = crate::effects::row_var_map(&[]);
+        let declared_row = crate::effects::surface_row_to_row_type(visits, &row_vars).map_err(
+            |reason| ElabError::TypeMismatch {
+                span: visits.span.clone(),
+                reason,
+            },
+        )?;
+        if !declared_row.concrete_effects().contains(&space.name) {
             return Err(ElabError::TypeMismatch {
                 span: visits.span.clone(),
                 reason: format!(
-                    "space operation `{}.{}` must declare exactly visits [{}]",
+                    "space operation `{}.{}` must include visits [{}]",
                     space.name, operation.name, space.name
                 ),
             });
@@ -5231,18 +5228,15 @@ pub(crate) fn elaborate_space_decl(
         })?;
         drop(cx);
         elab.globals.insert(qualified_name.clone(), operation_id);
-        let effect_row = crate::effects::RowType::Concrete(crate::effects::EffectRow::singleton(
-            space.name.clone(),
-        ));
         elab.effect_rows
-            .insert(qualified_name.clone(), effect_row.clone());
+            .insert(qualified_name.clone(), declared_row.clone());
         results.push(ElabResult {
             name: qualified_name,
             def_id: operation_id,
             obligations: vec![],
             foreign_binding: None,
             temporal_obligations: vec![],
-            effect_row_type: Some(effect_row),
+            effect_row_type: Some(declared_row),
         });
     }
     Ok(results)

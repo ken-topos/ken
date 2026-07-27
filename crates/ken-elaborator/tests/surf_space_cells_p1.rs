@@ -23,6 +23,14 @@ space Registers {
   proc read_middle () : Int visits [Registers] = middle
   proc read_right () : Int visits [Registers] = right
   proc write_middle () : Unit visits [Registers] = middle becomes 99
+  proc write_middle_wide () : Unit visits [Registers, Console] = middle becomes 99
+}
+"#;
+
+const INITIAL_COLLISION: &str = r#"
+space Collision {
+  mut n : Int = 7
+  proc initial () : Int visits [Collision] = n
 }
 "#;
 
@@ -54,9 +62,17 @@ fn apply_all(head: Term, args: &[Term]) -> Term {
     })
 }
 
-fn run_operation(env: &ElabEnv, operation: &str, result_type: Term) -> (EvalVal, EvalVal) {
+fn run_operation(
+    env: &ElabEnv,
+    space: &str,
+    operation: &str,
+    result_type: Term,
+) -> (EvalVal, EvalVal) {
     let p = &env.prelude_env;
-    let state_id = env.globals["Registers"];
+    let state_id = env.globals[space];
+    let initial_id = env
+        .space_initial_state(space)
+        .expect("space elaboration records its private initial state");
     let empty_id = env.globals["Empty"];
     let state_type = Term::const_(state_id, vec![]);
     let empty_type = Term::indformer(empty_id, vec![]);
@@ -68,7 +84,7 @@ fn run_operation(env: &ElabEnv, operation: &str, result_type: Term) -> (EvalVal,
             empty_type,
             resp_empty,
             result_type,
-            Term::const_(env.globals["Registers.initial"], vec![]),
+            Term::const_(initial_id, vec![]),
             Term::const_(env.globals[operation], vec![]),
         ],
     );
@@ -144,7 +160,8 @@ fn ac_s2_middle_write_preserves_both_neighbors() {
         .expect("three-cell space must elaborate");
     let unit_type = Term::indformer(env.prelude_env.unit_id, vec![]);
 
-    let (_, written_state) = run_operation(&env, "Registers.write_middle", unit_type);
+    let (_, written_state) =
+        run_operation(&env, "Registers", "Registers.write_middle", unit_type);
     let actual = state3(written_state);
     println!("AC-S2 actual post-write state: {actual:?}");
     assert_eq!(
@@ -161,9 +178,16 @@ fn ac_s3_reads_each_of_three_pairwise_distinct_components() {
         .expect("three-cell space must elaborate");
     let int_type = Term::const_(env.globals["Int"], vec![]);
 
-    let (left, left_state) = run_operation(&env, "Registers.read_left", int_type.clone());
-    let (middle, middle_state) = run_operation(&env, "Registers.read_middle", int_type.clone());
-    let (right, right_state) = run_operation(&env, "Registers.read_right", int_type);
+    let (left, left_state) =
+        run_operation(&env, "Registers", "Registers.read_left", int_type.clone());
+    let (middle, middle_state) = run_operation(
+        &env,
+        "Registers",
+        "Registers.read_middle",
+        int_type.clone(),
+    );
+    let (right, right_state) =
+        run_operation(&env, "Registers", "Registers.read_right", int_type);
 
     assert_eq!(
         (
@@ -217,12 +241,29 @@ fn ac_s4_write_core_is_bind_get_then_put() {
 #[test]
 fn ac_s5_space_label_is_emitted_and_required() {
     let mut env = ElabEnv::new().expect("prelude");
-    env.elaborate_file(THREE_CELLS)
+    let wide_result = env
+        .elaborate_decl_v1(THREE_CELLS)
         .expect("three-cell space must elaborate");
     assert_eq!(
         env.effect_rows.get("Registers.write_middle"),
         Some(&RowType::singleton("Registers")),
         "the emitted operation row must carry its space label"
+    );
+    let wide_row = RowType::concrete(
+        ken_elaborator::effects::EffectRow::from_effects([
+            "Registers".to_string(),
+            "Console".to_string(),
+        ]),
+    );
+    assert_eq!(
+        env.effect_rows.get("Registers.write_middle_wide"),
+        Some(&wide_row),
+        "the declared operation row must retain stable-interface headroom"
+    );
+    assert_eq!(
+        wide_result.effect_row_type.as_ref(),
+        Some(&wide_row),
+        "the elaboration result must retain the same declared row"
     );
 
     let mut env = ElabEnv::new().expect("prelude");
@@ -231,6 +272,71 @@ fn ac_s5_space_label_is_emitted_and_required() {
         .expect_err("cell access without visits [MissingRow] must fail");
     assert!(matches!(error, ElabError::TypeMismatch { ref reason, .. }
         if reason.contains("effect escape") && reason.contains("MissingRow")));
+
+    let mut env = ElabEnv::new().expect("prelude");
+    let error = env
+        .elaborate_file(
+            "space MissingLabel { \
+               mut n : Int = 0 \
+               proc read () : Int visits [Console] = n \
+             }",
+        )
+        .expect_err("a declared row without the space label must fail");
+    assert!(matches!(error, ElabError::TypeMismatch { ref reason, .. }
+        if reason.contains("must include visits [MissingLabel]")));
+
+    let mut env = ElabEnv::new().expect("prelude");
+    let error = env
+        .elaborate_file(
+            "space UnsupportedTail { \
+               mut n : Int = 0 \
+               proc read () : Int visits [UnsupportedTail | e] = n \
+             }",
+        )
+        .expect_err("an unbound space-row tail must fail closed");
+    assert!(matches!(error, ElabError::TypeMismatch { ref reason, .. }
+        if reason.contains("unknown row variable `e`")));
+}
+
+#[test]
+fn generated_initial_state_does_not_claim_the_initial_member() {
+    let mut env = ElabEnv::new().expect("prelude");
+    let emitted = env
+        .elaborate_file(THREE_CELLS)
+        .expect("three-cell space must elaborate");
+    let initial_state_id = env
+        .space_initial_state("Registers")
+        .expect("the private initial state remains addressable");
+    assert!(
+        !env.globals.contains_key("Registers.initial"),
+        "the generated initial state must not claim a source global"
+    );
+    assert!(
+        !emitted.contains(&initial_state_id),
+        "the generated initial state must not claim a public elaboration result"
+    );
+
+    let mut env = ElabEnv::new().expect("prelude");
+    env.elaborate_file(INITIAL_COLLISION)
+        .expect("an operation named initial must elaborate");
+
+    let operation_id = env.globals["Collision.initial"];
+    let initial_state_id = env
+        .space_initial_state("Collision")
+        .expect("the private initial state remains addressable");
+    assert_ne!(
+        operation_id, initial_state_id,
+        "the source operation and generated initial state must stay distinct"
+    );
+
+    let int_type = Term::const_(env.globals["Int"], vec![]);
+    let (result, final_state) =
+        run_operation(&env, "Collision", "Collision.initial", int_type);
+    assert_eq!(
+        (int(&result), int(&final_state)),
+        (7, 7),
+        "the operation remains callable and uses the separate private initial state"
+    );
 }
 
 #[test]
