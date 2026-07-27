@@ -689,8 +689,18 @@ pub fn recursive_shapes_equivalent(
 ) -> bool {
     left.len() == right.len()
         && left.iter().zip(right).all(|(left, right)| {
+            if left.prior_field_types.len() != right.prior_field_types.len() {
+                return false;
+            }
             let mut field_ctx = ctx.clone();
-            field_ctx.extend_tel(&left.prior_field_types);
+            for (left_prefix, right_prefix) in
+                left.prior_field_types.iter().zip(&right.prior_field_types)
+            {
+                if !convert_type(env, &field_ctx, left_prefix, right_prefix) {
+                    return false;
+                }
+                field_ctx.push(left_prefix.clone());
+            }
             left.position == right.position
                 && left.shape.same_topology(&right.shape)
                 && convert_type(env, &field_ctx, &left.field_type, &right.field_type)

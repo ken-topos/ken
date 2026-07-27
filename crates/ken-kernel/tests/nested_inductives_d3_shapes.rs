@@ -363,6 +363,72 @@ fn transparent_aliases_preserve_former_topology_and_fail_closed_otherwise() {
 }
 
 #[test]
+fn descriptor_equivalence_validates_dependent_telescope_prefixes_in_lockstep() {
+    // Durable invariant: a dependent recursive field may share a comparison
+    // context only after every preceding telescope entry converts there.
+    let mut env = GlobalEnv::new();
+    let d = declare_inductive(&mut env, |family| InductiveSpec {
+        level_params: vec![],
+        params: vec![],
+        indices: vec![],
+        level: Level::zero().suc().suc(),
+        constructors: vec![
+            CtorSpec {
+                args: vec![
+                    ty0(),
+                    Term::pi(Term::var(0), Term::indformer(family, vec![])),
+                ],
+                target_indices: vec![],
+            },
+            CtorSpec {
+                args: vec![
+                    Term::Type(Level::zero().max(Level::zero())),
+                    Term::pi(Term::var(0), Term::indformer(family, vec![])),
+                ],
+                target_indices: vec![],
+            },
+            CtorSpec {
+                args: vec![
+                    Term::Omega(Level::zero()),
+                    Term::pi(Term::var(0), Term::indformer(family, vec![])),
+                ],
+                target_indices: vec![],
+            },
+        ],
+    })
+    .expect("dependent-prefix family is admitted");
+    let constructors = env
+        .inductive(d)
+        .expect("admitted family metadata")
+        .constructors
+        .clone();
+    let type_prefix =
+        recursive_shapes(&env, &constructors[0], d, 0).expect("Type-prefix recursive shape");
+    let equivalent_type_prefix = recursive_shapes(&env, &constructors[1], d, 0)
+        .expect("semilattice-equivalent Type-prefix recursive shape");
+    let omega_prefix =
+        recursive_shapes(&env, &constructors[2], d, 0).expect("Omega-prefix recursive shape");
+    let ctx = Context::new();
+
+    assert!(
+        recursive_shapes_equivalent(&env, &ctx, &type_prefix, &equivalent_type_prefix,),
+        "convertible dependent prefixes must establish a shared field context"
+    );
+    assert!(
+        !recursive_shapes_equivalent(&env, &ctx, &type_prefix, &omega_prefix),
+        "non-convertible dependent prefixes must reject before field comparison"
+    );
+    assert!(
+        recursive_shapes_equivalent(&env, &ctx, &equivalent_type_prefix, &type_prefix,),
+        "the shared dependent context must be valid in either comparison direction"
+    );
+    assert!(
+        !recursive_shapes_equivalent(&env, &ctx, &omega_prefix, &type_prefix),
+        "prefix rejection must not depend on which telescope is left"
+    );
+}
+
+#[test]
 fn checked_positive_former_paths_compose_without_opening_admission() {
     // Transition sentinel: the descriptor is ready for the later atomic
     // D3-semantic+D4 landing, while foreign-former admission remains rejected
