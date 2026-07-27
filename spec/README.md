@@ -18,7 +18,7 @@ shape, the design principles, scope/non-goals, and the glossary.
 | **Trusted kernel** | `10-kernel/` | Core type theory: syntax, universes, Π/Σ, inductives, identity/`J`, observational equality, conversion, the typing judgment + kernel API |
 | **Verification** | `20-verification/` | Spec syntax, obligation generation, the prover (Z3 + Kripke), diagnostics, the machine-readable protocol |
 | Surface language | `30-surface/` | Lexer, grammar, modules, data/`match`, numbers, effects, FFI, elaboration |
-| Runtime | `40-runtime/` | Value model, content-addressed heap, reference operational semantics, termination, capacity |
+| Runtime | `40-runtime/` | Value model, durable canonical bytes, private runtime storage, reference operational semantics, termination, capacity |
 | Stdlib | `50-stdlib/` | Prelude and core library shape |
 | **Security** (tier-1) | `60-security/` | Threat model, information-flow control, capabilities/authority, supply-chain, the trust model, **policy-as-code** + honest limits |
 | **Behavioral** (seam) | `70-behavioral/` | What Ken can't prove but must state: the assumption-boundary export to the sibling (`Ward`); proved/tested/delegated/unknown; temporal-as-data (ADR 0006) |

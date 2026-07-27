@@ -81,14 +81,15 @@ tranche** —
 `List` is a **prelude** type (named by the `String ↔ List Char` conversion,
 `30 §4`); its combinators (`map`/`filter`/`fold`/`range`/…) are packages.
 `Array` is a **built-in audited runtime type** (`../30-surface/37 §3.2`,
-`30 §6`: `declare_primitive` OpaqueType, item-2 audited — the O(1)
-content-addressed persistent tree is genuinely runtime). **`Map`/`Set`, by
-contrast, are proved package trees over `Ord k` — out of `trusted_base()`, not
-primitives** (`52-map.md`; OQ-A retires the earlier opaque `Map`/`Set`
-primitive, `30 §6`). This catalog provides `Array`'s combinators and hosts the
-proved `Map` module (`52-map.md`). The **verified building blocks** — a `sort`
-returning `{ ys | is_sorted ys ∧ Perm ys xs }`, the proved `Map` — are the
-canonical demonstrations of the thesis; the sort's predicates
+`30 §6`: `declare_primitive` OpaqueType, item-2 audited); its internal
+persistent-tree, copying, and sharing strategy is private (`41 §2`).
+**`Map`/`Set`, by contrast, are proved package trees over `Ord k` — out of
+`trusted_base()`, not primitives** (`52-map.md`; OQ-A retires the earlier
+opaque `Map`/`Set` primitive, `30 §6`). This catalog provides `Array`'s
+combinators and hosts the proved `Map` module (`52-map.md`). The **verified
+building blocks** — a `sort` returning
+`{ ys | is_sorted ys ∧ Perm ys xs }`, the proved `Map` — are the canonical
+demonstrations of the thesis; the sort's predicates
 `is_sorted`/`Perm` are **definitions** the prover unfolds (`../30-surface/37 §6`,
 ES1), never postulates.
 

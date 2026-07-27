@@ -319,19 +319,16 @@ re-registering any of them is out of scope and a break.
 run-time store already carries the arbitrary-precision representation:
 `Value::BigInt { sign, limbs }` — sign-magnitude, little-endian `limbs`, under
 the `minimal_limbs` canonical invariant (no trailing zero limbs; a single zero
-limb for `0`), content-addressed. The interpreter's evaluator value does **not**
-currently populate it — there is no big-integer arm on the eval→store
-conversion today, so a value beyond the fixed-width ceiling cannot intern at all
-— so this is a bijection F1 **establishes**, not one it preserves. F1 fixes the
-lossless conversion at the store boundary in **both** directions: every
-evaluator arbitrary-precision integer converts to
+limb for `0`). The interpreter's evaluator value does **not** currently
+populate it, so this is a bijection F1 **establishes**, not one it preserves.
+F1 fixes the lossless conversion at the durable-value boundary in **both**
+directions: every evaluator arbitrary-precision integer converts to
 `Value::BigInt { sign, limbs }` and back **byte-identically**, the
 `minimal_limbs` invariant is preserved by
 construction (a freshly reduced value is canonicalised, never emitted with a
-non-minimal limb vector), and content-addressing (`canonical.rs`) stays stable —
-equal integers intern to the same content hash regardless of the arithmetic
-route that produced them. This is a **testable obligation**: round-trip
-byte-identity + minimal-limb canonicity + cross-boundary hash stability.
+non-minimal limb vector), and durable canonical bytes stay stable regardless of
+the arithmetic route that produced them. This is a **testable obligation**:
+round-trip byte identity + minimal-limb canonicity + canonical-byte stability.
 
 **(4) Crate-vetting — the ADR 0009 rubric-step-1 gate, made concrete.** F1 is
 the first Phase-2 dogfood of ADR 0009's **curate-before-construct** rubric: the
@@ -604,12 +601,12 @@ derived-exact `Decimal`**, so the chain **F1 bignum `Int` → derived-exact
 
 ### 5.8 `String` and `Bytes` — NATIVE opaque buffers (`37 §2.4`, `38 §1.2`)
 
-`String` (immutable UTF-8, content-addressed, NFC-normalized at construction)
+`String` (immutable UTF-8, NFC-normalized at construction)
 and `Bytes` (immutable byte buffer) are **opaque primitive types**: their ops
 act on the buffer with no case-split, and `String` earns native over a derived
-`List Char` on a **real cliff** — **O(1) content-addressed equality** (slot-id
-vs O(n) structural), **NFC-at-construction**, compact UTF-8 (`mul_int`-shaped,
-not convenience). So
+`List Char` on real representation and traversal cliffs —
+**NFC-at-construction**, compact UTF-8, and direct buffer operations
+(`mul_int`-shaped, not convenience). So
 `byteLength`/`charLength`/`++`/`slice`/`index`/`encode`/`decode` (String) and
 `length`/`at`/`slice`/`concat`/`empty` (Bytes) are **NATIVE**, partiality
 already face-(c)-compliant:
@@ -638,9 +635,12 @@ Ken and add zero further trust. No other byte combinator is native-ized.
 **★ Pin: `String` equality is NFC-equality, not byte-equality** — the row must
 state it (`"é"`-composed `≡` `"é"`-decomposed), the semantic-pin discipline of
 truncated-`mod`. `DecEq String` is **postulate-only** (opaque buffer, like
-`DecEq Int`) — but it **is** a real decidable equality (content-addressed ⇒
-slot-id compare is structural, *unlike* the non-proof `eq_float`), so it can
-back `DecEq String`, just audited-delta. Non-definitional `String`/`Bytes` laws
+`DecEq Int`) — but it **is** a real decidable equality because the runtime's
+NFC-aware comparison decides the extensional relation, *unlike* the non-proof
+`eq_float`; it can back `DecEq String`, with an audited delta. Its complexity
+and in-process representation are private unless an implementation advertises
+the optional `constant-time-equality` profile (`41 §4`). Non-definitional
+`String`/`Bytes` laws
 (`byteLength (s ++ t) ≡ …`) are prelude propositions (derived), adding nothing
 to `trusted_base()`.
 

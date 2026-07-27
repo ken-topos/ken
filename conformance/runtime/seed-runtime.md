@@ -1,31 +1,32 @@
 # Runtime conformance — seed cases
 
 Format: `../README.md`. These pin the runtime corrections (typed values, not
-uniform f64), conventional content addressing for closure-free canonical data,
-and the runtime-local opaque callable boundary.
+uniform f64), durable canonical bytes for closure-free canonical data, private
+runtime representation, and the runtime-local opaque callable boundary.
 
-## runtime/values/dedup-shares-slot
+## runtime/values/equal-canonical-values-same-durable-bytes
 - spec: `spec/40-runtime/41-values.md §2,§4`
 - given: two independently-constructed structurally-equal closure-free
   canonical compound values
-- expect: they occupy the **same slot** (global dedup); `==` is O(1) (slot-id
-  comparison)
-- why: content addressing gives canonical-data sharing + O(1) structural
-  equality. Ordinary closures and aggregates containing them are outside this
-  identity contract; `values/README.md` pins that boundary.
+- expect: they compare equal and produce identical durable canonical bytes;
+  copying, sharing, and interning are not observed
+- why: durable canonicity and extensional equality are independent of storage.
+  Ordinary closures and aggregates containing them remain outside this
+  canonical contract; `values/README.md` pins that boundary.
 
-## runtime/values/scalars-are-typed-immediates
+## runtime/values/scalars-retain-distinct-types
 - spec: `spec/40-runtime/41-values.md §1`
 - given: an `Int`, a `Bool`, a `Float`
-- expect: each is an **unboxed typed immediate** (machine word / `i1` / `f64`),
-  not routed through a uniform `f64` nor a heap slot
+- expect: each retains its declared type and behavior, not a uniform `f64`;
+  boxing and immediacy are private
 - why: the "every value is an f64" model is not Ken's.
 
 ## runtime/values/int-small-to-bignum
 - spec: `spec/40-runtime/41-values.md §1`, `35 §1`
 - given: an `Int` computation that grows past a machine word
-- expect: transparent promotion to a heap bignum; value stays exact
-- why: arbitrary-precision `Int` with a small-int fast path.
+- expect: the value stays exact and preserves its durable canonical bytes;
+  the physical promotion form is not observed
+- why: arbitrary-precision `Int` permits a private small-integer fast path.
 
 ## runtime/evaluation/canonicity
 - spec: `spec/40-runtime/42-evaluation.md §1`
@@ -42,8 +43,9 @@ and the runtime-local opaque callable boundary.
 - why: partial verification runs and marks where the gap bites.
 
 > **The capacity / addressing cases moved.** The store-capacity commitments —
-> loud refusal (`CapacityExhausted`, never silent), dedup-aware accounting,
-> reclamation, and `no-lattice-on-hot-path` — are now pinned at X2 rigor in
+> loud refusal (`CapacityExhausted`, never silent), profile-declared
+> accounting, semantics-invisible reclamation, and no semantic lattice
+> dependency — are now pinned at X2 rigor in
 > `capacity/seed-capacity.md` (grounded on `44` + the landed `store.rs`). The
 > two cases that lived here (`runtime/capacity/loud-refusal`,
 > `runtime/addressing/no-lattice-on-hot-path`) are **subsumed** there (one home

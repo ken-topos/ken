@@ -218,7 +218,7 @@ briefs are in §6.1–§6.8; the operator was briefed on 2026-07-26.
 | C4 | **SCT termination** — exact SCT as source compatibility, or a kernel-checkable termination-evidence interface with SCT as one producer | ✅ **CLOSED — option (a), operator 2026-07-26** | nothing; SCT is deliberate source compatibility |
 | C5 | **Instance coherence + package admission** — keep the exact admission graph, or find the smaller invariant | ✅ **Layer 1 CLOSED** (ADR 0008) · ▶ **Layer 2 DEFERRED** behind Linux ABI/compiler, probably next | Layer 2 gates on the package-manager round |
 | C6 | **Prover search portfolio** — ⚠ *not in the operator's original three-way split; it belongs here* | ✅ **DEFERRED, unspec'd — status quo, operator 2026-07-26** | nothing today; ▶ **reopens on check-time latency** OR on any V4 prover-backend WP; §6.6 |
-| C7 | **Logical `space` vs physical realization** (`OQ-Space`) — ⚠ *also not in the original split* | ✅ **DEFERRED — operator concurred 2026-07-26** | ▶ gates on the **content-store fork**; they are one mechanism — §6.7 |
+| C7 | **Logical `space` vs physical realization** (`OQ-Space`) — ⚠ *also not in the original split* | ✅ **RULED 2026-07-26** — logical isolation retained; physical storage private | discharged by `SPEC-STORE-SPLIT`; §6.7 |
 | C8 | **Purity keyword reverse-direction errors** — is `proc`-becomes-pure a reviewed promise or refactoring churn? | ✅ **CLOSED — status quo, operator 2026-07-26.** The spec is ALREADY one-way; the advisory's premise is false | nothing; ▶ one **editorial** Track A follow-on (the carve-out is buried in a parenthetical) — §6.8 |
 
 ### ⚠ On C6, C7, C8 — my own three-kind summary under-covered the advisory
@@ -756,61 +756,40 @@ policy, and C6 never touched them.
 
 ### 6.7 C7 — logical `space` vs physical structure
 
-`spec/30-surface/36-effects.md §4` + `44-capacity.md §1`–`§3` couple the logical
-isolation guarantee to shared-nothing actors, closure-free content-addressed
-messages, per-space arenas, re-interning, and reclamation boundaries — possibly
-foreclosing ownership-based sharing, regions, or alternative actor
-implementations with identical observable guarantees. Erlang is the precedent:
-messages are normally copied, but refcounted binaries and literals **are**
-shared on a node, and the logical process model never exposes which.
+`spec/30-surface/36-effects.md §4` retains the logical isolation guarantee:
+encapsulated, non-aliased state and no shared mutable authority. The prior
+`44-capacity.md §1`–`§3` additionally required per-space arenas, re-interning,
+and reset mechanics. Those physical choices unnecessarily foreclosed copying,
+ownership-based sharing, regions, collectors, and other implementations with
+the same observable guarantees.
 
-Open decision `OQ-Space` already exists in `spec/90-open-decisions.md`.
+`OQ-Space` is already **DECIDED** in `spec/90-open-decisions.md`. Its
+2026-06-27 decision settles the logical contract and explicitly defers runtime
+realization to `40-runtime`; C7 is that realization question.
 
 ⚠ **The caveat is the fork's whole difficulty:** failure isolation and message
 order **are** observable. Relaxing "shared-nothing storage" must not
 accidentally relax no-shared-mutable-authority. ⇒ Couples tightly to the store
 family in §2 — do not decide C7 and the store separately.
 
-## ✅ C7 DEFERRED — concurred (operator, 2026-07-26)
+## ✅ C7 RULED — deferral condition discharged (operator, 2026-07-26)
 
-**Ruling.** *"concur, defer for now."* — concurring with the recommendation to
-hold C7 until the content-store question lands.
+The operator's earlier concurrence held C7 until the content-store question
+landed. `SPEC-STORE-SPLIT` is that landing and discharges the condition.
 
-⇒ **`36-effects §4` and `44-capacity.md §1`–`§3` stay as written.** Advisory
-items 1 (*same-slot conformance + O(1) equality as a promise*) and 5 (*logical
-`space` → physical structure*) are **deferred, not declined**. `OQ-Space`
-remains open in `spec/90-open-decisions.md` and is the durable carrier — ⛔ do
-not close it on the strength of this deferral.
+**Ruling.** The logical `space` contract is retained unchanged: state is
+encapsulated and non-aliased; reasoning is bounded per-space Hoare; spaces
+share no mutable authority. Physical copying/sharing, per-space index shape,
+arena organization, reset mechanics, and reclamation strategy are private
+runtime choices. Durable publication remains closure-free and deterministic.
 
-### ⭐ Why deferral is the *substantive* answer here, not a postponement
+`O(1)` equality is no longer inferred from same-slot identity. It is an
+optional named performance profile whose implementation strategy is private
+(`40-runtime/41 §4`).
 
-C6 defers because nothing is built. **C7 defers for the opposite reason:
-deciding it alone would decide something else by accident.**
-
-The logical-`space` guarantee and the content-addressed store are **one
-mechanism seen from two ends** — per-space arenas, re-interning, and
-copy-on-send are simultaneously the store's representation policy and the
-space's isolation story. ⇒ Ruling C7 first would silently fix the store's
-degrees of freedom before the store fork is even framed, and the constraint
-would arrive unlabelled: a later reader would find the store's options already
-narrowed with no record of who narrowed them or why.
-
-⭐ **This is the `[[dont-preempt-technical-fork-with-sequencing]]` shape** —
-except the preemption here would come from *answering* rather than from
-sequencing, which makes it harder to see.
-
-### ▶ The ordering constraint this creates — binding on whoever frames the store
-
-⛔ **The store fork must be framed as the JOINT fork, or it must state which
-`space` guarantees it is holding fixed.** Whichever lands first owns the
-coupling; it cannot be left for the second one to discover.
-
-⚠ **And the guarantee that is NOT deferred:** failure isolation and message
-order are **observable**, and no-shared-mutable-authority is a security
-invariant, not a representation choice. A future relaxation of "shared-nothing
-*storage*" must be shown not to relax those — the Erlang precedent (refcounted
-binaries shared on a node, invisible to the process model) is a proof that the
-split is *possible*, ⛔ **not** evidence that any particular split preserves it.
+This reconciles the realization half of the already-decided `OQ-Space` entry
+in place. It does not create an `OPEN → DECIDED` transition or alter the
+operator's 2026-06-27 logical guarantees.
 
 ### 6.8 C8 — purity keyword reverse errors
 
@@ -898,13 +877,13 @@ wrong. **`—` in the Track column is not permitted.**
 | advisory item | class | track |
 |---|---|---|
 | 1. content-addressed runtime store — *durable canonical encoding* | 2 | **B1** (durable bytes are a protocol) |
-| 1. content-addressed runtime store — *in-process interning, FNV-1a, probing, load factor, page size, slot retirement* | 4 | **A1 census → expected STOP** (§2) |
-| 1. content-addressed runtime store — *same-slot conformance + O(1) equality as a promise* | 1/4 | **C7-coupled** (§6.7) |
+| 1. content-addressed runtime store — *in-process interning, FNV-1a, probing, load factor, page size, slot retirement* | 4 | **`SPEC-STORE-SPLIT` — private** (§6.7) |
+| 1. content-addressed runtime store — *same-slot conformance + O(1) equality as a promise* | 1/4 | **C7 RULED** — same-slot private; `O(1)` optional profile (§6.7) |
 | 1. authority reversal (*"landed code is normative"*) | — | **A1, fix first** (§3) |
 | 2. runtime `unknown` | 1 | **C1** |
 | 3. automated-prover architecture | 1/4 | **C6** |
 | 4. exact SCT termination | 1 | **C4** |
-| 5. logical `space` → physical structure | 1/4 | **C7** |
+| 5. logical `space` → physical structure | 1/4 | **C7 RULED** — logical contract retained; physical realization private |
 | 6. Ward export + trace (ITF) schemas | 2 | **B1** |
 | 7. checked-package + executable envelopes | 2/3 | **B1** (per-edge threat audit) |
 | 8. `Ord`/`Map` canonical carriers | 1 | **C2** |

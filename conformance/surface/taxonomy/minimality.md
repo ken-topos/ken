@@ -96,9 +96,10 @@ on the landed set.
 
 ## D. Irredundancy findings — the prelude postulates (the ★ TCB-hygiene half)
 
-The concrete `trusted_base()` entries in `prelude.rs` (Architect-approved
-`evt_5bedyc3zyhr`), each a live trust-root surface. Verdicts + Ω-sort
-witnesses:
+The entries audited in `prelude.rs` (Architect-approved
+`evt_5bedyc3zyhr`), with their current fate after the landed follow-ons.
+Entries marked as retired below are no longer live trust-root surfaces.
+Verdicts + Ω-sort witnesses:
 
 | Entry | Form | Verdict | Witness / action |
 |---|---|---|---|
@@ -107,7 +108,7 @@ witnesses:
 | **`isSorted : Π(A). List A→Ω`** | `declare_postulate` | **DERIVABLE (★ soundness)** | Ω-recursion `isSorted (x::y::r)= And (x≤y)(isSorted (y::r))`. **Needs a Prop-valued `≤ : A→A→Ω`** — if `Ord` exposes only `Bool` `leq`, add `Le`/`IsTrue (leq a b):Ω` (else it's `Type`, a relevance leak). |
 | **`Perm : Π(A). List A→List A→Ω`** | `declare_postulate` | **DERIVABLE (★ soundness)** | **Ω-sort fork:** the inductive relation (`refl\|swap\|trans\|cons`) is proof-**relevant** (`Type`) ⇒ needs **truncation** `∥·∥` to be an Ω predicate; count-equality (`Π x. Eq Nat (count x xs)(count x ys)`) is **natively Ω** but DecEq-dependent. Either is derivable; spec picks the form. |
 | **opaque `Bool`** | `declare_primitive` (Opaque) | **DERIVABLE (F1)** | `data Bool = True\|False` (Type) — removes the opaque primitive **and** the `OrdResult` branch-workaround (§B). |
-| **`Map`/`Set`** | `declare_postulate` | **runtime — MIS-CLASSIFIED** | NOT derivable (O(1) content-addressed canonical form is heap-backed, `41 §3a`) — but **audited primitives** (`declare_primitive` OpaqueType, item-2, like `String`/`Bytes`), **not assumed axioms** (item-3). Stay in `trusted_base()`, correctly (§E). |
+| **the former `Map`/`Set` placeholder** | historical `declare_postulate`, then `declare_primitive`, now retired | **DERIVABLE — proved package (landed `52-map`)** | The shipped carrier is ordinary inductive `Tree k v` over lawful `Ord k`; its operations and shipped laws are re-checked definitions, `Set` derives from the same carrier, and the one deferred permutation law is not postulated (`52 §1`/`§4.4`/`§7c`). It is out of `trusted_base()`. Extensional behavior and durable round-trip do not require a particular in-process representation: copying, sharing, or interning the value is private, and internal bytes are not observable (`41 §3a`/`§4`). |
 | **`reg_novf` — the no-overflow PREDICATE** (`Fits`/`inBounds : Int → Ω`) | `declare_postulate` (`numbers.rs:190`) | **★ NEW (seed missed) — DERIVABLE (ruled §6)** | the reusable decidable fixed-width **bound predicate** (`(a+b)` within `[MIN_w, MAX_w]` over arbitrary-precision `Int`) → a **definition, out of `trusted_base()`** (`OQ-1a`). Same Prop-`≤`/`IsTrue` bridge as `isSorted`. My signature-grep surfaced it; §6 ruled it a definition. |
 | **the L1 per-op no-silent-wrap OBLIGATION-HOLES** (`declare_postulate` goal per fixed-width op) | `declare_postulate` | **★ NOT bloat — a LIVE OBLIGATION (stays)** | the per-operation "no silent wrap" **proof obligation** awaiting prover discharge (`35 §3`, `43 §2`, [[soundness-AC-static-vs-runtime-face]]) — **legitimate trusted-until-discharged**, the overflow soundness net. Making *this* a "definition" would be circular or **eliminate the net**. It **stays** in `trusted_base()` as a live obligation (item-3, but the *good* kind). **The distinction the invariant turns on:** a *derivable* postulate is bloat; a *live proof-obligation* is not — the predicate demotes, the obligation-hole stays. If `reg_novf` does double duty, ES2 **splits** them (predicate→def / obligation→hole). Architect pre-flag `evt_57r42rsx3jx3w`. |
 | **numeric + string literals** (`elab.rs:460`/`:503`, `elab_str_lit`) | `declare_postulate` (**per literal**) | **★ HIGHEST-VOLUME hygiene — TERM (ruled §3)** | each literal *value* (`42`, `"…"`, in `num_values`) is a **per-program `trusted_base()` postulate** — an *assumed* value for a *computed* constant. Ruling: a **primitive-constant TERM** (the *type* is item-2, listed once; the value is a real core term), **out of `trusted_base()`** — not a per-literal entry at all. Verified `elab.rs:460` (Architect VAL1 catch `evt_488kj79z0wqd7`). |
@@ -129,29 +130,31 @@ The invariant turns on a distinction the accounting must keep sharp:
 **`trusted_base()` should contain only genuine irreducibles + audited
 primitives + *live proof-obligations*.** A **derivable** postulate is bloat
 (demote); a **live obligation** (awaiting discharge) is legitimate (stays).
-Three fates:
+Two current fates, after the later `Map`/`Set` retirement:
 
 - **Leave `trusted_base()` entirely** — the *derivable* / *shadowing* entries,
   now re-checked `Decl::Transparent` defs (or a kernel reference / a term):
   `Equal` (→ kernel `Eq`), `And`, `isSorted`, `Perm`, `Bool`, the `reg_novf`
   **predicate** (→ decidable-bound def), and **every literal** (→
-  primitive-constant terms). The **assumed-axiom bloat** goes to zero.
-- **Stay listed, re-classified `Opaque`→`Primitive`** (item-3 assumed → item-2
-  **audited**): `Map`, `Set`. A real admission-path change (the `Decl`
-  variant), not a relabel; no trust regression (still listed), but the basis is
-  now honestly "audited," not "assumed."
+  primitive-constant terms). The former `Map`/`Set` placeholder also leaves:
+  landed `52-map` supersedes it with ordinary inductive `Tree k v`, re-checked
+  operations and proofs, and `Set` derived from that carrier. The
+  **assumed-axiom bloat** goes to zero, and the later Map retirement removes
+  those two audited primitive entries as well.
 - **Stay listed as *live obligations*** (item-3, the legitimate kind): the L1
   per-op **no-silent-wrap obligation-holes** — trusted-until-discharged, the
   overflow soundness net (`soundness-AC-static-vs-runtime-face`). **Not** bloat;
   removing them would eliminate the net.
 
 **Net:** the surface **assumed-axiom bloat** in `trusted_base()` goes to
-**zero**; what legitimately remains is **`Map`/`Set` as audited primitives** +
-the **live overflow obligations**. The invariant holds on the real set: **no
-built-in has a derivation path** (§A, no bloat) and **no package/prelude
-feature lacks one** (§B/§C, no hidden built-in) — and the `trusted_base()`
-surface a consumer audits is honestly *irreducibles + audited primitives + live
-obligations*, nothing derivable hiding as an assumption.
+**zero**; among the entries in this table, only the **live overflow
+obligations** legitimately remain trusted. The broader surface still contains
+the genuine irreducibles and audited primitives in §A. The invariant holds on
+the real set: **no built-in has a derivation path** (§A, no bloat) and **no
+package/prelude feature lacks one** (§B/§C, no hidden built-in). `Map`/`Set`
+are the landed derived-package case: their extensional behavior is independent
+of whether a conforming runtime copies, shares, or privately interns their
+ordinary data representation.
 
 ## Coverage map (AC → sections)
 
@@ -167,26 +170,31 @@ obligations*, nothing derivable hiding as an assumption.
   verified-`sort` refinement (`37 §6`) unfolds them (green-vs-green against a
   postulate otherwise).
 - **AC4** (trust-class rulings exact): §E — the item-2/item-3 line per entry,
-  the `trusted_base()` delta; `Equal` delete-for-`Eq`, `Map`/`Set`
-  audited-primitive.
+  the `trusted_base()` delta; `Equal` delete-for-`Eq`; the former `Map`/`Set`
+  placeholder retired in favor of the proved package, with no replacement
+  trust-root entry.
 
-## Build-forward (ES2's verification gate)
+## Build-forward (current verification gate)
 
-This is **spec + conformance only** (no crate). **ES2** implements the
-`prelude.rs` demotion; its conformance gate is the **elaboration witness** —
-producer-grepped, not asserted:
+This artifact began as **spec + conformance only** (no crate). Its current
+build-forward gate includes the later landed `52-map` supersession. The
+conformance gate is the **elaboration witness** — producer-grepped, not
+asserted:
 1. Each demoted predicate (`And`/`isSorted`/`Perm`) **kernel-checks as a
    `Decl::Transparent` def in the stated Ω sort** (the relevance-leak check).
 2. The **assumed-axiom** entries **leave** `trusted_base()` — `Equal`, `And`,
    `isSorted`, `Perm`, `Bool`, the `reg_novf` **predicate**, and the per-literal
    postulates (→ terms) — a real `trusted_base()`-delta assertion; no entry
    hides, none over-removed.
-3. `Map`/`Set` **still appear** but as `Decl::Primitive` (item-2), the
-   trust-class corrected.
+3. The former `Map`/`Set` prelude placeholders are **absent** from
+   `trusted_base()` and are not `Decl::Primitive`/`Decl::Opaque`. The shipped
+   package carrier and operations are re-checked inductive data/definitions;
+   its observed values do not reveal whether the runtime copies, shares, or
+   privately interns them.
 4. **★ The live overflow obligation-holes still appear** (item-3, the
-   legitimate kind) — ES2 must **not** sweep them away with the predicate; the
-   split (predicate→def / obligation→hole) is the load-bearing check, or the
-   overflow net is lost.
-A green ES2 that hand-inserts the def or asserts "it type-checks" without the
-`trusted_base()`-delta (both the removals **and** the retained obligations) is
-green-vs-green (`conformance-hand-feeds-the-deliverable`).
+   legitimate kind) — a successor must **not** sweep them away with the
+   predicate; the split (predicate→def / obligation→hole) is the load-bearing
+   check, or the overflow net is lost.
+A green build that hand-inserts the def or asserts "it type-checks" without
+the `trusted_base()` delta (both the removals **and** the retained obligations)
+is green-vs-green (`conformance-hand-feeds-the-deliverable`).

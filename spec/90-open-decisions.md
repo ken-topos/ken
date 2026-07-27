@@ -380,26 +380,27 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
 
 ## D. Runtime & representation
 
-### OQ-7 — Content-addressed boundary — **DECIDED**
-- **Fork.** Exactly which canonical data values are interned (small tuples?)
-  vs. immediate, and the per-case equality story.
-- **Decision (operator, 2026-06-27; closure boundary revised by operator
-  directive 2026-07-26).** **Scalars immediate; closure-free canonical
-  compounds interned; ordinary closures runtime-local and opaque.** Equality is
-  per case (slot-equality for interned canonical data, native comparison for
-  comparable immediates, absent for closures). The **small closure-free
-  aggregate boundary** is empirical X2 tuning, not semantics. A closure or
-  closure-containing graph is never canonicalized or published; a conditional
+### OQ-7 — Durable-canonical boundary — **DECIDED**
+- **Fork.** Which values have durable canonical bytes, and which representation
+  choices are semantic.
+- **Decision (operator, 2026-06-27; closure boundary and storage realization
+  revised 2026-07-26).** Closure-free canonical compounds have deterministic
+  bytes at durable boundaries; ordinary closures are runtime-local and opaque.
+  Equality is extensional for comparable data, native for comparable
+  immediates when chosen, and absent for closures. Immediate, boxed, copied,
+  shared, interned, or deduplicated representation is private. A closure or
+  closure-containing graph is refused before durable bytes exist; a conditional
   stable static callable reference is explicit, capture-free, and distinct.
 - **Affects.** `40-runtime/41 §5` (updated).
 
 ### OQ-hash — Addressing & hashing functions — **DECIDED**
-- **Fork.** Exact in-process hash (FNV-1a vs. other), collision strategy, and
-  the separate serialization/Merkle hash.
-- **Decision (operator, 2026-06-27).** **Two hashes, two jobs:** a fast
-  **non-cryptographic hash + `memcmp`** in-process (**not** lattice geometry); a
-  **cryptographic/Merkle** hash for serialization (`63`). The exact functions
-  are an X2 constant.
+- **Fork.** Which hash choices are durable and which are private runtime
+  mechanisms.
+- **Decision (operator, 2026-06-27; realization revised 2026-07-26).**
+  Cryptographic/Merkle hashing for serialization and integrity is separate from
+  in-process addressing (`63`, `41 §3`). The in-process hash, collision
+  strategy, probing policy, and identity scheme are private; a collision MUST
+  NOT cause a false merge. No lattice machinery is a semantic dependency.
 - **Affects.** `40-runtime/41 §3` (updated), `44`.
 
 ### OQ-5 — Heap capacity bound — **DECIDED**
@@ -420,25 +421,26 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   aesthetic flourish, kept out of the load-bearing runtime.
 - **Affects.** `40-runtime/44 §4` (updated), `50-stdlib`.
 
-### OQ-gc — Reclamation — **DECIDED (deferred impl detail)**
-- **Fork.** Manual/region reclamation only vs. adding automatic GC/refcount for
-  the content heap.
-- **Decision (operator, 2026-06-27).** **Manual + region-scoped** now. Automatic
-  GC is a **well-demonstrated benefit at modest cost** and **invisible to the
-  language surface and semantics** (immutable values + content identity ⇒
-  reclaiming an unreachable slot changes nothing observable), so it **collapses
-  to a deferred implementation detail** the runtime may adopt when working sets
-  demand — **no language fork**.
+### OQ-gc — Reclamation — **DECIDED (private realization)**
+- **Fork.** Whether the language requires one reclamation strategy.
+- **Decision (operator, 2026-06-27; realization revised 2026-07-26).**
+  Reclamation is semantics-invisible and private. Regions, reset, tracing GC,
+  reference counting, process-lifetime allocation, and compaction are all
+  permitted when live observable values, equality, and authority are preserved.
+  Canonical bytes are also preserved for the durably canonicalizable domain;
+  proved `Map`/`Set` package trees instead preserve extensional equality,
+  ordered `to_list`, and durable round-trip while their internal bytes remain
+  unobservable. There is no language fork and no mandatory collector.
 - **Affects.** `40-runtime/44 §3` (updated).
 
 ### OQ-eval-order — Strictness — **DECIDED**
 - **Fork.** Strictness vs. laziness for `let`/data fields (observable values
   fixed; this is space/time, not meaning).
-- **Decision (operator, 2026-06-27).** **Call-by-value (strict) with sharing,
+- **Decision (operator, 2026-06-27).** **Call-by-value (strict),
   strict by default.** Totality makes eval-order **meaning-preserving**, so pick
   the most **predictable/legible** order — strict wins (reason-able cost model,
-  reading order, no thunk/space-leak footguns, composes with content-addressed
-  sharing). **Predictability is a precondition for the time/space reasoning
+  reading order, no thunk/space-leak footguns). **Predictability is a
+  precondition for the time/space reasoning
   security needs** (`@ct`/`61 §5a`, worst-case bounds). Laziness only **where
   required** (`if`/`match` taken-arm, `&&`/`||` short-circuit) or **by explicit
   annotation** — an opt-in **`Lazy a`** thunk (forced-on-demand, memoized;
@@ -448,7 +450,8 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   ground observations, reaching callable-bearing results only through selected
   well-typed probes (`42 §2`). Coinductive fragment, if added
   (`OQ-coinduction`), brings its own local guarded laziness.
-- **Affects.** `40-runtime/42` (updated), `41` (sharing). **Recorded.**
+- **Affects.** `40-runtime/42` (updated), `41` (representation boundary).
+  **Recorded.**
 
 ### OQ-domain — Ken's intended domain / positioning — **DECIDED**
 - **Fork.** How broad — and how bounded — is Ken's intended domain: a bare-metal
@@ -457,9 +460,10 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
 - **Decision (operator, 2026-07-02, in-session ruling).** **Broad but bounded,
   and asymmetric between the two bounds.** The **lower bound is
   systems-*adjacent*** — one notch above true systems programming — and is
-  **settled and substantiated**: the content-addressed managed heap with
-  optional, semantics-invisible reclamation is the *right* substrate for it, not
-  a compromise (`40-runtime/44 §3`). The **upper bound — reaching application,
+  **settled and substantiated**: managed immutable values with optional,
+  semantics-invisible reclamation are the right substrate, while copying,
+  sharing, and storage organization remain private (`40-runtime/44 §3`). The
+  **upper bound — reaching application,
   edge, web, and mobile targets — is directional, not delivered**: an
   aspirational reach realized via **native codegen**, itself **as-yet-unexplored
   design space** (`40-runtime/45`, the X-series; the target choice is
@@ -468,6 +472,10 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   bare-metal systems language. `OQ-domain` fixes the *domain*; it does not
   settle the *toolchain* (`OQ-backend-target`), nor claim the upper-bound
   targets as built.
+- **Authority note.** `docs/PRINCIPLES.md §I.1` supplies the systems-adjacent
+  mission bound, not a runtime mechanism. Its earlier content-addressed-heap
+  implementation example is superseded by `40-runtime/41`/`44` and does not
+  require interning or sharing.
 - **Affects.** `40-runtime/44 §3` (memory-model rationale, the settled lower
   bound), `40-runtime/45` + `OQ-backend-target` (the forthcoming upper-bound
   reach), `docs/PRINCIPLES.md` §I.1 (mission domain-qualification).
@@ -516,9 +524,13 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   (send/receive), IFC labels (on messages), and Ward (message events = the
   behavioral alphabet). Distribution-ready; the **runtime realization**
   (process/thread/green/distributed) is deferred to `40-runtime`. **Transport:**
-  content-addressed **immutable, closure-free value passing** (cross-space dedup
-  by hash; composes with K3); closure-containing graphs reject before
-  publication; labels ride; typed/session channels a later refinement.
+  **immutable, closure-free value passing**; durable publication uses
+  deterministic canonical bytes for the durably canonicalizable domain.
+  Proved `Map`/`Set` package trees preserve extensional equality, ordered
+  `to_list`, and durable round-trip; their internal bytes are not observable.
+  Physical copy/share/storage policy is private. Closure-containing graphs
+  reject before bytes exist; labels ride; typed/session channels are a later
+  refinement.
   **Division of labor:** Ken proves **local/sequential/per-space** correctness;
   **global/concurrent/distributed/temporal** correctness is **delegated to
   Ward** (Quint/Apalache/P model-check the message protocol).
@@ -528,18 +540,20 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   so it does not weaken the in-Ken isolation property.
 - **Isolation property (ADR 0004).** Shared-nothing gives a *stated* isolation
   guarantee on which capability revocation (`60-security/62 §4`) and confinement
-  rest; the runtime realization MUST preserve it. Warrants an ADR when
-  `40-runtime` settles the realization.
+  rest; the runtime realization MUST preserve it. **Realization discharge
+  (`SPEC-STORE-SPLIT`, 2026-07-26):** copying/sharing, per-space index/arena,
+  reset, and reclamation mechanics are private. This amends the already-decided
+  entry in place; it is not an open→closed transition.
 - **Affects.** `30-surface/36 §4` (updated), `20-verification/21 §4` (`old`),
   `40-runtime/`, `60-security/62`, `70-behavioral/`.
 
 ### OQ-witness — Surface runtime introspection — **DECIDED**
-- **Fork.** Expose process-level heap stats / Merkle root (extensional-safe) —
-  and the exact surface.
-- **Decision (operator, 2026-06-27).** **Process-level stats only** (slots,
-  dedup rate, arena bytes, Merkle root) as an extensional-safe `witness`
-  facility; **never** per-value identity/provenance/address — that would let a
-  program observe sharing and break **referential transparency**.
+- **Fork.** Expose aggregate runtime statistics without exposing value identity.
+- **Decision (operator, 2026-06-27; realization revised 2026-07-26).**
+  Aggregate process/domain statistics MAY be exposed by a profile-specific,
+  extensional-safe `witness` facility; **never** per-value identity,
+  provenance, address, or allocation order. No portable slot/dedup/arena field
+  set is required.
 - **Affects.** `40-runtime/41 §7` (updated).
 
 ---
@@ -822,7 +836,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-behavioral** | 2026-06-27 — downstream complement is a **sibling** (`Ward`) fed by an assumption-boundary export; temporal obligations as **data, not kernel modalities**; one logic, two engines. | **ADR 0006** |
 | **OQ-8 / OQ-8a** | 2026-06-27 — static effect **rows** (`visits`), pure by default; **layered encoding** authority(tokens)/denotation(interaction-tree)/spec(WP) into a pure kernel; handlers tail-resumptive only; capabilities = static value tokens (attenuable/revocable/audited). Stateful verification → `OQ-Space`. | — (recorded in `30-surface/36`) |
 | **`OQ-8` child · SURF-1** | 2026-07-04 — **row-variable surface** `[e]`/`[E | e]` as an implicit param (effect polymorphism made surface-writable, statically closed at every instantiation; unblocks CAT-2) + **purity keywords** `const`/`fn`/`proc` (`view` retired; checked static-purity signal, bidirectional, mismatch a hard error; effect-polymorphic ≠ pure) + **Unicode surface** = lexer(both spellings, same token)+formatter(emits Unicode), keywords stay ASCII. Kernel-untouched. | — (recorded in `30-surface/36 §1.5`/`§1.6`, `31 §1c`/`§4`, `32`/`33 §1`) |
-| **OQ-Space** | 2026-06-27 — encapsulated non-aliased `space` cells → **bounded per-space Hoare, no separation logic**; **`old` scoped to space ops** (resolves `OQ-spec` deferral); **shared-nothing message-passing** (in-Ken), closure-free content-addressed transport; runtime realization → `40-runtime`; concurrent/temporal correctness **delegated to Ward**; FFI shared memory is the (unsafe) exception. | — (recorded in `30-surface/36 §4`); ADR when `40-runtime` settles |
+| **OQ-Space** | 2026-06-27; realization discharged 2026-07-26 — encapsulated non-aliased `space` cells → **bounded per-space Hoare, no separation logic**; **`old` scoped to space ops**; **no shared mutable authority** and immutable closure-free messages; copy/share, index/arena/reset, and reclamation realization private; concurrent/temporal correctness **delegated to Ward**; FFI shared memory is the unsafe exception. | — (recorded in `30-surface/36 §4`, `40-runtime/44 §1a`) |
 | **OQ-ifc** | 2026-06-27 — **lattice-parametric** non-interference (proved once, any lattice); **DLM** standard; static type-index labels + first-class **boundary** labels for data-derived classification (per-tenant), no full dynamic IFC; by-typing default; lattice supplied by policy. | — (recorded in `60-security/61`) |
 | **OQ-policy** | 2026-06-27 — **policy as code**: a mandatory, static, separately-authored security-policy surface **in Ken** (role separation, not a sibling); the lattice-parametric *instantiation*; non-weakenable; governance via supply-chain. | **ADR 0007** (recorded in `60-security/65`) |
 | **OQ-provenance** | 2026-06-27 — package = (source, artifact, .keni, proof-bundle, delta, provenance); consume = **re-check**; **keyless sigstore + in-toto/SLSA**; two ladders distinct; **+ policy attestation** (governing policy in provenance, monotone-compatible consume check). Impl deferred. | — (recorded in `60-security/63`) |
@@ -834,15 +848,15 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-discharge-attestation** | 2026-06-27 — post-build validation = a **signed, runtime-checkable discharge attestation**; a **deployment gate** enforces per-target-environment validation; policy-attestation ladder. **DECIDED (Sec6, 2026-07-01, ward `f33276b`):** Ken-visible field set ratified (`export.hash`/`.contractVersion`, `ward.version`, `obligations[].id`/`.field`/`.outcome`, `signature` — all B1-emitted); `Ward` policy + sampling **reclassified `Ward`-internal** (Ken classifies epistemic status, not mechanism); outcome four-way `discharged/bounded/monitored/failed` (`bounded-to-`k`` widened to `bounded`); I4 hard (no `outcome` → `proved`). | **DECIDED** (`60-security/63 §5a`) |
 | **OQ-conformance** | 2026-06-27 — **reframed to Ken's half**: Ken emits a **trace/instrumentation contract** (concrete `Σ`-event schema at the effect boundary + correlation/identity for multi-space + runtime `Q`/`P`/`T` monitors), making the running system observable in the model's vocabulary. Export = **broadcast contract** to a family of engines; runtime monitor likely a **distinct sidecar**. Gate/monitor/both + response = downstream policy. | **ADR 0006** (recorded in `70-behavioral/73`) |
 | **OQ-relational** | 2026-06-27 — by-proof relational = **re-checked unary obligations** (product programs; reflective embedding if ever first-class), **progress-sensitive** default, heavy machinery **deferred**. **Constant-time split out**: a distinct **opt-in `@ct` label** enforced **by typing** (taint to leakage-effect sinks; sound 2-safety enforcement, no product programs); timing guarantee **delegated to Ward** under a leakage model; policy may require `@ct` per data class. | — (recorded in `60-security/61 §5a`, `30-surface/36`, `64`, `65`) |
-| **OQ-eval-order** | 2026-06-27 — **CBV (strict) with sharing, strict by default**; totality makes eval-order meaning-preserving so pick the predictable order (cost model, reading order, no space leaks; precondition for `@ct`/bounds). Laziness only where required (branches/short-circuit) or by explicit **`Lazy a`** thunk. Distinct from kernel lazy-WHNF conversion. | — (recorded in `40-runtime/42`) |
+| **OQ-eval-order** | 2026-06-27 — **CBV (strict), strict by default**; totality makes eval-order meaning-preserving so pick the predictable order (cost model, reading order, no space leaks; precondition for `@ct`/bounds). Bindings evaluate once; physical sharing is private. Laziness only where required or by explicit **`Lazy a`** thunk. | — (recorded in `40-runtime/42`) |
 | **OQ-coinduction** | 2026-06-27 — **inductive/total core, deferred**: no coinductive types/productivity checker (TCB growth `OQ-temporal` declined). Infinitude routed away from the value layer (total ITree is finite; forever = per-message handler + runtime loop + Ward). Streaming via generators / `Lazy` (fuel-bounded) / the seam — finite-by-construction. Re-open → contained sized-types or reflective deep embedding. | — (recorded in `30-surface/37`, `40-runtime/43`) |
-| **OQ-7** | 2026-06-27, closure boundary revised 2026-07-26 — scalars **immediate**, closure-free canonical compounds **interned**, ordinary closures **runtime-local opaque** (no equality/canonical identity/persistence); small closure-free aggregate boundary is **X2 tuning**, not semantics. | — (recorded in `40-runtime/41`) |
-| **OQ-hash** | 2026-06-27 — **two hashes**: fast non-crypto + `memcmp` in-process; crypto/Merkle for serialization (`63`). Exact functions an X2 constant. | — (recorded in `40-runtime/41`) |
+| **OQ-7** | 2026-06-27, closure/storage boundary revised 2026-07-26 — closure-free canonical compounds have deterministic durable bytes; immediate/boxed/copied/shared/interned representation is private; ordinary closures **runtime-local opaque** (no equality/canonical identity/persistence). | — (recorded in `40-runtime/41`) |
+| **OQ-hash** | 2026-06-27, realization revised 2026-07-26 — crypto/Merkle hashing serves serialization/integrity; in-process hashing, collision strategy, probing, and identity are private and must not false-merge. | — (recorded in `40-runtime/41`) |
 | **OQ-5** | 2026-06-27 — **engineering-chosen capacity, no practical ceiling** (wide handles), **loud refusal** permanent; Leech number aesthetic. | — (recorded in `40-runtime/44`) |
 | **OQ-6** | 2026-06-27 — Leech/Golay/Co₀ machinery **out of the core**, optional research packages only, never the hot path — the lattice math kept out of the load-bearing runtime. | — (recorded in `40-runtime/44`) |
-| **OQ-gc** | 2026-06-27 — manual + region-scoped now; **automatic GC a deferred implementation detail** (semantics-invisible — addable later with no language fork). | — (recorded in `40-runtime/44`) |
-| **OQ-domain** | 2026-07-02 — **broad but bounded (asymmetric)**: lower bound systems-adjacent, *settled & substantiated* (managed content-heap is the right substrate, `44 §3`); upper bound application/edge/web/mobile *directional, not delivered* — an aspirational reach via native codegen, itself unexplored (`45`, `OQ-backend-target` OPEN). Verified software-engineering across the range, not bare-metal systems. | — (recorded in `40-runtime/44 §3`, `PRINCIPLES §I.1`) |
-| **OQ-witness** | 2026-06-27 — **process-level stats only** (extensional-safe `witness`); **never** per-value identity/provenance (referential transparency). | — (recorded in `40-runtime/41`) |
+| **OQ-gc** | 2026-06-27, realization revised 2026-07-26 — reclamation is private and semantics-invisible; regions, reset, GC, refcounting, compaction, or process-lifetime allocation are permitted with no language fork. | — (recorded in `40-runtime/44`) |
+| **OQ-domain** | 2026-07-02 — **broad but bounded (asymmetric)**: lower bound systems-adjacent, *settled & substantiated* (managed immutable values with semantics-invisible reclamation; copying, sharing, and storage are private, `44 §3`); upper bound application/edge/web/mobile *directional, not delivered* — an aspirational reach via native codegen, itself unexplored (`45`, `OQ-backend-target` OPEN). Verified software-engineering across the range, not bare-metal systems. | — (recorded in `40-runtime/44 §3`, `PRINCIPLES §I.1`) |
+| **OQ-witness** | 2026-06-27, realization revised 2026-07-26 — aggregate profile-specific stats MAY be exposed by an extensional-safe `witness`; **never** per-value identity/provenance/allocation order; no portable slot/dedup/arena field set. | — (recorded in `40-runtime/41`) |
 | **OQ-9** | 2026-06-27 — **tail-resumptive only; multishot excluded** (positive choice). Expressiveness subsumed (generators / search-as-data / seam / interaction-tree denotation); `call/cc` uniquely adds unpredictability + breaks single-consumption WP (single-shot *simplifies* proofs). Footnote only if an unsubsumable need appears. | — (recorded in `30-surface/36 §5`) |
 | **OQ-1a** | 2026-06-27 — fixed-width overflow **obligation-generating by default** (proven ⇒ total; unproven ⇒ runtime check, so "checked" subsumed); **wrapping explicit** (`+%`/`Wrapping[T]`) for intended-modular domains, never silent. | — (recorded in `30-surface/35 §3`, `40-runtime/43`) |
 | **OQ-coalgebra** | 2026-06-27 — **excluded from core** (same reasoning as `OQ-9`); pragmatic wins subsumed by `visits` + `space`, reactive concerns are Ward's; harvest any win as a package, no core layer. | — (recorded in register; `00-overview.md §5`) |

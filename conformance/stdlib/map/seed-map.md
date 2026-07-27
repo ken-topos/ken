@@ -73,7 +73,10 @@ ordered `toList`, out of `trusted_base()`). The superseded heap-`Map`/`Set`
 cases in `seed-collections.md` are reconciled to this model in the **same
 branch** (else the corpus self-contradicts the spec on merge — the
 internal-consistency gate); see that file's supersession note. There are **not
-two `Map`s**.
+two `Map`s**. Durable write/read round-trip preserves extensional Map/Set
+equality and ordered observations. Internal bytes, hashes, and deduplication
+outcomes are not observable under R2; this corpus compares neither byte
+equality nor inequality across insertion histories.
 
 ---
 

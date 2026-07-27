@@ -3,13 +3,13 @@
 > Status: **impl-ready (L3).** The data types a programmer reaches for daily:
 > `String`, `List`/`Array`/`Map`/`Set`, `Option`/`Result`, the core combinators,
 > and structural equality/ordering. These are **stdlib** (`../50-stdlib/`) over
-> the **landed** content-addressed value model (`../40-runtime/41-values.md`) and
+> the **landed** value model (`../40-runtime/41-values.md`) and
 > the **landed** L2 `data` machinery (`34-data-match.md`) — **no new kernel
 > rule**. This chapter fixes their *shape*, their lowering to `41`, and their
 > laws as propositions.
 >
 > **L3 scope (this WP).** §1 the decision (state inductively, do not coinduct);
-> §2 `String`; §3 the collection types + persistence/sharing; §4 combinators +
+> §2 `String`; §3 the collection types + persistence; §4 combinators +
 > laws; §5 infinitude without coinduction; §6 equality, ordering, and the
 > verified `sort`; §7 the no-coinduction structural absence; §8 level-discipline
 > + pinned-vs-deferred; §9 deliverables + acceptance. The **exact API spelling**
@@ -26,8 +26,8 @@
 ## 1. The decision: state collections inductively, do not coinduct
 
 Ken's collections core is **inductive and total**. `List` is an ordinary
-inductive `data` (`34 §1`); `Array`/`Map`/`Set` are abstract types over the
-content-addressed heap; every operation is a **terminating** function and every
+inductive `data` (`34 §1`); `Array`/`Map`/`Set` are abstract types; every
+operation is a **terminating** function and every
 law is an ordinary **proposition**. There is **no coinductive type, no `codata`,
 and no productivity/guardedness checker** (`OQ-coinduction` DECIDED — deferred;
 the dual of SCT and the declined `OQ-temporal` modal growth, `§7`).
@@ -43,23 +43,21 @@ language primitive.
 ## 2. Strings and text
 
 `String` is an immutable **UTF-8** text value and a **primitive type** (an
-opaque type constant, `../10-kernel/14 §5`); it is **content-addressed** like
-other canonical compound data (`41 §2`), so equal strings share one slot and
-equality is **O(1)** (`41 §4`). It is **not** `List Char` — that is a separate,
-convertible *view* (`§2.3`). The runtime representation is a **packed byte
-buffer**, NFC-normalized at construction (`41 §3a`, kind tag `0x04`).
+opaque type constant, `../10-kernel/14 §5`). It has deterministic durable
+canonical bytes (`41 §3a`) and extensional NFC-aware equality; its in-process
+storage is private. It is **not** `List Char` — that is a separate, convertible
+*view* (`§2.3`).
 
-### 2.1 NFC normalization is at the address, not just the surface
+### 2.1 NFC normalization is canonical, not representation-dependent
 
-A `String` is interned by the **canonical bytes of its NFC-normalized UTF-8**
-(`41 §3a`: "normalization is performed at construction time; the normalized form
-is stored"). Two consequences are normative and load-bearing:
+A `String`'s durable bytes are the **canonical bytes of its NFC-normalized
+UTF-8** (`41 §3a`). Two consequences are normative and load-bearing:
 
-- **O(1) equality is NFC-aware.** `s == t` is a slot-id comparison (`41 §4`);
-  because both were NFC-normalized before interning, two strings that are
-  canonically-equivalent under NFC **share a slot** and compare equal in O(1).
-  Equality is decided once, at intern time, never by re-traversal.
-- **`byte_length` is over the *stored* (normalized) bytes.** Length-in-bytes
+- **Equality is NFC-aware.** Two strings canonically equivalent under NFC
+  compare equal regardless of whether a runtime copies, shares, or interns
+  them. A runtime advertising `constant-time-equality` may optimize comparison
+  under `41 §4`; the result does not depend on that profile.
+- **`byte_length` is over the normalized bytes.** Length-in-bytes
   reports the NFC byte buffer's length, not the pre-normalization source. This
   is the only length a program can observe, and it is deterministic.
 
@@ -87,9 +85,9 @@ the literal method names are `(oracle)`-tagged (`§8`):
 | Conversion | Totality | Meaning |
 |---|---|---|
 | `String → List Char` | total | decode code points (the `char_length`-long view) |
-| `List Char → String` | total | encode UTF-8, **then NFC-normalize** + intern |
+| `List Char → String` | total | encode UTF-8, then NFC-normalize |
 | `String → Bytes` | total | the stored NFC UTF-8 buffer (`byte_length`-long) |
-| `Bytes → String` | **partial → `Result`** | validate UTF-8, NFC-normalize, intern |
+| `Bytes → String` | **partial → `Result`** | validate UTF-8, then NFC-normalize |
 
 `Bytes → String` is the one partial direction: arbitrary bytes need not be valid
 UTF-8, so it returns `Result DecodeError String` (`§6` uses `Result`, not a
@@ -305,17 +303,17 @@ longer required for new folds.
 
 | Type | Kind | Lowering | Equality |
 |---|---|---|---|
-| `List a` | transparent inductive `data` (L2) | `data List a = Nil \| Cons a (List a)` (`34 §1`) | structural, O(1) (`41 §4`) |
-| `Array a` | abstract (persistent index tree) | content-addressed, kind `0x06` (`41 §3a`) | structural, O(1) |
+| `List a` | transparent inductive `data` (L2) | `data List a = Nil \| Cons a (List a)` (`34 §1`) | structural |
+| `Array a` | abstract persistent sequence | durable tag `0x06` (`41 §3a`); runtime representation private | structural |
 | `Map k v` | proved package (`Ord k`-keyed) | ordered BST `data Tree k v` over `Ord k` (`50-stdlib/52`) | extensional, via ordered `to_list` |
 | `Set a` | proved package (`Ord a`-keyed) | `Map a Unit` (`50-stdlib/52`) | extensional, via ordered `to_list` |
-| `Option a` | transparent inductive `data` (L2) | `data Option a = None \| Some a` (`34 §1`) | structural, O(1) |
-| `Result e a` | transparent inductive `data` (L2) | `data Result e a = Err e \| Ok a` (`34 §1`) | structural, O(1) |
+| `Option a` | transparent inductive `data` (L2) | `data Option a = None \| Some a` (`34 §1`) | structural |
+| `Result e a` | transparent inductive `data` (L2) | `data Result e a = Err e \| Ok a` (`34 §1`) | structural |
 
-All core collections are **immutable and persistent**: an "update" allocates the
-changed spine and **shares** the unchanged rest (`41 §2`, append-mostly heap).
-Mutation, where genuinely needed, lives only in a `space` (`36 §4`), never in a
-collection value.
+All core collections are **immutable and persistent**: an "update" returns a
+new value and leaves the input unchanged. Copying, structural sharing, and
+allocation are private runtime choices (`41 §2`). Mutation, where genuinely
+needed, lives only in a `space` (`36 §4`), never in a collection value.
 
 ### 3.1 `List` — the transparent inductive (canonical for proofs)
 
@@ -330,20 +328,15 @@ here, not re-declared.)
 
 `Array a` is an **abstract type** (`33 §4` module abstraction): an opaque
 carrier plus a lawful interface (`get`, `set`, `push`, `length`,
-`from_list`/`to_list`). The carrier is a **persistent index tree** (a chunked /
-radix-balanced tree), each node content-addressed (`41 §3a`, kind `0x06`). This
-reconciles the two requirements the frame pins together — they are in tension
-for a flat buffer:
+`from_list`/`to_list`). It is persistent: update returns a new array while the
+old array remains unchanged. Its runtime representation is private.
 
-- **Effectively-constant index.** Index is a bounded-depth tree descent
-  (`O(log_b n)` for a large branching factor `b` — the persistent-vector
-  standard), reported as "O(1)" at the interface; a flat `O(1)`-index buffer
-  **cannot** also share structure on update, so the tree is the honest
-  reconciliation, not a literal `O(1)` claim (honesty-about-the-boundary).
-- **Structural sharing on update.** `set i x` allocates only the path from the
-  root to the changed chunk and **shares** every other node (`41 §2`); the
-  result is a new value O(1)-comparable to siblings via slot-id. The unchanged
-  subtrees are *the same slots*.
+- **Index profile.** An implementation may advertise an index-complexity
+  profile; no branching factor, tree shape, or flat-buffer representation is
+  semantic.
+- **Persistent update.** `set i x` preserves every element except index `i`,
+  leaves the source array unchanged, and returns the updated value. Physical
+  structural sharing is permitted but not observable.
 
 `Array` is **abstract**, so it is consumed through its interface, never by
 `match` on its internal tree; the exact branching factor / representation
@@ -372,23 +365,19 @@ pure + zero-TCB* over the runtime-O(1) heap form:
   `Ord.antisym → Equal` step used for overwrite carries **ADR 0010's
   canonical-carrier requirement** (sound for `Int`/`Char`/`Bool`, `50-stdlib/52
   §2.1`).
-- **Identity is extensional, not insertion-order-canonical.** A program-level
-  tree is not interned by byte-order, so two maps are equal via their ordered
-  `to_list`, not by O(1) slot-id (`50-stdlib/52 §5.3`). The insertion-order-
-  independent content-addressed heap form is **parked** as a possible later
-  fast-map (the "HAMT-later" analog, `§3.2`), also proved if it lands.
+- **Identity is extensional, not representational.** Two maps are equal via
+  their ordered `to_list` (`50-stdlib/52 §5.3`), regardless of insertion
+  history or private tree/storage representation.
 
 `Set a` is **`Map a Unit`** (`50-stdlib/52 §4.4`).
 
-### 3.4 Persistence and sharing (the runtime contract)
+### 3.4 Persistence is observable; sharing is private
 
-Persistence is **not** a per-collection reimplementation: it is the content-
-addressed heap's append-mostly immutability (`41 §2`). "Updating" any collection
-allocates the changed spine and shares the rest; the shared sub-structures are
-the **same slots**, so sharing is observable as slot-id equality (the
-conformance asserts the *sharing*, `41`-style, not merely a correct result —
-AC2). Mutable cells exist only in a `space` (`36 §4`) and are explicitly
-**not** content-addressed.
+Updating a collection returns a new value and leaves the source unchanged.
+Implementations may share unchanged substructure, copy it, or use another
+private representation. Conformance asserts the old and new values and their
+elements, never pointer or slot identity. Mutable cells exist only in a
+`space` (`36 §4`).
 
 ## 4. Iteration and combinators (laws as propositions)
 
@@ -572,8 +561,7 @@ productivity checker (`§7`).
 
 ## 6. Equality, ordering, and the verified `sort`
 
-**Equality** is structural and content-addressed by default (`41 §4`): on heap
-values `a == b` is a slot-id comparison (O(1)); `DecEq` (`33 §5`) makes it
+**Equality** is structural and extensional (`41 §4`); `DecEq` (`33 §5`) makes it
 usable in constraints (its `eq` returns `Bool` with the `ok` law tying it to the
 kernel's `Eq`); `Eq` (observational equality, `15`/`16`) is the propositional
 version proofs use. `DecEq` is a **structure class** (`33 §5`): genuinely many
@@ -726,14 +714,14 @@ with its level, and none adds a universe computation:
   `List a` at its level; the predicate is `Ω`-valued (`12 §5`/`16 §1`),
   discharged as a V3 obligation, **no** universe bump (`34 §5`/§7).
 
-**Pinned here (do not reopen).** `String` = content-addressed NFC UTF-8
+**Pinned here (do not reopen).** `String` = canonically encoded NFC UTF-8
 primitive (not `List Char`); byte-length ≠ char-length; the four
 convertible-view totalities (`§2.3`); collections immutable + persistent with
-observable sharing; `List`/`Option`/`Result` transparent inductive,
-`Array`/`Map`/`Set` abstract; `DecEq` for membership / `Ord` for order; the
-combinator law set (`§4`); the fuel-bounded unfold as the buildable-now
-infinitude demonstration; `sort`'s **`is_sorted ∧ Perm`** refinement; the
-no-coinduction absence; the L-classes staging boundary.
+extensional observations; `List`/`Option`/`Result` transparent inductive,
+`Array` abstract; `Map`/`Set` proved `Ord`-keyed package trees; the combinator
+law set (`§4`); the fuel-bounded unfold as the buildable-now infinitude
+demonstration; `sort`'s **`is_sorted ∧ Perm`** refinement; the no-coinduction
+absence; the L-classes staging boundary.
 
 **K3-deferred kernel/TCB gap (not an API deferral).** Registered
 `PrimReduction::Op` computations are opaque to kernel conversion today (§2.4).
@@ -746,17 +734,17 @@ definitionally reduce. This chapter does not anticipate that decision with
 exact **method names** other than the landed primitive-core names
 (`byte_length`, `char_length`, `string_to_list_char`, and
 `list_char_to_string`) — for example `get` vs `index`; the
-**`Array`/`Map`/`Set` internal representation** (RRB-tree / HAMT / bitmap,
-branching factor — `41 §5` tiny-aggregate tuning is X2); whether `Set a` is
-literally `Map a Unit`; the `DecodeError` payload of `Bytes → String`; the
-comprehension/`for` surface (`OQ-syntax`). These are spelling/representation
-choices the laws and equality are invariant under.
+**`Array` internal representation**; whether the proved package spells `Set a`
+as `Map a Unit`; the `DecodeError` payload of `Bytes → String`; the
+comprehension/`for` surface (`OQ-syntax`). These are spelling or private
+representation choices the laws and equality are invariant under; the proved
+`Map`/`Set` contract itself lives in `50-stdlib/52`.
 
 ## 9. What WS-L must deliver here (L3, → L8) and acceptance
 
 Deliver in the surface/elaborator + prelude (lowering to the landed `41`): UTF-8
 `String` (byte/char views, the four conversions, `Char`); `List` (L2 `data`),
-`Array` (persistent index tree), `Option`/`Result` (L2); the
+`Array` (persistent abstract carrier), `Option`/`Result` (L2); the
 `map`/`filter`/`fold`/`zip` combinators with their laws as
 propositions; the fuel-bounded-unfold infinitude idiom; structural equality +
 `DecEq`/`Ord` (built-in instances now); and the verified `sort`. L8 extends this
@@ -764,15 +752,15 @@ to the full lawful stdlib; L3 **unblocks T3** (the test/property framework).
 
 **Testable acceptance criteria.**
 
-- **AC1 (`String` UTF-8 primitive, structural).** A `String` is
-  content-addressed (NFC-equal strings O(1)-equal, **same slot**) and
-  `byte_length ≠ char_length` on a multi-byte string (assert **both** runtime
-  view values, not "compiles" and not a `Refl` proof); `String` is **not**
-  `List Char` (the convertible view is a separate value).
+- **AC1 (`String` UTF-8 primitive, structural).** NFC-equivalent strings have
+  identical durable canonical bytes and compare equal regardless of runtime
+  representation. `byte_length ≠ char_length` on a multi-byte string (assert
+  **both** runtime view values, not "compiles" and not a `Refl` proof);
+  `String` is **not** `List Char` (the convertible view is a separate value).
 - **AC2 (persistent collections, structural).** `List` pattern-matches (real
-  `elim_List`, `34`); an `Array`/`Map` update **returns a new value sharing the
-  unchanged structure** — assert the **sharing** (shared sub-structure = same
-  slot-id), not merely a correct result.
+  `elim_List`, `34`); an `Array`/`Map` update returns a new value with the
+  requested element changed, every other element preserved, and the source
+  value unchanged. Do not assert a physical sharing strategy.
 - **AC3 (lawful combinators, structural).** A functor/fold law (`map_id`, or
   `lookup_insert` for `Map`) is **provable as a proposition** — observe the
   **emitted obligation**, not "it type-checks"; the cross-declaration reference
@@ -782,10 +770,9 @@ to the full lawful stdlib; L3 **unblocks T3** (the test/property framework).
   net, pinned by construct + the three named homonyms), **AND** a working
   **fuel-bounded `unfoldUpTo … n`** produces a finite `List` prefix —
   infinitude with no coinductive value, on landed L2 only.
-- **AC5 (structural equality + `DecEq`, verdict flip).** Structurally-equal
-  collections are O(1)-comparable (content-addressed, same slot); a `Map`/`Set`
-  with a key type that **has** `DecEq` accepts, while one **lacking** `DecEq`
-  **rejects** naming the missing instance — the verdict flips.
+- **AC5 (structural equality).** Structurally equal collections compare equal
+  independently of runtime representation. The proved `Map`/`Set` carrier is
+  keyed by lawful `Ord`; its accept/reject coverage lives in `50-stdlib/52`.
 - **AC6 (the verified example, structural).** `sort` (threading the explicit
   `leq : a → a → Bool`) produces `{ ys | is_sorted leq ys ∧ Perm ys xs }` — the
   **conjoined** refinement obligation is **emitted** and dischargeable; assert
@@ -822,8 +809,8 @@ impl-ready).** The floor + 5 string ops, mapping the WP frame's AC1–AC7:
   `String` is NFC-normalized at construction (`§2.1`, a deferred behavior —
   currently stubbed), so once real NFC lands the two literals merge to one value
   and `eq` on them is **`True`**; a literal-level pin would falsely fail then
-  (the over-pin-a-deferred-behavior trap). Under real NFC the content-addressed
-  `==` and codepoint-wise `eq` **agree** on `String` values.
+  (the over-pin-a-deferred-behavior trap). Under real NFC, extensional `==` and
+  codepoint-wise `eq` **agree** on `String` values.
 - **DS-AC6 (name hygiene).** `list_append` does not shadow the `Bytes` `append`
   (`§4.1`); both resolve to their intended op.
 - **DS-AC7 (round-trip / totality).** `concat`+`slice` compose sanely at runtime
@@ -842,13 +829,12 @@ a non-empty byte buffer, and adds no consumer `Axiom` or cached-`Nat` carrier.
 
 **Conformance:** `../../conformance/surface/collections/` — UTF-8
 byte/char-length edge cases + the `Bytes → String` partial decode;
-persistent-update **sharing** (slot-id); the combinator laws + `Map`
+persistent-update source preservation; the combinator laws + `Map`
 lookup/insert; the verified `sort` with the **`is_sorted ∧ Perm`** obligation;
 the no-coinduction structural absence + the working `unfoldUpTo`; the
-`DecEq`-key verdict flip. Per-case verdict/structural-flip **and** the
-cross-case sweep: every collection's equality maps to the content-addressed
-slot-id story (`41 §4`); the `DecEq`-membership vs `Ord`-order split is
-consistent across `Map` and `Set`.
+proved Map's lawful-`Ord` key boundary. Per-case verdict/structural-flip
+**and** the cross-case sweep: every collection's equality is extensional and
+independent of runtime representation (`41 §4`).
 
 **QA gate (new-surface WP):** **producer-grep** the `String`/`Array`/`Map`/`Set`
 **registration** in `ken-elaborator/src/` (and the `String` primitive in the

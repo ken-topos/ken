@@ -98,7 +98,7 @@ global environment `Σ` (written `env`) and a local context `Γ` (written `ctx`)
 
 The pseudocode below is the **normative contract** for the observable yes/no.
 Where it fixes a step that affects only *performance* (the exact δ-unfold
-heuristic, memoization, the content-hash fast path), that step is
+heuristic, memoization, a private equality-certificate fast path), that step is
 **non-normative** and flagged as such — an implementation MAY choose differently
 as long as the decided equality is unchanged.
 
@@ -339,8 +339,9 @@ changes *when* the work is done, never the yes/no. (This reconciles the two
 
 **(perf, non-normative).** *Which* side to unfold first when both heads are
 transparent, and how far, is a performance heuristic (Lean uses definitional
-height; an implementation MAY memoize, or take the §3.9 content-hash fast path
-first). The observable result is fixed by completeness for definitional
+height; an implementation MAY memoize, or take a §3.9 private
+equality-certificate fast path first). The observable result is fixed by
+completeness for definitional
 equality; the heuristic is **(oracle)** only in the sense that the reference
 interpreter fixes a concrete order — it can never change a
 convertible/not-convertible verdict.
@@ -412,14 +413,13 @@ reflective prover (`../20-verification/23 §3`) relies on closed terms computing
 
 ### 3.9 Fast paths (non-normative, for performance)
 
-For closed canonical data admitted to the content-addressed store
-(`../40-runtime/41-values.md`), two terms with the same canonical content hash
-are equal — an O(1) shortcut conversion MAY take before structural comparison.
-Ordinary closures and closure-containing graphs have no content hash and MUST
-NOT enter this fast path (`41 §2.1`). Memoizing whnf and sharing canonical data
-via the heap make repeated conversions cheap. These are optimizations and are
-explicitly **out of the decidability-critical TCB** (frame: the content-hash
-fast path is non-normative); they must never report unequal terms equal or vice
+An implementation MAY memoize WHNF or use a runtime-local equality certificate
+for closed canonical data (`../40-runtime/41-values.md`) before structural
+comparison. No particular hash, slot, interning policy, or sharing strategy is
+required. Ordinary closures and closure-containing graphs MUST NOT acquire
+structural equality, canonical identity, or a persistent identity through such
+a fast path (`41 §2.1`). These optimizations are explicitly **out of the
+decidability-critical TCB**; they must never report unequal terms equal or vice
 versa.
 
 ## 4. Termination of conversion — the SCT gate

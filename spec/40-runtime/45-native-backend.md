@@ -102,18 +102,17 @@ without the model changing.
 > (`../10-kernel/13`, `14`) and preserves the interpreter's **observable value**
 > (`42 §2`). The pieces:
 >
-> - **Value representation follows the K3 model** (`41`, `OQ-7`): scalars
->   (`Int`/`Bool`/`Float`) are **unboxed typed immediates**; closure-free
->   canonical compound data uses **content-addressed heap slots** (interned, so
->   structural equality is O(1) slot-id comparison); ordinary closures and
->   graphs containing them are runtime-local opaque values (`41 §2.1`). The
->   backend shares this observable value boundary with the interpreter but is
->   free to choose an unobservable internal closure representation.
+> - **Value representation follows the K3 model** (`41`, `OQ-7`): scalars may
+>   use **unboxed typed immediates**; closure-free canonical compounds have
+>   extensional equality and deterministic bytes at durable boundaries;
+>   ordinary closures and graphs containing them are runtime-local opaque
+>   values (`41 §2.1`). The backend shares this observable boundary with the
+>   interpreter but is free to choose all unobservable storage and closure
+>   representations.
 > - **Functions lower to ordinary closures** — application is
 >   **call-by-value, strict, left-to-right** (`42 §2`, `OQ-eval-order`).
->   Equal subcomputations deduplicate only when their result is
->   content-addressable canonical data. No closure identity, equality, hash, or
->   persistence is observable.
+>   A binding evaluates once; physical deduplication of equal values is private.
+>   No closure identity, equality, hash, or persistence is observable.
 > - **Primitives lower to the audited runtime semantics** (`14 §5`, `18a`):
 >   each `Decl::Primitive` operation computes the value its registered
 >   interpreter dispatch defines — the backend must compute the **same** partial
@@ -149,8 +148,8 @@ every divergence from the oracle is a **loud, catchable** failure.
 > **Contract BE-Differential (`AC2`).** For any closed core term `t` whose
 > result is a **closure-free comparable ground observation** (canonical data or
 > a comparable immediate), evaluating `t` through the interpreter and through
-> the native backend must produce **identical K3 values** (content-addressed
-> model, `41 §4`: same slot for canonical data / same immediate). On any
+> the native backend must produce **extensionally equal K3 values** under
+> `41 §4`. On any
 > disagreement, **the interpreter is right by definition** (`42 §5`); the
 > backend is the defect. The backend earns trust by agreement over the corpus,
 > not by inspection.
@@ -231,11 +230,10 @@ return; the build gate below stands until then.
 
 ## 6. Capacity and limits — cross-reference, not re-specified
 
-Native execution runs against the **same content store** the interpreter does
-(`41`, `44`): the content-addressed append-mostly heap, the
-capacity-is-an-engineering-choice posture with **loud refusal** at the ceiling
-(`44 §2`, `OQ-5`), and the reclamation model (`44 §3`). The backend **inherits**
-these bounds; it does not define its own.
+Native execution obeys the same value and capacity contracts as the interpreter
+(`41`, `44`): extensional values, durable canonical bytes where admitted,
+**loud refusal** for declared limits (`44 §2`, `OQ-5`), and
+semantics-invisible reclamation (`44 §3`). It may use a different private store.
 
 > **Contract BE-Capacity (`AC5`).** The backend's resource story is `44`'s
 > capacity model and `X4`'s scale/limits validation (`44 §5`) —
@@ -249,7 +247,7 @@ these bounds; it does not define its own.
 Once `OQ-backend-target` is ratified, `X3-build` (Team Runtime) delivers:
 
 - **`ken-codegen`** — the backend lowering the model of §3 to the **ratified**
-  target: value representation (K3 immediates + interned slots),
+  target: value representation (typed values with private storage),
   runtime-local opaque closures with CBV application, the audited primitives,
   constructor-dispatch
   eliminators, proof erasure.

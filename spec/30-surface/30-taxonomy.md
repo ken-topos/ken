@@ -180,7 +180,12 @@ coincide.
   `data` + `view` defs, re-checked, out of `trusted_base()`** — the opaque
   `Map`/`Set` primitive is **retired**, shrinking `trusted_base()` (a
   net-negative delta; "proved" *requires* a transparent carrier, since an opaque
-  primitive has no eliminator and its laws could only be `Axiom`). The
+  primitive has no eliminator and its laws could only be `Axiom`). The ordinary
+  transport boundary preserves extensional equality and ordered `to_list`
+  through round-trip. Internal bytes, hashes, and deduplication outcomes are
+  not observable. This runtime specification defines no Map-specific codec; a
+  future portable serialization would be a separate ordinary-package Ken WP,
+  out of `trusted_base()`. The
   content-addressed heap form is **parked** as a possible later fast-map
   (the "HAMT-later" analog, `37 §3.2`), proved if it lands. (The item-2/item-3
   audited-vs-assumed accounting distinction below still governs the entries that

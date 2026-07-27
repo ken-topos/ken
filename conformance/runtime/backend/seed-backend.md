@@ -41,14 +41,15 @@ so no case names or assumes a target.
 
 **The observable is a closure-free comparable ground observation; the
 unobservable is strategy and representation (`42 §2`, `45 §4`).** Canonical
-data is compared by value/slot and comparable immediates natively. If a result
+data is compared extensionally and comparable scalars by their declared
+operation. If a result
 contains a callable at any depth, the harness selects well-typed
 projections/applications and compares only the closure-free observations they
 produce. What a backend is free to differ in (relative to the interpreter, or
 the kernel's WHNF) is
 **strategy and internal representation**: reduction/evaluation order
-(meaning-preserving in the total core, `42 §2`), closure encoding, how sharing
-is realized on the heap — the **unobservable internals**. The `42 §2` rule is
+(meaning-preserving in the total core, `42 §2`), closure encoding, and storage
+or sharing policy — the **unobservable internals**. The `42 §2` rule is
 exact: layers may differ internally but must agree on closure-free comparable
 ground observations, directly or through selected probes. So the corpus's
 discriminating boundary (§BD2) is **observation divergence rejects / an
@@ -87,8 +88,9 @@ cases pin the **discipline**; the runs are the build ring's.
   `elim`, or an observational `Eq`/`cast` computation), run through **both**
   the reference interpreter and the native backend
 - expect: the two produce the **identical observation**: equal comparable
-  immediates, or the same canonical data value/slot (`41`). On disagreement
-  the interpreter is right by definition — the backend is wrong.
+  scalars or the same extensional canonical-data value (`41`). At a durable
+  boundary their canonical bytes also agree. On disagreement the interpreter
+  is right by definition — the backend is wrong.
 - why: (oracle) BD1, the differential-agreement rule (`42 §5`). The backend
   earns trust by **agreement over the corpus**, not by inspection. The
   interpreter half is landed (`crates/ken-interp`); the **backend half is
@@ -199,9 +201,9 @@ cases pin the **discipline**; the runs are the build ring's.
 ### runtime/backend/backend-inherits-capacity-bounds (cross-ref)
 - spec: `45 §6` (BE-Capacity), `44` (capacity), WP `X4` (scale/limits)
 - given: native execution of a term that approaches the `44` capacity bounds
-- expect: the backend **inherits** `44`'s capacity model (the store bounds,
-  the loud at-limit failure) — its resource story is `44` + X4's, **not** a
-  backend-local mechanism
+- expect: the backend **inherits** `44`'s capacity model (declared resource
+  bounds and loud at-limit failure) — its resource story is `44` + X4's,
+  **not** a backend-local mechanism
 - why: (cross-ref, contract-posture) BD5. Native execution does not get a
   separate capacity model; it rides `44` (`../capacity/seed-capacity.md`) and
   the backend-specific scale/limits are **X4's lane**. Cross-link only — this
@@ -252,10 +254,11 @@ cases pin the **discipline**; the runs are the build ring's.
   **X1's** (`../evaluation/seed-evaluation.md`, CAN1/CAN2). This seed drives
   the interpreter as the **oracle** the backend validates against; it does
   **not** re-pin the interpreter's own correctness.
-- **The K3 value model, canonical-data content addressing/O(1) equality, and
+- **The K3 value model, durable canonical bytes, extensional equality, and
   closure opacity** are the **runtime's** (`../seed-runtime.md`, `../values/`,
   `../../` `41`). This seed consumes that observable boundary for the
-  differential; the value model is X1/runtime's home.
+  differential; private in-process representation and any optional performance
+  profile remain outside this seed.
 - **The capacity model** is **`44`/X4's** (`../capacity/seed-capacity.md`).
   BD5 cross-refs it; it is not re-pinned.
 - **The codegen lowering model + the backend target** are **`/spec §45`'s**

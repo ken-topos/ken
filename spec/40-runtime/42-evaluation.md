@@ -69,15 +69,15 @@ purely **operational** choice (space, time, legibility), **not** semantics —
 unlike a partial language, where laziness is observable. That frees the choice
 to favor predictability.
 
-**Decision (operator, 2026-06-27): call-by-value (strict) with sharing, strict
-by default, lazy only where required or annotated.**
+**Decision (operator, 2026-06-27; storage realization revised by
+`SPEC-STORE-SPLIT`): call-by-value (strict), strict by default, lazy only where
+required or annotated.**
 
 - **Strict CBV is the default** — application arguments, `let` bindings,
   constructor arguments, and pair components are evaluated **eagerly,
-  left-to-right**; content-addressable results are shared via the heap (`41`),
-  so equal canonical-data subcomputations are deduplicated (CBV's
-  predictability + the store's space efficiency, no recomputation). Ordinary
-  closures and graphs containing them remain runtime-local (`41 §2.1`).
+  left-to-right**. A bound result is evaluated once and reused; whether equal
+  values also share physical storage is private (`41`, `44`). Ordinary closures
+  and graphs containing them remain runtime-local (`41 §2.1`).
   Chosen because, the choice being meaning-preserving, strict is the most
   **legible and predictable**: a cost model you can reason about, an order that
   matches how the code reads, and no thunk/space-leak footguns.
@@ -103,7 +103,7 @@ by default, lazy only where required or annotated.**
   frame), tracked separately from effect evaluation (§6).
 - **Distinct from the kernel's conversion (`OQ-eval-strategy`).** The kernel
   decides definitional equality by **lazy WHNF** (`§1`, `17`); the *runtime*
-  executes **CBV-with-sharing**. Different layers, allowed to differ — as Lean's
+  executes **CBV**. Different layers, allowed to differ — as Lean's
   kernel reduces lazily for defeq while compiled code runs strictly. The two
   agree on **closure-free comparable ground observations**: directly for a
   closure-free result, and through selected well-typed
@@ -126,23 +126,25 @@ that realizes it (`§5`).
 A **value** `v` (the inhabitants of `41`'s model):
 
 ```
-v ::= n                          -- scalar immediate: Int word, Bool, Char, Float, Decimal (41 §1)
+v ::= n                          -- typed scalar: Int, Bool, Char, Float, Decimal (41 §1)
     | cₖ v̄                        -- constructor application, saturated (data)
     | (v₁ , v₂)                   -- pair (Σ); a record is a right-nested pair (13 §3)
     | ⟨ λ(x:A).t ; ρ ⟩            -- ordinary closure: runtime-local and opaque (41 §2.1)
     | Type ℓ | (x:A)→B | (x:A)×B  -- type values (types ARE values; canonical type formers)
-    | str | bytes | array | map | set   -- collection values (heap, 41 §2)
+    | str | bytes | array | map | set   -- collection values (41 §2)
     | unknown                     -- the open-hole residue (41 §6, §4)
     | ⟨neutral⟩                   -- a stuck head + value spine; closed ground pure terms never reach this (§3.6)
 ```
 
 An **environment** `ρ` maps de Bruijn indices to values (`ρ(i)`), a persistent
 vector extended on each binder. `eval : Env → Term → Value`, `apply : Value →
-Value → Value`. Every closure-free canonical compound (`cₖ v̄`, pair,
-collection, bignum) is interned on construction via the `41 §3b` algorithm,
-yielding a slot id; equal content ⇒ same slot ⇒ dedup (§3.4). An ordinary
-closure, or an aggregate containing one, is constructed as a runtime-local
-value and never reaches that interner (`41 §2.1`).
+Value → Value`. Every closure-free durably canonicalizable compound (`cₖ v̄`,
+pair, `String`, `Bytes`, `Array`, bignum) has the extensional value and canonical
+encoding specified by `41`. Proved `Map`/`Set` package trees instead have the
+extensional equality, ordered `to_list`, and durable round-trip specified by
+`41 §3a`; their internal bytes are not observable. In-process representation
+is private. An ordinary closure, or an aggregate containing one, is a
+runtime-local value (`41 §2.1`).
 
 ### 3.2 `eval` / `apply`
 
@@ -168,10 +170,11 @@ apply ⟨neutral n⟩       u = ⟨neutral (n · u)⟩                      -- s
 apply unknown           u = unknown                                -- strict (§4)
 ```
 
-`construct` does not prescribe an allocation strategy. It interns a
-closure-free canonical graph as required by `41 §2–§3`; if any reachable value
-is an ordinary closure, it constructs a runtime-local graph and MUST NOT submit
-that graph to canonicalization or persistence.
+`construct` does not prescribe an allocation strategy. It constructs the
+extensional value; a closure-free canonical graph acquires bytes only when
+admitted to a durable boundary under `41 §2–§3`. If any reachable value is an
+ordinary closure, the graph remains runtime-local and durable publication
+rejects it before bytes exist.
 
 ### 3.3 Per-form reduction (reconciled with `17 §1`)
 
@@ -227,26 +230,23 @@ that graph to canonicalization or persistence.
     from `16` + the conformance oracle at build time, never from prototype
     source.)*
 
-### 3.4 Sharing and dedup (where the heap is consulted)
-
-Two distinct sharings, only one of which requires the content-addressed heap:
+### 3.4 Evaluation reuse and private representation
 
 - **Evaluation sharing** — a `let`/argument value is computed **once** and bound
   in the env (§3.2); every use reads the bound value. No recomputation (CBV +
   binding).
-- **Representation sharing (dedup)** — every closure-free canonical compound
-  is interned at construction (`41 §3b`): equal canonical content ⇒ the **same
-  slot id** ⇒ stored once. Two subcomputations that produce structurally-equal
-  canonical data resolve to the **same heap entry**. Ordinary closures and
-  closure-containing graphs have no canonical representative or slot identity
-  (`41 §2.1`).
+- **Representation sharing** — a runtime MAY deduplicate equal closure-free
+  values, share persistent substructure, or keep distinct representations.
+  These strategies are private and MUST NOT change extensional equality,
+  capacity-failure semantics, or evaluation results. For values in the durably
+  canonicalizable domain, they also MUST NOT change canonical bytes. For proved
+  `Map`/`Set` package trees, only extensional equality, ordered `to_list`, and
+  durable round-trip are observed; internal bytes are not (`41 §2`, `41 §3a`,
+  `44 §1`).
 
-Consequently **structural equality of content-addressed data is O(1)** — a
-slot-id comparison (`41 §4`), not a deep traversal (the traversal happened
-once, at intern time). The conformance corpus asserts **dedup** for canonical
-data (equal subcomputations share a slot), not merely value-equality (§3.7,
-AC2) — a recompute-without-dedup bug yields an equal value at a *different*
-slot, which the slot assertion catches. It does not compare closure slots.
+The conformance corpus asserts evaluation-once for bindings and equal
+observations for equal subcomputations. It does not assert slot identity,
+physical deduplication, allocation counts, or closure representation.
 
 ### 3.5 WHNF vs full value (the boundary)
 
@@ -303,18 +303,18 @@ since the pure fragment is otherwise total.
 ### 3.7 Determinism (testable)
 
 **Determinism.** Evaluation of a closed term is a **function**. A closure-free
-comparable ground result yields the same observation, and content-addressed
-compound data yields the **same slot id**. A result containing a callable at any
-depth is compared only through selected well-typed projections/applications
-that yield closure-free comparable ground observations, never through closure
-identity or representation (`41 §2.1`). This holds because reduction is
-confluent (`17 §1`) and CBV fixes the order; totality makes any order preserve
-the same observations (§2), and interning makes the canonical-data
-representative stable (§3.4). Determinism is what makes the interpreter a
-usable **oracle** (§5). The discriminating conformance case (AC2) must **flip**
-for canonical data: a correct shared evaluation (equal subterms → one slot)
-versus a recompute-divergence (equal value at two slots) — assert the slot
-identity, not just value equality, or the case passes vacuously.
+comparable ground result yields the same extensional observation. A result
+containing a callable at any depth is compared only through selected well-typed
+projections/applications that yield closure-free comparable ground
+observations, never through closure identity or representation (`41 §2.1`).
+This holds because reduction is confluent (`17 §1`) and CBV fixes the order;
+totality makes any order preserve the same observations (§2). Determinism is
+what makes the interpreter a usable **oracle** (§5). The discriminating
+conformance case (AC2) compares the full closure-free observable value. At a
+durable boundary it also compares canonical bytes when the result is in the
+durably canonicalizable domain. For proved `Map`/`Set` package trees it compares
+extensional equality, ordered `to_list`, and durable round-trip, never internal
+bytes. It deliberately ignores private sharing and allocation identity.
 
 ## 4. `unknown` propagation
 
@@ -401,8 +401,8 @@ interaction, because their handler is itself an `elim_ITree` fold (`36 §5`):
   through the tree and reduces to `(r, s_final) : R × S` (§3.3 ι). A program
   whose only effect is its `space` runs **entirely in pure §3** — no driver. The
   runtime *may* realize the fold with a real identity-bearing mutable cell (not
-  content-addressed, `41 §2`) as an operational strategy (the §3 latitude),
-  provided the result agrees with `run_state`.
+  a durably canonical value, `41 §2`) as an operational strategy (the §3
+  latitude), provided the result agrees with `run_state`.
 - any **user handler** `handle ret ops` (`36 §5.1`) that discharges an effect
   `E` into another tree.
 
@@ -632,7 +632,7 @@ A reference interpreter that evaluates **closed core terms to values** realizing
 the kernel's shared reductions (`§1`, `§3.3`) plus audited, interpreter-only
 primitive operations, **deterministically** (§3.7) and with **canonicity** for
 closed ground programs (§3.6), observed under the closure-free/probe boundary;
-**CBV with sharing** via the content-addressed heap (§2, §3.4) with
+**CBV with evaluation-once binding reuse** (§2, §3.4) with
 **branch-lazy** eliminators (§2); **`unknown` propagation** (§4); and the
 **oracle** role for later backends (§5). It runs the **G1** vertical slice
 end-to-end (V0 elaborates surface → core, X1 runs the core); effect evaluation —
@@ -644,10 +644,10 @@ primitive-value and conformance oracles.
 
 Conformance: `../../conformance/runtime/evaluation/` — canonicity of closed
 inductive/observational computations (constructor form; `cast`-refl → `a`;
-`Eq`-by-type; quotient elim), determinism + **dedup** for closure-free canonical
-data (same term → same value at the same slot), callable-bearing results by
+`Eq`-by-type; quotient elim), deterministic extensional observations for
+closure-free canonical data, callable-bearing results by
 selected closure-free ground observations, short-circuit / branch laziness
 (untaken arm not forced), and `unknown` propagation (hole-present flips to
 `unknown`, hole-free never does). Each discriminating case **flips** on its
-targeted bug or asserts a structural output (slot identity, constructor head),
+targeted bug or asserts a structural output (constructor head or durable bytes),
 per COORDINATION §7.

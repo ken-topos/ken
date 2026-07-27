@@ -36,8 +36,8 @@ the `conformance-oracle-grounding-fallback` discipline):** `14 §5` (`Bytes` is
 named a primitive type; opaque constant, trusted/audited — `18 §5`; checked
 `Bytes` literals are `PrimReduction::Literal` values, while operations such as
 `bytes_length` are `PrimReduction::Op` and compute in `ken-interp`, not kernel
-conversion, pending K3); `41 §3a` (`Bytes` =
-kind-tag `0x05` interned compound; **`String` is NFC-normalized UTF-8 at
+conversion, pending K3); `41 §3a` (`Bytes` has durable kind tag `0x05` and
+private runtime representation; **`String` is NFC-normalized UTF-8 at
 construction time** — the fact the round-trip law and its one-directionality
 both rest on); `36 §1.4` (the escape check `ρ_inf ⊆ ρ_decl` accept / `ρ_inf ⊄
 ρ_decl` EFFECT-ESCAPE — the **single soundness-relevant gate**, pinned in
@@ -63,10 +63,10 @@ cross-reference the L5 home rather than copy it.
 **Reading disciplines (what makes a case here load-bearing):**
 - **Structural, not "compiles."** AC1 asserts the **elaborated value/type** (the
   `Bytes` primitive, the `0x05` kind), and immutability as a
-  **fresh-allocation** flip (`concat` yields a new slot; the input slot is
-  unchanged), not the absence of a mutator alone (an absence that passes
-  vacuously if the op is *coincidentally* missing — the `content-reconcile`
-  absence-assertion gate).
+  **value-preservation** flip (`concat` yields the concatenated value while
+  both inputs remain unchanged), not the absence of a mutator alone (an absence
+  that passes vacuously if the op is *coincidentally* missing — the
+  `content-reconcile` absence-assertion gate). Allocation is private.
 - **Verdict-flip on the target bug** (`discriminating-conformance-verdict-must-
   flip`): AC2/AC3 each pair accept (rowed) vs reject (untracked) on the real
   `[FS]`/`[Console]` producers, so the verdict flips on a dropped/absent row;
@@ -113,9 +113,9 @@ A `b"…"`/`0x[…]` literal elaborates **directly** to the `Bytes` primitive
 - spec: `38 §1.1`, `14 §5`, `41 §3a` (`0x05`), `31 §3`
 - given: the literals `b"GET"` and `0x[deadbeef]`.
 - expect: each elaborates **directly** to a value of the **`Bytes` primitive
-  type** — an opaque `14 §5` constant whose runtime form is content-addressed
-  `0x05`-kinded interned compound (`41 §3a`/`§5`). Assert the **elaborated type
-  is `Bytes`** (structural), **not** that it "compiles", and **not** via
+  type** — an opaque `14 §5` constant with durable canonical kind `0x05`
+  (`41 §3a`/`§5`). Assert the **elaborated type is `Bytes`** (structural),
+  **not** that it "compiles", and **not** via
   a `String` (a `b"…"` does not decode at the literal — no charset round-trip on
   introduction).
 - why: AC1's introduction face as a **structural** assertion on the elaborated
@@ -135,20 +135,15 @@ A `b"…"`/`0x[…]` literal elaborates **directly** to the `Bytes` primitive
   flips:** a bug that lexes `0x[ff]` as `Int` (or `0xFF` as `Bytes`) gives the
   wrong static type and is caught by the asserted type on each. (type-flip.)
 
-### surface/bytes-io/bytes-immutable-concat-allocates-fresh
-- spec: `38 §1.1`, `41 §2` (append-mostly, immutable heap)
+### surface/bytes-io/bytes-immutable-concat-preserves-inputs
+- spec: `38 §1.1`, `41 §2`
 - given: `a = 0x[dead]`, `b = 0x[beef]`, then `c = concat a b` (`++`).
-- expect: `c` is a **new** value `0x[deadbeef]` occupying a **fresh slot**
-  distinct from `a`'s and `b`'s slot-ids; **`a` is unchanged** after (same
-  slot-id, same content `0x[dead]`). No surface operation mutates a `Bytes` in
-  place — "updating" **allocates** and shares nothing observable with the old
-  value.
-- why: AC1's immutability face as a **fresh-allocation structural flip**, not a
-  vacuous "no mutator exists". A hypothetical in-place-mutate bug (`concat`
-  growing `a`'s buffer) would change `a`'s slot-id/content — caught by asserting
-  `a` is unchanged **and** `c` is a distinct slot. Grounds immutability in the
-  `41 §2` append-mostly heap. (structural; the absence-assertion gate met by a
-  positive flip.)
+- expect: `c == 0x[deadbeef]`; `a == 0x[dead]` and `b == 0x[beef]` after the
+  call. No surface operation mutates either input. The case does not inspect
+  allocation, copying, sharing, or slot identity.
+- why: AC1's immutability face as a value flip. A hypothetical in-place-mutate
+  bug changes an input and fails; copying and sharing implementations both
+  pass. (structural value; positive immutability control.)
 
 ---
 
@@ -332,8 +327,8 @@ gate (this case does not re-pin the gate — see the subsume note).
 ## Coverage map (AC → cases)
 
 - **AC1** (`Bytes` primitive + immutable): `bytes-literal-elaborates-to-
-  primitive`, `bracketed-hex-is-bytes-bare-hex-is-int`, `bytes-immutable-concat-
-  allocates-fresh`.
+  primitive`, `bracketed-hex-is-bytes-bare-hex-is-int`,
+  `bytes-immutable-concat-preserves-inputs`.
 - **§1.2 core ops** (runtime primitive operations + safe partiality):
   `bytes-prim-runtime-value-k3-conversion-deferred` (soundness),
   `bytes-at-some-in-range-none-out-of-range`,
@@ -398,13 +393,13 @@ gate (this case does not re-pin the gate — see the subsume note).
   `pure`-as-claim, runtime contracts) are **L7**, under `../ffi-io/` — out of L6
   scope; not authored here.
 - **The serialization/integrity (Merkle/BLAKE3) hash** (`41 §3b`) is distinct
-  from in-process FNV-1a addressing, selected **downstream** (L8/transport),
+  from private in-process addressing, selected **downstream** (L8/transport),
   not pinned by L6.
 
 ## Build-sequencing note
 
-L6 builds on **landed** kernel/runtime: `Bytes` is the `41 §3a` `0x05` interned
-compound (K3 store) and a `14 §5` primitive (no new kernel rule — the W-style
+L6 builds on **landed** kernel/runtime: `Bytes` has the durable `41 §3a` `0x05`
+kind and is a `14 §5` primitive (no new kernel rule — the W-style
 `ITree.Vis` admission already **landed in K1.5**, `14 §8.4`). The effect-row
 machinery (`36 §1.4` gate, `ITree` denotation) is **L5, on `main`**. So every
 case here drives **real** values/signatures through **landed** mechanisms: AC2/

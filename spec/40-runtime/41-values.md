@@ -1,22 +1,17 @@
 # The value model
 
-> Status: **Elaborated (F4)**. Normative for the model, equality, the callable
-> boundary, and canonical encoding. Contract for WS-X **X1/X2** and
-> Foundation's **K3** (production store, building on F4's concrete encoding +
-> index design).
-> Encodes two design commitments: heterogeneous typed values (not uniform
-> f64, §1) and conventional content addressing (FNV-1a + memcmp, not Leech,
-> §3). The canonical byte encoding (§3a) and intern algorithm (§3b) are now
-> specified at implementation resolution — Foundation implements to these,
-> not from first principles.
+> Status: **Elaborated (X2 contract)**. Normative for the value model,
+> extensional equality, the callable boundary, and durable canonical encoding.
+> In-process sharing, hashing, allocation, and identity are private runtime
+> choices.
 
-## 1. Scalars are typed immediates
+## 1. Scalars retain their declared types
 
-A Ken value is **not** a uniform `f64` handle. Scalars are **unboxed, typed
-machine values**, dispatched by their static type
-(`../30-surface/35-numbers.md`):
+A Ken value is **not** a uniform `f64` handle. Scalars are **typed values**,
+dispatched by their static type (`../30-surface/35-numbers.md`).
+The table gives permitted efficient representations, not observable storage:
 
-| Ken type | Runtime immediate |
+| Ken type | Permitted fast path |
 |---|---|
 | `Int` (small) | machine word `i64` (fast path); promotes to a heap bignum when it outgrows the word (§2) |
 | `Int64`/`UInt32`/… | the named machine integer |
@@ -24,35 +19,45 @@ machine values**, dispatched by their static type
 | `Char` | `u32` |
 | `Float`/`Float32` | `f64`/`f32` |
 | `Decimal` | a small struct (coefficient + exponent) |
-| handle / heap reference | a tagged pointer / slot id (§3) |
+| handle / heap reference | an opaque implementation-defined reference |
 
-There is **no decode-from-f64 stratum**; the type determines the representation
-directly. A `section`/handle crossing a boundary *may* be shuttled as an
-integer- in-`f64` **wire convention**, but that is a transport detail, not the
-value model (`44`/`../30-surface/38`).
+There is **no semantic decode-from-f64 stratum**; arithmetic and dispatch use
+the declared type. A runtime MAY box a scalar or select another private
+representation without changing its range, operations, equality, durable
+encoding, or observable results. A `section`/handle crossing a boundary *may*
+be shuttled by an implementation-defined wire convention, but that is a
+transport detail, not the value model (`44`/`../30-surface/38`).
 
-## 2. Runtime values and the content-addressed heap
+## 2. Runtime values and durable canonical data
 
-Content addressing applies to **canonical data graphs**, not to every runtime
-value. Constructor applications (`data`), records (Σ), `String`, `Bytes`,
-`Array`/`Map`/`Set`, and big integers are content-addressable when every value
-reachable from the root has a canonical encoding:
+Ken separates a value's semantics from its in-process representation.
+Structural constructor applications (`data`), records (Σ), `String`, `Bytes`,
+`Array`, and big integers are **durably canonicalizable** when every value
+reachable from the root is closure-free and has a canonical encoding:
 
-- A value is stored once, keyed by the **hash of its (canonical) content**;
-  identical content ⇒ **same slot** ⇒ stored once (global **deduplication**).
-- References into the content-addressed heap are compact **slot ids**; a
-  canonical data value is a small immediate or a slot id. Runtime-local opaque
-  values are outside this representation contract.
-- The heap is **append-mostly and immutable**: a stored value never changes;
-  "updating" a structure allocates the changed spine and **shares** the rest
-  (persistent data structures for free). Mutable state is confined to `space`
-  cells (`../30-surface/36 §4`), which are *not* content-addressed.
+- Equal durably canonicalizable values have identical canonical bytes (§3a).
+- Unequal values MUST NOT be merged merely because a private hash, pointer, or
+  storage key collides.
+- A runtime MAY copy, share, intern, deduplicate, or directly embed such
+  values. No program can observe which policy was chosen, and no per-value
+  slot, address, allocation order, or physical provenance exists in the Ken
+  value model.
+- Values are immutable. Updating a persistent structure returns a new value
+  and leaves the old value unchanged; physical structural sharing is optional.
+  Mutable state remains confined to `space` cells
+  (`../30-surface/36 §4`).
+
+The proved `Map`/`Set` package trees are closure-free and may cross a durable
+boundary, but they are not durably canonicalizable in the sense above. Their
+internal transport bytes are not a Ken observation. The specified observations
+are extensional equality, ordered `to_list`, and durable round-trip to an
+extensionally equal value (§3a).
 
 An ordinary executable **closure is different**. It is a callable,
-runtime-local opaque value. A closure, and any value graph containing one, has
-no canonical encoding and is not eligible for the content-addressed heap.
-Such an aggregate may exist as a runtime-local value; it simply is not a
-canonical data graph.
+runtime-local opaque value. A closure, and any graph containing one, is outside
+the durable canonicalization domain by construction. Such an aggregate may
+exist as a runtime-local value, but a durable publication boundary rejects it
+before canonical bytes, a content digest, or a storage identity can exist.
 
 ### 2.1 The callable boundary
 
@@ -113,31 +118,33 @@ It requires no particular handle or trampoline, owner/lifetime encoding,
 allocation scheme, GC strategy, or memoization scheme. It also does not require
 that `StaticCallableRef` or a future durable higher-order abstraction exist.
 
-## 3. Addressing: a fast hash + memcmp (NOT lattice geometry)
+## 3. Durable encoding and private in-process addressing
 
-Content addressing is **conventional**.
-
-- The content key is a **fast non-cryptographic hash (FNV-1a-style)** of the
-  canonical byte encoding, with **`memcmp`** to resolve hash collisions exactly.
-  Slot ids are a **monotonic counter**. (A cryptographic/Merkle hash is used for
+Durable canonical encoding and in-process addressing are separate contracts.
+(A cryptographic/Merkle hash is used for
   *serialization/verification*, `../30-surface/38 §1` — a separate concern from
-  in-process addressing). **`OQ-hash` DECIDED:** a fast non-cryptographic hash +
-  `memcmp` in-process, a cryptographic/Merkle hash for serialization — two
-  hashes, two jobs; the exact functions are an X2 constant.
-- **No Leech-lattice quantizer, no Co₀-orbit canonicalization on the allocation
-  path.** Heap addressing is not lattice geometry; Ken MUST NOT put lattice math
-  on the hot path. (The lattice's *legitimate*, optional, separate roles are in
-  `44 §4`.)
-- **Canonical encoding.** Dedup requires a canonical byte form per value so that
-  "same value ⇒ same bytes ⇒ same hash." The canonicalization rules (field
-  order, normalization of which values are interned) are part of X2 and must be
-  deterministic.
+  in-process addressing).
+
+`OQ-hash` is revised accordingly: this specification fixes no in-process hash,
+collision strategy, probing policy, load factor, or identifier scheme. A
+runtime MAY use FNV-1a, another hash, direct pointers, structural values, or no
+index. Any private collision strategy MUST preserve extensional equality and
+MUST NOT merge unequal values.
+
+No Leech-lattice or Co₀ machinery is part of value semantics or durable
+canonical encoding (`44 §4`). Optional library mathematics and private runtime
+data structures remain separate from this contract.
 
 ### 3a. Canonical byte encoding (F4-elaborated)
 
-Every content-addressed value has a deterministic canonical byte form.
-The encoding is specified in full in `docs/design/content-addressing.md
-§1`; this section states the normative rules that Foundation implements.
+Every durably canonicalizable value has a deterministic canonical byte form.
+Closure-free `Map`/`Set` trees may also cross a durable boundary, but their
+internal bytes are not part of the Ken value model and no portable operation
+exposes them. This section is the normative authority for both boundaries. The
+earlier implementation profile in
+`../../docs/design/content-addressing.md §1` is derived; its byte-layout details
+apply only where they agree with this chapter, and its interning, slot, and
+storage language is superseded.
 
 **Kind tags.** Each encoding is prefixed by a 1-byte kind tag from a single
 namespace (see the design doc §1.1 for the full table). Currently assigned:
@@ -145,19 +152,14 @@ namespace (see the design doc §1.1 for the full table). Currently assigned:
 `Array` (`0x06`), bignum `Int` (`0x01`), big `Decimal` (`0x0A`).
 **Kinds `0x07`/`0x08` (formerly `Map`/`Set` heap primitives) are
 retired** under OQ-A: `Map`/`Set` are now proved `data` trees
-(`../50-stdlib/52-map.md`) encoding as ordinary `data` (`0x02`); the tags are
-held reserved (a later content-addressed fast-map, `52-map §6`, would reclaim
-them).
+(`../50-stdlib/52-map.md`). This chapter assigns them no Map-specific runtime
+kind; their internal durable transport is outside the observable kind-tag
+contract.
 
 **Determinism rules (the correctness bar):**
 
 - **Records:** fields encode in **declaration order** (the order in the
   `record` definition), never alphabetical or insertion order.
-- **`Map`:** entries sorted by the **lexicographic order of the canonical
-  byte encoding of each key**. Duplicate keys resolved at construction time
-  (last-write-wins).
-- **`Set`:** elements sorted by the **lexicographic order of the canonical
-  byte encoding of each element**.
 - **`data`:** constructor identified by a **global elaborator-assigned id**
   (not a per-type de Bruijn index); arguments encode in positional order.
 - **`String`:** **NFC-normalized** UTF-8. Normalization is performed at
@@ -166,101 +168,82 @@ them).
   zero limbs) — guarantees a unique encoding for every integer.
 - **`Array`:** elements in index order.
 
-These rules guarantee that two structurally-equal, content-addressable values
-encode to identical bytes regardless of construction history. In particular:
-a `Map` or `Set` built in two different insertion orders encodes identically.
+These rules guarantee that two equal values in the durable canonicalization
+domain encode to identical bytes regardless of construction history.
+
+**`Map`/`Set` residual (OQ-A, R2).** A closure-free package value may be written
+to and read from a durable boundary. Reading MUST produce an extensionally
+equal `Map`/`Set` with the same ordered `to_list` observation. The runtime's
+internal bytes, kind discriminator, tree topology, hash, and deduplication
+result are not Ken observations. No conformance case may compare internal
+encodings from different insertion histories for either equality or
+inequality.
+
+This chapter defines no Map-specific codec or discriminator. If a portable
+canonical serialization is later required, it belongs in ordinary package Ken,
+out of `trusted_base()`, under a separate WP; it is not a runtime primitive or
+part of this revision.
 
 **Constructor and type identity.** The elaborator assigns globally-unique
 integer identifiers to constructors (`data`) and record types. These travel
 in the encoding so that two values of different types that happen to share
 a field layout do not collide.
 
-### 3b. Hashing and the intern algorithm (F4-elaborated)
+### 3b. Private addressing profile
 
-**Hash function.** The hash of canonical bytes is **FNV-1a 64-bit** with
-the FNV-specification constants:
+An implementation MAY derive a private key from §3a's bytes and MAY use
+bytewise comparison to resolve collisions. FNV-1a, linear probing, table
+growth, arena allocation, slot numbering, and identifier retirement are
+examples of private choices, not conformance requirements. The runtime design
+may document a chosen profile, but programs and portable tests cannot observe
+it.
 
-```
-offset_basis = 0xcbf29ce484222325
-prime        = 0x100000001b3
-```
+## 4. Equality and the optional constant-time profile {#equality}
 
-This is non-cryptographic and fast. A cryptographic/Merkle hash (BLAKE3 is
-the recommendation, selected at X2) is used for serialization/integrity
-(`38 §1`) — a separate hash pipeline, two hashes for two jobs. **`OQ-hash`
-DECIDED.**
+Comparable values use extensional equality: two values compare equal exactly
+when their language-defined structures and primitive components are equal.
+Comparable immediates may use native comparison. Ordinary closures have no
+equality operation (§2.1).
 
-**Collision resolution.** `memcmp` of the full canonical bytes resolves hash
-collisions exactly. The canonical bytes are stored alongside the slot in the
-store index so `memcmp` always compares against the canonical form.
+The core language promises **no universal equality complexity bound**.
+`O(1)` equality is instead an optional performance profile:
 
-**Intern algorithm.** Given canonical bytes `b[0..n)`:
+- A runtime advertising `constant-time-equality` MUST provide worst-case
+  `O(1)` equality for every value kind listed by that profile.
+- The profile does not prescribe interning, slot identity, hashing, or another
+  implementation strategy.
+- A runtime that does not advertise the profile may traverse values. Both
+  runtimes MUST return the same equality result.
 
-1. Compute `h = FNV-1a(b)`.
-2. Probe the index (`44 §1`) for `h`.
-3. On hit (hash matches and `memcmp` confirms equal canonical bytes):
-   return the existing slot id.
-4. On miss: atomically increment the monotonic slot-id counter (`44 §2`),
-   bump-allocate space in the arena, copy `b` and construct the in-memory
-   value representation, and occupy the probed bucket.
-5. On hash collision: continue probing per the index's open-addressing
-   discipline (`44 §1`).
+The kernel may use private hashes or sharing as a conversion fast path
+(`../10-kernel/17 §3`) only after confirming equality; a collision or
+representation difference cannot establish definitional equality.
 
-**Slot ids** are 64-bit, monotonic (increment-on-insert), starting at 1
-(slot 0 is the null/invalid sentinel). The slot id is the permanent
-identity of a distinct value for the process lifetime. Slot ids are never
-reused (even if the slot is reclaimed — the id is retired).
-
-The full index data structure, arena layout, and intern pseudocode are in
-`docs/design/content-addressing.md §3`.
-
-## 4. Structural equality is O(1) {#equality}
-
-Because identical content-addressed values share a slot, **structural equality
-of two content-addressed heap values is a slot-id comparison — O(1)** (after
-construction). This is the headline runtime property of the content-addressed
-heap:
-
-- `a == b` on content-addressed heap values is `slot(a) == slot(b)`; on
-  comparable scalars it is the native comparison. No deep traversal at
-  comparison time (the traversal happened once, at intern time). Ordinary
-  closures have no such operation (§2.1).
-- This O(1) structural equality is also a **conversion fast path** for the
-  kernel (`../10-kernel/17 §3`): closed terms with equal content hashes are
-  definitionally equal.
-- It realizes "extensionality made physical" *as an optimization*, while the
-  *propositional* equality that proofs use is `Eq` (`../10-kernel/15`, `16`) —
-  the two agree on closed first-order data but the proof story does not depend
-  on the heap.
-
-## 5. Which values are content-addressed (`OQ-7` DECIDED)
+## 5. Which values are durably canonicalizable (`OQ-7` DECIDED)
 
 **Decided (operator, 2026-06-27; closure boundary revised 2026-07-26):**
-**scalars are immediate**, **canonical compound data is content-addressed**,
-and ordinary closures are runtime-local opaque callables (§2.1). Equality is
-per case: slot equality for interned canonical data, native comparison for
-comparable immediates, and no equality for closures. The exact
-**small-aggregate boundary** (are tiny closure-free tuples interned?) is an
-empirical X2 tuning, not a semantic commitment.
+**scalars may use immediate representations**, **closure-free canonical
+compound data has durable canonical bytes**, and ordinary closures are
+runtime-local opaque callables (§2.1). Equality is extensional for comparable
+data, native for comparable immediates when chosen, and absent for closures.
+The immediate/boxed/shared boundary is private runtime tuning, not semantics.
 
 **Concrete starting rule (F4-elaborated).** Foundation implements:
 
 | Category | Values | Treatment |
 |---|---|---|
-| **Immediate scalars** | `Bool`, `Char`, `Float`/`Float32`, `Int8`–`Int64`, `UInt8`–`UInt64` | Stored inline; never reach the interner |
-| **Small `Int`** | Within `i64` range | Inline `i64`; promotes to heap bignum on overflow (`§1`) |
-| **Small `Decimal`** | Coefficient fits `i64`, exponent in `i32` range | Inline struct `{ i64 coeff, i32 exp }`; promotes to heap on overflow |
-| **Interned canonical compounds** | Closure-free `data` applications, records, `String`, `Bytes`, `Array`, `Map`, `Set`, bignums (overflowed `Int`), big `Decimal` | Content-addressed via the intern algorithm |
-| **Runtime-local callable** | Ordinary `Closure`, and any aggregate graph containing one | Opaque and non-persistable; never sent to the canonical interner |
+| **Immediate scalars** | `Bool`, `Char`, `Float`/`Float32`, `Int8`–`Int64`, `UInt8`–`UInt64` | May be stored inline |
+| **Small `Int`** | Within `i64` range | May use inline `i64`; arithmetic still promotes without overflow (`§1`) |
+| **Small `Decimal`** | Coefficient fits `i64`, exponent in `i32` range | May use an inline coefficient/exponent pair |
+| **Canonical compounds** | Closure-free structural `data` applications, records, `String`, `Bytes`, `Array`, bignums, big `Decimal` | Deterministic canonical bytes under §3a; runtime representation private |
+| **Durably transportable package trees** | Closure-free proved `Map`/`Set` trees | Extensional equality, ordered `to_list`, and durable round-trip; internal bytes, hashes, and deduplication are not observable (§3a) |
+| **Runtime-local callable** | Ordinary `Closure`, and any aggregate graph containing one | Opaque and non-persistable; refused before durable bytes exist |
 
-**Tiny-aggregate boundary (X2 tuning).** F4's baseline interns **all
-closure-free canonical aggregates** — including tiny records — for
-correctness-by-construction (identity follows content). X2 may identify a
-small-aggregate cutoff (e.g. records ≤ 2 machine words with all scalar fields)
-that is immediate for performance. This is a **semantics-preserving
-optimization**: it changes the equality cost model (immediate aggregates
-compare by field traversal, not slot-id) but not the equality *result*.
-Foundation implements the "intern-all-canonical-aggregates" baseline.
+An implementation may tune the immediate/boxed/shared boundary without
+changing equality or any observable result. For the durably canonicalizable
+domain, that includes canonical bytes at a durable boundary. For proved
+`Map`/`Set` package trees, it includes extensional equality, ordered `to_list`,
+and durable round-trip; internal bytes remain unobservable (§3a).
 
 ## 6. The `unknown` value
 
@@ -278,53 +261,32 @@ an open verification hole, `../20-verification/24 §2`):
 
 ## 7. Introspection (extensional-safe) (`OQ-witness` DECIDED)
 
-**Decided (operator, 2026-06-27):** the runtime MAY expose **process-level**
-statistics — slots used, dedup rate, arena bytes, a Merkle root — as a
-first-class, **extensional-safe** facility (a `witness` surface primitive). It
-**MUST NOT** expose **per-value identity or provenance** (which slot a value
-occupies, allocation order), as that would break referential transparency. Stats
-about the *store*, yes; identity of *values*, no.
+**Decided (operator, 2026-06-27; realization revised by
+`SPEC-STORE-SPLIT`):** a runtime MAY expose aggregate, process- or
+domain-level resource statistics as an extensional-safe `witness` facility.
+It MUST NOT expose per-value identity, provenance, allocation order, or a
+representation-dependent equality witness.
 
-**Concrete stat set (F4-elaborated).** The `witness` surface returns a
-`StoreStats` record:
-
-```
-StoreStats {
-    total_slots     : UInt64   // distinct values currently stored
-    total_interns   : UInt64   // total intern() calls (includes hits)
-    dedup_hits      : UInt64   // intern() calls that returned an existing slot
-    arena_bytes     : UInt64   // total arena memory allocated
-    index_buckets   : UInt64   // total index buckets across all partitions
-    index_load      : Float    // fraction of occupied buckets (0.0–1.0)
-    merkle_root     : Option<Bytes>  // root of the Merkle tree over all stored
-                                     // values; populated only when Merkle is
-                                     // enabled (off by default)
-}
-```
-
-This is **extensional-safe**: it reports about the *store*, never about
-individual values. A program's observable behavior must be identical regardless
-of what `witness` reports. The exact `witness` API (function vs. language
-primitive) is a surface-design detail for the language team; the stat-set shape
-is fixed.
+The stat set is profile-specific. Slot counts, deduplication rates, arena bytes,
+index load, and Merkle roots are permitted diagnostics when the selected
+runtime actually has them; none is a portable required field. A program's
+semantic result must be independent of the reported statistics.
 
 ## 8. What WS-X must deliver here (X1/X2) and Foundation (K3)
 
-The value model: typed scalar immediates (no uniform f64); the
-content-addressed canonical-data heap with FNV-1a+memcmp addressing, canonical
-encoding (per §3a), global dedup, and **O(1) structural equality**; the
-immediate-vs-interned-vs-local boundary (OQ-7, §5 table); the callable boundary
-and transitive publication refusal (§2.1); the intern algorithm (§3b); the
-`unknown` value with propagation; and extensional-safe process introspection
-(§7). Foundation implements the canonical byte encoding, hashing, intern
-algorithm, and the `StoreStats` shape from the elaborated design; K3 builds the
-production store on this contract.
+The value model: typed scalars (no uniform f64); deterministic durable
+canonical bytes for closure-free canonical data (§3a); extensional equality
+with an optional constant-time performance profile (§4); the private
+immediate/boxed/shared boundary (§5); the callable boundary and transitive
+publication refusal (§2.1); the `unknown` value; and extensional-safe aggregate
+introspection (§7). Foundation and Runtime may choose in-process storage,
+hashing, sharing, and reclamation strategies privately.
 
 Conformance:
-- `../../conformance/runtime/values/` — dedup (equal closure-free canonical
-  values share a slot), O(1) equality for content-addressed data,
-  canonical-encoding determinism (Map/Set ordering), closure opacity and
+- `../../conformance/runtime/values/` — extensional equality independent of
+  representation, canonical-encoding determinism, closure opacity and
   transitive publication refusal, `Int` small→bignum promotion, and `unknown`
   propagation.
-- `../../conformance/runtime/capacity/` — loud at-limit failure, dedup-aware
-  accounting, reclamation page release, and no-lattice-on-hot-path.
+- `../../conformance/runtime/capacity/` — loud declared-limit failure,
+  storage-policy independence, reclamation invisibility, space isolation, and
+  large-value safety.

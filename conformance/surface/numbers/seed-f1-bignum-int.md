@@ -8,7 +8,7 @@ total**, matching the sealed `spec/10-kernel/18a §5.2` "NATIVE iff bignum"
 boundary that Pat ratified (2026-07-02). Anchors: `18a §5.2` (the
 `Int`-arithmetic floor rows), `18a §3` (the differential-oracle discipline — the
 *sole* external net for a native op), `18a §2` (the partiality discipline), the
-L1 numeric-tower surface (`35`), and the runtime store representation
+L1 numeric-tower surface (`35`), and the durable runtime-value conversion
 (`ken-runtime` `Value::BigInt { sign, limbs }`, `canonical.rs`, `41 §5`).
 
 ## The non-reproduction: the i128 ceiling (distinct from AC1's f64 carrier)
@@ -72,32 +72,33 @@ reduction that can produce a wrong value cannot be promoted to kernel-executed).
   boundary (negatives, zero, mixed-sign `mul`) per `18a §2`/`§3` — an oracle
   that samples only the total interior cannot catch a silent out-of-domain
   result.
-- **AC3 asserts a STRUCTURAL / trace output (byte-identity + content-hash),
-  never a value.** The store round-trip property is not observable in an `Int`
+- **AC3 asserts a STRUCTURAL / trace output (canonical-byte identity), never a
+  value.** The durable round-trip property is not observable in an `Int`
   value — two encodings of the same integer print the same. So the case asserts
-  the **canonical byte encoding** (`canonical.rs`, `encode_canonical`) and the
-  content-address are **identical** across
+  that the **canonical byte encoding** (`canonical.rs`, `encode_canonical`) is
+  **identical** across
   `eval → Value::BigInt { sign, limbs } → eval`, and that `minimal_limbs` (strip
   trailing-zero limbs; zero keeps one zero limb — `canonical.rs:61`) holds. A
   value-only assertion here would be green-vs-green
   ([[soundness-AC-static-vs-runtime-face]] structural face; the X1
   structural-output discipline).
-- **AC3 is an ESTABLISH, not a preserve — and it must DRIVE the real eval→store
+- **AC3 is an ESTABLISH, not a preserve — and it must DRIVE the real eval→runtime
   producer, never hand-feed a `Value::BigInt`.** Verified at source
-  (`ken-interp/src/eval.rs:212` `to_rt`): the eval→store conversion has arms for
+  (`ken-interp/src/eval.rs:212` `to_rt`): the eval→runtime conversion has arms for
   `Bool`/`Int`/`Ctor`/`Pair`/`Closure`/`Bytes`/`Str` but **no `BigInt` arm**, so
-  an `EvalVal::BigInt` falls to the catch-all `None` and **cannot intern today**
-  — the round-trip does not merely round to `i128`, it **does not exist**. F1
+  an `EvalVal::BigInt` falls to the catch-all `None` and cannot cross this
+  runtime-value boundary today — the round-trip does not merely round to
+  `i128`, it **does not exist**. F1
   **establishes** it (adds the `BigInt`→`Value::BigInt` arm), so AC3 asserts the
   round-trip *holds post-F1*, not that it is unchanged from a prior working
   state. The trap this creates: `ken-runtime` **already** round-trips a
   **hand-built** `Value::BigInt` (`store.rs:485`, `canonical.rs:360` are green
   today with zero eval-path bignum) — so a case that constructs a
   `Value::BigInt` directly and checks `canonical.rs` re-validates the
-  **pre-existing** store consumer with **zero F1**, the
+  **pre-existing** canonical encoder with **zero F1**, the
   [[conformance-hand-feeds-the-deliverable]] green-vs-green pattern. AC3's value
   **must arise from an evaluator arithmetic op** (a `> i128` `mul_int` result)
-  and be interned **through `to_rt`** — the driver is the real producer F1
+  and be converted **through `to_rt`** — the driver is the real producer F1
   wires, verified by grepping `to_rt`, not the hand-fed binding.
 - **AC4/AC5 are landing-discipline / build-artifact ACs, not black-box
   behavioral cases.** AC4 pins the **no-regression gate shape**
@@ -109,8 +110,8 @@ reduction that can produce a wrong value cannot be promoted to kernel-executed).
 
 **Tags.** **(soundness)** = a correctness / TCB commitment that must never
 regress: the no-wrap totality across the i128 ceiling (AC1), the
-independent-oracle discipline (AC2), the store-round-trip content-address
-stability (AC3), and the interp-local / no-`trusted_base()`-promotion boundary.
+independent-oracle discipline (AC2), durable canonical-byte stability (AC3),
+and the interp-local / no-`trusted_base()`-promotion boundary.
 **(oracle)** = a value confirmed against Ken's reference interpreter once
 available; before then, grounded against `18a` + `35` + `41` + first principles.
 **(hard-AC)** = a build-gate obligation the merge Decision checks (AC2
@@ -126,8 +127,9 @@ or larger — strictly **outside `i128`** (`i128::MAX = 2¹²⁷ − 1`), so the
 ### surface/numbers/f1-mul-int-crosses-i128-ceiling  (soundness)
 - spec: `18a §5.2` (`mul_int` NATIVE iff bignum), `35 §1`, `41 §5`
 - given: `mul_int (2^127) 2 : Int` (equivalently `2^127 * 2`)
-- expect: **reduces-to** the exact value `2¹²⁸` — stored as a minimal-limb heap
-  bignum (`Value::BigInt`, tag `0x01`), **no panic, no wrap**.
+- expect: **reduces-to** the exact value `2¹²⁸` and durably encodes as a
+  minimal-limb bignum (tag `0x01`), **no panic, no wrap**. Its in-process
+  representation is private.
 - why: `2¹²⁷ · 2 = 2¹²⁸` overflows `i128` (max `2¹²⁷ − 1`). Under the exact bug
   this targets — `i128`-width `mul` — the op **debug-panics**
   (`attempt to multiply with overflow`) or **release-wraps** to `0`/a wrong
@@ -203,81 +205,82 @@ or larger — strictly **outside `i128`** (`i128::MAX = 2¹²⁷ − 1`), so the
   is **not** `N/A`; it is the independent reference, and its independence is
   verified at review.
 
-## AC3 — store round-trip byte-identity + `minimal_limbs`  (soundness)
+## AC3 — durable round-trip byte identity + `minimal_limbs`  (soundness)
 
 Structural / trace assertions on the canonical encoding — never a value.
 
-### surface/numbers/f1-store-roundtrip-above-i128-byte-identical  (soundness)
+### surface/numbers/f1-durable-roundtrip-above-i128-byte-identical  (soundness)
 - spec: `18a §5.2`, `ken-runtime` `Value::BigInt { sign, limbs }` (`values.rs`),
   `canonical.rs` (`encode_canonical`), `eval.rs:212` (`to_rt`), `41 §5`
 - given: a `> i128` value **produced by the evaluator** — `mul_int (2^127) 4`
-  (`= 2¹²⁹` exactly), interned **through `to_rt`** to
+  (`= 2¹²⁹` exactly), converted **through `to_rt`** to
   `Value::BigInt { sign, limbs }` and read back — **not** a hand-constructed
   `Value::BigInt`.
 - expect: the round-trip is **byte-identical** — `encode_canonical` produces the
-  **same** bytes and the **same** content-address for the interned value and the
-  value re-read into eval, and the reconstructed evaluator value reduces
-  identically. (`2¹²⁹` requires ≥ 3 `u64` limbs, so the round-trip exercises
-  real multi-limb storage.)
+  **same durable canonical bytes** for the converted value and the value
+  re-read into eval, and the reconstructed evaluator value reduces identically.
+  (`2¹²⁹` requires ≥ 3 `u64` limbs, so the round-trip exercises real multi-limb
+  storage.)
 - why: **F1 establishes this round-trip; it does not preserve one.** `to_rt`
-  (`eval.rs:212`) has **no `BigInt` arm** today, so an `EvalVal::BigInt` interns
-  as `None` — the eval→store bignum path **does not exist** before F1. The case
+  (`eval.rs:212`) has **no `BigInt` arm** today, so an `EvalVal::BigInt`
+  converts as `None` — the eval→runtime bignum path **does not exist** before
+  F1. The case
   must therefore **drive the real producer**: the value **arises from an
-  arithmetic op** and interns via `to_rt`, so it flips on the actual F1 wiring
-  (`None` / no-intern before → byte-identical round-trip after). A case that
+  arithmetic op** and converts via `to_rt`, so it flips on the actual F1 wiring
+  (`None` before → byte-identical round-trip after). A case that
   hand-built a `Value::BigInt` and checked `canonical.rs` would pass **today
   with zero F1** (`store.rs:485` / `canonical.rs:360` already round-trip
   hand-built bignums) — the [[conformance-hand-feeds-the-deliverable]] trap.
-  Structural (byte / content-hash) assertion, not a value.
+  Structural canonical-byte assertion, not a value.
 
-### surface/numbers/f1-dedup-content-address-stable-across-paths  (soundness)
-- spec: `canonical.rs:61` (`minimal_limbs`), `44` (content-addressed store /
-  dedup), `18a §5.2`
+### surface/numbers/f1-canonical-bytes-stable-across-paths  (soundness)
+- spec: `canonical.rs:61` (`minimal_limbs`), `41 §3a`, `18a §5.2`
 - given: the **same** `> i128` integer `2¹²⁸` reached by **two distinct
   evaluator arithmetic paths** — `mul_int (2^64) (2^64)` and `mul_int (2^127) 2`
-  — each interned via `to_rt`.
-- expect: both intern to the **identical content-address** (one store slot —
-  dedup holds), because `to_rt`'s `Value::BigInt` output is **canonical**
+  — each converted via `to_rt`.
+- expect: both produce **identical durable canonical bytes**, because `to_rt`'s
+  `Value::BigInt` output is **canonical**
   (`minimal_limbs`-respecting) regardless of which arithmetic path produced it.
   A build whose `to_rt` emits a **non-canonical** bignum (e.g. carrying a
   crate-internal high-order zero limb on one path but not the other) yields
-  **two** content-addresses for one value and **flips** (dedup breaks, the `44`
-  store invariant).
+  different canonical bytes for one value and **flips**.
 - why: the F1-level face of the `minimal_limbs` invariant — asserted by
   **driving the real producer** (two eval paths → `to_rt`) and checking
-  content-address **equality**, not by hand-feeding a non-minimal `[0,1,0]` limb
+  canonical-byte **equality**, not by hand-feeding a non-minimal `[0,1,0]` limb
   vector to `canonical.rs` (which tests the **pre-existing** encoder with zero
-  F1 — the hand-feed trap). Structural (content-hash) equality on two
+  F1 — the hand-feed trap). Structural canonical-byte equality on two
   representations of one value — vacuous as a value assertion (both *are*
-  `2¹²⁸`), discriminating as a store-address assertion
+  `2¹²⁸`), discriminating as a durable-boundary assertion
   ([[abstraction-visibility-feature-soundness-gate]] byte-identity discipline).
   `minimal_limbs`'s trailing-strip **rule itself** is a pre-existing
   `canonical.rs` unit-test's job; F1's obligation is that its produced bignums
-  **feed** it canonically, which this content-address-equality case pins.
+  **feed** it canonically, which this canonical-byte-equality case pins.
 
 ### surface/numbers/f1-zero-and-sign-canonical  (soundness)
 - spec: `canonical.rs:61` (zero keeps exactly one zero limb), `values.rs`
   (`sign`), `18a §5.2`
 - given: `0 : Int` (via `sub_int n n`) and a negative `−(2^128) : Int` (via
   `neg_int (2^128)` / `sub_int 0 (2^128)`), each round-tripped through the
-  store.
+  durable-value conversion.
 - expect: `0` canonicalizes to **exactly one zero limb** (not zero limbs, not
   many) with a canonical `sign`; the negative round-trips with `sign`
   **preserved and distinct** from its positive (`−2¹²⁸` and `+2¹²⁸` have
-  **different** content-addresses). A build that drops the sign, or emits `0`
+  **different canonical bytes**). A build that drops the sign, or emits `0`
   with a non-canonical limb count, **flips**.
 - why: the sign and the zero-limb rule are the two edges of the `Value::BigInt`
   canonical form; the negative case is the **non-degenerate sign pair**
-  (`+n`/`−n` must not collapse to one content-address —
+  (`+n`/`−n` must not collapse to one canonical encoding —
   [[taint-axis-orientation-needs-distinguishing-pair]] applied to the sign
   axis).
 
 ## AC4 — workspace-green landing discipline (the K7 lesson)  (hard-AC)
 
 - spec: `docs/program/wp/F1-bignum-int.md` AC4, `COORDINATION §7`
-- **AC (build-gate, not a reduction case):** the no-regression gate is
-  **`cargo test --workspace`**, **never** `-p ken-interp`. F1 changes reduction
-  **values**, so its blast radius is **workspace-wide**: any downstream proof
+- **AC (build-gate, not a reduction case):** the no-regression gate is the
+  publisher CI's full-workspace suite. Local runs remain targeted through
+  `scripts/ken-cargo`; they never use `--workspace` (`COORDINATION §12`). F1
+  changes reduction **values**, so its blast radius is **workspace-wide**: any
+  downstream proof
   term, golden vector, or `.ken` artifact that encoded the old `i128`-ceiling
   behavior (a wrapped/panicking product, a `Value::BigInt(i128)` round-trip
   bound) **migrates in the same land-together green unit**. Asserting a
@@ -329,9 +332,9 @@ Structural / trace assertions on the canonical encoding — never a value.
   `f1-product-chain-exceeds-2^1000`
 - **AC2** (independent differential oracle) — `f1-oracle-independent-reference`
   (hard-AC)
-- **AC3** (store round-trip byte-identity + `minimal_limbs`) —
-  `f1-store-roundtrip-above-i128-byte-identical`,
-  `f1-dedup-content-address-stable-across-paths`, `f1-zero-and-sign-canonical`
+- **AC3** (durable round-trip byte identity + `minimal_limbs`) —
+  `f1-durable-roundtrip-above-i128-byte-identical`,
+  `f1-canonical-bytes-stable-across-paths`, `f1-zero-and-sign-canonical`
 - **AC4** (workspace-green landing discipline) — landing-discipline AC (hard-AC)
 - **AC5** (dependency-delta / crate-vetting) — checklist AC (hard-AC)
 
@@ -348,11 +351,11 @@ Structural / trace assertions on the canonical encoding — never a value.
   and a compositional chain — the interpreter dispatches the `exact_int_binop`
   arm uniformly, so totality generalizes across the three ops and all
   magnitudes. No case admits a fixed-width intermediate on the arithmetic path.
-- **Store-canonical class agrees.** Every `> i128` value round-trips
-  byte-identically; `minimal_limbs` strips trailing zeros so non-minimal and
-  minimal encodings of one value are content-address-equal; zero keeps exactly
-  one zero limb; `sign` is preserved and `+n`/`−n` stay distinct. No case admits
-  a raw-limb (unstripped) or sign-dropping encoding.
+- **Durable-canonical class agrees.** Every `> i128` value round-trips
+  byte-identically; `minimal_limbs` strips trailing zeros so all valid paths to
+  one value produce identical canonical bytes; zero keeps exactly one zero
+  limb; `sign` is preserved and `+n`/`−n` stay distinct. No case admits a
+  raw-limb (unstripped) or sign-dropping encoding.
 - **Kernel-untouched boundary holds.** No case asserts a **kernel** reduction of
   these ops — F1 is interp-local; `obs.rs:84` keeps `Eq` at a primitive type
   neutral, so `eq_int (2^128) (2^128)` reduces in the **interpreter** to `true`
@@ -366,7 +369,7 @@ ceiling vs f64 carrier — see the top section), so there is **one home per
 property**, not a duplicate. `seed-numbers.md` AC1 stays authoritative for the
 **f64-carrier** surface property and its off-grid `10²⁰+1` witness; this seed is
 authoritative for the **interpreter's bignum delivery across the i128 ceiling**
-and the store round-trip. A one-line cross-reference is added to
+and the durable round-trip. A one-line cross-reference is added to
 `seed-numbers.md` AC1's `why` noting the ceiling corpus lives here (the OF1
 blind-spot is closed here, not by loosening AC1's f64 witness).
 
