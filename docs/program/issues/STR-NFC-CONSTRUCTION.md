@@ -1,7 +1,7 @@
 ---
 id: STR-NFC-CONSTRUCTION
 title: "NFC-at-construction is normative and unimplemented: all three `EvalVal::Str` ingresses store the raw string, so `char_length`/`byte_length`/`s2l`/`==` observe unnormalized values and the interp carrier disagrees with the runtime carrier"
-status: draft
+status: ready
 owner: language
 size: L
 gate: none

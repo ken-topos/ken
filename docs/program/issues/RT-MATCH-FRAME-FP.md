@@ -108,6 +108,26 @@ closure structure."*
 site_id`), **not** by the fingerprint. ⚠ Re-derive that at kickoff; if it holds,
 the fingerprint may be **narrowable rather than merely re-carriered**.
 
+## ⛔ SYMPTOM INVENTORY — Architect appends one line per hard-stop; never rewritten
+
+**NEXT PREDICATE CHECK = 3rd entry, then 6th, 9th, …**
+**NEXT RESEARCH PULL = 3rd hard-stop, then 6th, 9th, …**
+
+⭐ Both counts are **armed lines, not tallies.** Re-read them on every hard-stop.
+A deep chain carrying **zero** research advisories is itself the tell that both
+the Architect's self-trigger and the Steward's backstop have lapsed
+(`steward.md §5a`, measured on `RT-NATIVE-FNSPLIT` at **10**).
+
+| # | date | the wall that was hit |
+|---|---|---|
+| 1 | 2026-07-27 | ⭐ **`AC-F1` and the inference selector want opposite things.** `AC-F1` requires body-only differences to share a header fingerprint; `lowering/mod.rs:4095–4106` **selects** from `callee_frame_templates` **by that fingerprint** when `checked_frame_id.is_none()`. Measured affirmatively by `runtime-leader`: one callee declaration with two computational eliminators of the same family yields **header-identical** templates (case fields derive from the family; the default trap is family-symbol keyed). Today's Debug hash distinguishes them **by body**; Route C must not. ⇒ Dominant new result is a lowering refusal, but a complete permutation can **silently exchange** header-identical templates, observable through fields absent from the header (`semantic_position`, `output_interface`, `segment_site_id`). Held at `evt_2qaj3kt3dawhr` for an Architect selector-scope ruling. ⚠ The join-site path stays identity-selected and is unaffected |
+
+⚠ **Entry 1 is a ruling-surface gap in this node's own narrowability premise** —
+the node says the fingerprint *"may be narrowable rather than merely
+re-carriered"* because `planned_join_site_for_frame` selects by `site_id`. That
+is true **for the join-site path** and does **not** cover the inference selector.
+⛔ Do not read the narrowability lead as settling the selector question.
+
 ## Acceptance criteria
 
 `AC-F1`–`AC-F4` are the Architect's required controls, transcribed.
