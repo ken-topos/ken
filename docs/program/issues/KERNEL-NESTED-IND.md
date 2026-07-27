@@ -174,6 +174,12 @@ containers, which is the allow-list the ruling forbids.
   readable when checking a nested occurrence. ⚠ Sizing input: this does not exist
   today (see the substrate section), so `D1` cannot be a local edit to
   `check_pos_arg`.
+  ⛔ **AND the producer must be TOTAL over every accepted constructor field
+  type** — a polarity record or a *rejection* for each, and **never a panic**
+  (`18 §4`: the kernel contract is yes/no, never a crash). ⚠ This clause was
+  **added 2026-07-27 after two consecutive Architect rejections landed on it**;
+  the original three properties (derived / recorded / readable) are all about the
+  *record* and say nothing about the *producer*. See `AC-K13`.
 - **`D1b`** — structural positivity through those declared strictly-positive
   parameter positions, replacing the blanket nested rejection at
   `inductive.rs` `check_pos_arg`'s non-`D`-head arm. ⛔ Keyed on **declared
@@ -208,6 +214,7 @@ Each names its positive control.
 | `AC-K9` | ⛔ **Zero** new axiom, postulate, trusted escape, or library-side representation workaround. | grep the diff for `Axiom`/`postulate`/`sorry`/`unsafe` additions; a hit fails the row |
 | `AC-K10` | `trusted_base()` delta reported **as a number**, with what grew. | ⚠ no mechanical control — discharged by the report. Listed so "grew by 0" and "never measured" cannot read identically |
 | `AC-K11` | ⭐ `D1a`'s recorded polarity is **populated at admission and read by the positivity check** — not recorded-then-ignored. | perturb the **recorded** value for one parameter → admittance must change. ⛔ If it does not, the check recomputes and the record is inert — the `ConstructorDecl.recursive_positions` failure repeated (frame §2e) |
+| `AC-K13` | ⭐ **The polarity producer is TOTAL over every accepted constructor field type** — every such field yields a polarity record or a rejection, ⛔ **never a panic** (`18 §4`). | ⚠ **Enumerate by `Term` form, not by example.** For each form the fallback traverses, exercise a field of that form that mentions the parameter. Two named controls, both from Architect rejections: (a) `Term::Let { ty: Bool, val: false, body: pi(var(1), Bool) }` — an accepted field reducing to `A -> Bool`, which must record `NonPositive`; its `body` binds index 0, so a fallback that traverses children at one depth reads `A` at the wrong index. (b) index selection must be non-panicking for an out-of-range relative index — ⛔ `bool::then_some` evaluates its argument **eagerly**, so `(r < n).then_some(n - 1 - r)` underflows *before* the condition can yield `None`; `then(\|\| …)` is the lazy form |
 | `AC-K12` | A nested-IH constructor **lowers and evaluates**, not just type-checks. | the evaluator and native-lowering paths **re-derive** recursive positions (frame §2d, §2f) and one lowering site computes binder arity as `argument_binders + recursive_positions.len()`. Control: a recursive computation over `JsonArray` evaluates, and the built-artifact suite is green |
 
 ⛔ **`AC-K3` and `AC-K8` are the pair that matters.** `AC-K3` proves the new
