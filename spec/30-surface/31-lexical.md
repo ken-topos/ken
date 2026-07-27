@@ -144,15 +144,17 @@ formatter-disable directive, or other escape hatch.
 
 Canonical notation is chosen from the **parsed token kind**, never by replacing
 raw source text. Accepted ASCII and Unicode aliases denote the same notation
-token, and the formatter prints that token's blessed §1b glyph. Identifier and
-keyword tokens print their stored spelling. In particular, identifiers named
-`l` or `level`, keywords such as `in`, and identifiers or prose containing
-`not` are never rewritten because their bytes resemble a notation alias. A
-listed glyph that lexes directly to an identifier-class token instead expands
-to that token's stored ASCII name: a binding spelled `ℓ` is the same binding
-as `level`, not a second Unicode-named binding. Outside the fixed alias table,
-the lexer rejects a non-ASCII alphabetic scalar at an identifier position
-rather than repairing it into a different binding.
+token, and the formatter prints a dedicated notation token's blessed §1b
+glyph. Identifier-class tokens have two distinct representations. Their
+semantic stored ASCII name, after alias expansion, determines binding identity.
+Separately, the formatter losslessly preserves and re-emits the original source
+lexeme; it does not replace that lexeme with the semantic name. Thus source
+`ℓ` remains `ℓ` after formatting while resolving to the same stored name and
+binding as source `level`, which remains `level`. An identifier spelled `l`,
+a keyword such as `in`, and an identifier or prose containing `not` likewise
+retain their own source bytes. Outside the fixed alias table, the lexer rejects
+a non-ASCII alphabetic scalar at an identifier position rather than repairing
+it into a different binding.
 
 The formatter preserves the source lexeme of every literal, including numeric
 base, digit separators, suffixes, delimiters, and escapes. It does not rewrite
