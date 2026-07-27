@@ -1,6 +1,6 @@
 ---
 id: V4-RESIDUAL
-title: "The Kripke countermodel is an inert shell: `forcing` is always empty, so nothing can force `¬φ` at any world, and V3's prose `description` is stuffed into `FormRef`, a slot meant for a subformula reference"
+title: "The Kripke countermodel is an inert shell: it is never related to `φ` at all — no interpretation of the formula, no recursive forcing evaluator — and V3's prose `description` is stuffed into `FormRef`, a slot meant for a structural subformula reference"
 status: active
 owner: verify
 size: L
@@ -58,11 +58,17 @@ failure: Some(FailureWitness {
 Three separate defects fall out, and ⛔ **they are not the same defect three
 times**:
 
-1. ⭐⭐ **`forcing` is empty, so no atom holds at any world.** `24 §1` makes a
-   refutation *mean* **"a model that forces `¬φ`"**, and the preamble's cardinal
+1. ⭐⭐ **Nothing in the emitted model is connected to `φ` at all.** `24 §1` makes
+   a refutation *mean* **"a model that forces `¬φ`"**, and the preamble's cardinal
    rule is explicit that *"a Kripke model that merely fails to force `φ` is
-   **not** a refutation."* ⇒ **The emitted model forces nothing at all.** It
-   cannot discharge the very property the `false` tag asserts.
+   **not** a refutation."* ⇒ The constructor never interprets `φ`, never builds a
+   forcing relation over its atoms, and has no evaluator that could decide
+   `forces(w, ¬φ)`. **The model is unrelated to the obligation it claims to
+   refute.**
+
+   ⛔ **The defect is NOT that `forcing` is empty.** See the AMENDMENT below —
+   an empty atomic forcing relation is lawful and is frequently the *correct*
+   witness. Do not "fix" this by populating `forcing`.
 2. **`order` is empty and `worlds` is a singleton**, so there are no stages of
    knowledge and the monotonicity requirement (`w ⊩ P` monotone in `≤`) is
    vacuous — satisfied by having no content rather than by holding.
@@ -120,13 +126,58 @@ error the chapter exists to eliminate.
 | spec | `spec/20-verification/24-diagnostics.md` blob **`84b72c45`** — `§1` worlds/forcing/witness; preamble cardinal rule + Glivenko invariant |
 | producer | `V3-RESIDUAL` (PR #1103) — `prover.rs::attempt_with_refutation` is the **first real** `Disproved` producer |
 
+## ⛔⛔ AMENDMENT 2026-07-27 — `AC-V4r1` WAS WRONG. Read this before the table.
+
+**Architect, blocking `7c6e92cb` on Decision `dec_7mctdjqs71jrm`.** The original
+`AC-V4r1` demanded a **non-empty** `forcing` relation, on the stated ground that
+otherwise no world could force `¬φ`. ⛔ **That ground is false under the spec's
+own Kripke clause.** For an atomic `P`, a world forces `¬P` **precisely when no
+accessible world forces `P`** — so the atomic forcing relation may legitimately
+be **empty**, and emptiness is often the correct witness rather than a defect.
+
+⇒ **A non-emptiness requirement is not just weak, it points the implementer at
+the wrong artifact.** The first successor obeyed it by inventing an atom *named*
+`not({phi:?})` and then defining success as "is that self-generated string
+present at the witness world?" — circular, and it would validate identically for
+**any** term. ⭐ **An AC that can be discharged by a string the implementation
+chose itself is a self-authenticating label, not a property.**
+
+**The requirement is now: `forces(model, witness, Not(φ)) == true` under a real
+recursive forcing evaluator implementing the `23 §4` clauses over the supported
+formula fragment.** ⛔ Never `!forcing.is_empty()`; ⛔ never the presence of an
+atom whose *name* renders `φ`.
+
+### Successor mechanism — binding (Architect)
+
+1. **`FormRef` becomes a structural reference into the obligation formula** — a
+   root-relative child path checked against `triple.phi` — ⛔ not a `String`
+   rendering. A debug rendering of the whole `Term` has no node identity and
+   cannot distinguish repeated subformulas.
+2. **Forcing atoms are structural/canonical**, and a side-effect-free
+   `forces(world, formula_ref)` evaluator implements the `23 §4` clauses. ⛔ Its
+   result is **validation/advisory only** and must never move the copied V3 tag.
+3. **Widen the V3 `Countermodel` / shared evidence carrier as needed** so V4
+   consumes **actual structural refutation evidence** instead of ignoring
+   `countermodel` and reconstructing a model from the verdict. For the present
+   ground unequal-`Int` refutation: model the actual equality atom as **unforced
+   at every accessible world** (or a structurally linked theory disequality),
+   then demonstrate the recursive negation clause at the witness.
+4. **Controls.** Keep the contradictory-content / no-tag-move control. ⭐ **Add
+   the causal mutation that injects only the string `not({phi:?})` — semantic
+   validation must still FAIL.** Plus rejects for: invalid `FormRef` path,
+   unknown forcing world, preorder violation, monotonicity violation.
+
+⚠ This remains an **advisory-UX/completeness** block, not a kernel-unsoundness
+incident — no verdict becomes falsely `proved`. Exact `7c6e92cb` carries no
+Architect approval; hold that branch and fold a fresh successor.
+
 ## Acceptance criteria
 
 | AC | claim | control |
 |---|---|---|
-| `AC-V4r1` | ⭐⭐ **`forcing` is non-empty for a real refutation, and the model actually forces `¬φ` at the witness world.** | ⛔ Assert the **relation**, not its length. A test that only checks `!forcing.is_empty()` does not discharge this — construct a refuted FO obligation and check the specific `(world, atom)` pairs that make `¬φ` hold |
+| `AC-V4r1` | ⭐⭐ **AMENDED — see above.** For a real refutation, **`forces(model, witness, Not(φ))` evaluates to `true`** under a recursive evaluator implementing the `23 §4` clauses, over a model whose atoms are **structurally derived from `φ`**. | ⛔ **`!forcing.is_empty()` does NOT discharge this and is not even necessary** — an empty atomic relation is lawful. ⛔ Neither does an atom named after `φ`. ⭐ **Required causal control: inject *only* the string `not({phi:?})` and show semantic validation still FAILS.** Then assert the specific structural `(world, atom)` facts the negation clause consumes |
 | `AC-V4r2` | ⛔ **The cardinal rule is UNTOUCHED:** the `false`/`unknown` tag is still copied from V3's verdict and **never** recomputed from `worlds`/`forcing`. | ⭐ Control: feed a `KripkeCountermodel` whose forcing contradicts the tag and confirm **the tag does not move**. ⛔ If populating the model changes any verdict anywhere, **stop and re-raise** — that is the V3-prover trap and it is a regression, not a fix |
-| `AC-V4r3` | `failure.subformula` is a **real reference into `φ`**, not prose. | ⛔ Must **redden** if `v3.description` is passed to `FormRef` again. ⚠ The type currently permits it — say so if you cannot close it in the type, and name what would |
+| `AC-V4r3` | ⭐ **STRENGTHENED 2026-07-27.** `failure.subformula` is a **structural** reference into `φ` — a root-relative child path checked against `triple.phi` — carrying node identity. | ⛔ **A `String` of any kind fails this, including `format!("{phi:?}")`.** Reddening on V3's prose proves only "not V3 prose"; it does **not** prove "real `FormRef`" — that mutation passed while the defect was intact one layer up. ⭐ Required: an **invalid-path reject**, and a case with **repeated subformulas** that the reference distinguishes |
 | `AC-V4r4` | `order` and `worlds` describe genuine stages, and **forcing is monotone in `≤`**. | Construct a two-world model and assert monotonicity **holds**; then a deliberately non-monotone one and assert it is **rejected**. ⛔ A vacuous pass on the empty relation does not count |
 | `AC-V4r5` | ⭐ **The Glivenko invariant holds: a classically-valid goal is NEVER tagged `false`.** | Take a classically-valid, intuitionistically-unprovable goal (`p ∨ ¬p`) and assert the verdict is `unknown` and the tag is **not** `false` (`24` preamble, `23 §5`, `16 §1.3`) |
 | `AC-V4r6` | The wire form carries the structured model. | ⛔ `protocol.rs:286`'s literal `"[countermodel pending V4-backend]"` must no longer be reachable for a real refutation. Report whether it survives for any other path |
@@ -180,8 +231,22 @@ never vendored, never consulted by the implementer** (`CLEAN-ROOM.md`).
 
 ## Reporting
 
-Return exact SHA/tree/base, and specifically: **the `(world, atom)` pairs
-asserted for `AC-V4r1`**; **the `AC-V4r2` control showing a contradicting model
-does NOT move the tag**; the **redden** evidence for `AC-V4r3`; the monotonicity
-pass **and** the non-monotone rejection for `AC-V4r4`; and whether
-`protocol.rs:286`'s pending-literal remains reachable.
+Return exact SHA/tree/base, and specifically: **the `forces(model, witness,
+Not(φ))` evaluation for `AC-V4r1` and the `not({phi:?})`-injection control that
+must FAIL**; **the `AC-V4r2` control showing a contradicting model does NOT move
+the tag**; the **structural-path** evidence and invalid-path reject for
+`AC-V4r3`; the monotonicity pass **and** the non-monotone rejection for
+`AC-V4r4`; and whether `protocol.rs:286`'s pending-literal remains reachable.
+
+## ⚠ SYMPTOM INVENTORY
+
+**NEXT PREDICATE CHECK = 3rd entry · NEXT RESEARCH PULL = 3rd hard-stop.**
+
+**Entry 1 (hard-stop 1) — 2026-07-27.** `AC-V4r1` demanded a non-empty `forcing`
+relation on a ground the spec's own Kripke clause falsifies; the implementer
+satisfied it with a self-named atom and a validator that looked for that same
+name. **Disposition:** Architect block on `dec_7mctdjqs71jrm`; AC amended above
+to demand a real recursive `forces(…, Not(φ))` plus a causal control that FAILS
+on the string injection. ⭐ **The shape to notice: the AC named a proxy
+(non-emptiness) instead of the property, and the proxy was satisfiable by an
+artifact the implementation authored itself.**

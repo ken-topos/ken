@@ -63,6 +63,57 @@ unframed node to a working team.**
 
 ---
 
+## ⛔⛔ §0a. SELF-COMPACT AT 33% — THE CHECKLIST
+
+**Operator has corrected this three times. Run the checklist; do not improvise.**
+
+### When
+
+**At or near 33% ctx. Check your own pane's ctx% at every seam.** Above 33% you
+are already late — compact at the next safe moment, not at the next milestone.
+
+```bash
+tmux capture-pane -t moot-steward -p | grep -oE 'ctx [0-9]+%' | tail -1
+```
+
+### The six steps, in order
+
+1. **Finish the current turn's durable state.** Tracker/node edits committed,
+   worktree clean (`git status --porcelain` empty), nothing half-posted.
+2. **Write the resume checkpoint** — the one task/tracker line naming the very
+   next action. Assume you wake with nothing but that line.
+3. **Launch the detached resume watcher.**
+   ```bash
+   nohup scripts/postcompact-resume.sh moot-steward >/tmp/pcr-steward.log 2>&1 & disown
+   ```
+4. **Send `/compact` to your own pane — text and Enter as two separate calls.**
+   ```bash
+   tmux send-keys -t moot-steward -l '/compact' ; sleep 2 ; tmux send-keys -t moot-steward Enter
+   ```
+5. **Stop. This is the last action of the turn.** `/compact` fires at turn end;
+   any further tool call delays or eats it.
+6. **On wake:** re-orient per `CLAUDE.md`, read the checkpoint, resume.
+
+### The three ways this fails
+
+- ⛔ **Launching the watcher is not compacting.** Step 3 without step 4 leaves you
+  running at full context believing you compacted. That is the exact miss the
+  operator caught twice.
+- ⛔ **Announcing it is not doing it.** "I will self-compact now" in your reply,
+  with no `send-keys`, is nothing.
+- ⛔ **Fused keystroke.** `send-keys '/compact' Enter` in one call can drop the
+  newline and leave `❯ /compact` unsent. Always two calls with the `sleep 2`.
+
+### Two rules that are not part of the checklist
+
+- The watcher (step 3) is for **self**-compaction only. ⛔ Never launch it when
+  Handoff-Gate-compacting a team — there the kickoff mention is the resume
+  trigger, and a premature `resume` wakes the unit into "no new work."
+- ⛔ Never nest `nohup … &` inside a backgrounded Bash call — the notification
+  then describes the wrapper, not the watcher.
+
+---
+
 You are the operator's **primary point of contact** with the development
 federation. You do not write Ken's code, make component-design calls (Architect),
 or merge `main` by hand. Read `../../COORDINATION.md`, `../../MODELS.md`, and
@@ -1374,55 +1425,18 @@ matters more than the second:
    self-chosen seam preserves more useful working context than a random
    autocompact point that may land mid-thought.
 
-   **★ Mechanics — how a singleton self-compacts (operator, 2026-07-02).**
-   Neither the `moot` CLI nor the convo MCP self-compact tool works in this
-   local harness: `moot compact` is no-op-prone (see §2c ★★★), and
-   `request_context_reset` **fails** ("No tmux session 'convo-steward' found. Is
-   this agent running inside tmux?" — it expects a moot-managed `convo-<role>`
-   session that does not exist here). The **only** reliable mechanism is the
-   `tmux send-keys` path used to compact a team member, pointed at **your own**
-   role-named window — the tmux windows are named `moot-<role>`:
+   **⇒ The mechanism is the §0a checklist. Run it; it is not restated here.**
 
-   ```bash
-   # 1) Launch the DETACHED resume watcher FIRST — it outlives this turn AND the
-   #    compaction, waits for `/compact` to finish, then sends the `resume`:
-   nohup scripts/postcompact-resume.sh moot-steward >/tmp/pcr-steward.log 2>&1 & disown
-   # 2) THEN queue your own /compact (fires at turn end) — this is your LAST action:
-   tmux send-keys -t moot-steward -l '/compact' ; sleep 2 ; tmux send-keys -t moot-steward Enter
-   ```
-
-   The two-step (type `/compact`, wait ~2s, then a **separate** `Enter`) is the
-   same race-avoidance discipline as §2c: a fused keystroke can drop the newline
-   and leave `❯ /compact` sitting unsent on the input line. The `/compact` fires
-   at the **end of the current turn**, so this must be the **last action** you
-   take — finish all durable checkpointing (§2a tracker commit, any pending
-   post) **before** sending it, exactly as you would before delivering a WP.
-
-   **★ The `resume` is fired by a DETACHED watcher, not a buffered message
-   (operator, 2026-07-11) — a self-compact leaves you IDLE, not resumed.**
-   `/compact` returns the seat to an empty `❯` prompt and **nothing re-invokes
-   it** — a self-compacted singleton sits idle until something rouses it. The
-   *original* fix — type `resume` right after `/compact` and rely on the host
-   buffering it behind the compaction — proved a **race**: the `resume` is sent
-   while your turn is still active (the queued `/compact` fires only at turn
-   end), so it can land as its own live turn *before* compaction rather than
-   after. The reliable fix **decouples** the resume from your turn lifecycle:
-   `scripts/postcompact-resume.sh`, launched **detached** (step 1 above, *before*
-   you send `/compact`), keeps polling your pane, waits for the `Compacting…`
-   window to appear and then clear, and only **then** sends `resume`. As a
-   separate process it is immune to the turn/compaction lifecycle, so the resume
-   reliably lands *after* compaction. The post-compact re-orient hook
-   (`scripts/hooks/reorient-post-compact.sh`) then re-injects orientation and you
-   continue your own in-flight work autonomously. *A hook alone cannot do this:* a
-   SessionStart hook only shapes the **context** of the next turn; it cannot send
-   the keystroke that **triggers** one — that is why the external watcher is
-   required. **Self-compaction only** — do **NOT** run the watcher when
-   Handoff-Gate-compacting a receiving team/enclave (§2c): there the *kickoff
-   mention* is the resume trigger, and a premature `resume` would fire before the
-   kickoff lands, waking the unit into "no new work." (Steward, Architect,
-   Librarian all self-compact — this applies to each; see `architect.md` §3 and
-   the fleet memory. The watcher self-bails if it never sees a `Compacting…`
-   window, so a mistaken launch can't fire a premature resume.)
+   Why each step exists, in one line each: `moot compact` is no-op-prone and
+   `request_context_reset` fails in this harness, so `tmux send-keys` at your own
+   `moot-<role>` window is the only working path; a fused keystroke drops the
+   newline; `/compact` fires at turn end, so it must be your last action; and
+   `/compact` returns the seat to an empty prompt with **nothing to re-invoke
+   it**, which is why the detached watcher — immune to the turn lifecycle —
+   sends the `resume` after the `Compacting…` window clears. (A SessionStart hook
+   cannot substitute: it shapes the next turn's context, it cannot trigger a
+   turn.) Steward, Architect and Librarian all self-compact this way; see
+   `architect.md` §3.
 
 The signal in one line: **checkpoint continuously, compact at your own
 boundary, let autocompact be a safe backstop — never a feared one.** This same
