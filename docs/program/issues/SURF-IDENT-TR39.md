@@ -1,7 +1,7 @@
 ---
 id: SURF-IDENT-TR39
 title: "The lexer's confusable-resistance is satisfied VACUOUSLY by an ASCII-only identifier rule — spec 31 §2's blessed Unicode letters are unimplemented, and the test that looks like the TR39 gate cannot see the difference"
-status: active
+status: merged
 owner: ergo
 size: S–M
 gate: none
@@ -10,6 +10,41 @@ blocks: []
 github: null
 origin: Steward measurement 2026-07-27 at `origin/main = 78f1f74b`, filed per COORDINATION §2.
 ---
+
+> ## ✅ MERGED 2026-07-27 — PR #1121, `origin/main` = `91b67c3e`
+>
+> Squash of the exact approved SHA `a741061b` (tree `5e7c1061`). All three paths
+> blob-verified identical on `main`: `error.rs`, `lexer.rs`,
+> `tests/surface_unicode.rs`. Architect Decision `dec_5ch6fb4kvbqs2` resolved
+> APPROVE for that exact SHA/tree; QA approved the same SHA. CI green.
+>
+> **Shape B was chosen before any `lexer.rs` edit** and the reasoning is the
+> durable part: `§1b`'s bounded table governs **notation operators**, while `§2`
+> supplies **no bounded blessed identifier-character table**. Inventing one would
+> have violated `§1a-5`'s own fixed-table requirement and could have opened the
+> confusable hole the spec names. So the ASCII boundary is recorded as an
+> explicit **decision**, not as an accident of implementation.
+>
+> ⭐ **`AC-T3` is what makes this reviewable.** Cyrillic `а` **and**
+> non-confusable `字` must fail with the *same specific* error and span — which
+> makes the rejection **attributable to the ASCII rule** rather than merely
+> coincident with it. The superseded test could not do that: all its cases died
+> at the ASCII wall before any confusable rule could have been consulted, so it
+> was vacuous as a security property. It is preserved under a truthful
+> ASCII-boundary name with exact typed assertions.
+>
+> ⛔ **What this does NOT claim** (Architect's resolution, verbatim in substance):
+> not Shape A, not a TR39 identifier profile, not a blessed Unicode identifier
+> table, and **not lexical conformance coverage**.
+>
+> ⚠ **Residual — the `§2` completeness gap is enclave-routed, not closed.** The
+> open question is whether `§2` should acquire a real blessed-character table or
+> whether the blessed-letter clause should be retired for an explicit ASCII-only
+> contract. ⛔ Do not read this merge as having settled it.
+>
+> ⚠ **`AC-T4` addressed the `ℓ`/`l` operator axis by EXCLUSION**, stated as such:
+> the lexer maps the blessed operator glyph and its ASCII spelling to the same
+> token, and this WP neither changes that nor claims TR39 separation on it.
 
 > ## ⭐ RELEASED 2026-07-27 to **Ergo** as
 > **[`SURF-IDENT-TR39-R1`](../wp/SURF-IDENT-TR39-R1.md)**.
