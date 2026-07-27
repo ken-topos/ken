@@ -84,6 +84,13 @@ occurs, but durable export refuses the whole trace before producing bytes or a
 content hash. It does not redact the closure, substitute an identity, or drop
 the event
 ([§6.4](../../../spec/40-runtime/42-evaluation.md#64-effect-sequencing-and-ordering)).
+For other closure-free values, durable behavior is separate from in-process
+storage. Values in the durably canonicalizable domain have deterministic
+bytes. Proved `Map` and `Set` package trees instead preserve extensional
+equality, ordered `to_list`, and durable round-trip; their internal bytes are
+not observable. The runtime may copy, share, intern, or directly embed either
+kind without changing those guarantees
+([capacity §1](../../../spec/40-runtime/44-capacity.md#1-logical-values-are-separate-from-physical-storage)).
 Nothing in this corpus exercises that path for this entry: it is a
 pure-library component, checked, never run. The entry's own word,
 "delegated," is therefore not a hedge — it is naming precisely the boundary
@@ -120,29 +127,23 @@ runtime behavior
    **diverge at runtime**, an explicit, surfaced choice, never a default
    ([§3.3](../../../spec/40-runtime/42-evaluation.md#33-per-form-reduction-reconciled-with-17-1),
    "δ").
-5. **Resource-limit exhaustion** — the content-addressed store hitting its
-   capacity bound **MUST** surface a loud, catchable `CapacityExhausted` at
-   the `space` boundary, never a silent drop to a null/sentinel slot; this is
-   distinct from the other four because the program stays logically total,
-   so Ken generates no static "never exhausts" obligation — the stance is
-   detect-and-fail-loud, not prevent-by-proof
-   ([§2](../../../spec/40-runtime/44-capacity.md#2-capacity-is-an-engineering-choice-not-numerology-oq-5)).
-   That same section flags an implementation gap at the time it was written:
-   `ken-interp`'s intern shim mapped `CapacityExhausted` to the null slot — a
-   silent drop, exactly what the MUST forbids. The
-   [interpreter store](../../../crates/ken-interp/src/eval.rs)
-   records the error (`EvalStore::capacity_error`,
-   `take_capacity_error`) rather than only collapsing to the null slot, and an
-   in-crate test drives a store to its limit and asserts the error is
-   recorded, not dropped, at exactly the point of overflow, while a repeated
-   value at the same limit correctly does not trip it
-   ([capacity producer](../../../crates/ken-interp/src/eval.rs), `capacity_tests::
-   interp_loud_capacity_error_not_silent`,
-   `capacity_tests::interp_at_limit_repeat_does_not_trip`). This is evidence
-   that the silent-drop gap has been repaired at this
-   layer — it is not evidence that every layer above this store surfaces the
-   error to a user as a catchable fault; this page traces only as far as the
-   test above establishes and does not extend the claim further.
+5. **Resource-limit exhaustion** — a runtime or deployment may declare a
+   finite resource profile. When that limit is exhausted, the operation
+   **MUST** report a typed `CapacityExhausted`-class failure before it could
+   drop a value, alias unequal values, corrupt live state, or substitute a
+   sentinel. The specification does not require the measured resource to be
+   slots, values, bytes, pages, or table buckets. This case is distinct from
+   the other four because the program stays logically total, so Ken generates
+   no static "never exhausts" obligation — the stance is detect-and-fail-loud,
+   not prevent-by-proof
+   ([§2](../../../spec/40-runtime/44-capacity.md#2-capacity-and-loud-failure-oq-5-decided)).
+   The [interpreter store](../../../crates/ken-interp/src/eval.rs) records its
+   configured-limit error in `EvalStore::capacity_error`, and
+   `capacity_tests::interp_loud_capacity_error_not_silent` drives that store to
+   its limit and asserts that the error is recorded. This is evidence about
+   one private store implementation. It does not make interning, slot counts,
+   or deduplication part of the language contract, and it does not establish
+   that every higher layer exposes the recorded error as a catchable fault.
 
 None of the seven registered fragments contains an open hole, an opaque
 non-total definition, or an unguarded partial primitive — this is a
@@ -224,7 +225,7 @@ reconciling it.
 **Sources:**
 [evaluation §§1, 3.3–6](../../../spec/40-runtime/42-evaluation.md#1-relationship-to-the-kernels-reduction);
 [termination §§1–2](../../../spec/40-runtime/43-termination.md#1-the-total-core);
-[capacity §2](../../../spec/40-runtime/44-capacity.md#2-capacity-is-an-engineering-choice-not-numerology-oq-5);
+[capacity §§1–2](../../../spec/40-runtime/44-capacity.md#1-logical-values-are-separate-from-physical-storage);
 [native backend §§1–5](../../../spec/40-runtime/45-native-backend.md#1-why-a-native-backend-and-where-it-sits);
 [open decisions](../../../spec/90-open-decisions.md);
 [CLI paths](../../../crates/ken-cli/src/main.rs);
