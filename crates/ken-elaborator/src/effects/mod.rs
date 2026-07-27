@@ -56,7 +56,7 @@ pub use extract::{
     RowVarAllocator,
 };
 pub use infer::{infer_all, infer_all_poly, infer_row, infer_row_type, EffectDecl};
-pub use itree::{bind, handler_fold, perform, HandlerCase, ITree, Response, Value};
+pub use itree::{bind, handler_fold, incl, perform, HandlerCase, ITree, Response, Value};
 pub use lower::{lower_bind, lower_elim_itree, lower_handler_fold_uniform};
 pub use row::{EffectName, EffectRow, RowSubst, RowType, RowVar};
 pub use row_poly::{check_row_poly_escape, infer_row_poly};
