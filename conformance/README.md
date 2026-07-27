@@ -63,6 +63,13 @@ claim with no conformance case is a claim no one can rely on
   first).
 - `kernel/seed-k1.md` — K1-scoped subset (33 seed cases covering AC-1 through
   AC-8).
+- `kernel/inductive/seed-wstyle.md` — K1.5 W-style/Π-bound induction:
+  structural admission, function-shaped IH, W-style ι, conversion, and
+  unchanged direct/negative controls.
+- `kernel/inductive/seed-nested.md` — the nested-positive extension (`14 §3.2`,
+  `§7.8`, `§8.5`, `§9.5`): fresh-carrier structural admission with no name
+  allow-list, load-bearing lifted IH and nested ι, separate unknown/
+  non-positive/nested-negative controls, and unchanged direct/W-style behavior.
 - `kernel/observational/seed-observational.md` — K2-scoped seed cases (Omega-PI,
   funext, propext, Eq-by-type, cast regularity/computation, J-on-nonrefl,
   quotients, truncation, UIP).

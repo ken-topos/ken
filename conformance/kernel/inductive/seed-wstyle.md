@@ -8,10 +8,12 @@ strict positivity) — they **add** admittance for the strictly-positive Π-boun
 class and **do not regress** any existing K1 case.
 
 Ground truth: `spec/10-kernel/14-inductive.md` §2.1 (admission), §3.1
-(eliminator + Π-abstracted IH), §7.7 (W-style ι), §8.4–§8.5 (admission gate /
-deferred nested-mutual), §9.4 (subject reduction + termination + the adversarial
-boundary). Frame: `docs/program/wp/K1p5-wstyle-inductives.md`. Clean-room:
-grounded in the landed §-bodies + first principles; `yon` not consulted.
+(eliminator + Π-abstracted IH), §7.7 (W-style ι), §8.4–§8.6 (admission gate,
+nested boundary, and mutual deferral), §9.4 (subject reduction + termination +
+the adversarial boundary). Nested-positive behavior is homed in
+`seed-nested.md`; mutual families remain separately deferred by `§8.6`. Frame:
+`docs/program/wp/K1p5-wstyle-inductives.md`. Clean-room: grounded in the landed
+§-bodies + first principles; `yon` not consulted.
 
 Every discriminating case **flips** (correct accepts / the targeted bug rejects,
 or vice versa) or asserts a **verdict-independent structural output** (the ι
@@ -247,10 +249,10 @@ Spec: `14 §7.7`, `§9.4`.
 
 ## AC4 — no regression; the `14 §2` erratum is reconciled
 
-Spec: `14 §2`, `§6`, `§8.4`, `§8.5`.
+Spec: `14 §2`, `§6`, `§8.4`–`§8.6`.
 
 ### kernel/inductive/k1-inductive-suite-still-green
-- spec: `14 §6`, `§8.4`, `§8.5`
+- spec: `14 §6`, `§8.4`–`§8.6`
 - given: the full existing K1 inductive corpus — `../seed-k1.md`
   `positive-{nat,list}-admitted`, `negative-{bad,under-pi}-rejected`,
   `nested-negative-in-application-rejected`, `d-in-own-indices-rejected`,
@@ -258,24 +260,27 @@ Spec: `14 §2`, `§6`, `§8.4`, `§8.5`.
 - expect: **all unchanged-green** — K1.5 widens admittance by **exactly** the
   strictly-positive Π-bound class and nothing adjacent
 - why: `§8.4` — no change to `§8.1`/`§8.2` is needed; only the separate blanket
-  Π-bound gate is removed. Negative occurrences, nested occurrences (`§8.5`,
-  `List (Rose A)`), and mutual families stay **rejected**; the structural
-  eliminator and its ι are unchanged for direct (non-W-style) recursion. The
-  regression gate for the trust-root extension.
+  Π-bound gate is removed. Negative occurrences and mutual families stay
+  **rejected**; nested-positive is a separately gated extension with its own
+  structural lift (`§8.5`, `seed-nested.md`). The structural eliminator and its
+  ι are unchanged for direct and W-style recursion. The regression gate for the
+  trust-root extension.
 
 ### kernel/inductive/s2-erratum-allowed-reconciled
-- spec: `14 §2`, `§2.1`, `§8.4`, `§8.5`
+- spec: `14 §2`, `§2.1`, `§8.4`–`§8.6`
 - given: the chapter prose after K1.5 — `§2`'s "Allowed" list entry `(Nat → D) →
   D` annotated "**admitted in K1.5**, §2.1", and no in-chapter K1.5-deferral
   note remaining for the W-style class
 - expect: the chapter's **prose** and the kernel's **admittance** now **agree**
   for the strictly-positive Π-bound class (`§2` "allowed" is true), with
-  nested/mutual correctly split out as still-deferred (`§8.5`)
+  nested-positive specified separately (`§8.5`) and mutual alone still deferred
+  (`§8.6`)
 - why: closes this WP's origin — **positivity ≠ admittance**. Pre-K1.5 `§2`
   said `(Nat → D) → D` was "allowed" (positivity) while the kernel *rejected* it
   (admittance), the stale-prose hazard. K1.5 makes the prose true and removes
-  the deferral note (`§8.4`/`§8.5` split admitted-W from deferred
-  nested/mutual).
+  the W-style deferral note. The later nested extension does not change the
+  Π-bound class (`§8.4`); `§8.5` and `§8.6` now separate nested-positive from
+  mutual.
   Documentation-vs-behavior reconciliation case: a checker reading `§2`'s
   "allowed" must find the kernel actually admits it.
 
