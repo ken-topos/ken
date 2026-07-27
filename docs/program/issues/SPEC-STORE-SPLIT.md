@@ -235,6 +235,46 @@ arena organization, and reset mechanics become private.
    (`AC-V11`, `Debug` depth-totality) does **not** depend on P2 and is
    releasable independently.
 
+## 7b. ✅ §7 PROGRESS — items 1, 2, 3, 5 DISCHARGED (2026-07-27, Steward)
+
+| item | state |
+|---|---|
+| **1** re-cut `RT-NATIVE-FNSPLIT` | ✅ **PR #1066.** `B2E` retired to `closed`; `RT-FNSPLIT-C1` filed in its place. ⚠ **`B2F` was AMENDED, not retired** — a deliberate departure from item 1's wording; reasoning in `RT-FNSPLIT-C1.md`. |
+| **2** re-put `#11` | ✅ **Architect ruling `evt_7ay6s5s79awz8`, `dec_45aa2gngjc79z` resolved.** `#11` **still binds**; §1's causal claim ruled **over-broad**. Transcribed into `RT-NATIVE-FNSPLIT.md`. |
+| **3** re-read `SPEC-ALIGN-A1`'s stop list | ✅ **Done below — NOT auto-cleared.** 1 clears, 2 split, 2 hold. |
+| **4** `e1b540e2` salvage | ⏳ **still owed.** |
+| **5** frame `RT-VALUE-TOTALITY` P2 | ✅ written and queued behind `ABI-S3`. |
+
+### ✅ Item 3 — the re-read, row by row
+
+**Two blockers moved, and they moved independently.** `B2E` is **retired**
+(`closed`, PR #1066), and **§5 ruled C7**: *"the logical `space` contract is
+retained; per-`space` index shape, arena organization, and reset mechanics
+become private."*
+
+⛔ **The stops were NOT auto-cleared.** Each was re-read against its *own* stated
+reasons, and most rest on reasons neither `B2E` nor C7 touches — a live
+conformance population is independent of both.
+
+| census row | stated reasons | verdict |
+|---|---|---|
+| **Open addressing, linear probing, power-of-two mask, bucket/tombstone shape** (`:59`) | `STOP-C7` — *"eligible by consumer/class alone, but the store family is C7-coupled and live `B2E` infrastructure consumes it"* | ⭐ **CLEARS.** Its blockers were **exactly two** and **both are gone.** The census already recorded the consumer set as **empty** (*"the only `probing` hit is the Map-after-delete false control"*), and §5's ruling names this row's own subject — **index shape** — as private. |
+| **Fixed 4 MiB pages, bump allocation, oversized page** (`:61`) | *"Control B is live; C7/`B2E` entanglement"* | **SPLITS.** §5 makes **arena organization** private, so the *authority* question is settled — but `runtime/capacity/arena-spans-pages-oversized-safe` is **live**. ⇒ Not a stop on authority any more; a **conformance-row retarget**. |
+| **Per-`space` indexes, re-interning, manual reset, no GC, retired slot ids** (`:62`) | *"exactly fork C7"* | **SPLITS along the line §5 drew.** The **logical `space` contract is retained** — `space-reset-is-isolated`, `escape-survives-sender-reset`, `no-automatic-gc` stay. The **physical realization** goes private. |
+| **FNV-1a addressing, full-byte `memcmp`, monotonic `u64` slots** (`:57`) | *"live rows and C7/`B2E` entanglement"* | ⛔ **HOLDS.** `no-lattice-on-hot-path` and `reset-retires-ids-never-resurrected` are live and independent of both. |
+| **Same-slot dedup, slot-observable sharing, O(1) equality** (`:63`) | *"live population and C7"* | ⛔ **HOLDS.** Eight-plus live rows across `runtime/values`, `runtime/evaluation` and `surface/collections`. |
+
+⭐ **The shape worth carrying:** removing one of a stop's reasons clears the stop
+only when it was **one of exactly two**. Row `:59` cleared because the census had
+already done the hard part — it recorded an **empty consumer set**, so the row was
+held up by coupling alone. Rows `:57` and `:63` are untouched because a live
+conformance population never depended on `B2E` or C7 in the first place.
+
+⇒ **What this frees:** one small spec relaxation (`41 §3b` / `44 §1a` index
+policy) plus two conformance-reconcile items. ⚠ **Enclave work, not Steward
+work** — the relaxation edit and the retargets belong to the spec enclave, and
+⛔ this section is a finding, not the edit.
+
 ## 7a. ▶ HARD-STOP `#11`'s MEASUREMENTS — carried here because they live nowhere else
 
 ⚠ **These were raised BEFORE any production edit** — `crates/` was byte-identical
