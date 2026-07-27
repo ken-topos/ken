@@ -9,8 +9,8 @@ use — these are current-state claims and they perish.**
 | input | pin |
 |---|---|
 | the defect | `crates/ken-runtime/src/values.rs` blob **`a2921904`** — `#[derive(Debug)]` at **`:130`**, immediately above `pub enum Value` |
-| the mechanism to share | same file, `impl Drop for Value` **`:381`** and `impl Clone for Value` **`:399`**, and their doc block at **`:368–380`** describing the explicit **LIFO** heap worklist |
-| the postorder sibling | `crates/ken-runtime/src/canonical.rs` blob **`bc2579a9`** — `project_operational_to_canonical` at **`:107`**, `Visit`/`Finish` worklist, `Finish` arm at **`:165`** |
+| ⭐ **the mechanism to share — CORRECTED, see §2a** | `crates/ken-runtime/src/canonical.rs` blob **`bc2579a9`** — `impl Canonical for Value`'s **streaming pre-order emitter**, `let mut stack: Vec<Step<'_>>` at **`:337`** |
+| ⛔ **NOT the mechanism** | `impl Drop` **`values.rs:381`** / `impl Clone` **`:399`** — the **postorder** machine. §2a says why |
 | the AC text | `RT-VALUE-TOTALITY.md` **`AC-V11`** — read it; this frame does not restate its reasoning |
 | the corroborating probe | `runtime-implementer`, `evt_2119bqa3tnz0a`: landed `Debug` dies of stack overflow at **`D = 131072`**, out of process |
 
@@ -32,20 +32,55 @@ produced. That is a different failure class from the others, not a smaller one.
 ## 2. Deliverable
 
 **One hand-written `impl Debug for Value` driving the same explicit heap
-worklist `Clone`/`Drop` already use** (`values.rs:368–380`), replacing the
-derive at `:130`.
+worklist as the canonical encoder** — `Vec<Step<'_>>`, `canonical.rs:337` —
+replacing the derive at `values.rs:130`.
 
-⛔ **Not a second traversal mechanism beside the existing one.** The `AC-V9`
+⛔ **Not a second traversal mechanism beside the existing ones.** The `AC-V9`
 prohibition applies here for exactly the reason it applied there: two worklists
 diverge, and the next depth defect lands in whichever one the reader did not
-check. If the existing worklist cannot be shared as-is, **that is a finding to
-report, not a licence to fork it.**
+check.
+
+## 2a. ⛔⛔ FRAME CORRECTION — this section previously named the WRONG machine
+
+**Reported by `runtime-implementer` during implementation; verified at source
+and corrected here rather than annotated, because a stale operative sentence is
+what a reader binds to.**
+
+This frame's first revision said *"the same explicit heap worklist `Clone`/`Drop`
+already use."* ⛔ **That is wrong in kind, and the source says so in its own
+words.** `values.rs:393–397`:
+
+> *"`Clone` is the one **postorder** traversal here — a parent cannot be built
+> until its children exist … ⚠ This is deliberately **not** the same machine as
+> the encoder's streaming pre-order emitter; **fusing them would be wrong**."*
+
+**There are two iterative machines, not one, and they are not interchangeable:**
+
+| machine | shape | operand |
+|---|---|---|
+| `Clone` / `Drop` (`values.rs:381`, `:399`) | **postorder**, pending parent frames + completed-children buffer | **owned** values — it *constructs* or *destroys* |
+| the canonical encoder (`canonical.rs:337`) | **streaming pre-order**, `Vec<Step<'_>>` | **borrowed** values — it *emits* |
+
+⭐ **`Debug` takes `&self` and emits. It is the encoder's shape.** Nothing is
+constructed and nothing is destroyed, so the postorder machine's
+completed-children buffer has no operand to hold.
+
+⚠ **Read literally, the original sentence pointed at the machine the source
+explicitly warns against fusing** — so the frame did not merely under-specify,
+it aimed the implementer at the wrong one. The `AC-V9` prohibition stands
+unchanged; **which** existing worklist to share is what moved.
+
+⭐ **This is the escape clause in §2 working as intended** — *"if the existing
+worklist cannot be shared as-is, that is a finding to report"* — and it is worth
+noticing that the finding came from the seat holding the code, not from the seat
+that wrote the frame. A frame's mechanism claim is a hypothesis until someone
+implements against it.
 
 ## 3. Acceptance criteria
 
 | AC | claim | control |
 |---|---|---|
-| `AC-P3a` | ⭐⭐ **The mechanism is pinned, not the depth.** `Debug` traverses the same explicit heap worklist as `Clone`/`Drop`, therefore its depth is heap-bounded rather than host-stack-bounded. | ⛔ **A discharge whose whole content is "it survives `D = 131072`" is NOT this AC** — that is green against one depth on one platform and re-derives nothing if the traversal changes. State the structural argument; cite the measurement **beside** it |
+| `AC-P3a` | ⭐⭐ **The mechanism is pinned, not the depth.** `Debug` traverses the **encoder's** explicit heap worklist (`canonical.rs:337`), therefore its depth is heap-bounded rather than host-stack-bounded. ⚠ **AMENDED — see §2a**; this row previously named `Clone`/`Drop`. | ⛔ **A discharge whose whole content is "it survives `D = 131072`" is NOT this AC** — that is green against one depth on one platform and re-derives nothing if the traversal changes. State the structural argument; cite the measurement **beside** it |
 | `AC-P3b` | A `{:?}` at the **same `D` that `AC-V1` exercises** returns. | ⛔ Run it **out of process** — a stack overflow aborts, it does not unwind, so an in-process control cannot observe its own failure. ⚠ **State the depth as a number BEFORE running.** A control that renders nothing reports the same green as one that renders a deep value |
 | `AC-P3c` | ⭐ **The control actually rendered.** | Assert something about the produced string that is **impossible at shallow depth** — e.g. its length, or an occurrence count of a nesting token that scales with `D`. This is the positive control for `AC-P3b`; without it, `AC-P3b` passes for any reason including the value never being built |
 | `AC-P3d` | The derive is **gone**, not shadowed. | `#[derive(Debug)]` no longer appears above `pub enum Value`. ⛔ A hand-written impl added while the derive remains does not compile — but a derive moved to a wrapper type would, and would leave the recursive path reachable. Say which you did |
