@@ -3960,6 +3960,7 @@ pub struct FSIds {
     pub buffer_id: GlobalId,
     pub resource_kind_mismatch_id: GlobalId,
     pub buffer_limit_id: GlobalId,
+    pub allocation_failed_id: GlobalId,
     pub invalid_offset_id: GlobalId,
     pub invalid_bounds_id: GlobalId,
     pub no_progress_id: GlobalId,
@@ -4029,6 +4030,7 @@ impl FSIds {
             buffer_id: get("Buffer")?,
             resource_kind_mismatch_id: get("ResourceKindMismatch")?,
             buffer_limit_id: get("BufferLimit")?,
+            allocation_failed_id: get("AllocationFailed")?,
             invalid_offset_id: get("InvalidOffset")?,
             invalid_bounds_id: get("InvalidBounds")?,
             no_progress_id: get("NoProgress")?,
@@ -4780,6 +4782,9 @@ fn resource_error_value_v1(
             make_ctor(fs.resource_kind_mismatch_id, vec![expected, actual], store)
         }
         ken_host::ResourceErrorV1::BufferLimit => make_ctor(fs.buffer_limit_id, vec![], store),
+        ken_host::ResourceErrorV1::AllocationFailed => {
+            make_ctor(fs.allocation_failed_id, vec![], store)
+        }
         ken_host::ResourceErrorV1::InvalidOffset => make_ctor(fs.invalid_offset_id, vec![], store),
         ken_host::ResourceErrorV1::InvalidBounds => make_ctor(fs.invalid_bounds_id, vec![], store),
         ken_host::ResourceErrorV1::NoProgress => make_ctor(fs.no_progress_id, vec![], store),
@@ -6249,6 +6254,7 @@ mod px5b_effect_observation_tests {
             buffer_id: id(),
             resource_kind_mismatch_id: id(),
             buffer_limit_id: id(),
+            allocation_failed_id: id(),
             invalid_offset_id: id(),
             invalid_bounds_id: id(),
             no_progress_id: id(),
@@ -6373,6 +6379,36 @@ mod px5b_effect_observation_tests {
             ids,
             store,
         )
+    }
+
+    /// Durable invariant (`PX8-ERRID-ALLOC` AC-2): the checked FS driver
+    /// reifies a failure from the production host reservation path as the
+    /// nullary `ResourceError.AllocationFailed` constructor.
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn buffer_reservation_failure_reifies_the_checked_allocation_error() {
+        let ids = console_ids();
+        let fs = fs_ids();
+        let mut store = EvalStore::new();
+        let mut host = CaptureHost::new(Vec::new());
+        let mut resources = ken_host::ResourceTableV1::with_buffer_limits(
+            ken_host::BufferLimitsV1::new(u64::MAX, u64::MAX).unwrap(),
+        );
+
+        let result = run_fs(
+            fs.private_buffer_allocate_id,
+            &[
+                EvalVal::Unknown,
+                EvalVal::BigInt(BigInt::from(usize::MAX as u64)),
+            ],
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+
+        expect_resource_error(&result, fs.allocation_failed_id, &ids);
     }
 
     fn open_file<H: HostHandler>(

@@ -132,6 +132,7 @@ fn right_masks (error : ResourceError) : Bool =
     ReleaseFailed kind identity io |-> False;
     ResourceKindMismatch expected actual |-> False;
     BufferLimit |-> False;
+    AllocationFailed |-> False;
     InvalidOffset |-> False;
     InvalidBounds |-> False;
     NoProgress |-> False
@@ -203,6 +204,7 @@ fn double_release_second_error (error : ResourceError)
     ResourceKindMismatch expected actual |->
       double_release_unexpected (ResourceKindMismatch expected actual);
     BufferLimit |-> double_release_unexpected BufferLimit;
+    AllocationFailed |-> double_release_unexpected AllocationFailed;
     InvalidOffset |-> double_release_unexpected InvalidOffset;
     InvalidBounds |-> double_release_unexpected InvalidBounds;
     NoProgress |-> double_release_unexpected NoProgress

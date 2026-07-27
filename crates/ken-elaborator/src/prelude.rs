@@ -1412,7 +1412,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         ));
     }
     elab.elaborate_decl(
-        "data ResourceError = ResourceHostIO IOError | Closed | MalformedResource | RightNotHeld Int Int | ReleaseFailed ResourceKind ResourceTraceIdentity IOError | ResourceKindMismatch ResourceKind ResourceKind | BufferLimit | InvalidOffset | InvalidBounds | NoProgress",
+        "data ResourceError = ResourceHostIO IOError | Closed | MalformedResource | RightNotHeld Int Int | ReleaseFailed ResourceKind ResourceTraceIdentity IOError | ResourceKindMismatch ResourceKind ResourceKind | BufferLimit | AllocationFailed | InvalidOffset | InvalidBounds | NoProgress",
     )
     .map_err(|e| ElabError::Internal(format!("prelude ResourceError failed: {e}")))?;
     let resource_host_io_id = elab
@@ -1865,6 +1865,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            ReleaseFailed kind identity io |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r (ReleaseFailed kind identity io)); \
            ResourceKindMismatch expected actual |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r (ResourceKindMismatch expected actual)); \
            BufferLimit |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r BufferLimit); \
+           AllocationFailed |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r AllocationFailed); \
            InvalidOffset |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r InvalidOffset); \
            InvalidBounds |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r InvalidBounds); \
            NoProgress |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r NoProgress) \
@@ -1885,6 +1886,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            ReleaseFailed kind identity io |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (ReleaseFailed kind identity io)); \
            ResourceKindMismatch expected actual |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (ResourceKindMismatch expected actual)); \
            BufferLimit |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error BufferLimit); \
+           AllocationFailed |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error AllocationFailed); \
            InvalidOffset |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error InvalidOffset); \
            InvalidBounds |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error InvalidBounds); \
            NoProgress |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error NoProgress) \

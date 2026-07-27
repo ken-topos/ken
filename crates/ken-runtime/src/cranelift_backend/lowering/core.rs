@@ -8333,18 +8333,24 @@ impl<'a> Lowering<'a> {
                         )?,
                         self.synthesized_dynamic_alternative(
                             7,
+                            SynthesizedFixedConstructorRole::ResourceAllocationFailed,
+                            self.process_symbols.resource_allocation_failed.clone(),
+                            Vec::new(),
+                        )?,
+                        self.synthesized_dynamic_alternative(
+                            8,
                             SynthesizedFixedConstructorRole::ResourceInvalidOffset,
                             self.process_symbols.resource_invalid_offset.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
-                            8,
+                            9,
                             SynthesizedFixedConstructorRole::ResourceInvalidBounds,
                             self.process_symbols.resource_invalid_bounds.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
-                            9,
+                            10,
                             SynthesizedFixedConstructorRole::ResourceNoProgress,
                             self.process_symbols.resource_no_progress.clone(),
                             Vec::new(),

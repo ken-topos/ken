@@ -24,6 +24,7 @@ error|resource.BufferLimit|5
 error|resource.InvalidOffset|6
 error|resource.InvalidBounds|7
 error|resource.NoProgress|8
+error|resource.AllocationFailed|9
 tag|resource_kind.FsHandle|0
 tag|resource_kind.Buffer|1
 tag|stream.stdin|0

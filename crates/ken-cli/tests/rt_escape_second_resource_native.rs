@@ -363,18 +363,7 @@ const R2_CROSS_BUFFER_FREEZE: &str = r#"program capabilities FS AFull
 fn body_from_freeze (r : Result ResourceError Bytes) : ResourceBodyResult Unit Unit =
   match r {
     Ok bytes |-> ResourceBodyErr Unit Unit MkUnit;
-    Err error |-> match error {
-      InvalidBounds |-> ResourceBodyOk Unit Unit MkUnit;
-      Closed |-> ResourceBodyErr Unit Unit MkUnit;
-      InvalidOffset |-> ResourceBodyErr Unit Unit MkUnit;
-      BufferLimit |-> ResourceBodyErr Unit Unit MkUnit;
-      NoProgress |-> ResourceBodyErr Unit Unit MkUnit;
-      MalformedResource |-> ResourceBodyErr Unit Unit MkUnit;
-      RightNotHeld required held |-> ResourceBodyErr Unit Unit MkUnit;
-      ResourceHostIO io |-> ResourceBodyErr Unit Unit MkUnit;
-      ReleaseFailed kind identity io |-> ResourceBodyErr Unit Unit MkUnit;
-      ResourceKindMismatch expected actual |-> ResourceBodyErr Unit Unit MkUnit
-    }
+    Err error |-> ResourceBodyOk Unit Unit MkUnit
   }
 
 fn body_from_bracket (bracket : ResourceBracketResult Unit Unit) : ResourceBodyResult Unit Unit =
