@@ -405,13 +405,16 @@ and their dispositions are:
 5. Both former citations from §1a/§1c to `64-trust-model.md` are removed. That
    chapter contains no identifier-confusable contract, and none is needed:
    this is a lexical boundary, not a new TCB or trust-model claim.
+6. `spec/90-open-decisions.md` preserves the operator's bounded,
+   confusable-resistant principle and records its settled mechanism: §1b
+   bounds notation, while identifiers are ASCII-only and receive no TR39
+   profile, normalization, or repair.
 
 The examined complement is also closed:
 
-- `spec/90-open-decisions.md`'s `OQ-syntax` summary and
-  `docs/PRINCIPLES.md` §11 are governance summaries of the bounded
-  notation/security principle. They point back to §1a/§1b and define no
-  identifier production.
+- `docs/PRINCIPLES.md` §11 is a governance summary of the bounded
+  notation/security property. It points back to §1a and defines no identifier
+  production.
 - `spec/20-verification/25-protocol.md` and
   `conformance/verify/protocol/false-unknown-non-confusable-roundtrip` use
   "non-confusable" for distinguishable serialized verdict messages, not source
@@ -424,7 +427,13 @@ The examined complement is also closed:
   `crates/**` implementation/tests are historical or implementation evidence,
   not additional normative or conformance-row authorities. The landed lexer
   and its tests already enforce the selected ASCII boundary; this spec-only
-  decision changes no behavior and owes no current conformance row.
+  decision changes no behavior.
+
+A black-box conformance row is nevertheless **owed and staged**, tracked by the
+Steward without assigning a row identifier here. It must cover ASCII `ident`
+and `conid` acceptance, non-ASCII alphabetic rejection, and confusable and
+non-confusable controls that distinguish the ASCII wall from a TR39 gate. This
+WP does not edit a conformance path.
 
 ## 2. Tokens
 

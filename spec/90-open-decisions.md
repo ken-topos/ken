@@ -204,8 +204,12 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   style latitude); **(4)** **keywords stay ASCII words**, notation reserved for
   operators; **(5)** a **bounded, confusable-resistant** blessed set with lexer
   normalization/rejection of Unicode look-alikes (TR39) — a *security* property
-  (the reviewer reads exactly what the kernel checks; no homoglyph backdoor,
-  `60-security/64`). A starter glyph↔ASCII table is in `30-surface/31 §1b`.
+  (the reviewer reads exactly what the kernel checks; no homoglyph backdoor).
+  A starter glyph↔ASCII table is in `30-surface/31 §1b`.
+- **Resolved sub-item (SURF-IDENT-TR39 / SPEC-IDENT-BLESSED, 2026-07-27):**
+  principle 5's boundedness is preserved and binds the §1b notation set. The
+  identifier surface is ASCII-only (`30-surface/31 §1e/§2`); there is no TR39
+  identifier profile, normalization, or repair.
 - **Still iterating (team, under the principles):** the exact glyph for each
   construct (notably `≡`-vs-`==` equality and the lattice-op/`ℓ` ASCII),
   layout-vs-brace details, the keyword set — **except** the **definition
