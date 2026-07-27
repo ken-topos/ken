@@ -1,7 +1,7 @@
 ---
 id: V4-RESIDUAL
 title: "The Kripke countermodel is an inert shell: `forcing` is always empty, so nothing can force `¬φ` at any world, and V3's prose `description` is stuffed into `FormRef`, a slot meant for a subformula reference"
-status: ready
+status: active
 owner: verify
 size: L
 gate: G2-G3

@@ -139,10 +139,18 @@ Blobs at `origin/main = a8b632f0`. ⛔ Re-derive every one at point of use.
 | `crates/ken-elaborator/tests/l3_strings_roundtrip_acceptance.rs` | `0eed416d` | the carrier to flip (§6) — ⚠ **will move** when `STR-BIJ-TEST-CARRIER` merges |
 | `spec/30-surface/37-strings-collections.md` | `51695439` | `§2.1`, the `§2.3` conversion table, `§9 DS-AC4` |
 
-**Dependency available:** `unicode-normalization = "0.1"` is already a workspace
-dependency — **of `ken-runtime` only** (`crates/ken-runtime/Cargo.toml:23`). The
-ingresses live in `ken-elaborator` and `ken-interp`, so this WP **adds a manifest
-edge**. ⚠ That changes `Cargo.lock`; commit the updated lockfile or CI's
+**Dependency available:** `unicode-normalization = "0.1"` is declared by
+**`crates/ken-runtime/Cargo.toml:23` only**. The ingresses live in
+`ken-elaborator` and `ken-interp`, so this WP **adds a manifest edge**.
+
+> ⛔ **CORRECTED 2026-07-27 by `language-leader` at `2ebe232c`.** The root
+> `Cargo.toml` has **no `[workspace.dependencies]` table** and no
+> `unicode-normalization` entry, so ⛔ **a `.workspace = true` edge is invalid
+> and fails before the build.** ⇒ Add a **direct** `unicode-normalization =
+> "0.1"` to each ingress-owning crate's own manifest. This does not change the
+> ruled architecture or the scope.
+
+⚠ Either way it changes `Cargo.lock`; commit the updated lockfile or CI's
 `--locked` gate fails, and that failure will look like an unrelated PR's.
 
 ## ⛔ §6 — Atomicity, and the ONE dependency
