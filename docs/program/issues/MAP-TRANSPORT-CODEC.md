@@ -11,13 +11,19 @@ github: null
 origin: Operator ruling 2026-07-26 (`RULING R2` on SPEC-STORE-SPLIT) — "Map/Set's internal bytes should not be observable. Only it's external behavior should be observable. If a codec is required for map/set to be transportable, then the codec should be in ken, as it would also be generally useful not just inter-thread, but inter-process or over the network." Steward-filed per COORDINATION §2.
 ---
 
-> ## ⛔ GATED. Nothing starts here until `SPEC-STORE-SPLIT` merges.
+> ## ✅ GATE SATISFIED — `SPEC-STORE-SPLIT` merged 2026-07-27 at `c631841d`.
 >
-> `SPEC-STORE-SPLIT` is the WP that **removes** Map/Set byte canonicity from the
-> normative contract. This node is only coherent on the other side of it: until
-> that lands, `spec/40-runtime/41-values.md` still promises the very property a
-> codec would be built to supply, and any work here would be designing a
-> replacement for something the corpus says still exists.
+> The gate was that `SPEC-STORE-SPLIT` **removes** Map/Set byte canonicity from
+> the normative contract, so until it landed, `spec/40-runtime/41-values.md`
+> still promised the very property a codec would be built to supply and any work
+> here would have been designing a replacement for something the corpus said
+> still existed. That is no longer the case: `41 §2/§3a/§5`, `30-taxonomy §6`, and
+> every generic closure-free byte clause now dispatch by value domain, and Map/Set
+> expose only extensional equality, ordered `to_list`, and durable round-trip.
+>
+> ⛔ **This node is still not released.** §2 below is the reason — the first
+> deliverable is a decision about whether a codec is required at all, and that
+> has not been taken. It is releasable, not ready.
 
 ## 1. The operator ruling, verbatim
 
