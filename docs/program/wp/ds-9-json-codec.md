@@ -127,7 +127,10 @@ hour that the theorem is the whole job. Plan the proof first (§4 `D4`).
    `list_bytes_roundtrip` are **"trusted declarations, not"** proofs.
 
 ⇒ A round-trip law routed through `Bytes` concatenation is either unprovable or
-provable only at a `trusted_base()` cost. That is what §3 rules on.
+provable only at a `trusted_base()` cost. **§3 rules `Bytes` out as the core
+carrier for exactly this reason** — the measurement above is why the ruling went
+the way it did, and it is kept here so the ruling is auditable rather than
+merely obeyed.
 
 ⚠ `bytes_encode`/`bytes_decode` are **not** in the same position: the
 `BytesRoundTripLaw` at `spec/30-surface/38-ffi-io.md:253-317` states
@@ -155,20 +158,73 @@ provable only at a `trusted_base()` cost. That is what §3 rules on.
 `LawfulClasses`. Object keys can therefore carry a lawful ordering. ⛔ Verify
 that at your base before relying on it — that line is a claim in prose.
 
-## 3. ⚠ THE CARRIER RULING — Architect, transcribed here before release
+## 3. ✅ THE CARRIER RULING — Architect, `dec_3n1pp559pxrrw` RESOLVED
 
-> **TRANSCRIPTION SLOT.** The fork was put to the Architect as
-> `evt_46z6m4mcpdbj4`: does `encode` produce `List UInt8` (with `Bytes` only at
-> the outermost shell), `Bytes` (accepting a `trusted_base()` delta), or is
-> `bytes_concat` spec work that gates DS-9? **The ruling is transcribed into
-> this section before the node flips `ready`.** ⛔ An in-thread ruling is not a
-> durable input — if this slot still reads "TRANSCRIPTION SLOT" when you pick
-> the WP up, stop and tell the Steward.
+Transcribed from `evt_4mt4bbxrqhay3`, verified `resolved` from the decision
+object. **This is a fixed input. Do not re-open it.**
 
-⛔ Whatever the ruling, **the trust position is stated in the entry, not
-discovered by a reader.** If any step leans on a postulate, the package's
-"Trust & derivation" section names it and the `trusted_base()` delta is reported
-as a number, not as "zero" by omission.
+> **OPTION C — `List Char` is the law-bearing carrier.** The proof-bearing core
+> is:
+>
+> ```ken
+> encode : Json -> List Char
+> decode : List Char -> Result JsonError Json
+> ```
+>
+> and `decode (encode j) = Ok j` is proved **structurally over `Json` and
+> transparent list operations**. `CursorOps` is already carrier-neutral, so DS-9
+> supplies a **character** cursor without changing the parser abstraction. The
+> existing `ByteCursor` chose byte offsets for its *diagnostic* contract; **that
+> does not make `Bytes` the authority for a codec proof.**
+>
+> **JSON string values and object keys may remain `String`.** Their round-trip
+> leaf uses the already-landed `string_to_list_char_retraction` certificate.
+> ⇒ DS-9 adds **zero new trusted declarations**, but the report must state
+> honestly that this case is **proved relative to that existing `String`
+> certificate** — it is **not** an absolutely trust-free theorem.
+>
+> **Rejected core carriers.**
+> - ⛔ **Not `List UInt8`** — that puts UTF-8 validity/encoding and the opaque
+>   `String`/`Bytes` bridges *inside the central law*, and it weakens the
+>   driver's intended exercise of the landed `Char`/`String` layer.
+> - ⛔ **Not `Bytes`** — `bytes_concat` has no spec authority, the relevant byte
+>   operations are opaque to kernel conversion, and the structural-view inverses
+>   are trusted declarations. A green theorem there would be
+>   **postulate-dependent by construction**.
+>
+> **Outer shells are separate APIs.** Separately named convenience shells such
+> as `encode_string`/`decode_string` and `encode_bytes`/`decode_bytes` are
+> allowed, but **neither inherits the core theorem by assertion**.
+> - A `String`-shell law needs a **specialized** proof that every `encode j`
+>   output is **already canonical** under the NFC-normalizing conversion. ⛔ **The
+>   general `List Char → String → List Char` inverse is FALSE.**
+> - A `Bytes`-shell law must **expose** its dependence on the existing
+>   UTF-8/`Bytes` trusted boundary.
+>
+> ⛔ **Do not spec-gate DS-9 on `bytes_concat`** — the law-bearing core does not
+> consume it. Its missing spec entry is a separate gap, not a blocker here.
+
+### What the ruling means for the trust report
+
+⚠ **`string_to_list_char_retraction` is an `axiom`, not a theorem.**
+`catalog/packages/Data/Text/StringBijection.ken.md:13` declares it, and `:48`
+records it as *"the one named postulate selected by the operator."* The ruling's
+wording is exact and this frame keeps it exact: **zero *new* trusted
+declarations, and not a trust-free theorem.**
+
+⛔ **Report the string leaf's dependence as a positive statement, not as
+silence.** "Zero `trusted_base()` delta" is true and, on its own, misleading — a
+reader concludes the round-trip is unconditional. The entry's "Trust &
+derivation" section names the certificate, says which case rests on it, and says
+which cases do not.
+
+⭐ **Why the NFC point is sharp rather than pedantic.**
+`spec/30-surface/38-ffi-io.md:265-266` records that `String` construction
+**NFC-normalizes**, and that normalization is
+what makes the general round-trip through `String` false: a `List Char` that is
+not already NFC comes back different. The `String` shell is therefore only sound
+because `encode`'s *own output* is canonical — which is a property of `encode`
+that must be **proved**, not assumed from the core theorem.
 
 ## 4. Deliverables
 
@@ -178,12 +234,15 @@ as a number, not as "zero" by omission.
   optional fraction and exponent, and `Capability/Parsing/Numeric.ken.md` parses
   *integers*. State what DS-9 accepts, prove the round-trip over exactly that,
   and file the remainder as a scoped residual — ⛔ not as a silent narrowing.
-- **`D2` · a `CursorOps` instance for the codec's carrier**, per §3, with
-  **`CursorLaws` proved for it** (`Cursor.ken.md:250`). ⛔ An instance without
-  its laws is the inert-artifact shape; the decoder's guarantees are conditional
-  on `CursorLaws` and are worth nothing without it.
-- **`D3` · `encode` and `decode`.** `decode` built from the landed combinators
-  (`§2b`) via `decoder_recursive`; `encode` structurally recursive on `Json`.
+- **`D2` · a `Char` `CursorOps` instance**, per §3 — `CursorOps (List Char) Char
+  loc` — with **`CursorLaws` proved for it** (`Cursor.ken.md:250`). ⛔ An instance
+  without its laws is the inert-artifact shape; the decoder's guarantees are
+  *conditional* on `CursorLaws` and are worth nothing without it. ⭐ Adding a
+  third `CursorOps` instance is the abstraction working as designed — ⛔ do not
+  reach for `ByteCursor` because it is the one the exemplar used.
+- **`D3` · the core `encode` / `decode`**, at exactly the §3 signatures.
+  `decode` built from the landed combinators (`§2b`) via `decoder_recursive`;
+  `encode` structurally recursive on `Json`, producing `List Char`.
 - **`D4` · the round-trip theorem** — `decode (encode j)` yields `j`, for every
   `j` in `D1`'s stated domain. ⭐ **Plan this before writing `D3`.** The standard
   route is a *prefix* lemma — the decoder applied to `encode j` followed by any
@@ -192,6 +251,14 @@ as a number, not as "zero" by omission.
   after the codec is written and `D3` gets rewritten.
 - **`D5` · fuel sufficiency** — the §2b argument as a theorem: for well-formed
   input, `decoder_recursive`'s seeded fuel is never exhausted.
+- **`D5a` · the shells, if you ship them — each with its OWN law or none.**
+  `encode_string`/`decode_string` and `encode_bytes`/`decode_bytes` are permitted
+  by §3 and ⛔ **neither inherits `D4` by assertion.** A `String` shell needs a
+  *specialized* proof that `encode`'s output is already NFC-canonical; a `Bytes`
+  shell must name its dependence on the UTF-8/`Bytes` trusted boundary. ⭐ **A
+  shell with no law is a perfectly good deliverable** — export it as a plain
+  convenience function and say it carries no round-trip guarantee. ⛔ What is not
+  acceptable is a shell whose docs imply the core theorem covers it.
 - **`D6` · the acceptance test**, following the landed pattern in
   `crates/ken-elaborator/tests/ds3_sum_combinators_acceptance.rs`: elaborate the
   `.ken.md` through `ElabEnv::elaborate_ken_md_file`, assert the laws are **real
@@ -214,9 +281,18 @@ Each names its positive control — the mutation that must flip it red.
 | `AC-5` | The round-trip theorem `D4` is a real kernel-checked `theorem`, reported **per Json constructor** — one row each for null, bool, number, string, array, object. | neuter the array case's induction step → **only** the array row reddens; ⛔ an aggregate pass hides one defecting constructor |
 | `AC-6` | `D5` fuel sufficiency is a theorem, exercised on input nested deeply enough to distinguish it. | halve the seeded fuel in a probe build → `DecoderFuelExhausted` appears, proving the test input actually reaches the bound |
 | `AC-7` | Object keys use the **landed lawful** `Ord String` / `DecEq String`. | swap in a structurally-equal but unproved comparison → the law's proof term fails |
-| `AC-8` | `trusted_base()` delta is reported **as a number** for the new file, and any postulate leaned on is named in "Trust & derivation". | add a stray `Axiom` to the fence → the delta assertion reddens |
-| `AC-9` | Zero `Axiom` / `postulate` / `sorry` inside any law claimed as proved. | as `AC-8`'s control, asserted at the law rather than the file |
+| `AC-8` | `trusted_base()` delta is reported **as a number** for the new file, **and** the entry names `string_to_list_char_retraction` as the certificate the string leaf rests on. | add a stray `Axiom` to the fence → the delta assertion reddens |
+| `AC-9` | Zero `Axiom` / `postulate` / `sorry` **declared in DS-9's own file**. ⚠ Scoped deliberately — see below. | add an `axiom` to the fence → reddens; ⛔ the control must **not** redden merely because an imported certificate is reachable |
 | `AC-10` | `D7` Findings filed, **or** an explicit written statement that the assembly produced none. | ⚠ this AC has **no mechanical control** — it is discharged by the report, and it is listed so that "clean" and "never looked" cannot read identically |
+
+⚠ **Why `AC-9` is scoped to DS-9's own file, and not to reachability.** The
+ruling permits the string leaf to rest on `string_to_list_char_retraction`, which
+is an `axiom` in a *landed* package. An `AC-9` written as "no postulate anywhere
+in the proof's dependency closure" would therefore be **unsatisfiable by
+construction** — it would block a WP for doing exactly what the Architect ruled
+it should do. ⇒ `AC-9` bounds what DS-9 **introduces**; `AC-8` is what makes the
+inherited dependence **visible**. ⛔ Neither one alone is enough, and swapping
+either for the other silently drops half the property.
 
 ⛔ **`AC-5` is the WP.** If it cannot be discharged, DS-9 has found the tier's
 real limit and that outcome is a **legitimate, valuable result** — report it,

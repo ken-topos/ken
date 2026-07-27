@@ -1,7 +1,7 @@
 ---
 id: DS-9
 title: "lawful JSON codec — the data-structures tier's acceptance test: a Json value type, encode/decode, and the proved round-trip law, assembled entirely from the landed Core/Data sections"
-status: draft
+status: ready
 owner: foundation
 size: L
 gate: none
@@ -19,15 +19,28 @@ origin: Phase 3 of the catalog data-structures enrichment program (docs/program/
 > **DS-1 … DS-8 are all landed.** DS-9 adds no new component — it finds out
 > whether the ones already there compose.
 
-## Why this node is `draft` and not `ready`
+## ✅ The carrier is RULED — `dec_3n1pp559pxrrw`, transcribed
 
-⛔ **One Architect ruling is outstanding.** Frame §3 holds a transcription slot
-for it, and the node flips `ready` only once the ruling is written into that
-slot. An in-thread ruling is not a durable input.
+**Option C: `List Char` is the law-bearing carrier.** Core API
+`encode : Json -> List Char` / `decode : List Char -> Result JsonError Json`,
+round-trip proved structurally over `Json` and transparent list operations.
+`Bytes` and `List UInt8` are both **rejected as the core carrier**; convenience
+shells are permitted but ⛔ **inherit no theorem by assertion**. Full ruling text
+is transcribed into frame §3 — read it there, not here.
 
-**The fork** (put as `evt_46z6m4mcpdbj4`): DS-9's central deliverable is a
-**proved** round-trip law, and reasoning through a `Bytes` encoder appears to
-stop. Measured at `origin/main = 32b1b772`:
+⭐ **DS-9 adds zero new trusted declarations**, and it is **not** an absolutely
+trust-free theorem: the string leaf rests on the landed `axiom`
+`string_to_list_char_retraction`
+(`catalog/packages/Data/Text/StringBijection.ken.md:13`). `AC-8` makes that
+dependence visible; `AC-9` bounds what DS-9 itself introduces.
+
+⛔ **`bytes_concat` does NOT gate this node.** The law-bearing core does not
+consume it; its missing spec entry is a separate gap.
+
+### The measurement that produced the fork
+
+Kept because it is why the ruling went the way it did. Measured at
+`origin/main = 32b1b772`:
 
 | measurement | where |
 |---|---|
@@ -37,8 +50,8 @@ stop. Measured at `origin/main = 32b1b772`:
 
 ⇒ A `Json → Bytes` encoder makes the round-trip either unprovable or provable
 only at a `trusted_base()` cost — against the zero-delta discipline every landed
-catalog entry has held. The carrier is a component-design call, so it is the
-Architect's, not mine.
+catalog entry has held. The carrier was a component-design call, so it went to
+the Architect rather than being settled in this frame.
 
 ⚠ `bytes_encode`/`bytes_decode` are **not** in the same position — the
 `BytesRoundTripLaw` at `spec/30-surface/38-ffi-io.md:253` records
