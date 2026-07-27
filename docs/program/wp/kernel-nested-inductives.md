@@ -87,8 +87,43 @@ the head is **`List`** — not `Json`. **So the arm never fires and
 `recursive_args` returns `[]`.**
 
 ⛔⛔ **`[]` is not an error. `[]` is the correct answer for `JsonNull`.** That is
-the whole hazard, and it makes contract point 2 mechanically precise. If you
-only relax `check_pos_arg`:
+the whole hazard, and it makes contract point 2 mechanically precise.
+
+### ⛔⛔ CORRECTED 2026-07-27 — the inert outcome is PRESENT, not future
+
+⚠ **This section originally described the zero-IH outcome as something relaxing
+`check_pos_arg` *would* create. It already exists on `main`**, for a shape the
+kernel **already admits**. Measured by `kernel-implementer`, independently
+confirmed:
+
+```rust
+// crates/ken-kernel/src/inductive.rs
+:90  Term::Pi(dom, cod)    => check_pos_arg(d, pol.flip(), dom) && check_pos_arg(d, pol, cod),
+:91  Term::Sigma(dom, cod) => check_pos_arg(d, pol,        dom) && check_pos_arg(d, pol, cod),
+```
+
+⭐ **`Pi` flips its domain; `Sigma` does not — both components are checked at the
+same polarity.** So `Σ (_ : D). D` is **strictly positive and admitted today**,
+while `recursive_args` returns `[]` for it (a `Sigma` is not `IndFormer`-headed
+after `peel_app`). ⇒ **A declaration with two recursive occurrences and zero
+induction hypotheses is reachable on `main` right now**, with no foreign former
+involved.
+
+⚠ **It is not currently a *bug*** — Architect: the method type and the reduct
+**agree** on zero IHs, so it is *"an already-admitted **eliminator-completeness
+gap** … internally type-correct."* ⛔ **Changing only `method_type` is what turns
+it into a subject-reduction defect.** That is the entire reason `D3b` and `D4`
+must be atomic (§4).
+
+⇒ **Primitive `Sigma` is MANDATORY in the exhaustive recursive-shape
+population** — Architect: it belongs through §8.5 clause 2's native-former rule,
+and *"§3.2's lift is structural over the argument type, not name-scoped to
+foreign formers."* For `Σ (_ : D). D`: preserve the dependent `Sigma` topology
+and expose **exactly two motive leaves**. ⛔ Omitting it preserves an
+already-demonstrated zero-IH gap.
+
+Original text, still accurate as to mechanism — if you only relax
+`check_pos_arg`:
 
 | step | what happens |
 |---|---|
@@ -207,15 +242,39 @@ Node text is authoritative; this is the slicing view.
 | `D1a` | per-parameter polarity for an inductive family — derived at admission, **recorded** on the declaration, readable when checking a nested occurrence | ⚠ does not exist (§2b). ⛔ Read §2e before choosing where to record it |
 | `D1b` | structural positivity through those declared positions, replacing the blanket rejection at `check_pos_arg`'s non-`D`-head arm | ⛔ keyed on polarity, never on a name |
 | `D2` | fail-closed for unknown and non-positive parameter positions | |
-| `D3` | eliminator generation: one lifted IH per contained recursive occurrence | ⚠ §2c — widens `recursive_args`' return type |
-| `D4` | the matching iota reductions; the kernel **checks** the generated eliminator | |
+| `D3a` | ⭐ **inert preparation**: the exhaustive recursive-shape descriptor, its producer, and API plumbing. Population **must** include direct, Pi/W-style, `D`-free, declared-positive-former nesting (test-only construction), and **primitive `Sigma`** | ⛔ Must leave admission, `method_type`, `iota_reduct`, and **every observable eliminator signature and reduct behaviour unchanged**. If it replaces `recursive_args`, legacy consumers **project only** the legacy direct/Π-bound class. ⚠ Does **not** discharge `D3` or `AC-K3` |
+| `D3b` | **semantic consumption**: a generated method binder actually carries the structured lift | ⛔⛔ **ATOMIC WITH `D4`** — see `AC-K14`. ⛔ Not separable by any commit |
+| `D4` | the matching iota reductions; the kernel **checks** the generated eliminator | ⛔⛔ **ATOMIC WITH `D3b`.** *"Generated method binders and the terms supplied by ι are one semantic unit."* Both land before `D1b` |
 | `D5` | surface consumability: matching, elaboration, structural-recursion/termination | ⚠ §2d — the elaborator delegates, `sct.rs` and the evaluator do not |
 | `D6` | the four conformance rows of contract point 4 | |
 | `D7` | `trusted_base()` delta as a **number**, with what grew and why | ⛔ not a zero — this node grows the TCB |
 
 ## §4 Slicing guidance — ⭐ `D1a` FIRST, and the order is not arbitrary
 
-**Recommended order: `D1a` → `D3` → `D1b`/`D2` → `D4` → `D5` → `D6`/`D7`.**
+> ## ⛔⛔ CORRECTED — THE ORDER BELOW WAS UNSOUND (`dec_351mz4r239398`)
+>
+> **The order this section originally gave — `D1a` → `D3` → `D1b`/`D2` → `D4` —
+> is unsound and is withdrawn.** Architect, verbatim: *"The current order `D3
+> semantics → D1b → D4` is unsound."*
+>
+> **Why:** ⭐ *"In the TCB, generated method binders and the terms supplied by ι
+> are **one semantic unit**."* Giving a method a structured lifted binder while
+> `iota_reduct` still supplies none is not an incomplete step — it is a
+> **subject-reduction defect**: the generated method expects a lifted value the
+> reduct never constructs. Separating `D3`'s semantics from `D4` by *any* commit,
+> let alone by `D1b`, passes through that broken state.
+>
+> ⇒ **`D3` splits, and `D3b` fuses with `D4`:**
+>
+> **`D1a` ✅ → `D3a` (inert prep) → `D3b`+`D4` ATOMIC → `D1b`/`D2` → `D5` →
+> `D6`/`D7`.**
+>
+> ⚠ **`D3a` does NOT discharge `D3` or `AC-K3`.** *"The frame phrase 'eliminator
+> generation extended' is not satisfied until a generated method consumes the
+> structured lift."*
+
+**Superseded order (kept only so the correction is legible): `D1a` → `D3` →
+`D1b`/`D2` → `D4` → `D5` → `D6`/`D7`.**
 
 ### ⭐ RELEASED AS A `D1a`-FIRST SLICE — Steward sequencing call
 
