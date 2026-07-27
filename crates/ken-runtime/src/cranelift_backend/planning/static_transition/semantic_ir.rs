@@ -12,6 +12,7 @@ use crate::{
     RuntimeExpr, RuntimeIntV1, RuntimePartiality, RuntimePrimitive, RuntimeTrap, RuntimeTrapCode,
     RuntimeValue, Sign,
 };
+use std::collections::BTreeMap;
 
 /// The preallocated positional identity of one planned occurrence.
 ///
@@ -24,6 +25,97 @@ use crate::{
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub(in crate::cranelift_backend) struct StaticOriginId(pub(super) u32);
+
+/// The artifact-static identity of a **constructor** symbol (`D1`).
+///
+/// ⭐ The wrapped word is `pub(super)` for the same reason `StaticOriginId`'s
+/// ordinal is: `lowering` can hold one, compare two, and hand one to the
+/// carrier's emitted `tag` / `store_tag_id` helpers, but **cannot mint one**.
+/// That is what makes "one identity authority shared by producer and consumer"
+/// (`D2`) a property of the *type system* rather than of reviewer vigilance —
+/// there is no second derivation available to a consumer, because a consumer
+/// has no constructor for this type at all.
+///
+/// ⛔ **Distinct from [`FieldIdentity`] on purpose.** Constructor identity and
+/// record-field identity are different namespaces, and a comparison across them
+/// is meaningless. Two newtypes over one authority make that error **fail to
+/// compile** rather than merely never happening to be written.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(transparent)]
+pub(in crate::cranelift_backend) struct ConstructorIdentity(pub(super) DenseRange);
+
+/// The artifact-static identity of a **record field** name (`D1`).
+///
+/// See [`ConstructorIdentity`] for why the word is unmintable outside this
+/// planner and why the two namespaces are separate types.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(transparent)]
+pub(in crate::cranelift_backend) struct FieldIdentity(pub(super) DenseRange);
+
+/// The **one** injective `DenseRange -> u64` encoding, for handing an identity
+/// to the carrier's emitted ABI (`store_tag_id`, `tag`, `record_field`,
+/// `store_name`).
+///
+/// ⛔ **No per-site packing arithmetic.** Every identity that reaches emitted
+/// code goes through this function, so there is exactly one spelling to review
+/// and exactly one to get wrong.
+///
+/// ⭐ **Zero is retained as the invalid sentinel**, which is why the encoding
+/// adds one: a span of `start = 0, len = 0` is a legitimate identity (the empty
+/// name at offset zero) and would otherwise be indistinguishable from
+/// uninitialized ABI memory.
+///
+/// ⚠ **Artifact-local only.** This number is stable within one artifact's plane
+/// and carries no cross-artifact meaning — spans depend on that artifact's own
+/// interning order. ⛔ Do not persist it, compare it across artifacts, or read
+/// it as a portable name.
+fn pack_identity(span: DenseRange) -> Result<u64, CraneliftBackendError> {
+    ((u64::from(span.start) << 32) | u64::from(span.len))
+        .checked_add(1)
+        .ok_or_else(|| planner_capacity_error("semantic identity encoding exhausted"))
+}
+
+/// Inverse of [`pack_identity`]. ⛔ Zero is the invalid sentinel and is refused.
+///
+/// ⚠ **`cfg(test)` deliberately, and this is a statement about the current
+/// state rather than a permanent one.** Nothing in production decodes an
+/// identity yet — `S1`/`S2` only ever *hand* one to the carrier ABI. `D3`/`D4`
+/// are the consumers that read one back, and they promote this to production.
+///
+/// ⛔ Not `#[allow(dead_code)]`: the dead-code warning is a free and accurate
+/// oracle for "does production consume this?", and silencing it with an
+/// attribute would hide exactly the inertness this node exists to remove.
+#[cfg(test)]
+pub(super) fn unpack_identity(packed: u64) -> Result<DenseRange, CraneliftBackendError> {
+    let raw = packed
+        .checked_sub(1)
+        .ok_or_else(|| planner_error("semantic identity is the reserved invalid sentinel"))?;
+    Ok(DenseRange {
+        start: (raw >> 32) as u32,
+        len: (raw & u64::from(u32::MAX)) as u32,
+    })
+}
+
+impl ConstructorIdentity {
+    /// This identity as the carrier ABI's `tag_id` word.
+    ///
+    /// ⛔ Deliberately a method on the **typed** identity rather than a free
+    /// `u64` conversion: erasing both namespaces to `u64` before choosing
+    /// between the tag ABI and the name ABI is exactly the confusion the two
+    /// newtypes exist to prevent.
+    pub(in crate::cranelift_backend) fn tag_abi_word(self) -> Result<u64, CraneliftBackendError> {
+        pack_identity(self.0)
+    }
+}
+
+impl FieldIdentity {
+    /// This identity as the carrier ABI's `name_id` word. See
+    /// [`ConstructorIdentity::tag_abi_word`] for why this is not a shared
+    /// `u64` conversion.
+    pub(in crate::cranelift_backend) fn name_abi_word(self) -> Result<u64, CraneliftBackendError> {
+        pack_identity(self.0)
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
@@ -364,12 +456,44 @@ pub(super) struct SemanticMaterialArena {
     atoms: Vec<SemanticOperandElement>,
     child_origins: Vec<StaticOriginId>,
     names: Vec<u8>,
+    /// ⛔ **Construction-local only.** Exact-byte lookup so `intern` can return
+    /// the *canonical* span for content it has already seen.
+    ///
+    /// ⛔ This is **not** a second identity authority and must never become one:
+    /// it is never copied into the plane, never exported, and never consulted
+    /// after plane construction. `build_semantic_plane` copies `names` and
+    /// nothing else. It is a *memo* of the one derivation, discarded with the
+    /// arena — deleting it would change performance and not meaning.
+    ///
+    /// ⚠ It participates in the derived `PartialEq` harmlessly: the map is a
+    /// pure function of the interning history, so two arenas with equal `names`
+    /// necessarily have equal caches.
+    canonical_names: BTreeMap<Vec<u8>, DenseRange>,
 }
 
 impl SemanticMaterialArena {
+    /// Intern `bytes` **content-addressed**: equal bytes always yield the same
+    /// canonical [`DenseRange`], which is the artifact-static identity of that
+    /// symbol and the sole stored form of it.
+    ///
+    /// ⭐ This is what makes a producer's identity for `Cons` and an
+    /// eliminator's identity for `Cons` the *same value* even when they are
+    /// different occurrences — the property `D2` requires and the reason the
+    /// span, rather than an added id, is the identity. `names[span]` remains the
+    /// diagnostic view over that one authority.
+    ///
+    /// ⛔ Before `RT-FNSPLIT-C1` this appended unconditionally, so equal content
+    /// produced *unequal* spans and no shared identity existed. Restoring the
+    /// unconditional append re-breaks `D2` while leaving every span in bounds —
+    /// which is why `SemanticPlane::validate` rejects unequal spans for equal
+    /// bytes rather than trusting this function.
     fn intern(&mut self, bytes: &[u8]) -> Result<DenseRange, CraneliftBackendError> {
+        if let Some(span) = self.canonical_names.get(bytes) {
+            return Ok(*span);
+        }
         let span = DenseRange::at_end(&self.names, bytes.len(), "semantic name")?;
         self.names.extend_from_slice(bytes);
+        self.canonical_names.insert(bytes.to_vec(), span);
         Ok(span)
     }
 
@@ -908,6 +1032,156 @@ fn opcode_for_source(source: SemanticSourceKind) -> SemanticOpcode {
 }
 
 impl SemanticPlane {
+    /// The single record an origin resolves to, with both positional-identity
+    /// checks applied.
+    ///
+    /// ⭐ Extracted so that `child_origin` and the `D1` identity accessors share
+    /// **one** descriptor -> program -> record walk. Two copies of this walk
+    /// would be two authorities on "the record for this origin", and a
+    /// divergence between them is exactly the wrong-occurrence substitution the
+    /// origin-vs-index checks below exist to make impossible.
+    fn record_for(&self, origin: StaticOriginId) -> Result<&SemanticRecord, CraneliftBackendError> {
+        let descriptor = self
+            .descriptors
+            .get(origin.0 as usize)
+            .ok_or_else(|| planner_error("static origin is outside the semantic descriptors"))?;
+        if descriptor.origin != origin {
+            return Err(planner_error(
+                "descriptor origin is not its preallocated positional identity",
+            ));
+        }
+        let program = self
+            .programs
+            .get(descriptor.program.0 as usize)
+            .ok_or_else(|| planner_error("descriptor names an unknown semantic program"))?;
+        let [record] = plane_slice(&self.records, program.records, "semantic record")? else {
+            return Err(planner_error(
+                "semantic program does not hold exactly one record",
+            ));
+        };
+        if record.origin != origin {
+            return Err(planner_error(
+                "semantic record origin is not its preallocated positional identity",
+            ));
+        }
+        Ok(record)
+    }
+
+    /// This occurrence's own non-child semantic atoms, in emission order.
+    fn operands_of(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<&[SemanticOperandElement], CraneliftBackendError> {
+        let record = self.record_for(origin)?;
+        plane_slice(&self.operands, record.operands, "semantic operand")
+    }
+
+    /// The `occurrence`-th atom of `kind` among this origin's own operands.
+    ///
+    /// ⚠ Selection is by **atom kind**, not by absolute operand position: a
+    /// `Match`'s operand run begins with a `MatchDefault` atom and interleaves
+    /// `CaseBinders` / `CaseBinder` between the `CaseConstructor`s, so an
+    /// absolute index would silently track the binder counts of earlier cases.
+    fn named_atom(
+        &self,
+        origin: StaticOriginId,
+        kind: SemanticAtomKind,
+        occurrence: usize,
+    ) -> Result<&SemanticOperandElement, CraneliftBackendError> {
+        self.operands_of(origin)?
+            .iter()
+            .filter(|atom| atom.kind == kind)
+            .nth(occurrence)
+            .ok_or_else(|| {
+                planner_error("static origin has no atom of that kind at that occurrence")
+            })
+    }
+
+    /// The canonical identity span of a named atom of `kind`.
+    ///
+    /// ⭐ **The atom-kind check is `named_atom`'s `filter`, not a second test
+    /// here.** Selecting by kind and then re-asserting the kind would be a check
+    /// that can never fire, which reads as safety and supplies none. What makes
+    /// the returned identity's *type* a consequence of the atom's kind is that
+    /// the four callers below each pass a fixed kind and wrap in the newtype
+    /// that kind belongs to — there is no path that takes the kind from a
+    /// caller's intent.
+    ///
+    /// ⚠ The span is canonical because `SemanticMaterialArena::intern` is
+    /// content-addressed; that, not this function, is what makes equal spellings
+    /// equal identities. The bounds check is genuine and *can* fire: it is the
+    /// per-access half of the arena-closure invariant `validate` asserts
+    /// wholesale, and it fires on a corrupt plane handed straight to an
+    /// accessor without a validation pass.
+    fn identity_span(
+        &self,
+        origin: StaticOriginId,
+        kind: SemanticAtomKind,
+        occurrence: usize,
+    ) -> Result<DenseRange, CraneliftBackendError> {
+        let atom = self.named_atom(origin, kind, occurrence)?;
+        validate_range(
+            atom.content,
+            self.names.len(),
+            "semantic identity atom span is outside its closed name arena",
+        )?;
+        Ok(atom.content)
+    }
+
+    /// The artifact-static constructor identity of case `case_index` of the
+    /// `Match` / `ComputationalMatch` occurrence at `origin` (`D1`).
+    pub(super) fn case_constructor_identity(
+        &self,
+        origin: StaticOriginId,
+        case_index: usize,
+    ) -> Result<ConstructorIdentity, CraneliftBackendError> {
+        Ok(ConstructorIdentity(self.identity_span(
+            origin,
+            SemanticAtomKind::CaseConstructor,
+            case_index,
+        )?))
+    }
+
+    /// The artifact-static constructor identity of the `Construct` occurrence at
+    /// `origin` — the **producer** side of the same authority (`D2`).
+    pub(super) fn constructor_symbol_identity(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<ConstructorIdentity, CraneliftBackendError> {
+        Ok(ConstructorIdentity(self.identity_span(
+            origin,
+            SemanticAtomKind::ConstructorSymbol,
+            0,
+        )?))
+    }
+
+    /// The artifact-static field identity selected by the `Project` occurrence
+    /// at `origin` (`D1`).
+    pub(super) fn project_field_identity(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<FieldIdentity, CraneliftBackendError> {
+        Ok(FieldIdentity(self.identity_span(
+            origin,
+            SemanticAtomKind::ProjectField,
+            0,
+        )?))
+    }
+
+    /// The artifact-static field identity of field `position` of the `Record`
+    /// occurrence at `origin` — the **producer** side of `project_field_identity`.
+    pub(super) fn record_field_identity(
+        &self,
+        origin: StaticOriginId,
+        position: usize,
+    ) -> Result<FieldIdentity, CraneliftBackendError> {
+        Ok(FieldIdentity(self.identity_span(
+            origin,
+            SemanticAtomKind::RecordFieldName,
+            position,
+        )?))
+    }
+
     /// The preallocated origin of one **positional** syntax child.
     ///
     /// Child *k* is recovered as child *k* out of the occurrence's own
@@ -926,29 +1200,7 @@ impl SemanticPlane {
         parent: StaticOriginId,
         position: usize,
     ) -> Result<StaticOriginId, CraneliftBackendError> {
-        let descriptor = self
-            .descriptors
-            .get(parent.0 as usize)
-            .ok_or_else(|| planner_error("static origin is outside the semantic descriptors"))?;
-        if descriptor.origin != parent {
-            return Err(planner_error(
-                "descriptor origin is not its preallocated positional identity",
-            ));
-        }
-        let program = self
-            .programs
-            .get(descriptor.program.0 as usize)
-            .ok_or_else(|| planner_error("descriptor names an unknown semantic program"))?;
-        let [record] = plane_slice(&self.records, program.records, "semantic record")? else {
-            return Err(planner_error(
-                "semantic program does not hold exactly one record",
-            ));
-        };
-        if record.origin != parent {
-            return Err(planner_error(
-                "semantic record origin is not its preallocated positional identity",
-            ));
-        }
+        let record = self.record_for(parent)?;
         plane_slice(
             &self.child_origins,
             record.child_origins,
@@ -1231,6 +1483,31 @@ impl SemanticPlane {
                 self.names.len(),
                 "semantic atom content range is outside its closed name arena",
             )?;
+        }
+        // ⭐ `D2`'s shared-identity property, checked rather than trusted.
+        //
+        // Every identity in the backend is a canonical name span, and "canonical"
+        // means exactly this: equal bytes have equal spans. `intern` establishes
+        // it, but an `intern` that regressed to an unconditional append would
+        // leave every span *in bounds* and every budget *exact* — the checks
+        // above all stay green while producer and consumer silently stop sharing
+        // an identity. ⛔ So this is asserted here, at the plane, and not
+        // delegated to the function that is supposed to maintain it.
+        let mut canonical: BTreeMap<&[u8], DenseRange> = BTreeMap::new();
+        for atom in &self.operands {
+            let bytes = plane_slice(&self.names, atom.content, "semantic atom content")?;
+            match canonical.get(bytes) {
+                Some(seen) if *seen != atom.content => {
+                    return Err(planner_error(
+                        "equal semantic name bytes are interned at two different spans, \
+                         so one symbol has two identities",
+                    ));
+                }
+                Some(_) => {}
+                None => {
+                    canonical.insert(bytes, atom.content);
+                }
+            }
         }
         if self
             .operands

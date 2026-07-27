@@ -23,7 +23,14 @@ use semantic_ir::{
     SemanticSourceSeed,
 };
 
-pub(in crate::cranelift_backend) use semantic_ir::StaticOriginId;
+// ⭐ `D1`'s capability surface. The two identity types cross into
+// `crate::cranelift_backend` so `lowering` can hold and compare them; ⛔
+// `SemanticPlane`, `SemanticMaterialArena` and the `names` arena stay on the
+// `use` above, visible only inside this planner. Widening either of those to
+// serve a consumer is the move `§2d` forbids.
+pub(in crate::cranelift_backend) use semantic_ir::{
+    ConstructorIdentity, FieldIdentity, StaticOriginId,
+};
 
 pub(super) const MAX_HELPERS_PER_STATIC_SOURCE: usize = 8;
 
@@ -1141,6 +1148,59 @@ impl<'src> StaticTransitionPlan<'src> {
         position: usize,
     ) -> Result<StaticOriginId, CraneliftBackendError> {
         self.semantic.child_origin(parent, position)
+    }
+
+    /// The artifact-static constructor identity of one case of the `Match` /
+    /// `ComputationalMatch` occurrence at `origin` (`D1`).
+    ///
+    /// ⭐ **This is the capability export, not the plane.** `SemanticPlane` and
+    /// its `names` arena stay `pub(super)`; what crosses into
+    /// `crate::cranelift_backend` is an occurrence-keyed *question* and an
+    /// unmintable answer. That is `RT-FNSPLIT-B2E`'s surviving `R3` shape —
+    /// *"expose the capability, not the plane internals"* — and it is why `D1`
+    /// is not discharged by widening a field.
+    ///
+    /// ⭐ The returned identity **is** occurrence-independent: equal spellings
+    /// intern to one canonical span, so a producer's identity for `Cons` and an
+    /// eliminator's identity for `Cons` are the same value even at different
+    /// occurrences. That is `D2`'s shared-authority property.
+    ///
+    /// ⚠ **Artifact-local.** The identity is stable within one artifact's plane
+    /// and carries no cross-artifact meaning. ⛔ Do not persist or compare it
+    /// across artifacts.
+    pub(in crate::cranelift_backend) fn case_constructor_identity(
+        &self,
+        origin: StaticOriginId,
+        case_index: usize,
+    ) -> Result<ConstructorIdentity, CraneliftBackendError> {
+        self.semantic.case_constructor_identity(origin, case_index)
+    }
+
+    /// The artifact-static constructor identity of a `Construct` occurrence —
+    /// the producer side of [`Self::case_constructor_identity`] (`D2`).
+    pub(in crate::cranelift_backend) fn constructor_symbol_identity(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<ConstructorIdentity, CraneliftBackendError> {
+        self.semantic.constructor_symbol_identity(origin)
+    }
+
+    /// The artifact-static field identity a `Project` occurrence selects (`D1`).
+    pub(in crate::cranelift_backend) fn project_field_identity(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<FieldIdentity, CraneliftBackendError> {
+        self.semantic.project_field_identity(origin)
+    }
+
+    /// The artifact-static field identity of one field of a `Record` occurrence
+    /// — the producer side of [`Self::project_field_identity`] (`D2`).
+    pub(in crate::cranelift_backend) fn record_field_identity(
+        &self,
+        origin: StaticOriginId,
+        position: usize,
+    ) -> Result<FieldIdentity, CraneliftBackendError> {
+        self.semantic.record_field_identity(origin, position)
     }
 
     /// The **occurrence** origin of the whole program's root.
@@ -3122,6 +3182,175 @@ mod tests {
                 obligation: Some("ken.bytes.at.inBounds".to_string()),
             },
             "same variant, optional field present versus absent",
+        );
+    }
+
+    /// `RT-FNSPLIT-C1` `D2` — equal name bytes have exactly one canonical span.
+    ///
+    /// **MEASURED:** across every atom of a real plan, atoms whose interned
+    /// bytes are equal have equal `content` spans.
+    /// **CLAIMED:** a producer and an eliminator at *different occurrences*
+    /// derive the *same* artifact-static identity for the same spelling.
+    /// **THE GAP:** the identity must be a function of the span alone — which
+    /// is why `pack_identity` is the sole encoding and why the newtypes wrap the
+    /// span rather than carrying any second field.
+    ///
+    /// ⛔ **The non-vacuity guard is the load-bearing half of this test.** A
+    /// fixture in which no spelling repeats satisfies the canonicalization
+    /// assertion trivially and would stay green against an interner that never
+    /// deduplicates at all — which is precisely the pre-`C1` behaviour this
+    /// test exists to detect. So the repeat count is asserted, not assumed.
+    #[test]
+    fn boundary_c1_equal_name_bytes_have_one_canonical_span() {
+        // Promise class: durable invariant.
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
+
+        let mut spans_by_bytes: BTreeMap<Vec<u8>, Vec<DenseRange>> = BTreeMap::new();
+        for atom in &plan.semantic.operands {
+            let start = atom.content.start as usize;
+            let bytes = plan.semantic.names[start..start + atom.content.len as usize].to_vec();
+            spans_by_bytes.entry(bytes).or_default().push(atom.content);
+        }
+
+        let repeated = spans_by_bytes
+            .iter()
+            .filter(|(bytes, spans)| !bytes.is_empty() && spans.len() > 1)
+            .count();
+        assert!(
+            repeated > 0,
+            "NON-VACUITY: no non-empty spelling occurs twice in this fixture, so the \
+             canonicalization assertion below is trivially satisfied and would not \
+             detect an interner that never deduplicates."
+        );
+
+        for (bytes, spans) in &spans_by_bytes {
+            let first = spans[0];
+            assert!(
+                spans.iter().all(|span| *span == first),
+                "spelling {:?} is interned at {} distinct spans, so one symbol has more \
+                 than one artifact-static identity",
+                String::from_utf8_lossy(bytes),
+                spans.iter().collect::<BTreeSet<_>>().len()
+            );
+        }
+    }
+
+    /// `RT-FNSPLIT-C1` `D2` — the plane refuses a two-identity symbol.
+    ///
+    /// ⭐ This is the control for the *validator*, not for `intern`. An `intern`
+    /// that regressed to an unconditional append leaves every span in bounds and
+    /// every budget exact, so every pre-existing check stays green while
+    /// producer and consumer quietly stop sharing an identity. The plane has to
+    /// assert canonicality itself rather than trusting the function that is
+    /// supposed to maintain it.
+    #[test]
+    fn boundary_c1_validate_rejects_equal_bytes_interned_at_two_spans() {
+        // Promise class: durable mutation proof.
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
+
+        // The unmutated plane is green — the inverse half, so a red result below
+        // is attributable to the mutation and not to a fixture that never validated.
+        plan.semantic
+            .validate(
+                &plan.nodes,
+                &plan.edges,
+                &plan.entries,
+                &plan.semantic_sources,
+                &plan.semantic_material,
+            )
+            .expect("the unmutated plane validates");
+
+        let mut duplicated = plan.semantic.clone();
+        let victim = duplicated
+            .operands
+            .iter()
+            .find(|atom| atom.content.len > 0)
+            .map(|atom| atom.content)
+            .expect("fixture has an atom with out-of-line content");
+        let start = victim.start as usize;
+        let bytes = duplicated.names[start..start + victim.len as usize].to_vec();
+
+        // Append a byte-identical second copy and repoint one atom at it: same
+        // spelling, different span. Nothing else about the plane changes.
+        let copy = DenseRange {
+            start: u32::try_from(duplicated.names.len()).unwrap(),
+            len: victim.len,
+        };
+        duplicated.names.extend_from_slice(&bytes);
+        let atom = duplicated
+            .operands
+            .iter_mut()
+            .find(|atom| atom.content == victim)
+            .expect("the victim atom is still present");
+        atom.content = copy;
+
+        assert_eq!(
+            duplicated
+                .validate(
+                    &plan.nodes,
+                    &plan.edges,
+                    &plan.entries,
+                    &plan.semantic_sources,
+                    &plan.semantic_material,
+                )
+                .unwrap_err(),
+            planner_error(
+                "equal semantic name bytes are interned at two different spans, \
+                 so one symbol has two identities"
+            )
+        );
+    }
+
+    /// `RT-FNSPLIT-C1` `D1` — the one identity ABI encoding is injective and
+    /// reserves zero.
+    ///
+    /// ⚠ `start = 0, len = 0` is a **legitimate** identity (the empty name at
+    /// offset zero), which is the entire reason the encoding adds one. Without
+    /// the `+1` that identity would encode as `0` and be indistinguishable from
+    /// uninitialized ABI memory.
+    #[test]
+    fn boundary_c1_identity_abi_word_round_trips_and_reserves_zero() {
+        // Promise class: normative compatibility vector — the encoding is the
+        // contract between the planner and the carrier's emitted ABI.
+        for (start, len) in [(0u32, 0u32), (0, 1), (1, 0), (7, 3), (u32::MAX, u32::MAX - 1)] {
+            let span = DenseRange { start, len };
+            let packed = ConstructorIdentity(span).tag_abi_word().unwrap();
+            assert_ne!(packed, 0, "({start},{len}) encoded as the invalid sentinel");
+            assert_eq!(
+                super::semantic_ir::unpack_identity(packed).unwrap(),
+                span,
+                "({start},{len}) did not round trip"
+            );
+        }
+
+        // Both namespaces share the one encoding, so a field identity and a
+        // constructor identity over the same span agree numerically. That is
+        // intended: the separation is carried by the *type*, not by the number.
+        let span = DenseRange { start: 9, len: 4 };
+        assert_eq!(
+            ConstructorIdentity(span).tag_abi_word().unwrap(),
+            FieldIdentity(span).name_abi_word().unwrap()
+        );
+
+        assert_eq!(
+            super::semantic_ir::unpack_identity(0).unwrap_err(),
+            planner_error("semantic identity is the reserved invalid sentinel")
+        );
+
+        // ⭐ Capacity loudness. The `+1` that reserves zero costs exactly one
+        // encodable span at the very top of the range, and the refusal must be
+        // a loud capacity error rather than a wrap to the sentinel — a silent
+        // wrap would hand emitted code the "invalid" word for a valid symbol.
+        assert_eq!(
+            ConstructorIdentity(DenseRange {
+                start: u32::MAX,
+                len: u32::MAX
+            })
+            .tag_abi_word()
+            .unwrap_err(),
+            planner_capacity_error("semantic identity encoding exhausted")
         );
     }
 
