@@ -27,10 +27,34 @@ origin: Operator stop-order 2026-07-26 — "the runtime team has been working on
 > contracts. The former can be required without the latter."**
 
 Ken's spec **conflates them**. That is why a compiled-once function body had to
-carry in-process sharing semantics across a call boundary, why every eliminator
-needed a compile-time template, and why all three escapes from hard-stop `#11`
-were closed by settled authority. ⇒ **The wall was in the contract, not in the
-implementation.**
+carry in-process sharing semantics across a call boundary.
+
+> ### ⛔ CORRECTION 2026-07-27 — this paragraph's causal claim was OVER-BROAD
+>
+> It used to continue *"…, **why every eliminator needed a compile-time
+> template**, and why all three escapes from hard-stop `#11` were closed by
+> settled authority. ⇒ **The wall was in the contract, not in the
+> implementation.**"* **Ruled over-broad and edited out**, not annotated, because
+> it is the sentence a reader reaches first and it would decide the re-cut's
+> shape.
+>
+> **Architect ruling `evt_7ay6s5s79awz8`, Decision `dec_45aa2gngjc79z`
+> resolved** — put deliberately as a *test* of this sentence rather than
+> inheriting it: **store/sharing conflation ENLARGED the old prerequisite; it did
+> NOT cause the template requirement.** The three eliminators' decisions come
+> from invocation-specific constructor/record shape, which no storage policy can
+> make compile-time-known. ⇒ ⛔ **`#11` still binds, and the relaxation did not
+> dissolve it.** Full transcription: `docs/program/issues/RT-NATIVE-FNSPLIT.md`,
+> the governing ruling at the top.
+>
+> ⚠ The ruling cites this sentence as `RT-VALUE-TOTALITY` §1; it is here. A
+> mis-citation of location, not of content.
+>
+> ⭐ **What the relaxation DID buy is still real and still worth the node** — it
+> removed obligations *accidentally attached to storage* (stable `SlotId`,
+> mandatory interning/sharing, canonical-byte adoption, store-local
+> identity/name binding), and the re-cut's prerequisite contract drops that
+> substrate. The relaxation was correct; only its claimed reach was too wide.
 
 ### ⭐ CORROBORATED FROM INSIDE THE WALL — `runtime-leader`, on the stop order
 
@@ -270,11 +294,29 @@ half and moved the hard half forward one slot. This is a standing memory lesson
 (`a-representation-node-must-name-who-eliminates-it`); ⭐ **the re-cut is where it
 gets applied, not re-learned.**
 
-## 8. ⚠ THE HONEST RESIDUAL
+## 8. ✅ THE HONEST RESIDUAL — ANSWERED 2026-07-27, and the answer is NO
 
-⛔ **It is not established that this relaxation makes `B2F` achievable.** It
-removes the contract-level conflation that research identifies as the root
-cause, and it is the strongest available lever. **Whether the compiled-once
-call boundary then closes is an open question for the Architect**, and this node
-does not promise it. ⭐ Stating that plainly is the point: the previous five days
-ran on the assumption that one more layer would close it.
+This section said: *"It is not established that this relaxation makes `B2F`
+achievable. … Whether the compiled-once call boundary then closes is an open
+question for the Architect, and this node does not promise it."*
+
+⭐ **That refusal to promise was right, and the answer came back negative.**
+Architect ruling `evt_7ay6s5s79awz8`, Decision `dec_45aa2gngjc79z` resolved:
+**`#11` still binds**, the template wall is independent of store/sharing policy,
+and **no old escape reopens**. ⇒ The relaxation did **not** make `B2F`
+achievable on its own.
+
+⛔ **It was still the right node.** It removed obligations accidentally attached
+to storage, and the re-cut's prerequisite contract drops that substrate. And the
+ruling **names the lever**: a runtime-general **operational carrier** at the
+`Lowered`/lowering boundary, distinct from durable canonical storage, with
+**executable** semantic consumers for all three eliminators — plus the binding
+inertness rule that a prerequisite's *producer → validator → eliminator* edge
+must be real and executable, so a representation-only artifact no longer
+discharges anything. Full transcription: `RT-NATIVE-FNSPLIT.md`, top.
+
+⭐ **The residual's value was the discipline, not the outcome.** §7 item 2 said
+*"do not assume it dissolves — that must be established, not inherited"*, and the
+re-put was framed to test this node's own causal sentence rather than carry it
+in. Had it been carried in, the re-cut would have been designed around a
+dissolution that never happened.
