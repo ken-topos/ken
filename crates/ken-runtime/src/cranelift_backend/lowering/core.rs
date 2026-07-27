@@ -8171,6 +8171,18 @@ impl<'a> Lowering<'a> {
                 resource_held,
                 resource_expected_kind,
                 resource_actual_kind,
+                [
+                    wire.resource_error_closed,
+                    wire.resource_error_malformed,
+                    wire.resource_error_right_not_held,
+                    wire.resource_error_release_failed,
+                    wire.resource_error_kind_mismatch,
+                    wire.resource_error_buffer_limit,
+                    wire.resource_error_invalid_offset,
+                    wire.resource_error_invalid_bounds,
+                    wire.resource_error_no_progress,
+                    wire.resource_error_allocation_failed,
+                ],
                 wire.resource_error_reply_schema,
                 wire.resource_kind_fs_handle,
                 wire.resource_kind_buffer,
@@ -8274,6 +8286,9 @@ impl<'a> Lowering<'a> {
                         },
                     ))
                 };
+                let checked_resource_tag = |wire_tag: u64| {
+                    i64::try_from(wire_tag).expect("resource error tag fits i64") + 1
+                };
                 let trace_identity = self.synthesized_constructor(
                     SynthesizedFixedConstructorRole::ResourceTraceIdentity,
                     self.process_symbols.resource_trace_identity.clone(),
@@ -8289,25 +8304,25 @@ impl<'a> Lowering<'a> {
                             vec![surface_io_error.clone()],
                         )?,
                         self.synthesized_dynamic_alternative(
-                            1,
+                            checked_resource_tag(wire.resource_error_closed),
                             SynthesizedFixedConstructorRole::ResourceClosed,
                             self.process_symbols.resource_closed.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
-                            2,
+                            checked_resource_tag(wire.resource_error_malformed),
                             SynthesizedFixedConstructorRole::ResourceMalformed,
                             self.process_symbols.resource_malformed.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
-                            3,
+                            checked_resource_tag(wire.resource_error_right_not_held),
                             SynthesizedFixedConstructorRole::ResourceRightNotHeld,
                             self.process_symbols.resource_right_not_held.clone(),
                             vec![resource_required_int, resource_held_int],
                         )?,
                         self.synthesized_dynamic_alternative(
-                            4,
+                            checked_resource_tag(wire.resource_error_release_failed),
                             SynthesizedFixedConstructorRole::ResourceReleaseFailed,
                             self.process_symbols.resource_release_failed.clone(),
                             vec![
@@ -8317,7 +8332,7 @@ impl<'a> Lowering<'a> {
                             ],
                         )?,
                         self.synthesized_dynamic_alternative(
-                            5,
+                            checked_resource_tag(wire.resource_error_kind_mismatch),
                             SynthesizedFixedConstructorRole::ResourceKindMismatch,
                             self.process_symbols.resource_kind_mismatch.clone(),
                             vec![
@@ -8326,31 +8341,31 @@ impl<'a> Lowering<'a> {
                             ],
                         )?,
                         self.synthesized_dynamic_alternative(
-                            6,
+                            checked_resource_tag(wire.resource_error_buffer_limit),
                             SynthesizedFixedConstructorRole::ResourceBufferLimit,
                             self.process_symbols.resource_buffer_limit.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
-                            7,
+                            checked_resource_tag(wire.resource_error_allocation_failed),
                             SynthesizedFixedConstructorRole::ResourceAllocationFailed,
                             self.process_symbols.resource_allocation_failed.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
-                            8,
+                            checked_resource_tag(wire.resource_error_invalid_offset),
                             SynthesizedFixedConstructorRole::ResourceInvalidOffset,
                             self.process_symbols.resource_invalid_offset.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
-                            9,
+                            checked_resource_tag(wire.resource_error_invalid_bounds),
                             SynthesizedFixedConstructorRole::ResourceInvalidBounds,
                             self.process_symbols.resource_invalid_bounds.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
-                            10,
+                            checked_resource_tag(wire.resource_error_no_progress),
                             SynthesizedFixedConstructorRole::ResourceNoProgress,
                             self.process_symbols.resource_no_progress.clone(),
                             Vec::new(),

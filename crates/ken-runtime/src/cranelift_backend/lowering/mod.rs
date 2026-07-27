@@ -9416,6 +9416,7 @@ impl<'a> Lowering<'a> {
         held: cranelift_codegen::ir::Value,
         actual_expected_kind: cranelift_codegen::ir::Value,
         actual_actual_kind: cranelift_codegen::ir::Value,
+        resource_error_tags_in_payload_shape_order: [u64; 10],
         expected_schema: u64,
         expected_kind: u64,
         buffer_kind: u64,
@@ -9429,11 +9430,14 @@ impl<'a> Lowering<'a> {
         );
         builder.ins().brif(is_resource, resource, &[], done, &[]);
         builder.switch_to_block(resource);
-        let arms = (0..9).map(|_| builder.create_block()).collect::<Vec<_>>();
+        let arms = resource_error_tags_in_payload_shape_order
+            .into_iter()
+            .map(|tag| (tag, builder.create_block()))
+            .collect::<Vec<_>>();
         let mut test = builder
             .current_block()
             .expect("resource reply validation block");
-        for (index, arm) in arms.into_iter().enumerate() {
+        for (index, (discriminator_tag, arm)) in arms.into_iter().enumerate() {
             let next = builder.create_block();
             if builder.current_block() != Some(test) {
                 builder.switch_to_block(test);
@@ -9441,7 +9445,7 @@ impl<'a> Lowering<'a> {
             let selected = builder.ins().icmp_imm(
                 cranelift_codegen::ir::condcodes::IntCC::Equal,
                 discriminator,
-                index as i64,
+                i64::try_from(discriminator_tag).expect("resource error tag fits i64"),
             );
             builder.ins().brif(selected, arm, &[], next, &[]);
             builder.switch_to_block(arm);
@@ -9504,7 +9508,7 @@ impl<'a> Lowering<'a> {
                     );
                     Self::require_true(builder, distinct);
                 }
-                5..=8 => {
+                5..=9 => {
                     for field in [
                         schema,
                         kind,
