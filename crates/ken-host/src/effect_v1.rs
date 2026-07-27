@@ -38,10 +38,11 @@ pub enum HostOpV1 {
     ResourceRelease = 0x0401,
     BufferAllocate = 0x0402,
     BufferFreeze = 0x0403,
+    EntropyRandomBytes = 0x0501,
 }
 
 impl HostOpV1 {
-    pub const ALL: [Self; 24] = [
+    pub const ALL: [Self; 25] = [
         Self::ConsoleRead,
         Self::ConsoleWrite,
         Self::ConsoleFlush,
@@ -66,6 +67,7 @@ impl HostOpV1 {
         Self::ResourceRelease,
         Self::BufferAllocate,
         Self::BufferFreeze,
+        Self::EntropyRandomBytes,
     ];
 
     pub const fn availability(self) -> HostOpAvailabilityV1 {
@@ -101,9 +103,16 @@ impl HostOpV1 {
                 | Self::ClockWallNow
                 | Self::ClockMonotonicNow
                 | Self::ClockSleepUntil
+                | Self::EntropyRandomBytes
         )
     }
 }
+
+/// Upper bound on a single kernel-entropy request. ABI-S3 D3 requires a
+/// bounded requested byte count; an over-large request is refused rather
+/// than truncated, so a caller never receives fewer bytes than it asked for
+/// while believing it received all of them.
+pub const MAX_ENTROPY_REQUEST_BYTES_V1: u64 = 1024;
 
 /// PX5's intended promotion set. Membership is a plan, not evidence: every
 /// operation remains `RepresentedUnavailable` until its artifact differential
@@ -1224,6 +1233,16 @@ pub trait HostEffectBackendV1 {
         Vec::new()
     }
     fn clock_sleep_until(&mut self, _deadline: u64) {}
+    /// Read `count` bytes from the kernel CSPRNG.
+    ///
+    /// The default is the UNAVAILABLE outcome rather than an empty or
+    /// substitute buffer: ABI-S3 D3 forbids a userspace PRNG, a seeded
+    /// substitute, a cached weak source, and any silent fallback, so a
+    /// backend that has not wired a kernel source must report unavailable
+    /// and return no bytes at all.
+    fn entropy_random_bytes(&mut self, _count: u64) -> Result<Vec<u8>, IoErrorIdentityV1> {
+        Err(IoErrorIdentityV1::Unsupported)
+    }
     fn fs_read_file(
         &mut self,
         grant: &CapabilityGrantV1,
@@ -1478,6 +1497,7 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
                 | HostOpV1::ClockWallNow
                 | HostOpV1::ClockMonotonicNow
                 | HostOpV1::ClockSleepUntil
+                | HostOpV1::EntropyRandomBytes
                 | HostOpV1::FsReadFile
                 | HostOpV1::FsWriteFile
                 | HostOpV1::FsAppendFile
@@ -1525,6 +1545,16 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
         (HostOpV1::ClockSleepUntil, CanonicalRequestV1::ClockSleepUntil { deadline }) => {
             backend.clock_sleep_until(*deadline);
             Ok(CanonicalReplyV1::Unit)
+        }
+        (HostOpV1::EntropyRandomBytes, CanonicalRequestV1::EntropyRandomBytes { count }) => {
+            if *count > MAX_ENTROPY_REQUEST_BYTES_V1 {
+                Err(SemanticErrorV1::Io(IoErrorIdentityV1::InvalidInput))
+            } else {
+                backend
+                    .entropy_random_bytes(*count)
+                    .map(CanonicalReplyV1::Bytes)
+                    .map_err(SemanticErrorV1::Io)
+            }
         }
         (HostOpV1::FsReadFile, CanonicalRequestV1::FsReadFile { path }) => backend
             .fs_read_file(grant.expect("validated FS capability"), path)
@@ -1962,6 +1992,9 @@ pub enum CanonicalRequestV1 {
     ClockSleepUntil {
         deadline: u64,
     },
+    EntropyRandomBytes {
+        count: u64,
+    },
     FsReadFile {
         path: Vec<u8>,
     },
@@ -2384,7 +2417,17 @@ mod tests {
     use sha2::{Digest, Sha256};
 
     #[derive(Default)]
-    struct AllOpsBackend(Vec<HostOpV1>);
+    struct AllOpsBackend(Vec<HostOpV1>, EntropySource);
+
+    /// Whether the test backend has a kernel entropy source wired.
+    /// `Unavailable` returns the exact value the production default returns,
+    /// so the unavailable path under test is the real one.
+    #[derive(Default, Clone, Copy, PartialEq, Eq)]
+    enum EntropySource {
+        #[default]
+        Wired,
+        Unavailable,
+    }
 
     impl HostEffectBackendV1 for AllOpsBackend {
         fn console_read(
@@ -2417,6 +2460,13 @@ mod tests {
         }
         fn clock_sleep_until(&mut self, _deadline: u64) {
             self.0.push(HostOpV1::ClockSleepUntil);
+        }
+        fn entropy_random_bytes(&mut self, count: u64) -> Result<Vec<u8>, IoErrorIdentityV1> {
+            self.0.push(HostOpV1::EntropyRandomBytes);
+            if self.1 == EntropySource::Unavailable {
+                return Err(IoErrorIdentityV1::Unsupported);
+            }
+            Ok((0..count).map(|index| index as u8).collect())
         }
         fn fs_read_file(
             &mut self,
@@ -2629,6 +2679,10 @@ mod tests {
                     mode: 0o640,
                 },
             ),
+            (
+                HostOpV1::EntropyRandomBytes,
+                CanonicalRequestV1::EntropyRandomBytes { count: 8 },
+            ),
         ];
         let mut backend = AllOpsBackend::default();
         let mut resources = ResourceTableV1::default();
@@ -2661,9 +2715,77 @@ mod tests {
         assert_eq!(backend.0, pre_resource);
     }
 
+    /// ABI-S3 AC-4. The two halves are not equally load-bearing.
+    ///
+    /// "two requests do not return identical bytes" passes for a userspace
+    /// PRNG too, so it cannot on its own establish the D3 trust boundary. The
+    /// half that matters is the second: when the secure source is
+    /// UNAVAILABLE, the operation must report unavailable and return no bytes
+    /// -- never a substitute, a cached weak source, or a silent downgrade.
+    #[test]
+    fn ac4_entropy_reports_unavailable_rather_than_supplying_bytes_from_elsewhere() {
+        let capabilities = CapabilityTableV1::default();
+
+        let dispatch = |source: EntropySource, count: u64| {
+            let mut backend = AllOpsBackend(Vec::new(), source);
+            let mut resources = ResourceTableV1::default();
+            dispatch_host_op_v1(
+                &mut backend,
+                &capabilities,
+                &mut resources,
+                HostOpV1::EntropyRandomBytes,
+                None,
+                ResourceInputsV1::None,
+                &CanonicalRequestV1::EntropyRandomBytes { count },
+            )
+            .expect("entropy dispatch is total")
+            .outcome
+        };
+
+        // Weak half, recorded for completeness: distinct requests differ.
+        let CanonicalOutcomeV1::Success(CanonicalReplyV1::Bytes(eight)) =
+            dispatch(EntropySource::Wired, 8)
+        else {
+            panic!("a wired kernel source yields bytes");
+        };
+        let CanonicalOutcomeV1::Success(CanonicalReplyV1::Bytes(four)) =
+            dispatch(EntropySource::Wired, 4)
+        else {
+            panic!("a wired kernel source yields bytes");
+        };
+        assert_ne!(eight, four);
+
+        // THE LOAD-BEARING HALF: an unavailable source reports unavailable and
+        // yields no bytes at all.
+        let unavailable = dispatch(EntropySource::Unavailable, 8);
+        assert!(
+            matches!(
+                unavailable,
+                CanonicalOutcomeV1::Error(SemanticErrorV1::Io(IoErrorIdentityV1::Unsupported))
+            ),
+            "an unavailable secure source must report unavailable, got {unavailable:?}"
+        );
+        assert!(
+            !matches!(unavailable, CanonicalOutcomeV1::Success(_)),
+            "an unavailable secure source must not return bytes from anywhere else"
+        );
+
+        // D3 also bounds the requested byte count: an over-large request is
+        // refused rather than truncated, so a caller never silently receives
+        // fewer bytes than it asked for.
+        assert!(matches!(
+            dispatch(EntropySource::Wired, MAX_ENTROPY_REQUEST_BYTES_V1 + 1),
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Io(IoErrorIdentityV1::InvalidInput))
+        ));
+        assert!(matches!(
+            dispatch(EntropySource::Wired, MAX_ENTROPY_REQUEST_BYTES_V1),
+            CanonicalOutcomeV1::Success(_)
+        ));
+    }
+
     #[test]
     fn catalog_is_closed_and_availability_is_exact() {
-        assert_eq!(HostOpV1::ALL.len(), 24);
+        assert_eq!(HostOpV1::ALL.len(), 25);
         assert_eq!(
             HostOpV1::ALL
                 .into_iter()

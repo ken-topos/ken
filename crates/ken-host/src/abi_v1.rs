@@ -265,6 +265,12 @@ struct ClockDeadlineRequestV1 {
 }
 
 #[repr(C)]
+#[allow(dead_code)] // Manifest-covered V1 lane; native execution is deferred.
+struct EntropyRequestV1 {
+    count: u64,
+}
+
+#[repr(C)]
 struct BufferAllocateRequestV1 {
     capacity: u64,
 }
@@ -1683,6 +1689,7 @@ mod tests {
         size_align!("FsPositionedRequestV1", FsPositionedRequestV1);
         size_align!("FsWriteAtRequestV1", FsWriteAtRequestV1);
         size_align!("ClockDeadlineRequestV1", ClockDeadlineRequestV1);
+        size_align!("EntropyRequestV1", EntropyRequestV1);
         size_align!("BufferAllocateRequestV1", BufferAllocateRequestV1);
         size_align!("BufferFreezeRequestV1", BufferFreezeRequestV1);
         size_align!("ResourceErrorReplyV1", ResourceErrorReplyV1);
@@ -1710,6 +1717,7 @@ mod tests {
         offset!("ConsoleStreamRequestV1", ConsoleStreamRequestV1, stream);
         offset!("UnitRequestV1", UnitRequestV1, reserved);
         offset!("ClockDeadlineRequestV1", ClockDeadlineRequestV1, deadline);
+        offset!("EntropyRequestV1", EntropyRequestV1, count);
         offset!("FsReadFileRequestV1", FsReadFileRequestV1, capability);
         offset!("FsReadFileRequestV1", FsReadFileRequestV1, path);
         offset!("FsWriteFileRequestV1", FsWriteFileRequestV1, capability);
@@ -1754,7 +1762,7 @@ mod tests {
         offset!("HostReplyV1", HostReplyV1, detail);
         offset!("HostReplyV1", HostReplyV1, bytes);
         offset!("HostReplyV1", HostReplyV1, resource_error);
-        assert_eq!(crate::HOST_EFFECT_ABI_V1_CATALOG.len(), 24);
+        assert_eq!(crate::HOST_EFFECT_ABI_V1_CATALOG.len(), 25);
         for operation in HostOpV1::ALL {
             let row = crate::HOST_EFFECT_ABI_V1_CATALOG
                 .iter()

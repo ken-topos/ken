@@ -117,6 +117,10 @@ fn put_request(
             put_u8(out, 23);
             put_u64(out, *deadline);
         }
+        CanonicalRequestV1::EntropyRandomBytes { count } => {
+            put_u8(out, 24);
+            put_u64(out, *count);
+        }
         CanonicalRequestV1::FsReadFile { path } => {
             put_u8(out, 5);
             put_bytes(out, path)?;
@@ -631,6 +635,9 @@ fn get_request(cursor: &mut Cursor<'_>) -> Result<CanonicalRequestV1, EffectTrac
         22 => CanonicalRequestV1::ClockMonotonicNow,
         23 => CanonicalRequestV1::ClockSleepUntil {
             deadline: cursor.u64()?,
+        },
+        24 => CanonicalRequestV1::EntropyRandomBytes {
+            count: cursor.u64()?,
         },
         5 => CanonicalRequestV1::FsReadFile {
             path: cursor.bytes()?,
