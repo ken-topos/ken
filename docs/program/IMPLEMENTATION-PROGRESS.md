@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-27 22:02:35Z — from 117 issue file(s) in `docs/program/issues/`.
+2026-07-27 22:42:41Z — from 117 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -133,7 +133,7 @@ the committed file matches the generator's output.
 | `SEAL-2` | carrier producer closure, over a derived enumeration | merged | foundation | M | none | PR #912 @ 4ac9141e (origin/main, CI green) |
 | `SEC1-IFC-R3` | [Sec1-reduce] cannot be reified yet: NO production path can return Verdict::Disproved, so the verdict D5 requires is unreachable and every Disproved in sec1_acceptance is hand-rigged | draft | verify | M | G-Sec | — |
 | `SEC1-IFC` | Reify the three named Sec1 stubs — two of them are the SOLE NETS for Sec1's two trusted surfaces, and both are placeholders under a green suite | merged | verify | M | G-Sec | https://github.com/swe-toolkit/ken/pull/1094 |
-| `SEC4-TCB` | Sec4's trust-model conformance seed is fully authored and nothing executes it — Sec1/Sec1ct/Sec2 each have an acceptance suite bound to their seed, Sec4 has none | ready | verify | M | G5 | — |
+| `SEC4-TCB` | Sec4's trust-model conformance seed is fully authored and nothing executes it — Sec1/Sec1ct/Sec2 each have an acceptance suite bound to their seed, Sec4 has none | merged | verify | M | G5 | — |
 | `SPAN-SEAL` | seal the BufferSpan producer surface | merged | foundation | M | none | — |
 | `SPEC-31-WIDTH-ERRATUM` | spec 31-lexical mandates a 96-column canonical width while the formatting conformance suite asserts 88 in 18 places and cites 31 §1d as its source — rule the exact value and reconcile | closed | spec | S | none | https://github.com/swe-toolkit/ken/pull/1054 |
 | `SPEC-38-ERRATUM` | spec 38-ffi-io self-contradicts on the transfer bound — rule and reconcile | closed | spec | S | none | 827 |
@@ -166,7 +166,6 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `PX8-ERRID-ALLOC` — ResourceErrorV1 has no allocation-failure identity and buffer allocation is infallible, so PX8's allocation-distinct-from-BufferLimit row cannot be produced at all
 - `PX8-WROTE-ABS` — PX8 clause-(a) evidence gap — interpreter capped-short Wrote lacks an absolute oracle; PR-C error identities unreached
-- `SEC4-TCB` — Sec4's trust-model conformance seed is fully authored and nothing executes it — Sec1/Sec1ct/Sec2 each have an acceptance suite bound to their seed, Sec4 has none
 - `SPEC-IDENT-BLESSED` — Settle the identifier character set: 31-lexical promises a bounded blessed-Unicode-letter table that does not exist, cites a security chapter that carries no such claim, and states a confusable gate the landed lexer does not implement
 
 ## Blockers
@@ -219,7 +218,7 @@ for every item, gated or not):
 
 - **G-Sec**: `SEC1-IFC-R3` (draft) `SEC1-IFC` (merged)
 - **G2-G3**: `V3-RESIDUAL` (merged) `V4-RESIDUAL` (merged)
-- **G5**: `SEC4-TCB` (ready)
+- **G5**: `SEC4-TCB` (merged)
 
 ## Archive & diary
 

@@ -1,7 +1,7 @@
 ---
 id: SEC4-TCB
 title: "Sec4's trust-model conformance seed is fully authored and nothing executes it — Sec1/Sec1ct/Sec2 each have an acceptance suite bound to their seed, Sec4 has none"
-status: ready
+status: merged
 owner: verify
 size: M
 gate: G5
@@ -10,6 +10,24 @@ blocks: []
 github: null
 origin: "Measured by the Steward 2026-07-27 at origin/main d6df571e while scoping Team Verify's next WP after V4-RESIDUAL merged (PR #1117) and SEC1-IFC-R3 was ruled still-blocked. Not routed by any ring."
 ---
+
+## ✅ MERGED 2026-07-27 — PR #1134, `origin/main = 92374fc7`
+
+Candidate `61340d34`, blob `9f98d343eb139ae0cb777a7f061e20d73204228f` verified
+on `main`. One additive file, `crates/ken-elaborator/tests/sec4_acceptance.rs`
+(+355); no `src/**`, `spec/`, or `conformance/` change. Architect Decision
+`dec_2rh2k4n4dw4t0`, resolved from the object and SHA-bound to that exact head.
+
+⭐ **Group C shipped re-scoped, and the reason is durable in `§3e`.** Neither
+seed arm reaches `Refl`: `obs.rs:113` reduces a registered closed literal
+equality to `Top` or `Bottom` before `check.rs:434` sees an `Eq`-shaped goal.
+The accept arm was unreachable; ⚠ the reject arm was **green while measuring a
+different mechanism** than its `expect` clause names. The suite now keeps the
+closed pair asserting the `Bottom` collapse it actually exercises and adds an
+abstract two-binder pair that flips on convertibility alone.
+
+⇒ The seed defect itself is [[CONF-SEC4-REFL-PAIR]], owner `spec-enclave`.
+⛔ It did not gate this close and is not Verify's.
 
 ## The measurement
 
