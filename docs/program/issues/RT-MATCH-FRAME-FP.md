@@ -141,23 +141,50 @@ carriers, the core, the projecting wrapper, and their controls.
   value rendered or compared.
 - ⛔ `P2`'s `D3`/`D4`, and any public plan-format change.
 
-## Contention — ⭐ NO elaborator authorization is required, and that is measured
+## Contention — ⚠ the conclusion holds, but the ORIGINAL PREMISE WAS FALSE
 
-⚠ **The escalation that produced this node assumed route C would enter
-`crates/ken-elaborator/src`.** ⛔ **It does not.** Two facts:
+> ### ⛔ CORRECTED 2026-07-27 — `ken-elaborator` IS a consumer. Corrected by
+> ### `runtime-leader` (`evt_1cm96c2ce6vbn`), re-measured by the Steward.
+>
+> ⛔ **This section used to assert:** *"every consumer of the two helpers is in
+> `ken-runtime` … **No `ken-elaborator` file among them**."* **That is false**,
+> and the Steward repeated it in the kickoff (`evt_3hp0wxgtedd36`) labelled
+> *"measured rather than assumed"* — which it was not; it was inherited from this
+> node without re-derivation.
+>
+> **Re-measured across the whole workspace:**
+>
+> ```
+> grep -rn 'match_frame_fingerprint' crates/ --include=*.rs
+>   5  crates/ken-runtime/src/cranelift_backend/lowering/mod.rs
+>   3  crates/ken-elaborator/src/erasure.rs        <-- the missed population
+>   2  crates/ken-runtime/src/cranelift_backend/lowering/core/tests/control.rs
+>   1  crates/ken-runtime/src/cranelift_backend/test_objects.rs
+>   1  crates/ken-runtime/src/cranelift_backend/planning.rs
+> ```
 
-1. The Architect's route C explicitly achieves the boundary *"without assuming an
-   elaborator edit or a public plan-format change"* — the existing-signature
-   wrapper is what avoids caller churn.
-2. Measured: every consumer of the two helpers is in **`ken-runtime`** —
-   `src/ir.rs`, `src/cranelift_backend/lowering/mod.rs`,
-   `src/cranelift_backend/planning.rs`, plus `test_objects.rs` and
-   `lowering/core/tests/control.rs`. **No `ken-elaborator` file among them.**
+⭐ **The conclusion survives, for a reason that is narrower than the old one and
+must not be widened back.** Route C keeps the **existing helper signatures**, and
+an existing-signature wrapper leaves all three `erasure.rs` consumers **untouched**
+— so *this* implementation needs no cross-ring authorization. ⛔ The licence comes
+from **signature stability**, not from an absence of elaborator consumers.
 
-⇒ ✅ **This node is `ken-runtime`-local and needs no cross-ring authorization.**
-⛔ **If an elaborator edit turns out to be needed anyway, STOP and re-raise** —
-that is a finding about the ruling's premise, not a licence, and it comes to the
-Steward before any edit.
+⇒ ⛔ **Any variant that changes either helper's signature has three
+`ken-elaborator` callers and REQUIRES cross-ring authorization. STOP and re-raise
+to the Steward before such an edit** — that is a finding about the ruling's
+premise, not a licence.
+
+⚠ Kernel's `KERNEL-NESTED-IND` `D5` will also reach `ken-elaborator/src`, so a
+signature-changing variant would contend with live kernel work as well.
+
+### ⚠ Second open question — raised by `runtime-leader`, not yet ruled
+
+`lowering/mod.rs:4095–4106` selects `callee_frame_templates` **by fingerprint**
+when `checked_frame_id.is_none()`. ⭐ `AC-F1` **deliberately** makes body-only
+differences collide, so if **header-identical callee templates are jointly
+reachable**, that selection becomes ambiguous. The implementer is measuring
+reachability; ⛔ **if reachable, route the evidence to the Architect for a scope
+decision before extending the candidate** — do not resolve it inside this node.
 
 ⚠ Kernel's `KERNEL-NESTED-IND` `D5` will reach `ken-elaborator/src`. That is why
 this section is measured rather than assumed.
