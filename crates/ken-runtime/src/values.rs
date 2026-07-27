@@ -657,8 +657,22 @@ fn debug_header<'a>(
 /// constitute one.
 ///
 /// ⚠ **The rendered text is unspecified and must not be pinned.** It is kept
-/// close to the derived rendering as a courtesy to existing logs, but the claim
-/// under test is *does it return*, not *what does it print*.
+/// byte-identical to the derived rendering for `{:?}` as a courtesy to existing
+/// logs, but the claim under test is *does it return*, not *what does it print*.
+///
+/// ⛔ **One deliberate, stated difference: `{:#?}` is no longer pretty-printed.**
+/// [`fmt::Formatter::alternate`] is not consulted, so the alternate flag renders
+/// the same single-line text as `{:?}`. This is a **degradation, not a
+/// regression**: before this impl, `{:#?}` on a deep value aborted the process
+/// rather than printing anything at all.
+///
+/// ⭐ It is not implemented because doing so would *require* the pinned-text test
+/// `AC-P3e` forbids. Matching the derived pretty layout means reproducing its
+/// exact newline and indent placement, and the only way to know that layout is
+/// right is to snapshot it — which would freeze an explicitly unspecified
+/// surface. Emitting a wrong-but-plausible layout silently is worse than
+/// emitting the compact one visibly. If pretty-printing is wanted back, it is a
+/// separate change that must first decide whether the layout is specified.
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut stack: Vec<DebugStep<'_>> = vec![DebugStep::Val(self)];
