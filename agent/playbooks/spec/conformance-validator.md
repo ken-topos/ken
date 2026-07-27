@@ -240,6 +240,34 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   silence you find is raised to the author, not papered over.
 - **Ground before locking (§7):** verify the expected output against the
   `/spec`, permissive references, and first principles; don't assume it.
+- **⛔ OPERAND BINDING — the FIRST question of every independent review, asked
+  BEFORE any measurement.** This is not a new gate or a new reviewer; it is the
+  opening step of the review you already run. Before you count a column, a byte,
+  or a line — and before you cite an adjacent green test — answer, **per fixture,
+  from the contract**:
+
+  > *What is this fixture's smallest complete parseable carrier, and what exact
+  > rendered line does the contract's decision measure — including indentation
+  > and every same-line carrier token?*
+
+  Then execute the boundary pair directly against the real producer. Only after
+  that may counts, byte/display discrimination, or neighbouring test evidence
+  support your verdict.
+
+  ⭐ **Why this is first and not later: independent arithmetic is not independent
+  grounding.** On `SPEC-31-WIDTH-ERRATUM` (2026-07-27) the author measured 16
+  strings and this seat **independently re-measured all 16, correctly, and
+  approved** — both binding to the candidate's *extracted group spelling* while
+  `31 §1d` bounds the **rendered source line**. The `match` arm carried four
+  indentation columns and the field two, so the stated 96 arm rendered at 98 and
+  could not be flat. The Architect blocked it by re-deriving the operand from the
+  contract; that was the entire difference. ⇒ **Two seats measuring the same
+  wrong object agree, and agreement reads exactly like corroboration.** §14's
+  second reviewer only pays for itself when it re-derives the **operand**, not
+  the arithmetic.
+  ⚠ **The cheapest tell, and it is usually in the candidate:** when a
+  measurement states what it **excludes** (*"the wrapper is excluded from the
+  measurement"*), check whether the contract's object **includes** it.
 - **Reachability pass — MANDATORY, mechanical, ends every output-oracle
   authoring.** An output oracle (a case asserting canonical/expected *bytes* a
   producer must emit, e.g. a formatter/canonicalizer golden) may only gate on a
@@ -260,6 +288,17 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   was unbuilt; a per-construct grounding *judgment* was not enough, so it is now
   a per-fixture mechanical gate. Fixing one mislabel is whack-a-mole; **sweep all
   fixtures, don't patch one.**)
+
+  ⭐ **Second axis, measured 2026-07-27 — a GREEN neighbouring test is evidence
+  only for the population it actually SELECTS.** On `SPEC-31-WIDTH-ERRATUM` the
+  `FMT9` reachability test was green and never read the changed `FMT7` fixtures:
+  it starts after the `FMT9` heading and consumes parseable `ken` fences, while
+  the new pairs were earlier `text` fences. So it established neither
+  parseability nor a fit decision for the population under review — a green run
+  over a fixture the run never opens. ⇒ **Name the producer's complete operand,
+  prove the test selects that exact population, and only then read its colour.**
+  A sibling-section pass and correct arithmetic on an extracted subexpression are
+  both compatible with the changed fixtures being wrong.
 - Behavioral forks you surface become Decisions; scope forks escalate to
   Steward.
 

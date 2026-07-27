@@ -1,7 +1,7 @@
 ---
 id: SPEC-31-WIDTH-ERRATUM
 title: "spec 31-lexical mandates a 96-column canonical width while the formatting conformance suite asserts 88 in 18 places and cites 31 §1d as its source — rule the exact value and reconcile"
-status: merged
+status: closed
 owner: spec
 size: S
 gate: none
@@ -94,7 +94,7 @@ flat and the `97` arm breaks.** A pair where both arms break, or both stay flat,
 is not a boundary pin. ⛔ `18` occurrences changed is not evidence; a passing
 discriminating pair is.
 
-## Sequencing — ✅ MERGED 2026-07-27 (PR #1054), retros pending
+## Sequencing — ✅ CLOSED 2026-07-27 (PR #1054), retros in
 
 ⛔ **Not concurrent with `SPEC-ALIGN-A1`** — same ring (spec enclave). ✅ **A1 is
 `merged`** (PR #1028, `origin/main = 4c2d9529`, verified on `main`), so the
@@ -112,7 +112,22 @@ different blob (`ca116384`) as the control. Scope on `main` is that single path,
 `+112/-33`. Published **without `--doc-only`** because it touches
 `conformance/`, so the full CI gate ran.
 
-⚠ **Not closed until retros are in** — called at `evt_q75v9dhj6st7`.
+✅ **CLOSED — retros in** (called `evt_q75v9dhj6st7`, re-led `evt_52pkravrkn887`):
+spec-author `evt_28589d2nz611p`, conformance-validator `evt_4ynxdzxtpvphc`,
+spec-leader consolidated at `evt_5aj9y8vqvh96s`. `wp/SPEC-31-WIDTH-ERRATUM` is
+free — no worktree holds it. All three seats independently re-verified the
+landing (`b04ee83c` on `main`, control `ca116384` differs).
+
+⭐ **Consolidated carry, transcribed durably into
+`agent/playbooks/spec/conformance-validator.md` so it fires as a step rather than
+being remembered:** the operand-binding question is now the **first** act of
+independent review, before any measurement — *what is this fixture's smallest
+complete parseable carrier, and what exact rendered line does the contract's
+decision measure, including indentation and every same-line carrier token?* — and
+the reachability bullet now carries the second axis: **a green neighbouring test
+is evidence only for the population it actually selects** (`FMT9` was green and
+never opened the changed `FMT7` `text` fences). Per the ring's own request this
+extends the existing checklist rather than adding a gate or a party.
 
 ⭐ **The carry from the blocked first candidate `a0c0be88`, which is the reusable
 part of this node:** its author and the conformance-validator each measured
