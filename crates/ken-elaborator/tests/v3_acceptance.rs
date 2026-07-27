@@ -240,7 +240,7 @@ fn unrecognized_shape_to_ho_default_no_skip() {
 /// `dec : A → Decidable φ` + kernel canonicity `dec a →_β inl proof` (23 §3.1).
 /// The D-fragment backend (kernel whnf + constructor extraction) is pending.
 #[test]
-fn reflective_decision_computes_cert_d() {
+fn reflective_decision_computes_cert_d_placeholder() {
     // [placeholder — reifies in V4]
     // When landed: a closed `2 + 2 == 4`-style decidable goal with a registered
     // `dec` computes cert via kernel `whnf`; `inl proof → proved`.
@@ -252,7 +252,7 @@ fn reflective_decision_computes_cert_d() {
 /// [placeholder — reifies in V4]: requires Kripke embedding φ ↦ φ#, World sort,
 /// adequacy lemma `classically_valid(φ#) → φ`, and `check_cert` soundness (23 §4).
 #[test]
-fn kripke_embedding_cert_rechecks_fo() {
+fn kripke_embedding_cert_rechecks_fo_placeholder() {
     // [placeholder — reifies in V4]
     // When landed: an FO goal φ routed to Kripke; Z3 decides φ# valid;
     // discharge term `sound φ π (refl true)` checks → proved.
@@ -341,7 +341,7 @@ fn ipc_lem_invalid_not_refuted_unknown() {
 /// [placeholder — reifies in V4]: requires List inductive + induction tactic +
 /// sub-obligation composition and localized holes (23 §5).
 #[test]
-fn induction_descent_with_ih_and_localized_partiality() {
+fn induction_descent_with_ih_and_localized_partiality_placeholder() {
     // [placeholder — reifies in V4]
     // When landed: `∀ xs : List Nat. length xs ≥ 0` decomposes per-constructor;
     // nil branch → proved; cons branch with IH in Γ → proved.
@@ -355,7 +355,7 @@ fn induction_descent_with_ih_and_localized_partiality() {
 /// [placeholder — reifies in V4]: requires a backend producing `q : ¬φ`
 /// (countermodel) + schema from `24` (oracle).
 #[test]
-fn disproved_carries_countermodel() {
+fn disproved_carries_countermodel_placeholder() {
     // [placeholder — reifies in V4]
     // When landed: `n > 0` for `n ≤ 0` → backend yields countermodel naming
     // the failing input class; cert `q : ¬φ` is kernel-checked.
