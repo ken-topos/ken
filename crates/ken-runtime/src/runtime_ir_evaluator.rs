@@ -319,8 +319,10 @@ pub fn evaluate_runtime_ir_example(
     env: &RuntimeIrSeedEnvironment,
 ) -> Result<RuntimeIrRunReport, RuntimeIrEvaluationError> {
     reject_runtime_ir_program_blockers(program)?;
-    reject_unbound_runtime_example(program, example)?;
-    let observation = evaluate_runtime_ir_program_expr(program, &example.ir, env)?;
+    // ⛔ Evaluate the PROGRAM-OWNED body, not the caller's. The caller's
+    // `example` names which one to run; it does not supply what runs.
+    let selected = select_bound_runtime_example(program, example)?;
+    let observation = evaluate_runtime_ir_program_expr(program, &selected.ir, env)?;
     let artifact = RuntimeArtifactIdentity::from_program(program);
     let target = RuntimeIrTargetIdentity::from_example(example);
     Ok(RuntimeIrRunReport {
@@ -1089,34 +1091,82 @@ fn require_referenced_symbol_supported(
     Ok(())
 }
 
-fn reject_unbound_runtime_example(
-    program: &RuntimeProgram,
+/// Select the **unique program-owned example** this request names, or refuse.
+///
+/// ⛔ Returns a reference **into `program.examples`**, and the caller evaluates
+/// *that* IR — never the caller's copy. This is the whole point: the closure-free
+/// key decides *which* program-owned example is meant, and the program's own IR
+/// is then what runs. A caller cannot supply a matching key beside a different
+/// body and have the different body evaluated.
+///
+/// ⛔ **Fail-closed on both sides of unique:** zero matches refuse, and so do
+/// two or more. An ambiguous key is not silently resolved to the first hit —
+/// that would let a caller pick which of two examples runs by ordering.
+fn select_bound_runtime_example<'p>(
+    program: &'p RuntimeProgram,
     example: &RuntimeExample,
-) -> Result<(), RuntimeIrEvaluationError> {
-    if program
-        .examples
-        .iter()
-        .any(|candidate| candidate == example)
-    {
-        return Ok(());
-    }
+) -> Result<&'p RuntimeExample, RuntimeIrEvaluationError> {
+    // ⛔ **Membership is decided on the CLOSURE-FREE projection of an example**
+    // — `name`, `checked_core_shape` and `observation` — never on `ir`.
+    //
+    // This compared whole `RuntimeExample`s with `==`. `RuntimeExample` contains
+    // a `RuntimeExpr`, which contains a `RuntimeValue`, which has a `ClosureRef`
+    // arm, so that equality was ordinary-closure structural equality reached
+    // through four layers of derive — exactly what
+    // `spec/40-runtime/41-values.md §2.1` denies and what `D2` removes.
+    //
+    // ⚠ **This is a NARROWING, and it is recorded rather than hidden.** Two
+    // examples agreeing on name, shape and expected observation but differing
+    // in `ir` now compare as the same binding. `observation` is the example's
+    // expected result and is itself closure-free, so the key stays
+    // discriminating on what an example *means*; but the residual is real, and
+    // it is review-enforced rather than mechanically guarded.
+    //
+    // ⭐ Recovering the exact check needs the sealed closure-free witness the
+    // Architect describes in `dec_7ptkf05j884ae` — a comparison that refuses a
+    // closure-containing input rather than answering. That is P3's shape, not
+    // this phase's.
+    let mut matches = program.examples.iter().filter(|candidate| {
+        candidate.name == example.name
+            && candidate.checked_core_shape == example.checked_core_shape
+            && candidate.observation == example.observation
+    });
 
-    Err(preflight_unsupported(
-        "RuntimeExample",
-        format!(
-            "example {} is not present byte-for-byte in RuntimeProgram.examples for the exact runtime artifact",
-            example.name
-        ),
-    ))
+    match (matches.next(), matches.next()) {
+        (Some(selected), None) => Ok(selected),
+        (Some(_), Some(_)) => Err(preflight_unsupported(
+            "RuntimeExample",
+            format!(
+                "example {} matches more than one entry in RuntimeProgram.examples; \
+                 an ambiguous binding is refused rather than resolved by order",
+                example.name
+            ),
+        )),
+        (None, _) => Err(preflight_unsupported(
+            "RuntimeExample",
+            format!(
+                "example {} is not bound in RuntimeProgram.examples for the exact runtime artifact",
+                example.name
+            ),
+        )),
+    }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// ⚠ **`PartialEq`/`Eq` are not derived** — it wraps [`EvaluatedValue`], whose
+/// closure arm may not expose structural equality (`41 §2.1`, `D2`).
+#[derive(Clone, Debug)]
 enum RuntimeIrOutcome {
     Value(EvaluatedValue),
     Trap(RuntimeTrap),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// ⛔ **`PartialEq`/`Eq` are not derived** — the `Closure` arm carries a
+/// `RuntimeExpr` body plus its captures, so a blanket derive would grant
+/// ordinary-closure structural equality (`41 §2.1`, `D2`).
+///
+/// ⚠ [`RuntimeIrOutcome`] wraps this type and loses its derive for the same
+/// reason.
+#[derive(Clone, Debug)]
 enum EvaluatedValue {
     Bool(bool),
     Int(crate::RuntimeIntV1),

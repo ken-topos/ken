@@ -335,6 +335,13 @@ fn stale_oracle_identity_rejects_before_runtime_ir_evaluation() {
 }
 
 #[test]
+// ⚠ The expected reason text changed with `RT-VALUE-TOTALITY-P2` `D2`. It read
+// "not present byte-for-byte", which described the old whole-`RuntimeExample`
+// equality — a comparison that reached `RuntimeValue::ClosureRef` and is now
+// gone. Selection is by the closure-free key, so "byte-for-byte" would be a
+// false description of what the refusal checks. The control itself is
+// unchanged: an external example is still refused at BoundaryPreflight, before
+// any evaluation.
 fn external_runtime_example_rejects_before_evaluation() {
     let stored = scalar_seed_example();
     let mut external = stored.clone();
@@ -358,7 +365,7 @@ fn external_runtime_example_rejects_before_evaluation() {
             stage: RuntimeIrDifferentialStage::BoundaryPreflight,
             construct: "RuntimeExample",
             ref reason,
-        } if reason.contains("not present byte-for-byte")
+        } if reason.contains("is not bound in")
     ));
 }
 
@@ -541,4 +548,85 @@ fn explicit_runtime_trap_is_an_observation_not_host_behavior() {
             .expect("explicit trap reports as a runtime observation");
 
     assert_eq!(report.observation.observation, example.observation);
+}
+
+/// ⭐ **`RT-VALUE-TOTALITY-P2` — the program's IR is what runs, not the
+/// caller's.**
+///
+/// `D2` removed `RuntimeExpr: PartialEq`, so `evaluate_runtime_ir_example` can
+/// no longer decide "is this example bound?" by comparing whole examples — that
+/// comparison reached `RuntimeValue::ClosureRef` and was ordinary-closure
+/// structural equality, which `spec/40-runtime/41-values.md §2.1` denies.
+///
+/// It now selects on the **closure-free key** (`name`, `checked_core_shape`,
+/// `observation`) and evaluates **the selected program-owned example's `ir`**.
+///
+/// ⛔ **This is the discriminator that makes that safe**, and without it the
+/// narrowing would be a real weakening: a caller passes the right key beside a
+/// DIFFERENT body, and the evaluator must run the **program's** body. If it ran
+/// the caller's, the key would have become a way to smuggle arbitrary IR into a
+/// program's identity — strictly worse than the equality that was removed.
+#[test]
+fn p2_selection_evaluates_the_program_owned_ir_not_the_callers() {
+    let owned = scalar_seed_example();
+    let program = runtime_program(owned.clone(), 0x1301);
+
+    // Same closure-free key, different body: an integer literal the program
+    // does not contain.
+    let mut impostor = owned.clone();
+    impostor.ir = ken_runtime::RuntimeExpr::Value(ken_runtime::RuntimeValue::Int(
+        ken_runtime::RuntimeIntV1::from(4242_i64),
+    ));
+
+    let report =
+        evaluate_runtime_ir_example(&program, &impostor, &RuntimeIrSeedEnvironment::empty())
+            .expect("the key is bound, so evaluation proceeds on the program's own body");
+
+    // ⭐ The observation is the PROGRAM's, so the impostor body never ran.
+    assert_eq!(
+        report.observation.observation, owned.observation,
+        "the program-owned IR produced the result; the caller's body was ignored"
+    );
+
+    // ⚠ POSITIVE CONTROL — the impostor body is genuinely different, so the
+    // assertion above is not vacuous. Evaluating it as its OWN program yields a
+    // different observation.
+    let impostor_program = runtime_program(impostor.clone(), 0x1302);
+    let impostor_report = evaluate_runtime_ir_example(
+        &impostor_program,
+        &impostor,
+        &RuntimeIrSeedEnvironment::empty(),
+    )
+    .expect("the impostor body is itself evaluable");
+    assert_ne!(
+        impostor_report.observation.observation, owned.observation,
+        "non-vacuity: the two bodies really do observe differently"
+    );
+}
+
+/// ⛔ **An ambiguous key is REFUSED, not resolved by order.**
+///
+/// Two program-owned examples sharing the closure-free key would otherwise let
+/// a caller choose which one runs by depending on `Vec` order. Fail-closed on
+/// both sides of *unique*: zero matches refuse, and so do two.
+#[test]
+fn p2_an_ambiguous_example_key_is_refused_rather_than_resolved_by_order() {
+    let owned = scalar_seed_example();
+    let mut program = runtime_program(owned.clone(), 0x1303);
+    program.examples.push(owned.clone());
+
+    let err = evaluate_runtime_ir_example(&program, &owned, &RuntimeIrSeedEnvironment::empty())
+        .expect_err("a duplicated key must refuse");
+    assert!(
+        format!("{err}").contains("more than one"),
+        "the refusal names ambiguity rather than absence: {err}"
+    );
+
+    // ⚠ POSITIVE CONTROL — with exactly one entry the same call succeeds, so
+    // the refusal is caused by the duplicate and not by the fixture.
+    let single = runtime_program(owned.clone(), 0x1303);
+    assert!(
+        evaluate_runtime_ir_example(&single, &owned, &RuntimeIrSeedEnvironment::empty()).is_ok(),
+        "exactly one binding evaluates"
+    );
 }

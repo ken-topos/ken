@@ -351,12 +351,13 @@ fn recursive_body_view_lowers_to_explicit_runtime_declaration_ref() {
         .expect("recursive declaration call lowers to runtime ref");
     let body = lowered_body(&program, &target);
 
-    assert_eq!(
-        body,
-        RuntimeExpr::DeclarationRef {
-            symbol: target.to_string()
-        }
-    );
+    // ⛔ No whole-expression equality (`P2` `D2`). The property is *which
+    // declaration the lowered body names*, so destructure to that variant and
+    // assert the symbol; a wrong variant panics loudly.
+    let RuntimeExpr::DeclarationRef { symbol } = &body else {
+        panic!("recursive declaration call lowered to {body:?}, not a DeclarationRef");
+    };
+    assert_eq!(symbol, &target.to_string());
 }
 
 #[test]
@@ -376,14 +377,21 @@ fn imported_declaration_ref_requires_exact_dependency_seed_identity() {
     let mut program = erase_checked_core_package_for_target(&package, [&target])
         .expect("imported declaration call lowers");
     let body = lowered_body(&program, &target);
-    assert_eq!(
-        body,
-        RuntimeExpr::ImportedDeclarationRef {
-            symbol: imported.to_string(),
-            dependency: dependency.to_string(),
-            dependency_semantic_hash: dependency_hash.clone(),
-        }
-    );
+    // ⛔ Same `D2` substitution. This variant carries three fields and all
+    // three are load-bearing — the symbol, the dependency it came from, and the
+    // semantic hash pinning WHICH build of that dependency — so each is
+    // asserted rather than folded into one comparison.
+    let RuntimeExpr::ImportedDeclarationRef {
+        symbol,
+        dependency: dep,
+        dependency_semantic_hash: dep_hash,
+    } = &body
+    else {
+        panic!("imported declaration lowered to {body:?}, not an ImportedDeclarationRef");
+    };
+    assert_eq!(symbol, &imported.to_string());
+    assert_eq!(dep, &dependency.to_string());
+    assert_eq!(dep_hash, &dependency_hash);
 
     let example = RuntimeExample {
         name: "nc17-imported-answer".to_string(),

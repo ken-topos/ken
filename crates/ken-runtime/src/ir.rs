@@ -15,14 +15,22 @@ pub type RuntimeSymbol = String;
 ///
 /// `identity` is observation-only provenance. `value` is the live, opaque
 /// credential and is the only field allowed to authorize a host operation.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// ⚠ **`PartialEq`/`Eq` are not derived** — this type transitively contains
+/// [`RuntimeValue`], whose closure arm may not expose structural equality
+/// (`spec/40-runtime/41-values.md §2.1`, `D2`). Compare a closure-free
+/// projection such as [`RuntimeGroundValue`] instead.
+#[derive(Clone, Debug)]
 pub struct RuntimeCapabilityUse {
     pub identity: RuntimeSymbol,
     pub value: Box<RuntimeExpr>,
 }
 
 /// Complete NC5 runtime artifact for one checked-core package subset.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// ⚠ **`PartialEq`/`Eq` are not derived** — this type transitively contains
+/// [`RuntimeValue`], whose closure arm may not expose structural equality
+/// (`spec/40-runtime/41-values.md §2.1`, `D2`). Compare a closure-free
+/// projection such as [`RuntimeGroundValue`] instead.
+#[derive(Clone, Debug)]
 pub struct RuntimeProgram {
     pub package_identity: RuntimeSymbol,
     pub core_semantic_hash: u64,
@@ -222,14 +230,22 @@ pub enum RuntimeEffectBoundary {
 }
 
 /// Runtime declaration lowered from a checked-core symbol.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// ⚠ **`PartialEq`/`Eq` are not derived** — this type transitively contains
+/// [`RuntimeValue`], whose closure arm may not expose structural equality
+/// (`spec/40-runtime/41-values.md §2.1`, `D2`). Compare a closure-free
+/// projection such as [`RuntimeGroundValue`] instead.
+#[derive(Clone, Debug)]
 pub struct RuntimeDeclaration {
     pub symbol: RuntimeSymbol,
     pub kind: RuntimeDeclarationKind,
     pub metadata: RuntimeSymbolMetadata,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// ⚠ **`PartialEq`/`Eq` are not derived** — this type transitively contains
+/// [`RuntimeValue`], whose closure arm may not expose structural equality
+/// (`spec/40-runtime/41-values.md §2.1`, `D2`). Compare a closure-free
+/// projection such as [`RuntimeGroundValue`] instead.
+#[derive(Clone, Debug)]
 pub enum RuntimeDeclarationKind {
     Transparent {
         body: RuntimeExpr,
@@ -333,7 +349,11 @@ pub enum RuntimePartiality {
 }
 
 /// Backend-neutral runtime expression language.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// ⚠ **`PartialEq`/`Eq` are not derived** — this type transitively contains
+/// [`RuntimeValue`], whose closure arm may not expose structural equality
+/// (`spec/40-runtime/41-values.md §2.1`, `D2`). Compare a closure-free
+/// projection such as [`RuntimeGroundValue`] instead.
+#[derive(Clone, Debug)]
 pub enum RuntimeExpr {
     #[doc(hidden)]
     CheckedJoinSite {
@@ -445,14 +465,22 @@ pub enum RuntimeExpr {
     Trap(RuntimeTrap),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// ⚠ **`PartialEq`/`Eq` are not derived** — this type transitively contains
+/// [`RuntimeValue`], whose closure arm may not expose structural equality
+/// (`spec/40-runtime/41-values.md §2.1`, `D2`). Compare a closure-free
+/// projection such as [`RuntimeGroundValue`] instead.
+#[derive(Clone, Debug)]
 pub struct RuntimeMatchCase {
     pub constructor: RuntimeSymbol,
     pub binders: usize,
     pub body: RuntimeExpr,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// ⚠ **`PartialEq`/`Eq` are not derived** — this type transitively contains
+/// [`RuntimeValue`], whose closure arm may not expose structural equality
+/// (`spec/40-runtime/41-values.md §2.1`, `D2`). Compare a closure-free
+/// projection such as [`RuntimeGroundValue`] instead.
+#[derive(Clone, Debug)]
 pub struct RuntimeComputationalMatchCase {
     pub constructor: RuntimeSymbol,
     pub argument_binders: usize,
@@ -483,7 +511,24 @@ pub fn compiler_private_computational_match_frame_fingerprint(
     crate::fnv1a_64(format!("computational\0{cases:?}\0{default:?}").as_bytes())
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// The **operational** carrier — where an ordinary closure lives.
+///
+/// ⛔ **`PartialEq`/`Eq` are deliberately NOT derived, and that is `D2`.** This
+/// enum has a `ClosureRef` arm, and `spec/40-runtime/41-values.md §2.1` denies
+/// ordinary closures structural equality. A blanket derive would have granted
+/// Ken-semantic equality to *every* arm — closures included — merely because
+/// they share one Rust enum, which is the "half an AC that reads as whole"
+/// failure `AC-V4` names.
+///
+/// ⭐ **The property is reachability, not the absence of a caller:** generic
+/// code requiring `PartialEq<RuntimeValue>` **fails to compile**. There is no
+/// detector to evade, because the capability is absent from the type.
+///
+/// ⚠ Comparison of *closure-free* runtime values is still available and
+/// explicitly named: [`RuntimeGroundValue`] and [`RuntimeObservation`] keep
+/// their derives, because neither has a closure arm. Route a comparison through
+/// those rather than re-adding one here.
+#[derive(Clone, Debug)]
 pub enum RuntimeValue {
     Bool(bool),
     Int(crate::RuntimeIntV1),
@@ -540,7 +585,11 @@ pub enum RuntimeTrapCode {
     ExplicitTrap,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// ⚠ **`PartialEq`/`Eq` are not derived** — this type transitively contains
+/// [`RuntimeValue`], whose closure arm may not expose structural equality
+/// (`spec/40-runtime/41-values.md §2.1`, `D2`). Compare a closure-free
+/// projection such as [`RuntimeGroundValue`] instead.
+#[derive(Clone, Debug)]
 pub struct RuntimeExample {
     pub name: String,
     pub checked_core_shape: String,

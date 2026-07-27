@@ -265,7 +265,8 @@ impl NativeEntrypointPlanV1 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// No `PartialEq`/`Eq`: see `RT-VALUE-TOTALITY-P2` `D2`.
+#[derive(Clone, Debug)]
 pub struct NativeProgramBuildOutput {
     pub package: CheckedCorePackage,
     pub plan: NativeEntrypointPlanV1,
