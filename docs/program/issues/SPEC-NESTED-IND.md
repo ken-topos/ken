@@ -1,7 +1,7 @@
 ---
 id: SPEC-NESTED-IND
 title: "un-defer nested strictly-positive inductives in 14 §8.5 — state structural positivity through declared strictly-positive type-parameter positions, the lifted induction hypotheses, and the iota rules, WITHOUT mutual families"
-status: ready
+status: merged
 owner: spec-enclave
 size: M
 gate: none
@@ -10,6 +10,32 @@ blocks: [KERNEL-NESTED-IND]
 github: null
 origin: Architect ruling evt_55k9f9efvd8jk, Decision dec_13af1mercv2m0 resolved — the fork was raised by the Steward as evt_1ykvpj7yvtg18 after DS-9 blocked at its first deliverable on `JsonArray (List Json)`. Demand-pulled by DS-9, which stays blocked until KERNEL-NESTED-IND lands. Steward-filed; Steward owns the frame and AC/control placement.
 ---
+
+> ## ✅ MERGED 2026-07-27 — `origin/main = 88196527`, PR #1076
+>
+> Candidate `7622d1b59afb8f338967b6993003e8a16308138a`, **CI checks passed**.
+> Landed content verified by **blob identity**: `spec/10-kernel/14-inductive.md`
+> `4dab9d0e` and `conformance/kernel/inductive/seed-nested.md` `c1059266`, with
+> discriminating controls (the chapter blob differs at `3313379e`; the seed file
+> did not exist there).
+>
+> Decision `dec_62mg078pr106y` read `resolved` fresh from the object
+> (`resolved_by=agt_37reqftfe6g00`, 07:38:21Z) before publishing. CV approved the
+> exact assembled object no-carry first.
+>
+> Scope: 16 Markdown paths — 11 `spec/` + 5 `conformance/`, +740/−179. Base kept at
+> `6f1eeda1`; the candidate's changed-path set and `base→origin/main` were verified
+> to have **zero intersection**, independently by CV and again before launch.
+>
+> **Landed section structure**, spot-checked on `origin/main` rather than taken from
+> the AC report: §3.2 lifted IHs (`:326`), §7.8 nested ι (`:622`), **§8.5 "Nested
+> inductives — structural parameter polarity"** (`:804`), **§8.6 "Mutually-defined
+> inductives — still deferred"** (`:868`), §9.5 subject reduction / termination /
+> conformance (`:1003`). ⭐ The §8.5/§8.6 split is the `AC-S3` deliverable and it is
+> visible in the headings: nested was lifted, mutual stayed deferred in its own
+> section with its own reason.
+>
+> ⛔ Per operator direction, no retro is owed and none was collected.
 
 > ## ▶ THE SPEC HALF OF A TWO-STAGE PREREQUISITE
 >
