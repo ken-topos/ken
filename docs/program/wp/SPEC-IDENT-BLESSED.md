@@ -69,13 +69,49 @@ confusables."*
 `§1d` (line 138): *"The lexer rejects **unblessed confusable** identifier
 characters rather than repairing them into a different binding."*
 
-The landed lexer rejects **every non-ASCII alphabetic scalar**. That is
-**strictly stronger** on coverage and **a different mechanism**: it is not a
-confusable rule, it is an ASCII wall, and it presumes no blessed set. ⇒ The
-spec describes a gate that discriminates confusables from non-confusables; the
-implementation discriminates ASCII from non-ASCII. `SURF-IDENT-TR39-R1`'s
-load-bearing control exists precisely to prove that — Cyrillic `а`
-(confusable) and `字` (plainly not) fail with the **same** error and span.
+⛔⛔ **THIS STRAND WAS FALSE AS ORIGINALLY WRITTEN. CORRECTED 2026-07-27
+(Steward ruling `evt_5xqj5r5fbn7ry`), after the conformance validator and the
+Architect blocked a candidate built on it. Read the correction, not the
+retracted claim.**
+
+⛔ ~~"The landed lexer rejects **every non-ASCII alphabetic scalar**. That is
+**strictly stronger** on coverage…"~~ — **wrong.**
+
+**Measured on `lexer.rs` at `origin/main = 4fd80cd8`:** the operator match arms
+at `:259-355` run **before** the `is_alphabetic()` rejection at `:483`, and
+four of them return **identifier-class tokens**:
+
+| glyph | token | enters a binding? |
+|---|---|---|
+| `Ω` | `Token::ConId("Omega")` | ✅ **yes** |
+| `Σ` | `Token::ConId("Sigma")` | ✅ **yes** |
+| `Π` | `Token::ConId("Pi")` | ✅ **yes** |
+| `ℓ` | `Token::Ident("level")` | ✅ **yes** |
+| `λ` | `Token::Lambda` | ⛔ no — dedicated token |
+| `∀` `∃` `¬` | `Token::Ident(…)` | yes, but **not alphabetic**, so they never reach the gate |
+
+⇒ ⭐ **`ℓ` *is* `level`; `Ω` *is* the ConId `Omega`.** Four alphabetic Unicode
+scalars **do** enter binding positions, as their ASCII aliases. ⛔ Any claim of
+"ASCII-only identifiers" or "no Unicode letter reaches a binding" stated
+**absolutely** is false and will be blocked.
+
+**The true statement: the identifier surface is ASCII-only *after alias
+expansion*.** Every accepted identifier is an ASCII name; a fixed, closed table
+of Unicode glyphs are alternate spellings **of specific ASCII names**.
+
+⭐ **And this satisfies principle 5 rather than violating it.** The alias map
+is total, closed, and single-valued — `ℓ` and `level` are **one** identifier,
+not two that look alike. A homoglyph hole is two *distinct* bindings with
+confusable spellings; this is its opposite. ⇒ The security property holds, via
+a mechanism the chapter never described. **That gap is the actual defect.**
+
+**What survives of the original strand:** for every non-ASCII alphabetic scalar
+**outside** the alias table, the lexer *is* an ASCII wall rather than a
+confusable rule, and `SURF-IDENT-TR39-R1`'s control proves it — Cyrillic `а`
+(confusable) and `字` (plainly not) fail with the **same** error and span. ⇒
+The spec describes a gate discriminating confusables from non-confusables; the
+implementation discriminates *alias-table membership*, then ASCII from
+non-ASCII.
 
 ### Strand 4 — ⛔ the security citation is dangling
 
@@ -110,16 +146,25 @@ Across the 59 `.ken` / `.ken.md` files under `catalog/`, `examples/`, and
 
 | scalar | count | what it actually is |
 |---|---|---|
-| `λ` U+03BB | 894 | ⭐ **notation glyph**, not an identifier — `§1b` maps `λ` ↔ `\` for anonymous functions |
-| `Ω` `Σ` `Π` | 19 / 12 / 6 | spec-brace and type-level notation / prose |
-| `δ` `φ` `η` `ι` `ρ` | 7 / 6 / 6 / 2 / 1 | Greek metavariables, prose and comments |
+| `λ` U+03BB | 894 | ⭐ **notation glyph**, not an identifier — `§1b` maps `λ` ↔ `\`; lexes to `Token::Lambda` |
+| `Ω` `Σ` `Π` | 19 / 12 / 6 | ⛔ **CORRECTED** — these lex to `Token::ConId("Omega"/"Sigma"/"Pi")`, i.e. **identifier-class aliases**, not mere notation |
+| `δ` `φ` `η` `ι` `ρ` | 7 / 6 / 6 / 2 / 1 | Greek metavariables, prose and comments — **not** in the alias table |
 | `é` U+00E9 | 1 | prose |
 
-⭐ **The decisive fact is not this grep — it is the merge.** The landed lexer
-rejects every non-ASCII alphabetic scalar in an identifier, and
-`SURF-IDENT-TR39-R1` passed **full CI** as PR #1121. ⇒ **No *checked* Ken code
-uses a non-ASCII identifier**, because if it did, that merge would have gone
-red.
+⛔ **CORRECTION, 2026-07-27 (`evt_5xqj5r5fbn7ry`) — this table's original
+reading was under-generalized and it is how the false Strand 3 survived.** I
+labelled `λ` "a notation glyph, not an identifier" and stopped there. That
+label is **correct for `λ` alone**, because `λ` is the only one returning a
+non-identifier token. `Ω`, `Σ`, `Π` (and `ℓ`) are a **different class**: they
+alias *to identifier tokens*. ⭐ **The census contained the answer and the
+generalization was never made.** Do not repeat it: classify by the **token
+returned**, not by the glyph's appearance in a notation table.
+
+⭐ **The decisive fact is not this grep — it is the merge.**
+`SURF-IDENT-TR39-R1` passed **full CI** as PR #1121, so ⇒ **no *checked* Ken
+code uses a non-ASCII identifier outside the alias table**, because if it did
+that merge would have gone red. ⚠ Note the added qualifier — the alias-table
+glyphs are *accepted*, so CI greenness says nothing about their absence.
 
 ⚠ **Scoped honestly, in the direction it fails:** this establishes the property
 for code that CI **elaborates**. A Greek letter sitting in an unchecked
@@ -193,13 +238,26 @@ it does not make is not an acceptable outcome of this WP.**
   invitation for failure and delay. Tests should focus on behavior."* ⚠ The
   weaker "only reports drift" form is **still a gate if it can go red**, and is
   equally banned.
-- ⛔ **Do not touch the notation-alias axis.** `§1d`'s protection of
-  identifiers spelled `l`, `level`, `in`, `not` against being rewritten into
-  notation glyphs is a **different axis** — alias-vs-identifier token
-  collision, not identifier character admission. `SURF-IDENT-TR39-R1`
-  explicitly excluded it and claimed no separation on it. It stays true under
-  every shape above. ⚠ Conflating the two is the most likely way to
-  manufacture a defect here.
+- ⚠ **AMENDED 2026-07-27 (`evt_5xqj5r5fbn7ry`) — the notation-alias axis:
+  DESCRIBE IT, DO NOT CHANGE IT.**
+
+  ⛔ ~~"Do not touch the notation-alias axis… it is a **different axis**."~~ —
+  **that ban was wrong and it blocked the WP.** Strand 3 shows the two axes
+  **intersect**: `Ω`/`Σ`/`Π`/`ℓ` are alias-table entries *and* alphabetic
+  scalars in identifier positions. ⇒ Forbidding the axis forbade stating the
+  truth about the identifier surface, and the enclave could not choose a
+  disposition by inference. That was my error, not a drafting slip.
+
+  ✅ **You MAY describe** the alias mechanism exactly where it bears on the
+  identifier surface — which glyphs alias to identifier tokens, and that the
+  map is total, closed, and single-valued.
+
+  ⛔ **You MAY NOT change it**: no adding to or removing from the alias table,
+  no altering `§1d`'s protection of identifiers spelled `l`, `level`, `in`,
+  `not`, no formatter change. The table is operator decision SURF-1 D3.
+  ⛔ Reserving these glyphs from identifier positions is a **breaking change**
+  and is a separate Ergo WP the Steward would frame — ⛔ **not** something this
+  WP may do as a consequence.
 - ⛔ **Do not edit `crates/`.** This WP is a spec decision. If it selects a
   shape whose implementation differs from the landed lexer, that is a
   follow-on build WP for Ergo — the Steward frames it, this WP does not do it.
@@ -262,9 +320,25 @@ it does not make is not an acceptable outcome of this WP.**
 
   ⭐ **AMENDED 2026-07-27 (Steward, `evt_7m5mgy8ne2pxz`), and this clause is
   now positive, not optional:** a conformance row **is** owed, and `AC-5` must
-  say so at the spec's **locked granularity** — ASCII `ident`/`conid`
-  acceptance and non-ASCII alphabetic rejection, with confusable **and**
-  non-confusable controls that distinguish the ASCII wall from a TR39 gate.
+  say so at the spec's **locked granularity**.
+
+  ⭐⭐ **RE-AMENDED the same day (`evt_5xqj5r5fbn7ry`): the obligation has
+  THREE cases, not two.**
+
+  1. ASCII identifier → **accepted**.
+  2. non-ASCII alphabetic **not** in the alias table (Cyrillic `а`, `字`,
+     fullwidth `Ｔ`) → **rejected**, typed error. Include a **non-confusable**
+     control alongside the confusable one, so the row distinguishes an ASCII
+     wall from a TR39 gate.
+  3. non-ASCII alphabetic **in** the alias table (`ℓ`, `Ω`, `Σ`, `Π`) →
+     **accepted as its ASCII alias**.
+
+  ⛔ **Case 3 requires the identity control or the row is vacuous:** `ℓ` and
+  `level` must resolve to **the same binding** — one identifier, not two.
+  ⭐ That control is the only one of the three that can tell an alias mechanism
+  apart from a confusable hole. ⚠ A row carrying cases 1 and 2 alone reads as
+  complete, and is exactly the shape that passed review while the frame's
+  premise was false.
   ⛔ The row is **staged, not authored here**, and ⛔ **do not invent a row
   id** — the Steward tracks the follow-on. ⚠ `crates/ken-elaborator/tests/
   surface_unicode.rs` is implementation evidence and does **not** discharge
