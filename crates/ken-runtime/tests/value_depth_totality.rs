@@ -1,5 +1,11 @@
 //! Out-of-process depth-totality controls for `Value` — `RT-VALUE-TOTALITY-P1`
-//! `AC-V1` and `AC-V3`.
+//! `AC-V1`/`AC-V3`, and `P3` `AC-V11` (`AC-P3a`–`AC-P3c`).
+//!
+//! ⛔ **P3 extends this file rather than adding a second harness.** The
+//! out-of-process discipline, the stated stack, the measured `D`, and the
+//! survivor/death assertions are the same evidence machinery; a parallel copy
+//! would drift from this one and the next depth defect would land in whichever
+//! the reader did not check.
 //!
 //! # Why these run out of process
 //!
@@ -57,6 +63,13 @@ const SCENARIO_ENV: &str = "KEN_RT_TOTALITY_SCENARIO";
 /// The `Record` type id used by the unary chain, and its closed-form encoding.
 const CHAIN_TYPE_ID: u32 = 1;
 const CHAIN_LEAF: i64 = 7;
+
+/// The leaf `AC-P3c` looks for in the rendered string.
+///
+/// ⭐ Deliberately a long, unusual digit run rather than [`CHAIN_LEAF`]: `7`
+/// occurs incidentally in a `type_id` or a byte and would make the
+/// leaf-reachability assertion pass without the traversal ever reaching bottom.
+const DEBUG_PROBE_LEAF: i64 = 987_654_321;
 
 /// The test's **own** copy of the byte-format constants, so `AC-V1` step 3 is an
 /// oracle *independent* of the production `tag` module rather than a restatement
@@ -139,7 +152,16 @@ fn expected_chain_bytes_with_leaf(depth: usize, leaf: i64) -> Vec<u8> {
 /// the depth claim cover the whole child-position surface rather than one slice
 /// of it. Found by attempting that exact evasion (`AC-V5`, row 1).
 fn mixed_chain(depth: usize) -> Value {
-    let mut v = Value::SmallInt(CHAIN_LEAF);
+    mixed_chain_with_leaf(depth, CHAIN_LEAF)
+}
+
+/// [`mixed_chain`] over a chosen leaf, mirroring [`unary_chain_with_leaf`].
+///
+/// `AC-P3c` needs a leaf it can *recognise in the rendered string*, so that
+/// "the renderer reached depth `D`" is a positive claim rather than an inference
+/// from output size alone.
+fn mixed_chain_with_leaf(depth: usize, leaf: i64) -> Value {
+    let mut v = Value::SmallInt(leaf);
     for j in 0..depth {
         v = match j % 4 {
             0 => Value::Record {
@@ -372,6 +394,59 @@ fn recursive_encode(value: &Value, out: &mut Vec<u8>) {
     }
 }
 
+/// A **host-recursive** rendering of the real `Value` population — the
+/// population-side positive control for `AC-P3a`/`AC-P3b`.
+///
+/// ⭐ Without this, "the new `Debug` survived at `D`" is compatible with `D`
+/// being too shallow to have broken a recursive renderer in the first place.
+/// Leaf rendering delegates to the production impl (depth-1 for a leaf); the
+/// recursion on **child positions** is what is under test.
+fn recursive_debug(value: &Value, out: &mut String) {
+    use std::fmt::Write as _;
+    match value {
+        Value::Record { type_id, fields } => {
+            let _ = write!(out, "Record {{ type_id: {type_id}, fields: [");
+            for field in fields {
+                recursive_debug(field, out);
+            }
+            out.push_str("] }");
+        }
+        leaf => {
+            let _ = write!(out, "{leaf:?}");
+        }
+    }
+}
+
+/// [`recursive_debug`] over **every** child position, not just `Record`.
+///
+/// ⚠ The `AC-V5` hybrid-evasion lesson applies verbatim here: an impl that is
+/// iterative for `Record` and still host-recursive for the other four passes
+/// every unary-chain control. This is the population that refuses that evasion.
+fn recursive_debug_mixed(value: &Value, out: &mut String) {
+    use std::fmt::Write as _;
+    match value {
+        Value::Record { fields: kids, .. }
+        | Value::Constructor { args: kids, .. }
+        | Value::Array { elements: kids, .. } => {
+            out.push('[');
+            for kid in kids {
+                recursive_debug_mixed(kid, out);
+            }
+            out.push(']');
+        }
+        Value::Map { entries, .. } => {
+            out.push('{');
+            for val in entries.values() {
+                recursive_debug_mixed(val, out);
+            }
+            out.push('}');
+        }
+        leaf => {
+            let _ = write!(out, "{leaf:?}");
+        }
+    }
+}
+
 /// A **host-recursive** deep clone of the real `Value` population — the
 /// population-side positive control for the `Clone` half of `AC-V3c`.
 fn recursive_clone(value: &Value) -> Value {
@@ -453,6 +528,40 @@ fn hash_of(witness: &CanonicalWitness) -> u64 {
 // ---------------------------------------------------------------- child worker
 
 /// Runs one scenario in a child process. Inert in the parent (no env var set).
+/// `AC-P3c` — the positive control for `AC-P3b`.
+///
+/// ⛔ **`AC-P3b` cannot fail honestly on its own.** "The child exited 0" is a
+/// negative check: a `Debug` that rendered *nothing*, or that stopped after the
+/// outermost node, exits 0 exactly like one that walked all `D` levels. These
+/// two assertions are what separate those outcomes.
+///
+/// ⚠ **Both are deliberately format-INDEPENDENT, per `AC-P3e`.** `Debug` output
+/// is unspecified and must not be frozen, so neither assertion names a
+/// delimiter, a field label, or an exact length:
+///
+/// - **Scale** — a *lower bound* of `D` bytes. Any rendering that descends `D`
+///   levels emits at least one byte per level, and no rendering that stops
+///   early can reach `D` bytes. A shallow render of this value is tens of bytes
+///   against `D` = 131072.
+/// - **Reachability** — the deepest leaf's *digits* appear. This is a claim
+///   about the leaf **value**, not about how the renderer spells a node, and it
+///   is what catches a traversal that emits `D` opening headers and then never
+///   reaches bottom — which the length bound alone would pass.
+fn assert_rendered_to_depth_d(rendered: &str, scenario: &str) {
+    assert!(
+        rendered.len() >= D,
+        "{scenario}: rendered only {} bytes at depth {D}. A render that walked \
+         every level emits at least one byte per level, so this is a render \
+         that stopped early — and a bare exit code could not have told us.",
+        rendered.len()
+    );
+    assert!(
+        rendered.contains(&DEBUG_PROBE_LEAF.to_string()),
+        "{scenario}: the deepest leaf {DEBUG_PROBE_LEAF} never appears, so the \
+         traversal emitted depth-scale output without reaching bottom."
+    );
+}
+
 #[test]
 fn scenario_worker() {
     let scenario = match std::env::var(SCENARIO_ENV) {
@@ -694,6 +803,38 @@ fn run_scenario(scenario: &str) {
             println!("OK witness_hash_at_depth D={D} bytes={}", same.0.bytes().len());
         }
 
+        // --- AC-P3b/AC-P3c: the NEW Debug returns at D, and actually rendered ---
+        "debug_at_depth_d" => {
+            let chain = unary_chain_with_leaf(D, DEBUG_PROBE_LEAF);
+            let rendered = format!("{chain:?}");
+            assert_rendered_to_depth_d(&rendered, "debug_at_depth_d");
+            println!("OK debug_at_depth_d len={}", rendered.len());
+        }
+
+        // --- AC-P3b/AC-P3c, over EVERY child position ---
+        "debug_at_depth_d_mixed" => {
+            let chain = mixed_chain_with_leaf(D, DEBUG_PROBE_LEAF);
+            let rendered = format!("{chain:?}");
+            assert_rendered_to_depth_d(&rendered, "debug_at_depth_d_mixed");
+            println!("OK debug_at_depth_d_mixed len={}", rendered.len());
+        }
+
+        // --- AC-P3a population control: a host-recursive renderer DIES at D ---
+        "recursive_debug_dies" => {
+            let chain = unary_chain_with_leaf(D, DEBUG_PROBE_LEAF);
+            let mut out = String::new();
+            recursive_debug(&chain, &mut out);
+            println!("UNEXPECTED recursive_debug survived len={}", out.len());
+        }
+
+        // --- AC-P3a population control, over EVERY child position ---
+        "recursive_debug_dies_mixed" => {
+            let chain = mixed_chain_with_leaf(D, DEBUG_PROBE_LEAF);
+            let mut out = String::new();
+            recursive_debug_mixed(&chain, &mut out);
+            println!("UNEXPECTED recursive_debug_mixed survived len={}", out.len());
+        }
+
         // --- harness positive control: the parent CAN observe a survivor ---
         "harness_survives" => {
             println!("OK harness_survives");
@@ -758,6 +899,47 @@ fn assert_dies_of_stack_overflow(scenario: &str) {
 #[test]
 fn harness_can_observe_a_survivor() {
     assert_survives("harness_survives");
+}
+
+// ------------------------------------------------- RT-VALUE-TOTALITY-P3 (V11)
+//
+// `AC-P3a` is discharged by the **mechanism**, not by these controls: the
+// hand-written `impl Debug for Value` drives the same explicit heap worklist
+// P1's canonical encoder uses (`DebugStep::{Val, Lit, Key}`, one `Vec` on the
+// heap), so the only host frames are `fmt` -> `debug_header`, one deep, for
+// every node regardless of depth.
+//
+// ⛔ These controls are **corroboration**. `D = 131072` is a single finite probe
+// on one platform; it supports the structural claim and does not constitute it.
+// The depth is stated here, before any run, as the module constant `D`.
+
+/// `AC-P3a` population control — a host-recursive renderer dies on this very
+/// population at `D`. Without it, the survival controls below are compatible
+/// with `D` being too shallow to have broken a recursive renderer at all.
+#[test]
+fn ac_p3a_host_recursive_debug_dies_at_depth_d() {
+    assert_dies_of_stack_overflow("recursive_debug_dies");
+}
+
+/// `AC-P3a` population control, over **every** child position — refuses the
+/// `AC-V5` hybrid evasion (iterative for `Record`, recursive for the rest).
+#[test]
+fn ac_p3a_host_recursive_debug_dies_at_depth_d_through_all_child_positions() {
+    assert_dies_of_stack_overflow("recursive_debug_dies_mixed");
+}
+
+/// `AC-P3b`+`AC-P3c` — `{:?}` at `D` returns, **and actually rendered**.
+/// ⛔ Not "exited 0": see [`assert_rendered_to_depth_d`] for why that alone
+/// would pass for a renderer that emitted nothing.
+#[test]
+fn ac_p3b_debug_returns_and_renders_at_depth_d() {
+    assert_survives("debug_at_depth_d");
+}
+
+/// `AC-P3b`+`AC-P3c`, over **every** child position.
+#[test]
+fn ac_p3b_debug_returns_and_renders_at_depth_d_through_all_child_positions() {
+    assert_survives("debug_at_depth_d_mixed");
 }
 
 /// `AC-V1` step 3 — the new encoder succeeds at `D` and emits exactly the
