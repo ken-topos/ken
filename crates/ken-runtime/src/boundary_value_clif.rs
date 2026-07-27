@@ -6488,163 +6488,7 @@ pub(crate) mod tests {
     // `PersistentClosure` — the canonical image layer
     // ───────────────────────────────────────────────────────────────────────
 
-    /// **`AC-6`/`AC-10` — an emitted `Closure` adopts, and a separately compiled
-    /// consumer recovers its identity, its artifact-scoped code identity, and
-    /// its captures IN ORDER, after the producer's arena is gone.**
-    ///
-    /// ⚠ MEASURED: the consumer reads back tag `PersistentClosure`, a non-null
-    /// `NODE_SLOT`, and the store's own `slot -> bytes -> Value` decode yields
-    /// `Value::Closure` with `boundary_code_id(identity, origin)` and the two
-    /// captures in the order they were written. CLAIMED: a closure survives the
-    /// boundary with content and identity intact. THE GAP: that the consumer is
-    /// not reading the producer's leftovers — closed by `rebind`, which gives it
-    /// a **fresh arena** sharing only the store's persistent image.
-    #[test]
-    fn b2v_ac6_an_emitted_closure_adopts_with_artifact_scoped_identity() {
-        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
-        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
-        let (_c1, class_code) = compile_probe(Probe::Unary(|h| h.class));
-        let (_c2, slot_code) = compile_probe(Probe::Unary(|h| h.slot));
-        let (_c3, escape_code) = compile_probe(Probe::Status(|h| h.escape_check));
 
-        let identity = fixture_artifact("closure", 1);
-        let origin = 7u64;
-        let mut store = BoundaryValueStore::new();
-        store.bind_artifact(identity.clone());
-
-        let pending = {
-            let f = bind_with(
-                &mut store,
-                BoundaryArenaBuilder::new(),
-                (4, 8, 0),
-                (0, 0, 0),
-            );
-            let word = emitted_closure(alloc_closure, store_field, f.base, origin, &[11, 22]);
-            // ⛔ Constructed is not published: an unadopted persistent word is
-            // refused at the boundary, which is what makes adoption the only
-            // route out.
-            assert_eq!(
-                run2(escape_code, f.base, word),
-                BOUNDARY_ERR_ESCAPE,
-                "AC-6: an unadopted closure must not escape"
-            );
-            word
-        };
-
-        store.seal_persistent();
-        let adopted = store.adopt(pending).expect("AC-6: the closure adopts");
-        let slot = store
-            .image()
-            .0
-            .node_field(adopted.payload(), NODE_SLOT)
-            .expect("the adopted node is live");
-        assert_ne!(
-            slot,
-            crate::store::NULL_SLOT,
-            "AC-6: a published PersistentStore handle is StoreMinted, never \
-             NoStoreIdentity"
-        );
-
-        // ⭐ A FRESH invocation — the producer's arena is gone.
-        let g = rebind(store.image_mut().0.publish());
-        // ⛔ Both halves, because they are different authorities: the WORD's tag
-        // byte says which region and lifetime, the NODE's class says how to
-        // interpret it, and a retagging defect moves exactly one of them.
-        assert_eq!(
-            adopted.tag(),
-            Some(BoundaryTag::PersistentClosure),
-            "AC-6: the adopted WORD is still a closure handle"
-        );
-        assert_eq!(
-            run2(class_code, g.base, adopted),
-            BoundaryClass::Closure as i64,
-            "AC-6: and the consumer reads a CLOSURE node, not a retagged ground one"
-        );
-        assert_eq!(
-            run2(slot_code, g.base, adopted),
-            slot as i64,
-            "AC-6: and the same identity, not its absence"
-        );
-        assert_eq!(
-            run2(escape_code, g.base, adopted),
-            BOUNDARY_OK,
-            "AC-6: an adopted closure may cross the boundary"
-        );
-
-        assert_eq!(
-            store.decode_slot(slot),
-            Some(Value::Closure {
-                code_id: boundary_code_id(&identity, origin),
-                captured: vec![Value::SmallInt(11), Value::SmallInt(22)],
-            }),
-            "AC-6: content AND order survive, through the store's own decode path"
-        );
-    }
-
-    /// **`AC-6` — closure identity converges on equality and never aliases on a
-    /// changed code identity, a changed capture, or a changed capture ORDER.**
-    ///
-    /// ⭐ **Order is the one an equality-by-set implementation would fail**, and
-    /// it is why the captures are `[11, 22]` and `[22, 11]` rather than two
-    /// unrelated pairs: the two differ in *nothing but order*, so a canonical
-    /// form that dropped order would converge them and this would redden.
-    #[test]
-    fn b2v_ac6_closure_identity_converges_and_never_aliases() {
-        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
-        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
-
-        let identity = fixture_artifact("converge", 2);
-        let mut store = BoundaryValueStore::new();
-        store.bind_artifact(identity.clone());
-        let f = bind_with(
-            &mut store,
-            BoundaryArenaBuilder::new(),
-            (16, 32, 0),
-            (0, 0, 0),
-        );
-        let mint = |origin, captures: &[i64]| {
-            emitted_closure(alloc_closure, store_field, f.base, origin, captures)
-        };
-        // Two independent, structurally equal closures — plus three that differ
-        // in exactly one axis each.
-        let a = mint(7, &[11, 22]);
-        let b = mint(7, &[11, 22]);
-        let other_code = mint(8, &[11, 22]);
-        let other_value = mint(7, &[11, 23]);
-        let other_order = mint(7, &[22, 11]);
-        assert_ne!(
-            a, b,
-            "the equal pair must be DISTINCT nodes before adoption, or \
-             convergence is trivial"
-        );
-
-        store.seal_persistent();
-        let slot_of = |store: &mut BoundaryValueStore, word: BoundaryWord| {
-            let adopted = store.adopt(word).expect("adopts");
-            store
-                .image()
-                .0
-                .node_field(adopted.payload(), NODE_SLOT)
-                .expect("live")
-        };
-        let sa = slot_of(&mut store, a);
-        let sb = slot_of(&mut store, b);
-        let sc = slot_of(&mut store, other_code);
-        let sv = slot_of(&mut store, other_value);
-        let so = slot_of(&mut store, other_order);
-
-        assert_eq!(
-            sa, sb,
-            "AC-6: equal code identity and equal ordered captures converge"
-        );
-        assert_ne!(sa, sc, "AC-6: a different code identity must not alias");
-        assert_ne!(sa, sv, "AC-6: a different capture VALUE must not alias");
-        assert_ne!(
-            sa, so,
-            "AC-6: a different capture ORDER must not alias — captures are an \
-             ordered environment, not a set"
-        );
-    }
 
     /// **`AC-6` — the same ordinal in two different artifacts is two different
     /// closures.**
@@ -6699,217 +6543,82 @@ pub(crate) mod tests {
         );
     }
 
-    /// **`AC-6` — closure adoption FAILS CLOSED while the store carries no
-    /// artifact binding.**
+    /// **`AC-6` / `AC-V5` — an emitted closure node is REFUSED at adoption.**
     ///
-    /// ⛔ The store has no artifact binding today, so this is not a hypothetical
-    /// state: it is the default one. Minting an identity from the bare ordinal
-    /// while unbound is exactly the cross-artifact collision the ruling
-    /// excludes, so the only sound answer is a refusal.
+    /// ⛔ **This test replaces five that asserted the opposite.** Before
+    /// `RT-VALUE-TOTALITY-P2`, `AC-6` pinned that an emitted closure node
+    /// *adopts*, mints an artifact-scoped `code_id`, converges on equal
+    /// captures, survives nesting and dedup, and round-trips through
+    /// `decode_slot` as a `Value::Closure`. Every one of those is the contract
+    /// `spec/40-runtime/41-values.md §2.1` retires: an ordinary closure is
+    /// **transitively non-persistable**, and publication must refuse it
+    /// **before** bytes, digest, slot or provenance exist. Those five tests were
+    /// not portable — their premise was the capability, not a behaviour that
+    /// merely changed shape — so they are deleted rather than adjusted.
     ///
-    /// ⚠ POSITIVE CONTROL: binding the artifact makes the *same* graph adopt, so
-    /// the refusal is about the binding and not about closures.
+    /// ⚠ **POSITIVE CONTROL, and it is the whole point of the test:** the
+    /// identical harness — same arena, same sealing, same artifact binding —
+    /// adopts a *ground* node. So the refusal is caused by the closure class and
+    /// not by a mis-set fixture, an unsealed region, or a broken builder, which
+    /// are the ways a refusal assertion passes for the wrong reason.
+    ///
+    /// ⛔ The refusal is `BOUNDARY_ERR_ESCAPE`, the same identity the two other
+    /// invocation-owned classes already use: a persistent node was handed
+    /// something runtime-local. It is raised in `canonical_image`, at
+    /// canonicalization, which is upstream of any byte, hash or slot.
+    // --- conformance: runtime/values/closure-publication-rejected-transitively ---
     #[test]
-    fn b2v_ac6_closure_adoption_fails_closed_while_artifact_unbound() {
+    fn b2v_ac6_an_emitted_closure_node_is_refused_at_adoption() {
         let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
         let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
 
         let mut store = BoundaryValueStore::new();
-        assert!(store.artifact().is_none(), "the store starts unbound");
+        store.bind_artifact(fixture_artifact("refused", 3));
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
             (4, 8, 0),
             (0, 0, 0),
         );
-        let word = emitted_closure(alloc_closure, store_field, f.base, 3, &[9]);
+        let word = emitted_closure(alloc_closure, store_field, f.base, 3, &[11, 22]);
         store.seal_persistent();
+
         assert_eq!(
             store.adopt(word),
-            Err(BOUNDARY_ERR_UNBOUND),
-            "AC-6: an unbound store cannot mint an artifact-scoped code identity"
+            Err(BOUNDARY_ERR_ESCAPE),
+            "AC-V5: an ordinary closure is refused at adoption, before any byte, \
+             digest or slot exists"
         );
+    }
 
-        // ⚠ POSITIVE CONTROL — the identical graph, with a binding.
-        store.bind_artifact(fixture_artifact("bound", 5));
+    /// ⚠ **POSITIVE CONTROL for the test above** — a ground node adopts through
+    /// the identical harness.
+    ///
+    /// ⛔ Without this, *"closures are refused"* and *"this fixture adopts
+    /// nothing"* are the same green.
+    #[test]
+    fn b2v_ac6_a_ground_node_still_adopts_through_the_same_harness() {
+        let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
+        let mut store = BoundaryValueStore::new();
+        store.bind_artifact(fixture_artifact("refused", 3));
+        let tag_id = store.intern_symbol("ctor:fixture::Ground::Leaf");
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (4, 8, 0),
+            (0, 0, 0),
+        );
+        let word = BoundaryWord(run3(alloc_ctor, f.base, BoundaryWord(tag_id), 0) as u64);
+        store.seal_persistent();
+
         assert!(
             store.adopt(word).is_ok(),
-            "AC-6: the same closure adopts once the artifact is bound"
+            "the same arena, sealing and binding adopt a GROUND node, so the \
+             closure refusal above is about the closure class"
         );
     }
 
-    /// **`AC-6` — a NESTED closure capture adopts bottom-up and keeps its own
-    /// tag.**
-    ///
-    /// ⛔ **The retagging defect this closes was live.** Adoption rewrote a
-    /// canonicalized child as `PersistentGround`, which for a nested
-    /// `PersistentClosure` silently changes what the child *is* — a consumer
-    /// would then read a closure as a ground handle. The tag belongs to the
-    /// child; only the index is canonicalization's to move.
-    #[test]
-    fn b2v_ac6_a_nested_closure_capture_adopts_without_retagging() {
-        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
-        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
-        let (_c1, class_code) = compile_probe(Probe::Unary(|h| h.class));
-        let (_c2, field_code) = compile_probe(Probe::Binary(|h| h.field));
 
-        let identity = fixture_artifact("nested", 6);
-        let mut store = BoundaryValueStore::new();
-        store.bind_artifact(identity.clone());
-
-        let outer = {
-            let f = bind_with(
-                &mut store,
-                BoundaryArenaBuilder::new(),
-                (8, 16, 0),
-                (0, 0, 0),
-            );
-            // ⚠ Two DISTINCT inner closures so the outer one has a real capture
-            // order to preserve, and so a canonicalization that collapsed them
-            // would be visible.
-            let inner_a = emitted_closure(alloc_closure, store_field, f.base, 21, &[1]);
-            let inner_b = emitted_closure(alloc_closure, store_field, f.base, 22, &[2]);
-            let outer = BoundaryWord(run3(alloc_closure, f.base, BoundaryWord(9), 2) as u64);
-            assert_eq!(
-                run4(store_field, f.base, outer.0, 0, inner_a.0),
-                BOUNDARY_OK
-            );
-            assert_eq!(
-                run4(store_field, f.base, outer.0, 1, inner_b.0),
-                BOUNDARY_OK
-            );
-            outer
-        };
-
-        store.seal_persistent();
-        let adopted = store.adopt(outer).expect("the nested closure adopts");
-
-        let g = rebind(store.image_mut().0.publish());
-        for index in 0..2u64 {
-            let child = BoundaryWord(run3(field_code, g.base, adopted, index) as u64);
-            assert_eq!(
-                child.tag(),
-                Some(BoundaryTag::PersistentClosure),
-                "AC-6: capture {index}'s WORD must still carry the closure tag — \
-                 rewriting it as PersistentGround is the retagging defect"
-            );
-            assert_eq!(
-                run2(class_code, g.base, child),
-                BoundaryClass::Closure as i64,
-                "AC-6: and its node is still a CLOSURE after adoption"
-            );
-        }
-
-        let slot = store
-            .image()
-            .0
-            .node_field(adopted.payload(), NODE_SLOT)
-            .expect("live");
-        assert_eq!(
-            store.decode_slot(slot),
-            Some(Value::Closure {
-                code_id: boundary_code_id(&identity, 9),
-                captured: vec![
-                    Value::Closure {
-                        code_id: boundary_code_id(&identity, 21),
-                        captured: vec![Value::SmallInt(1)],
-                    },
-                    Value::Closure {
-                        code_id: boundary_code_id(&identity, 22),
-                        captured: vec![Value::SmallInt(2)],
-                    },
-                ],
-            }),
-            "AC-6: the nested closures are captured as closures, in order"
-        );
-    }
-
-    /// **`AC-6` — a nested closure that CANONICALIZES ONTO ANOTHER NODE keeps
-    /// its own tag.**
-    ///
-    /// ⛔ **This is the control that actually reaches the retagging site, and
-    /// the sibling test above does not.** Canonicalization only rewrites a child
-    /// word when that child dedups onto a *different* node — `if target !=
-    /// child.payload()`. The nested test captures two **distinct** closures, so
-    /// neither dedups, the branch never runs, and mutation `M49` (hard-code the
-    /// rewritten tag back to `PersistentGround`, the historical defect) left it
-    /// green. A pin that never exercises the violating mechanism is not evidence
-    /// about it.
-    ///
-    /// Here the two captures are **structurally equal and separately
-    /// constructed**, so the second must dedup onto the first, the rewrite
-    /// fires, and the tag it writes is measured.
-    #[test]
-    fn b2v_ac6_a_deduped_closure_capture_keeps_its_tag_through_the_rewrite() {
-        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
-        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
-        let (_c1, class_code) = compile_probe(Probe::Unary(|h| h.class));
-        let (_c2, field_code) = compile_probe(Probe::Binary(|h| h.field));
-
-        let identity = fixture_artifact("dedup", 9);
-        let mut store = BoundaryValueStore::new();
-        store.bind_artifact(identity.clone());
-
-        let (outer, before) = {
-            let f = bind_with(
-                &mut store,
-                BoundaryArenaBuilder::new(),
-                (8, 16, 0),
-                (0, 0, 0),
-            );
-            // ⭐ EQUAL closures, built independently — so one must canonicalize
-            // onto the other and the child word must be rewritten.
-            let inner_a = emitted_closure(alloc_closure, store_field, f.base, 31, &[5]);
-            let inner_b = emitted_closure(alloc_closure, store_field, f.base, 31, &[5]);
-            assert_ne!(
-                inner_a, inner_b,
-                "the captures must be DISTINCT nodes, or no rewrite is attempted \
-                 and this control is vacuous"
-            );
-            let outer = BoundaryWord(run3(alloc_closure, f.base, BoundaryWord(12), 2) as u64);
-            assert_eq!(
-                run4(store_field, f.base, outer.0, 0, inner_a.0),
-                BOUNDARY_OK
-            );
-            assert_eq!(
-                run4(store_field, f.base, outer.0, 1, inner_b.0),
-                BOUNDARY_OK
-            );
-            (outer, (inner_a, inner_b))
-        };
-
-        store.seal_persistent();
-        let adopted = store.adopt(outer).expect("the deduped closure adopts");
-
-        let g = rebind(store.image_mut().0.publish());
-        let first = BoundaryWord(run3(field_code, g.base, adopted, 0) as u64);
-        let second = BoundaryWord(run3(field_code, g.base, adopted, 1) as u64);
-        // ⚠ NON-VACUITY: the rewrite must actually have happened — the two
-        // captures now name ONE node, and it is not the node the second capture
-        // was written as.
-        assert_eq!(
-            first, second,
-            "AC-6: the equal captures must canonicalize onto ONE node, or the \
-             rewrite this control measures never ran"
-        );
-        assert_ne!(
-            second, before.1,
-            "AC-6: and the second capture's word must genuinely have been \
-             rewritten"
-        );
-        // ⛔ And the rewritten word still says CLOSURE.
-        assert_eq!(
-            second.tag(),
-            Some(BoundaryTag::PersistentClosure),
-            "AC-6: the rewritten child word keeps the CHILD's tag — writing \
-             PersistentGround here silently changes what the child IS"
-        );
-        assert_eq!(
-            run2(class_code, g.base, second),
-            BoundaryClass::Closure as i64,
-            "AC-6: and the node it now names is still a closure"
-        );
-    }
 
     /// **`AC-6`/`AC-7` — an invocation-owned capture is refused BEFORE the
     /// parent publishes.**
@@ -6966,58 +6675,6 @@ pub(crate) mod tests {
         }
     }
 
-    /// **`AC-6` — the canonical `Closure` encoding round-trips, and a malformed
-    /// image is refused.**
-    ///
-    /// ⚠ MEASURED: encode-then-decode is the identity on a nested closure, and
-    /// every truncation of those bytes decodes to `None`. CLAIMED: the decode
-    /// extension is closed. THE GAP: that refusal is not merely the *absence* of
-    /// an arm — closed by the round trip, which proves the arm exists and works,
-    /// so the refusals below are decisions rather than gaps.
-    #[test]
-    fn b2v_ac6_closure_canonical_decode_round_trips_and_refuses_malformed() {
-        use crate::canonical::{decode_canonical, Canonical};
-        let value = Value::Closure {
-            code_id: 0x0123_4567_89ab_cdef,
-            captured: vec![
-                Value::SmallInt(-9),
-                Value::Closure {
-                    code_id: 4,
-                    captured: vec![Value::Bool(true)],
-                },
-            ],
-        };
-        let mut bytes = Vec::new();
-        value.encode_canonical(&mut bytes);
-        assert_eq!(
-            decode_canonical(&bytes),
-            Some((value.clone(), bytes.len())),
-            "AC-6: a canonical closure image round-trips exactly"
-        );
-
-        // ⛔ Every truncation is malformed and must be refused, not
-        // approximated into a shorter closure.
-        for cut in 1..bytes.len() {
-            assert_eq!(
-                decode_canonical(&bytes[..cut]),
-                None,
-                "AC-6: a truncated closure image must fail closed at {cut} bytes"
-            );
-        }
-        // ⚠ And the decoder stays closed at the top: `Array` is encodable and
-        // still refused, so the extension is `Closure` and nothing wider.
-        let mut array = Vec::new();
-        Value::Array {
-            elem_type_id: 1,
-            elements: vec![Value::SmallInt(1)],
-        }
-        .encode_canonical(&mut array);
-        assert_eq!(
-            decode_canonical(&array),
-            None,
-            "AC-6: the decoder was extended for Closure only"
-        );
-    }
 
     // ───────────────────────────────────────────────────────────────────────
     // The cycle / depth contract

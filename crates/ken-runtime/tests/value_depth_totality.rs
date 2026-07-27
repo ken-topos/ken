@@ -64,7 +64,8 @@ mod expected_format {
     pub const TAG_RECORD: u8 = 0x03;
     pub const TAG_ARRAY: u8 = 0x06;
     pub const TAG_MAP: u8 = 0x07;
-    pub const TAG_CLOSURE: u8 = 0x09;
+    // ⛔ `0x09` (the retired closure tag) is deliberately absent: the canonical
+    // carrier has no closure variant, so no encoding can emit it.
     pub const TAG_SMALL_INT: u8 = 0x1C;
 }
 
@@ -75,7 +76,6 @@ const MIXED_CTOR_ID: u32 = 0x2222_2222;
 const MIXED_ARRAY_ELEM_TYPE_ID: u32 = 0x3333_3333;
 const MIXED_MAP_KEY_TYPE_ID: u32 = 0x4444_4444;
 const MIXED_MAP_VALUE_TYPE_ID: u32 = 0x5555_5555;
-const MIXED_CLOSURE_CODE_ID: u64 = 0x6666_6666_7777_7777;
 
 /// Build a unary `Record` chain of `depth` nestings around a scalar leaf.
 ///
@@ -107,21 +107,25 @@ fn expected_chain_bytes(depth: usize) -> Vec<u8> {
     expected
 }
 
-/// Build a deep chain that **cycles through every one of the five child
-/// positions** — `Record.fields`, `Constructor.args`, `Array.elements`,
-/// `Map`'s entry values, and `Closure.captured`.
+/// Build a deep chain that **cycles through every one of the four child
+/// positions** — `Record.fields`, `Constructor.args`, `Array.elements`, and
+/// `Map`'s entry values.
+///
+/// ⚠ There were five until `RT-VALUE-TOTALITY-P2` removed `Closure.captured`
+/// with the variant that owned it. The claim below is therefore over **four**
+/// positions, and four is now the whole surface — not four fifths of it.
 ///
 /// ⭐ **Why this exists, and it is not redundant with [`unary_chain`]:** a
 /// unary-`Record` chain is the only population the depth controls would
 /// otherwise have, and a *hybrid* encoder — iterative for `Record`, still
 /// host-recursive for the other four — passes every one of those controls while
-/// leaving four of the five original recursion sites intact. This chain is what
-/// makes the depth claim cover the whole child-position surface rather than one
-/// fifth of it. Found by attempting that exact evasion (`AC-V5`, row 1).
+/// leaving the other original recursion sites intact. This chain is what makes
+/// the depth claim cover the whole child-position surface rather than one slice
+/// of it. Found by attempting that exact evasion (`AC-V5`, row 1).
 fn mixed_chain(depth: usize) -> Value {
     let mut v = Value::SmallInt(CHAIN_LEAF);
     for j in 0..depth {
-        v = match j % 5 {
+        v = match j % 4 {
             0 => Value::Record {
                 type_id: MIXED_RECORD_TYPE_ID,
                 fields: vec![v],
@@ -134,7 +138,7 @@ fn mixed_chain(depth: usize) -> Value {
                 elem_type_id: MIXED_ARRAY_ELEM_TYPE_ID,
                 elements: vec![v],
             },
-            3 => {
+            _ => {
                 let mut entries = std::collections::BTreeMap::new();
                 entries.insert(mixed_map_key(), v);
                 Value::Map {
@@ -143,10 +147,6 @@ fn mixed_chain(depth: usize) -> Value {
                     entries,
                 }
             }
-            _ => Value::Closure {
-                code_id: MIXED_CLOSURE_CODE_ID,
-                captured: vec![v],
-            },
         };
     }
     v
@@ -167,7 +167,10 @@ fn mixed_map_key() -> Vec<u8> {
 fn expected_mixed_chain_bytes(depth: usize) -> Vec<u8> {
     let mut expected = Vec::new();
     for j in (0..depth).rev() {
-        match j % 5 {
+        // ⚠ Must stay in lockstep with `mixed_chain`'s rotation: this builder is
+        // the independent oracle, so a divergent modulus here would compare two
+        // different chains and pass for the wrong reason.
+        match j % 4 {
             0 => {
                 expected.push(expected_format::TAG_RECORD);
                 expected.extend_from_slice(&MIXED_RECORD_TYPE_ID.to_le_bytes());
@@ -183,7 +186,7 @@ fn expected_mixed_chain_bytes(depth: usize) -> Vec<u8> {
                 expected.extend_from_slice(&MIXED_ARRAY_ELEM_TYPE_ID.to_le_bytes());
                 expected.extend_from_slice(&1u32.to_le_bytes());
             }
-            3 => {
+            _ => {
                 let key = mixed_map_key();
                 expected.push(expected_format::TAG_MAP);
                 expected.extend_from_slice(&MIXED_MAP_KEY_TYPE_ID.to_le_bytes());
@@ -191,11 +194,6 @@ fn expected_mixed_chain_bytes(depth: usize) -> Vec<u8> {
                 expected.extend_from_slice(&1u32.to_le_bytes());
                 expected.extend_from_slice(&(key.len() as u32).to_le_bytes());
                 expected.extend_from_slice(&key);
-            }
-            _ => {
-                expected.push(expected_format::TAG_CLOSURE);
-                expected.extend_from_slice(&MIXED_CLOSURE_CODE_ID.to_le_bytes());
-                expected.extend_from_slice(&1u16.to_le_bytes());
             }
         }
     }
@@ -232,12 +230,6 @@ fn recursive_encode_mixed(value: &Value, out: &mut Vec<u8>) {
             out.push(expected_format::TAG_MAP);
             for v in entries.values() {
                 recursive_encode_mixed(v, out);
-            }
-        }
-        Value::Closure { captured, .. } => {
-            out.push(expected_format::TAG_CLOSURE);
-            for c in captured {
-                recursive_encode_mixed(c, out);
             }
         }
         leaf => leaf.encode_canonical(out),

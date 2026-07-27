@@ -2397,26 +2397,29 @@ impl BoundaryValueStore {
                 let fields = self.child_images(at, count, images)?;
                 Ok(Value::Record { type_id, fields })
             }
-            BoundaryClass::Closure => {
-                // ⛔ The node carries the **local origin ordinal**; the artifact
-                // binding is what turns it into an identity. Emitted code never
-                // computes this — it has no artifact identity and B2F dispatch
-                // stays inert — so the binding happens here, at adoption, or not
-                // at all.
-                let identity = self.artifact.clone().ok_or(BOUNDARY_ERR_UNBOUND)?;
-                let code_id = boundary_code_id(&identity, payload);
-                // Captures are the full ordered canonical values, not hashes:
-                // equal code identity *and* equal ordered captures converge, and
-                // a changed capture or a changed ORDER does not alias, because
-                // the encoding is positional.
-                let captured = self.child_images(at, count, images)?;
-                Ok(Value::Closure { code_id, captured })
-            }
             // ⛔ Invocation-owned represented arms. They are not narrowed and not
             // reclassified — they are simply never placed in the permanent
             // store, and their transfer is governed by the invocation arena's
             // escape paths.
-            BoundaryClass::HostResult | BoundaryClass::BorrowedOpaque => Err(BOUNDARY_ERR_ESCAPE),
+            //
+            // ⛔ **`Closure` joined this arm when the canonical carrier lost its
+            // closure variant.** An ordinary closure is runtime-local, so a
+            // persistent node handed one is precisely the case
+            // `BOUNDARY_ERR_ESCAPE` names. This arm previously bound an artifact
+            // identity and built a `Value::Closure` from the full ordered
+            // captures; `41 §2.1` forbids that outcome — a closure is
+            // transitively non-persistable, and refusal must happen **before**
+            // bytes, digest, or slot exist, which is why the refusal is here at
+            // canonicalization rather than downstream of it.
+            //
+            // ⚠ The tag/class taxonomy, the `(tag, class)` relation, the storage
+            // shape and the CLIF emitters are deliberately UNCHANGED: B2V's
+            // representation lane is a named residual owned by the `FNSPLIT`
+            // re-cut (`SPEC-STORE-SPLIT` §7 item 1). Only the arm that
+            // *constructed a canonical closure image* is gone.
+            BoundaryClass::Closure
+            | BoundaryClass::HostResult
+            | BoundaryClass::BorrowedOpaque => Err(BOUNDARY_ERR_ESCAPE),
         }
     }
 

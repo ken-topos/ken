@@ -2,6 +2,16 @@
 //!
 //! Scalars are immediate (never interned). Compounds are content-addressed.
 //! `Unknown` is the third truth value for partially-verified programs.
+//!
+//! ⛔ **This is the CANONICAL carrier, and it is closure-free by construction.**
+//! Content-addressing is total over it *because* an ordinary closure cannot be
+//! built here at all — `41 §2.1` grants closures no structural equality,
+//! ordering, canonical hash, slot identity, or persistence, so a carrier that
+//! admits canonical encoding, hashing, interning and slot identity must not
+//! admit them. Ordinary closures live on the *operational* carrier
+//! (`ir::RuntimeValue::ClosureRef`) and reach this one only through the checked,
+//! fail-closed projection in [`crate::canonical`], which proves a whole graph
+//! closure-free **before** any byte, hash, or slot exists.
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -83,11 +93,12 @@ pub enum Value {
         elem_type_id: u32,
         elements: BTreeSet<Vec<u8>>,
     },
-    /// Closure — code pointer + full canonical captured environment (design doc §1.9).
-    Closure {
-        code_id: u64,
-        captured: Vec<Value>, // in capture order; encoded inline (memcmp-exact)
-    },
+    // ⛔ **No `Closure` variant, and this absence is the deliverable.** It is
+    // what makes the derives on this enum sound: `41 §2.1` forbids ordinary
+    // closures structural equality, ordering and canonical hashing, and a
+    // variant here would grant all three by construction. An ordinary closure
+    // is `ir::RuntimeValue::ClosureRef`; a future `FrozenClosure` /
+    // `StaticCallableRef` is a *separate explicit type*, never a re-added arm.
 
     // --- special (§6) ---
     /// Third truth value: the result of an open verification hole.
@@ -139,8 +150,7 @@ fn detach_children(value: &mut Value, out: &mut Vec<Value>) {
     match value {
         Value::Constructor { args: kids, .. }
         | Value::Record { fields: kids, .. }
-        | Value::Array { elements: kids, .. }
-        | Value::Closure { captured: kids, .. } => out.append(kids),
+        | Value::Array { elements: kids, .. } => out.append(kids),
 
         Value::Map { entries, .. } => out.extend(std::mem::take(entries).into_values()),
 
@@ -190,10 +200,6 @@ fn rebuild(proto: &Value, kids: Vec<Value>) -> Value {
         Value::Array { elem_type_id, .. } => Value::Array {
             elem_type_id: *elem_type_id,
             elements: kids,
-        },
-        Value::Closure { code_id, .. } => Value::Closure {
-            code_id: *code_id,
-            captured: kids,
         },
         // Keys are already-canonical bytes and are cloned flat; zipping against
         // `BTreeMap::keys()` is sound because the children were pushed in that
@@ -309,8 +315,7 @@ impl Clone for Value {
                 Job::Visit(value) => match value {
                     Value::Constructor { args: kids, .. }
                     | Value::Record { fields: kids, .. }
-                    | Value::Array { elements: kids, .. }
-                    | Value::Closure { captured: kids, .. } => {
+                    | Value::Array { elements: kids, .. } => {
                         jobs.push(Job::Finish {
                             proto: value,
                             children: kids.len(),

@@ -504,10 +504,7 @@ mod tests {
             args: vec![
                 inner_record,
                 inner_array,
-                Value::Closure {
-                    code_id: 99,
-                    captured: vec![Value::Bytes(vec![0x01])],
-                },
+                Value::Bytes(vec![0x01]),
             ],
         };
 
@@ -554,7 +551,6 @@ mod tests {
                 Value::Constructor { args, .. } => args.iter().collect(),
                 Value::Record { fields, .. } => fields.iter().collect(),
                 Value::Array { elements, .. } => elements.iter().collect(),
-                Value::Closure { captured, .. } => captured.iter().collect(),
                 Value::Map { entries, .. } => entries.values().collect(),
                 _ => Vec::new(),
             };
@@ -673,43 +669,17 @@ mod tests {
         assert!(matches!(r, InternResult::New(_))); // compound → gets a slot
     }
 
-    // --- conformance: runtime/values/closure-content-addressed ---
-    #[test]
-    fn closure_content_addressed() {
-        let mut store = Store::new();
-        let cap = vec![Value::SmallInt(1), Value::String("env".into())];
-        let c1 = Value::Closure {
-            code_id: 42,
-            captured: cap.clone(),
-        };
-        let c2 = Value::Closure {
-            code_id: 42,
-            captured: cap.clone(),
-        };
-        let r1 = store.intern(&c1);
-        let r2 = store.intern(&c2);
-        assert!(matches!(r1, InternResult::New(_)));
-        assert_eq!(r1.slot_id(), r2.slot_id()); // same code + same env → same slot
-    }
-
-    // --- conformance: runtime/values/closure-distinct-env-no-collision ---
-    #[test]
-    fn closure_distinct_env_no_collision() {
-        let mut store = Store::new();
-        let c1 = Value::Closure {
-            code_id: 42,
-            captured: vec![Value::SmallInt(1), Value::String("a".into())],
-        };
-        let c2 = Value::Closure {
-            code_id: 42,
-            captured: vec![Value::SmallInt(1), Value::String("b".into())],
-        };
-        let r1 = store.intern(&c1);
-        let r2 = store.intern(&c2);
-        assert!(matches!(r1, InternResult::New(_)));
-        assert!(matches!(r2, InternResult::New(_)));
-        assert_ne!(r1.slot_id(), r2.slot_id()); // distinct envs → distinct slots
-    }
+    // ⛔ `closure_content_addressed` and `closure_distinct_env_no_collision`
+    // are **deleted, not ported**. They asserted that two closures with equal
+    // code identity and equal captures intern to the *same slot* — i.e. that a
+    // closure has content-addressed slot identity, which is exactly what
+    // `41 §2.1` denies. Their conformance rows
+    // (`runtime/values/closure-content-addressed`,
+    // `runtime/values/closure-distinct-env-no-collision`) were retired from
+    // `conformance/` by `SPEC-STORE-SPLIT`, and the values README says so in its
+    // own words: *"Those controls assert the retired contract and are not
+    // retained anchors."* Keeping them green would have required keeping the
+    // capability the phase removes.
 
     // --- conformance: runtime/capacity/loud-refusal-not-silent ---
     #[test]

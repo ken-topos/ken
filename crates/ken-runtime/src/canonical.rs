@@ -22,7 +22,11 @@ mod tag {
     pub const ARRAY: u8 = 0x06;
     pub const MAP: u8 = 0x07;
     pub const SET: u8 = 0x08;
-    pub const CLOSURE: u8 = 0x09;
+    // ⛔ `0x09` was `CLOSURE` and is **retired, not reused**. `41 §2.1` assigns
+    // ordinary closures no canonical kind tag at all, so there is no encoding to
+    // give one. The ordinal stays burned so a decoder meeting a legacy `0x09`
+    // byte refuses it rather than silently reading it as whatever takes the slot
+    // next.
     pub const BIG_DECIMAL: u8 = 0x0A;
     // Immediate scalars appear in sub-value position within compounds.
     pub const BOOL: u8 = 0x10;
@@ -266,15 +270,12 @@ fn encode_header<'a>(value: &'a Value, out: &mut Vec<u8>, stack: &mut Vec<Step<'
             }
         }
 
-        Value::Closure { code_id, captured } => {
-            out.push(tag::CLOSURE);
-            write_u64_le(*code_id, out);
-            let arity = captured.len().min(65535) as u16;
-            write_u16_le(arity, out);
-            // Full canonical encoding of captured values (design doc §1.9):
-            // memcmp-exact, NOT a hash digest.
-            child_positions::push(captured, stack);
-        }
+        // ⛔ **No closure arm.** An ordinary closure has no canonical encoding —
+        // not an inline one, and equally not a digest, pointer, ordinal or
+        // handle standing in for one. It cannot appear here because the carrier
+        // this encoder walks has no closure variant to match, which is the
+        // property `41 §2.1` requires rather than a check this function
+        // performs.
 
         // --- immediate scalars (encoded when sub-values of compounds) ---
         Value::Bool(b) => {
@@ -453,14 +454,10 @@ fn encode_canonical_recursive_reference(value: &Value, out: &mut Vec<u8>) {
                 out.extend_from_slice(elem_bytes);
             }
         }
-        Value::Closure { code_id, captured } => {
-            out.push(tag::CLOSURE);
-            write_u64_le(*code_id, out);
-            write_u16_le(captured.len().min(65535) as u16, out);
-            for val in captured {
-                encode_canonical_recursive_reference(val, out);
-            }
-        }
+        // ⛔ No closure arm here either. `AC-V1b` compares this reference
+        // encoder against the production one, so a closure arm surviving on one
+        // side of that differential would be a silent asymmetry rather than a
+        // leftover.
         Value::Bool(b) => {
             out.push(tag::BOOL);
             out.push(*b as u8);
@@ -544,14 +541,16 @@ fn encode_canonical_recursive_reference(value: &Value, out: &mut Vec<u8>) {
 /// malformed"*: an unhandled tag must never fall through to a plausible
 /// default, because a silent wrong value is worse than a refusal. The covered
 /// set is the boundary ABI's persistent family — `BigInt`, `Constructor`,
-/// `Record`, `String`, `Bytes`, `Closure`, and the `Bool`/`SmallInt` scalars
-/// that appear in sub-value position — and every other tag is refused rather
-/// than guessed.
+/// `Record`, `String`, `Bytes`, and the `Bool`/`SmallInt` scalars that appear in
+/// sub-value position — and every other tag is refused rather than guessed.
 ///
-/// ⚠ `Closure` is covered because store adoption and independent recovery need
-/// it, and for no wider reason: `Array`, `Map`, `Set` and the remaining scalars
-/// are encodable and still **refused** here. Widening the decoder stays a
-/// deliberate edit at this `match`, never a side effect at a call site.
+/// ⛔ **`Closure` is NOT covered, and the retired `0x09` tag is refused like any
+/// other unknown byte.** An ordinary closure is not persistable at all
+/// (`41 §2.1`), so there is nothing for store adoption or independent recovery
+/// to decode: a closure never becomes bytes in the first place. `Array`, `Map`,
+/// `Set` and the remaining scalars are encodable and still **refused** here.
+/// Widening the decoder stays a deliberate edit at this `match`, never a side
+/// effect at a call site.
 pub fn decode_canonical(bytes: &[u8]) -> Option<(Value, usize)> {
     let (&kind, rest) = bytes.split_first()?;
     let mut at = 1usize;
@@ -604,17 +603,12 @@ pub fn decode_canonical(bytes: &[u8]) -> Option<(Value, usize)> {
             }
         }
         tag::SMALL_INT => Value::SmallInt(read_u64(bytes, &mut at)? as i64),
-        // A retained closure: authoritative code identity plus the FULL ordered
-        // captured environment, decoded inline exactly as it was encoded. The
-        // captures are values, not a digest, which is what lets a consumer
-        // recover capture content and order rather than merely comparing two
-        // closures for equality.
-        tag::CLOSURE => {
-            let code_id = read_u64(bytes, &mut at)?;
-            let arity = read_u16(bytes, &mut at)? as usize;
-            let captured = decode_children(bytes, &mut at, arity)?;
-            Value::Closure { code_id, captured }
-        }
+        // ⛔ No `0x09` arm: the retired closure tag falls to the refusal below,
+        // which is the point. A legacy byte stream carrying `0x09` is refused
+        // rather than reconstructed — there is no closure value to reconstruct
+        // it into, and inventing one would be exactly the "substitute a pointer,
+        // ordinal, digest, or handle" that `41 §2.1` forbids.
+        //
         // ⛔ Every other tag — including the ones this crate encodes — is
         // REFUSED, not approximated. Widening the decoder is a deliberate edit
         // here, never an accident at a call site.
@@ -799,32 +793,21 @@ mod tests {
                 elem_type_id: 6,
                 elements: set_ne,
             },
-            // --- closures, incl. captures (Phase 2 removes these, not us) ---
-            Value::Closure {
-                code_id: 0xDEAD_BEEF,
-                captured: vec![],
-            },
-            Value::Closure {
-                code_id: 0xFEED_FACE,
-                captured: vec![
-                    Value::SmallInt(3),
-                    Value::Record {
-                        type_id: 7,
-                        fields: vec![Value::Bool(true)],
-                    },
-                ],
-            },
+            // ⛔ The two closure entries this corpus used to carry are gone —
+            // `RT-VALUE-TOTALITY-P2` is the phase their own comment named. The
+            // canonical carrier has no closure variant, so there is no closure
+            // for a differential over canonical encodings to compare.
             // --- moderate nesting through several child-position kinds ---
             Value::Constructor {
                 constructor_id: 8,
                 args: vec![Value::Array {
                     elem_type_id: 3,
+                    // The nesting depth and the mix of child-position kinds are
+                    // what this entry exercises, so the closure leaf is replaced
+                    // rather than the entry dropped.
                     elements: vec![Value::Record {
                         type_id: 2,
-                        fields: vec![Value::Closure {
-                            code_id: 1,
-                            captured: vec![Value::Unknown],
-                        }],
+                        fields: vec![Value::Unknown],
                     }],
                 }],
             },
@@ -842,10 +825,19 @@ mod tests {
         let corpus = differential_corpus();
         // Non-vacuity: the corpus must actually cover every variant, or a
         // missing arm would make this differential silently narrow.
+        //
+        // ⛔ This asserted the literal corpus size `38`. A cardinality is a
+        // **proxy** for coverage and it fails both ways: it reddened when
+        // `RT-VALUE-TOTALITY-P2` legitimately removed a variant, and it would
+        // have stayed green if two corpus members were swapped for two others
+        // covering less. Assert the reached inventory directly instead — it is
+        // the property the comment above already claims.
+        let reached: std::collections::BTreeSet<u8> =
+            corpus.iter().map(|value| encode(value)[0]).collect();
         assert_eq!(
-            corpus.len(),
-            38,
-            "corpus size changed — re-check variant coverage before editing"
+            reached,
+            permitted_kind_tags(),
+            "corpus coverage changed — re-check variant coverage before editing"
         );
         for value in &corpus {
             assert_eq!(
@@ -878,9 +870,19 @@ mod tests {
         );
     }
 
-    /// `AC-V1b` reaches every variant. Counted from the corpus itself against
-    /// the enum's own arm count, so adding a variant without extending the
-    /// corpus reddens rather than silently narrowing coverage.
+    /// `AC-V1b` reaches every variant.
+    ///
+    /// ⛔ **Asserted against the ALLOWED INVENTORY, not against a count.** This
+    /// pinned the literal `25` and went red when `RT-VALUE-TOTALITY-P2` removed
+    /// the closure variant — a legitimate removal reported as a regression,
+    /// which is the failure mode a frozen derived count always has. It is also
+    /// the *weaker* claim: a corpus that dropped `Record` and gained a second
+    /// scalar keeps the count at 25 and still covers less than it says.
+    ///
+    /// The set below is the exact permitted inventory, so **adding** a variant
+    /// without extending the corpus reddens, **removing** one without retiring
+    /// its tag reddens, and **swapping** one for another reddens — none of which
+    /// a cardinality can distinguish.
     #[test]
     fn ac_v1b_corpus_covers_every_value_variant() {
         let corpus = differential_corpus();
@@ -889,12 +891,56 @@ mod tests {
             // The leading tag byte is the variant discriminator.
             kinds.insert(encode(value)[0]);
         }
-        // 25 distinct kind tags: 10 compounds + 14 scalars + Unknown.
+
         assert_eq!(
-            kinds.len(),
-            25,
-            "corpus does not reach every kind tag; reached {kinds:?}"
+            kinds,
+            permitted_kind_tags(),
+            "the corpus's reached kind tags are not exactly the permitted \
+             inventory"
         );
+        assert!(
+            !kinds.contains(&0x09),
+            "0x09 is the RETIRED closure tag: no value on the canonical carrier \
+             may encode to it"
+        );
+    }
+
+    /// The exact set of kind tags a value on the canonical carrier may encode
+    /// to — the **allowed inventory** both `AC-V1b` controls assert against.
+    ///
+    /// ⛔ `tag::CLOSURE` (`0x09`) is absent **by construction, not by
+    /// omission**: the carrier has no closure variant, so no value can emit it.
+    /// Re-adding a closure arm without re-adding the tag here reddens, which is
+    /// the direction that matters.
+    fn permitted_kind_tags() -> std::collections::BTreeSet<u8> {
+        [
+            tag::BIG_INT,
+            tag::DATA,
+            tag::RECORD,
+            tag::STRING,
+            tag::BYTES,
+            tag::ARRAY,
+            tag::MAP,
+            tag::SET,
+            tag::BIG_DECIMAL,
+            tag::BOOL,
+            tag::CHAR,
+            tag::FLOAT,
+            tag::FLOAT32,
+            tag::INT8,
+            tag::INT16,
+            tag::INT32,
+            tag::INT64,
+            tag::UINT8,
+            tag::UINT16,
+            tag::UINT32,
+            tag::UINT64,
+            tag::SMALL_INT,
+            tag::SMALL_DECIMAL,
+            tag::UNKNOWN,
+        ]
+        .into_iter()
+        .collect()
     }
 
     // --- conformance: runtime/values/canonical-encoding-map-ordering ---

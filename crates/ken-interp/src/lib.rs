@@ -1433,13 +1433,25 @@ mod tests {
         assert_eq!(r, EvalVal::Unknown);
     }
 
-    /// `runtime/evaluation/det-distinct-bodies-get-distinct-slots` (regression)
+    /// ⛔ **A closure gets NO K3 slot at all** — `41 §2.1`.
     ///
-    /// Two closures with **distinct body Terms** but identical captured envs must
-    /// intern to **different** K3 slots. Guards against hash-only `code_id`
-    /// collisions (the F4 lesson: closure equality is memcmp-exact, not a digest).
+    /// This test used to assert the opposite: that two closures with distinct
+    /// body `Term`s but identical captured envs intern to **different** slots,
+    /// guarding hash-only `code_id` collisions. That premise was slot identity
+    /// *for closures*, which `RT-VALUE-TOTALITY-P2` removes — the question
+    /// "do these two closures get the same slot?" no longer has a well-formed
+    /// answer, because neither gets one.
+    ///
+    /// ⚠ Its conformance row `runtime/evaluation/det-sharing-dedups-by-slot` was
+    /// retired from `conformance/` by `SPEC-STORE-SPLIT`, so this is not a
+    /// coverage loss — it is a control catching up with its contract.
+    ///
+    /// ⚠ **POSITIVE CONTROL is the second half and it is required:** a
+    /// closure-free value through the *same* store still mints a real slot.
+    /// Without it, "closures are refused" and "this store interns nothing"
+    /// produce the same green.
     #[test]
-    fn det_distinct_bodies_get_distinct_slots() {
+    fn det_closures_get_no_slot_while_closure_free_values_still_do() {
         let (env, std) = std_env();
         let Std { nat, zero, .. } = std;
         let nat_ty = Term::IndFormer {
@@ -1465,12 +1477,40 @@ mod tests {
 
         match (&v1, &v2) {
             (EvalVal::Closure { slot: s1, .. }, EvalVal::Closure { slot: s2, .. }) => {
-                assert_ne!(
-                    s1, s2,
-                    "distinct-body closures with same captured env must get distinct K3 slots"
+                assert_eq!(
+                    *s1,
+                    ken_runtime::store::NULL_SLOT,
+                    "a closure must not be interned: no slot, not a distinct one"
+                );
+                assert_eq!(
+                    *s2,
+                    ken_runtime::store::NULL_SLOT,
+                    "and the same for a closure with a different body — the \
+                     refusal is about the closure, not about a collision"
                 );
             }
             _ => panic!("expected two Closures, got {:?} and {:?}", v1, v2),
+        }
+
+        // ⚠ POSITIVE CONTROL — the same store still mints a slot for a
+        // closure-free value, so the two `NULL_SLOT`s above are a refusal and
+        // not an inert store.
+        let ground = eval(
+            &[],
+            &Term::Constructor {
+                id: zero,
+                level_args: vec![],
+            },
+            &env,
+            &mut store,
+        );
+        match &ground {
+            EvalVal::Ctor { slot, .. } => assert_ne!(
+                *slot,
+                ken_runtime::store::NULL_SLOT,
+                "the same store DOES mint a slot for a closure-free value"
+            ),
+            other => panic!("expected a Ctor, got {other:?}"),
         }
     }
 }
