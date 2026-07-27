@@ -12,21 +12,21 @@
 >
 > **Freeze status (read before treating §4 as the audited TCB boundary).** This
 > chapter is *authored* against the **complete kernel** — the admission gates as
-> the landed per-feature chapters define them (`14 §8`/`§8.4` positivity +
-> W-style, `16 §5.1` quotient respect, `17 §4` SCT), which it **cites** rather
-> than restates. Its API surface is correct-by-citation regardless of build
-> timing. But the *freeze* — the claim "this is the audited, stable TCB boundary
-> the code actually exposes" — is **contingent**: it holds only once the landed
-> `ken-kernel` matches the cited gates, i.e. after **K1.5-build** (W-style
+> the per-feature chapters define them (`14 §8`/`§8.4`/`§8.5` positivity,
+> W-style, and nested-positive admission; `16 §5.1` quotient respect; `17 §4`
+> SCT), which it **cites** rather than restates. Its API surface is
+> correct-by-citation regardless of build timing. But the *freeze* — the claim
+> "this is the audited, stable TCB boundary the code actually exposes" — is
+> **contingent**: the original K-api freeze held only once the landed
+> `ken-kernel` matched its then-current gates, i.e. after **K1.5-build** (W-style
 > admission + the `method_type` indexed-family eliminator fix,
 > `dec_2vc6ytrbcbfc5`) **and K2c-series-2-build** (non-Ω quotient respect)
-> merge. The K-api merge
-> Decision is **gated on those two builds being green-and-merged** (§4.6); until
-> then the on-`main` code still carries the pre-K1.5 blanket Π-bound-recursion
-> reject and the pre-series-2 non-Ω-quotient reject. This is the **inverse of a
-> stale-frame**: here the landed *spec* leads and the *code* trails an in-flight
-> merge — the contract follows the spec (the authority), never the transient
-> code state.
+> merged. The later nested-positive semantic extension preserves the frozen API
+> signature but remains gated on `KERNEL-NESTED-IND`; until that node lands,
+> the on-`main` kernel rejects the new class fail-closed. This is the **inverse
+> of a stale-frame**: here the landed *spec* leads and the *code* trails an
+> in-flight merge — the contract follows the spec (the authority), never the
+> transient code state.
 
 ## 1. Judgment forms
 
@@ -249,10 +249,13 @@ impl GlobalEnv { fn trusted_base(&self) -> Vec<GlobalId>; }
 The **input** to `declare_inductive` is the lightweight `InductiveSpec`
 (`level_params, params, indices, level, constructors: Vec<CtorSpec>`); the
 **stored** form callers read back via `env.inductive(id)` is `InductiveDecl`
-(allocated ids, the built former type, per-constructor `recursive_positions`).
-The `build` closure receives the family's fresh `GlobalId` so constructor
-signatures can self-reference `D` (e.g. `suc : Nat → Nat`). `PrimReduction` is
-`OpaqueType | Op { symbol }`. `KernelResult<T> = Result<T, KernelError>` (§4.4).
+(allocated ids, the built former type, and checked per-constructor recursion
+metadata). The existing `recursive_positions` identifies direct and Π-bound
+positions; any nested positive paths and parameter-polarity facts are
+kernel-internal metadata, not a new caller-supplied assertion. The `build`
+closure receives the family's fresh `GlobalId` so constructor signatures can
+self-reference `D` (e.g. `suc : Nat → Nat`). `PrimReduction` is `OpaqueType |
+Op { symbol }`. `KernelResult<T> = Result<T, KernelError>` (§4.4).
 
 ### 4.2 Per-entry contract
 
@@ -265,7 +268,7 @@ entry may return.
 |---|---|---|---|
 | `declare_def` | `ty`, `body` raw-well-formed over `·` | `· ⊢ ty type`; `· ⊢ body ⇐ ty`; the def's group passes **SCT** (`17 §4`); `id` admitted **transparent** (δ-unfoldable). Pre-admitted opaque during checking so `body` may self-reference `id` | `TypeMismatch`, `UniverseInconsistency`, `NotTerminating` (SCT reject ⇒ `id` removed, Σ unchanged) |
 | `declare_recursive_group` | one `(level_params, ty)` per member; `bodies_fn` returns one body per member, in order | each `ty` checked; all members pre-admitted opaque; each body checked; **SCT on the whole group**; accept ⇒ all transparent; **reject ⇒ the whole group rolled back** | as `declare_def`; `NotTerminating` rolls back every member |
-| `declare_inductive` | `build(id)` yields a well-formed `InductiveSpec` self-referencing `id` | signatures checked; **strict positivity** (`14 §8`) and the **W-style admission boundary** (`14 §8.4`: W-style admitted, negative / non-`D`-free-domain rejected) hold; type former + constructors admitted; the **dependent eliminator** (Π-abstracted IH + W-ι, `14 §3.1`/`§7.7`) generated on use | `PositivityViolation`, `IllFormedDecl`, `LevelArityMismatch` |
+| `declare_inductive` | `build(id)` yields a well-formed `InductiveSpec` self-referencing `id` | signatures checked; **strict positivity** (`14 §8`), the **W-style boundary** (`14 §8.4`), and the **nested-positive boundary** (`14 §8.5`: checked positive-parameter paths only; unknown/non-positive rejected) hold; type former + constructors admitted; the **dependent eliminator** generates direct, Π-abstracted, and nested lifted IHs plus their ι (`14 §3`/`§7`). The nested clause is implementation-gated on `KERNEL-NESTED-IND` | `PositivityViolation`, `IllFormedDecl`, `LevelArityMismatch` |
 | `declare_postulate` | `name` is a non-positional audit label; `ty` raw-well-formed over `·` | `· ⊢ ty type`; `id` admitted **opaque** with `name`; **recorded in the trusted base** (appears as a named entry in `trusted_base()`). A postulate of an empty type is admitted but **visible** as an assumption | `TypeMismatch`, `UniverseInconsistency` |
 | `declare_primitive` | `ty` raw-well-formed; `reduction` the registered operation descriptor | `· ⊢ ty type`; `id` admitted opaque + descriptor **registered in the trusted-base ledger**. `Literal` records a value class; `Op` is opaque to landed conversion and names interpreter dispatch (§5) | `TypeMismatch`, `UniverseInconsistency` |
 | `infer` | `ctx` well-formed; `t` raw-well-formed | returns the **unique** `A` with `ctx ⊢ t ⇒ A` (§3.1) | `VarOutOfScope`, `NotAFunction`, `NotASigma`, `LevelArityMismatch`, `TypeMismatch`; a non-inferable head ⇒ error |
@@ -331,15 +334,16 @@ admitted without passing.
 |---|---|---|---|---|
 | Strict positivity | `declare_inductive` | every recursive occurrence of `D` is strictly positive (`Pol::Plus`) | `14 §8` | `PositivityViolation` |
 | W-style admission (K1.5) | `declare_inductive` | a Π-bound recursive arg `(b:B) → D Δ_p t̄` has `D` only as **target**, `B` `D`-free; the **eliminator** generates the Π-abstracted IH + W-ι | `14 §2.1`/`§8.4` (gate) + `§3.1`/`§7.7` (elim/ι) | `PositivityViolation` |
+| Nested-positive admission | `declare_inductive` | every nested occurrence follows checked strictly-positive parameter positions; unknown/non-positive positions reject; the eliminator generates the structurally lifted IH + nested ι | `14 §8.5` (gate) + `§3.2`/`§7.8` (elim/ι) | `PositivityViolation` |
 | SCT (δ-termination) | `declare_def`, `declare_recursive_group` | every idempotent self-loop has ≥1 strict descent (`↓`) on the diagonal | `17 §4` | `NotTerminating` |
 | Quotient respect (K2c-s2) | `infer`/`check` on `QuotElim` | Ω-target motive: respect-free; **Type-target motive: the respect proof checks against the `cong`/`cast` respect schema** | `16 §5.1` | `BadEliminator` |
 
-Positivity and W-style fire **inside** `declare_inductive`; SCT inside the
-definition declarators; quotient respect is checked when a `QuotElim` term is
-**typed** (so it is gated at admission of the elimination, not a separate
-declarator). This is why an "invoking" conformance test per gate (Acceptance §3)
-drives the gate through its host entry, flipping accept↔reject on the gate
-condition alone.
+Positivity, W-style, and nested-positive admission fire **inside**
+`declare_inductive`; SCT inside the definition declarators; quotient respect is
+checked when a `QuotElim` term is **typed** (so it is gated at admission of the
+elimination, not a separate declarator). This is why an "invoking" conformance
+test per gate (Acceptance §3) drives the gate through its host entry, flipping
+accept↔reject on the gate condition alone.
 
 ### 4.4 `KernelError` is a typed enum (honest minimality)
 
@@ -392,6 +396,12 @@ The K-api merge Decision is gated on these two builds being
 actually exposes the day K-api lands (cross-ref the banner's freeze-status
 note).
 
+That historical freeze did not claim the later `14 §8.5` nested-positive
+extension. `KERNEL-NESTED-IND` adds that semantic class behind the same frozen
+`declare_inductive` signature; until it lands, the nested row in §4.3 is a
+specified, fail-closed implementation gate rather than a claim about current
+code.
+
 ## 5. The trusted base (what soundness actually rests on)
 
 Ken's audited boundary has three categories. Kernel proof soundness rests on
@@ -399,9 +409,10 @@ the declarations/signatures in all three; runtime value correctness additionally
 relies on the interpreter semantics named by (2):
 
 1. **The kernel code** implementing §1–§4 and `11`–`17` (the Rust core) — this
-   includes the admission gates (§4.3: positivity, W-style, SCT, quotient
-   respect), which are *trusted-as-code* but **re-run on every input**: nothing
-   is admitted without passing, so the gates add no per-program assumption.
+   includes the admission gates (§4.3: positivity, W-style, nested-positive,
+   SCT, quotient respect), which are *trusted-as-code* but **re-run on every
+   input**: nothing is admitted without passing, so the gates add no per-program
+   assumption.
 2. **The primitive declarations and operation registrations** admitted via
    `declare_primitive` (`14 §5`) — opaque constants enumerated for audit. Their
    declared types are part of the proof-soundness TCB. In the landed system an
@@ -454,9 +465,9 @@ The kernel's soundness commitments (`README.md §5`) and their current status:
 | Commitment | Status |
 |---|---|
 | No `Type:Type` / universe consistency | **By construction** (`12`); tested. |
-| Subject reduction | **Argued** from the rules; extended to the K2c-s2 reducts (cast-at-inductive-index, J-at-dependent-motive, Type-target quotient elim — `16 §8.4`) and the W-style ι (`14 §9.4`); to be mechanized. |
+| Subject reduction | **Argued** from the rules; extended to the K2c-s2 reducts (cast-at-inductive-index, J-at-dependent-motive, Type-target quotient elim — `16 §8.4`), W-style ι (`14 §9.4`), and nested lifted ι (`14 §9.5`); to be mechanized. |
 | Confluence / unique normal forms | **Argued** (standard for this calculus). |
-| Strong normalization of the core | **Argued** (β/ι/η/obs). W-style ι terminates by **finiteness of the inductive tree** (`14 §9.4`), not by stuckness; the hard metatheorem overall. |
+| Strong normalization of the core | **Argued** (β/ι/η/obs). W-style and nested lifted ι terminate by **finiteness and structural descent** (`14 §9.4`/`§9.5`), not by stuckness; the hard metatheorem overall. |
 | δ-termination → decidable checking | **By the SCT gate** (`17 §4`); the size-change principle (Lee/Jones/Ben-Amram 2001) bounds δ-unfolding (`17 §5`); tested. |
 | Canonicity (closed terms compute) | **Required + tested** (`16 §9`, observational). The observational reductions are now **complete** (K2c series-1+2): the three formerly sound-but-stuck seams all compute (`16 §3.2`, `§4.1`, `§5.1`). |
 | Decidable conversion | **Proven** for OTT (`TTobs`/`CICobs`, ADR 0005); Ken follows. **K2c delivers the operational decidability**: `convert` is total via the SCT gate (`17 §4`–§5), so the (Conv) mode switch (§3) always halts. |
@@ -490,15 +501,16 @@ rules (§2) including (Conv); the bidirectional infer/check algorithm (§3) with
 the single conversion call at the mode switch and **no** unification/guessing
 (§3.3); the API (§4) as a **total, decidable** surface matching the §4.2
 per-entry contract, whose every declarator re-checks its input and passes the
-§4.3 admission gates (positivity, W-style, SCT, quotient respect); a typed,
-minimal `KernelError` (§4.4); proof checking as `check` with no separate
-`check_proof` (§4.5); and the `trusted_base()` enumeration (§5). It MUST NOT
-contain implicit insertion, error recovery, or proof search — those belong to
-untrusted layers. Conformance: `../../conformance/kernel/judgments/` —
-infer/check round-trips, the (Conv) switch (a term that checks only via a
-conversion step), one **invoking** test per admission gate flipping
-accept↔reject on the gate condition, a certificate-checking case (prover output
-re-checked) and its wrong-certificate rejection, an ill-typed term rejected with
-a minimal error, and a `trusted_base()` enumeration test. Per §4.6, the
-W-style/positivity and non-Ω-quotient invoking cases pass against the **complete
-kernel** (they ride K1.5-build and K2c-series-2-build).
+§4.3 admission gates (positivity, W-style, nested-positive, SCT, quotient
+respect); a typed, minimal `KernelError` (§4.4); proof checking as `check` with
+no separate `check_proof` (§4.5); and the `trusted_base()` enumeration (§5). It
+MUST NOT contain implicit insertion, error recovery, or proof search — those
+belong to untrusted layers. Conformance:
+`../../conformance/kernel/judgments/` — infer/check round-trips, the (Conv)
+switch (a term that checks only via a conversion step), one **invoking** test
+per admission gate flipping accept↔reject on the gate condition alone, a
+certificate-checking case (prover output re-checked) and its wrong-certificate
+rejection, an ill-typed term rejected with a minimal error, and a
+`trusted_base()` enumeration test. Per §4.6, nested-positive invocation remains
+gated on `KERNEL-NESTED-IND`; the W-style/positivity and non-Ω-quotient cases
+already ride their landed builds.

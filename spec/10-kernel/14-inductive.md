@@ -1,6 +1,7 @@
 # Inductive families
 
-> Status: **K1 elaborated; K1.5 extends it** (W-style recursive inductives).
+> Status: **K1 elaborated; K1.5 extends it; nested-positive specified and
+> implementation-gated**.
 > Normative. Declaration of inductive types, the strict-positivity requirement,
 > the dependent eliminator and its ι-computation, and how primitive types
 > attach. Identity is **not** a plain inductive in Ken — it is observational
@@ -13,9 +14,11 @@
 > argument that is a *function into* the recursive type, `(b:B) → D` — and
 > generates the eliminator whose induction hypothesis is itself a function
 > (§2.1, §3.1, §7.7, §9.4). It removes the K1-era blanket rejection of Π-bound
-> recursion; strict positivity (§8) is unchanged and remains the sole structural
-> admission gate. The motivating client is L5's interaction tree `ITree`
-> (`../30-surface/36-effects.md`).
+> recursion. Strict positivity (§8) remains the sole structural admission gate;
+> §8.5 extends that gate through checked positive-parameter paths and requires
+> the lifted eliminator machinery of §3.2/§7.8. That extension remains gated on
+> `KERNEL-NESTED-IND`. The motivating K1.5 client is L5's interaction tree
+> `ITree` (`../30-surface/36-effects.md`).
 
 ## 1. Declarations
 
@@ -64,9 +67,10 @@ and the like expressible.
 
 To keep the logic consistent (no encoding of a fixpoint that inhabits `Empty`),
 every recursive occurrence of `D` in a constructor argument MUST be **strictly
-positive**: `D` may appear only as the *target* of a (possibly dependent)
-function type, never to the *left* of an arrow, and never under another type
-former applied to `D` in a non-positive position.
+positive**: `D` may appear directly as the *target* of a (possibly dependent)
+function type or through a declared strictly-positive parameter path (§8.5),
+never to the *left* of an arrow and never through an unknown or non-positive
+parameter position.
 
 - **Allowed:** `A → List A → List A` (recursive arg `List A` is itself the
   type); `(n : Nat) → Vec A n → …` (recursive arg under a Π whose codomain is
@@ -123,10 +127,11 @@ eliminator to this WP). **K1.5 removes that blanket gate.** Admission of a
    dependent generalisation `(b:B)(c:C[b]) → D`, where no domain mentions `D`.
 
 **Still rejected** (unchanged): **negative** occurrences — `D` to the left of
-any arrow (`(D → Bool) → D`, §8.3) — and **nested** occurrences under another
-type former (`List (Rose A)`, §8.5); those stay out (the `occurs`-guard of §8.2
-rejects them; nested/mutual remain a later extension). K1.5 widens admittance to
-**exactly** the strictly-positive Π-bound class, no more.
+any arrow (`(D → Bool) → D`, §8.3) — and nested occurrences through an unknown
+or non-positive parameter position (§8.5). Mutual families remain a separate
+later extension. Nested occurrences through declared strictly-positive
+parameter positions are specified in §8.5; the on-`main` kernel remains
+fail-closed on that new class until `KERNEL-NESTED-IND` lands.
 
 **Level (predicativity) — no new rule, one instance of `14 §1`.** A W-style
 argument type `(b:B) → D Δ_p t̄` lives at `max(level B, ℓ_D)`; `14 §1`'s rule
@@ -157,7 +162,8 @@ codomain is a **sort** — `Type ℓ'`, shown here, or a proposition `Ω_l` (the
 giving the result for that constructor —
 including, for each recursive argument, the **induction hypothesis** (the motive
 already applied to that sub-value; §3.1 generalises this to W-style arguments,
-whose IH is itself a *function*) — the eliminator has type:
+whose IH is itself a *function*, and §3.2 lifts it through nested
+strictly-positive content) — the eliminator has type:
 
 ```
 elim_D : (M : (Δ_i) → D Δ_p Δ_i → Type ℓ')
@@ -167,9 +173,9 @@ elim_D : (M : (Δ_i) → D Δ_p Δ_i → Type ℓ')
        → (i̅ : Δ_i) → (x : D Δ_p i̅) → M i̅ x
 ```
 
-The method type for a constructor `cₖ : (Δₖ) → D Δ_p t̄ₖ` is: abstract over `Δₖ`,
-add an induction hypothesis `M (…) r` for each recursive argument `r` in `Δₖ`,
-and conclude `M t̄ₖ (cₖ …)`.
+For a constructor `cₖ : (Δₖ) → D Δ_p t̄ₖ`, the method type abstracts over
+`Δₖ`, adds the direct, Π-abstracted, or structurally lifted induction
+hypotheses specified by §3.1–§3.2, and concludes `M t̄ₖ (cₖ …)`.
 
 **Computation (ι).** On a constructor the eliminator reduces to the
 corresponding method, applied to the constructor's arguments and the recursive
@@ -179,10 +185,11 @@ results:
 elim_D M m̄ i̅ (cₖ ā)  ≡  mₖ ā [elim_D M m̄ … r  for each recursive r in ā]   (D-ι)
 ```
 
-i.e. each recursive argument `r` is replaced in the method by `elim_D M m̄ … r` —
-the structural recursive call. Because recursion is only ever on *structurally
-smaller* sub-values, ι-reduction terminates; this is the totality of the
-eliminator.
+i.e. each direct recursive argument `r` is replaced in the method by `elim_D M
+m̄ … r` — the structural recursive call. §3.1 and §3.2 give the corresponding
+Π-abstracted and nested lifted forms. Because recursion is only ever on
+*structurally smaller* sub-values, ι-reduction terminates; this is the totality
+of the eliminator.
 
 **Example (Nat).**
 
@@ -316,6 +323,59 @@ on which L5's `bind`/handlers/denotation are structural folds (`36 §2`, total b
 §9.4, no SCT). Generating `elim_ITree` is the concrete deliverable that unblocks
 L5's denotation half.
 
+### 3.2 Nested arguments and lifted induction hypotheses
+
+A nested recursive argument is not itself headed by `D`: it contains values of
+`D` through one or more declared strictly-positive parameter positions (§8.5).
+The direct recipe "one IH per recursive argument" is therefore strengthened to
+**one IH per contained recursive occurrence**. A nested argument contributes
+one structured lifted hypothesis whose leaves are in bijection with those
+contained occurrences and whose shape follows the containing value.
+
+Write `Lift_D(M, A, a)` for the kernel's dependent lifting of motive `M` through
+the type `A` of value `a`. This is a metatheoretic operation used to state the
+generated method type; it is not a new surface type former. It is defined
+structurally:
+
+- at a direct occurrence `r : D Δ_p t̄`,
+  `Lift_D(M, D Δ_p t̄, r) = M t̄ r`;
+- through a declared strictly-positive parameter position, it preserves the
+  enclosing constructor shape and recursively lifts every contained occurrence;
+- through a Π-bound recursive position, it is the Π-abstracted IH of §3.1;
+- at a type with no occurrence of `D`, it contributes no IH.
+
+Thus a constructor argument `a_j : A_j` with nested recursive content adds
+
+```
+ih_j : Lift_D(M, A_j, a_j)
+```
+
+to its method type. The lift is available only along the same checked
+strictly-positive paths that admitted `A_j` (§8.5). An unknown or non-positive
+parameter position cannot acquire a lift and is rejected at admission; the
+eliminator generator never guesses how to traverse it.
+
+**Computation (ι), nested case.** The outer ι-rule still selects exactly one
+constructor method. For each nested argument, it supplies the structurally
+lifted value obtained by following the enclosing value's constructors and
+placing `elim_D M m̄ … r` at every contained recursive occurrence `r`:
+
+```
+elim_D M m̄ ī (cₖ … a_j …)
+  ≡ mₖ … a_j … lift-elim_D(M, m̄, A_j, a_j) …                 (Nested-D-ι)
+```
+
+The auxiliary `lift-elim_D` is determined by the admitted former's own
+constructor/eliminator structure. It may not be supplied by a name allow-list,
+an unchecked user function, or an axiom. §7.8 gives the reduction rule and
+§9.5 states its subject-reduction and termination obligations.
+
+**Level.** Let `ℓ_path` be the maximum level of the field domains traversed by
+the positive path. If `M` lands in `Type ℓ'`, the lifted hypothesis lands in
+`Type (max ℓ_path ℓ')`; if `M` lands in `Ω_l`, it lands in
+`Ω_(max ℓ_path l)`. These are ordinary predicative Π/Σ maxima (`12 §2`,
+`16 §1.1`), not a new universe rule or an impredicative collapse.
+
 ## 4. Σ as a record; relationship to Π
 
 `Σ` (`13`) is presented natively (negatively, with η) rather than as an
@@ -391,14 +451,19 @@ A conforming kernel MUST:
 1. Type-check inductive declarations and **enforce strict positivity** (§2, §8),
    rejecting negative occurrences; **admit strictly-positive W-style (Π-bound)
    recursive occurrences** (§2.1) — positivity (§8.2) is the sole structural
-   gate, with no separate Π-bound rejection.
+   gate, with no separate Π-bound rejection; and admit nested occurrences only
+   through declared strictly-positive parameter paths (§8.5), rejecting unknown
+   and non-positive paths while mutual families remain deferred (§8.6).
 2. Generate the constructors and the **dependent** eliminator with induction
    hypotheses for recursive arguments (§3) — including the **Π-abstracted**
-   induction hypothesis `(b:B) → M t̄[b] (k b)` for W-style arguments (§3.1).
+   induction hypothesis `(b:B) → M t̄[b] (k b)` for W-style arguments (§3.1)
+   and one structurally lifted hypothesis per contained recursive occurrence
+   for nested arguments (§3.2).
 3. Implement **ι-reduction** of the eliminator on constructor forms (§3, §7),
    driving structural recursion; for W-style arguments thread the recursive
    result through the branching function (`λ b. elim_D … (k b)`, §3.1, §7.7);
-   ensure it terminates (structural decrease, §9).
+   for nested arguments structurally lift the result through the enclosing
+   value (§3.2, §7.8); ensure both terminate (structural decrease, §9).
 4. Permit **large elimination** under the predicative universe rules (§3).
 5. Treat **primitive** types/operations as opaque constants with registered,
    audited operation descriptors (§5), never as inductives. K1 defines only the
@@ -554,6 +619,35 @@ The inner elim is genuinely **neutral** only in the special case where `a_j`
 `a_j b*` is stuck on the abstract `b*`. That is a legitimate sub-case, not the
 general mechanism; decidability does not depend on it (§9.4).
 
+### 7.8 Nested ι
+
+For a nested argument position `j`, §3.2's lifted IH is computed by structural
+recursion over the actual enclosing value `a_j`. At each constructor of that
+value, `lift-elim_D` preserves the constructor, recursively processes fields
+whose types lead to a declared strictly-positive parameter position, and
+replaces every contained `r : D Δ_p t̄` with:
+
+```
+elim_D M m₁…mₙ t̄ r
+```
+
+The outer reduct is:
+
+```
+elim_D M m̄ ī (cₖ ā)  ⇝  mₖ ā [ih₁ … ih_p]
+```
+
+where an `ih` is direct (§7.3), Π-abstracted (§7.7), or structurally lifted
+through an enclosing value (this section). A lifted `ih` contains exactly one
+recursive result for each contained recursive occurrence and preserves the
+enclosing value's constructor topology. Its own ι-reductions are the
+constructor-selects-method reductions of the enclosing former followed by the
+`D-ι` call at each contained child.
+
+The generated method type (§3.2), the generated lifted term, and every nested
+ι-reduct are kernel-checked. Admission alone is insufficient: if the lift
+cannot be generated and checked, the declaration is rejected.
+
 ## 8. Strict-positivity check algorithm
 
 §2 defines *what* strict positivity means. This section gives the *how* — the
@@ -565,9 +659,9 @@ For a family `D` being declared, the judgment `Pos_D^n(A)` — "`A` is positive
 in `D` at polarisation `n`" — where `n ∈ {+, -}` (positive/negative
 polarisation). The check starts with each constructor argument type at `n = +`
 and recurses structurally. Every case that would discard subterms without
-inspection **must** confirm `D` does not occur in those subterms; if it does,
-the declaration is rejected (the kernel conservatively forbids nested
-occurrences, per §8.5).
+inspection **must** confirm `D` does not occur in those subterms, except where
+§8.5 supplies a checked structural descent through a declared
+strictly-positive parameter position. Every other occurrence is rejected.
 
 ```
 Pos_D^+(D Δ_p t̄)        holds  if D does not occur in t̄
@@ -589,10 +683,11 @@ since the environment determines what names refer to).
 
 Key: `D` may appear strictly positively (as the target of a function type under
 `+` polarisation), but never under `-` polarisation. Any position the algorithm
-cannot structurally classify (application arguments, indices, type parameters
-containing `D`) is **conservatively rejected** — K1 accepts only the clean
-non-nested strictly-positive patterns. This blocks `(D → ⊥) → D`, nested
-negatives like `T (D → ⊥)`, and index-embedded occurrences.
+cannot structurally classify (indices, unknown parameter positions, or
+non-positive parameter positions containing `D`) is **conservatively
+rejected**. §8.5 is the only refinement of the application-argument case. This
+blocks `(D → ⊥) → D`, nested negatives like `T (D → ⊥)`, and index-embedded
+occurrences.
 
 ### 8.2 Algorithm
 
@@ -613,13 +708,14 @@ check-pos-arg(D, pol, A):
                     and check-pos-arg(D, pol, B)
     (x : C) × B  →  return check-pos-arg(D, pol, C)
                     and check-pos-arg(D, pol, B)
-    C u      →  return check-pos-arg(D, pol, C)   -- recurse into head
-                    and not occurs(D, u)            -- reject D in argument
+    C u      →  return check-pos-application(D, pol, C, u)
+                                                    -- §8.5; unknown fails closed
 ```
 
-where `flip(+) = -`, `flip(-) = +`, and `occurs(D, t)` is true iff `D` appears
-as a sub-expression anywhere in `t` (a simple term traversal — de Bruijn
-indices make this unambiguous).
+where `flip(+) = -`, `flip(-) = +`, `check-pos-application` is the structural
+parameter-position rule of §8.5, and `occurs(D, t)` is true iff `D` appears as a
+sub-expression anywhere in `t` (a simple term traversal — de Bruijn indices
+make this unambiguous).
 
 ### 8.3 Worked examples
 
@@ -696,31 +792,85 @@ gate**: §8.2 positivity becomes the sole structural admission test for recursiv
 occurrences, and the eliminator generator handles the W-style IH and its ι
 (§3.1, §7.7, §9.4).
 
-No change to §8.1/§8.2 is needed — they are already correct; only the extra
-blanket rejection is removed. The algorithm continues to reject, with no gap,
-every **negative** occurrence (`D` left of an arrow → `Pos_D^-(D)` fails, §8.3)
-and every **nested** occurrence (`D` inside an application argument → the
-`occurs` guard fails, §8.5). The admission test for a recursive position is
-exactly: peel the argument's leading Π binders; if the body's head is `D`, the
-argument is a recursive occurrence and §8.2's positivity verdict on the whole
-argument type decides it (positive ⇒ admit, with the Π-abstracted IH; negative
-⇒ reject).
+The Π-bound rule itself is unchanged. The algorithm continues to reject, with
+no gap, every **negative** occurrence (`D` left of an arrow →
+`Pos_D^-(D)` fails, §8.3). The admission test for a Π-bound recursive position
+is exactly: peel the argument's leading Π binders; if the body's head is `D`,
+the argument is a recursive occurrence and §8.2's positivity verdict on the
+whole argument type decides it (positive ⇒ admit, with the Π-abstracted IH;
+negative ⇒ reject). §8.5 separately governs a recursive occurrence contained
+in an application argument; it does not change this Π-bound class.
 
-### 8.5 Nested and mutually-defined inductives — still deferred
+### 8.5 Nested inductives — structural parameter polarity
 
-Two classes remain outside K1.5 and are rejected by the on-`main` kernel:
+A nested occurrence is an occurrence of the family being declared inside an
+argument to another type former. The former's name is irrelevant. Admission is
+decided only by the checked polarity of the parameter path from the enclosing
+former to the occurrence.
 
-- **Nested** occurrences under another type former — `data Rose A = node : A →
-  List (Rose A) → Rose A` — are caught by the `C u` application case of §8.2
-  (the `occurs(D, u)` guard rejects `Rose` inside `List (Rose A)`). Admitting
-  these needs positivity to *unfold* the host former (`List`) to check the guest
-  (`Rose`) within it — a strict generalisation, deferred.
-- **Mutually-defined** families are rejected at declaration.
+**Nested-parameter rule (normative).** First collect an application into its
+maximal spine `F a₁ … aₙ`. For that spine at positive polarisation:
 
-Both are a later extension; neither is required by L5 (`ITree` is single,
-non-mutual, non-nested W-style). Keeping them out preserves the minimal-TCB
-discipline: K1.5 widens admittance by **exactly** the strictly-positive Π-bound
-class and nothing adjacent.
+1. Resolve `F` to a previously admitted type-former declaration, transparently
+   unfolding an admitted definition before classification. If it does not
+   resolve, or the resulting former carries no checked parameter-polarity
+   information, every argument position is **unknown** and an argument
+   containing `D` is rejected.
+2. A parameter position is **declared strictly positive** only when the
+   declaration's checked definition or constructor telescopes establish that
+   the parameter occurs solely at positive polarisation. An index or other
+   position the checker cannot structurally classify makes the polarity
+   unknown. Native formers obtain the same fact from their kernel formation
+   rule. This fact is computed and kernel-checked when the declaration is
+   admitted; it is not an unchecked user assertion.
+3. If `D` occurs in `a_j`, position `j` must be declared strictly positive and
+   `check-pos-arg(D, +, a_j)` must itself hold. This composes through any finite
+   chain of declared strictly-positive parameter positions.
+4. If position `j` is declared **non-positive**—negative, mixed, or otherwise
+   not solely positive—an argument containing `D` is rejected. The checker does
+   not flip or infer a variance for that position.
+5. At negative polarisation, any contained occurrence of `D` is rejected,
+   including one reached through a declared strictly-positive parameter.
+6. Every application argument not traversed by clauses 1–5 remains guarded by
+   `not occurs(D, a_j)`. Thus an unknown, unclassified, or discarded position
+   fails closed rather than becoming positive by default.
+
+This rule is structural and compositional: only a checked positive path admits
+the nested occurrence, and the same path determines the lifted IH and ι of
+§3.2/§7.8. Merely deleting the `occurs` guard would satisfy none of clauses
+1–6 and would not generate the required eliminator machinery.
+
+**Illustrative admitted shapes.**
+
+```ken
+data Rose A = node : A → List (Rose A) → Rose A
+data Json = ... | JsonArray (List Json)
+                    | JsonObject (List (Pair String Json)) | ...
+```
+
+These examples are admitted because every path to the recursive family follows
+checked strictly-positive parameters. They are examples of the rule, not
+special cases in it.
+
+**Fail-closed boundaries.** A recursive occurrence under a parameter with no
+checked polarity is rejected as **unknown**. A recursive occurrence under a
+declared negative or mixed parameter is rejected as **non-positive**. A nested
+negative such as `Pair (Bad → Empty) Unit` remains rejected by §8.3 even when
+the outer parameter is positive: the recursive descent reaches the Π-domain at
+negative polarisation and fails.
+
+**Implementation stage.** `SPEC-NESTED-IND` states this rule;
+`KERNEL-NESTED-IND` implements its admission metadata, lifted IHs, and ι. Until
+that kernel node lands, the on-`main` kernel continues to reject the newly
+specified nested-positive class. This is a safe completeness boundary, not an
+unsound kernel result.
+
+### 8.6 Mutually-defined inductives — still deferred
+
+Mutually-defined families remain rejected at declaration. They require
+simultaneous positivity over a declaration block plus jointly generated
+eliminators and a joint termination argument; no current consumer requires that
+distinct extension, so this nested-only change does not admit them.
 
 ## 9. K1 subject reduction and termination
 
@@ -849,3 +999,49 @@ eliminator would let one build a non-terminating fixpoint. K1.5 admits the
 **target** position and only that; the polarity discipline of §8.1 is the line,
 and the conformance corpus exercises both sides (a W-style elim that *uses* its
 Π-abstracted IH, and a negative occurrence that must still be rejected).
+
+### 9.5 Nested ι: subject reduction, termination, and conformance
+
+Nested admission (§8.5) adds trusted machinery only together with the lifted IH
+and ι of §3.2/§7.8. Admitting the declaration without those consumers is not a
+conforming implementation of this chapter.
+
+**Subject reduction.** For a nested constructor argument `a : A`, the method
+type requires `Lift_D(M, A, a)`. The generated `lift-elim_D(M, m̄, A, a)` has
+exactly that type by induction on the already-admitted declaration for `A`:
+each enclosing constructor is rebuilt at the lift, each field follows its
+checked positive-parameter path, and each contained `r : D Δ_p t̄` contributes
+`elim_D M m̄ t̄ r : M t̄ r`. Supplying these lifted terms therefore gives the
+selected method its declared result `M t̄ₖ (cₖ ā)`, the same type as the
+redex.
+
+**Termination.** The well-founded measure is the lexicographic pair consisting
+of the outer `D` value's structural size and the already-admitted host former's
+own eliminator measure. A recursive lift call follows a host-eliminator call and
+strictly decreases the second component (including the Π-bound measure of
+§9.4). Applying `elim_D` to a contained child strictly decreases the first,
+regardless of the second component for that child. The host former was admitted
+only with a terminating eliminator, so nested ι terminates. No SCT edge or
+general recursive δ-definition is introduced.
+
+**Surface consumability.** Surface `match` and structural recursion elaborate
+to the generated method type, including `Lift_D`; the elaborator and termination
+checker must preserve and consume those lifted hypotheses rather than
+reconstructing recursive calls or discarding the lift. Matching an enclosing
+value deconstructs its lift in lockstep, so an exposed recursive child carries
+its motive instance and an exposed enclosing child carries the residual lift
+(`../30-surface/34 §3.1`, `../30-surface/39 §2.2`,
+`../40-runtime/43 §1`). A theorem or recursive computation over a nested branch
+must therefore be writable from the generated IHs.
+
+**Required conformance population.**
+
+1. A positive nested declaration through a freshly declared positive container,
+   with a real recursive proof or computation that fails if its lifted IH is
+   removed.
+2. A nested-negative declaration that is rejected at the specific positivity
+   boundary.
+3. Fail-closed parameter controls: one unknown-position rejection and one
+   separately asserted non-positive-position rejection.
+4. Direct recursive and existing Π-bound/W-style declarations and their ι
+   behavior remain unchanged.

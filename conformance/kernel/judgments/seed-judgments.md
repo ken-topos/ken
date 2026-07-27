@@ -221,6 +221,24 @@ it**.
   `wstyle-branching-domain-not-d-free-rejected` (`(D->D)->D`) for the
   W-style-specific non-`D`-free-domain reject.
 
+### A3b — Nested-positive gate at `declare_inductive`
+
+### kernel/judgments/declare-inductive-nested-admits [KERNEL-NESTED-IND]
+
+- spec: `18 §4.3`/`§4.6`; `14 §3.2`/`§7.8`/`§8.5`
+- given: first call `declare_inductive` for a fresh positive carrier
+  `Bag A` with constructors `empty`, `one : A -> Bag A`, and
+  `join : Bag A -> Bag A -> Bag A`; then call it for
+  `Rose` with `leaf : Rose` and `node : Bag Rose -> Rose`
+- expect: **Ok(id)** for both declarations. `elim_Rose` is generated with the
+  structured lifted IH for `node`, and its nested ι is checked
+- why: this drives the nested-positive admission gate through its stable host
+  API rather than assuming a separate declarator. `Bag` is freshly declared, so
+  a standard-former name allow-list rejects where the required structural rule
+  accepts. Until `KERNEL-NESTED-IND` lands the invoking case remains gated, as
+  `18 §4.6` requires. The exhaustive admission/lift/fail-closed boundary is
+  `inductive/seed-nested.md`.
+
 ### A4 — Quotient-respect gate at `infer`/`check` on `QuotElim` (cite `16 §5.1`)
 
 ### kernel/judgments/quot-respect-admits (soundness) [K2c-s2-build]

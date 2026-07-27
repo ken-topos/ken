@@ -24,10 +24,12 @@ in all three; runtime value correctness additionally relies on item 2's
 interpreter semantics:
 
 1. **The kernel** — the small, permanent Rust core (type theory + conversion +
-   proof checker), including the admission gates (positivity, W-style, SCT,
-   quotient respect, `18 §4.3`). The gates are trusted-as-code but **re-run on
-   every input** — nothing is admitted without passing — so they add **no
-   per-program assumption**; they are part of item 1, never item 3.
+   proof checker), including the admission gates (positivity, W-style,
+   nested-positive, SCT, quotient respect, `18 §4.3`). The gates are
+   trusted-as-code but **re-run on every input** — nothing is admitted without
+   passing — so they add **no per-program assumption**; they are part of item 1,
+   never item 3. The nested-positive gate is specified but remains
+   implementation-gated on `KERNEL-NESTED-IND`.
 2. **The primitive declarations and operation registrations** — the irreducible
    primitive surface (`../10-kernel/14 §5`), each registered via
    `declare_primitive` as a `Decl::Primitive` and enumerated for audit. The

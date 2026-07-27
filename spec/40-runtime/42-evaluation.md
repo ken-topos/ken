@@ -184,9 +184,11 @@ rejects it before bytes exist.
 - **ι (`elimReduce`).** Force the scrutinee `s` to a value, then dispatch on its
   head:
   - `s = cₖ ā` → fire ι: evaluate **only** method `mₖ`, applied to the
-    constructor arguments `ā` and, for each **recursive** argument `a_j`, the
-    induction hypothesis `elimReduce ρ D M m̄ idx(a_j) a_j` (`14 §7.3`).
-    Recursion is on the structurally smaller `a_j`, so it terminates (`14 §3`).
+    constructor arguments `ā` and the generated induction hypotheses: direct
+    recursive arguments use `elimReduce ρ D M m̄ idx(a_j) a_j` (`14 §7.3`),
+    Π-bound arguments use the abstracted form (`14 §7.7`), and nested arguments
+    use the structurally lifted form (`14 §7.8`). Every recursive call is on a
+    contained structurally smaller child, so it terminates (`14 §9`).
     The other methods `m_{j≠k}` are **discarded unevaluated** — this is branch
     laziness (§2).
   - `s = unknown` → `unknown` (§4). `s = ⟨neutral⟩` (open only) → a neutral

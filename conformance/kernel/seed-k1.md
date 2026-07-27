@@ -178,17 +178,19 @@ Spec: `spec/10-kernel/14-inductive.md §2, §8`; frame §2 item 5.
   `-` (flipped), and `D` at `-` polarity is always rejected. Frame AC-5.
 
 ### kernel/inductive/nested-negative-in-application-rejected
-- spec: `spec/10-kernel/14-inductive.md §8.1–8.3`
+- spec: `spec/10-kernel/14-inductive.md §8.1–8.3`, `§8.5`
 - given: declaration `data Bad3 : Type 0 where { mk : Pair (Bad3 → Empty)
   Unit → Bad3 }` — `Bad3` occurs in the argument of an application (`Pair
   (Bad3 → Empty) Unit`), hidden from the structural polarisation check.
 - expect: **rejected** at admission (non-strictly-positive occurrence in
   application argument)
-- why: the positivity algorithm's `occurs` guard on `C u` inspects the
-  application argument `u` and finds `Bad3` there (negatively, under the
-  arrow in `Bad3 → Empty`). Without this guard the algorithm would
-  recurse only into the head `Pair`, return true, and admit the paradox.
-  Frame AC-5; Architect review blocker.
+- why: before `KERNEL-NESTED-IND`, the conservative `occurs` guard rejects this
+  entire nested class. After that gate lands, `14 §8.5` permits traversal only
+  through `Pair`'s checked positive parameter and then recursively checks its
+  argument; it finds `Bad3` negatively in the domain of `Bad3 → Empty` and
+  rejects by `§8.3`. A bug that treats a positive outer parameter as making the
+  whole payload positive admits the paradox. Frame AC-5; retained soundness
+  control, reconciled by `inductive/seed-nested.md` AC4.
 
 ### kernel/inductive/d-in-own-indices-rejected
 - spec: `spec/10-kernel/14-inductive.md §8.1–8.3`
