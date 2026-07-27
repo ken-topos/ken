@@ -43,6 +43,7 @@ pub fn occurs(d: GlobalId, t: &Term) -> bool {
 enum Pol {
     Plus,
     Minus,
+    Unknown,
 }
 
 impl Pol {
@@ -50,6 +51,7 @@ impl Pol {
         match self {
             Pol::Plus => Pol::Minus,
             Pol::Minus => Pol::Plus,
+            Pol::Unknown => Pol::Unknown,
         }
     }
 }
@@ -167,9 +169,9 @@ impl ParameterPolarityDeriver<'_> {
                     // D1a does not open structural traversal through another
                     // former. Until D1b supplies that rule, every such
                     // argument is unknown and therefore fails closed.
-                    self.visit(local_depth, Pol::Minus, &head);
+                    self.visit(local_depth, Pol::Unknown, &head);
                     for arg in &args {
-                        self.visit(local_depth, Pol::Minus, arg);
+                        self.visit(local_depth, Pol::Unknown, arg);
                     }
                 }
             }
@@ -181,7 +183,7 @@ impl ParameterPolarityDeriver<'_> {
                     self.parameter_count,
                 );
                 if let Some(parameter) = parameter {
-                    if pol == Pol::Minus {
+                    if pol != Pol::Plus {
                         self.positive[parameter] = false;
                     }
                 }
@@ -195,7 +197,7 @@ impl ParameterPolarityDeriver<'_> {
                 // Any parameter below a type form not covered by the D1a
                 // grammar is unknown, hence not declared strictly positive.
                 for child in term.children() {
-                    self.visit(local_depth, Pol::Minus, child);
+                    self.visit(local_depth, Pol::Unknown, child);
                 }
             }
         }

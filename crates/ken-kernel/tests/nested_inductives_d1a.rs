@@ -89,6 +89,20 @@ fn admission_records_positive_and_non_positive_parameters() {
         }],
     })
     .expect("mixed two-parameter declaration");
+    let unknown_nested_id = declare_inductive(&mut env, |_| InductiveSpec {
+        level_params: vec![U],
+        params: vec![Term::Type(level_u())],
+        indices: vec![],
+        level: level_u(),
+        constructors: vec![CtorSpec {
+            args: vec![Term::app(
+                Term::indformer(list_id, vec![level_u()]),
+                Term::pi(Term::var(0), Term::indformer(bool_id, vec![])),
+            )],
+            target_indices: vec![],
+        }],
+    })
+    .expect("foreign carrier use remains admissible while its polarity fails closed");
 
     assert_eq!(
         env.inductive(list_id)
@@ -110,6 +124,13 @@ fn admission_records_positive_and_non_positive_parameters() {
             ParameterPolarity::NonPositive,
             ParameterPolarity::StrictlyPositive,
         ]
+    );
+    assert_eq!(
+        env.inductive(unknown_nested_id)
+            .expect("recorded unknown nested use")
+            .parameter_polarities,
+        vec![ParameterPolarity::NonPositive],
+        "unknown carrier positions must absorb nested polarity flips"
     );
 }
 
