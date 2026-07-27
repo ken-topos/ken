@@ -165,6 +165,39 @@ construction. ⛔ Do not assume this is out of scope because it is not the kerne
 — `AC-K12` covers it, and a source-level census cannot see it (⭐ the ABI-S3
 lesson: only a crate that exercises a **built artifact** caught that class).
 
+### 2g ⛔ ADDED 2026-07-27 — the producer must be TOTAL, and this frame did not say so
+
+**Two consecutive Architect rejections of `D1a` landed on the same axis**, and it
+is an axis §2b–§2e never named. Recorded here so the third attempt is measured
+against a written bar rather than discovering it again.
+
+| rejected SHA | Decision | the defect |
+|---|---|---|
+| `83d6a7c3` | `dec_3g5qg6f9hzge5` | unknown/unsupported positions were encoded as `Pol::Minus`. `Minus` is **ordinary contravariance, not absorbing** — `Minus.flip() == Plus` — so a nested `Pi` laundered the fail-closed marking positive. `List (A -> Bool)` recorded `[StrictlyPositive]` where the contract demands `[NonPositive]` |
+| `6103d321` | `dec_2r7xykp0aswe5` | the producer is **not total**. `declare_inductive` **panics** with `attempt to subtract with overflow` on an accepted field type. Two coupled causes: the fallback traverses every `Term::Let` child at one `local_depth` although `body` binds index 0; and `(r < n).then_some(n - 1 - r)` evaluates the subtraction **eagerly**, underflowing before the condition can yield `None` |
+
+⭐ **The generalisation, which is what makes this a frame defect and not two bugs.**
+`D1a` as originally written asked for a polarity notion *"derived at admission,
+recorded on the declaration, and readable when checking a nested occurrence."*
+All three properties are about **the record**. `AC-K11` then guards **consumption**
+(recorded-then-ignored). ⛔ **Nothing guarded the producer.** A producer can
+satisfy every one of those and still be non-absorbing on one lattice element, or
+partial on one `Term` form — and both failures are silent until someone declares
+the shape that hits them.
+
+⚠ **Two distinct lessons, both worth carrying past this node:**
+
+1. ⛔ **A fail-closed state must not be an ordinary value of a lattice that has a
+   flip operation.** `Unknown` has to absorb `flip()`; encoding "I don't know" as
+   "contravariant" means the type system cannot tell the two apart, and one of
+   them is safe to invert.
+2. ⛔ **Enumerate the producer's domain by `Term` form, not by example.** The
+   Architect's instruction is the right standard: *"audit every child traversed
+   by the fallback whose de Bruijn depth differs, rather than fixing one named
+   arm only."* ⭐ Same discipline Runtime applied to `first()` on `ABI-S3` the
+   same morning — fix the **class**, because a re-review scoped to the named
+   trace passes either way.
+
 ## §3 Deliverables
 
 Node text is authoritative; this is the slicing view.
@@ -199,7 +232,7 @@ Node text is authoritative; this is the slicing view.
 > that does not exist.
 >
 > ⚠ **Expect `SPEC-NESTED-IND` to land while you are inside `D1a`.** Re-read it
-> from the object when it does (`git show origin/main:spec/10-kernel/14-inductive.md`),
+> from the object when it does — `git show origin/main:` on the chapter path —
 > ⛔ not from your worktree copy — a branch cut before the merge carries the old
 > text, and that reads as complete and self-consistent.
 >
