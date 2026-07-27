@@ -11,7 +11,46 @@ github: null
 origin: "conformance-validator block on STR-BIJ exact bcdd4548 (evt_35vfffa5pm230); Steward scope ruling 2026-07-27 narrowed STR-BIJ to prose/spec carriers and named this the explicit tracked exclusion. Frame: docs/program/wp/str-bij-overclaim-erratum.md (supplies the discriminating operand in its §2 repro)."
 ---
 
-> ## ⛔ READ THIS FIRST — THE FIX IS **TWO** CHANGES AND EITHER ALONE MAKES THINGS WORSE
+> ## ⛔⛔ RE-SCOPED 2026-07-27 AFTER A BLOCK — `AC-C1` AND `AC-C4` WITHDRAWN
+>
+> **They were unachievable at this base.**
+>
+> **@language-leader blocked this node on its own fixed inputs and was right.**
+> Measured on the real elaborated/evaluated path: `l2s([101,769])` yields
+> `EvalVal::Str("e\u{301}")`, **not** `Str("é")`. ⇒ **The implementation does not
+> NFC-normalize.** No normalization exists in `ken-elaborator`/`ken-runtime`.
+>
+> ⛔ **The spec contradicts itself, and it names this exact trap:**
+> `spec/30-surface/37-strings-collections.md:89` states `List Char → String` as
+> *"encode UTF-8, then **NFC-normalize**"* — normative, total behavior — while
+> `:810–811` says `String` NFC normalization is *"**a deferred behavior —
+> currently stubbed**"* and warns, verbatim, against *"**the
+> over-pin-a-deferred-behavior trap**."*
+>
+> ⇒ ⛔ **`AC-C1`'s expected `[233]` was inherited from the contract and never run
+> through the executable path.** The spec warns against pinning the *pre*-NFC
+> behavior; the withdrawn AC pinned the *post*-NFC behavior. Same error, opposite
+> direction.
+>
+> ### ⭐⭐ AND THE ORIGINAL DIAGNOSIS WAS TOO WEAK — no operand can fix this test
+>
+> With NFC stubbed, `s2l (l2s cs) ≡ cs` **genuinely holds for every `cs`**. ⇒ The
+> test is **not** vacuous because its operand happens to be an NFC fixed point —
+> it is vacuous because ⛔ **every input is one while normalization is absent.**
+> There is no operand that discriminates at this base.
+>
+> ⭐ **The correct statement of the defect: the test is green because a deferred
+> behavior is MISSING. It pins the STUB, and its name claims the CONTRACT.** That
+> is strictly more serious than the NFC-fixed-point framing this node was filed
+> with, and it is what the node now targets.
+>
+> ⚠ **Open, and NOT this node's to settle** — routed to the Architect: is stubbed
+> NFC a **contract defect**? Either `:89` is aspirational and must be marked
+> deferred everywhere it is stated as behavior, or the implementation owes NFC as
+> a **behavioral WP**. ⛔ Do not resolve it here; ⛔ do not wait on it either —
+> everything below is independent of the ruling.
+
+> ## ⛔ THE ORIGINAL FRAMING, RETAINED FOR THE RECORD — but see the re-scope above
 >
 > This test has **two independent defects**: a **false universal carrier** (its
 > name, header, doc, and assertion message) and a **vacuous operand** (its sole
@@ -77,7 +116,11 @@ property.** A test that cannot fail when its stated law is false is not evidence
 about that law. This is the same honesty over-claim `STR-BIJ` exists to remove,
 in executable rather than prose form.
 
-## Fixed inputs — ⛔ the discriminating operand is ALREADY DERIVED, do not re-derive it
+## Fixed inputs
+
+⛔ **The `cs₁`/`cs₂` operand below belongs to the WITHDRAWN `AC-C1`.** It is
+retained because it is the evidence that the contract and the implementation
+disagree — ⛔ not as an input to build against.
 
 `docs/program/wp/str-bij-overclaim-erratum.md §2` supplies it, and both elements
 are valid `Char` per `37 §2.4` (both are Unicode scalar values):
@@ -99,19 +142,23 @@ s2l (l2s cs₁) ≡ cs₂ ≠ cs₁    -- the List-Char-side round trip is NOT t
 | landed axiom | `catalog/packages/Data/Text/StringBijection.ken.md:13–14` — `string_to_list_char_retraction`, the `String` side only |
 | frame | `docs/program/wp/str-bij-overclaim-erratum.md` (§2 repro = the operand above) |
 
-## Acceptance criteria
+## Acceptance criteria — ⛔ RE-SCOPED. `AC-C1` and `AC-C4` are WITHDRAWN.
+
+> ⛔ **`AC-C1` (assert `[233]`) and `AC-C4` (the normalizer positive control) are
+> WITHDRAWN as unachievable at this base** — there is no normalizer to reach and
+> no operand that discriminates. ⚠ Recorded rather than deleted so they cannot be
+> re-read as still owed. ⇒ They return **with the behavioral NFC WP**, not before.
 
 | AC | claim | control |
 |---|---|---|
-| `AC-C1` | The reverse test's operand set includes a **non-NFC-fixed-point** `List Char` — `[U+0065, U+0301]` — and asserts the **normalized** result `[233]`. | ⭐⭐ **The discrimination control, and this AC's whole point:** assert `[233]`. ⛔ Asserting `[101, 769]` (the input, i.e. what a true inverse would return) must **FAIL**. Show both readings and which one the test takes — a green test whose expectation you cannot state in two distinguishable ways has not discriminated anything |
-| `AC-C2` | All four carriers in (a) state the **landed** property: the retraction `l2s (s2l s) ≡ s` and `s2l`'s derived injectivity. ⛔ No "identity", no "inverse", no "both ends", no "reproduce exactly" on the reverse direction. | grep the four sites; each must name **retraction** or **injectivity**, ⛔ never a two-sided claim. The `:145` header must stop naming the **pair** as an identity |
+| `AC-C2` | All four carriers state the **landed** property: the retraction `l2s (s2l s) ≡ s` and `s2l`'s derived injectivity. ⛔ No "identity", no "inverse", no "both ends", no "reproduce exactly" on the reverse direction. | grep the four sites; each must name **retraction** or **injectivity**, ⛔ never a two-sided claim. The `:145` header must stop naming the **pair** as an identity |
 | `AC-C3` | The **existing** landed-direction test and its corpus are unchanged. | `ac2_round_trip_l2s_s2l_identity` (`:150`) and its ten-string corpus are **byte-identical**. ⛔ This WP removes an over-claim; it must not remove coverage |
-| `AC-C4` | ⭐ **A positive control that the new operand is actually reaching `l2s`'s normalizer** — not being rejected, silently truncated, or lost in `Char` literal construction. | ⛔ Required, because *"the assertion passed"* and *"the operand never got built"* are the same green. Show the intermediate `String` (or its codepoints) differs from a naive UTF-8 encoding of the input — i.e. that normalization **happened** |
-| `AC-C5` | No behavior change anywhere else: no axiom, law, instance, spec, or catalog edit. | ⛔ This is **test-only** Rust work. If it appears to need a spec or axiom change, **stop and re-raise** — that would mean the landed law is wrong, which is a different and much larger finding |
+| `AC-C5` | No behavior change anywhere: no axiom, law, instance, spec, or catalog edit. | ⛔ **Test-only** Rust. ⚠ It is now *known* that a spec change is implied — that is the Architect's open ruling, ⛔ **not** a licence to make it here |
+| ⭐ `AC-C6` **(NEW — replaces `AC-C1`)** | The test states **explicitly** that the reverse direction holds **only under the current NFC stub**, citing `37-strings-collections.md:810`. | ⛔ The carrier must name the **stub** as the reason it passes. ⭐ This is the honest version of what `AC-C1` was reaching for: the test cannot demonstrate the contract, so it must **say which weaker thing it demonstrates** |
+| ⭐⭐ `AC-C7` **(NEW — the durable half)** | **A tripwire: when real NFC lands, this test must FAIL LOUDLY** rather than silently keep passing. | ⛔ The control is a comment or assertion positioned so that a future NFC implementation **breaks this test on purpose**, with a message naming the node/ruling to consult. ⚠ Today the test would silently continue to pass once NFC lands, which is exactly the *"literal-level pin would falsely fail"* hazard `37:811` describes — inverted. ⇒ **This is the one thing the current test cannot do and the reason the node stays open** |
 
-⚠ **`AC-C1` does not require a verdict flip in the suite.** The suite stays green.
-What must change is that it **could** go red. ⛔ Do not read "the tests still
-pass" as evidence for this node — that was true before the fix.
+⚠ **No verdict flip is required and the suite stays green.** ⛔ Do not report
+"tests still pass" as evidence for this node — that was true before any of it.
 
 ## Scope
 

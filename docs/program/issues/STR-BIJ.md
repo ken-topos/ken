@@ -1,13 +1,13 @@
 ---
 id: STR-BIJ
 title: "the String/List Char 'bijection' over-claim (adversary A1 + A2)"
-status: ready
+status: merged
 owner: spec-enclave
 size: S
 gate: none
 depends_on: []
 blocks: []
-github: null
+github: https://github.com/swe-toolkit/ken/pull/1096
 origin: adversary findings A1 + A2
 ---
 

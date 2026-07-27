@@ -1,13 +1,13 @@
 ---
 id: SEC1-IFC
 title: "Reify the three named Sec1 stubs — two of them are the SOLE NETS for Sec1's two trusted surfaces, and both are placeholders under a green suite"
-status: ready
+status: merged
 owner: verify
 size: M
 gate: G-Sec
 depends_on: []
 blocks: []
-github: null
+github: https://github.com/swe-toolkit/ken/pull/1094
 origin: Corrected 2026-07-27 by the Steward after a mis-release. Sec1 is BUILT (crates/ken-elaborator/src/ifc.rs + tests/sec1_acceptance.rs, 20 tests green); the residual is the three reify triggers the source itself names at ifc.rs:361-381. Frame docs/program/wp/Sec1-build.md. Owner operator-decided — WS-Sec build is a scope extension of Team Verify.
 ---
 
