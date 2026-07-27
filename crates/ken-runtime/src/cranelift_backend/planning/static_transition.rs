@@ -3185,6 +3185,144 @@ mod tests {
         );
     }
 
+    const IDENTITY_CTOR: &str = "ctor:prelude::Pair::MkPair";
+    const IDENTITY_OTHER_CTOR: &str = "ctor:prelude::Triple::MkTriple";
+    const IDENTITY_FIELD: &str = "field:fst";
+
+    /// A `Match` whose scrutinee **constructs** the same constructor one of its
+    /// cases **eliminates**, and whose case body projects a field the record
+    /// beneath it **declares**.
+    ///
+    /// ⭐ The point of the shape is that each spelling appears at **two distinct
+    /// occurrences** with different atom kinds — `ConstructorSymbol` vs
+    /// `CaseConstructor`, `RecordFieldName` vs `ProjectField`. That is what makes
+    /// the equality assertions below non-trivial: they are comparing a
+    /// *producer's* identity against a *consumer's*, which is exactly `D2`.
+    ///
+    /// Positional child layout, verified against the planner's own construction
+    /// rather than assumed: `Match` pushes the scrutinee then the case bodies
+    /// (`children.push(scrutinee); children.extend(case_bodies)`), and `Project`
+    /// plans its record at position 0.
+    fn identity_fixture() -> RuntimeExpr {
+        RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: IDENTITY_CTOR.to_string(),
+                args: Vec::new(),
+            }),
+            cases: vec![
+                RuntimeMatchCase {
+                    constructor: IDENTITY_CTOR.to_string(),
+                    binders: 0,
+                    body: RuntimeExpr::Project {
+                        record: Box::new(RuntimeExpr::Record {
+                            fields: vec![(IDENTITY_FIELD.to_string(), unit())],
+                        }),
+                        field: IDENTITY_FIELD.to_string(),
+                    },
+                },
+                RuntimeMatchCase {
+                    constructor: IDENTITY_OTHER_CTOR.to_string(),
+                    binders: 0,
+                    body: unit(),
+                },
+            ],
+            default: trap("identity fixture default"),
+        }
+    }
+
+    /// `RT-FNSPLIT-C1` `D2` — the producer and the eliminator derive **one**
+    /// constructor identity, and different spellings stay distinct.
+    ///
+    /// **MEASURED:** `constructor_symbol_identity` at the `Construct` occurrence
+    /// equals `case_constructor_identity` at the `Match` occurrence, and differs
+    /// from the identity of a differently-spelled case.
+    /// **CLAIMED:** producer and consumer share one authority (`D2`).
+    /// **THE GAP:** the two readings must come from **different occurrences** —
+    /// otherwise equality is trivially true of any scheme at all, including the
+    /// per-occurrence spans this node replaced. That is asserted, not assumed.
+    #[test]
+    fn boundary_c1_producer_and_eliminator_share_one_constructor_identity() {
+        // Promise class: durable invariant.
+        let expr = identity_fixture();
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
+
+        let match_origin = plan.root_static_origin().unwrap();
+        let construct_origin = plan.child_static_origin(match_origin, 0).unwrap();
+
+        assert_ne!(
+            match_origin, construct_origin,
+            "NON-VACUITY: the produced and eliminated identities must be read at \
+             two different occurrences, or their equality says nothing about \
+             sharing an authority."
+        );
+
+        let produced = plan.constructor_symbol_identity(construct_origin).unwrap();
+        let eliminated = plan.case_constructor_identity(match_origin, 0).unwrap();
+        assert_eq!(
+            produced, eliminated,
+            "the constructor built at one occurrence and matched at another have \
+             different artifact-static identities, so producer and consumer are \
+             not sharing one authority"
+        );
+
+        // Discriminator: a different spelling must not collide.
+        let other = plan.case_constructor_identity(match_origin, 1).unwrap();
+        assert_ne!(
+            produced, other,
+            "two differently-spelled constructors share an identity"
+        );
+    }
+
+    /// `RT-FNSPLIT-C1` `D2` — the record's declared field and the projection's
+    /// selected field are one identity.
+    #[test]
+    fn boundary_c1_declared_and_projected_field_share_one_identity() {
+        // Promise class: durable invariant.
+        let expr = identity_fixture();
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
+
+        let match_origin = plan.root_static_origin().unwrap();
+        let project_origin = plan.child_static_origin(match_origin, 1).unwrap();
+        let record_origin = plan.child_static_origin(project_origin, 0).unwrap();
+
+        assert_ne!(
+            project_origin, record_origin,
+            "NON-VACUITY: the declared and selected field identities must be read \
+             at two different occurrences."
+        );
+
+        let selected = plan.project_field_identity(project_origin).unwrap();
+        let declared = plan.record_field_identity(record_origin, 0).unwrap();
+        assert_eq!(
+            selected, declared,
+            "the field declared by a record and the field selected by a projection \
+             over it have different artifact-static identities"
+        );
+    }
+
+    /// `RT-FNSPLIT-C1` `D1` — the capability refuses a wrong-kind or
+    /// out-of-cardinality access rather than returning a plausible identity.
+    #[test]
+    fn boundary_c1_identity_capability_refuses_wrong_kind_and_cardinality() {
+        // Promise class: durable invariant.
+        let expr = identity_fixture();
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
+        let match_origin = plan.root_static_origin().unwrap();
+        let construct_origin = plan.child_static_origin(match_origin, 0).unwrap();
+
+        // Cardinality: the fixture has two cases, so index 2 does not exist.
+        assert!(plan.case_constructor_identity(match_origin, 2).is_err());
+
+        // Wrong kind: a `Construct` occurrence has a `ConstructorSymbol` atom
+        // and no `ProjectField` atom, so asking it for a field identity must
+        // fail rather than fall back to whatever named atom it does hold.
+        assert!(plan.project_field_identity(construct_origin).is_err());
+
+        // The positive direction, so the two refusals above are attributable to
+        // the kind/cardinality checks and not to an origin that resolves nothing.
+        assert!(plan.constructor_symbol_identity(construct_origin).is_ok());
+    }
+
     /// `RT-FNSPLIT-C1` `D2` — equal name bytes have exactly one canonical span.
     ///
     /// **MEASURED:** across every atom of a real plan, atoms whose interned
@@ -3226,12 +3364,14 @@ mod tests {
 
         for (bytes, spans) in &spans_by_bytes {
             let first = spans[0];
+            let deviant = spans.iter().find(|span| **span != first);
             assert!(
-                spans.iter().all(|span| *span == first),
-                "spelling {:?} is interned at {} distinct spans, so one symbol has more \
+                deviant.is_none(),
+                "spelling {:?} is interned at both {:?} and {:?}, so one symbol has more \
                  than one artifact-static identity",
                 String::from_utf8_lossy(bytes),
-                spans.iter().collect::<BTreeSet<_>>().len()
+                first,
+                deviant.unwrap()
             );
         }
     }
@@ -3314,7 +3454,13 @@ mod tests {
     fn boundary_c1_identity_abi_word_round_trips_and_reserves_zero() {
         // Promise class: normative compatibility vector — the encoding is the
         // contract between the planner and the carrier's emitted ABI.
-        for (start, len) in [(0u32, 0u32), (0, 1), (1, 0), (7, 3), (u32::MAX, u32::MAX - 1)] {
+        for (start, len) in [
+            (0u32, 0u32),
+            (0, 1),
+            (1, 0),
+            (7, 3),
+            (u32::MAX, u32::MAX - 1),
+        ] {
             let span = DenseRange { start, len };
             let packed = ConstructorIdentity(span).tag_abi_word().unwrap();
             assert_ne!(packed, 0, "({start},{len}) encoded as the invalid sentinel");

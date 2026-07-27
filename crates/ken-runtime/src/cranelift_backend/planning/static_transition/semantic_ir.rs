@@ -488,6 +488,18 @@ impl SemanticMaterialArena {
     /// which is why `SemanticPlane::validate` rejects unequal spans for equal
     /// bytes rather than trusting this function.
     fn intern(&mut self, bytes: &[u8]) -> Result<DenseRange, CraneliftBackendError> {
+        // ⛔ The empty span is canonically `(0, 0)`, matching what `push_numeric`
+        // stores for an atom with no out-of-line content.
+        //
+        // ⚠ Without this, empty content has **two** spellings: `push_numeric`'s
+        // `(0, 0)` and `at_end`'s `(names.len(), 0)`. Both denote the same empty
+        // byte string, so the canonicality invariant — equal bytes, equal span —
+        // would be violated by construction on any plan holding both a numeric
+        // atom and an empty string/bytes literal, and the validator would report
+        // a two-identity symbol that is really just two spellings of "nothing".
+        if bytes.is_empty() {
+            return Ok(DenseRange { start: 0, len: 0 });
+        }
         if let Some(span) = self.canonical_names.get(bytes) {
             return Ok(*span);
         }
