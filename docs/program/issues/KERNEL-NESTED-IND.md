@@ -1,7 +1,7 @@
 ---
 id: KERNEL-NESTED-IND
 title: "admit nested strictly-positive inductives in the kernel — structural positivity through declared parameter positions, generated and checked dependent eliminators with one lifted IH per contained recursive occurrence, iota, and surface consumability"
-status: draft
+status: ready
 owner: kernel
 size: L
 gate: none
@@ -13,11 +13,18 @@ origin: Architect ruling evt_55k9f9efvd8jk, Decision dec_13af1mercv2m0 resolved.
 
 > ## ▶ THE KERNEL HALF OF A TWO-STAGE PREREQUISITE
 >
+> **Frame:** [`kernel-nested-inductives.md`][f], under `docs/program/wp/`. The
+> frame is the executable artifact — measured substrate, slicing order, control
+> recipes, validation set, contention. This node carries the contract and the ACs.
+>
 > **Sequence:** `SPEC-NESTED-IND` → **`KERNEL-NESTED-IND`** → `DS-9`.
 >
-> ⛔ **`draft` until `SPEC-NESTED-IND` merges.** The rules are stated there; this
-> node implements and checks them. Starting here first would implement a contract
-> that does not yet exist.
+> ⭐ **`ready` for `D1a` ONLY — `D1b` onward waits for `SPEC-NESTED-IND`.**
+> `D1a` derives and records per-parameter polarity; it **admits nothing new**, so
+> the nested declaration stays rejected throughout and the inert outcome is
+> unreachable. `D1b` opens admittance, which is the rule the spec enclave is
+> writing now — ⛔ starting there first implements a contract that does not yet
+> exist. Frame §4 carries the release decision and the re-read instruction.
 >
 > ⚠ **This node changes the TCB.** Read `docs/PRINCIPLES.md` on the small
 > auditable trusted base before slicing it.
@@ -91,7 +98,8 @@ of that edge observable.
 
 ## ⭐⭐ MEASURED SUBSTRATE — and it makes contract point 1 bigger than it looks
 
-Measured at `origin/main = 6f1eeda1`. ⚠ Re-derive before starting; these move.
+Measured at `origin/main = 10b2f56a`, every citation re-verified to resolve.
+⚠ Re-derive before starting; these line numbers move.
 
 **The single line that rejects nesting** — `crates/ken-kernel/src/inductive.rs`,
 inside `check_pos_arg` (`:86`, the `14 §8.2` judgment):
@@ -113,6 +121,29 @@ with `args.iter().all(|x| check_pos_arg(d, pol, x))` would admit `List Json`
 **today**, in one line, with no eliminator, no lifted IH, and no iota — the exact
 inert outcome contract point 2 forbids. ⚠ **Expect this to be tempting: it is a
 one-line diff that makes the blocked declaration type-check.**
+
+### ⭐⭐ `recursive_args` returns `[]` for a nested arg — SILENTLY
+
+**This is what makes contract point 2 mechanically precise.** `recursive_args`
+(`inductive.rs:183`) is the single producer of *"which arguments are recursive
+and what IH does each need."* It peels Π binders, peels the application spine,
+and fires only when the head **is** the family. For `JsonArray (List Json)` the
+head is `List`, so the arm never fires and it returns `[]`.
+
+⛔⛔ **`[]` is not an error — it is the correct answer for `JsonNull`.** So with
+`check_pos_arg` relaxed and nothing else: the declaration is **admitted**;
+`method_type` (`:211`) generates the `JsonArray` method with **zero IHs**;
+`check.rs:555` **accepts** that method type; `iota_reduct` (`:339`) **fires**;
+and **every existing test stays green**. ⇒ A `Json` that can be declared,
+constructed and matched but **not inducted over**, with the TCB already grown and
+no red test anywhere.
+
+⚠ **The return type cannot express a nested occurrence.** Its triple says *"arg
+`pos` has type `Π tel. D params idxs`"*; a nested occurrence puts the recursive
+occurrences **inside a container**, so the IH must be **lifted through** it. ⇒
+`D3` widens a public API with consumers in three crates — and per the frame's
+census, `sct.rs:241` and `ken-interp` `eval.rs:557` **re-derive** this test
+rather than calling it, so they will not follow. Frame §2c–§2d.
 
 ### ⭐ The machinery contract point 1 requires DOES NOT EXIST YET
 
@@ -176,6 +207,8 @@ Each names its positive control.
 | `AC-K8` | Direct and existing **W-style** inductives unchanged. | the K1.5 Π-bound suite (`(Nat → D) → D`, §2.1) runs green **untouched**; ⛔ a diff to those tests is itself a finding |
 | `AC-K9` | ⛔ **Zero** new axiom, postulate, trusted escape, or library-side representation workaround. | grep the diff for `Axiom`/`postulate`/`sorry`/`unsafe` additions; a hit fails the row |
 | `AC-K10` | `trusted_base()` delta reported **as a number**, with what grew. | ⚠ no mechanical control — discharged by the report. Listed so "grew by 0" and "never measured" cannot read identically |
+| `AC-K11` | ⭐ `D1a`'s recorded polarity is **populated at admission and read by the positivity check** — not recorded-then-ignored. | perturb the **recorded** value for one parameter → admittance must change. ⛔ If it does not, the check recomputes and the record is inert — the `ConstructorDecl.recursive_positions` failure repeated (frame §2e) |
+| `AC-K12` | A nested-IH constructor **lowers and evaluates**, not just type-checks. | the evaluator and native-lowering paths **re-derive** recursive positions (frame §2d, §2f) and one lowering site computes binder arity as `argument_binders + recursive_positions.len()`. Control: a recursive computation over `JsonArray` evaluates, and the built-artifact suite is green |
 
 ⛔ **`AC-K3` and `AC-K8` are the pair that matters.** `AC-K3` proves the new
 capability is *usable*; `AC-K8` proves the old capability is *undamaged*. A node
@@ -210,3 +243,5 @@ broadly: nesting a `List` inside a recursive type is the shape of **every tree
 with a list of children** — JSON, XML, S-expressions, ASTs, rose trees. ⚠ That
 breadth is the argument for doing it properly, ⛔ not for widening scope past
 nested-only.
+
+[f]: ../wp/kernel-nested-inductives.md
