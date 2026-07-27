@@ -1,13 +1,13 @@
 ---
 id: STR-BIJ-TEST-CARRIER
 title: "The AC2 reverse-direction test claims a universal inverse and its sole operand is an NFC fixed point — it is green under the correct law AND under the false one it pins"
-status: ready
+status: merged
 owner: language
 size: S
 gate: none
 depends_on: [STR-BIJ]
 blocks: []
-github: null
+github: https://github.com/swe-toolkit/ken/pull/1102
 origin: "conformance-validator block on STR-BIJ exact bcdd4548 (evt_35vfffa5pm230); Steward scope ruling 2026-07-27 narrowed STR-BIJ to prose/spec carriers and named this the explicit tracked exclusion. Frame: docs/program/wp/str-bij-overclaim-erratum.md (supplies the discriminating operand in its §2 repro)."
 ---
 

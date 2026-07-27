@@ -1,7 +1,7 @@
 ---
 id: RT-MATCH-FRAME-FP
 title: "match-frame fingerprints must hash a dedicated closure-free header carrier, not a Debug rendering of closure-capable cases"
-status: ready
+status: active
 owner: runtime
 size: M
 gate: none
@@ -108,6 +108,40 @@ closure structure."*
 site_id`), **not** by the fingerprint. ⚠ Re-derive that at kickoff; if it holds,
 the fingerprint may be **narrowable rather than merely re-carriered**.
 
+## ⛔ SYMPTOM INVENTORY — Architect appends one line per hard-stop; never rewritten
+
+**NEXT PREDICATE CHECK = 3rd entry, then 6th, 9th, …**
+**NEXT RESEARCH PULL = 3rd hard-stop, then 6th, 9th, …**
+
+⭐ Both counts are **armed lines, not tallies.** Re-read them on every hard-stop.
+A deep chain carrying **zero** research advisories is itself the tell that both
+the Architect's self-trigger and the Steward's backstop have lapsed
+(`steward.md §5a`, measured on `RT-NATIVE-FNSPLIT` at **10**).
+
+| # | date | the wall that was hit |
+|---|---|---|
+| 1 | 2026-07-27 | ⭐ **`AC-F1` and the inference selector want opposite things.** `AC-F1` requires body-only differences to share a header fingerprint; `lowering/mod.rs:4095–4106` **selects** from `callee_frame_templates` **by that fingerprint** when `checked_frame_id.is_none()`. Measured affirmatively by `runtime-leader`: one callee declaration with two computational eliminators of the same family yields **header-identical** templates (case fields derive from the family; the default trap is family-symbol keyed). Today's Debug hash distinguishes them **by body**; Route C must not. ⇒ Dominant new result is a lowering refusal, but a complete permutation can **silently exchange** header-identical templates, observable through fields absent from the header (`semantic_position`, `output_interface`, `segment_site_id`). Held at `evt_2qaj3kt3dawhr` for an Architect selector-scope ruling. ⚠ The join-site path stays identity-selected and is unaffected |
+
+**Disposition of entry 1 — RULED, chain not continuing.** The Architect ruled
+for an **identity-based selector**: eliminate the `checked_frame_id.is_none()`
+fingerprint `find`, **preserve the pre-erasure checked ID through all internal
+paths**, **reject a missing ID before CFG**, retain the fingerprint as
+**compatibility-only**, and close the permutation gap with **exact
+occurrence/order validation**. Both helper signatures stay stable, so the
+signature-stability licence in `Contention` is unaffected. Released to the ring
+at `evt_j1ajtszmhxt1`; the implementer folds on top of preserved `88980012`.
+
+⭐ **Note what the ruling did to `AC-F1`:** it is no longer in tension, because
+the fingerprint stopped being a *selector* and became a *compatibility check*.
+⛔ That is the shape to remember if a later entry looks similar — the fix was to
+narrow what the fingerprint is **used for**, not to weaken what it **hashes**.
+
+⚠ **Entry 1 is a ruling-surface gap in this node's own narrowability premise** —
+the node says the fingerprint *"may be narrowable rather than merely
+re-carriered"* because `planned_join_site_for_frame` selects by `site_id`. That
+is true **for the join-site path** and does **not** cover the inference selector.
+⛔ Do not read the narrowability lead as settling the selector question.
+
 ## Acceptance criteria
 
 `AC-F1`–`AC-F4` are the Architect's required controls, transcribed.
@@ -141,23 +175,50 @@ carriers, the core, the projecting wrapper, and their controls.
   value rendered or compared.
 - ⛔ `P2`'s `D3`/`D4`, and any public plan-format change.
 
-## Contention — ⭐ NO elaborator authorization is required, and that is measured
+## Contention — ⚠ the conclusion holds, but the ORIGINAL PREMISE WAS FALSE
 
-⚠ **The escalation that produced this node assumed route C would enter
-`crates/ken-elaborator/src`.** ⛔ **It does not.** Two facts:
+> ### ⛔ CORRECTED 2026-07-27 — `ken-elaborator` IS a consumer. Corrected by
+> ### `runtime-leader` (`evt_1cm96c2ce6vbn`), re-measured by the Steward.
+>
+> ⛔ **This section used to assert:** *"every consumer of the two helpers is in
+> `ken-runtime` … **No `ken-elaborator` file among them**."* **That is false**,
+> and the Steward repeated it in the kickoff (`evt_3hp0wxgtedd36`) labelled
+> *"measured rather than assumed"* — which it was not; it was inherited from this
+> node without re-derivation.
+>
+> **Re-measured across the whole workspace:**
+>
+> ```
+> grep -rn 'match_frame_fingerprint' crates/ --include=*.rs
+>   5  crates/ken-runtime/src/cranelift_backend/lowering/mod.rs
+>   3  crates/ken-elaborator/src/erasure.rs        <-- the missed population
+>   2  crates/ken-runtime/src/cranelift_backend/lowering/core/tests/control.rs
+>   1  crates/ken-runtime/src/cranelift_backend/test_objects.rs
+>   1  crates/ken-runtime/src/cranelift_backend/planning.rs
+> ```
 
-1. The Architect's route C explicitly achieves the boundary *"without assuming an
-   elaborator edit or a public plan-format change"* — the existing-signature
-   wrapper is what avoids caller churn.
-2. Measured: every consumer of the two helpers is in **`ken-runtime`** —
-   `src/ir.rs`, `src/cranelift_backend/lowering/mod.rs`,
-   `src/cranelift_backend/planning.rs`, plus `test_objects.rs` and
-   `lowering/core/tests/control.rs`. **No `ken-elaborator` file among them.**
+⭐ **The conclusion survives, for a reason that is narrower than the old one and
+must not be widened back.** Route C keeps the **existing helper signatures**, and
+an existing-signature wrapper leaves all three `erasure.rs` consumers **untouched**
+— so *this* implementation needs no cross-ring authorization. ⛔ The licence comes
+from **signature stability**, not from an absence of elaborator consumers.
 
-⇒ ✅ **This node is `ken-runtime`-local and needs no cross-ring authorization.**
-⛔ **If an elaborator edit turns out to be needed anyway, STOP and re-raise** —
-that is a finding about the ruling's premise, not a licence, and it comes to the
-Steward before any edit.
+⇒ ⛔ **Any variant that changes either helper's signature has three
+`ken-elaborator` callers and REQUIRES cross-ring authorization. STOP and re-raise
+to the Steward before such an edit** — that is a finding about the ruling's
+premise, not a licence.
+
+⚠ Kernel's `KERNEL-NESTED-IND` `D5` will also reach `ken-elaborator/src`, so a
+signature-changing variant would contend with live kernel work as well.
+
+### ⚠ Second open question — raised by `runtime-leader`, not yet ruled
+
+`lowering/mod.rs:4095–4106` selects `callee_frame_templates` **by fingerprint**
+when `checked_frame_id.is_none()`. ⭐ `AC-F1` **deliberately** makes body-only
+differences collide, so if **header-identical callee templates are jointly
+reachable**, that selection becomes ambiguous. The implementer is measuring
+reachability; ⛔ **if reachable, route the evidence to the Architect for a scope
+decision before extending the candidate** — do not resolve it inside this node.
 
 ⚠ Kernel's `KERNEL-NESTED-IND` `D5` will reach `ken-elaborator/src`. That is why
 this section is measured rather than assumed.

@@ -11,15 +11,52 @@ github: null
 origin: "verify-implementer authorized hard-stop on SEC1-IFC AC-R3 (2026-07-27), Steward-authorized evt_1g1tq7ybc92hj. R1+R2 landed as PR #1094 (main tree 8229a811). Measured by the Steward at origin/main 4d15002d: no crates/*/src/ path constructs Verdict::Disproved. Blocked on BOTH V3 (prover, a route that can refute) and V4 (diagnostics, whose DAG deliverables are countermodels+holes+unknown) -- prover.rs names V4 seven times; neither has a tracker node."
 ---
 
-> ## ⛔ STATUS IS `draft` DELIBERATELY — THIS IS NOT RELEASABLE AND MUST NOT BE PULLED
+> ## ⛔ STATUS IS `draft` DELIBERATELY — STILL NOT RELEASABLE, BUT THE BLOCK HAS MOVED
 >
-> ⛔ **Do not release this to Team Verify.** It is blocked on infrastructure that
-> does not exist, and the whole point of filing it now is that the gap is
-> **durable and named** rather than living in a channel message.
+> ⛔ **Do not release this to Team Verify yet.** ⚠ **But the premise below is now
+> PARTLY STALE and must be re-derived before anyone acts on it.**
 >
-> ⭐ It flips to `ready` only when a prover **refutation backend** exists — see
-> §"The blocking dependency": **`V3` AND `V4`**, which carry different halves of
-> it and are both required.
+> ### ⭐⭐ MEASURED UPDATE 2026-07-27 — `V3-RESIDUAL` merged (PR #1103)
+>
+> At `main = 7725272c`.
+>
+> ⛔ **The central claim of this node — *"No production code path can return
+> `Verdict::Disproved`"* — IS NO LONGER TRUE.** Verified on `main`:
+>
+> ```
+> crates/ken-elaborator/src/prover.rs:220
+>     Ok(()) => Verdict::Disproved { countermodel },
+> ```
+>
+> in `attempt_with_refutation`, gated on `check(env, ctx, &refutation, &not_φ)`
+> where `not_φ = φ → Bottom`. ⭐ **The cardinal rule (`23 §1.5`) is intact** — a
+> refutation is believed only because the **kernel accepted `q : φ → Bottom`**;
+> an invalid refutation yields an honest `Unknown`. ⇒ The backend did **not**
+> become a second trust root, which was `AC-R3d`'s / `AC-V3r4`'s whole worry.
+>
+> `disproved_carries_countermodel` is now a **real** test: it asserts the
+> countermodel names the failing input class, carries both failing inputs, and
+> that `trusted_base()` is **unchanged** by a checked empty-context refutation.
+>
+> ⇒ ⭐ **`AC-R3a` is now satisfiable and must NOT be re-derived as blocked.**
+>
+> ### ⛔ What is still owed — re-scope to THIS before releasing
+>
+> ⚠ **Do not read "a `Disproved` exists" as "`Sec1`'s reduction is unblocked."**
+> The landed arm refutes an **`Int`-literal disequality**. `AC-R3b` needs
+> `product(c, ζ)` — variable renaming, `lowEq_ζ`, the `coterminates_ζ` conjunct —
+> and `AC-R3c`, ⭐ **the row this whole node exists for**, needs a deliberately
+> too-weak `Φ_post` to be **DETECTED**. ⛔ Neither follows from a literal
+> refutation.
+>
+> ⇒ **Before release, someone must measure the residual**: which of `AC-R3a`–`R3f`
+> the landed refutation arm actually reaches, and how much of `V4`'s countermodel
+> machinery (`24 §1`) the landed `Countermodel` type genuinely supplies versus a
+> description string. ⛔ **Until that measurement exists, this stays `draft`** —
+> and it is a *measurement*, not another ruling.
+>
+> ⚠ **`SPEC-PROGRESS.md` cannot answer this** (47/48 rows `DRAFT`, `REVISED`
+> never used). Measure the code.
 
 ## What happened
 
@@ -33,11 +70,20 @@ happened, so `[Sec1-reduce]` **correctly remains live** in `ifc.rs` and in the
 suite's stub inventory. ⛔ It is an authorized deferral, ⛔ not a silent
 completion claim.
 
-## ⭐⭐ The measurement — and it is worse than "the reduction is stubbed"
+## ⚠ HISTORICAL — the measurement AS IT STOOD AT `4d15002d`. ⛔ SUPERSEDED.
+
+> ⛔ **This whole section is a historical record, not a live claim.** Its central
+> assertion was **falsified** by `V3-RESIDUAL` (PR #1103, `main = 7725272c`) —
+> see the correction block at the top of this node. It is retained because the
+> *reasoning* about what an unreachable verdict costs is still the reason the
+> node exists, and because the census method below is the one to re-run.
+>
+> ⛔ **Do not quote any sentence from this section as current state.**
 
 Measured at `origin/main = 4d15002d`.
 
-**No production code path can return `Verdict::Disproved`.**
+**No production code path can return `Verdict::Disproved`.** *(⛔ FALSE as of
+`7725272c` — `prover.rs:220` constructs it.)*
 
 `grep -rn 'Verdict::Disproved *{' crates/*/src/` returns **six** hits and **all
 six are pattern-match arms**, not constructions:
