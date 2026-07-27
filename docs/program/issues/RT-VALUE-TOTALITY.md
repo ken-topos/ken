@@ -35,7 +35,12 @@ origin: Architect cycle-contract ruling evt_5pzxf6sm4z08 ("host recursion may no
 > violations* now, not robustness gaps).
 >
 > ⇒ **P1 landed the totality half. The representation half — the half the
-> relaxation was actually about — has no frame.**
+> relaxation was actually about — is `P2`, and it IS now framed:**
+> [`RT-VALUE-TOTALITY-P2-representation-split.md`](../wp/RT-VALUE-TOTALITY-P2-representation-split.md)
+> (444 lines: fixed inputs, measured substrate §2a–§2g, `D1`–`D6`, ACs).
+> ⚠ This sentence previously read *"has no frame"* — true when written, false now;
+> edited rather than annotated. **`P3` still has none.**
+> **`P2` released to Runtime 2026-07-27** on the Handoff Gate.
 >
 > ### ▶ THE REDIRECT, CONCRETELY
 >
