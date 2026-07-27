@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-27 16:05:58Z — from 105 issue file(s) in `docs/program/issues/`.
+2026-07-27 16:12:51Z — from 105 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -82,7 +82,7 @@ the committed file matches the generator's output.
 | `LIB-GATE-DECOUPLE` | main is red on two library documentation-census gates: the currency gate the operator decoupled from merges still fires from inside CI, and a doc-only merge invalidated the ledger unreported | merged | verify | S | none | 1039 |
 | `LOADER-CITE-ANCHOR` | LOADER-STALE-PREMISE cites the spec by line number (:147-158) — rots silently in the one catalog file outside the currency gate | merged | doc | XS | none | — |
 | `LOADER-STALE-PREMISE` | \"no disk loader yet\" is stale in 9 places — including already-landed library/ content | merged | doc | S | none | — |
-| `MAP-TRANSPORT-CODEC` | If Map/Set need a portable canonical serialization, it is ordinary package Ken — not a runtime primitive: settle whether a codec is required at all, and if so place it out of trusted_base() | draft | unassigned | TBD | none | — |
+| `MAP-TRANSPORT-CODEC` | If Map/Set need a portable canonical serialization, it is ordinary package Ken — not a runtime primitive: settle whether a codec is required at all, and if so place it out of trusted_base() | ready | ergo | TBD | none | — |
 | `MODELS-TIER` | agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception | ready | steward | S | none | — |
 | `NATIVE-HANDLE-CARRIER` | Native build-pipeline completeness — a constructor-private resource-carrying handle fails checked-core body-view lowering (MissingClosureMetadata) when it crosses the higher-order withBuffer normalization boundary | draft | runtime | M | none | — |
 | `ORACLE-VIS-CHECK` | replace the text-pin oracle in px4b_native_production.rs with a real visibility check | merged | runtime | S | none | — |
@@ -152,6 +152,7 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `DOC-ATTEST-LIVING` — attesting living tracker files makes every routine WP status flip redden the currency gate
 - `EFF-SPACE-ENSURES-PRESTATE` — `old` is transparent, so a space operation's `ensures` cannot express the pre/post distinction `36 §4.3` is built on
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
+- `MAP-TRANSPORT-CODEC` — If Map/Set need a portable canonical serialization, it is ordinary package Ken — not a runtime primitive: settle whether a codec is required at all, and if so place it out of trusted_base()
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 
 ## Blockers

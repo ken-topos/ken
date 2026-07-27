@@ -1,8 +1,8 @@
 ---
 id: MAP-TRANSPORT-CODEC
 title: "If Map/Set need a portable canonical serialization, it is ordinary package Ken — not a runtime primitive: settle whether a codec is required at all, and if so place it out of trusted_base()"
-status: draft
-owner: unassigned
+status: ready
+owner: ergo
 size: TBD
 gate: none
 depends_on: [SPEC-STORE-SPLIT]
@@ -21,9 +21,24 @@ origin: Operator ruling 2026-07-26 (`RULING R2` on SPEC-STORE-SPLIT) — "Map/Se
 > every generic closure-free byte clause now dispatch by value domain, and Map/Set
 > expose only extensional equality, ordered `to_list`, and durable round-trip.
 >
-> ⛔ **This node is still not released.** §2 below is the reason — the first
-> deliverable is a decision about whether a codec is required at all, and that
-> has not been taken. It is releasable, not ready.
+> ## ⭐ RELEASED 2026-07-27 — but ONLY §2, and §2 is not a build
+>
+> **This block replaces the prior "still not released" statement, which is no
+> longer true and must not be read as operative.**
+>
+> ⛔ **What is released is `§2` alone** — the determination of whether a codec is
+> required at all — as **`MAP-TRANSPORT-CODEC-R1-requirement`**
+> ([frame](../wp/MAP-TRANSPORT-CODEC-R1-requirement.md)),
+> owned by **Ergo**. Its entire deliverable is one evidence-backed document under
+> `docs/program/`. **Zero code, zero spec, zero conformance.**
+>
+> ⛔ **Designing or building a codec is NOT released and is not in that WP's
+> scope.** If R1 returns *yes, a requirement exists*, the build is a successor WP
+> with its own frame. If R1 returns *no*, this node closes as **not needed** —
+> ⭐ a complete outcome, and the one the Steward considers most likely.
+>
+> ⚠ `§5`'s `C2` key-interface coupling stays **not a dependency edge** until R1
+> returns yes. `§6`'s do-not-reopen list is unchanged.
 
 ## 1. The operator ruling, verbatim
 
