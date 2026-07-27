@@ -1383,29 +1383,15 @@ fn select_region_by_tag(
     tag: cranelift_codegen::ir::Value,
     plan: &crate::boundary_value::BoundaryEmissionPlan,
 ) -> cranelift_codegen::ir::Value {
-    let known = tag_in_set(b, tag, plan.tags().admitted());
-    let closed = b.create_block();
-    let unknown = b.create_block();
-    b.ins().brif(known, closed, &[], unknown, &[]);
-
-    b.switch_to_block(unknown);
-    let err = b.ins().iconst(types::I64, BOUNDARY_ERR_TAG);
-    b.ins().return_(&[err]);
-
-    b.switch_to_block(closed);
-    // ⛔ An immediate has no node to allocate. `make_immediate` is its
-    // constructor, and conflating the two would mint a word whose payload is
-    // read as a node index.
-    let is_handle = tag_in_set(b, tag, plan.tags().handle());
-    let handle = b.create_block();
-    let immediate = b.create_block();
-    b.ins().brif(is_handle, handle, &[], immediate, &[]);
-
-    b.switch_to_block(immediate);
-    let err = b.ins().iconst(types::I64, BOUNDARY_ERR_SHAPE);
-    b.ins().return_(&[err]);
-
-    b.switch_to_block(handle);
+    // ⛔ **Recognition (`-1`) and shape (`-2`) MOVED to `define_alloc`'s ordered
+    // prologue** — this is the sole caller, and leaving copies here would make
+    // them unreachable branches. An unreachable fail-closed branch is not a
+    // fail-closed branch, and the two checks are now part of a sequence whose
+    // order is load-bearing (recognize -> shape -> pair -> tombstone -> admit),
+    // which cannot be expressed with two of its steps buried in this helper.
+    //
+    // ⇒ By the time control reaches here the tag is recognized, handle-shaped,
+    // compatible with its class, and not a retired lane.
     let selected = b.create_block();
     b.append_block_param(selected, ptr);
     select_region_by_owner_band(b, ptr, arena, tag, selected, plan);
@@ -1551,6 +1537,102 @@ fn define_alloc<M: Module>(
         // ⛔ Do not "simplify" this by adding the pair to the plan's relation:
         // that is the admitted set, and admitting it restores the durable lane
         // `D5` removes.
+        //
+        // ⚠⚠ **THE ORDER BELOW IS THE RULING'S AND IS CONSTRAINED FROM BOTH
+        // SIDES.** I got it wrong once in each direction, so both constraints
+        // are written down rather than left to be re-derived:
+        //
+        //   * recognition must come BEFORE the pair check — `select_region_by_tag`
+        //     rejects an unadmitted tag with `BOUNDARY_ERR_TAG`, so a retired tag
+        //     that is not recognized here never reaches the relation at all and
+        //     `PersistentClosure + Bool` reports `-1` instead of `-8`;
+        //   * the tombstone must come AFTER the pair check — checking it first
+        //     works for the retired pair but leaves a genuinely unknown tag
+        //     reaching the relation, and an unknown tag must keep reporting
+        //     `-1`, not `-8`.
+
+        // ── STEP 1 — RECOGNIZE the vocabulary, tombstone names included ──────
+        //
+        // ⭐ Recognition is strictly wider than admission and that is the whole
+        // point: a name is kept so a refusal can cite it.
+        let admitted_known = tag_in_set(&mut b, tag, plan.tags().admitted());
+        let mut known = admitted_known;
+        for (retired_tag, _) in crate::boundary_value::BOUNDARY_RETIRED_LANES {
+            let hit = b.ins().icmp_imm(IntCC::Equal, tag, *retired_tag as i64);
+            known = b.ins().bor(known, hit);
+        }
+        let recognized = b.create_block();
+        let unrecognized = b.create_block();
+        b.ins().brif(known, recognized, &[], unrecognized, &[]);
+
+        b.switch_to_block(unrecognized);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_TAG);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(recognized);
+
+        // ── STEP 1b — SHAPE: an immediate has no node to allocate ────────────
+        //
+        // ⚠ **Measured constraint, not a guessed one.** This must sit *between*
+        // recognition and the pair check. `make_immediate` is an immediate's
+        // constructor, and conflating the two would mint a word whose payload
+        // is read as a node index. Putting the relation check first instead
+        // reported `BOUNDARY_ERR_RELATION` for `ImmediateBool` — immediates
+        // hold no rows in the handle relation, so an empty mask looks exactly
+        // like an illegal pair. ⛔ `-2` and `-8` are different findings and the
+        // control that told me so was already there.
+        //
+        // A retired lane is handle-shaped: it names a node that simply may no
+        // longer be allocated.
+        let admitted_handle = tag_in_set(&mut b, tag, plan.tags().handle());
+        let mut handle_shaped = admitted_handle;
+        for (retired_tag, _) in crate::boundary_value::BOUNDARY_RETIRED_LANES {
+            let hit = b.ins().icmp_imm(IntCC::Equal, tag, *retired_tag as i64);
+            handle_shaped = b.ins().bor(handle_shaped, hit);
+        }
+        let shaped = b.create_block();
+        let immediate = b.create_block();
+        b.ins().brif(handle_shaped, shaped, &[], immediate, &[]);
+
+        b.switch_to_block(immediate);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_SHAPE);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(shaped);
+
+        // ── STEP 2 — the (tag, class) PAIR, over admitted ∪ retired ──────────
+        //
+        // ⛔ This replaces the relation check that used to sit after region
+        // selection. It is not duplicated there: a check downstream of this one
+        // could never fire, and a control that cannot fail is not a control.
+        let mut mask = relation_mask(&mut b, tag, plan);
+        for (retired_tag, retired_class) in crate::boundary_value::BOUNDARY_RETIRED_LANES {
+            let row = b.ins().iconst(types::I64, 1i64 << (*retired_class as u64));
+            let hit = b.ins().icmp_imm(IntCC::Equal, tag, *retired_tag as i64);
+            let widened = b.ins().bor(mask, row);
+            mask = b.ins().select(hit, widened, mask);
+        }
+        let one = one_i64(&mut b);
+        let bit = b.ins().ishl(one, class);
+        let compatible = b.ins().band(mask, bit);
+        let related = b.ins().icmp_imm(IntCC::NotEqual, compatible, 0);
+        let paired = b.create_block();
+        let unrelated = b.create_block();
+        b.ins().brif(related, paired, &[], unrelated, &[]);
+
+        b.switch_to_block(unrelated);
+        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_RELATION);
+        b.ins().return_(&[err]);
+
+        b.switch_to_block(paired);
+
+        // ── STEP 3 — a COMPATIBLE pair that names a retired lane ─────────────
+        //
+        // ⚠ Reached only for well-formed pairs, which is what makes `-12` mean
+        // *"lawful word, retired capability"* rather than *"malformed input"*.
+        // Ahead of region selection, the seal guard and every write, per the
+        // ruling's "before allocation, owner/region lookup, CFG construction,
+        // or invocation".
         for (retired_tag, retired_class) in crate::boundary_value::BOUNDARY_RETIRED_LANES {
             let tag_hit = b.ins().icmp_imm(IntCC::Equal, tag, *retired_tag as i64);
             let class_hit = b.ins().icmp_imm(IntCC::Equal, class, *retired_class as i64);
@@ -1566,34 +1648,27 @@ fn define_alloc<M: Module>(
             b.switch_to_block(live);
         }
 
+        // ── STEP 4 — the unchanged admitted path ─────────────────────────────
         let region = select_region_by_tag(&mut b, ptr, arena, tag, plan);
         // The eleventh writer: `alloc` takes no word, so it never reaches
         // `mutable_guard` and needs the seal check on its own path.
         seal_guard(&mut b, region);
 
-        // ── ⛔ the RELATION, not the two sets ────────────────────────────────
+        // ⛔ **The `(tag, class)` relation check MOVED to step 2 above** — it is
+        // not missing and it is deliberately not duplicated here.
         //
         // Both sets are closed and their product still contains pairs no
-        // disposition can produce — `PersistentClosure + HostResult`,
-        // `InvocationHostResult + Constructor`. Minting one succeeds and then
+        // disposition can produce (`PersistentClosure + HostResult`,
+        // `InvocationHostResult + Constructor`); minting one succeeds and then
         // fails much later at an unrelated projection, reporting the wrong
-        // defect in the wrong place. The mask comes from the plan's
-        // partition-derived relation, so the emitted check cannot say something
-        // the authority does not.
-        let mask = relation_mask(&mut b, tag, plan);
-        let one = one_i64(&mut b);
-        let bit = b.ins().ishl(one, class);
-        let admitted = b.ins().band(mask, bit);
-        let related = b.ins().icmp_imm(IntCC::NotEqual, admitted, 0);
-        let lawful = b.create_block();
-        let unrelated = b.create_block();
-        b.ins().brif(related, lawful, &[], unrelated, &[]);
-
-        b.switch_to_block(unrelated);
-        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_RELATION);
-        b.ins().return_(&[err]);
-
-        b.switch_to_block(lawful);
+        // defect in the wrong place. That is unchanged — only the position is.
+        //
+        // ⚠ It had to move **ahead of region selection** so a *recognized but
+        // unadmitted* tag reaches it at all: `select_region_by_tag` returns
+        // `BOUNDARY_ERR_TAG` for anything outside the admitted set, which
+        // short-circuited the pair diagnostic for the retired lane. ⛔ Leaving a
+        // second copy here would be a branch that can never be taken, and an
+        // unreachable fail-closed branch is not a fail-closed branch.
 
         // ── node capacity ───────────────────────────────────────────────────
         let count = b
