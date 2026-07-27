@@ -1,7 +1,7 @@
 ---
 id: ABI-S3
 title: "monotonic clocks, sleep/deadlines, and secure kernel entropy"
-status: ready
+status: merged
 owner: runtime
 size: L
 gate: none
@@ -10,6 +10,33 @@ blocks: [PX12]
 github: null
 origin: docs/program/10-linux-abi-completion.md §4 (the ABI-completion program); node filed by the Steward 2026-07-25 on the operator's directive to frame the remaining program. Agents cannot create tracked work (COORDINATION §2).
 ---
+
+> ## ✅ MERGED 2026-07-27 — `origin/main = 312a22dd`, PR #1073
+>
+> Candidate `e60ab3645f3a03719af1aeec13b7300d95030eb8`, published unchanged.
+> **CI checks passed** and the currency checker is green on `origin/main` — the
+> full-workspace / `--locked` / conformance gate, which only ever runs there.
+> Landed content verified by **blob identity** (`ken-verify/src/host.rs`
+> `8555aab2`, `ken-host/src/effect_v1.rs` `374356f3`,
+> `wp/ABI-S3-report.md` `4fefd09a`), each with a discriminating pre-merge control.
+>
+> Decision `dec_7yh8pk6w77bm8` read `resolved` fresh from the object
+> (`resolved_by=agt_37reqftfe6g00`, 07:00:57Z) before publishing.
+>
+> ⭐ **Two QA blocks, and the second found a production defect.**
+> `decode_deadline` read `args.first()`, so a forbidden cancellation field on the
+> surface `Deadline` was **discarded during decoding** — upstream of every control
+> that existed, all of which stayed green. The decisive artifact is the *contrast*:
+> the new elaborated-telescope control fails while the host request triad stays
+> green. ⚠ `SleepUntil`'s and `RandomBytes`' operand reads had the identical
+> `first()` shape, so the repair was made **as a class**, wider than the block.
+>
+> ⚠ **Root cause worth carrying:** the governing frame was amended on
+> `origin/main` after the branch was cut, and the branch's own copy read as
+> complete and self-consistent — no conflict, no error, no signal. Bind a frame
+> **by blob from `origin/main`**, never by the worktree path.
+>
+> ⛔ Per operator direction (2026-07-27), no retro is owed and none was collected.
 
 > ## ✅ FRAMED AND RELEASABLE — 2026-07-27
 >
