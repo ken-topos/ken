@@ -3,7 +3,7 @@ id: ABI-S3
 title: "monotonic clocks, sleep/deadlines, and secure kernel entropy"
 status: ready
 owner: runtime
-size: M
+size: L
 gate: none
 depends_on: []
 blocks: [PX12]

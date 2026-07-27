@@ -86,6 +86,40 @@ checklist*, so it is silent — this one surfaced only because the frame said th
 list was a checklist rather than a bound, and Runtime treated it as an in-scope
 expansion instead of a stop.
 
+### ⭐⭐ A THIRD site — same defect, in a direction the fix above does NOT cover
+
+**`crates/ken-runtime/.../prelude.rs` is in the obligation surface and was
+structurally invisible to my instrument** (`runtime-implementer`,
+`evt_14xf98y408sm0`). It declares the **language-level** effect vocabulary —
+`ConsoleOp`, `ClockOp`, `AmbientOp`, `clock_resp` — and it spells the operation
+`WallNow`, never `ClockWallNow`. ⇒ **A grep for the Rust identity has zero hits
+in the one file that defines the surface algebra a new op must extend.**
+
+⛔ **Note carefully how this differs from the `.catalog` miss, because the
+correction above would not have caught it.** The `.catalog` file was one the
+grep *could* have seen and an extension filter excluded; `prelude.rs` is a
+`.rs` file the extension-free glob **would** have included and the search term
+**still** could not reach. Dropping `--include=*.rs` fixes the first and does
+nothing for the second.
+
+⇒ ⭐ **The general form: a census keyed on one plane's spelling of a concept is
+blind to every other plane that names the same concept differently.** The Rust
+enum says `ClockWallNow`, the catalog says `operation|ClockWallNow|…`, the
+surface algebra says `WallNow` inside `ClockOp`, and the count pins say `22`
+and name nothing at all. **Four spellings, one obligation.** ⇒ Enumerate the
+**planes** a new op crosses — ABI enum, codegen catalog, wire, surface algebra,
+count/collection pins, elaborator export — and search each in **its own**
+vocabulary. ⛔ Do not sweep one term across all of them and read the result as
+coverage.
+
+⚠ **This is why the ring derived the obligation from the compiler instead**, by
+adding a throwaway variant and patching errors to fixpoint. That method has no
+vocabulary at all, which is exactly its advantage — and its own limit is
+recorded in deliverable 5: `ken-interp` has **zero** compiler-policed sites, so
+a compiler census cannot see what a wildcard arm silently absorbs. **Neither
+instrument is complete; they fail in different directions, which is the reason
+to run both.**
+
 ## The design judgments, front-loaded (§2c) — do not re-litigate these
 
 ### D1 — monotonic is a **separate operation**, never a mode of `ClockWallNow`
@@ -166,6 +200,41 @@ The two-state availability model has no provisional value, and the code says
 membership in a promotion set *"is a plan, not evidence."* Promotion is a
 separate, evidence-bearing act (that is what Track A is for). ⛔ Do not add any
 new op to `PX5_PLANNED_NATIVE_TARGETS` in this WP.
+
+## ⭐ SIZING CALL — the node is **L**, and it is NOT re-sliced. Steward, 2026-07-27
+
+`runtime-implementer` flagged that `F-3`/Option A *"materially exceeds Size M"*
+and asked for a Steward size call (`evt_39mcgsvjqcqk`). **Answering it: the node
+moves M → L, the scope stays whole, and nothing is deferred out.**
+
+**What the Architect's Option A ruling (`dec_5vbz7tvc5dcdw`) actually costs**, as
+the ring measured it: a new opcode family byte `0x05` (the landed families are
+`0x01` console, `0x02` clock, `0x03` fs, `0x04` resource, and entropy belongs to
+none); `EntropyOp` + `entropy_resp` + `EntropyIO` in the prelude; an `Entropy`
+effect label; an `entropy_family` spine field in both spine structs; and the
+ambient elimination in `erasure.rs` going from a two-arm `InL`→console /
+`InR`→clock match to a three-way one.
+
+**Why the answer is "grow it", not "slice it":**
+
+1. ⛔ **The topology change has no seam that leaves the tree consistent.**
+   `AmbientOp` is the *closed* ambient operation sum; a slice that lands the
+   family byte and the prelude type without the three-way elimination ships a
+   coproduct member nothing eliminates. **That is verbatim the failure this
+   fleet spent five days on in `RT-NATIVE-FNSPLIT`** — a representation whose
+   consumer is the next node's problem. ⛔ Not again, and not for a saved letter
+   of size.
+2. **Option A is ruled.** Re-slicing to avoid the topology would be re-litigating
+   `F-3` by the back door — the Architect rejected Option B precisely because it
+   creates a second ambient semantic lane.
+3. **The cost is bounded and already surveyed.** The list above is a closed
+   enumeration made by the compiler, not an estimate.
+
+⚠ **Size is a coordination signal, not an authorization limit.** The M was my
+estimate before three census findings and one topology ruling landed; ⭐ **an
+estimate that has been overtaken is a stale input, and correcting it is cheaper
+than defending it.** No AC changes, no deliverable is dropped, and the ring does
+not stop.
 
 ## Deliverables
 
