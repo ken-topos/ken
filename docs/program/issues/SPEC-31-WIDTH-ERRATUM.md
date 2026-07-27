@@ -1,13 +1,13 @@
 ---
 id: SPEC-31-WIDTH-ERRATUM
 title: "spec 31-lexical mandates a 96-column canonical width while the formatting conformance suite asserts 88 in 18 places and cites 31 §1d as its source — rule the exact value and reconcile"
-status: active
+status: merged
 owner: spec
 size: S
 gate: none
 depends_on: []
 blocks: []
-github: null
+github: https://github.com/swe-toolkit/ken/pull/1054
 origin: Found by conformance-validator during the SPEC-ALIGN-A1 census, reported evt_3jpxb2qhkx2d0 (2026-07-26), Steward-verified at exact origin/main=cf8924a8. Explicitly carved OUT of SPEC-ALIGN-A1: it is not an over-specification candidate and A1 is forbidden from moving a conformance row. Sibling of the closed SPEC-38-ERRATUM (spec 38-ffi-io self-contradicts on the transfer bound). Steward-filed per COORDINATION §2.
 ---
 
@@ -94,14 +94,35 @@ flat and the `97` arm breaks.** A pair where both arms break, or both stay flat,
 is not a boundary pin. ⛔ `18` occurrences changed is not evidence; a passing
 discriminating pair is.
 
-## Sequencing — ✅ PRECONDITION DISCHARGED, RELEASED 2026-07-27
+## Sequencing — ✅ MERGED 2026-07-27 (PR #1054), retros pending
 
 ⛔ **Not concurrent with `SPEC-ALIGN-A1`** — same ring (spec enclave). ✅ **A1 is
 `merged`** (PR #1028, `origin/main = 4c2d9529`, verified on `main`), so the
-condition *"releases when A1 closes"* is met and **this node is released to the
-spec enclave** — kickoff `evt_629qvns1n7j7d`, at `origin/main = a1e29284`.
+condition *"releases when A1 closes"* was met and this node was released to the
+spec enclave — kickoff `evt_629qvns1n7j7d`, at `origin/main = a1e29284`.
 ⚠ A1 was forbidden from touching it: A1 may not move a conformance row, which is
 why this was carved out in the first place.
+
+✅ **Landed:** PR **#1054**, `origin/main = c5281fc3` (was `ace40683`), on merge
+Decision `dec_7k38kgcqs9prm` (`resolved`) with fresh no-carry approvals on exact
+`9ee28592` — conformance-validator `evt_4wpm2knae8bnw`, Architect
+`evt_371t39vahnj0t`. Verified by blob identity, not ancestry: the one path's blob
+on `main` is `b04ee83c`, equal to the candidate's, and the pre-merge base held a
+different blob (`ca116384`) as the control. Scope on `main` is that single path,
+`+112/-33`. Published **without `--doc-only`** because it touches
+`conformance/`, so the full CI gate ran.
+
+⚠ **Not closed until retros are in** — called at `evt_q75v9dhj6st7`.
+
+⭐ **The carry from the blocked first candidate `a0c0be88`, which is the reusable
+part of this node:** its author and the conformance-validator each measured
+rigorously, agreed, and were both wrong, because both measured the width of the
+**extracted group spelling** while `31 §1d` defines the limit on the **rendered
+line** (indentation included). §14's second reviewer only pays for itself when it
+re-derives the **operand** from the contract rather than the arithmetic from the
+candidate's own table. The tell was one sentence in the candidate: *"the wrapper
+is excluded from the measurement"* ⇒ **when a measurement declares what it
+excludes, check whether the contract's object includes it.**
 
 ## Scope
 
