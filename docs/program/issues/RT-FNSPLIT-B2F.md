@@ -5,11 +5,54 @@ status: ready
 owner: runtime
 size: L
 gate: none
-depends_on: [RT-FNSPLIT-B2A-S, RT-FNSPLIT-B2O, RT-FNSPLIT-B2R, RT-FNSPLIT-B2V, RT-FNSPLIT-B2E]
+depends_on: [RT-FNSPLIT-B2A-S, RT-FNSPLIT-B2O, RT-FNSPLIT-B2R, RT-FNSPLIT-B2V, RT-FNSPLIT-C1]
 blocks: [RT-SCALE-B]
 github: null
 origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answering Steward Q1-Q3 on merits (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the D1/D2 half of the retired RT-FNSPLIT-B2A frame. RE-SLICED 2026-07-25 by Architect ruling evt_842spc7t6js1 on hard-stop #9 (research advisory evt_531c4k52mshrn) plus addendum evt_t4fykh52ncb: this node is NOT buildable as one unit and now depends on two inert prerequisites. Steward-filed; Steward owns the replacement frame and AC/control placement.
 ---
+
+> ## ⛔ AMENDED 2026-07-27 — PREREQUISITE IS NOW `C1`, AND ONE RESIDUAL IS FALSE
+>
+> **Ruling `evt_7ay6s5s79awz8`, Decision `dec_45aa2gngjc79z` — resolved,
+> verified from the object.** Read this before the `#11` block below it.
+>
+> ### 1. ✅ This node's PURPOSE and ATOMICITY are UNCHANGED
+>
+> Per-static-origin Cranelift target functions, atomic with switch-over,
+> equivalence evidence, old-path removal. ⭐ **It was ruled that hard-stop `#11`
+> is independent of the store/sharing contract**, so `SPEC-STORE-SPLIT` §7's
+> instruction to retire this node — which rested on the causal claim the ruling
+> found **over-broad** — does not apply to it. `RT-FNSPLIT-C1.md` carries the
+> full reasoning for retiring `B2E` and keeping this.
+>
+> ### 2. ⛔ THE PREREQUISITE CHANGED — `B2E` is RETIRED
+>
+> **Sequence is now `B2O` → `B2R` → `B2V` → `C1` → `B2F`.** The release gate is
+> the **closed `C1` artifact**, not merely `C1` being merged.
+>
+> ### 3. ⛔ ONE RESIDUAL STATED BELOW IS NOW FALSE — do not build it
+>
+> `B2E`'s ruling `R1` left this node exactly one residual: *"`B2F` **activates
+> it** — loads the resolved **store-local** ID from the binding/table."*
+> ⛔ **There is no store-local ID to load.** Constructor and field identity now
+> come from **artifact/module semantic authority shared by producer and
+> consumer** (`C1` `D1`/`D2`), and `C1` lands that authority **already
+> executing** — so this node's residual is not "activate a prepared binding" but
+> "route production traffic through an edge that already runs."
+>
+> ⚠ **`C1` is NOT inert in the old sense.** It lands a real, executable
+> producer → validator → eliminator edge. What it defers is only the
+> **production function routing switch**, which is this node. ⛔ Do not plan
+> against a `C1` that shipped a representation with the consumers deferred —
+> the ruling forbids exactly that shape.
+>
+> ### 4. Count and cadence
+>
+> **Hard-stop count of record stays `#11`** — the numbering does not reset and
+> the re-put did not add a stop. The armed research-consult and symptom-inventory
+> lines live in [`RT-NATIVE-FNSPLIT.md`](RT-NATIVE-FNSPLIT.md); ⛔ read them
+> there, not from memory.
+
 
 > ## ⛔ HELD AT HARD-STOP #11 — RULED: `RT-FNSPLIT-B2E` IS INSERTED BEFORE THIS NODE
 >

@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2E
 title: "semantic boundary-value elimination — an opaque boundary inhabitant plus a mechanically closed operation-by-class disposition ledger over every reachable Lowered consumer, inert"
-status: ready
+status: closed
 owner: runtime
 size: L
 gate: none
@@ -10,6 +10,42 @@ blocks: [RT-FNSPLIT-B2F]
 github: null
 origin: Architect ruling evt_35p5ancbdmzr7 on hard-stop #11 (2026-07-26), Decision dec_43h1rggqxcf1a — resolved, resolved_by=agt_37reqftfe6g00, verified from the object. Stop raised by runtime-implementer evt_27yytvndqfxcg with falsifier evidence d1abbc79 (origin ref preserved/rt-fnsplit-b2f-hardstop-11-evidence). Steward-filed; Steward owns the frame and AC/control placement.
 ---
+
+> ## ⛔⛔ RETIRED 2026-07-27 — SUPERSEDED BY `RT-FNSPLIT-C1`
+>
+> ⛔ **Do not build this node. Do not release it. Do not read the contract below
+> as live.** Its successor is
+> [`RT-FNSPLIT-C1`](RT-FNSPLIT-C1.md), frame
+> [`RT-FNSPLIT-C1-operational-carrier.md`][f] under `docs/program/wp/`.
+>
+> **Two premises of this node were removed by the `#11` re-put ruling**
+> (`evt_7ay6s5s79awz8`, Decision `dec_45aa2gngjc79z` resolved), and both were
+> structural rather than wording — which is why this is a retirement and not an
+> edit:
+>
+> 1. ⛔ **"a closed LEDGER, not three eliminators" + INERT.** The ruling's
+>    inertness rule states that *"a representation-only artifact with the
+>    semantic consumers deferred **does not discharge `#11`**."* The three
+>    executable eliminations are now the node; the ledger is one deliverable
+>    inside it (`C1` `D5`).
+> 2. ⛔ **Name authority through store-local interning** (ruling `R1` below).
+>    Identity now comes from **artifact/module semantic authority shared by
+>    producer and consumer** — not persistent-store identity. `SemanticPlane`'s
+>    `CaseConstructor` / `ProjectField` / `ConstructorSymbol` / `RecordFieldName`
+>    atoms are that authority.
+>
+> ⭐ **`R1`'s MEASUREMENT survives and is worth keeping** — there is no
+> artifact-static `u64` name ID sitting ready to be used. What died is its
+> conclusion, that the store should supply one. `C1`'s frame §2c measures where
+> the identity actually lives.
+>
+> ⚠ **`R3`'s "expose the capability, not the plane internals" survives intact**
+> and is carried into `C1` `D1`; it was never store-dependent.
+>
+> ⛔ **Everything below this banner is retained as the gate record only.** It is
+> the reasoning that produced hard-stop `#11`'s acceptance and the evidence
+> chain, both of which stay citable. It is **not** an instruction to anyone.
+
 
 > ## ⭐ WHY THIS NODE EXISTS — `B2V` shipped a producer and no consumer
 >
@@ -326,3 +362,5 @@ still closes the ledger over the smaller surface and reports green.
 three Runtime seats unconditionally, verify every drop, and `git cat-file -e` every
 object the kickoff names at the base it names. `B2F` was kicked once against a
 frame that did not mention `B2V`, and the re-anchor cost a publish.
+
+[f]: ../wp/RT-FNSPLIT-C1-operational-carrier.md

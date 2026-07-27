@@ -115,6 +115,27 @@ store-identity/adoption substrate from the prerequisite contract.** ⛔ The
 re-slice and its transcription are the Steward's; the Architect ruled the
 mechanism, not a work plan.
 
+> ### ✅ DISCHARGED 2026-07-27 — the re-cut is authored
+>
+> | | |
+> |---|---|
+> | **new prerequisite** | [`RT-FNSPLIT-C1`](RT-FNSPLIT-C1.md) — the operational carrier plus its three **executable** eliminators, grounded on artifact-static semantic identity. Frame: [`wp/RT-FNSPLIT-C1-operational-carrier.md`](../wp/RT-FNSPLIT-C1-operational-carrier.md), `ready`. |
+> | **retired** | [`RT-FNSPLIT-B2E`](RT-FNSPLIT-B2E.md) → `closed`. Both its premises died: the *inert closed-ledger* contract (killed by the inertness rule) and its *store-local* name authority (killed by lever requirement 3). |
+> | **amended, NOT retired** | [`RT-FNSPLIT-B2F`](RT-FNSPLIT-B2F.md) — purpose and atomicity unchanged; dependency `B2E` → `C1`; the `R1` residual *"loads the resolved store-local ID"* is now **false**. |
+> | **sequence** | `B2O` → `B2R` → `B2V` → **`C1`** → `B2F` |
+>
+> ⭐ **Why `B2F` survives while `B2E` does not:** `SPEC-STORE-SPLIT` §7 directed
+> that both be retired, on the ground that they are *"built around the constraint
+> being removed."* The re-put put that ground under test and the Architect ruled
+> it **over-broad** — the conflation *enlarged* the old prerequisite, it did not
+> *cause* the template requirement. `B2E`'s contract genuinely descended from the
+> removed substrate; `B2F`'s functionization purpose never touched it.
+> Full reasoning in `RT-FNSPLIT-C1.md`.
+>
+> ⛔ **`SPEC-STORE-SPLIT` §7 items 3, 4 and 5 are unaffected by this and remain
+> owed** — the `SPEC-ALIGN-A1` stop-list re-read, the `e1b540e2` salvage
+> decision, and (item 5, ✅ done) the `RT-VALUE-TOTALITY` P2 frame.
+
 ## ⭐⭐ Requirements (`RQ`) — retroactive, per `docs/program/15-*.md`
 
 > **This program is the RETROFIT.** Operator, 2026-07-26: *"we should establish
@@ -130,8 +151,8 @@ mechanism, not a work plan.
 |---|---|---|---|---|
 | **`RT-NATIVE-FNSPLIT.RQ-1`** | functional | A cross-owner call transfers a boundary value whose **representation is a tagged word**, not a compile-time template. | `conformance/runtime/values/README.md` (value model), `conformance/runtime/seed-runtime.md` | ✅ `B2V.AC-*` (merged) |
 | **`RT-NATIVE-FNSPLIT.RQ-2`** | functional | Ownership and region/lifetime context of a transferred value is **declared and obeyed** across the boundary. | `conformance/runtime/capacity/seed-capacity.md` (region/reclamation), `conformance/runtime/values/README.md` | ✅ `B2R.AC-*` (merged) |
-| **`RT-NATIVE-FNSPLIT.RQ-3`** | functional | ⛔ **Boundary values are ELIMINATED — every semantic consumer reachable from a transferred value disposes of it, in PRODUCTION traffic.** | `conformance/runtime/evaluation/seed-evaluation.md`, `conformance/runtime/values/README.md` | ▶ `B2E` prepares the ledger + binding; ⛔ **`B2F` is the only node that can discharge it** |
-| **`RT-NATIVE-FNSPLIT.RQ-4`** | functional | Name identity is **one authority**: a single artifact-static name reference resolved through the producer's store-local interning. | `none` — no seed case asserts name-authority singularity. ⚠ **This absence is itself a finding**; see below. | ▶ `B2E.AC-E5` (in flight, per `RULING R1`) |
+| **`RT-NATIVE-FNSPLIT.RQ-3`** | functional | ⛔ **Boundary values are ELIMINATED — every semantic consumer reachable from a transferred value disposes of it, in PRODUCTION traffic.** | `conformance/runtime/evaluation/seed-evaluation.md`, `conformance/runtime/values/README.md` | ▶ **`C1` lands the executable elimination edge** (`B2E` retired); ⛔ **`B2F` is the only node that can discharge it in PRODUCTION traffic** |
+| **`RT-NATIVE-FNSPLIT.RQ-4`** | functional | ⛔ **REWRITTEN 2026-07-27.** Name identity is **one authority**: constructor and field identity come from **artifact/module semantic authority shared by producer and consumer** — ⛔ **not** persistent-store identity. (Was: *"resolved through the producer's store-local interning"* — retired with `B2E`'s `R1`.) | `none` — no seed case asserts name-authority singularity. ⚠ **This absence is itself a finding**; see below. | ▶ `C1.D2` + `AC-C2` (the two-sided perturbation control) |
 | **`RT-NATIVE-FNSPLIT.RQ-5`** | **non-functional** | Cross-owner call overhead does not regress against the pre-split baseline. | `none` — a complexity/perf contract, not a definitional row | ⛔ **UNREFERENCED — no AC in this program claims it** |
 | **`RT-NATIVE-FNSPLIT.RQ-6`** | **non-functional** | Compiled-once function bodies are created once per unit, not per call site. | `none` — an NFR | ▶ `B2F` (its atomicity clause) |
 
@@ -372,6 +393,12 @@ this line wins.** Re-read this line on every hard-stop.
 >             seats and the Architect said so independently.
 >          ⛔ This entry now takes FOUR nodes, not one:
 >             RT-FNSPLIT-B2O -> RT-FNSPLIT-B2R -> RT-FNSPLIT-B2V -> B2F.
+>          ⛔ RE-CUT 2026-07-27: the 4th node is RT-FNSPLIT-C1, not B2E.
+>             B2E is RETIRED (closed); C1 replaces it and lands an EXECUTABLE
+>             producer -> validator -> eliminator edge rather than an inert
+>             ledger. Sequence: B2O -> B2R -> B2V -> C1 -> B2F. The entry stays
+>             OPEN; the count of record stays 3 and the next predicate check
+>             stays the 6th -- the re-put added no hard-stop.
 >          ⭐ B2V was inserted 2026-07-25 by Architect ruling evt_28cnmxf6ncghn
 >             on hard-stop #10. ⛔ #10 IS NOT A FOURTH SYMPTOM-INVENTORY ENTRY —
 >             the ruling classified it explicitly as ANOTHER MISSING PREREQUISITE
