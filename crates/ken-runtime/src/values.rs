@@ -2,6 +2,16 @@
 //!
 //! Scalars are immediate (never interned). Compounds are content-addressed.
 //! `Unknown` is the third truth value for partially-verified programs.
+//!
+//! ⛔ **This is the CANONICAL carrier, and it is closure-free by construction.**
+//! Content-addressing is total over it *because* an ordinary closure cannot be
+//! built here at all — `41 §2.1` grants closures no structural equality,
+//! ordering, canonical hash, slot identity, or persistence, so a carrier that
+//! admits canonical encoding, hashing, interning and slot identity must not
+//! admit them. Ordinary closures live on the *operational* carrier
+//! (`ir::RuntimeValue::ClosureRef`) and reach this one only through the checked,
+//! fail-closed projection in [`crate::canonical`], which proves a whole graph
+//! closure-free **before** any byte, hash, or slot exists.
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -14,12 +24,110 @@ use std::collections::BTreeSet;
 /// same hazard and the same treatment.
 ///
 /// ⚠ The recursive **child positions** of this enum (`args`, `fields`,
-/// `elements`, `captured`, and `Map`'s entry values) are governed by the closed
-/// allow-list in `canonical::child_positions`. Giving one of them reference /
-/// handle / arena / slot / index indirection, or interior mutation, **will not
-/// compile** — that is deliberate, and it is what keeps the unrepresentability
-/// of cycles on this carrier from silently lapsing.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// `elements`, and `Map`'s entry values) are governed by the closed allow-list
+/// in `canonical::child_positions`. Giving one of them reference / handle /
+/// arena / slot / index indirection, or interior mutation, **will not compile**
+/// — that is deliberate, and it is what keeps the unrepresentability of cycles
+/// on this carrier from silently lapsing.
+///
+/// ⛔ **`PartialEq`/`Eq`/`PartialOrd`/`Ord`/`Hash` are NOT derived, and that is
+/// `D3`.** They were, and they were **unsound** — independently of closures.
+/// Two `BigInt`s `{limbs: [5]}` and `{limbs: [5, 0]}` encode to *identical*
+/// canonical bytes (`minimal_limbs` strips trailing zero limbs) and compared
+/// **unequal** under the derive; two NFC-distinct spellings of one `String` did
+/// the same. ⇒ The derived relations **disagreed with canonical identity**,
+/// which is exactly what `AC-V8` forbids.
+///
+/// ⭐ Equality, order and hash are therefore exposed **only** on
+/// [`CanonicalWitness`], which *is* the canonical bytes. Agreement is
+/// **definitional** rather than asserted — there is no second definition of
+/// identity to keep in step — and comparison is **depth-total** because the
+/// bytes come from P1's iterative encoder and comparing a flat `Vec<u8>`
+/// recurses not at all (`AC-V12`).
+///
+/// # `AC-V4` — the forbidden capabilities are UNREACHABLE on this carrier
+///
+/// ⭐ **The claim is *reachability*, not the absence of a caller today**, so
+/// every control below must fail to **compile**. ⭐ And each pins the **trait
+/// implementation** rather than one operator spelling: a bound check
+/// `fn requires_eq<T: PartialEq>` cannot be evaded by writing `a.eq(b)`,
+/// `PartialEq::eq(a, b)`, or an inherent method, because the only way to make
+/// it compile is to supply the impl — which *is* the forbidden capability.
+///
+/// ⛔ **The `EXXXX` codes below are DOCUMENTATION, not a check — measured, not
+/// assumed.** Rewriting one block's `compile_fail,E0277` to `compile_fail,E0308`
+/// — a code that block cannot possibly produce — left the doc-test **green**,
+/// so rustdoc is not binding the annotation on this toolchain. They are kept
+/// because they tell a reader which error is expected, and flagged here because
+/// a fence that *looks* like a pin and is not one is worse than no fence.
+///
+/// ⇒ **MEASURED:** each block fails to compile, for some reason.
+/// **CLAIMED:** it fails *because the trait impl is absent*.
+/// **THE GAP:** closed by the **sibling**, not by the code annotation — the
+/// sibling shares every import, helper and constructor, so a malformed fixture
+/// reddens *it* instead of silently greening the negatives. The `Value::Closure`
+/// block additionally has a direct non-vacuity control: substituting a variant
+/// that *does* exist makes it compile, and the doc-test then fails.
+///
+/// ⛔ **An ordinary closure cannot even be NAMED here (`D1`)** — the variant
+/// does not exist, so there is no value for a comparison to be about:
+///
+/// ```compile_fail,E0599
+/// use ken_runtime::Value;
+/// let _closure = Value::Closure { captured: vec![Value::Bool(true)] };
+/// ```
+///
+/// **No structural equality (`D3`):**
+///
+/// ```compile_fail,E0277
+/// use ken_runtime::Value;
+/// fn requires_eq<T: PartialEq>(_: &T) {}
+/// let v = Value::Record { type_id: 1, fields: vec![Value::Bool(true)] };
+/// requires_eq(&v);
+/// ```
+///
+/// **No ordering (`D3`):**
+///
+/// ```compile_fail,E0277
+/// use ken_runtime::Value;
+/// fn requires_ord<T: Ord>(_: &T) {}
+/// let v = Value::Record { type_id: 1, fields: vec![Value::Bool(true)] };
+/// requires_ord(&v);
+/// ```
+///
+/// **No canonical hash (`D3`):**
+///
+/// ```compile_fail,E0277
+/// use ken_runtime::Value;
+/// fn requires_hash<T: std::hash::Hash>(_: &T) {}
+/// let v = Value::Record { type_id: 1, fields: vec![Value::Bool(true)] };
+/// requires_hash(&v);
+/// ```
+///
+/// ⭐ **The sibling that MUST compile — without it, every block above is green
+/// whether it failed for the stated reason or because the fixture was
+/// malformed.** ⛔ A `compile_fail` block passes for *any* compilation error,
+/// including a mistyped path or a missing import, so a negative-only set of
+/// controls establishes nothing. This block has the same imports and the same
+/// construction; the only difference is that the subject of each bound check is
+/// the sealed witness. It also **runs**, so the capability is shown to be
+/// genuinely available rather than merely well-typed:
+///
+/// ```
+/// use ken_runtime::Value;
+/// use ken_runtime::canonical::CanonicalWitness;
+/// fn requires_eq<T: PartialEq>(_: &T) {}
+/// fn requires_ord<T: Ord>(_: &T) {}
+/// fn requires_hash<T: std::hash::Hash>(_: &T) {}
+/// let v = Value::Record { type_id: 1, fields: vec![Value::Bool(true)] };
+/// let w = CanonicalWitness::of(&v);
+/// requires_eq(&w);
+/// requires_ord(&w);
+/// requires_hash(&w);
+/// assert_eq!(w, CanonicalWitness::of(&v));
+/// assert_ne!(w, CanonicalWitness::of(&Value::Bool(true)));
+/// ```
+#[derive(Debug)]
 pub enum Value {
     // --- immediate scalars (§1, §5 table) ---
     Bool(bool),
@@ -83,11 +191,12 @@ pub enum Value {
         elem_type_id: u32,
         elements: BTreeSet<Vec<u8>>,
     },
-    /// Closure — code pointer + full canonical captured environment (design doc §1.9).
-    Closure {
-        code_id: u64,
-        captured: Vec<Value>, // in capture order; encoded inline (memcmp-exact)
-    },
+    // ⛔ **No `Closure` variant, and this absence is the deliverable.**
+    // `41 §2.1` forbids ordinary closures structural equality, ordering and
+    // canonical hashing, and a variant here would have granted all three the
+    // moment anything derived them. An ordinary closure is
+    // `ir::RuntimeValue::ClosureRef`; a future `FrozenClosure` /
+    // `StaticCallableRef` is a *separate explicit type*, never a re-added arm.
 
     // --- special (§6) ---
     /// Third truth value: the result of an open verification hole.
@@ -139,8 +248,7 @@ fn detach_children(value: &mut Value, out: &mut Vec<Value>) {
     match value {
         Value::Constructor { args: kids, .. }
         | Value::Record { fields: kids, .. }
-        | Value::Array { elements: kids, .. }
-        | Value::Closure { captured: kids, .. } => out.append(kids),
+        | Value::Array { elements: kids, .. } => out.append(kids),
 
         Value::Map { entries, .. } => out.extend(std::mem::take(entries).into_values()),
 
@@ -190,10 +298,6 @@ fn rebuild(proto: &Value, kids: Vec<Value>) -> Value {
         Value::Array { elem_type_id, .. } => Value::Array {
             elem_type_id: *elem_type_id,
             elements: kids,
-        },
-        Value::Closure { code_id, .. } => Value::Closure {
-            code_id: *code_id,
-            captured: kids,
         },
         // Keys are already-canonical bytes and are cloned flat; zipping against
         // `BTreeMap::keys()` is sound because the children were pushed in that
@@ -309,8 +413,7 @@ impl Clone for Value {
                 Job::Visit(value) => match value {
                     Value::Constructor { args: kids, .. }
                     | Value::Record { fields: kids, .. }
-                    | Value::Array { elements: kids, .. }
-                    | Value::Closure { captured: kids, .. } => {
+                    | Value::Array { elements: kids, .. } => {
                         jobs.push(Job::Finish {
                             proto: value,
                             children: kids.len(),

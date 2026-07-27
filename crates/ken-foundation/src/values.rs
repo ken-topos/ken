@@ -2,6 +2,15 @@
 //!
 //! This models the value kinds in `spec/40-runtime/41-values.md §1–2`
 //! at the level needed for benchmarking canonical encoding + intern.
+//!
+//! ⛔ **This model is closure-free, and deliberately so.** It previously
+//! carried a `Closure` variant with its own `0x09` canonical encoding, which
+//! made it a **second, contradictory answer** to the question
+//! `RT-VALUE-TOTALITY-P2` settles: `41 §2.1` gives ordinary closures no
+//! canonical encoding, no slot identity and no structural equality. A bench is
+//! still a **shipped public validation model**, and a reader had no way to tell
+//! which of the two answers binds — so the stale one is retired here rather
+//! than left for a follow-up.
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -61,13 +70,21 @@ pub enum Value {
         elem_type_id: u32,
         elements: BTreeSet<Vec<u8>>, // elements stored as canonical bytes for ordering
     },
-    Closure {
-        code_id: u64,
-        /// Captured environment — a record (fields in capture order).
-        /// Encoded inline (memcmp-exact), not via a hash digest, so the
-        /// "equal slot ⇒ structurally equal" invariant is total.
-        captured: Vec<Value>,
-    },
+    // ⛔ **No `Closure` variant**, and its doc comment is gone with it. That
+    // comment asserted the captured environment was encoded inline rather than
+    // as a digest, and concluded that an "equal slot implies structurally
+    // equal" invariant was therefore total — a statement of the retired
+    // contract, and the more misleading for being confident. `41 §2.1` gives
+    // ordinary closures no canonical encoding, no slot identity and no
+    // structural equality, so there is no invariant of that shape to be total.
+    //
+    // ⚠ Removed rather than annotated: an appended correction leaves the false
+    // sentence operative, and it is the sentence positioned to be believed.
+    //
+    // ⚠ Paraphrased rather than quoted, deliberately: `AC-V6`'s probe greps
+    // `crates/` for the retired phrasing, and a verbatim quotation inside the
+    // comment that *removes* it would keep the probe red. A deletion has a text
+    // surface that outlives the deletion.
 
     // --- special ---
     Unknown,

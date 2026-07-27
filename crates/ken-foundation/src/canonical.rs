@@ -23,7 +23,8 @@ mod tag {
     pub const ARRAY: u8 = 0x06;
     pub const MAP: u8 = 0x07;
     pub const SET: u8 = 0x08;
-    pub const CLOSURE: u8 = 0x09;
+    // ⛔ `0x09` was `CLOSURE`, and it is RETIRED rather than reused — the
+    // carrier has no closure variant to encode.
     pub const BIG_DECIMAL: u8 = 0x0A;
     // Immediates (0x10–0x1F) — encoded when appearing as sub-values within
     // compounds; never hashed directly since they are never interned.
@@ -160,15 +161,9 @@ impl Canonical for Value {
                     out.extend_from_slice(elem_bytes);
                 }
             }
-            Value::Closure { code_id, captured } => {
-                out.push(tag::CLOSURE);
-                write_u64_le(*code_id, out);
-                let arity = captured.len().min(65535) as u16;
-                out.extend_from_slice(&arity.to_le_bytes());
-                for val in captured {
-                    val.encode_canonical(out);
-                }
-            }
+            // ⛔ No closure arm: an ordinary closure has no canonical
+            // encoding, and equally no digest, pointer or ordinal standing in
+            // for one.
 
             // --- immediate scalars — encoded when sub-values of compounds ---
             Value::Bool(b) => {

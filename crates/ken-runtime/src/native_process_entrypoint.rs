@@ -337,6 +337,46 @@ fn flush_diagnostics(stderr: &mut impl Write) {
 
 #[cfg(test)]
 mod tests {
+
+    /// ⛔ **Closure-free structural comparison for test assertions.**
+    ///
+    /// `RuntimeValue` no longer implements `PartialEq` (`D2`): a blanket derive
+    /// would have granted ordinary-closure structural equality, which
+    /// `spec/40-runtime/41-values.md §2.1` denies. These assertions only ever
+    /// compare closure-free process-input values, so they compare the
+    /// **ground projection** — which keeps its derives precisely because it has
+    /// no closure arm.
+    ///
+    /// ⚠ Fail-closed: a `ClosureRef` anywhere in either operand yields `None`
+    /// and the assertion fails, rather than being silently skipped or answered.
+    fn ground_eq(a: &RuntimeValue, b: &RuntimeValue) -> bool {
+        fn ground(v: &RuntimeValue) -> Option<RuntimeGroundValue> {
+            Some(match v {
+                RuntimeValue::Bool(x) => RuntimeGroundValue::Bool(*x),
+                RuntimeValue::Int(x) => RuntimeGroundValue::Int(x.clone()),
+                RuntimeValue::Bytes(x) => RuntimeGroundValue::Bytes(x.clone()),
+                RuntimeValue::String(x) => RuntimeGroundValue::String(x.clone()),
+                RuntimeValue::Constructor { constructor, args } => {
+                    RuntimeGroundValue::Constructor {
+                        constructor: constructor.clone(),
+                        args: args.iter().map(ground).collect::<Option<Vec<_>>>()?,
+                    }
+                }
+                RuntimeValue::Record { fields } => RuntimeGroundValue::Record {
+                    fields: fields
+                        .iter()
+                        .map(|(n, v)| Some((n.clone(), ground(v)?)))
+                        .collect::<Option<Vec<_>>>()?,
+                },
+                // ⛔ A closure has no ground image and therefore no equality.
+                RuntimeValue::ClosureRef { .. } | RuntimeValue::Unknown => return None,
+            })
+        }
+        match (ground(a), ground(b)) {
+            (Some(x), Some(y)) => x == y,
+            _ => false,
+        }
+    }
     use super::*;
     use crate::{RuntimeTrapCode, RuntimeValue};
 
@@ -501,7 +541,7 @@ mod tests {
         let RuntimeValue::Constructor { args, .. } = arguments else {
             unreachable!()
         };
-        assert_eq!(args[0], RuntimeValue::Bytes(vec![0xff, b'a']));
+        assert!(ground_eq(&args[0], &RuntimeValue::Bytes(vec![0xff, b'a'])));
         let RuntimeValue::Constructor { args, .. } = environment else {
             unreachable!()
         };
@@ -513,8 +553,8 @@ mod tests {
             panic!("environment head is not Prod")
         };
         assert_eq!(constructor, PROD_CONSTRUCTOR);
-        assert_eq!(pair[0], RuntimeValue::Bytes(vec![0xfe]));
-        assert_eq!(pair[1], RuntimeValue::Bytes(vec![0xfd, 0x00]));
+        assert!(ground_eq(&pair[0], &RuntimeValue::Bytes(vec![0xfe])));
+        assert!(ground_eq(&pair[1], &RuntimeValue::Bytes(vec![0xfd, 0x00])));
     }
 
     #[test]
@@ -543,10 +583,10 @@ mod tests {
             runtime.trap_reporting,
             NativeProcessRuntimeSupportFact::Available
         );
-        assert_eq!(
-            runtime.staged_process_input,
-            native_process_input_value(&input)
-        );
+        assert!(ground_eq(
+            &runtime.staged_process_input,
+            &native_process_input_value(&input)
+        ));
     }
 
     #[test]

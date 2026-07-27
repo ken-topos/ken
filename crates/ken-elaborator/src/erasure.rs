@@ -6431,18 +6431,44 @@ mod px7l_tests {
             constructor: "px7l::ResponseAndOuter".to_string(),
             args: vec![RuntimeExpr::Var(0), RuntimeExpr::Var(1)],
         };
-        let corrected = shift_runtime_vars(continuation.clone(), 3, 1);
+        // ⛔ `RuntimeExpr: PartialEq` is gone (`RT-VALUE-TOTALITY-P2` `D2`): it
+        // reached `RuntimeValue::ClosureRef`, so whole-expression equality was
+        // ordinary-closure structural equality, which `41 §2.1` denies. The
+        // property this control owns is a statement about TWO VAR INDICES, so
+        // it is asserted directly — no whole-expression comparison, and
+        // deliberately no shared projection helper, which would restore the
+        // forbidden capability under a private spelling.
+        //
+        // Destructuring is itself part of the control: a wrong variant panics
+        // loudly rather than comparing as unequal.
+        let var_args = |expr: RuntimeExpr| -> Vec<u32> {
+            let RuntimeExpr::Construct { constructor, args } = expr else {
+                panic!("shift_runtime_vars did not return a Construct");
+            };
+            assert_eq!(constructor, "px7l::ResponseAndOuter");
+            args.into_iter()
+                .map(|arg| match arg {
+                    RuntimeExpr::Var(index) => index,
+                    other => panic!("expected a Var argument, got {other:?}"),
+                })
+                .collect()
+        };
+
+        // The accepted cutoff: the response binder stays bound at 0, and only
+        // the free environment variable shifts 1 -> 4.
         assert_eq!(
-            corrected,
-            RuntimeExpr::Construct {
-                constructor: "px7l::ResponseAndOuter".to_string(),
-                args: vec![RuntimeExpr::Var(0), RuntimeExpr::Var(4)],
-            },
+            var_args(shift_runtime_vars(continuation.clone(), 3, 1)),
+            vec![0, 4],
             "response Var(0) stays bound while only the free environment shifts"
         );
-        assert_ne!(
-            shift_runtime_vars(continuation, 3, 0),
-            corrected,
+
+        // ⚠ The rejected cutoff-0 mutation, asserted by its EXACT result rather
+        // than by mere inequality. `assert_ne!` on whole expressions also passed
+        // if some unrelated field moved; pinning `[3, 4]` says precisely what
+        // goes wrong — the live response binder is dragged from 0 to 3.
+        assert_eq!(
+            var_args(shift_runtime_vars(continuation, 3, 0)),
+            vec![3, 4],
             "the rejected cutoff-0 mutation moves the live response binder"
         );
     }

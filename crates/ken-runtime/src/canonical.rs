@@ -12,6 +12,190 @@ pub trait Canonical {
     fn encode_canonical(&self, out: &mut Vec<u8>);
 }
 
+/// ⭐ **The sealed canonical witness — the ONLY surface exposing equality,
+/// order, and hash for a canonical value (`D3`, `AC-V8`, `AC-V12`).**
+///
+/// It **is** the canonical bytes. That single fact discharges both ACs:
+///
+/// - **`AC-V8` — agreement is DEFINITIONAL, not asserted.** The old derives on
+///   [`Value`] disagreed with canonical identity: `BigInt{limbs:[5]}` and
+///   `BigInt{limbs:[5,0]}` encode identically (`minimal_limbs` strips trailing
+///   zero limbs) yet compared unequal, and two NFC-distinct spellings of one
+///   `String` did the same. A witness that *is* the encoding cannot disagree
+///   with it, because there is no second definition of identity to keep in step.
+/// - **`AC-V12` — the comparison is DEPTH-TOTAL by construction.** The bytes are
+///   produced by P1's **iterative** encoder, and `==` / `<` / `hash` over a flat
+///   `Vec<u8>` do not recurse on value depth at all. ⭐ **The claim is the
+///   mechanism, not a measured depth**: a passing `D = 131_072` corroborates it
+///   and would re-derive nothing if the traversal changed.
+///
+/// ⛔ **Sealed:** the byte vector is private and there is no constructor taking
+/// bytes. The only way to obtain one is [`CanonicalWitness::of`], which encodes.
+/// So a caller cannot mint a witness that is not some value's true encoding, and
+/// cannot reach in and perturb one.
+///
+/// ⛔ **Not a general escape hatch for [`Value`] comparison.** Obtaining a
+/// witness means *encoding*, which is exactly the operation `41 §2.1` denies
+/// ordinary closures — and the carrier has no closure arm, so there is nothing
+/// here for a closure to ride.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CanonicalWitness {
+    bytes: Vec<u8>,
+}
+
+impl CanonicalWitness {
+    /// The witness of `value` — its canonical encoding.
+    pub fn of(value: &Value) -> Self {
+        let mut bytes = Vec::new();
+        value.encode_canonical(&mut bytes);
+        Self { bytes }
+    }
+
+    /// The canonical bytes this witness is.
+    ///
+    /// ⚠ Borrowed, not owned: a caller may read the encoding but cannot
+    /// construct a witness from bytes it chose.
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
+/// Why a value could not be projected onto the canonical carrier (`D4`).
+///
+/// ⛔ A refusal, never a substitution. `41 §2.1` forbids standing a closure in
+/// for itself with a pointer, ordinal, digest or handle, so there is deliberately
+/// no variant here carrying a partial or redacted image.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CanonicalProjectionRefusal {
+    /// An ordinary closure was reached, at any depth.
+    OrdinaryClosure,
+}
+
+/// One unit of pending work for the iterative projection.
+enum ProjectStep<'a> {
+    /// Inspect this operational value: refuse it, emit a leaf, or push children.
+    Visit(&'a crate::ir::RuntimeValue),
+    /// Its `children` projections are the last `children` entries of `done`.
+    Finish {
+        proto: &'a crate::ir::RuntimeValue,
+        children: usize,
+    },
+}
+
+/// ⭐ **The ONLY route from the operational carrier to the canonical one
+/// (`D4`).**
+///
+/// Transitive, **iterative**, and **fail-closed**: it proves the whole graph
+/// closure-free *before* any byte, hash, slot or publication exists, because it
+/// returns a `Value` at all only once every node has been projected. A caller
+/// holding `Err` holds nothing it could publish.
+///
+/// ⛔ **No recursion, and no second traversal mechanism beside P1's.** This is
+/// the same explicit `Visit`/`Finish` postorder worklist as
+/// [`crate::values::Value`]'s hand-written `Clone` — a parent cannot be built
+/// until its children exist, so the shape is forced, and a private recursive
+/// adapter here would reintroduce the exact host-stack overflow P1 removed, one
+/// layer out. ⛔ There is no `MAX_DEPTH`: depth is bounded by the heap, not by a
+/// semantic limit.
+///
+/// `intern` maps a runtime symbol to the numeric id the canonical carrier uses,
+/// following the established convention (`boundary_value.rs`): a constructor
+/// interns its own symbol, and a record's `type_id` interns `record:` followed
+/// by its field names in order — which is how a *named*-field operational record
+/// collapses onto the canonical carrier's positional one without losing the
+/// distinction between two records that differ only in field names.
+pub fn project_operational_to_canonical<F>(
+    root: &crate::ir::RuntimeValue,
+    intern: &mut F,
+) -> Result<Value, CanonicalProjectionRefusal>
+where
+    F: FnMut(&str) -> u32,
+{
+    use crate::ir::RuntimeValue as Rv;
+
+    let mut work: Vec<ProjectStep<'_>> = vec![ProjectStep::Visit(root)];
+    let mut done: Vec<Value> = Vec::new();
+
+    while let Some(step) = work.pop() {
+        match step {
+            ProjectStep::Visit(value) => match value {
+                // ⛔ THE REFUSAL, and it is the first arm on purpose: reached at
+                // any depth, it aborts the whole projection. Nothing partial has
+                // been emitted, because `done` is discarded with the `Err`.
+                Rv::ClosureRef { .. } => {
+                    return Err(CanonicalProjectionRefusal::OrdinaryClosure)
+                }
+
+                // Child-bearing: push a frame, then the children in reverse so
+                // LIFO pops restore declaration order.
+                Rv::Constructor { args, .. } => {
+                    work.push(ProjectStep::Finish {
+                        proto: value,
+                        children: args.len(),
+                    });
+                    for arg in args.iter().rev() {
+                        work.push(ProjectStep::Visit(arg));
+                    }
+                }
+                Rv::Record { fields } => {
+                    work.push(ProjectStep::Finish {
+                        proto: value,
+                        children: fields.len(),
+                    });
+                    for (_, field) in fields.iter().rev() {
+                        work.push(ProjectStep::Visit(field));
+                    }
+                }
+
+                // Leaves. ⛔ Exhaustive with no `_` arm, so a new operational
+                // variant must decide here whether it is projectable rather than
+                // inheriting a silent answer.
+                Rv::Bool(b) => done.push(Value::Bool(*b)),
+                Rv::Bytes(bytes) => done.push(Value::Bytes(bytes.clone())),
+                Rv::String(text) => done.push(Value::String(text.clone())),
+                Rv::Int(int) => done.push(match int {
+                    crate::RuntimeIntV1::Small(n) => Value::SmallInt(*n),
+                    crate::RuntimeIntV1::Big { sign, limbs } => Value::BigInt {
+                        sign: *sign,
+                        limbs: limbs.clone(),
+                    },
+                }),
+                Rv::Unknown => done.push(Value::Unknown),
+            },
+            ProjectStep::Finish { proto, children } => {
+                let kids = done.split_off(done.len() - children);
+                done.push(match proto {
+                    Rv::Constructor { constructor, .. } => Value::Constructor {
+                        constructor_id: intern(constructor),
+                        args: kids,
+                    },
+                    Rv::Record { fields } => {
+                        let names = fields
+                            .iter()
+                            .map(|(name, _)| name.as_str())
+                            .collect::<Vec<_>>()
+                            .join(",");
+                        Value::Record {
+                            type_id: intern(&format!("record:{names}")),
+                            fields: kids,
+                        }
+                    }
+                    // Only the two child-bearing arms above ever push a `Finish`.
+                    other => unreachable!("non-parent pushed a Finish frame: {other:?}"),
+                });
+            }
+        }
+    }
+
+    // ⛔ NOT `ok_or(OrdinaryClosure)`: an empty `done` would be a broken
+    // invariant in this function, not a closure in the input, and reporting it
+    // as a refusal would attribute an internal bug to the caller's value. The
+    // loop pushes exactly one root, exactly as P1's `Clone` does.
+    Ok(done
+        .pop()
+        .expect("the traversal assembles exactly one projected root"))
+}
+
 /// Kind tags (design doc §1.1).
 mod tag {
     pub const BIG_INT: u8 = 0x01;
@@ -22,7 +206,11 @@ mod tag {
     pub const ARRAY: u8 = 0x06;
     pub const MAP: u8 = 0x07;
     pub const SET: u8 = 0x08;
-    pub const CLOSURE: u8 = 0x09;
+    // ⛔ `0x09` was `CLOSURE` and is **retired, not reused**. `41 §2.1` assigns
+    // ordinary closures no canonical kind tag at all, so there is no encoding to
+    // give one. The ordinal stays burned so a decoder meeting a legacy `0x09`
+    // byte refuses it rather than silently reading it as whatever takes the slot
+    // next.
     pub const BIG_DECIMAL: u8 = 0x0A;
     // Immediate scalars appear in sub-value position within compounds.
     pub const BOOL: u8 = 0x10;
@@ -266,15 +454,12 @@ fn encode_header<'a>(value: &'a Value, out: &mut Vec<u8>, stack: &mut Vec<Step<'
             }
         }
 
-        Value::Closure { code_id, captured } => {
-            out.push(tag::CLOSURE);
-            write_u64_le(*code_id, out);
-            let arity = captured.len().min(65535) as u16;
-            write_u16_le(arity, out);
-            // Full canonical encoding of captured values (design doc §1.9):
-            // memcmp-exact, NOT a hash digest.
-            child_positions::push(captured, stack);
-        }
+        // ⛔ **No closure arm.** An ordinary closure has no canonical encoding —
+        // not an inline one, and equally not a digest, pointer, ordinal or
+        // handle standing in for one. It cannot appear here because the carrier
+        // this encoder walks has no closure variant to match, which is the
+        // property `41 §2.1` requires rather than a check this function
+        // performs.
 
         // --- immediate scalars (encoded when sub-values of compounds) ---
         Value::Bool(b) => {
@@ -453,14 +638,10 @@ fn encode_canonical_recursive_reference(value: &Value, out: &mut Vec<u8>) {
                 out.extend_from_slice(elem_bytes);
             }
         }
-        Value::Closure { code_id, captured } => {
-            out.push(tag::CLOSURE);
-            write_u64_le(*code_id, out);
-            write_u16_le(captured.len().min(65535) as u16, out);
-            for val in captured {
-                encode_canonical_recursive_reference(val, out);
-            }
-        }
+        // ⛔ No closure arm here either. `AC-V1b` compares this reference
+        // encoder against the production one, so a closure arm surviving on one
+        // side of that differential would be a silent asymmetry rather than a
+        // leftover.
         Value::Bool(b) => {
             out.push(tag::BOOL);
             out.push(*b as u8);
@@ -544,14 +725,16 @@ fn encode_canonical_recursive_reference(value: &Value, out: &mut Vec<u8>) {
 /// malformed"*: an unhandled tag must never fall through to a plausible
 /// default, because a silent wrong value is worse than a refusal. The covered
 /// set is the boundary ABI's persistent family — `BigInt`, `Constructor`,
-/// `Record`, `String`, `Bytes`, `Closure`, and the `Bool`/`SmallInt` scalars
-/// that appear in sub-value position — and every other tag is refused rather
-/// than guessed.
+/// `Record`, `String`, `Bytes`, and the `Bool`/`SmallInt` scalars that appear in
+/// sub-value position — and every other tag is refused rather than guessed.
 ///
-/// ⚠ `Closure` is covered because store adoption and independent recovery need
-/// it, and for no wider reason: `Array`, `Map`, `Set` and the remaining scalars
-/// are encodable and still **refused** here. Widening the decoder stays a
-/// deliberate edit at this `match`, never a side effect at a call site.
+/// ⛔ **`Closure` is NOT covered, and the retired `0x09` tag is refused like any
+/// other unknown byte.** An ordinary closure is not persistable at all
+/// (`41 §2.1`), so there is nothing for store adoption or independent recovery
+/// to decode: a closure never becomes bytes in the first place. `Array`, `Map`,
+/// `Set` and the remaining scalars are encodable and still **refused** here.
+/// Widening the decoder stays a deliberate edit at this `match`, never a side
+/// effect at a call site.
 pub fn decode_canonical(bytes: &[u8]) -> Option<(Value, usize)> {
     let (&kind, rest) = bytes.split_first()?;
     let mut at = 1usize;
@@ -604,17 +787,12 @@ pub fn decode_canonical(bytes: &[u8]) -> Option<(Value, usize)> {
             }
         }
         tag::SMALL_INT => Value::SmallInt(read_u64(bytes, &mut at)? as i64),
-        // A retained closure: authoritative code identity plus the FULL ordered
-        // captured environment, decoded inline exactly as it was encoded. The
-        // captures are values, not a digest, which is what lets a consumer
-        // recover capture content and order rather than merely comparing two
-        // closures for equality.
-        tag::CLOSURE => {
-            let code_id = read_u64(bytes, &mut at)?;
-            let arity = read_u16(bytes, &mut at)? as usize;
-            let captured = decode_children(bytes, &mut at, arity)?;
-            Value::Closure { code_id, captured }
-        }
+        // ⛔ No `0x09` arm: the retired closure tag falls to the refusal below,
+        // which is the point. A legacy byte stream carrying `0x09` is refused
+        // rather than reconstructed — there is no closure value to reconstruct
+        // it into, and inventing one would be exactly the "substitute a pointer,
+        // ordinal, digest, or handle" that `41 §2.1` forbids.
+        //
         // ⛔ Every other tag — including the ones this crate encodes — is
         // REFUSED, not approximated. Widening the decoder is a deliberate edit
         // here, never an accident at a call site.
@@ -799,32 +977,21 @@ mod tests {
                 elem_type_id: 6,
                 elements: set_ne,
             },
-            // --- closures, incl. captures (Phase 2 removes these, not us) ---
-            Value::Closure {
-                code_id: 0xDEAD_BEEF,
-                captured: vec![],
-            },
-            Value::Closure {
-                code_id: 0xFEED_FACE,
-                captured: vec![
-                    Value::SmallInt(3),
-                    Value::Record {
-                        type_id: 7,
-                        fields: vec![Value::Bool(true)],
-                    },
-                ],
-            },
+            // ⛔ The two closure entries this corpus used to carry are gone —
+            // `RT-VALUE-TOTALITY-P2` is the phase their own comment named. The
+            // canonical carrier has no closure variant, so there is no closure
+            // for a differential over canonical encodings to compare.
             // --- moderate nesting through several child-position kinds ---
             Value::Constructor {
                 constructor_id: 8,
                 args: vec![Value::Array {
                     elem_type_id: 3,
+                    // The nesting depth and the mix of child-position kinds are
+                    // what this entry exercises, so the closure leaf is replaced
+                    // rather than the entry dropped.
                     elements: vec![Value::Record {
                         type_id: 2,
-                        fields: vec![Value::Closure {
-                            code_id: 1,
-                            captured: vec![Value::Unknown],
-                        }],
+                        fields: vec![Value::Unknown],
                     }],
                 }],
             },
@@ -842,10 +1009,19 @@ mod tests {
         let corpus = differential_corpus();
         // Non-vacuity: the corpus must actually cover every variant, or a
         // missing arm would make this differential silently narrow.
+        //
+        // ⛔ This asserted the literal corpus size `38`. A cardinality is a
+        // **proxy** for coverage and it fails both ways: it reddened when
+        // `RT-VALUE-TOTALITY-P2` legitimately removed a variant, and it would
+        // have stayed green if two corpus members were swapped for two others
+        // covering less. Assert the reached inventory directly instead — it is
+        // the property the comment above already claims.
+        let reached: std::collections::BTreeSet<u8> =
+            corpus.iter().map(|value| encode(value)[0]).collect();
         assert_eq!(
-            corpus.len(),
-            38,
-            "corpus size changed — re-check variant coverage before editing"
+            reached,
+            permitted_kind_tags(),
+            "corpus coverage changed — re-check variant coverage before editing"
         );
         for value in &corpus {
             assert_eq!(
@@ -878,9 +1054,19 @@ mod tests {
         );
     }
 
-    /// `AC-V1b` reaches every variant. Counted from the corpus itself against
-    /// the enum's own arm count, so adding a variant without extending the
-    /// corpus reddens rather than silently narrowing coverage.
+    /// `AC-V1b` reaches every variant.
+    ///
+    /// ⛔ **Asserted against the ALLOWED INVENTORY, not against a count.** This
+    /// pinned the literal `25` and went red when `RT-VALUE-TOTALITY-P2` removed
+    /// the closure variant — a legitimate removal reported as a regression,
+    /// which is the failure mode a frozen derived count always has. It is also
+    /// the *weaker* claim: a corpus that dropped `Record` and gained a second
+    /// scalar keeps the count at 25 and still covers less than it says.
+    ///
+    /// The set below is the exact permitted inventory, so **adding** a variant
+    /// without extending the corpus reddens, **removing** one without retiring
+    /// its tag reddens, and **swapping** one for another reddens — none of which
+    /// a cardinality can distinguish.
     #[test]
     fn ac_v1b_corpus_covers_every_value_variant() {
         let corpus = differential_corpus();
@@ -889,12 +1075,241 @@ mod tests {
             // The leading tag byte is the variant discriminator.
             kinds.insert(encode(value)[0]);
         }
-        // 25 distinct kind tags: 10 compounds + 14 scalars + Unknown.
+
         assert_eq!(
-            kinds.len(),
-            25,
-            "corpus does not reach every kind tag; reached {kinds:?}"
+            kinds,
+            permitted_kind_tags(),
+            "the corpus's reached kind tags are not exactly the permitted \
+             inventory"
         );
+        assert!(
+            !kinds.contains(&0x09),
+            "0x09 is the RETIRED closure tag: no value on the canonical carrier \
+             may encode to it"
+        );
+    }
+
+    /// The exact set of kind tags a value on the canonical carrier may encode
+    /// to — the **allowed inventory** both `AC-V1b` controls assert against.
+    ///
+    /// ⛔ `tag::CLOSURE` (`0x09`) is absent **by construction, not by
+    /// omission**: the carrier has no closure variant, so no value can emit it.
+    /// Re-adding a closure arm without re-adding the tag here reddens, which is
+    /// the direction that matters.
+    fn permitted_kind_tags() -> std::collections::BTreeSet<u8> {
+        [
+            tag::BIG_INT,
+            tag::DATA,
+            tag::RECORD,
+            tag::STRING,
+            tag::BYTES,
+            tag::ARRAY,
+            tag::MAP,
+            tag::SET,
+            tag::BIG_DECIMAL,
+            tag::BOOL,
+            tag::CHAR,
+            tag::FLOAT,
+            tag::FLOAT32,
+            tag::INT8,
+            tag::INT16,
+            tag::INT32,
+            tag::INT64,
+            tag::UINT8,
+            tag::UINT16,
+            tag::UINT32,
+            tag::UINT64,
+            tag::SMALL_INT,
+            tag::SMALL_DECIMAL,
+            tag::UNKNOWN,
+        ]
+        .into_iter()
+        .collect()
+    }
+
+    // ─── D4 / AC-V9 — the projection is TRANSITIVE and FAIL-CLOSED ───────────
+
+    /// ⛔ **A closure nested BELOW the root refuses the whole projection.**
+    ///
+    /// ⚠ A refusal at depth 1 would not establish transitivity, so the closure
+    /// here sits under three admitted parents. The parent must not succeed
+    /// "around" its unprojectable child.
+    ///
+    /// ⚠ **POSITIVE CONTROL:** the byte-identical graph with the closure replaced
+    /// by a ground leaf **projects**. Without it, "closures refuse" and "this
+    /// fixture refuses everything" are the same green.
+    #[test]
+    fn ac_v9_projection_refuses_a_closure_nested_below_the_root() {
+        use crate::ir::RuntimeValue as Rv;
+        let mut intern = |symbol: &str| symbol.len() as u32;
+
+        // depth 3: Constructor > Record > Constructor > <leaf>
+        let nest = |leaf: Rv| Rv::Constructor {
+            constructor: "ctor:fixture::Outer".to_string(),
+            args: vec![Rv::Record {
+                fields: vec![(
+                    "inner".to_string(),
+                    Rv::Constructor {
+                        constructor: "ctor:fixture::Inner".to_string(),
+                        args: vec![leaf],
+                    },
+                )],
+            }],
+        };
+
+        let closure_leaf = Rv::ClosureRef {
+            symbol: "decl:fixture::f".to_string(),
+            captured: vec![],
+        };
+        // ⚠ `matches!`, not `assert_eq!`: `Result<Value, _>` cannot be compared
+        // because `D3` removed `Value: PartialEq`. The refusal VARIANT is
+        // asserted specifically, not merely `is_err()`.
+        assert!(
+            matches!(
+                project_operational_to_canonical(&nest(closure_leaf), &mut intern),
+                Err(CanonicalProjectionRefusal::OrdinaryClosure)
+            ),
+            "a closure three levels down refuses the WHOLE projection"
+        );
+
+        // ⚠ POSITIVE CONTROL — same shape, ground leaf.
+        assert!(
+            project_operational_to_canonical(&nest(Rv::Bool(true)), &mut intern).is_ok(),
+            "the identical graph projects when its leaf is closure-free"
+        );
+
+        // ⛔ And directly, so the depth case is not the only arm.
+        assert!(
+            matches!(
+                project_operational_to_canonical(
+                    &Rv::ClosureRef {
+                        symbol: "decl:fixture::g".to_string(),
+                        captured: vec![],
+                    },
+                    &mut intern
+                ),
+                Err(CanonicalProjectionRefusal::OrdinaryClosure)
+            ),
+            "and a bare closure refuses too"
+        );
+    }
+
+    /// ⛔ **A refusal yields NOTHING that could be published** — no bytes, no
+    /// witness, no slot.
+    ///
+    /// ⭐ This is a type-level property, and stating it that way is the point:
+    /// the projection's `Err` carries no `Value`, so there is no image for a
+    /// caller to encode. `CanonicalWitness::of` and the store both require a
+    /// `Value`, so the refusal is upstream of every byte-producing operation
+    /// rather than a check performed alongside them.
+    #[test]
+    fn ac_v9_a_refusal_carries_no_projectable_image() {
+        use crate::ir::RuntimeValue as Rv;
+        let mut intern = |symbol: &str| symbol.len() as u32;
+        let refused = project_operational_to_canonical(
+            &Rv::Record {
+                fields: vec![(
+                    "f".to_string(),
+                    Rv::ClosureRef {
+                        symbol: "decl:fixture::h".to_string(),
+                        captured: vec![],
+                    },
+                )],
+            },
+            &mut intern,
+        );
+        assert!(refused.is_err());
+        // ⚠ POSITIVE CONTROL — an accepted projection DOES yield a witness, so
+        // the absence above is a refusal and not an inert harness.
+        let accepted = project_operational_to_canonical(&Rv::Bool(false), &mut intern)
+            .expect("a ground value projects");
+        assert!(!CanonicalWitness::of(&accepted).bytes().is_empty());
+    }
+
+    // ─── D3 / AC-V8 — the witness AGREES with canonical identity ────────────
+    //
+    // ⛔ BOTH pairs are required. They fail through different mechanisms — limb
+    // truncation vs character normalization — so a passing arm on one says
+    // nothing about the other.
+
+    /// `AC-V8` pair 1 — trailing-zero limbs.
+    ///
+    /// `minimal_limbs` strips them, so these two encode **identically**. Under
+    /// the old derives on `Value` they compared **unequal**: the relation
+    /// disagreed with canonical identity, which is the defect `AC-V8` names.
+    #[test]
+    fn ac_v8_bigint_trailing_zero_limbs_agree_with_canonical_identity() {
+        let short = Value::BigInt {
+            sign: Sign::NonNegative,
+            limbs: vec![5],
+        };
+        let padded = Value::BigInt {
+            sign: Sign::NonNegative,
+            limbs: vec![5, 0],
+        };
+
+        // The premise: the encodings are identical.
+        assert_eq!(
+            encode(&short),
+            encode(&padded),
+            "premise: minimal-limb encoding makes these one canonical value"
+        );
+
+        // ⭐ And the verdict AGREES with that, on all three operations.
+        let (a, b) = (CanonicalWitness::of(&short), CanonicalWitness::of(&padded));
+        assert_eq!(a, b, "equality agrees with canonical identity");
+        assert_eq!(a.cmp(&b), std::cmp::Ordering::Equal, "order agrees");
+        assert_eq!(hash_of(&a), hash_of(&b), "hash agrees");
+
+        // ⚠ POSITIVE CONTROL — a genuinely different magnitude does NOT collapse,
+        // so the agreement above is not a witness that equates everything.
+        let other = Value::BigInt {
+            sign: Sign::NonNegative,
+            limbs: vec![6],
+        };
+        let c = CanonicalWitness::of(&other);
+        assert_ne!(a, c, "distinct magnitudes stay distinct");
+        assert_ne!(hash_of(&a), hash_of(&c));
+    }
+
+    /// `AC-V8` pair 2 — NFC-distinct spellings of one string.
+    ///
+    /// Encoding normalizes to NFC, so these are one canonical value. The old
+    /// derives compared the un-normalized Rust `String`s and disagreed.
+    #[test]
+    fn ac_v8_nfc_distinct_spellings_agree_with_canonical_identity() {
+        // "é" precomposed (U+00E9) vs decomposed (U+0065 U+0301).
+        let precomposed = Value::String("\u{00e9}".to_string());
+        let decomposed = Value::String("e\u{0301}".to_string());
+        assert_ne!(
+            "\u{00e9}", "e\u{0301}",
+            "premise: the two Rust strings really are distinct byte sequences"
+        );
+
+        assert_eq!(
+            encode(&precomposed),
+            encode(&decomposed),
+            "premise: NFC normalization at encoding time makes these one value"
+        );
+
+        let (a, b) = (
+            CanonicalWitness::of(&precomposed),
+            CanonicalWitness::of(&decomposed),
+        );
+        assert_eq!(a, b, "equality agrees with canonical identity");
+        assert_eq!(a.cmp(&b), std::cmp::Ordering::Equal, "order agrees");
+        assert_eq!(hash_of(&a), hash_of(&b), "hash agrees");
+
+        // ⚠ POSITIVE CONTROL — a different string stays different.
+        let c = CanonicalWitness::of(&Value::String("e".to_string()));
+        assert_ne!(a, c, "distinct strings stay distinct");
+    }
+
+    fn hash_of(witness: &CanonicalWitness) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        witness.hash(&mut hasher);
+        hasher.finish()
     }
 
     // --- conformance: runtime/values/canonical-encoding-map-ordering ---

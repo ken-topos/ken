@@ -72,7 +72,15 @@ const NULL_SLOT: SlotId = 0;
 
 /// Evaluation-time store: wraps the K3 content-addressed heap with a
 /// `code_id` side table so distinct closure bodies get distinct, collision-free
-/// integer ids (the F4 lesson: closure equality is memcmp-exact, never a digest).
+/// integer ids.
+///
+/// ⛔ **The `code_id` is evaluator-internal bookkeeping, not an identity.** This
+/// comment used to justify it by asserting that closure equality compares
+/// captured bytes exactly rather than a digest. `41 §2.1` denies ordinary
+/// closures structural equality altogether, so there is no closure equality for
+/// either answer to be right about. The side table exists so the evaluator can
+/// tell two closure *bodies* apart while reducing; it never becomes a slot, a
+/// canonical encoding, or anything durable — [`to_rt`] refuses closures.
 pub struct EvalStore {
     /// The underlying K3 content-addressed heap.
     pub k3: Store,
@@ -314,20 +322,26 @@ fn to_rt(val: &EvalVal) -> Option<RtValue> {
                 fields: vec![f, s],
             })
         }
-        EvalVal::Closure {
-            code_id, captured, ..
-        } => {
-            let cap_fields: Vec<RtValue> = captured.iter().filter_map(to_rt).collect();
-            // Only intern if all captured values are representable.
-            if cap_fields.len() == captured.len() {
-                Some(RtValue::Closure {
-                    code_id: *code_id,
-                    captured: cap_fields,
-                })
-            } else {
-                None
-            }
-        }
+        // ⛔ **A closure is REFUSED, transitively and unconditionally.**
+        // `spec/40-runtime/41-values.md §2.1`: an ordinary closure is not
+        // persistable, and refusal must happen **before** canonical bytes, a
+        // digest, or a slot exist. `None` is that refusal — the caller maps it
+        // to `NULL_SLOT`, i.e. *no slot was minted*, which is an absence rather
+        // than an identity.
+        //
+        // ⛔ Note what is deliberately NOT here: no `code_id` is emitted as a
+        // stand-in, no captured environment is interned on its own, and no
+        // digest, pointer, ordinal or handle is substituted. Those are exactly
+        // the substitutions `41 §2.1` names, and each would turn a refusal into
+        // a durable identity for a value that must not have one.
+        //
+        // ⚠ Refusing the whole closure — rather than its unrepresentable
+        // captures — is what makes this transitive: a closure nested as a
+        // record field or constructor argument fails its parent's
+        // `cap_fields.len() == args.len()` check above, so the parent is refused
+        // too. The recursion carries the refusal outward without a second
+        // mechanism.
+        EvalVal::Closure { .. } => None,
         EvalVal::Bytes(b) => Some(RtValue::Bytes(b.clone())),
         EvalVal::Str(s) => Some(RtValue::String(s.clone())),
         _ => None,

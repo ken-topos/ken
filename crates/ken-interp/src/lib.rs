@@ -1433,13 +1433,327 @@ mod tests {
         assert_eq!(r, EvalVal::Unknown);
     }
 
-    /// `runtime/evaluation/det-distinct-bodies-get-distinct-slots` (regression)
+    /// The K3 slot an evaluated value carries, for the slot-bearing variants.
     ///
-    /// Two closures with **distinct body Terms** but identical captured envs must
-    /// intern to **different** K3 slots. Guards against hash-only `code_id`
-    /// collisions (the F4 lesson: closure equality is memcmp-exact, not a digest).
+    /// ⛔ `None` means "this variant has no slot field at all", which is a
+    /// different answer from `Some(NULL_SLOT)` = "this value was refused
+    /// publication". Collapsing the two would let a wrong variant pass as a
+    /// refusal.
+    fn slot_of(v: &EvalVal) -> Option<ken_runtime::store::SlotId> {
+        match v {
+            EvalVal::Ctor { slot, .. }
+            | EvalVal::Pair { slot, .. }
+            | EvalVal::Closure { slot, .. } => Some(*slot),
+            _ => None,
+        }
+    }
+
+    // ─── RT-VALUE-TOTALITY-P2 — realizations of the three RED-UNTIL rows ────
+    //
+    // ⛔ These three conformance rows had **no executable realization** before
+    // this phase: `conformance/runtime/values/README.md` carried them as
+    // `RED-UNTIL` *status text*, and a probe over `crates/` for the
+    // `// --- conformance: <row> ---` marker found zero for each, while finding
+    // the markers that do exist (`canonical.rs`, `store.rs`) as its positive
+    // control. So "the oracle already exists and is red" was true of the
+    // contract and false of the code; P2 owes the code.
+    //
+    // ⚠ They are realized at the interpreter's publication boundary, because
+    // that is where a Ken-level closure meets interning. `to_rt` refuses a
+    // closure, so the parent's `len() == args.len()` check fails and the
+    // refusal propagates outward with no second mechanism — which is exactly
+    // the transitivity the rows require.
+
+    /// Build `λ x : Nat. x` — an ordinary closure with an EMPTY capture set.
+    fn empty_capture_closure(nat_ty: Term) -> Term {
+        Term::Lam(Box::new(nat_ty), Box::new(Term::var(0)))
+    }
+
+    // --- conformance: runtime/values/closure-publication-rejected-transitively ---
+    ///
+    /// ⛔ **Per-position arms are required** — the row names them, and a single
+    /// value carrying closures everywhere cannot prove the check is
+    /// per-position. The row names five: **directly**, **record field**, **data
+    /// constructor argument**, **array element**, **map value**.
+    ///
+    /// ⭐ **Three are realized here: direct (a), constructor argument (b), and
+    /// record field (c)** — each with its own closure-free positive control in
+    /// the identical position.
+    ///
+    /// ⛔ **`array element` and `map value` are STRUCTURALLY UNEXPRESSIBLE as
+    /// closure-carrying positions, and that is a proof, not an omission.** No
+    /// carrier that can hold a closure has an array or map position:
+    ///
+    /// | carrier | child-bearing positions | closure arm? |
+    /// |---|---|---|
+    /// | `ir::RuntimeValue` | `Constructor.args`, `Record.fields` | ✅ `ClosureRef` |
+    /// | `BoundaryClass` | `Constructor`, `Record` | ✅ `Closure` |
+    /// | `values::Value` | `args`, `fields`, `elements`, **`Map` values** | ⛔ none — `D1` |
+    ///
+    /// ⇒ `Array` and `Map` exist **only** on the canonical carrier, and that
+    /// carrier has no closure variant at all, so "a closure in an array element"
+    /// names no constructible value. The two rows are discharged by
+    /// unrepresentability rather than by a test — which is strictly stronger,
+    /// and is why `AC-V4`'s `compile_fail` block is their real evidence.
+    ///
+    /// ⚠ **This is reported to the frame as an amendment request, not settled
+    /// unilaterally** — the row was written against the canonical carrier's
+    /// shape, which is the one carrier that cannot exhibit the case.
+    ///
+    /// ⚠ An earlier revision of this comment said only *"directly, and nested as
+    /// a constructor argument"* and the AC was nonetheless reported discharged.
+    /// The limitation was written down in the realization and still read as
+    /// complete from outside — caught by the Architect on `195c2311`.
+    ///
+    /// ⚠ **POSITIVE CONTROL, taken from the row itself:** the closure-free
+    /// value in the *same* position through the *same* store publishes. That is
+    /// what proves the boundary causes the refusal, rather than the carrier
+    /// shape or an inert fixture.
     #[test]
-    fn det_distinct_bodies_get_distinct_slots() {
+    fn closure_publication_rejected_transitively() {
+        let (env, std) = std_env();
+        let Std { nat, zero, suc, .. } = std;
+        let nat_ty = Term::IndFormer {
+            id: nat,
+            level_args: vec![],
+        };
+        let mut store = mk_store();
+
+        // (a) DIRECTLY — a bare closure.
+        let direct = eval(&[], &empty_capture_closure(nat_ty.clone()), &env, &mut store);
+        assert_eq!(
+            slot_of(&direct),
+            Some(ken_runtime::store::NULL_SLOT),
+            "a closure publishes nothing: refused before any byte, hash or slot"
+        );
+
+        // (b) NESTED as a constructor argument — `suc <closure>`.
+        let nested = eval(
+            &[],
+            &Term::app(
+                Term::Constructor {
+                    id: suc,
+                    level_args: vec![],
+                },
+                empty_capture_closure(nat_ty.clone()),
+            ),
+            &env,
+            &mut store,
+        );
+        assert_eq!(
+            slot_of(&nested),
+            Some(ken_runtime::store::NULL_SLOT),
+            "and the refusal is TRANSITIVE: a constructor carrying a closure \
+             publishes nothing either, rather than publishing a redacted or \
+             substituted child"
+        );
+
+        // ⚠ POSITIVE CONTROL — the identical position, closure-free.
+        let control = eval(
+            &[],
+            &Term::app(
+                Term::Constructor {
+                    id: suc,
+                    level_args: vec![],
+                },
+                Term::Constructor {
+                    id: zero,
+                    level_args: vec![],
+                },
+            ),
+            &env,
+            &mut store,
+        );
+        assert_ne!(
+            slot_of(&control),
+            Some(ken_runtime::store::NULL_SLOT),
+            "the SAME constructor position publishes when its argument is \
+             closure-free — so the refusal is about the closure, not about the \
+             shape or the store"
+        );
+
+        // (c) NESTED as a RECORD FIELD — `(closure, zero)`. A Σ-intro reaches
+        // `to_rt` through `EvalVal::Pair` → `RtValue::Record`, which is a
+        // different production arm from the constructor path in (b): one builds
+        // `Record { fields }`, the other `Constructor { args }`. A refusal
+        // wired into only one of them passes (b) and leaks here.
+        let in_field = eval(
+            &[],
+            &Term::Pair(
+                Box::new(empty_capture_closure(nat_ty.clone())),
+                Box::new(Term::Constructor {
+                    id: zero,
+                    level_args: vec![],
+                }),
+            ),
+            &env,
+            &mut store,
+        );
+        assert_eq!(
+            slot_of(&in_field),
+            Some(ken_runtime::store::NULL_SLOT),
+            "a record whose FIELD is a closure publishes nothing either"
+        );
+
+        // ⚠ POSITIVE CONTROL for (c) — the identical record position, closure-free.
+        let field_control = eval(
+            &[],
+            &Term::Pair(
+                Box::new(Term::Constructor {
+                    id: zero,
+                    level_args: vec![],
+                }),
+                Box::new(Term::Constructor {
+                    id: zero,
+                    level_args: vec![],
+                }),
+            ),
+            &env,
+            &mut store,
+        );
+        assert_ne!(
+            slot_of(&field_control),
+            Some(ken_runtime::store::NULL_SLOT),
+            "and the same record position publishes when both fields are \
+             closure-free"
+        );
+    }
+
+    // --- conformance: runtime/values/empty-capture-closure-is-not-static-reference ---
+    ///
+    /// ⛔ An empty-capture closure is still an **ordinary** closure. An
+    /// optimization MUST NOT silently promote it to a static callable
+    /// reference, which would hand it the persistence the program never
+    /// selected (ruling pin 5).
+    ///
+    /// ⚠ This is its own case and not a reading of the row above, because it
+    /// fails through a different mechanism: that row fails if the refusal is
+    /// missing, this one fails if an optimization routes *around* a refusal
+    /// that is present.
+    #[test]
+    fn empty_capture_closure_is_not_static_reference() {
+        let (env, std) = std_env();
+        let nat_ty = Term::IndFormer {
+            id: std.nat,
+            level_args: vec![],
+        };
+        let mut store = mk_store();
+
+        let empty = eval(&[], &empty_capture_closure(nat_ty.clone()), &env, &mut store);
+        assert_eq!(
+            slot_of(&empty),
+            Some(ken_runtime::store::NULL_SLOT),
+            "an empty capture set does not change a closure's class"
+        );
+
+        // ⚠ POSITIVE CONTROL — a closure that captures is refused identically,
+        // so the verdict above is not an artifact of the capture set being
+        // empty. Both are ordinary closures and both publish nothing.
+        let capturing = eval(
+            &[EvalVal::Unknown],
+            &Term::Lam(Box::new(nat_ty), Box::new(Term::var(1))),
+            &env,
+            &mut store,
+        );
+        assert_eq!(
+            slot_of(&capturing),
+            Some(ken_runtime::store::NULL_SLOT),
+            "and a CAPTURING closure is refused the same way"
+        );
+    }
+
+    // --- conformance: runtime/values/closure-containing-aggregate-has-no-deceq ---
+    ///
+    /// The row: an aggregate of only-`Int` fields compares structurally; the
+    /// same aggregate with one `Int -> Int` field is **rejected**, and ⛔ MUST
+    /// NOT compare a pointer, slot, code id, or captured environment.
+    ///
+    /// ⭐ At this layer the observable is slot identity, which is what a
+    /// structural comparison would key on. The closure-free aggregate gets
+    /// **real, distinct** slots for distinct values — so comparison is
+    /// available and discriminating. The closure-bearing aggregate gets
+    /// `NULL_SLOT`, i.e. **no identity at all**.
+    ///
+    /// ⛔ And that is the trap this test exists to pin: `NULL_SLOT == NULL_SLOT`
+    /// is *true*, so a consumer that treated the slot as an identity would
+    /// conclude two different closure-bearing aggregates are EQUAL. The
+    /// assertion below is that they are both `NULL_SLOT` **precisely so that no
+    /// consumer may read a slot here as an identity** — absence of a slot is
+    /// the refusal, not a shared one.
+    #[test]
+    fn closure_containing_aggregate_has_no_deceq() {
+        let (env, std) = std_env();
+        let Std { nat, zero, suc, .. } = std;
+        let nat_ty = Term::IndFormer {
+            id: nat,
+            level_args: vec![],
+        };
+        let mut store = mk_store();
+        let ctor = |id| Term::Constructor {
+            id,
+            level_args: vec![],
+        };
+
+        // (a) closure-free aggregates — comparison is available AND
+        //     discriminating: equal values share a slot, distinct ones do not.
+        let one_a = eval(&[], &Term::app(ctor(suc), ctor(zero)), &env, &mut store);
+        let one_b = eval(&[], &Term::app(ctor(suc), ctor(zero)), &env, &mut store);
+        let two = eval(
+            &[],
+            &Term::app(ctor(suc), Term::app(ctor(suc), ctor(zero))),
+            &env,
+            &mut store,
+        );
+        assert_eq!(
+            slot_of(&one_a),
+            slot_of(&one_b),
+            "equal closure-free aggregates share a slot"
+        );
+        assert_ne!(
+            slot_of(&one_a),
+            slot_of(&two),
+            "and distinct ones do not — the comparison discriminates"
+        );
+        assert_ne!(
+            slot_of(&one_a),
+            Some(ken_runtime::store::NULL_SLOT),
+            "non-vacuity: the closure-free arm really did publish"
+        );
+
+        // (b) the same aggregate shape with a callable field — NO identity.
+        let with_closure = eval(
+            &[],
+            &Term::app(ctor(suc), empty_capture_closure(nat_ty)),
+            &env,
+            &mut store,
+        );
+        assert_eq!(
+            slot_of(&with_closure),
+            Some(ken_runtime::store::NULL_SLOT),
+            "an aggregate containing a callable acquires no slot, no code id \
+             and no captured-environment identity to compare on"
+        );
+    }
+
+    /// ⛔ **A closure gets NO K3 slot at all** — `41 §2.1`.
+    ///
+    /// This test used to assert the opposite: that two closures with distinct
+    /// body `Term`s but identical captured envs intern to **different** slots,
+    /// guarding hash-only `code_id` collisions. That premise was slot identity
+    /// *for closures*, which `RT-VALUE-TOTALITY-P2` removes — the question
+    /// "do these two closures get the same slot?" no longer has a well-formed
+    /// answer, because neither gets one.
+    ///
+    /// ⚠ Its conformance row `runtime/evaluation/det-sharing-dedups-by-slot` was
+    /// retired from `conformance/` by `SPEC-STORE-SPLIT`, so this is not a
+    /// coverage loss — it is a control catching up with its contract.
+    ///
+    /// ⚠ **POSITIVE CONTROL is the second half and it is required:** a
+    /// closure-free value through the *same* store still mints a real slot.
+    /// Without it, "closures are refused" and "this store interns nothing"
+    /// produce the same green.
+    #[test]
+    fn det_closures_get_no_slot_while_closure_free_values_still_do() {
         let (env, std) = std_env();
         let Std { nat, zero, .. } = std;
         let nat_ty = Term::IndFormer {
@@ -1465,12 +1779,40 @@ mod tests {
 
         match (&v1, &v2) {
             (EvalVal::Closure { slot: s1, .. }, EvalVal::Closure { slot: s2, .. }) => {
-                assert_ne!(
-                    s1, s2,
-                    "distinct-body closures with same captured env must get distinct K3 slots"
+                assert_eq!(
+                    *s1,
+                    ken_runtime::store::NULL_SLOT,
+                    "a closure must not be interned: no slot, not a distinct one"
+                );
+                assert_eq!(
+                    *s2,
+                    ken_runtime::store::NULL_SLOT,
+                    "and the same for a closure with a different body — the \
+                     refusal is about the closure, not about a collision"
                 );
             }
             _ => panic!("expected two Closures, got {:?} and {:?}", v1, v2),
+        }
+
+        // ⚠ POSITIVE CONTROL — the same store still mints a slot for a
+        // closure-free value, so the two `NULL_SLOT`s above are a refusal and
+        // not an inert store.
+        let ground = eval(
+            &[],
+            &Term::Constructor {
+                id: zero,
+                level_args: vec![],
+            },
+            &env,
+            &mut store,
+        );
+        match &ground {
+            EvalVal::Ctor { slot, .. } => assert_ne!(
+                *slot,
+                ken_runtime::store::NULL_SLOT,
+                "the same store DOES mint a slot for a closure-free value"
+            ),
+            other => panic!("expected a Ctor, got {other:?}"),
         }
     }
 }
