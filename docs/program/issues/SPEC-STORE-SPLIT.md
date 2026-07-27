@@ -1,7 +1,7 @@
 ---
 id: SPEC-STORE-SPLIT
 title: "Split durable canonical bytes from in-process maximal sharing: demote the store mechanism to private, retarget the conformance rows that assert it, and re-cut the runtime program against the relaxed contract"
-status: active
+status: merged
 owner: spec-enclave
 size: L
 gate: none
