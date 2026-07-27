@@ -137,6 +137,17 @@ pub struct ConstructorDecl {
     pub recursive_positions: Vec<usize>,
 }
 
+/// Whether an inductive family's parameter is known to occur only in strictly
+/// positive positions in the declaration admitted by the kernel.
+///
+/// This is deliberately a two-point, fail-closed classification: any
+/// unsupported or negative use is [`ParameterPolarity::NonPositive`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParameterPolarity {
+    StrictlyPositive,
+    NonPositive,
+}
+
 /// An inductive family declaration (`14 §1`).
 ///
 /// `data D (Δ_p) : (Δ_i) → Type ℓ where cₖ : (Δₖ) → D Δ_p t̄ₖ`.
@@ -148,6 +159,10 @@ pub struct InductiveDecl {
     /// `Δ_p` — parameters, fixed across the family. Relative to the empty
     /// term context (only level params are in scope).
     pub params: Vec<Term>,
+    /// Polarity of each parameter in `params`, derived and recorded during
+    /// admission. Consumers must treat `NonPositive` and missing entries as
+    /// fail-closed.
+    pub parameter_polarities: Vec<ParameterPolarity>,
     /// `Δ_i` — indices, may vary per constructor. Relative to `Δ_p`.
     pub indices: Vec<Term>,
     /// `ℓ` — the family's universe level (may mention `level_params`).

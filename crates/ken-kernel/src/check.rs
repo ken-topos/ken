@@ -937,6 +937,7 @@ where
         id: d_id,
         level_params: spec.level_params,
         params: spec.params,
+        parameter_polarities: Vec::new(),
         indices: spec.indices,
         level: spec.level,
         constructors,
@@ -945,6 +946,7 @@ where
 
     // Generate former + constructor types (`Π Δ_p. Π Δ_i. Type ℓ`, etc.).
     ind.build_types();
+    ind.parameter_polarities = crate::inductive::derive_parameter_polarities(&ind);
 
     // Provisionally admit so every admission clause can roll back both the
     // declaration and its allocated ids on failure.

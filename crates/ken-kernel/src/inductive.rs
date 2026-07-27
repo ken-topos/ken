@@ -24,7 +24,7 @@
 //! the sole structural admission test. The eliminator and ι handle the
 //! Π-abstracted IH and the λ-threaded recursive call (`14 §3.1`, `14 §7.7`).
 
-use crate::env::{ConstructorDecl, InductiveDecl};
+use crate::env::{ConstructorDecl, InductiveDecl, ParameterPolarity};
 use crate::error::{KernelError, KernelResult};
 use crate::subst::{apply_args, shift, subst_levels, subst_outer, subst_tel, weaken};
 use crate::term::{GlobalId, Level, Term};
@@ -129,6 +129,108 @@ fn check_pos_arg(d: GlobalId, pol: Pol, a: &Term) -> bool {
     }
 }
 
+fn parameter_index(
+    var: usize,
+    local_depth: usize,
+    prior_constructor_args: usize,
+    parameter_count: usize,
+) -> Option<usize> {
+    let relative = var.checked_sub(local_depth + prior_constructor_args)?;
+    (relative < parameter_count).then_some(parameter_count - 1 - relative)
+}
+
+struct ParameterPolarityDeriver<'a> {
+    d: GlobalId,
+    parameter_count: usize,
+    prior_constructor_args: usize,
+    positive: &'a mut [bool],
+}
+
+impl ParameterPolarityDeriver<'_> {
+    fn visit(&mut self, local_depth: usize, pol: Pol, term: &Term) {
+        match term {
+            Term::Pi(dom, cod) => {
+                self.visit(local_depth, pol.flip(), dom);
+                self.visit(local_depth + 1, pol, cod);
+            }
+            Term::Sigma(dom, cod) => {
+                self.visit(local_depth, pol, dom);
+                self.visit(local_depth + 1, pol, cod);
+            }
+            Term::App(_, _) => {
+                let (head, args) = peel_app(term);
+                if matches!(head, Term::IndFormer { id, .. } if id == self.d) {
+                    for arg in &args {
+                        self.visit(local_depth, pol, arg);
+                    }
+                } else {
+                    // D1a does not open structural traversal through another
+                    // former. Until D1b supplies that rule, every such
+                    // argument is unknown and therefore fails closed.
+                    self.visit(local_depth, Pol::Minus, &head);
+                    for arg in &args {
+                        self.visit(local_depth, Pol::Minus, arg);
+                    }
+                }
+            }
+            Term::Var(var) => {
+                let parameter = parameter_index(
+                    *var,
+                    local_depth,
+                    self.prior_constructor_args,
+                    self.parameter_count,
+                );
+                if let Some(parameter) = parameter {
+                    if pol == Pol::Minus {
+                        self.positive[parameter] = false;
+                    }
+                }
+            }
+            Term::Type(_)
+            | Term::Omega(_)
+            | Term::IndFormer { .. }
+            | Term::Const { .. }
+            | Term::Constructor { .. } => {}
+            _ => {
+                // Any parameter below a type form not covered by the D1a
+                // grammar is unknown, hence not declared strictly positive.
+                for child in term.children() {
+                    self.visit(local_depth, Pol::Minus, child);
+                }
+            }
+        }
+    }
+}
+
+/// Derive the fail-closed polarity record for an inductive family's parameters.
+///
+/// D1a deliberately does not traverse applications of other type formers:
+/// those positions remain unknown until the D1b structural rule lands.
+pub fn derive_parameter_polarities(ind: &InductiveDecl) -> Vec<ParameterPolarity> {
+    let mut positive = vec![true; ind.params.len()];
+    for constructor in &ind.constructors {
+        for (argument, term) in constructor.args.iter().enumerate() {
+            ParameterPolarityDeriver {
+                d: ind.id,
+                parameter_count: ind.params.len(),
+                prior_constructor_args: argument,
+                positive: &mut positive,
+            }
+            .visit(0, Pol::Plus, term);
+        }
+    }
+    positive
+        .into_iter()
+        .map(|is_positive| {
+            if is_positive {
+                ParameterPolarity::StrictlyPositive
+            } else {
+                ParameterPolarity::NonPositive
+            }
+        })
+        .collect()
+}
+
 /// Run the strict-positivity check on a family declaration (`14 §8`): every
 /// constructor argument type must be strictly positive in `D`. The family's
 /// own parameters, indices, and each constructor's result target indices are
@@ -136,6 +238,22 @@ fn check_pos_arg(d: GlobalId, pol: Pol, a: &Term) -> bool {
 /// and nested parameter occurrences).
 pub fn check_positivity(ind: &InductiveDecl) -> KernelResult<()> {
     let d = ind.id;
+    if ind.parameter_polarities.len() != ind.params.len() {
+        return Err(KernelError::PositivityViolation(
+            "parameter polarity record does not match the parameter telescope".into(),
+        ));
+    }
+    let derived = derive_parameter_polarities(ind);
+    if ind
+        .parameter_polarities
+        .iter()
+        .zip(derived)
+        .any(|(recorded, actual)| recorded != &actual)
+    {
+        return Err(KernelError::PositivityViolation(
+            "recorded parameter polarity does not match the declaration".into(),
+        ));
+    }
     for p in &ind.params {
         if occurs(d, p) {
             return Err(KernelError::PositivityViolation(
@@ -505,6 +623,7 @@ mod tests {
             id: d(0),
             level_params: vec![],
             params: vec![],
+            parameter_polarities: vec![],
             indices: vec![],
             level: Level::zero(),
             constructors: vec![
@@ -538,6 +657,7 @@ mod tests {
             id: d(0),
             level_params: vec![],
             params: vec![],
+            parameter_polarities: vec![],
             indices: vec![],
             level: Level::zero(),
             constructors: vec![ConstructorDecl {
@@ -568,6 +688,7 @@ mod tests {
             id: d(0),
             level_params: vec![],
             params: vec![],
+            parameter_polarities: vec![],
             indices: vec![],
             level: Level::zero(),
             constructors: vec![ConstructorDecl {
@@ -596,6 +717,7 @@ mod tests {
             id: d(0),
             level_params: vec![],
             params: vec![],
+            parameter_polarities: vec![],
             indices: vec![idx], // D in its own index telescope
             level: Level::zero(),
             constructors: vec![],
@@ -620,6 +742,7 @@ mod tests {
             id: d(0),
             level_params: vec![],
             params: vec![],
+            parameter_polarities: vec![],
             indices: vec![],
             level: Level::zero(),
             constructors: vec![ConstructorDecl {
@@ -659,6 +782,7 @@ mod tests {
             id: d(0),
             level_params: vec![],
             params: vec![],
+            parameter_polarities: vec![],
             indices: vec![],
             level: Level::zero(),
             constructors: vec![ConstructorDecl {
@@ -689,6 +813,7 @@ mod tests {
             id: d(0),
             level_params: vec![],
             params: vec![],
+            parameter_polarities: vec![],
             indices: vec![],
             level: Level::zero(),
             constructors: vec![

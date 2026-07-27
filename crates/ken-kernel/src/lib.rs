@@ -57,7 +57,10 @@ pub use check::{
     declare_primitive, declare_recursive_group, infer, raw_well_formed, CtorSpec, InductiveSpec,
 };
 pub use conv::{convert, convert_type, level_eq, normalize, whnf};
-pub use env::{ConstructorDecl, Context, Decl, DecEqCert, GlobalEnv, InductiveDecl, PrimReduction};
+pub use env::{
+    ConstructorDecl, Context, Decl, DecEqCert, GlobalEnv, InductiveDecl, ParameterPolarity,
+    PrimReduction,
+};
 pub use error::{KernelError, KernelResult};
 pub use term::{GlobalId, Level, LevelVar, Term};
 
