@@ -384,16 +384,14 @@ fn space_becomes_threads_state_type_level() {
     );
 }
 
-/// `surface/effects/space-old-scoped-to-ensures` (type-level, oracle)
+/// `surface/effects/space-operation-row-inference` (type-level, oracle)
 ///
-/// `inc` carries row `[Counter]` and an ensures `n == old(n) + 1`.
-/// The K1-buildable assertion: the row analysis sees this as a `State Counter`
-/// effect and the ensures predicate has the correct structure (pre/post).
-///
-/// The proof that `s.n+1 == s.n+1` closes by `refl` is verified by the
-/// kernel (not this pass); we assert only the row and effect presence here.
+/// The row analysis sees `inc` as a `State Counter` effect, and the escape
+/// check accepts that declared-and-used effect. This test observes only row
+/// inference and escape; contract-clause behavior is tested by the elaborator
+/// acceptance harness.
 #[test]
-fn space_old_scoped_to_ensures_type_level() {
+fn space_operation_row_inference_and_escape() {
     let seed: HashMap<String, EffectRow> = [(
         "inc".to_string(),
         EffectRow::singleton("Counter"),

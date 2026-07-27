@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use ken_elaborator::layout::{display_width, format_ken, CANONICAL_WIDTH};
 use ken_elaborator::lossless::parse_lossless;
 use ken_elaborator::resolve::resolve_decls;
-use ken_elaborator::ElabEnv;
+use ken_elaborator::{ElabEnv, ElabError};
 
 fn ast_shape(source: &str) -> String {
     let parsed = parse_lossless(source).expect("source must parse");
@@ -117,8 +117,14 @@ fn ac4_old_atom_boundary_parentheses_preserve_meaning() {
 
     let mut original = ElabEnv::new().unwrap();
     let mut canonical = ElabEnv::new().unwrap();
-    assert!(original.elaborate_file(source).is_ok());
-    assert!(canonical.elaborate_file(&formatted).is_ok());
+    assert!(matches!(
+        original.elaborate_file(source),
+        Err(ElabError::OldPreStateUnsupported { .. })
+    ));
+    assert!(matches!(
+        canonical.elaborate_file(&formatted),
+        Err(ElabError::OldPreStateUnsupported { .. })
+    ));
     assert_eq!(original.env.trusted_base(), canonical.env.trusted_base());
 }
 
