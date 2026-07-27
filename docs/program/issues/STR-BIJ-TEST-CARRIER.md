@@ -133,7 +133,12 @@ l2s cs₁  ≡  l2s cs₂          -- NFC identifies them  ⇒  l2s is NOT injec
 s2l (l2s cs₁) ≡ cs₂ ≠ cs₁    -- the List-Char-side round trip is NOT the identity
 ```
 
-⇒ In codepoints: input `[101, 769]`, correct output **`[233]`**.
+⇒ In codepoints: input `[101, 769]`. **Contract output `[233]`; MEASURED output
+`[101, 769]`** — the implementation gap `dec_ppakqc11kffh` names.
+
+⛔ **Therefore `[233]` is NOT an expectation for this node.** `AC-C7` expects the
+**measured `[101, 769]`**, solely as the transition tripwire. ⭐ The `[233]` value
+belongs to the **behavioral NFC WP**, which is what will flip this carrier.
 
 | input | pin |
 |---|---|
@@ -210,5 +215,26 @@ seat-to-seat yield **in-thread**, ⛔ never by sampling `ps`.
 ## Reporting
 
 Return exact SHA/tree/base and, specifically: **the failing-expectation evidence
-for `AC-C1`** (that asserting `[101, 769]` reddens), and **the normalization
-positive control for `AC-C4`**.
+for the **live** ACs only:
+
+- **`AC-C2`** — the four corrected carriers, each naming retraction or
+  injectivity.
+- **`AC-C6`** — where the carrier names the **stub** as the reason the reverse
+  direction passes, citing `37 §9` and `dec_ppakqc11kffh`.
+- ⭐⭐ **`AC-C7`** — the tripwire: **where `[101, 769]` is expected**, and **how a
+  future real NFC makes this test fail loudly** rather than silently continue.
+- **`AC-C3`** — that `ac2_round_trip_l2s_s2l_identity` and its ten-string corpus
+  are byte-identical.
+
+> ⛔ **CORRECTED 2026-07-27 (second amendment).** This section previously demanded
+> *"the failing-expectation evidence for `AC-C1` (that asserting `[101, 769]`
+> reddens)"* and *"the normalization positive control for `AC-C4`"*. ⛔ **Both were
+> withdrawn ACs, and both are the exact OPPOSITE of `AC-C7`**, which requires
+> `[101, 769]` to be the **green** expectation. ⇒ The two sections were mutually
+> impossible to satisfy.
+>
+> ⭐ **Caught by @language-leader, not by me.** I amended the acceptance table and
+> left this section stating the superseded requirement — and **a stale operative
+> section outranks a correct amendment elsewhere in the same file**, because it is
+> the one an implementer reads when deciding what to report. ⇒ When withdrawing an
+> AC, grep the whole node for its id and every value it named.
