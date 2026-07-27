@@ -299,9 +299,28 @@ about source lines invite failure and delay. Assert what the ops DO.**
   length.
 - **AC-6 — no regression, green in CI.** ⛔ Build and test **locally only
   scoped** (`scripts/ken-cargo -p ken-host`, `-p ken-interp`, `-p
-  ken-elaborator`). ⛔ **Never `--workspace` on this box** — the full build, the
-  `--locked` gate, and conformance run **in CI on GitHub** (`COORDINATION §12`).
-  "No regression" here means **green in CI**, never a local workspace run.
+  ken-elaborator`, **`-p ken-verify`**). ⛔ **Never `--workspace` on this box** —
+  the full build, the `--locked` gate, and conformance run **in CI on GitHub**
+  (`COORDINATION §12`). "No regression" here means **green in CI**, never a
+  local workspace run.
+
+  ⛔⛔ **`-p ken-verify` IS REQUIRED — this frame originally named only the first
+  three, and that omission would have shipped a build-wide regression.** Runtime
+  measured it (`evt_3x09t9a0axw2h`): `crates/ken-elaborator/src/compiler_driver.rs`
+  holds a constructor-name → `HostOpV1` admission table written as a **`for` loop
+  over string literals, not a `match`**, so **no exhaustiveness gate of any kind
+  covers it** and the site is invisible to a source census. Adding constructors
+  left every checked host family holding an unadmitted constructor, and **every
+  native program failed to build**. Neither `ken-host`'s nor `ken-elaborator`'s
+  suites caught it. The only thing that did is a `ken-verify` differential that
+  **builds a native artifact**. Fixed in `62c96210`.
+
+  ⭐ **The general rule this frame now carries:** a census that enumerates
+  *source sites* cannot see a site no static gate covers. Whenever a WP widens a
+  closed enum or a catalog of operations, the crate that exercises the **built
+  artifact** belongs in the local validation set — not because the frame's file
+  table named it, but because it is the only oracle that observes the
+  consequence.
 
 ## Contention check
 
