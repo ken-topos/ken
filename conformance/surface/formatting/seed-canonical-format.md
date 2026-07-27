@@ -174,16 +174,18 @@ substring replacement is never an acceptable witness.
   group breaking), WP S gate 7
 - given: paired fixtures at display widths 96 and 97 for a declaration header,
   arrow chain, application, match arm, effect row, contract, refinement, and
-  record/class/instance field. Each displayed group is embedded in the smallest
-  complete source that preserves that spelling; the wrapper is excluded from
-  the measurement. In every block below, the first line is the 96-column arm
-  and the second adds exactly one identifier character:
+  record/class/instance field. Each displayed line is the actual rendered line
+  in its smallest canonical carrier: top-level forms include their declaration
+  carrier; the match arm includes the four source spaces contributed by its
+  declaration body and `match`; the field includes its two block spaces. In
+  every block below, the first line is the 96-column arm and the second adds
+  exactly one identifier character:
 
   Declaration header:
 
   ```text
-  fn declaration_header_boundary (α : Type) (value : Vector α n) : Result α = valuexxxxxxxxxxxxxxx
-  fn declaration_header_boundary (α : Type) (value : Vector α n) : Result α = valuexxxxxxxxxxxxxxxx
+  fn declaration_header_boundary (a : Type) (value : Vector a n) : A → B = valuexxxxxxxxxxxxxxxxxx
+  fn declaration_header_boundary (a : Type) (value : Vector a n) : A → B = valuexxxxxxxxxxxxxxxxxxx
   ```
 
   Arrow chain:
@@ -196,43 +198,45 @@ substring replacement is never an acceptable witness.
   Application:
 
   ```text
-  apply α first_argument second_argument third_argument fourth_argumentxxxxxxxxxxxxxxxxxxxxxxxxxxx
-  apply α first_argument second_argument third_argument fourth_argumentxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  const app : R = apply (A → B) first_argument second_argument third_argument fourth_argumentxxxxx
+  const app : R = apply (A → B) first_argument second_argument third_argument fourth_argumentxxxxxx
   ```
 
-  Match arm:
+  Match arm inside
+  `const match_boundary : R = match subject { … }`; the four leading spaces
+  are source:
 
   ```text
-  ExtremelyLongPattern α pattern_argument ↦ apply handler α pattern_argument additional_argumentxx
-  ExtremelyLongPattern α pattern_argument ↦ apply handler α pattern_argument additional_argumentxxx
+      ExtremelyLongPattern a pattern_argument ↦ apply handler a pattern_argument additional_argxxx
+      ExtremelyLongPattern a pattern_argument ↦ apply handler a pattern_argument additional_argxxxx
   ```
 
   Effect row:
 
   ```text
-  proc effect_row_boundary (α : Type) : IO α visits [Console, FileSystem, Network, Clock] = runxxx
-  proc effect_row_boundary (α : Type) : IO α visits [Console, FileSystem, Network, Clock] = runxxxx
+  proc effect_row_boundary (f : A → B) : IO A visits [Console, FileSystem, Network, Clock] = runxx
+  proc effect_row_boundary (f : A → B) : IO A visits [Console, FileSystem, Network, Clock] = runxxx
   ```
 
   Contract:
 
   ```text
-  space proc contract_boundary (x : Int) : Int requires zero ≤ x ensures result == x = xxxxxxxxxxx
-  space proc contract_boundary (x : Int) : Int requires zero ≤ x ensures result == x = xxxxxxxxxxxx
+  space proc c (f : A → B) (x : A) : B requires predicate x ensures Equal B result (f x) = f xxxxx
+  space proc c (f : A → B) (x : A) : B requires predicate x ensures Equal B result (f x) = f xxxxxx
   ```
 
   Refinement:
 
   ```text
-  const refinement_boundary : {x : Int | lower_bound ≤ x ∧ x ≤ upper_bound} = witnessxxxxxxxxxxxxx
-  const refinement_boundary : {x : Int | lower_bound ≤ x ∧ x ≤ upper_bound} = witnessxxxxxxxxxxxxxx
+  const refinement_boundary : {f : A → B | predicate f} = witnessxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  const refinement_boundary : {f : A → B | predicate f} = witnessxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
   ```
 
-  Record/class/instance field:
+  Field inside `class Boundary a { … }`; the two leading spaces are source:
 
   ```text
-  field_boundary : Container α beta_argument gamma_argument delta_argument epsilon_argumentxxxxxxx
-  field_boundary : Container α beta_argument gamma_argument delta_argument epsilon_argumentxxxxxxxx
+    field_boundary : Container (A → B) beta_argument gamma_argument delta_argument epsilon_argxxxx
+    field_boundary : Container (A → B) beta_argument gamma_argument delta_argument epsilon_argxxxxx
   ```
 
   Unicode display-width measurement gives the following discriminating
@@ -241,14 +245,14 @@ substring replacement is never an acceptable witness.
 
   | form | 96 arm | 97 arm |
   |---|---|---|
-  | declaration header | 96 display / 99 bytes → flat | 97 display / 100 bytes → broken |
+  | declaration header | 96 display / 98 bytes → flat | 97 display / 99 bytes → broken |
   | arrow chain | 96 display / 106 bytes → flat | 97 display / 107 bytes → broken |
-  | application | 96 display / 97 bytes → flat | 97 display / 98 bytes → broken |
-  | match arm | 96 display / 100 bytes → flat | 97 display / 101 bytes → broken |
+  | application | 96 display / 98 bytes → flat | 97 display / 99 bytes → broken |
+  | match arm | 96 display / 98 bytes → flat | 97 display / 99 bytes → broken |
   | effect row | 96 display / 98 bytes → flat | 97 display / 99 bytes → broken |
   | contract | 96 display / 98 bytes → flat | 97 display / 99 bytes → broken |
-  | refinement | 96 display / 102 bytes → flat | 97 display / 103 bytes → broken |
-  | record/class/instance field | 96 display / 97 bytes → flat | 97 display / 98 bytes → broken |
+  | refinement | 96 display / 98 bytes → flat | 97 display / 99 bytes → broken |
+  | record/class/instance field | 96 display / 98 bytes → flat | 97 display / 99 bytes → broken |
 - expect: **RED-UNTIL-BUILT (B3/C)** — each 96-column form remains flat when
   its group fits; the paired 97-column form makes that same breakable group
   choose its specified multiline layout. Every output line over 96 is
