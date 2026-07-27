@@ -33,90 +33,91 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## ▶▶ LIVE — 2026-07-26 ~20:2xZ · ⛔ `main` IS RED; ONE WP CLEARS IT
+## ▶▶ LIVE — 2026-07-27 ~01:2xZ · `main` IS GREEN; the enclave has the thread
 
-**`origin/main` at last check: `3b979305`.** ⛔ Verify it; do not trust this line.
+**`origin/main` at last check: `a1e29284`.** ⛔ Verify it; do not trust this line.
 
-### ⛔⛔ THE ONE THING THAT MATTERS
+### ✅ THE RED IS GONE — and here is the evidence, because the claim is load-bearing
 
-**`main` is RED**, and **not** for the reason an earlier window gave. Measured at
-`11b21039` — a tree containing **no** candidate:
+The block that stood here said **`main` IS RED** and *"every non-doc-only merge is
+blocked."* ⛔ **Both were true when written and are false now.** `LIB-GATE-DECOUPLE`
+landed and removed the CI coupling, per the operator's ruling.
 
-```
-scripts/ken-cargo test -p ken-cli --test library_documentation_gates
-test result: FAILED. 29 passed; 2 failed
-```
-
-| failing test | asserts |
-|---|---|
-| `registered_record_validation_gates_run` (`:636`, panics `:1048`) | 12 cited sources drifted from their attestations |
-| `agent_library_manifest_schema_contract_and_measurements_hold` (`:3356`) | `author-package.md` `measured_tokens` — 480 declared, 459 actual |
-
-**Cause: my own `--doc-only` merge `95bc855c` (PR #1031).** It edited 11 cited
-catalog sources + `docs/program/07-catalog-style-guide.md` without regenerating
-`library/SOURCE-ATTESTATIONS`, and `library/agents/tasks/author-package.md`
-without recomputing its token count. ⛔ **`--doc-only` skips CI, so nothing
-reported either.**
-
-⇒ **Every non-doc-only merge is blocked.** Fix =
-[`LIB-GATE-DECOUPLE`](../issues/LIB-GATE-DECOUPLE.md), **operator-ruled: "remove
-the CI coupling."** ⛔ **Do NOT regenerate the ledger** — that option was
-considered and rejected.
+⭐ **The proof is not a green badge — it is a merge that could not have happened.**
+PR **#1052** (integrator retirement) was published **without `--doc-only`**
+precisely because it touches `ci.yml` and a functional case arm. The publisher
+waited its full pre-poll window, read the checks, and reported
+*"PR #1052 checks passed and merge command succeeded."* ⇒ A **non**-doc-only merge
+cleared CI end to end. That is the discriminating observation; a doc-only merge
+would have proved nothing, since `--doc-only` skips CI.
 
 ### ▶ Lane state
 
 | ring | state |
 |---|---|
-| **Verify** | ▶ **LIVE** on `LIB-GATE-DECOUPLE`, kicked at `e9987c6a` (`evt_1bhzvkrc1gmm0`), leader confirmed `Working` |
-| **Runtime** | ⛔ **STOPPED by operator order.** No node. `B2F` held. ⛔ Do NOT re-anchor `B2E`/`B2F` — retire them and write fresh |
-| **Language** | ✅ **CLOSED** — `KW-ORACLE-REMOVE` merged, all three retros in |
-| **Spec enclave** | idle, correct. Next work = the `SPEC-STORE-SPLIT` frame (unwritten) |
-| **Doc · Foundation · Kernel · Ergo** | idle |
+| **Spec enclave** | ▶ **LIVE** on `SPEC-31-WIDTH-ERRATUM`, kicked `evt_629qvns1n7j7d` at `a1e29284`. Size S. Reconcile `conformance/` to **96** columns |
+| **Runtime** | ⛔ **STOPPED by operator order.** No node. ⛔ Do NOT re-anchor `B2E`/`B2F` — retire them and write fresh |
+| **Verify · Language · Doc · Foundation · Kernel · Ergo** | idle, correct — nothing released |
 
-### ✅ `KW-ORACLE-REMOVE` LANDED — ⛔ and it did NOT clear the red
+⛔ **The tracker shows three items `active`; only one ring is.**
+`RT-NATIVE-FNSPLIT` and `RT-VALUE-TOTALITY` read `active` and are **stopped**;
+`SPEC-MISSION-GROUNDING` reads `active` and is an **umbrella with no ring on it**.
+See the operator escalation below — `gen-progress.sh`'s `VALID_STATUSES` has no
+value meaning *"halted under an operator stop-order"*, so the stop exists only as
+prose someone has to repeat.
 
-**`origin/main = 3b979305`** — *"KW-ORACLE-REMOVE: delete source-text oracle
-(#1035)"*. ⭐ **Merged by the OPERATOR directly, not through the publisher** — ⛔ so
-there is no publisher log and no `wp/scripted-merge-*` branch for it.
+### ✅ Landed this window — five merges, each blob-verified with a control
 
-Verified by **blob absence**:
-`git cat-file -e origin/main:crates/ken-elaborator/tests/kw_theorem_source_oracle.rs`
-→ exit 1. ⭐ Control: the same probe returned **present** at base `720b0e17`, so the
-absence is the change landing, not a path that never existed.
+| PR | `main` | what |
+|---|---|---|
+| #1048 | `c631841d` | `SPEC-STORE-SPLIT` — Map/Set internal bytes are not observable |
+| #1049 | `5b848ad5` | tracker flip |
+| #1050 | `6d3f9fb5` | retro carry: a property-removal census must close over **entailment** |
+| #1051 | `fd8de255` | Librarian as-built — chapter 06 store mechanism + capacity prose |
+| #1052 | `a1e29284` | **integrator seat retired** — 50 files, every operative reference |
 
-⚠ **Its PR shows red checks and they were never the candidate's.** `test shard 1/4`,
-`test shard 4/4`, `build + test` = the `library_documentation_gates` failures above.
-**Passed:** `conformance suite`, `path-guard`, `clean-room provenance check`,
-`work-item tracker`, shards `2/4` + `3/4`, all three `native-slow` jobs.
+⭐ **`SPEC-STORE-SPLIT`'s carry is the strongest thing this window produced, and all
+four enclave seats derived it independently:** a property-removal census **by
+subject name is not closed under entailment.** The first fold repaired all six
+carriers that *say* Map/Set; the retired promise survived in generic clauses
+quantified over *closure-free* / *admitted* / *any live* value — whose domains
+contain Map/Set. Nine carriers in total, found across three passes. ⭐⭐ **The tell:
+repeated population growth across passes means the ENUMERATION METHOD is wrong,
+not that the list is longer.** Landed at
+`agent/memory/fleet/an-enumeration-needs-a-proven-closure-not-a-better-grep.md`.
 
-⇒ **One blocker removed, not the blockage.** `main` stays red until
-`LIB-GATE-DECOUPLE` lands.
+### ⛔ OWED TO THE OPERATOR — three items, none self-resolvable
 
-### ▶ Still queued behind the red
+1. **The tracker cannot express an operator stop-order.** `RT-NATIVE-FNSPLIT`,
+   `RT-FNSPLIT-B2F`, `RT-VALUE-TOTALITY`, `PX8-F-CAP-41` display **unblocked**
+   because their dependency merged, while runtime is under a full stop. Needs
+   either a new status value or a `halted:` field. **Raised, unanswered.**
+2. ⛔ **`SPEC-MISSION-GROUNDING` `AC-M3` names a pass I am forbidden to request.**
+   The AC says *"the adversary refutation pass is still owed"*, and the node's §2
+   routes it to the adversary. **`COORDINATION §10⁻a` forbids the Steward from
+   asking the adversary to hunt anything** — *"a request for an attack is a
+   conversation; the Steward does not make one"* — and scopes the adversary to
+   `crates/` and catalog/`library/`, which a spec-vs-mission audit is not. ⇒ Two
+   operator-authored artifacts conflict. **I cannot discharge `AC-M3` without the
+   operator either dispatching the adversary directly (as happened for the first
+   pass) or re-routing the AC.**
+3. **The `integrator` participant still exists in the convo space** with a stale
+   status citing PR #365 (merged 2026-07-08). The roster, git, worktrees, tmux, and
+   every tracked non-chronicle file are clean — but `orientation()` and
+   `list_participants` still show the seat to **every** agent, and no MCP tool
+   removes a participant. **Operator/convo-admin action.**
 
-- **Publisher message fix** — `preserved/steward-publisher-msg-fix = 921e042b`
-  (also `steward/work` HEAD, one file, blob `76afaf31`). ⛔ Touches `scripts/`, so
-  it **must clear CI** and ⛔ **must not ride a `--doc-only` merge.**
-  ⚠ **Twice on 2026-07-26 `git diff origin/main..steward/work` included this file
-  and a `--doc-only` publish would have skipped CI on it.** ⛔ **Re-check the diff
-  before every `--doc-only`.**
+### ⛔ Still operator-HELD
 
-### ▶ What I owe next, in order
+**`DOC-ATTEST-LIVING`** — ⛔ **do not release, do not re-ask.** Node:
+`docs/program/issues/DOC-ATTEST-LIVING.md`.
 
-1. Verify's candidate → Decision → publish → blob-verify → retros.
-2. Publish the publisher message fix (needs CI, so it waits for green).
-3. Author the `SPEC-STORE-SPLIT` frame shovel-ready; **§2c gate — compact all
-   three enclave seats unconditionally** — then kick the enclave.
-4. Fold task `#94`'s hard-stop-`#11` measurements into a durable node, then delete
-   the task.
-5. **Land the promotion batch (task `#113`).** ⚠ Its strongest entries exist **only
-   in the convo channel and a task description** — the exact undurability that task
-   `#107` tracks.
+### ⚠ UNDURABLE CARRY — this text is the only copy, do not delete it unread
 
-### ⭐⭐ The carry from the closed Language ring — stronger than my own framing
+Task `#113` tracks the promotion ladder; this entry is still channel-only, which
+is the exact undurability task `#107` exists to fix.
 
-`runtime`-style retros usually restate process. This one supplied a mechanism I did
-not have. **A CORRECTION RESETS THE FIXED-INPUT AUDIT** (`evt_5h11p8gjjswmp`):
+**A CORRECTION RESETS THE FIXED-INPUT AUDIT** (`evt_5h11p8gjjswmp`, Language ring):
 
 > *"The first measurement validated cardinality; it did not validate pass state, and
 > no amount of confidence in the corrected prose could bridge that gap. … Re-read
@@ -124,22 +125,14 @@ not have. **A CORRECTION RESETS THE FIXED-INPUT AUDIT** (`evt_5h11p8gjjswmp`):
 > were introduced by the correction itself**. A correction explains why the prior
 > claim was wrong; it does not make its replacement observed."*
 
-⭐ **That is why my second `AC-4` error lived INSIDE the fix for the first.** ⭐⭐ And
-it is the **same property** as *a clearance names the axes it covers*, seen from the
+⭐ That is why the second `AC-4` error lived **inside** the fix for the first. ⭐⭐ It
+is the **same property** as *a clearance names the axes it covers*, seen from the
 other end — an arity mismatch that prose collapses. ⇒ ⛔ Promote them as **one**
 entry, not two.
 
 ⭐ Also load-bearing: *"the 'measure before any edit' boundary kept the red
 attributable to `main`."* ⇒ **A deletion that lands without a pre-measurement
 destroys the evidence that the base was already broken.**
-
-### ⛔ Still operator-HELD
-
-**`DOC-ATTEST-LIVING`** — ⛔ **do not release, do not re-ask.** Node:
-`docs/program/issues/DOC-ATTEST-LIVING.md`.
-⚠ `DOC-GATE-NEEDLE` was also listed as operator-HELD in the old file; **it has
-since merged (#1019) and closed.** That marker was stale.
-
 ## ⛔ CORRECTIONS — two claims the old file made that were FALSE
 
 ⭐ Both were **time-varying state wearing a permanent-looking hat** — the exact
@@ -178,21 +171,43 @@ the claim.**
 - ⛔ `claude mcp list` reporting `convo: ✔ Connected` **is not evidence** — it
   health-checks a fresh process.
 
-## ▶ Preserved refs — ⛔ QUERY, do not maintain a list here
+## ▶ Preserved refs — ⛔ QUERY LOCALLY. `origin` carries `main` ONLY.
 
-The old file hand-maintained 6. **Origin holds 26.** ⇒ A hand-list of refs is a
-floor that reads as a population:
+> ### ⛔ THIS SECTION WAS FALSE AS WRITTEN. Both halves.
+>
+> It said *"Origin holds 26"* and gave `git ls-remote origin
+> 'refs/heads/preserved/*'` as the query. **Operator ruling, 2026-07-26:** *"you do
+> not need off-box pushes … Also clean up all of the non-main branches at origin."*
+> ⇒ **All 63 non-`main` origin branches are deleted.** That `ls-remote` now returns
+> **nothing**, and a reader running it would conclude the work was lost.
+
+**Measured 2026-07-27 — the query is local, and the population is larger, not
+smaller:**
 
 ```sh
-git ls-remote origin 'refs/heads/preserved/*'
+git for-each-ref 'refs/heads/preserved/*'    # 78 refs
+git ls-remote --heads origin                 # refs/heads/main — and nothing else
 ```
 
-⭐ Notable, because their content exists **nowhere else**:
-`preserved/b2e-rejected-source-oracle` = `159f4109` and
-`wp/RT-FNSPLIT-B2E-boundary-value-elimination` = `e1b540e2` (Runtime's five
-stopped days — ⛔ **delete neither**) ·
-`preserved/rt-fnsplit-b2f-hardstop-{9,10,11}-evidence` ·
-`preserved/architect-state-*` (a state branch that never merges).
+⭐ **A branch on one local ref is the NORMAL state of preserved work, not an
+exposure.** ⛔ Do not raise an unpushed ref as a finding, and do not mint a token
+to push one.
+
+⛔ **AND THE "EXISTS NOWHERE ELSE" CLAIM WAS WRONG ON EVERY ITEM IT NAMED.** Each
+was checked at `origin/main = a1e29284`:
+
+| the old claim | measured |
+|---|---|
+| `preserved/b2e-rejected-source-oracle` = `159f4109` | ✅ **present locally at that exact SHA** |
+| `wp/RT-FNSPLIT-B2E-boundary-value-elimination` = `e1b540e2` | ✅ **present locally at that exact SHA** — ⛔ delete neither |
+| `preserved/rt-fnsplit-b2f-hardstop-{9,10,11}-evidence` | ⛔ **no local ref of that name exists** — and it does not need to. Hard-stops #9/#10/#11 are all on `main`, across **12** files (`RT-FNSPLIT-B2{E,F,O,R,V}.md`, `RT-NATIVE-FNSPLIT.md`, `RT-VALUE-TOTALITY.md`, the B2O report + predictions, two WP frames, `diary/2026/Jul/25.md`). `bce75fec` is literally *"make hard-stop #11's evidence durable"*. |
+| `preserved/architect-state-*` | ⛔ **wrong prefix** — the refs are `preserved/architect-work-*` (5 locally). A ref name you cannot resolve is not a backup. |
+
+⭐ **The transferable part: a "this exists nowhere else" note is a claim about a
+population you did not enumerate, and it decays in both directions at once** — the
+copy you were protecting had already landed in the repo, while the ref name you
+recorded it under never existed. ⇒ **Re-derive from `for-each-ref` and `git grep`
+on `main`; never from a hand-kept list of what is precious.**
 
 ## Operator rulings — 2026-07-21 ~12:45Z. ⛔ SETTLED, do not reopen.
 
@@ -224,6 +239,33 @@ that changes nothing about how any program behaves make this test fail?"**
 
 **Standing gate policy (operator, 2026-07-26):** the library currency ledger is
 generated **at version release points**, ⛔ **not enforced per merge.**
+
+**⛔ NO OFF-BOX PUSHES (operator, 2026-07-26).** *"You do not need off-box pushes.
+In decades of software development, I have never lost a commit to a drive failure.
+Also clean up all of the non-main branches at origin."* And on the protocol:
+*"keep it simple. the off box push protocol needlessly complicates and wastes time
+and tokens."* ⇒ **`origin` carries `main` only.** A branch on one local ref is
+**normal**. ⛔ No durability sweeps, no token-minting pushes, no ring reporting an
+unpushed ref. The publisher's own candidate-branch push stays — that is how it
+opens a PR. `steward.md` §2c step 8b (~80 lines of `ls-remote` sweep + push
+recipe) is **deleted**, not amended.
+
+**⛔ THE `integrator` SEAT IS RETIRED (operator, 2026-07-26).** *"remove any
+references to the integrator. that seat was retired weeks ago."* ⇒ Every operative
+reference is gone as of PR #1052 (`a1e29284`, 50 files) — PR template, CODEOWNERS,
+`ci.yml`, four devcontainer files (including a **functional** `ctx-nudge.sh` case
+arm), `COORDINATION.md`, `04-git-and-integration.md`, 40 WP frames, the roster
+(29→28), git refs, worktrees. ⭐ **The chronicles keep the word deliberately** —
+`docs/program/diary/`, `agent/memory/MIGRATION-LOG.md`,
+`docs/program/ds-campaign-judgment-log.md` (17 files, 501 occurrences): there it is
+a true account of what the process **was**. **Instructions get corrected; records
+stay records.** ⚠ One residual is not mine to clear — the convo **participant**
+still exists; see the LIVE block's operator-owed list.
+
+**Canonical width: 96 (operator, 2026-07-26).** *"re 88 v 96. 96 is what it should
+be. It was an incomplete revision, apparently."* ⇒ `spec/30-surface/31-lexical.md`
+and `CANONICAL_WIDTH` are correct; `conformance/` is the stale side.
+`SPEC-31-WIDTH-ERRATUM` reconciles it. ⛔ Do not re-argue the value.
 
 ## ▶ Where durable law lives — ⛔ do not restate it here
 
