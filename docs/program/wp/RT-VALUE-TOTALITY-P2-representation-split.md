@@ -261,8 +261,40 @@ persistence, or slot identity merely because it is one Rust enum.** Concretely:
 through an explicitly-named compiler-private route.
 
 ⭐ **The property, not the spelling:** generic code that requires `PartialEq`
-on `RuntimeValue` must **fail to compile**. §2e says the migration is small — 4
-explicit sites. If you find more, that is a report, not a stop.
+on `RuntimeValue` must **fail to compile**.
+
+> ### ⛔ CORRECTED 2026-07-27 — "4 explicit sites" was WRONG, and wrong in kind
+>
+> §2e said *"the migration is small — 4 explicit sites … if you find more, that is
+> a report, not a stop."* **Measured to fixpoint with the compiler: 6 direct
+> consumers and 25 transitive types.** It was also not "a report, not a stop" — it
+> was a genuine fork needing a ruling, and stopping was correct.
+>
+> ⛔ **The error is one of kind, not arithmetic: a count of explicit sites cannot
+> measure a derive removal.** A derive's cost is carried by **reachability**, not
+> by call sites — so the number to state was the transitive closure, which is 25.
+>
+> ✅ **RULED (Steward, scope axis): route A — remove the derives.** The 25 include
+> leaf metadata enums with no closure relationship (`RuntimeObligationStatus`,
+> `RuntimeRecursionAdmission`, `RuntimeEffectBoundary`,
+> `RuntimeLowerabilityStatus`), and that cost is accepted because:
+>
+> 1. ⭐ **Its direction is OVER-STRICT, not unsound.** The defect `D2` fixes
+>    *grants* a closure equality `41 §2.1` forbids; route A merely *withdraws* an
+>    equality those enums were permitted to have. ⛔ Not the same class — one
+>    admits a forbidden operation, the other loses a convenience.
+> 2. It is **contained entirely inside `ken-runtime`**.
+> 3. ⛔ Route B enters `crates/ken-elaborator/src/erasure.rs`, which **collides
+>    with kernel's `D5`** — more expensive *and* contended.
+>
+> ⛔ **A hand-written ~40-arm `PartialEq for RuntimeExpr` stays rejected**: one
+> wrong arm is a **silent** miscomparison in a spec-governed carrier, with no
+> compiler check.
+>
+> ⚠ **Still open and NOT mine:** whether `AC-V4`'s failure-to-compile control
+> admits an *explicitly named* escape hatch (route B) or requires that structural
+> closure equality not compile at all. **Architect's call.** If it admits one,
+> route B revives and the contention question returns to the Steward.
 
 ### D3 — ⭐ THE `AC-V8` ARM IS CHOSEN FOR YOU: the **sealed canonical witness**
 
