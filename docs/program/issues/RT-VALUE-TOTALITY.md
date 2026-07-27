@@ -1,7 +1,7 @@
 ---
 id: RT-VALUE-TOTALITY
 title: "Make every total traversal of Value non-recursive in the host stack, and remove the closure capabilities the landed closure boundary forbids"
-status: active
+status: merged
 owner: runtime
 size: L
 gate: none
@@ -18,7 +18,7 @@ origin: Architect cycle-contract ruling evt_5pzxf6sm4z08 ("host recursion may no
 > — `values.rs` = `042642ca`, `value_depth_totality.rs` = `cde48b42` on main and
 > on the approved candidate `c630c66d`. Derived `Debug` removed.
 >
-> ### ⚠ TWO NAMED RESIDUALS — recorded here so they are not approval-thread asides
+> ### ⚠ TWO NAMED RESIDUALS — recorded so they are not thread-only asides
 >
 > 1. ⛔ **The alternate `{:#?}` pretty format is GONE.** The Steward ruled this
 >    acceptable on a **zero-consumer census**: the pre-change base has zero
@@ -35,7 +35,15 @@ origin: Architect cycle-contract ruling evt_5pzxf6sm4z08 ("host recursion may no
 >    observations from outer fixture nodes — so omission and duplication mutations
 >    do redden it; what it cannot see is a variant absent from both.
 >
-> ⚠ P3 is one slice. This node stays `active` for its remaining scope.
+> ### ✅ ALL THREE PHASES MERGED — THIS NODE IS COMPLETE
+>
+> `P1` (PR #996), `P2`, and `P3` (PR #1116) are all merged. §5's phase table
+> names those three as the whole plan and calls `P3` *"the node's residual"*.
+> ⇒ **There is no remaining scope; status is `merged`.**
+>
+> ⭐ **This discharges the last unmet `depends_on` of
+> [`RT-FNSPLIT-C1`](RT-FNSPLIT-C1.md)** — its other three (`B2O`, `B2R`, `B2V`)
+> were already merged, so C1's dependencies are now fully met.
 
 > ## ⭐⭐ OPERATOR RULING 2026-07-26 — THIS NODE IS NOW THE RUNTIME TEAM'S DIRECTION
 >
