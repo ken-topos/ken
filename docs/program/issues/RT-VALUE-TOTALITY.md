@@ -43,7 +43,7 @@ origin: Architect cycle-contract ruling evt_5pzxf6sm4z08 ("host recursion may no
 > |---|---|
 > | **Runtime goes to** | **`P2` + `P3` of this node** — the carry-through |
 > | **`RT-FNSPLIT-B2F` stays** | ⛔ **HELD at hard-stop #11.** Do not resume it |
-> | **`RT-FNSPLIT-B2E`** | ▶ **land it** — candidate under QA, inert infrastructure, zero `B2F` population. ⛔ Do **not** discard a nearly-complete unit |
+> | **`RT-FNSPLIT-B2E`** | ⛔ **RETIRED 2026-07-26 — superseded by `SPEC-STORE-SPLIT` §7 item 1.** This row used to read *"land it — do not discard a nearly-complete unit"*; it is edited, not annotated, because it is the text a reader acts on. `B2E`/`B2F` are built around the constraint the store split removes. **Retire them and write fresh.** ⛔ Do not delete `wp/RT-FNSPLIT-B2E-boundary-value-elimination = e1b540e2` or `preserved/b2e-rejected-source-oracle = 159f4109`; the salvage decision is §7 item 4 there |
 >
 > ⭐ **Why the redirect is right and not merely a re-prioritisation.** `B2F`'s
 > wall is that every eliminator needs a compile-time template, and all three
@@ -61,17 +61,20 @@ origin: Architect cycle-contract ruling evt_5pzxf6sm4z08 ("host recursion may no
 > relaxation items impact the work in front of the runtime team?"* Measured
 > against `spec-align-a1-census.md` and the Track C dispositions: yes, three.**
 >
-> **1. ⛔ A live conformance row says equality IS SLOT ID. `AC-V8` says equality
-> agrees with CANONICAL identity.** A1 census row: *"Same-slot dedup,
-> slot-observable structural sharing, O(1) equality"* — `41 §2,§4`; `42 §3.4`;
-> `44 §1` — with live rows `runtime/values/equality-is-slot-id`,
+> **1. ✅ CLOSED 2026-07-27 — the slot-id collision is GONE, no escalation owed.**
+> This item used to read *"a live conformance row says equality IS SLOT ID …
+> surface it to the Architect before P2 picks an arm"*; it is **edited, not
+> annotated**, because the instruction it carried is now wrong.
+> **`SPEC-STORE-SPLIT` retired all four rows.** Measured at
+> `origin/main = 7e9cfc96`: `runtime/values/equality-is-slot-id`,
 > `runtime/values/dedup-shares-slot`,
-> `surface/collections/structurally-equal-collections-o1-comparable`. Verdict
-> **`STOP-1/4` — exactly fork C7.**
-> ⇒ **`AC-V8` cannot be discharged without saying how canonical agreement relates
-> to slot-id equality**, and a live row asserts the latter. ⛔ **This is a real
-> possible collision, not a wording problem** — surface it to the Architect
-> *before* P2 picks an arm, not at review.
+> `surface/collections/structurally-equal-collections-o1-comparable`, and
+> `runtime/evaluation/det-sharing-dedups-by-slot` are **absent** from
+> `conformance/` and `spec/`. ⚠ Positive control — the same probe **does** find
+> `runtime/values/closure-publication-rejected-transitively` and
+> `runtime/addressing/no-lattice-on-hot-path`, so it was not silently returning
+> empty. ⇒ `AC-V8` has no live row asserting the other side of it, and fork C7
+> was decided inside `SPEC-STORE-SPLIT` §5.
 >
 > **2. ⚠ C2 already ruled the key interface `AC-V8` is choosing inside.** The
 > Architect ruled C2 as option (b), **`KeyEq` derived from the order**
@@ -144,7 +147,7 @@ origin: Architect cycle-contract ruling evt_5pzxf6sm4z08 ("host recursion may no
 > | phase | frame | covers |
 > |---|---|---|
 > | **P1 — totality** | ✅ **MERGED** `docs/program/wp/RT-VALUE-TOTALITY-P1-iterative-canonical-traversal.md` | `AC-V1` iterative encoder · `AC-V2` structural pin · `AC-V3` clone+drop |
-> | **P2 — representation** | ⛔ **NOT WRITTEN** | `AC-V4`–`AC-V6`, `AC-V8`–`AC-V10`: carrier split, derives, closure arm, `ken-foundation` twin, checked projection · **plus `AC-V12`**, which rides `AC-V8` and is not a reading of it |
+> | **P2 — representation** | ✅ **WRITTEN** `docs/program/wp/RT-VALUE-TOTALITY-P2-representation-split.md` | `AC-V4`–`AC-V6`, `AC-V8`–`AC-V10`: carrier split, derives, closure arm, `ken-foundation` twin, checked projection · **plus `AC-V12`**, which rides `AC-V8` and is not a reading of it |
 > | **P3 — residual totality** | ⛔ **NOT WRITTEN** | `AC-V11`: derived `Debug` is depth-total. ⚠ **Does NOT depend on P2** — releasable any time after P1 |
 >
 > **P1 is first because P2's checked projection must SHARE P1's mechanism**
