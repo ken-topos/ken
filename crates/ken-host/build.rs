@@ -158,7 +158,7 @@ fn parse_effect_catalog() -> EffectCatalog {
             kind => panic!("unknown effect catalog row {kind}"),
         }
     }
-    assert_eq!(operations.len(), 22, "HostOpV1 catalog is closed at 22");
+    assert_eq!(operations.len(), 24, "HostOpV1 catalog is closed at 24");
     let mut ids = operations
         .iter()
         .map(|operation| operation.id)

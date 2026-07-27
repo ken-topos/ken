@@ -19,6 +19,8 @@ pub enum HostOpV1 {
     ConsoleFlush = 0x0103,
     ConsoleIsTerminal = 0x0104,
     ClockWallNow = 0x0201,
+    ClockMonotonicNow = 0x0202,
+    ClockSleepUntil = 0x0203,
     FsReadFile = 0x0301,
     FsWriteFile = 0x0302,
     FsAppendFile = 0x0303,
@@ -39,12 +41,14 @@ pub enum HostOpV1 {
 }
 
 impl HostOpV1 {
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 24] = [
         Self::ConsoleRead,
         Self::ConsoleWrite,
         Self::ConsoleFlush,
         Self::ConsoleIsTerminal,
         Self::ClockWallNow,
+        Self::ClockMonotonicNow,
+        Self::ClockSleepUntil,
         Self::FsReadFile,
         Self::FsWriteFile,
         Self::FsAppendFile,
@@ -95,6 +99,8 @@ impl HostOpV1 {
                 | Self::ConsoleFlush
                 | Self::ConsoleIsTerminal
                 | Self::ClockWallNow
+                | Self::ClockMonotonicNow
+                | Self::ClockSleepUntil
         )
     }
 }
@@ -1214,6 +1220,10 @@ pub trait HostEffectBackendV1 {
     fn clock_wall_now(&mut self) -> Vec<u8> {
         Vec::new()
     }
+    fn clock_monotonic_now(&mut self) -> Vec<u8> {
+        Vec::new()
+    }
+    fn clock_sleep_until(&mut self, _deadline: u64) {}
     fn fs_read_file(
         &mut self,
         grant: &CapabilityGrantV1,
@@ -1466,6 +1476,8 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
                 | HostOpV1::ConsoleFlush
                 | HostOpV1::ConsoleIsTerminal
                 | HostOpV1::ClockWallNow
+                | HostOpV1::ClockMonotonicNow
+                | HostOpV1::ClockSleepUntil
                 | HostOpV1::FsReadFile
                 | HostOpV1::FsWriteFile
                 | HostOpV1::FsAppendFile
@@ -1506,6 +1518,13 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
         }
         (HostOpV1::ClockWallNow, CanonicalRequestV1::ClockWallNow) => {
             Ok(CanonicalReplyV1::Instant(backend.clock_wall_now()))
+        }
+        (HostOpV1::ClockMonotonicNow, CanonicalRequestV1::ClockMonotonicNow) => Ok(
+            CanonicalReplyV1::MonotonicInstant(backend.clock_monotonic_now()),
+        ),
+        (HostOpV1::ClockSleepUntil, CanonicalRequestV1::ClockSleepUntil { deadline }) => {
+            backend.clock_sleep_until(*deadline);
+            Ok(CanonicalReplyV1::Unit)
         }
         (HostOpV1::FsReadFile, CanonicalRequestV1::FsReadFile { path }) => backend
             .fs_read_file(grant.expect("validated FS capability"), path)
@@ -1939,6 +1958,10 @@ pub enum CanonicalRequestV1 {
         stream: ConsoleStreamV1,
     },
     ClockWallNow,
+    ClockMonotonicNow,
+    ClockSleepUntil {
+        deadline: u64,
+    },
     FsReadFile {
         path: Vec<u8>,
     },
@@ -2100,6 +2123,7 @@ pub enum CanonicalReplyV1 {
     ResourceSettlement(ResourceSettlementObservationV1),
     ReadProgress(ReadProgressV1),
     WriteProgress(WriteProgressV1),
+    MonotonicInstant(Vec<u8>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2207,7 +2231,8 @@ impl CanonicalOutcomeV1 {
                 | CanonicalReplyV1::FileMetadata(_)
                 | CanonicalReplyV1::DirectoryEntries(_)
                 | CanonicalReplyV1::ResourceAcquired { .. }
-                | CanonicalReplyV1::ResourceSettlement(_) => None,
+                | CanonicalReplyV1::ResourceSettlement(_)
+                | CanonicalReplyV1::MonotonicInstant(_) => None,
                 CanonicalReplyV1::ReadProgress(progress) => match progress {
                     ReadProgressV1::ReadEof => None,
                     ReadProgressV1::ReadSome { transferred, .. } => {
@@ -2386,6 +2411,13 @@ mod tests {
             self.0.push(HostOpV1::ClockWallNow);
             vec![1]
         }
+        fn clock_monotonic_now(&mut self) -> Vec<u8> {
+            self.0.push(HostOpV1::ClockMonotonicNow);
+            vec![1]
+        }
+        fn clock_sleep_until(&mut self, _deadline: u64) {
+            self.0.push(HostOpV1::ClockSleepUntil);
+        }
         fn fs_read_file(
             &mut self,
             _: &CapabilityGrantV1,
@@ -2523,6 +2555,14 @@ mod tests {
             ),
             (HostOpV1::ClockWallNow, CanonicalRequestV1::ClockWallNow),
             (
+                HostOpV1::ClockMonotonicNow,
+                CanonicalRequestV1::ClockMonotonicNow,
+            ),
+            (
+                HostOpV1::ClockSleepUntil,
+                CanonicalRequestV1::ClockSleepUntil { deadline: 0 },
+            ),
+            (
                 HostOpV1::FsReadFile,
                 CanonicalRequestV1::FsReadFile {
                     path: b"a".to_vec(),
@@ -2605,12 +2645,25 @@ mod tests {
             )
             .unwrap();
         }
-        assert_eq!(backend.0, HostOpV1::ALL[..15]);
+        const RESOURCE_BEARING: [HostOpV1; 7] = [
+            HostOpV1::FsOpen,
+            HostOpV1::FsHandleMetadata,
+            HostOpV1::FsReadAt,
+            HostOpV1::FsWriteAt,
+            HostOpV1::ResourceRelease,
+            HostOpV1::BufferAllocate,
+            HostOpV1::BufferFreeze,
+        ];
+        let pre_resource = HostOpV1::ALL
+            .into_iter()
+            .filter(|operation| !RESOURCE_BEARING.contains(operation))
+            .collect::<Vec<_>>();
+        assert_eq!(backend.0, pre_resource);
     }
 
     #[test]
     fn catalog_is_closed_and_availability_is_exact() {
-        assert_eq!(HostOpV1::ALL.len(), 22);
+        assert_eq!(HostOpV1::ALL.len(), 24);
         assert_eq!(
             HostOpV1::ALL
                 .into_iter()

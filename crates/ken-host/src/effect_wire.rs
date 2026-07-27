@@ -112,6 +112,11 @@ fn put_request(
             put_u8(out, stream_tag(*stream));
         }
         CanonicalRequestV1::ClockWallNow => put_u8(out, 4),
+        CanonicalRequestV1::ClockMonotonicNow => put_u8(out, 22),
+        CanonicalRequestV1::ClockSleepUntil { deadline } => {
+            put_u8(out, 23);
+            put_u64(out, *deadline);
+        }
         CanonicalRequestV1::FsReadFile { path } => {
             put_u8(out, 5);
             put_bytes(out, path)?;
@@ -252,6 +257,10 @@ fn put_reply(out: &mut Vec<u8>, reply: &CanonicalReplyV1) -> Result<(), EffectTr
         CanonicalReplyV1::ReadEof => put_u8(out, 4),
         CanonicalReplyV1::Instant(bytes) => {
             put_u8(out, 5);
+            put_bytes(out, bytes)?;
+        }
+        CanonicalReplyV1::MonotonicInstant(bytes) => {
+            put_u8(out, 12);
             put_bytes(out, bytes)?;
         }
         CanonicalReplyV1::FileMetadata(metadata) => {
@@ -619,6 +628,10 @@ fn get_request(cursor: &mut Cursor<'_>) -> Result<CanonicalRequestV1, EffectTrac
             stream: get_stream(cursor)?,
         },
         4 => CanonicalRequestV1::ClockWallNow,
+        22 => CanonicalRequestV1::ClockMonotonicNow,
+        23 => CanonicalRequestV1::ClockSleepUntil {
+            deadline: cursor.u64()?,
+        },
         5 => CanonicalRequestV1::FsReadFile {
             path: cursor.bytes()?,
         },
@@ -739,6 +752,7 @@ fn get_reply(cursor: &mut Cursor<'_>) -> Result<CanonicalReplyV1, EffectTraceWir
         3 => CanonicalReplyV1::ReadChunk(cursor.bytes()?),
         4 => CanonicalReplyV1::ReadEof,
         5 => CanonicalReplyV1::Instant(cursor.bytes()?),
+        12 => CanonicalReplyV1::MonotonicInstant(cursor.bytes()?),
         6 => CanonicalReplyV1::FileMetadata(FileMetadataV1 {
             size: cursor.u64()?,
             kind: get_node_kind(cursor)?,
