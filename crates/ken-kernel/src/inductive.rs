@@ -24,7 +24,8 @@
 //! the sole structural admission test. The eliminator and ι handle the
 //! Π-abstracted IH and the λ-threaded recursive call (`14 §3.1`, `14 §7.7`).
 
-use crate::env::{ConstructorDecl, GlobalEnv, InductiveDecl, ParameterPolarity};
+use crate::conv::normalize;
+use crate::env::{ConstructorDecl, Context, GlobalEnv, InductiveDecl, ParameterPolarity};
 use crate::error::{KernelError, KernelResult};
 use crate::subst::{apply_args, shift, subst_levels, subst_outer, subst_tel, weaken};
 use crate::term::{GlobalId, Level, Term};
@@ -352,8 +353,10 @@ pub struct RecursiveArgumentShape {
 /// The variants exhaust the positive recursive shapes in the core grammar:
 /// direct occurrences, Π-bound/W-style occurrences, primitive dependent Σ,
 /// and applications of an admitted former through checked positive parameter
-/// positions. Transparent aliases are delta-unfolded before this structural
-/// classification. A D-free field contributes no [`RecursiveArgumentShape`].
+/// positions. Field terms are normalized through the kernel's established
+/// terminating δ+β semantics before this structural classification, making
+/// the result invariant under definitional equality.
+/// A D-free field contributes no [`RecursiveArgumentShape`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RecursiveShape {
     /// `D Δ_p t̄`: one motive leaf, indexed by `t̄`.
@@ -440,6 +443,8 @@ fn derive_recursive_shape(
     d: GlobalId,
     parameter_count: usize,
 ) -> KernelResult<ShapeDerivation> {
+    let normalized = normalize(env, &Context::new(), term);
+    let term = &normalized;
     if !occurs(d, term) {
         return Ok(ShapeDerivation::DFree);
     }
@@ -538,16 +543,9 @@ fn derive_recursive_shape(
                         arguments: shaped_arguments,
                     }))
                 }
-                Term::Const { id, level_args } => {
-                    let (level_params, body) = env.transparent_body(id).ok_or_else(|| {
-                        unsupported_recursive_shape(
-                            "recursive occurrence has an opaque or unresolved application head",
-                        )
-                    })?;
-                    let unfolded_head = subst_levels(&body, &level_params, &level_args);
-                    let unfolded = apply_args(unfolded_head, &arguments);
-                    derive_recursive_shape(env, &unfolded, d, parameter_count)
-                }
+                Term::Const { .. } => Err(unsupported_recursive_shape(
+                    "recursive occurrence has an opaque or unresolved application head",
+                )),
                 _ => Err(unsupported_recursive_shape(
                     "recursive occurrence has an unresolved application head",
                 )),

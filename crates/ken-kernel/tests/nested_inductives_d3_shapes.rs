@@ -147,6 +147,16 @@ fn transparent_aliases_preserve_former_topology_and_fail_closed_otherwise() {
         Term::const_(alias, vec![Level::Var(U)]),
     )
     .expect("transparent alias chain");
+    let lambda_alias = declare_def(
+        &mut env,
+        vec![U],
+        alias_ty.clone(),
+        Term::lam(
+            Term::Type(Level::Var(U)),
+            Term::app(Term::indformer(carrier, vec![Level::Var(U)]), Term::var(0)),
+        ),
+    )
+    .expect("lambda-bodied transparent alias");
     let opaque_alias = declare_postulate(
         &mut env,
         "opaque carrier alias".to_string(),
@@ -167,6 +177,10 @@ fn transparent_aliases_preserve_former_topology_and_fail_closed_otherwise() {
         Term::const_(chained_alias, vec![Level::zero()]),
         former(d),
     )]);
+    let through_lambda = constructor(vec![Term::app(
+        Term::const_(lambda_alias, vec![Level::zero()]),
+        former(d),
+    )]);
     let direct_shape = recursive_shapes(&env, &direct, d, 0).expect("direct former shape");
 
     assert_eq!(
@@ -178,6 +192,31 @@ fn transparent_aliases_preserve_former_topology_and_fail_closed_otherwise() {
         recursive_shapes(&env, &through_chain, d, 0).expect("transparent alias-chain shape"),
         direct_shape,
         "finite transparent alias chains must preserve the same topology"
+    );
+    assert_eq!(
+        recursive_shapes(&env, &through_lambda, d, 0).expect("transparent lambda-alias shape"),
+        direct_shape,
+        "beta-equivalent transparent aliases must preserve the same topology"
+    );
+
+    let beta_type = Term::app(
+        Term::lam(Term::Type(Level::zero().suc()), Term::var(0)),
+        ty0(),
+    );
+    let direct_index = constructor(vec![Term::app(former(d), ty0())]);
+    let beta_index = constructor(vec![Term::app(former(d), beta_type.clone())]);
+    assert_eq!(
+        recursive_shapes(&env, &beta_index, d, 0).expect("beta-normalized direct index"),
+        recursive_shapes(&env, &direct_index, d, 0).expect("normal direct index"),
+        "definitionally equal recursive indices must have identical topology"
+    );
+
+    let direct_pi = constructor(vec![Term::pi(ty0(), former(d))]);
+    let beta_pi = constructor(vec![Term::pi(beta_type, former(d))]);
+    assert_eq!(
+        recursive_shapes(&env, &beta_pi, d, 0).expect("beta-normalized Pi domain"),
+        recursive_shapes(&env, &direct_pi, d, 0).expect("normal Pi domain"),
+        "definitionally equal branching domains must have identical topology"
     );
 
     let opaque = constructor(vec![Term::app(
