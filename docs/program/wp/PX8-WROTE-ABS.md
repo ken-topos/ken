@@ -113,6 +113,12 @@ reason this WP cannot close.
 
 ### 3b. ⛔ The fixture construction is the WP, and I am not prescribing it
 
+> ⛔⛔ **STOP — the dichotomy in this section is FALSE and was ruled so on
+> 2026-07-27. Read the SUPERSEDED banner at the end of `§3b` before acting on
+> anything below.** Neither branch is the mechanism; `D3`'s second form is
+> ruled and `AC-6` is withdrawn. The text is kept only as the record of what
+> was asked.
+
 The discriminating shape requires **`count < effective < requested`**. On the
 read path that is produced by a short source file (`:6554` reads 2 bytes into
 a capacity-4 buffer against a length-8 request).
@@ -131,6 +137,56 @@ going to guess in a frame. The open question is exactly:
   is not merely missing — it is inexpressible on this path.**
 
 ⭐ **Both outcomes are acceptable deliverables.** See `§5 D3`.
+
+> ## ⛔⛔ SUPERSEDED 2026-07-27 — the dichotomy above is FALSE
+>
+> **Ruled `evt_1grq3fcfkz4yy` on `verify-implementer`'s hard stop, measured at
+> `origin/main = 06722d2b` and verified independently. Durable here because a
+> ruling that lives only in the channel is not an input.**
+>
+> **Neither branch is the mechanism.** `effective` **is** capacity-backed
+> (`effect_v1.rs:1784-1786`: `effective = min(requested, capacity - start)`), so
+> branch (b) is false — **and branch (a)'s fixture is still unbuildable.**
+> `count < effective` is **unreachable** on the interpreter write path, by a
+> composition of four facts:
+>
+> | # | fact | site |
+> |---|---|---|
+> | 1 | `effective = min(requested, capacity - start)` — capacity-backed | `effect_v1.rs:1784-1786` |
+> | 2 | the whole `[start, start+effective)` must be in the installed live window ⇒ a 2-byte window returns exact `InvalidBounds` **before any write** | `:1798-1800` → `:681-692` |
+> | 3 | `InterpreterHostBackend` does **not** override `fs_resource_write_at`; it inherits the direct POSIX call ⇒ **no injectable short-write seam** | `eval.rs:4399-4697`, `effect_v1.rs:1356-1364` |
+> | 4 | `TransferCountV1::new` is **`pub(crate)`** to `ken-host` ⇒ `ken-interp` cannot hand-construct `count 2 / effective 4` either | `effect_v1.rs:2188` |
+>
+> ### ⭐⭐ Why this frame got it wrong — the matrix's symmetry is an artifact
+>
+> `§2`'s 2×2 presented four cells as four instances of one shape. **They are
+> three different shapes:**
+>
+> - **read** cells get their discriminating count **free from file size** —
+>   `:6554` writes a 2-byte source and the real POSIX read returns 2;
+> - **writes have no analogue** — POSIX `write()` to a regular file writes
+>   everything or errors. There is no "short source" for a write;
+> - **native's** cells test the **lowered arithmetic**, not a host reply —
+>   `run_checked_bounded_nat_fixture(2, 0, 8, 4, …)` takes the scalars as
+>   arguments.
+>
+> ⇒ ⭐ **Drawing them in one table made a genuinely absent capability look like a
+> missing test.** ⛔ Do not read a matrix cell as a comparable instance without
+> checking that the cells share a production route.
+>
+> ### ✅ Authorized: `D3` second form, and nothing else
+>
+> ⛔ **No write fixture. No seam. No `src/**` behavior change.** ⭐ A
+> production short-write seam added so a test can force `count 2` is a
+> production change driven by test convenience — banned, and unnecessary.
+>
+> ✅ The measurement **may** be committed as a comment adjacent to the `Wrote`
+> arm (`eval.rs:5316-5326`), in the style of the existing `:6456-6465` note.
+>
+> ⚠ **Consequence routed above this WP:** if the cell is inexpressible, `PX8`
+> clause (a)'s **universal** absolute-evidence claim cannot be discharged by
+> adding a test here. Whether the clause covers a value with **no production
+> route** is the Architect's call. ⛔ It does not gate this WP's close.
 
 ### 3c. ⭐ If it is inexpressible, that is a FINDING, not a failure
 
@@ -174,11 +230,14 @@ to something the coincidental shape can satisfy. Route it to me under `§8`.
 - **`D2`** — the `§38` clause the literal is derived from, cited by section in
   a comment. ⭐ A reader must be able to check the number against the spec
   without re-deriving it.
-- **`D3`** — **one of two**, whichever the measurement supports: either `D1`
-  landed and green, **or** a written measurement showing `count < effective`
-  is unconstructible on the write path, with the mechanism that forces
-  `effective` to the installed window. ⛔ `D3` is not optional in either
-  branch — the second form is a full deliverable, not an abandonment.
+- **`D3`** ⚖️ **RULED 2026-07-27 — second form applies**
+  (`evt_1grq3fcfkz4yy`).
+  ⛔ `D1` is **not** available: `count < effective` is unreachable on the
+  interpreter write path. **Deliver the written measurement**, citing all four
+  sites in the `§3b` superseding table plus the read/native/write asymmetry.
+  ⛔ The clause *"the mechanism that forces `effective` to the installed
+  window"* is **withdrawn** — that mechanism does not exist. ⭐ The second form
+  is a full deliverable, not an abandonment.
 - **`D4`** — a one-line statement of whether the `:6450-6467` comment's
   "load-bearing pair member" reasoning is now true of **both** pairs, or
   remains true of the read pair only and why.
@@ -221,10 +280,19 @@ to something the coincidental shape can satisfy. Route it to me under `§8`.
   module. ⚠ Re-derive build-slot availability first; `ken-cargo` blocks
   silently up to 30 minutes on lock contention.
 
-- **`AC-6`** — if `D3` takes its second form, the measurement names **the
-  code** that forces `effective` to the installed window, by file and line.
-  ⛔ A prose assertion that it "appears not to be possible" does not discharge
-  this.
+- **`AC-6`** ⛔ **WITHDRAWN AS WRITTEN 2026-07-27** (`evt_1grq3fcfkz4yy`). It
+  required naming *"the code that forces `effective` to the installed window"* —
+  **nothing does; `effective` is capacity-backed** (`effect_v1.rs:1784-1786`).
+  The AC presupposed a branch of the `§3b` dichotomy that is false, so it was
+  not satisfiable by the true finding.
+  **REPLACED — `AC-6′`:** the measurement names, by file and line, the code that
+  makes `count < effective` **unreachable**. **Control:** all four sites of the
+  `§3b` superseding table are cited — capacity-backed `effective`, live-window
+  admission, the absent backend override, **and** the `pub(crate)`
+  `TransferCountV1::new`. ⛔ Citing fewer than four is an incomplete census: each
+  one independently closes a different route, so omitting one leaves that route
+  looking open. ⛔ A prose assertion that it "appears not to be possible" still
+  does not discharge this.
 
 ---
 
