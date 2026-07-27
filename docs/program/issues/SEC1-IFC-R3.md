@@ -58,6 +58,83 @@ origin: "verify-implementer authorized hard-stop on SEC1-IFC AC-R3 (2026-07-27),
 > ⚠ **`SPEC-PROGRESS.md` cannot answer this** (47/48 rows `DRAFT`, `REVISED`
 > never used). Measure the code.
 
+> ## ⭐⭐ THE MEASUREMENT WAS TAKEN — 2026-07-27, Steward, at `main = d6df571e`
+>
+> Both `V3-RESIDUAL` and `V4-RESIDUAL` are now **merged** (`V4-RESIDUAL`
+> confirmed by `merge-tree` against `origin/main`: identical tree
+> `2d9153c3`). ⛔ **That does NOT unblock this node**, and the reason is
+> narrower and more decisive than the "blocked on V3 AND V4" prose above.
+>
+> ### `AC-R3a` — ✅ SATISFIED, and the census it prescribes now passes
+>
+> `crates/ken-elaborator/src/prover.rs:264` constructs
+> `Verdict::Disproved { countermodel }`, and there **is** a production route:
+> `attempt_obligation → attempt_d (:281) → attempt_with_refutation (:305)`.
+> ⭐ The cardinal rule (`23 §1.5`) is intact — the verdict is returned only
+> after the kernel accepts `q : φ → Bottom`; an invalid refutation yields
+> `Unknown`. The backend did **not** become a second trust root.
+>
+> ### ⛔ `AC-R3b` / `AC-R3c` — UNREACHABLE, and the census cannot see it
+>
+> ⭐⭐ **This is the finding that matters.** `attempt_d`'s refutation arm is
+> gated on exactly one syntactic shape (`prover.rs:298-300`):
+>
+> ```rust
+> if let Term::Eq(_, lhs, rhs) = phi {
+>     if let (Term::IntLit(left), Term::IntLit(right)) = (lhs.as_ref(), rhs.as_ref()) {
+>         if left != right {   // ← the ONLY production route to Disproved
+> ```
+>
+> Every other `φ` falls through to `emit_unknown_hole` at `:320`.
+>
+> ⇒ **A `product(c, ζ)` faithfulness obligation is not an `Int`-literal
+> disequality.** Building `product(c, ζ)` would make `D5`'s
+> `check_reduction_faithfulness` receive `Unknown`, not `Disproved` — so the
+> WP would *fail*, not deliver. ⛔ `AC-R3c` (a too-weak `Φ_post` must be
+> DETECTED) is the same: detection **is** a refutation of the faithfulness
+> obligation, and no route produces one.
+>
+> ⚠ **`AC-R3a`'s control is a census of a spelling, and it now passes while
+> the property it stands for is still false for every obligation this node
+> actually cares about.** A "`Disproved` construction exists in `src/`" is
+> true and does not entail "`D5` can be fed by the prover."
+>
+> ### ⛔ The ACs transitively require this node's own EXCLUDED scope
+>
+> `## Scope` bans *"building the prover backend itself."* But `AC-R3b`/`R3c`
+> cannot be discharged without exactly that. ⇒ **The frame is unsatisfiable as
+> written** — the same ban-vs-AC intersection that blocked two WPs on
+> 2026-07-27, at whole-node scale.
+>
+> ### The real blocker, named precisely
+>
+> `prover.rs:317-318` — *"[placeholder — reifies in V4]: kernel whnf +
+> decision procedure (`23 §3.1`) + Z3-backed arithmetic search + `Decidable`
+> constructor extraction (`23 §3.2`)"*. Seven such markers remain.
+>
+> ⛔⛔ **`z3` is not a dependency of this workspace at all** — zero hits across
+> the root and every crate manifest. The DAG's `V3` row (`05` `:166`) names
+> *"classifier + Z3 + Kripke embedding + reflective certificate."*
+>
+> ⇒ **Adding an SMT backend is a product/architecture decision (build, CI,
+> licensing, throughput — the DAG already names
+> `V3-z3-throughput-evaluation.md`), not a call this node can make.**
+> ⭐ **It is escalated to the operator and it gates the entire by-proof half
+> of `Sec1`.**
+>
+> ### ⛔ And the Z3-free widening is VACUOUS — do not frame it
+>
+> ⚠ Recorded so nobody re-derives it as available work. `attempt_d` hardcodes
+> `Term::IntLit` where the **kernel is already generic**: `obs.rs:84` gates on
+> `env.deceq_cert(*id).is_some()` and says in-source *"general opt-in gate …
+> not hardcoded to any specific primitive."* But
+> `declare_deceq_certificate` has **exactly one caller** —
+> `crates/ken-elaborator/src/numbers.rs:363`, registering `Int`.
+>
+> ⇒ Generalizing the prover off `IntLit` has **no second registered type to
+> generalize to**. It would change no observable behavior and produce a green
+> WP over nothing. ⛔ Not work.
+
 ## What happened
 
 `SEC1-IFC` (PR #1094) delivered `AC-R1` (`[Sec1-dual]`) and `AC-R2`
