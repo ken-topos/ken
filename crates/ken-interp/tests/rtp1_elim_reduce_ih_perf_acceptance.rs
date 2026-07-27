@@ -213,7 +213,7 @@ fn natToDecimal (n : Nat) : String =
 const main : String = natToDecimal (natGcd twelve eight)
 "#;
     let (dt, v, _env) = run(src);
-    assert_eq!(v, EvalVal::Str("4".to_string()), "natToDecimal(natGcd 12 8) must be \"4\"");
+    assert_eq!(v, EvalVal::Str("4".into()), "natToDecimal(natGcd 12 8) must be \"4\"");
     assert!(
         dt < BUDGET,
         "natGcd+natToDecimal repro took {dt:?}, budget {BUDGET:?} — the eager-IH blowup may have returned"

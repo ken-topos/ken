@@ -328,7 +328,7 @@ fn forge_parses_flags_raw_values_and_positionals_and_renders_derived_help() {
             .expect("Valid payload"),
         "MkParsedCommand",
     );
-    assert_eq!(inspect_command[0], EvalVal::Str("inspect".to_owned()));
+    assert_eq!(inspect_command[0], EvalVal::Str("inspect".into()));
 
     let width = nat_value(&env, &mut store, 0);
     let root_help = eval_global(&env, &mut store, "forge_help");

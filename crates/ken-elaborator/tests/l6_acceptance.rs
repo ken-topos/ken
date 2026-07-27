@@ -411,7 +411,7 @@ fn encode_is_total_named_op() {
         ("日本語", "日本語".as_bytes().to_vec()),
     ];
     for (s, expected_bytes) in &cases {
-        let result = prim_reduce("bytes_encode", &[EvalVal::Str(s.to_string())]);
+        let result = prim_reduce("bytes_encode", &[EvalVal::Str((*s).into())]);
         assert_eq!(
             result,
             EvalVal::Bytes(expected_bytes.clone()),

@@ -807,8 +807,8 @@ impl-ready).** The floor + 5 string ops, mapping the WP frame's AC1–AC7:
   scalar sequence (NFC vs NFD of one grapheme, built directly as `List Char`)
   runtime-evaluates **unequal** *unconditionally*, pinning that NFC-eq was **not**
   smuggled in (ADR 0010 §3). Do **not** pin this on `String` *literals*:
-  `String` is NFC-normalized at construction (`§2.1`, a deferred behavior —
-  currently stubbed), so once real NFC lands the two literals merge to one value
+  `String` is NFC-normalized at construction (`§2.1`), so the two literals
+  merge to one value
   and `eq` on them is **`True`**; a literal-level pin would falsely fail then
   (the over-pin-a-deferred-behavior trap). Under real NFC, extensional `==` and
   codepoint-wise `eq` **agree** on `String` values.

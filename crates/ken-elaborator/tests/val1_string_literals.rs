@@ -81,7 +81,7 @@ fn string_literal_evaluates_to_str_val() {
     let val = eval_def(&env, &mut store, id);
     assert_eq!(
         val,
-        EvalVal::Str("Hello, World!".to_owned()),
+        EvalVal::Str("Hello, World!".into()),
         "greeting must evaluate to EvalVal::Str(\"Hello, World!\")"
     );
 }

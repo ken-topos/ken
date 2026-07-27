@@ -26,6 +26,7 @@ use ken_kernel::{
 use ken_kernel::env::PrimReduction;
 
 use crate::error::ElabError;
+use crate::strings::NfcString;
 
 // ── numeric literal value (for side-table; independent of ken-interp) ─────────
 
@@ -41,7 +42,7 @@ pub enum NumericLitVal {
     Float32(f32),
     Decimal { coeff: i64, exp: i32 },
     /// NFC-normalized UTF-8 string literal (`37 §2.1`, VAL1-surface).
-    Str(String),
+    Str(NfcString),
 }
 
 // ── dispatch entries ────────────────────────────────────────────────────────

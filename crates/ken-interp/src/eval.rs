@@ -183,7 +183,7 @@ pub enum EvalVal {
     /// pseudo-immediate at the eval layer for simplicity; K3 interns as compound.
     Bytes(Vec<u8>),
     /// NFC-normalized UTF-8 string (for encode/decode boundary, `38 §1.4`).
-    Str(String),
+    Str(ken_elaborator::NfcString),
     BigInt(BigInt), // Int values > i64::MAX or < i64::MIN (arbitrary-precision, `18a §5.2.1`)
     Float(f64),     // IEEE 754 double
     Float32(f32),   // IEEE 754 single
@@ -343,8 +343,84 @@ fn to_rt(val: &EvalVal) -> Option<RtValue> {
         // mechanism.
         EvalVal::Closure { .. } => None,
         EvalVal::Bytes(b) => Some(RtValue::Bytes(b.clone())),
-        EvalVal::Str(s) => Some(RtValue::String(s.clone())),
+        EvalVal::Str(s) => Some(RtValue::String(s.as_str().to_owned())),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod nfc_construction_tests {
+    use super::*;
+
+    fn list_ids(env: &ken_elaborator::ElabEnv) -> ListCharIds {
+        ListCharIds {
+            nil_id: env.prelude_env.nil_id,
+            cons_id: env.prelude_env.cons_id,
+        }
+    }
+
+    fn round_trip_string(
+        value: &ken_elaborator::NfcString,
+        ids: &ListCharIds,
+        store: &mut EvalStore,
+    ) -> ken_elaborator::NfcString {
+        let chars = build_list_char(value, ids, store);
+        let raw = list_char_to_evalval_string(&chars, ids).expect("well-formed List Char");
+        ken_elaborator::NfcString::new(raw)
+    }
+
+    #[test]
+    fn nfc_consumers_observe_normalized_literal_value() {
+        let value = EvalVal::Str("e\u{301}".into());
+
+        assert_eq!(
+            prim_reduce("byte_length", std::slice::from_ref(&value)),
+            EvalVal::Int(2)
+        );
+        assert_eq!(
+            prim_reduce("char_length", std::slice::from_ref(&value)),
+            EvalVal::Int(1)
+        );
+        assert_eq!(
+            prim_reduce("bytes_encode", &[value]),
+            EvalVal::Bytes(vec![0xC3, 0xA9])
+        );
+    }
+
+    #[test]
+    fn bytes_decode_normalizes_and_preserves_string_retraction() {
+        let env = ken_elaborator::ElabEnv::new().expect("base env");
+        let ids = list_ids(&env);
+        let mut store = EvalStore::new();
+
+        let decoded = prim_reduce_elaborated(
+            "bytes_decode",
+            &[EvalVal::Bytes(vec![0x65, 0xCC, 0x81])],
+            &env,
+            &mut store,
+        );
+        let EvalVal::Ctor { args, .. } = decoded else {
+            panic!("valid UTF-8 must decode to Ok");
+        };
+        let Some(EvalVal::Str(decoded)) = args.last() else {
+            panic!("Ok payload must be String");
+        };
+        assert_eq!(decoded.as_str(), "\u{E9}");
+        assert_eq!(round_trip_string(decoded, &ids, &mut store), decoded.clone());
+    }
+
+    #[test]
+    fn normalized_list_ingress_value_preserves_string_retraction() {
+        let env = ken_elaborator::ElabEnv::new().expect("base env");
+        let ids = list_ids(&env);
+        let mut store = EvalStore::new();
+
+        let decomposed = build_list_char("e\u{301}", &ids, &mut store);
+        let raw =
+            list_char_to_evalval_string(&decomposed, &ids).expect("well-formed List Char");
+        let from_list = ken_elaborator::NfcString::new(raw);
+        assert_eq!(from_list.as_str(), "\u{E9}");
+        assert_eq!(round_trip_string(&from_list, &ids, &mut store), from_list);
     }
 }
 
@@ -1606,6 +1682,7 @@ pub fn apply(f: EvalVal, u: EvalVal, globals: &GlobalEnv, store: &mut EvalStore)
                             } else if *symbol == "list_char_to_string" {
                                 if let [v] = args.as_slice() {
                                     return list_char_to_evalval_string(v, &ids)
+                                        .map(ken_elaborator::NfcString::new)
                                         .map(EvalVal::Str)
                                         .unwrap_or(EvalVal::Neutral);
                                 }
@@ -1767,7 +1844,7 @@ fn reduce_safe_bytes_primitive(
             match std::str::from_utf8(bytes) {
                 Ok(string) => {
                     let mut ctor_args = type_args();
-                    ctor_args.push(EvalVal::Str(string.to_string()));
+                    ctor_args.push(EvalVal::Str(ken_elaborator::NfcString::new(string)));
                     make_ctor(ok.id, ctor_args, store)
                 }
                 Err(_) => {
