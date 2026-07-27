@@ -11,11 +11,26 @@ github: null
 origin: Architect ruling evt_55k9f9efvd8jk, Decision dec_13af1mercv2m0 resolved. Demand-pulled by DS-9, which blocked at its first deliverable on `JsonArray (List Json)`; fork raised by the Steward as evt_1ykvpj7yvtg18. The five-point prerequisite contract below is the Architect's, transcribed verbatim in substance. Steward-filed; Steward owns the frame and AC/control placement.
 ---
 
-> ## ⭐ `D1a` LANDED — PR #1077, `main = 88196527`. `D1b` IS NOW UNGATED.
+> ## ⭐ `D1a` + `D3a` LANDED. Next is the ATOMIC `D3b`+`D4`.
 >
-> ⛔ **The node is NOT complete.** `D1a` is one of eight deliverables; `D3`–`D7`
-> remain. A nested inductive is still **rejected** on `origin/main` — the
-> non-`D`-head `occurs` guard is byte-identical to base by design.
+> | slice | PR | landed | evidence |
+> |---|---|---|---|
+> | `D1a` — per-parameter polarity | #1077 | `88196527` | `inductive.rs` `e37e906f`, `nested_inductives_d1a.rs` `280025f1` |
+> | `D3a` — recursive-shape descriptor, inert | #1089 | `ac86b2d7` | `inductive.rs` `d6ab179c`, `nested_inductives_d3_shapes.rs` `33a3efbf`; +858/−1 |
+>
+> Both CI-green; both verified by **blob identity** with discriminating pre-merge
+> controls. `D3a` took **six** candidates — five rejected objects preserved as
+> ancestors on `wp/KERNEL-NESTED-IND-D3`, none rewritten.
+>
+> ⛔ **The node is NOT complete.** `D1a` and `D3a` are two of eight deliverables;
+> `D3b`, `D4`, `D1b`, `D2`, `D5`, `D6`, `D7` remain. **A nested inductive is still
+> rejected on `origin/main`** — ⭐ independently confirmed after `D3a` landed: the
+> non-`D`-head `args.iter().all(|x| !occurs(d, x))` guard is **still present**.
+> That is `D3a`'s inertness, verified rather than asserted.
+>
+> ⇒ **Next is the atomic `D3b`+`D4`** (`dec_351mz4r239398`), ⛔ **before** `D1b`.
+> ⚠ `D1b`'s external gate lifted when `SPEC-NESTED-IND` merged; ⛔ that did **not**
+> reorder the work.
 >
 > **`D1a` = per-parameter polarity, derived at admission and consumed by the
 > positivity gate.** Candidate `e685570c1b8403c38af7ed0f45c205a6bc2eeb90`, **CI
