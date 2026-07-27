@@ -154,8 +154,30 @@ s2l (l2s cs₁) ≡ cs₂ ≠ cs₁    -- the List-Char-side round trip is NOT t
 | `AC-C2` | All four carriers state the **landed** property: the retraction `l2s (s2l s) ≡ s` and `s2l`'s derived injectivity. ⛔ No "identity", no "inverse", no "both ends", no "reproduce exactly" on the reverse direction. | grep the four sites; each must name **retraction** or **injectivity**, ⛔ never a two-sided claim. The `:145` header must stop naming the **pair** as an identity |
 | `AC-C3` | The **existing** landed-direction test and its corpus are unchanged. | `ac2_round_trip_l2s_s2l_identity` (`:150`) and its ten-string corpus are **byte-identical**. ⛔ This WP removes an over-claim; it must not remove coverage |
 | `AC-C5` | No behavior change anywhere: no axiom, law, instance, spec, or catalog edit. | ⛔ **Test-only** Rust. ⚠ It is now *known* that a spec change is implied — that is the Architect's open ruling, ⛔ **not** a licence to make it here |
-| ⭐ `AC-C6` **(NEW — replaces `AC-C1`)** | The test states **explicitly** that the reverse direction holds **only under the current NFC stub**, citing `37-strings-collections.md:810`. | ⛔ The carrier must name the **stub** as the reason it passes. ⭐ This is the honest version of what `AC-C1` was reaching for: the test cannot demonstrate the contract, so it must **say which weaker thing it demonstrates** |
-| ⭐⭐ `AC-C7` **(NEW — the durable half)** | **A tripwire: when real NFC lands, this test must FAIL LOUDLY** rather than silently keep passing. | ⛔ The control is a comment or assertion positioned so that a future NFC implementation **breaks this test on purpose**, with a message naming the node/ruling to consult. ⚠ Today the test would silently continue to pass once NFC lands, which is exactly the *"literal-level pin would falsely fail"* hazard `37:811` describes — inverted. ⇒ **This is the one thing the current test cannot do and the reason the node stays open** |
+| ⭐ `AC-C6` **(NEW — replaces `AC-C1`)** | The test states **explicitly** that the reverse direction holds **only under the current NFC stub**, citing `37 §9` and `dec_ppakqc11kffh`. | ⛔ The carrier must name the **stub** as the reason it passes, and ⛔ must **not** present it as normative `String` semantics. ⭐ The honest version of what `AC-C1` reached for: the test cannot demonstrate the contract, so it must **say which weaker thing it demonstrates** |
+| ⭐⭐ `AC-C7` **(NEW — the durable half)** | **Expect the decomposed `[101, 769]` SOLELY as a loud transition tripwire**: when real NFC lands, this test must **FAIL LOUDLY** rather than silently keep passing. | ⛔ Positioned so a future NFC implementation **breaks this test on purpose**, with a message naming `dec_ppakqc11kffh` and this node. ⚠ Today it would silently continue passing once NFC lands — the inverse of the *"literal-level pin would falsely fail"* hazard `37 §9` describes. ⇒ **The one thing the current test cannot do, and the reason this node exists** |
+
+> ### ⚖️ AMENDED by Architect Decision `dec_ppakqc11kffh`
+>
+> (`resolved` 2026-07-27T13:58:05Z)
+>
+> **Disposition (b): NFC-at-construction REMAINS the normative contract.**
+> `37 §2.1`/`§2.3`, `41 §3a`, and the existing K3 canonical encoder all agree on
+> it; `37 §9`'s *"deferred behavior — currently stubbed"* is an **honest staging
+> disclosure, not authority to weaken the permanent contract.** ⇒ The measured
+> decomposed result is a **known implementation gap**, not intended behavior.
+>
+> ✅ *"Hold/withdraw the released `[233]` ACs at base `f1f626f7`"* — the withdrawal
+> above is confirmed.
+>
+> ⚠ **Correction to this node, which had it backwards:** I wrote ⛔ *"do not weaken
+> `[233]` to the observed decomposed result."* The ruling **requires** expecting
+> `[101, 769]` — **solely as the transition tripwire**, never as normative
+> semantics. `AC-C7` now says so. ⇒ Expecting the decomposed value is **mandatory
+> and bounded**, not forbidden.
+>
+> ⛔ **This carrier must be replaced/flipped when the behavioral WP lands, and
+> ⛔ must never be cited as normative `String` semantics.**
 
 ⚠ **No verdict flip is required and the suite stays green.** ⛔ Do not report
 "tests still pass" as evidence for this node — that was true before any of it.
