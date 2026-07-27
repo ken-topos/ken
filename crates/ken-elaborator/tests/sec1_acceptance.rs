@@ -69,7 +69,7 @@ fn synthetic_disproved(
     let result = ProverResult {
         obligation_id: ObligationId(id.to_owned()),
         verdict: Verdict::Disproved {
-            countermodel: Countermodel { description: description.to_owned() },
+            countermodel: Countermodel::root(description),
         },
     };
     (result, triple)

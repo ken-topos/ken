@@ -60,6 +60,13 @@ use std::fmt;
 /// `PartialEq::eq(a, b)`, or an inherent method, because the only way to make
 /// it compile is to supply the impl — which *is* the forbidden capability.
 ///
+/// ⚠ **Execution inventory:** all four `AC-V4` `compile_fail` fences below
+/// (`Value::Closure` cannot be named, and no `PartialEq`, `Ord`, or `Hash`) are
+/// **not executed by CI**. CI runs nextest, which does not run rustdoc
+/// doctests. The fences and their compiling sibling are local documentation
+/// probes, not mechanized acceptance evidence; if a forbidden variant or impl
+/// became available, these fences would contribute no CI-red signal.
+///
 /// ⛔ **The `EXXXX` codes below are DOCUMENTATION, not a check — measured, not
 /// assumed.** Rewriting one block's `compile_fail,E0277` to `compile_fail,E0308`
 /// — a code that block cannot possibly produce — left the doc-test **green**,

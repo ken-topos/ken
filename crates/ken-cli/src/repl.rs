@@ -74,7 +74,7 @@ fn show_verdict(v: &Verdict) -> String {
     match v {
         Verdict::Proved { .. } => "proved (Q) — kernel-certified".to_owned(),
         Verdict::Disproved {
-            countermodel: Countermodel { description },
+            countermodel: Countermodel { description, .. },
         } => {
             format!("refuted — countermodel: {}", description)
         }
