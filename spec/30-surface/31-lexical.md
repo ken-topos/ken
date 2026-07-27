@@ -8,10 +8,12 @@
 
 ## 1. Source text
 
-- Source is **UTF-8**. Ken is Unicode-aware: identifiers and operators may use a
-  **curated** set of mathematical symbols (so `→`, `×`, `∧`, `Ω`, `≤`, `≠`, `⊑`
-  appear in source, matching the spec's notation). An ASCII spelling exists for
-  every such symbol so no program *requires* a special keyboard (§1a).
+- Source is **UTF-8**. Ken's notation operators may use the **curated** set of
+  mathematical symbols in §1b (so `→`, `×`, `∧`, `Ω`, `≤`, `≠`, and `⊑`
+  appear in source, matching the spec's notation). An ASCII spelling exists
+  for every such symbol so no program *requires* a special keyboard (§1a).
+  Identifiers are ASCII-only (§1e, §2); Unicode remains available in notation,
+  literals, comments, and other specified payloads.
 - Files use the extension `.ken`. Line endings are LF (CRLF tolerated).
 
 ## 1a. Notation: read-optimized canonical Unicode (`OQ-syntax` DECIDED)
@@ -42,12 +44,15 @@ agents. Five principles (decided; the §2–§6 spellings are a starter under th
    keywords would be decoration. (So the purity keywords `const`/`fn`/`proc`,
    `36 §1.6`, are ASCII words, not glyphs.)
 5. **Curated and confusable-resistant (a security property, not only
-   legibility).** The blessed set is **bounded** (a fixed table, not "any
-   Unicode"), and the lexer **normalizes/rejects Unicode confusables** (the TR39
-   security profile: `⊔`/`U`, `∨`/`v`, `×`/`x`, `ℓ`/`l`, Cyrillic look- alikes).
-   A reviewer must read **exactly** what the kernel checks — no homoglyph can
-   smuggle code past a human reader (`../60-security/64`). This makes the rich
-   notation *safe*, part of the "human reviews, kernel checks" integrity story.
+   legibility).** The blessed **notation** set is bounded by the fixed §1b
+   table, not by "any Unicode". The lexer recognizes only those listed glyph ↔
+   ASCII pairs as notation aliases, and token-kind canonicalization never
+   repairs look-alike source bytes into another token. Identifiers have the
+   separate ASCII-only boundary of §1e/§2: no Unicode letter can enter a
+   binding, and a non-ASCII alphabetic scalar at an identifier position is
+   rejected. A reviewer therefore reads exactly the token distinctions the
+   lexer enforces; the rich notation does not create a homoglyph path into an
+   identifier.
 
 ## 1b. Starter notation table (iterates with the team)
 
@@ -93,7 +98,7 @@ remains that identifier.
   curated Unicode glyph and its ASCII transliteration (`→`/`->`, `λ`/`\`, `∀`/
   `forall`, `Σ`/`Sigma`, `Ω`/`Omega`, `⊑`/`<:`, …, §1b) lex to the **identical**
   token — the §1b/§8 "the two are the same token" rule generalized across the
-  blessed table. So the glyph carries **zero** extra information and **ASCII
+  notation table. So the glyph carries **zero** extra information and **ASCII
   spellings remain accepted forever** (no program ever *requires* a special
   keyboard). This is genuinely a **lexer** capability, not only a convention.
 - **The formatter emits canonical Unicode on save (principle 3).** The single
@@ -105,10 +110,12 @@ remains that identifier.
   surface is for **operators/symbols** only; `const`/`fn`/`proc` and every other
   keyword (`31 §4`) stay ASCII words. BL3 Unicode-ifies the *operator* surface,
   not the keyword surface.
-- **Confusable-resistance is a hard lexer gate (principle 5).** The blessed set
-  is bounded; the lexer normalizes/rejects TR39 confusables (`⊔`/`U`, `∨`/`v`,
-  `×`/`x`, `ℓ`/`l`, Cyrillic look-alikes) so a reviewer reads exactly what the
-  kernel checks (`../60-security/64`).
+- **Confusable-resistance is enforced by bounded token domains (principle
+  5).** The lexer accepts only §1b's fixed notation glyph ↔ ASCII pairs as the
+  same token. Identifier characters are ASCII-only (§1e/§2), and a non-ASCII
+  alphabetic scalar at an identifier position receives a typed rejection.
+  There is no general Unicode-identifier normalization or TR39 identifier
+  profile in this contract.
 
 **Build scope (BL3 / D4).** The build realizes the lexer's accept-both +
 same-token behaviour and the formatter's Unicode normalization, then **runs the
@@ -135,8 +142,8 @@ token, and the formatter prints that token's blessed §1b glyph. Identifier and
 keyword tokens print their stored spelling. In particular, identifiers named
 `l` or `level`, keywords such as `in`, and identifiers or prose containing
 `not` are never rewritten because their bytes resemble a notation alias. The
-lexer rejects unblessed confusable identifier characters rather than repairing
-them into a different binding.
+lexer rejects a non-ASCII alphabetic scalar at an identifier position rather
+than repairing it into a different binding.
 
 The formatter preserves the source lexeme of every literal, including numeric
 base, digit separators, suffixes, delimiters, and escapes. It does not rewrite
@@ -357,17 +364,80 @@ Type application by juxtaposition and bracketed type application are the same
 construct but remain under `OQ-syntax`. The formatter preserves the form that
 was parsed and does not force one spelling until that decision is settled.
 
+## 1e. Identifier character set (`SPEC-IDENT-BLESSED` DECIDED)
+
+**Decision (2026-07-27): Shape C — ASCII-only now, with a reserved extension
+point.** An `ident` or `conid` consists only of the ASCII productions in §2.
+No Unicode letter is admitted as an identifier character, and §1b's notation
+table is not identifier authority. Source remains UTF-8 because notation,
+literals, comments, and other specified payloads remain Unicode-capable.
+
+Shape C is selected because it matches the landed lexer and every checked Ken
+program, closes the identifier-homoglyph path without inventing a character
+table, and records the evidence a safe future widening would require. Shape A
+(ASCII-only with no reserved contract) is rejected because it would leave a
+future widening's safety conditions implicit. Shape B (adopt a Unicode
+identifier profile now) is rejected because the corpus names no selected
+external profile or table, normalization rule, or confusable policy, the
+landed lexer implements none, and no checked program requires the widening.
+
+A future widening is additive only through a separate language decision that
+names its external identifier profile, fixes its normalization and
+confusable-handling rules, and adds a conformance row with both an admitted
+identifier and a rejected confusable control. This decision does not select
+such a profile, alter §1b's notation aliases, or change the landed lexer.
+
+### Completeness inventory
+
+The closure root for this decision is the active normative corpus
+`spec/**/*.md` plus structured conformance rows. The identifier-level carriers
+and their dispositions are:
+
+1. This chapter's §1 source-text summary now separates Unicode notation and
+   payloads from ASCII-only identifiers.
+2. Principle 5 in §1a and the BL3 rule in §1c now bind blessed notation to the
+   fixed §1b table and bind identifiers to §1e/§2; neither names an undefined
+   identifier set or an unimplemented TR39 identifier gate.
+3. The non-repair clause in §1d now states the implemented ASCII-boundary
+   rejection without changing the protected notation-alias cases.
+4. The `ident` and `conid` entries in §2 state the complete ASCII productions,
+   and §7's delivery summary refers to Unicode/ASCII **notation** spellings.
+5. Both former citations from §1a/§1c to `64-trust-model.md` are removed. That
+   chapter contains no identifier-confusable contract, and none is needed:
+   this is a lexical boundary, not a new TCB or trust-model claim.
+
+The examined complement is also closed:
+
+- `spec/90-open-decisions.md`'s `OQ-syntax` summary and
+  `docs/PRINCIPLES.md` §11 are governance summaries of the bounded
+  notation/security principle. They point back to §1a/§1b and define no
+  identifier production.
+- `spec/20-verification/25-protocol.md` and
+  `conformance/verify/protocol/false-unknown-non-confusable-roundtrip` use
+  "non-confusable" for distinguishable serialized verdict messages, not source
+  identifiers.
+- `conformance/surface/declarations/unicode-twin-identical` covers §1b
+  notation glyph/ASCII twins, not Unicode identifiers.
+- §1b and §1d's `l`/`level`/`in`/`not` cases are the separate
+  notation-alias-versus-token-kind axis and remain unchanged.
+- `docs/program/**` task frames, issue records, progress/diary entries, and
+  `crates/**` implementation/tests are historical or implementation evidence,
+  not additional normative or conformance-row authorities. The landed lexer
+  and its tests already enforce the selected ASCII boundary; this spec-only
+  decision changes no behavior and owes no current conformance row.
+
 ## 2. Tokens
 
 ```
 token ::= ident | conid | keyword | literal | operator | punct | layout
 ```
 
-- **`ident`** — value/term names: lowercase-initial, `[a-z_][A-Za-z0-9_']*` plus
-  blessed Unicode letters. Primes (`x'`) allowed (math-friendly).
-- **`conid`** — constructor / type / module names: uppercase-initial. The case
-  distinction (lowercase = term variable, uppercase = constructor/type) is used
-  by `match` to tell binders from nullary constructors (`34`).
+- **`ident`** — value/term names: ASCII lowercase-or-underscore initial,
+  `[a-z_][A-Za-z0-9_']*`. Primes (`x'`) are allowed (math-friendly).
+- **`conid`** — constructor / type / module names: ASCII uppercase initial,
+  `[A-Z][A-Za-z0-9_']*`. The case distinction (lowercase = term variable,
+  uppercase = constructor/type) is used by `match` to tell binders from nullary
+  constructors (`34`).
 - **`keyword`** — reserved (§4).
 - **`literal`** — numbers, strings, chars, bytes (§3).
 - **`operator`** — symbolic, from a fixed set plus user-defined (`33`); fixity
@@ -448,8 +518,9 @@ surface tokens are also lexed here (all spellings OQ-syntax):
 ## 7. What WS-L must deliver here
 
 A lexer producing the token stream above with the fixed literal categories (§3 —
-especially `Int`-default integers), Unicode + ASCII spellings, comments/doc
-comments, and the layout-to-braces translation. Conformance:
+especially `Int`-default integers), the §1b Unicode + ASCII notation spellings,
+the §1e ASCII-only identifier boundary, comments/doc comments, and the
+layout-to-braces translation. Conformance:
 `../../conformance/surface/lexical/` — including the regression that `2 : Int`
 and `2.0 : Float` are distinct (the f64 non-reproduction at the lexer).
 
