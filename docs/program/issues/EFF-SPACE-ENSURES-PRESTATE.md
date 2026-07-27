@@ -20,7 +20,7 @@ origin: "Steward measurement 2026-07-27 at origin/main=0031dd6a, taken while sco
 > `UnboundName(old)`; an ordinary space `ensures` without `old` still emits.
 > Verified by blob: `elab.rs` = `648df173` on main and on the approved candidate.
 >
-> ### ⚠ THIS NODE CLOSED PARTIAL, AND THE RESIDUAL HAS NO NODE YET
+> ### ⚠ CLOSED PARTIAL — residual: [`SURF-SPACE-CELLS`](SURF-SPACE-CELLS.md)
 >
 > ⛔ **Do not read "closed" as "`36 §4.3` is delivered."** It is not. **Normative
 > pre-state semantics remain unimplemented.** What changed is the honesty of the
@@ -31,10 +31,18 @@ origin: "Steward measurement 2026-07-27 at origin/main=0031dd6a, taken while sco
 > unavailable in this slice because the parser has only `space proc`: no
 > `becomes`, no cell environment, no `s_pre`/`s_post` binding to elaborate
 > against. ⇒ **The residual is the `becomes` / space cell-block surface**, which
-> this frame deliberately excluded, and which needs a design call on whether
-> space-block syntax exists at all before it can be framed. **That node is not
-> yet filed.** Until it is, a reader finding this node closed and no successor
-> could reasonably conclude the feature shipped. It did not.
+> this frame deliberately excluded.
+>
+> ✅ **It is now filed as [`SURF-SPACE-CELLS`](SURF-SPACE-CELLS.md)** (released to
+> Team Language 2026-07-27). ⭐ The design call I expected to be needed — *does
+> space-block syntax exist at all?* — **was already settled in the corpus:**
+> `36 §4.1` gives the desugaring verbatim, and its whole target (`State`,
+> `Get`/`Put`, `run_state`) is built and live in `effects/state.rs`. So the
+> residual is a surface + translation job, not a design fork.
+>
+> ⛔ Building the cells does **not** by itself restore `old` — `SURF-SPACE-CELLS`
+> explicitly leaves `OldPreStateUnsupported` firing. The pre-state binding is
+> that node's **successor**, and it becomes framable once cells exist.
 
 ## The measurement
 
