@@ -39,8 +39,13 @@ origin: Architect cycle-contract ruling evt_5pzxf6sm4z08 ("host recursion may no
 > [`RT-VALUE-TOTALITY-P2-representation-split.md`](../wp/RT-VALUE-TOTALITY-P2-representation-split.md)
 > (444 lines: fixed inputs, measured substrate §2a–§2g, `D1`–`D6`, ACs).
 > ⚠ This sentence previously read *"has no frame"* — true when written, false now;
-> edited rather than annotated. **`P3` still has none.**
-> **`P2` released to Runtime 2026-07-27** on the Handoff Gate.
+> edited rather than annotated. **`P3` is now framed too**
+> ([`RT-VALUE-TOTALITY-P3-debug-depth-totality.md`](../wp/RT-VALUE-TOTALITY-P3-debug-depth-totality.md),
+> 2026-07-27) — this line previously read *"`P3` still has none"*, edited
+> rather than annotated.
+> **`P2` MERGED 2026-07-27** — verified on `main = 5df415c1`: `Value` derives
+> `Debug` only, and `CanonicalWitness` carries the `Eq`/`Ord`/`Hash` the enum
+> used to grant `Closure`. ⇒ **`P3` is the node's residual.**
 >
 > ### ▶ THE REDIRECT, CONCRETELY
 >
@@ -152,8 +157,8 @@ origin: Architect cycle-contract ruling evt_5pzxf6sm4z08 ("host recursion may no
 > | phase | frame | covers |
 > |---|---|---|
 > | **P1 — totality** | ✅ **MERGED** `docs/program/wp/RT-VALUE-TOTALITY-P1-iterative-canonical-traversal.md` | `AC-V1` iterative encoder · `AC-V2` structural pin · `AC-V3` clone+drop |
-> | **P2 — representation** | ✅ **WRITTEN** `docs/program/wp/RT-VALUE-TOTALITY-P2-representation-split.md` | `AC-V4`–`AC-V6`, `AC-V8`–`AC-V10`: carrier split, derives, closure arm, `ken-foundation` twin, checked projection · **plus `AC-V12`**, which rides `AC-V8` and is not a reading of it |
-> | **P3 — residual totality** | ⛔ **NOT WRITTEN** | `AC-V11`: derived `Debug` is depth-total. ⚠ **Does NOT depend on P2** — releasable any time after P1 |
+> | **P2 — representation** | ✅ **MERGED** `docs/program/wp/RT-VALUE-TOTALITY-P2-representation-split.md` | `AC-V4`–`AC-V6`, `AC-V8`–`AC-V10`: carrier split, derives, closure arm, `ken-foundation` twin, checked projection · **plus `AC-V12`**, which rides `AC-V8` and is not a reading of it |
+> | **P3 — residual totality** | ✅ **WRITTEN** [`RT-VALUE-TOTALITY-P3-debug-depth-totality.md`](../wp/RT-VALUE-TOTALITY-P3-debug-depth-totality.md) | `AC-V11`: derived `Debug` is depth-total. ⚠ **Does NOT depend on P2** — releasable any time after P1 |
 >
 > **P1 is first because P2's checked projection must SHARE P1's mechanism**
 > (§3b pin 3 — *"no recursive adapter"*). If P2 ran first it would grow its own

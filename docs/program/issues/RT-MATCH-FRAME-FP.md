@@ -1,13 +1,13 @@
 ---
 id: RT-MATCH-FRAME-FP
 title: "match-frame fingerprints must hash a dedicated closure-free header carrier, not a Debug rendering of closure-capable cases"
-status: active
+status: merged
 owner: runtime
 size: M
 gate: none
 depends_on: []
 blocks: []
-github: null
+github: https://github.com/swe-toolkit/ken/pull/1108
 origin: Re-sliced out of RT-VALUE-TOTALITY-P2 by the Steward (evt_35eggstm95hk1) as item 1 of the Architect's block on 6f2ca526. Mechanism ruled by the Architect as dec_16n1t4b92463g (route C), which also states "Steward owns framing and scope release". Steward-filed; Steward owns the frame and AC/control placement.
 ---
 
