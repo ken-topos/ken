@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-27 03:50:16Z — from 93 issue file(s) in `docs/program/issues/`.
+2026-07-27 04:39:00Z — from 93 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -49,7 +49,7 @@ the committed file matches the generator's output.
 | `ABI-REVOKE` | runtime revocation membrane — the deferred runtime face of 62 §4 | draft | runtime | TBD | none | — |
 | `ABI-S1` | descriptor completion — seek, truncate, sync/data-sync, flags, duplication under explicit inheritance policy | draft | runtime | M | none | — |
 | `ABI-S2` | directory streaming — supersedes whole-directory read where streaming is the honest shape | draft | runtime | M | none | — |
-| `ABI-S3` | monotonic clocks, sleep/deadlines, and secure kernel entropy | ready | runtime | M | none | — |
+| `ABI-S3` | monotonic clocks, sleep/deadlines, and secure kernel entropy | ready | runtime | L | none | — |
 | `ABI-S4` | statx-shaped metadata with field-availability bits | draft | runtime | M | none | — |
 | `ABI-S5` | terminal basics and process signal disposition at the executable edge | draft | runtime | M | none | — |
 | `ABI-S6` | ordinary anonymous and file-backed mappings as opaque runtime-owned regions and bounded byte views | draft | runtime | L | none | — |
