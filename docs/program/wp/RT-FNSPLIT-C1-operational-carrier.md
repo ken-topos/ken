@@ -257,9 +257,40 @@ were skipped. ⛔ An AC with no control is invisible to review: *"discharged"* a
 
 - **`AC-C1`** — `D1`'s accessor exists at `pub(in crate::cranelift_backend)` and
   `SemanticPlane` / `names` remain `pub(super)`.
-  **Control:** a probe that attempts to name `SemanticPlane` from `lowering`
-  **fails to compile**, and the same probe naming `StaticTransitionPlan`
-  **succeeds** — so the check discriminates rather than always failing.
+  **Control (AMENDED 2026-07-27 by the Steward, who authored the original and
+  got it wrong — see the amendment note below):** the **positive** half is the
+  mechanized pin — `lowering` calls the narrowly exported `D1` accessor, and
+  compilation of `ken-runtime` proves it. The **negative** half is discharged by
+  **compiler-enforced visibility**, recorded as such, ⛔ **not** as a running
+  pin.
+
+> #### ⛔ Amendment note — the original `AC-C1` control was UNRUNNABLE
+>
+> The original demanded a probe that *"fails to compile"* naming `SemanticPlane`
+> from `lowering`. Runtime measured that no mechanism in this repo can execute
+> it: **CI runs `nextest`, which does not run doctests at all**; an external
+> `rlib` cannot distinguish `pub(super)` from crate visibility; `trybuild` would
+> add a dependency; and a source scan is both outside the implementation lane and
+> banned by the operator's test policy (2026-07-26).
+>
+> ⇒ As written it had **zero trust delta** — it could not have gone red.
+>
+> ⭐ **Compiler-enforced visibility is not a downgrade; on coverage it is
+> strictly stronger.** A compile-fail pin tests **one spelling** at **one call
+> site**. `pub(super)` is enforced by rustc over **every** name and **every**
+> call site, including ones written after this WP. A pin naming `SemanticPlane`
+> would have said nothing about `names`, `SemanticNameArena`, or any later
+> spelling.
+>
+> ⚠ **The residual, stated in the direction it actually fails:** compiler
+> enforcement is **conditional on the visibility annotation surviving**. If a
+> later WP widens `pub(in crate::cranelift_backend)` → `pub(crate)`, the
+> encapsulation evaporates and **nothing goes red**. That is a review-enforced
+> property, not a mechanized one. ⛔ Report it as a named residual; `AC-C1` does
+> **not** close it.
+>
+> ⛔ Do **not** add `trybuild`, and do **not** substitute a source-scanning
+> oracle. Both were considered and rejected here.
 - **`AC-C2`** — producer and eliminators derive constructor/field identity from
   one authority.
   **Control:** perturb the artifact-static atom for one constructor and show
