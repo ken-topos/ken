@@ -27,11 +27,37 @@ a normative call. **This one depends on nothing and sat unowned and unframed.**
 ⛔ **A2b below is NOT in the framed scope.** It needs the Architect's route-2
 normative call before it can be sized, and is filed as [[PX8-ERRID-SCOPE]].
 
-⚠ **The frame does not prescribe the fixture.** Whether `effective` on the
-write path is the buffer's capacity or its installed window length decides
-whether `count < effective` is constructible at all — and if it is not, the
-cell is **inexpressible**, not merely missing, which is a full deliverable
-(same class as [[CONF-FMT8-LEVELTOK]] and [[CONF-SEC4-REFL-PAIR]]).
+> ## ⚖️ RULED TWICE 2026-07-27 — and the second ruling REVERSES the first
+>
+> ⚠ **This node previously said the cell might be *inexpressible*, a full
+> deliverable in the class of [[CONF-FMT8-LEVELTOK]] / [[CONF-SEC4-REFL-PAIR]].
+> ⛔ That is now FALSE.** Sequence, so the reversal is legible:
+>
+> 1. **Steward `evt_1grq3fcfkz4yy`** — the frame's capacity-vs-installed-window
+>    dichotomy was false in **both** branches. Ruled `D3`'s inexpressibility on a
+>    four-site census: capacity-backed `effective`, live-window admission,
+>    `InterpreterHostBackend` not overriding `fs_resource_write_at`, and
+>    `TransferCountV1::new` being `pub(crate)`.
+> 2. ⛔ **Architect `evt_5h884g6xhtts3` REVERSES it.** Rows 3 and 4 are true
+>    facts with a **false consequence**: the seam is the **`pub trait
+>    HostEffectBackendV1`** (`effect_v1.rs:1214`), not the one concrete backend
+>    that declines to override it — `dispatch_host_op_v1` calls it through the
+>    trait at `:1801-1803` — and **ken-host mints the `TransferCountV1` itself**
+>    at `:1811`, so the constructor's visibility never mattered.
+>
+> ⇒ ⭐ **The census proves only that no end-to-end regular-file fixture exists —
+> a reachability limit, not a semantic absence.** LOCKED `§38.1.7.2` admits
+> `0 < n <= effective` including a short write.
+>
+> ✅ **`D1` is available at the COMPONENT boundary** and is the required
+> discharge: a test-local `HostEffectBackendV1` returning a short write → the
+> real `dispatch_host_op_v1` → the real minted count → the existing
+> `reify_host_reply_v1` → assert `remaining = 2`. ⛔ Production unchanged; ⛔ a
+> comment-only deliverable does **not** discharge `PX8`.
+>
+> ⭐ Same component shape native already uses. Requiring an interpreter *OS*
+> fixture while accepting native's *component* evidence was an accidental
+> asymmetry — and that asymmetry is what read as inexpressibility.
 
 Surfaced by the **Architect's PX8 closure-property verdict** (`evt_163mfgjs7fkh8`)
 — clause (a) *absolute-not-differential* evidence is **not** discharged for two
