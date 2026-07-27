@@ -210,6 +210,34 @@ this frame. Known live: `CAT-C2` Phase 2 will touch
 
 ---
 
+## 7a. ⛔⛔ RUN THE FORMATTER ON ANY NEW `catalog/` FILE BEFORE HANDOFF
+
+⚠ **Added 2026-07-27 after this WP's first candidate failed CI.** `d52611f5`
+was AC-complete, QA-approved, and Architect-approved, and it went **red in CI**
+on two shards:
+
+```
+crates/ken-elaborator/tests/kenfmt_c_capstone.rs:38
+    canonical_live_corpus_is_a_fixed_point
+    assertion `left == right` failed: …/Capability/Filesystem/Authority.ken.md
+crates/ken-cli/tests/ken_fmt.rs:111
+    strict_frozen_corpus_gate_is_green
+```
+
+⇒ There is a **corpus-wide formatter fixed-point gate**: every file under
+`catalog/` must already be in canonical `kenfmt` form.
+
+⭐ **Why no local run could catch it.** The gate lives in `ken-cli` and
+`kenfmt_c_capstone` and is keyed on **every catalog file**, so it fires only in
+a full-workspace run — which is **CI-only** by operator hard rule
+(`COORDINATION §12`). A targeted `-p ken-elaborator --test <yours>` is correct
+and cannot see it. ⛔ Do **not** respond to this by running `--workspace`
+locally.
+
+⇒ ✅ **Format any new `catalog/` file before handing the SHA to QA.** This
+belongs in every frame that adds a `catalog/` file; its absence here was the
+Steward's omission, not a ring error.
+
 ## 8. Hard stop
 
 ⛔ Route to the Steward if:

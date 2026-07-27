@@ -263,6 +263,43 @@ it does not make is not an acceptable outcome of this WP.**
   follow-on build WP for Ergo — the Steward frames it, this WP does not do it.
 - ⛔ **Do not re-open** the `§1c` accept-both / same-token behaviour or the
   formatter's canonicalization rules. They are settled and orthogonal.
+- ⚠ **AMENDED 2026-07-27 (`evt_7egdvdf68p7a4`) — `§1b:80-81` IS IN SCOPE, and
+  `conformance/**` stays OUT but must be NAMED.** Raised by the conformance
+  validator's block on `b3468101`; both carriers verified by the Steward.
+
+  ✅ **`31-lexical.md:80-81` is authorized, atomic with `§1d`.** It asserts the
+  superseded model — *"only a parsed level-or-label notation token prints as
+  `ℓ`; an identifier token whose stored spelling is `l` or `level`…"* — while
+  **the lexer has no Level/Label token kind at all** (a `Token`-scoped grep for
+  either returns nothing). ⭐ `§1b:92` **already** says the lexer accepts both
+  spellings as the *same token*, so `§1b` currently contradicts **itself**
+  across twelve lines; the repair aligns `:80-81` to what `:92` says.
+  ⛔ Describe, do not change. This is the same file and the same defect as
+  `§1d` — shipping one without the other leaves `31` self-contradictory.
+
+  ⛔ **`conformance/**` remains excluded.** The FMT8 row
+  (`conformance/surface/formatting/seed-canonical-format.md:304-314`,
+  `l-identifier-is-not-a-level-token`) expects **RED-UNTIL-BUILT**, so this WP
+  does not falsify it. ⭐⭐ But its operand — *"a genuine level-token fixture
+  using the canonical level role"* — is **unproducible, permanently**: under
+  endpoint (b) there is no Level/Label token kind and there never will be.
+  ⇒ **FMT8 as written can never go green.** That is a pre-existing defect this
+  candidate neither creates nor worsens; landing the `31` repair makes it
+  legible. ⛔ Repairing it inside a spec-only WP would put an unreviewed
+  conformance edit on a spec candidate.
+
+  ✅ **Required instead — NAME it.** A short forward note in `§1b` or `§1d`
+  recording that the formatting seed's FMT8 row still asserts the superseded
+  token-kind model and is filed separately as **`CONF-FMT8-LEVELTOK`**.
+  ⭐ The contradiction must be **recorded, not repaired**: a corpus that
+  contradicts itself silently is the failure; one that says "known-stale, filed
+  there" is honest and reviewable.
+
+  ⭐⭐ **The finding worth more than this WP:** a `RED-UNTIL-BUILT` row whose
+  fixture cannot be constructed is **byte-identical, to any reader, to one that
+  merely has not been built yet.** It sits red forever and reads as pending.
+  Same class as Sec1's synthetic `Disproved`. ⚠ A sweep of the formatting seed
+  for other unproducible fixtures is a **separate node**, ⛔ not this WP.
 
 ---
 
