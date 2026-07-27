@@ -184,13 +184,44 @@ the `if`/`else` cascade there would have been no error at all.
 | AC-1 | `ac1_every_new_request_survives_an_encode_decode_round_trip` | encodings asserted mutually distinct, so a codec collapsing every request cannot pass; wall ≠ monotonic on the wire |
 | AC-2 | `ac2_monotonic_readings_survive_a_wall_clock_step_backwards` | positive control asserted **first**; **mutation-proven both halves** |
 | AC-3 | `ac3_the_deadline_a_caller_passes_is_the_deadline_honoured` | demonstrated by use, with a discriminator |
-| AC-3b | `ac3b_the_sleep_request_carries_a_deadline_and_no_cancellation_surface` | three measurements, three positive controls; **mutation-proven** |
+| AC-3b | request: `ac3b_the_sleep_request_carries_a_deadline_and_no_cancellation_surface` · surface: `abi_s3_the_deadline_type_carries_exactly_its_reading_and_no_cancellation_field` · decoder: `ac3b_the_deadline_decoder_refuses_a_second_argument` | **both** representations the AC names; **all three mutation-proven** |
 | AC-3c | `ac3c_entropy_needs_no_capability_token_while_a_gated_op_still_does` + `abi_s3_entropy_is_visible_in_the_effect_row_and_absent_where_it_should_be` | both halves, **each mutation-proven** |
 | AC-4 | `ac4_entropy_reports_unavailable_rather_than_supplying_bytes_from_elsewhere` | **mutation-proven** against a silent downgrade |
 | AC-5 | `ac5_new_operations_are_unavailable_and_the_promotion_set_is_untouched` | asserts `PX5_PLANNED_NATIVE_TARGETS` **contents**; carries an explicit vacuity note |
 | AC-6 | CI | local runs are crate-scoped only (`COORDINATION §12`), and **must include `-p ken-verify`** |
 
-### AC-3b — why one measurement is not enough
+### AC-3b — TWO representations, and the first repair covered only one
+
+The AC names two: *"the **`Deadline` type** and the `SleepUntil` request."*
+Candidate `c7ffb0d7` discharged only the request and was blocked for it.
+
+⛔ **The gap was not a missing test — it was a production defect.**
+`decode_deadline` read `args.first()`, so a surface
+`MkDeadline MonotonicInstant <cancellation>` had its extra field **discarded
+during decoding**, before any wire image or C record exists. Every downstream
+control sits after that discard.
+
+★ **Measured, by adding the forbidden field to the surface `Deadline`:**
+
+| control | result |
+|---|---|
+| the new surface control | **fired** |
+| the `ken-host` request triad | **stayed green** |
+
+That is the whole finding in one line: a real cancellation surface, and the
+triad could not see it. The pin had been placed on the wrong representation
+boundary.
+
+**Fixed as a class, not as the named instance.** Every decoder this WP adds now
+binds an exact-arity slice pattern and fails closed — `decode_deadline` at
+*both* levels, and the `SleepUntil` and `RandomBytes` operand reads, which had
+the identical `first()` shape and would have survived a re-review scoped to the
+block's trace.
+
+The surface control measures the **elaborated constructor telescope** — what
+the kernel admitted — not a statement in `prelude.rs`.
+
+### AC-3b — why one measurement is not enough on the request side
 
 The AC forbids a cancellation field, token, or status *"including unused or
 reserved ones."* Each available measurement has a hole, so three are taken:
@@ -235,7 +266,9 @@ verified with `git diff --quiet` (⚠ `--stat` always exits 0):
 | monotonic script made decreasing | AC-2 **property** fires | property assertion fired; control did **not** |
 | wall clock no longer steps backwards | AC-2 **control** fires | control fired with its own message |
 | unavailable entropy falls back to `unwrap_or_default()` | AC-4 fires | fired, naming the observed `Success(Bytes([]))` |
-| an extra cancellation-status byte encoded on the sleep request | AC-3b fires | fired on the byte-accounting assertion |
+| an extra cancellation-status byte encoded on the sleep request | AC-3b request triad fires | fired on the byte-accounting assertion |
+| ⭐ the forbidden field added to the **surface** `Deadline` | AC-3b **surface** control fires | fired — **and the request triad stayed green**, which is the gap it was added to close |
+| `decode_deadline` reverted to `args.first()` | the decoder arity control fires | fired — "must be refused, not silently truncated" |
 | `random_bytes` declares `visits [Clock]` instead of `[Entropy]` | AC-3c **surface** half fires | fired — the effect row lost `Entropy` |
 | `EntropyRandomBytes` removed from the ambient class | AC-3c **dispatch** half fires | fired — entropy was refused without a token |
 
