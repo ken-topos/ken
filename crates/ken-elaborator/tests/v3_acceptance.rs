@@ -10,11 +10,13 @@
 
 use ken_elaborator::{
     attempt_obligation, attempt_with_cert, classify,
-    extract::{ObligationId, ObligationTriple, ProvKind, Provenance},
     error::Span,
-    prover::{Route, Verdict},
+    extract::{ObligationId, ObligationTriple, ProvKind, Provenance},
+    prover::{attempt_with_refutation, Countermodel, Route, Verdict},
+    ElabEnv,
 };
-use ken_kernel::{declare_postulate, GlobalEnv, GlobalId, Level, Term};
+use ken_kernel::{declare_postulate, Context, GlobalEnv, GlobalId, Level, Term};
+use num_bigint::BigInt;
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
 
@@ -240,7 +242,7 @@ fn unrecognized_shape_to_ho_default_no_skip() {
 /// `dec : A → Decidable φ` + kernel canonicity `dec a →_β inl proof` (23 §3.1).
 /// The D-fragment backend (kernel whnf + constructor extraction) is pending.
 #[test]
-fn reflective_decision_computes_cert_d() {
+fn reflective_decision_computes_cert_d_placeholder() {
     // [placeholder — reifies in V4]
     // When landed: a closed `2 + 2 == 4`-style decidable goal with a registered
     // `dec` computes cert via kernel `whnf`; `inl proof → proved`.
@@ -252,7 +254,7 @@ fn reflective_decision_computes_cert_d() {
 /// [placeholder — reifies in V4]: requires Kripke embedding φ ↦ φ#, World sort,
 /// adequacy lemma `classically_valid(φ#) → φ`, and `check_cert` soundness (23 §4).
 #[test]
-fn kripke_embedding_cert_rechecks_fo() {
+fn kripke_embedding_cert_rechecks_fo_placeholder() {
     // [placeholder — reifies in V4]
     // When landed: an FO goal φ routed to Kripke; Z3 decides φ# valid;
     // discharge term `sound φ π (refl true)` checks → proved.
@@ -341,7 +343,7 @@ fn ipc_lem_invalid_not_refuted_unknown() {
 /// [placeholder — reifies in V4]: requires List inductive + induction tactic +
 /// sub-obligation composition and localized holes (23 §5).
 #[test]
-fn induction_descent_with_ih_and_localized_partiality() {
+fn induction_descent_with_ih_and_localized_partiality_placeholder() {
     // [placeholder — reifies in V4]
     // When landed: `∀ xs : List Nat. length xs ≥ 0` decomposes per-constructor;
     // nil branch → proved; cons branch with IH in Γ → proved.
@@ -352,14 +354,84 @@ fn induction_descent_with_ih_and_localized_partiality() {
 // ─── E. Honest trichotomy — disproved + unknown evidence (23 §1.2/§1.3) ─────
 
 /// E1: disproved-carries-countermodel
-/// [placeholder — reifies in V4]: requires a backend producing `q : ¬φ`
-/// (countermodel) + schema from `24` (oracle).
+/// Unequal kernel-native Int literals yield a concrete failing input class,
+/// and the backend's `q : ¬φ` must pass the kernel re-check.
 #[test]
 fn disproved_carries_countermodel() {
-    // [placeholder — reifies in V4]
-    // When landed: `n > 0` for `n ≤ 0` → backend yields countermodel naming
-    // the failing input class; cert `q : ¬φ` is kernel-checked.
-    let _ = "placeholder";
+    let mut elab = ElabEnv::new().expect("numeric environment");
+    let int_ty = Term::const_(elab.numeric_env.int_id, vec![]);
+    let phi = Term::Eq(
+        Box::new(int_ty),
+        Box::new(Term::IntLit(BigInt::from(2))),
+        Box::new(Term::IntLit(BigInt::from(3))),
+    );
+    let trusted_before = elab.env.trusted_base();
+    let triple = closed_triple(&mut elab.env, "test.int_literal_disequality", phi.clone());
+
+    let result = attempt_obligation(&mut elab.env, &triple);
+    let description = match result.verdict {
+        Verdict::Disproved { countermodel } => countermodel.description,
+        other => panic!("unequal Int literals must be disproved, got {other:?}"),
+    };
+    assert!(
+        description.contains("Int literal equality"),
+        "countermodel must name the failing input class: {description}"
+    );
+    assert!(
+        description.contains('2') && description.contains('3'),
+        "countermodel must carry both failing inputs: {description}"
+    );
+    assert_eq!(
+        elab.env.trusted_base(),
+        trusted_before,
+        "checked empty-context refutation must not leave an Unknown hole"
+    );
+
+    // Ordering discriminator: the same intrinsically-false proposition is
+    // proved when Γ supplies it as a premise. IPC lookup must run before the
+    // literal-refutation backend, and neither successful path may mint a hole.
+    let premise_triple = ObligationTriple {
+        id: ObligationId("test.assumed_int_literal_disequality".into()),
+        hole_id: elab.env.fresh_id(),
+        context: vec![phi.clone()],
+        phi: phi.clone(),
+        goal_closed: Term::pi(phi.clone(), phi.clone()),
+        provenance: Provenance { kind: ProvKind::Prove, span: Span::zero() },
+    };
+    let trusted_before_premise = elab.env.trusted_base();
+    let premise_result = attempt_obligation(&mut elab.env, &premise_triple);
+    assert!(
+        matches!(&premise_result.verdict, Verdict::Proved { .. }),
+        "Γ containing φ must prove Γ ⊢ φ before refutation; got {:?}",
+        premise_result.verdict
+    );
+    assert_eq!(
+        elab.env.trusted_base(),
+        trusted_before_premise,
+        "checked premise proof must not leave an Unknown hole"
+    );
+
+    // AC-V3r3 discriminator: a backend candidate with the same countermodel
+    // but no valid `q : ¬φ` must remain Unknown. Removing the kernel `check`
+    // from `attempt_with_refutation` turns this assertion red.
+    let invalid_refutation = Term::lam(
+        phi.clone(),
+        Term::Refl(Box::new(Term::IntLit(BigInt::from(2)))),
+    );
+    let invalid = attempt_with_refutation(
+        &mut elab.env,
+        &Context::new(),
+        &phi,
+        &phi,
+        invalid_refutation,
+        Countermodel {
+            description: "must not be believed without checked negation".into(),
+        },
+    );
+    assert!(
+        matches!(invalid, Verdict::Unknown { .. }),
+        "invalid q : ¬φ must not produce Disproved; got {invalid:?}"
+    );
 }
 
 /// E2 (soundness): unknown-hole-trusted-base-distinct-from-proved

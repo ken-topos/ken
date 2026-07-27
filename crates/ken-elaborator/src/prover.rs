@@ -109,7 +109,20 @@ pub fn classify(phi: &Term) -> Route {
 /// A ground-decidable atom: no free variables, built from constants only.
 /// Conservative: only closed constant applications claimed as D.
 fn is_ground_decidable(phi: &Term) -> bool {
-    !has_free_vars(phi, 0) && is_const_atom(phi)
+    !has_free_vars(phi, 0) && (is_const_atom(phi) || is_literal_equality(phi))
+}
+
+/// A closed equality between kernel-native literals. The registered
+/// decidable-equality certificate remains the authority: this shape only
+/// selects fragment D, while the refutation certificate is still checked by
+/// the kernel before `Disproved` can be returned.
+fn is_literal_equality(phi: &Term) -> bool {
+    match phi {
+        Term::Eq(_, lhs, rhs) => {
+            matches!(lhs.as_ref(), Term::IntLit(_)) && matches!(rhs.as_ref(), Term::IntLit(_))
+        }
+        _ => false,
+    }
 }
 
 /// True if `φ` has a first-order connective structure: Pi/Sigma/App over
@@ -187,6 +200,28 @@ pub fn attempt_with_cert(env: &mut GlobalEnv, phi_closed: &Term, cert: Term) -> 
     }
 }
 
+/// Attempt a backend-produced refutation certificate `q : ¬φ`.
+///
+/// Like [`attempt_with_cert`], this is an untrusted-backend boundary: a
+/// `Disproved` verdict is returned only after the kernel accepts
+/// `q : φ → Bottom` in the obligation context. The diagnostic description
+/// remains untrusted explanatory data. An invalid refutation yields an honest
+/// `Unknown`, never `Disproved`.
+pub fn attempt_with_refutation(
+    env: &mut GlobalEnv,
+    ctx: &Context,
+    phi: &Term,
+    phi_closed: &Term,
+    refutation: Term,
+    countermodel: Countermodel,
+) -> Verdict {
+    let not_phi = Term::pi(phi.clone(), Term::const_(env.bottom_id(), Vec::new()));
+    match check(env, ctx, &refutation, &not_phi) {
+        Ok(()) => Verdict::Disproved { countermodel },
+        Err(_) => emit_unknown_hole(env, phi_closed),
+    }
+}
+
 // ─── Fragment D ─────────────────────────────────────────────────────────────
 
 /// Fragment D: reflective decision for ground decidable atoms (`23 §3`).
@@ -205,14 +240,40 @@ fn attempt_d(
     phi: &Term,
     phi_closed: &Term,
 ) -> Verdict {
-    // IPC pre-pass: assumption lookup closes D-goals that follow from context.
-    let ipc = attempt_ipc(env, ctx, phi, phi_closed);
-    if matches!(ipc, Verdict::Proved { .. }) {
-        return ipc;
+    // IPC assumption lookup has priority over every backend. A proposition can
+    // be intrinsically false yet still prove a sequent when it is an explicit
+    // premise; report that checked certificate before attempting refutation.
+    if let Some(cert) = try_ipc_cert(env, ctx, phi, phi_closed) {
+        return Verdict::Proved { cert };
     }
+
+    // The kernel's registered decidable-equality certificate reduces unequal
+    // Int literals to Bottom. The identity from that proposition to Bottom is
+    // therefore a kernel-checkable proof of ¬φ; the BigInt comparison merely
+    // selects a candidate and is never trusted as the verdict.
+    if let Term::Eq(_, lhs, rhs) = phi {
+        if let (Term::IntLit(left), Term::IntLit(right)) = (lhs.as_ref(), rhs.as_ref()) {
+            if left != right {
+                let refutation = Term::lam(phi.clone(), Term::var(0));
+                let countermodel = Countermodel {
+                    description: format!("Int literal equality fails: {left} != {right}"),
+                };
+                return attempt_with_refutation(
+                    env,
+                    ctx,
+                    phi,
+                    phi_closed,
+                    refutation,
+                    countermodel,
+                );
+            }
+        }
+    }
+
     // [placeholder — reifies in V4]: kernel whnf + decision procedure (23 §3.1)
     // + Z3-backed arithmetic search + Decidable constructor extraction (23 §3.2).
-    // Conservative: honest unknown until backend is in place.
+    // Conservative: emit exactly one honest hole after proof and refutation
+    // candidates have both failed.
     emit_unknown_hole(env, phi_closed)
 }
 
@@ -266,6 +327,23 @@ fn attempt_ipc(
     phi: &Term,
     phi_closed: &Term,
 ) -> Verdict {
+    match try_ipc_cert(env, ctx, phi, phi_closed) {
+        Some(cert) => Verdict::Proved { cert },
+        None => emit_unknown_hole(env, phi_closed),
+    }
+}
+
+/// Build and kernel-check an IPC certificate without mutating `env` on failure.
+///
+/// Fragment D uses this side-effect-free phase before attempting a backend, so
+/// a later successful refutation cannot inherit a ghost `Unknown` postulate
+/// from a failed IPC pre-pass.
+fn try_ipc_cert(
+    env: &GlobalEnv,
+    ctx: &Context,
+    phi: &Term,
+    phi_closed: &Term,
+) -> Option<Term> {
     match ipc_search(ctx, phi, 0) {
         Some(open_cert) => {
             // Close the open cert: wrap with Lam for each context entry so the
@@ -273,11 +351,11 @@ fn attempt_ipc(
             let cert = close_cert(open_cert, ctx);
             // Cardinal rule: check the cert before claiming proved (23 §1.5).
             match check(env, &Context::new(), &cert, phi_closed) {
-                Ok(()) => Verdict::Proved { cert },
-                Err(_) => emit_unknown_hole(env, phi_closed),
+                Ok(()) => Some(cert),
+                Err(_) => None,
             }
         }
-        None => emit_unknown_hole(env, phi_closed),
+        None => None,
     }
 }
 
