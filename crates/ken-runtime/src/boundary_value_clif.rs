@@ -4909,7 +4909,7 @@ pub(crate) mod tests {
             (64, 8, 0),
         );
 
-        let (mut admitted, mut rejected) = (0usize, 0usize);
+        let (mut admitted, mut rejected, mut retired) = (0usize, 0usize, 0usize);
         for tag in BoundaryTag::ALL {
             for class in BoundaryClass::ALL {
                 let status = run4(alloc_code, f.base, tag as u64, class as u64, 0);
@@ -4920,6 +4920,26 @@ pub(crate) mod tests {
                         status, BOUNDARY_ERR_SHAPE,
                         "AC-4: {tag:?} has no node to allocate"
                     );
+                    continue;
+                }
+                // ⛔ `RT-FNSPLIT-C1` `D5` — the RETIRED lane is a third outcome.
+                //
+                // ⭐ It is neither admitted nor malformed, and collapsing it
+                // into either arm would destroy the distinction the tombstone
+                // exists to make: `PersistentClosure + Closure` is a
+                // **well-formed pair naming a retired capability**, while
+                // `PersistentClosure + Bool` is genuinely malformed and keeps
+                // `BOUNDARY_ERR_RELATION`. Both are refused; only one can say
+                // which lane it refused.
+                if crate::boundary_value::boundary_lane_is_retired(tag, class) {
+                    assert_eq!(
+                        status,
+                        crate::boundary_value::BOUNDARY_ERR_RETIRED_LANE,
+                        "D5: {tag:?} + {class:?} is the retired lane and must be \
+                         refused BY NAME at allocation, not as an unknown tag or \
+                         a malformed pair"
+                    );
+                    retired += 1;
                     continue;
                 }
                 if boundary_relation_admits(tag, class) {
@@ -4937,20 +4957,45 @@ pub(crate) mod tests {
                 }
             }
         }
+        // ⚠ NON-VACUITY for the retired arm, and it is not optional: the arm
+        // above is a `continue` guarded by a predicate, so a tombstone list that
+        // silently emptied — or a `boundary_lane_is_retired` that stopped
+        // matching — would take the arm zero times and the sweep would stay
+        // green with the retired lane completely unexercised.
+        assert_eq!(
+            retired,
+            crate::boundary_value::BOUNDARY_RETIRED_LANES.len(),
+            "D5: the sweep exercised {retired} retired lanes but {} are declared; \
+             the retired arm is not being reached",
+            crate::boundary_value::BOUNDARY_RETIRED_LANES.len()
+        );
+
         // ⚠ POSITIVE CONTROL on both arms: a relation that admitted everything
         // or nothing would satisfy one arm vacuously.
         let handles = BoundaryTag::ALL
             .iter()
             .filter(|t| !t.is_immediate())
             .count();
+        // ⛔ **The schema is no longer the admitted set** (`RT-FNSPLIT-C1` `D5`).
+        // `BOUNDARY_TAG_CLASS_RELATION` still spells the retired lane out —
+        // that is the whole point of a tombstone, so a refusal can name it — so
+        // the admitted total is the schema MINUS the retired rows. ⚠ Still
+        // derived from both authorities rather than re-fitted to the observed
+        // 7: a count refitted to whatever the code now emits measures nothing,
+        // and this form goes red if either the schema or the tombstone list
+        // moves.
         let expected_admitted: usize = BOUNDARY_TAG_CLASS_RELATION
             .iter()
-            .map(|(_, classes)| classes.len())
-            .sum();
+            .flat_map(|(tag, classes)| classes.iter().map(move |class| (*tag, *class)))
+            .filter(|(tag, class)| !crate::boundary_value::boundary_lane_is_retired(*tag, *class))
+            .count();
         assert_eq!(admitted, expected_admitted, "AC-1: admitted count");
+        // ⚠ The product now partitions into THREE arms, not two, so the retired
+        // pairs must be subtracted here as well — otherwise this control would
+        // silently absorb a lane that stopped being refused by name.
         assert_eq!(
             rejected,
-            handles * BoundaryClass::ALL.len() - expected_admitted,
+            handles * BoundaryClass::ALL.len() - expected_admitted - retired,
             "AC-1: rejected count"
         );
         assert!(
