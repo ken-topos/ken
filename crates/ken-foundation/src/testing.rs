@@ -143,10 +143,12 @@ pub fn synthetic_value(idx: usize, rng: &mut WyHashRng) -> Value {
             }
         }
         8 => {
-            // Closure with captured environment
-            Value::Closure {
-                code_id: rng.next(),
-                captured: vec![
+            // ⛔ Was a `Closure` with a captured environment. The carrier has no
+            // closure variant; a nested constructor keeps this arm exercising a
+            // compound with child values, which is what the bench needs it for.
+            Value::Constructor {
+                constructor_id: 102,
+                args: vec![
                     Value::SmallInt(rng.next() as i64),
                     Value::String(format!("cap{}", rng.next() % 1000)),
                 ],

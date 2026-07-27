@@ -72,7 +72,15 @@ const NULL_SLOT: SlotId = 0;
 
 /// Evaluation-time store: wraps the K3 content-addressed heap with a
 /// `code_id` side table so distinct closure bodies get distinct, collision-free
-/// integer ids (the F4 lesson: closure equality is memcmp-exact, never a digest).
+/// integer ids.
+///
+/// ⛔ **The `code_id` is evaluator-internal bookkeeping, not an identity.** This
+/// comment used to justify it by asserting that closure equality compares
+/// captured bytes exactly rather than a digest. `41 §2.1` denies ordinary
+/// closures structural equality altogether, so there is no closure equality for
+/// either answer to be right about. The side table exists so the evaluator can
+/// tell two closure *bodies* apart while reducing; it never becomes a slot, a
+/// canonical encoding, or anything durable — [`to_rt`] refuses closures.
 pub struct EvalStore {
     /// The underlying K3 content-addressed heap.
     pub k3: Store,
