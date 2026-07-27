@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-27 11:24:26Z — from 98 issue file(s) in `docs/program/issues/`.
+2026-07-27 12:21:48Z — from 99 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -124,6 +124,7 @@ the committed file matches the generator's output.
 | `RT-SYMLINK-LANE` | SymlinkPolicy is honoured by the interpreter lane and unreachable in the native lane — FollowWithinScope has no native behaviour | draft | runtime | TBD | none | — |
 | `RT-VALUE-TOTALITY` | Make every total traversal of Value non-recursive in the host stack, and remove the closure capabilities the landed closure boundary forbids | active | runtime | L | none | — |
 | `SEAL-2` | carrier producer closure, over a derived enumeration | merged | foundation | M | none | PR #912 @ 4ac9141e (origin/main, CI green) |
+| `SEC1-IFC` | IFC by typing — the label lattice, the flow-typing pass, and no-laundering at the Vis boundary (WS-Sec increment 1) | ready | verify | M | G-Sec | — |
 | `SPAN-SEAL` | seal the BufferSpan producer surface | merged | foundation | M | none | — |
 | `SPEC-31-WIDTH-ERRATUM` | spec 31-lexical mandates a 96-column canonical width while the formatting conformance suite asserts 88 in 18 places and cites 31 §1d as its source — rule the exact value and reconcile | closed | spec | S | none | https://github.com/swe-toolkit/ken/pull/1054 |
 | `SPEC-38-ERRATUM` | spec 38-ffi-io self-contradicts on the transfer bound — rule and reconcile | closed | spec | S | none | 827 |
@@ -146,6 +147,7 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `RT-MATCH-FRAME-FP` — match-frame fingerprints must hash a dedicated closure-free header carrier, not a Debug rendering of closure-capable cases
+- `SEC1-IFC` — IFC by typing — the label lattice, the flow-typing pass, and no-laundering at the Vis boundary (WS-Sec increment 1)
 - `STR-BIJ` — the String/List Char 'bijection' over-claim (adversary A1 + A2)
 
 ## Blockers
@@ -193,7 +195,7 @@ Work items grouped by the gate (`05-implementation-dag.md`) they
 feed; `none`/`TBD` gates are omitted here (see the status table above
 for every item, gated or not):
 
-- No item in the current queue cites a named gate.
+- **G-Sec**: `SEC1-IFC` (ready)
 
 ## Archive & diary
 

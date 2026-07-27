@@ -1,6 +1,25 @@
 # WP Sec1 — Information-flow control by typing (opens WS-Sec, tier-1)
 
-> **Status:** Steward frame — **candidate post-spine WP** (deps met: L5 on `main`).
+> # ⛔⛔ SUPERSEDED — DO NOT RELEASE, DO NOT BUILD FROM THIS FILE
+>
+> **The operative frame is [`Sec1-build.md`](Sec1-build.md).** This file is the
+> **pre-elaboration predecessor** (2026-06-30) and is retained only as the
+> record of how Sec1 was originally scoped.
+>
+> ⚠ **Both of its open questions have since been answered, which is exactly why
+> it is unsafe to read as current:**
+>
+> | this file says | actually settled |
+> |---|---|
+> | "spec-leader elaborates `61` (DRAFT → implementation-ready)" | ✅ **done** — `61` self-declares *"Sec1 + Sec1ct elaborated — implementation-ready for WS-Sec"* |
+> | "build team **TBD** (Verify or a security enclave)" | ✅ **Team Verify**, operator-decided (WS-Sec is a scope extension of Verify, not a new team) |
+>
+> ⛔ It also describes `@ct` as "the label + the hook" inside Sec1. **That is now
+> false** — the whole `@ct` discipline is Sec1ct's. See `Sec1-build.md` §The
+> `@ct` boundary.
+
+> **Status:** ⛔ superseded — historical. Steward frame — **candidate
+> post-spine WP** (deps met: L5 on `main`).
 > **Opens WS-Sec** (security, a tier-1 workstream). spec-leader elaborates
 > `spec/60-security/61-information-flow.md` (DRAFT → implementation-ready); build
 > team TBD (Verify or a security enclave — see Sequencing).
