@@ -2082,6 +2082,7 @@ pub struct ClockIds {
     pub sleep_until_id: GlobalId,
     pub mk_monotonic_instant_id: GlobalId,
     pub mk_deadline_id: GlobalId,
+    pub random_bytes_id: GlobalId,
 }
 
 impl ClockIds {
@@ -2095,6 +2096,7 @@ impl ClockIds {
             sleep_until_id: get("SleepUntil")?,
             mk_monotonic_instant_id: get("MkMonotonicInstant")?,
             mk_deadline_id: get("MkDeadline")?,
+            random_bytes_id: get("RandomBytes")?,
         })
     }
 }
@@ -2291,6 +2293,11 @@ pub trait HostHandler {
     /// reached completes immediately (dec_50pzvb14nnbt0 D2). This operation
     /// is uncancellable; PX12 owns cancellation.
     fn clock_sleep_until(&mut self, deadline: BigInt);
+
+    /// Read `count` bytes from the kernel CSPRNG. An implementation with no
+    /// kernel source must fail rather than substitute a userspace PRNG, a
+    /// seeded generator, or a cached weak source (ABI-S3 D3).
+    fn entropy_random_bytes(&mut self, count: u64) -> io::Result<Vec<u8>>;
 
     /// Observation hook for an exact pre-operation capability denial.
     fn fs_denied(&mut self, _denial: CapabilityDenied) {}
@@ -2596,6 +2603,19 @@ impl HostHandler for PosixHost {
 
     fn clock_monotonic_now(&mut self) -> BigInt {
         BigInt::from(process_monotonic_baseline().elapsed().as_nanos())
+    }
+
+    fn entropy_random_bytes(&mut self, count: u64) -> io::Result<Vec<u8>> {
+        // The kernel CSPRNG, read directly. Not a userspace PRNG, not a
+        // seeded substitute, and no fallback: if the kernel source cannot be
+        // read the error propagates and the operation reports unavailable
+        // (ABI-S3 D3).
+        use std::io::Read;
+        let mut bytes = vec![0u8; usize::try_from(count).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidInput, "entropy request too large")
+        })?];
+        std::fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
+        Ok(bytes)
     }
 
     fn clock_sleep_until(&mut self, deadline: BigInt) {
@@ -3373,6 +3393,13 @@ impl HostHandler for CaptureHost {
         self.clock_trace.push(ClockTrace::SleepUntil { deadline });
     }
 
+    fn entropy_random_bytes(&mut self, count: u64) -> io::Result<Vec<u8>> {
+        // Deterministic stand-in for the kernel source. It is NOT a PRNG the
+        // production path could ever reach -- it exists only so a test can
+        // bind an exact byte string.
+        Ok((0..count).map(|index| index as u8).collect())
+    }
+
     fn fs_denied(&mut self, denial: CapabilityDenied) {
         self.fs_denials.push(denial);
     }
@@ -4143,6 +4170,12 @@ fn decode_clock_request(
             ken_host::HostOpV1::ClockSleepUntil,
             ken_host::CanonicalRequestV1::ClockSleepUntil { deadline },
         ))
+    } else if op_id == clock.random_bytes_id {
+        let count = u64::try_from(eval_to_bigint(op_args.first()?)?).ok()?;
+        Some((
+            ken_host::HostOpV1::EntropyRandomBytes,
+            ken_host::CanonicalRequestV1::EntropyRandomBytes { count },
+        ))
     } else {
         None
     }
@@ -4303,6 +4336,15 @@ impl<H: HostHandler> ken_host::HostEffectBackendV1 for InterpreterHostBackend<'_
 
     fn clock_sleep_until(&mut self, deadline: u64) {
         self.handler.clock_sleep_until(BigInt::from(deadline));
+    }
+
+    fn entropy_random_bytes(
+        &mut self,
+        count: u64,
+    ) -> Result<Vec<u8>, ken_host::IoErrorIdentityV1> {
+        self.handler
+            .entropy_random_bytes(count)
+            .map_err(|error| ken_host::io_error_identity_v1(&error))
     }
 
     fn fs_read_file(
@@ -5252,6 +5294,9 @@ fn ambient_dispatch<H: HostHandler>(
                 vec![bigint_to_int_val(BigInt::from_signed_bytes_be(&bytes))],
                 store,
             ))
+        }
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::Bytes(bytes)) => {
+            Ok(make_result(true, EvalVal::Bytes(bytes), ids, store))
         }
         ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::MonotonicInstant(
             bytes,
@@ -6959,6 +7004,7 @@ mod px5b_effect_observation_tests {
             sleep_until_id: GlobalId(403),
             mk_monotonic_instant_id: GlobalId(404),
             mk_deadline_id: GlobalId(405),
+            random_bytes_id: GlobalId(406),
         }
     }
 
@@ -7135,6 +7181,7 @@ mod px5b_effect_observation_tests {
             sleep_until_id: GlobalId(403),
             mk_monotonic_instant_id: GlobalId(404),
             mk_deadline_id: GlobalId(405),
+            random_bytes_id: GlobalId(406),
         };
         let mut host = CaptureHost::new(Vec::new());
         host.set_fixed_clock(17);
