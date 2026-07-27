@@ -122,6 +122,20 @@ the Architect's self-trigger and the Steward's backstop have lapsed
 |---|---|---|
 | 1 | 2026-07-27 | ⭐ **`AC-F1` and the inference selector want opposite things.** `AC-F1` requires body-only differences to share a header fingerprint; `lowering/mod.rs:4095–4106` **selects** from `callee_frame_templates` **by that fingerprint** when `checked_frame_id.is_none()`. Measured affirmatively by `runtime-leader`: one callee declaration with two computational eliminators of the same family yields **header-identical** templates (case fields derive from the family; the default trap is family-symbol keyed). Today's Debug hash distinguishes them **by body**; Route C must not. ⇒ Dominant new result is a lowering refusal, but a complete permutation can **silently exchange** header-identical templates, observable through fields absent from the header (`semantic_position`, `output_interface`, `segment_site_id`). Held at `evt_2qaj3kt3dawhr` for an Architect selector-scope ruling. ⚠ The join-site path stays identity-selected and is unaffected |
 
+**Disposition of entry 1 — RULED, chain not continuing.** The Architect ruled
+for an **identity-based selector**: eliminate the `checked_frame_id.is_none()`
+fingerprint `find`, **preserve the pre-erasure checked ID through all internal
+paths**, **reject a missing ID before CFG**, retain the fingerprint as
+**compatibility-only**, and close the permutation gap with **exact
+occurrence/order validation**. Both helper signatures stay stable, so the
+signature-stability licence in `Contention` is unaffected. Released to the ring
+at `evt_j1ajtszmhxt1`; the implementer folds on top of preserved `88980012`.
+
+⭐ **Note what the ruling did to `AC-F1`:** it is no longer in tension, because
+the fingerprint stopped being a *selector* and became a *compatibility check*.
+⛔ That is the shape to remember if a later entry looks similar — the fix was to
+narrow what the fingerprint is **used for**, not to weaken what it **hashes**.
+
 ⚠ **Entry 1 is a ruling-surface gap in this node's own narrowability premise** —
 the node says the fingerprint *"may be narrowable rather than merely
 re-carriered"* because `planned_join_site_for_frame` selects by `site_id`. That

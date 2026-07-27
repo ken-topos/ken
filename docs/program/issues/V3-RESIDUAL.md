@@ -1,13 +1,13 @@
 ---
 id: V3-RESIDUAL
 title: "V3's suite has FOUR assertion-free placeholder tests carrying ordinary names — `disproved_carries_countermodel` asserts nothing, passes, and reads in cargo output exactly like a real pin"
-status: ready
+status: merged
 owner: verify
 size: L
 gate: G2-G3
 depends_on: []
 blocks: []
-github: null
+github: https://github.com/swe-toolkit/ken/pull/1103
 origin: "Measured by the Steward 2026-07-27 at origin/main f1f626f7 while looking for Verify's next WP. V3 is BUILT (crates/ken-elaborator/src/prover.rs + tests/v3_acceptance.rs) — this node is its RESIDUAL, not the WP. Frame docs/program/wp/V3-prover.md (blob b7442ba2; its status header is STALE and re-pinned by this node). Unblocks SEC1-IFC-R3."
 ---
 
