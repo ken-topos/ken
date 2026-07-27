@@ -4614,6 +4614,156 @@ fn b2v_ac3_the_lowered_boundary_disposition_has_no_wildcard_arm() {
     );
 }
 
+// ─── RT-FNSPLIT-C1 D5 — closure admissibility is a property of the GRAPH ───
+
+/// A real `StaticOriginId` for a closure fixture.
+///
+/// ⭐ One cannot be minted outside the planner — its ordinal is `pub(super)`,
+/// which is exactly the unmintability `D1`/`D2` rely on. So a control that needs
+/// a closure value must source a genuine origin from a genuine plan rather than
+/// fabricating one, and that constraint is a feature reaching into the tests.
+fn c1_closure_fixture_origin() -> StaticOriginId {
+    let expr = RuntimeExpr::Construct {
+        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+        args: Vec::new(),
+    };
+    let plan = plan_static_transition_graph(&expr, &BTreeMap::new())
+        .expect("the fixture expression plans");
+    plan.root_static_origin()
+        .expect("the plan has a root occurrence origin")
+}
+
+fn c1_closure(origin: StaticOriginId) -> Lowered {
+    Lowered::Closure {
+        captures: Vec::new(),
+        params: Vec::new(),
+        body: origin,
+    }
+}
+
+/// **`RT-FNSPLIT-C1` `D5` — a closure is inadmissible at the root and at every
+/// depth, and the rejection is the same exact typed error at each.**
+///
+/// **MEASURED:** `boundary_transfer_admissibility` returns the closure-transfer
+/// error for a bare closure, a bare declaration closure, a closure nested one
+/// level inside a `Constructor`, and one nested two levels inside a
+/// `Constructor` -> `Record`.
+/// **CLAIMED:** admissibility is a property of the whole value graph.
+/// **THE GAP:** the root variant table cannot see any of the nested cases —
+/// `boundary_disposition` reports `RepresentedHandle` for every one of the
+/// nested fixtures below, because it is a function of the root tag alone. That
+/// disagreement is asserted here rather than described, so the walk cannot be
+/// deleted in favour of the table without reddening.
+#[test]
+fn c1_d5_a_closure_is_inadmissible_at_the_root_and_at_every_depth() {
+    // Promise class: durable invariant.
+    let origin = c1_closure_fixture_origin();
+    let expected = unsupported(
+        "Closure",
+        "a closure cannot cross the boundary: it is runtime-local and \
+         live-domain only, and it has no durable lane",
+    );
+
+    let bare = c1_closure(origin);
+    let bare_declaration = Lowered::DeclarationClosure {
+        symbol: "decl:fixture::f".to_string(),
+        captures: Vec::new(),
+        params: Vec::new(),
+        body: origin,
+    };
+    let depth_1 = Lowered::Constructor {
+        constructor: "ctor:fixture::Box::MkBox".to_string(),
+        args: vec![c1_closure(origin)],
+    };
+    let depth_2 = Lowered::Constructor {
+        constructor: "ctor:fixture::Box::MkBox".to_string(),
+        args: vec![Lowered::Record {
+            fields: vec![("field:held".to_string(), c1_closure(origin))],
+        }],
+    };
+
+    for (label, value) in [
+        ("bare closure", &bare),
+        ("bare declaration closure", &bare_declaration),
+        ("closure nested at depth 1", &depth_1),
+        ("closure nested at depth 2", &depth_2),
+    ] {
+        assert_eq!(
+            value.boundary_transfer_admissibility().unwrap_err(),
+            expected,
+            "{label}: the graph holds a closure and must be refused with the \
+             exact closure-transfer error"
+        );
+    }
+
+    // ⭐ THE GAP, asserted. The two nested fixtures are exactly the cases the
+    // root table cannot see, and it must be shown to disagree — otherwise this
+    // whole walk could be replaced by `boundary_disposition` and nothing would
+    // redden.
+    for (label, value) in [
+        ("closure nested at depth 1", &depth_1),
+        ("closure nested at depth 2", &depth_2),
+    ] {
+        assert!(
+            matches!(
+                value.boundary_disposition(),
+                BoundaryDisposition::RepresentedHandle { .. }
+            ),
+            "{label}: the ROOT table already refuses this, so the graph walk is \
+             not what is catching it and this control proves nothing about depth"
+        );
+    }
+}
+
+/// **`RT-FNSPLIT-C1` `D5` — the positive path: a closure-free constructor is
+/// still admitted.**
+///
+/// ⛔ This is the control that keeps the rejection **conditional**. Without it,
+/// an implementation that refused every `Constructor` outright would satisfy
+/// every negative control above — and it would be a capability removal wearing
+/// a soundness fix's clothing.
+///
+/// ⚠ Admitted here means *"this graph holds no closure"*, **not** *"this value
+/// is transferable"*. Whether the root has a boundary representation at all is
+/// `boundary_disposition`'s separate question.
+#[test]
+fn c1_d5_a_closure_free_constructor_is_admissible() {
+    // Promise class: durable invariant.
+    let closure_free = Lowered::Constructor {
+        constructor: "ctor:fixture::Pair::MkPair".to_string(),
+        args: vec![
+            Lowered::String("left".to_string()),
+            Lowered::Record {
+                fields: vec![("field:right".to_string(), Lowered::Bytes(vec![7, 8]))],
+            },
+        ],
+    };
+    assert!(
+        closure_free.boundary_transfer_admissibility().is_ok(),
+        "a constructor whose graph holds no closure must remain admissible; \
+         D5 rejects closure-bearing GRAPHS, not the Constructor variant"
+    );
+
+    // Non-vacuity: the same shape with one leaf swapped for a closure must be
+    // refused, so the `is_ok` above is attributable to the absence of a closure
+    // rather than to the walk admitting everything it is handed.
+    let origin = c1_closure_fixture_origin();
+    let closure_bearing = Lowered::Constructor {
+        constructor: "ctor:fixture::Pair::MkPair".to_string(),
+        args: vec![
+            Lowered::String("left".to_string()),
+            Lowered::Record {
+                fields: vec![("field:right".to_string(), c1_closure(origin))],
+            },
+        ],
+    };
+    assert!(
+        closure_bearing.boundary_transfer_admissibility().is_err(),
+        "NON-VACUITY: the walk admits a graph differing only by a closure in one \
+         leaf position, so it is not discriminating on closures at all"
+    );
+}
+
 // ─── RT-FNSPLIT-B2V AC-3 — exactly one of the FIVE static encoding policies ───
 
 /// **`AC-3` — every `Lowered` variant carries exactly one of `D4`'s five static

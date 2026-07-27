@@ -1417,6 +1417,112 @@ impl Lowered {
     pub(in crate::cranelift_backend) fn boundary_disposition(&self) -> BoundaryDisposition {
         self.variant().boundary_disposition()
     }
+
+    /// `RT-FNSPLIT-C1` `D5` — whether this **whole value graph** may cross the
+    /// boundary, decided before anything is allocated, written or published.
+    ///
+    /// ⭐⭐ **The root variant table is not sufficient, and that is the finding
+    /// this walk exists to encode.** `boundary_disposition` is a function of the
+    /// root tag alone, so it reports `RepresentedHandle` for a `Constructor`
+    /// whose arguments contain a closure. Nothing in the lowering excludes that
+    /// shape: `lower_expr`'s `Construct` arm lowers each argument through
+    /// `lower_expr` and screens only for `RecursiveBackedge`, so a closure
+    /// nested inside a constructor is constructible on the live path.
+    ///
+    /// ⇒ Admissibility is a property of the **graph**, not of the root.
+    ///
+    /// ⛔ **Total and wildcard-free by construction.** Every variant is named,
+    /// so a 22nd `Lowered` inhabitant is a compile error here as well as in
+    /// `variant()` — a new carrier of children cannot be added without deciding
+    /// whether it can hide a closure.
+    ///
+    /// ⚠ **Ordering is load-bearing: this runs BEFORE any allocation, store
+    /// write, adoption or publication.** A walk performed after the first child
+    /// is published would reject the transfer having already emitted part of
+    /// it, which is a partial publication rather than a rejection.
+    ///
+    /// ⚠ **The completeness cost, stated honestly and in its true size:** this
+    /// rejects only graphs that *actually contain* a closure. ⛔ It does **not**
+    /// reject the `Constructor` variant, and it does **not** follow that the 29
+    /// of 41 measured `Constructor` transfers fail — only those whose actual
+    /// argument graph holds a closure do. ⭐ And the measured zero-closure
+    /// transfer census proves nothing either way, because the carrier is inert:
+    /// that zero holds for every variant and cannot distinguish "closures never
+    /// transfer" from "nothing transfers yet."
+    pub(in crate::cranelift_backend) fn boundary_transfer_admissibility(
+        &self,
+    ) -> Result<(), CraneliftBackendError> {
+        match self {
+            // ── closures: the rejection this walk exists for ──────────────
+            //
+            // ⛔ One exact typed error at every depth, so a nested rejection is
+            // not reported as some enclosing variant's failure.
+            Lowered::Closure { .. } | Lowered::DeclarationClosure { .. } => Err(unsupported(
+                "Closure",
+                "a closure cannot cross the boundary: it is runtime-local and \
+                 live-domain only, and it has no durable lane",
+            )),
+            Lowered::ComputationalRecursorClosure { .. } => Err(unsupported(
+                "ComputationalMatch",
+                "a computational recursor closure names an in-flight activation, \
+                 not a transferable value",
+            )),
+
+            // ── recursive carriers: recurse into EVERY child position ─────
+            Lowered::Constructor { args, .. } => {
+                for arg in args {
+                    arg.boundary_transfer_admissibility()?;
+                }
+                Ok(())
+            }
+            Lowered::Record { fields } => {
+                for (_, value) in fields {
+                    value.boundary_transfer_admissibility()?;
+                }
+                Ok(())
+            }
+            Lowered::HostResult { error, ok, .. } => {
+                error.boundary_transfer_admissibility()?;
+                ok.boundary_transfer_admissibility()
+            }
+            // ⚠ **The child position most easily missed.** `DynamicConstructor`
+            // looks like a leaf: its payload is a struct, and the children are
+            // two levels down, in a `Vec` of alternative structs. Treating it
+            // as a leaf would leave a closure nested in a dynamic alternative
+            // completely unguarded while every other arm was correct.
+            Lowered::DynamicConstructor(dynamic) => {
+                for alternative in &dynamic.alternatives {
+                    for field in &alternative.fields {
+                        field.boundary_transfer_admissibility()?;
+                    }
+                }
+                Ok(())
+            }
+
+            // ── leaves: no `Lowered` child position exists ────────────────
+            //
+            // ⛔ Admitted here means "holds no closure", NOT "is transferable".
+            // Whether a leaf has a boundary representation at all is
+            // `boundary_disposition`'s question and is decided separately; a
+            // `ProtocolOnly` or otherwise forbidden leaf is still refused
+            // there. Conflating the two would let this walk read as a transfer
+            // authorization it is not.
+            Lowered::Int { .. }
+            | Lowered::Bool { .. }
+            | Lowered::ProcessExitStatus { .. }
+            | Lowered::CapabilityToken { .. }
+            | Lowered::ResourceToken { .. }
+            | Lowered::BoundedNat(_)
+            | Lowered::StructuralNat(_)
+            | Lowered::ResponseBytes { .. }
+            | Lowered::Bytes(_)
+            | Lowered::BorrowedNativeValue { .. }
+            | Lowered::BorrowedOption { .. }
+            | Lowered::String(_)
+            | Lowered::RecursiveBackedge
+            | Lowered::Trap(_) => Ok(()),
+        }
+    }
 }
 
 impl LoweredVariant {
@@ -1516,18 +1622,41 @@ impl LoweredVariant {
                 class: BoundaryClass::BorrowedOpaque,
             },
 
-            // ─── closures ────────────────────────────────────────────────
+            // ─── closures: FAIL CLOSED for `C1` ──────────────────────────
             //
-            // Represented as a handle to a record of the static origin plus the
-            // captured words. ⚠ Represented, NOT callable: `B2V` supplies no
-            // dispatch, because a cross-owner call is precisely what `D6`
-            // forbids and what `B2F` exists to add. Making these handles now
-            // rather than forbidding them is deliberate — a higher-order
-            // language will pass closures as parameters, and a
-            // `FailClosedForbidden` here would guarantee that wall for `B2F`.
-            LoweredVariant::Closure | LoweredVariant::DeclarationClosure => RepresentedHandle {
-                tag: BoundaryTag::PersistentClosure,
-                class: BoundaryClass::Closure,
+            // ⛔ **Changed by `RT-FNSPLIT-C1` under Architect Decision
+            // `dec_21aa95jbsznfh`, and the history is the point.**
+            //
+            // `B2V` landed this arm as `RepresentedHandle { tag:
+            // BoundaryTag::PersistentClosure, class: BoundaryClass::Closure }`,
+            // deliberately, reasoning that *"a `FailClosedForbidden` here would
+            // guarantee that wall for `B2F`."* That reasoning was recorded and
+            // never executed — the whole disposition was inert.
+            //
+            // ⭐ The conflict it hid: `PersistentClosure` is the DURABLE lane
+            // (`referent_owner() == PersistentStore`; the word outlives the
+            // invocation that minted it), and `C1`'s settled input is that
+            // ordinary closures stay **runtime-local and live-domain only**.
+            // Making the landed disposition execute would have restored exactly
+            // the lane the `#11` ruling forbids.
+            //
+            // ⛔ So this is conditional rejection of a VALUE SHAPE, not of the
+            // closure concept and not of `Constructor`: a closure-free
+            // constructor is still admitted and has its own positive control.
+            // ⛔ Do not "fix" this by adding a third closure tag or by
+            // disguising a closure as `InvocationBorrowed` / `BorrowedOpaque` —
+            // both were considered and refused; they violate the ownership and
+            // self-evidence boundaries rather than respecting them.
+            //
+            // ⚠ A live-domain closure carrier is a real and expected future
+            // mechanism, but it is **`B2F`'s design**: it needs invocation
+            // ownership, static origin, captured `BoundaryWord`s, callable
+            // dispatch and non-escape enforcement. ⛔ `C1` may not invent it,
+            // and this arm is not the place to smuggle it in.
+            LoweredVariant::Closure | LoweredVariant::DeclarationClosure => FailClosedForbidden {
+                why: "an ordinary closure is runtime-local and live-domain only; it has \
+                      no durable boundary lane, and a callable cross-owner carrier is \
+                      B2F's design rather than this node's",
             },
 
             // ─── fail-closed ─────────────────────────────────────────────
