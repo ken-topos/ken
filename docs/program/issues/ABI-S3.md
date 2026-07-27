@@ -1,7 +1,7 @@
 ---
 id: ABI-S3
 title: "monotonic clocks, sleep/deadlines, and secure kernel entropy"
-status: draft
+status: ready
 owner: runtime
 size: M
 gate: none
@@ -11,13 +11,19 @@ github: null
 origin: docs/program/10-linux-abi-completion.md §4 (the ABI-completion program); node filed by the Steward 2026-07-25 on the operator's directive to frame the remaining program. Agents cannot create tracked work (COORDINATION §2).
 ---
 
-> ## Authority: `10-linux-abi-completion.md` §4 — read that, not this
+> ## ✅ FRAMED AND RELEASABLE — 2026-07-27
 >
-> ⛔ **This is a tracker/DAG node, NOT a shovel-ready WP frame.** A
-> `docs/program/wp/` frame carrying deliverables, acceptance criteria, fixed
-> inputs, negative controls, and a contention check **must be authored before
-> release** (§2c front-load rule). **Do not release this on the strength of this
-> file.**
+> ⭐ **The shovel-ready frame is
+> [`docs/program/wp/ABI-S3-monotonic-clocks-deadlines-entropy.md`](../wp/ABI-S3-monotonic-clocks-deadlines-entropy.md)
+> — build from that, not from this node.** It carries fixed inputs measured on
+> `origin/main = d359fb66`, the four front-loaded design judgments (D1–D4), six
+> deliverables, six acceptance criteria with negative controls, the contention
+> check, and the do-not-reopen list.
+>
+> Authority remains `10-linux-abi-completion.md` §4 Track S. The §2c front-load
+> obligation is **discharged**: the previous banner here correctly refused
+> release on the strength of this file alone, and the frame it required now
+> exists.
 
 ## Objective
 
