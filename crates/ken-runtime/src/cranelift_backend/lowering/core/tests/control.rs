@@ -3476,6 +3476,22 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
         vec![
             "pub(in crate::cranelift_backend) fn source_occurrence(",
             "pub(in crate::cranelift_backend) fn child_static_origin(",
+            // `RT-FNSPLIT-C1` `D1` — the artifact-static identity capability.
+            //
+            // ⭐ These four are the whole of `D1`, and they are the shape the
+            // Architect's ruling requires: an occurrence-keyed *question* with
+            // an unmintable answer. ⛔ `SemanticPlane` and its `names` arena
+            // stay `pub(super)`; widening either to serve a consumer is what
+            // this pin exists to catch, and adding a capability is not that.
+            //
+            // ⚠ None of them returns a source term, so the `-> Result<&'src
+            // RuntimeExpr` count below is still exactly one. That assertion is
+            // the one carrying B2A-S's AC-4; this list is the surrounding
+            // allowed-inventory.
+            "pub(in crate::cranelift_backend) fn case_constructor_identity(",
+            "pub(in crate::cranelift_backend) fn constructor_symbol_identity(",
+            "pub(in crate::cranelift_backend) fn project_field_identity(",
+            "pub(in crate::cranelift_backend) fn record_field_identity(",
             "pub(in crate::cranelift_backend) fn root_static_origin(",
             "pub(in crate::cranelift_backend) fn declaration_occurrence_origin(",
             "pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(",
@@ -4440,10 +4456,33 @@ fn the_owner_classification_has_a_closed_production_naming_inventory() {
         .collect::<Vec<_>>();
     assert_eq!(
         widened,
-        vec!["pub(in crate::cranelift_backend) struct StaticOriginId(pub(super) u32);"],
+        vec![
+            "pub(in crate::cranelift_backend) struct StaticOriginId(pub(super) u32);",
+            "pub(in crate::cranelift_backend) struct ConstructorIdentity(pub(super) DenseRange);",
+            "pub(in crate::cranelift_backend) struct FieldIdentity(pub(super) DenseRange);",
+            "pub(in crate::cranelift_backend) fn tag_abi_word(self) -> Result<u64, CraneliftBackendError> {",
+            "pub(in crate::cranelift_backend) fn name_abi_word(self) -> Result<u64, CraneliftBackendError> {",
+        ],
         "D7: the plane's widened-visibility inventory changed. `StaticOriginId` \
          is widened deliberately so the lowering can carry an occurrence's \
          static name.\n\
+         ⭐ `RT-FNSPLIT-C1` `D1`/`D2` adds four members, and the argument for \
+         each is the same one that justifies `StaticOriginId`: the widened item \
+         is a NAME the lowering may hold, never a CONSTRUCTOR it may use. Both \
+         identity newtypes wrap a `pub(super)` field, so a consumer can hold, \
+         compare and pass an identity but CANNOT MINT one -- which is what \
+         makes `D2`'s single-authority property a fact about the type system \
+         rather than about reviewer vigilance. `tag_abi_word`/`name_abi_word` \
+         are widened because the carrier's emitted ABI takes a word; they are \
+         METHODS ON THE TYPED IDENTITY rather than a shared `u64` conversion, \
+         so neither namespace can be erased before the tag-vs-name ABI \
+         operation is chosen.\n\
+         ⛔ What is NOT widened, and is the thing this pin most needs to keep \
+         catching: `SemanticPlane` and its `names` arena stay `pub(super)`. The \
+         Architect's ruling forbids resolving a consumer's need by widening the \
+         plane, and `D1` is deliberately a capability export instead. A future \
+         `SemanticPlane` or `names` line appearing in this list is the \
+         violation, not a fifth capability.\n\
          ⚠ This is a DECLARATION inventory, not a proof of inertness: a \
          widening of the OWNER surface is a DELIBERATE REVIEW EVENT that must \
          be argued here, not absorbed. It entails nothing by itself about what \

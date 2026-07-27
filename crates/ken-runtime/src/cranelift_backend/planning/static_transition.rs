@@ -3402,29 +3402,65 @@ mod tests {
             )
             .expect("the unmutated plane validates");
 
+        // ⛔ The mutation must NOT grow `names`.
+        //
+        // `validate` already requires `plane.names == arena.names`, and that
+        // check runs first. Appending a duplicate copy of a spelling therefore
+        // trips the arena-equality check and never reaches the canonicality
+        // one — the first draft of this control did exactly that and proved
+        // nothing about the property it names.
+        //
+        // ⭐ So the two equal-byte spans are manufactured *inside* the existing
+        // arena: whole symbols are unique after canonicalization, but their
+        // BYTES are not — two distinct symbols routinely share a first byte.
+        // Pointing two atoms at one-byte spans over the same byte value at
+        // different offsets yields equal content at unequal spans with `names`
+        // byte-for-byte untouched.
         let mut duplicated = plan.semantic.clone();
-        let victim = duplicated
+        let candidates = duplicated
             .operands
             .iter()
-            .find(|atom| atom.content.len > 0)
+            .filter(|atom| atom.content.len > 0)
             .map(|atom| atom.content)
-            .expect("fixture has an atom with out-of-line content");
-        let start = victim.start as usize;
-        let bytes = duplicated.names[start..start + victim.len as usize].to_vec();
+            .collect::<Vec<_>>();
+        let (first, second) = candidates
+            .iter()
+            .enumerate()
+            .find_map(|(i, a)| {
+                candidates[i + 1..]
+                    .iter()
+                    .find(|b| {
+                        b.start != a.start
+                            && duplicated.names[a.start as usize]
+                                == duplicated.names[b.start as usize]
+                    })
+                    .map(|b| (*a, *b))
+            })
+            .expect(
+                "NON-VACUITY: the fixture has no two out-of-line atoms starting at \
+                 different offsets with the same first byte, so this mutation cannot \
+                 manufacture equal bytes at unequal spans and the control is vacuous.",
+            );
 
-        // Append a byte-identical second copy and repoint one atom at it: same
-        // spelling, different span. Nothing else about the plane changes.
-        let copy = DenseRange {
-            start: u32::try_from(duplicated.names.len()).unwrap(),
-            len: victim.len,
-        };
-        duplicated.names.extend_from_slice(&bytes);
-        let atom = duplicated
-            .operands
-            .iter_mut()
-            .find(|atom| atom.content == victim)
-            .expect("the victim atom is still present");
-        atom.content = copy;
+        for atom in duplicated.operands.iter_mut() {
+            if atom.content == first {
+                atom.content = DenseRange {
+                    start: first.start,
+                    len: 1,
+                };
+            } else if atom.content == second {
+                atom.content = DenseRange {
+                    start: second.start,
+                    len: 1,
+                };
+            }
+        }
+        assert_eq!(
+            duplicated.names, plan.semantic.names,
+            "the mutation must leave the name arena byte-identical, or the \
+             arena-equality check fires before the canonicality check and this \
+             control measures the wrong rejection"
+        );
 
         assert_eq!(
             duplicated
