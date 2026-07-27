@@ -23,6 +23,7 @@ pub struct AmbientScript {
     pub stdout_is_terminal: bool,
     pub stderr_is_terminal: bool,
     pub wall_clock_nanoseconds: Vec<BigInt>,
+    pub monotonic_clock_nanoseconds: Vec<BigInt>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -75,6 +76,8 @@ pub struct ScriptedPosixHost {
     stderr: Vec<u8>,
     terminals: [bool; 3],
     wall_clock_nanoseconds: VecDeque<BigInt>,
+    monotonic_clock_nanoseconds: VecDeque<BigInt>,
+    sleep_deadlines: Vec<BigInt>,
     denials: Vec<CapabilityDenied>,
     fs_actions_after_resolve: u64,
     expected_fs: VecDeque<ExpectedFsEffect>,
@@ -96,6 +99,8 @@ impl ScriptedPosixHost {
                 script.stderr_is_terminal,
             ],
             wall_clock_nanoseconds: script.wall_clock_nanoseconds.into(),
+            monotonic_clock_nanoseconds: script.monotonic_clock_nanoseconds.into(),
+            sleep_deadlines: Vec::new(),
             denials: Vec::new(),
             fs_actions_after_resolve: 0,
             expected_fs: VecDeque::new(),
@@ -243,6 +248,18 @@ impl HostHandler for ScriptedPosixHost {
         self.wall_clock_nanoseconds
             .pop_front()
             .expect("PX6 Clock.WallNow requires an explicit scripted response")
+    }
+
+    fn clock_monotonic_now(&mut self) -> BigInt {
+        self.monotonic_clock_nanoseconds
+            .pop_front()
+            .expect("PX6 Clock.MonotonicNow requires an explicit scripted response")
+    }
+
+    fn clock_sleep_until(&mut self, deadline: BigInt) {
+        // A verification host never suspends; it records the deadline so a
+        // scripted expectation can bind the value the program passed.
+        self.sleep_deadlines.push(deadline);
     }
 
     fn fs_denied(&mut self, denial: CapabilityDenied) {
