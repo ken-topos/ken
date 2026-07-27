@@ -682,6 +682,17 @@ fn qualify_decl_name(decl: &Decl, prefix: &str) -> Decl {
             is_space_op: *is_space_op,
             span: span.clone(),
         },
+        Decl::SpaceDecl {
+            name,
+            cells,
+            operations,
+            span,
+        } => Decl::SpaceDecl {
+            name: qualify(prefix, name),
+            cells: cells.clone(),
+            operations: operations.clone(),
+            span: span.clone(),
+        },
         Decl::LetDecl {
             name,
             ty,
@@ -877,6 +888,13 @@ fn rewrite_rexpr(
             s,
         ),
         RExpr::ROld(e, s) => RExpr::ROld(Box::new(rewrite_rexpr(scope, exports, *e)?), s),
+        RExpr::RCell(index, name, span) => RExpr::RCell(index, name, span),
+        RExpr::RBecomes(index, name, value, span) => RExpr::RBecomes(
+            index,
+            name,
+            Box::new(rewrite_rexpr(scope, exports, *value)?),
+            span,
+        ),
         RExpr::RNumLit(l, s) => RExpr::RNumLit(l, s),
         RExpr::RStr(v, s) => RExpr::RStr(v, s),
         RExpr::RBinOp(op, l, r, s) => RExpr::RBinOp(
@@ -1172,6 +1190,7 @@ fn is_qualifiable(decl: &Decl) -> bool {
     matches!(
         decl,
         Decl::ViewDecl { .. }
+            | Decl::SpaceDecl { .. }
             | Decl::LetDecl { .. }
             | Decl::PropDecl { .. }
             | Decl::TheoremDecl { .. }
@@ -1361,6 +1380,33 @@ fn expand_scope(
                 elab.module_state
                     .exports
                     .insert(child_prefix, child_exports);
+                i += 1;
+            }
+            Decl::SpaceDecl {
+                name,
+                cells,
+                operations,
+                span,
+            } => {
+                let qualified_name = qualify(prefix, name);
+                resolve::check_no_definition_collision(
+                    name,
+                    &qualified_name,
+                    span,
+                    Some(unit_definitions),
+                )?;
+                for operation in operations {
+                    let operation_name = format!("{qualified_name}.{}", operation.name);
+                    resolve::check_no_definition_collision(
+                        &operation.name,
+                        &operation_name,
+                        &operation.span,
+                        Some(unit_definitions),
+                    )?;
+                }
+                let resolved =
+                    resolve::resolve_space_decl(&qualified_name, cells, operations, span)?;
+                ids.extend(crate::elab::elaborate_space_decl(elab, &resolved)?);
                 i += 1;
             }
             // A maximal run of non-`pub` definitions — auto-grouped by

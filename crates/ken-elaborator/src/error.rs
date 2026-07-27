@@ -55,6 +55,9 @@ pub enum ElabError {
     /// `old` reached elaboration in a space-operation `ensures`, but the
     /// reachable surface has no pre-state binding yet (`36 §4.3`).
     OldPreStateUnsupported { span: Span },
+    /// `mut` or `becomes` appeared outside a block-scoped mutable cell
+    /// (`36 §7.3`, class 4).
+    MutationOutsideSpace { construct: String, span: Span },
     /// A `ConId` with no global declaration.
     UnresolvedCon { name: String, span: Span },
     /// A second top-level definition of a name already defined in the same
@@ -208,6 +211,11 @@ impl fmt::Display for ElabError {
                 f,
                 "`old` in a space-operation ensures is not yet supported: \
                  no pre-state binding is available at {}-{}",
+                span.start, span.end,
+            ),
+            ElabError::MutationOutsideSpace { construct, span } => write!(
+                f,
+                "`{construct}` is only valid for a mutable cell inside a space at {}-{}",
                 span.start, span.end,
             ),
             ElabError::UnresolvedCon { name, span } => {

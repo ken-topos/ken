@@ -382,6 +382,35 @@ fn collect_decl_spans(decl: &Decl, out: &mut Vec<Span>) {
             }
             collect_expr_spans(body, out);
         }
+        Decl::SpaceDecl {
+            cells, operations, ..
+        } => {
+            for cell in cells {
+                out.push(cell.span.clone());
+                collect_type_spans(&cell.ty, out);
+                collect_expr_spans(&cell.init, out);
+            }
+            for operation in operations {
+                out.push(operation.span.clone());
+                operation
+                    .params
+                    .iter()
+                    .for_each(|binder| collect_binder_spans(binder, out));
+                collect_type_spans(&operation.ret_ty, out);
+                operation
+                    .requires
+                    .iter()
+                    .for_each(|expr| collect_expr_spans(expr, out));
+                operation
+                    .ensures
+                    .iter()
+                    .for_each(|expr| collect_expr_spans(expr, out));
+                if let Some(row) = &operation.visits {
+                    out.push(row.span.clone());
+                }
+                collect_expr_spans(&operation.body, out);
+            }
+        }
         Decl::LetDecl { ty, val, .. } => {
             if let Some(ty) = ty {
                 collect_type_spans(ty, out);
@@ -527,6 +556,7 @@ fn collect_expr_spans(expr: &Expr, out: &mut Vec<Span>) {
     match expr {
         Expr::EApp(function, argument, _)
         | Expr::EBinOp(_, function, argument, _)
+        | Expr::EBecomes(function, argument, _)
         | Expr::EArrow(function, argument, _) => {
             collect_expr_spans(function, out);
             collect_expr_spans(argument, out);

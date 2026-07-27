@@ -50,7 +50,7 @@ use ken_kernel::{check as kernel_check, declare_postulate, Context, GlobalEnv, G
 pub use ast::{
     BinOp, BoundaryHeader, BoundaryKind, CapabilityDecl, ConstructorSignature,
     ConstructorSignatureArg, Decl, ExplicitDataCtor, ExportForm, Expr, ImportItem, ImportKind,
-    LetBinding, Type,
+    LetBinding, SpaceCell, SpaceOperation, Type,
 };
 pub use bytes::BytesEnv;
 pub use classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo, InstanceResolution};

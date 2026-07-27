@@ -10,7 +10,7 @@ use std::collections::HashSet;
 
 use crate::ast::{
     BinOp, ClassField, ConstructorSignatureArg, Decl, DefKeyword, EffectRowSyntax,
-    ExplicitDataCtor, Expr, InstanceConstraint, NumLit, PatKind, Type,
+    ExplicitDataCtor, Expr, InstanceConstraint, NumLit, PatKind, SpaceCell, SpaceOperation, Type,
 };
 use crate::error::{ElabError, Span};
 
@@ -61,6 +61,34 @@ pub enum RPatKind {
 pub struct RMatchArm {
     pub pat: RPattern,
     pub body: RExpr,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct RSpaceCell {
+    pub name: String,
+    pub ty: RType,
+    pub init: RExpr,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct RSpaceOperation {
+    pub name: String,
+    pub params: Vec<(String, RType)>,
+    pub ret_ty: RType,
+    pub requires: Vec<RExpr>,
+    pub ensures: Vec<RExpr>,
+    pub visits: Option<EffectRowSyntax>,
+    pub body: RExpr,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct RSpaceDecl {
+    pub name: String,
+    pub cells: Vec<RSpaceCell>,
+    pub operations: Vec<RSpaceOperation>,
     pub span: Span,
 }
 
@@ -193,6 +221,10 @@ pub enum RExpr {
     RAsc(Box<RExpr>, Box<RType>, Span),
     /// `old e` resolved in a `space`-op `ensures` (`21 §6.4`).
     ROld(Box<RExpr>, Span),
+    /// A resolved cell read, indexed in declaration order (`36 §4.1`).
+    RCell(usize, String, Span),
+    /// A resolved cell write (`36 §4.1`).
+    RBecomes(usize, String, Box<RExpr>, Span),
     /// Numeric literal (`35 §4.1`).
     RNumLit(NumLit, Span),
     /// String literal (`37 §2.1`, VAL1-surface).
@@ -235,6 +267,8 @@ impl RExpr {
             | RExpr::RLet(_, _, _, _, s)
             | RExpr::RAsc(_, _, s)
             | RExpr::ROld(_, s)
+            | RExpr::RCell(_, _, s)
+            | RExpr::RBecomes(_, _, _, s)
             | RExpr::RNumLit(_, s)
             | RExpr::RStr(_, s)
             | RExpr::RProj(_, _, s)
@@ -289,6 +323,7 @@ struct Scope {
     /// unchanged while letting the shared constraints scope over contracts and
     /// bodies.
     local_dictionaries: std::collections::HashSet<String>,
+    space_cells: std::collections::HashMap<String, usize>,
 }
 
 impl Scope {
@@ -296,6 +331,7 @@ impl Scope {
         Self {
             bindings: Vec::new(),
             local_dictionaries: std::collections::HashSet::new(),
+            space_cells: std::collections::HashMap::new(),
         }
     }
 
@@ -327,6 +363,18 @@ impl Scope {
 
     fn depth(&self) -> usize {
         self.bindings.len()
+    }
+
+    fn install_space_cells(&mut self, cells: &[SpaceCell]) -> Result<(), ElabError> {
+        for (index, cell) in cells.iter().enumerate() {
+            if self.space_cells.insert(cell.name.clone(), index).is_some() {
+                return Err(ElabError::DuplicateDefinition {
+                    name: cell.name.clone(),
+                    span: cell.span.clone(),
+                });
+            }
+        }
+        Ok(())
     }
 
     fn bind_local_dictionary(&mut self, name: &str) {
@@ -485,6 +533,7 @@ fn expr_as_type(expr: &Expr) -> Result<Type, ElabError> {
         | Expr::ELet(..)
         | Expr::EAsc(..)
         | Expr::EOld(..)
+        | Expr::EBecomes(..)
         | Expr::ENumLit(..)
         | Expr::EStr(..)
         | Expr::EBinOp(..)
@@ -719,6 +768,84 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
     resolve_decl_in_unit(decl, &mut HashSet::new(), None)
 }
 
+pub(crate) fn resolve_space_decl(
+    name: &str,
+    cells: &[SpaceCell],
+    operations: &[SpaceOperation],
+    span: &Span,
+) -> Result<RSpaceDecl, ElabError> {
+    let mut cell_scope = Scope::new();
+    cell_scope.install_space_cells(cells)?;
+
+    let mut resolved_cells = Vec::with_capacity(cells.len());
+    for cell in cells {
+        let mut scope = Scope::new();
+        resolved_cells.push(RSpaceCell {
+            name: cell.name.clone(),
+            ty: resolve_type(&mut scope, &cell.ty)?,
+            init: resolve_expr(&mut scope, &cell.init)?,
+            span: cell.span.clone(),
+        });
+    }
+
+    let mut operation_names = HashSet::new();
+    let mut resolved_operations = Vec::with_capacity(operations.len());
+    for operation in operations {
+        if !operation_names.insert(operation.name.clone()) {
+            return Err(ElabError::DuplicateDefinition {
+                name: operation.name.clone(),
+                span: operation.span.clone(),
+            });
+        }
+        let mut scope = cell_scope.clone();
+        let mut params = Vec::new();
+        for binder in &operation.params {
+            let ty = resolve_type(&mut scope, &binder.ty)?;
+            for param in &binder.names {
+                if scope.space_cells.contains_key(param) {
+                    return Err(ElabError::DuplicateDefinition {
+                        name: param.clone(),
+                        span: binder.span.clone(),
+                    });
+                }
+                params.push((param.clone(), ty.clone()));
+                scope.push(param);
+            }
+        }
+        let requires = operation
+            .requires
+            .iter()
+            .map(|expr| resolve_prop(&mut scope, expr, PropCtx::Requires))
+            .collect::<Result<Vec<_>, _>>()?;
+        let ret_ty = resolve_type(&mut scope, &operation.ret_ty)?;
+        let body = resolve_expr(&mut scope, &operation.body)?;
+        scope.push("result");
+        let ensures = operation
+            .ensures
+            .iter()
+            .map(|expr| resolve_prop(&mut scope, expr, PropCtx::SpaceOpEnsures))
+            .collect::<Result<Vec<_>, _>>()?;
+        scope.pop();
+        resolved_operations.push(RSpaceOperation {
+            name: operation.name.clone(),
+            params,
+            ret_ty,
+            requires,
+            ensures,
+            visits: operation.visits.clone(),
+            body,
+            span: operation.span.clone(),
+        });
+    }
+
+    Ok(RSpaceDecl {
+        name: name.to_string(),
+        cells: resolved_cells,
+        operations: resolved_operations,
+        span: span.clone(),
+    })
+}
+
 pub(crate) fn resolve_decl_in_unit(
     decl: &Decl,
     unit_definitions: &mut HashSet<String>,
@@ -733,6 +860,7 @@ pub(crate) fn resolve_decl_in_unit(
     if !matches!(
         decl,
         Decl::BoundaryDecl { .. }
+            | Decl::SpaceDecl { .. }
             | Decl::ModuleDecl { .. }
             | Decl::ImportDecl { .. }
             | Decl::ExportDecl { .. }
@@ -768,11 +896,12 @@ pub(crate) fn resolve_decl_in_unit(
         // ordinary decl. Unreachable from that pipeline; kept exhaustive
         // for `Decl`'s other (non-`ken-elaborator`-internal) callers.
         Decl::BoundaryDecl { .. }
+        | Decl::SpaceDecl { .. }
         | Decl::ModuleDecl { .. }
         | Decl::ImportDecl { .. }
         | Decl::ExportDecl { .. }
         | Decl::Pub(_) => Err(ElabError::Internal(
-            "resolve_decl: boundary/module/import/export/pub decls must be expanded by modules.rs first"
+            "resolve_decl: boundary/space/module/import/export/pub decls must be expanded by modules.rs first"
                 .into(),
         )),
         Decl::ViewDecl {
@@ -1387,6 +1516,8 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
             }
             if let Some(i) = scope.index_of(name) {
                 Ok(RExpr::RVar(i, name.clone(), span.clone()))
+            } else if let Some(index) = scope.space_cells.get(name) {
+                Ok(RExpr::RCell(*index, name.clone(), span.clone()))
             } else {
                 // Local scope miss — fall through to global lookup (same as TVar).
                 // The elaborator's RCon handler resolves the name against globals.
@@ -1479,6 +1610,28 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
             }
             let re = resolve_expr_ctx(scope, e, ctx)?;
             Ok(RExpr::ROld(Box::new(re), span.clone()))
+        }
+
+        Expr::EBecomes(cell, value, span) => {
+            let Expr::EVar(name, _) = cell.as_ref() else {
+                return Err(ElabError::MutationOutsideSpace {
+                    construct: "becomes".to_string(),
+                    span: span.clone(),
+                });
+            };
+            let Some(index) = scope.space_cells.get(name).copied() else {
+                return Err(ElabError::MutationOutsideSpace {
+                    construct: "becomes".to_string(),
+                    span: span.clone(),
+                });
+            };
+            let value = resolve_expr_ctx(scope, value, ctx)?;
+            Ok(RExpr::RBecomes(
+                index,
+                name.clone(),
+                Box::new(value),
+                span.clone(),
+            ))
         }
 
         Expr::ENumLit(lit, span) => Ok(RExpr::RNumLit(lit.clone(), span.clone())),

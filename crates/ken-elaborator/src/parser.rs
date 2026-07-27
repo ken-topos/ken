@@ -11,7 +11,7 @@
 use crate::ast::{
     Binder, BoundaryKind, CapabilityDecl, ClassField, ConstructorSignature,
     ConstructorSignatureArg, CtorDecl, Decl, DefKeyword, EffectRowSyntax, ExplicitDataCtor, Expr,
-    LetBinding, MatchArm, PatKind, Pattern, PropIntro, Type,
+    LetBinding, MatchArm, PatKind, Pattern, PropIntro, SpaceCell, SpaceOperation, Type,
 };
 use crate::error::{ElabError, Span};
 use crate::lexer::Token;
@@ -187,7 +187,11 @@ impl Parser {
     fn parse_decl(&mut self) -> Result<Decl, ElabError> {
         let start = self.peek_span().start;
         match self.peek().clone() {
-            Token::KwSpace => self.parse_space_view_decl(start),
+            Token::KwSpace => self.parse_space_decl(start),
+            Token::KwMut => Err(ElabError::MutationOutsideSpace {
+                construct: "mut".to_string(),
+                span: self.peek_span().clone(),
+            }),
             Token::KwView => self.parse_view_decl(start, false, DefKeyword::View),
             Token::KwConst => self.parse_view_decl(start, false, DefKeyword::Const),
             Token::KwFn => self.parse_view_decl(start, false, DefKeyword::Fn),
@@ -352,15 +356,101 @@ impl Parser {
         })
     }
 
-    fn parse_space_view_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+    fn parse_space_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
         self.advance(); // consume 'space'
-        match self.peek().clone() {
-            Token::KwProc => self.parse_view_decl(start, true, DefKeyword::Proc),
-            other => Err(ElabError::ParseError {
-                msg: format!("expected 'proc' after 'space', found {:?}", other),
-                span: self.peek_span().clone(),
-            }),
+        if matches!(self.peek(), Token::KwProc) {
+            return self.parse_view_decl(start, true, DefKeyword::Proc);
         }
+
+        let (name, _) = self.expect_con()?;
+        self.expect(&Token::LBrace)?;
+        let mut cells = Vec::new();
+        let mut operations = Vec::new();
+        while !matches!(self.peek(), Token::RBrace) {
+            match self.peek().clone() {
+                Token::KwMut => {
+                    let cell_start = self.peek_span().start;
+                    self.advance();
+                    let (cell_name, _) = self.expect_ident()?;
+                    self.expect(&Token::Colon)?;
+                    let ty = self.parse_type()?;
+                    self.expect(&Token::Eq)?;
+                    let init = self.parse_expr()?;
+                    let end = init.span().end;
+                    cells.push(SpaceCell {
+                        name: cell_name,
+                        ty,
+                        init,
+                        span: Span::new(cell_start, end),
+                    });
+                }
+                Token::KwProc => {
+                    let op_start = self.peek_span().start;
+                    let decl = self.parse_view_decl(op_start, true, DefKeyword::Proc)?;
+                    let Decl::ViewDecl {
+                        name,
+                        params,
+                        ret_ty,
+                        requires,
+                        ensures,
+                        constraints,
+                        visits,
+                        body,
+                        span,
+                        ..
+                    } = decl
+                    else {
+                        unreachable!("parse_view_decl always returns ViewDecl")
+                    };
+                    if !constraints.is_empty() {
+                        return Err(ElabError::ParseError {
+                            msg: "`where` constraints on a space operation are not supported"
+                                .to_string(),
+                            span,
+                        });
+                    }
+                    let ret_ty = ret_ty.ok_or_else(|| ElabError::ParseError {
+                        msg: "a space operation requires an explicit return type".to_string(),
+                        span: span.clone(),
+                    })?;
+                    operations.push(SpaceOperation {
+                        name,
+                        params,
+                        ret_ty,
+                        requires,
+                        ensures,
+                        visits,
+                        body,
+                        span,
+                    });
+                }
+                other => {
+                    return Err(ElabError::ParseError {
+                        msg: format!(
+                            "expected `mut`, `proc`, or `}}` inside space `{name}`, found {other:?}"
+                        ),
+                        span: self.peek_span().clone(),
+                    })
+                }
+            }
+            if matches!(self.peek(), Token::Semicolon) {
+                self.advance();
+            }
+        }
+        let end = self.peek_span().end;
+        self.advance();
+        if cells.is_empty() {
+            return Err(ElabError::ParseError {
+                msg: format!("space `{name}` must declare at least one `mut` cell"),
+                span: Span::new(start, end),
+            });
+        }
+        Ok(Decl::SpaceDecl {
+            name,
+            cells,
+            operations,
+            span: Span::new(start, end),
+        })
     }
 
     fn parse_view_decl(
@@ -377,6 +467,10 @@ impl Parser {
         };
 
         let mut params = Vec::new();
+        if matches!(self.peek(), Token::LParen) && matches!(self.lookahead(1), Token::RParen) {
+            self.advance();
+            self.advance();
+        }
         while matches!(self.peek(), Token::LParen)
             && matches!(self.lookahead(1), Token::Ident(_) | Token::ConId(_))
         {
@@ -1709,6 +1803,12 @@ impl Parser {
 
     pub fn parse_expr(&mut self) -> Result<Expr, ElabError> {
         let lhs = self.parse_arrow_expr()?;
+        if matches!(self.peek(), Token::KwBecomes) {
+            self.advance();
+            let rhs = self.parse_arrow_expr()?;
+            let span = Span::merge(lhs.span(), rhs.span());
+            return Ok(Expr::EBecomes(Box::new(lhs), Box::new(rhs), span));
+        }
         if matches!(self.peek(), Token::Colon) {
             let colon_span = self.peek_span().clone();
             self.advance();
@@ -2225,6 +2325,7 @@ impl Parser {
                         Expr::ELet(bindings, body, _) => Expr::ELet(bindings, body, span),
                         Expr::EAsc(e, t, _) => Expr::EAsc(e, t, span),
                         Expr::EOld(e, _) => Expr::EOld(e, span),
+                        Expr::EBecomes(cell, value, _) => Expr::EBecomes(cell, value, span),
                         Expr::ENumLit(lit, _) => Expr::ENumLit(lit, span),
                         Expr::EStr(s, _) => Expr::EStr(s, span),
                         Expr::EBinOp(op, l, r, _) => Expr::EBinOp(op, l, r, span),

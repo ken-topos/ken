@@ -25,7 +25,7 @@ use crate::error::{ElabError, Span};
 use crate::numbers::{AddEntry, BinOpEntry, NumericEnv, NumericLitVal};
 use crate::resolve::{
     RClassField, RDecl, RDeclKind, RExpr, RInstanceConstraint, RMatchArm, RPatKind, RPattern,
-    RPropIntro, RType, SUGAR_ABSURD, SUGAR_AXIOM, SUGAR_EQ, SUGAR_J, SUGAR_REFL,
+    RPropIntro, RSpaceDecl, RType, SUGAR_ABSURD, SUGAR_AXIOM, SUGAR_EQ, SUGAR_J, SUGAR_REFL,
 };
 
 // ----- obligation model -----
@@ -340,6 +340,9 @@ struct ElabCtx<'e> {
     /// changes — only which TERM an `RVar` reference resolves to (a
     /// `Cast`-wrapped alias, never the bare `Var`) for one branch's body.
     var_refinements: HashMap<usize, (Term, Term, usize)>,
+    /// The stable bottom-relative position of the state binder plus the
+    /// declared cell types while elaborating one space-operation continuation.
+    space_state: Option<(usize, Vec<Term>)>,
 }
 
 impl<'e> ElabCtx<'e> {
@@ -363,6 +366,7 @@ impl<'e> ElabCtx<'e> {
             class_env: None,
             local_dicts: HashMap::new(),
             var_refinements: HashMap::new(),
+            space_state: None,
         }
     }
 
@@ -374,6 +378,10 @@ impl<'e> ElabCtx<'e> {
     fn with_local_dicts(mut self, local_dicts: &HashMap<String, (Term, Term, usize)>) -> Self {
         self.local_dicts = local_dicts.clone();
         self
+    }
+
+    fn install_space_state(&mut self, cell_types: &[Term]) {
+        self.space_state = Some((self.ctx.len() - 1, cell_types.to_vec()));
     }
 }
 
@@ -2071,6 +2079,28 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
             Ok((Term::var(*i), ty))
         }
 
+        RExpr::RCell(index, _, span) => {
+            let Some((state_position, cell_types)) = &cx.space_state else {
+                return Err(ElabError::MutationOutsideSpace {
+                    construct: "cell read".to_string(),
+                    span: span.clone(),
+                });
+            };
+            let cell_ty = cell_types.get(*index).cloned().ok_or_else(|| {
+                ElabError::Internal(format!("space cell index {index} out of range"))
+            })?;
+            let state_index = cx.ctx.len() - 1 - state_position;
+            Ok((
+                project_space_cell(Term::var(state_index), *index, cell_types.len()),
+                cell_ty,
+            ))
+        }
+
+        RExpr::RBecomes(_, _, _, span) => Err(ElabError::MutationOutsideSpace {
+            construct: "becomes".to_string(),
+            span: span.clone(),
+        }),
+
         RExpr::RCon(name, span) => {
             if let Some((term, ty, install_depth)) = cx.local_dicts.get(name) {
                 let growth = cx.ctx.len().checked_sub(*install_depth).ok_or_else(|| {
@@ -3559,9 +3589,11 @@ fn infer_expr_row_type(
             .get(name)
             .cloned()
             .unwrap_or_else(crate::effects::RowType::empty),
-        RExpr::RVar(_, _, _) | RExpr::RUniv(_, _) | RExpr::RNumLit(_, _) | RExpr::RStr(_, _) => {
-            crate::effects::RowType::empty()
-        }
+        RExpr::RVar(_, _, _)
+        | RExpr::RCell(_, _, _)
+        | RExpr::RUniv(_, _)
+        | RExpr::RNumLit(_, _)
+        | RExpr::RStr(_, _) => crate::effects::RowType::empty(),
         RExpr::RApp(f, a, _) => infer_expr_row_type(f, effect_rows, projection_ctx)
             .join(infer_expr_row_type(a, effect_rows, projection_ctx)),
         RExpr::RLam(_, _, _) | RExpr::RPi(_, _, _, _) | RExpr::RArrow(_, _, _) => {
@@ -3577,7 +3609,7 @@ fn infer_expr_row_type(
             .unwrap_or_else(crate::effects::RowType::empty),
         RExpr::RLet(_, _, val, body, _) => infer_expr_row_type(val, effect_rows, projection_ctx)
             .join(infer_expr_row_type(body, effect_rows, projection_ctx)),
-        RExpr::RAsc(e, _, _) | RExpr::ROld(e, _) => {
+        RExpr::RAsc(e, _, _) | RExpr::ROld(e, _) | RExpr::RBecomes(_, _, e, _) => {
             infer_expr_row_type(e, effect_rows, projection_ctx)
         }
         RExpr::RProj(e, field, _) => infer_expr_row_type(e, effect_rows, projection_ctx)
@@ -4880,6 +4912,342 @@ fn elaborate_view_or_let(
     )
 }
 
+fn apply_space_args(head: Term, args: &[Term]) -> Term {
+    args.iter().fold(head, |function, argument| {
+        Term::app(function, argument.clone())
+    })
+}
+
+fn build_space_state_type(cell_types: &[Term]) -> Term {
+    let mut state = cell_types
+        .last()
+        .cloned()
+        .expect("a parsed space has at least one cell");
+    for cell_type in cell_types[..cell_types.len() - 1].iter().rev() {
+        state = Term::sigma(cell_type.clone(), weaken(&state, 1));
+    }
+    state
+}
+
+fn build_space_state_value(cell_values: &[Term]) -> Term {
+    let mut state = cell_values
+        .last()
+        .cloned()
+        .expect("a parsed space has at least one cell");
+    for cell_value in cell_values[..cell_values.len() - 1].iter().rev() {
+        state = Term::pair(cell_value.clone(), state);
+    }
+    state
+}
+
+fn project_space_cell(mut state: Term, index: usize, cell_count: usize) -> Term {
+    for _ in 0..index {
+        state = Term::proj2(state);
+    }
+    if index + 1 == cell_count {
+        state
+    } else {
+        Term::proj1(state)
+    }
+}
+
+fn update_space_cell(state: Term, index: usize, cell_count: usize, value: Term) -> Term {
+    if cell_count == 1 {
+        return value;
+    }
+    if index == 0 {
+        return Term::pair(value, Term::proj2(state));
+    }
+    Term::pair(
+        Term::proj1(state.clone()),
+        update_space_cell(Term::proj2(state), index - 1, cell_count - 1, value),
+    )
+}
+
+fn first_old_span(expr: &RExpr) -> Option<Span> {
+    match expr {
+        RExpr::ROld(_, span) => Some(span.clone()),
+        RExpr::RApp(a, b, _) | RExpr::RArrow(a, b, _) | RExpr::RBinOp(_, a, b, _) => {
+            first_old_span(a).or_else(|| first_old_span(b))
+        }
+        RExpr::RLam(_, body, _)
+        | RExpr::RAsc(body, _, _)
+        | RExpr::RProj(body, _, _)
+        | RExpr::RBecomes(_, _, body, _) => first_old_span(body),
+        RExpr::RLet(_, _, value, body, _) => first_old_span(value).or_else(|| first_old_span(body)),
+        RExpr::RMatch { scrut, arms, .. } => {
+            first_old_span(scrut).or_else(|| arms.iter().find_map(|arm| first_old_span(&arm.body)))
+        }
+        RExpr::RPi(_, _, body, _) => first_old_span(body),
+        RExpr::RVar(..)
+        | RExpr::RCon(..)
+        | RExpr::RUniv(..)
+        | RExpr::RCell(..)
+        | RExpr::RNumLit(..)
+        | RExpr::RStr(..)
+        | RExpr::RAttachedProofRef { .. } => None,
+    }
+}
+
+/// Elaborate a `space` surface block onto the already-built `State` effect.
+///
+/// The emitted kernel objects are ordinary transparent definitions:
+/// `S : Type := T₁ × … × Tₘ`, `S.initial : S`, and one qualified operation
+/// `S.op : Π params. ITree (State S ⊕ Empty) ... R`.
+pub(crate) fn elaborate_space_decl(
+    elab: &mut crate::ElabEnv,
+    space: &RSpaceDecl,
+) -> Result<Vec<ElabResult>, ElabError> {
+    let mut cell_types = Vec::with_capacity(space.cells.len());
+    let mut cell_values = Vec::with_capacity(space.cells.len());
+    for cell in &space.cells {
+        let mut cx = ElabCtx::new(
+            &mut elab.env,
+            &elab.globals,
+            &mut elab.num_values,
+            &elab.numeric_env,
+            format!("{}.initial", space.name),
+        );
+        let cell_type = elab_type(&mut cx, &cell.ty)?;
+        let cell_value = check(&mut cx, &cell.init, &cell_type, &cell.span)?;
+        cell_types.push(cx.metas.zonk_term(&cell_type));
+        cell_values.push(cx.metas.zonk_term(&cell_value));
+    }
+
+    let state_body = build_space_state_type(&cell_types);
+    let state_sort = kernel_infer(&elab.env, &Context::new(), &state_body).map_err(|error| {
+        ElabError::KernelRejected {
+            error,
+            span: space.span.clone(),
+        }
+    })?;
+    let state_id = declare_def(&mut elab.env, vec![], state_sort, state_body).map_err(|error| {
+        ElabError::KernelRejected {
+            error,
+            span: space.span.clone(),
+        }
+    })?;
+    elab.globals.insert(space.name.clone(), state_id);
+    let mut results = vec![ElabResult {
+        name: space.name.clone(),
+        def_id: state_id,
+        obligations: vec![],
+        foreign_binding: None,
+        temporal_obligations: vec![],
+        effect_row_type: None,
+    }];
+
+    let state_type = Term::const_(state_id, vec![]);
+    let initial_name = format!("{}.initial", space.name);
+    let initial_id = declare_def(
+        &mut elab.env,
+        vec![],
+        state_type.clone(),
+        build_space_state_value(&cell_values),
+    )
+    .map_err(|error| ElabError::KernelRejected {
+        error,
+        span: space.span.clone(),
+    })?;
+    elab.globals.insert(initial_name.clone(), initial_id);
+    results.push(ElabResult {
+        name: initial_name,
+        def_id: initial_id,
+        obligations: vec![],
+        foreign_binding: None,
+        temporal_obligations: vec![],
+        effect_row_type: None,
+    });
+
+    let prelude = elab.prelude_env.clone();
+    let empty_id = *elab.globals.get("Empty").ok_or_else(|| {
+        ElabError::Internal("space desugaring requires the prelude Empty type".to_string())
+    })?;
+    let empty_type = Term::indformer(empty_id, vec![]);
+    let unit_type = Term::indformer(prelude.unit_id, vec![]);
+    let resp_empty = Term::lam(empty_type.clone(), unit_type.clone());
+
+    for operation in &space.operations {
+        for clause in operation.requires.iter().chain(&operation.ensures) {
+            if let Some(span) = first_old_span(clause) {
+                return Err(ElabError::OldPreStateUnsupported { span });
+            }
+        }
+        if !operation.requires.is_empty() || !operation.ensures.is_empty() {
+            return Err(ElabError::TypeMismatch {
+                span: operation.span.clone(),
+                reason: "space-operation contracts without `old` are staged with the pre-state successor"
+                    .to_string(),
+            });
+        }
+        let visits = operation
+            .visits
+            .as_ref()
+            .ok_or_else(|| ElabError::TypeMismatch {
+                span: operation.span.clone(),
+                reason: format!(
+                    "false purity or effect escape in `{}.{}`: cell access requires visits [{}]",
+                    space.name, operation.name, space.name
+                ),
+            })?;
+        if visits.tail.is_some()
+            || visits.heads.len() != 1
+            || visits.heads.first() != Some(&space.name)
+        {
+            return Err(ElabError::TypeMismatch {
+                span: visits.span.clone(),
+                reason: format!(
+                    "space operation `{}.{}` must declare exactly visits [{}]",
+                    space.name, operation.name, space.name
+                ),
+            });
+        }
+
+        let qualified_name = format!("{}.{}", space.name, operation.name);
+        let mut cx = ElabCtx::new(
+            &mut elab.env,
+            &elab.globals,
+            &mut elab.num_values,
+            &elab.numeric_env,
+            qualified_name.clone(),
+        )
+        .with_classes(&elab.class_env);
+        let mut parameter_domains = Vec::with_capacity(operation.params.len());
+        for (_, parameter_type) in &operation.params {
+            let domain = elab_type(&mut cx, parameter_type)?;
+            let domain = cx.metas.zonk_term(&domain);
+            cx.ctx.push(domain.clone());
+            parameter_domains.push(domain);
+        }
+        let return_type = elab_type(&mut cx, &operation.ret_ty)?;
+        let return_type = cx.metas.zonk_term(&return_type);
+
+        let op_type = apply_space_args(
+            Term::indformer(prelude.coproduct_id, vec![]),
+            &[
+                Term::app(
+                    Term::indformer(prelude.state_op_id, vec![]),
+                    state_type.clone(),
+                ),
+                empty_type.clone(),
+            ],
+        );
+        let response_type = apply_space_args(
+            Term::const_(prelude.resp_coproduct_id, vec![]),
+            &[
+                Term::app(
+                    Term::indformer(prelude.state_op_id, vec![]),
+                    state_type.clone(),
+                ),
+                empty_type.clone(),
+                Term::app(
+                    Term::const_(prelude.resp_state_id, vec![]),
+                    state_type.clone(),
+                ),
+                resp_empty.clone(),
+            ],
+        );
+        let computation_type = apply_space_args(
+            Term::indformer(prelude.itree_id, vec![]),
+            &[op_type.clone(), response_type.clone(), return_type.clone()],
+        );
+        let get_call = apply_space_args(
+            Term::const_(prelude.get_fn_id, vec![]),
+            &[
+                state_type.clone(),
+                empty_type.clone(),
+                resp_empty.clone(),
+                Term::constructor(prelude.mkunit_id, vec![]),
+            ],
+        );
+
+        cx.ctx.push(state_type.clone());
+        cx.install_space_state(&cell_types);
+        let continuation_body = match &operation.body {
+            RExpr::RBecomes(index, _, value, span) => {
+                kernel_check(
+                    cx.env,
+                    &cx.ctx,
+                    &Term::constructor(prelude.mkunit_id, vec![]),
+                    &weaken(&return_type, 1),
+                )
+                .map_err(|_| ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: "`becomes` produces Unit; the space operation must return Unit"
+                        .to_string(),
+                })?;
+                let target_type = cell_types.get(*index).ok_or_else(|| {
+                    ElabError::Internal(format!("space cell index {index} out of range"))
+                })?;
+                let value = check(&mut cx, value, target_type, span)?;
+                let updated = update_space_cell(Term::var(0), *index, cell_types.len(), value);
+                apply_space_args(
+                    Term::const_(prelude.put_fn_id, vec![]),
+                    &[
+                        state_type.clone(),
+                        empty_type.clone(),
+                        resp_empty.clone(),
+                        updated,
+                    ],
+                )
+            }
+            body => {
+                let value = check(&mut cx, body, &weaken(&return_type, 1), &operation.span)?;
+                apply_space_args(
+                    Term::constructor(prelude.ret_id, vec![]),
+                    &[
+                        op_type.clone(),
+                        response_type.clone(),
+                        weaken(&return_type, 1),
+                        value,
+                    ],
+                )
+            }
+        };
+        cx.space_state = None;
+        cx.ctx.pop();
+        let continuation = Term::lam(state_type.clone(), continuation_body);
+        let mut body = apply_space_args(
+            Term::const_(prelude.bind_id, vec![]),
+            &[
+                op_type.clone(),
+                response_type.clone(),
+                state_type.clone(),
+                return_type.clone(),
+                get_call,
+                continuation,
+            ],
+        );
+        let mut operation_type = computation_type;
+        for domain in parameter_domains.iter().rev() {
+            body = Term::lam(domain.clone(), body);
+            operation_type = Term::pi(domain.clone(), operation_type);
+        }
+        let operation_id = declare_def(cx.env, vec![], operation_type, body).map_err(|error| {
+            ElabError::KernelRejected {
+                error,
+                span: operation.span.clone(),
+            }
+        })?;
+        drop(cx);
+        elab.globals.insert(qualified_name.clone(), operation_id);
+        let effect_row = crate::effects::RowType::Concrete(crate::effects::EffectRow::singleton(
+            space.name.clone(),
+        ));
+        elab.effect_rows
+            .insert(qualified_name.clone(), effect_row.clone());
+        results.push(ElabResult {
+            name: qualified_name,
+            def_id: operation_id,
+            obligations: vec![],
+            foreign_binding: None,
+            temporal_obligations: vec![],
+            effect_row_type: Some(effect_row),
+        });
+    }
+    Ok(results)
+}
+
 /// Extract the predicate from the innermost refinement in a resolved type.
 ///
 /// `{ k : A | φ }` at the end of a Pi-chain → `Some(φ)`. Used by V2 to
@@ -5281,9 +5649,11 @@ pub fn elaborate_mutual_group(
 pub(crate) fn rexpr_mentions_name(expr: &RExpr, name: &str) -> bool {
     match expr {
         RExpr::RCon(n, _) => n == name,
-        RExpr::RVar(_, _, _) | RExpr::RUniv(_, _) | RExpr::RNumLit(_, _) | RExpr::RStr(_, _) => {
-            false
-        }
+        RExpr::RVar(_, _, _)
+        | RExpr::RCell(_, _, _)
+        | RExpr::RUniv(_, _)
+        | RExpr::RNumLit(_, _)
+        | RExpr::RStr(_, _) => false,
         RExpr::RApp(f, a, _) => rexpr_mentions_name(f, name) || rexpr_mentions_name(a, name),
         RExpr::RLam(_, b, _) => rexpr_mentions_name(b, name),
         RExpr::RLet(_, _, rhs, body, _) => {
@@ -5291,6 +5661,7 @@ pub(crate) fn rexpr_mentions_name(expr: &RExpr, name: &str) -> bool {
         }
         RExpr::RAsc(e, _, _) => rexpr_mentions_name(e, name),
         RExpr::ROld(e, _) => rexpr_mentions_name(e, name),
+        RExpr::RBecomes(_, _, e, _) => rexpr_mentions_name(e, name),
         RExpr::RBinOp(_, l, r, _) => rexpr_mentions_name(l, name) || rexpr_mentions_name(r, name),
         RExpr::RMatch { scrut, arms, .. } => {
             rexpr_mentions_name(scrut, name)
