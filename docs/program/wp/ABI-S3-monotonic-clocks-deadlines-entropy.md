@@ -17,9 +17,10 @@
 
 | fact | site |
 |---|---|
+| ⭐ **`crates/ken-host/effect_abi_v1.catalog` is the CODEGEN AUTHORITY** — 22 `operation\|` rows; `build.rs:114` reads it and generates from it, `build.rs:14` is `rerun-if-changed` | `effect_abi_v1.catalog` |
+| a new op **requires a catalog row** — e.g. `operation\|ClockWallNow\|0201\|unavailable\|UnitRequestV1\|0\|HostReplyV1\|1` | `effect_abi_v1.catalog:53` |
 | `HostOpV1` holds **22** operations | `crates/ken-host/src/effect_v1.rs:16` |
-| `pub const ALL: [Self; 22]` | `effect_v1.rs:42` |
-| the count is pinned by `assert_eq!(HostOpV1::ALL.len(), 22)` | `effect_v1.rs:2613` |
+| ⛔ the op count is pinned in **FOUR** literals, not one | see the table below |
 | opcode families: `0x01` console, `0x02` clock, `0x03` fs, `0x04` resource | `effect_v1.rs:17`–`38` |
 | ⭐ the clock family holds **exactly one** op — `ClockWallNow = 0x0201` | `effect_v1.rs:21` |
 | availability is **two-state**: `NativeTested` \| `RepresentedUnavailable` | `effect_v1.rs:449`–`452` |
@@ -50,6 +51,40 @@ template:
 appears, which is evidence about *that* op; a new op with different shape (a
 blocking one — see D2) may require a site none of these name. **Sweep for the
 obligation, then confirm you covered at least these.**
+
+### ⛔ CENSUS CORRECTION — the table above is INCOMPLETE. Runtime, `evt_4rc0b25k59a6s`
+
+Verified against `main` before recording. **Two omissions, both load-bearing:**
+
+**1. `crates/ken-host/effect_abi_v1.catalog` is missing from the table and is
+the codegen authority.** `build.rs` parses it (`:114`) and generates the host
+effect surface from it. A new op **needs a catalog row** or `build.rs` fails with
+*"HostOpV1 catalog is closed at 22"*.
+
+**2. The op count is pinned in FOUR literals, not the one the table named:**
+
+| site | literal |
+|---|---|
+| `crates/ken-host/build.rs:161` | `assert_eq!(operations.len(), 22, "HostOpV1 catalog is closed at 22")` |
+| `crates/ken-host/src/abi_v1.rs:1749` | `assert_eq!(crate::HOST_EFFECT_ABI_V1_CATALOG.len(), 22)` |
+| `crates/ken-host/src/effect_v1.rs:42` | `pub const ALL: [Self; 22]` |
+| `crates/ken-host/src/effect_v1.rs:2613` | `assert_eq!(HostOpV1::ALL.len(), 22)` |
+
+⭐ **Why the census missed them, because the same mistake is easy to repeat: my
+sweep was bounded twice over, and neither bound was visible from inside it.**
+
+- It ran with **`--include=*.rs`**, so a `.catalog` file could not appear **by
+  construction** — the authority was excluded by file extension, not by judgment.
+- It keyed on the **op name**. The `build.rs` and `abi_v1.rs` pins never mention
+  `ClockWallNow`, because they count the **collection**, not the op. ⇒ Enumerating
+  one member's occurrences can **never** find a pin on the set.
+
+⇒ **When censusing "everything a new X must touch", sweep by extension-free glob
+AND search for the count/collection pins separately from the member name.** ⚠ And
+note the direction of the error: an under-complete census reads as a *complete
+checklist*, so it is silent — this one surfaced only because the frame said the
+list was a checklist rather than a bound, and Runtime treated it as an in-scope
+expansion instead of a stop.
 
 ## The design judgments, front-loaded (§2c) — do not re-litigate these
 
@@ -146,8 +181,11 @@ new op to `PX5_PLANNED_NATIVE_TARGETS` in this WP.
    Kernel CSPRNG, bounded request, no fallback.
 4. **The full 10-file sweep** for each new op, using the table above as the
    checklist.
-5. **The count pin at `effect_v1.rs:2613` and `ALL: [Self; N]` updated** to the
-   new arity, with the wire tags continuing from **22**.
+5. **A catalog row per new op** in `crates/ken-host/effect_abi_v1.catalog`, and
+   **all FOUR op-count literals** updated to the new arity — `build.rs:161`,
+   `abi_v1.rs:1749`, `effect_v1.rs:42`, `effect_v1.rs:2613` — with the wire tags
+   continuing from **22**. ⛔ Bumping an assert without adding the catalog row, or
+   the row without the asserts, is the failure mode here.
 6. ✅ **Done — the D2/D3 ruling is transcribed above** from
    `dec_50pzvb14nnbt0` (read `resolved` from the object, `resolved_by` the
    Architect). Nothing about it lives only in the channel; build from the
