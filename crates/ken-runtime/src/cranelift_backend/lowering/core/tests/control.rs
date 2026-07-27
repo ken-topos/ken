@@ -5622,3 +5622,292 @@ fn recut2_identity_is_a_function_of_owner_and_needs_no_second_wiring() {
          is vacuous"
     );
 }
+
+// ── RT-MATCH-FRAME-FP: the identity selector and its permutation net ───────
+//
+// `dec_s30rdnb1dvgk`. `AC-F1` makes two frames that differ only in a
+// closure-bearing body share one header fingerprint, so a fingerprint can no
+// longer say *which* occurrence is being checked. Identity is transported;
+// the fingerprint is a compatibility check only.
+//
+// ⚠ The fixture below is the reachable shape, not a contrived one: `erasure.rs`
+// derives the case headers from the eliminated family and builds the default as
+// `format!("no runtime match case selected for {family_symbol}")`. Two
+// eliminations of one family in one declaration therefore agree on every field
+// a header fingerprint can see.
+
+#[cfg(test)]
+const RTFP_DECLARATION: &str = "decl:fixture::RTFP::twice";
+#[cfg(test)]
+const RTFP_CALL_TEMPLATE: u64 = 700;
+/// `semantic_position` 1 — the outermost checked frame, visited FIRST.
+#[cfg(test)]
+const RTFP_OUTER_FRAME: u64 = 10;
+/// `semantic_position` 0 — checked postorder's first frame, visited LAST.
+#[cfg(test)]
+const RTFP_INNER_FRAME: u64 = 11;
+
+#[cfg(test)]
+fn rtfp_cases(body: i64) -> Vec<crate::RuntimeComputationalMatchCase> {
+    vec![crate::RuntimeComputationalMatchCase {
+        constructor: "ctor:fixture::Succ".to_string(),
+        argument_binders: 1,
+        recursive_positions: vec![0],
+        // ⭐ The ONLY field that differs between the two frames.
+        body: RuntimeExpr::Value(RuntimeValue::Int(body.into())),
+    }]
+}
+
+#[cfg(test)]
+fn rtfp_default() -> RuntimeTrap {
+    RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "no runtime match case selected for ind:fixture::Nat".to_string(),
+    }
+}
+
+#[cfg(test)]
+fn rtfp_frame(
+    frame_id: u64,
+    semantic_position: u64,
+    input: u8,
+    output: u8,
+    parent: Option<u64>,
+) -> crate::OrientedSubcontinuationFramePlanV1 {
+    let mut frame = crate::OrientedSubcontinuationFramePlanV1 {
+        frame_id,
+        segment_site_id: 9,
+        declaration: RTFP_DECLARATION.to_string(),
+        checked_occurrence_path: vec![frame_id],
+        semantic_position,
+        input_interface: oriented_test_interface(input),
+        output_interface: oriented_test_interface(output),
+        // ⭐ Identical for both frames — computed from the shared header, never
+        // from the body. That equality is `AC-F1`, and it is what makes the
+        // fingerprint useless as a selector.
+        runtime_frame_fingerprint: crate::compiler_private_computational_match_frame_fingerprint(
+            &rtfp_cases(0),
+            &rtfp_default(),
+        ),
+        occurrence_binding_fingerprint: 0,
+        control_witness: parent.map_or(
+            crate::OrientedControlWitnessV1::DistinguishedRoot,
+            crate::OrientedControlWitnessV1::ParentFrame,
+        ),
+    };
+    frame.occurrence_binding_fingerprint =
+        crate::compiler_private_oriented_occurrence_binding_fingerprint(&frame);
+    frame
+}
+
+#[cfg(test)]
+fn rtfp_plan() -> crate::OrientedSubcontinuationPlanV1 {
+    let mut call = crate::CheckedRecursiveInvocationTemplateV1 {
+        call_template_id: RTFP_CALL_TEMPLATE,
+        declaration: RTFP_DECLARATION.to_string(),
+        checked_occurrence_path: vec![5],
+        callee: RTFP_DECLARATION.to_string(),
+        level_instantiation: Vec::new(),
+        recursion_group: "scc:fixture::RTFP".to_string(),
+        scc_index: 0,
+        admission: 0,
+        arity: 1,
+        local_telescope: Vec::new(),
+        result_interface: oriented_test_interface(2),
+        callee_segment_site_id: 9,
+        // ⚠ Ascending `semantic_position`, exactly as `erasure.rs:1149` sorts.
+        callee_frame_templates: vec![RTFP_INNER_FRAME, RTFP_OUTER_FRAME],
+        caller_interface: oriented_test_interface(2),
+        // ⚠ `validate_marker_locations` rejects an empty occurrence list, so an
+        // empty one would make every REJECTION control below green on a fixture
+        // that could never have lowered in the first place. The positive
+        // control is what surfaced that.
+        runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+            declaration: RTFP_DECLARATION.to_string(),
+            runtime_path: vec![0, 1],
+        }],
+        occurrence_binding_fingerprint: 0,
+    };
+    call.occurrence_binding_fingerprint =
+        crate::compiler_private_recursive_call_binding_fingerprint(&call);
+    crate::OrientedSubcontinuationPlanV1 {
+        representation_rule_version:
+            crate::OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+        frames: vec![
+            rtfp_frame(RTFP_OUTER_FRAME, 1, 1, 2, None),
+            rtfp_frame(RTFP_INNER_FRAME, 0, 0, 1, Some(RTFP_OUTER_FRAME)),
+        ],
+        recursive_calls: vec![call],
+        computational_ih_slots: Vec::new(),
+        computational_ih_calls: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+fn rtfp_layer(
+    frame_id: Option<u64>,
+    body: i64,
+    role: RecursorLayerRole,
+) -> ComputationalRecursorLayer {
+    ComputationalRecursorLayer {
+        cases: rtfp_cases(body),
+        default: rtfp_default(),
+        outer_env: Vec::new(),
+        static_origin: inert_test_static_origin(),
+        provenance: RecursorFrameProvenance(frame_id.unwrap_or(0)),
+        role,
+        checked_frame_id: frame_id,
+        checked_invocation_id: None,
+        checked_invocation_source: None,
+        checked_invocation_depth: 0,
+        semantic_pending: true,
+    }
+}
+
+#[cfg(test)]
+fn rtfp_invocation() -> CheckedRecursiveInvocationInstance {
+    CheckedRecursiveInvocationInstance {
+        source: InvocationTemplateRef::SameSccCall(RTFP_CALL_TEMPLATE),
+        invocation_instance_id: 0,
+        semantic_depth: 0,
+        dynamic_splice_edge: None,
+    }
+}
+
+/// `selection_frame` is visited first, `wrapper_frame` second.
+#[cfg(test)]
+fn rtfp_segment(
+    selection_frame: Option<u64>,
+    wrapper_frame: Option<u64>,
+) -> RecursorInvocationSegment {
+    let origin = RecursorProducerOriginId(70);
+    RecursorInvocationSegment::new(
+        origin,
+        0,
+        rtfp_layer(
+            selection_frame,
+            1,
+            RecursorLayerRole::SelectsOccurrence { origin },
+        ),
+        RecursorUnwindStack {
+            later_wrappers_in_construction_order: vec![rtfp_layer(
+                wrapper_frame,
+                2,
+                RecursorLayerRole::ExitsScope {
+                    origin,
+                    scope_origin: RecursorProducerOriginId(71),
+                    parent_scope: None,
+                },
+            )],
+        },
+        ContinuationCursorId(7),
+        None,
+        None,
+    )
+}
+
+#[cfg(test)]
+fn rtfp_compose(
+    plan: &crate::OrientedSubcontinuationPlanV1,
+    segment: RecursorInvocationSegment,
+) -> Result<InstalledOrientedSubcontinuationSegment, CraneliftBackendError> {
+    compose_oriented_subcontinuation(
+        Some(plan),
+        Some(rtfp_invocation()),
+        ContinuationActivationId(8),
+        segment,
+        Vec::new(),
+    )
+}
+
+#[cfg(test)]
+fn rtfp_reason(
+    result: Result<InstalledOrientedSubcontinuationSegment, CraneliftBackendError>,
+) -> String {
+    match result {
+        Ok(_) => panic!("this fixture must reject"),
+        Err(CraneliftBackendError::Unsupported(UnsupportedLowering { construct, reason })) => {
+            assert_eq!(construct, "OrientedSubcontinuationPlanV1");
+            reason
+        }
+        Err(other) => panic!("unexpected error class: {other:?}"),
+    }
+}
+
+#[test]
+fn rtfp_the_two_frames_are_header_identical_and_body_distinct() {
+    // ⭐ Non-vacuity for every control below. If the fingerprints differed, the
+    // permutation control would redden at the *fingerprint* check and prove
+    // nothing about the order check; if the bodies agreed, there would be no
+    // permutation to catch.
+    let plan = rtfp_plan();
+    let outer = plan.frame(RTFP_OUTER_FRAME).expect("outer frame");
+    let inner = plan.frame(RTFP_INNER_FRAME).expect("inner frame");
+    assert_eq!(
+        outer.runtime_frame_fingerprint, inner.runtime_frame_fingerprint,
+        "AC-F1: two same-family frames must share one header fingerprint"
+    );
+    assert_ne!(
+        format!("{:?}", rtfp_cases(1)),
+        format!("{:?}", rtfp_cases(2)),
+        "the two bodies must actually differ"
+    );
+    assert_ne!(RTFP_OUTER_FRAME, RTFP_INNER_FRAME, "identities are distinct");
+}
+
+#[test]
+fn rtfp_both_exact_occurrences_lower_under_equal_header_fingerprints() {
+    let plan = rtfp_plan();
+    let installed = rtfp_compose(&plan, rtfp_segment(Some(RTFP_OUTER_FRAME), Some(RTFP_INNER_FRAME)))
+        .expect("two header-identical frames with distinct transported ids must both lower");
+    assert_eq!(
+        installed
+            .semantic_frames
+            .iter()
+            .map(|frame| frame.checked_frame_id.unwrap())
+            .collect::<Vec<_>>(),
+        vec![RTFP_INNER_FRAME, RTFP_OUTER_FRAME],
+        "checked composition order is postorder: inner then outer"
+    );
+}
+
+#[test]
+fn rtfp_a_cleared_transported_identity_rejects_before_cfg() {
+    let plan = rtfp_plan();
+    let reason = rtfp_reason(rtfp_compose(&plan, rtfp_segment(None, Some(RTFP_INNER_FRAME))));
+    assert!(
+        reason.contains("no checked frame identity"),
+        "a dropped identity must be named as such, not recovered by inference: {reason}"
+    );
+}
+
+#[test]
+fn rtfp_exchanging_the_two_occurrence_identities_rejects() {
+    // ⭐ THE PERMUTATION NET. The exchanged set is still exactly `expected`, and
+    // both layers still pass the fingerprint compatibility check because the
+    // two frames are header-identical by construction. ⛔ So a set-only check
+    // CANNOT fail this fixture — only the occurrence-order check can.
+    let plan = rtfp_plan();
+    let reason = rtfp_reason(rtfp_compose(
+        &plan,
+        rtfp_segment(Some(RTFP_INNER_FRAME), Some(RTFP_OUTER_FRAME)),
+    ));
+    assert!(
+        reason.contains("out of their planned occurrence order"),
+        "the ORDER check must be the detector that fires, not coverage or the \
+         fingerprint: {reason}"
+    );
+}
+
+#[test]
+fn rtfp_header_drift_after_identity_selection_rejects_by_fingerprint() {
+    let plan = rtfp_plan();
+    let mut segment = rtfp_segment(Some(RTFP_OUTER_FRAME), Some(RTFP_INNER_FRAME));
+    // Identity is still exact and correctly ordered; only the header moved.
+    segment.selection.default.message.push_str(" (drifted)");
+    let reason = rtfp_reason(rtfp_compose(&plan, segment));
+    assert!(
+        reason.contains("does not match its checked frame template"),
+        "post-selection header drift must still reject by fingerprint: {reason}"
+    );
+}

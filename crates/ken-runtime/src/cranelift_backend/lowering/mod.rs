@@ -2094,8 +2094,21 @@ fn instantiate_checked_invocation_segment(
     let frame_templates = checked_invocation_frame_templates(plan, invocation.source)?;
     let expected = frame_templates.iter().copied().collect::<BTreeSet<_>>();
     let mut instantiated = BTreeSet::new();
+    // ⭐ Set equality alone cannot see a PERMUTATION (`dec_s30rdnb1dvgk` item
+    // 5): two header-identical frames of the same callee declaration can be
+    // exchanged and still cover `expected` exactly. Record the ORDER in which
+    // identities are instantiated so the exact occurrence binding — not merely
+    // the set — is checked below.
+    let mut instantiated_order: Vec<u64> = Vec::new();
+    // ⚠ A layer carrying no checked identity is not an error *here*: a segment
+    // may legitimately contain unchecked layers. It becomes one only if the
+    // callee's expected templates are then not covered, which is what
+    // distinguishes "this layer need not instantiate" from "this layer must
+    // and cannot say which occurrence it is."
+    let mut layers_without_identity = 0usize;
     let mut visit = |layer: &mut ComputationalRecursorLayer| {
         let Some(frame_id) = layer.checked_frame_id else {
+            layers_without_identity += 1;
             return Ok(());
         };
         let frame = plan.frame(frame_id).ok_or_else(|| {
@@ -2140,6 +2153,7 @@ fn instantiate_checked_invocation_segment(
                 "one invocation instantiates a checked frame template more than once",
             ));
         }
+        instantiated_order.push(frame_id);
         Ok(())
     };
     visit(&mut segment.selection)?;
@@ -2151,10 +2165,58 @@ fn instantiate_checked_invocation_segment(
             .chain(segment.unwind.later_wrappers_in_construction_order.iter())
             .map(|layer| (layer.checked_frame_id, layer.checked_invocation_id))
             .collect::<Vec<_>>();
+        // ⭐ Name the missing-identity cause explicitly rather than letting it
+        // read as ordinary coverage drift. Since `dec_s30rdnb1dvgk` removed the
+        // fingerprint recovery in `make_computational_recursor`, an absent
+        // `checked_frame_id` is the expected shape of a layer whose transported
+        // marker was dropped — and it must never be recovered by inference.
+        if layers_without_identity > 0 {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                format!(
+                    "computational invocation {:?} has {layers_without_identity} layer(s) with no checked frame identity and does not cover its expected templates: expected={expected:?} instantiated={instantiated:?} actual={actual:?}",
+                    invocation.source,
+                ),
+            ));
+        }
         return Err(unsupported(
             "OrientedSubcontinuationPlanV1",
             format!(
                 "computational invocation {:?} does not carry its exact checked frame sequence: expected={expected:?} instantiated={instantiated:?} actual={actual:?}",
+                invocation.source,
+            ),
+        ));
+    }
+    // ⛔ **The permutation net.** `instantiated == expected` is set equality and
+    // is therefore blind to an exchange of two header-identical frames — the
+    // exact hazard `AC-F1` creates by design. Requiring the *sequence* to agree
+    // pins each occurrence to its own identity.
+    //
+    // ⭐ The expected sequence is re-derived here from the plan's
+    // `semantic_position`, deliberately **not** inherited from the order
+    // `erasure.rs:1149` happened to emit — an ordering claim taken from its own
+    // producer cannot detect that producer drifting.
+    //
+    // ⚠ Direction: `finish_match` assigns `semantic_position` in checked
+    // postorder, and a segment is traversed **selection first**, which is the
+    // reverse of that order. `oriented_test_plan` documents exactly this — its
+    // frames are postorder `p2, p1, p0` while composition visits `0, 1, 2` and
+    // `oriented_segment_keeps_semantic_and_control_axes_independent` asserts
+    // the resulting semantic order is `[2, 1, 0]`.
+    //
+    // ⚠ This uses Runtime traversal order only to VALIDATE the checked
+    // plan/marker binding. It does not mint semantic order from Runtime: the
+    // plan's `semantic_position` is the authority and Runtime order is the
+    // thing being checked against it.
+    let mut planned_visit_order = frame_templates.to_vec();
+    planned_visit_order.sort_by_key(|frame_id| {
+        std::cmp::Reverse(plan.frame(*frame_id).map(|frame| frame.semantic_position))
+    });
+    if instantiated_order != planned_visit_order {
+        return Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            format!(
+                "computational invocation {:?} instantiates its checked frames out of their planned occurrence order: planned={planned_visit_order:?} instantiated={instantiated_order:?}",
                 invocation.source,
             ),
         ));
@@ -4089,26 +4151,23 @@ impl<'a> Lowering<'a> {
     ) -> Result<Lowered, CraneliftBackendError> {
         let (residual, payload) = decompose_computational_recursor(recursive);
         let active_instance = self.active_recursive_invocations.last().copied();
-        let inferred_frame_id = if checked_frame_id.is_none() {
-            active_instance.and_then(|instance| {
-                let fingerprint =
-                    crate::compiler_private_computational_match_frame_fingerprint(&cases, &default);
-                self.oriented_subcontinuation_plan
-                    .as_ref()
-                    .and_then(|plan| checked_invocation_frame_templates(plan, instance.source).ok())
-                    .and_then(|frame_templates| {
-                        frame_templates.iter().copied().find(|frame_id| {
-                            self.oriented_subcontinuation_plan
-                                .as_ref()
-                                .and_then(|plan| plan.frame(*frame_id))
-                                .is_some_and(|frame| frame.runtime_frame_fingerprint == fingerprint)
-                        })
-                    })
-            })
-        } else {
-            checked_frame_id
-        };
-        let invocation_id = inferred_frame_id
+        // ⛔ **The frame identity is TRANSPORTED, never inferred**
+        // (`dec_s30rdnb1dvgk`). This site used to fall back, when
+        // `checked_frame_id` was `None`, to `find`ing a `callee_frame_templates`
+        // entry whose `runtime_frame_fingerprint` equalled one recomputed from
+        // `cases`/`default`. `AC-F1` deliberately makes body-only differences
+        // share a header fingerprint, so that `find` cannot discriminate a
+        // callee declaration's two same-family computational frames — it
+        // returns the first, silently.
+        //
+        // ⛔ Do not restore any recovery here, in any spelling: not header
+        // equality, not body equality, not `StaticOriginId`, not vector
+        // position, and not "the only remaining match." Each of those is
+        // Runtime *inference*; the oriented plan's checked identity is the
+        // authority. A missing identity is rejected in
+        // `instantiate_checked_invocation_segment`, before CFG.
+        let exact_frame_id = checked_frame_id;
+        let invocation_id = exact_frame_id
             .and_then(|_| active_instance.map(|instance| instance.invocation_instance_id));
         let invocation_source = active_instance.map(|instance| instance.source);
         let invocation_depth = active_instance.map_or(0, |instance| instance.semantic_depth);
@@ -4119,7 +4178,7 @@ impl<'a> Lowering<'a> {
             static_origin,
             provenance,
             role,
-            checked_frame_id: inferred_frame_id,
+            checked_frame_id: exact_frame_id,
             checked_invocation_id: invocation_id,
             checked_invocation_source: invocation_source,
             checked_invocation_depth: invocation_depth,
