@@ -213,7 +213,7 @@ scripts/ken-cargo test -p ken-host          53 passed
 scripts/ken-cargo test -p ken-elaborator  1076 passed
 scripts/ken-cargo test -p ken-interp       168 passed
 scripts/ken-cargo test -p ken-verify        24 passed
-                                          ---- 
+                                          ----
                                           1321 passed, 0 failed
 ```
 

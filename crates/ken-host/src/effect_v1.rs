@@ -2783,6 +2783,95 @@ mod tests {
         ));
     }
 
+    /// ABI-S3 AC-3c, host half. Entropy is ambient AT DISPATCH: no capability
+    /// token appears in the host request, and no ProgramCaps/EntropyCap field
+    /// gates it.
+    ///
+    /// MEASURED: the entropy operation dispatches successfully with NO
+    /// capability token, its probed C record is exactly one u64 (the count),
+    /// and its wire image is exactly a tag plus that count.
+    /// CLAIMED: nothing capability-shaped rides the entropy request.
+    /// THE GAP: "dispatch succeeded without a token" is only meaningful if the
+    /// dispatcher can refuse for want of a token at all -- so the positive
+    /// control below withholds the token from an operation that DOES require
+    /// one and shows it is denied.
+    ///
+    /// The other half of AC-3c -- that Entropy is VISIBLE in the program
+    /// effect row -- is not observable from this crate and is discharged by
+    /// ken-elaborator's abi_s3_entropy_effect_row test. Both halves are
+    /// required: showing only this one is compatible with a hidden ambient
+    /// read, which the ruling forbids.
+    #[test]
+    fn ac3c_entropy_needs_no_capability_token_while_a_gated_op_still_does() {
+        let capabilities = CapabilityTableV1::default();
+        let dispatch = |operation, request: &CanonicalRequestV1| {
+            let mut backend = AllOpsBackend::default();
+            let mut resources = ResourceTableV1::default();
+            dispatch_host_op_v1(
+                &mut backend,
+                &capabilities,
+                &mut resources,
+                operation,
+                // No capability token supplied, for either operation.
+                None,
+                ResourceInputsV1::None,
+                request,
+            )
+            .expect("dispatch is total")
+            .outcome
+        };
+
+        // Entropy carries no token and is served.
+        assert!(
+            matches!(
+                dispatch(
+                    HostOpV1::EntropyRandomBytes,
+                    &CanonicalRequestV1::EntropyRandomBytes { count: 8 },
+                ),
+                CanonicalOutcomeV1::Success(_)
+            ),
+            "entropy is ambient at dispatch and must need no capability token"
+        );
+
+        // POSITIVE CONTROL -- the dispatcher CAN refuse for want of a token, so
+        // the success above is evidence about entropy rather than about a
+        // dispatcher that never checks.
+        let gated = dispatch(
+            HostOpV1::FsReadFile,
+            &CanonicalRequestV1::FsReadFile {
+                path: b"a".to_vec(),
+            },
+        );
+        assert!(
+            !matches!(gated, CanonicalOutcomeV1::Success(_)),
+            "a capability-gated operation must be refused without a token, \
+             otherwise the entropy result proves nothing; got {gated:?}"
+        );
+
+        // Entropy is in the ambient class, the same class the wall clock is in.
+        assert!(HostOpV1::EntropyRandomBytes.is_ambient());
+        assert!(!HostOpV1::FsReadFile.is_ambient());
+
+        // The request record is exactly the count: no token field rides along.
+        let fact = |name: &str| {
+            HOST_EFFECT_ABI_V1_FACTS
+                .iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| *value)
+                .unwrap_or_else(|| panic!("probed layout fact {name}"))
+        };
+        assert_eq!(fact("OFFSET_EntropyRequestV1_count"), 0);
+        assert_eq!(
+            fact("SIZE_EntropyRequestV1"),
+            8,
+            "the entropy request record is exactly its count; a capability \
+             token field would enlarge it"
+        );
+        // Control: the probe distinguishes sizes, so 8 is a reading and not a
+        // constant it would report for anything.
+        assert!(fact("SIZE_FsReadFileRequestV1") > fact("SIZE_EntropyRequestV1"));
+    }
+
     /// ABI-S3 AC-5. Every operation this WP adds is RepresentedUnavailable
     /// (D4), and the PX5 promotion set is untouched -- asserted by CONTENTS,
     /// not by length, so swapping a member for another cannot pass.
