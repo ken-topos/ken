@@ -4132,18 +4132,31 @@ fn decode_deadline(value: &EvalVal, clock: &ClockIds) -> Option<u64> {
     if *id != clock.mk_deadline_id {
         return None;
     }
+    // EXACTLY one argument, at both levels. A `MkDeadline` (or a
+    // `MkMonotonicInstant`) carrying a second field -- a cancellation token,
+    // status, or anything else -- is REFUSED, never silently truncated to its
+    // first argument. Reading `args.first()` would discard the extra field
+    // here, before any wire or C-record control downstream could observe it,
+    // so this is the boundary where AC-3b's "no cancellation surface on the
+    // Deadline type" is actually enforced.
+    let [instant] = args.as_slice() else {
+        return None;
+    };
     let EvalVal::Ctor {
         id: instant_id,
         args: instant_args,
         ..
-    } = args.first()?
+    } = instant
     else {
         return None;
     };
     if *instant_id != clock.mk_monotonic_instant_id {
         return None;
     }
-    u64::try_from(eval_to_bigint(instant_args.first()?)?).ok()
+    let [nanoseconds] = instant_args.as_slice() else {
+        return None;
+    };
+    u64::try_from(eval_to_bigint(nanoseconds)?).ok()
 }
 
 /// The complete set of surface clock operations, with their canonical host
@@ -4165,13 +4178,19 @@ fn decode_clock_request(
             ken_host::CanonicalRequestV1::ClockMonotonicNow,
         ))
     } else if op_id == clock.sleep_until_id {
-        let deadline = decode_deadline(op_args.first()?, clock)?;
+        let [deadline_value] = op_args else {
+            return None;
+        };
+        let deadline = decode_deadline(deadline_value, clock)?;
         Some((
             ken_host::HostOpV1::ClockSleepUntil,
             ken_host::CanonicalRequestV1::ClockSleepUntil { deadline },
         ))
     } else if op_id == clock.random_bytes_id {
-        let count = u64::try_from(eval_to_bigint(op_args.first()?)?).ok()?;
+        let [count_value] = op_args else {
+            return None;
+        };
+        let count = u64::try_from(eval_to_bigint(count_value)?).ok()?;
         Some((
             ken_host::HostOpV1::EntropyRandomBytes,
             ken_host::CanonicalRequestV1::EntropyRandomBytes { count },
@@ -7130,6 +7149,119 @@ mod px5b_effect_observation_tests {
         );
         // Discriminator: the observation tracks the argument.
         assert_ne!(sleep_with(4_242), sleep_with(9_999));
+    }
+
+    /// ABI-S3 AC-3b at the DECODE boundary — a `Deadline` carrying a second
+    /// argument is refused, not silently truncated.
+    ///
+    /// This is the arm `runtime-qa` found open on `c7ffb0d7`. The host-side
+    /// triad inspects the canonical request, the wire image, and the C record;
+    /// all three sit DOWNSTREAM of this decode. Reading `args.first()` here
+    /// would discard a cancellation/status/token argument before any of them
+    /// could observe it, so a surface
+    /// `MkDeadline MonotonicInstant <cancellation>` would keep the forbidden
+    /// surface while every downstream control stayed green.
+    ///
+    /// MEASURED: `decode_deadline` and `decode_clock_request` return `None` for
+    /// any arity other than exactly one, at every level.
+    /// CLAIMED: an extra field on the Deadline surface cannot reach the ABI.
+    /// THE GAP: refusal is only evidence if the same decoder ACCEPTS the
+    /// well-formed shape — otherwise a decoder that rejects everything would
+    /// pass. Each rejection below is paired with its acceptance.
+    #[test]
+    fn ac3b_the_deadline_decoder_refuses_a_second_argument() {
+        let clock = abi_s3_clock_ids();
+        let ctor = |id: GlobalId, args: Vec<EvalVal>| EvalVal::Ctor {
+            id,
+            args: Rc::new(args),
+            slot: NULL_SLOT,
+        };
+        let instant = |args: Vec<EvalVal>| ctor(clock.mk_monotonic_instant_id, args);
+        let cancellation = EvalVal::Int(1);
+
+        // POSITIVE CONTROL — the well-formed shape decodes.
+        assert_eq!(
+            decode_deadline(
+                &ctor(clock.mk_deadline_id, vec![instant(vec![EvalVal::Int(77)])]),
+                &clock
+            ),
+            Some(77)
+        );
+
+        // A second argument on MkDeadline is REFUSED, not truncated to the
+        // first. This is the cancellation surface D2 forbids.
+        assert_eq!(
+            decode_deadline(
+                &ctor(
+                    clock.mk_deadline_id,
+                    vec![instant(vec![EvalVal::Int(77)]), cancellation.clone()],
+                ),
+                &clock
+            ),
+            None,
+            "a Deadline carrying a second field must be refused, not silently \
+             truncated to its first argument"
+        );
+
+        // ...and at the inner level too.
+        assert_eq!(
+            decode_deadline(
+                &ctor(
+                    clock.mk_deadline_id,
+                    vec![instant(vec![EvalVal::Int(77), cancellation.clone()])],
+                ),
+                &clock
+            ),
+            None,
+            "a MonotonicInstant carrying a second field must be refused"
+        );
+
+        // Zero arguments fail closed as well, at both levels.
+        assert_eq!(
+            decode_deadline(&ctor(clock.mk_deadline_id, vec![]), &clock),
+            None
+        );
+        assert_eq!(
+            decode_deadline(
+                &ctor(clock.mk_deadline_id, vec![instant(vec![])]),
+                &clock
+            ),
+            None
+        );
+
+        // The same closure holds one layer up, where the surface operation is
+        // decoded: a SleepUntil carrying an extra operand is not an operation.
+        let good = ctor(clock.mk_deadline_id, vec![instant(vec![EvalVal::Int(5)])]);
+        // POSITIVE CONTROL — one operand decodes to the sleep request.
+        assert!(matches!(
+            decode_clock_request(clock.sleep_until_id, &[good.clone()], &clock),
+            Some((
+                ken_host::HostOpV1::ClockSleepUntil,
+                ken_host::CanonicalRequestV1::ClockSleepUntil { deadline: 5 },
+            ))
+        ));
+        assert!(
+            decode_clock_request(
+                clock.sleep_until_id,
+                &[good, cancellation.clone()],
+                &clock
+            )
+            .is_none(),
+            "a SleepUntil carrying a second operand must not decode"
+        );
+
+        // And for the entropy operation, closing the same class rather than
+        // only the instance the block named.
+        assert!(matches!(
+            decode_clock_request(clock.random_bytes_id, &[EvalVal::Int(8)], &clock),
+            Some((ken_host::HostOpV1::EntropyRandomBytes, _))
+        ));
+        assert!(decode_clock_request(
+            clock.random_bytes_id,
+            &[EvalVal::Int(8), cancellation],
+            &clock
+        )
+        .is_none());
     }
 
     /// ABI-S3 D1 at the decode boundary. `ClockSleepUntil` consumes an
