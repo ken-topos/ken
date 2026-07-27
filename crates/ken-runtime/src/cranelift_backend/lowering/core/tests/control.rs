@@ -5718,7 +5718,14 @@ fn rtfp_plan() -> crate::OrientedSubcontinuationPlanV1 {
         // ⚠ Ascending `semantic_position`, exactly as `erasure.rs:1149` sorts.
         callee_frame_templates: vec![RTFP_INNER_FRAME, RTFP_OUTER_FRAME],
         caller_interface: oriented_test_interface(2),
-        runtime_marker_locations: Vec::new(),
+        // ⚠ `validate_marker_locations` rejects an empty occurrence list, so an
+        // empty one would make every REJECTION control below green on a fixture
+        // that could never have lowered in the first place. The positive
+        // control is what surfaced that.
+        runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+            declaration: RTFP_DECLARATION.to_string(),
+            runtime_path: vec![0, 1],
+        }],
         occurrence_binding_fingerprint: 0,
     };
     call.occurrence_binding_fingerprint =
