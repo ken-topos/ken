@@ -33,9 +33,30 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## ▶▶ LIVE — 2026-07-27 ~01:2xZ · `main` IS GREEN; the enclave has the thread
+## ▶▶ LIVE — 2026-07-27 ~03:4xZ · `main` GREEN; enclave owes retros, then `STR-BIJ`
 
-**`origin/main` at last check: `a1e29284`.** ⛔ Verify it; do not trust this line.
+**`origin/main` at last check: `13004a63`.** ⛔ Verify it; do not trust this line.
+
+### ▶ Where the thread actually is
+
+`SPEC-31-WIDTH-ERRATUM` is **merged** — PR **#1054** (`main` was `c5281fc3`),
+node flipped `merged` in PR **#1055** (`main` now `13004a63`). Both verified by
+**blob identity with a pre-merge control that differs**, never by ancestry.
+#1054 was published **without** `--doc-only` (it touches `conformance/`), so the
+full CI gate ran and passed — a second non-doc-only merge clearing CI.
+
+⛔ **The node is NOT closed: spec-author and conformance-validator retros are
+owed** (called `evt_q75v9dhj6st7`, re-led `evt_52pkravrkn887`, then delivered by
+direct pane write). ⛔ **Do not compact the enclave until they post** — a
+compaction eats an unposted retro. `STR-BIJ` is next and is released only after
+retros, behind the full Handoff Gate.
+
+⚠ **Measured 2026-07-27: two convo mentions and a bare `Enter` did NOT wake
+`spec-leader`; only writing into its pane did.** The composer held its **idle
+placeholder**, so nothing was stranded — the event never arrived at all. ⭐ The
+bare-`Enter` recovery presumes something is *sitting on* the composer; against an
+empty one it is a **no-op that looks exactly like a successful nudge**. Check for
+a `Working`/spinner transition after any nudge, not just that you sent it.
 
 ### ✅ THE RED IS GONE — and here is the evidence, because the claim is load-bearing
 
@@ -55,7 +76,7 @@ would have proved nothing, since `--doc-only` skips CI.
 
 | ring | state |
 |---|---|
-| **Spec enclave** | ▶ **LIVE** on `SPEC-31-WIDTH-ERRATUM`, kicked `evt_629qvns1n7j7d` at `a1e29284`. Size S. Reconcile `conformance/` to **96** columns |
+| **Spec enclave** | ✅ `SPEC-31-WIDTH-ERRATUM` **merged** (#1054/#1055). ⛔ **retros owed** — not closed, do not compact. Next: `STR-BIJ` (hold discharged, re-derivation done) |
 | **Runtime** | ⛔ **STOPPED by operator order.** No node. ⛔ Do NOT re-anchor `B2E`/`B2F` — retire them and write fresh |
 | **Verify · Language · Doc · Foundation · Kernel · Ergo** | idle, correct — nothing released |
 
