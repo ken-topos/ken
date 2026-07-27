@@ -1,7 +1,7 @@
 ---
 id: SURF-IDENT-TR39
 title: "The lexer's confusable-resistance is satisfied VACUOUSLY by an ASCII-only identifier rule — spec 31 §2's blessed Unicode letters are unimplemented, and the test that looks like the TR39 gate cannot see the difference"
-status: ready
+status: active
 owner: ergo
 size: S–M
 gate: none

@@ -1,7 +1,7 @@
 ---
 id: SURF-SPACE-CELLS
 title: "The `space` block surface — cells and `becomes` — is unbuilt, while its entire desugaring target (the `State` effect: Get/Put/run_state) is built and live"
-status: ready
+status: active
 owner: language
 size: M–L
 gate: none
