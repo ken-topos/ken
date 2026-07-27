@@ -1,8 +1,9 @@
 ---
 id: EFF-SPACE-ENSURES-PRESTATE
 title: "`old` is transparent, so a space operation's `ensures` cannot express the pre/post distinction `36 §4.3` is built on"
-status: ready
+status: closed
 owner: language
+resolution: "Shape B (fail closed) merged PR #1115 at origin/main=aea07d62, elab.rs blob 648df173. ⚠ PARTIAL BY DESIGN: normative pre-state semantics remain UNDELIVERED -- `old` is now unavailable and says so, instead of available and meaningless. Shape A needs the `becomes`/space cell-block surface, which this frame excluded and which has no node yet."
 size: M
 gate: none
 depends_on: []
@@ -10,6 +11,38 @@ blocks: []
 github: null
 origin: "Steward measurement 2026-07-27 at origin/main=0031dd6a, taken while scoping L5 for release to Team Language. L5 is NOT clean backlog -- crates/ken-elaborator/src/effects/ is 2614 lines across 10 files and is consumed by elab.rs, capabilities.rs, prelude.rs, modules.rs, classes.rs, compiler_driver.rs, program_admission.rs, foreign.rs and bytes.rs. Five of 36 section 6's six deliverables are built and live. This node is the measured residual of the sixth (section 4, the `space` state model), sliced to the part that is a correctness hole in already-reachable surface rather than a missing feature."
 ---
+
+> ## ✅ CLOSED 2026-07-27 as **Shape B** — PR #1115, `origin/main = aea07d62`
+>
+> `old` no longer silently means its operand. Both `check` and `infer` reject
+> `RExpr::ROld` with a span-carrying `OldPreStateUnsupported`; the resolver
+> remains the sole admission gate; a pure `fn` still fails as exact
+> `UnboundName(old)`; an ordinary space `ensures` without `old` still emits.
+> Verified by blob: `elab.rs` = `648df173` on main and on the approved candidate.
+>
+> ### ⚠ CLOSED PARTIAL — residual: [`SURF-SPACE-CELLS`](SURF-SPACE-CELLS.md)
+>
+> ⛔ **Do not read "closed" as "`36 §4.3` is delivered."** It is not. **Normative
+> pre-state semantics remain unimplemented.** What changed is the honesty of the
+> failure: the feature is now *unavailable and says so* rather than *available
+> and wrong*.
+>
+> Shape A — elaborating `ensures` against the state transformer — was
+> unavailable in this slice because the parser has only `space proc`: no
+> `becomes`, no cell environment, no `s_pre`/`s_post` binding to elaborate
+> against. ⇒ **The residual is the `becomes` / space cell-block surface**, which
+> this frame deliberately excluded.
+>
+> ✅ **It is now filed as [`SURF-SPACE-CELLS`](SURF-SPACE-CELLS.md)** (released to
+> Team Language 2026-07-27). ⭐ The design call I expected to be needed — *does
+> space-block syntax exist at all?* — **was already settled in the corpus:**
+> `36 §4.1` gives the desugaring verbatim, and its whole target (`State`,
+> `Get`/`Put`, `run_state`) is built and live in `effects/state.rs`. So the
+> residual is a surface + translation job, not a design fork.
+>
+> ⛔ Building the cells does **not** by itself restore `old` — `SURF-SPACE-CELLS`
+> explicitly leaves `OldPreStateUnsupported` firing. The pre-state binding is
+> that node's **successor**, and it becomes framable once cells exist.
 
 ## The measurement
 

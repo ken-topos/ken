@@ -1,7 +1,7 @@
 ---
 id: RT-VALUE-TOTALITY
 title: "Make every total traversal of Value non-recursive in the host stack, and remove the closure capabilities the landed closure boundary forbids"
-status: active
+status: merged
 owner: runtime
 size: L
 gate: none
@@ -10,6 +10,40 @@ blocks: [RT-FNSPLIT-B2V]
 github: null
 origin: Architect cycle-contract ruling evt_5pzxf6sm4z08 ("host recursion may not be the totality mechanism -- a deep acyclic chain must adopt without host-stack growth and must not be reclassified as malformed") plus closure-identity ruling dec_3b1r19v59v20y / SPEC-CLOSURE-BOUNDARY. Steward-filed 2026-07-26 per COORDINATION §2 as move 2 of three from the closure-identity ruling: the repair is a BLOCKING DEPENDENCY for RT-FNSPLIT-B2V acceptance but a SEPARATE implementation slice, and must not be built as a B2V-local adapter. Scope was re-derived against the landed code rather than taken from the ruling's prose, which surfaced three mechanisms the ruling did not name.
 ---
+
+> ## ✅ P3 MERGED 2026-07-27 — PR #1116, `origin/main = b55d292c`
+>
+> `Value`'s `Debug` is depth-total: an encoder-shaped iterative state machine
+> over one heap `Vec<DebugStep>`, one host frame deep, no depth cap. Blob-verified
+> — `values.rs` = `042642ca`, `value_depth_totality.rs` = `cde48b42` on main and
+> on the approved candidate `c630c66d`. Derived `Debug` removed.
+>
+> ### ⚠ TWO NAMED RESIDUALS — recorded so they are not thread-only asides
+>
+> 1. ⛔ **The alternate `{:#?}` pretty format is GONE.** The Steward ruled this
+>    acceptable on a **zero-consumer census**: the pre-change base has zero
+>    alternate-format callers and zero crate `Formatter::alternate` consumers.
+>    ⭐ **This is an unconsumed capability LOSS, not an impossibility claim.**
+>    Nothing in the iterative encoder forecloses pretty-printing — it can carry an
+>    indent level. If a consumer ever wants it, that is a build, not a redesign.
+>    ⛔ Do not cite this line as evidence that `Value` "cannot" pretty-print.
+> 2. **The current-population inventory is REVIEW-ENFORCED, not mechanically
+>    closed** (Architect + QA, and stated as such by both). The accepted guarantee
+>    is **today's** `Value` population. A future child-bearing variant omitted from
+>    *both* the mixed fixture and the inventory would not be caught. The audit is
+>    independent of the list it checks — trip count from `MIXED_CHAIN_CYCLE`,
+>    observations from outer fixture nodes — so omission and duplication mutations
+>    do redden it; what it cannot see is a variant absent from both.
+>
+> ### ✅ ALL THREE PHASES MERGED — THIS NODE IS COMPLETE
+>
+> `P1` (PR #996), `P2`, and `P3` (PR #1116) are all merged. §5's phase table
+> names those three as the whole plan and calls `P3` *"the node's residual"*.
+> ⇒ **There is no remaining scope; status is `merged`.**
+>
+> ⭐ **This discharges the last unmet `depends_on` of
+> [`RT-FNSPLIT-C1`](RT-FNSPLIT-C1.md)** — its other three (`B2O`, `B2R`, `B2V`)
+> were already merged, so C1's dependencies are now fully met.
 
 > ## ⭐⭐ OPERATOR RULING 2026-07-26 — THIS NODE IS NOW THE RUNTIME TEAM'S DIRECTION
 >

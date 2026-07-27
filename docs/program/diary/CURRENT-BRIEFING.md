@@ -33,127 +33,129 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## ▶▶ LIVE — 2026-07-27 ~03:4xZ · `main` GREEN; enclave owes retros, then `STR-BIJ`
+## ▶▶ LIVE — 2026-07-27 ~18:0xZ · 4 merges; 3 FRAMES WRITTEN, NOT KICKED
 
-**`origin/main` at last check: `13004a63`.** ⛔ Verify it; do not trust this line.
+**`origin/main` at last check: `b55d292c`, with PR #1117 (`V4-RESIDUAL`) in its
+publisher window.** ⛔ Verify it; do not trust this line.
 
-### ▶ Where the thread actually is
+### ⭐⭐ THE ONE THING TO DO NEXT
 
-`SPEC-31-WIDTH-ERRATUM` is **merged** — PR **#1054** (`main` was `c5281fc3`),
-node flipped `merged` in PR **#1055** (`main` now `13004a63`). Both verified by
-**blob identity with a pre-merge control that differs**, never by ancestry.
-#1054 was published **without** `--doc-only` (it touches `conformance/`), so the
-full CI gate ran and passed — a second non-doc-only merge clearing CI.
+Three WP frames are **written, committed to `steward/work`, and NOT released.**
+Publishing them and kicking their rings is the whole of the next action — it is
+`§00` delivery and nothing outranks it.
 
-⛔ **The node is NOT closed: spec-author and conformance-validator retros are
-owed** (called `evt_q75v9dhj6st7`, re-led `evt_52pkravrkn887`, then delivered by
-direct pane write). ⛔ **Do not compact the enclave until they post** — a
-compaction eats an unposted retro. `STR-BIJ` is next and is released only after
-retros, behind the full Handoff Gate.
+| ring | frame | state |
+|---|---|---|
+| **Ergo** | `SURF-IDENT-TR39-R1` | written, unkicked |
+| **Language** | `SURF-SPACE-CELLS-P1` | written, unkicked |
+| **Runtime** | `RT-FNSPLIT-C1` (frame pre-existed) | dependency cleared, unkicked |
 
-⚠ **Measured 2026-07-27: two convo mentions and a bare `Enter` did NOT wake
-`spec-leader`; only writing into its pane did.** The composer held its **idle
-placeholder**, so nothing was stranded — the event never arrived at all. ⭐ The
-bare-`Enter` recovery presumes something is *sitting on* the composer; against an
-empty one it is a **no-op that looks exactly like a successful nudge**. Check for
-a `Working`/spinner transition after any nudge, not just that you sent it.
+Sequence: V4 lands → verify by blob → publish my doc bundle (`steward/work`
+commits `781ffee1`, `a2bbde28`, `6aa5c230`, `a5dbdc6b`; ⛔ cut a fresh
+`wp/steward-<slug>` from `origin/main` and cherry-pick — never publish from
+`steward/work`) → **then the Handoff Gate for each ring: compact EVERY member,
+verify each drop, THEN post the kickoff.**
 
-### ✅ THE RED IS GONE — and here is the evidence, because the claim is load-bearing
+⚠ **Ergo and Language both touch `crates/ken-elaborator/src/lexer.rs`** (Ergo:
+the identifier rule; Language: `becomes`/`mut` tokens). Different functions, but
+I told Language in `SURF-SPACE-CELLS-P1 §5` that I would **sequence rather than
+let them collide.** Honor that.
 
-The block that stood here said **`main` IS RED** and *"every non-doc-only merge is
-blocked."* ⛔ **Both were true when written and are false now.** `LIB-GATE-DECOUPLE`
-landed and removed the CI coupling, per the operator's ruling.
+### ✅ Landed this window — four merges, each blob-verified
 
-⭐ **The proof is not a green badge — it is a merge that could not have happened.**
-PR **#1052** (integrator retirement) was published **without `--doc-only`**
-precisely because it touches `ci.yml` and a functional case arm. The publisher
-waited its full pre-poll window, read the checks, and reported
-*"PR #1052 checks passed and merge command succeeded."* ⇒ A **non**-doc-only merge
-cleared CI end to end. That is the discriminating observation; a doc-only merge
-would have proved nothing, since `--doc-only` skips CI.
+| PR | `main` | what |
+|---|---|---|
+| #1114 | `78f1f74b` | `MAP-TRANSPORT-CODEC-R1` determination — no codec is required today |
+| #1115 | `aea07d62` | `EFF-SPACE-ENSURES-PRESTATE` — `old` fails closed (Shape B) |
+| #1116 | `b55d292c` | `RT-VALUE-TOTALITY-P3` — `Value` `Debug` is depth-total |
+| #1117 | in flight | `V4-RESIDUAL` — binder-child paths rejected |
 
 ### ▶ Lane state
 
 | ring | state |
 |---|---|
-| **Spec enclave** | ✅ `SPEC-31-WIDTH-ERRATUM` **merged** (#1054/#1055). ⛔ **retros owed** — not closed, do not compact. Next: `STR-BIJ` (hold discharged, re-derivation done) |
-| **Runtime** | ⛔ **STOPPED by operator order.** No node. ⛔ Do NOT re-anchor `B2E`/`B2F` — retire them and write fresh |
-| **Verify · Language · Doc · Foundation · Kernel · Ergo** | idle, correct — nothing released |
+| **Kernel** | ✅ **building** — `KERNEL-NESTED-IND` D3b+D4. D3a already merged |
+| **Verify** | `V4-RESIDUAL` in the publisher; ring free after |
+| **Runtime** | free; `RT-FNSPLIT-C1` releasable, awaiting my kickoff |
+| **Language · Ergo** | free; frames written, awaiting my kickoff |
+| **Foundation** | ⛔ **whole ring idle and legitimately blocked** — see task `#144` |
+| **Doc** | idle, correct — `DOC-ATTEST-LIVING` is operator-held |
+| **Spec enclave** | `STR-NFC-CONSTRUCTION` awaiting Architect resolution |
 
-⛔ **The tracker shows three items `active`; only one ring is.**
-`RT-NATIVE-FNSPLIT` and `RT-VALUE-TOTALITY` read `active` and are **stopped**;
-`SPEC-MISSION-GROUNDING` reads `active` and is an **umbrella with no ring on it**.
-See the operator escalation below — `gen-progress.sh`'s `VALID_STATUSES` has no
-value meaning *"halted under an operator stop-order"*, so the stop exists only as
-prose someone has to repeat.
+### ⛔ OWED TO THE OPERATOR — four items, none self-resolvable
 
-### ✅ Landed this window — five merges, each blob-verified with a control
-
-| PR | `main` | what |
-|---|---|---|
-| #1048 | `c631841d` | `SPEC-STORE-SPLIT` — Map/Set internal bytes are not observable |
-| #1049 | `5b848ad5` | tracker flip |
-| #1050 | `6d3f9fb5` | retro carry: a property-removal census must close over **entailment** |
-| #1051 | `fd8de255` | Librarian as-built — chapter 06 store mechanism + capacity prose |
-| #1052 | `a1e29284` | **integrator seat retired** — 50 files, every operative reference |
-
-⭐ **`SPEC-STORE-SPLIT`'s carry is the strongest thing this window produced, and all
-four enclave seats derived it independently:** a property-removal census **by
-subject name is not closed under entailment.** The first fold repaired all six
-carriers that *say* Map/Set; the retired promise survived in generic clauses
-quantified over *closure-free* / *admitted* / *any live* value — whose domains
-contain Map/Set. Nine carriers in total, found across three passes. ⭐⭐ **The tell:
-repeated population growth across passes means the ENUMERATION METHOD is wrong,
-not that the list is longer.** Landed at
-`agent/memory/fleet/an-enumeration-needs-a-proven-closure-not-a-better-grep.md`.
-
-### ⛔ OWED TO THE OPERATOR — three items, none self-resolvable
-
-1. **The tracker cannot express an operator stop-order.** `RT-NATIVE-FNSPLIT`,
-   `RT-FNSPLIT-B2F`, `RT-VALUE-TOTALITY`, `PX8-F-CAP-41` display **unblocked**
-   because their dependency merged, while runtime is under a full stop. Needs
-   either a new status value or a `halted:` field. **Raised, unanswered.**
+1. **`MAP-TRANSPORT-CODEC` candidate 3** — a wire format for a **non-Ken peer**.
+   Candidates 1 and 2 were measured and answered *no*; this one is a **roadmap
+   call and is not answerable from the repository.** The node is closed
+   `not-needed`; if this comes back *yes* it reopens with a fresh frame.
 2. ⛔ **`SPEC-MISSION-GROUNDING` `AC-M3` names a pass I am forbidden to request.**
-   The AC says *"the adversary refutation pass is still owed"*, and the node's §2
-   routes it to the adversary. **`COORDINATION §10⁻a` forbids the Steward from
-   asking the adversary to hunt anything** — *"a request for an attack is a
-   conversation; the Steward does not make one"* — and scopes the adversary to
-   `crates/` and catalog/`library/`, which a spec-vs-mission audit is not. ⇒ Two
-   operator-authored artifacts conflict. **I cannot discharge `AC-M3` without the
-   operator either dispatching the adversary directly (as happened for the first
-   pass) or re-routing the AC.**
-3. **The `integrator` participant still exists in the convo space** with a stale
-   status citing PR #365 (merged 2026-07-08). The roster, git, worktrees, tmux, and
-   every tracked non-chronicle file are clean — but `orientation()` and
-   `list_participants` still show the seat to **every** agent, and no MCP tool
-   removes a participant. **Operator/convo-admin action.**
+   The AC says the adversary refutation pass is owed; `COORDINATION §10⁻a`
+   forbids the Steward from asking the adversary to hunt anything. **Two
+   operator-authored artifacts conflict.** Needs the operator to dispatch the
+   adversary directly or re-route the AC. **Raised, unanswered.**
+3. **T3 / `Property`** — there is **no `ken test` subcommand** (`ken-cli`
+   dispatches `repl|run|check|native-build|fmt|version|help`) and **no spec
+   chapter for the CLI at all** (task `#143`). `Tooling/Testing/Property.ken.md`
+   exists but is deterministic finite checks — no randomness, shrinking, or
+   seeds, deliberately. ⇒ T3 is blocked on a **design input**, not on code.
+4. **Linux ABI** — `ABI-S3`'s three ops landed `RepresentedUnavailable` by
+   design and **no Track-A node promotes them**, so `§6`'s exit condition is
+   unreachable through `ABI-A1/A2/A3`.
 
 ### ⛔ Still operator-HELD
 
 **`DOC-ATTEST-LIVING`** — ⛔ **do not release, do not re-ask.** Node:
 `docs/program/issues/DOC-ATTEST-LIVING.md`.
 
-### ⚠ UNDURABLE CARRY — this text is the only copy, do not delete it unread
+### ⛔⛔ THE `integrator` GHOST — do NOT chase it again
 
-Task `#113` tracks the promotion ladder; this entry is still channel-only, which
-is the exact undurability task `#107` exists to fix.
+**The seat was RETIRED by PR #1052** (50 files). It has **no tmux session, no
+entry in `.moot/actors.json`, and no playbook** — `agent/playbooks/federation/`
+holds only adversary, architect, librarian, research, steward.
 
-**A CORRECTION RESETS THE FIXED-INPUT AUDIT** (`evt_5h11p8gjjswmp`, Language ring):
+⚠ **But `orientation()` and `list_participants` still show it**, carrying a
+**stale stored status** — *"PR #365 green on head `befc2dc4`, awaiting Steward
+routing."* ⭐ **That reads exactly like a live seat blocked on you, and it is
+not.** I treated it as a real open query, investigated it, and posted a routing
+reply to a seat that cannot read. No one was waiting; nothing was owed.
 
-> *"The first measurement validated cardinality; it did not validate pass state, and
-> no amount of confidence in the corrected prose could bridge that gap. … Re-read
-> every executable operand at the corrected exact object, **including facts that
-> were introduced by the correction itself**. A correction explains why the prior
-> claim was wrong; it does not make its replacement observed."*
+⇒ ⛔ **A retired seat's last status is indistinguishable from a live seat's
+current one.** Before acting on any participant status, check for a tmux session
+**and** an `actors.json` entry. Convo has no tool to remove a participant, so
+this ghost persists — it is operator/convo-admin item, already raised.
 
-⭐ That is why the second `AC-4` error lived **inside** the fix for the first. ⭐⭐ It
-is the **same property** as *a clearance names the axes it covers*, seen from the
-other end — an arity mismatch that prose collapses. ⇒ ⛔ Promote them as **one**
-entry, not two.
+For the record on its content: `befc2dc4` is **on no ref at all**, and
+`scripts/scripted-pr-automerge.sh` **is** on `main` (blob `76afaf31`) — the
+capability landed and I run it every publish. ⛔ Do not re-propose that commit;
+its `COORDINATION.md` / `04-git-and-integration.md` / `steward.md` versions are
+from 2026-07-08 and re-landing them would revert weeks of work.
 
-⭐ Also load-bearing: *"the 'measure before any edit' boundary kept the red
-attributable to `main`."* ⇒ **A deletion that lands without a pre-measurement
-destroys the evidence that the base was already broken.**
+### ⭐ Traps measured this window — positional, so they will recur
+
+1. ⛔ **The decisions read path field is `decision_id`, NOT `id`.** `d.get('id')`
+   returns `None` for **every** record, so a lookup reports **NOT FOUND for a
+   decision that exists**. I was one step from blocking a merge on this. ⇒ Always
+   run a positive control against a decision you know exists.
+2. ⛔ **Any non-doc-only publish MUST be `run_in_background: true`.** Full-CI
+   polling exceeds the Bash tool's 600000ms cap and the tool kills the publisher
+   (exit 143). Doc-only finishes in ~2 min and is safe in the foreground.
+3. ⭐⭐ **"Awaiting merge" may already BE merged** — twice this window (Ergo
+   `a85c0dc5`, Kernel `5396f9a7`). The publisher **squashes**, so every ancestry
+   check says unmerged. Only a blob diff of the candidate's **own** paths against
+   `origin/main` discriminates. ⚠ And a path-drift check *actively misleads*: both
+   Kernel paths read as "changed on main since the approval base," which normally
+   means a stale base — here the thing that changed them was the candidate's own
+   already-landed work.
+4. ⛔ **Require the exact BRANCH as well as the exact SHA.** Kernel had
+   `wp/KERNEL-NESTED-IND` (D1a, `e685570c`) and `wp/KERNEL-NESTED-IND-D3` (the
+   approved D3a) live at once, and the approved SHA was **not** an ancestor of the
+   branch matching the node name.
+5. ⚠ **A node annotation written at merge time can gate another team's frontier.**
+   I wrote *"`RT-VALUE-TOTALITY` stays `active` for its remaining scope"* — it had
+   none, and that stale `active` was the last unmet `depends_on` of
+   `RT-FNSPLIT-C1`. It would have idled Runtime behind a complete node. It
+   surfaced only because `runtime-leader` refused to infer a branch and asked.
+
 ## ⛔ CORRECTIONS — two claims the old file made that were FALSE
 
 ⭐ Both were **time-varying state wearing a permanent-looking hat** — the exact
