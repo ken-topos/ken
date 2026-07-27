@@ -1,7 +1,7 @@
 ---
 id: SPEC-31-WIDTH-ERRATUM
 title: "spec 31-lexical mandates a 96-column canonical width while the formatting conformance suite asserts 88 in 18 places and cites 31 §1d as its source — rule the exact value and reconcile"
-status: ready
+status: active
 owner: spec
 size: S
 gate: none
@@ -94,11 +94,14 @@ flat and the `97` arm breaks.** A pair where both arms break, or both stay flat,
 is not a boundary pin. ⛔ `18` occurrences changed is not evidence; a passing
 discriminating pair is.
 
-## Sequencing
+## Sequencing — ✅ PRECONDITION DISCHARGED, RELEASED 2026-07-27
 
-⛔ **Not concurrent with `SPEC-ALIGN-A1`** — same ring (spec enclave), and A1 is
-live. This releases when A1 closes. ⚠ A1 is forbidden from touching it: A1 may
-not move a conformance row, which is why this was carved out in the first place.
+⛔ **Not concurrent with `SPEC-ALIGN-A1`** — same ring (spec enclave). ✅ **A1 is
+`merged`** (PR #1028, `origin/main = 4c2d9529`, verified on `main`), so the
+condition *"releases when A1 closes"* is met and **this node is released to the
+spec enclave** — kickoff `evt_629qvns1n7j7d`, at `origin/main = a1e29284`.
+⚠ A1 was forbidden from touching it: A1 may not move a conformance row, which is
+why this was carved out in the first place.
 
 ## Scope
 
