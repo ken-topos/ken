@@ -40,7 +40,8 @@ The `budget_eff_*` oracle family in `crates/ken-interp/src/eval.rs`:
 | capped-**full** write | ✅ `:6629` | ✅ `effects.rs:453` |
 | capped-**short** write | ⛔ **ABSENT** | ✅ `effects.rs:453` |
 
-Native's `budget_eff_native_wrote_capped_full_and_short_reify_effective_not_raw_remaining`
+Native's test
+`budget_eff_native_wrote_capped_full_and_short_reify_effective_not_raw_remaining`
 asserts both write cells in one test, the short one being
 `raw 8 / effective 4 / count 2 -> remaining 2`, labelled in-source
 *"NOT 6 == raw 8 - count 2, the pre-fix defect this WP closes."*
@@ -60,8 +61,34 @@ asserts both write cells in one test, the short one being
 
 That reasoning was applied to the read pair and **not** to the write pair.
 The wrong shortcut on the write side is the same one: the reifier arm at
-`eval.rs:4981-4997` is green under capped-full because both formulae yield
-`remaining == 0`.
+**`eval.rs:5316-5326`** is green under capped-full because both formulae yield
+`remaining == 0`. The operand is `:5322`:
+
+```rust
+let count = transferred.get();
+let effective = transferred.effective_request();   // :5322 — the operand
+let remaining = buffer_nat_value(effective.checked_sub(count)…)?;  // :5324
+```
+
+> ### ⛔ LOCATOR CORRECTED 2026-07-27 — this frame cited `eval.rs:4981-4997`
+>
+> **That range is wrong and it was wrong when written.** `:4981-4997` is the
+> `FsReadAt` / `PrivateFsWriteAt` **request-argument narrowing** block
+> (`narrow_host_u64` on offset/start/length) — it does not compute `effective`
+> at all, so `effective := count` is not expressible there. Re-measured at
+> `origin/main = 5fbbc67e`, where the `eval.rs` blob is **unchanged** from the
+> `12a5ef4f` this frame was pinned at ⇒ ⛔ not drift, an authoring error.
+>
+> ### ⭐⭐ And the correction matters more than a line number
+>
+> **`:5303` is the `ReadSome` arm and carries a byte-identical expression** —
+> `let effective = transferred.effective_request();`. ⇒ A ring that mutates
+> "the `effective` computation" and sees red may have hit the **read** arm and
+> reddened the **pre-existing** read tests (`:6469`, `:6554`), concluding
+> `AC-1` discharged while the new write test never discriminated anything.
+>
+> ⛔ **The mutation must be on the `Wrote` arm at `:5322`, and the redden must
+> be attributed by test name.** See `AC-1`.
 
 ⚠ **The source formula is presently right.** This is an *evidence* gap, not a
 behavior gap — the Architect's clause-(a) verdict (`evt_163mfgjs7fkh8`)
@@ -161,12 +188,19 @@ to something the coincidental shape can satisfy. Route it to me under `§8`.
 ## 6. Acceptance criteria
 
 - **`AC-1`** ⭐ **(load-bearing)** — the new test **discriminates**. **Control:**
-  mutate the reifier arm at `eval.rs:4981-4997` to the wrong shortcut
-  (`effective := count`, or `remaining := requested - count`), show the new
+  mutate the **`Wrote`** reifier arm at **`eval.rs:5322`** to the wrong shortcut
+  (`let effective = count;`, or `remaining := requested - count`), show the new
   test **reddens**, and restore byte-identically. ⛔ A test that stays green
   under that mutation has measured nothing and does not discharge clause (a).
   ⚠ Confirm the redden is **your** test and not a build break — report the
   failing test name from the run output, not the exit code.
+  ⛔⛔ **And confirm you mutated the WRITE arm.** `:5303` is the `ReadSome` arm
+  and carries the **identical** expression; mutating it reddens the
+  pre-existing read tests (`:6469`, `:6554`) and says **nothing** about your
+  new write test. **Control:** name the failing test, and report that the
+  capped-short *read* test at `:6554` is **unaffected** by your mutation.
+  ⭐ A redden you cannot attribute to a named test is not evidence about your
+  detector.
 
 - **`AC-2`** — the capped-**full** write test, unmodified, **stays green**
   under the same mutation is **not** required and must not be claimed. ⭐ It is
