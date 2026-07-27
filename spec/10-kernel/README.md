@@ -121,7 +121,7 @@ tests encode — are in §6.
 | `11-syntax.md` | Core grammar: terms, de Bruijn indices, telescopes, contexts, the global environment | **K1** |
 | `12-universes.md` | Universe hierarchy, predicativity, checking, level polymorphism; Ω stub (K1) | **K1** (Ω fully in K2) |
 | `13-pi-sigma.md` | Π and Σ: formation, intro, elim, computation, η; K1 conversion + subject reduction | **K1** |
-| `14-inductive.md` | Inductive families, constructors, dependent eliminator, strict positivity, ι-reduction | **K1** |
+| `14-inductive.md` | Inductive families, constructors, dependent eliminator, strict positivity, ι-reduction | **K1/K1.5** + nested-positive extension |
 | `15-identity.md` | Identity as observational `Eq`; `refl`; `cast`; `J` and its computation; funext/UIP | **K2** |
 | `16-observational.md` | The strict-prop Ω, `Eq`-by-type, `cast`, quotient types, propositional truncation | **K2** |
 | `17-conversion.md` | Full definitional equality, NbE, decidable conversion, β/η/δ/ι, regularity, SCT termination | K2c |
@@ -161,6 +161,7 @@ must also satisfy:
 | 17 | **Consistency.** There is no closed proof of the empty type `⊥`; the logic is not degenerate. | K2 | A documented argument; the positivity + predicativity + termination architecture is designed to support a future mechanized proof. |
 | 18 | **SCT termination gate.** Every transparent definition is admitted only if a size-change-termination check certifies it (`17 §4`): a lexicographic and a mutually-recursive def are admitted; a non-terminating def is **rejected** at admission. The kernel never admits uncertified transparent recursion. | K2c | `17 §4`; `conversion/sct-accept-*`, `conversion/sct-reject-*` |
 | 19 | **Operational decidability (termination).** `convert` — and hence `check`/`infer` — is **total**: it halts with yes/no on every well-typed input. SCT-bounded δ (#18) + strong normalization of the core reductions give termination (`17 §5`); the kernel never loops or panics on raw-well-formed input. | K2c | `17 §5`; `conversion/delta-termination`, `conversion/decidable-halts` |
+| 20 | **Nested strictly-positive induction.** A nested occurrence is admitted only through checked strictly-positive parameter positions; unknown/non-positive positions reject. The dependent eliminator supplies one structurally lifted IH per contained occurrence and nested ι computes on the contained children. Mutual families remain deferred. | `KERNEL-NESTED-IND` | `14 §3.2`/`§7.8`/`§8.5`/`§9.5`; positive computation/proof, nested-negative, unknown/non-positive, and unchanged direct/W-style controls |
 
 Where a commitment is currently an argument rather than a mechanized proof,
 `18-judgments.md §Metatheory` says so explicitly.

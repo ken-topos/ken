@@ -11,7 +11,11 @@ on all inputs. Two mechanisms, both at admission time (`../10-kernel/`):
 
 - **Structural recursion via eliminators** (`../10-kernel/14 §3`) — `match`/
   recursion over inductives compiles to `elim_D`, which recurses only on
-  structurally smaller sub-values; always terminating, no extra check.
+  structurally smaller sub-values. For nested inductives, the generated lifted
+  IH follows only declared strictly-positive parameter paths and supplies the
+  recursive result at each contained child (`14 §3.2`, `§9.5`); consuming that
+  IH is structural recursion, not an SCT-certified self-call. Both direct and
+  nested cases are always terminating with no extra check.
 - **General recursion gated by SCT** (`../10-kernel/17 §4`) — δ-definitions that
   are not plainly structural are admitted only if the **size-change
   termination** check certifies every loop has a decreasing thread. Uncertified

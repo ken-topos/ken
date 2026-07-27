@@ -183,8 +183,9 @@ Notes.
   run with δ **deferred** so heads can be compared before unfolding; δ fires
   only on the `conv` retry path of §3.5. This split is the whole point of "lazy
   δ" and is detailed in §3.5.
-- **Termination.** Every branch except `Const`/`Let` strictly shrinks the term
-  (β/Σ-β/ι/prim contract it; obs descends on the type, `16 §3.3`). `Let` is
+- **Termination.** β/Σ-β/prim contract the term; ι follows the finite
+  structural measures of `14 §9` (including Π-bound and nested lifted
+  recursive content); and obs descends on the type (`16 §3.3`). `Let` is
   non-recursive (a `let` binds a value, no self-reference). The `Const` branch
   is the only source of unbounded unfolding — post-K2c δ **is** cyclic
   (recursive transparent defs), and it is exactly what the **SCT gate (§4)**
@@ -641,9 +642,11 @@ loop of §3.2:
 
 1. **The core reductions are strongly normalizing.** β/Σ-β/ι/η/prim and the
    observational `Eq`/`cast` reductions terminate on well-typed terms:
-   β/Σ-β/ι/prim strictly contract the term, and the `Eq`/`cast` mutual recursion
-   descends on the *type* being traversed, which is a finite tree (`16 §3.3`).
-   None of these can diverge.
+   β/Σ-β/η/prim strictly contract the term; ι follows the finite structural
+   measures for direct, Π-bound, and nested lifted recursive content
+   (`14 §9.2`, `§9.4`, `§9.5`); and the `Eq`/`cast` mutual recursion descends on
+   the *type* being traversed, which is a finite tree (`16 §3.3`). None of these
+   can diverge.
 
 2. **δ-unfolding is SCT-bounded.** The single branch of §3.2 that can grow a
    term is `Const(c)` unfolding. Every transparent `c` in `env` passed the **SCT

@@ -7,23 +7,28 @@
 > declaration lowers to a genuine inductive type with real constructors and a
 > real eliminator, never an opaque base.
 >
-> **No new kernel rule.** Everything here lowers to the **landed** kernel: a
-> `data` decl elaborates to a kernel inductive family + its generated `elim_D`
-> (`../10-kernel/14`, K1 and **K1.5**); `match` elaborates to `elim_D`
+> **No new kernel rule for the landed L2 surface.** Its direct and Π-bound forms
+> lower to the **landed** kernel: a `data` decl elaborates to a kernel inductive
+> family + its generated `elim_D` (`../10-kernel/14`, K1 and **K1.5**); `match`
+> elaborates to `elim_D`
 > (`39 §2.6`); a refinement `{x:A|φ}` elaborates to its **carrier `A` plus an
 > emitted obligation** (`../20-verification/21 §2`, `22 §2.1`), never a kernel
 > type former. The elaborator and the exhaustiveness/reachability checker are
 > **untrusted** (`39 §1`): a bug yields a rejected valid program or a poor
 > diagnostic, **never** an unsound acceptance — the kernel re-checks the emitted
-> `elim_D` (`§4.4`).
+> `elim_D` (`§4.4`). The nested-positive extension named below is separately
+> staged on `KERNEL-NESTED-IND`; it does not claim that kernel support has
+> landed.
 >
 > **Perishable — pin against the landed kernel, not this prose.** K1.5 has
 > landed: the K1-era blanket rejection of Π-bound recursion
 > (`check_no_pi_bound_recursive`) is **retired**, and `check_positivity` is the
 > sole structural admission gate (`../10-kernel/14 §8.4`;
 > `ken-kernel/src/inductive.rs`). W-style `(b:B) → D` recursive constructor
-> arguments are **admitted**. Verify against the on-`main` `14`/kernel before
-> building.
+> arguments are **admitted**. Nested recursion through declared
+> strictly-positive parameter positions is specified by `14 §8.5` and remains
+> gated on `KERNEL-NESTED-IND`; the current kernel rejects that class
+> fail-closed. Verify against the on-`main` `14`/kernel before building.
 
 ## 1. Sum types (real, not stubbed)
 
@@ -47,10 +52,11 @@ be built **and** taken apart, and the eliminator reduces.
   surface `C A B` form and the record form `C { f : A, g : B }` both elaborate
   to a constructor telescope `(Δₖ) → D Δ_p t̄ₖ` (`14 §1`).
 - **Recursive constructors** are admitted **subject to strict positivity** (`14
-  §2`, `§8`): a recursive occurrence of `D` may appear only as the *target* of a
-  (possibly dependent) function type, never to the left of an arrow. The
-  elaborator emits the declaration; the **kernel** runs `check_positivity` and
-  rejects negative or nested occurrences (`14 §8.3`/`§8.5`). The elaborator does
+  §2`, `§8`): a recursive occurrence of `D` may appear only at positive
+  polarisation—directly, as a function target, or through declared
+  strictly-positive parameter positions—never to the left of an arrow or
+  through an unknown/non-positive parameter. The elaborator emits the
+  declaration; the **kernel** runs `check_positivity`. The elaborator does
   **not** re-implement positivity — it is a kernel admission gate (`§4.4`, the
   trust boundary).
 - **`Result`, `Option`** are ordinary prelude `data` decls (`../50-stdlib/`):
@@ -84,16 +90,16 @@ be built **and** taken apart, and the eliminator reduces.
   comment leaves explicitly open for the Architect to take up, not a
   decision this WP makes.
 
-**What the elaborator builds vs. what the kernel admits (the K1/K1.5 line).**
+**What the elaborator builds vs. what the kernel admits (the staged line).**
 The elaborator lowers a `data` decl to a kernel `InductiveDecl` and relies on
 the kernel's admission gates. Non-recursive and **direct-recursive**
 (`A → List A → List A`) constructors are K1. **W-style** (Π-bound) recursive
 arguments — `(b:B) → D`, the branching shape of `W` and L5's `ITree` — are
-**K1.5** and now admitted (`14 §2.1`, landed). **Nested** (`List (Rose A)`) and
-**mutual** families remain rejected by the on-`main` kernel (`14 §8.5`); a
-`data` decl that needs them is a compile error citing the unadmitted shape, not
-a silent lowering — declare the stage dependency, do not present it as
-satisfied.
+**K1.5** and now admitted (`14 §2.1`, landed). **Nested strictly-positive**
+recursion is specified in `14 §8.5` but remains implementation-gated on
+`KERNEL-NESTED-IND`; until that node lands, a declaration needing it is a
+fail-closed compile error, not a silent lowering. **Mutual** families remain a
+separately deferred extension (`14 §8.6`).
 
 ## 2. Indexed families and dependent constructors (GADT-like)
 
@@ -183,9 +189,9 @@ definitionally-equal class permits harmless aliases or reducible notation, but
 it does **not** permit a different family head, changed parameters, an
 undersaturated/oversaturated target, or a non-family result. Such a declaration
 is rejected as a bad constructor result target before or while forming the
-kernel inductive declaration. Strict positivity, nested/mutual rejection, and
-W-style admission remain exactly the kernel admission rules of `14`; the
-surface does not re-open them.
+kernel inductive declaration. Strict positivity, nested structural admission,
+mutual rejection, and W-style admission remain exactly the kernel rules of
+`14`; the surface does not re-open them.
 
 Examples:
 
@@ -269,6 +275,19 @@ patterns. Specifically:
 - **As-patterns** `p as x` bind `x` to the whole scrutinee in `p`'s scope;
   **or-patterns** `p | q` duplicate the residual arm under both (requiring
   identical binder sets, `32 §4`).
+
+**Nested recursive fields.** When a constructor field contains recursive values
+through a declared strictly-positive parameter path, its method type includes
+the lifted IH of `14 §3.2`. The source arm still binds the field written by the
+program. When a nested match deconstructs that field, its branch context
+deconstructs the lift in lockstep: every pattern-bound recursive child receives
+the corresponding motive instance, and every pattern-bound enclosing child
+retains the residual lift for its contained occurrences. A recursive theorem or
+computation over the field consumes those generated hypotheses. Re-emitting an
+unrestricted self-call, discarding the lift, or admitting the declaration
+without this branch context is not a valid lowering. This surface path remains
+gated on `KERNEL-NESTED-IND` until the kernel can generate and check the lifted
+method type and its ι.
 
 ### 3.2 Dependent-motive recovery
 

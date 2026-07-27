@@ -283,13 +283,14 @@ slowing Z3 — so it is reserved for FO; D uses direct/decision (§3).
   - **⇒/∀-intro** → move the antecedent / binder into `Γ`, discharge the body;
     certificate is the `λ`.
   - **induction over an inductive family** → **one subgoal per constructor**,
-    and each recursive-field subgoal carries the **induction hypothesis** — the
-    motive instance `M zᵢ` — in its `Γ`, exactly the body-as-motive structure V2
-    builds at extraction (`22 §4`); here the *tactic* synthesizes it. A single
-    goal over the whole inductive structure carries **no IH** and cannot be
-    discharged — the descent is **required, not an optimization**. The cert is
-    the eliminator application `elim_D M methods… z` whose methods are the
-    per-constructor sub-certificates (`14 §3`).
+    and each recursive-field subgoal carries the **induction hypothesis** — a
+    direct motive instance `M zᵢ`, a Π-abstracted instance, or the structurally
+    lifted instances for nested content (`14 §3`–`§3.2`) — in its `Γ`, exactly
+    the body-as-motive structure V2 builds at extraction (`22 §4`); here the
+    *tactic* synthesizes it. A single goal over the whole inductive structure
+    carries **no IH** and cannot be discharged — the descent is **required, not
+    an optimization**. The cert is the eliminator application `elim_D M methods…
+    z` whose methods are the per-constructor sub-certificates (`14 §3`).
 
   The composed certificate is **one core term**, `check`ed once at the top goal
   (`18 §4.5`); a sub-certificate the prover cannot build leaves a **typed hole

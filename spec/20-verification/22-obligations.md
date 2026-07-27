@@ -106,7 +106,8 @@ it is *not* a single obligation over a branchy body. The result type is the
 - a **branchy** body (an eliminator — `match`/`if`/recursion) **splits per
   branch** via the motive (§4, `39 §2.6`): each branch leaf `bₖ` emits
   `Γ, Γₖ ⊢ ψ[bₖ/result]` under that branch's path hypotheses (§3: scrutinee/bool
-  equation, plus the **induction hypothesis** for a recursive branch).
+  equation, plus the direct, Π-abstracted, or structurally lifted **induction
+  hypotheses** for a recursive branch, `14 §3`/`§3.1`/`§3.2`).
 
 Splitting is **required**, not an optimization: a recursive function's
 postcondition is only provable *by induction*, which is exactly the
@@ -230,12 +231,14 @@ it **reads the eliminator the elaborator already built**:
   the recursed argument — `M z = {r : B z | ψ}` for an `ensures ψ` over a
   scrutinee `z`.
 - The kernel's **dependent** eliminator gives each constructor method the
-  **induction hypothesis** as a parameter: in the `cₖ` method, every recursive
-  field `zᵢ` carries `M zᵢ` (the motive already established for the
-  sub-structure). V2 adds these `M zᵢ` to `Γ` (§3) — so the obligation for the
-  `suc n` / `cons x xs` branch is discharged with "the postcondition holds for
-  the recursive call" in scope. This is precisely structural induction, surfaced
-  automatically.
+  **induction hypothesis** as a parameter: in the `cₖ` method, every direct
+  recursive field `zᵢ` carries `M zᵢ` (the motive already established for the
+  sub-structure), while a field with nested recursive content carries the
+  structurally lifted hypotheses `Lift_D(M, Aᵢ, zᵢ)` (`14 §3.2`). V2 adds the
+  direct or lifted motive instances to `Γ` (§3) — so the obligation for a direct
+  branch, or for every contained child of a nested branch, has "the
+  postcondition holds for the recursive call" in scope. This is precisely
+  structural induction, surfaced automatically.
 - **Non-recursive** functions are the degenerate motive (no recursive fields ⇒
   no induction hypotheses); the same machinery covers both — the extractor does
   not special-case recursion.
@@ -243,9 +246,9 @@ it **reads the eliminator the elaborator already built**:
 So "prove this recursive function meets its spec" becomes "discharge the
 per-constructor obligations, each with the recursive call's spec as a
 hypothesis" — generated mechanically, no manual induction principle stated by
-the user. (The eliminator's own totality is the kernel's concern — strict
-positivity / W-style / SCT, `14 §8`/`17 §4`; V2 consumes a well-formed
-eliminator, it does not re-check termination.)
+the user. (The eliminator's own totality is the kernel's concern — direct,
+Π-bound, and nested structural positivity plus SCT, `14 §8`/`17 §4`; V2
+consumes a well-formed eliminator, it does not re-check termination.)
 
 ## 5. The extraction algorithm
 
@@ -291,7 +294,7 @@ extract(Γ, term, expectedTy) → ObligationSet:        -- Γ: hypotheses; term:
         for (cₖ, branchₖ) ∈ methods:
            Γₖ := Γ ⊕ fields(cₖ)
                    ⊕ (_ : Eq A scrut (cₖ fields(cₖ)))            -- §3 scrutinee equation
-                   ⊕ { (_ : M zᵢ) | zᵢ ∈ recursiveFields(cₖ) }  -- §4 induction hypotheses
+                   ⊕ inductionHypotheses(M, cₖ, fields(cₖ))     -- §4 direct, Π-abstracted, or nested lifted
            obls ∪= extract(Γₖ, branchₖ, M (cₖ fields(cₖ)))      -- the refined motive carries the postcondition into each branch
   If(c, thn, els):                                               -- §3 conditional (elim_Bool)
         obls ∪= extract(Γ ⊕ (_ : Eq Bool c true),  thn, expectedTy)
@@ -375,9 +378,10 @@ reconciled against `12`/`16 §1.1`:
 - **Hypotheses are at their natural levels.** A `Γ`-entry is either a **data**
   binder (`x : A : Type ℓ`), a **proof** assumption (`_ : φ : Ω_ℓ`), or a
   **path equation** (`_ : Eq A s t : Ω_ℓ`, `16 §2.1`: `Eq` over `A : Type ℓ`
-  lands in `Ω_ℓ`). The induction hypotheses (§4) are motive instances `M zᵢ`,
-  themselves refined types whose proposition component is in Ω. No `Γ`-entry
-  introduces a new universe.
+  lands in `Ω_ℓ`). The induction hypotheses (§4) are direct, Π-abstracted, or
+  structurally lifted motive instances (`14 §3`–`§3.2`), themselves refined
+  types whose proposition component is in Ω. No `Γ`-entry introduces a new
+  universe.
 - **No new universes or formers.** V2 introduces none — it reuses Ω (`16 §1`),
   `Eq` (`16 §2`), and the kernel eliminator (`14 §3`). Consistent with `12`'s
   predicative, non-cumulative regime; nothing here can bump a level.
