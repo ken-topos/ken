@@ -5,7 +5,7 @@
 //! postulates for predicates (NonNeg, Equal, etc.) declared via
 //! `declare_postulate_raw`.
 
-use ken_elaborator::{ElabEnv, ElabError};
+use ken_elaborator::{ElabEnv, ElabError, Span};
 use ken_kernel::{Context, Level, Term};
 
 // ----- test helpers -----
@@ -202,22 +202,53 @@ fn result_out_of_ensures_rejects() {
 // B. `old`-capture scope guard
 // ======================================================================
 
-/// verify/spec-syntax/old-resolves-in-space-op-ensures
+/// verify/spec-syntax/old-fails-closed-without-pre-state
 ///
-/// In a `space view`, `old(n)` in ensures is accepted (scope guard passes).
+/// Shape B: an ordinary space-operation `ensures` still emits an obligation,
+/// while either elaboration route for `old` rejects specifically because no
+/// pre-state binding exists.
 #[test]
-fn old_resolves_in_space_op_ensures() {
+fn old_fails_closed_while_ordinary_space_ensures_remains_live() {
     let mut env = mk_env();
     decl_nat_rel(&mut env, "Equal");
 
-    // space view: old(n) is in scope in ensures
-    let res = env
-        .elaborate_decl_v1(
-            "space proc inc (n : Nat) : Nat ensures Equal n (old n) = n",
-        )
-        .expect("old in space-op ensures should resolve");
-    // Obligation is emitted
-    assert_eq!(res.obligations.len(), 1, "space-op ensures emits obligation");
+    let ordinary = env
+        .elaborate_decl_v1("space proc keep (n : Nat) : Nat ensures Equal n n = n")
+        .expect("ordinary space-operation ensures must remain supported");
+    assert_eq!(
+        ordinary.obligations.len(),
+        1,
+        "ordinary space-operation ensures must still emit one obligation"
+    );
+
+    // Nested `old` is elaborated through the checking arm.
+    let checked_old = env
+        .elaborate_decl_v1("space proc inc (n : Nat) : Nat ensures Equal n (old n) = n")
+        .expect_err("old must fail closed when no pre-state binding exists");
+    assert!(
+        matches!(
+            checked_old,
+            ElabError::OldPreStateUnsupported {
+                span: Span { start, end }
+            } if start < end
+        ),
+        "nested old must preserve a non-empty source span in its specific diagnostic"
+    );
+
+    // Proposition-root `old` is elaborated through the inference arm. Keeping
+    // this second route explicit prevents one transparent arm from surviving.
+    let inferred_old = env
+        .elaborate_decl_v1("space proc root (n : Nat) : Nat ensures old (Equal n n) = n")
+        .expect_err("root old must fail closed when no pre-state binding exists");
+    assert!(
+        matches!(
+            inferred_old,
+            ElabError::OldPreStateUnsupported {
+                span: Span { start, end }
+            } if start < end
+        ),
+        "root old must preserve a non-empty source span in its specific diagnostic"
+    );
 }
 
 /// verify/spec-syntax/old-out-of-scope-rejects  (soundness)
@@ -231,9 +262,11 @@ fn old_out_of_scope_rejects() {
     let result = env
         .elaborate_decl_v1("fn k (n : Nat) : Nat ensures Equal n (old n) = n");
     assert!(
-        result.is_err(),
-        "old in pure const ensures must be rejected, got {:?}",
-        result.ok()
+        matches!(
+            result,
+            Err(ElabError::UnboundName { name, .. }) if name == "old"
+        ),
+        "old in pure fn ensures must remain an exact UnboundName(old) rejection"
     );
 }
 

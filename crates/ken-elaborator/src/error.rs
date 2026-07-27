@@ -50,6 +50,9 @@ pub enum ElabError {
     MissingCapability { effect: String, span: Span },
     /// An unresolved name at the name-resolution stage (`39 §5.3`).
     UnboundName { name: String, span: Span },
+    /// `old` reached elaboration in a space-operation `ensures`, but the
+    /// reachable surface has no pre-state binding yet (`36 §4.3`).
+    OldPreStateUnsupported { span: Span },
     /// A `ConId` with no global declaration.
     UnresolvedCon { name: String, span: Span },
     /// A second top-level definition of a name already defined in the same
@@ -194,6 +197,12 @@ impl fmt::Display for ElabError {
             ElabError::UnboundName { name, span } => {
                 write!(f, "unbound name '{}' at {}-{}", name, span.start, span.end)
             }
+            ElabError::OldPreStateUnsupported { span } => write!(
+                f,
+                "`old` in a space-operation ensures is not yet supported: \
+                 no pre-state binding is available at {}-{}",
+                span.start, span.end,
+            ),
             ElabError::UnresolvedCon { name, span } => {
                 write!(f, "unresolved type '{}' at {}-{}", name, span.start, span.end)
             }

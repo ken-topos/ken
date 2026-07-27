@@ -1,4 +1,4 @@
-//! LET-5 — checking-mode propagation through local `let` and `old`.
+//! LET-5 — checking-mode propagation through local `let`.
 
 use ken_elaborator::ElabEnv;
 use ken_kernel::Term;
@@ -72,11 +72,16 @@ fn grouped_let_preserves_checked_body_goal() {
 }
 
 #[test]
-fn old_transparently_preserves_its_child_goal() {
+fn old_in_checked_position_fails_closed_without_prestate() {
     let mut env = ElabEnv::new().expect("base environment");
-    env.elaborate_decl_v1(
-        "space proc old_checked (n : Nat) : Nat \
-         ensures Equal (Nat → Nat) (old (λx. x)) (λx. x) = n",
-    )
-    .expect("old must pass the function goal through to its transparent child");
+    let error = env
+        .elaborate_decl_v1(
+            "space proc old_checked (n : Nat) : Nat \
+             ensures Equal (Nat → Nat) (old (λx. x)) (λx. x) = n",
+        )
+        .expect_err("old must fail closed when no pre-state binding exists");
+    assert!(matches!(
+        error,
+        ken_elaborator::error::ElabError::OldPreStateUnsupported { .. }
+    ));
 }

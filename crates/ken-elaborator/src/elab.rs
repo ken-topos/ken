@@ -609,9 +609,12 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
                 body: Box::new(body_core),
             })
         }
-        // `old` is transparent in the V1 model, so checking must preserve the
-        // goal for checked-only children such as `Refl` and `Axiom`.
-        RExpr::ROld(inner, span) => check(cx, inner, expected, span),
+        // The reachable `space proc` surface has no cell environment or
+        // pre-state binding. Refuse `old` rather than silently elaborating it
+        // as the post-state expression (`36 §4.3`).
+        RExpr::ROld(_, span) => Err(ElabError::OldPreStateUnsupported {
+            span: span.clone(),
+        }),
         // `match` against a KNOWN expected type: build the motive from the
         // ascribed goal (`λd. expected[d/scrut]`), not inferred from the
         // first arm's body (ES4-lawproofs AC4). This is what lets a
@@ -2193,10 +2196,11 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
             ))
         }
 
-        // `old e` in a space-op ensures (`21 §6.4`).
-        // Simplified V1 model: elaborates to the same term as `e` (the pre-state
-        // value shares the type of `e`; full state-transformer semantics is V3+).
-        RExpr::ROld(e, _) => infer(cx, e),
+        // `old` cannot be assigned a sound core term until the space-operation
+        // elaboration context names its pre-state (`36 §4.3`).
+        RExpr::ROld(_, span) => Err(ElabError::OldPreStateUnsupported {
+            span: span.clone(),
+        }),
 
         RExpr::RNumLit(lit, span) => elab_num_lit_infer(cx, lit, span),
 
