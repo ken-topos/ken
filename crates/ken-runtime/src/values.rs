@@ -44,6 +44,89 @@ use std::collections::BTreeSet;
 /// identity to keep in step — and comparison is **depth-total** because the
 /// bytes come from P1's iterative encoder and comparing a flat `Vec<u8>`
 /// recurses not at all (`AC-V12`).
+///
+/// # `AC-V4` — the forbidden capabilities are UNREACHABLE on this carrier
+///
+/// ⭐ **The claim is *reachability*, not the absence of a caller today**, so
+/// every control below must fail to **compile**. ⭐ And each pins the **trait
+/// implementation** rather than one operator spelling: a bound check
+/// `fn requires_eq<T: PartialEq>` cannot be evaded by writing `a.eq(b)`,
+/// `PartialEq::eq(a, b)`, or an inherent method, because the only way to make
+/// it compile is to supply the impl — which *is* the forbidden capability.
+///
+/// ⛔ **The `EXXXX` codes below are DOCUMENTATION, not a check — measured, not
+/// assumed.** Rewriting one block's `compile_fail,E0277` to `compile_fail,E0308`
+/// — a code that block cannot possibly produce — left the doc-test **green**,
+/// so rustdoc is not binding the annotation on this toolchain. They are kept
+/// because they tell a reader which error is expected, and flagged here because
+/// a fence that *looks* like a pin and is not one is worse than no fence.
+///
+/// ⇒ **MEASURED:** each block fails to compile, for some reason.
+/// **CLAIMED:** it fails *because the trait impl is absent*.
+/// **THE GAP:** closed by the **sibling**, not by the code annotation — the
+/// sibling shares every import, helper and constructor, so a malformed fixture
+/// reddens *it* instead of silently greening the negatives. The `Value::Closure`
+/// block additionally has a direct non-vacuity control: substituting a variant
+/// that *does* exist makes it compile, and the doc-test then fails.
+///
+/// ⛔ **An ordinary closure cannot even be NAMED here (`D1`)** — the variant
+/// does not exist, so there is no value for a comparison to be about:
+///
+/// ```compile_fail,E0599
+/// use ken_runtime::Value;
+/// let _closure = Value::Closure { captured: vec![Value::Bool(true)] };
+/// ```
+///
+/// **No structural equality (`D3`):**
+///
+/// ```compile_fail,E0277
+/// use ken_runtime::Value;
+/// fn requires_eq<T: PartialEq>(_: &T) {}
+/// let v = Value::Record { type_id: 1, fields: vec![Value::Bool(true)] };
+/// requires_eq(&v);
+/// ```
+///
+/// **No ordering (`D3`):**
+///
+/// ```compile_fail,E0277
+/// use ken_runtime::Value;
+/// fn requires_ord<T: Ord>(_: &T) {}
+/// let v = Value::Record { type_id: 1, fields: vec![Value::Bool(true)] };
+/// requires_ord(&v);
+/// ```
+///
+/// **No canonical hash (`D3`):**
+///
+/// ```compile_fail,E0277
+/// use ken_runtime::Value;
+/// fn requires_hash<T: std::hash::Hash>(_: &T) {}
+/// let v = Value::Record { type_id: 1, fields: vec![Value::Bool(true)] };
+/// requires_hash(&v);
+/// ```
+///
+/// ⭐ **The sibling that MUST compile — without it, every block above is green
+/// whether it failed for the stated reason or because the fixture was
+/// malformed.** ⛔ A `compile_fail` block passes for *any* compilation error,
+/// including a mistyped path or a missing import, so a negative-only set of
+/// controls establishes nothing. This block has the same imports and the same
+/// construction; the only difference is that the subject of each bound check is
+/// the sealed witness. It also **runs**, so the capability is shown to be
+/// genuinely available rather than merely well-typed:
+///
+/// ```
+/// use ken_runtime::Value;
+/// use ken_runtime::canonical::CanonicalWitness;
+/// fn requires_eq<T: PartialEq>(_: &T) {}
+/// fn requires_ord<T: Ord>(_: &T) {}
+/// fn requires_hash<T: std::hash::Hash>(_: &T) {}
+/// let v = Value::Record { type_id: 1, fields: vec![Value::Bool(true)] };
+/// let w = CanonicalWitness::of(&v);
+/// requires_eq(&w);
+/// requires_ord(&w);
+/// requires_hash(&w);
+/// assert_eq!(w, CanonicalWitness::of(&v));
+/// assert_ne!(w, CanonicalWitness::of(&Value::Bool(true)));
+/// ```
 #[derive(Debug)]
 pub enum Value {
     // --- immediate scalars (§1, §5 table) ---

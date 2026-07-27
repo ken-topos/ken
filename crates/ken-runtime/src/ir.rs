@@ -528,6 +528,91 @@ pub fn compiler_private_computational_match_frame_fingerprint(
 /// explicitly named: [`RuntimeGroundValue`] and [`RuntimeObservation`] keep
 /// their derives, because neither has a closure arm. Route a comparison through
 /// those rather than re-adding one here.
+///
+/// # `AC-V4` — the forbidden capabilities are UNREACHABLE on this carrier
+///
+/// ⭐ Same discipline as [`crate::values::Value`]'s block, and it is required
+/// **separately**: discharging `AC-V4` on the canonical carrier alone is "half
+/// an AC that reads as whole," because that carrier has no closure arm to
+/// begin with while this one does. ⚠ The subject here is therefore a
+/// `ClosureRef` in every block — the forbidden *value*, not the enum in
+/// general.
+///
+/// ⛔ **The `EXXXX` codes are documentation, not a check** — rustdoc was
+/// measured not to bind them (see [`crate::values::Value`]'s block for the
+/// probe). Reason-attribution here comes from the two siblings below.
+///
+/// **No structural equality (`D2` — the derive was removed):**
+///
+/// ```compile_fail,E0277
+/// use ken_runtime::RuntimeValue;
+/// fn requires_eq<T: PartialEq>(_: &T) {}
+/// let c = RuntimeValue::ClosureRef { symbol: "f".to_string(), captured: vec![] };
+/// requires_eq(&c);
+/// ```
+///
+/// **No ordering:**
+///
+/// ```compile_fail,E0277
+/// use ken_runtime::RuntimeValue;
+/// fn requires_ord<T: Ord>(_: &T) {}
+/// let c = RuntimeValue::ClosureRef { symbol: "f".to_string(), captured: vec![] };
+/// requires_ord(&c);
+/// ```
+///
+/// **No canonical hash:**
+///
+/// ```compile_fail,E0277
+/// use ken_runtime::RuntimeValue;
+/// fn requires_hash<T: std::hash::Hash>(_: &T) {}
+/// let c = RuntimeValue::ClosureRef { symbol: "f".to_string(), captured: vec![] };
+/// requires_hash(&c);
+/// ```
+///
+/// ⚠ **Stated honestly:** only the first of those three was ever derived here.
+/// `Ord` and `Hash` were never present, so their blocks pin an absence that
+/// `D2` did not create — they are kept because `AC-V4` names all three
+/// capabilities, and an unpinned one is indistinguishable from an unexamined
+/// one.
+///
+/// ⭐ **Two siblings that MUST compile.** ⛔ A `compile_fail` block passes for
+/// *any* compilation error, so the negative blocks above are worthless alone.
+/// The first sibling is the same fixture with the bound check removed, which is
+/// what makes each failure attributable to the missing impl rather than to a
+/// malformed `ClosureRef` literal:
+///
+/// ```
+/// use ken_runtime::RuntimeValue;
+/// let c = RuntimeValue::ClosureRef { symbol: "f".to_string(), captured: vec![] };
+/// assert!(matches!(c, RuntimeValue::ClosureRef { .. }));
+/// ```
+///
+/// The second shows the three capabilities are genuinely **available** for a
+/// closure-free operational value, through the one sanctioned route —
+/// [`crate::canonical::project_operational_to_canonical`] onto the sealed
+/// witness. ⇒ The carrier is not merely comparison-hostile; it routes:
+///
+/// ```
+/// use ken_runtime::RuntimeValue;
+/// use ken_runtime::canonical::{project_operational_to_canonical, CanonicalWitness};
+/// fn requires_eq<T: PartialEq>(_: &T) {}
+/// fn requires_ord<T: Ord>(_: &T) {}
+/// fn requires_hash<T: std::hash::Hash>(_: &T) {}
+/// let mut intern = |s: &str| s.len() as u32;
+/// let free = RuntimeValue::Record {
+///     fields: vec![("n".to_string(), RuntimeValue::Bool(true))],
+/// };
+/// let w = CanonicalWitness::of(
+///     &project_operational_to_canonical(&free, &mut intern).expect("closure-free"),
+/// );
+/// requires_eq(&w);
+/// requires_ord(&w);
+/// requires_hash(&w);
+/// let again = CanonicalWitness::of(
+///     &project_operational_to_canonical(&free, &mut intern).expect("closure-free"),
+/// );
+/// assert_eq!(w, again);
+/// ```
 #[derive(Clone, Debug)]
 pub enum RuntimeValue {
     Bool(bool),
