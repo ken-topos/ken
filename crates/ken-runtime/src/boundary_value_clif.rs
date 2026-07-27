@@ -6567,8 +6567,15 @@ pub(crate) mod tests {
     ///
     /// ⛔ The refusal is `BOUNDARY_ERR_ESCAPE`, the same identity the two other
     /// invocation-owned classes already use: a persistent node was handed
-    /// something runtime-local. It is raised in `canonical_image`, at
-    /// canonicalization, which is upstream of any byte, hash or slot.
+    /// something runtime-local.
+    ///
+    /// ⚠ **It is raised in `validate_reachable` — phase 2 — not in
+    /// `canonical_image`.** This doc previously said the latter "which is
+    /// upstream of any byte, hash or slot"; that was false, because
+    /// canonicalization *mints as it walks*. See
+    /// [`b2v_acv5_a_closure_capturing_a_compound_node_mints_nothing`], which is
+    /// the arm that can tell the two positions apart — ⛔ this one cannot, since
+    /// its captures are immediates and an immediate is never interned.
     // --- conformance: runtime/values/closure-publication-rejected-transitively ---
     #[test]
     fn b2v_ac6_an_emitted_closure_node_is_refused_at_adoption() {
@@ -6618,6 +6625,130 @@ pub(crate) mod tests {
             store.adopt(word).is_ok(),
             "the same arena, sealing and binding adopt a GROUND node, so the \
              closure refusal above is about the closure class"
+        );
+    }
+
+    /// ⛔ **`AC-V5`'s LOAD-BEARING arm — a closure capturing a COMPOUND node
+    /// mints nothing.**
+    ///
+    /// ⭐ **Why the sibling above cannot establish this.** Its captures are
+    /// immediates (`[11, 22]`), and an immediate is never interned — so it is
+    /// green whether refusal happens *before* minting or *after*. This fixture
+    /// captures a **constructor node**, which the postorder canonicalizer would
+    /// intern and slot on its way to the closure. The two positions are
+    /// distinguishable only here.
+    ///
+    /// **MEASURED:** `adopt` returns `Err(BOUNDARY_ERR_ESCAPE)`, the store's
+    /// resident slot count is unchanged, and both nodes still carry
+    /// `NULL_SLOT`.
+    /// **CLAIMED:** refusal precedes any byte, hash, slot or provenance.
+    /// **THE GAP:** closed by the *compound* capture. With an immediate capture
+    /// there is no byte and no slot for the assertion to be about, so the
+    /// stronger claim rode on a fixture that could not carry it.
+    ///
+    /// ⚠ Found by the Architect on review of `195c2311`, not by me: my control
+    /// asserted the right property against a value that could not exhibit its
+    /// violation.
+    // --- conformance: runtime/values/closure-publication-rejected-transitively ---
+    #[test]
+    fn b2v_acv5_a_closure_capturing_a_compound_node_mints_nothing() {
+        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
+        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
+        let (_cm, alloc_ctor) = compile_producer(5, emit_ctor_node);
+
+        let mut store = BoundaryValueStore::new();
+        store.bind_artifact(fixture_artifact("refused", 3));
+        let tag_id = store.intern_symbol("ctor:fixture::Ground::Leaf");
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (8, 16, 0),
+            (0, 0, 0),
+        );
+
+        // A COMPOUND child — the ground node the sibling control proves adopts
+        // and mints a slot on its own.
+        let child = BoundaryWord(run3(alloc_ctor, f.base, BoundaryWord(tag_id), 0) as u64);
+        assert!(child.0 as i64 > 0, "ctor allocates: {}", child.0 as i64);
+
+        // The closure, capturing it.
+        let closure = BoundaryWord(run3(alloc_closure, f.base, BoundaryWord(3), 1) as u64);
+        assert!(closure.0 as i64 > 0, "closure allocates: {}", closure.0 as i64);
+        assert_eq!(
+            run4(store_field, f.base, closure.0, 0, child.0),
+            BOUNDARY_OK,
+            "the compound capture stores"
+        );
+
+        store.seal_persistent();
+
+        let slots_before = store.store_resident_slots();
+        let residents_before = store.resident_count();
+
+        assert_eq!(
+            store.adopt(closure),
+            Err(BOUNDARY_ERR_ESCAPE),
+            "AC-V5: an ordinary closure is refused at adoption"
+        );
+
+        // ⭐ The three assertions the immediate-capture arm cannot make.
+        assert_eq!(
+            store.store_resident_slots(),
+            slots_before,
+            "AC-V5: the captured COMPOUND child must not have been interned — a \
+             refusal that arrives after its descendants hold canonical bytes and \
+             minted slots is not a refusal 'before any byte, hash or slot'"
+        );
+        assert_eq!(
+            store.resident_count(),
+            residents_before,
+            "AC-V5: and no persistent referent may have been recorded"
+        );
+        assert_eq!(
+            store.node_slot_of(child.payload()),
+            Some(crate::store::NULL_SLOT),
+            "AC-V5: the captured child's NODE_SLOT must be untouched"
+        );
+        assert_eq!(
+            store.node_slot_of(closure.payload()),
+            Some(crate::store::NULL_SLOT),
+            "AC-V5: and so must the closure's own"
+        );
+    }
+
+    /// ⚠ **POSITIVE CONTROL for the arm above — the identical compound child,
+    /// adopted on its own, DOES mint a slot.**
+    ///
+    /// ⛔ Without this, *"the closure minted nothing"* and *"this fixture's
+    /// child was never mintable in the first place"* are the same green, and
+    /// the whole arm collapses back to the immediate-capture one it replaced.
+    #[test]
+    fn b2v_acv5_the_same_compound_child_alone_does_mint_a_slot() {
+        let (_cm, alloc_ctor) = compile_producer(5, emit_ctor_node);
+
+        let mut store = BoundaryValueStore::new();
+        store.bind_artifact(fixture_artifact("refused", 3));
+        let tag_id = store.intern_symbol("ctor:fixture::Ground::Leaf");
+        let f = bind_with(
+            &mut store,
+            BoundaryArenaBuilder::new(),
+            (8, 16, 0),
+            (0, 0, 0),
+        );
+        let child = BoundaryWord(run3(alloc_ctor, f.base, BoundaryWord(tag_id), 0) as u64);
+        store.seal_persistent();
+
+        let slots_before = store.store_resident_slots();
+        assert!(store.adopt(child).is_ok(), "the compound child adopts alone");
+        assert!(
+            store.store_resident_slots() > slots_before,
+            "and minting it moves the store's slot count — so 'unchanged' in the \
+             arm above is a real observation, not a property of the counter"
+        );
+        assert_ne!(
+            store.node_slot_of(child.payload()),
+            Some(crate::store::NULL_SLOT),
+            "and it acquires a NODE_SLOT, so NULL_SLOT above is discriminating"
         );
     }
 

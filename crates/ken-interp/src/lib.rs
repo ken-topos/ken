@@ -1473,7 +1473,37 @@ mod tests {
     ///
     /// ⛔ **Per-position arms are required** — the row names them, and a single
     /// value carrying closures everywhere cannot prove the check is
-    /// per-position. Here: directly, and nested as a constructor argument.
+    /// per-position. The row names five: **directly**, **record field**, **data
+    /// constructor argument**, **array element**, **map value**.
+    ///
+    /// ⭐ **Three are realized here: direct (a), constructor argument (b), and
+    /// record field (c)** — each with its own closure-free positive control in
+    /// the identical position.
+    ///
+    /// ⛔ **`array element` and `map value` are STRUCTURALLY UNEXPRESSIBLE as
+    /// closure-carrying positions, and that is a proof, not an omission.** No
+    /// carrier that can hold a closure has an array or map position:
+    ///
+    /// | carrier | child-bearing positions | closure arm? |
+    /// |---|---|---|
+    /// | `ir::RuntimeValue` | `Constructor.args`, `Record.fields` | ✅ `ClosureRef` |
+    /// | `BoundaryClass` | `Constructor`, `Record` | ✅ `Closure` |
+    /// | `values::Value` | `args`, `fields`, `elements`, **`Map` values** | ⛔ none — `D1` |
+    ///
+    /// ⇒ `Array` and `Map` exist **only** on the canonical carrier, and that
+    /// carrier has no closure variant at all, so "a closure in an array element"
+    /// names no constructible value. The two rows are discharged by
+    /// unrepresentability rather than by a test — which is strictly stronger,
+    /// and is why `AC-V4`'s `compile_fail` block is their real evidence.
+    ///
+    /// ⚠ **This is reported to the frame as an amendment request, not settled
+    /// unilaterally** — the row was written against the canonical carrier's
+    /// shape, which is the one carrier that cannot exhibit the case.
+    ///
+    /// ⚠ An earlier revision of this comment said only *"directly, and nested as
+    /// a constructor argument"* and the AC was nonetheless reported discharged.
+    /// The limitation was written down in the realization and still read as
+    /// complete from outside — caught by the Architect on `195c2311`.
     ///
     /// ⚠ **POSITIVE CONTROL, taken from the row itself:** the closure-free
     /// value in the *same* position through the *same* store publishes. That is
@@ -1540,6 +1570,52 @@ mod tests {
             "the SAME constructor position publishes when its argument is \
              closure-free — so the refusal is about the closure, not about the \
              shape or the store"
+        );
+
+        // (c) NESTED as a RECORD FIELD — `(closure, zero)`. A Σ-intro reaches
+        // `to_rt` through `EvalVal::Pair` → `RtValue::Record`, which is a
+        // different production arm from the constructor path in (b): one builds
+        // `Record { fields }`, the other `Constructor { args }`. A refusal
+        // wired into only one of them passes (b) and leaks here.
+        let in_field = eval(
+            &[],
+            &Term::Pair(
+                Box::new(empty_capture_closure(nat_ty.clone())),
+                Box::new(Term::Constructor {
+                    id: zero,
+                    level_args: vec![],
+                }),
+            ),
+            &env,
+            &mut store,
+        );
+        assert_eq!(
+            slot_of(&in_field),
+            Some(ken_runtime::store::NULL_SLOT),
+            "a record whose FIELD is a closure publishes nothing either"
+        );
+
+        // ⚠ POSITIVE CONTROL for (c) — the identical record position, closure-free.
+        let field_control = eval(
+            &[],
+            &Term::Pair(
+                Box::new(Term::Constructor {
+                    id: zero,
+                    level_args: vec![],
+                }),
+                Box::new(Term::Constructor {
+                    id: zero,
+                    level_args: vec![],
+                }),
+            ),
+            &env,
+            &mut store,
+        );
+        assert_ne!(
+            slot_of(&field_control),
+            Some(ken_runtime::store::NULL_SLOT),
+            "and the same record position publishes when both fields are \
+             closure-free"
         );
     }
 

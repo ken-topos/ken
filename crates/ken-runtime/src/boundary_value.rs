@@ -2052,8 +2052,63 @@ impl BoundaryValueStore {
         Ok(slot != NULL_SLOT)
     }
 
+    /// Whether a node of this class may become store-resident at all.
+    ///
+    /// ⭐ **The single source of truth for the two phases that must agree.**
+    /// `validate_reachable` (phase 2) consults it to refuse *before* anything is
+    /// interned; `canonical_image` (phase 3) consults it as defence in depth. ⛔
+    /// Two hand-written lists would be free to drift, and the drift would be
+    /// silent — the phase-3 list alone was the `AC-V5` defect (below).
+    ///
+    /// ⛔ Exhaustive with no `_` arm on purpose: a new [`BoundaryClass`] must
+    /// decide here whether it is persistable rather than inheriting an answer.
+    fn class_is_persistable(class: BoundaryClass) -> bool {
+        match class {
+            BoundaryClass::Bool
+            | BoundaryClass::Int
+            | BoundaryClass::Bytes
+            | BoundaryClass::String
+            | BoundaryClass::Constructor
+            | BoundaryClass::Record => true,
+            // ⛔ Transitively non-persistable. `41 §2.1` denies an ordinary
+            // closure canonical bytes, slot identity and persistence outright;
+            // `HostResult` and `BorrowedOpaque` die with the invocation.
+            BoundaryClass::Closure
+            | BoundaryClass::HostResult
+            | BoundaryClass::BorrowedOpaque => false,
+        }
+    }
+
+    /// Refuse a non-persistable node **at admission to the walk**, which is what
+    /// makes `AC-V5`'s "before any byte, hash, slot or provenance exists" true
+    /// of the mechanism rather than merely asserted about it.
+    fn admit_persistable(&self, index: u64) -> Result<(), i64> {
+        let bits = self
+            .image
+            .0
+            .node_field(index, NODE_CLASS)
+            .ok_or(BOUNDARY_ERR_BOUNDS)?;
+        let class = BoundaryClass::from_bits(bits).ok_or(BOUNDARY_ERR_CLASS)?;
+        if Self::class_is_persistable(class) {
+            Ok(())
+        } else {
+            Err(BOUNDARY_ERR_ESCAPE)
+        }
+    }
+
     /// ⛔ **Validate the complete reachable graph — iteratively — and return it
     /// in postorder.**
+    ///
+    /// ⛔ **This is also where a closure is refused, and the position is the
+    /// deliverable — not an implementation detail.** `canonicalize` is
+    /// **postorder and minting**: it builds each node's image and immediately
+    /// `persist_image`s it, so by the time a closure node is reached its
+    /// captured *compound* children already hold canonical bytes and
+    /// store-minted slots. Refusing there would satisfy "the adoption returns
+    /// `Err`" while violating `AC-V5`'s actual requirement, that refusal precede
+    /// **any** byte, hash, slot or provenance. ⚠ A control whose closure carries
+    /// only *immediate* captures cannot see that difference — which is exactly
+    /// why the first version of this passed.
     ///
     /// ⭐ **Tri-colour, with an explicit heap stack, and both halves matter.**
     ///
@@ -2094,6 +2149,8 @@ impl BoundaryValueStore {
         if self.already_owned(root)? {
             return Ok(order);
         }
+        // Admission site 1 of 2 — the root.
+        self.admit_persistable(root)?;
         colour.insert(root, Colour::Grey);
         stack.push((root, 0));
 
@@ -2143,6 +2200,12 @@ impl BoundaryValueStore {
                             if self.already_owned(next)? {
                                 colour.insert(next, Colour::Black);
                             } else {
+                                // Admission site 2 of 2 — every descendant. ⭐
+                                // This is the transitive half: a closure nested
+                                // at any depth is refused here, while the walk
+                                // is still read-only and nothing has been
+                                // interned or minted.
+                                self.admit_persistable(next)?;
                                 colour.insert(next, Colour::Grey);
                                 stack.push((next, 0));
                             }
@@ -2204,10 +2267,16 @@ impl BoundaryValueStore {
                     }
                 }
                 // ⛔ **Preserve the child's OWN tag.** Rewriting it as
-                // `PersistentGround` would retag a nested `PersistentClosure`
-                // into a ground handle — a canonicalization that silently
-                // changes what the child *is*. The tag is the child's; only the
-                // index is this step's to move.
+                // `PersistentGround` would silently change what the child *is*;
+                // the tag is the child's, and only the index is this step's to
+                // move.
+                //
+                // ⚠ This previously justified itself by the nested-closure case
+                // — "retagging a `PersistentClosure` into a ground handle." That
+                // example is now **unreachable**: `validate_reachable` refuses a
+                // closure-classed node at any depth before this loop runs. The
+                // rule is kept because it is right for every tag, ⛔ not because
+                // the closure it cited can still arrive.
                 if let Some(&target) = canonical.get(&child.payload()) {
                     if target != child.payload() {
                         let tag = child.tag().ok_or(BOUNDARY_ERR_TAG)?;
@@ -2271,14 +2340,26 @@ impl BoundaryValueStore {
     /// ⭐ **Total over [`BoundaryClass`] with no `_` arm**, which is the point: a
     /// new class is a compile error here, not a value that silently has no
     /// canonical form. This is the *canonicalizer* phase, and it is the sole
-    /// authority for what a persistent node means — the same layer serves ground
-    /// values and closures rather than routing one through a second decoder.
+    /// authority for what a persistent node's canonical image **is**.
     ///
-    /// ⛔ **`Closure` deliberately does NOT go through
-    /// [`RuntimeGroundValue`].** That type has no closure arm and adding one
-    /// would be a second value taxonomy; [`Value::Closure`] already *is* the
+    /// ⛔ **It is NOT the authority on what may be persisted.** That decision
+    /// belongs to `validate_reachable` (phase 2), because this phase mints:
+    /// every arm below runs inside a postorder loop that interns each image and
+    /// writes a `NODE_SLOT` immediately. A refusal issued *here* would therefore
+    /// arrive after the node's descendants already had canonical bytes and
+    /// store-minted slots. The non-persistable arm below is retained as
+    /// **defence in depth** and for exhaustiveness; both phases read one
+    /// predicate, [`BoundaryValueStore::class_is_persistable`], so they cannot
+    /// disagree.
+    ///
+    /// ⚠ **This block previously said `Value::Closure` "already *is* the
     /// normative image — authoritative code identity plus the full ordered
-    /// canonical captured environment — so the layer produces [`Value`] directly.
+    /// canonical captured environment," and that the layer "serves ground
+    /// values and closures."** Both statements described the retired mechanism:
+    /// `41 §2.1` grants an ordinary closure no canonical image at all, and `D1`
+    /// deleted the variant. ⛔ Replaced rather than annotated — an appended
+    /// correction leaves the confident false sentence in the position a reader
+    /// believes.
     fn canonical_image(
         &mut self,
         index: u64,
@@ -2408,9 +2489,17 @@ impl BoundaryValueStore {
             // `BOUNDARY_ERR_ESCAPE` names. This arm previously bound an artifact
             // identity and built a `Value::Closure` from the full ordered
             // captures; `41 §2.1` forbids that outcome — a closure is
-            // transitively non-persistable, and refusal must happen **before**
-            // bytes, digest, or slot exist, which is why the refusal is here at
-            // canonicalization rather than downstream of it.
+            // transitively non-persistable.
+            //
+            // ⛔ **UNREACHABLE in `adopt`, and deliberately kept.**
+            // `validate_reachable` refuses these three classes at admission, so
+            // no such node survives into this phase. ⚠ An earlier revision said
+            // refusal "must happen before bytes, digest, or slot exist, which is
+            // why the refusal is here at canonicalization" — the requirement was
+            // right and the position was wrong, since this phase mints as it
+            // goes. The arm stays because the match is total over the class
+            // taxonomy and because a future caller could reach this function by
+            // another route.
             //
             // ⚠ The tag/class taxonomy, the `(tag, class)` relation, the storage
             // shape and the CLIF emitters are deliberately UNCHANGED: B2V's
@@ -2547,6 +2636,17 @@ impl BoundaryValueStore {
     /// Number of distinct persistent referents.
     pub fn resident_count(&self) -> usize {
         self.resident.len()
+    }
+
+    /// One node's `NODE_SLOT`, for `AC-V5`'s "nothing was minted" control.
+    ///
+    /// ⚠ Test-only and deliberately so: production has no business reading a
+    /// node's minted identity back out of the image. It exists because
+    /// *"adoption returned `Err`"* and *"adoption left no slot behind"* are
+    /// different claims, and only the second is what `AC-V5` requires.
+    #[cfg(test)]
+    pub(crate) fn node_slot_of(&self, index: u64) -> Option<u64> {
+        self.image.0.node_field(index, NODE_SLOT)
     }
 
     /// Take persistent ownership of a ground value, returning its slot id.
