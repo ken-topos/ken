@@ -43,8 +43,9 @@ use crate::boundary_value::{
     ARENA_NAME_COUNT, ARENA_NATIVE_INT, ARENA_NODES, ARENA_NODE_CAPACITY, ARENA_NODE_COUNT,
     ARENA_PERSISTENT, ARENA_SEALED, ARENA_WORDS, ARENA_WORD_CAPACITY, ARENA_WORD_COUNT,
     BOUNDARY_ERR_BOUNDS, BOUNDARY_ERR_CAPACITY, BOUNDARY_ERR_CLASS, BOUNDARY_ERR_ESCAPE,
-    BOUNDARY_ERR_FROZEN, BOUNDARY_ERR_RELATION, BOUNDARY_ERR_SEALED, BOUNDARY_ERR_SHAPE,
-    BOUNDARY_ERR_TAG, BOUNDARY_INT_REGION_LIMBS, BOUNDARY_NODE_STRIDE, BOUNDARY_OK,
+    BOUNDARY_ERR_FROZEN, BOUNDARY_ERR_RELATION, BOUNDARY_ERR_RETIRED_LANE, BOUNDARY_ERR_SEALED,
+    BOUNDARY_ERR_SHAPE, BOUNDARY_ERR_TAG, BOUNDARY_INT_REGION_LIMBS, BOUNDARY_NODE_STRIDE,
+    BOUNDARY_OK,
     BOUNDARY_TAG_BITS, BOUNDARY_TAG_MASK, NODE_CLASS, NODE_EXTENT, NODE_FIELDS_AT,
     NODE_FIELD_COUNT, NODE_INT_SEALED, NODE_LIMBS_AT, NODE_LIMB_COUNT, NODE_OWNER, NODE_PAYLOAD,
     NODE_SLOT, NODE_TAG_ID,
@@ -1517,6 +1518,54 @@ fn define_alloc<M: Module>(
         b.ins().return_(&[err]);
 
         b.switch_to_block(classed);
+
+        // ── ⛔ RETIRED LANE — refused BY NAME, before anything is selected ───
+        //
+        // `RT-FNSPLIT-C1` `D5`, Architect `dec_21aa95jbsznfh` + addendum
+        // `dec_6xffebwj4s347`. The `(PersistentClosure, Closure)` pair is
+        // **recognized ABI vocabulary that is never admitted**.
+        //
+        // ⚠ **Position is load-bearing and is the ruling's own ordering.** This
+        // sits ahead of `select_region_by_tag`, the seal guard and every write,
+        // because the ruling requires the refusal to land *before allocation,
+        // owner/region lookup, CFG construction, or invocation*. A retired lane
+        // must never reach the machinery that would give it a home.
+        //
+        // ⭐ **Why an exact-pair test rather than a recognized relation row.**
+        // The two outcomes the ruling requires both fall out of this placement,
+        // and neither needs `PersistentClosure` to enter an admitted set:
+        //
+        //   `PersistentClosure` + `Closure` -> `BOUNDARY_ERR_RETIRED_LANE`, here.
+        //   `PersistentClosure` + `Bool`    -> `BOUNDARY_ERR_RELATION`, below,
+        //                                      via the absent-row fail-closed
+        //                                      path the relation mask already
+        //                                      has by construction.
+        //
+        // ⚠ Stated honestly, because the mechanism differs from the wording
+        // even though the observable status does not: the `-8` for a malformed
+        // cross-pair arises from the tag having **no row**, not from a
+        // recognized row that excludes `Bool`. The distinction is invisible at
+        // the ABI and would only matter if a retired tag ever needed to admit
+        // some classes, which is a contradiction in terms.
+        //
+        // ⛔ Do not "simplify" this by adding the pair to the plan's relation:
+        // that is the admitted set, and admitting it restores the durable lane
+        // `D5` removes.
+        for (retired_tag, retired_class) in crate::boundary_value::BOUNDARY_RETIRED_LANES {
+            let tag_hit = b.ins().icmp_imm(IntCC::Equal, tag, *retired_tag as i64);
+            let class_hit = b.ins().icmp_imm(IntCC::Equal, class, *retired_class as i64);
+            let lane_hit = b.ins().band(tag_hit, class_hit);
+            let live = b.create_block();
+            let retired = b.create_block();
+            b.ins().brif(lane_hit, retired, &[], live, &[]);
+
+            b.switch_to_block(retired);
+            let err = b.ins().iconst(types::I64, BOUNDARY_ERR_RETIRED_LANE);
+            b.ins().return_(&[err]);
+
+            b.switch_to_block(live);
+        }
+
         let region = select_region_by_tag(&mut b, ptr, arena, tag, plan);
         // The eleventh writer: `alloc` takes no word, so it never reaches
         // `mutable_guard` and needs the seal check on its own path.

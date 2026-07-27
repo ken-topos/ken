@@ -663,11 +663,59 @@ pub(crate) const BOUNDARY_TAG_CLASS_RELATION: &[(BoundaryTag, &[BoundaryClass])]
     ),
 ];
 
+/// ⛔ **The closed set of RETIRED lanes — reserved ABI metadata, NOT a
+/// capability** (`RT-FNSPLIT-C1` `D5`).
+///
+/// ⭐ **Recognized, never admitted.** These pairs stay in the ABI's *vocabulary*
+/// so a word naming one is refused **by name** with
+/// [`BOUNDARY_ERR_RETIRED_LANE`], instead of collapsing into
+/// [`BOUNDARY_ERR_TAG`] and becoming indistinguishable from a corrupt byte.
+///
+/// ⛔ **This is deliberately a written-down declaration and not derived**, and
+/// that is the opposite of how the admitted sets work. `BoundaryEmissionPlan::
+/// derive` sweeps the live representation authority, so a lane with no producer
+/// contributes nothing — which is exactly how the closure vocabulary was lost
+/// when its disposition became `FailClosedForbidden`. A tombstone has no
+/// producer **by definition**, so it cannot be derived from producers and must
+/// be stated.
+///
+/// ⛔ **Never consult this from a producer or a representation disposition.**
+/// Its only readers are decode/classification and emitted-helper validation.
+/// `Closure` / `DeclarationClosure` remain `FailClosedForbidden`, and no
+/// `RepresentedHandle { PersistentClosure, Closure }` may be restored — the
+/// point is a recognition/admission split, not a revived capability.
+pub(crate) const BOUNDARY_RETIRED_LANES: &[(BoundaryTag, BoundaryClass)] =
+    &[(BoundaryTag::PersistentClosure, BoundaryClass::Closure)];
+
+/// Whether this `(tag, class)` pair names a retired lane.
+///
+/// ⚠ A `true` here means *"well-formed, and refused because the capability is
+/// retired"* — it is **not** a malformed pair. `PersistentClosure + Bool` is
+/// malformed and answers `false`, keeping its [`BOUNDARY_ERR_RELATION`]
+/// diagnostic; only the exactly-paired lane reaches this.
+pub(crate) fn boundary_lane_is_retired(tag: BoundaryTag, class: BoundaryClass) -> bool {
+    BOUNDARY_RETIRED_LANES
+        .iter()
+        .any(|(retired_tag, retired_class)| *retired_tag == tag && *retired_class == class)
+}
+
 /// Whether the ABI admits this `(tag, class)` pair, per the Rust mirror.
 ///
 /// The Rust builders' fail-before-publication check. Kept because they cannot
 /// see the private lowering partition; reconciled to it over the full product.
+///
+/// ⚠ **A retired lane is RECOGNIZED but NOT admitted**, so this still answers
+/// `false` for `(PersistentClosure, Closure)`. Recognition governs which
+/// *diagnostic* a refusal carries; it never widens what is admitted.
 pub(crate) fn boundary_relation_admits(tag: BoundaryTag, class: BoundaryClass) -> bool {
+    // ⛔ Recognition first, admission second — the retired lane is in the
+    // schema below **precisely so it can be named**, and reading the schema
+    // alone would therefore report it as admitted. That is the inversion this
+    // whole split exists to avoid: the pair stays spelled out so a refusal can
+    // say which lane it refused, not so the lane works.
+    if boundary_lane_is_retired(tag, class) {
+        return false;
+    }
     BOUNDARY_TAG_CLASS_RELATION
         .iter()
         .any(|(t, classes)| *t == tag && classes.contains(&class))
@@ -1207,6 +1255,28 @@ pub const BOUNDARY_ERR_CYCLE: i64 = -10;
 /// meaningful, so an unbound store cannot mint one and must **fail closed**
 /// rather than mint an ordinal that aliases.
 pub const BOUNDARY_ERR_UNBOUND: i64 = -11;
+/// ⛔ **The word names the RETIRED durable-closure lane** (`RT-FNSPLIT-C1`
+/// `D5`, Architect `dec_21aa95jbsznfh` + addendum `dec_6xffebwj4s347`).
+///
+/// The `(PersistentClosure, Closure)` pair is **recognized ABI vocabulary and
+/// is never admitted**. An ordinary closure is runtime-local and live-domain
+/// only; it has no durable lane, and a callable cross-owner carrier is `B2F`'s
+/// design rather than this node's.
+///
+/// ⭐ **Why this is its own status and not [`BOUNDARY_ERR_TAG`], which is the
+/// whole point of the code existing.** Deleting the pair from the vocabulary
+/// would have been the smaller change and it silently downgrades *"I refuse
+/// this specific retired lane"* into *"I do not recognize this byte"* — the
+/// same status arbitrary corruption produces. A refusal that cannot say **what**
+/// it refused is the same failure class as a negative check that passes for any
+/// reason. ⇒ The lane keeps its name **so that it can be refused by name.**
+///
+/// ⚠ Distinct from [`BOUNDARY_ERR_RELATION`] on the other side, too:
+/// `PersistentClosure + Bool` is a **malformed pair** and still returns `-8`,
+/// while `PersistentClosure + Closure` is a **well-formed pair naming a retired
+/// capability** and returns this. Collapsing the two would lose the ability to
+/// tell a corrupt word from a lawful word the ABI no longer honours.
+pub const BOUNDARY_ERR_RETIRED_LANE: i64 = -12;
 
 // ---------------------------------------------------------------------------
 // The invocation-scoped arena
