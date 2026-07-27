@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-27 20:37:19Z — from 111 issue file(s) in `docs/program/issues/`.
+2026-07-27 20:41:15Z — from 111 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -147,7 +147,7 @@ the committed file matches the generator's output.
 | `SURF-IDENT-TR39` | The lexer's confusable-resistance is satisfied VACUOUSLY by an ASCII-only identifier rule — spec 31 §2's blessed Unicode letters are unimplemented, and the test that looks like the TR39 gate cannot see the difference | merged | ergo | S–M | none | — |
 | `SURF-SPACE-CELLS` | The `space` block surface — cells and `becomes` — is unbuilt, while its entire desugaring target (the `State` effect: Get/Put/run_state) is built and live | active | language | M–L | none | — |
 | `V3-RESIDUAL` | V3's suite has FOUR assertion-free placeholder tests carrying ordinary names — `disproved_carries_countermodel` asserts nothing, passes, and reads in cargo output exactly like a real pin | merged | verify | L | G2-G3 | https://github.com/swe-toolkit/ken/pull/1103 |
-| `V4-RESIDUAL` | The Kripke countermodel is an inert shell: it is never related to `φ` at all — no interpretation of the formula, no recursive forcing evaluator — and V3's prose `description` is stuffed into `FormRef`, a slot meant for a structural subformula reference | active | verify | L | G2-G3 | — |
+| `V4-RESIDUAL` | The Kripke countermodel is an inert shell: it is never related to `φ` at all — no interpretation of the formula, no recursive forcing evaluator — and V3's prose `description` is stuffed into `FormRef`, a slot meant for a structural subformula reference | merged | verify | L | G2-G3 | 1117 |
 | `VIS-BR-LITERAL` | visibility walk: raw-string prefixes br and cr are unrecognized by the literal scanner | merged | runtime | XS | none | — |
 
 ## Releasable frontier
@@ -208,7 +208,7 @@ feed; `none`/`TBD` gates are omitted here (see the status table above
 for every item, gated or not):
 
 - **G-Sec**: `SEC1-IFC-R3` (draft) `SEC1-IFC` (merged)
-- **G2-G3**: `V3-RESIDUAL` (merged) `V4-RESIDUAL` (active)
+- **G2-G3**: `V3-RESIDUAL` (merged) `V4-RESIDUAL` (merged)
 
 ## Archive & diary
 

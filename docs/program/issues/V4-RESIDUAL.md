@@ -1,13 +1,13 @@
 ---
 id: V4-RESIDUAL
 title: "The Kripke countermodel is an inert shell: it is never related to `φ` at all — no interpretation of the formula, no recursive forcing evaluator — and V3's prose `description` is stuffed into `FormRef`, a slot meant for a structural subformula reference"
-status: active
+status: merged
 owner: verify
 size: L
 gate: G2-G3
 depends_on: []
 blocks: [SEC1-IFC-R3]
-github: null
+github: 1117
 origin: "Measured by the Steward 2026-07-27 at origin/main 2ebe232c while looking for Verify's next WP after V3-RESIDUAL (PR #1103) merged. V4 is BUILT (diagnostics.rs + protocol.rs + v4_acceptance.rs, 15 tests, no placeholders, all asserting) -- this node is its RESIDUAL, not the WP. Frame docs/program/wp/V4-diagnostics.md if one exists; spec/20-verification/24-diagnostics.md self-declares V4 elaborated / implementation-ready."
 ---
 
