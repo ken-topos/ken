@@ -3,6 +3,39 @@
 **Owner:** Team Runtime · **Size:** L · **Closes:** `RT-NATIVE-FNSPLIT`
 symptom-inventory **entry 2** — the last open entry.
 
+> ## ⛔⛔ THIS NODE IS HELD AT `7ce4198f` — `S6`/`D6` DOES NOT PROCEED
+> **Architect corrected ruling `evt_2yjg12pyqqjdv`, 2026-07-28**, bound to exact
+> `7ce4198f580829e166f751f62e5d206831143e9f`. ⭐ **Added by the Steward on that
+> ruling; it supersedes the owner/capacity/scope parts of `evt_1m082dp6xf0mw`.**
+>
+> The switch-over needs the root and every unit to take
+> `(frame_ptr, services_ptr)`. ⛔ **Nothing in production can supply the second
+> argument, and the object-linked starter cannot be taught to** —
+> `ken-runtime` is **rlib-only**, so `BoundaryArenaV1::publish` is unreachable
+> from the C stub it links. ⇒ **New prerequisite node:
+> `RT-FNSPLIT-C3-ACTIVATION`** (`docs/program/wp/RT-FNSPLIT-C3-ACTIVATION.md`).
+>
+> **What is permitted while held:**
+> - ✅ The landed `GeneratedActivationServicesV1` record **stays as built**.
+> - ✅ The already-independent `AC-2` / `AC-3` / `AC-8` work continues.
+> - ⛔ **No per-function binder** — it has no production consumer, and the
+>   dead-code warning would be **telling the truth**.
+> - ⛔ **No shared-root signature change.** `STARTER_ENTRY_SYMBOL`
+>   (`object_linker_packaging.rs:303`) compiles through the same `sig`, ⇒ ⛔ a
+>   **JIT-only half-step is forbidden**: it breaks the C stub in the same edit.
+> - ⛔ **No `S6`/`D6` reland.**
+>
+> ⚠ **Two premises of the prior ruling were falsified by measurement, so do not
+> carry them forward:** there is **no** production activation owner, and the
+> *"existing store/plan capacity authority"* **has no referent** — the four
+> reserve numbers are caller-supplied parameters
+> (`boundary_value_clif.rs:2859`/`:2870`/`:2871`).
+>
+> ⛔⛔ **And its fail-closed clause is WITHDRAWN, not weakened.** *"A launcher
+> missing a non-null, fully published boundary arena does not call generated
+> code"* would make **every linked executable start and then not run** — ⭐ a
+> working→broken regression, ⛔ never to be reintroduced in any wording.
+
 **Depends on — all three merged and verified on `main`:**
 
 | dependency | landed | PR | what it supplies to this node |
