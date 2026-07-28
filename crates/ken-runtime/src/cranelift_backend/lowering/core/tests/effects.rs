@@ -85,6 +85,10 @@ fn run_checked_bounded_nat_fixture(
         native_int_narrow: None,
         native_int_export: None,
         native_int_tags: BTreeMap::new(),
+        // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
+        // no callable carrier refs. The `Carried` routes fail closed on this
+        // rather than silently taking the `Specialized` path.
+        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: mutation,
     };

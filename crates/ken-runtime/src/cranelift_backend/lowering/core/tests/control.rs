@@ -73,6 +73,10 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         native_int_narrow: None,
         native_int_export: None,
         native_int_tags: BTreeMap::new(),
+        // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
+        // no callable carrier refs. The `Carried` routes fail closed on this
+        // rather than silently taking the `Specialized` path.
+        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
     }
@@ -158,6 +162,10 @@ fn run_px8j_malformed_recursor_consumer(
         native_int_narrow: None,
         native_int_export: None,
         native_int_tags: BTreeMap::new(),
+        // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
+        // no callable carrier refs. The `Carried` routes fail closed on this
+        // rather than silently taking the `Specialized` path.
+        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
     };
@@ -2001,6 +2009,10 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         native_int_narrow: None,
         native_int_export: None,
         native_int_tags: BTreeMap::new(),
+        // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
+        // no callable carrier refs. The `Carried` routes fail closed on this
+        // rather than silently taking the `Specialized` path.
+        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
     };

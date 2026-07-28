@@ -331,6 +331,15 @@ struct Lowering<'a> {
     native_int_narrow: Option<FuncRef>,
     native_int_export: Option<FuncRef>,
     native_int_tags: BTreeMap<cranelift_codegen::ir::Value, cranelift_codegen::ir::Value>,
+    /// The boundary-carrier helpers, made callable inside **this** generated
+    /// function (`RT-FNSPLIT-C1` `D3`).
+    ///
+    /// ⛔ `FuncRef`s, not `FuncId`s — the ruling requires the helper IDs to be
+    /// *"declared into each generated function as callable refs and actually
+    /// called by all three routes"*, and a `FuncId` held here would be exactly
+    /// the inert threading the node forbids: present, plausible, and never
+    /// reaching an emitted call.
+    boundary_carrier: Option<BoundaryCarrierRefs>,
     #[cfg(test)]
     native_int_mutation: NativeIntLoweringMutation,
     #[cfg(test)]
@@ -510,6 +519,96 @@ enum Lowered {
     /// marker so it cannot be confused with an ordinary or terminal value.
     RecursiveBackedge,
     Trap(RuntimeTrap),
+}
+
+/// The boundary-carrier helpers this generated function may call.
+///
+/// ⛔ **Exactly the helpers the three eliminators use, and no more.** A ref
+/// declared here that no route calls is inert threading — the defect this node
+/// exists to avoid — so the set is kept minimal and every member is reached by
+/// [`Lowering::carried_constructor_identity`], the `Match`/`ComputationalMatch`
+/// route, or the `Project` route.
+#[derive(Clone, Copy, Debug)]
+struct BoundaryCarrierRefs {
+    /// `(arena, word, out) -> status` — the runtime constructor/record identity
+    /// that `Match` discriminates against the artifact-static case set.
+    tag: FuncRef,
+    /// `(arena, word, out) -> status` — the child count a case's binder arity
+    /// is checked against **at runtime**.
+    field_count: FuncRef,
+    /// `(arena, word, index, out) -> status` — positional child projection.
+    /// Its result stays [`LoweringOperand::Carried`].
+    field: FuncRef,
+    /// `(arena, word, name_id, out) -> status` — `Project` by artifact-static
+    /// field identity.
+    record_field: FuncRef,
+    /// `(arena, tag, class, field_count, out) -> status` — the one-way
+    /// producer's allocation step.
+    alloc: FuncRef,
+    /// `(arena, word, tag_id) -> status` — the producer records the identity.
+    store_tag_id: FuncRef,
+    /// `(arena, word, index, child) -> status` — the producer writes children.
+    store_field: FuncRef,
+}
+
+/// A value that has crossed into the **operational carrier** — nothing but the
+/// Cranelift SSA boundary word (`RT-FNSPLIT-C1` `D3`).
+///
+/// ⛔ **It holds the word and NOTHING ELSE, and the emptiness is the point.**
+/// No constructor string, no field list, no body or template, no tag/class, no
+/// reverse-decoding data. Every question about this value — which constructor,
+/// how many fields, which child — is answered by **calling an emitted helper at
+/// runtime**, never by reading a field of this struct. ⇒ The struct having room
+/// for a compile-time answer is exactly how the wall would grow back.
+#[derive(Clone, Copy, Debug)]
+struct CarriedBoundaryWord {
+    word: cranelift_codegen::ir::Value,
+}
+
+/// ⭐ **The closed PHASE sum — which phase a lowering operand is in, not what
+/// kind of value it is** (`RT-FNSPLIT-C1` `D3`).
+///
+/// ⛔ **This is the ruling, recorded in source because it was previously only
+/// in a chat thread and became unretrievable** (the reachable event window is
+/// capped, `offset` is ignored, and it is not a Decision object). Binding text,
+/// from the Runtime leader on the Architect's `§2f` answer:
+///
+/// > one private closed phase wrapper
+/// > `LoweringOperand { Specialized(Lowered), Carried(CarriedBoundaryWord) }`;
+/// > `CarriedBoundaryWord` contains only the existing Cranelift SSA boundary
+/// > word — no constructor string, field list, body/template, tag/class, or
+/// > reverse-decoding data. Producer is one-way typed
+/// > `Lowered -> CarriedBoundaryWord`, consuming `BoundaryLocalFuncs`. There is
+/// > no `Carried→Lowered` conversion or compile-time rehydration. `Match`,
+/// > `ComputationalMatch`, and `Project` have explicit `Carried` emitted-helper
+/// > arms; projected children remain `Carried`; existing paths remain explicit
+/// > `Specialized`; every reachable consumer exhaustively classifies both
+/// > phases without wildcard. `Carried` acquires no `LoweredVariant`,
+/// > `BoundaryDisposition`, `AlreadyCarried` policy, or second producer pass.
+/// > Helper IDs are declared into each generated function as callable refs and
+/// > actually called by all three routes. The wrapper is necessary
+/// > infrastructure; executable eliminations plus independent
+/// > producer→validator→eliminator controls are the deliverable.
+///
+/// ⛔ **NOT a variant of [`Lowered`].** `Lowered` is a compile-time
+/// specialization lattice (`§2f`); a `Lowered::Boundary` inhabitant is the
+/// `B2E` shape the inertness rule rejects — the inhabitant is the easy half and
+/// the three executable eliminations are the node.
+///
+/// ⛔ **One-way.** There is a producer into [`Self::Carried`] and deliberately
+/// **no** inverse: a `Carried → Lowered` conversion would let a consumer
+/// recover a compile-time template from a runtime value, which is the wall
+/// itself wearing a different name.
+// ⛔ No `Debug`: `Lowered` has none, and deriving one here would be a new,
+// second way to read a compile-time template out of an operand.
+#[derive(Clone)]
+enum LoweringOperand {
+    /// The compile-time specialization lattice — every route that existed
+    /// before this node. ⛔ Kept as an **explicit** arm, never a fallback:
+    /// a fallback arm is a wildcard with better manners.
+    Specialized(Lowered),
+    /// A runtime boundary word, eliminated only by emitted helpers.
+    Carried(CarriedBoundaryWord),
 }
 
 /// ⛔ **The `Lowered` variant TAG, without a value.**

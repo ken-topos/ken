@@ -84,7 +84,12 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     // private to `cranelift_backend::lowering`). Ruled in scope and required by
     // the Architect: production codegen consumption is not `B2F` activation.
     let boundary_plan = crate::boundary_value::BoundaryEmissionPlan::derive();
-    let _boundary_value_abi = crate::boundary_value_clif::emit_boundary_value_local_graph(
+    // ⭐ `RT-FNSPLIT-C1` `AC-C8` — the emitted graph's result is **consumed**,
+    // not bound to `_`. ⚠ Labelled honestly: this is *necessary, not
+    // sufficient*. Consuming the handle only proves the helpers are reachable;
+    // `AC-C7`'s three per-eliminator executable-edge tests are what make it
+    // evidence that the carrier is live. ⛔ Do not report this line alone.
+    let boundary_value_abi = crate::boundary_value_clif::emit_boundary_value_local_graph(
         &mut module,
         &native_int,
         &boundary_plan,
@@ -117,6 +122,17 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     let int_intern = module.declare_func_in_func(native_int.intern, &mut ctx.func);
     let int_narrow = module.declare_func_in_func(native_int.narrow, &mut ctx.func);
     let int_export = module.declare_func_in_func(native_int.export, &mut ctx.func);
+    // `RT-FNSPLIT-C1` `D3` — the carrier helpers become **callable refs inside
+    // this generated function**, exactly as the native-int helpers above do.
+    let boundary_carrier = BoundaryCarrierRefs {
+        tag: module.declare_func_in_func(boundary_value_abi.tag, &mut ctx.func),
+        field_count: module.declare_func_in_func(boundary_value_abi.field_count, &mut ctx.func),
+        field: module.declare_func_in_func(boundary_value_abi.field, &mut ctx.func),
+        record_field: module.declare_func_in_func(boundary_value_abi.record_field, &mut ctx.func),
+        alloc: module.declare_func_in_func(boundary_value_abi.alloc, &mut ctx.func),
+        store_tag_id: module.declare_func_in_func(boundary_value_abi.store_tag_id, &mut ctx.func),
+        store_field: module.declare_func_in_func(boundary_value_abi.store_field, &mut ctx.func),
+    };
 
     let mut func_ctx = FunctionBuilderContext::new();
     let mut compiler = Lowering {
@@ -165,6 +181,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         native_int_narrow: Some(int_narrow),
         native_int_export: Some(int_export),
         native_int_tags: BTreeMap::new(),
+        boundary_carrier: Some(boundary_carrier),
         #[cfg(test)]
         native_int_mutation: NATIVE_INT_LOWERING_MUTATION.with(std::cell::Cell::get),
         #[cfg(test)]
