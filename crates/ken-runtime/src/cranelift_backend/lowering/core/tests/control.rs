@@ -6602,6 +6602,78 @@ fn b2f_mints_one_defined_artifact_static_object_per_seed_environment_entry() {
     );
 }
 
+/// **`D3` — the minted material is IN the artifact, verified against the module
+/// rather than against our own bookkeeping.**
+///
+/// ⛔⛔ **This test exists because a counter cannot detect the deletion of the
+/// call it counts, and that is measured rather than argued.** Removing the
+/// `define_data` call while leaving the adjacent `defined += 1` reachable left
+/// `b2f_last_seed_material_emission` reporting `(1, 1)` — both the counter and
+/// the call are `seed_material`'s own code, so a mutation can remove one and
+/// leave the other. ⚠ What caught that mutation instead was a **SIGSEGV** in the
+/// test binary when the artifact ran against the undefined symbol: an undefined
+/// data symbol is caught by neither the module nor the counter, only by the
+/// hardware. ⭐ Loud, but undiagnostic — and a crash is not a control.
+///
+/// ⇒ **The fix is to ask a different party what it holds.**
+/// `JITModule::get_finalized_data` reads the module's own finalized memory, so
+/// the definition either happened or the comparison fails.
+///
+/// **MEASURED:** for every object this compile minted, the bytes the finalized
+/// module holds at that `DataId` equal the byte image handed to `define_data`.
+/// **CLAIMED:** the encoded seed material is really present in the artifact.
+/// **THE GAP:** ⛔ the *expected* side is still this crate's encoder output, so
+/// this cannot catch an encoding that is wrong in the same way on both sides.
+/// That residual is covered by the encoder's own tag/offset/nesting tests, whose
+/// expectations are written out independently of the encoder.
+#[test]
+fn minted_seed_material_is_present_in_the_finalized_artifact() {
+    let env = b2f_seed_capture_program("s", RuntimeGroundValue::Int(0x0123_4567_89ab_cdefi64.into()));
+    let module = new_jit_module().expect("jit module");
+    let compiled = compile_expr_into_module(
+        module,
+        "b2f_seed_material_readback_probe",
+        Linkage::Local,
+        &RuntimeExpr::Value(RuntimeValue::Bool(true)),
+        &env,
+        BTreeMap::new(),
+        None,
+        false,
+        None,
+        None,
+        None,
+    )
+    .expect("compile");
+
+    let images = crate::cranelift_backend::lowering::seed_material::b2f_last_seed_material_images();
+    // ⭐ POSITIVE CONTROL, first: without it every assertion below is vacuously
+    // satisfied by an empty image list, for any mutation, forever.
+    assert_eq!(
+        images.len(),
+        1,
+        "D3 -- one environment entry must mint one image to read back"
+    );
+
+    let mut compiled = compiled;
+    compiled
+        .module
+        .finalize_definitions()
+        .expect("jit finalizes");
+    for (id, expected) in images {
+        let (pointer, length) = compiled.module.get_finalized_data(id);
+        // SAFETY: `finalize_definitions` has run, so the module guarantees this
+        // pointer/length names its own finalized data for `id`.
+        let actual = unsafe { std::slice::from_raw_parts(pointer, length) };
+        assert_eq!(
+            actual, expected,
+            "D3 -- the artifact does not hold the bytes that were defined for \
+             this seed object. Either the definition never happened or something \
+             overwrote it; in both cases a capture would borrow from storage \
+             whose contents are not the seed value."
+        );
+    }
+}
+
 /// **`AC-12` — the emitted code OBEYS `BorrowedForActivation` +
 /// `ArtifactStatic`, with a positive control.**
 ///

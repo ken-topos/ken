@@ -143,6 +143,33 @@ pub(in crate::cranelift_backend) fn b2f_artifact_static_loads() -> usize {
     B2F_ARTIFACT_STATIC_LOADS.with(std::cell::Cell::get)
 }
 
+/// **The byte image this module handed to `define_data`, per object.**
+///
+/// ⛔⛔ **This exists because NO COUNTER OF OUR OWN CALLS CAN DETECT THE
+/// DELETION OF THE CALL IT COUNTS.** Measured, not reasoned: removing the
+/// `define_data` call while leaving the adjacent increment reachable left the
+/// `(declared, defined)` pair reporting `(1, 1)` — the counter and the call are
+/// both this module's code, and a mutation can remove one and leave the other.
+/// ⚠ What caught that mutation instead was a **SIGSEGV** in the test binary when
+/// the artifact ran against the undefined symbol: loud, but undiagnostic, and
+/// not a control.
+///
+/// ⭐ **The fix is to ask a different party.** Paired with
+/// `JITModule::get_finalized_data`, this turns the population claim into a
+/// comparison against **what the module actually holds** rather than against
+/// what this loop believes it did.
+#[cfg(test)]
+thread_local! {
+    static B2F_SEED_MATERIAL_IMAGES: std::cell::RefCell<Vec<(DataId, Vec<u8>)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The `(id, bytes)` images minted by the most recent compile.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn b2f_last_seed_material_images() -> Vec<(DataId, Vec<u8>)> {
+    B2F_SEED_MATERIAL_IMAGES.with(|images| images.borrow().clone())
+}
+
 /// Every artifact-static seed object this module minted, keyed by the symbol
 /// whose value it holds.
 ///
@@ -272,6 +299,8 @@ pub(in crate::cranelift_backend) fn mint_seed_material<M: Module>(
 ) -> Result<SeedMaterial, CraneliftBackendError> {
     let mut objects = BTreeMap::new();
     #[cfg(test)]
+    B2F_SEED_MATERIAL_IMAGES.with(|images| images.borrow_mut().clear());
+    #[cfg(test)]
     let mut declared = 0usize;
     #[cfg(test)]
     let mut defined = 0usize;
@@ -299,6 +328,8 @@ pub(in crate::cranelift_backend) fn mint_seed_material<M: Module>(
         {
             declared += 1;
         }
+        #[cfg(test)]
+        let image = encoded.clone();
         let mut description = DataDescription::new();
         description.define(encoded.into_boxed_slice());
         description.set_align(SEED_ALIGN_BYTES);
@@ -313,6 +344,10 @@ pub(in crate::cranelift_backend) fn mint_seed_material<M: Module>(
         #[cfg(test)]
         {
             defined += 1;
+            // ⭐ Record the exact image handed to `define_data`, so the control
+            // can compare it against what the finalized module HOLDS rather
+            // than against this loop's own belief about what it did.
+            B2F_SEED_MATERIAL_IMAGES.with(|images| images.borrow_mut().push((id, image)));
         }
         if objects.insert(symbol.clone(), id).is_some() {
             // ⛔ Fails closed. `seed_env.values` is a `BTreeMap`, so a duplicate
