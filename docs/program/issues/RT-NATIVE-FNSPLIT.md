@@ -367,8 +367,9 @@ Gates the [[NATIVE-HANDLE-CARRIER]] fast-follow + [[PX8-F-CAP-41]] too.
 Architect re-derives its own count across compactions; **on any disagreement
 this line wins.** Re-read this line on every hard-stop.
 
-> ## ⭐⭐ COUNT OF RECORD = **14** (2026-07-28)
+> ## ⭐⭐ COUNT OF RECORD = **15** (2026-07-28)
 > ## ⛔ READ THIS — NOT A NUMBER FURTHER DOWN THIS SECTION.
+> ## ⚠⚠ `#15` HAS FIRED. THE ARMED RESEARCH CONSULT IS OPEN.
 >
 > ⚠ **This block exists because the only number in this section used to be
 > `Count unchanged: 11`, buried in the dated `#10` sub-block below.** It was
@@ -380,16 +381,42 @@ this line wins.** Re-read this line on every hard-stop.
 > |---|---|---|
 > | `#12` | `B2F` — process host-dispatch context has no declared lane under the fixed two-parameter ABI | `evt_27wg681jcke4v` |
 > | `#13` | `RT-SCALE-B` — the governed bracket family selects `RecursiveDescent`, so the functionized population is never produced | `evt_14eq3v2g0v1hm` · Steward `evt_37fwa49tk6dhj` |
-> | `#14` | `RT-FNSPLIT-RECUR-PORT` — a **carried** host-effect operand cannot cross the functionized closure-body boundary; `lower_process_host_effect` is specialized-only | Architect routed `evt_7pgwd2amvb41y` |
+> | `#14` | `RT-FNSPLIT-RECUR-PORT` — a **carried** host-effect operand cannot cross the functionized closure-body boundary; `lower_process_host_effect` is specialized-only | Architect ruled `evt_3629v1gy7fwqq` · Steward `evt_4r8agncfanwvx` |
+> | `#15` | `RT-FNSPLIT-RECUR-PORT` — with `D6`'s seats open, the corrected family's `Match` result join **has no carried lane**; `specialized_join_arm("Match")` refuses a phase-bearing boundary word | reported `evt_70nwtht1kf0aq` · Steward `evt_43c6tspcx0xg3` · ⏳ Architect ruling owed |
 >
-> ⛔⛔ **THE NEXT HARD STOP IS `#15` AND IT FIRES THE ARMED RESEARCH CONSULT.**
-> The armed multiples are `#15`, `#18`, `#21`. ⇒ ⭐ **`#14` fires nothing, but
-> there is no longer any slack — the following stop pulls research.**
+> ⛔⛔ **`#15` HAS FIRED — THE ARMED RESEARCH CONSULT IS OPEN.** The armed
+> multiples are `#15`, `#18`, `#21`.
 >
-> ⚠ **Symptom inventory: `ENTRIES` 4 → 5 is owed by the Architect** for `#14`
-> (*"appends one line per hard-stop, before it rules"*). ⭐ **Entry 5 is the last
-> one before `NEXT PREDICATE CHECK = 6th`** — so the entry after it must answer
-> whether the entries share a predicate.
+> ⚠⚠ **Symptom inventory: `ENTRIES` 5 → 6 is owed by the Architect** for `#15`
+> (*"appends one line per hard-stop, before it rules"*). ⭐⭐ **Entry 6 IS
+> `NEXT PREDICATE CHECK` — it must answer whether the entries share a
+> predicate before the `#15` ruling issues.** ⛔ §5a-ii: naming the predicate is
+> the Architect's, never the Steward's.
+>
+> ### ⛔⛔ `#14` AND `#15` ARE THE SAME SHAPE — read this before ruling `#15`
+>
+> Both are **a specialized-only surface meeting a carried boundary word**:
+>
+> | stop | surface | refusal |
+> |---|---|---|
+> | `#14` | `lower_process_host_effect` — host-effect operand | *"a host-effect operand is a specialized-only surface and a carried boundary word has no compile-time template"* |
+> | `#15` | `specialized_join_arm("Match")` — ordinary result join | *"`Match` merges native scalar lanes and has no carried lane; a boundary word cannot cross it until that join carries the phase"* |
+>
+> ⇒ ⚠ **Each narrowly-ruled seat opens the path far enough to reveal the next
+> one.** `D6` was ruled narrow deliberately and that was right; ⛔ the
+> consequence is that this node has now been re-priced twice on one underlying
+> shape.
+>
+> ⇒ ⛔⛔ **THE QUESTION IS NOT "may we open a carried `Match` join lane?"** It is
+> **whether there is ONE general carried-phase representation boundary of which
+> both are instances, and how many more sit between here and a complete
+> `UnitBundle`.** ⚠ Answering seat-by-seat is how this node gets re-priced a
+> third and fourth time.
+>
+> ⭐ **The already-named §5a-ii predicate is `executable-boundary closure`.**
+> ⇒ That is exactly what entry 6's mandated check exists to detect, and it falls
+> on exactly the right entry. ⛔ **Pointing at the coincidence is the Steward's
+> limit; ruling it is the Architect's.**
 
 > ### ✅✅ THE §5a-ii PREDICATE IS NAMED — Architect, 2026-07-28 (`evt_55bzwnhjpwjrs`)
 >

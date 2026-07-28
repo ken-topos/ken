@@ -266,6 +266,64 @@ origin: RT-SCALE-B frame-unsatisfied hard stop #13, raised by runtime-implemente
 > `recursive_positions = [0]`, **all** trap arms, the `n=3..7` family, and LIFO
 > bracket behavior.
 
+> ## ⛔⛔ HARD STOP `#15` — 2026-07-28, after `S6/D7`. ⚠ **THE ARMED RESEARCH
+> ## CONSULT HAS FIRED.** Scope: **it folds in. Still not a new node.**
+>
+> **Reported by `runtime-implementer` (`evt_70nwtht1kf0aq`), escalated by
+> `runtime-leader` (`evt_7wb1y9a8rdrza`), Steward disposition
+> `evt_43c6tspcx0xg3`.** ✅ `S6/D7` committed alone at `f1306864`; `S7/D6` held
+> as a one-file patch. No prohibited change made.
+>
+> ### What `S6`/`D7` proved before it stopped — ⭐ `AC-7` did its job
+>
+> Structural `n=3..7` pin **green**. The span-origin-role evasion **red at the
+> intended role assertion** and was restored. ⭐ The generated case scope was
+> audited against the real three-role inventory — allocated buffer, original
+> `Scope` argument, induction hypothesis — so `ih(buffer)` uses the **allocation
+> result**, not the original closure. ⇒ **The index audit caught exactly what
+> copying raw `Var` indices out of the ruling would have missed.**
+>
+> ### The stop
+>
+> ```text
+> BoundaryCarrier: Match merges native scalar lanes and has no carried lane; a
+> boundary word cannot cross it until that join carries the phase
+> ```
+>
+> With the corrected family **and** `D6`'s `BufferFreeze` seats open, the
+> governed compile reaches **past both carried resource operands** and then
+> refuses at `specialized_join_arm("Match")`: the corrected closure body returns
+> the recursive bracket through an ordinary `Match`, and after the host-seat port
+> that result is phase-bearing. ⛔ **`D6`'s closed license does not admit a
+> carried ordinary `Match` result join** — opening one is a new executable
+> representation mechanism. ✅ Runtime made no such change.
+>
+> ### ⭐ WHY IT FOLDS — re-derived, not cited
+>
+> **Identical to `#14` and deliberately re-argued rather than inherited.**
+> `AC-1` requires a complete `UnitBundle`; `AC-6` requires the metrics to be
+> collectable. Compilation still halts — now at the `Match` join instead of the
+> host-effect operand — so **both remain undischargeable inside this node's own
+> acceptance criteria.** ⛔ A new node would again insert a hard prerequisite in
+> front of an `active` critical-path node.
+>
+> ⛔ **No `D8` and no re-pricing until the Architect rules.** The mechanism
+> determines the size, exactly as at `#14`.
+>
+> ### ⛔⛔ THE PATTERN MATTERS MORE THAN THIS STOP
+>
+> **`#14` and `#15` are the same shape — a specialized-only surface meeting a
+> carried boundary word.** ⇒ ⚠ **Each narrowly-ruled seat opens the path far
+> enough to reveal the next one**, and this node has now been re-priced twice on
+> one underlying shape.
+>
+> ⇒ ⛔ **The consult question is not "may we open a carried `Match` join
+> lane?"** It is **whether one general carried-phase representation boundary
+> subsumes both, and how many instances remain before a complete `UnitBundle`.**
+> ⭐ The named §5a-ii predicate is `executable-boundary closure`, and **entry 6
+> is the mandated predicate check** — it falls on exactly the right entry.
+> ⛔ §5a-ii: the Architect names it, not the Steward.
+
 ## Objective
 
 Make the **same governed** `nested_resource_bracket` family — recursive
@@ -360,16 +418,19 @@ the corrected source, not assumed to carry.
 
 ## Bookkeeping
 
-- **Hard-stop count of record: 14.** ⛔ **No research pull fires at `#14`** —
-  the armed multiples are `#15`, `#18`, `#21`. ⚠⚠ **`#15` IS ARMED: the next
-  hard stop pulls research, with no slack left.** The authoritative counter is
+- **Hard-stop count of record: 15.** ⚠⚠ **`#15` HAS FIRED — the armed research
+  consult is OPEN.** The armed multiples are `#15`, `#18`, `#21`; the next is
+  `#18`. The authoritative counter is
   `docs/program/issues/RT-NATIVE-FNSPLIT.md`'s **`COUNT OF RECORD` block at the
   head of `§5a`**, which wins on any disagreement — ⛔ read it at the point of a
   stop, never a count transcribed into a frame (**including this line**).
-- **Symptom inventory: `ENTRIES` 4 → 5**, appended by the **Architect** at
-  commit `9db7991f` **before** it ruled, as the protocol requires. ⛔ **`NEXT
-  PREDICATE CHECK` stays the 6th entry.** ⚠ **Entry 5 is the last one before
-  it** — the 6th must answer the shared-predicate question.
+- **Symptom inventory: `ENTRIES` 4 → 5** for `#14`, appended by the
+  **Architect** at commit `9db7991f` **before** it ruled, as the protocol
+  requires. ⚠⚠ **`ENTRIES` 5 → 6 is now owed for `#15` — and entry 6 IS `NEXT
+  PREDICATE CHECK`.** ⇒ ⛔ **The Architect must answer whether the entries share
+  a predicate BEFORE the `#15` ruling issues.** ⭐ The predicate it already
+  named is `executable-boundary closure` (`evt_55bzwnhjpwjrs`); ⛔ §5a-ii —
+  naming it is the Architect's, never the Steward's.
 - ⛔ **§5a-ii: the shared predicate is the Architect's to name**, and it named it
   at `evt_55bzwnhjpwjrs`. The Steward does not restate it.
 
