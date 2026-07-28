@@ -3505,11 +3505,17 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
             // allowed-inventory.
             "pub(in crate::cranelift_backend) fn case_constructor_identity(",
             "pub(in crate::cranelift_backend) fn constructor_symbol_identity(",
+            // `RT-FNSPLIT-C2-SYNTH-ID` adds one closed synthesized-role
+            // identity route plus the opaque dynamic-role population. Neither
+            // accepts a spelling, origin, hash, or ordinal from lowering.
+            "pub(in crate::cranelift_backend) fn synthesized_constructor_identity(",
+            "pub(in crate::cranelift_backend) fn synthesized_io_error_roles(",
             "pub(in crate::cranelift_backend) fn project_field_identity(",
             "pub(in crate::cranelift_backend) fn record_field_identity(",
             "pub(in crate::cranelift_backend) fn root_static_origin(",
             "pub(in crate::cranelift_backend) fn declaration_occurrence_origin(",
             "pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(",
+            "pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols<'src>(",
         ],
         "AC-4 -- the planner's exported surface changed; exactly one of these may \
          return a source term"
@@ -4308,12 +4314,15 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
          count to be `tokens - definitions`"
     );
     let calls = tokens - definitions;
-    // ⭐ **59 -> 61 on `RT-FNSPLIT-C1` `D3`, and the arithmetic is the whole
+    // ⭐ **59 -> 61 on `RT-FNSPLIT-C1` `D3`, then 61 -> 62 on
+    // `RT-FNSPLIT-C2-SYNTH-ID`, and the arithmetic is the whole
     // report the pin asks for.** The two added calls are the case-body descents
     // of the two *carried* elimination routes — `lower_carried_match` and
     // `lower_carried_computational_match` — each lowering a case body under a
     // `case_env` whose binders are runtime projections rather than compile-time
-    // constructor arguments.
+    // constructor arguments. C2 adds the HostResult-specific carried case-body
+    // descent: the runtime success bit chooses the Result case, while the
+    // selected payload remains a carried operand in that case's environment.
     //
     // ⭐ **Neither is a new owner boundary**, which is the disposition this pin
     // actually reports. A carried case body is reached by ordinary descent from
@@ -4323,7 +4332,7 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
     // `StaticBody` edge is introduced, and no retained body is reached by a new
     // path.
     assert_eq!(
-        calls, 61,
+        calls, 62,
         "D6: the tokenized production call population into `lower_expr` moved. \
          ⚠ If you reached this by counting `self.lower_expr(` you will have got \
          one fewer -- the root call at `core.rs:188` is spelled \
@@ -4497,9 +4506,13 @@ fn the_owner_classification_has_a_closed_production_naming_inventory() {
         vec![
             "pub(in crate::cranelift_backend) struct StaticOriginId(pub(super) u32);",
             "pub(in crate::cranelift_backend) struct ConstructorIdentity(pub(super) DenseRange);",
+            "pub(in crate::cranelift_backend) enum SynthesizedFixedConstructorRole {",
+            "pub(in crate::cranelift_backend) struct SynthesizedIoErrorRole(pub(super) u32);",
+            "pub(in crate::cranelift_backend) enum SynthesizedConstructorRole {",
             "pub(in crate::cranelift_backend) struct FieldIdentity(pub(super) DenseRange);",
             "pub(in crate::cranelift_backend) fn tag_abi_word(self) -> Result<u64, CraneliftBackendError> {",
             "pub(in crate::cranelift_backend) fn name_abi_word(self) -> Result<u64, CraneliftBackendError> {",
+            "pub(in crate::cranelift_backend) fn with_last_io_error_role_omitted<T>(",
         ],
         "D7: the plane's widened-visibility inventory changed. `StaticOriginId` \
          is widened deliberately so the lowering can carry an occurrence's \
@@ -4515,6 +4528,12 @@ fn the_owner_classification_has_a_closed_production_naming_inventory() {
          METHODS ON THE TYPED IDENTITY rather than a shared `u64` conversion, \
          so neither namespace can be erased before the tag-vs-name ABI \
          operation is chosen.\n\
+         ⭐ `RT-FNSPLIT-C2-SYNTH-ID` adds the closed fixed-role sum, the opaque \
+         dynamic-role token, their closed key sum, and a cfg(test) omission \
+         seam. The source tripwire cannot distinguish cfg(test), so it records \
+         that seam without claiming production reachability. The IO token's \
+         field remains parent-private and lowering can only receive one from \
+         the plan.\n\
          ⛔ What is NOT widened, and is the thing this pin most needs to keep \
          catching: `SemanticPlane` and its `names` arena stay `pub(super)`. The \
          Architect's ruling forbids resolving a consumer's need by widening the \
@@ -4711,10 +4730,12 @@ fn c1_d5_a_closure_is_inadmissible_at_the_root_and_at_every_depth() {
     };
     let depth_1 = Lowered::Constructor {
         constructor: "ctor:fixture::Box::MkBox".to_string(),
+        synthesized_identity: None,
         args: vec![c1_closure(origin)],
     };
     let depth_2 = Lowered::Constructor {
         constructor: "ctor:fixture::Box::MkBox".to_string(),
+        synthesized_identity: None,
         args: vec![Lowered::Record {
             fields: vec![("field:held".to_string(), c1_closure(origin))],
         }],
@@ -4769,6 +4790,7 @@ fn c1_d5_a_closure_free_constructor_is_admissible() {
     // Promise class: durable invariant.
     let closure_free = Lowered::Constructor {
         constructor: "ctor:fixture::Pair::MkPair".to_string(),
+        synthesized_identity: None,
         args: vec![
             Lowered::String("left".to_string()),
             Lowered::Record {
@@ -4788,6 +4810,7 @@ fn c1_d5_a_closure_free_constructor_is_admissible() {
     let origin = c1_closure_fixture_origin();
     let closure_bearing = Lowered::Constructor {
         constructor: "ctor:fixture::Pair::MkPair".to_string(),
+        synthesized_identity: None,
         args: vec![
             Lowered::String("left".to_string()),
             Lowered::Record {

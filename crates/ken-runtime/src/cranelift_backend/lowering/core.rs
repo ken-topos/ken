@@ -11,6 +11,17 @@ pub(in crate::cranelift_backend) use super::*;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+thread_local! {
+    static C2_UNIT_EMISSION_EPOCH: std::cell::Cell<Option<u64>> =
+        const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+fn c2_unit_emission_epoch() -> Option<u64> {
+    C2_UNIT_EMISSION_EPOCH.with(std::cell::Cell::get)
+}
+
 pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     mut module: M,
     function_name: &str,
@@ -28,6 +39,8 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     native_join_plan: Option<crate::NativeJoinPlanV1>,
     oriented_subcontinuation_plan: Option<crate::OrientedSubcontinuationPlanV1>,
 ) -> Result<CompiledModule<M>, CraneliftBackendError> {
+    #[cfg(test)]
+    C2_UNIT_EMISSION_EPOCH.with(|epoch| epoch.set(Some(0)));
     validate_oriented_subcontinuation_transport(
         expr,
         &declarations,
@@ -42,13 +55,27 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     // occurrence BY REFERENCE, because a retained closure body is now selected by
     // its origin rather than carried as a clone. The emitter is otherwise
     // unchanged, and nothing borrowed reaches `CompiledModule`.
-    let static_transition_plan = plan_static_transition_graph(expr, &declarations)?;
+    let process_symbols = process_symbols
+        .cloned()
+        .unwrap_or_else(crate::NativeProcessSymbols::legacy_prelude);
+    let static_transition_plan =
+        plan_static_transition_graph_with_symbols(expr, &declarations, &process_symbols)?;
     let root_static_origin = static_transition_plan.root_static_origin()?;
     let mut sig = module.make_signature();
     sig.params
         .push(AbiParam::new(module.target_config().pointer_type()));
     sig.returns.push(AbiParam::new(types::I64));
 
+    #[cfg(test)]
+    C2_UNIT_EMISSION_EPOCH.with(|epoch| {
+        epoch.set(Some(
+            epoch
+                .get()
+                .expect("the C2 compilation epoch was initialized")
+                .checked_add(1)
+                .expect("the C2 compilation epoch fits u64"),
+        ));
+    });
     let func_id = module
         .declare_function(function_name, linkage, &sig)
         .map_err(|err| backend_module(err.to_string()))?;
@@ -129,8 +156,16 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         field_count: module.declare_func_in_func(boundary_value_abi.field_count, &mut ctx.func),
         field: module.declare_func_in_func(boundary_value_abi.field, &mut ctx.func),
         record_field: module.declare_func_in_func(boundary_value_abi.record_field, &mut ctx.func),
+        #[cfg(test)]
+        scalar: module.declare_func_in_func(boundary_value_abi.scalar, &mut ctx.func),
+        host_success: module
+            .declare_func_in_func(boundary_value_abi.host_success, &mut ctx.func),
+        host_payload: module
+            .declare_func_in_func(boundary_value_abi.host_payload, &mut ctx.func),
         alloc: module.declare_func_in_func(boundary_value_abi.alloc, &mut ctx.func),
         store_tag_id: module.declare_func_in_func(boundary_value_abi.store_tag_id, &mut ctx.func),
+        store_scalar: module
+            .declare_func_in_func(boundary_value_abi.store_scalar, &mut ctx.func),
         store_field: module.declare_func_in_func(boundary_value_abi.store_field, &mut ctx.func),
         store_name: module.declare_func_in_func(boundary_value_abi.store_name, &mut ctx.func),
         make_immediate: module
@@ -173,9 +208,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: process_mode,
-        process_symbols: process_symbols
-            .cloned()
-            .unwrap_or_else(crate::NativeProcessSymbols::legacy_prelude),
+        process_symbols,
         host_dispatch,
         invocation_pointer: None,
         native_int_arena: None,
@@ -945,6 +978,7 @@ impl<'a> Lowering<'a> {
                         .collect::<Result<Vec<_>, _>>()?;
                     return Ok(LoweringOperand::Specialized(Lowered::Constructor {
                         constructor: constructor.clone(),
+                        synthesized_identity: None,
                         args: specialized_env_at(&lowered_args, "a constructor argument")?,
                     }));
                 }
@@ -1149,6 +1183,7 @@ impl<'a> Lowering<'a> {
                     builder,
                     LoweringOperand::Specialized(Lowered::Constructor {
                         constructor: constructor.clone(),
+                        synthesized_identity: None,
                         args: specialized_env_at(&lowered_args, "a constructor argument")?,
                     }),
                     eliminators,
@@ -1327,7 +1362,11 @@ impl<'a> Lowering<'a> {
                         &composed,
                     );
                 }
-                let LoweringOperand::Specialized(Lowered::Constructor { constructor, args }) = selected else {
+                let LoweringOperand::Specialized(Lowered::Constructor {
+                    constructor,
+                    args,
+                    ..
+                }) = selected else {
                     return Err(unsupported(
                         "ComputationalMatch",
                         "tree-producing match scrutinee is not Bool or a constructor",
@@ -1534,7 +1573,11 @@ impl<'a> Lowering<'a> {
                 eliminators,
             );
         }
-        let Lowered::Constructor { constructor, args } = scrutinee else {
+        let Lowered::Constructor {
+            constructor,
+            args,
+            ..
+        } = scrutinee else {
             return Err(unsupported(
                 "ComputationalMatch",
                 "scrutinee is not a constructor value after ordinary expression lowering",
@@ -1542,6 +1585,7 @@ impl<'a> Lowering<'a> {
         };
         let retained_scrutinee = Lowered::Constructor {
             constructor: constructor.clone(),
+            synthesized_identity: None,
             args: args.clone(),
         };
         let remaining_eliminators = &eliminators[1..];
@@ -2077,6 +2121,7 @@ impl<'a> Lowering<'a> {
         }
         let outer_scrutinee = Lowered::Constructor {
             constructor: deferred.constructor.to_string(),
+            synthesized_identity: None,
             args: constructor_args.clone(),
         };
         let outer_tail = match self.materialize_eliminator_frame_env(
@@ -2907,7 +2952,11 @@ impl<'a> Lowering<'a> {
                                         control,
                                     );
                                 }
-                                LoweringOperand::Specialized(Lowered::Constructor { constructor, args }) => {
+                                LoweringOperand::Specialized(Lowered::Constructor {
+                                    constructor,
+                                    args,
+                                    ..
+                                }) => {
                                     let Some((case_index, case)) = cases
                                         .iter()
                                         .enumerate()
@@ -4637,10 +4686,12 @@ impl<'a> Lowering<'a> {
     /// | nothing matched? | a compile-time `Lowered::Trap` | a **runtime** closed default |
     ///
     /// ⭐ **Both columns read ONE identity authority** (`D2`). The producer
-    /// wrote `constructor_symbol_identity(..).tag_abi_word()`; this compares
-    /// against `case_constructor_identity(..).tag_abi_word()`, and equal
-    /// spellings intern to one canonical span, so the two agree **because they
-    /// are the same number**, not because two derivations happen to coincide.
+    /// wrote either `constructor_symbol_identity(..)` for a source occurrence
+    /// or `synthesized_constructor_identity(..)` for a closed compiler role;
+    /// this compares against `case_constructor_identity(..).tag_abi_word()`.
+    /// Equal spellings intern to one canonical span, so the two agree **because
+    /// they are the same number**, not because two derivations happen to
+    /// coincide.
     /// ⛔ There is no decode step and no reverse table: the comparison is word
     /// against word, ⛔ never word against a reconstructed name.
     ///
@@ -4662,6 +4713,30 @@ impl<'a> Lowering<'a> {
         // merge block for it would leave one with no predecessor.
         if cases.is_empty() {
             return Ok(LoweringOperand::Specialized(Lowered::Trap(default.clone())));
+        }
+        let ok_case = cases
+            .iter()
+            .enumerate()
+            .find(|(_, case)| case.constructor == self.process_symbols.result_ok);
+        let err_case = cases
+            .iter()
+            .enumerate()
+            .find(|(_, case)| case.constructor == self.process_symbols.result_err);
+        if ok_case.is_some() || err_case.is_some() {
+            let (Some(ok_case), Some(err_case)) = (ok_case, err_case) else {
+                return Err(unsupported(
+                    "HostResult",
+                    "a carried HostResult match requires both closed Result cases",
+                ));
+            };
+            return self.lower_carried_host_result_match(
+                builder,
+                scrutinee,
+                ok_case,
+                err_case,
+                static_origin,
+                env,
+            );
         }
 
         // Read identity and arity ONCE, ahead of the chain: both are properties
@@ -4745,6 +4820,48 @@ impl<'a> Lowering<'a> {
                 "Match",
                 "the carried match's closed default did not seal its branch",
             ));
+        }
+
+        builder.switch_to_block(merge);
+        Ok(LoweringOperand::Carried(CarriedBoundaryWord {
+            word: builder.block_params(merge)[0],
+        }))
+    }
+
+    fn lower_carried_host_result_match(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        scrutinee: CarriedBoundaryWord,
+        ok_case: (usize, &crate::RuntimeMatchCase),
+        err_case: (usize, &crate::RuntimeMatchCase),
+        static_origin: StaticOriginId,
+        env: &[LoweringOperand],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        if ok_case.1.binders != 1 || err_case.1.binders != 1 {
+            return Err(unsupported(
+                "HostResult",
+                "carried Result cases must each bind exactly one selected payload",
+            ));
+        }
+        let success = self.emit_carrier_host_success(builder, scrutinee)?;
+        let payload = self.emit_carrier_host_payload(builder, scrutinee)?;
+        let ok_block = builder.create_block();
+        let err_block = builder.create_block();
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+        builder
+            .ins()
+            .brif(success, ok_block, &[], err_block, &[]);
+
+        for (block, (index, case)) in [(ok_block, ok_case), (err_block, err_case)] {
+            builder.switch_to_block(block);
+            let case_env = env_with_operands([LoweringOperand::Carried(payload)], env);
+            let body = self.case_body_occurrence(static_origin, index, &case.body)?;
+            let body_origin = body.static_origin;
+            let lowered = self.lower_expr(builder, body, &case_env)?;
+            let word =
+                self.carried_join_arm(builder, body_origin, lowered, "a carried HostResult arm")?;
+            builder.ins().jump(merge, &[word.word.into()]);
         }
 
         builder.switch_to_block(merge);
@@ -5327,6 +5444,7 @@ impl<'a> Lowering<'a> {
                 }
                 Ok(LoweringOperand::Specialized(Lowered::Constructor {
                     constructor: constructor.clone(),
+                    synthesized_identity: None,
                     args: specialized_env_at(&lowered_args, "a constructor argument")?,
                 }))
             }
@@ -5508,7 +5626,11 @@ impl<'a> Lowering<'a> {
                         pair,
                     )));
                 }
-                let LoweringOperand::Specialized(Lowered::Constructor { constructor, args }) = lowered_scrutinee else {
+                let LoweringOperand::Specialized(Lowered::Constructor {
+                    constructor,
+                    args,
+                    ..
+                }) = lowered_scrutinee else {
                     return Err(unsupported("Match", "scrutinee is not a constructor value"));
                 };
                 let Some((index, case)) = cases
@@ -6417,22 +6539,9 @@ impl<'a> Lowering<'a> {
             );
             let payload = builder.ins().sshr_imm(detail, 32);
             let payload_int = self.lower_dynamic_small_int(builder, payload);
-            let last = self.process_symbols.io_errors.len().saturating_sub(1);
             let io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
                 discriminator: builder.ins().band_imm(detail, 0xff),
-                alternatives: self
-                    .process_symbols
-                    .io_errors
-                    .iter()
-                    .enumerate()
-                    .map(|(tag, constructor)| DynamicConstructorAlternativeV1 {
-                        tag: tag as i64,
-                        constructor: constructor.clone(),
-                        fields: (tag == last)
-                            .then(|| vec![payload_int.clone()])
-                            .unwrap_or_default(),
-                    })
-                    .collect(),
+                alternatives: self.synthesized_io_error_alternatives(payload_int)?,
             });
             let error = if matches!(
                 operation,
@@ -6445,34 +6554,33 @@ impl<'a> Lowering<'a> {
                     .first()
                     .cloned()
                     .expect("validated FS operation has a path");
-                Lowered::Constructor {
-                    constructor: self.process_symbols.file_error.clone(),
-                    args: vec![
-                        Lowered::Constructor {
-                            constructor: match operation {
-                                ken_host::HostOpV1::FsReadFile => {
-                                    self.process_symbols.file_operation_read.clone()
-                                }
-                                ken_host::HostOpV1::FsWriteFile => {
-                                    self.process_symbols.file_operation_write.clone()
-                                }
-                                ken_host::HostOpV1::FsChangeMode => {
-                                    self.process_symbols.file_operation_change_mode.clone()
-                                }
-                                ken_host::HostOpV1::FsOpen => {
-                                    self.process_symbols.file_operation_read.clone()
-                                }
-                                _ => unreachable!("validated FS result operation"),
-                            },
-                            args: Vec::new(),
-                        },
-                        Lowered::Constructor {
-                            constructor: self.process_symbols.option_some.clone(),
-                            args: vec![path],
-                        },
-                        io_error,
-                    ],
-                }
+                let (operation_role, operation_symbol) = match operation {
+                    ken_host::HostOpV1::FsReadFile | ken_host::HostOpV1::FsOpen => (
+                        SynthesizedFixedConstructorRole::FileOperationRead,
+                        self.process_symbols.file_operation_read.clone(),
+                    ),
+                    ken_host::HostOpV1::FsWriteFile => (
+                        SynthesizedFixedConstructorRole::FileOperationWrite,
+                        self.process_symbols.file_operation_write.clone(),
+                    ),
+                    ken_host::HostOpV1::FsChangeMode => (
+                        SynthesizedFixedConstructorRole::FileOperationChangeMode,
+                        self.process_symbols.file_operation_change_mode.clone(),
+                    ),
+                    _ => unreachable!("validated FS result operation"),
+                };
+                let operation =
+                    self.synthesized_constructor(operation_role, operation_symbol, Vec::new())?;
+                let path = self.synthesized_constructor(
+                    SynthesizedFixedConstructorRole::OptionSome,
+                    self.process_symbols.option_some.clone(),
+                    vec![path],
+                )?;
+                self.synthesized_constructor(
+                    SynthesizedFixedConstructorRole::FileError,
+                    self.process_symbols.file_error.clone(),
+                    vec![operation, path, io_error],
+                )?
             } else if matches!(
                 operation,
                 ken_host::HostOpV1::FsHandleMetadata
@@ -6500,106 +6608,107 @@ impl<'a> Lowering<'a> {
                 let surface_io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
                     discriminator: builder.ins().band_imm(surface_io, 0xff),
                     alternatives: self
-                        .process_symbols
-                        .io_errors
-                        .iter()
-                        .enumerate()
-                        .map(|(tag, constructor)| DynamicConstructorAlternativeV1 {
-                            tag: tag as i64,
-                            constructor: constructor.clone(),
-                            fields: (tag == last)
-                                .then(|| vec![surface_io_payload_int.clone()])
-                                .unwrap_or_default(),
-                        })
-                        .collect(),
+                        .synthesized_io_error_alternatives(surface_io_payload_int)?,
                 });
                 let identity_low = builder.ins().band_imm(resource_identity, 0xffff_ffff);
                 let identity_high = builder.ins().ushr_imm(resource_identity, 32);
                 let identity_low_int = self.lower_dynamic_small_int(builder, identity_low);
                 let identity_high_int = self.lower_dynamic_small_int(builder, identity_high);
-                let resource_kind_value = |discriminator| {
-                    Lowered::DynamicConstructor(DynamicConstructorV1 {
+                let resource_kind_value = |this: &Self, discriminator| {
+                    Ok::<_, CraneliftBackendError>(Lowered::DynamicConstructor(
+                        DynamicConstructorV1 {
                         discriminator,
                         alternatives: vec![
-                            DynamicConstructorAlternativeV1 {
-                                tag: wire.resource_kind_fs_handle as i64,
-                                constructor: self.process_symbols.resource_kind_fs_handle.clone(),
-                                fields: Vec::new(),
-                            },
-                            DynamicConstructorAlternativeV1 {
-                                tag: wire.resource_kind_buffer as i64,
-                                constructor: self.process_symbols.resource_kind_buffer.clone(),
-                                fields: Vec::new(),
-                            },
+                            this.synthesized_dynamic_alternative(
+                                wire.resource_kind_fs_handle as i64,
+                                SynthesizedFixedConstructorRole::ResourceKindFsHandle,
+                                this.process_symbols.resource_kind_fs_handle.clone(),
+                                Vec::new(),
+                            )?,
+                            this.synthesized_dynamic_alternative(
+                                wire.resource_kind_buffer as i64,
+                                SynthesizedFixedConstructorRole::ResourceKindBuffer,
+                                this.process_symbols.resource_kind_buffer.clone(),
+                                Vec::new(),
+                            )?,
                         ],
-                    })
+                    }))
                 };
+                let trace_identity = self.synthesized_constructor(
+                    SynthesizedFixedConstructorRole::ResourceTraceIdentity,
+                    self.process_symbols.resource_trace_identity.clone(),
+                    vec![identity_low_int, identity_high_int],
+                )?;
                 Lowered::DynamicConstructor(DynamicConstructorV1 {
                     discriminator: surface_tag,
                     alternatives: vec![
-                        DynamicConstructorAlternativeV1 {
-                            tag: 0,
-                            constructor: self.process_symbols.resource_host_io.clone(),
-                            fields: vec![surface_io_error.clone()],
-                        },
-                        DynamicConstructorAlternativeV1 {
-                            tag: 1,
-                            constructor: self.process_symbols.resource_closed.clone(),
-                            fields: Vec::new(),
-                        },
-                        DynamicConstructorAlternativeV1 {
-                            tag: 2,
-                            constructor: self.process_symbols.resource_malformed.clone(),
-                            fields: Vec::new(),
-                        },
-                        DynamicConstructorAlternativeV1 {
-                            tag: 3,
-                            constructor: self.process_symbols.resource_right_not_held.clone(),
-                            fields: vec![resource_required_int, resource_held_int],
-                        },
-                        DynamicConstructorAlternativeV1 {
-                            tag: 4,
-                            constructor: self.process_symbols.resource_release_failed.clone(),
-                            fields: vec![
-                                resource_kind_value(resource_kind),
-                                Lowered::Constructor {
-                                    constructor: self
-                                        .process_symbols
-                                        .resource_trace_identity
-                                        .clone(),
-                                    args: vec![identity_low_int, identity_high_int],
-                                },
+                        self.synthesized_dynamic_alternative(
+                            0,
+                            SynthesizedFixedConstructorRole::ResourceHostIo,
+                            self.process_symbols.resource_host_io.clone(),
+                            vec![surface_io_error.clone()],
+                        )?,
+                        self.synthesized_dynamic_alternative(
+                            1,
+                            SynthesizedFixedConstructorRole::ResourceClosed,
+                            self.process_symbols.resource_closed.clone(),
+                            Vec::new(),
+                        )?,
+                        self.synthesized_dynamic_alternative(
+                            2,
+                            SynthesizedFixedConstructorRole::ResourceMalformed,
+                            self.process_symbols.resource_malformed.clone(),
+                            Vec::new(),
+                        )?,
+                        self.synthesized_dynamic_alternative(
+                            3,
+                            SynthesizedFixedConstructorRole::ResourceRightNotHeld,
+                            self.process_symbols.resource_right_not_held.clone(),
+                            vec![resource_required_int, resource_held_int],
+                        )?,
+                        self.synthesized_dynamic_alternative(
+                            4,
+                            SynthesizedFixedConstructorRole::ResourceReleaseFailed,
+                            self.process_symbols.resource_release_failed.clone(),
+                            vec![
+                                resource_kind_value(self, resource_kind)?,
+                                trace_identity,
                                 surface_io_error,
                             ],
-                        },
-                        DynamicConstructorAlternativeV1 {
-                            tag: 5,
-                            constructor: self.process_symbols.resource_kind_mismatch.clone(),
-                            fields: vec![
-                                resource_kind_value(resource_expected_kind),
-                                resource_kind_value(resource_actual_kind),
+                        )?,
+                        self.synthesized_dynamic_alternative(
+                            5,
+                            SynthesizedFixedConstructorRole::ResourceKindMismatch,
+                            self.process_symbols.resource_kind_mismatch.clone(),
+                            vec![
+                                resource_kind_value(self, resource_expected_kind)?,
+                                resource_kind_value(self, resource_actual_kind)?,
                             ],
-                        },
-                        DynamicConstructorAlternativeV1 {
-                            tag: 6,
-                            constructor: self.process_symbols.resource_buffer_limit.clone(),
-                            fields: Vec::new(),
-                        },
-                        DynamicConstructorAlternativeV1 {
-                            tag: 7,
-                            constructor: self.process_symbols.resource_invalid_offset.clone(),
-                            fields: Vec::new(),
-                        },
-                        DynamicConstructorAlternativeV1 {
-                            tag: 8,
-                            constructor: self.process_symbols.resource_invalid_bounds.clone(),
-                            fields: Vec::new(),
-                        },
-                        DynamicConstructorAlternativeV1 {
-                            tag: 9,
-                            constructor: self.process_symbols.resource_no_progress.clone(),
-                            fields: Vec::new(),
-                        },
+                        )?,
+                        self.synthesized_dynamic_alternative(
+                            6,
+                            SynthesizedFixedConstructorRole::ResourceBufferLimit,
+                            self.process_symbols.resource_buffer_limit.clone(),
+                            Vec::new(),
+                        )?,
+                        self.synthesized_dynamic_alternative(
+                            7,
+                            SynthesizedFixedConstructorRole::ResourceInvalidOffset,
+                            self.process_symbols.resource_invalid_offset.clone(),
+                            Vec::new(),
+                        )?,
+                        self.synthesized_dynamic_alternative(
+                            8,
+                            SynthesizedFixedConstructorRole::ResourceInvalidBounds,
+                            self.process_symbols.resource_invalid_bounds.clone(),
+                            Vec::new(),
+                        )?,
+                        self.synthesized_dynamic_alternative(
+                            9,
+                            SynthesizedFixedConstructorRole::ResourceNoProgress,
+                            self.process_symbols.resource_no_progress.clone(),
+                            Vec::new(),
+                        )?,
                     ],
                 })
             } else {
@@ -6709,34 +6818,38 @@ impl<'a> Lowering<'a> {
                     ));
                 };
                 let span_origin = *span_origin;
-                let span = Lowered::Constructor {
-                    constructor: self.process_symbols.private_buffer_span.clone(),
-                    args: vec![
+                let span = self.synthesized_constructor(
+                    SynthesizedFixedConstructorRole::PrivateBufferSpan,
+                    self.process_symbols.private_buffer_span.clone(),
+                    vec![
                         Lowered::ResourceToken { value: span_origin },
                         reply_start_int,
                         Lowered::BoundedNat(count),
                     ],
-                };
-                let transferred = Lowered::Constructor {
-                    constructor: self.process_symbols.private_transfer_count.clone(),
-                    args: vec![
+                )?;
+                let transferred = self.synthesized_constructor(
+                    SynthesizedFixedConstructorRole::PrivateTransferCount,
+                    self.process_symbols.private_transfer_count.clone(),
+                    vec![
                         Lowered::BoundedNat(predecessor),
                         Lowered::BoundedNat(remaining),
                     ],
-                };
+                )?;
                 Lowered::DynamicConstructor(DynamicConstructorV1 {
                     discriminator: builder.ins().uextend(types::I64, nonzero),
                     alternatives: vec![
-                        DynamicConstructorAlternativeV1 {
-                            tag: 0,
-                            constructor: self.process_symbols.read_eof.clone(),
-                            fields: Vec::new(),
-                        },
-                        DynamicConstructorAlternativeV1 {
-                            tag: 1,
-                            constructor: self.process_symbols.read_some.clone(),
-                            fields: vec![span, transferred],
-                        },
+                        self.synthesized_dynamic_alternative(
+                            0,
+                            SynthesizedFixedConstructorRole::ReadEof,
+                            self.process_symbols.read_eof.clone(),
+                            Vec::new(),
+                        )?,
+                        self.synthesized_dynamic_alternative(
+                            1,
+                            SynthesizedFixedConstructorRole::ReadSome,
+                            self.process_symbols.read_some.clone(),
+                            vec![span, transferred],
+                        )?,
                     ],
                 })
             } else if operation == ken_host::HostOpV1::FsWriteAt {
@@ -6757,23 +6870,27 @@ impl<'a> Lowering<'a> {
                     effective_request,
                     None,
                 );
-                Lowered::Constructor {
-                    constructor: self.process_symbols.wrote.clone(),
-                    args: vec![Lowered::Constructor {
-                        constructor: self.process_symbols.private_transfer_count.clone(),
-                        args: vec![
+                let transferred = self.synthesized_constructor(
+                    SynthesizedFixedConstructorRole::PrivateTransferCount,
+                    self.process_symbols.private_transfer_count.clone(),
+                    vec![
                             Lowered::BoundedNat(predecessor),
                             Lowered::BoundedNat(remaining),
-                        ],
-                    }],
-                }
+                    ],
+                )?;
+                self.synthesized_constructor(
+                    SynthesizedFixedConstructorRole::Wrote,
+                    self.process_symbols.wrote.clone(),
+                    vec![transferred],
+                )?
             } else if operation == ken_host::HostOpV1::FsHandleMetadata {
                 self.lower_unsigned_u64_int(builder, detail)?
             } else {
-                Lowered::Constructor {
-                    constructor: self.process_symbols.unit.clone(),
-                    args: Vec::new(),
-                }
+                self.synthesized_constructor(
+                    SynthesizedFixedConstructorRole::Unit,
+                    self.process_symbols.unit.clone(),
+                    Vec::new(),
+                )?
             };
             Ok(LoweringOperand::Specialized(Lowered::HostResult {
                 success,

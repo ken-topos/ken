@@ -13,6 +13,13 @@ use crate::{
     RuntimeValue, Sign,
 };
 use std::collections::BTreeMap;
+#[cfg(test)]
+use std::cell::Cell;
+
+#[cfg(test)]
+thread_local! {
+    static OMIT_LAST_IO_ERROR_ROLE: Cell<bool> = const { Cell::new(false) };
+}
 
 /// The preallocated positional identity of one planned occurrence.
 ///
@@ -43,6 +50,111 @@ pub(in crate::cranelift_backend) struct StaticOriginId(pub(super) u32);
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(transparent)]
 pub(in crate::cranelift_backend) struct ConstructorIdentity(pub(super) DenseRange);
+
+/// A fixed constructor role synthesized by effect lowering.
+///
+/// This is a closed capability vocabulary, not a name lookup.  Lowering may
+/// ask for one of these roles, but it cannot submit a `RuntimeSymbol`, an
+/// ordinal, or an origin and thereby mint a second constructor identity.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum SynthesizedFixedConstructorRole {
+    FileError,
+    FileOperationRead,
+    FileOperationWrite,
+    FileOperationChangeMode,
+    OptionSome,
+    ResourceHostIo,
+    ResourceClosed,
+    ResourceMalformed,
+    ResourceRightNotHeld,
+    ResourceReleaseFailed,
+    ResourceKindMismatch,
+    ResourceBufferLimit,
+    ResourceInvalidOffset,
+    ResourceInvalidBounds,
+    ResourceNoProgress,
+    ResourceKindFsHandle,
+    ResourceKindBuffer,
+    ResourceTraceIdentity,
+    PrivateBufferSpan,
+    PrivateTransferCount,
+    ReadSome,
+    ReadEof,
+    Wrote,
+    Unit,
+}
+
+impl SynthesizedFixedConstructorRole {
+    pub(super) const ALL: [Self; 24] = [
+        Self::FileError,
+        Self::FileOperationRead,
+        Self::FileOperationWrite,
+        Self::FileOperationChangeMode,
+        Self::OptionSome,
+        Self::ResourceHostIo,
+        Self::ResourceClosed,
+        Self::ResourceMalformed,
+        Self::ResourceRightNotHeld,
+        Self::ResourceReleaseFailed,
+        Self::ResourceKindMismatch,
+        Self::ResourceBufferLimit,
+        Self::ResourceInvalidOffset,
+        Self::ResourceInvalidBounds,
+        Self::ResourceNoProgress,
+        Self::ResourceKindFsHandle,
+        Self::ResourceKindBuffer,
+        Self::ResourceTraceIdentity,
+        Self::PrivateBufferSpan,
+        Self::PrivateTransferCount,
+        Self::ReadSome,
+        Self::ReadEof,
+        Self::Wrote,
+        Self::Unit,
+    ];
+
+    fn spelling<'a>(self, symbols: &'a crate::NativeProcessSymbols) -> &'a str {
+        match self {
+            Self::FileError => &symbols.file_error,
+            Self::FileOperationRead => &symbols.file_operation_read,
+            Self::FileOperationWrite => &symbols.file_operation_write,
+            Self::FileOperationChangeMode => &symbols.file_operation_change_mode,
+            Self::OptionSome => &symbols.option_some,
+            Self::ResourceHostIo => &symbols.resource_host_io,
+            Self::ResourceClosed => &symbols.resource_closed,
+            Self::ResourceMalformed => &symbols.resource_malformed,
+            Self::ResourceRightNotHeld => &symbols.resource_right_not_held,
+            Self::ResourceReleaseFailed => &symbols.resource_release_failed,
+            Self::ResourceKindMismatch => &symbols.resource_kind_mismatch,
+            Self::ResourceBufferLimit => &symbols.resource_buffer_limit,
+            Self::ResourceInvalidOffset => &symbols.resource_invalid_offset,
+            Self::ResourceInvalidBounds => &symbols.resource_invalid_bounds,
+            Self::ResourceNoProgress => &symbols.resource_no_progress,
+            Self::ResourceKindFsHandle => &symbols.resource_kind_fs_handle,
+            Self::ResourceKindBuffer => &symbols.resource_kind_buffer,
+            Self::ResourceTraceIdentity => &symbols.resource_trace_identity,
+            Self::PrivateBufferSpan => &symbols.private_buffer_span,
+            Self::PrivateTransferCount => &symbols.private_transfer_count,
+            Self::ReadSome => &symbols.read_some,
+            Self::ReadEof => &symbols.read_eof,
+            Self::Wrote => &symbols.wrote,
+            Self::Unit => &symbols.unit,
+        }
+    }
+}
+
+/// One dynamic `IOError` role minted by semantic-plane construction.
+///
+/// The wrapped position is planner-private.  Lowering can only receive these
+/// values from `StaticTransitionPlan::synthesized_io_error_roles`; it cannot
+/// forge an alternative by supplying a vector index.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct SynthesizedIoErrorRole(pub(super) u32);
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum SynthesizedConstructorRole {
+    Fixed(SynthesizedFixedConstructorRole),
+    IoError(SynthesizedIoErrorRole),
+}
 
 /// The artifact-static identity of a **record field** name (`D1`).
 ///
@@ -553,6 +665,56 @@ impl SemanticMaterialArena {
     }
 }
 
+pub(super) fn build_synthesized_constructor_inventory(
+    arena: &mut SemanticMaterialArena,
+    symbols: &crate::NativeProcessSymbols,
+) -> Result<
+    (
+        BTreeMap<SynthesizedConstructorRole, DenseRange>,
+        Vec<SynthesizedIoErrorRole>,
+    ),
+    CraneliftBackendError,
+> {
+    let mut identities = BTreeMap::new();
+    for role in SynthesizedFixedConstructorRole::ALL {
+        let span = arena.intern(role.spelling(symbols).as_bytes())?;
+        identities.insert(SynthesizedConstructorRole::Fixed(role), span);
+    }
+
+    let mut io_roles = Vec::with_capacity(symbols.io_errors.len());
+    for (position, spelling) in symbols.io_errors.iter().enumerate() {
+        let role = SynthesizedIoErrorRole(u32::try_from(position).map_err(|_| {
+            planner_capacity_error("synthesized IOError role population exhausted")
+        })?);
+        let span = arena.intern(spelling.as_bytes())?;
+        #[cfg(test)]
+        let omit = OMIT_LAST_IO_ERROR_ROLE.with(Cell::get)
+            && position + 1 == symbols.io_errors.len();
+        #[cfg(not(test))]
+        let omit = false;
+        if !omit {
+            identities.insert(SynthesizedConstructorRole::IoError(role), span);
+        }
+        io_roles.push(role);
+    }
+    Ok((identities, io_roles))
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn with_last_io_error_role_omitted<T>(
+    body: impl FnOnce() -> T,
+) -> T {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            OMIT_LAST_IO_ERROR_ROLE.with(|flag| flag.set(false));
+        }
+    }
+    OMIT_LAST_IO_ERROR_ROLE.with(|flag| flag.set(true));
+    let _reset = Reset;
+    body()
+}
+
 fn range_since(
     start: usize,
     end: usize,
@@ -673,6 +835,11 @@ pub(super) struct SemanticPlane {
     pub(super) capture_slots: Vec<CaptureSlot>,
     pub(super) ruled_children: Vec<RuledChild>,
     pub(super) functions: Vec<PredeclaredFunction>,
+    /// Constructor identities for the exact role population effect lowering
+    /// may synthesize.  Values are spans in `names`, produced by the same
+    /// private interner as source constructor atoms.
+    synthesized_constructor_roles: BTreeMap<SynthesizedConstructorRole, DenseRange>,
+    synthesized_io_error_roles: Vec<SynthesizedIoErrorRole>,
 }
 
 /// The unique pair of shared exit templates, located and checked as a pair.
@@ -1044,6 +1211,61 @@ fn opcode_for_source(source: SemanticSourceKind) -> SemanticOpcode {
 }
 
 impl SemanticPlane {
+    pub(super) fn install_synthesized_constructor_inventory(
+        &mut self,
+        identities: BTreeMap<SynthesizedConstructorRole, DenseRange>,
+        io_roles: Vec<SynthesizedIoErrorRole>,
+    ) {
+        self.synthesized_constructor_roles = identities;
+        self.synthesized_io_error_roles = io_roles;
+    }
+
+    pub(super) fn synthesized_constructor_identity(
+        &self,
+        role: SynthesizedConstructorRole,
+    ) -> Result<ConstructorIdentity, CraneliftBackendError> {
+        let span = self
+            .synthesized_constructor_roles
+            .get(&role)
+            .copied()
+            .ok_or_else(|| {
+                planner_error(format!(
+                    "synthesized constructor role {role:?} is absent from the closed inventory"
+                ))
+            })?;
+        validate_range(
+            span,
+            self.names.len(),
+            "synthesized constructor identity is outside the closed name arena",
+        )?;
+        Ok(ConstructorIdentity(span))
+    }
+
+    pub(super) fn synthesized_io_error_roles(&self) -> &[SynthesizedIoErrorRole] {
+        &self.synthesized_io_error_roles
+    }
+
+    pub(super) fn validate_synthesized_constructor_inventory(
+        &self,
+    ) -> Result<(), CraneliftBackendError> {
+        for role in SynthesizedFixedConstructorRole::ALL {
+            self.synthesized_constructor_identity(SynthesizedConstructorRole::Fixed(role))?;
+        }
+        for role in &self.synthesized_io_error_roles {
+            self.synthesized_constructor_identity(SynthesizedConstructorRole::IoError(*role))?;
+        }
+        let expected = SynthesizedFixedConstructorRole::ALL
+            .len()
+            .checked_add(self.synthesized_io_error_roles.len())
+            .ok_or_else(|| planner_capacity_error("synthesized constructor role count exhausted"))?;
+        if self.synthesized_constructor_roles.len() != expected {
+            return Err(planner_error(
+                "synthesized constructor inventory is not exact for its closed role population",
+            ));
+        }
+        Ok(())
+    }
+
     /// The single record an origin resolves to, with both positional-identity
     /// checks applied.
     ///

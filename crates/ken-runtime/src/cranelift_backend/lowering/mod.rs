@@ -56,8 +56,13 @@ pub(in crate::cranelift_backend) use crate::{
 pub(in crate::cranelift_backend) use super::compiled::{CompiledModule, ResultDecoder};
 pub(in crate::cranelift_backend) use super::planning::{
     collect_checked_oriented_markers, collect_checked_subcontinuation_frames,
-    plan_static_transition_graph, validate_oriented_subcontinuation_transport,
-    CheckedOrientedMarkerSets, StaticOriginId, StaticTransitionPlan,
+    plan_static_transition_graph_with_symbols, validate_oriented_subcontinuation_transport,
+    CheckedOrientedMarkerSets, ConstructorIdentity, StaticOriginId, StaticTransitionPlan,
+    SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
+};
+#[cfg(test)]
+pub(in crate::cranelift_backend) use super::planning::{
+    plan_static_transition_graph, with_last_io_error_role_omitted,
 };
 pub(in crate::cranelift_backend) use super::surface::{
     backend, backend_module, unsupported, BackendFailure, CraneliftBackendError,
@@ -589,6 +594,10 @@ enum Lowered {
     String(String),
     Constructor {
         constructor: String,
+        /// `Some` for a compiler-synthesized constructor whose identity came
+        /// from the semantic plane's closed role capability. Source
+        /// constructors keep `None` and use their planned occurrence.
+        synthesized_identity: Option<ConstructorIdentity>,
         args: Vec<Lowered>,
     },
     Record {
@@ -698,11 +707,20 @@ struct BoundaryCarrierRefs {
     /// `(arena, word, name_id, out) -> status` — `Project` by artifact-static
     /// field identity.
     record_field: FuncRef,
+    /// Test observation seam for the inline payload of a represented token or
+    /// borrowed response. Production carries these values opaquely.
+    #[cfg(test)]
+    scalar: FuncRef,
+    /// HostResult runtime discriminant and selected payload.
+    host_success: FuncRef,
+    host_payload: FuncRef,
     /// `(arena, tag, class, field_count, out) -> status` — the one-way
     /// producer's allocation step.
     alloc: FuncRef,
     /// `(arena, word, tag_id) -> status` — the producer records the identity.
     store_tag_id: FuncRef,
+    /// The producer records an inline scalar or HostResult discriminant.
+    store_scalar: FuncRef,
     /// `(arena, word, index, child) -> status` — the producer writes children.
     store_field: FuncRef,
     /// `(arena, word, index, name_id) -> status` — the producer writes a
@@ -997,23 +1015,33 @@ impl<'a> Lowering<'a> {
                 let tag = Self::carrier_immediate_tag(value)?;
                 self.emit_carrier_immediate(builder, tag, *word)
             }
-            Lowered::Constructor { args, .. } => {
+            Lowered::Constructor {
+                synthesized_identity,
+                args,
+                ..
+            } => {
                 let (tag, class) = Self::carrier_handle_disposition(value)?;
                 // ⭐ `D2` — the identity comes from the ONE artifact-static
                 // authority, via the typed newtype's own ABI-word method. ⛔ Not
                 // `intern_symbol`, which is dense insertion-order numbering over
                 // one store instance and therefore a *different* number in a
                 // different store (`§2e`).
-                let identity = self
-                    .static_transition_plan
-                    .constructor_symbol_identity(origin)?
-                    .tag_abi_word()?;
+                let identity = match synthesized_identity {
+                    Some(identity) => *identity,
+                    None => self
+                        .static_transition_plan
+                        .constructor_symbol_identity(origin)?,
+                }
+                .tag_abi_word()?;
                 let word = self.emit_carrier_alloc(builder, tag, class, args.len())?;
                 self.emit_carrier_store_tag_id(builder, word, identity)?;
                 for (position, argument) in args.iter().enumerate() {
-                    let child_origin = self
-                        .static_transition_plan
-                        .child_static_origin(origin, position)?;
+                    let child_origin = if synthesized_identity.is_some() {
+                        origin
+                    } else {
+                        self.static_transition_plan
+                            .child_static_origin(origin, position)?
+                    };
                     let child = self.emit_carrier_transfer(builder, child_origin, argument)?;
                     self.emit_carrier_store_field(builder, word, position, child)?;
                 }
@@ -1068,20 +1096,40 @@ impl<'a> Lowering<'a> {
                  the content needs the `store_bytes_len` / `store_byte` \
                  sequence, which is a distinct claim-then-fill protocol",
             )),
-            Lowered::HostResult { .. } => Err(unsupported(
-                lowered_value_kind(value),
-                "the carrier producer does not yet emit a `HostResult` handle: \
-                 its two payload words are selected by a runtime discriminant",
-            )),
-            Lowered::DynamicConstructor(_) => Err(unsupported(
-                lowered_value_kind(value),
-                "the carrier producer does not yet emit a dynamic constructor: \
-                 its alternatives are selected at runtime, so one occurrence \
-                 origin does not name one constructor identity",
-            )),
+            Lowered::HostResult {
+                success, error, ok, ..
+            } => {
+                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                let ok = self.emit_carrier_transfer(builder, origin, ok)?;
+                let error = self.emit_carrier_transfer(builder, origin, error)?;
+                let word = self.emit_carrier_alloc(builder, tag, class, 2)?;
+                self.emit_carrier_store_scalar(builder, word, *success)?;
+                self.emit_carrier_store_field(builder, word, 0, ok)?;
+                self.emit_carrier_store_field(builder, word, 1, error)?;
+                Ok(word)
+            }
+            Lowered::DynamicConstructor(dynamic) => {
+                self.emit_carrier_dynamic_constructor(builder, origin, dynamic)
+            }
+            Lowered::ResourceToken { value: payload } => {
+                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                let word = self.emit_carrier_alloc(builder, tag, class, 0)?;
+                self.emit_carrier_store_scalar(builder, word, *payload)?;
+                Ok(word)
+            }
+            Lowered::ResponseBytes { pointer, len } => {
+                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                let word = self.emit_carrier_alloc(builder, tag, class, 1)?;
+                self.emit_carrier_store_scalar(builder, word, *pointer)?;
+                let len = self.emit_carrier_immediate(
+                    builder,
+                    BoundaryTag::ImmediateInt,
+                    *len,
+                )?;
+                self.emit_carrier_store_field(builder, word, 0, len)?;
+                Ok(word)
+            }
             Lowered::CapabilityToken { .. }
-            | Lowered::ResourceToken { .. }
-            | Lowered::ResponseBytes { .. }
             | Lowered::BorrowedNativeValue { .. }
             | Lowered::BorrowedOption { .. } => Err(unsupported(
                 lowered_value_kind(value),
@@ -1293,6 +1341,79 @@ impl<'a> Lowering<'a> {
         Ok(())
     }
 
+    /// `store_scalar(arena, word, value) -> status`.
+    fn emit_carrier_store_scalar(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+        payload: cranelift_codegen::ir::Value,
+    ) -> Result<(), CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let call = builder
+            .ins()
+            .call(refs.store_scalar, &[arena, target.word, payload]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(())
+    }
+
+    fn emit_carrier_dynamic_constructor(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        dynamic: &DynamicConstructorV1,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        validate_dynamic_constructor_alternatives(
+            dynamic
+                .alternatives
+                .iter()
+                .map(|alternative| (alternative.tag, alternative.constructor.as_str())),
+        )?;
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+
+        for alternative in &dynamic.alternatives {
+            let selected = builder.create_block();
+            let next = builder.create_block();
+            let matches = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                dynamic.discriminator,
+                alternative.tag,
+            );
+            builder.ins().brif(matches, selected, &[], next, &[]);
+
+            builder.switch_to_block(selected);
+            let disposition =
+                Lowered::DynamicConstructor(DynamicConstructorV1 {
+                    discriminator: dynamic.discriminator,
+                    alternatives: vec![alternative.clone()],
+                });
+            let (tag, class) = Self::carrier_handle_disposition(&disposition)?;
+            let word =
+                self.emit_carrier_alloc(builder, tag, class, alternative.fields.len())?;
+            self.emit_carrier_store_tag_id(
+                builder,
+                word,
+                alternative.identity.tag_abi_word()?,
+            )?;
+            for (position, field) in alternative.fields.iter().enumerate() {
+                let field = self.emit_carrier_transfer(builder, origin, field)?;
+                self.emit_carrier_store_field(builder, word, position, field)?;
+            }
+            builder.ins().jump(merge, &[word.word.into()]);
+            builder.switch_to_block(next);
+        }
+
+        let malformed = builder
+            .ins()
+            .iconst(types::I64, MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS);
+        builder.ins().return_(&[malformed]);
+        builder.switch_to_block(merge);
+        Ok(CarriedBoundaryWord {
+            word: builder.block_params(merge)[0],
+        })
+    }
+
     /// `store_field(arena, word, index, child) -> status`.
     fn emit_carrier_store_field(
         &mut self,
@@ -1361,6 +1482,56 @@ impl<'a> Lowering<'a> {
         let pointer_type = builder.func.dfg.value_type(arena);
         let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
         let call = builder.ins().call(refs.tag, &[arena, target.word, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(builder.ins().stack_load(types::I64, slot, 0))
+    }
+
+    fn emit_carrier_host_success(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let call = builder
+            .ins()
+            .call(refs.host_success, &[arena, target.word, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(builder.ins().stack_load(types::I64, slot, 0))
+    }
+
+    fn emit_carrier_host_payload(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let call = builder
+            .ins()
+            .call(refs.host_payload, &[arena, target.word, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(CarriedBoundaryWord {
+            word: builder.ins().stack_load(types::I64, slot, 0),
+        })
+    }
+
+    /// Test observation seam for an opaque token or borrowed response scalar.
+    #[cfg(test)]
+    fn emit_carrier_scalar(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let call = builder.ins().call(refs.scalar, &[arena, target.word, out]);
         Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
         Ok(builder.ins().stack_load(types::I64, slot, 0))
     }
@@ -2678,8 +2849,87 @@ struct DynamicConstructorV1 {
 struct DynamicConstructorAlternativeV1 {
     tag: i64,
     constructor: RuntimeSymbol,
+    identity: ConstructorIdentity,
     fields: Vec<Lowered>,
 }
+
+impl<'a> Lowering<'a> {
+    fn synthesized_fixed_identity(
+        &self,
+        role: SynthesizedFixedConstructorRole,
+    ) -> Result<ConstructorIdentity, CraneliftBackendError> {
+        self.static_transition_plan
+            .synthesized_constructor_identity(SynthesizedConstructorRole::Fixed(role))
+    }
+
+    fn synthesized_constructor(
+        &self,
+        role: SynthesizedFixedConstructorRole,
+        constructor: RuntimeSymbol,
+        args: Vec<Lowered>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        Ok(Lowered::Constructor {
+            constructor,
+            synthesized_identity: Some(self.synthesized_fixed_identity(role)?),
+            args,
+        })
+    }
+
+    fn synthesized_dynamic_alternative(
+        &self,
+        tag: i64,
+        role: SynthesizedFixedConstructorRole,
+        constructor: RuntimeSymbol,
+        fields: Vec<Lowered>,
+    ) -> Result<DynamicConstructorAlternativeV1, CraneliftBackendError> {
+        Ok(DynamicConstructorAlternativeV1 {
+            tag,
+            constructor,
+            identity: self.synthesized_fixed_identity(role)?,
+            fields,
+        })
+    }
+
+    fn synthesized_io_error_alternatives(
+        &self,
+        payload: Lowered,
+    ) -> Result<Vec<DynamicConstructorAlternativeV1>, CraneliftBackendError> {
+        let roles = self.static_transition_plan.synthesized_io_error_roles();
+        if roles.len() != self.process_symbols.io_errors.len() {
+            return Err(unsupported(
+                "DynamicConstructor",
+                "the closed IOError role inventory does not match the effect symbol population",
+            ));
+        }
+        let last = roles.len().saturating_sub(1);
+        self.process_symbols
+            .io_errors
+            .iter()
+            .zip(roles)
+            .enumerate()
+            .map(|(tag, (constructor, role))| {
+                Ok(DynamicConstructorAlternativeV1 {
+                    tag: i64::try_from(tag).map_err(|_| {
+                        unsupported(
+                            "DynamicConstructor",
+                            "the IOError alternative population exceeds the ABI discriminator",
+                        )
+                    })?,
+                    constructor: constructor.clone(),
+                    identity: self
+                        .static_transition_plan
+                        .synthesized_constructor_identity(
+                            SynthesizedConstructorRole::IoError(*role),
+                        )?,
+                    fields: (tag == last)
+                        .then(|| vec![payload.clone()])
+                        .unwrap_or_default(),
+                })
+            })
+            .collect()
+    }
+}
+
 const MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS: i64 = -3;
 fn validate_dynamic_constructor_alternatives<'a>(
     alternatives: impl IntoIterator<Item = (i64, &'a str)>,
@@ -2757,7 +3007,9 @@ fn materialize_dynamic_constructor_env(
     env_with(alternative.fields.clone(), env)
 }
 fn console_stream_tag(value: &Lowered) -> Option<i64> {
-    let Lowered::Constructor { constructor, args } = value else {
+    let Lowered::Constructor {
+        constructor, args, ..
+    } = value else {
         return None;
     };
     if !args.is_empty() {
@@ -2774,7 +3026,9 @@ fn console_stream_tag(value: &Lowered) -> Option<i64> {
     }
 }
 fn create_policy_tag(value: &Lowered) -> Option<i64> {
-    let Lowered::Constructor { constructor, args } = value else {
+    let Lowered::Constructor {
+        constructor, args, ..
+    } = value else {
         return None;
     };
     if !args.is_empty() {
@@ -2791,7 +3045,9 @@ fn create_policy_tag(value: &Lowered) -> Option<i64> {
     }
 }
 fn resource_open_mode_tag(value: &Lowered) -> Option<i64> {
-    let Lowered::Constructor { constructor, args } = value else {
+    let Lowered::Constructor {
+        constructor, args, ..
+    } = value else {
         return None;
     };
     if constructor.ends_with("::ResourceRead") && args.is_empty() {
@@ -2805,7 +3061,9 @@ fn resource_open_mode_tag(value: &Lowered) -> Option<i64> {
     }
 }
 fn lowered_char_list(value: &Lowered) -> Option<Vec<u8>> {
-    let Lowered::Constructor { constructor, args } = value else {
+    let Lowered::Constructor {
+        constructor, args, ..
+    } = value else {
         return None;
     };
     if constructor.ends_with("::Nil") && args.is_empty() {
@@ -5526,7 +5784,9 @@ impl<'a> Lowering<'a> {
                 },
                 ScalarMergeKind::StructuralNat,
             )),
-            Lowered::Constructor { constructor, args }
+            Lowered::Constructor {
+                constructor, args, ..
+            }
                 if args.is_empty()
                     && (constructor == self.process_symbols.bool_true
                         || constructor == self.process_symbols.bool_false) =>
@@ -5662,6 +5922,7 @@ impl<'a> Lowering<'a> {
                 Lowered::Constructor {
                     constructor,
                     mut args,
+                    ..
                 } if constructor.ends_with("::ITree::Ret") && args.len() == 1 => {
                     lowered = args.remove(0);
                 }
@@ -6834,6 +7095,7 @@ impl<'a> Lowering<'a> {
         }
         Ok(Lowered::Constructor {
             constructor,
+            synthesized_identity: None,
             args: lowered_args,
         })
     }
@@ -7314,6 +7576,7 @@ impl<'a> Lowering<'a> {
             RuntimeValue::String(value) => Ok(Lowered::String(value.clone())),
             RuntimeValue::Constructor { constructor, args } => Ok(Lowered::Constructor {
                 constructor: constructor.clone(),
+                synthesized_identity: None,
                 args: args
                     .iter()
                     .map(|arg| self.lower_value(builder, arg))
@@ -7371,6 +7634,7 @@ impl<'a> Lowering<'a> {
             RuntimeGroundValue::String(value) => Ok(Lowered::String(value.clone())),
             RuntimeGroundValue::Constructor { constructor, args } => Ok(Lowered::Constructor {
                 constructor: constructor.clone(),
+                synthesized_identity: None,
                 args: args
                     .iter()
                     .map(|arg| self.lower_ground_value(builder, arg))
@@ -7874,6 +8138,7 @@ impl<'a> Lowering<'a> {
         Ok(match byte {
             Some(byte) => Lowered::Constructor {
                 constructor: some.clone(),
+                synthesized_identity: None,
                 args: vec![Lowered::Int {
                     value: builder.ins().iconst(types::I64, i64::from(byte)),
                     known: Some(i64::from(byte)),
@@ -7881,6 +8146,7 @@ impl<'a> Lowering<'a> {
             },
             None => Lowered::Constructor {
                 constructor: none.clone(),
+                synthesized_identity: None,
                 args: Vec::new(),
             },
         })
@@ -7930,10 +8196,12 @@ impl<'a> Lowering<'a> {
         Ok(match value {
             Some(bytes) => Lowered::Constructor {
                 constructor: some.clone(),
+                synthesized_identity: None,
                 args: vec![Lowered::Bytes(bytes)],
             },
             None => Lowered::Constructor {
                 constructor: none.clone(),
+                synthesized_identity: None,
                 args: Vec::new(),
             },
         })
@@ -7993,12 +8261,15 @@ impl<'a> Lowering<'a> {
         Ok(match String::from_utf8(value) {
             Ok(value) => Lowered::Constructor {
                 constructor: ok.clone(),
+                synthesized_identity: None,
                 args: vec![Lowered::String(value)],
             },
             Err(_) => Lowered::Constructor {
                 constructor: err.clone(),
+                synthesized_identity: None,
                 args: vec![Lowered::Constructor {
                     constructor: error.clone(),
+                    synthesized_identity: None,
                     args: Vec::new(),
                 }],
             },
@@ -8121,7 +8392,9 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         value: Lowered,
     ) -> cranelift_codegen::ir::Value {
-        let Lowered::Constructor { constructor, args } = value else {
+        let Lowered::Constructor {
+            constructor, args, ..
+        } = value else {
             return builder.ins().iconst(types::I64, -2);
         };
         if constructor == self.process_symbols.exit_success {
@@ -8242,7 +8515,9 @@ impl<'a> Lowering<'a> {
                 "borrowed ingress values cannot escape the native call",
             )),
             Lowered::String(value) => Ok(RuntimeGroundValue::String(value)),
-            Lowered::Constructor { constructor, args } => Ok(RuntimeGroundValue::Constructor {
+            Lowered::Constructor {
+                constructor, args, ..
+            } => Ok(RuntimeGroundValue::Constructor {
                 constructor,
                 args: args
                     .into_iter()
@@ -8304,10 +8579,12 @@ fn same_recursive_argument_shapes(left: &[Lowered], right: &[Lowered]) -> bool {
                     Lowered::Constructor {
                         constructor: left_constructor,
                         args: left_args,
+                        ..
                     },
                     Lowered::Constructor {
                         constructor: right_constructor,
                         args: right_args,
+                        ..
                     },
                 ) => {
                     left_constructor == right_constructor
@@ -8473,8 +8750,13 @@ fn rebuild_recursive_argument(
         },
         Lowered::Bytes(bytes) => Lowered::Bytes(bytes.clone()),
         Lowered::String(string) => Lowered::String(string.clone()),
-        Lowered::Constructor { constructor, args } => Lowered::Constructor {
+        Lowered::Constructor {
+            constructor,
+            synthesized_identity,
+            args,
+        } => Lowered::Constructor {
             constructor: constructor.clone(),
+            synthesized_identity: *synthesized_identity,
             args: args
                 .iter()
                 .map(|arg| rebuild_recursive_argument(arg, values, native_int_tags))

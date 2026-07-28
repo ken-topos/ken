@@ -19,8 +19,8 @@ use super::{
 use crate::RuntimeExpr;
 use abi::{build_abi_plane, AbiPlane};
 use semantic_ir::{
-    build_semantic_plane, SemanticMaterialArena, SemanticPlane, SemanticSourceKind,
-    SemanticSourceSeed,
+    build_semantic_plane, build_synthesized_constructor_inventory, SemanticMaterialArena,
+    SemanticPlane, SemanticSourceKind, SemanticSourceSeed,
 };
 
 // ⭐ `D1`'s capability surface. The two identity types cross into
@@ -29,8 +29,11 @@ use semantic_ir::{
 // `use` above, visible only inside this planner. Widening either of those to
 // serve a consumer is the move `§2d` forbids.
 pub(in crate::cranelift_backend) use semantic_ir::{
-    ConstructorIdentity, FieldIdentity, StaticOriginId,
+    ConstructorIdentity, FieldIdentity, StaticOriginId, SynthesizedConstructorRole,
+    SynthesizedFixedConstructorRole, SynthesizedIoErrorRole,
 };
+#[cfg(test)]
+pub(in crate::cranelift_backend) use semantic_ir::with_last_io_error_role_omitted;
 
 pub(super) const MAX_HELPERS_PER_STATIC_SOURCE: usize = 8;
 
@@ -1068,7 +1071,15 @@ impl<'src> Planner<'src> {
         }
     }
 
-    fn finish(mut self) -> Result<StaticTransitionPlan<'src>, CraneliftBackendError> {
+    fn finish(
+        mut self,
+        symbols: &crate::NativeProcessSymbols,
+    ) -> Result<StaticTransitionPlan<'src>, CraneliftBackendError> {
+        let (synthesized_identities, synthesized_io_roles) =
+            build_synthesized_constructor_inventory(
+                &mut self.plan.semantic_material,
+                symbols,
+            )?;
         self.plan.semantic = build_semantic_plane(
             &self.plan.nodes,
             &self.plan.edges,
@@ -1076,6 +1087,13 @@ impl<'src> Planner<'src> {
             &self.plan.semantic_sources,
             &self.plan.semantic_material,
         )?;
+        self.plan.semantic.install_synthesized_constructor_inventory(
+            synthesized_identities,
+            synthesized_io_roles,
+        );
+        self.plan
+            .semantic
+            .validate_synthesized_constructor_inventory()?;
         // `B2R` — the representation contract is built from the owner partition
         // the line above just validated, and it fails **before** anything is
         // emitted. It is deliberately not deferred to lowering: a contract that
@@ -1183,6 +1201,25 @@ impl<'src> StaticTransitionPlan<'src> {
         origin: StaticOriginId,
     ) -> Result<ConstructorIdentity, CraneliftBackendError> {
         self.semantic.constructor_symbol_identity(origin)
+    }
+
+    /// The existing semantic-plane identity for one compiler-synthesized
+    /// constructor role.
+    ///
+    /// The key is a closed sum.  In particular, dynamic IOError alternatives
+    /// can only be named with opaque tokens returned by
+    /// [`Self::synthesized_io_error_roles`].
+    pub(in crate::cranelift_backend) fn synthesized_constructor_identity(
+        &self,
+        role: SynthesizedConstructorRole,
+    ) -> Result<ConstructorIdentity, CraneliftBackendError> {
+        self.semantic.synthesized_constructor_identity(role)
+    }
+
+    pub(in crate::cranelift_backend) fn synthesized_io_error_roles(
+        &self,
+    ) -> &[SynthesizedIoErrorRole] {
+        self.semantic.synthesized_io_error_roles()
     }
 
     /// The artifact-static field identity a `Project` occurrence selects (`D1`).
@@ -1895,9 +1932,22 @@ impl<'src> StaticTransitionPlan<'src> {
     }
 }
 
+#[cfg(test)]
 pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(
     entry: &'src RuntimeExpr,
     declarations: &BTreeMap<&str, &'src RuntimeDeclaration>,
+) -> Result<StaticTransitionPlan<'src>, CraneliftBackendError> {
+    plan_static_transition_graph_with_symbols(
+        entry,
+        declarations,
+        &crate::NativeProcessSymbols::legacy_prelude(),
+    )
+}
+
+pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols<'src>(
+    entry: &'src RuntimeExpr,
+    declarations: &BTreeMap<&str, &'src RuntimeDeclaration>,
+    symbols: &crate::NativeProcessSymbols,
 ) -> Result<StaticTransitionPlan<'src>, CraneliftBackendError> {
     #[cfg(test)]
     reset_recursive_lowering_frame_count();
@@ -1939,7 +1989,7 @@ pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(
             }
         }
     }
-    planner.finish()
+    planner.finish(symbols)
 }
 
 fn runtime_expr_tag(expr: &RuntimeExpr) -> u32 {
@@ -2414,7 +2464,7 @@ mod tests {
         let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
         let mut reversed_sources = plan.semantic_sources.clone();
         reversed_sources.reverse();
-        let reordered = build_semantic_plane(
+        let mut reordered = build_semantic_plane(
             &plan.nodes,
             &plan.edges,
             &plan.entries,
@@ -2422,6 +2472,17 @@ mod tests {
             &plan.semantic_material,
         )
         .unwrap();
+        let mut reordered_material = plan.semantic_material.clone();
+        let (reordered_roles, reordered_io_roles) =
+            build_synthesized_constructor_inventory(
+                &mut reordered_material,
+                &crate::NativeProcessSymbols::legacy_prelude(),
+            )
+            .unwrap();
+        reordered.install_synthesized_constructor_inventory(
+            reordered_roles,
+            reordered_io_roles,
+        );
         assert_eq!(reordered, plan.semantic);
 
         let mut changed_frames = plan.nodes.clone();
@@ -2433,7 +2494,7 @@ mod tests {
         for (index, node) in changed_frames.iter_mut().enumerate() {
             node.frame = frames[(index + 1) % frames.len()];
         }
-        let changed = build_semantic_plane(
+        let mut changed = build_semantic_plane(
             &changed_frames,
             &plan.edges,
             &plan.entries,
@@ -2441,6 +2502,17 @@ mod tests {
             &plan.semantic_material,
         )
         .unwrap();
+        let mut changed_material = plan.semantic_material.clone();
+        let (changed_roles, changed_io_roles) =
+            build_synthesized_constructor_inventory(
+                &mut changed_material,
+                &crate::NativeProcessSymbols::legacy_prelude(),
+            )
+            .unwrap();
+        changed.install_synthesized_constructor_inventory(
+            changed_roles,
+            changed_io_roles,
+        );
         assert_eq!(
             changed, plan.semantic,
             "dynamic activation state changed semantic programs or bodies"
