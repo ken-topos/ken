@@ -367,6 +367,49 @@ Gates the [[NATIVE-HANDLE-CARRIER]] fast-follow + [[PX8-F-CAP-41]] too.
 Architect re-derives its own count across compactions; **on any disagreement
 this line wins.** Re-read this line on every hard-stop.
 
+> ### ✅✅ THE §5a-ii PREDICATE IS NAMED — Architect, 2026-07-28 (`evt_55bzwnhjpwjrs`)
+>
+> ⭐ **The predicate is `executable-boundary closure`.** `#9` and `#10` are **two
+> observations of ONE predicate**, not two predicates. Recorded here because the
+> ruling was issued in-thread and an in-thread ruling is not a durable
+> deliverable.
+>
+> > *"A generated-function boundary is closed only when every admitted transfer
+> > has both (1) a stable static schema for unit ownership, slot layout,
+> > lifetime, and call ABI, and (2) executable constructor / projector /
+> > eliminator semantics for the runtime bits carried by that schema. **A declared
+> > or validated boundary description is not itself an executable value-transfer
+> > mechanism.**"*
+>
+> | observation | which half failed |
+> |---|---|
+> | **`#9`** | ⛔ the **whole** predicate — one-function-per-origin had no configuration-independent executable representation contract at all |
+> | **`#10`** | ⛔ the **dynamic half, after the static half landed** — `B2O`+`B2R` gave ownership, population, slot order/width and declared ownership, but no *meaning* for `ValueWord`/`ResultWord` bits and no emitted way to inspect a dynamic aggregate |
+>
+> ⇒ ⭐ **`#10` is `#9` recurring one representation layer down.** It is the second
+> observation that forced the predicate to be stated with **both** halves.
+> ⚠ **The defect was crediting the static half as "executable"** — which is
+> exactly what this node's own `#9` discharge text already confessed when it said
+> the discharge *"over-credited `B2R`"*.
+>
+> ### ⛔ WHAT THIS RULING DOES **NOT** DO — read before reaching for a recut
+>
+> **Structural closure:** retain `B2A-S`, `B2O`, `B2R`; require the executable
+> half supplied by **`B2V` and `C1`**; let **`B2F`** consume that closed edge.
+> ⭐ **That closure is ALREADY LANDED** — `C1` merged at PR #1156.
+>
+> ⛔ The ruling **names the already-executed recut.** Verbatim: it does *"not
+> reopen `#9` or `#10`, add a prerequisite, reset the count, or hold the `B2F`
+> build."*
+>
+> ⇒ ⭐ **No recut frame is owed.** This node's `#10` entry said *"if named, the
+> RECUT FRAME IS THE STEWARD'S to author"* — that obligation is **discharged by
+> the recut having already happened**, not by authoring a second one. ⛔ Do not
+> read the naming as a trigger to re-cut work that is merged.
+>
+> ⚠ **Count unchanged: 11.** ⛔ `#10` is still **not** a fourth symptom-inventory
+> entry; `ENTRIES` stays **3** and the next predicate check stays the **6th**.
+
 > ### ⭐ SYMPTOM INVENTORY — armed 2026-07-24 (operator-directed)
 >
 > **The Architect appends one line per hard-stop, before it rules; at the 3rd
