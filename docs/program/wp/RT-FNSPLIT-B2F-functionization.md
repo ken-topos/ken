@@ -1139,10 +1139,29 @@ passes on a mechanism that carries no layout information at all.
 re-baselined with justification in-source. `B2A-S`'s AC-4 pin must be left
 truthful either way.
 
-**AC-5 — all 59 calls into `lower_expr` enumerated and dispositioned** (D5),
-**under the amended five-class taxonomy**, with the 14 caller-dependent sites
-dispositioned per `(site × reaching path)` and the root at `:188` present. The
+**AC-5 — EVERY call into `lower_expr` enumerated and dispositioned** (D5),
+**under the amended five-class taxonomy**, at **whatever count the tokenized
+derivation returns on your own base**, with the caller-dependent sites
+dispositioned per `(site × reaching path)` and **the root call present**. The
 enumeration is committed, not asserted in a handoff message.
+
+> ⛔⛔ **THE COUNT IS NOT PART OF THIS AC, AND THIS HEADING USED TO CARRY ONE.**
+> ⚠ It read *"all **59** calls"* and *"the root at `:188`"*. **The population is
+> `61`** as of Runtime's committed census
+> (`docs/program/rt-fnsplit-b2f-ac5-lower-expr-census.md`, tip `e08efe6f`), and
+> `:188` was never the root at any base this AC was read on.
+>
+> ⭐ **Correction 2 at the top of this frame recorded `61` hours before a ring
+> read `59` here — which is the whole lesson: an appended correction block does
+> NOT replace operative text.** A reader who goes to the AC to learn the AC finds
+> the AC, not the banner. ⇒ ⛔ **Fix the operative line; a banner is a supplement,
+> never a substitute.** *(Found by runtime-implementer, `evt_11saxqd8mht90`,
+> doing exactly what this AC's own item 2 told it to do.)*
+>
+> ⇒ **The derivation is the pin, and it is the ONLY pin:** tokenize via
+> `identifier_occurrences`; ⛔ never `grep 'self.lower_expr('`, which is
+> spelling-scoped and **misses the root**. ⭐ **Your own count wins over every
+> number written in this file, including `61`.**
 
 ⛔ **Two withdrawals, both Steward defects — do not reinstate either:**
 1. **The two-way migrated/not-a-body-emission classification is UNSOUND** for the
