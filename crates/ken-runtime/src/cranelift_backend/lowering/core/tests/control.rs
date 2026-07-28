@@ -4953,6 +4953,118 @@ fn the_body_authority_selector_narrows_only_completed_ports_and_stays_fail_close
 }
 
 #[test]
+fn retained_authority_residual_is_the_typed_selector_accounting() {
+    // Promise class: durable invariant. The retained population is produced by
+    // the exhaustive selector walk and represented by a closed reason type;
+    // this pin does not maintain a second inventory of source spellings.
+    //
+    // MEASURED: each production route that yields retained authority produces
+    // its exact typed reason, wrappers propagate that reason, a completed port
+    // produces no reason, and the authority decision agrees in every case.
+    // CLAIMED: D5's RecursiveDescent residual is closed over the selector's
+    // source and declaration producers, with no handwritten shadow list.
+    // THE GAP: this establishes selector accounting, not emission behavior.
+    // S1/S2/S4 establish the ported mechanisms and completed collection; the
+    // five S4 rows do not establish an asymptotic exponent or verdict.
+    let producer_match = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            }),
+            args: Vec::new(),
+        }),
+        cases: Vec::new(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D5 producer-Match default".to_string(),
+        },
+    };
+    assert_eq!(
+        recursive_descent_residual(&producer_match),
+        Some(RecursiveDescentResidual::ProducerMatchCall)
+    );
+    assert_eq!(
+        select_body_emission_authority(&producer_match, &BTreeMap::new()),
+        BodyEmissionAuthority::RecursiveDescent
+    );
+
+    let seed_closure_call = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Closure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+    let wrapped_seed = RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(false))),
+        body: Box::new(seed_closure_call),
+    };
+    assert_eq!(
+        recursive_descent_residual(&wrapped_seed),
+        Some(RecursiveDescentResidual::SeedClosureCall),
+        "a wrapper failed to propagate its child's retained reason"
+    );
+    assert_eq!(
+        select_body_emission_authority(&wrapped_seed, &BTreeMap::new()),
+        BodyEmissionAuthority::RecursiveDescent
+    );
+
+    let symbol = "decl:fixture::d5::closure".to_string();
+    let declaration = RuntimeDeclaration {
+        symbol: symbol.clone(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+    assert_eq!(
+        declaration_recursive_descent_residual(&declaration),
+        Some(RecursiveDescentResidual::TransparentDeclarationClosure)
+    );
+    let declarations = BTreeMap::from([(symbol.as_str(), &declaration)]);
+    assert_eq!(
+        select_body_emission_authority(
+            &RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            &declarations,
+        ),
+        BodyEmissionAuthority::RecursiveDescent
+    );
+
+    let completed_port = RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        cases: vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::d5::Node".to_string(),
+            argument_binders: 1,
+            recursive_positions: vec![0],
+            body: RuntimeExpr::Trap(RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "D5 completed terminal".to_string(),
+            }),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D5 completed default".to_string(),
+        },
+    };
+    assert_eq!(recursive_descent_residual(&completed_port), None);
+    assert_eq!(
+        select_body_emission_authority(&completed_port, &BTreeMap::new()),
+        BodyEmissionAuthority::FunctionizedUnits,
+        "a completed recursive-position/trap port remained in the residual"
+    );
+}
+
+#[test]
 fn a_trap_arm_and_its_trap_free_twin_both_functionize() {
     let declarations = BTreeMap::new();
     let fixture = |trap_arm| RuntimeExpr::Match {

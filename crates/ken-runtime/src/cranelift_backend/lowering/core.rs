@@ -29,122 +29,134 @@ fn recursive_position_unit_calls() -> usize {
     RECURSIVE_POSITION_UNIT_CALLS.with(std::cell::Cell::get)
 }
 
-/// Classify the closed source residual still owned by recursive descent after
-/// the recursive-position and trap emission ports.
+/// The closed production routes that still require retained recursive descent.
 ///
-/// The residual is a producer `Match` over a call, a seed `Closure` call, or a
-/// transparent declaration whose body is a closure or contains either retained
-/// shape. Only the two conditions backed by the completed ports are narrowed:
-/// computational recursive positions use declared units, and traps use terminal
-/// control flow. The match stays exhaustive over `RuntimeExpr`; adding a form
-/// cannot silently admit it to functionized emission.
-fn requires_recursive_descent_authority(expr: &RuntimeExpr) -> bool {
+/// This type is the D5 accounting: the selector produces one of these reasons
+/// rather than consulting a second spelling list. D1/D2/D3/D6/D8 ported and
+/// admitted recursive positions, trap terminals, carried host-effect seats, and
+/// result-directed joins; D7/S4 exercise their corrected governed composition.
+/// S4's completed-emission rows establish collection capability only; they are
+/// not an asymptotic verdict about those rows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RecursiveDescentResidual {
+    /// An ordinary producer match whose scrutinee is directly a call.
+    ProducerMatchCall,
+    /// A call whose callee is the retained non-lexical closure form.
+    SeedClosureCall,
+    /// A transparent declaration whose body is a closure seed.
+    TransparentDeclarationClosure,
+}
+
+/// Produce the retained reason, if any, from the exhaustive source walk.
+///
+/// Wrapper and child-producing forms propagate a reason from their children.
+/// The exhaustive match is the fail-closed default: a new `RuntimeExpr` form
+/// cannot compile until this production classifier assigns it to the
+/// functionized population or to a typed retained reason.
+fn recursive_descent_residual(expr: &RuntimeExpr) -> Option<RecursiveDescentResidual> {
     match expr {
         RuntimeExpr::CheckedJoinSite { body, .. }
         | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
         | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
         | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
         | RuntimeExpr::CheckedComputationalIHInvocation { body, .. }
-        | RuntimeExpr::Closure { body, .. } => {
-            requires_recursive_descent_authority(body)
-        }
-        RuntimeExpr::LexicalClosure { captures, body, .. } => {
-            captures
-                .iter()
-                .any(requires_recursive_descent_authority)
-                || requires_recursive_descent_authority(body)
-        }
+        | RuntimeExpr::Closure { body, .. } => recursive_descent_residual(body),
+        RuntimeExpr::LexicalClosure { captures, body, .. } => captures
+            .iter()
+            .find_map(recursive_descent_residual)
+            .or_else(|| recursive_descent_residual(body)),
         RuntimeExpr::Let { value, body } => {
-            requires_recursive_descent_authority(value)
-                || requires_recursive_descent_authority(body)
+            recursive_descent_residual(value).or_else(|| recursive_descent_residual(body))
         }
         RuntimeExpr::If {
             scrutinee,
             then_expr,
             else_expr,
-        } => {
-            requires_recursive_descent_authority(scrutinee)
-                || requires_recursive_descent_authority(then_expr)
-                || requires_recursive_descent_authority(else_expr)
-        }
+        } => recursive_descent_residual(scrutinee)
+            .or_else(|| recursive_descent_residual(then_expr))
+            .or_else(|| recursive_descent_residual(else_expr)),
         RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
-            args.iter()
-                .any(requires_recursive_descent_authority)
+            args.iter().find_map(recursive_descent_residual)
         }
         RuntimeExpr::Match {
             scrutinee, cases, ..
-        } => {
-            matches!(scrutinee.as_ref(), RuntimeExpr::Call { .. })
-                || requires_recursive_descent_authority(scrutinee)
-                || cases
+        } => matches!(scrutinee.as_ref(), RuntimeExpr::Call { .. })
+            .then_some(RecursiveDescentResidual::ProducerMatchCall)
+            .or_else(|| recursive_descent_residual(scrutinee))
+            .or_else(|| {
+                cases
                     .iter()
-                    .any(|case| requires_recursive_descent_authority(&case.body))
-        }
+                    .find_map(|case| recursive_descent_residual(&case.body))
+            }),
         RuntimeExpr::ComputationalMatch {
             scrutinee, cases, ..
-        } => {
-            requires_recursive_descent_authority(scrutinee)
-                || cases
-                    .iter()
-                    .any(|case| requires_recursive_descent_authority(&case.body))
-        }
+        } => recursive_descent_residual(scrutinee).or_else(|| {
+            cases
+                .iter()
+                .find_map(|case| recursive_descent_residual(&case.body))
+        }),
         RuntimeExpr::Record { fields } => fields
             .iter()
-            .any(|(_, value)| requires_recursive_descent_authority(value)),
-        RuntimeExpr::Project { record, .. } => {
-            requires_recursive_descent_authority(record)
-        }
+            .find_map(|(_, value)| recursive_descent_residual(value)),
+        RuntimeExpr::Project { record, .. } => recursive_descent_residual(record),
         RuntimeExpr::Call { callee, args } => {
             matches!(callee.as_ref(), RuntimeExpr::Closure { .. })
-                || requires_recursive_descent_authority(callee)
-                || args
-                    .iter()
-                    .any(requires_recursive_descent_authority)
+                .then_some(RecursiveDescentResidual::SeedClosureCall)
+                .or_else(|| recursive_descent_residual(callee))
+                .or_else(|| args.iter().find_map(recursive_descent_residual))
         }
         RuntimeExpr::Effect {
             capability, args, ..
-        } => {
-            capability.as_ref().is_some_and(|capability| {
-                requires_recursive_descent_authority(&capability.value)
-            }) || args
-                .iter()
-                .any(requires_recursive_descent_authority)
-        }
+        } => capability
+            .as_ref()
+            .and_then(|capability| recursive_descent_residual(&capability.value))
+            .or_else(|| args.iter().find_map(recursive_descent_residual)),
         RuntimeExpr::Value(_)
         | RuntimeExpr::Var(_)
         | RuntimeExpr::DeclarationRef { .. }
-        | RuntimeExpr::ImportedDeclarationRef { .. } => false,
-        RuntimeExpr::Trap(_) => false,
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => None,
+    }
+}
+
+/// Produce the retained reason from the exhaustive declaration-kind route.
+fn declaration_recursive_descent_residual(
+    declaration: &RuntimeDeclaration,
+) -> Option<RecursiveDescentResidual> {
+    match &declaration.kind {
+        RuntimeDeclarationKind::Transparent { body } => matches!(
+            body,
+            RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
+        )
+        .then_some(RecursiveDescentResidual::TransparentDeclarationClosure)
+        .or_else(|| recursive_descent_residual(body)),
+        RuntimeDeclarationKind::Primitive { .. }
+        | RuntimeDeclarationKind::Data { .. }
+        | RuntimeDeclarationKind::Record { .. }
+        | RuntimeDeclarationKind::RecursiveGroup { .. }
+        | RuntimeDeclarationKind::EffectBoundary { .. }
+        | RuntimeDeclarationKind::MetadataOnly => None,
     }
 }
 
 /// The one temporary B2F migration selector, evaluated once at compilation
 /// entry from source syntax and declaration kinds only.
 ///
-/// `FunctionizedUnits` is selected only after the exhaustive source classifier
-/// finds no retained form. `RecursiveDescent` therefore remains the fail-closed
-/// authority for a producer `Match` over a call and a seed/declaration closure
-/// body. No runtime value, carrier class, walk result, or emission failure can
-/// change this answer after it is chosen.
+/// `FunctionizedUnits` is selected only after both exhaustive production
+/// classifiers produce no typed retained reason. No runtime value, carrier
+/// class, walk result, or emission failure can change this answer after it is
+/// chosen.
 fn select_body_emission_authority(
     expr: &RuntimeExpr,
     declarations: &BTreeMap<&str, &RuntimeDeclaration>,
 ) -> BodyEmissionAuthority {
-    if requires_recursive_descent_authority(expr)
-        || declarations.values().any(|declaration| match &declaration.kind {
-            RuntimeDeclarationKind::Transparent { body } => {
-                matches!(
-                    body,
-                    RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
-                ) || requires_recursive_descent_authority(body)
-            }
-            RuntimeDeclarationKind::Primitive { .. }
-            | RuntimeDeclarationKind::Data { .. }
-            | RuntimeDeclarationKind::Record { .. }
-            | RuntimeDeclarationKind::RecursiveGroup { .. }
-            | RuntimeDeclarationKind::EffectBoundary { .. }
-            | RuntimeDeclarationKind::MetadataOnly => false,
+    if recursive_descent_residual(expr)
+        .or_else(|| {
+            declarations
+                .values()
+                .find_map(|declaration| declaration_recursive_descent_residual(declaration))
         })
+        .is_some()
     {
         BodyEmissionAuthority::RecursiveDescent
     } else {
