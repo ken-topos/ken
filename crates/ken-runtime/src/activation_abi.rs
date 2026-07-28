@@ -553,3 +553,134 @@ mod tests {
         );
     }
 }
+
+/// **`RT-FNSPLIT-C3-ACTIVATION` `D7` — rendering the final exported `Int`, in
+/// Rust.**
+///
+/// ⭐⭐ **A finding, and it is why the stub rewrite is bigger than a deletion.**
+/// The generated C stub's `ken_print_exported_int` is not merely a *reader* of
+/// the native-`Int` arena layout — it is a **second implementation of `Int`
+/// rendering and of the export's canonicality checks**, re-deriving in C what
+/// `NativeIntArenaV1::decode_final_export` already decides in Rust. ⇒ Removing
+/// the C layout copy is not possible without moving the rendering too, and
+/// `docs/PRINCIPLES.md`'s subsume-don't-proliferate says that is the right
+/// direction rather than a cost.
+///
+/// ⛔ **The output is byte-for-byte the C stub's**, because the pre-existing
+/// smoke positives assert exact stdout and `AC-6` is discharged by *those*
+/// tests, ⛔ not by new ones. The three shapes:
+///
+/// | case | rendering |
+/// |---|---|
+/// | no export (`final_tag` untouched) | the raw entry result, `"%lld\n"` |
+/// | `Small` | decimal, `"%PRId64\n"` |
+/// | `Big` | optional `-`, `0x`, top limb `"%PRIx64"`, each lower limb `"%016PRIx64"`, `\n` |
+///
+/// ⚠ **The `Big` padding asymmetry is the part that would be got wrong** — the
+/// most-significant limb is printed *unpadded* and every lower limb is padded to
+/// 16 hex digits. Padding the top limb too would emit leading zeroes that the C
+/// stub never emitted.
+pub fn format_final_export(export: Option<crate::native_int::RuntimeIntV1>, fallback: i64) -> String {
+    use crate::native_int::RuntimeIntV1;
+    use crate::values::Sign;
+    match export {
+        None => format!("{fallback}\n"),
+        Some(RuntimeIntV1::Small(value)) => format!("{value}\n"),
+        Some(RuntimeIntV1::Big { sign, limbs }) => {
+            let mut rendered = String::new();
+            if sign == Sign::Negative {
+                rendered.push('-');
+            }
+            rendered.push_str("0x");
+            let (top, lower) = limbs.split_last().expect("a Big export has limbs");
+            rendered.push_str(&format!("{top:x}"));
+            for limb in lower.iter().rev() {
+                rendered.push_str(&format!("{limb:016x}"));
+            }
+            rendered.push('\n');
+            rendered
+        }
+    }
+}
+
+#[cfg(test)]
+mod export_rendering_tests {
+    use super::*;
+    use crate::native_int::RuntimeIntV1;
+    use crate::values::Sign;
+
+    /// ⭐ **The three shapes render exactly as the C stub rendered them.**
+    ///
+    /// **MEASURED:** the bytes this function produces for each shape.
+    /// **CLAIMED:** replacing the stub's `ken_print_exported_int` with a call
+    /// into Rust changes no observable output.
+    /// **THE GAP:** ⛔ that the stub actually calls it. That is `S4b`, and
+    /// `AC-6`'s discharge is the **pre-existing** smoke positives going green
+    /// after the swap — ⛔ not this test.
+    ///
+    /// Promise class: **normative compatibility vector** — these bytes are a
+    /// linked executable's observable output and a starter's contract.
+    #[test]
+    fn the_rendered_export_matches_the_c_stubs_bytes_for_every_shape() {
+        assert_eq!(format_final_export(None, 42), "42\n");
+        assert_eq!(format_final_export(None, -7), "-7\n");
+        assert_eq!(format_final_export(Some(RuntimeIntV1::Small(42)), 0), "42\n");
+        assert_eq!(
+            format_final_export(Some(RuntimeIntV1::Small(-42)), 0),
+            "-42\n"
+        );
+
+        // One limb: the top limb is UNPADDED.
+        assert_eq!(
+            format_final_export(
+                Some(RuntimeIntV1::Big {
+                    sign: Sign::NonNegative,
+                    limbs: vec![0x8000_0000_0000_0001],
+                }),
+                0
+            ),
+            "0x8000000000000001\n"
+        );
+        // Two limbs: top unpadded, lower padded to 16 — the asymmetry.
+        assert_eq!(
+            format_final_export(
+                Some(RuntimeIntV1::Big {
+                    sign: Sign::NonNegative,
+                    limbs: vec![0x0000_0000_0000_00ab, 0x1],
+                }),
+                0
+            ),
+            "0x100000000000000ab\n"
+        );
+        assert_eq!(
+            format_final_export(
+                Some(RuntimeIntV1::Big {
+                    sign: Sign::Negative,
+                    limbs: vec![0x0000_0000_0000_00ab, 0x1],
+                }),
+                0
+            ),
+            "-0x100000000000000ab\n"
+        );
+    }
+
+    /// ⛔ **The positive control for the padding asymmetry.** Without it, a
+    /// renderer that padded *every* limb would pass the single-limb case and
+    /// the sign cases, and fail only on a multi-limb value — the shape least
+    /// likely to appear in a smoke fixture.
+    #[test]
+    fn padding_the_top_limb_too_would_change_the_bytes() {
+        let rendered = format_final_export(
+            Some(RuntimeIntV1::Big {
+                sign: Sign::NonNegative,
+                limbs: vec![0xffff_ffff_ffff_ffff, 0x1],
+            }),
+            0,
+        );
+        assert_eq!(rendered, "0x1ffffffffffffffff\n");
+        assert!(
+            !rendered.starts_with("0x0"),
+            "the most-significant limb was zero-padded, which the C stub never did"
+        );
+    }
+}
