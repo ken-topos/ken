@@ -73,7 +73,6 @@ ken check <the one file>         exit 0
 
 **A validator that never blocks is useless; one that never retracts is dangerous.**
 CV self-diagnosed and retracted within minutes — **that is the behavior to
-copy.** Sibling of [[verify-the-guard-before-acting-on-it]]: *the guard fired, and
-the guard was wrong* — and of
+copy.** The general shape: *a guard can fire and still be wrong* — cf.
 [[an-oracle-that-greps-a-name-fires-on-prose-that-denies-it]]: **the greps were all
 true and the conclusion was still unsupported.**

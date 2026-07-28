@@ -37,5 +37,5 @@ now*" is not a reason to leave a unit idle when the work is real.
 stands unchanged — compacting before new work avoids *pure* stale-context waste
 (no benefit lost). "Don't worry about credits" is about not refusing *beneficial
 parallel work* over its cost; it is not licence to carry stale context or skip
-the compaction gate. Still reserve the top tier for genuine T1 work
-([[credit-window-reserve-opus-for-t1]]) — that's about *fit*, not *thrift*.
+the compaction gate. Still seat genuine T1 work on the T1 tier (see
+`agent/MODELS.md`'s tier table) — that's about *fit*, not *thrift*.
