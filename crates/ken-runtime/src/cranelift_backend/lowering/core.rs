@@ -152,6 +152,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     // `RT-FNSPLIT-C1` `D3` — the carrier helpers become **callable refs inside
     // this generated function**, exactly as the native-int helpers above do.
     let boundary_carrier = BoundaryCarrierRefs {
+        class: module.declare_func_in_func(boundary_value_abi.class, &mut ctx.func),
         tag: module.declare_func_in_func(boundary_value_abi.tag, &mut ctx.func),
         field_count: module.declare_func_in_func(boundary_value_abi.field_count, &mut ctx.func),
         field: module.declare_func_in_func(boundary_value_abi.field, &mut ctx.func),
@@ -4680,6 +4681,7 @@ impl<'a> Lowering<'a> {
     ///
     /// | question | specialized route | this route |
     /// |---|---|---|
+    /// | which Result carrier representation? | compile-time `Lowered` variant | `class(word)` |
     /// | which constructor? | `case.constructor == constructor` | `tag(word)` vs `case_constructor_identity` |
     /// | how many children? | `args.len()` | `field_count(word)` |
     /// | child *i*? | `args[i]` | `field(word, i)` — ⭐ **stays `Carried`** |
@@ -4729,16 +4731,86 @@ impl<'a> Lowering<'a> {
                     "a carried HostResult match requires both closed Result cases",
                 ));
             };
-            return self.lower_carried_host_result_match(
+            // Result case spellings identify the semantic type, not the carried
+            // representation. Read the representation fact from the emitted
+            // word before selecting either representation-specific consumer.
+            let class = self.emit_carrier_class(builder, scrutinee)?;
+            let is_host_result = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                class,
+                BoundaryClass::HostResult as i64,
+            );
+            let host_result = builder.create_block();
+            let constructor = builder.create_block();
+            let merge = builder.create_block();
+            builder.append_block_param(merge, types::I64);
+            builder
+                .ins()
+                .brif(is_host_result, host_result, &[], constructor, &[]);
+
+            builder.switch_to_block(host_result);
+            let host_result_word = self.lower_carried_host_result_match(
                 builder,
                 scrutinee,
                 ok_case,
                 err_case,
                 static_origin,
                 env,
-            );
+            )?;
+            let LoweringOperand::Carried(host_result_word) = host_result_word else {
+                return Err(unsupported(
+                    "HostResult",
+                    "the carried HostResult route recovered a compile-time template",
+                ));
+            };
+            builder
+                .ins()
+                .jump(merge, &[host_result_word.word.into()]);
+
+            builder.switch_to_block(constructor);
+            let constructor_word = self.lower_carried_constructor_match(
+                builder,
+                scrutinee,
+                cases,
+                default,
+                static_origin,
+                env,
+            )?;
+            let LoweringOperand::Carried(constructor_word) = constructor_word else {
+                return Err(unsupported(
+                    "Match",
+                    "the carried constructor route recovered a compile-time template",
+                ));
+            };
+            builder
+                .ins()
+                .jump(merge, &[constructor_word.word.into()]);
+
+            builder.switch_to_block(merge);
+            return Ok(LoweringOperand::Carried(CarriedBoundaryWord {
+                word: builder.block_params(merge)[0],
+            }));
         }
 
+        self.lower_carried_constructor_match(
+            builder,
+            scrutinee,
+            cases,
+            default,
+            static_origin,
+            env,
+        )
+    }
+
+    fn lower_carried_constructor_match(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        scrutinee: CarriedBoundaryWord,
+        cases: &[crate::RuntimeMatchCase],
+        default: &RuntimeTrap,
+        static_origin: StaticOriginId,
+        env: &[LoweringOperand],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
         // Read identity and arity ONCE, ahead of the chain: both are properties
         // of the scrutinee, not of any case, and re-reading per case would be a
         // second answer to a question that has one.

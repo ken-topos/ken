@@ -695,6 +695,9 @@ enum Lowered {
 /// eliminator never mints an immediate and never writes a field name.
 #[derive(Clone, Copy, Debug)]
 struct BoundaryCarrierRefs {
+    /// `(arena, word, out) -> status` — the representation class that selects
+    /// representation-specific consumers such as `HostResult`.
+    class: FuncRef,
     /// `(arena, word, out) -> status` — the runtime constructor/record identity
     /// that `Match` discriminates against the artifact-static case set.
     tag: FuncRef,
@@ -1482,6 +1485,20 @@ impl<'a> Lowering<'a> {
         let pointer_type = builder.func.dfg.value_type(arena);
         let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
         let call = builder.ins().call(refs.tag, &[arena, target.word, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(builder.ins().stack_load(types::I64, slot, 0))
+    }
+
+    fn emit_carrier_class(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let call = builder.ins().call(refs.class, &[arena, target.word, out]);
         Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
         Ok(builder.ins().stack_load(types::I64, slot, 0))
     }

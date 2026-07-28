@@ -2082,6 +2082,7 @@ fn ac_c7_try_compile_edge<'src>(
         Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
 
     let carrier = BoundaryCarrierRefs {
+        class: module.declare_func_in_func(helpers.class, &mut context.func),
         tag: module.declare_func_in_func(helpers.tag, &mut context.func),
         field_count: module.declare_func_in_func(helpers.field_count, &mut context.func),
         field: module.declare_func_in_func(helpers.field, &mut context.func),
@@ -2191,6 +2192,7 @@ fn c2_compile_edge_with_arg<'src>(
     context.func =
         Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
     let carrier = BoundaryCarrierRefs {
+        class: module.declare_func_in_func(helpers.class, &mut context.func),
         tag: module.declare_func_in_func(helpers.tag, &mut context.func),
         field_count: module.declare_func_in_func(helpers.field_count, &mut context.func),
         field: module.declare_func_in_func(helpers.field, &mut context.func),
@@ -2277,13 +2279,30 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
             message: "C2 HostResult default".to_string(),
         },
     };
+    let ordinary_producer_expr = RuntimeExpr::Construct {
+        constructor: symbols.result_ok.clone(),
+        args: vec![RuntimeExpr::Construct {
+            constructor: symbols.read_some.clone(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+        }],
+    };
+    let planned_fixture = RuntimeExpr::Let {
+        value: Box::new(ordinary_producer_expr),
+        body: Box::new(match_expr.clone()),
+    };
     let plan = plan_static_transition_graph_with_symbols(
-        &match_expr,
+        &planned_fixture,
         &BTreeMap::new(),
         &symbols,
     )
     .expect("the C2 producer/consumer fixture plans");
-    let match_origin = plan.root_static_origin().expect("root occurrence exists");
+    let root = plan.root_static_origin().expect("root occurrence exists");
+    let ordinary_producer_origin = plan
+        .child_static_origin(root, 0)
+        .expect("the ordinary Result producer occurrence exists");
+    let match_origin = plan
+        .child_static_origin(root, 1)
+        .expect("the shared Result consumer occurrence exists");
     let read_some = plan
         .synthesized_constructor_identity(SynthesizedConstructorRole::Fixed(
             SynthesizedFixedConstructorRole::ReadSome,
@@ -2349,6 +2368,49 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
         },
     );
 
+    let ordinary_producer_plan = plan.clone();
+    assert_eq!(
+        ordinary_producer_plan
+            .constructor_symbol_identity(ordinary_producer_origin)
+            .expect("the ordinary Result producer identity exists")
+            .tag_abi_word()
+            .expect("the ordinary Result producer identity projects"),
+        plan.case_constructor_identity(match_origin, 1)
+            .expect("the consumer Result::Ok identity exists")
+            .tag_abi_word()
+            .expect("the consumer Result::Ok identity projects"),
+        "separately generated producer and consumer occurrences in one plan \
+         must converge for Result::Ok"
+    );
+    let ordinary_symbols = symbols.clone();
+    let (_ordinary_producer_module, ordinary_producer) = c2_compile_edge_with_arg(
+        "c2_ordinary_result_producer",
+        &seed_env,
+        ordinary_producer_plan,
+        move |compiler, builder, _| {
+            let true_word = builder.ins().iconst(types::I64, 1);
+            let ordinary_result = Lowered::Constructor {
+                constructor: ordinary_symbols.result_ok.clone(),
+                synthesized_identity: None,
+                args: vec![Lowered::Constructor {
+                    constructor: ordinary_symbols.read_some.clone(),
+                    synthesized_identity: None,
+                    args: vec![Lowered::Bool {
+                        value: true_word,
+                        known: Some(true),
+                    }],
+                }],
+            };
+            Ok(compiler
+                .transfer_into_carrier(
+                    builder,
+                    ordinary_producer_origin,
+                    &ordinary_result,
+                )?
+                .word)
+        },
+    );
+
     let consumer_plan = plan;
     let (_consumer_module, consumer) = c2_compile_edge_with_arg(
         "c2_host_result_consumer",
@@ -2406,6 +2468,19 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
     assert_ne!(
         success_observed, error_observed,
         "the runtime success bit must change the separately generated consumer's answer"
+    );
+
+    let ordinary_word = c2_run_edge_with_arg(ordinary_producer, base, 0);
+    assert!(
+        ordinary_word >= 0,
+        "the separately generated ordinary Result producer must emit a carrier \
+         word, got {ordinary_word}"
+    );
+    let ordinary_observed = c2_run_edge_with_arg(consumer, base, ordinary_word);
+    assert_eq!(
+        ordinary_observed as u64, true_boundary_word,
+        "an ordinary source Result constructor must use the ordinary tag/field \
+         route through the same consumer and project its nested payload"
     );
 }
 

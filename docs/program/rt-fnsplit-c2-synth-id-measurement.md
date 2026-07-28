@@ -37,8 +37,10 @@ The excluded population is:
 
 - process-input, list, product, and exit roles, which are entrypoint or input
   lowering roles rather than synthesized effect payload constructors;
-- `Result::{Ok, Err}`, which are compile-time `HostResult` case labels and do
-  not acquire constructor identities;
+- `Result::{Ok, Err}` as synthesized roles. `HostResult` uses them only as
+  semantic case labels and acquires no Result identity; ordinary source Result
+  constructor occurrences still use the existing source-constructor identity
+  route;
 - `Nat` and `Bool` specialization roles; and
 - every arbitrary `RuntimeSymbol` spelling.
 
@@ -62,11 +64,19 @@ The producer covers the four effect-result graph classes required by the frame:
 selects field zero for the success payload and field one for the error payload.
 Both payload graphs are emitted independently. Consumers use `host_success`
 for case selection and `host_payload` for projection; no `Result` constructor
-identity or compile-time payload template is introduced.
+identity or compile-time payload template is introduced for `HostResult`.
+
+Result case spellings do not select that representation-specific route. The
+consumer first reads the carried word's emitted `BoundaryClass`: `HostResult`
+uses `host_success` and `host_payload`, while an ordinary source Result in a
+`Constructor` node retains the general tag, field-count, and field route. Both
+routes rejoin only after their selected case body produces a carried word.
 
 The behavioral controls are
 `c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload` for
-`Constructor` plus `DynamicConstructor`, and
+one same consumer fed by a separately generated `HostResult` and an ordinary
+source Result constructor, with nested `Constructor` plus `DynamicConstructor`
+payloads, and
 `c2_ac6_host_result_covers_resource_token_and_response_bytes_payloads` for
 `ResourceToken` plus `ResponseBytes`.
 
@@ -83,6 +93,8 @@ followed by a green baseline:
 | alias `Unit` to `FileError` identity | AC-2 distinct synthesized-role spelling assertion |
 | omit the last dynamic IO-error role | AC-3 exact missing `IoError` role at `Some(0)` unit epoch |
 | project compile-time field zero instead of calling `host_payload` | AC-4 runtime-error nested tag/field assertion |
+| force `HostResult` down the ordinary constructor route | AC-4 runtime-success nested tag/field assertion |
+| force an ordinary Result constructor down the `HostResult` route | AC-4 ordinary-source-Result tag/field assertion |
 
 The Result-case mutation originally passed when both case bodies merely returned
 their payload. The final AC-4 consumer instead performs a distinct nested match
