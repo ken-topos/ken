@@ -379,10 +379,9 @@ one authority**, never as a second source.
 > precisely the second authority `D2` exists to forbid, and it would be
 > introduced *by the work that discharges `D2`.*
 >
-> **⇒ The actual residual of `D1`/`D2`:** widen those four accessors to
-> `pub(in crate::cranelift_backend)` (which is what `AC-C1` asks for), settle the
-> `u64`/`i64` slot question as a view over the one encoding, and **write the
-> consumers.** ⛔ Not a new capability.
+> **⇒ The actual residual of `D1`/`D2` was CONSUMERS, and only consumers.**
+> ⛔ **Not a new capability, and ⛔ not a visibility edit either — see the third
+> correction below, which retires an instruction this block used to give.**
 >
 > ### ⛔⛔ TWO CORRECTIONS — read these before acting on the above
 >
@@ -406,6 +405,91 @@ one authority**, never as a second source.
 > `crates/ken-runtime/src/boundary_value.rs` (2,983 lines) and `:2642` is a **doc
 > comment**, not a producer. Locate the producer by name, ⛔ not by line — see
 > `§2h-i` on landmarks versus boundaries.
+>
+> ### ⛔⛔ THIRD CORRECTION, measured 2026-07-28 at `8331c79e` — the visibility
+> ### instruction was ALREADY DISCHARGED, and acting on it trips a live pin
+>
+> This block previously read *"widen those four accessors to
+> `pub(in crate::cranelift_backend)`, which is what `AC-C1` asks for."*
+> ⛔ **That instruction is withdrawn. It was wrong in two independent ways.**
+>
+> 1. ⛔ **Already done, one module up.** `planning/static_transition.rs` exports
+>    all four at `pub(in crate::cranelift_backend)` — `:1171`
+>    `case_constructor_identity`, `:1181` `constructor_symbol_identity`, `:1189`
+>    `project_field_identity`, `:1198` `record_field_identity`. Likewise
+>    `tag_abi_word` / `name_abi_word` at `semantic_ir.rs:106` / `:115`. The
+>    `pub(super)` methods in the table above are the **inner** layer.
+> 2. ⛔ **The inner layer must STAY `pub(super)`, and a pin enforces it.**
+>    `lowering/core/tests/control.rs` pins the planner's exported surface as an
+>    exact allowed inventory that already lists the four, and says so in its own
+>    comment: *"`SemanticPlane` and its `names` arena stay `pub(super)`; widening
+>    either to serve a consumer is what this pin exists to catch, and adding a
+>    capability is not that."* ⇒ Widening the `SemanticPlane` methods buys nothing
+>    — the type is unnameable outside the planner — and moves in the one direction
+>    the pin guards.
+>
+> ⭐ **The mechanism, because this class will recur:** the as-built census above
+> measured **one layer's** visibility and that reading was converted into an
+> instruction. **The export layer one module up was invisible to the census**, so
+> *"these are `pub(super)`"* became *"widen these"* with no step in between.
+> ⇒ ⛔ **A visibility finding at an inner layer is not a finding about the
+> exported surface** — the census was bounded by an unstated notion of where the
+> surface is.
+>
+> ⭐ **`AC-C1`'s own control was already the right oracle** — *"`lowering` calls
+> the narrowly exported `D1` accessor, and compilation of `ken-runtime` proves
+> it."* The visibility half is discharged **by rustc**, ⛔ not by a pin and ⛔ not
+> by a visibility edit. The only genuinely absent piece was the CLIF `iconst`
+> cast, spelled once in `carrier_identity_immediate`.
+>
+> ### ⭐ The `Record` tag question — ANSWERED by measurement. ⛔ Do not add a fifth
+> ### accessor
+>
+> `D1` has four accessors and **no `record_symbol_identity`**, and a `Record`
+> consequently gets no `store_tag_id`. ⛔ **That absence is the design, not a
+> gap.** Measured at `boundary_value.rs:2894`:
+>
+> ```rust
+> (BoundaryClass::Record, 0, 0, 0, children, names, Vec::new())
+> ```
+>
+> `tag_id` is a **literal `0`**. A boundary record node **has no tag** — its
+> identity *is* the interned `names` vector, which `record_field_identity` already
+> grounds. ⇒ ⛔ **Inventing a `record_symbol_identity` would mint an authority for
+> an identity the representation does not have** — the exact second authority
+> `D2` forbids, introduced by the work discharging `D2`.
+>
+> ### ⭐ `D2`'s store side is IN SCOPE — it is `D2`'s own sentence
+>
+> `D2` reads **"Re-ground the carrier's `TagId` (and record field identity) on
+> `D1`'s artifact-static identity."** ⇒ The `intern_symbol` re-grounding at
+> `boundary_value.rs:2872` / `:2891` is **`D2`'s core mandate, ⛔ not optional
+> follow-up.** No further ruling is needed to do it.
+>
+> ⚠ **`boundary_value_clif.rs`'s adoption test is NOT a blocker and must not be
+> read as one.** It records that *"the constructor ids must be REAL interned
+> symbols"* — but **that property is precisely the store-instance-dependent
+> substrate `§2e` removes.** `§2e` already named this test class and its
+> obligation: *"the tests are the only thing that will notice, so they must be
+> **strengthened to notice the right property**, not merely updated to pass."* The
+> reverse lookup's shape is likewise already ruled by `D2`: it survives as a
+> **view over the one authority**, ⛔ never as a second source.
+>
+> ⭐ **This does not block `D3`/`D4`.** Producer and eliminators derive from the
+> same authority, so identity *comparison* is already sound; the store-side
+> re-grounding is an independent obligation in a different file with no type-flow
+> dependency on the phase closure. ✅ `§7`'s contention is **satisfied** —
+> `RT-VALUE-TOTALITY` P2 `53ede3f8` and P3 `b55d292c` are both ancestors of
+> `origin/main`.
+>
+> ### ⛔ Out of scope, named so it is not silently absorbed
+>
+> `Value::Record.type_id` is `intern_symbol`-minted on the **reification/egress**
+> path in **two different spellings** — `record:{names.join(",")}` (`:2499`) and
+> `record:{identity}` (`:2737`) — carrying the same store-instance dependence
+> `§2e` describes. ⚠ But there is **no `NodeField::TypeId`**: no eliminator or
+> adoption path compares it, and it is neither the carrier's `TagId` nor a record
+> field identity. ⛔ **Not in `D2`'s scope; do not repair it in `C1`.**
 
 **`D3` — `Match` and `ComputationalMatch` eliminate a carried value.**
 A second, executable route in which the scrutinee is a boundary word: emitted
