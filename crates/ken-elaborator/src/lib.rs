@@ -50,7 +50,7 @@ use ken_kernel::{check as kernel_check, declare_postulate, Context, GlobalEnv, G
 pub use ast::{
     BinOp, BoundaryHeader, BoundaryKind, CapabilityDecl, ConstructorSignature,
     ConstructorSignatureArg, Decl, ExplicitDataCtor, ExportForm, Expr, ImportItem, ImportKind,
-    LetBinding, Type,
+    LetBinding, SpaceCell, SpaceOperation, Type,
 };
 pub use bytes::BytesEnv;
 pub use classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo, InstanceResolution};
@@ -104,6 +104,15 @@ pub use trace::{
     MonitorProjection, TraceContract, TraceContractError, TraceEvent,
 };
 
+/// Internal identities generated while elaborating surface `space` blocks.
+///
+/// The container is visible so structural tests can classify every `ElabEnv`
+/// namespace, but its maps are private and cannot act as source namespaces.
+#[derive(Default)]
+pub struct SpaceElaborationMetadata {
+    initial_states: HashMap<String, GlobalId>,
+}
+
 /// The surface-level elaboration environment.
 pub struct ElabEnv {
     pub env: GlobalEnv,
@@ -120,6 +129,12 @@ pub struct ElabEnv {
     /// Surface effect rows for already-elaborated definitions. SURF-1 D2 uses
     /// this to release a callee's declared row at a resolved call site.
     pub effect_rows: HashMap<String, effects::RowType>,
+    /// Generated initial-state definitions for surface `space` blocks.
+    ///
+    /// These are elaboration metadata, not source-visible `Space.initial`
+    /// members. Tests and later lowering stages may inspect them through
+    /// `space_initial_state`; source name resolution may not.
+    pub space_metadata: SpaceElaborationMetadata,
     /// The L3 prelude: collection inductives + Ω constants (`37`).
     pub prelude_env: PreludeEnv,
     /// The Lc typeclass environment: class/instance registry + structural
@@ -179,6 +194,7 @@ impl ElabEnv {
             bytes_env,
             foreign_env: foreign::ForeignEnv::empty(),
             effect_rows,
+            space_metadata: SpaceElaborationMetadata::default(),
             // placeholder; `register_prelude` fills it (and needs `&mut self`).
             prelude_env: prelude::empty_prelude_env(),
             // placeholder; replaced after prelude registration below.
@@ -201,6 +217,13 @@ impl ElabEnv {
     /// Create an environment with pre-declared `Nat`, `Bool`, and the full numeric tower.
     pub fn new() -> Result<Self, ElabError> {
         Self::empty()
+    }
+
+    /// Return the generated initial-state definition for a surface `space`.
+    ///
+    /// This accessor does not install a source-level member in `globals`.
+    pub fn space_initial_state(&self, space: &str) -> Option<GlobalId> {
+        self.space_metadata.initial_states.get(space).copied()
     }
 
     /// Declare a postulate `name : ty_term` in the environment.

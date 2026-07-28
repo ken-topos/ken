@@ -110,6 +110,28 @@ pub enum DefKeyword {
     Proc,
 }
 
+/// One identity-bearing cell declared inside a `space` block (`36 §4`).
+#[derive(Clone, Debug)]
+pub struct SpaceCell {
+    pub name: String,
+    pub ty: Type,
+    pub init: Expr,
+    pub span: Span,
+}
+
+/// One operation declared inside a `space` block.
+#[derive(Clone, Debug)]
+pub struct SpaceOperation {
+    pub name: String,
+    pub params: Vec<Binder>,
+    pub ret_ty: Type,
+    pub requires: Vec<Expr>,
+    pub ensures: Vec<Expr>,
+    pub visits: Option<EffectRowSyntax>,
+    pub body: Expr,
+    pub span: Span,
+}
+
 /// A class field declaration, with optional SURF-2 purity metadata.
 #[derive(Clone, Debug)]
 pub struct ClassField {
@@ -191,6 +213,16 @@ pub enum Decl {
         body: Expr,
         /// Whether the `space` prefix was present (V1 §6.4).
         is_space_op: bool,
+        span: Span,
+    },
+    /// `space S { mut c : T = e ; proc ... }` (`36 §4`).
+    ///
+    /// This is elaborator-only surface structure. The kernel receives only
+    /// the right-nested Σ state and ordinary `ITree`/`StateOp` terms.
+    SpaceDecl {
+        name: String,
+        cells: Vec<SpaceCell>,
+        operations: Vec<SpaceOperation>,
         span: Span,
     },
     LetDecl {
@@ -440,6 +472,7 @@ impl Decl {
             // An export declaration has no declaration-level name.
             Decl::ExportDecl { .. } => "",
             Decl::ViewDecl { name, .. }
+            | Decl::SpaceDecl { name, .. }
             | Decl::LetDecl { name, .. }
             | Decl::ProveDecl { name, .. }
             | Decl::PropDecl { name, .. }
@@ -462,6 +495,7 @@ impl Decl {
             Decl::Pub(inner) => inner.span(),
             Decl::BoundaryDecl { span, .. }
             | Decl::ViewDecl { span, .. }
+            | Decl::SpaceDecl { span, .. }
             | Decl::LetDecl { span, .. }
             | Decl::ProveDecl { span, .. }
             | Decl::PropDecl { span, .. }
@@ -556,6 +590,8 @@ pub enum Expr {
     EAsc(Box<Expr>, Box<Type>, Span),
     /// `old e` — pre-state reference in `space`-op `ensures` (`21 §6.4`).
     EOld(Box<Expr>, Span),
+    /// `cell becomes value` — state-cell update (`36 §4.1`).
+    EBecomes(Box<Expr>, Box<Expr>, Span),
     /// Numeric literal (`35 §4.1`).
     ENumLit(NumLit, Span),
     /// String literal (`37 §2.1`, VAL1-surface).
@@ -606,6 +642,7 @@ impl Expr {
             | Expr::ELet(_, _, s)
             | Expr::EAsc(_, _, s)
             | Expr::EOld(_, s)
+            | Expr::EBecomes(_, _, s)
             | Expr::ENumLit(_, s)
             | Expr::EStr(_, s)
             | Expr::EPi(_, _, _, s)

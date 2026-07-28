@@ -116,6 +116,7 @@ pub fn enumerate_producer_types(env: &ElabEnv) -> Vec<Producer> {
         bytes_env,    // GlobalId type / op ids — types live in global_env
         foreign_env,  // FFI postulate GlobalIds — types live in global_env
         effect_rows,  // effect-row algebra — carries no Term
+        space_metadata: _, // private GlobalId index — types live in global_env
         prelude_env,  // GlobalIds for prelude decls — types live in global_env
         module_state, // surface-name -> canonical-name aliases into global_env
     } = env;
@@ -626,7 +627,10 @@ pub fn type_names_in_expr(e: &Expr, out: &mut BTreeSet<String>) {
         | Expr::ENumLit(_, _)
         | Expr::EStr(_, _)
         | Expr::EAttachedProofRef { .. } => {}
-        Expr::EApp(a, b, _) | Expr::EBinOp(_, a, b, _) | Expr::EArrow(a, b, _) => {
+        Expr::EApp(a, b, _)
+        | Expr::EBecomes(a, b, _)
+        | Expr::EBinOp(_, a, b, _)
+        | Expr::EArrow(a, b, _) => {
             type_names_in_expr(a, out);
             type_names_in_expr(b, out);
         }
@@ -965,6 +969,32 @@ fn walk_decl(decl: &SurfaceDecl, facts: &mut RootFacts) {
         }
         SurfaceDecl::TemporalDecl { name, .. } => {
             facts.decl_refs.push((name.clone(), refs));
+        }
+        SurfaceDecl::SpaceDecl {
+            name,
+            cells,
+            operations,
+            ..
+        } => {
+            for cell in cells {
+                type_names_in_type(&cell.ty, &mut refs);
+                type_names_in_expr(&cell.init, &mut refs);
+            }
+            facts.decl_refs.push((name.clone(), refs.clone()));
+            for operation in operations {
+                let mut operation_refs = refs.clone();
+                for binder in &operation.params {
+                    type_names_in_type(&binder.ty, &mut operation_refs);
+                }
+                type_names_in_type(&operation.ret_ty, &mut operation_refs);
+                for clause in operation.requires.iter().chain(&operation.ensures) {
+                    type_names_in_expr(clause, &mut operation_refs);
+                }
+                type_names_in_expr(&operation.body, &mut operation_refs);
+                facts
+                    .decl_refs
+                    .push((format!("{name}.{}", operation.name), operation_refs));
+            }
         }
         SurfaceDecl::BoundaryDecl { .. } => {}
         // `module` / `import` / `export` carry cross-module identity the

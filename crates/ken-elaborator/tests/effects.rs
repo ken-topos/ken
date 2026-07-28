@@ -344,15 +344,13 @@ fn cap_two_distinct_caps_each_gated() {
 // - Cross-space aliasing is rejected (shared-nothing, §4.4)
 // - Multi-shot handlers are rejected (OQ-9, §5.2)
 
-/// `surface/effects/space-becomes-threads-state` (type-level, oracle)
+/// Synthetic row-algebra control for a pre-labelled State operation.
 ///
-/// `inc` and `get` each carry row `[Counter]` (the `State Counter` effect).
-/// A compound expression calling both also has row `[Counter]`.
-/// `run_state` eliminates `Counter` from the row → the residual row is ∅.
-///
-/// (The runtime result assertion `(2, 2)` is K1.5-deferred — requires ITree.)
+/// This does not exercise the `space` parser or a `Get`/`Put` term. The
+/// behavioral surface and desugaring controls live in
+/// `surf_space_cells_p1.rs`.
 #[test]
-fn space_becomes_threads_state_type_level() {
+fn synthetic_state_row_union_and_discharge() {
     // `inc` and `get` have row [Counter] (space op → State Counter effect).
     let seed: HashMap<String, EffectRow> = [
         ("inc".to_string(), EffectRow::singleton("Counter")),

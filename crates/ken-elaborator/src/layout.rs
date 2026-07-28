@@ -414,6 +414,7 @@ impl<'a> LayoutPrinter<'a> {
             Expr::EArrow(left, right, _) => self.print_arrow(left, right),
             Expr::EAsc(_, _, span)
             | Expr::EOld(_, span)
+            | Expr::EBecomes(_, _, span)
             | Expr::EBinOp(_, _, _, span)
             | Expr::EProj(_, _, span)
             | Expr::EPi(_, _, _, span) => self.print_span(span),
@@ -1715,6 +1716,7 @@ fn expr_precedence(expr: &Expr) -> u8 {
         Expr::EAsc(_, _, _) => 2,
         Expr::EBinOp(op, _, _, _) => binop_precedence(*op),
         Expr::EApp(_, _, _) => 7,
+        Expr::EBecomes(_, _, _) => 1,
         Expr::EOld(_, _) | Expr::EProj(_, _, _) => 8,
         _ => 9,
     }

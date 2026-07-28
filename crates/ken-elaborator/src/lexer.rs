@@ -29,6 +29,8 @@ pub enum Token {
     KwLaw,
     KwOld,
     KwSpace,
+    KwMut,
+    KwBecomes,
     // L2 keywords
     KwData,         // "data" — inductive type declaration
     KwMatch,        // "match" — pattern matching
@@ -440,6 +442,8 @@ impl<'s> Lexer<'s> {
                 "law" => Token::KwLaw,
                 "old" => Token::KwOld,
                 "space" => Token::KwSpace,
+                "mut" => Token::KwMut,
+                "becomes" => Token::KwBecomes,
                 "data" => Token::KwData,
                 "match" => Token::KwMatch,
                 "def" => Token::KwDef,
