@@ -22,6 +22,15 @@ pub(super) use static_transition::{
 };
 #[cfg(test)]
 pub(super) use static_transition::with_last_io_error_role_omitted;
+// `RT-FNSPLIT-B2F` `D1`/`D2` — the emitter's read-only view of the validated
+// function-unit population, plus the closed vocabulary its slots are described
+// in. ⛔ `AbiPlane`, `AbiDescriptor`, `build_abi_plane` and `AbiPlane::validate`
+// are deliberately NOT re-exported: the emitter reads a unit, and can neither
+// construct the plane nor reach the pre-emission validator to bypass it.
+pub(super) use static_transition::{
+    AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiSlot, AbiSlotKind,
+    AbiStorageOwner, AbiUnitDefinition, EmittableUnit, PredeclaredFunctionId,
+};
 
 pub(super) fn native_join_plan_for_program(
     program: &RuntimeProgram,

@@ -3383,6 +3383,37 @@ fn an_out_of_range_child_position_is_a_loud_planner_invariant() {
 // directory, so no `#[cfg(test)]` region has to be parsed out: the partition is
 // at file level.
 
+/// **`RT-FNSPLIT-B2F` `AC-2` — WHICH POPULATION THIS CENSUS COVERS, and why the
+/// rest is excluded.**
+///
+/// ⛔ **The population is the production LOWERING AND PLANNING sources** — the
+/// seven rows below. It is deliberately **not** "every Cranelift emitter in
+/// `ken-runtime`", and stating that boundary is `AC-2`'s second clause: a census
+/// whose scope is implicit reads as covering everything.
+///
+/// **Excluded, measured at base `6534e4a6`, each with its reason:**
+///
+/// | emitter | measured | why it is out of scope here |
+/// |---|---|---|
+/// | `native_int_clif.rs` | 5 / 1 / 3 | Θ(1) per native module. Its emitted population is already pinned behaviourally as `LOCAL_HELPER_COUNT = 6` (`artifact/tests.rs:56`) — ⛔ cite that, do not duplicate it |
+/// | `boundary_value_clif.rs` | 23 / 3 / 3 | ⭐ a live production emitter that was in **neither** this census nor `BACKEND_PRODUCTION_SOURCES`; same Θ(1)-per-module shape |
+///
+/// ⭐ **Why they are recorded as reasoned exclusions rather than pinned rows,
+/// which is a judgement and is stated as one:** freezing `23` and `5` here would
+/// redden this file whenever a *sibling* node legitimately changes an emitter it
+/// owns — landing the failure on whoever is unlucky, in a test they have never
+/// read, rather than on whoever changed the thing. Their growth is `AC-G0`/`D8`'s
+/// obligation and is discharged there **behaviourally**, against emitted counts,
+/// not against source spellings.
+///
+/// ⚠ **MEASURED:** how many times three spellings occur in seven files.
+/// **CLAIMED:** exactly that. **THE GAP:** ⛔ this is a source-TEXT oracle and
+/// it is retained as a **tripwire, not as the evidence**. A call split across
+/// lines evades all three needles; a mention inside a string or a block comment
+/// inflates them; and nothing here observes what a compiled module actually
+/// contains. `AC-2`'s real property — that `B2F` adds exactly the emitted units
+/// its design predicts — is defended by the behavioural control over
+/// `UnitBundle::len`, which a comment or a line break cannot move.
 #[test]
 fn correspondence_adds_no_emitted_unit_to_the_production_census() {
     struct Census {
@@ -3427,6 +3458,46 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
         Census {
             file: "planning/static_transition/semantic_ir.rs",
             source: include_str!("../../../planning/static_transition/semantic_ir.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+        },
+        // ⭐ `RT-FNSPLIT-B2F` `AC-2` — THE PREDICTED ROW, and it is predicted
+        // rather than fitted.
+        //
+        // Recorded in `docs/program/rt-fnsplit-b2f-predictions.md` (`P1`) at
+        // base `6534e4a6`, committed BEFORE the module was written, and then
+        // measured: 1 / 1 / 1, exactly as predicted. A census re-fitted to
+        // whatever the output happened to be measures nothing, so the order is
+        // the evidence.
+        //
+        // ⛔ ONE of each spelling, for a population of Θ(n) emitted units. The
+        // needles count SPELLINGS, never units: `declare_unit_bundle` holds one
+        // `declare_function` inside a loop over every unit, and
+        // `define_unit_body` is called once per unit from one site. That gap is
+        // the whole content of `AC-G0`'s narrative — `native_int_clif` emits 6
+        // definitions from 5 builder source sites — and it is why this row
+        // cannot be read as an emitted-unit count. `D8`'s growth verdict is
+        // about `UnitBundle::len`, which this pin cannot see.
+        Census {
+            file: "lowering/units.rs",
+            source: include_str!("../../units.rs"),
+            builders: 1,
+            definitions: 1,
+            declarations: 1,
+        },
+        // `RT-FNSPLIT-B2R`'s ABI plane, added as an explicit ZERO row because
+        // the frame flagged its absence: it is in `BACKEND_PRODUCTION_SOURCES`
+        // and was not in this census, and an absent row and a zero row read
+        // identically to a reader while only one of them is a claim.
+        //
+        // ⭐ The zero is the load-bearing part: `abi.rs` DECLARES the
+        // representation contract and must never emit against it. If this row
+        // ever moves, the planner has started emitting, which is the one thing
+        // the ownership/representation split exists to prevent.
+        Census {
+            file: "planning/static_transition/abi.rs",
+            source: include_str!("../../../planning/static_transition/abi.rs"),
             builders: 0,
             definitions: 0,
             declarations: 0,
@@ -3489,6 +3560,33 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
     assert_eq!(
         exported,
         vec![
+            // `RT-FNSPLIT-B2F` `D1` — the emitter's read-only view of ONE
+            // validated function unit. Six accessors, one type, no constructor.
+            //
+            // ⭐ Same shape as `C1`'s four below: a *question* about a planned
+            // object with an answer the asker cannot mint. `EmittableUnit`'s
+            // fields are private and its sole producer is `emittable_units`, so
+            // a unit cannot be forged in `lowering` — and since `B2F` drives
+            // emission from units, emission cannot be driven from anything but
+            // the validated plane.
+            //
+            // ⛔ `AbiPlane`, `AbiDescriptor`, `build_abi_plane` and
+            // `AbiPlane::validate` stay `pub(super)` and are NOT here. The
+            // emitter reads a unit; it cannot construct the plane, mutate a
+            // descriptor, or reach the pre-emission validator to bypass it. One
+            // of those names appearing in this list is the violation.
+            //
+            // ⚠ None of the six returns a source term, so the `-> Result<&'src
+            // RuntimeExpr` count below is still exactly one and `B2A-S`'s `AC-4`
+            // is untouched. A unit carries an ORIGIN; resolving that origin to a
+            // term still goes through `source_occurrence`, which is why `B2F`
+            // adds no second `origin -> expression` lookup.
+            "pub(in crate::cranelift_backend) fn function(self) -> PredeclaredFunctionId {",
+            "pub(in crate::cranelift_backend) fn origin(self) -> StaticOriginId {",
+            "pub(in crate::cranelift_backend) fn definition(self) -> AbiUnitDefinition {",
+            "pub(in crate::cranelift_backend) fn header(self) -> AbiFrameHeader {",
+            "pub(in crate::cranelift_backend) fn slots(self) -> &'plan [AbiSlot] {",
+            "pub(in crate::cranelift_backend) fn slot_offsets(",
             "pub(in crate::cranelift_backend) fn source_occurrence(",
             "pub(in crate::cranelift_backend) fn child_static_origin(",
             // `RT-FNSPLIT-C1` `D1` — the artifact-static identity capability.
@@ -3514,6 +3612,16 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
             "pub(in crate::cranelift_backend) fn record_field_identity(",
             "pub(in crate::cranelift_backend) fn root_static_origin(",
             "pub(in crate::cranelift_backend) fn declaration_occurrence_origin(",
+            // `RT-FNSPLIT-B2F` `D1` — the sole producer of an `EmittableUnit`,
+            // and therefore the sole route by which emission can be driven.
+            //
+            // ⛔ It projects `self.abi.descriptors`; it does not re-seed the
+            // population and must never be made to. The unit set is
+            // `plan.entries` ∪ every `EdgeKind::StaticBody` TARGET, already
+            // enforced by `validate_function_units`. In particular it does not
+            // consult `TransitionKind::ClosureBody`, which is a body's return
+            // successor and not a unit head.
+            "pub(in crate::cranelift_backend) fn emittable_units(",
             "pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(",
             "pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols<'src>(",
         ],
@@ -3762,6 +3870,13 @@ const BACKEND_PRODUCTION_SOURCES: &[(&str, &str)] = &[
     ("compiled.rs", include_str!("../../../compiled.rs")),
     ("lowering/core.rs", include_str!("../../core.rs")),
     ("lowering/mod.rs", include_str!("../../mod.rs")),
+    // `RT-FNSPLIT-B2F` `D1`/`D2` — the target code-unit population. Registered
+    // here the moment the module exists, because every pin that iterates this
+    // roster is closed only over the files it lists: a production emitter absent
+    // from it is invisible to all of them at once, which is precisely how
+    // `boundary_value_clif.rs` and `native_int_clif.rs` came to sit outside
+    // both this roster and the emitted-unit census.
+    ("lowering/units.rs", include_str!("../../units.rs")),
     ("planning.rs", include_str!("../../../planning.rs")),
     (
         "planning/static_transition.rs",
@@ -3819,6 +3934,12 @@ fn the_backend_production_surface_inventory_is_closed() {
             ("cranelift_backend.rs", "test_support"),
             ("artifact/mod.rs", "api"),
             ("lowering/mod.rs", "core"),
+            // `RT-FNSPLIT-B2F` `D1`/`D2`. A sibling of `core` rather than a
+            // region inside it: `core.rs` is the module whose recursive
+            // whole-configuration authority `D6` removes, and putting the
+            // replacement population in the same file would leave the census
+            // that measures the removal unable to tell the two apart.
+            ("lowering/mod.rs", "units"),
             ("planning.rs", "static_transition"),
             ("planning/static_transition.rs", "abi"),
             ("planning/static_transition.rs", "semantic_ir"),
@@ -4512,6 +4633,31 @@ fn the_owner_classification_has_a_closed_production_naming_inventory() {
             "pub(in crate::cranelift_backend) struct FieldIdentity(pub(super) DenseRange);",
             "pub(in crate::cranelift_backend) fn tag_abi_word(self) -> Result<u64, CraneliftBackendError> {",
             "pub(in crate::cranelift_backend) fn name_abi_word(self) -> Result<u64, CraneliftBackendError> {",
+            // ⭐ `RT-FNSPLIT-B2F` `D1` adds ONE member, and it is argued here
+            // rather than absorbed, because this pin exists to make a widening a
+            // review event.
+            //
+            // `B2F` emits one closed target function per `PredeclaredFunction`
+            // in the validated owner partition. To do that the emitter must be
+            // able to NAME a unit — to key its declared `FuncId` and to resolve
+            // `D4`'s call edges against the planner's identity rather than
+            // against an iteration ordinal. It must NOT be able to mint one.
+            //
+            // ⭐ The `pub(super)` field is what makes that a fact about the type
+            // system: the newtype is widened, its `u32` is not, so `lowering`
+            // can hold, compare, order and pass a unit identity and cannot
+            // fabricate one or do arithmetic on it. That is the identical
+            // argument `StaticOriginId` was widened on, and it transfers because
+            // it is the same shape, not because it is nearby.
+            //
+            // ⛔ What is deliberately NOT widened, and is the thing this row
+            // must not be read as licensing: `AbiPlane`, `AbiDescriptor`,
+            // `build_abi_plane` and `AbiPlane::validate` all stay `pub(super)`.
+            // The emitter reads one unit's projection; it cannot construct the
+            // plane, mutate a descriptor, or reach the pre-emission validator to
+            // bypass it. A future `AbiPlane` or `build_abi_plane` line appearing
+            // in this list is the violation, not a further capability.
+            "pub(in crate::cranelift_backend) struct PredeclaredFunctionId(pub(super) u32);",
             "pub(in crate::cranelift_backend) fn with_last_io_error_role_omitted<T>(",
         ],
         "D7: the plane's widened-visibility inventory changed. `StaticOriginId` \
@@ -6159,5 +6305,103 @@ fn rtfp_header_drift_after_identity_selection_rejects_by_fingerprint() {
     assert!(
         reason.contains("does not match its checked frame template"),
         "post-selection header drift must still reject by fingerprint: {reason}"
+    );
+}
+
+// ─── RT-FNSPLIT-B2F AC-2 — the emitted-unit population, measured BEHAVIOURALLY ─
+
+/// **`AC-2`'s real property, defended by an oracle that source text cannot
+/// move.**
+///
+/// ⭐ **Why this test exists next to a census that already "covers" `AC-2`.**
+/// `correspondence_adds_no_emitted_unit_to_the_production_census` counts how
+/// many times three spellings occur in seven files. That is a claim about
+/// *repository text*: splitting a call across lines evades every needle, a
+/// mention inside a comment inflates them, and in no configuration does it
+/// observe a single emitted function. ⇒ It is a **tripwire**. This test is the
+/// evidence: it counts units at the point of emission, so the number it asserts
+/// is a property of the compiled module.
+///
+/// **MEASURED:** for two programs that differ *only* in whether they contain a
+/// retained closure body, the `(declared, defined)` unit counts `B2F` actually
+/// emitted.
+/// **CLAIMED:** every declared target unit is defined, and the population tracks
+/// the program's static structure rather than being a constant.
+/// **THE GAP:** ⛔ this says nothing about whether a unit's *body* is correct,
+/// nor that the population equals `entries ∪ StaticBody targets` — the latter is
+/// `B2O`'s enforced equality (`validate_function_units`), consumed here rather
+/// than re-asserted, because planning refuses to build a graph that violates it
+/// and a re-assertion would be green on every input that can reach `B2F`.
+#[test]
+fn b2f_emits_one_defined_target_unit_per_planned_function_unit() {
+    fn units_emitted(expr: &RuntimeExpr) -> (usize, usize) {
+        let module = new_jit_module().expect("jit module");
+        compile_expr_into_module(
+            module,
+            "b2f_unit_population_probe",
+            Linkage::Local,
+            expr,
+            &NativeSeedEnvironment::empty(),
+            BTreeMap::new(),
+            None,
+            false,
+            None,
+            None,
+            None,
+        )
+        .expect("compile");
+        crate::cranelift_backend::lowering::units::b2f_last_unit_emission()
+    }
+
+    // The two fixtures differ in exactly one thing: the second reaches the same
+    // leaf value through a *called* lexical closure, which is what mints a
+    // `StaticBody` edge and therefore a second function unit.
+    //
+    // ⚠ The closure is CALLED rather than returned, and that is required rather
+    // than stylistic: a closure at the root is rejected outright
+    // ("closures are callable but not observable ground values in native
+    // lowering"), so a fixture that merely mentions one never reaches emission
+    // and would have measured nothing while looking like a discriminator.
+    let leaf = RuntimeExpr::Value(RuntimeValue::Bool(true));
+    let with_closure = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+
+    let (leaf_declared, leaf_defined) = units_emitted(&leaf);
+    let (closure_declared, closure_defined) = units_emitted(&with_closure);
+
+    // ⛔ Every declared unit is defined. A bundle that declares `n` and defines
+    // `n-1` leaves an undefined symbol, which is why the recorder carries two
+    // numbers instead of one.
+    assert_eq!(
+        leaf_declared, leaf_defined,
+        "AC-2 -- a declared target unit was never defined (leaf program)"
+    );
+    assert_eq!(
+        closure_declared, closure_defined,
+        "AC-2 -- a declared target unit was never defined (closure program)"
+    );
+
+    // ⭐ POSITIVE CONTROL / NON-VACUITY. Without this the assertions above are
+    // satisfied by emitting nothing at all, for any program, forever -- a
+    // negative check passes for any reason. The discriminator is that the count
+    // MOVES with the program's static structure.
+    assert!(
+        leaf_declared >= 1,
+        "AC-2 -- even a leaf program has a root scheduling entry, so the \
+         population is never empty; measured {leaf_declared}"
+    );
+    assert!(
+        closure_declared > leaf_declared,
+        "AC-2 -- NON-VACUITY: a retained closure body mints a `StaticBody` edge \
+         and therefore an additional function unit. If these are equal the \
+         population is not tracking the program and every count above is \
+         satisfied by a constant. measured leaf={leaf_declared} \
+         closure={closure_declared}"
     );
 }

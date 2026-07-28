@@ -848,18 +848,50 @@ const fn slot(kind: AbiSlotKind, carrier: AbiCarrier, ordinal: u32) -> AbiSlot {
     }
 }
 
+/// **`RT-FNSPLIT-B2F` `D2` — each slot's byte offset in its unit's frame, and
+/// the frame's total size, from ONE walk.**
+///
+/// ⭐ **This exists so the emitter cannot own a second layout derivation.**
+/// `B2F` has to know where a slot sits in order to load or store it, and
+/// `AbiSlot` records a width but no offset. The obvious repair — let the
+/// emitter prefix-sum the widths itself — would put the same arithmetic in two
+/// files, where the two can disagree and only a test would notice. ⛔ Instead
+/// the walk lives here once, [`frame_header`] totals *through* it, and the
+/// emitter reads it. **A divergence is then unrepresentable rather than
+/// merely untested.**
+///
+/// ⚠ There is no inter-slot padding, and that is a *consequence*, not an
+/// assumption: `AbiCarrier::width_bytes` and `align_bytes` are `8` for every
+/// variant, so each offset is already a multiple of every slot's alignment.
+/// ⛔ Do not read this as a licence to assume 8 — if a future carrier is
+/// narrower, this walk is the one place that has to learn about padding, which
+/// is exactly why it is one place.
+pub(in crate::cranelift_backend) fn slot_offsets(
+    slots: &[AbiSlot],
+) -> Result<(Vec<u32>, u32), CraneliftBackendError> {
+    let mut offsets = Vec::with_capacity(slots.len());
+    let mut frame_bytes = 0u32;
+    for slot in slots {
+        offsets.push(frame_bytes);
+        frame_bytes = frame_bytes
+            .checked_add(u32::from(slot.width_bytes))
+            .ok_or_else(|| planner_capacity_error("abi frame size exhausted"))?;
+    }
+    Ok((offsets, frame_bytes))
+}
+
 /// Derives the frame header from the laid slot run.
 fn frame_header(
     slots: &[AbiSlot],
     parameters: u32,
     captures: u32,
 ) -> Result<AbiFrameHeader, CraneliftBackendError> {
-    let mut frame_bytes = 0u32;
+    // ⛔ The total comes from `slot_offsets`, not from a second sum here: the
+    // emitter's offsets and this header's size are then the same walk by
+    // construction.
+    let (_, frame_bytes) = slot_offsets(slots)?;
     let mut align_bytes = 1u16;
     for slot in slots {
-        frame_bytes = frame_bytes
-            .checked_add(u32::from(slot.width_bytes))
-            .ok_or_else(|| planner_capacity_error("abi frame size exhausted"))?;
         align_bytes = align_bytes.max(slot.align_bytes);
     }
     Ok(AbiFrameHeader {

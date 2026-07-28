@@ -141,6 +141,15 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     } else {
         None
     };
+    // ⭐ `RT-FNSPLIT-B2F` `D1` — forward-declare the WHOLE target-unit bundle
+    // before any body (root or unit) is defined. A unit body may call any other
+    // unit, so declaring every signature first is what makes the call graph
+    // order-independent; a declare-and-define-in-one-pass loop could not emit a
+    // call to a unit it had not reached yet.
+    //
+    // ⛔ The population is `B2O`'s validated owner partition as `B2R` described
+    // it. This call does not derive it and must never be made to.
+    let unit_bundle = super::units::declare_unit_bundle(&mut module, &static_transition_plan)?;
     let mut ctx = module.make_context();
     ctx.func = Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), sig);
     let host_dispatch = host_dispatch.map(|id| module.declare_func_in_func(id, &mut ctx.func));
@@ -314,6 +323,18 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     module
         .define_function(func_id, &mut ctx)
         .map_err(|err| backend_module(err.to_string()))?;
+    // ⭐ `RT-FNSPLIT-B2F` `D2` — define every declared unit against `B2R`'s
+    // activation frame. After the root's own definition, so the root's context
+    // is finished before any unit context is made.
+    //
+    // ⚠ `compiler` owns the plan, so the units are defined through the borrow it
+    // holds rather than through a second copy — there is one plan and one
+    // population, not a re-derivation per emission phase.
+    super::units::define_unit_bodies(
+        &mut module,
+        &compiler.static_transition_plan,
+        &unit_bundle,
+    )?;
     // The plan is no longer dropped unused here: `compiler` owns it and it dies
     // with this call. `CompiledModule::from_parts` below takes only owned data
     // and the type has no lifetime parameter, so no part of the plan can reach

@@ -1181,6 +1181,25 @@ impl<'plan> EmittableUnit<'plan> {
     pub(in crate::cranelift_backend) fn slots(self) -> &'plan [AbiSlot] {
         self.slots
     }
+
+    /// Each slot's byte offset in this unit's activation frame, paired with the
+    /// frame's total size.
+    ///
+    /// ⛔ **Delegated to `abi::slot_offsets`, never re-derived here.** The
+    /// emitter needs offsets to load and store slots, and prefix-summing the
+    /// widths at the emission site would put the same arithmetic in a second
+    /// file where the two can silently disagree. `AbiFrameHeader::frame_bytes`
+    /// is totalled *through* the same walk, so the offsets the emitter uses and
+    /// the size the ABI declares cannot diverge.
+    ///
+    /// ⚠ The returned total is checked against [`Self::header`]'s `frame_bytes`
+    /// by `AC-3`, not here — this accessor's job is to have one walk, not to
+    /// assert about it.
+    pub(in crate::cranelift_backend) fn slot_offsets(
+        self,
+    ) -> Result<(Vec<u32>, u32), CraneliftBackendError> {
+        abi::slot_offsets(self.slots)
+    }
 }
 
 impl<'src> StaticTransitionPlan<'src> {

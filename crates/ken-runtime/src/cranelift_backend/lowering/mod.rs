@@ -17,6 +17,13 @@
 
 pub(in crate::cranelift_backend) mod core;
 
+// `RT-FNSPLIT-B2F` `D1`/`D2` — the target code-unit population. A sibling of
+// `core` rather than a region inside it: `core.rs` is the module whose recursive
+// whole-configuration authority `D6` removes, and putting the replacement
+// population in the same file would make the census that measures the removal
+// unable to distinguish the two.
+pub(in crate::cranelift_backend) mod units;
+
 // --- external dependencies -------------------------------------------------
 pub(in crate::cranelift_backend) use std::collections::{BTreeMap, BTreeSet};
 
@@ -57,7 +64,9 @@ pub(in crate::cranelift_backend) use super::compiled::{CompiledModule, ResultDec
 pub(in crate::cranelift_backend) use super::planning::{
     collect_checked_oriented_markers, collect_checked_subcontinuation_frames,
     plan_static_transition_graph_with_symbols, validate_oriented_subcontinuation_transport,
-    CheckedOrientedMarkerSets, ConstructorIdentity, StaticOriginId, StaticTransitionPlan,
+    AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiSlot, AbiSlotKind,
+    AbiStorageOwner, AbiUnitDefinition, CheckedOrientedMarkerSets, ConstructorIdentity,
+    EmittableUnit, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]
