@@ -6923,13 +6923,44 @@ fn the_resolved_call_edge_population_moves_with_the_program() {
 /// validators that return no term. ⇒ `source_occurrence` is the table's sole
 /// exit, and this test is what pins that exit to a single caller.
 ///
-/// **Compile-preserving evasion attempted:** resolve a body by calling
-/// `plan.source_occurrence(origin)` directly from an emission site instead of
-/// through `retained_body_occurrence`. It compiles, it produces the identical
-/// term, and it reddens this test — `resolutions` exceeds `invocations` by
-/// exactly the number of times the shortcut runs. ⭐ That mutation is the one
-/// `S6` is most likely to introduce by accident, because a unit body already
-/// holds the plan.
+/// **Compile-preserving evasion attempted, and the result is a COVERAGE LIMIT
+/// that must not be read off the fixture count.** The evasion is to resolve a
+/// body by calling `plan.source_occurrence(origin)` directly instead of through
+/// `retained_body_occurrence`; it compiles and produces the identical term.
+/// Applied at **each of the seven route call sites in turn**, with four fixture
+/// shapes:
+///
+/// | route site (`core.rs`) | mutation result |
+/// |---|---|
+/// | `:5754` | ⭐ **RED — reached and caught** |
+/// | `:474`, `:754`, `:769`, `:939`, `:5742`, `:5897` | ⛔ **GREEN — unreached, so UNMEASURED** |
+///
+/// ⛔ **This is a partition, not an example, and the discriminator is stated so
+/// the next reader can re-derive it rather than trust it:** bypass one site,
+/// run this test, and a green means that site is not on any fixture's path.
+/// ⚠ Adding fixture shapes did **not** move the number — a nested retention, a
+/// parameterised body and a `Let`-scheduled body all descend through the same
+/// arm as the plain application.
+///
+/// ⇒ ⛔ **NOT CLAIMED: that this test would catch a bypass at the other six
+/// sites.** Reaching them needs shapes this test's helper cannot build —
+/// `:754`/`:5742` are the `DeclarationClosure` arms and need a populated
+/// `declarations` map; `:769`/`:5897` are the seed-provenance `Closure` arms and
+/// need a non-empty `NativeSeedEnvironment`. ⚠ Both are real follow-on work, and
+/// until they exist the coverage is **one route site of seven**.
+///
+/// ⭐ **The mutation is the one `S6` is most likely to introduce by accident**,
+/// because a unit body already holds the plan and resolving its own origin
+/// directly is one line shorter than going through the route.
+///
+/// **Instrument positive control (run, not reasoned):** adding a single extra
+/// `source_occurrence` call on a path every compile takes reddens this with
+/// `2 resolutions against 1 route invocation`. ⇒ The counters move
+/// independently and the equality is not satisfied by construction.
+/// ⚠ Bypassing **all seven** sites at once reddens the **non-vacuity** assert
+/// first (`1 resolution, 0 route invocations`) rather than the equality — which
+/// is the more informative diagnosis of the two, and why that control is not
+/// redundant with the equality below.
 ///
 /// **Promise class: durable invariant.** ⭐ It pins a **ratio**, never a count.
 /// Seven consumption sites call the route today and `S6` adds more; every one of
@@ -6946,17 +6977,62 @@ fn every_origin_to_expression_resolution_goes_through_the_single_route() {
         crate::cranelift_backend::planning::ac4_route_counts()
     }
 
-    // A retained closure body: resolving it is the whole reason the route
-    // exists, so this fixture is what makes the measurement non-vacuous.
-    let with_retained_body = RuntimeExpr::Call {
-        callee: Box::new(RuntimeExpr::LexicalClosure {
-            captures: Vec::new(),
-            params: Vec::new(),
-            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
-        }),
-        args: Vec::new(),
-    };
-    let (resolutions, invocations) = route_counts_for(&with_retained_body);
+    fn nullary_closure(body: RuntimeExpr) -> RuntimeExpr {
+        RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(body),
+            }),
+            args: Vec::new(),
+        }
+    }
+
+    // ⭐ **A SET of retained-body shapes, not one.** The relation is a universal
+    // over the resolutions a compile performs, so the pin's reach is the union
+    // of route call sites the fixtures actually take — see the coverage note on
+    // the test's doc comment. Each shape below was chosen to drive the descent
+    // down a different arm.
+    let shapes = [
+        // The plain application of a retained lexical body.
+        nullary_closure(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        // Nested retention: the inner body is resolved while the outer one is
+        // already being emitted, so a bypass that only fires at depth 1 shows up.
+        nullary_closure(nullary_closure(RuntimeExpr::Value(RuntimeValue::Bool(true)))),
+        // A retained body under a parameter, so the environment is non-empty
+        // where the resolution happens.
+        RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["x".to_string()],
+                body: Box::new(RuntimeExpr::Var(0)),
+            }),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+        },
+        // A retained body reached through a `Let`, which schedules differently
+        // from a direct application.
+        RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            body: Box::new(nullary_closure(RuntimeExpr::Var(0))),
+        },
+    ];
+
+    let mut total_resolutions = 0usize;
+    let mut total_invocations = 0usize;
+    for (index, shape) in shapes.iter().enumerate() {
+        let (resolutions, invocations) = route_counts_for(shape);
+        assert_eq!(
+            resolutions, invocations,
+            "AC-4 -- shape {index}: {resolutions} origin->expression resolutions \
+             were performed but the single route was invoked only {invocations} \
+             times, so {} resolution(s) reached the plan's occurrence table by \
+             some other path.",
+            resolutions.saturating_sub(invocations)
+        );
+        total_resolutions += resolutions;
+        total_invocations += invocations;
+    }
+    let (resolutions, invocations) = (total_resolutions, total_invocations);
 
     // ⛔ THE NON-VACUITY CONTROL, and the equality below is worthless without
     // it: `0 == 0` is what a harness that never ran the compile also reports,
