@@ -1035,8 +1035,36 @@ misses the root, so the spelling-scoped defect is live at the new numbers too.
 inliner goes. ⚠ **Re-scoped and this is the load-bearing warning:** the
 "whole-configuration emission path" is **not a separable path you can delete** —
 it is `lower_expr`'s entire recursive-descent structure at `core.rs:4333`, reached
-from 59 sites. Removal means the recursion is gone, not flag-disabled, not
-`#[allow(dead_code)]`, not retained "for the differential."
+from **every call site the `AC-5` derivation returns on your own base**. Removal
+means the recursion is gone, not flag-disabled, not `#[allow(dead_code)]`, not
+retained "for the differential."
+
+> ## ⛔⛔ `D6` IS NOT A FOLLOW-ON TO THE SWITCH-OVER — IT IS THE SAME EDIT
+>
+> **Measured, not forecast** (runtime-implementer, `evt_39eq88mcs7n2k`, against
+> exact `f465bae0`; runtime-leader concurred, `evt_6j07e092z8t4k`; Steward
+> accepts the measurement and this block replaces any earlier sequencing).
+>
+> The plan's **per-occurrence atom records are single-consumption.** Emitting a
+> body as a real unit **while the root still inlines that same body** consumes
+> each record twice, and the second consumer finds it gone — 7 ×
+> `PlannerInvariant("static origin has no atom of that kind at that occurrence")`.
+> ⇒ **The root's recursive descent cannot coexist with real unit bodies.**
+>
+> ⭐ ⛔ **THE CONSEQUENCE, AND IT IS NOT OPTIONAL: `AC-6`'s removal pin and
+> `AC-11` clause 3's invariant must both be IN PLACE AND GREEN ON THE
+> PRE-REMOVAL BASE, BEFORE the combined edit lands.** ⚠ A pin authored *after* a
+> removal cannot witness the removal, and **the tests a ban reddens on
+> introduction never contain its witness** — those exercise the **success** path.
+> ⭐ The frame already has one correct instance to copy:
+> `an_unrepresentable_transfer_is_refused_before_any_unit_is_declared`
+> was deliberately asserted **before** `D6` deletes `lower_expr`'s late arm.
+>
+> ⚠ **And a red intermediate is not a permitted resting point here.** A red
+> baseline makes every subsequent mutation experiment uninterpretable in **both**
+> directions, and the remaining work is mutation-heavy (the removal pin, clause
+> 3's invariant, the destination control). ⇒ Keep the green checkpoint; land the
+> combined edit once, green.
 
 **D7 — behaviour-equivalence evidence.** The five-category differential suite
 (old `AC-1` of the retired frame lands here). Categories must be independently
@@ -1173,7 +1201,12 @@ enumeration is committed, not asserted in a handoff message.
    from the obvious grep and the root goes missing again.
 
 **AC-6 — `lower_expr`'s recursive-descent inliner is gone** (D6), pinned so its
-reintroduction reddens.
+reintroduction reddens — ⛔ **and the pin is authored, and green, on the base
+that still HAS the inliner.** **Control:** show the pin passing at a commit
+before the removal, then passing after it. ⚠ A pin first authored in the removal
+commit witnesses nothing: it has never observed the thing it forbids. See the
+`D6` atomicity block above — the removal and the switch-over are one edit, so
+this ordering is the only place the pin can be established.
 
 **AC-7 — the FULL runtime suite, unfiltered:**
 `scripts/ken-cargo test -p ken-runtime`. ⛔ **Workspace, `--locked`, and
