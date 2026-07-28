@@ -2778,6 +2778,189 @@ fn c1_d3_ac_c4_a_carried_hypothesis_applied_to_arguments_fails_closed() {
     );
 }
 
+/// A two-argument constructor, so the recursive position can be declared
+/// somewhere **other than 0**.
+fn ac_c4_wrap2(outer: &str, first: &str, second: &str) -> RuntimeExpr {
+    RuntimeExpr::Construct {
+        constructor: format!("ctor:fixture::C1::{outer}"),
+        args: vec![ac_c7_ctor(first), ac_c7_ctor(second)],
+    }
+}
+
+fn ac_c4_lowered_wrap2(outer: &str, first: &str, second: &str) -> Lowered {
+    Lowered::Constructor {
+        constructor: format!("ctor:fixture::C1::{outer}"),
+        args: vec![ac_c7_lowered_ctor(first), ac_c7_lowered_ctor(second)],
+    }
+}
+
+/// Drive a carried recursive-position elimination whose recursive position is
+/// **1 of 2**, capturing the `PX8J` producer trace alongside the eliminated
+/// value.
+///
+/// ⭐⭐ **Position 1, not 0, and that is the whole design.** `sibling_position: 0`
+/// is what a *positionally defaulted* implementation produces for free — an
+/// ownership claim measured on a fixture whose right answer is also the default
+/// cannot fail. ⚠ This is the `AC-C5` hazard from `AC-C7` in a new dress: that
+/// control stayed green under its mutation precisely because its field sat at
+/// position 0.
+fn ac_c4_ownership_edge() -> (i64, u64, u64, Vec<Px8jSourceTraceEvent>) {
+    let fixture = RuntimeExpr::Let {
+        value: Box::new(ac_c4_wrap2("Wrap2", "Alpha", "Leaf")),
+        body: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::C1::Wrap2".to_string(),
+                    argument_binders: 2,
+                    // ⛔ The SECOND argument is the recursive one.
+                    recursive_positions: vec![1],
+                    // `[IH] ++ [child0, child1] ++ frame env` -- so `Var(1)` is
+                    // `Alpha`. ⭐ Also a layout discriminator: without the IH at
+                    // index 0, `Var(1)` reads `Leaf` instead.
+                    body: RuntimeExpr::Var(1),
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::C1::Leaf".to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: ac_c7_ctor("Sentinel"),
+                },
+            ],
+            default: ac_c7_trap(),
+        }),
+    };
+    let RuntimeExpr::Let {
+        body: match_expr, ..
+    } = &fixture
+    else {
+        unreachable!("the fixture is a `Let`")
+    };
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let scrutinee_origin = plan
+        .child_static_origin(root, 0)
+        .expect("a `Let`'s value is child 0");
+    let match_origin = plan
+        .child_static_origin(root, 1)
+        .expect("a `Let`'s body is child 1");
+    let identity_at = |origin| {
+        plan.constructor_symbol_identity(origin)
+            .expect("a planned `Construct` has a constructor identity")
+            .tag_abi_word()
+            .expect("an identity packs into the ABI word")
+    };
+    let alpha_identity = identity_at(
+        plan.child_static_origin(scrutinee_origin, 0)
+            .expect("the wrapper's first argument has a planned origin"),
+    );
+    let leaf_identity = identity_at(
+        plan.child_static_origin(scrutinee_origin, 1)
+            .expect("the wrapper's second argument has a planned origin"),
+    );
+
+    let lowered = ac_c4_lowered_wrap2("Wrap2", "Alpha", "Leaf");
+    let seed_env = NativeSeedEnvironment::empty();
+
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            PX8J_SOURCE_TRACE.with(|trace| trace.borrow_mut().clear());
+        }
+    }
+    PX8J_SOURCE_TRACE.with(|trace| trace.borrow_mut().clear());
+    let _reset = Reset;
+
+    let (_module, code) = ac_c7_try_compile_edge(&seed_env, plan, move |compiler, builder| {
+        let word = compiler.transfer_into_carrier(builder, scrutinee_origin, &lowered)?;
+        let eliminated = compiler.lower_expr(
+            builder,
+            SourceOccurrence {
+                expr: match_expr.as_ref(),
+                static_origin: match_origin,
+            },
+            &[LoweringOperand::Carried(word)],
+        )?;
+        let LoweringOperand::Carried(selected) = eliminated else {
+            panic!("a carried `ComputationalMatch` merges in the carrier lane")
+        };
+        compiler.emit_carrier_tag(builder, selected)
+    })
+    .expect("the position-1 recursive case lowers");
+    let trace = PX8J_SOURCE_TRACE.with(|trace| trace.borrow().clone());
+
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = ac_c7_bind_arena(&mut store);
+    let observed = ac_c7_run(code, base);
+    (observed, alpha_identity, leaf_identity, trace)
+}
+
+/// ⭐⭐ **`AC-C4` CONTROL 3 — the recursive position's OWNERSHIP comes from the
+/// frame, not from the carried word or from a positional default.**
+///
+/// **MEASURED:** eliminating `Wrap2(Alpha, Leaf)` through a case declaring
+/// `recursive_positions: [1]` mints exactly one induction hypothesis, whose
+/// recorded `sibling_position` is **1**, under a producer origin that matches
+/// the mint's; and the eliminated value is `Alpha`.
+/// **CLAIMED:** the ruling's clause 5 — static-origin, slot-template, activation
+/// and invocation ownership all stay on the existing recursor metadata, and ⛔
+/// none of it is derived from the carried word.
+/// **THE GAP:** a trace assertion says an IH was *recorded*, not that the right
+/// one was built. ⭐ Closed by pairing it with the value: the trace fixes *which
+/// position owns the hypothesis* and `Var(1)` fixes *where the children sit*,
+/// and no single wrong answer satisfies both.
+///
+/// ⚠ Promise class: **durable invariant**.
+#[test]
+fn c1_d3_ac_c4_the_recursive_positions_ownership_comes_from_the_frame() {
+    let (observed, alpha, leaf, trace) = ac_c4_ownership_edge();
+    assert_ne!(alpha, leaf, "NON-VACUITY: the two children must be distinguishable");
+
+    let mints: Vec<_> = trace
+        .iter()
+        .filter_map(|event| match event {
+            Px8jSourceTraceEvent::Mint {
+                origin, siblings, ..
+            } => Some((*origin, *siblings)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        mints.len(),
+        1,
+        "exactly one recursive producer is minted for one recursive position: \
+         {trace:#?}"
+    );
+    let (mint_origin, siblings) = mints[0];
+    assert_eq!(siblings, 1, "the case declares one recursive position");
+
+    let carriers: Vec<_> = trace
+        .iter()
+        .filter_map(|event| match event {
+            Px8jSourceTraceEvent::Carrier {
+                origin,
+                sibling_position,
+                ..
+            } => Some((*origin, *sibling_position)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        carriers,
+        vec![(mint_origin, 1)],
+        "DISCRIMINATOR: the hypothesis must be owned by the DECLARED recursive \
+         position 1 under the minting producer's own origin. ⛔ `0` here is the \
+         positional default, which is exactly why this fixture declares its \
+         recursive position somewhere else: {trace:#?}"
+    );
+
+    assert_eq!(
+        observed as u64, alpha,
+        "the value route must stay intact while ownership is measured: with the \
+         hypothesis at index 0, `Var(1)` is the FIRST child. Reading `Leaf` \
+         ({leaf}) means the case environment lost its hypothesis; got {observed}"
+    );
+}
+
 /// A minimal, structurally valid recursor capsule wrapping `residual`.
 ///
 /// ⭐ The invocation segment is inert on purpose: control 4 measures the
