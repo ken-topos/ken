@@ -43,7 +43,7 @@ does not pathologically expand line count — a Nx blowup is a red flag). Column
 *ceilings* and idempotence do not substitute for these.
 
 This is the sharpest instance yet of "gate the real mechanism, not a proxy"
-([[verify-the-mechanism-not-a-proxy]] family, [[green-vs-green-does-not-confirm-a-fix]],
+(same family as [[grep-the-producer-not-the-cited-proxy]] and
 [[corpus-property-gate-only-as-strong-as-the-corpus]]): AST-preservation is a
 *proxy* for "the formatter is correct," and it is a proxy that cannot see the
 formatter's primary failure mode. Sibling to the standing B3 carry "a formatter

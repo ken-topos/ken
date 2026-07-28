@@ -73,10 +73,11 @@ all: `[lib]` in `crates/ken-cli/Cargo.toml`, and the existence of
 `crates/ken-cli/src/lib.rs`. Prefer a **new file** or a **new declaration**;
 avoid a name that already occurs in the file for other reasons.
 
-This is [[landing-integrity-verify-by-content-not-sha]] arriving through two
-doors at once: don't trust a SHA or a task status, don't trust an exit code,
-and don't trust a grep hit that predates your change. **The only thing that
-proves a merge is the content on `origin/main`.**
+This is the same landing-integrity discipline as
+[[committed-is-not-reachable-publish-then-verify-on-main]] arriving through
+two doors at once: don't trust a SHA or a task status, don't trust an exit
+code, and don't trust a grep hit that predates your change. **The only
+thing that proves a merge is the content on `origin/main`.**
 
 Sibling of [[scripted-publisher-target-is-head-branch-never-main]] and
 [[kernel-backed-claim-grep-the-emission-not-the-name]] — same family: **grep

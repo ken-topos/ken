@@ -35,8 +35,7 @@ can ask what the mechanism is supposed to establish.
   caught in review. A **true** statement standing in for the property that
   mattered is what ships — nine rounds converged on better and better *true
   statements about the anchor*. See the fleet
-  `verify-the-mechanism-not-a-proxy` family and
-  [[unbound-enumeration-is-the-shape-to-hunt-first]] if written.
+  `verify-the-mechanism-not-a-proxy` family.
 - **Do not accept credit framed as seat quality.** Correct it — in the direction
   of *less* credit to the seat — so the lesson transfers. If the value is the
   vantage, then any role reading a merged artifact cold can produce it, and the

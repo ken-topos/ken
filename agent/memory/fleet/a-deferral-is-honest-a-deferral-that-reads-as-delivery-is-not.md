@@ -70,5 +70,4 @@ claim down and see whether it survives contact with the code.*
 over-claimed three times (scope of the `unknown`, which WP owned the gap, whether
 an embedding must strictly precede a solver) and was corrected by the Verify and
 Spec leads on all three. **The finding survived; my framing didn't.** Publish the
-correction as loudly as the finding — sibling of
-[[verify-the-guard-before-acting-on-it]].
+correction as loudly as the finding.
