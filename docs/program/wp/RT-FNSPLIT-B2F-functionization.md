@@ -558,6 +558,102 @@ production Cranelift function in `ken-runtime`."
 
 ---
 
+## ⛔⛔ INHERITED 2026-07-28 — `B2F` now owns `AC-C4`'s runtime INVOCATION half
+
+**Steward decision on the Architect's mechanism ruling `evt_17fgr8nk6859c`.**
+`RT-FNSPLIT-C1` built the carried induction hypothesis and proved it eliminates;
+**invoking** it cannot be done there. ⇒ ⭐ **The invocation lands inside this
+node's existing atomic target/switch boundary — ⛔ it does NOT get a preparatory
+merge of its own**, which this frame already classes as a hard-stop.
+
+⚠ **Why it could not stay in `C1`:** a *specialized* recursive elimination
+terminates because its residual is a compile-time value that strictly shrinks. A
+**carried** residual is a runtime word ⇒ nothing shrinks at compile time, so
+emitting the recursive case emits its IH invocation, which re-enters the same
+eliminator **without bound** (measured on `6bae122a`: a compiler stack overflow,
+not an error). The only general vehicle is a callable target, and `C1`'s
+`AC-C10` forbids target-function population.
+
+### The required execution vehicle — ruled, ⛔ not open
+
+**One closed, recursively callable Cranelift target per static
+computational-eliminator origin.** Forward-declare its `FuncId`, define it once,
+and make a zero-argument structural IH invocation emit a **direct call to that
+same target** with the projected recursive child word. The call returns one
+carried result word; lowering then continues the enclosing case body, so
+**non-tail contexts use the machine call stack** — ⛔ never a new Ken
+continuation VM.
+
+⛔ **Rejected alternatives, on merits — do not re-open.** A plain **CFG
+backedge** is correct only when the IH result *is* the case result; `Wrap(x) =>
+Suc(IH(x))`, pairing two IH results, or using an IH under a later call must
+retain a continuation across the recursive step, and `AC-C4` imposes no
+tail-position restriction — so an in-function header jump is a strict subset.
+`Lowered::RecursiveBackedge` does not rescue it: it represents the existing
+tail-recursive declaration jump with a predecessor-free current block, and making
+it a **carried** value reopens the phase identity `C1 §2g-i` closed. ⛔ And ⛔ **no
+explicit heap continuation / work stack** inside the current root function — that
+is a second runtime abstract machine (frame tags, saved case state, dispatch,
+unwind), larger than the already-decided closed-function construction and needing
+its own authority and coverage.
+
+**Target contract:**
+
+- **Static authority** — target identity comes **only** from the computational
+  eliminator's `static_origin` and its checked frame/slot records. ⛔ Never derive
+  a target, case, slot, or invocation identity from the carried word.
+- **Dynamic ABI** — the carried scrutinee word plus the already-defined fixed
+  activation/environment context the static body needs; the result is one carried
+  word through the existing result/error convention. ⛔ No `Lowered`, inverse
+  conversion, producer re-entry, or durable closure crosses this call.
+- **Body** — the existing artifact-static constructor identities, arity checks,
+  field projection, closed default, and `case_env` order. A declared recursive
+  position calls **the same target** on that projected child; a non-recursive case
+  returns normally. Non-empty source arguments stay refused **before** invocation
+  installation.
+- **Ownership** — the helper belongs to the **same `SemanticOwner`/static origin**
+  as the computational-match body. Checked-frame, IH-slot, activation, cursor and
+  producer-origin metadata remain **compiler authority**; the runtime word supplies
+  value data only.
+- **Termination premise** — ⭐ the call is made only after the existing
+  producer→validator boundary has established a **finite acyclic carrier graph**,
+  and only on a **declared recursive child edge**. The measure is **strict descent
+  in that validated graph**, ⛔ not compile-time shrinkage. ⛔ A forged or
+  unvalidated word may not enter this target.
+- **Boundary** — the outer `ComputationalRecursorClosure` stays specialization-only
+  and unconditionally non-transferable; `C1`'s controls 4 and 5 are unchanged.
+
+### Required causal closure — ⛔ a tail-shaped fixture does not pass this
+
+⭐ **Control 1 must become a NON-TAIL executable fixture**: depth **at least two**
+and a case such as `Wrap(x) => Suc(IH(x))`, or an equally discriminating
+constructor around the IH result. Assert the final **value/discriminator**. ⇒ This
+proves the continuation **survives** the recursive call — a tail-only jump cannot
+pass it, which is exactly why the backedge was rejected.
+
+Additionally pin:
+
+1. **exactly one** declared/defined target for the fixture's computational
+   eliminator `static_origin`, with its self-call resolving to that same `FuncId`;
+2. a **non-default recursive sibling position**, and a mutation passing the **wrong
+   child word** reds the value/ownership control **without changing target
+   selection**;
+3. a mutation **selecting another static target** reds the static-origin control
+   while the carrier value remains valid;
+4. replacing the runtime call with the **old inline re-entry** reaches the named
+   compile-time sentinel — ⛔ never an actual stack-overflow run;
+5. existing specialized-recursion, outer-capsule refusal, and non-empty-argument
+   refusal stay **green**.
+
+### ⛔ Release gate — CORRECTED
+
+`B2F` gates on **the closed `C1` carrier artifact**. ⛔ It does **not** gate on any
+claim that the recursive call already exists — that claim is unsatisfiable in
+`C1` and was the source of the jointly-unsatisfiable state this amendment
+resolves.
+
+---
+
 ## Deliverables
 
 > ### ⭐⭐ WHAT THE PREREQUISITES SUBTRACTED — read this before `D1`

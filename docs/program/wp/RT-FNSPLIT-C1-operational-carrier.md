@@ -286,6 +286,59 @@ the fork exposed, not a conservative choice.
 recursive-position fail-closed refusal built at `678c27cc` must be replaced by
 the admitted route.
 
+> ### ⛔⛔ AMENDED 2026-07-28 by the Steward — `AC-C4` SPLITS
+>
+> ⭐ **The sentence immediately above was right about the danger and wrong about
+> the remedy.**
+>
+> **Why this amendment exists:** the ring built the licensed mechanism, and
+> invoking the hypothesis **could not terminate** — a carried residual is a
+> runtime word, so nothing shrinks at compile time and the eliminator emits
+> itself without bound (measured: a compiler stack overflow, not an error). The
+> Architect ruled the execution vehicle at `evt_17fgr8nk6859c` and found the
+> programme's documents **jointly unsatisfiable**:
+>
+> - this section required an executable IH **invocation**;
+> - **`AC-C10`** forbids *"no target-function population"* — the only general
+>   execution vehicle;
+> - **`B2F`** owns per-static-origin targets on **one atomic boundary** and
+>   requires a **closed `C1`** before it may create one.
+>
+> ⇒ ⭐ **STEWARD DECISION: `AC-C4` splits along the representation/execution
+> seam.** ⛔ I do **not** authorize a helper target on the `C1` branch, and ⛔ a
+> lone carved-out target is not available either — `B2F`'s frame calls a
+> deliverable wanting *"its own preparatory merge"* a **hard-stop**, and one live
+> target outside its atomic boundary is exactly that.
+>
+> | half | owner | state |
+> |---|---|---|
+> | **Representation + IH construction** — a carried recursive position mints its induction hypothesis over a carried child and eliminates | **`C1`** | ✅ **built**, JIT-run against a real bound arena, value-asserted, discriminated on `Var(1)` |
+> | Controls 2–5 (residual→specialized reds · origin/slot perturbation reds ownership · outer-capsule transfer fails before allocation · non-empty args fail before installation) | **`C1`** | 4 and 5 green; 2 and 3 designed |
+> | **Runtime INVOCATION of the hypothesis** — the recursive callable target | ⭐ **`B2F`**, inside its existing atomic target/switch boundary | ▶ assigned; see `B2F`'s frame |
+>
+> ⭐ **Why this is not the deferral the sentence above forbids.** That sentence
+> guards against a **silent** deferral — a refusal shipped as though it were
+> closure. This is the opposite: the residual is **stated, owned by a named
+> successor, and gated**, which is precisely what `§5`'s own heading demands
+> (*"stated, because an unstated residual reads as discharged"*). ⛔ The
+> distinction is authorization and durability, not appetite: the ring could not
+> authorize this, and correctly refused to offer it.
+>
+> ⛔ **The `static_origin`-keyed guard is a TRANSITION SENTINEL, not closure**, and
+> the Architect declined to accept it as such. It must name the `B2F` obligation
+> that retires it. ⭐ It is nonetheless the right guard: it refuses exactly
+> **self**-resumption and still permits a case body to eliminate a *different*
+> carried value — ⚠ a bare depth bound would have refused legitimate nesting and
+> manufactured defects.
+>
+> ⚠ **`B2F`'s release gate is corrected by this amendment**: it gates on **the
+> closed `C1` carrier artifact**, ⛔ never on a claim that its recursive call
+> already exists.
+>
+> ⚠ **And `C1`'s own control 1 stays honest:** building an IH and reading the
+> adjacent child **is not invoking the IH**. ⛔ Do not report control 1 as
+> discharged; report it as **partial, with the invocation half assigned**.
+
 #### ⛔ What the license does NOT extend to
 
 ⛔ **Any other `Lowered` child position** — `Constructor`, `Record`, ordinary
@@ -685,8 +738,16 @@ were skipped. ⛔ An AC with no control is invisible to review: *"discharged"* a
   unchanged for the recursive positions.
   ⭐ **See `§2g-i`, which is binding on this criterion** — it licenses the single
   `ComputationalRecursorClosure.residual` widening that makes a carried recursive
-  position expressible, ⛔ rules out a fail-closed refusal as a `C1` residual, and
-  ⭐ **replaces this line's control with the five named there.**
+  position expressible, and ⭐ **replaces this line's control with the five named
+  there.**
+  ⛔ **AMENDED 2026-07-28 — `AC-C4` SPLITS; `C1` owns the representation half
+  only.** `C1` discharges: the IH is **built over a carried child and the case
+  eliminates**, plus controls 2–5. ⛔ **The runtime INVOCATION of that hypothesis
+  is `B2F`'s**, because the only execution vehicle is a per-static-origin callable
+  target and `AC-C10` forbids target-function population here. ⚠ Control 1 is
+  therefore **PARTIAL by design** — ⛔ do not report it discharged; building an IH
+  and reading the adjacent child is **not** invoking the IH. See `§2g-i`'s
+  amendment block and `§5`.
 - **`AC-C5`** — `Project` selects the correct field by artifact-static identity
   and returns the carrier.
   **Control:** a record whose fields are **reordered** relative to declaration
@@ -724,6 +785,24 @@ were skipped. ⛔ An AC with no control is invisible to review: *"discharged"* a
 1. **`B2F` still owns functionization and the authority switch.** This node
    makes the edge executable; it does **not** create compiled-once units or move
    production traffic. ⛔ That is deliberate and is `AC-C10`.
+   ⭐ **AMENDED 2026-07-28 — and `AC-C4`'s INVOCATION half now rides in this
+   residual, by Steward decision on the Architect's ruling `evt_17fgr8nk6859c`.**
+   A carried recursive position **builds** its induction hypothesis and
+   eliminates (that is `C1`, and it is built); **invoking** it requires one
+   closed, recursively callable Cranelift target per static
+   computational-eliminator origin — ⛔ which is target-function population,
+   forbidden here by `AC-C10` and owned by `B2F`'s atomic boundary.
+   ⛔ **A plain CFG backedge is NOT a substitute** and was rejected on merits: it
+   is correct only when the IH result *is* the case result, so `Wrap(x) =>
+   Suc(IH(x))` — an ordinary non-tail body — cannot preserve its pending
+   continuation. `AC-C4` imposes no tail-position restriction, so a jump to an
+   in-function header implements a strict subset. ⛔ Nor may
+   `Lowered::RecursiveBackedge` carry it: making that marker a carried value
+   reopens exactly the phase identity `§2g-i` closes.
+   ⚠ **What `C1` must ship for this residual to be honest:** the
+   `static_origin`-keyed refusal, **labelled as a transition sentinel naming the
+   `B2F` obligation that retires it** — ⛔ never reported as closure, and ⛔ never
+   reachable as an actual stack-overflow run.
 2. **The `#11` safety net is ONE test.** Both reddenings recorded in
    `SPEC-STORE-SPLIT` §7a are the same single test out of 444. ⛔ Any claim in
    this node that leans on that test as *coverage* is leaning on one test. `D6`
