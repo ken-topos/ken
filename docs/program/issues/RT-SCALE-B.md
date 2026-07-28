@@ -5,7 +5,7 @@ status: ready
 owner: runtime
 size: L
 gate: none
-depends_on: [RT-SCALE-A, RT-FNSPLIT-B2F]
+depends_on: [RT-SCALE-A, RT-FNSPLIT-B2F, RT-FNSPLIT-RECUR-PORT]
 blocks: [RT-NATIVE-FNSPLIT]
 github: null
 origin: Operator scaling-gate directive 2026-07-23 (evt_4btfhwqhah1ye), requirements 1-3; relocated to the recut by `docs/program/wp/RT-NATIVE-FNSPLIT-recut.md` as Boundary B, whose metric list survived the 2026-07-24 B1/B2 split (Architect evt_49bnspfb74tne + addendum evt_3b2a75fcaegja) as B2's. Research dispatch for the analytical half: evt_62fqpe7pfvym4. Steward-filed 2026-07-26 (agents cannot create tracked work per COORDINATION §2) because the gate had acceptance criteria and no tracked node.
