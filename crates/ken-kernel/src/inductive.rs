@@ -642,7 +642,11 @@ fn terminal_type(
         motive_at_value = Term::app(motive_at_value, Term::var(index_count - position));
     }
     motive_at_value = Term::app(motive_at_value, Term::var(0));
-    let mut result = Term::pi(family, Term::pi(motive_at_value.clone(), motive_at_value));
+    let evidence_type = motive_at_value;
+    let mut result = Term::pi(
+        family,
+        Term::pi(evidence_type.clone(), weaken(&evidence_type, 1)),
+    );
     for index_type in index_types.into_iter().rev() {
         result = Term::pi(index_type, result);
     }
