@@ -1076,10 +1076,59 @@ in the Architect's exact shape, with `AC-G0`'s denominator named.
 
 **D9 — the sole carrier producer made TOTAL over the value classes a unit result
 can take.** ⭐ **Added 2026-07-28 on the Architect's ruling `evt_69aedr4j844xd`;
-Steward-scoped.** Extend `C1`'s producer to cover **spillable `Int`, `Bytes`,
-`ProcessExitStatus`, `HostResult`, and `Trap`** — the five classes whose absence
-the switch-over measured as **69 reds**, each of which says so in its own error
-text (*"the carrier producer does not yet emit …"*).
+Steward-scoped.** Extend `C1`'s producer over the arms below.
+
+> ### ⛔⛔ THE PARTITION, KEYED ON THE PRODUCER'S OWN REFUSAL TEXT
+>
+> **Corrected 2026-07-28 by runtime-implementer `evt_194gp9q80x2v9`, measured
+> against the same run. ⭐ Their measurement wins over the class list the ruling
+> and I both carried.** ⚠ **The discriminator is the refusal the producer
+> actually raised — ⛔ NOT the test name**, which cannot tell these apart and is
+> what produced the wrong grouping in the first place.
+>
+> | n | producer arm | disposition | in `D9`? |
+> |---|---|---|---|
+> | **63** | **spillable immediate** — `Int`, `ProcessExitStatus`, `BoundedNat`, `StructuralNat` | `RepresentedImmediate { spill: Some(Int) }` | ✅ **this IS the work** |
+> | 1 | `HostResult` handle | `RepresentedHandle` | ✅ single-test tail |
+> | 1 | byte-bodied handle — `String`, `Bytes` | `RepresentedHandle` | ✅ single-test tail |
+> | 4 | `Trap` | ⛔ **`ProtocolOnly`** | ⛔ **NO — see below** |
+>
+> ⭐ **One arm is worth 63 of 69.** ⇒ ⛔ This is **not five comparable pieces of
+> work**, and sequencing it as five invites the tails to be done first because
+> they look cheap. The spillable immediate **is** `D9`.
+>
+> ### ⛔⛔ `Trap` IS NOT A PRODUCER GAP — REMOVED FROM THIS DELIVERABLE
+>
+> ⛔ **My own `D9` named it, transcribing the ruling. That was wrong**, and the
+> reason is structural rather than an ordering preference:
+>
+> - `LoweredVariant::Trap`'s disposition is **`ProtocolOnly`** — a trap is
+>   written to the activation's trap word, **a protocol carrier, not a
+>   source-expression result** — and `boundary_disposition` is the sole
+>   representation authority the ruling just re-affirmed.
+> - The producer's `Trap` arm sits in its **"REFUSED, not deferred"** section.
+>   ⚠ Those two sections mean different things and the arm says which it is.
+> - `B2R` already gives a trap its own lane, `AbiSlotKind::Trap` /
+>   `AbiCarrier::TrapWord` — ⭐ the **same statement** as this frame's own `AC-11`
+>   correction that `result_carrier` is not the trap's producer.
+>
+> ⇒ **Extending the producer for `Trap` would re-decide that a trap is a
+> source-expression result**, contradicting three landed contracts and undoing a
+> correction this node already carries.
+>
+> ✅ **Those 4 reds belong to the switch-over, not to `C1`:** a trapping unit body
+> writes the declared **`Trap`** slot and reports through the declared
+> **`Control`** slot — both laid out by `B2R` and both ignored by the
+> experimental emission, ⭐ **exactly as it ignored the process/capability slots
+> `AC-14` now governs.** ⇒ Same defect, same repair, ⛔ not a dependency.
+>
+> ### ⛔ THE GUARD IS REPLACED BY THE DISPATCH, NEVER DELETED
+>
+> `carrier_immediate_tag` refuses `spill: Some(_)` as a **guard**, and that guard
+> is the only thing standing between a spillable value and a truncating
+> `make_immediate`. ⇒ ⛔ **A removed guard with a half-built dispatch behind it is
+> an unsound ACCEPT, not a stuck fallback** — it fails in the direction that
+> silently truncates exactly the values a bignum language exists to carry.
 
 > ### ⭐ WHY THIS IS `B2F` WORK AND NOT A NEW NODE — the scoping call, made
 >
@@ -1231,12 +1280,49 @@ enumeration is committed, not asserted in a handoff message.
    from the obvious grep and the root goes missing again.
 
 **AC-6 — `lower_expr`'s recursive-descent inliner is gone** (D6), pinned so its
-reintroduction reddens — ⛔ **and the pin is authored, and green, on the base
-that still HAS the inliner.** **Control:** show the pin passing at a commit
-before the removal, then passing after it. ⚠ A pin first authored in the removal
-commit witnesses nothing: it has never observed the thing it forbids. See the
-`D6` atomicity block above — the removal and the switch-over are one edit, so
-this ordering is the only place the pin can be established.
+reintroduction reddens. **The permanent property is the post-`D6` one:** one
+retained body is emitted once into its unit, independent of call-site count.
+
+> ### ⛔⛔ `AC-6` IS A TWO-PHASE CONTROL — Architect ruling `evt_5ewffm8w8sr9x`
+>
+> ⛔ **This corrects control prose I wrote.** My earlier wording — *"passes at a
+> commit before the removal, then passes after it"* — implies **one assertion
+> green on both sides**, and the ruling names exactly that phrasing as the thing
+> to fold. ⚠ **The permanent property cannot also be true on the required pre-`D6`
+> checkpoint, because the inliner is present there.** ⇒ **Two phase-specific
+> assertions over ONE discriminator**, never one assertion that accepts both
+> worlds. ⭐ Routes (a) and (b) were never competing: **the transition sentinel
+> is how the before/after requirement is made falsifiable.**
+>
+> The pre-`D6` sentinel landed at `c2ec73cd` is admissible staging evidence:
+>
+> 1. **Fixture:** one retained closure origin applied **once** vs **that same
+>    origin** applied twice. ⛔ Two closure literals are two origins and are not
+>    an admissible substitute.
+> 2. **Assertion:** the relational old-state observation
+>    `R(two calls) = R(one call) + 1`, with a **nonzero baseline**. ⛔ Not brittle
+>    absolute counts.
+> 3. ⛔ **The `S6`/`D6` edit must make this UNCHANGED sentinel RED** for the
+>    intended relation flip. **Capture that red before changing the assertion.**
+>    ⚠ **A `D6` edit that leaves it green has not discharged the transition.**
+> 4. **Only after that red** may it be converted to the post-`D6` invariant
+>    `R(two calls) = R(one call)`, keeping the same one-origin/two-call
+>    discriminator and its non-vacuity check.
+> 5. ⛔ **At conversion, re-establish that `R` still measures body emission under
+>    the new route.** If origin resolution is no longer one-for-one with
+>    emission, **replace the instrument** with a per-origin unit/body-emission
+>    observation — ⛔ **do not mechanically flip the expected relation.**
+> 6. **QA then applies a compile-preserving PRODUCTION mutation** reintroducing
+>    per-call-site descent for the second application; the durable post-`D6`
+>    invariant must red. ⚠ The distinct-origin instrument simulation proves only
+>    that the pre-`D6` sentinel distinguishes the two readings — ⛔ it does **not**
+>    discharge this reintroduction mutation.
+>
+> ⛔ **Not permitted:** a unit-body-only fixture · a widened relation accepting
+> both states · deletion of the red sentinel.
+>
+> ⭐ **This does not weaken `AC-6`** — it separates *transition* evidence from
+> *steady-state reintroduction* evidence so each can fail for exactly one reason.
 
 **AC-7 — the FULL runtime suite, unfiltered:**
 `scripts/ken-cargo test -p ken-runtime`. ⛔ **Workspace, `--locked`, and
@@ -1643,9 +1729,25 @@ substitute for each other:**
    cannot be silently unhandled, and no test has to remember to exist. ⛔ Five
    hand-written cases discharge nothing — they are satisfied by exactly the five
    classes you thought of, which is the population that was already known.
-2. ⛔ **Behavioural, per class.** For each of the five, a fixture whose **answer**
-   depends on the value surviving the transfer. ⚠ A test that produces a carrier
-   and asserts on its tag re-measures the constructor.
+2. ⛔ **Behavioural, per ARM of `D9`'s partition** (spillable immediate ·
+   `HostResult` handle · byte-bodied handle) — a fixture whose **answer** depends
+   on the value surviving the transfer. ⚠ A test that produces a carrier and
+   asserts on its tag re-measures the constructor.
+3. ⛔ **The magnitude dispatch READS THE PRODUCER'S STATUS; it does not re-derive
+   the predicate.** `ken_boundary_make_immediate_local` already performs the
+   magnitude test against the one `BOUNDARY_IMMEDIATE_DOMAIN` table and already
+   returns `BOUNDARY_ERR_BOUNDS` exactly when a payload does not fit. ⇒ ⛔ **A
+   shift-and-compare at the emission site is a SECOND answer to a question that
+   already has one**, and it drifts from the table silently — the
+   second-representation-authority defect one layer down.
+   ⭐ **Three outcomes, ⛔ not two:** `OK` → use the word · `ERR_BOUNDS` → spill to
+   a `BoundaryClass::Int` handle · **anything else → trap.** ⛔ Collapsing
+   *"anything else"* into the spill turns a shape, tag or capacity error into a
+   **silent bignum allocation**.
+   ⚠ **Recorded as review-caught, NOT mechanically detected:** swapping the
+   status branch for a hand-written magnitude test **still round-trips**, so the
+   suite cannot catch it. ⛔ Do not let its absence from a green run read as
+   evidence.
 
 ⛔ **The `#[cfg(test)]` trap, and this frame has already been bitten by it once.**
 Correction row 5 above records `D2` pinned to `AbiPlane::shape`/`shapes` — ⛔
