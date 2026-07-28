@@ -995,7 +995,10 @@ fn structured_lift_type(
             arguments,
         } => {
             let (actual_head, actual_arguments) = peel_app(&field_type);
-            if !matches!(actual_head, Term::IndFormer { id, .. } if id == *former)
+            let Term::IndFormer { id: actual_former, level_args: actual_former_level_args } = actual_head else {
+                return Err(unsupported_recursive_shape("declared-former lift head is not an IndFormer"));
+            };
+            if actual_former != *former
                 || actual_arguments.len() != arguments.len()
             {
                 return Err(unsupported_recursive_shape(
@@ -1013,13 +1016,13 @@ fn structured_lift_type(
             structured_former_lift_type(
                 env,
                 *former,
-                former_level_args,
+                &actual_former_level_args,
                 &actual_arguments,
                 value,
                 motive,
                 d,
                 parameter_count,
-                &[],
+                guest_level_args,
             )
         }
     }
@@ -1150,7 +1153,10 @@ fn structured_lift_term(
             arguments,
         } => {
             let (actual_head, actual_arguments) = peel_app(&field_type);
-            if !matches!(actual_head, Term::IndFormer { id, .. } if id == *former)
+            let Term::IndFormer { id: actual_former, level_args: actual_former_level_args } = actual_head else {
+                return Err(unsupported_recursive_shape("declared-former lifted term head is not an IndFormer"));
+            };
+            if actual_former != *former
                 || actual_arguments.len() != arguments.len()
             {
                 return Err(unsupported_recursive_shape(
@@ -1168,7 +1174,7 @@ fn structured_lift_term(
             structured_former_lift_term(
                 env,
                 *former,
-                former_level_args,
+                &actual_former_level_args,
                 &actual_arguments,
                 value,
                 motive,
