@@ -7,9 +7,27 @@ size: M–L
 gate: none
 depends_on: []
 blocks: [EFF-SPACE-ENSURES-PRESTATE]
-github: null
+github: https://github.com/swe-toolkit/ken/pull/1152
 origin: Steward measurement 2026-07-27 at `origin/main = aea07d62`, taken while scoping the residual left by EFF-SPACE-ENSURES-PRESTATE (closed Shape B, PR #1115). Filed per COORDINATION §2.
 ---
+
+> ## ⛔ P1 MERGED, NODE PARKED — Steward, 2026-07-28
+>
+> **`SURF-SPACE-CELLS-P1` merged as PR #1152** at `origin/main = 05f259d7`
+> (candidate `ec412eca`, landed tree `b1e4cc10`, blob-verified). That closes the
+> **first phase only**.
+>
+> ⛔ **The node is NOT done and no successor is scheduled.** Under the operator's
+> ABI wind-down (2026-07-28) Team Language takes no new work after this landing,
+> so the P2 residual below is **parked, not dropped**. It stays `active` so a
+> reader cannot mistake a merged phase for a merged node.
+>
+> ⚠ The two blockers the Architect raised against the earlier candidate
+> `31e5f097` are **carried into the parked residual**, not fixed by P1:
+> `elaborate_space_decl` still admits `proc leak () : Int visits [S] = fs n` with
+> an `FS` callee (it checks only `declared_row.concrete_effects()` and never
+> infers the body row), and `Pub(SpaceDecl)` still falls through to
+> `resolve_scoped_decl`, which rejects it as `Internal`.
 
 > ## ⭐ RELEASED 2026-07-27 to **Team Language** as
 > **[`SURF-SPACE-CELLS-P1`](../wp/SURF-SPACE-CELLS-P1.md)**.
