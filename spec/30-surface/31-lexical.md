@@ -79,7 +79,7 @@ digraph where one is unambiguous, else the spelled-out name.
 | `∈` | `in` | membership |
 | `⊑` `⊔` `⊓` | `<:` `\/` `/\` | IFC lattice flows-to / join / meet (`../60-security/61`) ‡ |
 | `×` | `><` | product type |
-| `ℓ` | `level` / `l` | universe level / label (token-kind-disambiguated) ‡ |
+| `ℓ` | `level` / `l` | universe level / label (role supplied by parser context) ‡ |
 
 † Equality notation is the load-bearing fine choice: `≡` propositional vs. `==`
 boolean `DecEq` (`33 §5`) must stay distinct (Lean/Agda convention); `=` is
