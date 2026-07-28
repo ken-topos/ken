@@ -224,7 +224,6 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     let mut func_ctx = FunctionBuilderContext::new();
     let mut compiler = Lowering {
         seed_env,
-        seed_material: seed_material_refs,
         declarations,
         static_transition_plan,
         declaration_stack: Vec::new(),
@@ -259,20 +258,23 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         unsupported: Vec::new(),
         process_object: process_mode,
         process_symbols,
-        host_dispatch,
-        invocation_pointer: None,
-        native_int_arena: None,
-        native_int_binop: Some(int_binop),
-        native_int_compare: Some(int_compare),
-        native_int_intern: Some(int_intern),
-        native_int_narrow: Some(int_narrow),
-        native_int_export: Some(int_export),
-        native_int_tags: BTreeMap::new(),
-        boundary_carrier: Some(boundary_carrier),
         #[cfg(test)]
         native_int_mutation: NATIVE_INT_LOWERING_MUTATION.with(std::cell::Cell::get),
         #[cfg(test)]
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+        function_local: FunctionLocalRefs {
+            seed_material: seed_material_refs,
+            host_dispatch,
+            invocation_pointer: None,
+            native_int_arena: None,
+            native_int_binop: Some(int_binop),
+            native_int_compare: Some(int_compare),
+            native_int_intern: Some(int_intern),
+            native_int_narrow: Some(int_narrow),
+            native_int_export: Some(int_export),
+            native_int_tags: BTreeMap::new(),
+            boundary_carrier: Some(boundary_carrier),
+        },
     };
     let (maybe_trap, decoder) = {
         let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
@@ -280,10 +282,10 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         builder.append_block_params_for_function_params(block);
         builder.switch_to_block(block);
         let invocation = builder.block_params(block)[0];
-        compiler.native_int_arena = Some(invocation);
+        compiler.function_local.native_int_arena = Some(invocation);
         let mut initial_env = Vec::new();
         if process_mode {
-            compiler.invocation_pointer = Some(invocation);
+            compiler.function_local.invocation_pointer = Some(invocation);
             let pointer_type = builder.func.dfg.value_type(invocation);
             let process_input =
                 builder
@@ -297,7 +299,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
                 .ins()
                 .load(pointer_type, MemFlags::trusted(), invocation, 24);
             Lowering::require_nonzero(&mut builder, int_arena);
-            compiler.native_int_arena = Some(int_arena);
+            compiler.function_local.native_int_arena = Some(int_arena);
             initial_env.push(LoweringOperand::Specialized(
                 Lowered::BorrowedNativeValue {
                     pointer: process_input,
@@ -4478,7 +4480,7 @@ impl<'a> Lowering<'a> {
                 }));
             }
             let mut values = Vec::new();
-            append_recursive_argument_values(builder, &args, &mut values, &self.native_int_tags)?;
+            append_recursive_argument_values(builder, &args, &mut values, &self.function_local.native_int_tags)?;
             builder.ins().jump(
                 active
                     .header
@@ -4496,7 +4498,7 @@ impl<'a> Lowering<'a> {
             builder,
             &args,
             &mut initial_values,
-            &self.native_int_tags,
+            &self.function_local.native_int_tags,
         )?;
         for value in &initial_values {
             builder.append_block_param(header, builder.func.dfg.value_type(*value));
@@ -4517,7 +4519,7 @@ impl<'a> Lowering<'a> {
             loop_args.push(rebuild_recursive_argument(
                 template,
                 &mut parameters,
-                &mut self.native_int_tags,
+                &mut self.function_local.native_int_tags,
             )?);
         }
         if parameters.next().is_some() {
@@ -5533,7 +5535,7 @@ impl<'a> Lowering<'a> {
                 builder.switch_to_block(merge);
                 let tag = builder.block_params(merge)[0];
                 let value = builder.block_params(merge)[1];
-                self.native_int_tags.insert(value, tag);
+                self.function_local.native_int_tags.insert(value, tag);
                 Ok(LoweringOperand::Specialized(Lowered::Int {
                     value,
                     known: None,
@@ -6184,7 +6186,7 @@ impl<'a> Lowering<'a> {
         // written into a host request under a guessed encoding.
         let lowered = specialized_env_at(&lowered, "a host-effect operand")?;
         let pointer_type = builder.func.dfg.value_type(
-            self.invocation_pointer
+            self.function_local.invocation_pointer
                 .expect("process effect lowering owns an invocation pointer"),
         );
         let wire = ken_host::host_effect_wire_layout_v1(operation).map_err(|error| {
@@ -6489,7 +6491,7 @@ impl<'a> Lowering<'a> {
             wire.reply_size,
             wire.reply_align_shift,
         ));
-        let invocation = self
+        let invocation = self.function_local
             .invocation_pointer
             .expect("process effect lowering owns an invocation pointer");
         let op = builder.ins().iconst(types::I64, operation as i64);
@@ -6506,7 +6508,7 @@ impl<'a> Lowering<'a> {
 
             builder.switch_to_block(dispatch);
             let call = builder.ins().call(
-                self.host_dispatch
+                self.function_local.host_dispatch
                     .expect("process effect lowering owns one host dispatch import"),
                 &[invocation, op, request_pointer, request_size, reply_pointer],
             );
@@ -6552,7 +6554,7 @@ impl<'a> Lowering<'a> {
             builder.switch_to_block(decoded);
         } else {
             let call = builder.ins().call(
-                self.host_dispatch
+                self.function_local.host_dispatch
                     .expect("process effect lowering owns one host dispatch import"),
                 &[invocation, op, request_pointer, request_size, reply_pointer],
             );
@@ -7234,7 +7236,7 @@ impl<'a> Lowering<'a> {
                 builder,
                 &lowered_args,
                 &mut values,
-                &self.native_int_tags,
+                &self.function_local.native_int_tags,
             )?;
             builder.ins().jump(
                 active
@@ -7316,7 +7318,7 @@ impl<'a> Lowering<'a> {
             builder,
             &lowered_args,
             &mut initial_values,
-            &self.native_int_tags,
+            &self.function_local.native_int_tags,
         )?;
         for value in &initial_values {
             builder.append_block_param(header, builder.func.dfg.value_type(*value));
@@ -7339,7 +7341,7 @@ impl<'a> Lowering<'a> {
             loop_args.push(rebuild_recursive_argument(
                 template,
                 &mut parameters,
-                &mut self.native_int_tags,
+                &mut self.function_local.native_int_tags,
             )?);
         }
         if parameters.next().is_some() {

@@ -43,7 +43,6 @@ fn run_checked_bounded_nat_fixture(
     let seed_env = NativeSeedEnvironment::empty();
     let mut compiler = Lowering {
         seed_env: &seed_env,
-        seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
         declarations: BTreeMap::new(),
         static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),
@@ -78,21 +77,24 @@ fn run_checked_bounded_nat_fixture(
         unsupported: Vec::new(),
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
-        host_dispatch: None,
-        invocation_pointer: None,
-        native_int_arena: None,
-        native_int_binop: None,
-        native_int_compare: None,
-        native_int_intern: None,
-        native_int_narrow: None,
-        native_int_export: None,
-        native_int_tags: BTreeMap::new(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
         // rather than silently taking the `Specialized` path.
-        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: mutation,
+        function_local: FunctionLocalRefs {
+            seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
+            host_dispatch: None,
+            invocation_pointer: None,
+            native_int_arena: None,
+            native_int_binop: None,
+            native_int_compare: None,
+            native_int_intern: None,
+            native_int_narrow: None,
+            native_int_export: None,
+            native_int_tags: BTreeMap::new(),
+            boundary_carrier: None,
+        },
     };
     let mut function_context = FunctionBuilderContext::new();
     {

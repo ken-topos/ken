@@ -169,7 +169,6 @@ fn run_dynamic_constructor_dispatch_fixture(
     };
     let mut compiler = Lowering {
         seed_env: &seed_env,
-        seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
         declarations: BTreeMap::new(),
         static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),
@@ -204,21 +203,24 @@ fn run_dynamic_constructor_dispatch_fixture(
         unsupported: Vec::new(),
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
-        host_dispatch: None,
-        invocation_pointer: None,
-        native_int_arena: None,
-        native_int_binop: None,
-        native_int_compare: None,
-        native_int_intern: None,
-        native_int_narrow: None,
-        native_int_export: None,
-        native_int_tags: BTreeMap::new(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
         // rather than silently taking the `Specialized` path.
-        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+        function_local: FunctionLocalRefs {
+            seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
+            host_dispatch: None,
+            invocation_pointer: None,
+            native_int_arena: None,
+            native_int_binop: None,
+            native_int_compare: None,
+            native_int_intern: None,
+            native_int_narrow: None,
+            native_int_export: None,
+            native_int_tags: BTreeMap::new(),
+            boundary_carrier: None,
+        },
     };
     let mut function_context = FunctionBuilderContext::new();
     {
@@ -1744,7 +1746,6 @@ fn bare_carrier_test_lowering<'src>(
 ) -> Lowering<'src> {
     Lowering {
         seed_env,
-        seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
         declarations: BTreeMap::new(),
         static_transition_plan: plan,
         declaration_stack: Vec::new(),
@@ -1779,18 +1780,21 @@ fn bare_carrier_test_lowering<'src>(
         unsupported: Vec::new(),
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
-        host_dispatch: None,
-        invocation_pointer: None,
-        native_int_arena: None,
-        native_int_binop: None,
-        native_int_compare: None,
-        native_int_intern: None,
-        native_int_narrow: None,
-        native_int_export: None,
-        native_int_tags: BTreeMap::new(),
-        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+        function_local: FunctionLocalRefs {
+            seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
+            host_dispatch: None,
+            invocation_pointer: None,
+            native_int_arena: None,
+            native_int_binop: None,
+            native_int_compare: None,
+            native_int_intern: None,
+            native_int_narrow: None,
+            native_int_export: None,
+            native_int_tags: BTreeMap::new(),
+            boundary_carrier: None,
+        },
     }
 }
 
@@ -2101,7 +2105,7 @@ fn ac_c7_try_compile_edge<'src>(
     };
 
     let mut compiler = bare_carrier_test_lowering(seed_env, plan);
-    compiler.boundary_carrier = Some(carrier);
+    compiler.function_local.boundary_carrier = Some(carrier);
 
     let mut function_context = FunctionBuilderContext::new();
     let refused = {
@@ -2109,7 +2113,7 @@ fn ac_c7_try_compile_edge<'src>(
         let entry = builder.create_block();
         builder.append_block_params_for_function_params(entry);
         builder.switch_to_block(entry);
-        compiler.native_int_arena = Some(builder.block_params(entry)[0]);
+        compiler.function_local.native_int_arena = Some(builder.block_params(entry)[0]);
         // â  A refusal must still leave a WELL-FORMED function behind, or the
         // failure the caller wanted to observe is replaced by a Cranelift
         // assertion about an unfilled block. â­ Every carrier route refuses

@@ -371,19 +371,78 @@ impl OwnedSourceOccurrence {
     }
 }
 
-struct Lowering<'a> {
-    seed_env: &'a NativeSeedEnvironment,
+/// **Everything that is resolved into ONE generated `Function` and is
+/// meaningless in any other.**
+///
+/// ⛔⛔ **Nothing in here is portable across functions, and the three kinds fail
+/// differently.** `FuncRef`, `GlobalValue` and `ir::Value` are all
+/// function-scoped entity references in Cranelift:
+///
+/// | field kind | what it is | moving it to another function |
+/// |---|---|---|
+/// | `FuncRef`s, `SeedMaterialRefs`' `GlobalValue`s, `BoundaryCarrierRefs` | an identity **resolved into** a function | ⚠ must be **re-resolved** — the identity survives, the handle does not |
+/// | `invocation_pointer`, `native_int_arena` | a **result of this function's own dataflow** | ⛔ must be **re-derived** — there is no identity to re-resolve |
+/// | `native_int_tags` | a map **keyed on `ir::Value`** | ⛔⛔ **silently aliases** |
+///
+/// ⭐ **The `native_int_tags` row is the dangerous one, and it is why this
+/// struct exists.** Entity references restart per `Function` — `v0`, `v1`, …
+/// are reused — so a tag map carried from one function into another answers a
+/// lookup for an unrelated value **that happens to share the numeric handle**.
+/// ⛔ No type error, no panic, no verifier complaint: a wrong tag on a path that
+/// still compiles.
+///
+/// ⇒ ⭐ **`RT-FNSPLIT-B2F` `S6` gives each unit body its own function, so this
+/// state must be partitioned by construction.** ⛔ A `reset()` someone has to
+/// remember to call is the same defect with an extra step. Gathering the fields
+/// under one name is what makes *"is this per-function state?"* answerable by
+/// reading one struct instead of auditing a hundred-field one.
+///
+/// ⚠ **This is the identity-alias class in a third substrate** — after `B2O`
+/// removed it from `SemanticDescriptor` and `D1` kept it out of `UnitBundle`,
+/// here it is again in Cranelift's own entity references.
+///
+/// ⛔ **NOT CLAIMED: no control demonstrates the alias.** Producing one requires
+/// the `S6` switch-over that does not exist yet, so this is a read of Cranelift's
+/// entity scoping, not a measurement. ⚠ What *is* structural is that a second
+/// function cannot silently inherit this state without a visible second
+/// construction of this struct.
+struct FunctionLocalRefs {
     /// **`RT-FNSPLIT-B2F` `D3`** — the artifact-static seed material, resolved
     /// into this generated function.
     ///
-    /// ⭐ Held **alongside** `seed_env`, not instead of it, and the division is
-    /// the point: `seed_env` answers *which* `RuntimeGroundValue` a symbol
-    /// denotes — a compile-time question — while this answers *where the
+    /// ⭐ Held **alongside** `Lowering::seed_env`, not instead of it, and the
+    /// division is the point: `seed_env` answers *which* `RuntimeGroundValue` a
+    /// symbol denotes — a compile-time question — while this answers *where the
     /// running artifact reads it from*. ⛔ Collapsing the two would either put a
     /// compilation-only borrow in the artifact (which does not typecheck) or
     /// re-fold the value into the instruction stream (which is the authority
     /// `D3` removes).
     seed_material: seed_material::SeedMaterialRefs,
+    host_dispatch: Option<FuncRef>,
+    invocation_pointer: Option<cranelift_codegen::ir::Value>,
+    native_int_arena: Option<cranelift_codegen::ir::Value>,
+    native_int_binop: Option<FuncRef>,
+    native_int_compare: Option<FuncRef>,
+    native_int_intern: Option<FuncRef>,
+    native_int_narrow: Option<FuncRef>,
+    native_int_export: Option<FuncRef>,
+    native_int_tags: BTreeMap<cranelift_codegen::ir::Value, cranelift_codegen::ir::Value>,
+    /// The boundary-carrier helpers, made callable inside **this** generated
+    /// function (`RT-FNSPLIT-C1` `D3`).
+    ///
+    /// ⛔ `FuncRef`s, not `FuncId`s — the ruling requires the helper IDs to be
+    /// *"declared into each generated function as callable refs and actually
+    /// called by all three routes"*, and a `FuncId` held here would be exactly
+    /// the inert threading the node forbids: present, plausible, and never
+    /// reaching an emitted call.
+    boundary_carrier: Option<BoundaryCarrierRefs>,
+}
+
+struct Lowering<'a> {
+    seed_env: &'a NativeSeedEnvironment,
+    /// Everything resolved into the ONE generated function this `Lowering`
+    /// emits into. ⛔ See [`FunctionLocalRefs`] — none of it is portable.
+    function_local: FunctionLocalRefs,
     declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
     /// The closed static plan for this compilation.
     ///
@@ -469,24 +528,6 @@ struct Lowering<'a> {
     unsupported: Vec<String>,
     process_object: bool,
     process_symbols: crate::NativeProcessSymbols,
-    host_dispatch: Option<FuncRef>,
-    invocation_pointer: Option<cranelift_codegen::ir::Value>,
-    native_int_arena: Option<cranelift_codegen::ir::Value>,
-    native_int_binop: Option<FuncRef>,
-    native_int_compare: Option<FuncRef>,
-    native_int_intern: Option<FuncRef>,
-    native_int_narrow: Option<FuncRef>,
-    native_int_export: Option<FuncRef>,
-    native_int_tags: BTreeMap<cranelift_codegen::ir::Value, cranelift_codegen::ir::Value>,
-    /// The boundary-carrier helpers, made callable inside **this** generated
-    /// function (`RT-FNSPLIT-C1` `D3`).
-    ///
-    /// ⛔ `FuncRef`s, not `FuncId`s — the ruling requires the helper IDs to be
-    /// *"declared into each generated function as callable refs and actually
-    /// called by all three routes"*, and a `FuncId` held here would be exactly
-    /// the inert threading the node forbids: present, plausible, and never
-    /// reaching an emitted call.
-    boundary_carrier: Option<BoundaryCarrierRefs>,
     #[cfg(test)]
     native_int_mutation: NativeIntLoweringMutation,
     #[cfg(test)]
@@ -1248,7 +1289,7 @@ impl<'a> Lowering<'a> {
 
     /// The carrier helpers, as refs callable inside **this** generated function.
     fn carrier_refs(&self) -> Result<BoundaryCarrierRefs, CraneliftBackendError> {
-        self.boundary_carrier.ok_or_else(|| {
+        self.function_local.boundary_carrier.ok_or_else(|| {
             unsupported(
                 "BoundaryCarrier",
                 "this generated function has no boundary-carrier helper refs",
@@ -1264,7 +1305,7 @@ impl<'a> Lowering<'a> {
     /// is one pointer, not two. ⛔ Reading it from a second field would create a
     /// second answer to a question that has one.
     fn carrier_arena(&self) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
-        self.native_int_arena.ok_or_else(|| {
+        self.function_local.native_int_arena.ok_or_else(|| {
             unsupported(
                 "BoundaryCarrier",
                 "this generated function has no invocation arena",
@@ -6050,7 +6091,7 @@ impl<'a> Lowering<'a> {
     ) -> Lowered {
         match kind {
             ScalarMergeKind::Int => {
-                self.native_int_tags.insert(pair.payload, pair.tag);
+                self.function_local.native_int_tags.insert(pair.payload, pair.tag);
                 Lowered::Int {
                     value: pair.payload,
                     known: None,
@@ -7152,7 +7193,7 @@ impl<'a> Lowering<'a> {
     ) -> Result<(cranelift_codegen::ir::Value, cranelift_codegen::ir::Value), CraneliftBackendError>
     {
         let pointer_type = builder.func.dfg.value_type(
-            self.invocation_pointer
+            self.function_local.invocation_pointer
                 .expect("process byte lowering owns an invocation pointer"),
         );
         match value {
@@ -7207,10 +7248,10 @@ impl<'a> Lowering<'a> {
         let Lowered::Int { value, known } = value else {
             return Err(unsupported("Effect", "host-width operand is not Int"));
         };
-        let arena = self
+        let arena = self.function_local
             .native_int_arena
             .ok_or_else(|| unsupported("Effect", "host-width Int has no invocation arena"))?;
-        let helper = self.native_int_narrow.ok_or_else(|| {
+        let helper = self.function_local.native_int_narrow.ok_or_else(|| {
             unsupported("Effect", "host-width Int has no checked narrowing helper")
         })?;
         let tag = self.native_int_tag(builder, *value, *known)?;
@@ -7239,7 +7280,7 @@ impl<'a> Lowering<'a> {
         let tag = builder
             .ins()
             .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64);
-        self.native_int_tags.insert(value, tag);
+        self.function_local.native_int_tags.insert(value, tag);
         Lowered::Int { value, known: None }
     }
 
@@ -7711,7 +7752,7 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         symbol: &str,
     ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
-        self.seed_material
+        self.function_local.seed_material
             .payload_word(builder, symbol)
             .ok_or_else(|| {
                 unsupported(
@@ -7786,11 +7827,11 @@ impl<'a> Lowering<'a> {
         let output =
             builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 16, 3));
         let pointer_type = builder.func.dfg.value_type(
-            self.native_int_arena
+            self.function_local.native_int_arena
                 .ok_or_else(|| unsupported("RuntimeValue::Int", "Big Int has no arena"))?,
         );
-        let arena = self.native_int_arena.expect("Big Int arena was checked");
-        let helper = self.native_int_intern.ok_or_else(|| {
+        let arena = self.function_local.native_int_arena.expect("Big Int arena was checked");
+        let helper = self.function_local.native_int_intern.ok_or_else(|| {
             unsupported("RuntimeValue::Int", "Big Int has no local intern helper")
         })?;
         let sign = builder
@@ -7821,10 +7862,10 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         value: cranelift_codegen::ir::Value,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let arena = self.native_int_arena.ok_or_else(|| {
+        let arena = self.function_local.native_int_arena.ok_or_else(|| {
             unsupported("NativeInt", "unsigned Int producer has no invocation arena")
         })?;
-        let helper = self.native_int_intern.ok_or_else(|| {
+        let helper = self.function_local.native_int_intern.ok_or_else(|| {
             unsupported(
                 "NativeInt",
                 "unsigned Int producer has no local intern helper",
@@ -7898,13 +7939,13 @@ impl<'a> Lowering<'a> {
         }
         let lhs_tag = self.native_int_tag(builder, lhs, lhs_known)?;
         let rhs_tag = self.native_int_tag(builder, rhs, rhs_known)?;
-        let arena = self.native_int_arena.ok_or_else(|| {
+        let arena = self.function_local.native_int_arena.ok_or_else(|| {
             unsupported(
                 "PrimitiveCall",
                 "exact Int operation has no invocation arena",
             )
         })?;
-        let helper = self.native_int_binop.ok_or_else(|| {
+        let helper = self.function_local.native_int_binop.ok_or_else(|| {
             unsupported(
                 "PrimitiveCall",
                 "exact Int operation has no local support function",
@@ -7939,7 +7980,7 @@ impl<'a> Lowering<'a> {
                 crate::NATIVE_INT_BIG_TAG_V1 as i64,
             ],
         );
-        self.native_int_tags.insert(value, tag);
+        self.function_local.native_int_tags.insert(value, tag);
         let known = lhs_known.and_then(|lhs| rhs_known.and_then(|rhs| eval(lhs, rhs)));
         Ok(Lowered::Int { value, known })
     }
@@ -7971,13 +8012,13 @@ impl<'a> Lowering<'a> {
         };
         let lhs_tag = self.native_int_tag(builder, lhs, lhs_known)?;
         let rhs_tag = self.native_int_tag(builder, rhs, rhs_known)?;
-        let arena = self.native_int_arena.ok_or_else(|| {
+        let arena = self.function_local.native_int_arena.ok_or_else(|| {
             unsupported(
                 "PrimitiveCall",
                 "exact Int comparison has no invocation arena",
             )
         })?;
-        let helper = self.native_int_compare.ok_or_else(|| {
+        let helper = self.function_local.native_int_compare.ok_or_else(|| {
             unsupported(
                 "PrimitiveCall",
                 "exact Int comparison has no local support function",
@@ -8008,7 +8049,7 @@ impl<'a> Lowering<'a> {
         payload: cranelift_codegen::ir::Value,
         known: Option<i64>,
     ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
-        if let Some(tag) = self.native_int_tags.get(&payload).copied() {
+        if let Some(tag) = self.function_local.native_int_tags.get(&payload).copied() {
             return Ok(tag);
         }
         if known.is_some() {
@@ -8177,7 +8218,7 @@ impl<'a> Lowering<'a> {
             let tag = builder
                 .ins()
                 .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64);
-            self.native_int_tags.insert(value, tag);
+            self.function_local.native_int_tags.insert(value, tag);
             return Ok(Lowered::BorrowedOption {
                 present: builder.block_params(merge)[0],
                 value,
@@ -8226,7 +8267,7 @@ impl<'a> Lowering<'a> {
             let tag = builder
                 .ins()
                 .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64);
-            self.native_int_tags.insert(value, tag);
+            self.function_local.native_int_tags.insert(value, tag);
             return Ok(Lowered::BorrowedOption {
                 present,
                 value,
@@ -8459,10 +8500,10 @@ impl<'a> Lowering<'a> {
         match value {
             Lowered::Int { value, known } => {
                 let tag = self.native_int_tag(builder, value, known)?;
-                let arena = self.native_int_arena.ok_or_else(|| {
+                let arena = self.function_local.native_int_arena.ok_or_else(|| {
                     unsupported("NativeResult", "Int result has no invocation arena")
                 })?;
-                let export = self.native_int_export.ok_or_else(|| {
+                let export = self.function_local.native_int_export.ok_or_else(|| {
                     unsupported("NativeResult", "Int result has no export support function")
                 })?;
                 #[cfg(test)]
