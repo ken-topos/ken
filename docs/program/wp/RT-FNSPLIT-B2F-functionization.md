@@ -856,6 +856,45 @@ Creating owned, artifact-static seed material that outlives every activation is
 **new work in this node**, and it is the one piece of `B2R`'s contract with no
 landed counterpart at all.
 
+> ### ⛔ `D3` GROUNDED 2026-07-28 — "no landed counterpart" IS LITERALLY TRUE, AND
+> ### ⛔ THIS IS NOT A NEW HARD STOP. Count of record stays **11**.
+>
+> **Measured by `runtime-implementer` at `evt_2we75javgbctw`** on
+> `wp/RT-FNSPLIT-B2F-functionization-live = 001242a8`.
+>
+> ⭐ **The frame's claim is confirmed at the TOOLCHAIN level, not merely the
+> design level:** `declare_data`, `define_data` and `DataDescription` have **zero**
+> occurrences anywhere in `ken-runtime`. ⇒ There is no in-crate precedent to copy.
+>
+> **What is actually there today:**
+>
+> | fact | consequence for `D3` |
+> |---|---|
+> | `lower_seed_capture` resolves the symbol against `seed_env` **at compile time**; `lower_ground_value` emits `iconst(…)` for `Bool` and small `Int` | ⛔ the value is **baked into the instruction stream**. An `iconst` is owned by the frame the moment it exists — ⛔ **neither a borrow NOR artifact-static storage** |
+> | `Bytes` / `String` / `Constructor` / `Record` map to `Lowered::…` holding the **compiler's own Rust values**; only `Lowered`'s scalar variants carry an `ir::Value` | ⛔ a seed capture of a non-scalar **exists only compiler-side and is specialized away** — it has **no runtime representation at all** |
+>
+> ⇒ ⛔ **`B2R`'s `GroundValueCarrier` declaration (`BorrowedForActivation` /
+> `ArtifactStatic`) describes NOTHING THAT EXISTS, in both halves.** ⚠ Reading it
+> as a description of current behaviour is the error `D3` invites, and it is
+> wrong in **both** directions rather than merely incomplete.
+>
+> #### ⛔⛔ THE §5a BOOKKEEPING — do not let this become hard stop `#12`
+>
+> ⚠ **Finding 2 has hard-stop `#10`'s exact signature** — a dynamic value with no
+> executable representation. ✅ **It was correctly NOT raised as a new stop, and
+> the count of record stays `11`.** The reason is durable, not a judgement call:
+>
+> - `#10` was **discharged** by `B2V` + `C1` landing an executable carrier, and
+> - ⭐ **this frame already assigns minting the durable seed material to THIS
+>   node, in these words** — *"`B2R` declared it and deliberately did not mint
+>   it… new work in this node."*
+>
+> ⇒ ⭐ **Resolvable from the frame ⇒ resolve from the frame** (`COORDINATION §6`).
+> ⛔ **A seat re-deriving this measurement later WILL see `#10`'s signature. It is
+> a known, assigned deliverable — not a new structural wall.** ⛔ Do not move the
+> count to `12` on it, and ⛔ do not re-anchor the research cadence (next pull
+> stays `#15`).
+
 **D4 — static dispatch / call edges, derived from the graph.** Call sites
 reference target functions by their **static** identity. No indirect dispatch on
 a dynamic property, and no runtime lookup that re-derives which code to run from
@@ -1031,6 +1070,55 @@ hand-listed subset of the **13**-file `BACKEND_PRODUCTION_SOURCES`
 **or** record the exclusion with its reason in-source. ⛔ **Silence is not an
 answer here** — an absent row and a zero row read identically and only one of
 them is a claim.
+
+> ### ⛔⛔ `AC-2` AMENDED 2026-07-28 — THIRD POPULATION DEFECT IN ONE NODE. THE
+> ### CENSUS IS **FAIL-OPEN**, AND THAT — NOT ITS NEEDLE LIST — IS THE DEFECT.
+>
+> **Raised by `runtime-implementer` at `evt_2we75javgbctw`, third of three.**
+>
+> | # | defect | scope of the hole |
+> |---|---|---|
+> | 1 | five rows are a subset of the 13-file population | one file unmeasured |
+> | 2 | live sibling emitters (`boundary_value_clif.rs`, `native_int_clif.rs`) absent | more files unmeasured |
+> | 3 | ⛔ **the needle set omits `.declare_data(` / `.define_data(`** | ⛔ **NO file measured for that entire kind of emission** |
+>
+> ⭐ **3 is a strictly worse shape than 1 and 2 and must not be filed beside
+> them.** A missing *row* leaves one file unmeasured and the census visibly has
+> a gap. A missing *needle class* leaves the census reading **complete across
+> every row** while `n` data objects sit in the artifact. ⇒ **`D3`'s
+> artifact-static seed material — every byte of it — would be invisible.**
+>
+> #### ⛔ THE RULING: the failure DIRECTION is the property to fix
+>
+> The census's needles are `FunctionBuilder::new(`, `.define_function(`,
+> `.declare_function(`. ⛔ **Its default branch is *"needle not found ⇒ nothing
+> emitted"*, so it fails OPEN for every emission spelling nobody enumerated.**
+> ⇒ ⭐ **Each of the three fixes added something it was not looking for, which is
+> why there was a third: a needle-list census can only ever be repaired one
+> discovery behind the code.** ⛔ Adding two more needles does **not** make it
+> sound, and this frame does not claim it does.
+>
+> ⚠ **Repeated defeats of one check mean its DEFAULT branch is wrong, not that
+> the check needs a longer list.** Three defeats is the evidence.
+>
+> #### ✅ What `AC-2` now requires — two instruments, different jobs
+>
+> 1. ⭐ **PRIMARY — a BEHAVIOURAL count of what the compiled module actually
+>    contains.** It counts what is **there** rather than searching for what a
+>    reader expected, so an unanticipated emission spelling **cannot** hide in it.
+>    ⇒ This is the evidence for the population property.
+> 2. ✅ **RETAINED — the source-text census, as a TRIPWIRE.** ⛔ **Do NOT retire
+>    or weaken it** — that would trade a real (if partial) guard for nothing, and
+>    a defeat count never licenses removing a gate. ⛔ **And do not let it be
+>    read as the population claim**; ⚠ its evasions survive every needle added.
+> 3. ✅ **Add `.declare_data(` / `.define_data(` to the needle set.** Prediction
+>    `P6`, committed **before** the code exists: `units.rs` = 1 `declare_data` /
+>    1 `define_data`, every other row `0/0`. ⭐ The prediction-before-existence
+>    ordering is itself the evidence, as it was for `units.rs`'s `1/1/1`.
+>
+> ⚠ **State in-source which instrument carries the claim.** ⛔ Two counts sitting
+> side by side with no stated division of labour reads as corroboration, and it
+> is not — one is fail-open by construction.
 
 **AC-3 — the four D3 width invariants**, each independently falsifiable (old
 `AC-3`). Each gets its own assertion and its own positive control; a single
