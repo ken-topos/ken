@@ -1896,3 +1896,616 @@ fn c1_d3_a_carried_operand_survives_case_env_and_nested_lowering() {
          measuring the phase at all"
     );
 }
+
+// ─── `RT-FNSPLIT-C1` `AC-C7` — the EXECUTABLE EDGE ────────────────────────
+//
+// ⭐⭐ **This section is the node's reason to exist**, and it is the only thing
+// here that distinguishes *"the carried routes are written"* from *"the carried
+// routes work."*
+//
+// ⚠⚠ **Why nothing before this rig could establish that, stated so it is not
+// re-learned.** Every earlier control ran against `bare_carrier_test_lowering`,
+// whose `boundary_carrier` is `None` — so it could only ever observe a
+// *refusal*. And rustc's dead-code pass, which correctly caught the uninhabited
+// `Carried` variant one commit earlier, clears on the **mention** of a helper,
+// ⛔ never on the branch executing. ⇒ Both instruments went quiet while all
+// three elimination routes were still unreached by any test.
+//
+// ⇒ These tests **JIT-compile and RUN** the emitted code against a real bound
+// arena, and assert the **eliminated value**, ⛔ not that no error came back.
+
+/// A real invocation arena, bound the way emitted code expects to find one.
+///
+/// ⚠ The returned `BoundaryArenaV1` and `BoundaryValueStore` must both stay
+/// alive across the call: the base pointer names *their* tables, and the
+/// reservation happens before `publish` because growing a table afterwards
+/// would move it under the pointer emitted code already holds.
+fn ac_c7_bind_arena(
+    store: &mut crate::boundary_value::BoundaryValueStore,
+) -> (crate::boundary_value::BoundaryArenaV1, *mut u64) {
+    store.reserve_persistent(64, 256, 512, 0);
+    let persistent = store.publish_persistent();
+    let mut arena = crate::boundary_value::BoundaryArenaBuilder::new().finish();
+    arena.reserve(64, 256, 512, 0);
+    arena.bind_persistent(Some(persistent as *const u64));
+    let base = arena.publish();
+    (arena, base)
+}
+
+/// The `AC-C7` rig: a JIT module carrying the **real** emitted carrier graph,
+/// plus a `Lowering` wired to call it, plus whatever the caller emits between
+/// them.
+///
+/// ⭐ The probe's one parameter is the invocation arena, which is exactly what
+/// `Lowering::carrier_arena` reads — so the helpers this rig calls are the same
+/// helpers production would call, reached the same way.
+fn ac_c7_compile_edge<'src>(
+    seed_env: &'src NativeSeedEnvironment,
+    plan: StaticTransitionPlan<'src>,
+    emit: impl FnOnce(
+        &mut Lowering<'src>,
+        &mut FunctionBuilder<'_>,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError>,
+) -> (cranelift_jit::JITModule, *const u8) {
+    let mut module = new_jit_module().expect("JIT module constructs");
+    let native = crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
+        .expect("native-int graph emits");
+    let boundary_plan = crate::boundary_value::BoundaryEmissionPlan::derive();
+    let helpers = crate::boundary_value_clif::emit_boundary_value_local_graph(
+        &mut module,
+        &native,
+        &boundary_plan,
+    )
+    .expect("boundary carrier graph emits");
+    let pointer = module.target_config().pointer_type();
+
+    let mut signature = module.make_signature();
+    signature.params.push(AbiParam::new(pointer));
+    signature.returns.push(AbiParam::new(types::I64));
+    let func_id = module
+        .declare_function("c1_ac_c7_edge", Linkage::Local, &signature)
+        .expect("edge probe declares");
+    let mut context = module.make_context();
+    context.func =
+        Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
+
+    let carrier = BoundaryCarrierRefs {
+        tag: module.declare_func_in_func(helpers.tag, &mut context.func),
+        field_count: module.declare_func_in_func(helpers.field_count, &mut context.func),
+        field: module.declare_func_in_func(helpers.field, &mut context.func),
+        record_field: module.declare_func_in_func(helpers.record_field, &mut context.func),
+        alloc: module.declare_func_in_func(helpers.alloc, &mut context.func),
+        store_tag_id: module.declare_func_in_func(helpers.store_tag_id, &mut context.func),
+        store_field: module.declare_func_in_func(helpers.store_field, &mut context.func),
+        store_name: module.declare_func_in_func(helpers.store_name, &mut context.func),
+        make_immediate: module.declare_func_in_func(helpers.make_immediate, &mut context.func),
+    };
+
+    let mut compiler = bare_carrier_test_lowering(seed_env, plan);
+    compiler.boundary_carrier = Some(carrier);
+
+    let mut function_context = FunctionBuilderContext::new();
+    {
+        let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+        let entry = builder.create_block();
+        builder.append_block_params_for_function_params(entry);
+        builder.switch_to_block(entry);
+        compiler.native_int_arena = Some(builder.block_params(entry)[0]);
+        let result = emit(&mut compiler, &mut builder).expect("the carried edge emits");
+        builder.ins().return_(&[result]);
+        builder.seal_all_blocks();
+        builder.finalize();
+    }
+    module
+        .define_function(func_id, &mut context)
+        .expect("edge probe defines");
+    module.finalize_definitions().expect("jit finalizes");
+    let code = module.get_finalized_function(func_id);
+    (module, code)
+}
+
+fn ac_c7_run(code: *const u8, arena: *const u64) -> i64 {
+    let f: extern "C" fn(*const u64) -> i64 = unsafe { std::mem::transmute(code) };
+    f(arena)
+}
+
+/// A zero-argument constructor occurrence, so the producer's supported surface
+/// (`Constructor` with no children) carries the whole fixture.
+fn ac_c7_ctor(name: &str) -> RuntimeExpr {
+    RuntimeExpr::Construct {
+        constructor: format!("ctor:fixture::C1::{name}"),
+        args: Vec::new(),
+    }
+}
+
+fn ac_c7_lowered_ctor(name: &str) -> Lowered {
+    Lowered::Constructor {
+        constructor: format!("ctor:fixture::C1::{name}"),
+        args: Vec::new(),
+    }
+}
+
+/// Drive one `Project` edge end to end and report the **runtime** identity of
+/// the projected child, beside the two artifact-static identities it could
+/// legitimately have been.
+///
+/// ⭐ **One plan serves both sides, and that is the point rather than a
+/// convenience.** The producer keys `store_name` on
+/// `record_field_identity(record_origin, position)` and the eliminator keys
+/// `record_field` on `project_field_identity(project_origin)`. Deriving both
+/// from a single planned `Let { Record{..}, Project{Var(0), ..} }` is what makes
+/// their agreement `D2`'s **shared-authority property under test**, ⛔ rather
+/// than an assumption baked into the fixture.
+///
+/// ⚠ **The identities are returned rather than hard-coded because they are
+/// ARTIFACT-LOCAL.** A packed identity is a span into *this* plan's own name
+/// arena, so the same spelling may pack differently in a different plan. ⛔ A
+/// caller must therefore compare within one call's results and never across two.
+fn ac_c7_project_edge(fields: [(&str, &str); 2], project: &str) -> (i64, u64, u64) {
+    let fixture = RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::Record {
+            fields: vec![
+                (fields[0].0.to_string(), ac_c7_ctor(fields[0].1)),
+                (fields[1].0.to_string(), ac_c7_ctor(fields[1].1)),
+            ],
+        }),
+        body: Box::new(RuntimeExpr::Project {
+            record: Box::new(RuntimeExpr::Var(0)),
+            field: project.to_string(),
+        }),
+    };
+    let RuntimeExpr::Let {
+        body: project_expr, ..
+    } = &fixture
+    else {
+        unreachable!("the fixture is a `Let`")
+    };
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let record_origin = plan
+        .child_static_origin(root, 0)
+        .expect("a `Let`'s value is child 0");
+    let project_origin = plan
+        .child_static_origin(root, 1)
+        .expect("a `Let`'s body is child 1");
+    let identity = |position: usize| {
+        plan.constructor_symbol_identity(
+            plan.child_static_origin(record_origin, position)
+                .expect("a record field has a planned child origin"),
+        )
+        .expect("a planned `Construct` has a constructor identity")
+        .tag_abi_word()
+        .expect("an identity packs into the ABI word")
+    };
+    let first_identity = identity(0);
+    let second_identity = identity(1);
+
+    let lowered_fields = vec![
+        (fields[0].0.to_string(), ac_c7_lowered_ctor(fields[0].1)),
+        (fields[1].0.to_string(), ac_c7_lowered_ctor(fields[1].1)),
+    ];
+    let seed_env = NativeSeedEnvironment::empty();
+    let (_module, code) = ac_c7_compile_edge(&seed_env, plan, move |compiler, builder| {
+        // ── PRODUCER: a compile-time record crosses the one-way seam ──────
+        let record = Lowered::Record {
+            fields: lowered_fields,
+        };
+        let word = compiler.transfer_into_carrier(builder, record_origin, &record)?;
+        // ── ELIMINATOR: `Project` over a value with NO compile-time
+        //    template — the carried operand is all the env holds ──────────
+        let eliminated = compiler.lower_expr(
+            builder,
+            SourceOccurrence {
+                expr: project_expr.as_ref(),
+                static_origin: project_origin,
+            },
+            &[LoweringOperand::Carried(word)],
+        )?;
+        let LoweringOperand::Carried(child) = eliminated else {
+            panic!(
+                "`§2g` requires a projected child to remain `Carried`; a specialized \
+                 result here would be the materialized template the node exists to remove"
+            );
+        };
+        // The assertion instrument: read the child's own runtime identity.
+        compiler.emit_carrier_tag(builder, child)
+    });
+
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = ac_c7_bind_arena(&mut store);
+    let observed = ac_c7_run(code, base);
+    (observed, first_identity, second_identity)
+}
+
+/// ⭐⭐ **`AC-C7` ROW 1 OF 3 — `Project`.** Reported as its own row; ⛔ never
+/// folded into an aggregate, because an aggregate differential passes while one
+/// of three contributors defects.
+///
+/// **MEASURED:** JIT-compiled emitted code, run against a real bound arena,
+/// transfers a `Record` across the one-way producer and then lowers a `Project`
+/// whose only input is the resulting boundary word — and the projected child's
+/// **runtime** `tag` equals the artifact-static identity of the constructor the
+/// named field holds.
+/// **CLAIMED:** `D4` — `Project` selects a runtime record field by
+/// artifact-static field identity and returns the carrier.
+/// **THE GAP:** *"the result equals `Beta`"* is satisfiable by an eliminator
+/// that ignores the field name and always returns the last child. ⭐ Closed by
+/// the second half: projecting `"a"` on the identical fixture must yield
+/// `Alpha`, so the two projections have to **disagree** in the direction the
+/// names dictate.
+///
+/// ⚠ Promise class: **durable invariant**. It asserts a relation between the
+/// runtime identity and the plan's own static identity, ⛔ not either as a
+/// frozen literal — so re-interning, re-ordering the arena, or renaming the
+/// fixture's constructors all keep it green, while an eliminator that stops
+/// keying on the name turns it red.
+#[test]
+fn c1_d4_ac_c7_project_eliminates_a_carried_record_by_static_field_identity() {
+    let (observed, alpha, beta) = ac_c7_project_edge([("a", "Alpha"), ("b", "Beta")], "b");
+    assert_ne!(
+        alpha, beta,
+        "NON-VACUITY: the two constructors must have DIFFERENT artifact-static \
+         identities, or `observed == beta` is satisfied by any answer at all"
+    );
+    assert_eq!(
+        observed as u64, beta,
+        "`D4`: projecting `b` must return the carrier holding `Beta`, whose \
+         runtime tag is its artifact-static identity {beta}; got {observed}"
+    );
+
+    // ── DISCRIMINATOR: the same fixture, the other field ──────────────────
+    let (other, alpha, beta) = ac_c7_project_edge([("a", "Alpha"), ("b", "Beta")], "a");
+    assert_eq!(
+        other as u64, alpha,
+        "DISCRIMINATOR: projecting `a` must return `Alpha`. If this and the case \
+         above returned the same word, the eliminator is not reading the field \
+         name at all"
+    );
+    assert_ne!(
+        other as u64, beta,
+        "DISCRIMINATOR: projecting `a` must NOT return `Beta`"
+    );
+}
+
+/// ⭐ **`AC-C5`'s named control — a record whose fields are REORDERED relative
+/// to declaration yields the same projection.**
+///
+/// **MEASURED:** with the fixture's fields declared `(b, a)` instead of
+/// `(a, b)`, projecting `"b"` still returns `Beta` — now the child at
+/// **position 0** rather than position 1.
+/// **CLAIMED:** the projection is keyed on artifact-static **field identity**,
+/// not on declaration position.
+/// **THE GAP:** a positional eliminator returns position 1 either way, so it
+/// would answer `Alpha` here while answering `Beta` in the row above. ⇒ The two
+/// tests together are the pair; ⛔ neither alone distinguishes name-keyed from
+/// position-keyed.
+///
+/// ⚠ Identities are compared **within this call only** — they are artifact-local
+/// spans, so the number here need not equal the number in the row above even for
+/// the same spelling.
+#[test]
+fn c1_d4_ac_c5_a_reordered_record_projects_the_same_field() {
+    // Declared `(b, a)`: `Beta` is now child 0.
+    let (observed, beta, alpha) = ac_c7_project_edge([("b", "Beta"), ("a", "Alpha")], "b");
+    assert_ne!(alpha, beta, "NON-VACUITY: the identities must differ");
+    assert_eq!(
+        observed as u64, beta,
+        "`AC-C5`: `b` sits at declaration position 0 in this fixture and position \
+         1 in the row above, and both must project to `Beta` — a positional \
+         eliminator answers `Alpha` here"
+    );
+}
+
+fn ac_c7_wrap(outer: &str, inner: &str) -> RuntimeExpr {
+    RuntimeExpr::Construct {
+        constructor: format!("ctor:fixture::C1::{outer}"),
+        args: vec![ac_c7_ctor(inner)],
+    }
+}
+
+fn ac_c7_lowered_wrap(outer: &str, inner: &str) -> Lowered {
+    Lowered::Constructor {
+        constructor: format!("ctor:fixture::C1::{outer}"),
+        args: vec![ac_c7_lowered_ctor(inner)],
+    }
+}
+
+fn ac_c7_trap() -> RuntimeTrap {
+    RuntimeTrap {
+        code: crate::RuntimeTrapCode::PatternMatchFailure,
+        message: "no artifact-static case matches the carried value".to_string(),
+    }
+}
+
+/// ⛔ The status the emitted closed default returns. Read from the one place
+/// that spells it — `Lowering::seal_source_trap_branch` — rather than restated,
+/// so the two cannot drift.
+const AC_C7_TRAP_STATUS: i64 = -4;
+
+/// Drive one carried `Match` end to end.
+///
+/// The fixture is `Let { Wrap(Inner), Match Var(0) { Left x -> x, Right x -> Sentinel } }`
+/// with `Wrap` supplied by the caller, so ONE helper produces all three
+/// interesting outcomes: selecting the first case, selecting the second, and
+/// reaching the closed default.
+///
+/// ⭐ **Case 0's body is `Var(0)` — the projected child.** That makes its
+/// returned identity the *child's*, so a green result requires all four emitted
+/// steps: `tag` selected the case, `field_count` admitted the arity, `field(0)`
+/// projected the child, and the child **stayed `Carried`** through `case_env`
+/// and the nested lowering of the body.
+///
+/// ⭐⭐ **Case 1's body is a DIFFERENT expression, and that asymmetry is
+/// load-bearing.** An earlier revision gave both cases the body `Var(0)`, and it
+/// was **green for a weaker reason than it claimed**: an eliminator that always
+/// took case 0 would still bind `field(0)` and return the same child, so the
+/// "selects the right case" assertion could not have failed. ⛔ Two cases that
+/// agree on every input do not discriminate between them. The defect was found
+/// by designing `AC-C7`'s neutering mutation and noticing it would not redden —
+/// which is the whole reason that control is mandated.
+fn ac_c7_match_edge(scrutinee: &str, inner: &str) -> (i64, u64, u64) {
+    let fixture = RuntimeExpr::Let {
+        value: Box::new(ac_c7_wrap(scrutinee, inner)),
+        body: Box::new(RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: "ctor:fixture::C1::Left".to_string(),
+                    binders: 1,
+                    body: RuntimeExpr::Var(0),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: "ctor:fixture::C1::Right".to_string(),
+                    binders: 1,
+                    body: ac_c7_ctor("Sentinel"),
+                },
+            ],
+            default: ac_c7_trap(),
+        }),
+    };
+    let RuntimeExpr::Let {
+        body: match_expr, ..
+    } = &fixture
+    else {
+        unreachable!("the fixture is a `Let`")
+    };
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let scrutinee_origin = plan
+        .child_static_origin(root, 0)
+        .expect("a `Let`'s value is child 0");
+    let match_origin = plan
+        .child_static_origin(root, 1)
+        .expect("a `Let`'s body is child 1");
+    let identity_at = |origin| {
+        plan.constructor_symbol_identity(origin)
+            .expect("a planned `Construct` has a constructor identity")
+            .tag_abi_word()
+            .expect("an identity packs into the ABI word")
+    };
+    let inner_identity = identity_at(
+        plan.child_static_origin(scrutinee_origin, 0)
+            .expect("the wrapper's only argument has a planned origin"),
+    );
+    // A `Match`'s case *i* body is child `1 + i` — the scrutinee is child 0.
+    let sentinel_identity = identity_at(
+        plan.child_static_origin(match_origin, 2)
+            .expect("case 1's body has a planned origin"),
+    );
+
+    let lowered = ac_c7_lowered_wrap(scrutinee, inner);
+    let seed_env = NativeSeedEnvironment::empty();
+    let (_module, code) = ac_c7_compile_edge(&seed_env, plan, move |compiler, builder| {
+        let word = compiler.transfer_into_carrier(builder, scrutinee_origin, &lowered)?;
+        let eliminated = compiler.lower_expr(
+            builder,
+            SourceOccurrence {
+                expr: match_expr.as_ref(),
+                static_origin: match_origin,
+            },
+            &[LoweringOperand::Carried(word)],
+        )?;
+        let LoweringOperand::Carried(selected) = eliminated else {
+            panic!("a carried `Match` merges in the carrier lane, so its result is `Carried`");
+        };
+        compiler.emit_carrier_tag(builder, selected)
+    });
+
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = ac_c7_bind_arena(&mut store);
+    let observed = ac_c7_run(code, base);
+    (observed, inner_identity, sentinel_identity)
+}
+
+/// ⭐⭐ **`AC-C7` ROW 2 OF 3 — `Match`.** Its own row; ⛔ never aggregated.
+///
+/// **MEASURED:** JIT-compiled emitted code, run against a real bound arena,
+/// transfers `Left(Alpha)` across the one-way producer and lowers a two-case
+/// `Match` whose only input is the resulting boundary word — the result's
+/// runtime `tag` is `Alpha`'s artifact-static identity. Swapping the scrutinee
+/// to `Right(Beta)` selects the **other** case, whose body is a different
+/// expression, and yields `Sentinel`.
+/// **CLAIMED:** `D3` — `Match` eliminates a carried value with no compile-time
+/// template, selecting the correct case and projecting its children back into
+/// the same carrier.
+/// **THE GAP:** a single positive case is satisfied by an eliminator that always
+/// takes case 0. ⭐ Closed because the two cases **disagree on every input**:
+/// case 0 returns the projected child, case 1 returns a fixed constructor, so
+/// selecting the wrong one is always observable.
+///
+/// ⚠ Promise class: **durable invariant** — a relation between the runtime tag
+/// and the plan's own static identity, ⛔ never a frozen literal.
+#[test]
+fn c1_d3_ac_c7_match_eliminates_a_carried_value_and_selects_the_right_case() {
+    let (first, alpha, sentinel) = ac_c7_match_edge("Left", "Alpha");
+    assert_ne!(
+        alpha, sentinel,
+        "NON-VACUITY: the child and the sentinel must have different identities, \
+         or selecting the wrong case is unobservable"
+    );
+    assert_eq!(
+        first as u64, alpha,
+        "`D3`: `Left(Alpha)` must select case 0 and bind its projected child, so \
+         the result carries `Alpha` (identity {alpha}); got {first}"
+    );
+
+    // ── DISCRIMINATOR: the SECOND case, whose body differs ────────────────
+    let (second, beta, sentinel) = ac_c7_match_edge("Right", "Beta");
+    assert_eq!(
+        second as u64, sentinel,
+        "DISCRIMINATOR: `Right(Beta)` must select case 1, whose body is a fixed \
+         constructor. An eliminator that always takes case 0 returns the child \
+         `Beta` ({beta}) here instead; got {second}"
+    );
+    assert_ne!(
+        second as u64, beta,
+        "DISCRIMINATOR: case 1's body ignores the binder, so the child must not \
+         be what comes back"
+    );
+}
+
+/// ⭐ **`AC-C3`'s negative arm — a constructor OUTSIDE the artifact-static case
+/// set reaches the closed default.**
+///
+/// **MEASURED:** the identical two-case fixture, given a scrutinee whose
+/// constructor matches neither case, returns the emitted trap status instead of
+/// any case's value.
+/// **CLAIMED:** the carried `Match`'s case chain is **closed** — it falls
+/// through to a runtime default rather than selecting arbitrarily or reading
+/// past the node.
+/// **THE GAP:** *"it returned the trap status"* is satisfiable by any failure
+/// whatsoever, including the arena never binding. ⭐ Closed by the row above
+/// sharing this helper: the same rig, same arena, same producer path returns
+/// real identities for the two matching scrutinees, so the trap here is
+/// attributable to the case chain and not to the rig.
+#[test]
+fn c1_d3_ac_c3_a_constructor_outside_the_case_set_reaches_the_closed_default() {
+    let (observed, inner, sentinel) = ac_c7_match_edge("Absent", "Gamma");
+    assert_eq!(
+        observed, AC_C7_TRAP_STATUS,
+        "`AC-C3`: `Absent(Gamma)` matches neither `Left` nor `Right`, so the \
+         emitted chain must reach the closed default; got {observed}"
+    );
+    assert_ne!(
+        observed as u64, inner,
+        "the default must not be reachable by returning the child anyway"
+    );
+    assert_ne!(
+        observed as u64, sentinel,
+        "the default must not be reachable by falling into the last case"
+    );
+}
+
+/// Drive one carried `ComputationalMatch` end to end — the same shape as
+/// [`ac_c7_match_edge`], through the **composed producer route**.
+///
+/// ⛔ `recursive_positions` is deliberately empty: an induction hypothesis over
+/// a carried child is the Architect fork this node refuses (see
+/// `Lowering::lower_carried_computational_match`), so this row measures the
+/// non-recursive elimination and ⛔ does NOT discharge `AC-C4`.
+fn ac_c7_computational_match_edge(scrutinee: &str, inner: &str) -> (i64, u64, u64) {
+    let fixture = RuntimeExpr::Let {
+        value: Box::new(ac_c7_wrap(scrutinee, inner)),
+        body: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::C1::Left".to_string(),
+                    argument_binders: 1,
+                    recursive_positions: Vec::new(),
+                    body: RuntimeExpr::Var(0),
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::C1::Right".to_string(),
+                    argument_binders: 1,
+                    recursive_positions: Vec::new(),
+                    body: ac_c7_ctor("Sentinel"),
+                },
+            ],
+            default: ac_c7_trap(),
+        }),
+    };
+    let RuntimeExpr::Let {
+        body: match_expr, ..
+    } = &fixture
+    else {
+        unreachable!("the fixture is a `Let`")
+    };
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let scrutinee_origin = plan
+        .child_static_origin(root, 0)
+        .expect("a `Let`'s value is child 0");
+    let match_origin = plan
+        .child_static_origin(root, 1)
+        .expect("a `Let`'s body is child 1");
+    let identity_at = |origin| {
+        plan.constructor_symbol_identity(origin)
+            .expect("a planned `Construct` has a constructor identity")
+            .tag_abi_word()
+            .expect("an identity packs into the ABI word")
+    };
+    let inner_identity = identity_at(
+        plan.child_static_origin(scrutinee_origin, 0)
+            .expect("the wrapper's only argument has a planned origin"),
+    );
+    let sentinel_identity = identity_at(
+        plan.child_static_origin(match_origin, 2)
+            .expect("case 1's body has a planned origin"),
+    );
+
+    let lowered = ac_c7_lowered_wrap(scrutinee, inner);
+    let seed_env = NativeSeedEnvironment::empty();
+    let (_module, code) = ac_c7_compile_edge(&seed_env, plan, move |compiler, builder| {
+        let word = compiler.transfer_into_carrier(builder, scrutinee_origin, &lowered)?;
+        let eliminated = compiler.lower_expr(
+            builder,
+            SourceOccurrence {
+                expr: match_expr.as_ref(),
+                static_origin: match_origin,
+            },
+            &[LoweringOperand::Carried(word)],
+        )?;
+        let LoweringOperand::Carried(selected) = eliminated else {
+            panic!(
+                "a carried `ComputationalMatch` merges in the carrier lane, so its \
+                 result is `Carried`"
+            );
+        };
+        compiler.emit_carrier_tag(builder, selected)
+    });
+
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = ac_c7_bind_arena(&mut store);
+    let observed = ac_c7_run(code, base);
+    (observed, inner_identity, sentinel_identity)
+}
+
+/// ⭐⭐ **`AC-C7` ROW 3 OF 3 — `ComputationalMatch`.** Its own row; ⛔ never
+/// aggregated with the other two.
+///
+/// **MEASURED:** as row 2, through the **composed producer route** rather than
+/// the direct one: `Left(Alpha)` selects case 0 and yields the projected child,
+/// `Right(Beta)` selects case 1 and yields its fixed body — on a value that
+/// never had a compile-time template.
+/// **CLAIMED:** `D3` for `ComputationalMatch`'s **non-recursive** cases.
+/// **THE GAP — stated because this row is the one that under-delivers:**
+/// ⛔ `AC-C4` asks for `ComputationalMatch` *"with recursive positions"*, and
+/// this fixture has none. The recursive arm **fails closed** pending the
+/// Architect's ruling on whether a `Lowered` variant may hold a
+/// `LoweringOperand`. ⇒ This row is `AC-C7` evidence for the third eliminator;
+/// it is ⛔ **NOT** `AC-C4`.
+#[test]
+fn c1_d3_ac_c7_computational_match_eliminates_a_carried_value_non_recursively() {
+    let (first, alpha, sentinel) = ac_c7_computational_match_edge("Left", "Alpha");
+    assert_ne!(alpha, sentinel, "NON-VACUITY: the identities must differ");
+    assert_eq!(
+        first as u64, alpha,
+        "`D3`: `Left(Alpha)` must select case 0 through the composed route and \
+         bind its projected child; got {first}"
+    );
+
+    let (second, beta, sentinel) = ac_c7_computational_match_edge("Right", "Beta");
+    assert_eq!(
+        second as u64, sentinel,
+        "DISCRIMINATOR: `Right(Beta)` must select case 1 through the composed \
+         route. An always-case-0 eliminator returns `Beta` ({beta}) instead"
+    );
+}
