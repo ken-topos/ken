@@ -4188,6 +4188,144 @@ pub(crate) mod tests {
         b.ins().return_(&[word]);
     }
 
+    // ───── `RT-FNSPLIT-C3-ACTIVATION` `AC-4` — eight limits, eight controls ────
+    //
+    // ⛔⛔ **Eight SEPARATE cases, and that is the acceptance criterion, not a
+    // style.** Emitted code answers one `BOUNDARY_ERR_CAPACITY` for every
+    // exhausted table in either region, so a shared *"capacity exhausted"*
+    // assertion is **one control claiming to be eight** — it cannot tell a
+    // persistent data-byte ceiling from an invocation node ceiling. Each case
+    // below therefore asserts the exact `(scope, resource)` the refusal was
+    // about, attributed by comparing the region's live count against the
+    // authorized limit.
+    //
+    // ⚠ Each case grants ONE tight limit and generous room for the other seven.
+    // A fixture that tightened two would get a well-defined but arbitrary
+    // attribution, and would pass while measuring the wrong cell.
+
+    /// A profile that is generous everywhere, so a single tightened limit is
+    /// unambiguously the one that fired.
+    fn ac4_roomy() -> crate::boundary_resource_profile::BoundaryResourceProfileV1 {
+        use crate::boundary_resource_profile::{BoundaryRegionLimitsV1, BoundaryResourceProfileV1};
+        let roomy = BoundaryRegionLimitsV1 {
+            nodes: 64,
+            words: 256,
+            data_bytes: 512,
+            native_int_limbs: 64,
+        };
+        BoundaryResourceProfileV1 {
+            invocation: roomy,
+            persistent: roomy,
+        }
+    }
+
+    /// The profile of [`ac4_roomy`] with exactly one limit tightened to `limit`.
+    fn ac4_profile_with(
+        scope: crate::boundary_resource_profile::BoundaryResourceScope,
+        resource: crate::boundary_resource_profile::BoundaryResource,
+        limit: usize,
+    ) -> crate::boundary_resource_profile::BoundaryResourceProfileV1 {
+        use crate::boundary_resource_profile::{BoundaryResource, BoundaryResourceScope};
+        let mut profile = ac4_roomy();
+        let limits = match scope {
+            BoundaryResourceScope::Invocation => &mut profile.invocation,
+            BoundaryResourceScope::Persistent => &mut profile.persistent,
+        };
+        let slot = match resource {
+            BoundaryResource::Nodes => &mut limits.nodes,
+            BoundaryResource::Words => &mut limits.words,
+            BoundaryResource::DataBytes => &mut limits.data_bytes,
+            BoundaryResource::NativeIntLimbs => &mut limits.native_int_limbs,
+        };
+        *slot = limit;
+        profile
+    }
+
+    /// The `(tag, class)` pair that reaches a region, ⛔ derived from the
+    /// admitted relation rather than chosen.
+    fn ac4_lane(
+        scope: crate::boundary_resource_profile::BoundaryResourceScope,
+    ) -> (BoundaryTag, BoundaryClass) {
+        use crate::boundary_resource_profile::BoundaryResourceScope;
+        match scope {
+            BoundaryResourceScope::Persistent => (BoundaryTag::PersistentGround, BoundaryClass::Int),
+            BoundaryResourceScope::Invocation => (
+                BoundaryTag::InvocationHostResult,
+                BoundaryClass::HostResult,
+            ),
+        }
+    }
+
+    /// `(base, tag, class, len) -> status` — allocate, then claim a DATA body
+    /// of `len` bytes. ⭐ `RT-FNSPLIT-C3` `AC-4`: the data-byte ceiling is
+    /// reached by claiming a span, so one call exceeds it by exactly one.
+    fn emit_ac4_bytes_len_probe(
+        b: &mut FunctionBuilder<'_>,
+        refs: &Refs,
+        p: &[cranelift_codegen::ir::Value],
+        ptr: cranelift_codegen::ir::Type,
+    ) {
+        let (base, tag, class, len) = (p[0], p[1], p[2], p[3]);
+        let out = cell(b, ptr);
+        let zero = b.ins().iconst(types::I64, 0);
+        let call = b.ins().call(refs.alloc, &[base, tag, class, zero, out]);
+        let status = b.inst_results(call)[0];
+        let good = b.ins().icmp_imm(IntCC::Equal, status, BOUNDARY_OK);
+        let ok = b.create_block();
+        let bad = b.create_block();
+        b.ins().brif(good, ok, &[], bad, &[]);
+        b.switch_to_block(bad);
+        b.ins().return_(&[status]);
+        b.switch_to_block(ok);
+        let word = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
+        let span = cell(b, ptr);
+        let call = b.ins().call(refs.store_bytes_len, &[base, word, len, span]);
+        let status = b.inst_results(call)[0];
+        b.ins().return_(&[status]);
+    }
+
+    /// `(base, tag, class, len) -> status` — allocate a region-limbed `Int`,
+    /// then claim `len` limbs. ⭐ `AC-4`'s limb ceiling, same shape.
+    fn emit_ac4_int_limbs_probe(
+        b: &mut FunctionBuilder<'_>,
+        refs: &Refs,
+        p: &[cranelift_codegen::ir::Value],
+        ptr: cranelift_codegen::ir::Type,
+    ) {
+        let (base, tag, class, len) = (p[0], p[1], p[2], p[3]);
+        let out = cell(b, ptr);
+        let zero = b.ins().iconst(types::I64, 0);
+        let call = b.ins().call(refs.alloc, &[base, tag, class, zero, out]);
+        let status = b.inst_results(call)[0];
+        let good = b.ins().icmp_imm(IntCC::Equal, status, BOUNDARY_OK);
+        let ok = b.create_block();
+        let bad = b.create_block();
+        b.ins().brif(good, ok, &[], bad, &[]);
+        b.switch_to_block(bad);
+        b.ins().return_(&[status]);
+        b.switch_to_block(ok);
+        let word = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
+        let marker = b
+            .ins()
+            .iconst(types::I64, crate::boundary_value::BOUNDARY_INT_REGION_LIMBS as i64);
+        let call = b.ins().call(refs.store_int_tag, &[base, word, marker]);
+        let status = b.inst_results(call)[0];
+        let good = b.ins().icmp_imm(IntCC::Equal, status, BOUNDARY_OK);
+        let claim = b.create_block();
+        let refused = b.create_block();
+        b.ins().brif(good, claim, &[], refused, &[]);
+        b.switch_to_block(refused);
+        b.ins().return_(&[status]);
+        b.switch_to_block(claim);
+        let sign = b.ins().iconst(types::I64, 0);
+        let span = cell(b, ptr);
+        let call = b
+            .ins()
+            .call(refs.store_int_limbs, &[base, word, sign, len, span]);
+        let status = b.inst_results(call)[0];
+        b.ins().return_(&[status]);
+    }
+
     /// `(base, word, index, child) -> status` — `store_field` on its own.
     fn emit_store_field_probe(
         b: &mut FunctionBuilder<'_>,
@@ -8301,4 +8439,236 @@ pub(crate) mod tests {
             "AC-6: the bands' union is not the admitted handle set"
         );
     }
+    /// ⭐⭐ **`AC-4` — each of the eight authorized limits, exercised by a REAL
+    /// generated-code requester at limit-plus-one, and attributed to its exact
+    /// named region and resource.**
+    ///
+    /// **MEASURED:** for each `(scope, resource)`, emitted code that requests
+    /// one past the authorized ceiling is refused, and the activation attributes
+    /// the refusal to **that** scope and resource.
+    /// **CLAIMED:** each limit governs its named region and resource.
+    /// **THE GAP:** ⛔ two of the eight cells are **not reachable by emitted
+    /// code at all**, and that is measured below rather than skipped — see
+    /// `ac4_invocation_data_and_limbs_are_unreachable_by_the_admitted_relation`.
+    ///
+    /// ⛔ Not one loop with one assertion: each cell asserts its own attribution,
+    /// so a control that fired on the wrong cell fails naming both.
+    #[test]
+    fn ac4_each_reachable_limit_refuses_at_limit_plus_one_naming_its_own_resource() {
+        use crate::boundary_activation::{BoundaryActivationV1, BoundaryStoreBindingV1};
+        use crate::boundary_resource_profile::{BoundaryResource, BoundaryResourceScope};
+
+        // The six cells the admitted relation can reach. ⛔ Derived below, not
+        // asserted: the other two are proved unreachable by their own control.
+        let cells = [
+            (BoundaryResourceScope::Persistent, BoundaryResource::Nodes),
+            (BoundaryResourceScope::Persistent, BoundaryResource::Words),
+            (BoundaryResourceScope::Persistent, BoundaryResource::DataBytes),
+            (
+                BoundaryResourceScope::Persistent,
+                BoundaryResource::NativeIntLimbs,
+            ),
+            (BoundaryResourceScope::Invocation, BoundaryResource::Nodes),
+            (BoundaryResourceScope::Invocation, BoundaryResource::Words),
+        ];
+
+        for (scope, resource) in cells {
+            let limit = 2usize;
+            let profile = ac4_profile_with(scope, resource, limit);
+            let mut store = BoundaryValueStore::new();
+            let binding = BoundaryStoreBindingV1::open(&mut store, profile);
+            let activation = BoundaryActivationV1::begin(&binding);
+            let base = match scope {
+                BoundaryResourceScope::Invocation => activation.published_boundary_base(),
+                BoundaryResourceScope::Persistent => activation.published_boundary_base(),
+            };
+            let (tag, class) = ac4_lane(scope);
+
+            // ⭐⭐ **Fill the region TO its ceiling first, then request one
+            // more.** That is what *"at-limit-plus-one"* means, and it is also
+            // what makes the attribution exact: a **refused** request bumps no
+            // count, so asking "which resource is at its limit?" after a
+            // refusal-from-empty names nothing. ⚠ I learned that from this
+            // control failing — `persistent words` was refused for capacity
+            // while every live count was still zero.
+            let status = match resource {
+                BoundaryResource::Nodes => {
+                    let (_m, code) = compile_producer(4, emit_alloc_probe);
+                    let f: extern "C" fn(*mut u64, i64, i64, i64) -> i64 =
+                        unsafe { std::mem::transmute(code) };
+                    let mut last = BOUNDARY_OK;
+                    // limit + 1 allocations; the extra one must be refused.
+                    for _ in 0..=limit {
+                        last = f(base, tag as i64, class as i64, 0);
+                    }
+                    last
+                }
+                BoundaryResource::Words => {
+                    let (_m, code) = compile_producer(4, emit_alloc_probe);
+                    let f: extern "C" fn(*mut u64, i64, i64, i64) -> i64 =
+                        unsafe { std::mem::transmute(code) };
+                    // Fill: one node claiming exactly the authorized words.
+                    let filled = f(base, tag as i64, class as i64, limit as i64);
+                    assert_ne!(
+                        filled, BOUNDARY_ERR_CAPACITY,
+                        "AC-4: filling {scope} words TO the ceiling was itself \
+                         refused, so the fixture never reached limit-plus-one"
+                    );
+                    f(base, tag as i64, class as i64, 1)
+                }
+                BoundaryResource::DataBytes => {
+                    let (_m, code) = compile_producer(4, emit_ac4_bytes_len_probe);
+                    let f: extern "C" fn(*mut u64, i64, i64, i64) -> i64 =
+                        unsafe { std::mem::transmute(code) };
+                    let (tag, class) = (
+                        BoundaryTag::PersistentGround as i64,
+                        BoundaryClass::Bytes as i64,
+                    );
+                    let filled = f(base, tag, class, limit as i64);
+                    assert_ne!(
+                        filled, BOUNDARY_ERR_CAPACITY,
+                        "AC-4: filling {scope} data bytes TO the ceiling was \
+                         itself refused"
+                    );
+                    f(base, tag, class, 1)
+                }
+                BoundaryResource::NativeIntLimbs => {
+                    let (_m, code) = compile_producer(4, emit_ac4_int_limbs_probe);
+                    let f: extern "C" fn(*mut u64, i64, i64, i64) -> i64 =
+                        unsafe { std::mem::transmute(code) };
+                    let (tag, class) = (
+                        BoundaryTag::PersistentGround as i64,
+                        BoundaryClass::Int as i64,
+                    );
+                    let filled = f(base, tag, class, limit as i64);
+                    assert_ne!(
+                        filled, BOUNDARY_ERR_CAPACITY,
+                        "AC-4: filling {scope} limbs TO the ceiling was itself \
+                         refused"
+                    );
+                    f(base, tag, class, 1)
+                }
+            };
+
+            assert_eq!(
+                status, BOUNDARY_ERR_CAPACITY,
+                "AC-4: {scope} {resource} at limit+1 was not refused for capacity"
+            );
+
+            // ⭐ The half that makes this eight controls and not one: the
+            // refusal is attributed to THIS scope and THIS resource.
+            let named = activation
+                .attribute_capacity_exhaustion(&store)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "AC-4: {scope} {resource} was refused for capacity but no \
+                         authorized limit is at its ceiling, so the refusal came \
+                         from somewhere other than the eight limits"
+                    )
+                });
+            assert_eq!(
+                (named.scope, named.resource),
+                (scope, resource),
+                "AC-4: the refusal was attributed to {} {} instead of {scope} {resource}",
+                named.scope,
+                named.resource
+            );
+            assert_eq!(named.limit, limit);
+            assert!(named.to_string().contains(scope.name()));
+            assert!(named.to_string().contains(resource.name()));
+        }
+    }
+
+    /// ⛔⛔ **The other two cells are UNREACHABLE BY THE ADMITTED RELATION, and
+    /// this measures it rather than asserting it.**
+    ///
+    /// ⭐ `BOUNDARY_TAG_CLASS_RELATION` gives the **invocation** arena exactly
+    /// two lanes — `(InvocationBorrowed, BorrowedOpaque)` and
+    /// `(InvocationHostResult, HostResult)` — and **neither class carries a data
+    /// body or magnitude limbs.** `Bytes`/`String`/`Int` are admitted only under
+    /// `PersistentGround`, which indexes the persistent region. ⇒ No emitted
+    /// requester can consume an invocation data byte or an invocation limb.
+    ///
+    /// **MEASURED:** the relation admits no invocation lane for any of the
+    /// body-bearing classes, and an emitted attempt to claim a data body under
+    /// an invocation lane is refused **before** any capacity question — with a
+    /// status that is ⛔ *not* `BOUNDARY_ERR_CAPACITY`.
+    /// **CLAIMED:** those two of the eight limits cannot be exercised by
+    /// generated code, so their ceilings are unreachable rather than untested.
+    /// **THE GAP:** ⚠ this is a property of the **admitted relation as landed**.
+    /// ⛔ If a future node admits `Bytes` or `Int` under an invocation tag, these
+    /// two cells become reachable and `AC-4` owes them a fixture — the assertion
+    /// below is written to go **red** in exactly that case rather than to keep
+    /// quietly passing.
+    #[test]
+    fn ac4_invocation_data_and_limbs_are_unreachable_by_the_admitted_relation() {
+        use crate::boundary_activation::{BoundaryActivationV1, BoundaryStoreBindingV1};
+        use crate::boundary_resource_profile::{BoundaryResource, BoundaryResourceScope};
+        use crate::boundary_value::{boundary_relation_admits, BOUNDARY_TAG_CLASS_RELATION};
+
+        // 1 — the relation itself: no invocation tag admits a body-bearing class.
+        let invocation_tags = [
+            BoundaryTag::InvocationBorrowed,
+            BoundaryTag::InvocationHostResult,
+        ];
+        let body_bearing = [
+            BoundaryClass::Bytes,
+            BoundaryClass::String,
+            BoundaryClass::Int,
+        ];
+        for tag in invocation_tags {
+            for class in body_bearing {
+                assert!(
+                    !boundary_relation_admits(tag, class),
+                    "AC-4: the relation now admits ({tag:?}, {class:?}), so the \
+                     invocation data-byte and limb ceilings ARE reachable and \
+                     each owes its own at-limit-plus-one fixture"
+                );
+            }
+        }
+        // Non-vacuity: the relation is not simply refusing everything.
+        assert!(boundary_relation_admits(
+            BoundaryTag::PersistentGround,
+            BoundaryClass::Bytes
+        ));
+        assert!(boundary_relation_admits(
+            BoundaryTag::InvocationHostResult,
+            BoundaryClass::HostResult
+        ));
+        assert!(
+            BOUNDARY_TAG_CLASS_RELATION
+                .iter()
+                .any(|(tag, _)| *tag == BoundaryTag::InvocationBorrowed),
+            "non-vacuity: the invocation tags are in the relation at all"
+        );
+
+        // 2 — and emitted code agrees: claiming a data body under an invocation
+        // lane is refused BEFORE any capacity question.
+        let profile = ac4_profile_with(
+            BoundaryResourceScope::Invocation,
+            BoundaryResource::DataBytes,
+            0,
+        );
+        let mut store = BoundaryValueStore::new();
+        let binding = BoundaryStoreBindingV1::open(&mut store, profile);
+        let activation = BoundaryActivationV1::begin(&binding);
+        let (_m, code) = compile_producer(4, emit_ac4_bytes_len_probe);
+        let f: extern "C" fn(*mut u64, i64, i64, i64) -> i64 = unsafe { std::mem::transmute(code) };
+        let status = f(
+            activation.published_boundary_base(),
+            BoundaryTag::InvocationHostResult as i64,
+            BoundaryClass::Bytes as i64,
+            1,
+        );
+        assert_ne!(
+            status, BOUNDARY_OK,
+            "AC-4: an invocation lane accepted a data body"
+        );
+        assert_ne!(
+            status, BOUNDARY_ERR_CAPACITY,
+            "AC-4: the refusal was a CAPACITY refusal, which would mean the cell \
+             is reachable after all and owes a real at-limit-plus-one fixture"
+        );
+    }
+
 }

@@ -93,18 +93,54 @@ that will present as an unrelated flake to whoever hits it next.
 | `AC-6` pre-existing positives | ✅ green, and it is the pre-existing population |
 | `AC-7` refusal before packaging | ✅ refused at `ResourceProfile` **and no executable written** |
 | `D5` profile in package identity | ✅ eight limits perturbed separately, eight distinct identities |
-| ⛔ **`AC-4`** | ⚠ **WIRING HALF ONLY** — see below |
+| `AC-4` eight limits | ✅ **six by real generated-code fixtures, two proved UNREACHABLE** — see below |
 
-### ⛔ `AC-4` is NOT discharged, and this is the one open AC
+### ✅ `AC-4` — six cells measured, two proved unreachable
 
-What is measured is that the four invocation ceilings in the **published header**
-are the four authorized invocation limits, in order, and that the persistent node
-ceiling is the authorized one. ⛔ **At-limit-plus-one is not measured.** `AC-4`
-requires a request one past each ceiling to fail loudly naming that exact scope,
-and the requester is **generated code** — so it needs eight generated-code
-capacity fixtures, one per limit. ⚠ A shared *"capacity exhausted"* assertion is
-one control claiming to be eight, and `BOUNDARY_ERR_CAPACITY` names nothing on
-its own.
+⛔ **The earlier return called this a residual. It was an acceptance gap** — the
+governing frame carries no deferment clause — and the leader was right to stand
+the return down.
+
+**Six cells** are exercised by a **real generated-code requester**: persistent
+nodes · words · data bytes · limbs, and invocation nodes · words. Each fills its
+region **to** the authorized ceiling and then asks for one more, and each asserts
+the refusal is attributed to **its own** `(scope, resource)`.
+
+⚠ **The fill-to-ceiling step is not decoration, and the control taught it.** The
+first cut requested `limit + 1` from an empty region; the request was refused, so
+**no count was bumped**, and asking *"which resource is at its limit?"* named
+nothing — `persistent words` failed with every live count still zero. ⇒ A
+refused request leaves no trace, so the region must be brought to its ceiling
+first.
+
+⭐ **Attribution is a comparison between two independent things** — the region's
+live count, which emitted code bumped, and the authorized limit the deployment
+wrote. ⛔ Not a re-reading of `BOUNDARY_ERR_CAPACITY`, which names nothing and
+would make one control claim to be eight.
+
+#### ⛔⛔ The other two cells are UNREACHABLE BY THE ADMITTED RELATION
+
+`BOUNDARY_TAG_CLASS_RELATION` gives the **invocation** arena exactly two lanes —
+`(InvocationBorrowed, BorrowedOpaque)` and `(InvocationHostResult, HostResult)` —
+and **neither class carries a data body or magnitude limbs**. `Bytes` / `String`
+/ `Int` are admitted only under `PersistentGround`, which indexes the persistent
+region. ⇒ **No emitted requester can consume an invocation data byte or an
+invocation limb**, so those two ceilings are unreachable rather than untested.
+
+⭐ Measured on both sides: the relation is asked directly, **and** an emitted
+attempt to claim a data body under an invocation lane is refused with a status
+that is ⛔ *not* `BOUNDARY_ERR_CAPACITY`.
+
+⚠ **This is a property of the relation AS LANDED, and the control is written to
+go RED if that changes** — `M-AC4c` admits `(InvocationHostResult, Bytes)` and
+the control fails saying the two cells now owe fixtures. ⛔ It is a live guard,
+not a comment.
+
+| mutation | outcome |
+|---|---|
+| `M-AC4a` attribution always names the first cell | red — *"attributed to invocation nodes instead of persistent nodes"* |
+| `M-AC4b` the persistent region metered against the invocation limits | red |
+| `M-AC4c` admit `(InvocationHostResult, Bytes)` — ⭐ the future event the guard exists for | red, naming the newly reachable cells |
 
 ### ⚠ `AC-5`'s residual, as a partition with its discriminator
 

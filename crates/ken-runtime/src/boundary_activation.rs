@@ -60,7 +60,10 @@
 use std::ffi::c_void;
 
 use crate::activation_services::GeneratedActivationServicesV1;
-use crate::boundary_resource_profile::BoundaryResourceProfileV1;
+use crate::boundary_resource_profile::{
+    BoundaryCapacityExhaustedV1, BoundaryResource, BoundaryResourceProfileV1,
+    BoundaryResourceScope,
+};
 use crate::boundary_value::{
     BoundaryArenaBuilder, BoundaryArenaV1, BoundaryValueStore, BoundaryWord, ARENA_DATA_CAPACITY,
     ARENA_LIMB_CAPACITY, ARENA_NATIVE_INT, ARENA_NODE_CAPACITY, ARENA_PERSISTENT,
@@ -314,6 +317,73 @@ impl BoundaryActivationV1 {
                 header_word(base, ARENA_PERSISTENT),
                 header_word(base, ARENA_NATIVE_INT),
             ))
+        }
+    }
+
+    /// **`AC-4` — name WHICH of the eight authorized limits a capacity refusal
+    /// was about.**
+    ///
+    /// ⛔⛔ **Without this, `AC-4` is not dischargeable at all.** Emitted code
+    /// answers a single [`crate::boundary_value::BOUNDARY_ERR_CAPACITY`] for
+    /// every exhausted table, in either region — ⚠ so a control that asserts
+    /// only *"the status was `ERR_CAPACITY`"* is **one control claiming to be
+    /// eight**, and cannot tell a persistent data-byte ceiling from an
+    /// invocation node ceiling.
+    ///
+    /// ⭐ The attribution is a comparison between two independent things: the
+    /// region's **live count**, which emitted code bumped, and the **authorized
+    /// limit** the deployment wrote. ⛔ Not a re-reading of the status.
+    ///
+    /// Returns the `(scope, resource)` whose live count has reached its
+    /// authorized ceiling, or `None` if none has — ⚠ which is itself
+    /// informative: a capacity refusal with nothing at its ceiling means the
+    /// refusal came from somewhere other than these eight limits, and a test
+    /// that ignored `None` would call that a pass.
+    ///
+    /// ⚠ **It reports the FIRST resource at its ceiling** in inventory order.
+    /// That is unambiguous only when the other seven have room, which is why
+    /// each control grants exactly one tight limit — ⛔ a fixture that tightened
+    /// two would get a well-defined but arbitrary answer.
+    pub fn attribute_capacity_exhaustion(
+        &self,
+        store: &BoundaryValueStore,
+    ) -> Option<BoundaryCapacityExhaustedV1> {
+        for scope in BoundaryResourceScope::ALL {
+            for resource in BoundaryResource::ALL {
+                let limit = self.profile.limit(scope, resource);
+                let live = self.live_count(store, scope, resource);
+                if live >= limit {
+                    return Some(BoundaryCapacityExhaustedV1 {
+                        scope,
+                        resource,
+                        limit,
+                        requested: live + 1,
+                    });
+                }
+            }
+        }
+        None
+    }
+
+    /// The live count of one resource in one region.
+    ///
+    /// ⛔ Read from the region itself — what emitted code actually bumped —
+    /// never from a Rust-side mirror of what it was expected to bump.
+    fn live_count(
+        &self,
+        store: &BoundaryValueStore,
+        scope: BoundaryResourceScope,
+        resource: BoundaryResource,
+    ) -> usize {
+        let region = match scope {
+            BoundaryResourceScope::Invocation => &self.arena.0,
+            BoundaryResourceScope::Persistent => &store.image().0,
+        };
+        match resource {
+            BoundaryResource::Nodes => region.node_count(),
+            BoundaryResource::Words => region.word_count(),
+            BoundaryResource::DataBytes => region.data_count(),
+            BoundaryResource::NativeIntLimbs => region.limb_count(),
         }
     }
 
