@@ -15,6 +15,8 @@ mod tests;
 thread_local! {
     static C2_UNIT_EMISSION_EPOCH: std::cell::Cell<Option<u64>> =
         const { std::cell::Cell::new(None) };
+    static RECURSIVE_POSITION_UNIT_CALLS: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
@@ -22,13 +24,19 @@ fn c2_unit_emission_epoch() -> Option<u64> {
     C2_UNIT_EMISSION_EPOCH.with(std::cell::Cell::get)
 }
 
-/// Classify the closed source residual still owned by recursive descent during
-/// this B2F migration stage.
+#[cfg(test)]
+fn recursive_position_unit_calls() -> usize {
+    RECURSIVE_POSITION_UNIT_CALLS.with(std::cell::Cell::get)
+}
+
+/// Classify the closed source residual still owned by recursive descent after
+/// the recursive-position and trap emission ports.
 ///
-/// The residual includes every source shape named by
-/// [`select_body_emission_authority`], not only computational recursion. The
-/// match is exhaustive over `RuntimeExpr`; adding a form cannot silently
-/// default it into either authority.
+/// The residual is a producer `Match` over a call, a seed `Closure` call, or a
+/// transparent declaration whose body is a closure or contains either retained
+/// shape. Computational recursive positions and traps are portable through
+/// declared units. The match is exhaustive over `RuntimeExpr`; adding a form
+/// cannot silently default it into either authority.
 fn requires_recursive_descent_authority(expr: &RuntimeExpr) -> bool {
     match expr {
         RuntimeExpr::CheckedJoinSite { body, .. }
@@ -74,10 +82,7 @@ fn requires_recursive_descent_authority(expr: &RuntimeExpr) -> bool {
         RuntimeExpr::ComputationalMatch {
             scrutinee, cases, ..
         } => {
-            cases
-                .iter()
-                .any(|case| !case.recursive_positions.is_empty())
-                || requires_recursive_descent_authority(scrutinee)
+            requires_recursive_descent_authority(scrutinee)
                 || cases
                     .iter()
                     .any(|case| requires_recursive_descent_authority(&case.body))
@@ -108,7 +113,7 @@ fn requires_recursive_descent_authority(expr: &RuntimeExpr) -> bool {
         | RuntimeExpr::Var(_)
         | RuntimeExpr::DeclarationRef { .. }
         | RuntimeExpr::ImportedDeclarationRef { .. } => false,
-        RuntimeExpr::Trap(_) => true,
+        RuntimeExpr::Trap(_) => false,
     }
 }
 
@@ -118,8 +123,8 @@ fn requires_recursive_descent_authority(expr: &RuntimeExpr) -> bool {
 /// The active/default stage is `FunctionizedUnits`. `RecursiveDescent` retains
 /// the closed residual that still needs specialized computational recursion,
 /// a producer `Match` over a call, a seed/declaration closure body, or a root
-/// trap. No runtime value, carrier class, walk result, or emission failure can
-/// change this answer after it is chosen.
+/// No runtime value, carrier class, walk result, or emission failure can change
+/// this answer after it is chosen.
 fn select_body_emission_authority(
     expr: &RuntimeExpr,
     declarations: &BTreeMap<&str, &RuntimeDeclaration>,
@@ -164,7 +169,10 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     oriented_subcontinuation_plan: Option<crate::OrientedSubcontinuationPlanV1>,
 ) -> Result<CompiledModule<M>, CraneliftBackendError> {
     #[cfg(test)]
-    C2_UNIT_EMISSION_EPOCH.with(|epoch| epoch.set(Some(0)));
+    {
+        C2_UNIT_EMISSION_EPOCH.with(|epoch| epoch.set(Some(0)));
+        RECURSIVE_POSITION_UNIT_CALLS.with(|calls| calls.set(0));
+    }
     validate_oriented_subcontinuation_transport(
         expr,
         &declarations,
@@ -612,10 +620,34 @@ impl<'a> Lowering<'a> {
         argument_env: &[LoweringOperand],
         saved_producer_env: &[LoweringOperand],
         outer_eliminators: &[EliminatorFrame<'_>],
+        recursive_unit_body: Option<StaticOriginId>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         // ⭐⭐ `AC-C4` — the carried residual, taken BEFORE the specialized
         // shapes so a carried word never reaches a template probe.
         if let LoweringOperand::Carried(word) = residual {
+            if let Some(body) = recursive_unit_body.filter(|_| {
+                matches!(
+                    self.body_emission_authority,
+                    BodyEmissionAuthority::FunctionizedUnits
+                )
+            }) {
+                let inputs = args
+                    .iter()
+                    .enumerate()
+                    .map(|(position, arg)| {
+                        let arg =
+                            self.child_occurrence(call_origin, 1 + position, arg)?;
+                        self.lower_expr(builder, arg, argument_env)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let returned =
+                    self.call_declared_recursive_position_unit(builder, body, &inputs)?;
+                return self.lower_computational_match_value_composed(
+                    builder,
+                    returned,
+                    outer_eliminators,
+                );
+            }
             Self::reject_carried_residual_arguments(args.len())?;
             return self.lower_computational_match_value_composed(
                 builder,
@@ -771,6 +803,7 @@ impl<'a> Lowering<'a> {
                 &continuation_env,
                 continuation.env,
                 &eliminators[1..],
+                continuation.recursive_unit_body,
             );
         }
         if let EliminatorFrame::Active(active) = eliminators[0] {
@@ -859,6 +892,8 @@ impl<'a> Lowering<'a> {
                                     let (activation, invocation) = boundary.expect(
                                         "recursor closure carries a continuation delimiter",
                                     );
+                                    let recursive_unit_body =
+                                        invocation.recursive_unit_body;
                                     let resume_cursor = invocation.resume_cursor;
                                     let current =
                                         active_recursor_frame(eliminators).ok_or_else(|| {
@@ -894,6 +929,7 @@ impl<'a> Lowering<'a> {
                                             args,
                                             call_origin: body_origin,
                                             env: producer_env,
+                                            recursive_unit_body,
                                         },
                                     ));
                                     composed.extend(frames);
@@ -1080,6 +1116,7 @@ impl<'a> Lowering<'a> {
                         );
                         let (activation, invocation) =
                             boundary.expect("recursor closure carries an invocation segment");
+                        let recursive_unit_body = invocation.recursive_unit_body;
                         let current = active_recursor_frame(eliminators).ok_or_else(|| {
                             unsupported(
                                 "ComputationalRecursor",
@@ -1113,6 +1150,46 @@ impl<'a> Lowering<'a> {
                         // `BoundedNat` arm below uses. ⛔ Not `specialized_at`,
                         // ⛔ not a reconstructed `Lowered`, ⛔ not the producer.
                         if let LoweringOperand::Carried(word) = base {
+                            if let Some(body) = recursive_unit_body.filter(|_| {
+                                matches!(
+                                    self.body_emission_authority,
+                                    BodyEmissionAuthority::FunctionizedUnits
+                                )
+                            }) {
+                                let inputs = args
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(position, arg)| {
+                                        let arg = self.child_occurrence(
+                                            static_origin,
+                                            1 + position,
+                                            arg,
+                                        )?;
+                                        self.lower_expr(builder, arg, producer_env)
+                                    })
+                                    .collect::<Result<Vec<_>, _>>()?;
+                                self.enter_oriented_semantic_region(installed.checked);
+                                let returned = self
+                                    .call_declared_recursive_position_unit(
+                                        builder,
+                                        body,
+                                        &inputs,
+                                    )
+                                    .and_then(|value| {
+                                        self.lower_computational_match_value_composed(
+                                            builder,
+                                            value,
+                                            &composed,
+                                        )
+                                    });
+                                self.leave_oriented_semantic_region(installed.checked);
+                                let returned = returned?;
+                                return self.lower_computational_match_value_composed(
+                                    builder,
+                                    returned,
+                                    eliminators,
+                                );
+                            }
                             Self::reject_carried_residual_arguments(args.len())?;
                             self.enter_oriented_semantic_region(installed.checked);
                             let returned = self.lower_computational_match_value_composed(
@@ -2039,6 +2116,7 @@ impl<'a> Lowering<'a> {
                         cursor,
                         splice_caller,
                         None,
+                        None,
                     )?;
                     #[cfg(test)]
                     px8j_record_recursor_carrier(Px8jProducerPath::Composed, &induction_hypothesis);
@@ -2536,6 +2614,7 @@ impl<'a> Lowering<'a> {
                         deferred.selected_active.activation,
                         deferred.selected_active.cursor,
                         deferred.splice_caller,
+                        None,
                         None,
                     )?;
                     #[cfg(test)]
@@ -3594,6 +3673,7 @@ impl<'a> Lowering<'a> {
                                             &control.selected,
                                             control.selected_lineage.as_slice(),
                                         )),
+                                        None,
                                     )?;
                                     #[cfg(test)]
                                     px8j_record_recursor_carrier(
@@ -4579,6 +4659,7 @@ impl<'a> Lowering<'a> {
                 );
                 let (activation, invocation) =
                     boundary.expect("recursor closure carries an invocation segment");
+                let recursive_unit_body = invocation.recursive_unit_body;
                 if source_active_cursor(
                     &control.selected,
                     &control.selected_lineage,
@@ -4615,7 +4696,6 @@ impl<'a> Lowering<'a> {
                 // **before** `install_recursor_invocation`, which is exactly the
                 // ordering control 5 measures.
                 if let LoweringOperand::Carried(word) = base {
-                    Self::reject_carried_residual_arguments(args.len())?;
                     let mut suspended = armed.suspended;
                     suspended.continuation = self.install_recursor_invocation(
                         suspended.continuation,
@@ -4623,6 +4703,23 @@ impl<'a> Lowering<'a> {
                         invocation,
                         checked_ih_invocation,
                     )?;
+                    if let Some(body) = recursive_unit_body.filter(|_| {
+                        matches!(
+                            self.body_emission_authority,
+                            BodyEmissionAuthority::FunctionizedUnits
+                        )
+                    }) {
+                        let value = self.call_declared_recursive_position_unit(
+                            builder,
+                            body,
+                            &args,
+                        )?;
+                        return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
+                            value,
+                            control: suspended,
+                        }));
+                    }
+                    Self::reject_carried_residual_arguments(args.len())?;
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                         value: LoweringOperand::Carried(word),
                         control: suspended,
@@ -4671,7 +4768,6 @@ impl<'a> Lowering<'a> {
                     }
                     let mut call_env = args;
                     extend_specialized(&mut call_env, captures);
-                    call_env.extend(env);
                     let mut suspended = armed.suspended;
                     suspended.continuation = self.install_recursor_invocation(
                         suspended.continuation,
@@ -4679,6 +4775,21 @@ impl<'a> Lowering<'a> {
                         invocation,
                         checked_ih_invocation,
                     )?;
+                    if matches!(
+                        self.body_emission_authority,
+                        BodyEmissionAuthority::FunctionizedUnits
+                    ) {
+                        let value = self.call_declared_recursive_position_unit(
+                            builder,
+                            body,
+                            &call_env,
+                        )?;
+                        return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
+                            value,
+                            control: suspended,
+                        }));
+                    }
+                    call_env.extend(env);
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
                         expr: self.machine_body_occurrence(body)?,
                         env: call_env,
@@ -5499,6 +5610,95 @@ impl<'a> Lowering<'a> {
         }))
     }
 
+    /// Emit the declared call that evaluates one computational recursive
+    /// position on the functionized path.
+    ///
+    /// Keeping this as a distinct operation makes the S1 boundary mechanical:
+    /// a recursive position cannot accidentally return to source-body
+    /// re-lowering without bypassing the one operation that emits its call.
+    fn call_declared_recursive_position_unit(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        body_origin: StaticOriginId,
+        inputs: &[LoweringOperand],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let result = self.call_declared_unit(
+            builder,
+            body_origin,
+            inputs,
+            #[cfg(test)]
+            None,
+        )?;
+        #[cfg(test)]
+        RECURSIVE_POSITION_UNIT_CALLS.with(|calls| calls.set(calls.get() + 1));
+        Ok(result)
+    }
+
+    /// Resolve the declared body unit of a callable recursive position in the
+    /// source form that owns the carried child.
+    ///
+    /// Structural-data recursive positions return `None`; they resume the
+    /// eliminator directly and take no arguments. A lexical closure with
+    /// captures also returns `None` because its carried value does not expose
+    /// those capture operands to a generated call frame.
+    fn recursive_position_unit_body(
+        &self,
+        eliminator_origin: StaticOriginId,
+        position: usize,
+    ) -> Result<Option<StaticOriginId>, CraneliftBackendError> {
+        let eliminator = self.retained_body_occurrence(eliminator_origin)?;
+        let RuntimeExpr::ComputationalMatch { scrutinee, .. } = eliminator.expr else {
+            return Err(backend_module(
+                "recursive-position metadata names a non-computational eliminator".to_string(),
+            ));
+        };
+        let scrutinee =
+            self.child_occurrence(eliminator_origin, 0, scrutinee)?;
+        let RuntimeExpr::Construct { args, .. } = scrutinee.expr else {
+            return Ok(None);
+        };
+        let Some(argument) = args.get(position) else {
+            return Err(backend_module(
+                "recursive position is outside its source constructor".to_string(),
+            ));
+        };
+        let argument =
+            self.child_occurrence(scrutinee.static_origin, position, argument)?;
+        match argument.expr {
+            RuntimeExpr::LexicalClosure {
+                captures, body, ..
+            } if captures.is_empty() => Ok(Some(
+                self.child_occurrence(argument.static_origin, 0, body)?
+                    .static_origin,
+            )),
+            RuntimeExpr::Closure { body, .. } => Ok(Some(
+                self.child_occurrence(argument.static_origin, 0, body)?
+                    .static_origin,
+            )),
+            RuntimeExpr::Value(_)
+            | RuntimeExpr::Var(_)
+            | RuntimeExpr::Let { .. }
+            | RuntimeExpr::If { .. }
+            | RuntimeExpr::PrimitiveCall { .. }
+            | RuntimeExpr::Construct { .. }
+            | RuntimeExpr::Match { .. }
+            | RuntimeExpr::ComputationalMatch { .. }
+            | RuntimeExpr::Record { .. }
+            | RuntimeExpr::Project { .. }
+            | RuntimeExpr::LexicalClosure { .. }
+            | RuntimeExpr::DeclarationRef { .. }
+            | RuntimeExpr::ImportedDeclarationRef { .. }
+            | RuntimeExpr::Call { .. }
+            | RuntimeExpr::Effect { .. }
+            | RuntimeExpr::Trap(_)
+            | RuntimeExpr::CheckedJoinSite { .. }
+            | RuntimeExpr::CheckedSubcontinuationFrame { .. }
+            | RuntimeExpr::CheckedRecursiveInvocation { .. }
+            | RuntimeExpr::CheckedComputationalIHSlots { .. }
+            | RuntimeExpr::CheckedComputationalIHInvocation { .. } => Ok(None),
+        }
+    }
+
     /// ⭐⭐ **`D3` — `ComputationalMatch` eliminating a carried value.**
     ///
     /// Structurally the same three runtime questions as
@@ -5547,24 +5747,29 @@ impl<'a> Lowering<'a> {
         // its IH over the carried child, still puts it in `case_env`, and still
         // eliminates — everything below runs. Only re-entering *this same*
         // eliminator refuses.
-        if self
+        if let Some((_, header)) = self
             .active_carried_computational_eliminations
-            .contains(&eliminator.static_origin)
+            .iter()
+            .rev()
+            .find(|(origin, _)| *origin == eliminator.static_origin)
         {
-            return Err(unsupported(
-                "BoundaryCarrier",
-                "a carried induction hypothesis resumed the same computational \
-                 eliminator, and inlining that recursion cannot terminate: the \
-                 residual is a runtime word, so no operand shrinks at compile \
-                 time and the recursive case re-emits itself without bound. \
-                 The invocation half is RT-FNSPLIT-B2F's, which emits one \
-                 closed recursively callable target per static \
-                 computational-eliminator origin; until it lands, a carried \
-                 induction hypothesis is built and eliminated but never called",
+            builder.ins().jump(*header, &[scrutinee.word.into()]);
+            let unreachable = builder.create_block();
+            builder.switch_to_block(unreachable);
+            return Ok(LoweringOperand::Specialized(
+                Lowered::RecursiveBackedge,
             ));
         }
+
+        let header = builder.create_block();
+        builder.append_block_param(header, types::I64);
+        builder.ins().jump(header, &[scrutinee.word.into()]);
+        builder.switch_to_block(header);
+        let scrutinee = CarriedBoundaryWord {
+            word: builder.block_params(header)[0],
+        };
         self.active_carried_computational_eliminations
-            .push(eliminator.static_origin);
+            .push((eliminator.static_origin, header));
         let lowered = self.lower_carried_computational_match_inner(
             builder,
             scrutinee,
@@ -5574,7 +5779,7 @@ impl<'a> Lowering<'a> {
         let popped = self.active_carried_computational_eliminations.pop();
         debug_assert_eq!(
             popped,
-            Some(eliminator.static_origin),
+            Some((eliminator.static_origin, header)),
             "the carried elimination stack must unwind in the order it was pushed"
         );
         lowered
@@ -5718,6 +5923,10 @@ impl<'a> Lowering<'a> {
                         cursor,
                         splice_caller,
                         None,
+                        self.recursive_position_unit_body(
+                            eliminator.static_origin,
+                            position,
+                        )?,
                     )?;
                     #[cfg(test)]
                     px8j_record_recursor_carrier(
@@ -5812,13 +6021,18 @@ impl<'a> Lowering<'a> {
                     remaining_eliminators,
                 )?
             };
-            let word = self.carried_join_arm(
-                builder,
-                body_origin,
+            if !matches!(
                 lowered,
-                "a carried `ComputationalMatch` arm",
-            )?;
-            builder.ins().jump(merge, &[word.word.into()]);
+                LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+            ) {
+                let word = self.carried_join_arm(
+                    builder,
+                    body_origin,
+                    lowered,
+                    "a carried `ComputationalMatch` arm",
+                )?;
+                builder.ins().jump(merge, &[word.word.into()]);
+            }
 
             builder.switch_to_block(next);
         }
@@ -6611,6 +6825,7 @@ impl<'a> Lowering<'a> {
                         let (activation, invocation) = boundary.expect(
                             "recursor closure carries an invocation segment",
                         );
+                        let recursive_unit_body = invocation.recursive_unit_body;
                         if !recursor_invocation_is_checked(&invocation) {
                             validate_recursor_invocation_segment(&invocation)?;
                         }
@@ -6629,6 +6844,41 @@ impl<'a> Lowering<'a> {
                         // ⭐⭐ `AC-C4` — the carried residual on the direct
                         // `lower_expr` call route.
                         if let LoweringOperand::Carried(word) = base {
+                            if let Some(body) = recursive_unit_body.filter(|_| {
+                                matches!(
+                                    self.body_emission_authority,
+                                    BodyEmissionAuthority::FunctionizedUnits
+                                )
+                            }) {
+                                let inputs = args
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(position, arg)| {
+                                        let arg = self.child_occurrence(
+                                            static_origin,
+                                            1 + position,
+                                            arg,
+                                        )?;
+                                        self.lower_expr(builder, arg, env)
+                                    })
+                                    .collect::<Result<Vec<_>, _>>()?;
+                                self.enter_oriented_semantic_region(installed.checked);
+                                let result = self
+                                    .call_declared_recursive_position_unit(
+                                        builder,
+                                        body,
+                                        &inputs,
+                                    )
+                                    .and_then(|value| {
+                                        self.lower_computational_match_value_composed(
+                                            builder,
+                                            value,
+                                            &frames,
+                                        )
+                                    });
+                                self.leave_oriented_semantic_region(installed.checked);
+                                return result;
+                            }
                             Self::reject_carried_residual_arguments(args.len())?;
                             self.enter_oriented_semantic_region(installed.checked);
                             let result = self.lower_computational_match_value_composed(
@@ -6689,6 +6939,27 @@ impl<'a> Lowering<'a> {
                             ));
                         }
                         call_env.extend(captures.into_iter().map(LoweringOperand::Specialized));
+                        if matches!(
+                            self.body_emission_authority,
+                            BodyEmissionAuthority::FunctionizedUnits
+                        ) {
+                            self.enter_oriented_semantic_region(installed.checked);
+                            let result = self
+                                .call_declared_recursive_position_unit(
+                                    builder,
+                                    body,
+                                    &call_env,
+                                )
+                                .and_then(|value| {
+                                    self.lower_computational_match_value_composed(
+                                        builder,
+                                        value,
+                                        &frames,
+                                    )
+                                });
+                            self.leave_oriented_semantic_region(installed.checked);
+                            return result;
+                        }
                         call_env.extend_from_slice(env);
                         self.enter_oriented_semantic_region(installed.checked);
                         let result = self.lower_computational_producer_expr(

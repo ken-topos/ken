@@ -15,7 +15,9 @@ mod static_transition;
 
 pub(super) use static_transition::plan_static_transition_graph_with_symbols;
 #[cfg(test)]
-pub(super) use static_transition::plan_static_transition_graph;
+pub(super) use static_transition::{
+    governed_nested_resource_bracket, plan_static_transition_graph,
+};
 pub(super) use static_transition::{
     ConstructorIdentity, StaticOriginId, StaticTransitionPlan, SynthesizedConstructorRole,
     SynthesizedFixedConstructorRole,

@@ -4879,7 +4879,7 @@ fn the_body_authority_selector_is_closed_static_and_chosen_from_source_shape() {
     };
     assert_eq!(
         select_body_emission_authority(&recursive, &declarations),
-        BodyEmissionAuthority::RecursiveDescent
+        BodyEmissionAuthority::FunctionizedUnits
     );
 
     let producer_match = RuntimeExpr::Match {
@@ -4912,7 +4912,7 @@ fn the_body_authority_selector_is_closed_static_and_chosen_from_source_shape() {
             }),
             &declarations,
         ),
-        BodyEmissionAuthority::RecursiveDescent
+        BodyEmissionAuthority::FunctionizedUnits
     );
     let seed_closure_call = RuntimeExpr::Call {
         callee: Box::new(RuntimeExpr::Closure {
@@ -4926,6 +4926,38 @@ fn the_body_authority_selector_is_closed_static_and_chosen_from_source_shape() {
         select_body_emission_authority(&seed_closure_call, &declarations),
         BodyEmissionAuthority::RecursiveDescent
     );
+}
+
+#[test]
+fn a_trap_arm_and_its_trap_free_twin_both_functionize() {
+    let declarations = BTreeMap::new();
+    let without_trap = RuntimeExpr::If {
+        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(false))),
+    };
+    let with_trap = RuntimeExpr::If {
+        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        else_expr: Box::new(RuntimeExpr::Trap(RuntimeTrap {
+            code: RuntimeTrapCode::ExplicitTrap,
+            message: "functionized trap arm".to_string(),
+        })),
+    };
+
+    for (name, expr) in [
+        ("trap-free", &without_trap),
+        ("trap-carrying", &with_trap),
+    ] {
+        assert_eq!(
+            select_body_emission_authority(expr, &declarations),
+            BodyEmissionAuthority::FunctionizedUnits,
+            "{name} twin did not select functionized emission"
+        );
+        ac11_compiles(expr).unwrap_or_else(|error| {
+            panic!("{name} twin failed functionized emission: {error}")
+        });
+    }
 }
 
 #[test]
@@ -6894,6 +6926,74 @@ fn ac11_compiles(expr: &RuntimeExpr) -> Result<(), CraneliftBackendError> {
         None,
     )
     .map(|_| ())
+}
+
+/// Compile the exact governed bracket source as a process object.
+///
+/// The fixture contains real host effects, so a value-mode probe would reject
+/// it before reaching the emission mechanism this control measures.
+#[cfg(test)]
+fn recursive_port_process_compiles(
+    expr: &RuntimeExpr,
+) -> Result<(), CraneliftBackendError> {
+    let module = new_jit_module().expect("jit module");
+    let process_symbols = crate::NativeProcessSymbols::legacy_prelude();
+    compile_expr_into_module(
+        module,
+        "recursive_port_probe",
+        Linkage::Local,
+        expr,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        Some(&process_symbols),
+        Some(test_only_distinguished_root_join_plan()),
+        None,
+    )
+    .map(|_| ())
+}
+
+#[test]
+fn governed_nested_brackets_n3_through_n7_emit_complete_functionized_bundles() {
+    for depth in 3..=7 {
+        let expr =
+            crate::cranelift_backend::planning::governed_nested_resource_bracket(depth);
+        assert_eq!(
+            select_body_emission_authority(&expr, &BTreeMap::new()),
+            BodyEmissionAuthority::FunctionizedUnits,
+            "governed depth {depth} selected retained emission"
+        );
+        recursive_port_process_compiles(&expr).unwrap_or_else(|error| {
+            panic!("governed depth {depth} did not compile: {error}")
+        });
+
+        let (declared, defined) =
+            crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
+        let resolved =
+            crate::cranelift_backend::lowering::units::b2f_last_call_edge_resolution();
+        let recursive_calls = recursive_position_unit_calls();
+        eprintln!(
+            "RT_FNSPLIT_RECUR_PORT n={depth} authority=FunctionizedUnits \
+             declared={declared} defined={defined} resolved_calls={resolved} \
+             recursive_position_calls={recursive_calls}"
+        );
+
+        assert!(declared > 1, "depth {depth} emitted no retained body units");
+        assert_eq!(
+            defined, declared,
+            "depth {depth} left a declared unit undefined"
+        );
+        assert!(
+            resolved > 0,
+            "depth {depth} resolved no graph-derived call edges"
+        );
+        assert!(
+            recursive_calls > 0,
+            "depth {depth} re-lowered every recursive position inline instead \
+             of emitting a declared unit call"
+        );
+    }
 }
 
 /// **`AC-11` clause 3 — an unrepresentable transfer is refused BEFORE any unit

@@ -2400,6 +2400,98 @@ fn runtime_expr_tag(expr: &RuntimeExpr) -> u32 {
     }
 }
 
+/// The governed nested-bracket source shared by the planning and emission
+/// controls. Keeping one constructor prevents the emission gate from silently
+/// measuring a trap-free or non-recursive surrogate.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn governed_nested_resource_bracket(
+    depth: usize,
+) -> RuntimeExpr {
+    fn trap(message: &str) -> crate::RuntimeTrap {
+        crate::RuntimeTrap {
+            code: crate::RuntimeTrapCode::PatternMatchFailure,
+            message: message.to_string(),
+        }
+    }
+
+    fn unit() -> RuntimeExpr {
+        RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+            args: Vec::new(),
+        }
+    }
+
+    if depth == 0 {
+        return unit();
+    }
+    let body = governed_nested_resource_bracket(depth - 1);
+    let release = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::BufferFreeze,
+            capability: None,
+            args: vec![RuntimeExpr::Var(0)],
+        }),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: "ctor:prelude::Result::Err".to_string(),
+                binders: 1,
+                body: RuntimeExpr::Trap(trap("release failed")),
+            },
+            crate::RuntimeMatchCase {
+                constructor: "ctor:prelude::Result::Ok".to_string(),
+                binders: 1,
+                body: unit(),
+            },
+        ],
+        default: trap("release result"),
+    };
+    let bracket = RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Bracket::Scope".to_string(),
+            args: vec![RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["buffer".to_string()],
+                body: Box::new(body),
+            }],
+        }),
+        cases: vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::Bracket::Scope".to_string(),
+            argument_binders: 1,
+            recursive_positions: vec![0],
+            body: RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(0)),
+                    args: vec![unit()],
+                }),
+                body: Box::new(release),
+            },
+        }],
+        default: trap("bracket scope"),
+    };
+    RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::BufferAllocate,
+            capability: None,
+            args: vec![RuntimeExpr::Value(crate::RuntimeValue::Int(1.into()))],
+        }),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: "ctor:prelude::Result::Err".to_string(),
+                binders: 1,
+                body: RuntimeExpr::Trap(trap("allocate failed")),
+            },
+            crate::RuntimeMatchCase {
+                constructor: "ctor:prelude::Result::Ok".to_string(),
+                binders: 1,
+                body: bracket,
+            },
+        ],
+        default: trap("allocate result"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::abi::{AbiCarrier, AbiSlot, AbiSlotKind};
@@ -2429,75 +2521,7 @@ mod tests {
     }
 
     fn nested_resource_bracket(depth: usize) -> RuntimeExpr {
-        if depth == 0 {
-            return unit();
-        }
-        let body = nested_resource_bracket(depth - 1);
-        let release = RuntimeExpr::Match {
-            scrutinee: Box::new(RuntimeExpr::Effect {
-                family: "FS".to_string(),
-                operation: ken_host::HostOpV1::BufferFreeze,
-                capability: None,
-                args: vec![RuntimeExpr::Var(0)],
-            }),
-            cases: vec![
-                RuntimeMatchCase {
-                    constructor: "ctor:prelude::Result::Err".to_string(),
-                    binders: 1,
-                    body: RuntimeExpr::Trap(trap("release failed")),
-                },
-                RuntimeMatchCase {
-                    constructor: "ctor:prelude::Result::Ok".to_string(),
-                    binders: 1,
-                    body: unit(),
-                },
-            ],
-            default: trap("release result"),
-        };
-        let bracket = RuntimeExpr::ComputationalMatch {
-            scrutinee: Box::new(RuntimeExpr::Construct {
-                constructor: "ctor:fixture::Bracket::Scope".to_string(),
-                args: vec![RuntimeExpr::LexicalClosure {
-                    captures: Vec::new(),
-                    params: vec!["buffer".to_string()],
-                    body: Box::new(body),
-                }],
-            }),
-            cases: vec![RuntimeComputationalMatchCase {
-                constructor: "ctor:fixture::Bracket::Scope".to_string(),
-                argument_binders: 1,
-                recursive_positions: vec![0],
-                body: RuntimeExpr::Let {
-                    value: Box::new(RuntimeExpr::Call {
-                        callee: Box::new(RuntimeExpr::Var(0)),
-                        args: vec![unit()],
-                    }),
-                    body: Box::new(release),
-                },
-            }],
-            default: trap("bracket scope"),
-        };
-        RuntimeExpr::Match {
-            scrutinee: Box::new(RuntimeExpr::Effect {
-                family: "FS".to_string(),
-                operation: ken_host::HostOpV1::BufferAllocate,
-                capability: None,
-                args: vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
-            }),
-            cases: vec![
-                RuntimeMatchCase {
-                    constructor: "ctor:prelude::Result::Err".to_string(),
-                    binders: 1,
-                    body: RuntimeExpr::Trap(trap("allocate failed")),
-                },
-                RuntimeMatchCase {
-                    constructor: "ctor:prelude::Result::Ok".to_string(),
-                    binders: 1,
-                    body: bracket,
-                },
-            ],
-            default: trap("allocate result"),
-        }
+        governed_nested_resource_bracket(depth)
     }
 
     fn assert_fixed_helper_identity_shape(key: PlannedHelperKey) {

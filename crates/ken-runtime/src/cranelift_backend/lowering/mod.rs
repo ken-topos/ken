@@ -691,7 +691,8 @@ struct Lowering<'a> {
     /// has already established a **finite acyclic carrier graph** and the call
     /// rides a **declared recursive child edge** — so its measure is strict
     /// descent in that validated graph, ⛔ never compile-time shrinkage.
-    active_carried_computational_eliminations: Vec<StaticOriginId>,
+    active_carried_computational_eliminations:
+        Vec<(StaticOriginId, cranelift_codegen::ir::Block)>,
     native_join_plan: Option<crate::NativeJoinPlanV1>,
     consumed_join_sites: BTreeSet<u64>,
     root_terminal_authority: Option<RootTerminalAnswerAuthority>,
@@ -4185,6 +4186,7 @@ struct PendingLetContinuationFrame<'a> {
     /// `child(call_origin, 1 + i)`.
     call_origin: StaticOriginId,
     env: &'a [LoweringOperand],
+    recursive_unit_body: Option<StaticOriginId>,
 }
 #[derive(Clone, Copy)]
 struct ActiveContinuationFrame<'a> {
@@ -4226,6 +4228,11 @@ struct RecursorInvocationSegment {
     resume_cursor: ContinuationCursorId,
     checked_invocation: Option<CheckedRecursiveInvocationInstance>,
     computational_ih_slot_template_id: Option<u64>,
+    /// The declared retained-body unit for a callable recursive position.
+    ///
+    /// `None` is the ordinary structural-data IH: it resumes the eliminator
+    /// over its carried value and accepts no source arguments.
+    recursive_unit_body: Option<StaticOriginId>,
     /// Inert handles into `Lowering::dynamic_splice_edges`. Cloning a lowered
     /// recursor can copy a handle, but only one clone can consume the unique
     /// compiler-owned edge; every replay rejects before CFG.
@@ -4411,6 +4418,7 @@ impl RecursorInvocationSegment {
             resume_cursor,
             checked_invocation,
             computational_ih_slot_template_id,
+            recursive_unit_body: None,
             dynamic_splice_edges: Vec::new(),
             open_control_obligations,
         }
@@ -6550,7 +6558,12 @@ impl<'a> Lowering<'a> {
             &SourceSelectedContinuation<'_>,
             &[SourceSelectedContinuation<'_>],
         )>,
+        recursive_unit_body: Option<StaticOriginId>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let recursive_unit_body = recursive_unit_body.or_else(|| match &recursive {
+            LoweringOperand::Specialized(Lowered::Closure { body, .. }) => Some(*body),
+            LoweringOperand::Specialized(_) | LoweringOperand::Carried(_) => None,
+        });
         let (residual, payload) = decompose_computational_recursor(recursive);
         let active_instance = self.active_recursive_invocations.last().copied();
         // ⛔ **The frame identity is TRANSPORTED, never inferred**
@@ -6598,6 +6611,10 @@ impl<'a> Lowering<'a> {
             .as_ref()
             .and_then(|(_, invocation)| invocation.checked_invocation)
             .or(active_instance);
+        let segment_recursive_unit_body = payload
+            .as_ref()
+            .and_then(|(_, invocation)| invocation.recursive_unit_body)
+            .or(recursive_unit_body);
         let segment_dynamic_splice_edges = payload
             .as_ref()
             .map(|(_, invocation)| invocation.dynamic_splice_edges.clone())
@@ -6715,6 +6732,7 @@ impl<'a> Lowering<'a> {
             segment_checked_invocation,
             computational_ih_slot_template_id,
         );
+        invocation.recursive_unit_body = segment_recursive_unit_body;
         invocation.dynamic_splice_edges = segment_dynamic_splice_edges;
         Ok(LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure {
             residual: Box::new(residual),
