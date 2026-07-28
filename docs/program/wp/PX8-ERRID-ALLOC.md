@@ -23,6 +23,12 @@ one of `PX8`'s three blockers. `PX8` gates 15 of that program's 19 nodes.
 | `spec/30-surface/38-ffi-io.md` | `56c3b3d5f1090f8920cc66286e0d7ba3729f0113` |
 | `conformance/behavioral/buffer-io/seed-buffer-io.md` | `0364b230742e08f67fc59a2c2421221744b051e0` |
 
+> ✅ **RE-VERIFIED CURRENT at `origin/main = dca1b793` (Steward, 2026-07-28).**
+> All three blobs above are **byte-identical** on `main` — ⭐ this frame has not
+> rotted, and `§2`'s line anchors are measured against a live tree. ⛔ You still
+> re-derive on your own base and yours wins; this stamp only means **no
+> re-framing pass is owed before you start.**
+
 ⚠ `38-ffi-io.md` is **LOCKED**. ⛔ Editing it is `§4`-banned; if the identity
 needs a normative home, that is a routed spec change, not this WP's edit.
 
