@@ -7305,3 +7305,130 @@ fn a_seed_capture_borrows_from_artifact_static_storage_rather_than_folding() {
          satisfied for the wrong reason; measured {without}"
     );
 }
+
+/// **`RT-FNSPLIT-B2F` `AC-6` — the removal pin, authored BEFORE the removal so
+/// that it can witness it.**
+///
+/// ⛔⛔ **A pin authored after a removal cannot witness it, and the tests a ban
+/// reddens on introduction never contain its witness — they exercise the success
+/// path.** So this lands on the green pre-`D6` base, asserting what is true
+/// *now*, shaped so that `D6` turns it red and forces the flip to be reviewed.
+///
+/// ⭐ **The property is symptom-inventory entry 2 itself, measured rather than
+/// described:** today a retained body is re-lowered **once per call site**, not
+/// once per body. One `LexicalClosure` occurrence, bound once and applied twice,
+/// resolves its origin **twice** — the same source term is walked and emitted
+/// again for the second application.
+///
+/// ⛔ **Stated as a RELATION between two programs, never as the literals.** The
+/// absolute counts move for reasons that have nothing to do with `D6` — a
+/// scheduling change, an extra planned occurrence, a different `Let` shape. What
+/// cannot move without `D6` is whether the count **follows the number of call
+/// sites**:
+///
+/// | | today (inliner) | after `D6` (unit + call) |
+/// |---|---|---|
+/// | applied once | `n` | `n` |
+/// | applied twice | `n + 1` | `n` |
+///
+/// **MEASURED:** the number of `origin -> expression` resolutions a compile
+/// performs grows by one when a single retained closure occurrence gains a
+/// second application site.
+/// **CLAIMED:** `lower_expr`'s recursive descent still emits a retained body per
+/// call site — i.e. the inliner `D6` removes is **present**.
+/// **THE GAP:** ⚠ a resolution is not an emission. This counts how many times
+/// the body's *term* was fetched, which is one-for-one with re-lowering under
+/// the current descent but ⛔ is **not** claimed to remain one-for-one under any
+/// other. ⇒ When `D6` lands, whoever flips this must re-check that the
+/// replacement reading means what they think — the flip is not mechanical.
+///
+/// **Promise class: TRANSITION SENTINEL — deliberately, and labelled for the
+/// boundary rather than the count.** ⭐ **The event that retires it is `D6`:**
+/// removal of the recursive-descent emission authority in `lower_expr`, at which
+/// point a retained body is emitted **once, into its own unit**, and both rows
+/// of the table above read `n`. ⇒ On that day this assertion becomes
+/// `assert_eq!(twice, once)` — a **durable invariant**, since no intended
+/// extension may reintroduce per-call-site emission.
+///
+/// ⛔ **Do not "fix" a red here by deleting the test or by widening it to accept
+/// both readings.** A sentinel that accepts its own retirement silently is not a
+/// sentinel; the red IS the deliverable.
+///
+/// **The retirement was SIMULATED and the sentinel does redden — run, not
+/// reasoned.** Counting one resolution per **distinct** origin instead of per
+/// call (which is exactly the post-`D6` reading, since a unit's body is fetched
+/// once however often it is called) produces `left: 1, right: 2` and the
+/// "D6 HAS LANDED" message above.
+///
+/// ⚠ **Labelled precisely: that is a simulation of the retirement event, NOT a
+/// compile-preserving evasion of this pin.** It mutates the instrument, not the
+/// descent. ⛔ What it demonstrates is only that the assertion **discriminates
+/// the two worlds** — it is not evidence that `D6` will produce that reading by
+/// this mechanism, and the `THE GAP` paragraph above is what governs that.
+#[test]
+fn a_retained_body_is_relowered_once_per_call_site_until_d6() {
+    fn resolutions(expr: &RuntimeExpr) -> usize {
+        crate::cranelift_backend::planning::ac4_open_route_window();
+        ac11_compiles(expr).expect("fixture compiles");
+        crate::cranelift_backend::planning::ac4_route_counts().0
+    }
+
+    let closure = || RuntimeExpr::LexicalClosure {
+        captures: Vec::new(),
+        params: Vec::new(),
+        body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+    };
+
+    // ONE closure occurrence, bound once, applied once.
+    let applied_once = RuntimeExpr::Let {
+        value: Box::new(closure()),
+        body: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::Var(0)),
+            args: Vec::new(),
+        }),
+    };
+    // ⭐ The SAME single closure occurrence, applied twice. ⛔ Not two closure
+    // literals: two literals are two distinct origins and would legitimately
+    // resolve twice even after `D6`, which would make this green for the wrong
+    // reason forever.
+    let applied_twice = RuntimeExpr::Let {
+        value: Box::new(closure()),
+        body: Box::new(RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Var(0)),
+                args: Vec::new(),
+            }),
+            body: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Var(1)),
+                args: Vec::new(),
+            }),
+        }),
+    };
+
+    let once = resolutions(&applied_once);
+    let twice = resolutions(&applied_twice);
+
+    // ⛔ NON-VACUITY: a harness that never compiled anything reports `0 == 0`
+    // and would satisfy the relation below by doing nothing at all.
+    assert!(
+        once > 0,
+        "AC-6 -- NON-VACUITY: a program with a retained closure body must \
+         resolve its origin at least once; got {once}. A zero here means this \
+         test measures nothing, whatever the relation below reports."
+    );
+    assert_eq!(
+        twice,
+        once + 1,
+        "AC-6 -- TRANSITION SENTINEL, and read the direction before touching it. \
+         One retained closure occurrence applied twice performed {twice} \
+         origin->expression resolutions against {once} when applied once. \
+         \n\nIf twice == once + 1 was expected and you got twice == once, D6 HAS \
+         LANDED: the recursive-descent inliner is gone and the body is now \
+         emitted once into its own unit. That is the intended retirement -- \
+         change this to assert_eq!(twice, once), relabel it a durable \
+         invariant, and re-check that a resolution still stands for an emission \
+         under the new descent (it is not claimed to). \
+         \n\nAny other pair means neither reading holds and the descent has \
+         changed in a way nobody described."
+    );
+}
