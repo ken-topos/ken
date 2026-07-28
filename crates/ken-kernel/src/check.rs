@@ -129,19 +129,19 @@ pub fn raw_well_formed(ctx: &Context, t: &Term) -> KernelResult<()> {
 /// universe `Ω_ℓ` (`16 §1.1`). A binder type, declaration type, or ascription
 /// may be either — a proposition is a valid type.
 #[derive(Clone, Debug)]
-pub(crate) enum Sort {
+enum Sort {
     Type(Level),
     Omega(Level),
 }
 
 impl Sort {
-    pub(crate) fn level(&self) -> &Level {
+    fn level(&self) -> &Level {
         match self {
             Sort::Type(l) | Sort::Omega(l) => l,
         }
     }
     /// Reify the sort as a term (`Type ℓ` or `Ω_ℓ`).
-    pub(crate) fn to_term(&self) -> Term {
+    fn to_term(&self) -> Term {
         match self {
             Sort::Type(l) => Term::Type(l.clone()),
             Sort::Omega(l) => Term::Omega(l.clone()),
@@ -601,7 +601,7 @@ fn infer_elim(
 /// proposition may be proved by case-split on a relevant scrutinee, exactly
 /// as a per-branch type may be selected. Loosely verifies the motive's shape;
 /// [`infer_elim`] re-checks it fully against [`motive_expected_type`].
-pub(crate) fn infer_motive_level(
+fn infer_motive_level(
     env: &GlobalEnv,
     ctx: &Context,
     ind: &InductiveDecl,
