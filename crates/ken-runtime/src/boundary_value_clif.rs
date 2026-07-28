@@ -45,8 +45,7 @@ use crate::boundary_value::{
     BOUNDARY_ERR_BOUNDS, BOUNDARY_ERR_CAPACITY, BOUNDARY_ERR_CLASS, BOUNDARY_ERR_ESCAPE,
     BOUNDARY_ERR_FROZEN, BOUNDARY_ERR_RELATION, BOUNDARY_ERR_RETIRED_LANE, BOUNDARY_ERR_SEALED,
     BOUNDARY_ERR_SHAPE, BOUNDARY_ERR_TAG, BOUNDARY_INT_REGION_LIMBS, BOUNDARY_NODE_STRIDE,
-    BOUNDARY_OK,
-    BOUNDARY_TAG_BITS, BOUNDARY_TAG_MASK, NODE_CLASS, NODE_EXTENT, NODE_FIELDS_AT,
+    BOUNDARY_OK, BOUNDARY_TAG_BITS, BOUNDARY_TAG_MASK, NODE_CLASS, NODE_EXTENT, NODE_FIELDS_AT,
     NODE_FIELD_COUNT, NODE_INT_SEALED, NODE_LIMBS_AT, NODE_LIMB_COUNT, NODE_OWNER, NODE_PAYLOAD,
     NODE_SLOT, NODE_TAG_ID,
 };
@@ -483,6 +482,59 @@ fn tag_in_set(
     }
 }
 
+/// Refuse a tag the partition does not admit, with the **exact** diagnostic
+/// (`RT-FNSPLIT-C1` `D5`). Returns; the builder is left in the `unknown` block.
+///
+/// ⛔ **RECOGNITION IS AN ABI-WIDE PROPERTY, NOT A `define_alloc` ONE — and
+/// that is the whole reason this helper exists.** `BoundaryEmissionPlan::derive`
+/// sweeps the live representation authority, so retiring the durable-closure
+/// lane deleted `PersistentClosure` from `plan.tags().admitted()` outright.
+/// Every site gating on that set therefore stopped answering *"I refuse this
+/// specific retired lane"* (`-12`) and started answering *"I do not recognize
+/// this byte"* (`-1`) — the identity arbitrary corruption produces.
+///
+/// ⚠ **The first `D5` pass repaired only `define_alloc` and left three more
+/// recognition sites downgraded**, which is the removal-census failure exactly:
+/// deleting a producer removes the vocabulary needed to reject it, at *every*
+/// consumer, not at the one the change was written against. `define_resolve`,
+/// `define_escape_check` and the child-tag check are all decode/classification
+/// — the readers [`crate::boundary_value::BOUNDARY_RETIRED_LANES`] names as its
+/// intended ones — so all three must name the lane they refuse.
+///
+/// ⭐ The retired set is derived here from the plan's own admitted set, so a
+/// mutation fixture that admits a different partition gets the retired set that
+/// partition implies rather than a hand-written constant.
+///
+/// ⚠ **HONEST RESIDUAL — three of the four call sites are pinned, the fourth is
+/// not.** `define_resolve` and `define_escape_check` are both swept by
+/// [`tests::b2v_emitted_code_admits_exactly_the_closed_tag_set`], which asserts
+/// `-12` for every retired tag byte across all 256 and reddened at exactly that
+/// position before this helper existed. ⛔ The **child-tag** site has no control
+/// asserting its retired arm: reaching it needs a node whose stored CHILD word
+/// carries a retired tag, and the store path that would place one is the same
+/// one the retirement closes. So that arm is **repaired but unexercised** — it
+/// is guarded by review, not by CI, and this note is where the next reader
+/// inherits that limit rather than reading four pinned sites into three.
+fn refuse_unadmitted_tag(
+    b: &mut FunctionBuilder<'_>,
+    tag: cranelift_codegen::ir::Value,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
+) {
+    let retired = crate::boundary_value::boundary_retired_tags(plan.tags().admitted());
+    let is_retired = tag_in_set(b, tag, &retired);
+    let retired_block = b.create_block();
+    let unknown = b.create_block();
+    b.ins().brif(is_retired, retired_block, &[], unknown, &[]);
+
+    b.switch_to_block(retired_block);
+    let err = b.ins().iconst(types::I64, BOUNDARY_ERR_RETIRED_LANE);
+    b.ins().return_(&[err]);
+
+    b.switch_to_block(unknown);
+    let err = b.ins().iconst(types::I64, BOUNDARY_ERR_TAG);
+    b.ins().return_(&[err]);
+}
+
 /// Emit the region selection for a handle tag, driven by the plan's derived
 /// owner bands. Jumps to `selected` with the region base, or returns an exact
 /// status; the builder is left in an unreachable trailing block.
@@ -586,12 +638,11 @@ fn define_resolve<M: Module>(
         // into some default projection.
         let known = tag_in_set(&mut b, tag, plan.tags().admitted());
         let closed = b.create_block();
-        let unknown = b.create_block();
-        b.ins().brif(known, closed, &[], unknown, &[]);
+        let not_admitted = b.create_block();
+        b.ins().brif(known, closed, &[], not_admitted, &[]);
 
-        b.switch_to_block(unknown);
-        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_TAG);
-        b.ins().return_(&[err]);
+        b.switch_to_block(not_admitted);
+        refuse_unadmitted_tag(&mut b, tag, plan);
 
         b.switch_to_block(closed);
         let is_handle = tag_in_set(&mut b, tag, plan.tags().handle());
@@ -1279,12 +1330,11 @@ fn define_escape_check<M: Module>(
         let tag = b.ins().band_imm(word, BOUNDARY_TAG_MASK as i64);
         let known = tag_in_set(&mut b, tag, plan.tags().admitted());
         let closed = b.create_block();
-        let unknown = b.create_block();
-        b.ins().brif(known, closed, &[], unknown, &[]);
+        let not_admitted = b.create_block();
+        b.ins().brif(known, closed, &[], not_admitted, &[]);
 
-        b.switch_to_block(unknown);
-        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_TAG);
-        b.ins().return_(&[err]);
+        b.switch_to_block(not_admitted);
+        refuse_unadmitted_tag(&mut b, tag, plan);
 
         b.switch_to_block(closed);
         // ⛔ The escaping tags are exactly the ones the partition publishes
@@ -1914,8 +1964,7 @@ fn define_store_field<M: Module>(
         b.ins().brif(known, child_ok, &[], bad_child, &[]);
 
         b.switch_to_block(bad_child);
-        let err = b.ins().iconst(types::I64, BOUNDARY_ERR_TAG);
-        b.ins().return_(&[err]);
+        refuse_unadmitted_tag(&mut b, child_tag, plan);
 
         b.switch_to_block(child_ok);
         let owner = b
@@ -3613,6 +3662,18 @@ pub(crate) mod tests {
         let out_of_range: u64 = 9_999;
         let mut admitted = 0usize;
         let mut rejected = 0usize;
+        let mut retired = 0usize;
+
+        // ⛔ `RT-FNSPLIT-C1` `D5` — RECOGNITION is a third outcome here too, and
+        // it is derived from the same authority the emitter reads rather than
+        // written down: a tag whose only lane is retired is still **vocabulary**,
+        // so it must be refused BY NAME (`-12`) and never collapse into `-1`,
+        // which is what an arbitrary corrupt byte produces.
+        let retired_tags = crate::boundary_value::boundary_retired_tags(
+            crate::boundary_value::BoundaryEmissionPlan::derive()
+                .tags()
+                .admitted(),
+        );
 
         for byte in 0u64..=255 {
             let word = BoundaryWord((out_of_range << BOUNDARY_TAG_BITS) | byte);
@@ -3627,6 +3688,16 @@ pub(crate) mod tests {
                          outside the closed set"
                     );
                     rejected += 1;
+                }
+                Some(tag) if retired_tags.contains(&tag) => {
+                    assert_eq!(
+                        class,
+                        crate::boundary_value::BOUNDARY_ERR_RETIRED_LANE,
+                        "D5: {tag:?} is recognized ABI vocabulary whose only lane \
+                         is retired, so emitted `class` must refuse it by name — \
+                         not as an unrecognized byte"
+                    );
+                    retired += 1;
                 }
                 Some(tag) if tag.is_immediate() => {
                     assert!(
@@ -3656,6 +3727,13 @@ pub(crate) mod tests {
             // malformed.
             let expected_escape = match known {
                 None => BOUNDARY_ERR_TAG,
+                // ⛔ `D5`: recognition precedes ownership. A retired tag has no
+                // live owner band at all, so asking `referent_owner()` would
+                // answer from the Rust enum about a lane the partition no longer
+                // publishes — the two-authority split this plan exists to close.
+                Some(tag) if retired_tags.contains(&tag) => {
+                    crate::boundary_value::BOUNDARY_ERR_RETIRED_LANE
+                }
                 Some(tag) => match tag.referent_owner() {
                     BoundaryReferentOwner::InvocationArena => BOUNDARY_ERR_ESCAPE,
                     BoundaryReferentOwner::PersistentStore => BOUNDARY_ERR_BOUNDS,
@@ -3671,11 +3749,36 @@ pub(crate) mod tests {
         }
 
         // ⚠ POSITIVE CONTROL. A sweep whose every byte landed in one bucket
-        // would pass both arms above for the wrong reason.
+        // would pass all three arms above for the wrong reason.
+        //
+        // ⛔ **TRANSITION SENTINEL, labelled as one.** This assertion goes RED
+        // the moment the retired-lane vocabulary is emptied — which is exactly
+        // the event that must be reviewed rather than absorbed, because an
+        // empty tombstone list makes the retired arm above a `continue` nobody
+        // takes and the whole `D5` distinction silently vacuous. It retires when
+        // `B2F` lands a real durable callable carrier and the lane stops being a
+        // tombstone; ⛔ it is NOT a durable invariant and must not be re-labelled
+        // as one.
+        assert!(
+            !retired_tags.is_empty(),
+            "D5: no tag is retired, so the retired arm of this sweep — and of \
+             every sibling three-way partition — is unexercised"
+        );
+        assert_eq!(
+            retired,
+            retired_tags.len(),
+            "D5: the sweep took the retired arm {retired} times but {} tags are \
+             retired; the arm is not being reached",
+            retired_tags.len()
+        );
+        // ⭐ Relationally derived, not re-fitted to what the code now emits: the
+        // admitted bytes are the closed set MINUS the retired vocabulary, so
+        // this goes red if either authority moves.
         assert_eq!(
             admitted,
-            BoundaryTag::ALL.len(),
-            "AC-1: the number of admitted tag bytes must equal the closed set"
+            BoundaryTag::ALL.len() - retired_tags.len(),
+            "AC-1: the number of admitted tag bytes must equal the closed set \
+             less the retired vocabulary"
         );
         assert_eq!(
             rejected,
@@ -6465,31 +6568,14 @@ pub(crate) mod tests {
         b.ins().return_(&[word]);
     }
 
-    /// `(base, origin, arity) -> word` — allocate one persistent `Closure` with
-    /// `arity` capture slots, recording the **local origin ordinal** in
-    /// `NODE_PAYLOAD`.
-    ///
-    /// ⛔ Emitted code writes the *ordinal*, never the `code_id`. Binding the
-    /// ordinal into an artifact-scoped namespace is the store's job at adoption
-    /// — emitted code holds no artifact identity, and `B2F` dispatch stays
-    /// inert.
-    fn emit_closure_node(
-        b: &mut FunctionBuilder<'_>,
-        refs: &Refs,
-        p: &[cranelift_codegen::ir::Value],
-        ptr: cranelift_codegen::ir::Type,
-    ) {
-        let (base, origin, arity) = (p[0], p[1], p[2]);
-        let out = cell(b, ptr);
-        let tag = b
-            .ins()
-            .iconst(types::I64, BoundaryTag::PersistentClosure as i64);
-        let class = b.ins().iconst(types::I64, BoundaryClass::Closure as i64);
-        guard(b, refs.alloc, &[base, tag, class, arity, out]);
-        let word = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
-        guard(b, refs.store_scalar, &[base, word, origin]);
-        b.ins().return_(&[word]);
-    }
+    // ⛔ `emit_closure_node` — the CLIF emitter that allocated a
+    // `(PersistentClosure, Closure)` node — is DELETED for the same reason as
+    // `emitted_closure`: `RT-FNSPLIT-C1` `D5` retires that lane, so the helper
+    // can only ever produce `BOUNDARY_ERR_RETIRED_LANE`. ⛔ It is not kept as a
+    // negative fixture — the product sweep and
+    // `b2v_d5_the_durable_closure_lane_is_refused_at_allocation_by_name` already
+    // exercise the refusal from the plan's own authority, without a bespoke
+    // emitter that would have to be maintained against a dead representation.
 
     /// **`AC-6` — adoption REFUSES an unsealed region.**
     ///
@@ -6630,41 +6716,21 @@ pub(crate) mod tests {
         }
     }
 
-    /// Build one emitted closure with the given ordered immediate captures.
     /// An arbitrary non-`NULL_SLOT` identity, used to put a node on the
     /// already-owned fast path. Its value is irrelevant; only `!= NULL_SLOT` is.
     const PREOWNED_SLOT: crate::store::SlotId = 4242;
 
-    fn emitted_closure(
-        alloc_closure: *const u8,
-        store_field: *const u8,
-        base: *const u64,
-        origin: u64,
-        captures: &[i64],
-    ) -> BoundaryWord {
-        let word = BoundaryWord(run3(
-            alloc_closure,
-            base,
-            BoundaryWord(origin),
-            captures.len() as u64,
-        ) as u64);
-        assert!(word.0 as i64 > 0, "closure allocates: {}", word.0 as i64);
-        for (index, value) in captures.iter().enumerate() {
-            let capture = BoundaryWord::immediate(BoundaryTag::ImmediateInt, *value as u64);
-            assert_eq!(
-                run4(store_field, base, word.0, index as u64, capture.0),
-                BOUNDARY_OK,
-                "capture {index} stores"
-            );
-        }
-        word
-    }
+    // ⛔ `emitted_closure` — the closure-fixture builder — is DELETED with the
+    // five phase-retired controls above, not kept behind `#[allow(dead_code)]`.
+    // Its first act was `assert!(word.0 as i64 > 0, "closure allocates")`, which
+    // the retired lane makes unsatisfiable, so it is a fixture for a value that
+    // cannot exist. ⭐ Keeping it would silence rustc's dead-code warning — the
+    // free oracle for *"does anything still consume this?"* — and leave an inert
+    // artifact arguing that the capability is still around the corner.
 
     // ───────────────────────────────────────────────────────────────────────
     // `PersistentClosure` — the canonical image layer
     // ───────────────────────────────────────────────────────────────────────
-
-
 
     /// **`AC-6` — the same ordinal in two different artifacts is two different
     /// closures.**
@@ -6719,58 +6785,110 @@ pub(crate) mod tests {
         );
     }
 
-    /// **`AC-6` / `AC-V5` — an emitted closure node is REFUSED at adoption.**
-    ///
-    /// ⛔ **This test replaces five that asserted the opposite.** Before
-    /// `RT-VALUE-TOTALITY-P2`, `AC-6` pinned that an emitted closure node
-    /// *adopts*, mints an artifact-scoped `code_id`, converges on equal
-    /// captures, survives nesting and dedup, and round-trips through
-    /// `decode_slot` as a `Value::Closure`. Every one of those is the contract
-    /// `spec/40-runtime/41-values.md §2.1` retires: an ordinary closure is
-    /// **transitively non-persistable**, and publication must refuse it
-    /// **before** bytes, digest, slot or provenance exist. Those five tests were
-    /// not portable — their premise was the capability, not a behaviour that
-    /// merely changed shape — so they are deleted rather than adjusted.
-    ///
-    /// ⚠ **POSITIVE CONTROL, and it is the whole point of the test:** the
-    /// identical harness — same arena, same sealing, same artifact binding —
-    /// adopts a *ground* node. So the refusal is caused by the closure class and
-    /// not by a mis-set fixture, an unsealed region, or a broken builder, which
-    /// are the ways a refusal assertion passes for the wrong reason.
-    ///
-    /// ⛔ The refusal is `BOUNDARY_ERR_ESCAPE`, the same identity the two other
-    /// invocation-owned classes already use: a persistent node was handed
-    /// something runtime-local.
-    ///
-    /// ⚠ **It is raised in `validate_reachable` — phase 2 — not in
-    /// `canonical_image`.** This doc previously said the latter "which is
-    /// upstream of any byte, hash or slot"; that was false, because
-    /// canonicalization *mints as it walks*. See
-    /// [`b2v_acv5_a_closure_capturing_a_compound_node_mints_nothing`], which is
-    /// the arm that can tell the two positions apart — ⛔ this one cannot, since
-    /// its captures are immediates and an immediate is never interned.
-    // --- conformance: runtime/values/closure-publication-rejected-transitively ---
-    #[test]
-    fn b2v_ac6_an_emitted_closure_node_is_refused_at_adoption() {
-        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
-        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
+    // ── `D5` — the durable-closure lane, at the ALLOCATION boundary ─────────
+    //
+    // ⛔ **PHASE-RETIRED COVERAGE — read this before assuming the properties
+    // named below are still defended.** `RT-FNSPLIT-C1` `D5` (Architect
+    // `dec_21aa95jbsznfh` + addendum `dec_6xffebwj4s347`) makes
+    // `(PersistentClosure, Closure)` a **retired lane**: recognized ABI
+    // vocabulary, admitted by nothing.
+    //
+    // ⭐ **MEASURED, not assumed — a closure node is unconstructible from BOTH
+    // producers.** Emitted allocation refuses the pair with
+    // `BOUNDARY_ERR_RETIRED_LANE` in `define_alloc`'s ordered prologue, and the
+    // Rust builder asserts `boundary_relation_admits` (the `ONE CONTRACT, TWO
+    // ENFORCEMENT PATHS` guard in `boundary_value.rs`), which now answers
+    // `false` for the same pair. ⇒ **No path remains by which a test can bring a
+    // closure node into existence in order to observe what happens to it next.**
+    //
+    // ⛔ **So the five tests removed here are NOT relocated, and calling them
+    // preserved would be false.** Their shared premise is *"a closure node
+    // exists"*. Once the lane cannot be entered, the deeper properties they
+    // pinned are **unreachable**, not merely re-sited. Each is recorded by name
+    // with the property it held:
+    //
+    //   * `b2v_ac6_an_emitted_closure_node_is_refused_at_adoption` — adoption
+    //     refuses with `BOUNDARY_ERR_ESCAPE` before any byte, digest, slot or
+    //     provenance exists.
+    //   * `b2v_acv5_a_closure_capturing_a_compound_node_mints_nothing` — the
+    //     load-bearing arm: refusal precedes **minting**. Only a *compound*
+    //     capture could tell `validate_reachable` apart from `canonical_image`,
+    //     because an immediate is never interned.
+    //   * `b2v_acv5_an_already_owned_closure_root_is_still_refused` — the
+    //     already-owned fast path does not smuggle a closure ROOT past the gate.
+    //   * `b2v_acv5_an_already_owned_closure_descendant_is_still_refused` — the
+    //     same, TRANSITIVELY, for a descendant.
+    //   * `b2v_ac6_an_invocation_owned_capture_rejects_before_publication` — an
+    //     invocation-owned capture is refused before publication.
+    //
+    // ⚠ **What this costs, stated plainly.** Adoption-time refusal, transitive
+    // descendant refusal and mint-ordering are now guarded by
+    // **unconstructibility** rather than by an executed refusal. That is a
+    // strictly earlier gate, but it is a **different property**: it says the
+    // value cannot be built, not that the adopter would reject one if it were.
+    // ⛔ If `B2F` lands a durable callable carrier and this stops being a
+    // tombstone, these five must be **rewritten against that carrier**, not
+    // resurrected — their fixtures assume the retired representation.
+    //
+    // ✅ Every GROUND twin is retained below and still executes; they are what
+    // keeps the surviving refusal from being "this harness adopts nothing".
 
+    /// **`D5` — the durable-closure lane is refused AT ALLOCATION, BY NAME.**
+    ///
+    /// The earliest point at which the retired lane is still observable, and so
+    /// the only place the coverage above can honestly relocate to.
+    ///
+    /// **MEASURED:** emitted allocation of every declared retired lane returns
+    /// [`crate::boundary_value::BOUNDARY_ERR_RETIRED_LANE`], while the identical
+    /// harness admits a ground constructor.
+    /// **CLAIMED:** an ordinary closure has no durable boundary lane.
+    /// **THE GAP:** closed on the producing side by the Rust builder's
+    /// `boundary_relation_admits` guard — two producers, one contract — and on
+    /// the diagnostic side by
+    /// [`b2v_the_tag_class_relation_is_closed_over_the_whole_product`], which
+    /// separates this refusal from both `BOUNDARY_ERR_TAG` (an unrecognized
+    /// byte) and `BOUNDARY_ERR_RELATION` (a malformed pair such as
+    /// `PersistentClosure + Bool`). ⛔ Without that separation this assertion
+    /// would be satisfied by the lane simply having been deleted.
+    #[test]
+    fn b2v_d5_the_durable_closure_lane_is_refused_at_allocation_by_name() {
+        let (_pm, alloc_code) = compile_producer(4, emit_alloc_probe);
         let mut store = BoundaryValueStore::new();
-        store.bind_artifact(fixture_artifact("refused", 3));
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
-            (4, 8, 0),
-            (0, 0, 0),
+            (64, 8, 0),
+            (64, 8, 0),
         );
-        let word = emitted_closure(alloc_closure, store_field, f.base, 3, &[11, 22]);
-        store.seal_persistent();
 
-        assert_eq!(
-            store.adopt(word),
-            Err(BOUNDARY_ERR_ESCAPE),
-            "AC-V5: an ordinary closure is refused at adoption, before any byte, \
-             digest or slot exists"
+        for (tag, class) in crate::boundary_value::BOUNDARY_RETIRED_LANES {
+            assert_eq!(
+                run4(alloc_code, f.base, *tag as u64, *class as u64, 0),
+                crate::boundary_value::BOUNDARY_ERR_RETIRED_LANE,
+                "D5: {tag:?} + {class:?} is a retired lane and must be refused BY \
+                 NAME at allocation"
+            );
+        }
+        // ⚠ NON-VACUITY: an emptied tombstone list makes the loop above assert
+        // nothing at all, and this is the whole subject of the test.
+        assert!(
+            !crate::boundary_value::BOUNDARY_RETIRED_LANES.is_empty(),
+            "D5: no lane is retired, so the loop above asserted nothing"
+        );
+
+        // ⚠ POSITIVE CONTROL: the identical arena, plan and harness admit a
+        // GROUND constructor — so the refusal above is caused by the retired
+        // lane and not by a mis-sized region or an unbound store.
+        assert!(
+            run4(
+                alloc_code,
+                f.base,
+                BoundaryTag::PersistentGround as u64,
+                BoundaryClass::Constructor as u64,
+                0
+            ) >= 0,
+            "the same harness admits a GROUND constructor, so the refusals above \
+             are about the lane"
         );
     }
 
@@ -6798,196 +6916,6 @@ pub(crate) mod tests {
             store.adopt(word).is_ok(),
             "the same arena, sealing and binding adopt a GROUND node, so the \
              closure refusal above is about the closure class"
-        );
-    }
-
-    /// ⛔ **`AC-V5`'s LOAD-BEARING arm — a closure capturing a COMPOUND node
-    /// mints nothing.**
-    ///
-    /// ⭐ **Why the sibling above cannot establish this.** Its captures are
-    /// immediates (`[11, 22]`), and an immediate is never interned — so it is
-    /// green whether refusal happens *before* minting or *after*. This fixture
-    /// captures a **constructor node**, which the postorder canonicalizer would
-    /// intern and slot on its way to the closure. The two positions are
-    /// distinguishable only here.
-    ///
-    /// **MEASURED:** `adopt` returns `Err(BOUNDARY_ERR_ESCAPE)`, the store's
-    /// resident slot count is unchanged, and both nodes still carry
-    /// `NULL_SLOT`.
-    /// **CLAIMED:** refusal precedes any byte, hash, slot or provenance.
-    /// **THE GAP:** closed by the *compound* capture. With an immediate capture
-    /// there is no byte and no slot for the assertion to be about, so the
-    /// stronger claim rode on a fixture that could not carry it.
-    ///
-    /// ⚠ Found by the Architect on review of `195c2311`, not by me: my control
-    /// asserted the right property against a value that could not exhibit its
-    /// violation.
-    // --- conformance: runtime/values/closure-publication-rejected-transitively ---
-    #[test]
-    fn b2v_acv5_a_closure_capturing_a_compound_node_mints_nothing() {
-        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
-        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
-        let (_cm, alloc_ctor) = compile_producer(5, emit_ctor_node);
-
-        let mut store = BoundaryValueStore::new();
-        store.bind_artifact(fixture_artifact("refused", 3));
-        let tag_id = store.intern_symbol("ctor:fixture::Ground::Leaf");
-        let f = bind_with(
-            &mut store,
-            BoundaryArenaBuilder::new(),
-            (8, 16, 0),
-            (0, 0, 0),
-        );
-
-        // A COMPOUND child — the ground node the sibling control proves adopts
-        // and mints a slot on its own.
-        let child = BoundaryWord(run3(alloc_ctor, f.base, BoundaryWord(tag_id), 0) as u64);
-        assert!(child.0 as i64 > 0, "ctor allocates: {}", child.0 as i64);
-
-        // The closure, capturing it.
-        let closure = BoundaryWord(run3(alloc_closure, f.base, BoundaryWord(3), 1) as u64);
-        assert!(closure.0 as i64 > 0, "closure allocates: {}", closure.0 as i64);
-        assert_eq!(
-            run4(store_field, f.base, closure.0, 0, child.0),
-            BOUNDARY_OK,
-            "the compound capture stores"
-        );
-
-        store.seal_persistent();
-
-        let slots_before = store.store_resident_slots();
-        let residents_before = store.resident_count();
-
-        assert_eq!(
-            store.adopt(closure),
-            Err(BOUNDARY_ERR_ESCAPE),
-            "AC-V5: an ordinary closure is refused at adoption"
-        );
-
-        // ⭐ The three assertions the immediate-capture arm cannot make.
-        assert_eq!(
-            store.store_resident_slots(),
-            slots_before,
-            "AC-V5: the captured COMPOUND child must not have been interned — a \
-             refusal that arrives after its descendants hold canonical bytes and \
-             minted slots is not a refusal 'before any byte, hash or slot'"
-        );
-        assert_eq!(
-            store.resident_count(),
-            residents_before,
-            "AC-V5: and no persistent referent may have been recorded"
-        );
-        assert_eq!(
-            store.node_slot_of(child.payload()),
-            Some(crate::store::NULL_SLOT),
-            "AC-V5: the captured child's NODE_SLOT must be untouched"
-        );
-        assert_eq!(
-            store.node_slot_of(closure.payload()),
-            Some(crate::store::NULL_SLOT),
-            "AC-V5: and so must the closure's own"
-        );
-    }
-
-    /// ⛔ **`AC-V5` — an ALREADY-OWNED closure ROOT is still refused.**
-    ///
-    /// ⭐ **The fast path cannot be the thing that decides this class.**
-    /// `validate_reachable` skips a node carrying a non-`NULL_SLOT` on the
-    /// grounds that "its reachable subtree was validated when it was adopted" —
-    /// an *inductive* argument presupposing adoption always refused closures.
-    /// For this class that premise is precisely what was broken, so consulting
-    /// the slot first is circular and lets a store-resident ordinary closure
-    /// through as "already canonical".
-    ///
-    /// ⚠ Found by @runtime-qa and @architect independently on `deea772f`, where
-    /// the predicate was placed *after* both fast paths while its own doc
-    /// claimed it guarded both admission sites.
-    // --- conformance: runtime/values/closure-publication-rejected-transitively ---
-    #[test]
-    fn b2v_acv5_an_already_owned_closure_root_is_still_refused() {
-        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
-
-        let mut store = BoundaryValueStore::new();
-        store.bind_artifact(fixture_artifact("refused", 3));
-        let f = bind_with(
-            &mut store,
-            BoundaryArenaBuilder::new(),
-            (8, 16, 0),
-            (0, 0, 0),
-        );
-        let closure = BoundaryWord(run3(alloc_closure, f.base, BoundaryWord(3), 0) as u64);
-        assert!(closure.0 as i64 > 0, "closure allocates: {}", closure.0 as i64);
-
-        // The pre-existing identity that triggers the already-owned fast path.
-        store.install_node_slot_for_test(closure.payload(), PREOWNED_SLOT);
-        store.seal_persistent();
-
-        let slots_before = store.store_resident_slots();
-        assert_eq!(
-            store.adopt(closure),
-            Err(BOUNDARY_ERR_ESCAPE),
-            "AC-V5: a closure carrying a pre-existing NODE_SLOT must still be \
-             refused — the fast path must not launder it into a store-owned \
-             ordinary closure"
-        );
-        assert_eq!(
-            store.store_resident_slots(),
-            slots_before,
-            "and the refusal has no further store side effect"
-        );
-    }
-
-    /// ⛔ **`AC-V5` — an ALREADY-OWNED closure DESCENDANT is still refused.**
-    ///
-    /// The root arm exercises the early `return Ok(order)`; this one exercises
-    /// the separate descendant branch that marks an owned child black. ⛔ They
-    /// are different code paths and neither implies the other.
-    // --- conformance: runtime/values/closure-publication-rejected-transitively ---
-    #[test]
-    fn b2v_acv5_an_already_owned_closure_descendant_is_still_refused() {
-        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
-        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
-        let (_cm, alloc_ctor) = compile_producer(5, emit_ctor_node);
-
-        let mut store = BoundaryValueStore::new();
-        store.bind_artifact(fixture_artifact("refused", 3));
-        let tag_id = store.intern_symbol("ctor:fixture::Ground::Leaf");
-        let f = bind_with(
-            &mut store,
-            BoundaryArenaBuilder::new(),
-            (8, 16, 0),
-            (0, 0, 0),
-        );
-
-        let closure = BoundaryWord(run3(alloc_closure, f.base, BoundaryWord(3), 0) as u64);
-        assert!(closure.0 as i64 > 0, "closure allocates: {}", closure.0 as i64);
-        let parent = BoundaryWord(run3(alloc_ctor, f.base, BoundaryWord(tag_id), 1) as u64);
-        assert!(parent.0 as i64 > 0, "ctor allocates: {}", parent.0 as i64);
-        assert_eq!(
-            run4(store_field, f.base, parent.0, 0, closure.0),
-            BOUNDARY_OK,
-            "the closure is stored as the ctor's field"
-        );
-
-        store.install_node_slot_for_test(closure.payload(), PREOWNED_SLOT);
-        store.seal_persistent();
-
-        let slots_before = store.store_resident_slots();
-        assert_eq!(
-            store.adopt(parent),
-            Err(BOUNDARY_ERR_ESCAPE),
-            "AC-V5: a NESTED closure carrying a pre-existing NODE_SLOT must \
-             still be refused, transitively"
-        );
-        assert_eq!(
-            store.store_resident_slots(),
-            slots_before,
-            "and the parent must not have been interned on the way"
-        );
-        assert_eq!(
-            store.node_slot_of(parent.payload()),
-            Some(crate::store::NULL_SLOT),
-            "and the parent's own NODE_SLOT is untouched"
         );
     }
 
@@ -7068,38 +6996,6 @@ pub(crate) mod tests {
 
 
 
-    /// **`AC-6`/`AC-7` — an invocation-owned capture is refused BEFORE the
-    /// parent publishes.**
-    ///
-    /// The parent survives the invocation and the capture does not, so a
-    /// published parent reaching one would name freed storage.
-    #[test]
-    fn b2v_ac6_an_invocation_owned_capture_rejects_before_publication() {
-        let (_am, alloc_closure) = compile_producer(3, emit_closure_node);
-        let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
-
-        let mut store = BoundaryValueStore::new();
-        store.bind_artifact(fixture_artifact("escape", 7));
-        let mut builder = BoundaryArenaBuilder::new();
-        let borrowed = materialize_borrowed(&mut builder, 0xBEEF);
-        let f = bind_with(&mut store, builder, (4, 8, 0), (0, 0, 0));
-        let word = BoundaryWord(run3(alloc_closure, f.base, BoundaryWord(4), 1) as u64);
-
-        // ⛔ The emitted store refuses it at construction — the invariant is
-        // enforced where it is created.
-        assert_eq!(
-            run4(store_field, f.base, word.0, 0, borrowed.0),
-            BOUNDARY_ERR_ESCAPE,
-            "AC-6: a persistent closure must not capture invocation-owned ingress"
-        );
-        // ⚠ POSITIVE CONTROL — the same slot takes a persistent capture, so the
-        // refusal is about the OWNER and not about the slot.
-        let ok_capture = BoundaryWord::immediate(BoundaryTag::ImmediateInt, 5);
-        assert_eq!(
-            run4(store_field, f.base, word.0, 0, ok_capture.0),
-            BOUNDARY_OK
-        );
-    }
 
     /// **`AC-6` — `HostResult` and `BorrowedOpaque` are never placed in the
     /// permanent store.**
@@ -7122,7 +7018,6 @@ pub(crate) mod tests {
             );
         }
     }
-
 
     // ───────────────────────────────────────────────────────────────────────
     // The cycle / depth contract
@@ -7583,7 +7478,7 @@ pub(crate) mod tests {
                 .any(|(t, classes)| *t == tag && classes.contains(&class))
         };
 
-        let (mut both, mut neither) = (0usize, 0usize);
+        let (mut both, mut neither, mut retired) = (0usize, 0usize, 0usize);
         for tag in BoundaryTag::ALL {
             for class in BoundaryClass::ALL {
                 let mirror = boundary_relation_admits(tag, class);
@@ -7595,6 +7490,22 @@ pub(crate) mod tests {
                     "R5: the Rust mirror and the partition disagree on {tag:?} + \
                      {class:?} — mirror={mirror}, partition={derived}"
                 );
+                // ⛔ `RT-FNSPLIT-C1` `D5` — the RETIRED cell agrees on "not
+                // admitted" but for a DIFFERENT REASON than an illegal cell, and
+                // the difference is the deliverable. `BOUNDARY_TAG_CLASS_RELATION`
+                // still SPELLS this cell — that is what a tombstone is — while
+                // the partition drops it, so counting it as `neither` would let
+                // the row total below silently absorb a lane that vanished from
+                // the mirror entirely.
+                if crate::boundary_value::boundary_lane_is_retired(tag, class) {
+                    assert!(
+                        !mirror && !derived,
+                        "D5: the retired lane {tag:?} + {class:?} must be admitted \
+                         by NEITHER authority — recognition never widens admission"
+                    );
+                    retired += 1;
+                    continue;
+                }
                 if mirror {
                     both += 1;
                 } else {
@@ -7602,6 +7513,14 @@ pub(crate) mod tests {
                 }
             }
         }
+        // ⚠ NON-VACUITY for the retired arm — a predicate-guarded `continue`
+        // that a silently-emptied tombstone list would take zero times.
+        assert_eq!(
+            retired,
+            crate::boundary_value::BOUNDARY_RETIRED_LANES.len(),
+            "D5: the sweep exercised {retired} retired lanes but {} are declared",
+            crate::boundary_value::BOUNDARY_RETIRED_LANES.len()
+        );
         // ⚠ NON-EMPTY POSITIVE CONTROLS on both arms, per clause 5. A relation
         // that admitted everything, or nothing, would make the agreement above
         // hold for a reason that has nothing to do with the two sides matching.
@@ -7616,13 +7535,21 @@ pub(crate) mod tests {
         );
         // And the admitted count is the mirror's own content, so a mirror that
         // silently emptied would redden here rather than pass the sweep above.
+        //
+        // ⛔ **The schema is no longer the admitted set** (`D5`): it retains the
+        // retired rows precisely so a refusal can name them, so the admitted
+        // total is the schema MINUS those rows. ⚠ Derived from both authorities,
+        // never re-fitted to the observed count — this goes red if the schema OR
+        // the tombstone list moves.
         let rows: usize = BOUNDARY_TAG_CLASS_RELATION
             .iter()
             .map(|(_, classes)| classes.len())
             .sum();
         assert_eq!(
-            both, rows,
-            "R5: the swept agreement count does not match the mirror's own rows"
+            both,
+            rows - crate::boundary_value::BOUNDARY_RETIRED_LANES.len(),
+            "R5: the swept agreement count does not match the mirror's own rows \
+             less the retired vocabulary"
         );
     }
 

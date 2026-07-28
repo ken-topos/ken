@@ -699,6 +699,31 @@ pub(crate) fn boundary_lane_is_retired(tag: BoundaryTag, class: BoundaryClass) -
         .any(|(retired_tag, retired_class)| *retired_tag == tag && *retired_class == class)
 }
 
+/// The tags that are **recognized but carry no admitted lane**, given the
+/// partition's admitted tag set (`RT-FNSPLIT-C1` `D5`).
+///
+/// ⛔ **Derived from BOTH authorities at every call site, never written down.**
+/// A tag is retired exactly when it names a retired lane *and* the live
+/// partition admits it nowhere — so a tag that still has one surviving admitted
+/// lane is **not** reported here, because such a tag is genuinely admitted and
+/// refusing it by name would be the inverse error.
+///
+/// ⭐ **Why this is a function of the plan and not a seventh field on
+/// [`BoundaryTagAdmission`].** Every emitted helper already holds the plan's
+/// admitted set; taking it as an argument means each mutation fixture derives
+/// its retired set from *its own* admitted set rather than from a hand-written
+/// list that would drift into a second authority — which is the defect the
+/// whole partition-derived plan exists to avoid.
+pub(crate) fn boundary_retired_tags(admitted: &[BoundaryTag]) -> Vec<BoundaryTag> {
+    let mut tags: Vec<BoundaryTag> = Vec::new();
+    for (retired_tag, _) in BOUNDARY_RETIRED_LANES {
+        if !admitted.contains(retired_tag) && !tags.contains(retired_tag) {
+            tags.push(*retired_tag);
+        }
+    }
+    tags
+}
+
 /// Whether the ABI admits this `(tag, class)` pair, per the Rust mirror.
 ///
 /// The Rust builders' fail-before-publication check. Kept because they cannot
