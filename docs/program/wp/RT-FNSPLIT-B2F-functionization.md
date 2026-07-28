@@ -89,7 +89,7 @@ previously stated at `0aa9e53f`, four merges back, and several had moved.
 > | `#9` | ✅ ruled | `evt_842spc7t6js1` + `evt_t4fykh52ncb` | the re-slice → `B2O`, `B2R` |
 > | `#10` | ✅ **ruled** | `evt_28cnmxf6ncghn` | inserted **`B2V`** — ⛔ *not* open |
 > | `#11` | ✅ **ruled** | `evt_7ay6s5s79awz8` (`dec_45aa2gngjc79z`) | retired `B2E`, produced **`C1`** |
-> | `#12` | ▶ **OPEN** | `evt_4mkg2vrted1xn` (2026-07-28 15:54) | the functionized process host-dispatch context has **no declared lane** — Architect lane, routed by `runtime-leader` |
+> | `#12` | ✅ **RULED** 16:16 | `evt_27wg681jcke4v` | a **typed call-frame envelope** — transcribed in full below. ⛔ No new node, no ABI change |
 >
 > ⭐ **Every prerequisite those rulings named has now MERGED:** `B2O`, `B2R`,
 > `B2V`, and **`C1` (PR #1156, `origin/main = feab3cb5`, blob-verified)**.
@@ -121,6 +121,110 @@ previously stated at `0aa9e53f`, four merges back, and several had moved.
 > explicitly does not reopen `#9` or `#10`, add a prerequisite, reset the count,
 > or hold this build.** ⇒ No recut frame is owed; the count stays **11**. Durable
 > record: `docs/program/issues/RT-NATIVE-FNSPLIT.md`.
+
+> ## ✅ HARD STOP `#12` — RULED 2026-07-28 16:16, `evt_27wg681jcke4v`
+>
+> **Architect ruling, transcribed because an in-thread ruling is not a durable
+> deliverable — and this chain has already lost three rulings to the channel.**
+> Bound to exact `wp/RT-FNSPLIT-B2F-functionization-live=b9280d4c`, tree
+> `67619b6e`. ⛔ **No new node. No ABI change. No prerequisite.**
+>
+> **The stop was valid.** The internal ABI stays exactly
+> `(frame_ptr, services_ptr) -> i64` and `GeneratedActivationServicesV1` stays
+> exactly its landed two-field record. ⛔ No third argument, no B2R host-context
+> slot, no implicit tail, and no unit may receive or reload the old invocation
+> record.
+>
+> ### 1. `frame_ptr` points to a fixed envelope, not to the B2R payload
+>
+> ```rust
+> #[repr(C)]
+> struct GeneratedUnitCallFrameV1 {
+>     slots: *mut u8,
+>     host_dispatch_context: *mut core::ffi::c_void,
+> }
+> ```
+>
+> Both offsets derive from **one closed field inventory**, as `C3` does for the
+> services record — ⛔ not hand-maintained constants. `slots` points at exactly
+> the program-derived B2R payload: its size stays `AbiFrameHeader::frame_bytes`
+> and every `AbiSlot` offset stays relative to that base.
+> `host_dispatch_context` is one uniform non-Ken runtime capability — ⛔ not
+> counted in `frame_bytes`, not an `AbiSlot`, no `AbiCarrier`, and **never
+> consulted to reconstruct a semantic environment.** ⇒ No hidden prefix/tail and
+> no second slot-layout derivation.
+>
+> ### 2. The public root adapter is the ONLY launch-ingress consumer
+>
+> ```rust
+> #[repr(C)]
+> struct GeneratedRootIngressV1 {
+>     process_input: *const core::ffi::c_void,
+>     host_dispatch_context: *mut core::ffi::c_void,
+>     capability: u64,
+> }
+> ```
+>
+> ⛔ The opaque pointer from `ken_activation_v1_bind_process_frame` is **launch
+> ingress only and never enters the unit call graph.** The adapter loads the
+> three fields once, B2V-transfers `process_input` + `capability` into the root's
+> two declared slots, builds the envelope, and calls the selected root unit.
+> ⭐ **After that split no emitted unit holds a pointer from which offsets `0` or
+> `16` can recover the source pair.** The native-Int arena is absent — it already
+> comes from `services_ptr`.
+>
+> Retire `FunctionLocalRefs::invocation_pointer`. Narrow the private
+> `ken_host_dispatch_v1` first-pointer contract to the direct host context —
+> **symbol and pointer-plus-four-operands signature unchanged**; the
+> implementation stops casting to `NativeInvocationV1`. Sound on the measured
+> implementation: dispatch dereferences only `invocation.host_context`.
+>
+> ### 3. Admit the root pair through a CLOSED STATIC ingress declaration
+>
+> ⛔ Do **not** make every `SchedulingEntry` arity two, and ⛔ do **not** identify
+> the root by descriptor ordinal, function id, or spelling. Record the root
+> scheduling entry explicitly at the planner's root visit and pass that
+> unmintable `StaticNodeId` into ABI-plane construction, with
+> `AbiRootIngress {Value, Process}`, `AbiSchedulingIngress {Empty, ProcessPair}`,
+> and `AbiProcessParameter {ProcessInput, Capability}`.
+>
+> `ProcessPair` declares exactly two `Parameter / ValueWord` slots, ordinals `0`
+> and `1` **in that order**; export a role-keyed
+> `process_parameter_slot(AbiProcessParameter)` from the validated plan so the
+> adapter ⛔ cannot re-search or restate the ordinals. This is compilation
+> configuration, not a runtime value ⇒ **B2R's value-independence holds.** A
+> retained body gets either binding only through ordinary closure conversion;
+> ⛔ no ambient-capture provenance.
+>
+> ### 4. Five required controls — the ruling is not discharged without all five
+>
+> 1. Process root has exactly the two role-keyed parameter slots; non-process
+>    root and transparent scheduling entries stay zero-parameter.
+> 2. The existing AC-14 pair: deleting either root/callee slot reds; an otherwise
+>    identical retained body not closing over a binding does not acquire a slot.
+> 3. One root **and** one descendant host-effect both succeed through the same
+>    direct `host_dispatch_context`. ⭐ Mutating descendant propagation to
+>    `services_ptr`, either arena, null, or the launch-ingress pointer **reds at
+>    the host-dispatch assertion while source-slot controls stay green.**
+> 4. Recovering process input/capability from the fixed context instead of the
+>    declared slot reds — and the production shape should make that mutation
+>    require **reintroducing a forbidden launch-ingress pointer**, not merely
+>    changing an offset.
+> 5. Inventory/layout: envelope exactly two fields, services record exactly two
+>    fields, every internal root/unit signature exactly two pointer parameters.
+>
+> ### ⚠ THIS SUPERSEDES AN EARLIER PROVISIONAL STATEMENT
+>
+> The earlier statement that **the raw activation-context pointer could occupy
+> the second unit parameter is superseded** — `C3` has since assigned that
+> parameter to the landed services record. ⭐ **The source-pair ruling is
+> unchanged; only the fixed runtime-context carrier is corrected.**
+>
+> **Routing:** `runtime-leader` routed the exact mechanism at 16:17
+> (`evt_3ba6ftktqcm0j`); `runtime-implementer` resumed the named build turn from
+> clean `b9280d4c` at 16:18 (`evt_c6fha599syxm`), which stays the **pre-envelope
+> boundary**. ⛔ Envelope, ingress declaration, direct-dispatch contract and
+> controls **land together**.
 
 ---
 
