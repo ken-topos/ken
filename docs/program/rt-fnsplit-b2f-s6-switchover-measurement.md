@@ -331,11 +331,11 @@ spill_block:     require_i64(status, BOUNDARY_ERR_BOUNDS);   // ⭐ outcome 3
 Written that way it cannot be reduced to a two-way branch by an edit that looks
 like a simplification.
 
-### ⚠ FINDING 5 — the third outcome is structurally unreachable, and that is a claim about two tables
+### ⚠ FINDING 5 — the third outcome is unreachable, by two tables
 
 **A mutation deleting `require_i64(status, BOUNDARY_ERR_BOUNDS)` leaves every
-behavioural row green.** ⛔ The tempting reading — *"the controls are weak"* — is
-wrong, and the correct one is not visible from the dispatch alone:
+behavioural row green.** ⛔ The tempting reading — *"the controls are weak"*
+— is wrong, and the correct one is not visible from the dispatch alone:
 
 - `make_immediate` answers `ERR_SHAPE` in exactly two situations: a **handle**
   tag, and a payload outside a **`Bit`** domain. Every other refusal is
