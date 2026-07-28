@@ -1,7 +1,16 @@
 # `RT-SCALE-B` — Boundary B: full emission measurement, analytical model, verdict
 
 **Owner:** Runtime ring (empirical) + **Architect** (analytical) · **Size:** L
-**Depends on:** `RT-SCALE-A`, `RT-FNSPLIT-B2F` · **Blocks:** `RT-NATIVE-FNSPLIT`
+**Depends on:** `RT-SCALE-A`, `RT-FNSPLIT-B2F`, **`RT-FNSPLIT-RECUR-PORT`** ·
+**Blocks:** `RT-NATIVE-FNSPLIT`
+
+> ⛔ **`RT-FNSPLIT-RECUR-PORT` IS A GATE ON THIS NODE AND THIS LINE ONCE OMITTED
+> IT.** `RT-SCALE-A` and `RT-FNSPLIT-B2F` are both `merged`, so a reader of the
+> old line would have concluded this node was releasable **now**. It is not:
+> `RECUR-PORT` is `active`, and it is the **only** unmet dependency. ⇒ ⭐ **This
+> node enters the frontier automatically the moment `RECUR-PORT` merges** — the
+> node file's `depends_on` was always correct and is what `gen-progress.sh`
+> reads.
 
 > ## ⛔ THIS NODE DECIDES WHETHER THE EFFORT WORKED
 >
@@ -103,6 +112,28 @@ derived solely from this node's own table.
 `RT-SCALE-A`'s `D5`. ⛔ **If `k` is still unmeasured, say so and treat the
 stack axis as carrying no weight**, rather than substituting an inferred
 per-frame figure.
+
+> ### ✅ `k` IS MEASURED — the fallback above does NOT apply. Verified 2026-07-28.
+>
+> `RT-SCALE-A` merged with `D5` discharged. The instrument is
+> `RecursiveLoweringFrameGuard` in
+> `crates/ken-runtime/src/cranelift_backend/planning/static_transition.rs`
+> (`ACTIVE_` / `MAX_RECURSIVE_LOWERING_FRAMES`).
+>
+> ⭐ **It measures the real thing.** The guard is entered **inside `plan_expr`**
+> and its `Drop` runs on every `?` return as well as the ordinary path, so it
+> observes the **production `plan_expr` call stack** — ⛔ **not** a proxy derived
+> from bracket depth or expression-node counts. ⇒ That is precisely the
+> laundering `RT-SCALE-A`'s `D5` was written to forbid, and it was not committed.
+>
+> ⚠ **It is `#[cfg(test)]`, and that is correct here, not a defect.** `D5`'s
+> deliverable is to *measure* `k`, not to ship it — a test-only instrument
+> observing production recursion discharges that. ⛔ Do not read the `cfg` and
+> conclude the measurement is unavailable.
+>
+> ⇒ **`D4` must therefore report `k` and carry the stack axis.** ⛔ Invoking the
+> "treat the stack axis as carrying no weight" fallback is now a **failed `AC-B6`**,
+> not a permitted degradation.
 
 ### `D5` — the verdict, in the operator's two shapes
 
