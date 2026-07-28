@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-28 15:28:23Z — from 119 issue file(s) in `docs/program/issues/`.
+2026-07-28 15:40:56Z — from 119 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -200,9 +200,11 @@ is itself not yet `merged`/`closed`:
 - `PX8-ERRID-SCOPE` blocked by `PX8-ERRID-ALLOC` (status: draft)
 - `PX8-F-CAP-41` blocked by `NATIVE-HANDLE-CARRIER` (status: draft)
 - `PX8` blocked by `PX8-F-CAP-41` (status: draft)
+- `PX8` blocked by `PX8-ERRID-SCOPE` (status: draft)
 - `PX9` blocked by `PX8` (status: draft)
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
 - `RT-FNSPLIT-B2O-CHECK` blocked by `RT-FNSPLIT-B2F` (status: ready)
+- `RT-NATIVE-FNSPLIT` blocked by `RT-SCALE-B` (status: ready)
 - `RT-SCALE-B` blocked by `RT-FNSPLIT-B2F` (status: ready)
 
 ## Gate progress
