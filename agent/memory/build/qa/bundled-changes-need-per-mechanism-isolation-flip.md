@@ -1,5 +1,5 @@
 ---
-scope: build
+scope: build/qa
 audience: (see scope README)
 source: private memory `bundled-changes-need-per-mechanism-isolation-flip`
 ---
@@ -42,6 +42,6 @@ riding together, a fix + its own regression guard), don't stop at a whole-bundle
 isolation-flip. Synthesize per-mechanism variants (delete just one change from
 the post-fix source, keep the rest) and flip each separately against the tests
 that are supposed to depend on it. This is the bundled-change generalization of
-discriminating flip must be checked per test — that lesson says check
+[[discriminating-flip-must-be-checked-per-test]] — that lesson says check
 per-*test*, not aggregate; this one says when the fix itself isn't a single
 mechanism, also check per-*mechanism*, not per-bundle.

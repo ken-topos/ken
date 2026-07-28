@@ -6,7 +6,7 @@ source: DOC-VALIDATION-BINDING retros, 2026-07-24 — named independently by the
   evt_78qng91927xvj. Tier-1 candidate: two seats, one team, one run.
 ---
 
-# A claimed executable inventory needs a **reversible deletion proof** that fails at its *stored* reference
+# An executable inventory needs a reversible deletion proof at its stored reference
 
 When a mechanism claims *"this registry is the one authoritative list, and every
 row in it actually runs,"* the text of the registry is **not evidence**. A list
@@ -37,9 +37,9 @@ build found the item some other way, and the registry is decoration.
 A test asserts the inventory is complete **at the moment it runs**. The
 deletion proof shows the inventory **cannot be incomplete** — an unlisted or
 misnamed entry stops compiling. That converts a checked property into a
-structural one, which is the same move as
-[[exhaustive-by-construction]]: make the load-bearing completeness a **compile
-error**, not an assertion.
+structural one — the same move as making a matcher exhaustive by
+construction: make the load-bearing completeness a **compile error**, not an
+assertion.
 
 ⇒ It also generalizes well past this gate. Any *"X is the single source of
 truth"* claim — a dispatch table, a manifest, a capability registry, a

@@ -274,33 +274,12 @@ visible `Axiom` pending K7" (parallel to sym/trans pending K6).
 Conclusion-shape-match is necessary, operand-reduction-fires is the further
 necessary condition.
 
-**Capability-gate PROSE has THREE states, and BOTH transitions go stale-on-
-arrival — decouple + own-the-flip (K7 erratum close, 2026-07-02).** A parked
-capability's spec/seed prose passes through **over-claim → interim-park →
-realized**, and the middle state is intrinsically transient, so a "main-honesty"
-erratum that lands it can itself be stale on arrival in *both* directions: (1)
-**over-claim side** — "needs K7 (forward)/pending K7" goes false the moment K7
-merges (K7 was landing *concurrently*). Fix = **decouple the capability axis
-from the proof-wiring axis**: "needs the K5+K7 *kernel capability* (cite by
-capability + spec §, e.g. `16 §8.1`) — park pending the *ES4-lawproofs-remainder
-real-proof wiring*." Honest under either merge order. And **cite a squash-bound
-gate by capability, NEVER its branch-tip SHA** — the publisher path squashes, so the
-tip (`b7396ae`) is a phantom that never appears on main; only an already-merged
-gate's real SHA (K5 `1c84a30`) is safe to name (CV's catch; sibling of check
-main via git object store not find). (2) **under-claim side** — the honest "park
-pending the wiring" goes stale the instant the wiring lands (`9a82745` wired
-real antisym/sound/complete zero-delta proofs — "no `Axiom` remains" — the *same
-window* as the erratum + K7). The build/wiring commit (Team Language) correctly
-stays in its lane (`.ken` + tests, even fixes its own `.ken` doc comments) and
-does NOT touch spec §6 / conformance seed — those are spec-author + CV. So the
-**park→realized flip is a DUE, OWNED lifecycle step** that must be **pre-filed
-and scheduled to land in the same window as the wiring commit**, or
-verify-on-main finds a stale under-claim on main (I caught it as my post-merge
-gate; spec-leader had already called the erratum "closed"). Playbook line: when
-a build WP will *realize* a parked capability, pre-file the coupled spec/seed
-park→realized flip so it merges with the wiring — don't leave it to be
-discovered after. The over-claim erratum and the under-claim flip are the two
-bookends of the same un-stage; both are spec-author's to own. Extends the
+**Capability-gate PROSE has THREE states — the K7 instance of the general
+rule.** The K7 erratum close (2026-07-02) is the concrete case that produced
+[[capability-gate-three-state-lifecycle]] (`#38`/`#39`: decouple the
+capability axis from the proof-wiring axis; the `9a82745` under-claim once the
+real `antisym`/`sound`/`complete` proofs wired). See that file for the general
+over-claim/interim-park/realized rule and how to apply it; it extends the
 un-stage-must-re-derive-per-obligation rule above.
 
 **Reviewer corollary — the interim-net keying check (#34 Fidelity,

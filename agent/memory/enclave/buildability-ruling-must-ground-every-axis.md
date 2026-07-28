@@ -29,12 +29,17 @@ But **the first fix carried a second over-claim**: it kept `toList`-ordered in
 the "buildable now" column because its proof is comparison-free (never touches
 the stuck `leq`) — clearing Gap A. It still didn't build: `toList` ordered
 inducts over the non-nullary `Tree`/`List` carrier, and `check_match_dependent`
-is gated to **nullary constructors only** (`ken-elaborator/src/elab.rs:455`) — a
-second, unrelated wall ("Gap B": dependent-motive narrowing, not equality
-transport). The Architect's ruling reasoned correctly about Gap A and missed Gap
-B entirely, because the reasoning was scoped to the axis under discussion. Only
-foundation-implementer's actual build attempt (an empirical 2-line repro with no
-`leq` in it at all) surfaced the second wall.
+was gated to **nullary constructors only** — a second, unrelated wall ("Gap B":
+dependent-motive narrowing, not equality transport). The Architect's ruling
+reasoned correctly about Gap A and missed Gap B entirely, because the reasoning
+was scoped to the axis under discussion. Only foundation-implementer's actual
+build attempt (an empirical 2-line repro with no `leq` in it at all) surfaced
+the second wall. (**Gap B has since been closed** — `check_match_dependent`
+now emits IH slots for non-nullary recursive fields, `elab.rs`'s
+`dependent-match-nonnullary`/Map-Gap-B path; verify current state before
+citing this as a live wall. The discipline the incident teaches — ground
+every axis, don't stop at the one under debate — is what's durable here, not
+the specific gap.)
 
 **Why this survives review.** Every review pass — spec-author's own, the
 Architect's ruling, CV's grounding — was implicitly scoped to "is the axis under
@@ -46,8 +51,9 @@ grep) surfaces it.
 
 **The axis checklist (grep each, don't reason only from the salient one):**
 1. **Elaboration path** — does the surface `match`/def lower to a well-formed
-   core term? (`check_match_dependent`'s nullary gate; `infer_match`'s constant
-   motive; the nested-pattern compiler.)
+   core term? (a dependent-match motive gate; `infer_match`'s constant motive;
+   the nested-pattern compiler — grep the current gate, don't assume the
+   Gap-B-era nullary restriction still holds.)
 2. **Termination (SCT)** — does the recursion pass `sct_check`? A separate
    fail-closed gate with its own completeness holes.
 3. **Transport / propositional rewrite** — is there a stuck comparison needing

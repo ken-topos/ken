@@ -1,5 +1,5 @@
 ---
-scope: build/leaders
+scope: build
 audience: (see scope README)
 source: private memory `wp-branch-handoff-deadlock-leader-holds`
 ---

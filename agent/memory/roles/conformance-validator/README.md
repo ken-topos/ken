@@ -10,3 +10,4 @@ the independent Spec review vote.
 | [conformance-oracle-grounding-fallback](conformance-oracle-grounding-fallback.md) | How to ground /conformance expected results when the prototype oracle isn't runnable |
 | [conformance-validator-casts-spec-review-vote](conformance-validator-casts-spec-review-vote.md) | The conformance-validator casts the Spec review vote on every merge Decision touching spec/conformance |
 | [delivery-contract-op-list-can-overscope](delivery-contract-op-list-can-overscope.md) | Casting the Spec vote on a delivery contract: re-derive scope from source |
+| [spec-crossref-must-resolve-to-content-not-a-number](spec-crossref-must-resolve-to-content-not-a-number.md) | A spec cross-reference must resolve to its claimed CONTENT, not just a `§`-number — six instances, one discipline |

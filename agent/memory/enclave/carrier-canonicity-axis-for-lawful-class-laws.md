@@ -41,6 +41,24 @@ non-canonical-carrier law that shouldn't exist at all — the postulate chain
 transport), because the check never asks whether the *statement being postulated
 is even true*.
 
+**The general shape: any law tying an op to the kernel's propositional `Equal`
+is carrier-gated.** Not just `DecEq.sound` — `DecEq.sound : (x y) →
+IsTrue(eq x y) → Equal a x y` and `Ord.antisym : … → Equal a x y` are both only
+deliverable over a canonical carrier; over a non-canonical one the law is a
+**false meta-theorem**, so postulating it (`sound = Axiom`) genuinely
+**inhabits `Bottom`** — a real false-proof hole, not merely a wrong value. When
+this fires, the fix is **not** "the proof bottoms at a landed floor" — there is
+no honest Axiom to write. Re-defer to a canonicalize-or-quotient/setoid design
+call instead.
+
+**Live self-correction (`wp/num-landedness-erratum` Fix-2, `0198110`).**
+Architect surfaced this on the lawful-lane Decimal WP; I independently
+re-derived the `Bottom` witness and corrected my OWN just-landed AC-D3
+over-claim ("`DecEq Decimal` bottoms at the landed `DecEq Int` Axiom") across 6
+coupled seed sites. No unsound code shipped — the build correctly HELD before
+authoring the instance; only the doc over-claim existed. Same
+absolute-honesty family as reconcile own over claim then grep coupled.
+
 **How to apply.** Before accepting or authoring any lawful-class instance
 (`Eq`/`DecEq`/`Ord`/`Num`/…) over a DEMOTE'd or derived carrier, ask FIRST: is
 the carrier canonical? If not, any law tying a value-level operation to

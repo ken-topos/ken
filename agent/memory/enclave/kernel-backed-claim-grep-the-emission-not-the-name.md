@@ -93,3 +93,21 @@ erratum'd at the gate), and a flat "the kernel-re-checked comment is a mislabel"
 would have been the opposite error. This is two arm producer needs a case per
 arm applied to trust-level prose: one arm trusted, the other kernel-backed, each
 pinned by its own emission grep.
+
+**CV's own record of the same incident — the catch is the dual of the base
+rule, not just an instance of it.** The base rule above warns against
+**over**-claiming kernel-backing (a trusted bool mislabeled
+"kernel-rechecked"); this near-miss was the **opposite**: my own §2c wrote
+"the runtime `authorizes`/`attenuate` checks are trusted Rust-level … no
+`declare_postulate` emission" — true for the runtime gate, but **false** for
+`attenuate`'s static obligation, which does emit. I'd grepped one check (the
+runtime bool), found nothing, and generalized the "trusted, no emission"
+verdict across the whole module — flattening a **per-check** distinction into
+a **per-module** one. It nearly shipped next to spec-author's correct D5
+split; their fold caught it, I self-erratum'd before resolve. **How to apply,
+sharpened:** (1) enumerate each check in a module and grep *its own* discharge
+path — don't let one check's verdict cover a sibling; (2) grep **both
+directions** (over-claim risk AND under-claim risk) every time, not just the
+direction you're primed to suspect; (3) when a co-author's parallel doc splits
+a distinction your artifact flattened, treat that as a signal to re-grep your
+**own** claim, not to assume theirs is the over-precise one.

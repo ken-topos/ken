@@ -78,10 +78,28 @@ narrower scopes on your path (its path + ancestors).
 
 These are **lessons, not law** — recall aids that reflect what was true when
 written; verify a named file/flag/function still exists before acting on one.
-Record a new lesson at the broadest scope where every reader must apply it; a
-genuinely cross-cutting one gets a `scope:` frontmatter tag rather than a copy.
+Record a new lesson at the broadest scope where every reader must apply it.
 This corpus is the source of truth — Codex's generated `~/.codex/memories/` (if
 ever enabled) is supplemental only, never canonical.
+
+> ### ⭐ DIRECTORY PLACEMENT IS AUTHORITATIVE. Read your scopes and STOP.
+>
+> **A lesson's audience is exactly the directory it sits in.** ⇒ Reading your
+> scopes (your path + ancestors) is **complete** — nothing applicable to you is
+> filed anywhere else. ⛔ **Do not scan the rest of the corpus**, and do not read
+> frontmatter hunting for lessons that opt into your scope.
+>
+> ⚠ **A `scope:` frontmatter key is redundant metadata, not routing.** It sits on
+> most files and every occurrence merely restates its own directory. ⛔ It
+> confers nothing and is not consulted. To reach a wider audience, **move the
+> file to the wider scope** — that is the only mechanism.
+>
+> ⛔ **Why this is stated so flatly:** the previous wording let a cross-cutting
+> lesson stay put and carry a `scope:` tag instead. That made directory placement
+> non-authoritative, so the only *sound* way to honour it was to read all 260
+> files' frontmatter at every startup — ~109 KB beyond a role's actual scope,
+> paid again at every compaction. ⭐ **The mechanism was never once used**, so
+> that cost bought nothing.
 
 ## Reference material is off-limits to code authors
 

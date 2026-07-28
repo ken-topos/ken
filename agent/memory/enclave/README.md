@@ -1,7 +1,8 @@
 # enclave — T1 clean-room design/soundness lessons
 
 Loaded by the T1 enclave: steward, architect, spec-author, spec-leader,
-conformance-validator. Design-reasoning, soundness-review, and spec-authoring
+conformance-validator, research, adversary. Design-reasoning, soundness-review,
+and spec-authoring
 discipline — the recurring shapes of a fork ruling, a soundness audit, or a
 conformance-reconcile that generalize across WPs. A lesson tied to one specific
 role's own mechanics (not shared reasoning) belongs in `roles/<role>` instead.
@@ -20,7 +21,6 @@ role's own mechanics (not shared reasoning) belongs in `roles/<role>` instead.
 | [conformance-assert-at-locked-granularity](conformance-assert-at-locked-granularity.md) | A conformance case must assert at the spec's locked granularity |
 | [conformance-reconcile-inherits-spec-metatheory-bugs](conformance-reconcile-inherits-spec-metatheory-bugs.md) | Content-reconciling a conformance case inherits the spec's metatheory bugs |
 | [contract-spec-defer-spelling-not-concept](contract-spec-defer-spelling-not-concept.md) | Defer the spelling, not the concept, in a wire/serialization spec |
-| [deceq-on-noncanonical-carrier-inhabits-bottom](deceq-on-noncanonical-carrier-inhabits-bottom.md) | A DecEq instance over a non-canonical carrier is genuinely unsound |
 | [differential-verify-which-mechanism-is-the-net](differential-verify-which-mechanism-is-the-net.md) | Differential-verify which mechanism is the actual soundness net |
 | [disclaimed-framing-still-binds-your-own-companion-artifact](disclaimed-framing-still-binds-your-own-companion-artifact.md) | Disclaiming a framing doesn't protect your own companion artifact |
 | [discriminating-axis-vacuous-until-capability-lands](discriminating-axis-vacuous-until-capability-lands.md) | A discriminating axis can be design-real yet build-vacuous |
@@ -30,7 +30,7 @@ role's own mechanics (not shared reasoning) belongs in `roles/<role>` instead.
 | [enclave-elaborates-autonomously-no-build-team-pulls](enclave-elaborates-autonomously-no-build-team-pulls.md) | The spec enclave elaborates autonomously — never pull in a build-team lead |
 | [enclave-ruling-in-thread-is-not-a-durable-deliverable](enclave-ruling-in-thread-is-not-a-durable-deliverable.md) | An enclave ruling articulated in a thread is not yet a deliverable |
 | [grounding-a-fabricated-citation-two-failure-modes](grounding-a-fabricated-citation-two-failure-modes.md) | Fixing a laundered citation has two failure modes past stripping the token |
-| [higher-kinded-class-param-and-funext-definitional](higher-kinded-class-param-and-funext-definitional.md) | Higher-kinded class params are hard-coded to Type0; funext is definitional |
+| [higher-kinded-class-param-and-funext-definitional](higher-kinded-class-param-and-funext-definitional.md) | Higher-kinded class params needed an outer-ring fix (now landed); funext is definitional |
 | [ken-owns-program-validity-not-runtime-constraint-caps-declared-in-program](ken-owns-program-validity-not-runtime-constraint-caps-declared-in-program.md) | Ken owns program validity, not runtime constraint; capabilities are declared IN the program (with the admits roster), not granted at the CLI |
 | [kernel-backed-claim-grep-the-emission-not-the-name](kernel-backed-claim-grep-the-emission-not-the-name.md) | Verify a kernel-backed claim by grepping the emission, not the name |
 | [kernel-backed-obligation-certificate-vs-discrimination](kernel-backed-obligation-certificate-vs-discrimination.md) | A kernel-backed obligation can notarize a certificate without re-deriving the discrimination |
@@ -59,7 +59,6 @@ role's own mechanics (not shared reasoning) belongs in `roles/<role>` instead.
 | [tested-not-trusted-posture-needs-reachability-precondition](tested-not-trusted-posture-needs-reachability-precondition.md) | A tested-not-trusted posture is sound only with a reachability precondition |
 | [transcription-moves-contract-requires-three-part-reconcile](transcription-moves-contract-requires-three-part-reconcile.md) | A transcription that moves the WP contract needs a three-part reconcile |
 | [transport-schema-degenerate-endpoint-trap](transport-schema-degenerate-endpoint-trap.md) | Review a transport/cast schema at non-degenerate endpoints |
-| [trust-level-claim-grep-per-check-both-directions](trust-level-claim-grep-per-check-both-directions.md) | A trust-level claim must be grepped per check and in both directions |
 | [trust-level-prose-vs-locked-adr-crosscheck](trust-level-prose-vs-locked-adr-crosscheck.md) | Cross-check a trust-level characterization against the locked ADR |
 | [trusted-by-typing-guarantee-is-not-kernel-proved-Q](trusted-by-typing-guarantee-is-not-kernel-proved-Q.md) | A by-typing trusted guarantee is not kernel-proved; it projects to P, never Q |
 | [trusted-primitive-refinement-codomain-witness](trusted-primitive-refinement-codomain-witness.md) | A trusted primitive with a refinement-typed codomain must establish the refinement |

@@ -93,53 +93,25 @@ fix to strike 2 and folded pre-vote — when a correction targets an over-claim 
 authored, the same region likely holds its siblings (grep-the-region-fold-all on
 my own prose).
 
-**Author's decision procedure once grounding reveals a stale premise
-(spec-author angle, L3-strings-surface, 2026-07-03).** Grepping the frame is
-step 1; what you DO with a caught stale premise splits on one test: **is the
-correct fix structurally determined, or does it contradict an explicit
-"do-not-reopen" input?** (a) Structurally-determined gap → **resolve inline +
-disclose** (`natSub` — the frame's `sub` wasn't landed, but a saturating monus
-is the exact minimal floor `slice` needs, same Approach-A shape, de-risked by a
-landed test precedent; I derived it as the 7th combinator and flagged the 6→7
-delta). (b) Correct fix would contradict a locked/settled input → **escalate to
-the ONE lane owner, don't self-authorize** (`compare` contradicted "reuse
-`Ord Char`, don't re-derive"; routed to Architect, who owned that his own
-table's binding was broken). The frame's settled inputs can themselves rest on a
-stale fact — so re-verify the input's FACTUAL BASIS, not just honor the lock;
-but the *fix* to a locked input is the owner's call, not yours. Companion rule —
-**fold pre-vote, route post-vote:** a low-severity nit surfaced *after* the gate
-votes are cast is routed to a tracked follow-on, NOT folded into the passing
-branch (folding a prose fix invalidates already-cast APPROVEs for a
-non-present-defect). I disclosed a forward-fragility in my own `§9` DS-AC4 (an
-NFC pin correct-today but wrong once a deferred behavior lands) and bundled it
-into the post-close doc pass rather than re-cutting the SHA mid-Decision. Fold
-coupled fixes while the branch is pre-vote/held; route them once the gate has
-passed.
-
-**Sharpening — the cutover isn't "post-vote," it's "merge-imminent"
-(State-effect `§7.5.6` sibling-`Prod` sweep, 2026-07-03).** Once all gates are
-voted AND resolve+merge is *queued*, folding even a *genuine* nit races the
-merge and typically **loses**: the WP squash-merges first, orphaning the fold on
-a now-stale branch, so you re-cut the fix as an erratum off current `main`
-**anyway** — plus you've burned a re-anchor round (every gate diff-verifies the
-fold SHA that then gets discarded). Live: an Architect-flagged real internal
-contradiction (§4.5.3 says "the result is the Σ-pair, *not* the inductive
-`Prod`"; §7.5.6 still called it `Prod` — the correcting scope must sweep whole
-doc sibling I'd *already banked* and still left). I judged "fold now, cheaper
-than an erratum" and folded post-all-votes; it lost the #237 merge by ~1 min and
-I re-cut it as erratum #238 off current main regardless. **spec-leader had
-explicitly leaned *track* for exactly this cost — and was right.** Apply: if the
-resolve/merge is already in motion (all gates carrying, leader assembling), a
-newly-surfaced doc nit is a *tracked erratum from the start*, never a fold —
-"fold cheaper than erratum" is a false economy once the merge race is on,
-because you pay the erratum either way. When the coordinator leans track with
-merge imminent, trust it.
+★ **What to DO once grounding catches a stale premise mid-review** — resolve it
+yourself only if the fix is structurally determined, escalate to the lane owner
+if it would contradict a locked input, and mind the fold-vs-track timing
+against the Decision's SHA anchor — is a separate discipline with its own
+evidence; see [[mid-review-fix-inline-escalate-or-track]].
 
 **Variant — a spec's BUILDABILITY claim ("in-WP, unblocked, real proof terms
 this WP") is a claim about what the ELABORATOR can construct TODAY; grep the
 proof-construction capability, and don't transfer a concrete-scrutinee proof
-idiom to an abstract-scrutinee setting (52-map §5 erratum, 2026-07-03).** I
-claimed the Map §5 induction proofs were "real proof terms, this WP, unblocked,"
+idiom to an abstract-scrutinee setting (52-map §5 erratum, 2026-07-03).**
+⚠ **Status check before reuse:** the two capability gaps below (no
+`Term::J`/`Cast` construction in `elab.rs`; the induction-mechanism nullary
+gate) are the 2026-07-03 ground truth — both have since moved (`elab.rs` now
+constructs `Term::J`/`Term::Cast` at several sites). Re-grep the current
+elaborator before citing either gap as still open; the *method* — grep the
+construction capability, don't reason abstractly — is what survives, not the
+specific verdict.
+
+I claimed the Map §5 induction proofs were "real proof terms, this WP, unblocked,"
 borrowing the `Ord Bool` idiom (case-split + reduce + `refl`/`tt`/`absurd`). But
 `Ord Bool`'s scrutinees are CONCRETE constructors (`True`/`False`) that reduce,
 whereas the Map inductions hit an ABSTRACT `leq k k'` (variable keys) that is
@@ -167,9 +139,11 @@ ground EVERY axis the proof's construction touches.** My erratum *fixing* the
 transport over-claim ITSELF kept `toList`-ordered as "buildable now," trusting a
 per-proof ruling that cleared the `leq`/transport axis (Gap A) but not the
 induction-mechanism axis (**Gap B**: `check_match_dependent`'s nullary-only
-gate, `elab.rs:455` `all(|c| c.args.is_empty())`, blocks ALL
-hypothesis-narrowing `List`/`Tree` induction). foundation-implementer's
-**empirical 2-line build-attempt** caught it — a reviewer (and I) reasoning from
+gate — as of 2026-07-03, a constructor-arity check in `elab.rs` — blocked ALL
+hypothesis-narrowing `List`/`Tree` induction; re-grep the current gate before
+citing this as still-live, the match-compilation code has since moved).
+foundation-implementer's **empirical 2-line build-attempt** caught it — a
+reviewer (and I) reasoning from
 one axis structurally can't see a wall on another. **Apply:** enumerate every
 construction capability the proof needs (dependent-match / transport / each
 eliminator) and grep EACH; when buildability is live, prefer the
@@ -189,8 +163,9 @@ you *build atop*; the dual failure is *binding a new definition to a name
 already taken by a landed global*. My CAT-3 `57 §3.1` ruled
 `Perm := count-equality` and grounded carefully against `Perm_rel` (the
 truncation *mechanism* it dodged) — but never grepped the bare umbrella `Perm`,
-which is a landed prelude global (`prelude.rs:119`, `Perm := ‖Perm_rel‖`, a
-*different, proof-relevant* definition). Three-way `37 §6` ↔ `57 §3.1` ↔
+which is a landed prelude global (`crates/ken-elaborator/src/prelude.rs`,
+`Perm := ‖Perm_rel‖`, a *different, proof-relevant* definition — line numbers
+drift, grep the symbol). Three-way `37 §6` ↔ `57 §3.1` ↔
 prelude-global collision, **build-affecting** (the verified sort's AC6 binds
 `Perm`), surfaced only a WP later — CAT-4's `58` re-referenced "the `Perm`
 move," CV caught it → a queued `permCount`-rename / AC6-repoint follow-up.

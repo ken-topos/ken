@@ -82,8 +82,18 @@ is not a signal to go looking elsewhere.
 Function is the primary axis; `teams/` is a parallel branch a role also pulls,
 so "all leaders" (`build/leaders`) and "all kernel" (`teams/kernel`) coexist
 with no duplication. **A lesson lives at the broadest scope where every reader
-must apply it.** A genuinely cross-cutting lesson gets a `scope:` tag in its
-frontmatter rather than being copied.
+must apply it.**
+
+⭐ **Directory placement is authoritative — it IS the routing.** A lesson's
+audience is exactly the directory it sits in, so a role that reads its path +
+ancestors has read everything applicable to it. ⛔ **No reader scans the rest of
+the corpus**, and no reader inspects frontmatter to discover lessons filed
+elsewhere.
+
+⚠ **The `scope:` frontmatter key is redundant metadata, not routing.** It
+appears on most files and every occurrence restates that file's own directory.
+⛔ It confers nothing. **To widen a lesson's audience, move the file** — there
+is no tag-based alternative.
 
 ## Wiring (how it gets loaded)
 
