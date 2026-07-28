@@ -20,7 +20,45 @@ previously stated at `0aa9e53f`, four merges back, and several had moved.
 
 ---
 
-## ✅ THE #9 HOLD IS DISCHARGED — the re-slice landed. ⛔ BUT #10 IS NOW OPEN
+> ## ✅✅ RELEASED 2026-07-28 — NO HARD-STOP HOLDS THIS NODE. Read this first.
+>
+> ⛔ **Three statements below this block are STALE and say `#10` is OPEN with
+> the Architect. They are wrong.** They are left in place as append-only history
+> per this chain's convention; **this block is the operative state.**
+>
+> | stop | state | ruled by | what it produced |
+> |---|---|---|---|
+> | `#9` | ✅ ruled | `evt_842spc7t6js1` + `evt_t4fykh52ncb` | the re-slice → `B2O`, `B2R` |
+> | `#10` | ✅ **ruled** | `evt_28cnmxf6ncghn` | inserted **`B2V`** — ⛔ *not* open |
+> | `#11` | ✅ **ruled** | `evt_7ay6s5s79awz8` (`dec_45aa2gngjc79z`) | retired `B2E`, produced **`C1`** |
+>
+> ⭐ **Every prerequisite those rulings named has now MERGED:** `B2O`, `B2R`,
+> `B2V`, and **`C1` (PR #1156, `origin/main = feab3cb5`, blob-verified)**.
+> ⇒ `B2F`'s release gate — **a closed `C1` carrier artifact** — is satisfied.
+>
+> **Hard-stop count of record = 11.** ⛔ The stale text below says `10`.
+>
+> ⚠ **NEXT RESEARCH PULL = `#15`.** ⛔ The text below says `#12`; that value was
+> **corrected away from** on 2026-07-25 in favour of the operator override
+> *"#11, then #15, #18, #21"*, and `#11` has since been raised and ruled. The
+> operative anchor is `docs/program/issues/RT-NATIVE-FNSPLIT.md`'s
+> **"ARMED §5a RESEARCH-CONSULT TRIGGER"** line, ⭐ **which this frame already
+> designates as winning on any disagreement.** Read it at the point of a stop;
+> ⛔ do not act on a count transcribed into this file.
+>
+> ### ⚠ ONE GENUINELY OPEN QUESTION — and it does NOT block the build
+>
+> `#10`'s ledger entry left a live item: **whether `#9` and `#10` are one
+> predicate or two instances.** ⛔ That is the **Architect's** call to name —
+> `steward §5a-ii` forbids the Steward naming it, so it is not named here and it
+> is not named in the kickoff. ⭐ **It is a naming obligation on a closed stop,
+> not a precondition on this node.** ⇒ Build; if a stop is raised, it is
+> answered then.
+
+## ✅ THE #9 HOLD IS DISCHARGED — the re-slice landed. ⛔ ~~BUT #10 IS NOW OPEN~~
+
+⛔ **STALE HEADING — `#10` was ruled `evt_28cnmxf6ncghn`; see the release block
+above.**
 
 **This block used to read `⛔⛔ HELD AT HARD-STOP #9`. It is retained as the
 reason the two prerequisites exist, rewritten to the state on `bd24422b`.**
@@ -94,9 +132,14 @@ atomic boundary.
 
 ### ⚠ The armed research trigger — unchanged by the re-slice
 
-**Count of record = 10 — `#10` raised 2026-07-25 and is OPEN with the
+⛔ **STALE — superseded by the release block at the top of this file.
+`#10` was RULED (`evt_28cnmxf6ncghn`, which inserted `B2V`), `#11` was ruled
+(`evt_7ay6s5s79awz8`, which produced `C1`), the count of record is `11`, and the
+next research pull is `#15`. Retained append-only.**
+
+~~**Count of record = 10 — `#10` raised 2026-07-25 and is OPEN with the
 Architect. NEXT RESEARCH PULL = hard-stop `#12`, unchanged and armed; `#10` is
-not a pull stop.** The count of
+not a pull stop.**~~ The count of
 record lives in `docs/program/issues/RT-NATIVE-FNSPLIT.md` under
 *"ARMED §5a RESEARCH-CONSULT TRIGGER"*; **on any disagreement that line wins.**
 `B2O` and `B2R` both closed with **no hard-stop**, so the count did not move —
@@ -1207,14 +1250,28 @@ not a cosmetic issue.
 
 ---
 
-## Hard-stop protocol — ✅ #9 CONSUMED ITS PULL · ⛔ #10 IS OPEN
+## Hard-stop protocol — ✅ #9, #10 AND #11 ALL RULED · ⛔ NOTHING HOLDS THIS NODE
 
-**Count of record: 10.** ⛔ **`#10` was raised 2026-07-25
+> ⛔ **CORRECTED 2026-07-28.** The paragraph below said `#10` was OPEN with the
+> Architect and that the next pull was `#12`. **Both are false.** `#10` was ruled
+> `evt_28cnmxf6ncghn` (it inserted `B2V`); `#11` was ruled `evt_7ay6s5s79awz8` /
+> `dec_45aa2gngjc79z` (it retired `B2E` and produced `C1`); every prerequisite
+> those rulings named has merged, `C1` last, at PR #1156. **Count of record =
+> 11. Next research pull = `#15`.** ⭐ The operative anchor is the
+> **"ARMED §5a RESEARCH-CONSULT TRIGGER"** line in
+> `docs/program/issues/RT-NATIVE-FNSPLIT.md` — read it at the point of a stop.
+>
+> ⚠ **The jointly-unsatisfiable report was real and it was ANSWERED, not
+> waived.** `D1`+`D2`+`D6`+`D7` were unsatisfiable because no executable
+> runtime-value representation existed. `B2V` and then `C1` built one. ⇒ This
+> node now consumes an edge that already executes.
+
+~~**Count of record: 10.**~~ ⛔ ~~**`#10` was raised 2026-07-25
 (`evt_71d2jg83z2yt4`, leader escalation `evt_r7797bd7bzk3`) and is with the
-Architect** — the ring reports `D1`+`D2`+`D6`+`D7` jointly unsatisfiable inside
-this frame's boundary, on an executable runtime-value representation gap.
+Architect**~~ — the ring reported `D1`+`D2`+`D6`+`D7` jointly unsatisfiable
+inside this frame's boundary, on an executable runtime-value representation gap.
 Evidence `49e24b59` is pushed to `origin`; `crates/` is byte-identical to
-`1e09a30a`. **`#10` is not a research-pull stop** — the next is `#12`.
+`1e09a30a`. ~~**`#10` is not a research-pull stop** — the next is `#12`.~~
 
 **`#9`** — raised 2026-07-25 (`evt_197xpdavdyrn0`); see the
 **discharged-hold** block at the top of this file. ✅ **Its research pull is
