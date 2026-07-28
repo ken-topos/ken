@@ -453,7 +453,7 @@ this line wins.** Re-read this line on every hard-stop.
 > ```text
 > SYMPTOM INVENTORY (append only; never rewritten)
 > NEXT PREDICATE CHECK = 6th entry   (3rd is CONSUMED — answered at entry 2)
-> ENTRIES = 4  ← ANSWERED AT ENTRY 2; entry 3 gives the CAUSE. See below.
+> ENTRIES = 5  ← ANSWERED AT ENTRY 2; entry 3 gives the CAUSE. See below.
 > 1. retained body selection — keyed on cloned RuntimeExpr pointer identity
 > 2. lower_expr re-lowers each retained closure body AT EVERY CALL SITE, in
 >    that call site's whole configuration (core.rs:4214/4229 clone the body
@@ -476,6 +476,15 @@ this line wins.** Re-read this line on every hard-stop.
 >    executable recursive-position/trap port produces the completed
 >    functionized population. The semantics named by the scaling discriminator
 >    therefore remain outside the completed emission authority.
+> 5. executable-boundary closure recurs at the host-effect operand seam: a
+>    functionized lexical-closure body receives its checked Buffer resource
+>    through the B2R frame as Carried, while lower_process_host_effect bulk-
+>    demands specialized templates before its operation-specific wire encoder.
+>    The checked operation seat and carried representation both exist, but no
+>    executable phase-aware resource-token projector connects them. The stop
+>    also exposed that the planning-only benchmark spelling cannot state
+>    BufferFreeze's four-seat buffer/start/length/span-origin contract: its one
+>    operand names the recursive result after Let, not a valid BufferSpan.
 > ```
 >
 > ### ⭐ CLOSURE LEDGER — which entries are DISCHARGED (Steward bookkeeping)
