@@ -2132,6 +2132,8 @@ fn ac_c7_try_compile_edge_with_operands<'src>(
         make_immediate: module.declare_func_in_func(helpers.make_immediate, &mut context.func),
         store_scalar: module.declare_func_in_func(helpers.store_scalar, &mut context.func),
         store_int_tag: module.declare_func_in_func(helpers.store_int_tag, &mut context.func),
+        store_bytes_len: module.declare_func_in_func(helpers.store_bytes_len, &mut context.func),
+        store_byte: module.declare_func_in_func(helpers.store_byte, &mut context.func),
     };
 
     let mut compiler = bare_carrier_test_lowering(seed_env, plan);
@@ -4143,5 +4145,119 @@ fn b2f_d9_no_spillable_tag_can_make_the_immediate_producer_answer_shape() {
         spillable > 0,
         "NON-VACUITY: a loop over zero spillable variants asserts nothing, and \
          would stay green if the disposition table lost its `spill` arm entirely"
+    );
+}
+
+// ─── `RT-FNSPLIT-B2F` `D9` — THE BYTE-BODIED HANDLE PRODUCER ──────────────
+
+/// Transfer one byte-bodied literal through the real emitted carrier graph and
+/// report `(word, node class, node content)`.
+///
+/// ⚠ The `Lowered` is handed in by the caller so that **one** helper drives both
+/// classes: `String` and `Bytes` differ by the class the disposition supplies,
+/// and that class is the axis `store_bytes_len` and `store_byte` guard on. ⛔ A
+/// `Bytes`-only fixture leaves `String`'s guard arm unreached — the defect
+/// `boundary_value_clif`'s own history records.
+fn b2f_d9_bytes_edge(literal: Lowered) -> (crate::boundary_value::BoundaryWord, Option<u64>, Vec<u8>) {
+    let fixture = ac_c7_ctor("Alpha");
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let seed_env = NativeSeedEnvironment::empty();
+    let (_module, code) = ac_c7_compile_edge(&seed_env, plan, move |compiler, builder| {
+        Ok(compiler.transfer_into_carrier(builder, root, &literal)?.word)
+    });
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = ac_c7_bind_arena(&mut store);
+    let word = crate::boundary_value::BoundaryWord(ac_c7_run(code, base) as u64);
+    let class = store
+        .image()
+        .0
+        .node_field(word.payload(), crate::boundary_value::NODE_CLASS);
+    let content = store
+        .image()
+        .0
+        .node_data(word.payload())
+        .map(<[u8]>::to_vec)
+        .unwrap_or_default();
+    (word, class, content)
+}
+
+/// ⭐ **`D9` — a `Bytes` literal crosses as a handle carrying its content.**
+///
+/// **MEASURED:** JIT-compiled emitted code claims a span of the literal's length
+/// in the node's own region and writes every byte; the persistent image reads
+/// back the exact content.
+/// **CLAIMED:** the byte-bodied producer arm emits the claim-then-fill protocol.
+/// **THE GAP:** ⚠ the content is a **compile-time literal**. ⛔ This says nothing
+/// about a runtime-computed byte body — no `Lowered` variant carries one today,
+/// and the arm must not be read as covering the class in general.
+///
+/// ⚠ Promise class: **durable invariant** — it asserts the round trip of a
+/// fixture it owns, not a frozen node index or length.
+#[test]
+fn b2f_d9_a_bytes_literal_crosses_with_its_content() {
+    // ⚠ Deliberately NOT ASCII-only and not a palindrome: a producer that wrote
+    // the length as content, or filled the span in reverse, must be visible.
+    let literal: Vec<u8> = vec![0x00, 0x7f, 0x80, 0xff, 0x01];
+    let (word, class, content) = b2f_d9_bytes_edge(Lowered::Bytes(literal.clone()));
+    assert_eq!(
+        word.tag(),
+        Some(BoundaryTag::PersistentGround),
+        "`D9`: a byte-bodied literal crosses as the handle its disposition declares"
+    );
+    assert_eq!(
+        class,
+        Some(BoundaryClass::Bytes as u64),
+        "`D9`: the class comes from the sole disposition authority"
+    );
+    assert_eq!(
+        content, literal,
+        "`D9`: ⛔ the whole content, in order — a claim-then-fill that stopped \
+         early, reversed, or wrote the length would differ here"
+    );
+}
+
+/// ⭐⭐ **`D9` — the SAME emitter drives the `String` class, and that is the
+/// discriminating row.**
+///
+/// ⛔ **Why this is not a duplicate of the `Bytes` row.** The two arms share
+/// every line of the producer except the class the disposition hands it — and
+/// the class is precisely what `store_bytes_len` and `store_byte` guard on. ⇒ A
+/// guard narrowed to `Bytes` alone would leave the `Bytes` row green and this
+/// one red, which is the whole reason both exist.
+///
+/// **MEASURED:** the identical emitter, given a `String`, produces a node whose
+/// class is `String` and whose content is the literal's UTF-8 bytes.
+/// **CLAIMED:** the byte-bodied arm is reached for both classes, not one.
+/// **THE GAP:** ⚠ same literal-content caveat as the row above.
+///
+/// ⚠ Promise class: **durable invariant.**
+#[test]
+fn b2f_d9_the_same_emitter_builds_the_string_class() {
+    // ⚠ Multi-byte on purpose: a producer writing `char`s rather than bytes, or
+    // truncating to ASCII, differs here and agrees on a plain-ASCII fixture.
+    let text = "kΩ→";
+    let (word, class, content) = b2f_d9_bytes_edge(Lowered::String(text.to_string()));
+    assert_eq!(
+        word.tag(),
+        Some(BoundaryTag::PersistentGround),
+        "`D9`: a `String` crosses as the handle its disposition declares"
+    );
+    assert_eq!(
+        class,
+        Some(BoundaryClass::String as u64),
+        "⛔ the `String` CLASS — not `Bytes`. This is the axis the two arms do \
+         NOT share, and the only thing this row adds over the `Bytes` row"
+    );
+    assert_eq!(
+        content,
+        text.as_bytes(),
+        "`D9`: the content is the literal's UTF-8 bytes, all {} of them",
+        text.len()
+    );
+    assert_ne!(
+        content.len(),
+        text.chars().count(),
+        "NON-VACUITY: the fixture must be multi-byte, or `bytes` and `chars` \
+         agree and the length assertion above discriminates nothing"
     );
 }

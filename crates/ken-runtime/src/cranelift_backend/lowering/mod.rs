@@ -494,6 +494,9 @@ impl ArtifactHelpers<'_> {
                     .declare_func_in_func(self.boundary_value_abi.make_immediate, func),
                 store_int_tag: module
                     .declare_func_in_func(self.boundary_value_abi.store_int_tag, func),
+                store_bytes_len: module
+                    .declare_func_in_func(self.boundary_value_abi.store_bytes_len, func),
+                store_byte: module.declare_func_in_func(self.boundary_value_abi.store_byte, func),
             }),
         }
     }
@@ -914,6 +917,13 @@ struct BoundaryCarrierRefs {
     /// nor pre-empts it — see [`Lowering::emit_carrier_spillable_immediate`] for
     /// the residual that leaves.
     store_int_tag: FuncRef,
+    /// `(arena, word, len, out) -> status` — claim `len` content bytes in the
+    /// node's own region. ⭐ A **claim-then-fill** protocol: the span exists
+    /// before a byte of it is written, so a length the region cannot satisfy
+    /// fails before any address is formed.
+    store_bytes_len: FuncRef,
+    /// `(arena, word, index, byte) -> status` — write one content byte.
+    store_byte: FuncRef,
 }
 
 /// A value that has crossed into the **operational carrier** — nothing but the
@@ -1218,6 +1228,20 @@ impl<'a> Lowering<'a> {
                 let marker = Self::carrier_small_marker(builder);
                 self.emit_carrier_spillable_immediate(builder, tag, spill, *payload, marker)
             }
+            // ── byte-bodied handles ───────────────────────────────────────
+            //
+            // ⛔ Two arms, ONE emitter, and the class comes from the
+            // disposition rather than from which arm we are in — see
+            // `emit_carrier_bytes` for why a shared body driven by the class is
+            // the thing that makes `String`'s guard reachable at all.
+            Lowered::String(text) => {
+                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                self.emit_carrier_bytes(builder, tag, class, text.as_bytes())
+            }
+            Lowered::Bytes(content) => {
+                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                self.emit_carrier_bytes(builder, tag, class, content)
+            }
             Lowered::Constructor {
                 synthesized_identity,
                 args,
@@ -1283,12 +1307,6 @@ impl<'a> Lowering<'a> {
             // most of them. The refusal is **this producer's**, and it is
             // conservative rather than silent precisely so the gap cannot be
             // mistaken for coverage.
-            Lowered::String(_) | Lowered::Bytes(_) => Err(unsupported(
-                lowered_value_kind(value),
-                "the carrier producer does not yet emit a byte-bodied handle: \
-                 the content needs the `store_bytes_len` / `store_byte` \
-                 sequence, which is a distinct claim-then-fill protocol",
-            )),
             Lowered::HostResult {
                 success, error, ok, ..
             } => {
@@ -1672,6 +1690,64 @@ impl<'a> Lowering<'a> {
         Ok(CarriedBoundaryWord {
             word: builder.block_params(join)[0],
         })
+    }
+
+    /// ⭐ **The byte-bodied handle producer** — the `String` / `Bytes` arm of
+    /// `RT-FNSPLIT-B2F` `D9`.
+    ///
+    /// ⭐ **ONE body, driven with the class the disposition supplies.** ⛔ Not
+    /// two emitters and ⛔ not a `Bytes` emitter a `String` "shares every code
+    /// path but the class" with — the class is exactly the axis `store_bytes_len`
+    /// and `store_byte` guard on, so it is the one path the two do **not** share.
+    /// `boundary_value_clif`'s own history records a `class_guard` narrowed to
+    /// `Bytes` alone staying green because no test had ever asked emitted code to
+    /// *build* a `String`.
+    ///
+    /// ⭐ **Claim-then-fill.** `store_bytes_len` reserves the whole span before a
+    /// byte is written, so a length the region cannot satisfy fails **before any
+    /// address is formed** rather than part-way through the content.
+    ///
+    /// **MEASURED:** the emitted body allocates a node of the declared class,
+    /// claims a span of the literal's length, and writes every byte of it.
+    /// **CLAIMED:** a byte-bodied literal crosses the boundary with its content.
+    /// **THE GAP:** ⚠ the content is a **compile-time literal**, so this arm says
+    /// nothing about a runtime-computed string — there is no `Lowered` variant
+    /// that carries one, and when one exists it needs its own control. ⛔ Do not
+    /// read this as coverage of the byte-bodied class in general.
+    fn emit_carrier_bytes(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        tag: BoundaryTag,
+        class: BoundaryClass,
+        content: &[u8],
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let word = self.emit_carrier_alloc(builder, tag, class, 0)?;
+        let (_span_slot, span) = Self::carrier_out_slot(builder, pointer_type);
+        let length = builder.ins().iconst(
+            types::I64,
+            i64::try_from(content.len()).map_err(|_| {
+                unsupported(
+                    "BoundaryCarrier",
+                    "a transferred literal is longer than the ABI can name",
+                )
+            })?,
+        );
+        let claim = builder
+            .ins()
+            .call(refs.store_bytes_len, &[arena, word.word, length, span]);
+        Self::require_i64(builder, builder.inst_results(claim)[0], BOUNDARY_OK);
+        for (index, byte) in content.iter().enumerate() {
+            let position = Self::carrier_position_immediate(builder, index)?;
+            let byte = builder.ins().iconst(types::I64, i64::from(*byte));
+            let write = builder
+                .ins()
+                .call(refs.store_byte, &[arena, word.word, position, byte]);
+            Self::require_i64(builder, builder.inst_results(write)[0], BOUNDARY_OK);
+        }
+        Ok(word)
     }
 
     /// The `NativeIntV1` marker for a spillable immediate whose magnitude **is**
