@@ -404,6 +404,46 @@ struct BoundaryACensus {
     recursive_lowering_frames: usize,
 }
 
+/// The planner-side material retained until one completed FunctionizedUnits
+/// emission can be measured at Boundary B.
+///
+/// Unlike [`BoundaryACensus`], this is not itself a result row.  The lowering
+/// collector takes this snapshot from the exact plan it subsequently emits and
+/// publishes it only after every production CLIF body has been defined.
+#[cfg(test)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct ScaleBPlanCensus {
+    pub(in crate::cranelift_backend) static_nodes: usize,
+    pub(in crate::cranelift_backend) edges: usize,
+    pub(in crate::cranelift_backend) planned_helpers: usize,
+    pub(in crate::cranelift_backend) persistent_store_nodes: usize,
+    pub(in crate::cranelift_backend) out_of_line_evidence_records: usize,
+    pub(in crate::cranelift_backend) max_helpers_per_static_source: usize,
+    pub(in crate::cranelift_backend) helper_key_bytes: usize,
+    pub(in crate::cranelift_backend) activation_frame_bytes: usize,
+    pub(in crate::cranelift_backend) store_node_bytes: usize,
+    pub(in crate::cranelift_backend) helper_key_schemas: usize,
+    pub(in crate::cranelift_backend) frame_schemas: usize,
+    pub(in crate::cranelift_backend) store_node_schemas: usize,
+    pub(in crate::cranelift_backend) static_node_id_bytes: usize,
+    pub(in crate::cranelift_backend) persistent_node_id_bytes: usize,
+    pub(in crate::cranelift_backend) max_logical_chain_depth: u32,
+    pub(in crate::cranelift_backend) max_environment_depth: u32,
+    pub(in crate::cranelift_backend) max_continuation_depth: u32,
+    pub(in crate::cranelift_backend) max_path_depth: u32,
+    pub(in crate::cranelift_backend) max_cleanup_depth: u32,
+    pub(in crate::cranelift_backend) max_affine_depth: u32,
+    pub(in crate::cranelift_backend) max_source_return_depth: u32,
+    pub(in crate::cranelift_backend) source_return_resume_nodes: usize,
+    pub(in crate::cranelift_backend) source_return_owned_resume_edges: usize,
+    pub(in crate::cranelift_backend) terminal_outgoing_edges: usize,
+    pub(in crate::cranelift_backend) recursive_lowering_frames: usize,
+    pub(in crate::cranelift_backend) distinct_interned_semantic_states: usize,
+    pub(in crate::cranelift_backend) defined_helpers: usize,
+    pub(in crate::cranelift_backend) descriptor_construction_work: usize,
+    pub(in crate::cranelift_backend) descriptor_comparison_work: usize,
+}
+
 #[cfg(test)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct BoundaryB1Census {
@@ -2580,6 +2620,56 @@ impl<'src> StaticTransitionPlan<'src> {
                 })
                 .count(),
             recursive_lowering_frames: max_recursive_lowering_frame_count(),
+        }
+    }
+
+    /// Capture the complete plan/semantic/ABI material that the emission
+    /// collector will bind to its completed-object row.
+    ///
+    /// Descriptor work is counted in explicit representation work units: one
+    /// descriptor header plus each slot it constructs, and the same closed
+    /// population compared by `AbiPlane::validate`.  This keeps the metric tied
+    /// to the actual descriptor/slot population rather than to wall-clock
+    /// sampling or a source-text proxy.
+    #[cfg(test)]
+    pub(in crate::cranelift_backend) fn scale_b_census(&self) -> ScaleBPlanCensus {
+        let outer = self.census();
+        let descriptor_work = self
+            .abi
+            .descriptors
+            .len()
+            .checked_add(self.abi.slots.len())
+            .expect("the descriptor work population fits usize");
+        ScaleBPlanCensus {
+            static_nodes: outer.static_nodes,
+            edges: outer.edges,
+            planned_helpers: outer.planned_helpers,
+            persistent_store_nodes: outer.persistent_store_nodes,
+            out_of_line_evidence_records: outer.out_of_line_evidence_records,
+            max_helpers_per_static_source: outer.max_helpers_per_static_source,
+            helper_key_bytes: outer.helper_key_bytes,
+            activation_frame_bytes: outer.activation_frame_bytes,
+            store_node_bytes: outer.store_node_bytes,
+            helper_key_schemas: outer.helper_key_schemas,
+            frame_schemas: outer.frame_schemas,
+            store_node_schemas: outer.store_node_schemas,
+            static_node_id_bytes: outer.static_node_id_bytes,
+            persistent_node_id_bytes: outer.persistent_node_id_bytes,
+            max_logical_chain_depth: outer.max_logical_chain_depth,
+            max_environment_depth: outer.max_environment_depth,
+            max_continuation_depth: outer.max_continuation_depth,
+            max_path_depth: outer.max_path_depth,
+            max_cleanup_depth: outer.max_cleanup_depth,
+            max_affine_depth: outer.max_affine_depth,
+            max_source_return_depth: outer.max_source_return_depth,
+            source_return_resume_nodes: outer.source_return_resume_nodes,
+            source_return_owned_resume_edges: outer.source_return_owned_resume_edges,
+            terminal_outgoing_edges: outer.terminal_outgoing_edges,
+            recursive_lowering_frames: outer.recursive_lowering_frames,
+            distinct_interned_semantic_states: self.semantic.records.len(),
+            defined_helpers: self.semantic.functions.len(),
+            descriptor_construction_work: descriptor_work,
+            descriptor_comparison_work: descriptor_work,
         }
     }
 

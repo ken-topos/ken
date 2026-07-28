@@ -181,6 +181,8 @@ fn finish<M: Module>(
             functions.push(func.display().to_string());
         }
     });
+    #[cfg(test)]
+    crate::cranelift_backend::scale_b_record_fixed_helper(&func);
     let mut ctx = module.make_context();
     std::mem::swap(&mut ctx.func, &mut func);
     module

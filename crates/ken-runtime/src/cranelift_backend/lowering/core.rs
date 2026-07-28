@@ -171,6 +171,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
 ) -> Result<CompiledModule<M>, CraneliftBackendError> {
     #[cfg(test)]
     {
+        scale_b_reset_emission_attempt();
         C2_UNIT_EMISSION_EPOCH.with(|epoch| epoch.set(Some(0)));
         RECURSIVE_POSITION_UNIT_CALLS.with(|calls| calls.set(0));
         reset_d8_join_conversion_counts();
@@ -208,6 +209,14 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
             BodyEmissionAuthority::FunctionizedUnits
         ),
     )?;
+    #[cfg(test)]
+    scale_b_begin_emission_attempt(
+        &static_transition_plan,
+        matches!(
+            body_emission_authority,
+            BodyEmissionAuthority::FunctionizedUnits
+        ),
+    );
     let mut sig = module.make_signature();
     sig.params
         .push(AbiParam::new(module.target_config().pointer_type()));
@@ -533,6 +542,8 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
                 builder.finalize();
             }
             verify_cranelift_function(&ctx.func, module.isa())?;
+            #[cfg(test)]
+            scale_b_record_root_adapter(&ctx.func);
             module
                 .define_function(func_id, &mut ctx)
                 .map_err(|err| backend_module(err.to_string()))?;
@@ -542,7 +553,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
             }
         }
     };
-    Ok(CompiledModule::from_parts(
+    let compiled = CompiledModule::from_parts(
         module,
         func_id,
         root_result.decoder,
@@ -551,7 +562,10 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         true,
         compiler.assumptions,
         compiler.unsupported,
-    ))
+    );
+    #[cfg(test)]
+    scale_b_finish_emission_attempt();
+    Ok(compiled)
 }
 
 impl<'a> Lowering<'a> {

@@ -7128,6 +7128,396 @@ fn governed_nested_brackets_n3_through_n7_emit_complete_functionized_bundles() {
     }
 }
 
+fn rt_scale_b_peak_rss_kib() -> Result<usize, String> {
+    let status = std::fs::read_to_string("/proc/self/status")
+        .map_err(|error| format!("could not read /proc/self/status: {error}"))?;
+    let line = status
+        .lines()
+        .find(|line| line.starts_with("VmHWM:"))
+        .ok_or_else(|| "VmHWM is absent from /proc/self/status".to_string())?;
+    line.split_whitespace()
+        .nth(1)
+        .ok_or_else(|| "VmHWM has no numeric field".to_string())?
+        .parse()
+        .map_err(|error| format!("VmHWM is not numeric: {error}"))
+}
+
+#[test]
+fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
+    const WORKER_ENV: &str = "KEN_RT_SCALE_B_EMISSION_WORKER";
+    const DEPTH_ENV: &str = "KEN_RT_SCALE_B_EMISSION_DEPTH";
+    const FORCE_INDETERMINATE_ENV: &str =
+        "KEN_RT_SCALE_B_FORCE_INDETERMINATE";
+    const OMIT_RESULT_ENV: &str = "KEN_RT_SCALE_B_OMIT_RESULT";
+    const REQUIRED_FIELDS: [&str; 39] = [
+        "compile_wall_ns=",
+        "peak_rss_kib=",
+        "distinct_interned_semantic_states=",
+        "defined_helpers=",
+        "emitted_helpers=",
+        "production_functions=",
+        "clif_instructions=",
+        "clif_bytes=",
+        "descriptor_construction_work=",
+        "descriptor_comparison_work=",
+        "total_dfg_values=",
+        "total_instructions=",
+        "total_blocks=",
+        "static_nodes=",
+        "edges=",
+        "planned_helpers=",
+        "persistent_store_nodes=",
+        "out_of_line_evidence_records=",
+        "max_helpers_per_static_source=",
+        "helper_key_bytes=",
+        "activation_frame_bytes=",
+        "store_node_bytes=",
+        "helper_key_schemas=",
+        "frame_schemas=",
+        "store_node_schemas=",
+        "static_node_id_bytes=",
+        "persistent_node_id_bytes=",
+        "max_logical_chain_depth=",
+        "max_environment_depth=",
+        "max_continuation_depth=",
+        "max_path_depth=",
+        "max_cleanup_depth=",
+        "max_affine_depth=",
+        "max_source_return_depth=",
+        "source_return_resume_nodes=",
+        "source_return_owned_resume_edges=",
+        "terminal_outgoing_edges=",
+        "recursive_lowering_frames=",
+        "stack_bytes=",
+    ];
+
+    if std::env::var_os(WORKER_ENV).is_none() {
+        let run_worker =
+            |depth: usize, force_indeterminate: bool, omit_result: bool| {
+                let executable = std::env::current_exe().unwrap_or_else(|error| {
+                    panic!(
+                        "RT_SCALE_B could_not_determine: test executable \
+                         could not be located: {error}"
+                    )
+                });
+                let test_name = std::thread::current()
+                    .name()
+                    .expect("libtest names every test thread")
+                    .to_string();
+                let mut command = std::process::Command::new("prlimit");
+                command
+                    .args([
+                        "--cpu=30:30",
+                        "--as=4294967296:4294967296",
+                        "--stack=8388608:8388608",
+                        "--",
+                    ])
+                    .arg(executable)
+                    .args(["--exact", &test_name, "--nocapture", "--test-threads=1"])
+                    .env(WORKER_ENV, "1")
+                    .env(DEPTH_ENV, depth.to_string())
+                    .env_remove("RUST_MIN_STACK");
+                if force_indeterminate {
+                    command.env(FORCE_INDETERMINATE_ENV, "1");
+                }
+                if omit_result {
+                    command.env(OMIT_RESULT_ENV, "1");
+                }
+                command
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped());
+                let mut child = command.spawn().unwrap_or_else(|error| {
+                    panic!(
+                        "RT_SCALE_B could_not_determine n={depth}: \
+                         prlimit worker could not start: {error}"
+                    )
+                });
+                let deadline =
+                    std::time::Instant::now() + std::time::Duration::from_secs(45);
+                loop {
+                    match child.try_wait() {
+                        Ok(Some(_)) => {
+                            break child.wait_with_output().unwrap_or_else(|error| {
+                                panic!(
+                                    "RT_SCALE_B could_not_determine n={depth}: \
+                                     worker output could not be collected: {error}"
+                                )
+                            });
+                        }
+                        Ok(None) if std::time::Instant::now() < deadline => {
+                            std::thread::sleep(std::time::Duration::from_millis(25));
+                        }
+                        Ok(None) => {
+                            let _ = child.kill();
+                            break child.wait_with_output().unwrap_or_else(|error| {
+                                panic!(
+                                    "RT_SCALE_B could_not_determine n={depth}: \
+                                     timed-out worker could not be reaped: {error}"
+                                )
+                            });
+                        }
+                        Err(error) => {
+                            let _ = child.kill();
+                            panic!(
+                                "RT_SCALE_B could_not_determine n={depth}: \
+                                 worker status could not be observed: {error}"
+                            );
+                        }
+                    }
+                }
+            };
+
+        // Promise class: durable invariant and fail-closed measurement gate.
+        //
+        // MEASURED: five separately bounded product-stack workers complete
+        // FunctionizedUnits emission and publish one typed snapshot containing
+        // every D2 field.  The forced and omitted-result controls establish
+        // that a failed or missing collection is not a silent pass.
+        //
+        // CLAIMED: the corrected governed family has crossed the real S4/D4
+        // exit: RT-SCALE-B can measure completed emission at every n=3..7.
+        //
+        // THE GAP: this is collection capability, not the later D5 scaling
+        // verdict.  Five rows alone prove no asymptotic exponent.
+        let forced = run_worker(3, true, false);
+        let forced_report = format!(
+            "{}{}",
+            String::from_utf8_lossy(&forced.stdout),
+            String::from_utf8_lossy(&forced.stderr)
+        );
+        assert!(
+            !forced.status.success() && forced_report.contains("could_not_determine"),
+            "forced indeterminacy must fail with the stable third-outcome \
+             spelling; status={:?}, report={forced_report}",
+            forced.status
+        );
+
+        let omitted = run_worker(3, false, true);
+        let omitted_report = format!(
+            "{}{}",
+            String::from_utf8_lossy(&omitted.stdout),
+            String::from_utf8_lossy(&omitted.stderr)
+        );
+        assert!(
+            omitted.status.success()
+                && !omitted_report.contains("status=measured_complete"),
+            "missing result data must remain distinguishable from a complete \
+             row; status={:?}, report={omitted_report}",
+            omitted.status
+        );
+
+        for depth in 3..=7 {
+            let measured = run_worker(depth, false, false);
+            let measured_report = format!(
+                "{}{}",
+                String::from_utf8_lossy(&measured.stdout),
+                String::from_utf8_lossy(&measured.stderr)
+            );
+            eprint!("{measured_report}");
+            assert!(
+                measured.status.success()
+                    && measured_report.contains(&format!(
+                        "RT_SCALE_B_RESULT status=measured_complete n={depth}"
+                    )),
+                "RT_SCALE_B could_not_determine n={depth}: bounded worker \
+                 failed or omitted its complete-result sentinel; status={:?}",
+                measured.status
+            );
+            for field in REQUIRED_FIELDS {
+                assert!(
+                    measured_report.contains(field),
+                    "RT_SCALE_B could_not_determine n={depth}: completed row \
+                     omitted required field {field}"
+                );
+            }
+        }
+        return;
+    }
+
+    let depth = std::env::var(DEPTH_ENV)
+        .ok()
+        .and_then(|depth| depth.parse::<usize>().ok())
+        .filter(|depth| (3..=7).contains(depth))
+        .unwrap_or_else(|| {
+            panic!(
+                "RT_SCALE_B could_not_determine: worker depth is absent or \
+                 outside n=3..7"
+            )
+        });
+    if std::env::var_os(FORCE_INDETERMINATE_ENV).is_some() {
+        panic!(
+            "RT_SCALE_B could_not_determine n={depth}: forced fail-closed \
+             positive control"
+        );
+    }
+    if std::env::var_os(OMIT_RESULT_ENV).is_some() {
+        return;
+    }
+
+    let row = std::thread::Builder::new()
+        .name(format!("rt-scale-b-emission-n{depth}-8-mib"))
+        .stack_size(8 * 1024 * 1024)
+        .spawn(move || {
+            let expr =
+                crate::cranelift_backend::planning::governed_nested_resource_bracket(
+                    depth,
+                );
+            assert_eq!(
+                select_body_emission_authority(&expr, &BTreeMap::new()),
+                BodyEmissionAuthority::FunctionizedUnits,
+                "RT_SCALE_B could_not_determine n={depth}: governed source \
+                 selected retained emission"
+            );
+            let started = std::time::Instant::now();
+            recursive_port_process_compiles(&expr).unwrap_or_else(|error| {
+                panic!(
+                    "RT_SCALE_B could_not_determine n={depth}: completed \
+                     emission failed: {error}"
+                )
+            });
+            let compile_wall_ns = usize::try_from(started.elapsed().as_nanos())
+                .expect("one bounded compile duration fits usize");
+            let peak_rss_kib = rt_scale_b_peak_rss_kib().unwrap_or_else(|error| {
+                panic!(
+                    "RT_SCALE_B could_not_determine n={depth}: peak RSS \
+                     collection failed: {error}"
+                )
+            });
+            let metrics =
+                crate::cranelift_backend::lowering::scale_b_last_emission_metrics()
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "RT_SCALE_B could_not_determine n={depth}: \
+                             completed-object metric snapshot is absent"
+                        )
+                    });
+            (compile_wall_ns, peak_rss_kib, metrics)
+        })
+        .unwrap_or_else(|error| {
+            panic!(
+                "RT_SCALE_B could_not_determine n={depth}: 8 MiB product-stack \
+                 worker could not start: {error}"
+            )
+        })
+        .join()
+        .unwrap_or_else(|_| {
+            panic!(
+                "RT_SCALE_B could_not_determine n={depth}: 8 MiB product-stack \
+                 worker panicked"
+            )
+        });
+
+    let (compile_wall_ns, peak_rss_kib, metrics) = row;
+    assert!(compile_wall_ns > 0, "compile wall time was not collected");
+    assert!(peak_rss_kib > 0, "peak RSS was not collected");
+    assert!(
+        metrics.authority_functionized,
+        "completed row came from the retained authority"
+    );
+    assert_eq!(
+        metrics.emitted_helpers, metrics.plan.defined_helpers,
+        "planned helper definitions and emitted unit bodies disagree"
+    );
+    assert_eq!(
+        metrics.production_functions,
+        metrics
+            .emitted_helpers
+            .checked_add(35)
+            .expect("the production-function population fits usize"),
+        "the completed denominator must contain every unit body, one root \
+         adapter, six native-Int helpers, and twenty-eight boundary helpers"
+    );
+    for (name, value) in [
+        (
+            "distinct_interned_semantic_states",
+            metrics.plan.distinct_interned_semantic_states,
+        ),
+        ("defined_helpers", metrics.plan.defined_helpers),
+        ("emitted_helpers", metrics.emitted_helpers),
+        ("clif_instructions", metrics.clif_instructions),
+        ("clif_bytes", metrics.clif_bytes),
+        (
+            "descriptor_construction_work",
+            metrics.plan.descriptor_construction_work,
+        ),
+        (
+            "descriptor_comparison_work",
+            metrics.plan.descriptor_comparison_work,
+        ),
+        ("total_dfg_values", metrics.total_dfg_values),
+        ("total_instructions", metrics.total_instructions),
+        ("total_blocks", metrics.total_blocks),
+        ("static_nodes", metrics.plan.static_nodes),
+        ("edges", metrics.plan.edges),
+        ("planned_helpers", metrics.plan.planned_helpers),
+        (
+            "persistent_store_nodes",
+            metrics.plan.persistent_store_nodes,
+        ),
+    ] {
+        assert!(value > 0, "required D2 metric {name} was not collected");
+    }
+
+    let plan = &metrics.plan;
+    eprintln!(
+        "RT_SCALE_B_RESULT status=measured_complete n={depth} \
+         authority=FunctionizedUnits compile_wall_ns={compile_wall_ns} \
+         peak_rss_kib={peak_rss_kib} \
+         distinct_interned_semantic_states={} defined_helpers={} \
+         emitted_helpers={} production_functions={} clif_instructions={} \
+         clif_bytes={} descriptor_construction_work={} \
+         descriptor_comparison_work={} total_dfg_values={} \
+         total_instructions={} total_blocks={} static_nodes={} edges={} \
+         planned_helpers={} persistent_store_nodes={} \
+         out_of_line_evidence_records={} max_helpers_per_static_source={} \
+         helper_key_bytes={} activation_frame_bytes={} store_node_bytes={} \
+         helper_key_schemas={} frame_schemas={} store_node_schemas={} \
+         static_node_id_bytes={} persistent_node_id_bytes={} \
+         max_logical_chain_depth={} max_environment_depth={} \
+         max_continuation_depth={} max_path_depth={} max_cleanup_depth={} \
+         max_affine_depth={} max_source_return_depth={} \
+         source_return_resume_nodes={} source_return_owned_resume_edges={} \
+         terminal_outgoing_edges={} recursive_lowering_frames={} \
+         stack_bytes=8388608",
+        plan.distinct_interned_semantic_states,
+        plan.defined_helpers,
+        metrics.emitted_helpers,
+        metrics.production_functions,
+        metrics.clif_instructions,
+        metrics.clif_bytes,
+        plan.descriptor_construction_work,
+        plan.descriptor_comparison_work,
+        metrics.total_dfg_values,
+        metrics.total_instructions,
+        metrics.total_blocks,
+        plan.static_nodes,
+        plan.edges,
+        plan.planned_helpers,
+        plan.persistent_store_nodes,
+        plan.out_of_line_evidence_records,
+        plan.max_helpers_per_static_source,
+        plan.helper_key_bytes,
+        plan.activation_frame_bytes,
+        plan.store_node_bytes,
+        plan.helper_key_schemas,
+        plan.frame_schemas,
+        plan.store_node_schemas,
+        plan.static_node_id_bytes,
+        plan.persistent_node_id_bytes,
+        plan.max_logical_chain_depth,
+        plan.max_environment_depth,
+        plan.max_continuation_depth,
+        plan.max_path_depth,
+        plan.max_cleanup_depth,
+        plan.max_affine_depth,
+        plan.max_source_return_depth,
+        plan.source_return_resume_nodes,
+        plan.source_return_owned_resume_edges,
+        plan.terminal_outgoing_edges,
+        plan.recursive_lowering_frames,
+    );
+}
+
 fn d8_mixed_host_result_join_fixture(swapped: bool) -> RuntimeExpr {
     let carried = crate::RuntimeMatchCase {
         constructor: "ctor:prelude::Result::Ok".to_string(),

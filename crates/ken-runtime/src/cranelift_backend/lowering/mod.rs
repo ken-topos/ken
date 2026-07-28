@@ -80,7 +80,7 @@ pub(in crate::cranelift_backend) use super::planning::{
 };
 #[cfg(test)]
 pub(in crate::cranelift_backend) use super::planning::{
-    plan_static_transition_graph, with_last_io_error_role_omitted,
+    plan_static_transition_graph, with_last_io_error_role_omitted, ScaleBPlanCensus,
 };
 pub(in crate::cranelift_backend) use super::surface::{
     backend, backend_module, unsupported, BackendFailure, CraneliftBackendError,
@@ -91,6 +91,126 @@ pub(in crate::cranelift_backend) use super::surface::{
 // build, which the test build cannot show you.
 #[cfg(test)]
 pub(in crate::cranelift_backend) use crate::RuntimeMatchCase;
+
+/// One completed FunctionizedUnits emission row for RT-SCALE-B.
+///
+/// The fixed native-Int and boundary-value graphs, every unit body, and the
+/// public root adapter all record through the same function seam.  Imports and
+/// test-only probes never call that seam.
+#[cfg(test)]
+#[derive(Clone, Debug)]
+pub(in crate::cranelift_backend) struct ScaleBEmissionMetrics {
+    pub(in crate::cranelift_backend) plan: ScaleBPlanCensus,
+    pub(in crate::cranelift_backend) authority_functionized: bool,
+    pub(in crate::cranelift_backend) emitted_helpers: usize,
+    pub(in crate::cranelift_backend) production_functions: usize,
+    pub(in crate::cranelift_backend) clif_instructions: usize,
+    pub(in crate::cranelift_backend) clif_bytes: usize,
+    pub(in crate::cranelift_backend) total_dfg_values: usize,
+    pub(in crate::cranelift_backend) total_instructions: usize,
+    pub(in crate::cranelift_backend) total_blocks: usize,
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug)]
+struct ScaleBEmissionAttempt {
+    metrics: ScaleBEmissionMetrics,
+    complete: bool,
+}
+
+#[cfg(test)]
+thread_local! {
+    static SCALE_B_EMISSION_ATTEMPT:
+        std::cell::RefCell<Option<ScaleBEmissionAttempt>> =
+            const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+fn scale_b_reset_emission_attempt() {
+    SCALE_B_EMISSION_ATTEMPT.with(|attempt| *attempt.borrow_mut() = None);
+}
+
+#[cfg(test)]
+fn scale_b_begin_emission_attempt(
+    plan: &StaticTransitionPlan<'_>,
+    authority_functionized: bool,
+) {
+    SCALE_B_EMISSION_ATTEMPT.with(|attempt| {
+        *attempt.borrow_mut() = Some(ScaleBEmissionAttempt {
+            metrics: ScaleBEmissionMetrics {
+                plan: plan.scale_b_census(),
+                authority_functionized,
+                emitted_helpers: 0,
+                production_functions: 0,
+                clif_instructions: 0,
+                clif_bytes: 0,
+                total_dfg_values: 0,
+                total_instructions: 0,
+                total_blocks: 0,
+            },
+            complete: false,
+        });
+    });
+}
+
+#[cfg(test)]
+fn scale_b_finish_emission_attempt() {
+    SCALE_B_EMISSION_ATTEMPT.with(|attempt| {
+        if let Some(attempt) = attempt.borrow_mut().as_mut() {
+            attempt.complete = true;
+        }
+    });
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn scale_b_last_emission_metrics(
+) -> Option<ScaleBEmissionMetrics> {
+    SCALE_B_EMISSION_ATTEMPT.with(|attempt| {
+        attempt
+            .borrow()
+            .as_ref()
+            .filter(|attempt| attempt.complete)
+            .map(|attempt| attempt.metrics.clone())
+    })
+}
+
+#[cfg(test)]
+fn scale_b_record_function(function: &Function, emitted_helper: bool) {
+    SCALE_B_EMISSION_ATTEMPT.with(|attempt| {
+        let mut attempt = attempt.borrow_mut();
+        let Some(attempt) = attempt.as_mut() else {
+            return;
+        };
+        if attempt.complete {
+            return;
+        }
+        let instructions = function.dfg.num_insts();
+        attempt.metrics.production_functions += 1;
+        attempt.metrics.clif_instructions += instructions;
+        attempt.metrics.clif_bytes += function.display().to_string().len();
+        attempt.metrics.total_dfg_values += function.dfg.num_values();
+        attempt.metrics.total_instructions += instructions;
+        attempt.metrics.total_blocks += function.dfg.num_blocks();
+        if emitted_helper {
+            attempt.metrics.emitted_helpers += 1;
+        }
+    });
+}
+
+#[cfg(test)]
+pub(crate) fn scale_b_record_fixed_helper(function: &Function) {
+    scale_b_record_function(function, false);
+}
+
+#[cfg(test)]
+fn scale_b_record_root_adapter(function: &Function) {
+    scale_b_record_function(function, false);
+}
+
+#[cfg(test)]
+fn scale_b_record_unit_body(function: &Function) {
+    scale_b_record_function(function, true);
+}
 
 const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 13] = [
     ken_host::HostOpV1::ConsoleWrite,
