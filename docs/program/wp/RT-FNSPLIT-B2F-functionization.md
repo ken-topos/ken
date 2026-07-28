@@ -1074,6 +1074,36 @@ recipe is in the tree** — see the recipe requirement below.
 **D8 — the growth verdict.** The Θ(n)-units / bounded-per-function claim, stated
 in the Architect's exact shape, with `AC-G0`'s denominator named.
 
+**D9 — the sole carrier producer made TOTAL over the value classes a unit result
+can take.** ⭐ **Added 2026-07-28 on the Architect's ruling `evt_69aedr4j844xd`;
+Steward-scoped.** Extend `C1`'s producer to cover **spillable `Int`, `Bytes`,
+`ProcessExitStatus`, `HostResult`, and `Trap`** — the five classes whose absence
+the switch-over measured as **69 reds**, each of which says so in its own error
+text (*"the carrier producer does not yet emit …"*).
+
+> ### ⭐ WHY THIS IS `B2F` WORK AND NOT A NEW NODE — the scoping call, made
+>
+> **Steward, 2026-07-28.** `C1` is **merged**; this is a residual of a closed
+> node that only functionization could surface. ⭐ **Under the inliner a closure
+> body's result never crosses anything** — it stays a compile-time `Lowered` in
+> the caller's own dataflow. A **unit's** result crosses a function boundary and
+> so must be *produced into a carrier*. ⇒ Producer completeness stops being a
+> `C1`-internal question and becomes this node's critical path.
+>
+> ⛔ **It does not touch the atomic boundary, and that is the test that decides
+> it.** The clause above forbids a **second production authority**; this makes
+> the **single existing** authority total. It declares **no target unit**, adds
+> **no production call edge**, and installs **no second decoder** — so it is
+> ⛔ **not** a fourth application of the spent preparatory-merge escape, and
+> raising it as one would be a hard-stop against a clause it does not touch.
+>
+> ⇒ ✅ **Land it as a green increment on the pre-switch-over base**, the same way
+> `ArtifactHelpers` and `AC-4`'s route pin already landed. ⚠ Those 69 tests are
+> **green today** — they red only *under* a switch-over that is not landed — so
+> this deliverable is behaviour-**additive**: new capability, no existing
+> behaviour changed. ⭐ That is precisely what makes it safe to land alone, and
+> ⛔ it is also what makes a green suite worth nothing as evidence for it.
+
 ---
 
 ## Acceptance criteria
@@ -1602,6 +1632,57 @@ control that reddens if the emission ignores the declaration.**
 (`abi.rs:122`) discharges nothing** — it re-measures a `const fn` over a closed
 enum. ★ *`pin-a-property`:* the needle must not be supplied by the thing under
 test.
+
+**AC-13 — the carrier producer is TOTAL, and totality is proved by the COMPILER,
+not by a case list** (`D9`). **Control, and it has two halves that do not
+substitute for each other:**
+
+1. ⛔ **Structural.** The producer dispatches over the **closed** variant sum
+   with **no `_` arm** — the same discipline `SemanticOwner` (`semantic_ir.rs:62`)
+   already carries. ⭐ **Then the compiler is the oracle:** a variant added later
+   cannot be silently unhandled, and no test has to remember to exist. ⛔ Five
+   hand-written cases discharge nothing — they are satisfied by exactly the five
+   classes you thought of, which is the population that was already known.
+2. ⛔ **Behavioural, per class.** For each of the five, a fixture whose **answer**
+   depends on the value surviving the transfer. ⚠ A test that produces a carrier
+   and asserts on its tag re-measures the constructor.
+
+⛔ **The `#[cfg(test)]` trap, and this frame has already been bitten by it once.**
+Correction row 5 above records `D2` pinned to `AbiPlane::shape`/`shapes` — ⛔
+**both `#[cfg(test)]`**, so the deliverable was **unbuildable, not merely
+mis-anchored**, and no line-number audit would ever have found it. ⇒ ⛔ **A
+producer arm reachable only from a test configuration does not discharge `AC-13`
+for that class.** ⚠ Verify in **both** configurations — the `cfg(test)` asymmetry
+clause above cuts both ways here too.
+
+**AC-14 — the process-ambient pair crosses ONLY through declared slots**
+(Architect ruling `evt_69aedr4j844xd`, §2 — ⛔ do not paraphrase the mechanism).
+`BorrowedNativeValue` and `CapabilityToken` are **Ken source-valued bindings**:
+parameters at root ingress, captures in a retained body that closes over them.
+The root wrapper loads them from host activation context and produces their `B2V`
+words into the root unit's **declared** process-input/capability slots;
+descendants transfer only what their callee descriptor declares; each callee
+builds its environment **solely** from those slots, in descriptor order.
+
+⛔ **No caller-env append. ⛔ No callee-side reload of offsets `0`/`16` as a
+substitute for a missing slot. ⛔ No new ambient-capture provenance or implicit
+tail.**
+
+**Control — the Architect's discriminator, and it is two-sided:** a separately
+emitted process body whose answer uses **both** bindings, where **(a)** deleting
+either declared slot, or substituting a callee-side host-context reload, **must
+red**, and **(b)** an otherwise identical body that does **not** close over a
+binding **must not acquire its slot**. ⚠ Without **(b)** the control is passed by
+an emitter that hands every unit every slot.
+
+⛔ **The nine traced failures are NOT the class.** They are the part that was
+traced. Every genuinely free variable reaching past a unit's slots must likewise
+be **declared or fail closed** — ⚠ if the plan does not name those slots, that is
+the defect `S6` exposed: repair closure conversion, or reject before emission.
+⭐ **The fixed host-context parameter stays structurally separate from the
+program-derived frame schema** — it is permitted as uniform, non-program-derived
+runtime service context, and ⛔ that permission does **not** extend to rebuilding
+the semantic environment from it.
 
 ---
 
