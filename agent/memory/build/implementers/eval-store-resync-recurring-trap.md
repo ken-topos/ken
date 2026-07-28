@@ -23,8 +23,9 @@ completely silent, no-error failure mode that looks exactly like "the interp is
 stuck" rather than "my test harness is stale." The analogous trap exists for
 `store.list_char_ids`: if it's never set (or the harness is built before
 `String`-op-touching decls exist), `string_to_list_char`/`list_char_to_string`
-degrade to `Neutral` too (`ken-interp/src/eval.rs:1032-1040`, by design — "never
-silently wrong," but silent to a test author who doesn't know to check).
+degrade to `Neutral` too (see `store.list_char_ids`'s usage in
+`crates/ken-interp/src/eval.rs`, by design — "never silently wrong," but silent
+to a test author who doesn't know to check).
 
 **How to apply:** the moment a scratch probe returns `Neutral`/
 `CtorPending`/garbage instead of the expected value, check the harness's OWN

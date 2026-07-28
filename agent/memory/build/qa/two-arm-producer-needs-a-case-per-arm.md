@@ -28,38 +28,8 @@ The enumeration-arm analog of "a multi-dimensional guard needs a case per
 dimension" (soundness AC static vs runtime face); sibling of discriminating
 conformance verdict must flip.
 
-**Disposition sub-rule (sharpened):** a **non-blocking strengthening** surfaced
-at review, when the branch is **free**, is **folded now** (a scope-mismatched
-carry silently never lands — trust level prose vs locked adr crosscheck's Lc
-lesson) — BUT fold-now is only clean if the fold stays **ahead of the Decision's
-SHA anchor**. Folding **after** a Decision is *proposed* (SHA recorded, gates
-cast on it) moves the tip out from under the record, and the merged SHA must
-equal the Decision's authoritative SHA (multipiece erratum verify all on main).
-So: fold **before** the gate opens; or if a gate is already cast, either hold it
-as a **named fast-follow** (don't move the tip under a live Decision) or fold +
-explicitly **re-anchor the Decision's SHA** to the new tip + re-affirm carrying
-gates. Live (Sec4): I folded B4 after gates were cast on `a81da90` → tip moved
-to `e940fe2`, but `a81da90` **merged to main** (`446c2f3`) before the fold
-caught up (a reviewer's "still on 0e4a93d" was already stale), so the SHA race
-became a **forward erratum**, not a pre-merge fix — the Steward cherry-picked
-`e940fe2`'s B4 delta onto main (additive, no revert/force-push; the
-Lc-coherence-erratum pattern), the three gates carrying. Sharpened: once a
-proposed tip can merge out from under you, a later fold is a **fast-follow
-erratum**, so when a gate is already cast prefer **holding the strengthening as
-a named fast-follow** over moving the tip.
-
-**Temporal-race edge (ES3, 2026-07-01).** "Fold ahead of the SHA anchor" is not
-just a *logical* ordering — it is a **race against the merge pipeline**. When a
-Decision is **proposed** (SHA recorded, gates voting), the publisher path may be
-mid-**PR-publish** on that SHA; a fold + re-anchor **races that publish**. If
-the publish + merge fires on the proposed SHA before your fold lands, the fix is
-**orphaned into a post-merge erratum** — the exact thing fold-ahead was meant to
-avoid. Live: I folded a `11 §4` quote-fix after `dec_8ce3w6h1dm2b` was proposed
-on `cdbf155`; it **won** the race (main landed my fixed `106a601`), but it was a
-near-miss. **Rule:** a pre-merge fold-ahead is clean **only if it wins the
-race** — so when folding after a Decision is proposed, announce the new SHA
-**AND explicitly flag the Steward/publisher path to hold + merge the new tip**
-(never assume the fold beats the publish); if the publisher has already published, treat it
-as a post-merge erratum, don't chase the pipeline. A fold worth doing pre-merge
-(a wrong **direct quote** gaining false authority on main — laundered-citation
-hygiene) is still worth doing; just don't leave the win to chance.
+**Disposition of the B4 fold itself** (a non-blocking strengthening surfaced at
+review, folded after gates were already cast, racing the merge on `a81da90`) —
+that is a distinct discipline from the discriminator-per-arm rule above; see
+[[mid-review-fix-inline-escalate-or-track]] for the full fold-vs-track timing
+rule and the Sec4 B4 SHA-race evidence.
