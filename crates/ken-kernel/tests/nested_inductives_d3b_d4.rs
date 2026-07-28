@@ -310,7 +310,6 @@ fn declared_positive_former_lift_builds_dependent_host_evidence() {
     let nil = list_declaration.constructors[0].id;
     let cons = list_declaration.constructors[1].id;
     let family_type = former(family);
-    let source_list_type = Term::app(former(list), family_type.clone());
     let motive = Term::Ascript(
         Box::new(Term::lam(family_type.clone(), family_type.clone())),
         Box::new(Term::pi(family_type.clone(), ty0())),
@@ -373,57 +372,10 @@ fn declared_positive_former_lift_builds_dependent_host_evidence() {
                 &[],
             )
             .expect("host method type");
-            if index == 1 {
-                eprintln!("host method={host_method:?}");
-                eprintln!("host expected={expected:?}");
-                let (_, expected_body) = peel_pi(&expected);
-                let (expected_domains, _) = peel_pi(&expected);
-                let mut method_context = Context::new();
-                method_context.extend_tel(&expected_domains);
-                let mut actual_body = host_method.clone();
-                while let Term::Lam(_, body) = actual_body {
-                    actual_body = *body;
-                }
-                eprintln!("actual body={actual_body:?}");
-                eprintln!("expected body={expected_body:?}");
-                eprintln!(
-                    "expected whnf={:?}",
-                    ken_kernel::whnf(&env, &method_context, &expected_body)
-                );
-                let Term::Pair(first, second) = &actual_body else {
-                    panic!("expected outer evidence pair")
-                };
-                let Term::Pair(second_first, _) = second.as_ref() else {
-                    panic!("expected nested evidence pair")
-                };
-                let Term::Sigma(_, expected_rest) =
-                    ken_kernel::whnf(&env, &method_context, &expected_body)
-                else {
-                    panic!("expected outer evidence Sigma")
-                };
-                let rest = ken_kernel::subst::subst0(&expected_rest, first);
-                let Term::Sigma(expected_ih, _) =
-                    ken_kernel::whnf(&env, &method_context, &rest)
-                else {
-                    panic!("expected nested evidence Sigma")
-                };
-                let found_ih = infer(&env, &method_context, second_first)
-                    .expect("infer supplied host IH");
-                eprintln!("expected ih={expected_ih:?}");
-                eprintln!("found ih={found_ih:?}");
-                eprintln!(
-                    "ih converts={}",
-                    convert_type(&env, &method_context, &expected_ih, &found_ih)
-                );
-            }
             check(&env, &Context::new(), host_method, &expected)
                 .unwrap_or_else(|error| panic!("host method {index}: {error}"));
         }
     }
-    eprintln!(
-        "lifted type={:?}",
-        infer(&env, &Context::new(), lifted).expect("infer lifted")
-    );
     check(&env, &Context::new(), lifted, &instantiated_lift_type)
         .expect("the second host elimination inhabits the generated FormerLift");
 

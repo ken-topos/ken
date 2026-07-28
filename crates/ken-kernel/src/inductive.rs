@@ -596,14 +596,6 @@ fn evidence_sigma(mut components: Vec<Term>, terminal: Term) -> Term {
     result
 }
 
-fn evidence_pair(mut components: Vec<Term>, terminal: Term) -> Term {
-    let mut result = terminal;
-    while let Some(component) = components.pop() {
-        result = Term::pair(component, result);
-    }
-    result
-}
-
 fn terminal_type(
     ind: &InductiveDecl,
     level_args: &[Level],
