@@ -23,7 +23,7 @@ pub(in crate::cranelift_backend) use std::collections::{BTreeMap, BTreeSet};
 // `RT-FNSPLIT-B2V` `D4`. Re-exported at facade scope like every other import in
 // this header so the `tests` subtree inherits the names.
 pub(in crate::cranelift_backend) use crate::boundary_value::{
-    BoundaryClass, BoundaryReferentOwner, BoundaryTag,
+    BoundaryClass, BoundaryReferentOwner, BoundaryTag, BOUNDARY_OK,
 };
 
 pub(in crate::cranelift_backend) use cranelift_codegen::ir::{
@@ -98,6 +98,28 @@ enum Px8jProducerPath {
     DeferredConstructor,
     SourceMachine,
 }
+/// ⭐ **The phase of an induction hypothesis's residual, with the carried word
+/// when there is one** (`RT-FNSPLIT-C1` `AC-C4`, `§2g-i`).
+///
+/// ⚠ **The raw `ir::Value` is recorded rather than a `CarriedBoundaryWord`, and
+/// that is deliberate.** Recording the struct would require giving it
+/// `PartialEq` — which would hand *production* a compile-time way to ask
+/// whether two carried values are the same word. ⛔ That is exactly the
+/// capability `CarriedBoundaryWord`'s emptiness exists to deny (see its doc
+/// comment: every question about a carried value is answered by an emitted
+/// helper at runtime). ⇒ The observation stays test-only in its **capability**,
+/// not merely in its `#[cfg]`.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Px8jResidualPhase {
+    /// The carried phase, together with the exact boundary word held.
+    Carried(cranelift_codegen::ir::Value),
+    /// The specialized phase. ⛔ Recorded as a phase only: `§2g-i`'s clause
+    /// constrains the **carried** arm, and a specialized residual is a
+    /// different route entirely.
+    Specialized,
+}
+
 #[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Px8jSourceTraceEvent {
@@ -113,6 +135,32 @@ enum Px8jSourceTraceEvent {
         origin: RecursorProducerOriginId,
         cursor: ContinuationCursorId,
         sibling_position: usize,
+        /// ⭐⭐ **The RESIDUAL edge — `§2g-i`'s actual sentence.**
+        ///
+        /// ⛔ Every other field of this event observes the **metadata** edge:
+        /// `origin`, `cursor` and `sibling_position` all say *who owns* the
+        /// hypothesis. ⛔ **None of them says what is INSIDE it.** Substituting
+        /// one projected child for another leaves all three byte-identical —
+        /// which is precisely the compile-preserving evasion that defeated this
+        /// control (`children[position]` → `children[0]`, `runtime-qa` on
+        /// `b8d2922f`).
+        residual: Px8jResidualPhase,
+    },
+    /// ⭐ **A child projected out of a carried scrutinee, as
+    /// `(position, word)`.**
+    ///
+    /// ⭐⭐ **This is the INDEPENDENT ORACLE for the residual edge, and the
+    /// independence is structural, not a matter of care.** It is written by the
+    /// projection loop itself, keyed on **that loop's own counter** — so it
+    /// records which field each word actually came from, and it is written
+    /// *before* any selection among the children happens. ⇒ A test may name a
+    /// position on its **fixture's** authority and ask this record which word
+    /// that field produced, without ever reading the index the production path
+    /// selected with.
+    CarrierFieldProjection {
+        path: Px8jProducerPath,
+        position: usize,
+        word: cranelift_codegen::ir::Value,
     },
     Install {
         origin: RecursorProducerOriginId,
@@ -175,16 +223,48 @@ fn px8tr_deforested_answer_route_enabled() -> bool {
 fn px8tr_deforested_answer_route_enabled() -> bool {
     true
 }
+/// Record which child a carried scrutinee's projection loop produced at each
+/// position. ⭐ See `Px8jSourceTraceEvent::CarrierFieldProjection` — this is the
+/// residual edge's independent oracle.
 #[cfg(test)]
-fn px8j_record_recursor_carrier(path: Px8jProducerPath, value: &Lowered) {
-    let Lowered::ComputationalRecursorClosure { invocation, .. } = value else {
+fn px8j_record_carrier_field_projection(
+    path: Px8jProducerPath,
+    position: usize,
+    word: CarriedBoundaryWord,
+) {
+    px8j_record_source_event(Px8jSourceTraceEvent::CarrierFieldProjection {
+        path,
+        position,
+        word: word.word,
+    });
+}
+
+#[cfg(test)]
+fn px8j_record_recursor_carrier(path: Px8jProducerPath, value: &LoweringOperand) {
+    // ⭐ A trace probe, so it is total over both phases and takes neither
+    // boundary: a carried operand is simply not a recursor carrier, which is the
+    // same "nothing to record" answer any other non-recursor value gets.
+    let LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure {
+        residual,
+        invocation,
+        ..
+    }) = value
+    else {
         return;
+    };
+    // ⭐ Total over both phases here too, and wildcard-free: the residual's
+    // phase is part of what is observed, so an unclassifiable arm would be a
+    // silent hole in exactly the edge this field exists to expose.
+    let residual = match residual.as_ref() {
+        LoweringOperand::Carried(word) => Px8jResidualPhase::Carried(word.word),
+        LoweringOperand::Specialized(_) => Px8jResidualPhase::Specialized,
     };
     px8j_record_source_event(Px8jSourceTraceEvent::Carrier {
         path,
         origin: invocation.origin,
         cursor: invocation.resume_cursor,
         sibling_position: invocation.sibling_position,
+        residual,
     });
 }
 fn verify_cranelift_function(
@@ -304,6 +384,40 @@ struct Lowering<'a> {
     live_source_continuations: usize,
     source_control_root: Option<ContinuationCursorId>,
     active_oriented_semantic_regions: usize,
+    /// ⛔⛔ **`AC-C4`'s TERMINATION GUARD — the carried computational
+    /// eliminations currently being emitted, by their frame's static origin.**
+    ///
+    /// ⚠ **Why a guard is needed at all, and it is not a scope choice.** A
+    /// *specialized* recursive elimination terminates because its residual is a
+    /// compile-time value that gets strictly smaller — `Suc(Suc(Zero))` reaches
+    /// `Zero`. A **carried** residual is a runtime word, so nothing shrinks at
+    /// compile time: emitting the recursive case emits its induction-hypothesis
+    /// invocation, which re-enters the same eliminator, which emits the
+    /// recursive case again. ⇒ Inlining a carried recursion **cannot
+    /// terminate**, for any recursive datatype, and without this the compiler
+    /// does not error — it **hangs and then overflows its stack**.
+    ///
+    /// ⭐ Keyed on the frame's own `static_origin` rather than a depth count, so
+    /// it refuses exactly self-resumption and ⛔ still permits a case body to
+    /// eliminate a *different* carried value. A bare depth bound would refuse
+    /// legitimate nesting — an over-strengthened guard manufacturing defects.
+    ///
+    /// ⛔⛔ **This is a TRANSITION SENTINEL, ⛔ not closure — and the successor
+    /// that retires it is named.** Steward decision 2026-07-28 (`C1 §2g-i`'s
+    /// amendment block): `AC-C4` splits, `C1` keeps the representation half, and
+    /// **`RT-FNSPLIT-B2F` owns the runtime invocation** inside its existing
+    /// atomic target/switch boundary. ⇒ `B2F` emits one closed, recursively
+    /// callable target per static computational-eliminator origin and turns a
+    /// zero-argument structural IH into a **direct call to that same target**;
+    /// at that point this stack, and the refusal it guards, come out.
+    ///
+    /// ⚠ **`B2F`'s termination premise is a DIFFERENT argument from this
+    /// guard's, and that is the point.** This refuses because nothing shrinks at
+    /// **compile** time. `B2F` may call because the producer→validator boundary
+    /// has already established a **finite acyclic carrier graph** and the call
+    /// rides a **declared recursive child edge** — so its measure is strict
+    /// descent in that validated graph, ⛔ never compile-time shrinkage.
+    active_carried_computational_eliminations: Vec<StaticOriginId>,
     native_join_plan: Option<crate::NativeJoinPlanV1>,
     consumed_join_sites: BTreeSet<u64>,
     root_terminal_authority: Option<RootTerminalAnswerAuthority>,
@@ -331,6 +445,15 @@ struct Lowering<'a> {
     native_int_narrow: Option<FuncRef>,
     native_int_export: Option<FuncRef>,
     native_int_tags: BTreeMap<cranelift_codegen::ir::Value, cranelift_codegen::ir::Value>,
+    /// The boundary-carrier helpers, made callable inside **this** generated
+    /// function (`RT-FNSPLIT-C1` `D3`).
+    ///
+    /// ⛔ `FuncRef`s, not `FuncId`s — the ruling requires the helper IDs to be
+    /// *"declared into each generated function as callable refs and actually
+    /// called by all three routes"*, and a `FuncId` held here would be exactly
+    /// the inert threading the node forbids: present, plausible, and never
+    /// reaching an emitted call.
+    boundary_carrier: Option<BoundaryCarrierRefs>,
     #[cfg(test)]
     native_int_mutation: NativeIntLoweringMutation,
     #[cfg(test)]
@@ -385,7 +508,7 @@ enum RecursorLayerRole {
 struct ComputationalRecursorFramePayload {
     cases: Vec<crate::RuntimeComputationalMatchCase>,
     default: RuntimeTrap,
-    outer_env: Vec<Lowered>,
+    outer_env: Vec<LoweringOperand>,
     /// The origin of the computational-match occurrence these cases came from,
     /// cloned into this payload **in the same constructor as the cases** so a
     /// later resumption can still derive a case body's origin positionally
@@ -500,8 +623,42 @@ enum Lowered {
         params: Vec<String>,
         body: StaticOriginId,
     },
+    /// ⭐⭐ **The one `Lowered` child position that is a [`LoweringOperand`], by
+    /// the Architect's `AC-C4` SINGLE-FIELD LICENSE — ⛔ not a precedent.**
+    ///
+    /// `residual` is the value the saved recursor **continues on**. `§2h`'s
+    /// phase closure therefore requires this edge to preserve `Carried`:
+    /// eliminating a carried scrutinee whose case declares a recursive position
+    /// builds an induction hypothesis over a **carried** child, and treating
+    /// that child as a compile-time template is precisely the defect that
+    /// closure exists to forbid.
+    ///
+    /// ⭐ **Why this is not the `§2g` violation it looks like.** The governing
+    /// line is **phase identity, not transitive Rust containment.** `§2g`
+    /// forbids a carried word from *becoming* a `Lowered` inhabitant or
+    /// acquiring a [`LoweredVariant`], a [`BoundaryDisposition`], an encoding
+    /// policy, or an inverse conversion. None of those happens here: the word
+    /// stays typed as a `LoweringOperand` end to end, and the outer object
+    /// remains a specialization-only, in-flight **control capsule**.
+    /// `Specialized` classifies how *that capsule* is consumed; it never
+    /// asserted that every operand edge the capsule owns is itself specialized.
+    ///
+    /// ⛔ **The license is this field and nothing else.** `Constructor`,
+    /// `Record`, `Closure`, `DeclarationClosure` and every other child position
+    /// stay `Lowered`. ⛔ No third `LoweringOperand` variant, ⛔ no
+    /// `Lowered::Boundary`, ⛔ no `Carried -> Lowered` conversion, ⛔ no durable
+    /// closure lane, ⛔ no encoder/decoder row, ⛔ no carrier tag.
+    ///
+    /// ⚠ **The capsule itself stays unconditionally non-transferable, and the
+    /// ORDERING is part of the ruling.** The admission walk must reject a
+    /// `ComputationalRecursorClosure` *before* inspecting or emitting its
+    /// residual — see [`Lowering::boundary_transfer_admissibility`] and the
+    /// [`LoweredVariant::ComputationalRecursorClosure`] `FailClosedForbidden`
+    /// row, both of which match `{ .. }` and refuse without descending. A
+    /// carried residual must not become a way to reach the carrier through a
+    /// capsule that is otherwise refused.
     ComputationalRecursorClosure {
-        residual: Box<Lowered>,
+        residual: Box<LoweringOperand>,
         activation: ContinuationActivationId,
         invocation: RecursorInvocationSegment,
     },
@@ -510,6 +667,800 @@ enum Lowered {
     /// marker so it cannot be confused with an ordinary or terminal value.
     RecursiveBackedge,
     Trap(RuntimeTrap),
+}
+
+/// The boundary-carrier helpers this generated function may call.
+///
+/// ⛔ **Exactly the helpers the four carrier routes use, and no more.** A ref
+/// declared here that no route calls is inert threading — the defect this node
+/// exists to avoid — so the set is kept minimal and every member is reached by
+/// the one-way producer ([`Lowering::transfer_into_carrier`]), the
+/// `Match`/`ComputationalMatch` route, or the `Project` route.
+///
+/// ⚠ **The set grew by two when the producer landed, and the reason is worth
+/// recording rather than absorbing.** The original comment said *"exactly the
+/// helpers the three **eliminators** use"* — which under-counts by exactly the
+/// producer, because `§2g` names it as a fourth route (*"the boundary producer
+/// has a one-way typed seam ... it consumes the sole `BoundaryLocalFuncs`
+/// authority"*). `make_immediate` and `store_name` are producer-only: an
+/// eliminator never mints an immediate and never writes a field name.
+#[derive(Clone, Copy, Debug)]
+struct BoundaryCarrierRefs {
+    /// `(arena, word, out) -> status` — the runtime constructor/record identity
+    /// that `Match` discriminates against the artifact-static case set.
+    tag: FuncRef,
+    /// `(arena, word, out) -> status` — the child count a case's binder arity
+    /// is checked against **at runtime**.
+    field_count: FuncRef,
+    /// `(arena, word, index, out) -> status` — positional child projection.
+    /// Its result stays [`LoweringOperand::Carried`].
+    field: FuncRef,
+    /// `(arena, word, name_id, out) -> status` — `Project` by artifact-static
+    /// field identity.
+    record_field: FuncRef,
+    /// `(arena, tag, class, field_count, out) -> status` — the one-way
+    /// producer's allocation step.
+    alloc: FuncRef,
+    /// `(arena, word, tag_id) -> status` — the producer records the identity.
+    store_tag_id: FuncRef,
+    /// `(arena, word, index, child) -> status` — the producer writes children.
+    store_field: FuncRef,
+    /// `(arena, word, index, name_id) -> status` — the producer writes a
+    /// record's field names, so [`Self::record_field`] can find one by
+    /// artifact-static identity. ⛔ No `arena`-free shortcut: the name a
+    /// `Project` looks up and the name the producer wrote must be the same
+    /// word, which is `D2` at the field-identity namespace.
+    store_name: FuncRef,
+    /// `(tag, payload, out) -> status` — the producer's leaf step for a value
+    /// whose payload rides in the tagged word. ⚠ Note the **absent `arena`**:
+    /// an immediate names no referent, so there is nothing for an arena to own.
+    make_immediate: FuncRef,
+}
+
+/// A value that has crossed into the **operational carrier** — nothing but the
+/// Cranelift SSA boundary word (`RT-FNSPLIT-C1` `D3`).
+///
+/// ⛔ **It holds the word and NOTHING ELSE, and the emptiness is the point.**
+/// No constructor string, no field list, no body or template, no tag/class, no
+/// reverse-decoding data. Every question about this value — which constructor,
+/// how many fields, which child — is answered by **calling an emitted helper at
+/// runtime**, never by reading a field of this struct. ⇒ The struct having room
+/// for a compile-time answer is exactly how the wall would grow back.
+#[derive(Clone, Copy, Debug)]
+struct CarriedBoundaryWord {
+    word: cranelift_codegen::ir::Value,
+}
+
+/// ⭐ **The closed PHASE sum — which phase a lowering operand is in, not what
+/// kind of value it is** (`RT-FNSPLIT-C1` `D3`).
+///
+/// ⛔ **THE RULING IS `§2g` OF THE C1 FRAME — cite it, do not restate it.**
+/// `docs/program/wp/RT-FNSPLIT-C1-operational-carrier.md §2g` carries Architect
+/// Decision `dec_4te25repm33ph`'s resolution verbatim. Where the frame and any
+/// restatement disagree, **the frame governs**.
+///
+/// ⚠ An earlier revision of this comment pasted the ruling text here. That was
+/// a **second authority** — the exact defect this chain keeps paying for — and
+/// it is deleted rather than kept "for convenience": two copies of a ruling
+/// drift silently, and the copy nearest the code is the one a reader trusts.
+///
+/// ⭐ The clause that shapes the surface census, and the one a
+/// three-eliminator reading misses: **environments and result surfaces that can
+/// receive a transferred value carry this wrapper.** Every other clause is
+/// prohibitive; this one *adds* obligated surface.
+///
+/// ⚠ The **name** `LoweringOperand` is this implementation's choice and is not
+/// ruled; the **shape** is.
+///
+/// ⛔ **NOT a variant of [`Lowered`].** `Lowered` is a compile-time
+/// specialization lattice (`§2f`); a `Lowered::Boundary` inhabitant is the
+/// `B2E` shape the inertness rule rejects — the inhabitant is the easy half and
+/// the three executable eliminations are the node.
+///
+/// ⛔ **One-way.** There is a producer into [`Self::Carried`] and deliberately
+/// **no** inverse: a `Carried → Lowered` conversion would let a consumer
+/// recover a compile-time template from a runtime value, which is the wall
+/// itself wearing a different name.
+// ⛔ No `Debug`: `Lowered` has none, and deriving one here would be a new,
+// second way to read a compile-time template out of an operand.
+#[derive(Clone)]
+enum LoweringOperand {
+    /// The compile-time specialization lattice — every route that existed
+    /// before this node. ⛔ Kept as an **explicit** arm, never a fallback:
+    /// a fallback arm is a wildcard with better manners.
+    Specialized(Lowered),
+    /// A runtime boundary word, eliminated only by emitted helpers.
+    Carried(CarriedBoundaryWord),
+}
+
+impl LoweringOperand {
+    /// ⭐ **THE RULED TYPED PHASE BOUNDARY** in front of a specialized-only
+    /// helper — `§2h` ¶2, verbatim: *"Every edge from `LoweringOperand` into
+    /// such a specialized-only helper must first exhaustively classify both
+    /// variants with no wildcard; `Carried` must take its ruled emitted-helper
+    /// route **or fail closed**."*
+    ///
+    /// ⛔ **This is NOT the forbidden `Carried -> Lowered` conversion, and the
+    /// difference is the whole point.** A conversion would *answer* a
+    /// compile-time question about a runtime value; this **refuses** to. The
+    /// `Carried` arm produces an error, never a `Lowered`, so no caller can
+    /// recover a template through it.
+    ///
+    /// ⚠⚠ **THE MISUSE THIS INVITES, NAMED SO A REVIEWER CAN HUNT IT.** Nothing
+    /// in production emits a `Carried` operand yet, so **every** call of this
+    /// method is currently unreachable in its failing arm — which means putting
+    /// it on a *phase-bearing* edge compiles, passes the whole suite, and still
+    /// destroys the closure `§2h` mandates. ⇒ It is legal **only** where the
+    /// callee inspects or destructures the **compile-time template** (a
+    /// primitive's operands, a shape comparison, a constructor-name probe). It
+    /// is ⛔ **illegal** on the three forwarding roles, which must stay
+    /// `LoweringOperand` end to end:
+    ///
+    /// | role | why it may not fail closed here |
+    /// |---|---|
+    /// | environment insertion | `§2h`: a projected `Carried` child must survive `case_env` |
+    /// | recursive lowering call | the callee is in the phase-bearing component, not a leaf |
+    /// | result / join forwarding | a refused join is a lost `Carried`, not a rejected one |
+    ///
+    /// `edge` names the call site in the diagnostic. ⚠ It is a **label, not a
+    /// mechanism** — it makes a misplaced boundary legible in a failure, and
+    /// nothing more.
+    fn specialized_at(self, edge: &'static str) -> Result<Lowered, CraneliftBackendError> {
+        match self {
+            LoweringOperand::Specialized(lowered) => Ok(lowered),
+            LoweringOperand::Carried(_) => Err(unsupported(
+                "BoundaryCarrier",
+                format!(
+                    "{edge} is a specialized-only surface and a carried boundary word has no \
+                     compile-time template for it to read; the carrier's ruled route is an \
+                     emitted helper call"
+                ),
+            )),
+        }
+    }
+
+    /// ⭐ **A BRANCH/JOIN ARM's typed phase boundary — deliberately a distinct
+    /// method from [`Self::specialized_at`], because it records a distinct
+    /// fact.**
+    ///
+    /// `§2h` names *"branch/join forwarding"* phase-bearing, so a join is ⛔
+    /// **not** a specialized-only leaf: the reason a `Carried` fails closed here
+    /// is not *"this surface reads a template"* but *"this join merges native
+    /// scalar lanes and `C1` has not built a carried lane for it."* ⇒ Every call
+    /// of this method is an **inventory entry** for the join work, and
+    /// `grep`ping the name is how that inventory is read back.
+    ///
+    /// ⚠ Collapsing the two into one helper would be the cheaper diff and the
+    /// worse artifact: it would erase, at exactly the sites that need it, the
+    /// difference between a boundary that is *final* and one that is *pending*.
+    fn specialized_join_arm(self, join: &'static str) -> Result<Lowered, CraneliftBackendError> {
+        match self {
+            LoweringOperand::Specialized(lowered) => Ok(lowered),
+            LoweringOperand::Carried(_) => Err(unsupported(
+                "BoundaryCarrier",
+                format!(
+                    "{join} merges native scalar lanes and has no carried lane; a boundary word \
+                     cannot cross it until that join carries the phase"
+                ),
+            )),
+        }
+    }
+
+    /// [`Self::specialized_at`] without consuming the operand — same ruling,
+    /// same prohibitions, for a callee that borrows its template.
+    fn specialized_ref_at(&self, edge: &'static str) -> Result<&Lowered, CraneliftBackendError> {
+        match self {
+            LoweringOperand::Specialized(lowered) => Ok(lowered),
+            LoweringOperand::Carried(_) => Err(unsupported(
+                "BoundaryCarrier",
+                format!(
+                    "{edge} is a specialized-only surface and a carried boundary word has no \
+                     compile-time template for it to read; the carrier's ruled route is an \
+                     emitted helper call"
+                ),
+            )),
+        }
+    }
+}
+
+/// ⭐ The spine's bulk phase boundary — an **environment** of operands rendered
+/// as the specialized templates a specialized-only helper reads.
+///
+/// ⚠ Same ruling and the same ⛔ prohibitions as
+/// [`LoweringOperand::specialized_at`]; this exists because several leaves take
+/// a whole `&[Lowered]` rather than one, and hand-writing the fold at each
+/// would multiply the classification instead of sharing it.
+fn specialized_env_at(
+    env: &[LoweringOperand],
+    edge: &'static str,
+) -> Result<Vec<Lowered>, CraneliftBackendError> {
+    env.iter()
+        .map(|operand| operand.specialized_ref_at(edge).cloned())
+        .collect()
+}
+
+/// ⭐ **THE ONE WAY A LOWERING ENVIRONMENT IS BUILT** — freshly bound
+/// specialized values in front of the enclosing spine.
+///
+/// ⭐ **The spine is forwarded UNCHANGED, and that is the `§2h` property, not
+/// an implementation detail.** The ruling's control clause asks that *"a
+/// projected `Carried` child remains `Carried` through `case_env` and nested
+/// lowering"*; that holds here **structurally** — `outer` is already
+/// `[LoweringOperand]` and every element is cloned, so there is no arm in which
+/// a carried operand could be re-specialized or dropped on the way in.
+///
+/// `bindings` are `Lowered` because a **binder introduces a compile-time
+/// value**: a case's constructor fields, a `Let`'s value, a closure's captures.
+/// ⚠ When a binder can be `Carried` — the projected child of an eliminated
+/// carrier — it does **not** come through this parameter; it is already an
+/// operand and is prepended as one.
+fn env_with(
+    bindings: impl IntoIterator<Item = Lowered>,
+    outer: &[LoweringOperand],
+) -> Vec<LoweringOperand> {
+    bindings
+        .into_iter()
+        .map(LoweringOperand::Specialized)
+        .chain(outer.iter().cloned())
+        .collect()
+}
+
+/// ⭐ **The phase-PRESERVING environment constructor** — for bindings that are
+/// already operands.
+///
+/// ⚠ This is the one that matters for `§2h`'s control clause. [`env_with`]'s
+/// bindings are templates a binder just introduced; **these** are values the
+/// lowering produced, and a projected `Carried` child arrives here. There is no
+/// arm that re-specializes or drops one — it is moved into the environment as
+/// it stands, which is what makes *"remains `Carried` through `case_env` and
+/// nested lowering"* a structural fact rather than a tested one.
+fn env_with_operands(
+    bindings: impl IntoIterator<Item = LoweringOperand>,
+    outer: &[LoweringOperand],
+) -> Vec<LoweringOperand> {
+    bindings.into_iter().chain(outer.iter().cloned()).collect()
+}
+
+/// Append specialized bindings **after** operands already in an environment —
+/// the same rule as [`env_with`], for the sites whose leading bindings are
+/// themselves lowered operands (a call's arguments) and whose trailing ones are
+/// a closure's captured templates.
+fn extend_specialized(env: &mut Vec<LoweringOperand>, bindings: impl IntoIterator<Item = Lowered>) {
+    env.extend(bindings.into_iter().map(LoweringOperand::Specialized));
+}
+
+/// ⭐ The inverse direction, which needs **no** boundary at all: a freshly
+/// constructed specialized value entering the spine.
+///
+/// ⛔ There is deliberately no `From<CarriedBoundaryWord>` counterpart taking a
+/// short cut around [`Lowering::transfer_into_carrier`] — the producer is the
+/// one way in, and it screens admissibility first.
+impl From<Lowered> for LoweringOperand {
+    fn from(lowered: Lowered) -> Self {
+        LoweringOperand::Specialized(lowered)
+    }
+}
+
+/// ⭐ **The ONE-WAY PRODUCER** — `Lowered -> CarriedBoundaryWord`
+/// (`RT-FNSPLIT-C1` `D3`; the seam is ruled in frame `§2g`, its authority for
+/// `(tag, class)` in `§2h` ¶4).
+///
+/// ⛔ **There is deliberately no inverse in this block, and none may be added.**
+/// A `Carried -> Lowered` conversion would let a consumer recover a compile-time
+/// template from a runtime value, which is the wall this whole node exists to
+/// remove, wearing a different name.
+impl<'a> Lowering<'a> {
+    /// Transfer a compile-time [`Lowered`] into the operational carrier.
+    ///
+    /// ⚠⚠ **The admissibility walk runs HERE and exactly once, before the first
+    /// allocation.** [`Lowered::boundary_transfer_admissibility`]'s own contract
+    /// says the ordering is load-bearing: a walk performed after the first child
+    /// is published rejects a transfer it has already half-emitted, which is a
+    /// **partial publication**, not a rejection. That is why the recursion lives
+    /// in a separate private [`Self::emit_carrier_transfer`] — the entry point
+    /// screens the whole graph, and the recursion never re-screens a subgraph
+    /// whose parent is already allocated.
+    fn transfer_into_carrier(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        value: &Lowered,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        value.boundary_transfer_admissibility()?;
+        self.emit_carrier_transfer(builder, origin, value)
+    }
+
+    /// The recursive emission step. ⛔ Private, and ⛔ never the entry point —
+    /// see [`Self::transfer_into_carrier`] for why the split is not stylistic.
+    ///
+    /// ⭐ **The dispatch is an exhaustive `match` on the variant, and the
+    /// `(tag, class)` comes from [`Lowered::boundary_disposition`].** Both
+    /// halves are load-bearing and they answer different questions: the
+    /// disposition is the **sole authority** for how a value is represented
+    /// (`§2h` ¶4 makes reading it *required*), while the variant match is what
+    /// supplies the **payload and children**, which a disposition cannot carry
+    /// because it is a function of the variant tag alone.
+    ///
+    /// ⛔ **No wildcard arm.** A 22nd `Lowered` inhabitant is a compile error
+    /// here, exactly as it is in `variant()` and
+    /// `boundary_transfer_admissibility` — so a new carrier of children cannot
+    /// be added without someone deciding whether it can cross.
+    fn emit_carrier_transfer(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        value: &Lowered,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        match value {
+            // ── the supported transfer surface ───────────────────────────
+            Lowered::Bool { value: word, .. } => {
+                let tag = Self::carrier_immediate_tag(value)?;
+                self.emit_carrier_immediate(builder, tag, *word)
+            }
+            Lowered::Constructor { args, .. } => {
+                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                // ⭐ `D2` — the identity comes from the ONE artifact-static
+                // authority, via the typed newtype's own ABI-word method. ⛔ Not
+                // `intern_symbol`, which is dense insertion-order numbering over
+                // one store instance and therefore a *different* number in a
+                // different store (`§2e`).
+                let identity = self
+                    .static_transition_plan
+                    .constructor_symbol_identity(origin)?
+                    .tag_abi_word()?;
+                let word = self.emit_carrier_alloc(builder, tag, class, args.len())?;
+                self.emit_carrier_store_tag_id(builder, word, identity)?;
+                for (position, argument) in args.iter().enumerate() {
+                    let child_origin = self
+                        .static_transition_plan
+                        .child_static_origin(origin, position)?;
+                    let child = self.emit_carrier_transfer(builder, child_origin, argument)?;
+                    self.emit_carrier_store_field(builder, word, position, child)?;
+                }
+                Ok(word)
+            }
+            Lowered::Record { fields } => {
+                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                let word = self.emit_carrier_alloc(builder, tag, class, fields.len())?;
+                for (position, (_, field)) in fields.iter().enumerate() {
+                    // ⭐ `D2` at the field-identity namespace: the name written
+                    // here and the name `Project` looks up are the same word
+                    // from the same authority. ⚠ The `String` key in the tuple
+                    // is deliberately NOT the identity — it is the compile-time
+                    // spelling, and using it would be the second derivation
+                    // `D2` forbids.
+                    let name = self
+                        .static_transition_plan
+                        .record_field_identity(origin, position)?
+                        .name_abi_word()?;
+                    self.emit_carrier_store_name(builder, word, position, name)?;
+                    let child_origin = self
+                        .static_transition_plan
+                        .child_static_origin(origin, position)?;
+                    let child = self.emit_carrier_transfer(builder, child_origin, field)?;
+                    self.emit_carrier_store_field(builder, word, position, child)?;
+                }
+                Ok(word)
+            }
+
+            // ── ⛔ FAIL CLOSED — and these are DEFERRALS, said plainly ────
+            //
+            // ⚠ A deferral is honest; a deferral that reads as delivery is not.
+            // Each arm below is a form the carrier ABI *can* represent and this
+            // producer does not yet emit. ⛔ Do not read the fail-closed status
+            // as "the boundary refuses this" — `boundary_disposition` admits
+            // most of them. The refusal is **this producer's**, and it is
+            // conservative rather than silent precisely so the gap cannot be
+            // mistaken for coverage.
+            Lowered::Int { .. }
+            | Lowered::ProcessExitStatus { .. }
+            | Lowered::BoundedNat(_)
+            | Lowered::StructuralNat(_) => Err(unsupported(
+                lowered_value_kind(value),
+                "the carrier producer does not yet emit a spillable immediate: \
+                 its disposition carries `spill: Some(_)`, which needs a runtime \
+                 magnitude test and a two-way branch, not a single \
+                 `make_immediate`",
+            )),
+            Lowered::String(_) | Lowered::Bytes(_) => Err(unsupported(
+                lowered_value_kind(value),
+                "the carrier producer does not yet emit a byte-bodied handle: \
+                 the content needs the `store_bytes_len` / `store_byte` \
+                 sequence, which is a distinct claim-then-fill protocol",
+            )),
+            Lowered::HostResult { .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "the carrier producer does not yet emit a `HostResult` handle: \
+                 its two payload words are selected by a runtime discriminant",
+            )),
+            Lowered::DynamicConstructor(_) => Err(unsupported(
+                lowered_value_kind(value),
+                "the carrier producer does not yet emit a dynamic constructor: \
+                 its alternatives are selected at runtime, so one occurrence \
+                 origin does not name one constructor identity",
+            )),
+            Lowered::CapabilityToken { .. }
+            | Lowered::ResourceToken { .. }
+            | Lowered::ResponseBytes { .. }
+            | Lowered::BorrowedNativeValue { .. }
+            | Lowered::BorrowedOption { .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "the carrier producer does not yet emit borrowed ingress: an \
+                 `InvocationBorrowed` handle is arena-owned and must clear \
+                 `escape_check` before it may be written into a parent",
+            )),
+
+            // ── ⛔ REFUSED, not deferred — and structurally required here ──
+            //
+            // ⚠ Stated honestly: these arms are **unreachable in practice**,
+            // because `boundary_transfer_admissibility` rejects the three
+            // closure forms at the entry point and `boundary_disposition`
+            // classifies the last two as `ProtocolOnly`. They are spelled
+            // anyway because exhaustiveness is the mechanism that makes a 22nd
+            // variant a compile error — ⛔ collapsing them into a `_` arm would
+            // buy three lines and spend the whole closure property.
+            Lowered::Closure { .. }
+            | Lowered::DeclarationClosure { .. }
+            | Lowered::ComputationalRecursorClosure { .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "a closure has no durable lane and cannot cross the boundary; \
+                 this arm is unreachable because the admissibility walk already \
+                 refused the graph",
+            )),
+            Lowered::RecursiveBackedge | Lowered::Trap(_) => Err(unsupported(
+                lowered_value_kind(value),
+                "protocol machinery is never a source value at a boundary",
+            )),
+        }
+    }
+
+    /// The `(tag, class)` of a **handle**-represented value, read from the sole
+    /// disposition authority (`§2h` ¶4).
+    ///
+    /// ⭐ **This is the typed boundary in front of the emission step**, and it
+    /// is wildcard-free over [`BoundaryDisposition`] on purpose: a fifth
+    /// disposition would break compilation here rather than silently taking
+    /// whichever arm a `_` had swallowed.
+    fn carrier_handle_disposition(
+        value: &Lowered,
+    ) -> Result<(BoundaryTag, BoundaryClass), CraneliftBackendError> {
+        match value.boundary_disposition() {
+            BoundaryDisposition::RepresentedHandle { tag, class } => Ok((tag, class)),
+            // ⚠ Not dead defensive code: it fires if a variant's disposition is
+            // ever retuned from handle to immediate while this arm still
+            // allocates. The disposition is the authority, so the producer must
+            // fail rather than out-vote it.
+            BoundaryDisposition::RepresentedImmediate { .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "the producer would allocate a handle for a value the sole \
+                 disposition authority represents as an immediate",
+            )),
+            BoundaryDisposition::ProtocolOnly { why }
+            | BoundaryDisposition::FailClosedForbidden { why } => {
+                Err(unsupported(lowered_value_kind(value), why))
+            }
+        }
+    }
+
+    /// The tag of a **spill-free immediate**, read from the sole disposition
+    /// authority. ⛔ `spill: Some(_)` is refused here rather than encoded: a
+    /// spillable payload needs a runtime magnitude test, and emitting a bare
+    /// `make_immediate` for one would silently truncate exactly the values a
+    /// bignum language exists to carry.
+    fn carrier_immediate_tag(value: &Lowered) -> Result<BoundaryTag, CraneliftBackendError> {
+        match value.boundary_disposition() {
+            BoundaryDisposition::RepresentedImmediate { tag, spill: None } => Ok(tag),
+            BoundaryDisposition::RepresentedImmediate { spill: Some(_), .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "a spillable immediate needs the runtime magnitude dispatch, \
+                 not a single `make_immediate`",
+            )),
+            BoundaryDisposition::RepresentedHandle { .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "the producer would mint an immediate for a value the sole \
+                 disposition authority represents as a handle",
+            )),
+            BoundaryDisposition::ProtocolOnly { why }
+            | BoundaryDisposition::FailClosedForbidden { why } => {
+                Err(unsupported(lowered_value_kind(value), why))
+            }
+        }
+    }
+
+    /// The carrier helpers, as refs callable inside **this** generated function.
+    fn carrier_refs(&self) -> Result<BoundaryCarrierRefs, CraneliftBackendError> {
+        self.boundary_carrier.ok_or_else(|| {
+            unsupported(
+                "BoundaryCarrier",
+                "this generated function has no boundary-carrier helper refs",
+            )
+        })
+    }
+
+    /// The invocation arena the carrier helpers take as their first argument.
+    ///
+    /// ⚠ **It is the same SSA value as the native-`Int` arena, and that is a
+    /// fact about the ABI rather than a shortcut.** Both graphs take *"the
+    /// invocation arena"* — block param 0 of the generated function — so there
+    /// is one pointer, not two. ⛔ Reading it from a second field would create a
+    /// second answer to a question that has one.
+    fn carrier_arena(&self) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        self.native_int_arena.ok_or_else(|| {
+            unsupported(
+                "BoundaryCarrier",
+                "this generated function has no invocation arena",
+            )
+        })
+    }
+
+    /// ⭐ **THE ONE SIGNEDNESS VIEW over `pack_identity`'s `u64`.**
+    ///
+    /// The planner's `pack_identity` is *"the ONE injective encoding"* and it
+    /// yields a `u64`; Cranelift's `iconst` takes an `i64`. ⛔ This bit-preserving
+    /// reinterpretation is a **view over that one encoding, never a sibling
+    /// beside it** — a second packing spelled at a call site is precisely how
+    /// `D2`'s single authority would be undone at the bridge rather than at the
+    /// source.
+    ///
+    /// ⚠ It is deliberately spelled once, so there is exactly one `as i64` to
+    /// review and exactly one to get wrong.
+    fn carrier_identity_immediate(
+        builder: &mut FunctionBuilder<'_>,
+        identity: u64,
+    ) -> cranelift_codegen::ir::Value {
+        builder.ins().iconst(types::I64, identity as i64)
+    }
+
+    /// A one-word output slot plus its address, for a helper's `out` parameter.
+    fn carrier_out_slot(
+        builder: &mut FunctionBuilder<'_>,
+        pointer_type: types::Type,
+    ) -> (cranelift_codegen::ir::StackSlot, cranelift_codegen::ir::Value) {
+        let slot =
+            builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
+        let address = builder.ins().stack_addr(pointer_type, slot, 0);
+        (slot, address)
+    }
+
+    /// `alloc(arena, tag, class, field_count, out) -> status`.
+    fn emit_carrier_alloc(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        tag: BoundaryTag,
+        class: BoundaryClass,
+        field_count: usize,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let tag = builder.ins().iconst(types::I64, i64::from(tag as u8));
+        let class = builder.ins().iconst(types::I64, class as i64);
+        let count = builder.ins().iconst(
+            types::I64,
+            i64::try_from(field_count).map_err(|_| {
+                unsupported(
+                    "BoundaryCarrier",
+                    "a transferred aggregate has more fields than the ABI can name",
+                )
+            })?,
+        );
+        let call = builder
+            .ins()
+            .call(refs.alloc, &[arena, tag, class, count, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(CarriedBoundaryWord {
+            word: builder.ins().stack_load(types::I64, slot, 0),
+        })
+    }
+
+    /// `make_immediate(tag, payload, out) -> status`. ⚠ No arena: an immediate
+    /// names no referent.
+    fn emit_carrier_immediate(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        tag: BoundaryTag,
+        payload: cranelift_codegen::ir::Value,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let tag = builder.ins().iconst(types::I64, i64::from(tag as u8));
+        let call = builder
+            .ins()
+            .call(refs.make_immediate, &[tag, payload, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(CarriedBoundaryWord {
+            word: builder.ins().stack_load(types::I64, slot, 0),
+        })
+    }
+
+    /// `store_tag_id(arena, word, tag_id) -> status`.
+    fn emit_carrier_store_tag_id(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+        identity: u64,
+    ) -> Result<(), CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let identity = Self::carrier_identity_immediate(builder, identity);
+        let call = builder
+            .ins()
+            .call(refs.store_tag_id, &[arena, target.word, identity]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(())
+    }
+
+    /// `store_field(arena, word, index, child) -> status`.
+    fn emit_carrier_store_field(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+        position: usize,
+        child: CarriedBoundaryWord,
+    ) -> Result<(), CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let index = Self::carrier_position_immediate(builder, position)?;
+        let call = builder
+            .ins()
+            .call(refs.store_field, &[arena, target.word, index, child.word]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(())
+    }
+
+    /// `store_name(arena, word, index, name_id) -> status`.
+    fn emit_carrier_store_name(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+        position: usize,
+        identity: u64,
+    ) -> Result<(), CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let index = Self::carrier_position_immediate(builder, position)?;
+        let identity = Self::carrier_identity_immediate(builder, identity);
+        let call = builder
+            .ins()
+            .call(refs.store_name, &[arena, target.word, index, identity]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(())
+    }
+
+    // ── the CONSUMER half of the carrier ABI (`D3` / `D4`) ──────────────
+    //
+    // ⭐ **Every question these answer is answered AT RUNTIME, by a call.**
+    // That is the whole content of the node: a carried value has no
+    // compile-time template, so *"which constructor"*, *"how many children"*
+    // and *"which child"* cannot be read off a struct field — there is no
+    // struct field to read. ⛔ Adding one is how the wall grows back
+    // (see [`CarriedBoundaryWord`]).
+    //
+    // ⚠ Each of these emits a `require_i64(status, BOUNDARY_OK)`, which
+    // **splits the current block**. A caller assembling its own control flow
+    // must therefore take `builder`'s *current* block after the call, never
+    // the block it switched to before it.
+
+    /// `tag(arena, word, out) -> status` — the runtime constructor identity.
+    ///
+    /// ⭐ The returned word is comparable **only** against a
+    /// `ConstructorIdentity::tag_abi_word()` from the same artifact's plane —
+    /// it is the very word the producer wrote with `store_tag_id`, and that
+    /// shared authority is `D2`. ⛔ It is not an ordinal, not a `LoweredVariant`
+    /// discriminant, and not portable across artifacts.
+    fn emit_carrier_tag(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let call = builder.ins().call(refs.tag, &[arena, target.word, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(builder.ins().stack_load(types::I64, slot, 0))
+    }
+
+    /// `field_count(arena, word, out) -> status` — the child count a case's
+    /// binder arity is checked against **at runtime**.
+    ///
+    /// ⚠ **Why this is a runtime check and not a compile-time one.** For a
+    /// specialized scrutinee the arity check compares `case.binders` against
+    /// `args.len()`, both known while compiling. A carried word knows neither,
+    /// so the same guard has to be emitted — and it must still *be* a guard:
+    /// binding *n* binders over a value with fewer children would read past the
+    /// node.
+    fn emit_carrier_field_count(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let call = builder
+            .ins()
+            .call(refs.field_count, &[arena, target.word, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(builder.ins().stack_load(types::I64, slot, 0))
+    }
+
+    /// `field(arena, word, index, out) -> status` — positional child projection.
+    ///
+    /// ⭐⭐ **The result is a [`CarriedBoundaryWord`], and that return type is
+    /// the `§2g` property, not a convenience.** *"Projected children remain
+    /// `Carried`."* A signature returning [`Lowered`] here would be the
+    /// forbidden inverse conversion wearing the name of a projection — so the
+    /// prohibition is carried by the **type**, where it cannot be forgotten at a
+    /// call site.
+    fn emit_carrier_field(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+        position: usize,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let index = Self::carrier_position_immediate(builder, position)?;
+        let call = builder
+            .ins()
+            .call(refs.field, &[arena, target.word, index, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(CarriedBoundaryWord {
+            word: builder.ins().stack_load(types::I64, slot, 0),
+        })
+    }
+
+    /// `record_field(arena, word, name_id, out) -> status` — `Project` by
+    /// **artifact-static field identity**.
+    ///
+    /// ⭐ The `name_id` is the same word the producer wrote with `store_name`,
+    /// from the same `D1` authority — which is exactly why `AC-C5`'s reordered
+    /// record still projects correctly: the lookup is keyed on the interned
+    /// name, ⛔ never on declaration position.
+    ///
+    /// ⭐ Result stays carried, for the reason spelled out on
+    /// [`Self::emit_carrier_field`].
+    fn emit_carrier_record_field(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+        identity: u64,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let identity = Self::carrier_identity_immediate(builder, identity);
+        let call = builder
+            .ins()
+            .call(refs.record_field, &[arena, target.word, identity, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(CarriedBoundaryWord {
+            word: builder.ins().stack_load(types::I64, slot, 0),
+        })
+    }
+
+    /// A child ordinal as an ABI immediate.
+    fn carrier_position_immediate(
+        builder: &mut FunctionBuilder<'_>,
+        position: usize,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        let position = i64::try_from(position).map_err(|_| {
+            unsupported(
+                "BoundaryCarrier",
+                "a transferred aggregate's child ordinal is outside the ABI's range",
+            )
+        })?;
+        Ok(builder.ins().iconst(types::I64, position))
+    }
 }
 
 /// ⛔ **The `Lowered` variant TAG, without a value.**
@@ -1417,6 +2368,112 @@ impl Lowered {
     pub(in crate::cranelift_backend) fn boundary_disposition(&self) -> BoundaryDisposition {
         self.variant().boundary_disposition()
     }
+
+    /// `RT-FNSPLIT-C1` `D5` — whether this **whole value graph** may cross the
+    /// boundary, decided before anything is allocated, written or published.
+    ///
+    /// ⭐⭐ **The root variant table is not sufficient, and that is the finding
+    /// this walk exists to encode.** `boundary_disposition` is a function of the
+    /// root tag alone, so it reports `RepresentedHandle` for a `Constructor`
+    /// whose arguments contain a closure. Nothing in the lowering excludes that
+    /// shape: `lower_expr`'s `Construct` arm lowers each argument through
+    /// `lower_expr` and screens only for `RecursiveBackedge`, so a closure
+    /// nested inside a constructor is constructible on the live path.
+    ///
+    /// ⇒ Admissibility is a property of the **graph**, not of the root.
+    ///
+    /// ⛔ **Total and wildcard-free by construction.** Every variant is named,
+    /// so a 22nd `Lowered` inhabitant is a compile error here as well as in
+    /// `variant()` — a new carrier of children cannot be added without deciding
+    /// whether it can hide a closure.
+    ///
+    /// ⚠ **Ordering is load-bearing: this runs BEFORE any allocation, store
+    /// write, adoption or publication.** A walk performed after the first child
+    /// is published would reject the transfer having already emitted part of
+    /// it, which is a partial publication rather than a rejection.
+    ///
+    /// ⚠ **The completeness cost, stated honestly and in its true size:** this
+    /// rejects only graphs that *actually contain* a closure. ⛔ It does **not**
+    /// reject the `Constructor` variant, and it does **not** follow that the 29
+    /// of 41 measured `Constructor` transfers fail — only those whose actual
+    /// argument graph holds a closure do. ⭐ And the measured zero-closure
+    /// transfer census proves nothing either way, because the carrier is inert:
+    /// that zero holds for every variant and cannot distinguish "closures never
+    /// transfer" from "nothing transfers yet."
+    pub(in crate::cranelift_backend) fn boundary_transfer_admissibility(
+        &self,
+    ) -> Result<(), CraneliftBackendError> {
+        match self {
+            // ── closures: the rejection this walk exists for ──────────────
+            //
+            // ⛔ One exact typed error at every depth, so a nested rejection is
+            // not reported as some enclosing variant's failure.
+            Lowered::Closure { .. } | Lowered::DeclarationClosure { .. } => Err(unsupported(
+                "Closure",
+                "a closure cannot cross the boundary: it is runtime-local and \
+                 live-domain only, and it has no durable lane",
+            )),
+            Lowered::ComputationalRecursorClosure { .. } => Err(unsupported(
+                "ComputationalMatch",
+                "a computational recursor closure names an in-flight activation, \
+                 not a transferable value",
+            )),
+
+            // ── recursive carriers: recurse into EVERY child position ─────
+            Lowered::Constructor { args, .. } => {
+                for arg in args {
+                    arg.boundary_transfer_admissibility()?;
+                }
+                Ok(())
+            }
+            Lowered::Record { fields } => {
+                for (_, value) in fields {
+                    value.boundary_transfer_admissibility()?;
+                }
+                Ok(())
+            }
+            Lowered::HostResult { error, ok, .. } => {
+                error.boundary_transfer_admissibility()?;
+                ok.boundary_transfer_admissibility()
+            }
+            // ⚠ **The child position most easily missed.** `DynamicConstructor`
+            // looks like a leaf: its payload is a struct, and the children are
+            // two levels down, in a `Vec` of alternative structs. Treating it
+            // as a leaf would leave a closure nested in a dynamic alternative
+            // completely unguarded while every other arm was correct.
+            Lowered::DynamicConstructor(dynamic) => {
+                for alternative in &dynamic.alternatives {
+                    for field in &alternative.fields {
+                        field.boundary_transfer_admissibility()?;
+                    }
+                }
+                Ok(())
+            }
+
+            // ── leaves: no `Lowered` child position exists ────────────────
+            //
+            // ⛔ Admitted here means "holds no closure", NOT "is transferable".
+            // Whether a leaf has a boundary representation at all is
+            // `boundary_disposition`'s question and is decided separately; a
+            // `ProtocolOnly` or otherwise forbidden leaf is still refused
+            // there. Conflating the two would let this walk read as a transfer
+            // authorization it is not.
+            Lowered::Int { .. }
+            | Lowered::Bool { .. }
+            | Lowered::ProcessExitStatus { .. }
+            | Lowered::CapabilityToken { .. }
+            | Lowered::ResourceToken { .. }
+            | Lowered::BoundedNat(_)
+            | Lowered::StructuralNat(_)
+            | Lowered::ResponseBytes { .. }
+            | Lowered::Bytes(_)
+            | Lowered::BorrowedNativeValue { .. }
+            | Lowered::BorrowedOption { .. }
+            | Lowered::String(_)
+            | Lowered::RecursiveBackedge
+            | Lowered::Trap(_) => Ok(()),
+        }
+    }
 }
 
 impl LoweredVariant {
@@ -1516,18 +2573,41 @@ impl LoweredVariant {
                 class: BoundaryClass::BorrowedOpaque,
             },
 
-            // ─── closures ────────────────────────────────────────────────
+            // ─── closures: FAIL CLOSED for `C1` ──────────────────────────
             //
-            // Represented as a handle to a record of the static origin plus the
-            // captured words. ⚠ Represented, NOT callable: `B2V` supplies no
-            // dispatch, because a cross-owner call is precisely what `D6`
-            // forbids and what `B2F` exists to add. Making these handles now
-            // rather than forbidding them is deliberate — a higher-order
-            // language will pass closures as parameters, and a
-            // `FailClosedForbidden` here would guarantee that wall for `B2F`.
-            LoweredVariant::Closure | LoweredVariant::DeclarationClosure => RepresentedHandle {
-                tag: BoundaryTag::PersistentClosure,
-                class: BoundaryClass::Closure,
+            // ⛔ **Changed by `RT-FNSPLIT-C1` under Architect Decision
+            // `dec_21aa95jbsznfh`, and the history is the point.**
+            //
+            // `B2V` landed this arm as `RepresentedHandle { tag:
+            // BoundaryTag::PersistentClosure, class: BoundaryClass::Closure }`,
+            // deliberately, reasoning that *"a `FailClosedForbidden` here would
+            // guarantee that wall for `B2F`."* That reasoning was recorded and
+            // never executed — the whole disposition was inert.
+            //
+            // ⭐ The conflict it hid: `PersistentClosure` is the DURABLE lane
+            // (`referent_owner() == PersistentStore`; the word outlives the
+            // invocation that minted it), and `C1`'s settled input is that
+            // ordinary closures stay **runtime-local and live-domain only**.
+            // Making the landed disposition execute would have restored exactly
+            // the lane the `#11` ruling forbids.
+            //
+            // ⛔ So this is conditional rejection of a VALUE SHAPE, not of the
+            // closure concept and not of `Constructor`: a closure-free
+            // constructor is still admitted and has its own positive control.
+            // ⛔ Do not "fix" this by adding a third closure tag or by
+            // disguising a closure as `InvocationBorrowed` / `BorrowedOpaque` —
+            // both were considered and refused; they violate the ownership and
+            // self-evidence boundaries rather than respecting them.
+            //
+            // ⚠ A live-domain closure carrier is a real and expected future
+            // mechanism, but it is **`B2F`'s design**: it needs invocation
+            // ownership, static origin, captured `BoundaryWord`s, callable
+            // dispatch and non-escape enforcement. ⛔ `C1` may not invent it,
+            // and this arm is not the place to smuggle it in.
+            LoweredVariant::Closure | LoweredVariant::DeclarationClosure => FailClosedForbidden {
+                why: "an ordinary closure is runtime-local and live-domain only; it has \
+                      no durable boundary lane, and a callable cross-owner carrier is \
+                      B2F's design rather than this node's",
             },
 
             // ─── fail-closed ─────────────────────────────────────────────
@@ -1672,11 +2752,9 @@ fn select_dynamic_constructor_case<'a>(
 }
 fn materialize_dynamic_constructor_env(
     alternative: &DynamicConstructorAlternativeV1,
-    env: &[Lowered],
-) -> Vec<Lowered> {
-    let mut arm_env = alternative.fields.clone();
-    arm_env.extend_from_slice(env);
-    arm_env
+    env: &[LoweringOperand],
+) -> Vec<LoweringOperand> {
+    env_with(alternative.fields.clone(), env)
 }
 fn console_stream_tag(value: &Lowered) -> Option<i64> {
     let Lowered::Constructor { constructor, args } = value else {
@@ -1773,7 +2851,7 @@ fn dynamic_host_result_producer_case<'a>(
 struct ComputationalEliminatorFrame<'a> {
     cases: &'a [crate::RuntimeComputationalMatchCase],
     default: &'a RuntimeTrap,
-    env: &'a [Lowered],
+    env: &'a [LoweringOperand],
     /// The origin of the computational-match occurrence these cases belong to.
     /// Case *i*'s body is `child(static_origin, 1 + i)`.
     static_origin: StaticOriginId,
@@ -1789,7 +2867,7 @@ struct ComputationalEliminatorFrame<'a> {
 struct OrdinaryEliminatorFrame<'a> {
     cases: &'a [crate::RuntimeMatchCase],
     default: &'a RuntimeTrap,
-    env: &'a [Lowered],
+    env: &'a [LoweringOperand],
     /// The origin of the **match occurrence these cases belong to**. Case *i*'s
     /// body is `child(static_origin, 1 + i)`; see `SourceContinuation::
     /// MatchScrutinee` for why one parent origin beats a per-case vector.
@@ -1799,12 +2877,17 @@ struct OrdinaryEliminatorFrame<'a> {
 }
 #[derive(Clone, Copy)]
 struct PendingLetContinuationFrame<'a> {
-    residual: &'a Lowered,
+    /// ⭐ The same phase-bearing edge as
+    /// [`Lowered::ComputationalRecursorClosure::residual`], borrowed: a pending
+    /// `Let` resumes on exactly the value the capsule it came from carries, so
+    /// narrowing it back to `&Lowered` here would reintroduce the boundary one
+    /// frame later.
+    residual: &'a LoweringOperand,
     args: &'a [RuntimeExpr],
     /// The origin of the `Call` occurrence `args` belong to; argument *i* is
     /// `child(call_origin, 1 + i)`.
     call_origin: StaticOriginId,
-    env: &'a [Lowered],
+    env: &'a [LoweringOperand],
 }
 #[derive(Clone, Copy)]
 struct ActiveContinuationFrame<'a> {
@@ -1821,7 +2904,7 @@ struct ActiveContinuationFrame<'a> {
 struct ComputationalRecursorLayer {
     cases: Vec<crate::RuntimeComputationalMatchCase>,
     default: RuntimeTrap,
-    outer_env: Vec<Lowered>,
+    outer_env: Vec<LoweringOperand>,
     /// The origin of the computational-match occurrence these cases came from,
     /// carried with the clone so a resumed selection can still derive a case
     /// body's origin positionally.
@@ -2046,19 +3129,35 @@ impl RecursorInvocationSegment {
         Ok(())
     }
 }
+/// Splits a recursor capsule into the value it continues on and its control
+/// payload.
+///
+/// ⭐ **`AC-C4`: both halves of the signature are phase-bearing.** The input is
+/// an operand because a capsule may itself arrive carried-adjacent; the output
+/// is an operand because the residual may now be a carried word. ⛔ Every
+/// invocation site must classify the returned base **exhaustively, with no
+/// wildcard** — `Specialized(BoundedNat | Closure)` keep their existing
+/// meanings byte-for-byte, and `Carried` installs the already-checked
+/// invocation segment and resumes the same computational eliminator over that
+/// word. ⛔ Never `specialized_at`, never a reconstructed `Lowered`, never back
+/// through the producer.
 fn decompose_computational_recursor(
-    value: Lowered,
+    value: LoweringOperand,
 ) -> (
-    Lowered,
+    LoweringOperand,
     Option<(ContinuationActivationId, RecursorInvocationSegment)>,
 ) {
     match value {
-        Lowered::ComputationalRecursorClosure {
+        LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure {
             residual,
             activation,
             invocation,
-        } => (*residual, Some((activation, invocation))),
-        value => (value, None),
+        }) => (*residual, Some((activation, invocation))),
+        // ⛔ Spelled rather than collapsed into a wildcard: a non-capsule
+        // operand passes through in whichever phase it arrived, and the phase
+        // set stays visibly closed.
+        LoweringOperand::Specialized(value) => (LoweringOperand::Specialized(value), None),
+        LoweringOperand::Carried(word) => (LoweringOperand::Carried(word), None),
     }
 }
 fn checked_invocation_frame_templates(
@@ -2938,7 +4037,7 @@ enum SourceContinuation<'a> {
     },
     LetBody {
         body: OwnedSourceOccurrence,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourceContinuation<'a>>,
     },
     ApplyRecursorSelection {
@@ -2953,14 +4052,14 @@ enum SourceContinuation<'a> {
     IfScrutinee {
         then_expr: OwnedSourceOccurrence,
         else_expr: OwnedSourceOccurrence,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourceContinuation<'a>>,
     },
     ConstructArgument {
         constructor: RuntimeSymbol,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<Lowered>,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourceContinuation<'a>>,
     },
     /// ⭐ `static_origin` is the **match occurrence's own** origin, carried in
@@ -2973,14 +4072,14 @@ enum SourceContinuation<'a> {
     MatchScrutinee {
         cases: Vec<crate::RuntimeMatchCase>,
         default: RuntimeTrap,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         static_origin: StaticOriginId,
         next: Box<SourceContinuation<'a>>,
     },
     ComputationalMatchScrutinee {
         cases: Vec<crate::RuntimeComputationalMatchCase>,
         default: RuntimeTrap,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         static_origin: StaticOriginId,
         provenance: RecursorFrameProvenance,
         checked_frame_id: Option<u64>,
@@ -2993,14 +4092,14 @@ enum SourceContinuation<'a> {
     },
     CallCallee {
         args: Vec<OwnedSourceOccurrence>,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourceContinuation<'a>>,
     },
     CallArgument {
-        callee: Lowered,
+        callee: LoweringOperand,
         remaining: Vec<OwnedSourceOccurrence>,
-        lowered: Vec<Lowered>,
-        env: Vec<Lowered>,
+        lowered: Vec<LoweringOperand>,
+        env: Vec<LoweringOperand>,
         next: Box<SourceContinuation<'a>>,
     },
 }
@@ -3062,7 +4161,7 @@ enum SourcePrefixTemplate {
     },
     LetBody {
         body: OwnedSourceOccurrence,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourcePrefixTemplate>,
     },
     ApplyRecursorSelection {
@@ -3077,27 +4176,27 @@ enum SourcePrefixTemplate {
     IfScrutinee {
         then_expr: OwnedSourceOccurrence,
         else_expr: OwnedSourceOccurrence,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourcePrefixTemplate>,
     },
     ConstructArgument {
         constructor: RuntimeSymbol,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<Lowered>,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourcePrefixTemplate>,
     },
     MatchScrutinee {
         cases: Vec<crate::RuntimeMatchCase>,
         default: RuntimeTrap,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         static_origin: StaticOriginId,
         next: Box<SourcePrefixTemplate>,
     },
     ComputationalMatchScrutinee {
         cases: Vec<crate::RuntimeComputationalMatchCase>,
         default: RuntimeTrap,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         static_origin: StaticOriginId,
         provenance: RecursorFrameProvenance,
         checked_frame_id: Option<u64>,
@@ -3110,14 +4209,14 @@ enum SourcePrefixTemplate {
     },
     CallCallee {
         args: Vec<OwnedSourceOccurrence>,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourcePrefixTemplate>,
     },
     CallArgument {
-        callee: Lowered,
+        callee: LoweringOperand,
         remaining: Vec<OwnedSourceOccurrence>,
-        lowered: Vec<Lowered>,
-        env: Vec<Lowered>,
+        lowered: Vec<LoweringOperand>,
+        env: Vec<LoweringOperand>,
         next: Box<SourcePrefixTemplate>,
     },
 }
@@ -3216,30 +4315,30 @@ enum SourceMachineState<'a> {
     /// same population reached two ways.
     Eval {
         expr: OwnedSourceOccurrence,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         control: SourceControl<'a>,
     },
     Value {
-        value: Lowered,
+        value: LoweringOperand,
         control: SourceControl<'a>,
     },
 }
 enum SourceCallOutcome<'a> {
     Continue(SourceMachineState<'a>),
-    Complete(Lowered),
+    Complete(LoweringOperand),
 }
 #[derive(Clone, Copy)]
 enum DynamicConstructorContinuation<'a> {
     Ordinary {
         cases: &'a [crate::RuntimeMatchCase],
         default: &'a RuntimeTrap,
-        env: &'a [Lowered],
+        env: &'a [LoweringOperand],
         static_origin: StaticOriginId,
     },
     Producer {
         cases: &'a [crate::RuntimeMatchCase],
         default: &'a RuntimeTrap,
-        env: &'a [Lowered],
+        env: &'a [LoweringOperand],
         static_origin: StaticOriginId,
         eliminators: &'a [EliminatorFrame<'a>],
     },
@@ -3274,7 +4373,7 @@ struct DeferredConstructorCaseEnvironment<'a> {
     /// of that constructor is its child *i*, so `trailing_fields[j]` is
     /// `child(construct_origin, selected_field + 1 + j)`.
     construct_origin: StaticOriginId,
-    producer_env: &'a [Lowered],
+    producer_env: &'a [LoweringOperand],
     outer_eliminator: EliminatorFrame<'a>,
     splice_caller: Option<&'a ActiveContinuationFrame<'a>>,
     selected_active: ActiveContinuationFrame<'a>,
@@ -3349,14 +4448,14 @@ fn requires_heterogeneous_deforestation(expr: &RuntimeExpr) -> bool {
 }
 fn reaches_environment_computational_recursor(
     expr: &RuntimeExpr,
-    env: &[Lowered],
+    env: &[LoweringOperand],
     introduced_binders: usize,
 ) -> bool {
     let recursive_hypotheses = env
         .iter()
         .enumerate()
         .filter_map(|(index, value)| {
-            matches!(value, Lowered::ComputationalRecursorClosure { .. })
+            matches!(value, LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure { .. }))
                 .then_some(index + introduced_binders)
         })
         .collect();
@@ -3945,10 +5044,14 @@ impl<'a> Lowering<'a> {
 
     fn finish_checked_computational_ih_marker(
         &mut self,
-        mut value: Lowered,
-    ) -> Result<Lowered, CraneliftBackendError> {
+        value: LoweringOperand,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        // ⭐ The marker consumes a **recursor closure template**; a carried
+        // boundary word is not one and never becomes one, so this is a
+        // specialized-only surface with the ruled fail-closed arm.
+        let mut value = value.specialized_at("a checked computational-IH marker")?;
         let Some(instance) = self.mint_checked_computational_ih_instance(&mut value)? else {
-            return Ok(value);
+            return Ok(LoweringOperand::Specialized(value));
         };
         let Lowered::ComputationalRecursorClosure { invocation, .. } = &mut value else {
             unreachable!("IH instance mint validates one recursor closure")
@@ -3963,7 +5066,7 @@ impl<'a> Lowering<'a> {
         // Existing child-qualified layers remain untouched when later parent
         // wrappers are added to the same flattened carrier.
         instantiate_checked_invocation_segment(plan, instance, invocation)?;
-        Ok(value)
+        Ok(LoweringOperand::Specialized(value))
     }
 
     fn consume_checked_recursive_invocation_call(
@@ -4130,10 +5233,10 @@ impl<'a> Lowering<'a> {
     #[allow(clippy::too_many_arguments)]
     fn make_computational_recursor(
         &mut self,
-        recursive: Lowered,
+        recursive: LoweringOperand,
         cases: Vec<crate::RuntimeComputationalMatchCase>,
         default: RuntimeTrap,
-        outer_env: Vec<Lowered>,
+        outer_env: Vec<LoweringOperand>,
         static_origin: StaticOriginId,
         provenance: RecursorFrameProvenance,
         checked_frame_id: Option<u64>,
@@ -4148,7 +5251,7 @@ impl<'a> Lowering<'a> {
             &SourceSelectedContinuation<'_>,
             &[SourceSelectedContinuation<'_>],
         )>,
-    ) -> Result<Lowered, CraneliftBackendError> {
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
         let (residual, payload) = decompose_computational_recursor(recursive);
         let active_instance = self.active_recursive_invocations.last().copied();
         // ⛔ **The frame identity is TRANSPORTED, never inferred**
@@ -4314,19 +5417,28 @@ impl<'a> Lowering<'a> {
             computational_ih_slot_template_id,
         );
         invocation.dynamic_splice_edges = segment_dynamic_splice_edges;
-        Ok(Lowered::ComputationalRecursorClosure {
+        Ok(LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure {
             residual: Box::new(residual),
             activation,
             invocation,
-        })
+        }))
     }
 
+    /// ⭐ **A JOIN — `§2h` calls branch/join forwarding phase-bearing, so the
+    /// arm arrives as a [`LoweringOperand`] and the phase boundary is taken
+    /// HERE, once, rather than at each of the callers.**
+    ///
+    /// ⚠ the two-lane native scalar join merges `(tag, payload)` lanes of a native scalar. A carried
+    /// boundary word has no such pair, so it fails closed via
+    /// [`LoweringOperand::specialized_join_arm`] — ⛔ a *pending* boundary, not
+    /// a final one; see that method for why the distinction is kept.
     fn merge_branch_value(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        lowered: Lowered,
+        lowered: LoweringOperand,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, bool), CraneliftBackendError> {
+        let lowered = lowered.specialized_join_arm(construct)?;
         let checked_root_exit_representation = self.has_checked_root_exit_representation();
         let lowered = if checked_root_exit_representation {
             Self::unwrap_terminal_ret(lowered)
@@ -4363,12 +5475,21 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    /// ⭐ **A JOIN — `§2h` calls branch/join forwarding phase-bearing, so the
+    /// arm arrives as a [`LoweringOperand`] and the phase boundary is taken
+    /// HERE, once, rather than at each of the callers.**
+    ///
+    /// ⚠ the tagged native scalar join merges `(tag, payload)` lanes of a native scalar. A carried
+    /// boundary word has no such pair, so it fails closed via
+    /// [`LoweringOperand::specialized_join_arm`] — ⛔ a *pending* boundary, not
+    /// a final one; see that method for why the distinction is kept.
     fn merge_scalar_branch(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        lowered: Lowered,
+        lowered: LoweringOperand,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
+        let lowered = lowered.specialized_join_arm(construct)?;
         let checked_root_exit_representation = self.has_checked_root_exit_representation();
         let lowered = if checked_root_exit_representation {
             Self::unwrap_terminal_ret(lowered)
@@ -4553,13 +5674,17 @@ impl<'a> Lowering<'a> {
     /// checked join site. In particular, process-object mode is not evidence
     /// that an arbitrary constructor is terminal: only an `ExitCode` plan may
     /// invoke the terminal process decoder.
+    /// ⭐ A **planned** join — same phase-bearing role as
+    /// [`Self::merge_scalar_branch`], same pending boundary, and named the same
+    /// way so `grep specialized_join_arm` reaches all three.
     fn merge_planned_scalar_branch(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        lowered: Lowered,
+        lowered: LoweringOperand,
         required_kind: ScalarMergeKind,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
+        let lowered = lowered.specialized_join_arm(construct)?;
         if required_kind == ScalarMergeKind::ExitCode {
             let lowered = Self::unwrap_terminal_ret(lowered);
             let zero_tag = builder.ins().iconst(types::I64, 0);
@@ -4591,7 +5716,7 @@ impl<'a> Lowering<'a> {
                 )),
             };
         }
-        self.merge_scalar_branch(builder, lowered, construct)
+        self.merge_scalar_branch(builder, LoweringOperand::Specialized(lowered), construct)
     }
 
     fn record_merge_kind(
@@ -5609,8 +6734,17 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    fn seal_source_trap_branch(builder: &mut FunctionBuilder<'_>, lowered: &Lowered) -> bool {
-        if matches!(lowered, Lowered::Trap(_)) {
+    /// ⭐ Takes the **operand**, not a template, and needs no phase boundary:
+    /// *"is this branch a trap?"* has a total answer in both phases. A carried
+    /// boundary word is never a trap — `Lowered::Trap` is a compile-time
+    /// refusal, and the producer refuses to transfer one — so the `Carried`
+    /// case answers `false` and the branch is left unsealed, which is the same
+    /// answer any non-trap specialized value gets.
+    fn seal_source_trap_branch(builder: &mut FunctionBuilder<'_>, lowered: &LoweringOperand) -> bool {
+        if matches!(
+            lowered,
+            LoweringOperand::Specialized(Lowered::Trap(_))
+        ) {
             let failure = builder.ins().iconst(types::I64, -4);
             builder.ins().return_(&[failure]);
             true
@@ -7044,6 +8178,33 @@ impl<'a> Lowering<'a> {
         builder.ins().select(is_zero, one, nonzero)
     }
 
+    /// ⛔ **A typed boundary: raw [`Lowered`] only, and STRUCTURALLY so**
+    /// (`RT-FNSPLIT-C1` frame `§2h` ¶2).
+    ///
+    /// `§2h` admits a raw-`Lowered` helper only where it is **structurally
+    /// incapable** of receiving, forwarding or returning a
+    /// [`LoweringOperand::Carried`]. ⛔ *"Nothing passes it one today"* is
+    /// explicitly **not** that property — present-corpus reachability is the
+    /// argument the ruling was written to reject. This helper is closed on all
+    /// three counts **by signature**, not by census:
+    ///
+    /// - **cannot receive** — the parameter is `Lowered`, so handing it a
+    ///   [`LoweringOperand`] is `E0308` at every call site, present or future;
+    /// - **cannot return** — [`RuntimeGroundValue`] is a closed **compile-time
+    ///   constant** domain (bool / int / bytes / string, and aggregates of
+    ///   itself). Transitively it has no arm able to hold a Cranelift SSA word;
+    /// - **cannot mint or forward** — ⚠ `&mut self` *does* reach
+    ///   [`Lowering::boundary_carrier`], so the refs are in scope. What closes
+    ///   the mint is that this takes **no `FunctionBuilder`**: it cannot emit
+    ///   CLIF, so it cannot run the one-way producer, and a `FuncRef` with
+    ///   nowhere to emit is inert. Its recursion descends into `Vec<Lowered>`
+    ///   child positions only.
+    ///
+    /// ⭐ **The edge's fail-closed disposition is FORCED, not chosen.** This
+    /// materializes a *compile-time constant*; a `Carried` is by construction a
+    /// runtime word with **no** compile-time value. So when the caller's
+    /// scrutinee becomes a `LoweringOperand`, the `Carried` arm has no sound
+    /// answer but `Err` — the return type's domain settles it, not a preference.
     fn ground_value(
         &mut self,
         value: Lowered,
@@ -7168,6 +8329,18 @@ fn same_recursive_argument_shapes(left: &[Lowered], right: &[Lowered]) -> bool {
                 _ => false,
             })
 }
+/// ⛔ **A typed boundary: raw [`Lowered`] only, and STRUCTURALLY so**
+/// (`RT-FNSPLIT-C1` frame `§2h` ¶2).
+///
+/// Closed **more tightly** than [`Lowering::ground_value`], and worth stating
+/// because the two were priced as one class and are not: this is a **free
+/// function with no `self`**, so it cannot reach
+/// [`Lowering::boundary_carrier`] at all — there is no `FunctionBuilder`
+/// argument *and* no receiver through which one could be found. Its parameter
+/// is `&Lowered` (⇒ `E0308` on a [`LoweringOperand`]) and it returns
+/// `&'static str` (⇒ no arm can hold a Cranelift SSA word). It is a
+/// one-per-variant dispatch table over the specialization lattice and nothing
+/// else, so there is no reachable surface on which to attempt an evasion.
 fn lowered_value_kind(value: &Lowered) -> &'static str {
     match value {
         Lowered::Int { .. } => "Int",

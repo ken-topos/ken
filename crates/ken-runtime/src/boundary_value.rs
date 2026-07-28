@@ -663,11 +663,84 @@ pub(crate) const BOUNDARY_TAG_CLASS_RELATION: &[(BoundaryTag, &[BoundaryClass])]
     ),
 ];
 
+/// ⛔ **The closed set of RETIRED lanes — reserved ABI metadata, NOT a
+/// capability** (`RT-FNSPLIT-C1` `D5`).
+///
+/// ⭐ **Recognized, never admitted.** These pairs stay in the ABI's *vocabulary*
+/// so a word naming one is refused **by name** with
+/// [`BOUNDARY_ERR_RETIRED_LANE`], instead of collapsing into
+/// [`BOUNDARY_ERR_TAG`] and becoming indistinguishable from a corrupt byte.
+///
+/// ⛔ **This is deliberately a written-down declaration and not derived**, and
+/// that is the opposite of how the admitted sets work. `BoundaryEmissionPlan::
+/// derive` sweeps the live representation authority, so a lane with no producer
+/// contributes nothing — which is exactly how the closure vocabulary was lost
+/// when its disposition became `FailClosedForbidden`. A tombstone has no
+/// producer **by definition**, so it cannot be derived from producers and must
+/// be stated.
+///
+/// ⛔ **Never consult this from a producer or a representation disposition.**
+/// Its only readers are decode/classification and emitted-helper validation.
+/// `Closure` / `DeclarationClosure` remain `FailClosedForbidden`, and no
+/// `RepresentedHandle { PersistentClosure, Closure }` may be restored — the
+/// point is a recognition/admission split, not a revived capability.
+pub(crate) const BOUNDARY_RETIRED_LANES: &[(BoundaryTag, BoundaryClass)] =
+    &[(BoundaryTag::PersistentClosure, BoundaryClass::Closure)];
+
+/// Whether this `(tag, class)` pair names a retired lane.
+///
+/// ⚠ A `true` here means *"well-formed, and refused because the capability is
+/// retired"* — it is **not** a malformed pair. `PersistentClosure + Bool` is
+/// malformed and answers `false`, keeping its [`BOUNDARY_ERR_RELATION`]
+/// diagnostic; only the exactly-paired lane reaches this.
+pub(crate) fn boundary_lane_is_retired(tag: BoundaryTag, class: BoundaryClass) -> bool {
+    BOUNDARY_RETIRED_LANES
+        .iter()
+        .any(|(retired_tag, retired_class)| *retired_tag == tag && *retired_class == class)
+}
+
+/// The tags that are **recognized but carry no admitted lane**, given the
+/// partition's admitted tag set (`RT-FNSPLIT-C1` `D5`).
+///
+/// ⛔ **Derived from BOTH authorities at every call site, never written down.**
+/// A tag is retired exactly when it names a retired lane *and* the live
+/// partition admits it nowhere — so a tag that still has one surviving admitted
+/// lane is **not** reported here, because such a tag is genuinely admitted and
+/// refusing it by name would be the inverse error.
+///
+/// ⭐ **Why this is a function of the plan and not a seventh field on
+/// [`BoundaryTagAdmission`].** Every emitted helper already holds the plan's
+/// admitted set; taking it as an argument means each mutation fixture derives
+/// its retired set from *its own* admitted set rather than from a hand-written
+/// list that would drift into a second authority — which is the defect the
+/// whole partition-derived plan exists to avoid.
+pub(crate) fn boundary_retired_tags(admitted: &[BoundaryTag]) -> Vec<BoundaryTag> {
+    let mut tags: Vec<BoundaryTag> = Vec::new();
+    for (retired_tag, _) in BOUNDARY_RETIRED_LANES {
+        if !admitted.contains(retired_tag) && !tags.contains(retired_tag) {
+            tags.push(*retired_tag);
+        }
+    }
+    tags
+}
+
 /// Whether the ABI admits this `(tag, class)` pair, per the Rust mirror.
 ///
 /// The Rust builders' fail-before-publication check. Kept because they cannot
 /// see the private lowering partition; reconciled to it over the full product.
+///
+/// ⚠ **A retired lane is RECOGNIZED but NOT admitted**, so this still answers
+/// `false` for `(PersistentClosure, Closure)`. Recognition governs which
+/// *diagnostic* a refusal carries; it never widens what is admitted.
 pub(crate) fn boundary_relation_admits(tag: BoundaryTag, class: BoundaryClass) -> bool {
+    // ⛔ Recognition first, admission second — the retired lane is in the
+    // schema below **precisely so it can be named**, and reading the schema
+    // alone would therefore report it as admitted. That is the inversion this
+    // whole split exists to avoid: the pair stays spelled out so a refusal can
+    // say which lane it refused, not so the lane works.
+    if boundary_lane_is_retired(tag, class) {
+        return false;
+    }
     BOUNDARY_TAG_CLASS_RELATION
         .iter()
         .any(|(t, classes)| *t == tag && classes.contains(&class))
@@ -1207,6 +1280,28 @@ pub const BOUNDARY_ERR_CYCLE: i64 = -10;
 /// meaningful, so an unbound store cannot mint one and must **fail closed**
 /// rather than mint an ordinal that aliases.
 pub const BOUNDARY_ERR_UNBOUND: i64 = -11;
+/// ⛔ **The word names the RETIRED durable-closure lane** (`RT-FNSPLIT-C1`
+/// `D5`, Architect `dec_21aa95jbsznfh` + addendum `dec_6xffebwj4s347`).
+///
+/// The `(PersistentClosure, Closure)` pair is **recognized ABI vocabulary and
+/// is never admitted**. An ordinary closure is runtime-local and live-domain
+/// only; it has no durable lane, and a callable cross-owner carrier is `B2F`'s
+/// design rather than this node's.
+///
+/// ⭐ **Why this is its own status and not [`BOUNDARY_ERR_TAG`], which is the
+/// whole point of the code existing.** Deleting the pair from the vocabulary
+/// would have been the smaller change and it silently downgrades *"I refuse
+/// this specific retired lane"* into *"I do not recognize this byte"* — the
+/// same status arbitrary corruption produces. A refusal that cannot say **what**
+/// it refused is the same failure class as a negative check that passes for any
+/// reason. ⇒ The lane keeps its name **so that it can be refused by name.**
+///
+/// ⚠ Distinct from [`BOUNDARY_ERR_RELATION`] on the other side, too:
+/// `PersistentClosure + Bool` is a **malformed pair** and still returns `-8`,
+/// while `PersistentClosure + Closure` is a **well-formed pair naming a retired
+/// capability** and returns this. Collapsing the two would lose the ability to
+/// tell a corrupt word from a lawful word the ABI no longer honours.
+pub const BOUNDARY_ERR_RETIRED_LANE: i64 = -12;
 
 // ---------------------------------------------------------------------------
 // The invocation-scoped arena
@@ -1856,6 +1951,27 @@ pub struct BoundaryValueStore {
     resident: BTreeMap<SlotId, RuntimeGroundValue>,
     symbols: Vec<RuntimeSymbol>,
     symbol_ids: BTreeMap<RuntimeSymbol, u64>,
+    /// ⭐⭐ **`D2` — the ONE identity authority, as this store sees it.**
+    ///
+    /// A carrier `TagId` / record-field name id is an **artifact-static
+    /// identity**: a packed span into the plan's own name arena, issued by
+    /// `constructor_symbol_identity` / `record_field_identity`. ⛔ It is **not
+    /// computable from the symbol string** — no formula here could reproduce
+    /// it — so this store does not derive one. It is **told**, and it refuses
+    /// symbols it was never told about.
+    ///
+    /// ⚠ **Why this is not `symbol_ids` under another name.** `intern_symbol`
+    /// *mints*: dense insertion-order numbering, per store instance, minting on
+    /// miss. ⇒ The same constructor gets a different id in a different store or
+    /// a different insertion order, and a compiled-once body cannot compare
+    /// against that (`§2e`). These two maps are a **view over an authority that
+    /// lives elsewhere**, ⛔ never a source.
+    carrier_identities: BTreeMap<RuntimeSymbol, u64>,
+    /// The reverse view — `D2` rules that the reverse lookup survives *as a
+    /// view over the one authority*, ⛔ never as a second source. Written only
+    /// by [`BoundaryValueStore::issue_carrier_identity`], so it cannot disagree
+    /// with the forward map.
+    carrier_symbols: BTreeMap<u64, RuntimeSymbol>,
     /// The persistent region every persistent word indexes.
     image: BoundaryPersistentImage,
     /// `SlotId -> persistent node index`. ⭐ **This is what makes the word an
@@ -1899,6 +2015,8 @@ impl BoundaryValueStore {
             resident: BTreeMap::new(),
             symbols: Vec::new(),
             symbol_ids: BTreeMap::new(),
+            carrier_identities: BTreeMap::new(),
+            carrier_symbols: BTreeMap::new(),
             image: BoundaryPersistentImage::default(),
             placement: BTreeMap::new(),
             artifact: None,
@@ -2621,6 +2739,41 @@ impl BoundaryValueStore {
         id
     }
 
+    /// ⭐ **`D2` — record the artifact-static identity the plan issued for
+    /// `symbol`.** The caller holds the authority (`StaticTransitionPlan`); this
+    /// store only remembers what it was handed.
+    ///
+    /// ⚠ Re-issuing the same pair is idempotent. Re-issuing a **different**
+    /// identity for one symbol is a caller bug — two authorities by definition —
+    /// so it is refused rather than silently overwritten.
+    pub fn issue_carrier_identity(&mut self, symbol: &str, identity: u64) -> bool {
+        match self.carrier_identities.get(symbol) {
+            Some(existing) => *existing == identity,
+            None => {
+                self.carrier_identities
+                    .insert(symbol.to_string(), identity);
+                self.carrier_symbols.insert(identity, symbol.to_string());
+                true
+            }
+        }
+    }
+
+    /// The artifact-static identity issued for `symbol`, if any.
+    ///
+    /// ⛔⛔ **THE MINTING BAN.** `None` means *"no authority has issued an
+    /// identity for this symbol"*, and every carrier caller must **fail closed**
+    /// on it. ⚠ Minting here on a miss would discharge `D2`'s sentence while
+    /// preserving the exact defect it forbids: the mint *is* the second
+    /// authority.
+    pub fn carrier_identity(&self, symbol: &str) -> Option<u64> {
+        self.carrier_identities.get(symbol).copied()
+    }
+
+    /// The symbol an artifact-static identity names — the reverse **view**.
+    pub fn carrier_symbol(&self, identity: u64) -> Option<&str> {
+        self.carrier_symbols.get(&identity).map(String::as_str)
+    }
+
     /// The symbol an id names, if any.
     pub fn symbol(&self, id: u64) -> Option<&str> {
         if id == 0 {
@@ -2869,7 +3022,9 @@ impl BoundaryValueStore {
                 )
             }
             RuntimeGroundValue::Constructor { constructor, args } => {
-                let tag_id = self.intern_symbol(constructor);
+                // ⭐⭐ `D2`: the carrier tag is the identity the PLAN issued, and
+                // ⛔ an unissued constructor fails closed rather than minting one.
+                let tag_id = self.carrier_identity(constructor)?;
                 let mut children = Vec::with_capacity(args.len());
                 for arg in args {
                     children.push(self.materialize(arg)?);
@@ -2888,7 +3043,8 @@ impl BoundaryValueStore {
                 let mut children = Vec::with_capacity(fields.len());
                 let mut names = Vec::with_capacity(fields.len());
                 for (name, field) in fields {
-                    names.push(self.intern_symbol(name));
+                    // ⭐⭐ `D2`: record field identity, same one authority.
+                    names.push(self.carrier_identity(name)?);
                     children.push(self.materialize(field)?);
                 }
                 (BoundaryClass::Record, 0, 0, 0, children, names, Vec::new())

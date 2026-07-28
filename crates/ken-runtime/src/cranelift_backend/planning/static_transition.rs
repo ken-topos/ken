@@ -23,7 +23,14 @@ use semantic_ir::{
     SemanticSourceSeed,
 };
 
-pub(in crate::cranelift_backend) use semantic_ir::StaticOriginId;
+// ⭐ `D1`'s capability surface. The two identity types cross into
+// `crate::cranelift_backend` so `lowering` can hold and compare them; ⛔
+// `SemanticPlane`, `SemanticMaterialArena` and the `names` arena stay on the
+// `use` above, visible only inside this planner. Widening either of those to
+// serve a consumer is the move `§2d` forbids.
+pub(in crate::cranelift_backend) use semantic_ir::{
+    ConstructorIdentity, FieldIdentity, StaticOriginId,
+};
 
 pub(super) const MAX_HELPERS_PER_STATIC_SOURCE: usize = 8;
 
@@ -1141,6 +1148,59 @@ impl<'src> StaticTransitionPlan<'src> {
         position: usize,
     ) -> Result<StaticOriginId, CraneliftBackendError> {
         self.semantic.child_origin(parent, position)
+    }
+
+    /// The artifact-static constructor identity of one case of the `Match` /
+    /// `ComputationalMatch` occurrence at `origin` (`D1`).
+    ///
+    /// ⭐ **This is the capability export, not the plane.** `SemanticPlane` and
+    /// its `names` arena stay `pub(super)`; what crosses into
+    /// `crate::cranelift_backend` is an occurrence-keyed *question* and an
+    /// unmintable answer. That is `RT-FNSPLIT-B2E`'s surviving `R3` shape —
+    /// *"expose the capability, not the plane internals"* — and it is why `D1`
+    /// is not discharged by widening a field.
+    ///
+    /// ⭐ The returned identity **is** occurrence-independent: equal spellings
+    /// intern to one canonical span, so a producer's identity for `Cons` and an
+    /// eliminator's identity for `Cons` are the same value even at different
+    /// occurrences. That is `D2`'s shared-authority property.
+    ///
+    /// ⚠ **Artifact-local.** The identity is stable within one artifact's plane
+    /// and carries no cross-artifact meaning. ⛔ Do not persist or compare it
+    /// across artifacts.
+    pub(in crate::cranelift_backend) fn case_constructor_identity(
+        &self,
+        origin: StaticOriginId,
+        case_index: usize,
+    ) -> Result<ConstructorIdentity, CraneliftBackendError> {
+        self.semantic.case_constructor_identity(origin, case_index)
+    }
+
+    /// The artifact-static constructor identity of a `Construct` occurrence —
+    /// the producer side of [`Self::case_constructor_identity`] (`D2`).
+    pub(in crate::cranelift_backend) fn constructor_symbol_identity(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<ConstructorIdentity, CraneliftBackendError> {
+        self.semantic.constructor_symbol_identity(origin)
+    }
+
+    /// The artifact-static field identity a `Project` occurrence selects (`D1`).
+    pub(in crate::cranelift_backend) fn project_field_identity(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<FieldIdentity, CraneliftBackendError> {
+        self.semantic.project_field_identity(origin)
+    }
+
+    /// The artifact-static field identity of one field of a `Record` occurrence
+    /// — the producer side of [`Self::project_field_identity`] (`D2`).
+    pub(in crate::cranelift_backend) fn record_field_identity(
+        &self,
+        origin: StaticOriginId,
+        position: usize,
+    ) -> Result<FieldIdentity, CraneliftBackendError> {
+        self.semantic.record_field_identity(origin, position)
     }
 
     /// The **occurrence** origin of the whole program's root.
@@ -3122,6 +3182,357 @@ mod tests {
                 obligation: Some("ken.bytes.at.inBounds".to_string()),
             },
             "same variant, optional field present versus absent",
+        );
+    }
+
+    const IDENTITY_CTOR: &str = "ctor:prelude::Pair::MkPair";
+    const IDENTITY_OTHER_CTOR: &str = "ctor:prelude::Triple::MkTriple";
+    const IDENTITY_FIELD: &str = "field:fst";
+
+    /// A `Match` whose scrutinee **constructs** the same constructor one of its
+    /// cases **eliminates**, and whose case body projects a field the record
+    /// beneath it **declares**.
+    ///
+    /// ⭐ The point of the shape is that each spelling appears at **two distinct
+    /// occurrences** with different atom kinds — `ConstructorSymbol` vs
+    /// `CaseConstructor`, `RecordFieldName` vs `ProjectField`. That is what makes
+    /// the equality assertions below non-trivial: they are comparing a
+    /// *producer's* identity against a *consumer's*, which is exactly `D2`.
+    ///
+    /// Positional child layout, verified against the planner's own construction
+    /// rather than assumed: `Match` pushes the scrutinee then the case bodies
+    /// (`children.push(scrutinee); children.extend(case_bodies)`), and `Project`
+    /// plans its record at position 0.
+    fn identity_fixture() -> RuntimeExpr {
+        RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: IDENTITY_CTOR.to_string(),
+                args: Vec::new(),
+            }),
+            cases: vec![
+                RuntimeMatchCase {
+                    constructor: IDENTITY_CTOR.to_string(),
+                    binders: 0,
+                    body: RuntimeExpr::Project {
+                        record: Box::new(RuntimeExpr::Record {
+                            fields: vec![(IDENTITY_FIELD.to_string(), unit())],
+                        }),
+                        field: IDENTITY_FIELD.to_string(),
+                    },
+                },
+                RuntimeMatchCase {
+                    constructor: IDENTITY_OTHER_CTOR.to_string(),
+                    binders: 0,
+                    body: unit(),
+                },
+            ],
+            default: trap("identity fixture default"),
+        }
+    }
+
+    /// `RT-FNSPLIT-C1` `D2` — the producer and the eliminator derive **one**
+    /// constructor identity, and different spellings stay distinct.
+    ///
+    /// **MEASURED:** `constructor_symbol_identity` at the `Construct` occurrence
+    /// equals `case_constructor_identity` at the `Match` occurrence, and differs
+    /// from the identity of a differently-spelled case.
+    /// **CLAIMED:** producer and consumer share one authority (`D2`).
+    /// **THE GAP:** the two readings must come from **different occurrences** —
+    /// otherwise equality is trivially true of any scheme at all, including the
+    /// per-occurrence spans this node replaced. That is asserted, not assumed.
+    #[test]
+    fn boundary_c1_producer_and_eliminator_share_one_constructor_identity() {
+        // Promise class: durable invariant.
+        let expr = identity_fixture();
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
+
+        let match_origin = plan.root_static_origin().unwrap();
+        let construct_origin = plan.child_static_origin(match_origin, 0).unwrap();
+
+        assert_ne!(
+            match_origin, construct_origin,
+            "NON-VACUITY: the produced and eliminated identities must be read at \
+             two different occurrences, or their equality says nothing about \
+             sharing an authority."
+        );
+
+        let produced = plan.constructor_symbol_identity(construct_origin).unwrap();
+        let eliminated = plan.case_constructor_identity(match_origin, 0).unwrap();
+        assert_eq!(
+            produced, eliminated,
+            "the constructor built at one occurrence and matched at another have \
+             different artifact-static identities, so producer and consumer are \
+             not sharing one authority"
+        );
+
+        // Discriminator: a different spelling must not collide.
+        let other = plan.case_constructor_identity(match_origin, 1).unwrap();
+        assert_ne!(
+            produced, other,
+            "two differently-spelled constructors share an identity"
+        );
+    }
+
+    /// `RT-FNSPLIT-C1` `D2` — the record's declared field and the projection's
+    /// selected field are one identity.
+    #[test]
+    fn boundary_c1_declared_and_projected_field_share_one_identity() {
+        // Promise class: durable invariant.
+        let expr = identity_fixture();
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
+
+        let match_origin = plan.root_static_origin().unwrap();
+        let project_origin = plan.child_static_origin(match_origin, 1).unwrap();
+        let record_origin = plan.child_static_origin(project_origin, 0).unwrap();
+
+        assert_ne!(
+            project_origin, record_origin,
+            "NON-VACUITY: the declared and selected field identities must be read \
+             at two different occurrences."
+        );
+
+        let selected = plan.project_field_identity(project_origin).unwrap();
+        let declared = plan.record_field_identity(record_origin, 0).unwrap();
+        assert_eq!(
+            selected, declared,
+            "the field declared by a record and the field selected by a projection \
+             over it have different artifact-static identities"
+        );
+    }
+
+    /// `RT-FNSPLIT-C1` `D1` — the capability refuses a wrong-kind or
+    /// out-of-cardinality access rather than returning a plausible identity.
+    #[test]
+    fn boundary_c1_identity_capability_refuses_wrong_kind_and_cardinality() {
+        // Promise class: durable invariant.
+        let expr = identity_fixture();
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
+        let match_origin = plan.root_static_origin().unwrap();
+        let construct_origin = plan.child_static_origin(match_origin, 0).unwrap();
+
+        // Cardinality: the fixture has two cases, so index 2 does not exist.
+        assert!(plan.case_constructor_identity(match_origin, 2).is_err());
+
+        // Wrong kind: a `Construct` occurrence has a `ConstructorSymbol` atom
+        // and no `ProjectField` atom, so asking it for a field identity must
+        // fail rather than fall back to whatever named atom it does hold.
+        assert!(plan.project_field_identity(construct_origin).is_err());
+
+        // The positive direction, so the two refusals above are attributable to
+        // the kind/cardinality checks and not to an origin that resolves nothing.
+        assert!(plan.constructor_symbol_identity(construct_origin).is_ok());
+    }
+
+    /// `RT-FNSPLIT-C1` `D2` — equal name bytes have exactly one canonical span.
+    ///
+    /// **MEASURED:** across every atom of a real plan, atoms whose interned
+    /// bytes are equal have equal `content` spans.
+    /// **CLAIMED:** a producer and an eliminator at *different occurrences*
+    /// derive the *same* artifact-static identity for the same spelling.
+    /// **THE GAP:** the identity must be a function of the span alone — which
+    /// is why `pack_identity` is the sole encoding and why the newtypes wrap the
+    /// span rather than carrying any second field.
+    ///
+    /// ⛔ **The non-vacuity guard is the load-bearing half of this test.** A
+    /// fixture in which no spelling repeats satisfies the canonicalization
+    /// assertion trivially and would stay green against an interner that never
+    /// deduplicates at all — which is precisely the pre-`C1` behaviour this
+    /// test exists to detect. So the repeat count is asserted, not assumed.
+    #[test]
+    fn boundary_c1_equal_name_bytes_have_one_canonical_span() {
+        // Promise class: durable invariant.
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
+
+        let mut spans_by_bytes: BTreeMap<Vec<u8>, Vec<DenseRange>> = BTreeMap::new();
+        for atom in &plan.semantic.operands {
+            let start = atom.content.start as usize;
+            let bytes = plan.semantic.names[start..start + atom.content.len as usize].to_vec();
+            spans_by_bytes.entry(bytes).or_default().push(atom.content);
+        }
+
+        let repeated = spans_by_bytes
+            .iter()
+            .filter(|(bytes, spans)| !bytes.is_empty() && spans.len() > 1)
+            .count();
+        assert!(
+            repeated > 0,
+            "NON-VACUITY: no non-empty spelling occurs twice in this fixture, so the \
+             canonicalization assertion below is trivially satisfied and would not \
+             detect an interner that never deduplicates."
+        );
+
+        for (bytes, spans) in &spans_by_bytes {
+            let first = spans[0];
+            let deviant = spans.iter().find(|span| **span != first);
+            assert!(
+                deviant.is_none(),
+                "spelling {:?} is interned at both {:?} and {:?}, so one symbol has more \
+                 than one artifact-static identity",
+                String::from_utf8_lossy(bytes),
+                first,
+                deviant.unwrap()
+            );
+        }
+    }
+
+    /// `RT-FNSPLIT-C1` `D2` — the plane refuses a two-identity symbol.
+    ///
+    /// ⭐ This is the control for the *validator*, not for `intern`. An `intern`
+    /// that regressed to an unconditional append leaves every span in bounds and
+    /// every budget exact, so every pre-existing check stays green while
+    /// producer and consumer quietly stop sharing an identity. The plane has to
+    /// assert canonicality itself rather than trusting the function that is
+    /// supposed to maintain it.
+    #[test]
+    fn boundary_c1_validate_rejects_equal_bytes_interned_at_two_spans() {
+        // Promise class: durable mutation proof.
+        let expr = nested_resource_bracket(3);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
+
+        // The unmutated plane is green — the inverse half, so a red result below
+        // is attributable to the mutation and not to a fixture that never validated.
+        plan.semantic
+            .validate(
+                &plan.nodes,
+                &plan.edges,
+                &plan.entries,
+                &plan.semantic_sources,
+                &plan.semantic_material,
+            )
+            .expect("the unmutated plane validates");
+
+        // ⛔ The mutation must NOT grow `names`.
+        //
+        // `validate` already requires `plane.names == arena.names`, and that
+        // check runs first. Appending a duplicate copy of a spelling therefore
+        // trips the arena-equality check and never reaches the canonicality
+        // one — the first draft of this control did exactly that and proved
+        // nothing about the property it names.
+        //
+        // ⭐ So the two equal-byte spans are manufactured *inside* the existing
+        // arena: whole symbols are unique after canonicalization, but their
+        // BYTES are not — two distinct symbols routinely share a first byte.
+        // Pointing two atoms at one-byte spans over the same byte value at
+        // different offsets yields equal content at unequal spans with `names`
+        // byte-for-byte untouched.
+        let mut duplicated = plan.semantic.clone();
+        let candidates = duplicated
+            .operands
+            .iter()
+            .filter(|atom| atom.content.len > 0)
+            .map(|atom| atom.content)
+            .collect::<Vec<_>>();
+        let (first, second) = candidates
+            .iter()
+            .enumerate()
+            .find_map(|(i, a)| {
+                candidates[i + 1..]
+                    .iter()
+                    .find(|b| {
+                        b.start != a.start
+                            && duplicated.names[a.start as usize]
+                                == duplicated.names[b.start as usize]
+                    })
+                    .map(|b| (*a, *b))
+            })
+            .expect(
+                "NON-VACUITY: the fixture has no two out-of-line atoms starting at \
+                 different offsets with the same first byte, so this mutation cannot \
+                 manufacture equal bytes at unequal spans and the control is vacuous.",
+            );
+
+        for atom in duplicated.operands.iter_mut() {
+            if atom.content == first {
+                atom.content = DenseRange {
+                    start: first.start,
+                    len: 1,
+                };
+            } else if atom.content == second {
+                atom.content = DenseRange {
+                    start: second.start,
+                    len: 1,
+                };
+            }
+        }
+        assert_eq!(
+            duplicated.names, plan.semantic.names,
+            "the mutation must leave the name arena byte-identical, or the \
+             arena-equality check fires before the canonicality check and this \
+             control measures the wrong rejection"
+        );
+
+        assert_eq!(
+            duplicated
+                .validate(
+                    &plan.nodes,
+                    &plan.edges,
+                    &plan.entries,
+                    &plan.semantic_sources,
+                    &plan.semantic_material,
+                )
+                .unwrap_err(),
+            planner_error(
+                "equal semantic name bytes are interned at two different spans, \
+                 so one symbol has two identities"
+            )
+        );
+    }
+
+    /// `RT-FNSPLIT-C1` `D1` — the one identity ABI encoding is injective and
+    /// reserves zero.
+    ///
+    /// ⚠ `start = 0, len = 0` is a **legitimate** identity (the empty name at
+    /// offset zero), which is the entire reason the encoding adds one. Without
+    /// the `+1` that identity would encode as `0` and be indistinguishable from
+    /// uninitialized ABI memory.
+    #[test]
+    fn boundary_c1_identity_abi_word_round_trips_and_reserves_zero() {
+        // Promise class: normative compatibility vector — the encoding is the
+        // contract between the planner and the carrier's emitted ABI.
+        for (start, len) in [
+            (0u32, 0u32),
+            (0, 1),
+            (1, 0),
+            (7, 3),
+            (u32::MAX, u32::MAX - 1),
+        ] {
+            let span = DenseRange { start, len };
+            let packed = ConstructorIdentity(span).tag_abi_word().unwrap();
+            assert_ne!(packed, 0, "({start},{len}) encoded as the invalid sentinel");
+            assert_eq!(
+                super::semantic_ir::unpack_identity(packed).unwrap(),
+                span,
+                "({start},{len}) did not round trip"
+            );
+        }
+
+        // Both namespaces share the one encoding, so a field identity and a
+        // constructor identity over the same span agree numerically. That is
+        // intended: the separation is carried by the *type*, not by the number.
+        let span = DenseRange { start: 9, len: 4 };
+        assert_eq!(
+            ConstructorIdentity(span).tag_abi_word().unwrap(),
+            FieldIdentity(span).name_abi_word().unwrap()
+        );
+
+        assert_eq!(
+            super::semantic_ir::unpack_identity(0).unwrap_err(),
+            planner_error("semantic identity is the reserved invalid sentinel")
+        );
+
+        // ⭐ Capacity loudness. The `+1` that reserves zero costs exactly one
+        // encodable span at the very top of the range, and the refusal must be
+        // a loud capacity error rather than a wrap to the sentinel — a silent
+        // wrap would hand emitted code the "invalid" word for a valid symbol.
+        assert_eq!(
+            ConstructorIdentity(DenseRange {
+                start: u32::MAX,
+                len: u32::MAX
+            })
+            .tag_abi_word()
+            .unwrap_err(),
+            planner_capacity_error("semantic identity encoding exhausted")
         );
     }
 

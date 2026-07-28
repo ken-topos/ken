@@ -43,6 +43,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         live_source_continuations: 0,
         source_control_root: None,
         active_oriented_semantic_regions: 0,
+        active_carried_computational_eliminations: Vec::new(),
         native_join_plan: Some(crate::NativeJoinPlanV1 {
             representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
             sites: vec![self_consistent_root_join_site(0)],
@@ -73,6 +74,10 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         native_int_narrow: None,
         native_int_export: None,
         native_int_tags: BTreeMap::new(),
+        // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
+        // no callable carrier refs. The `Carried` routes fail closed on this
+        // rather than silently taking the `Specialized` path.
+        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
     }
@@ -82,7 +87,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
 fn run_px8j_malformed_recursor_consumer(
     consumer: Px8jDirectRecursorConsumer,
     malformation: Px8jRecursorMalformation,
-) -> Result<Lowered, CraneliftBackendError> {
+) -> Result<LoweringOperand, CraneliftBackendError> {
     let mut module = new_jit_module()?;
     let mut signature = module.make_signature();
     signature.returns.push(AbiParam::new(types::I64));
@@ -131,6 +136,7 @@ fn run_px8j_malformed_recursor_consumer(
         live_source_continuations: 0,
         source_control_root: None,
         active_oriented_semantic_regions: 0,
+        active_carried_computational_eliminations: Vec::new(),
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
         root_terminal_authority: None,
@@ -158,6 +164,10 @@ fn run_px8j_malformed_recursor_consumer(
         native_int_narrow: None,
         native_int_export: None,
         native_int_tags: BTreeMap::new(),
+        // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
+        // no callable carrier refs. The `Carried` routes fail closed on this
+        // rather than silently taking the `Specialized` path.
+        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
     };
@@ -218,7 +228,7 @@ fn run_px8j_malformed_recursor_consumer(
         ],
     };
     let recursor = Lowered::ComputationalRecursorClosure {
-        residual: Box::new(Lowered::Closure {
+        residual: Box::new(LoweringOperand::Specialized(Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
             // An inert residual body. This test drives the recursor-malformation
@@ -226,7 +236,7 @@ fn run_px8j_malformed_recursor_consumer(
             // the whole of it — and since B2A-S the carrier *is* the origin, the
             // fixture can no longer pair an arbitrary term with an unrelated tag.
             body: inert_test_static_origin(),
-        }),
+        })),
         activation: ContinuationActivationId(8),
         invocation: RecursorInvocationSegment::new(
             origin,
@@ -251,7 +261,7 @@ fn run_px8j_malformed_recursor_consumer(
         selected_scope: None,
     };
     let active_frames = [EliminatorFrame::Active(active)];
-    let env = [recursor];
+    let env = [LoweringOperand::Specialized(recursor)];
     let mut function_context = FunctionBuilderContext::new();
     let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
     let entry = builder.create_block();
@@ -471,7 +481,7 @@ fn oriented_dynamic_edge_ledger_is_affine_and_sibling_isolated() {
 fn run_px8ds_edge_consumer(
     consumer: Px8jDirectRecursorConsumer,
     mutation: Px8dsEdgeMutation,
-) -> Result<Lowered, CraneliftBackendError> {
+) -> Result<LoweringOperand, CraneliftBackendError> {
     let seed_env = NativeSeedEnvironment::empty();
     let mut compiler = root_authority_test_lowering(&seed_env);
     compiler.native_join_plan = None;
@@ -513,13 +523,13 @@ fn run_px8ds_edge_consumer(
     let cursor = segment.resume_cursor;
     let activation = ContinuationActivationId(90);
     let recursor = Lowered::ComputationalRecursorClosure {
-        residual: Box::new(Lowered::Closure {
+        residual: Box::new(LoweringOperand::Specialized(Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
             // An inert residual body, as in the PX8J fixture above: the carrier is
             // the origin, and this test never lowers the body.
             body: inert_test_static_origin(),
-        }),
+        })),
         activation,
         invocation: segment,
     };
@@ -534,7 +544,7 @@ fn run_px8ds_edge_consumer(
         selected_scope: None,
     };
     let active_frames = [EliminatorFrame::Active(active)];
-    let env = [recursor];
+    let env = [LoweringOperand::Specialized(recursor)];
     let call = RuntimeExpr::Call {
         callee: Box::new(RuntimeExpr::Var(0)),
         args: Vec::new(),
@@ -1971,6 +1981,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         live_source_continuations: 0,
         source_control_root: None,
         active_oriented_semantic_regions: 0,
+        active_carried_computational_eliminations: Vec::new(),
         native_join_plan: Some(crate::NativeJoinPlanV1 {
             representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
             sites: vec![self_consistent_root_join_site(0)],
@@ -2001,6 +2012,10 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         native_int_narrow: None,
         native_int_export: None,
         native_int_tags: BTreeMap::new(),
+        // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
+        // no callable carrier refs. The `Carried` routes fail closed on this
+        // rather than silently taking the `Specialized` path.
+        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
     };
@@ -3476,6 +3491,22 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
         vec![
             "pub(in crate::cranelift_backend) fn source_occurrence(",
             "pub(in crate::cranelift_backend) fn child_static_origin(",
+            // `RT-FNSPLIT-C1` `D1` — the artifact-static identity capability.
+            //
+            // ⭐ These four are the whole of `D1`, and they are the shape the
+            // Architect's ruling requires: an occurrence-keyed *question* with
+            // an unmintable answer. ⛔ `SemanticPlane` and its `names` arena
+            // stay `pub(super)`; widening either to serve a consumer is what
+            // this pin exists to catch, and adding a capability is not that.
+            //
+            // ⚠ None of them returns a source term, so the `-> Result<&'src
+            // RuntimeExpr` count below is still exactly one. That assertion is
+            // the one carrying B2A-S's AC-4; this list is the surrounding
+            // allowed-inventory.
+            "pub(in crate::cranelift_backend) fn case_constructor_identity(",
+            "pub(in crate::cranelift_backend) fn constructor_symbol_identity(",
+            "pub(in crate::cranelift_backend) fn project_field_identity(",
+            "pub(in crate::cranelift_backend) fn record_field_identity(",
             "pub(in crate::cranelift_backend) fn root_static_origin(",
             "pub(in crate::cranelift_backend) fn declaration_occurrence_origin(",
             "pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(",
@@ -3991,7 +4022,15 @@ fn retained_closures_carry_a_static_origin_and_no_body_term() {
     assert_eq!(
         declared_fields(source, "    ComputationalRecursorClosure {"),
         vec![
-            "residual: Box<Lowered>,",
+            // ⚠ `RT-FNSPLIT-C1 AC-C4` widened this field from `Box<Lowered>` on
+            // the Architect's SINGLE-FIELD license, and the pin's own property
+            // is UNCHANGED by that: a `LoweringOperand` residual is still not a
+            // body carrier — no `StaticOriginId`, no `RuntimeExpr`, nothing this
+            // variant could be re-lowered from. It stays out of the covered
+            // population for exactly the reason stated below. ⛔ What would move
+            // it in is a field naming a source body, and that is still what this
+            // inventory equality catches.
+            "residual: Box<LoweringOperand>,",
             "activation: ContinuationActivationId,",
             "invocation: RecursorInvocationSegment,",
         ],
@@ -4269,11 +4308,26 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
          count to be `tokens - definitions`"
     );
     let calls = tokens - definitions;
+    // ⭐ **59 -> 61 on `RT-FNSPLIT-C1` `D3`, and the arithmetic is the whole
+    // report the pin asks for.** The two added calls are the case-body descents
+    // of the two *carried* elimination routes — `lower_carried_match` and
+    // `lower_carried_computational_match` — each lowering a case body under a
+    // `case_env` whose binders are runtime projections rather than compile-time
+    // constructor arguments.
+    //
+    // ⭐ **Neither is a new owner boundary**, which is the disposition this pin
+    // actually reports. A carried case body is reached by ordinary descent from
+    // the eliminator's own occurrence — `case_body_occurrence(static_origin,
+    // index, ..)`, the identical accessor the specialized routes use — so its
+    // occurrence's `SemanticOwner` and planned edge kind are unchanged. ⛔ No
+    // `StaticBody` edge is introduced, and no retained body is reached by a new
+    // path.
     assert_eq!(
-        calls, 59,
+        calls, 61,
         "D6: the tokenized production call population into `lower_expr` moved. \
          ⚠ If you reached this by counting `self.lower_expr(` you will have got \
-         58 -- the root call at `core.rs:188` is spelled `compiler.lower_expr(`"
+         one fewer -- the root call at `core.rs:188` is spelled \
+         `compiler.lower_expr(`"
     );
 
     // Non-vacuity: the tokenizer must actually see the root call's receiver
@@ -4440,10 +4494,33 @@ fn the_owner_classification_has_a_closed_production_naming_inventory() {
         .collect::<Vec<_>>();
     assert_eq!(
         widened,
-        vec!["pub(in crate::cranelift_backend) struct StaticOriginId(pub(super) u32);"],
+        vec![
+            "pub(in crate::cranelift_backend) struct StaticOriginId(pub(super) u32);",
+            "pub(in crate::cranelift_backend) struct ConstructorIdentity(pub(super) DenseRange);",
+            "pub(in crate::cranelift_backend) struct FieldIdentity(pub(super) DenseRange);",
+            "pub(in crate::cranelift_backend) fn tag_abi_word(self) -> Result<u64, CraneliftBackendError> {",
+            "pub(in crate::cranelift_backend) fn name_abi_word(self) -> Result<u64, CraneliftBackendError> {",
+        ],
         "D7: the plane's widened-visibility inventory changed. `StaticOriginId` \
          is widened deliberately so the lowering can carry an occurrence's \
          static name.\n\
+         ⭐ `RT-FNSPLIT-C1` `D1`/`D2` adds four members, and the argument for \
+         each is the same one that justifies `StaticOriginId`: the widened item \
+         is a NAME the lowering may hold, never a CONSTRUCTOR it may use. Both \
+         identity newtypes wrap a `pub(super)` field, so a consumer can hold, \
+         compare and pass an identity but CANNOT MINT one -- which is what \
+         makes `D2`'s single-authority property a fact about the type system \
+         rather than about reviewer vigilance. `tag_abi_word`/`name_abi_word` \
+         are widened because the carrier's emitted ABI takes a word; they are \
+         METHODS ON THE TYPED IDENTITY rather than a shared `u64` conversion, \
+         so neither namespace can be erased before the tag-vs-name ABI \
+         operation is chosen.\n\
+         ⛔ What is NOT widened, and is the thing this pin most needs to keep \
+         catching: `SemanticPlane` and its `names` arena stay `pub(super)`. The \
+         Architect's ruling forbids resolving a consumer's need by widening the \
+         plane, and `D1` is deliberately a capability export instead. A future \
+         `SemanticPlane` or `names` line appearing in this list is the \
+         violation, not a fifth capability.\n\
          ⚠ This is a DECLARATION inventory, not a proof of inertness: a \
          widening of the OWNER surface is a DELIBERATE REVIEW EVENT that must \
          be argued here, not absorbed. It entails nothing by itself about what \
@@ -4572,6 +4649,156 @@ fn b2v_ac3_the_lowered_boundary_disposition_has_no_wildcard_arm() {
         1,
         "AC-3: a second disposition exists, and the compiler cannot promise \
          the two agree"
+    );
+}
+
+// ─── RT-FNSPLIT-C1 D5 — closure admissibility is a property of the GRAPH ───
+
+/// A real `StaticOriginId` for a closure fixture.
+///
+/// ⭐ One cannot be minted outside the planner — its ordinal is `pub(super)`,
+/// which is exactly the unmintability `D1`/`D2` rely on. So a control that needs
+/// a closure value must source a genuine origin from a genuine plan rather than
+/// fabricating one, and that constraint is a feature reaching into the tests.
+fn c1_closure_fixture_origin() -> StaticOriginId {
+    let expr = RuntimeExpr::Construct {
+        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+        args: Vec::new(),
+    };
+    let plan = plan_static_transition_graph(&expr, &BTreeMap::new())
+        .expect("the fixture expression plans");
+    plan.root_static_origin()
+        .expect("the plan has a root occurrence origin")
+}
+
+fn c1_closure(origin: StaticOriginId) -> Lowered {
+    Lowered::Closure {
+        captures: Vec::new(),
+        params: Vec::new(),
+        body: origin,
+    }
+}
+
+/// **`RT-FNSPLIT-C1` `D5` — a closure is inadmissible at the root and at every
+/// depth, and the rejection is the same exact typed error at each.**
+///
+/// **MEASURED:** `boundary_transfer_admissibility` returns the closure-transfer
+/// error for a bare closure, a bare declaration closure, a closure nested one
+/// level inside a `Constructor`, and one nested two levels inside a
+/// `Constructor` -> `Record`.
+/// **CLAIMED:** admissibility is a property of the whole value graph.
+/// **THE GAP:** the root variant table cannot see any of the nested cases —
+/// `boundary_disposition` reports `RepresentedHandle` for every one of the
+/// nested fixtures below, because it is a function of the root tag alone. That
+/// disagreement is asserted here rather than described, so the walk cannot be
+/// deleted in favour of the table without reddening.
+#[test]
+fn c1_d5_a_closure_is_inadmissible_at_the_root_and_at_every_depth() {
+    // Promise class: durable invariant.
+    let origin = c1_closure_fixture_origin();
+    let expected = unsupported(
+        "Closure",
+        "a closure cannot cross the boundary: it is runtime-local and \
+         live-domain only, and it has no durable lane",
+    );
+
+    let bare = c1_closure(origin);
+    let bare_declaration = Lowered::DeclarationClosure {
+        symbol: "decl:fixture::f".to_string(),
+        captures: Vec::new(),
+        params: Vec::new(),
+        body: origin,
+    };
+    let depth_1 = Lowered::Constructor {
+        constructor: "ctor:fixture::Box::MkBox".to_string(),
+        args: vec![c1_closure(origin)],
+    };
+    let depth_2 = Lowered::Constructor {
+        constructor: "ctor:fixture::Box::MkBox".to_string(),
+        args: vec![Lowered::Record {
+            fields: vec![("field:held".to_string(), c1_closure(origin))],
+        }],
+    };
+
+    for (label, value) in [
+        ("bare closure", &bare),
+        ("bare declaration closure", &bare_declaration),
+        ("closure nested at depth 1", &depth_1),
+        ("closure nested at depth 2", &depth_2),
+    ] {
+        assert_eq!(
+            value.boundary_transfer_admissibility().unwrap_err(),
+            expected,
+            "{label}: the graph holds a closure and must be refused with the \
+             exact closure-transfer error"
+        );
+    }
+
+    // ⭐ THE GAP, asserted. The two nested fixtures are exactly the cases the
+    // root table cannot see, and it must be shown to disagree — otherwise this
+    // whole walk could be replaced by `boundary_disposition` and nothing would
+    // redden.
+    for (label, value) in [
+        ("closure nested at depth 1", &depth_1),
+        ("closure nested at depth 2", &depth_2),
+    ] {
+        assert!(
+            matches!(
+                value.boundary_disposition(),
+                BoundaryDisposition::RepresentedHandle { .. }
+            ),
+            "{label}: the ROOT table already refuses this, so the graph walk is \
+             not what is catching it and this control proves nothing about depth"
+        );
+    }
+}
+
+/// **`RT-FNSPLIT-C1` `D5` — the positive path: a closure-free constructor is
+/// still admitted.**
+///
+/// ⛔ This is the control that keeps the rejection **conditional**. Without it,
+/// an implementation that refused every `Constructor` outright would satisfy
+/// every negative control above — and it would be a capability removal wearing
+/// a soundness fix's clothing.
+///
+/// ⚠ Admitted here means *"this graph holds no closure"*, **not** *"this value
+/// is transferable"*. Whether the root has a boundary representation at all is
+/// `boundary_disposition`'s separate question.
+#[test]
+fn c1_d5_a_closure_free_constructor_is_admissible() {
+    // Promise class: durable invariant.
+    let closure_free = Lowered::Constructor {
+        constructor: "ctor:fixture::Pair::MkPair".to_string(),
+        args: vec![
+            Lowered::String("left".to_string()),
+            Lowered::Record {
+                fields: vec![("field:right".to_string(), Lowered::Bytes(vec![7, 8]))],
+            },
+        ],
+    };
+    assert!(
+        closure_free.boundary_transfer_admissibility().is_ok(),
+        "a constructor whose graph holds no closure must remain admissible; \
+         D5 rejects closure-bearing GRAPHS, not the Constructor variant"
+    );
+
+    // Non-vacuity: the same shape with one leaf swapped for a closure must be
+    // refused, so the `is_ok` above is attributable to the absence of a closure
+    // rather than to the walk admitting everything it is handed.
+    let origin = c1_closure_fixture_origin();
+    let closure_bearing = Lowered::Constructor {
+        constructor: "ctor:fixture::Pair::MkPair".to_string(),
+        args: vec![
+            Lowered::String("left".to_string()),
+            Lowered::Record {
+                fields: vec![("field:right".to_string(), c1_closure(origin))],
+            },
+        ],
+    };
+    assert!(
+        closure_bearing.boundary_transfer_admissibility().is_err(),
+        "NON-VACUITY: the walk admits a graph differing only by a closure in one \
+         leaf position, so it is not discriminating on closures at all"
     );
 }
 

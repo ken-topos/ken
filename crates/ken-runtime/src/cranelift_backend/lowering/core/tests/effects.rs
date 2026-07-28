@@ -58,6 +58,7 @@ fn run_checked_bounded_nat_fixture(
         live_source_continuations: 0,
         source_control_root: None,
         active_oriented_semantic_regions: 0,
+        active_carried_computational_eliminations: Vec::new(),
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
         root_terminal_authority: None,
@@ -85,6 +86,10 @@ fn run_checked_bounded_nat_fixture(
         native_int_narrow: None,
         native_int_export: None,
         native_int_tags: BTreeMap::new(),
+        // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
+        // no callable carrier refs. The `Carried` routes fail closed on this
+        // rather than silently taking the `Specialized` path.
+        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: mutation,
     };
@@ -275,7 +280,7 @@ fn run_checked_bounded_nat_fixture(
                     compiler.lower_bounded_nat_computational(&mut builder, nat, false, &frames)?
                 }
             };
-            match lowered {
+            match lowered.specialized_at("this fixture's result")? {
                 Lowered::Int { value, .. } => value,
                 other => compiler.emit_result(&mut builder, other)?.0,
             }
