@@ -249,8 +249,7 @@ which `B2R` already lays out and which the experimental emission ignored.
 ⇒ ⭐ **The producer extension is FOUR classes, not five**, and one of the five
 was a defect in this node's own code wearing a dependency's clothing.
 
-## ⭐ THE SPILLABLE-IMMEDIATE DISPATCH — the predicate already exists, and the
-## emitter must not re-derive it
+## ⭐ THE SPILLABLE-IMMEDIATE DISPATCH — the predicate already exists
 
 Design for the 63-red arm, grounded rather than invented.
 
