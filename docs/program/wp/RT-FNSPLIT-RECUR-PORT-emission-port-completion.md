@@ -194,8 +194,10 @@ evidence against that model, never its source.**
 ## Standing
 
 ⛔ Stop for a genuine frame-unsatisfied hard stop or a clean merge-ready handoff.
-**Hard-stop count of record = 14**, and ⚠⚠ **`#15` IS ARMED — the next stop
-pulls research, with no slack left.** The authoritative counter is the
+**Hard-stop count of record = 15**, and ⚠⚠ **`#15` HAS FIRED — the armed
+research consult is OPEN; the next armed multiple is `#18`.** ⛔ **`S6`/`S7` are
+paused pending the Architect's `#15` ruling**, which cannot issue until entry 6
+answers the shared-predicate check. The authoritative counter is the
 **`COUNT OF RECORD` block at the head of `§5a`** in
 `docs/program/issues/RT-NATIVE-FNSPLIT.md`, which wins on any disagreement —
 ⛔ read it at the point of a stop, never a count transcribed into a frame,
