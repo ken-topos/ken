@@ -928,11 +928,6 @@ struct BoundaryCarrierRefs {
     /// whose payload rides in the tagged word. ⚠ Note the **absent `arena`**:
     /// an immediate names no referent, so there is nothing for an arena to own.
     make_immediate: FuncRef,
-    /// `(arena, word, payload) -> status` — the spill arm records the magnitude
-    /// word of a spilled `Int`. ⚠ Shared with `HostResult`, where the same slot
-    /// holds the success discriminant; the class the node was allocated with is
-    /// what decides which reading applies, and the helper guards on it.
-    store_scalar: FuncRef,
     /// `(arena, word, native_tag) -> status` — the spill arm records **how** the
     /// magnitude word is to be read, as a `NativeIntV1` marker.
     ///
