@@ -296,11 +296,11 @@ fn convertible_field_spellings_generate_convertible_lifts_and_iota_terms() {
 }
 
 #[test]
-fn declared_positive_former_lift_maps_each_contained_recursive_value() {
+fn declared_positive_former_lift_builds_dependent_host_evidence() {
     // Durable invariant: the D3a Former skeleton is a semantic consumer, not a
-    // test-only ornament.  List's own eliminator maps every contained D to the
-    // package (d : D) × M d while preserving nil/cons topology.  Admission of
-    // this outer family remains a later D1b concern.
+    // test-only ornament. List's original eliminator builds an All-style
+    // evidence family without re-instantiating List at a larger universe.
+    // Admission of this outer family remains a later D1b concern.
     let mut env = GlobalEnv::new();
     let list = declare_list(&mut env);
     let family = install_test_only_nested_family(&mut env, list);
@@ -311,8 +311,6 @@ fn declared_positive_former_lift_maps_each_contained_recursive_value() {
     let cons = list_declaration.constructors[1].id;
     let family_type = former(family);
     let source_list_type = Term::app(former(list), family_type.clone());
-    let packaged = Term::sigma(family_type.clone(), family_type.clone());
-    let target_list_type = Term::app(former(list), packaged);
     let motive = Term::Ascript(
         Box::new(Term::lam(family_type.clone(), family_type.clone())),
         Box::new(Term::pi(family_type.clone(), ty0())),
@@ -321,7 +319,7 @@ fn declared_positive_former_lift_maps_each_contained_recursive_value() {
         constructor(leaf),
         Term::lam(
             source_list_type.clone(),
-            Term::lam(target_list_type.clone(), constructor(leaf)),
+            Term::lam(ty0(), constructor(leaf)),
         ),
     ];
     let leaf_value = constructor(leaf);
@@ -335,12 +333,10 @@ fn declared_positive_former_lift_maps_each_contained_recursive_value() {
     let (domains, _) = peel_pi(&method);
     assert_eq!(domains.len(), 2, "field plus one structured Former lift");
     let instantiated_lift_type = ken_kernel::subst::subst0(&domains[1], &list_value);
-    assert!(convert_type(
-        &env,
-        &Context::new(),
-        &instantiated_lift_type,
-        &target_list_type,
-    ));
+    assert!(
+        matches!(instantiated_lift_type, Term::Elim { fam, .. } if fam == list),
+        "FormerLift is a type-level elimination over the original host"
+    );
 
     let reduct = iota_reduct(
         &env,
@@ -356,8 +352,75 @@ fn declared_positive_former_lift_maps_each_contained_recursive_value() {
     let (_, arguments) = peel_app(&reduct);
     let lifted = arguments.last().expect("iota supplies the Former lift");
     assert!(matches!(lifted, Term::Elim { fam, .. } if *fam == list));
+    if let Term::Elim {
+        motive: host_motive,
+        methods: host_methods,
+        ..
+    } = lifted
+    {
+        for (index, host_method) in host_methods.iter().enumerate() {
+            let expected = method_type(
+                &env,
+                list_declaration,
+                index,
+                host_motive,
+                std::slice::from_ref(&family_type),
+                &[],
+            )
+            .expect("host method type");
+            if index == 1 {
+                eprintln!("host method={host_method:?}");
+                eprintln!("host expected={expected:?}");
+                let (_, expected_body) = peel_pi(&expected);
+                let (expected_domains, _) = peel_pi(&expected);
+                let mut method_context = Context::new();
+                method_context.extend_tel(&expected_domains);
+                let mut actual_body = host_method.clone();
+                while let Term::Lam(_, body) = actual_body {
+                    actual_body = *body;
+                }
+                eprintln!("actual body={actual_body:?}");
+                eprintln!("expected body={expected_body:?}");
+                eprintln!(
+                    "expected whnf={:?}",
+                    ken_kernel::whnf(&env, &method_context, &expected_body)
+                );
+                let Term::Pair(first, second) = &actual_body else {
+                    panic!("expected outer evidence pair")
+                };
+                let Term::Pair(second_first, _) = second.as_ref() else {
+                    panic!("expected nested evidence pair")
+                };
+                let Term::Sigma(_, expected_rest) =
+                    ken_kernel::whnf(&env, &method_context, &expected_body)
+                else {
+                    panic!("expected outer evidence Sigma")
+                };
+                let rest = ken_kernel::subst::subst0(&expected_rest, first);
+                let Term::Sigma(expected_ih, _) =
+                    ken_kernel::whnf(&env, &method_context, &rest)
+                else {
+                    panic!("expected nested evidence Sigma")
+                };
+                let found_ih = infer(&env, &method_context, second_first)
+                    .expect("infer supplied host IH");
+                eprintln!("expected ih={expected_ih:?}");
+                eprintln!("found ih={found_ih:?}");
+                eprintln!(
+                    "ih converts={}",
+                    convert_type(&env, &method_context, &expected_ih, &found_ih)
+                );
+            }
+            check(&env, &Context::new(), host_method, &expected)
+                .unwrap_or_else(|error| panic!("host method {index}: {error}"));
+        }
+    }
+    eprintln!(
+        "lifted type={:?}",
+        infer(&env, &Context::new(), lifted).expect("infer lifted")
+    );
     check(&env, &Context::new(), lifted, &instantiated_lift_type)
-        .expect("the host eliminator's mapped value inhabits the generated Former lift");
+        .expect("the second host elimination inhabits the generated FormerLift");
 
     let attempted = declare_inductive(&mut env, |nested| InductiveSpec {
         level_params: vec![],
