@@ -406,3 +406,62 @@ on controls that never touched the magnitude.
 Swapping the branch for a hand-written magnitude test still round-trips every
 value, so nothing in this suite reddens. ⛔ Its absence from a green run is not
 evidence about it.
+
+## ✅ THE BYTE-BODIED HANDLE — built, and its class is the discriminator
+
+Landed at `5f94d00e`; `ken-runtime` **506 + 26 + 14** green.
+
+One emitter, driven with the class the disposition supplies. ⛔ Not two arms
+with two bodies: `store_bytes_len` and `store_byte` **guard on the class**, so
+it is the one path `String` and `Bytes` do not share, and a `Bytes`-only fixture
+leaves `String`'s guard arm unreached. That is not hypothetical —
+`boundary_value_clif` records a `class_guard` narrowed to `Bytes` alone staying
+green because no test had ever asked emitted code to *build* a `String`.
+
+| mutation | outcome | what it establishes |
+|---|---|---|
+| M8 write the length into every byte slot | red ×2 | the **content** edge, not the node's existence |
+| M9 fill the span in reverse | red ×2 | order, not merely multiset |
+| M10 hardcode the `Bytes` class for `String` | **red ×1 — the `String` row only** | ⭐ the `String` row genuinely adds the class axis |
+
+⭐ **M10 is the row that justifies having two tests.** It reddens the `String`
+row and leaves the `Bytes` row green — which is the precise claim *"these two
+differ only in the axis the helpers guard on"*, demonstrated rather than
+asserted.
+
+⚠ Residual, on the emitter: the content is a **compile-time literal**. No
+`Lowered` variant carries a runtime-computed byte body today, so ⛔ this is not
+coverage of the byte-bodied class in general.
+
+## ⛔ BLOCKED — `HostResult` cannot be built without a representation ruling
+
+The last of the three producer mechanisms. ⛔ **I am not building it**, and the
+obstruction is architectural rather than mechanical.
+
+`Lowered::HostResult` is **synthesized by the effect lowering** from a host
+reply (`core.rs:6828`) — its `ok` and `error` children are *constructed*, not
+source subexpressions. In the `FsWriteAt` path, `ok` is a
+`Lowered::Constructor` two levels deep.
+
+⇒ The producer's recursion needs a `child_static_origin(origin, position)` for
+each child, and a `Constructor` child then needs
+`constructor_symbol_identity(child_origin)`. **A synthesized value has no source
+occurrence, so there is no origin to ask at.** ⚠ The identity itself is
+occurrence-*independent* — equal spellings intern to one canonical span — but
+the **lookup is occurrence-keyed**, and asking at an occurrence that holds a
+different atom is the hard `PlannerInvariant` failure this node already measured
+seven of.
+
+⛔ And the planner surface does not widen — that is ruled.
+
+**A second, separate question in the same arm:** the ABI's `HostResult` node
+records a discriminant plus two payload words (`store_scalar` / `store_field`
+0=ok, 1=err). It has **no slot for `ok_constructor` / `err_constructor`**. So
+either those identities live in the child words themselves, or a consumer
+re-wraps from somewhere else. ⛔ `boundary_disposition` is the sole
+representation authority and does not answer this; I will not decide it at an
+emission site.
+
+⇒ Escalated. It is **1 red of 69**, and it is the same lane as the region-limbed
+`Int` question already routed. ⛔ Do not read the other two mechanisms landing
+as `D9` complete.
