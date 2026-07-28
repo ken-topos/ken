@@ -25,7 +25,10 @@ activation handle, together with the deployment-supplied capacity profile that
 sizes it and the one-argument public adapter seam that lets `B2F` change the
 internal convention without touching the public C representation.
 
-⛔ `B2F` is **held at `7ce4198f`** until this node is durable.
+⛔ `B2F` is **held** until this node is durable. ⚠ The hold is a **capability**
+boundary — no per-function binder, no shared-root signature change, no `S6`/`D6`
+reland — ⛔ **not a SHA**: `B2F`'s tip advances under the authorized independent
+`AC` work, so any SHA written here would be stale on the next permitted commit.
 
 Frame: `docs/program/wp/RT-FNSPLIT-C3-ACTIVATION.md`.
 

@@ -279,8 +279,11 @@ refusal-at-run** — those are different observations and only one is permitted.
 
 ⚠ **`object_linker_packaging.rs` is the hot file** and is also where the C stub
 text lives. `boundary_value.rs` and `boundary_value_clif.rs` are touched by
-`B2F`'s producer work — ⭐ **but `B2F` is held at `7ce4198f`**, so the contention
-is with **landed** work, not a live turn.
+`B2F`'s producer work — ⭐ **but `B2F` is held**, so the contention is with
+**landed** work, not a live turn. ⚠ *"Held"* is a **capability** boundary, ⛔ not
+a SHA: `B2F`'s branch tip keeps advancing under the authorized independent `AC`
+work, so ⛔ **read the branch object for its tip** rather than any SHA quoted in
+prose.
 
 ⛔ `RT-FNSPLIT-C2-SYNTH-ID` is independent of this node — different files, no
 shared deliverable. ⭐ **Runtime holds both; the ordering between them is the

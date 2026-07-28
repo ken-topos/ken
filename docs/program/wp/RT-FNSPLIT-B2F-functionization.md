@@ -3,10 +3,35 @@
 **Owner:** Team Runtime · **Size:** L · **Closes:** `RT-NATIVE-FNSPLIT`
 symptom-inventory **entry 2** — the last open entry.
 
-> ## ⛔⛔ THIS NODE IS HELD AT `7ce4198f` — `S6`/`D6` DOES NOT PROCEED
-> **Architect corrected ruling `evt_2yjg12pyqqjdv`, 2026-07-28**, bound to exact
-> `7ce4198f580829e166f751f62e5d206831143e9f`. ⭐ **Added by the Steward on that
-> ruling; it supersedes the owner/capacity/scope parts of `evt_1m082dp6xf0mw`.**
+> ## ⛔⛔ THIS NODE IS HELD ON A CAPABILITY SET — `S6`/`D6` DOES NOT PROCEED
+> **Architect corrected ruling `evt_2yjg12pyqqjdv`, 2026-07-28**, measured
+> against exact `7ce4198f580829e166f751f62e5d206831143e9f`. ⭐ **Added by the
+> Steward on that ruling; it supersedes the owner/capacity/scope parts of
+> `evt_1m082dp6xf0mw`.**
+>
+> ### ⛔⛔ THE HOLD NAMES CAPABILITIES, ⛔ NOT A SHA — corrected 2026-07-28
+> ⚠ **This block first said *"held at `7ce4198f`"*, and three seats propagated
+> that SHA within the hour** (runtime-implementer `evt_5c18d7zk8am2f`,
+> runtime-leader `evt_7824vabvaq4v4`). ⛔ **It was already an ancestor, not the
+> tip** — the authorized independent work had advanced the branch:
+>
+> ```
+> 7ce4198f  S6: the activation-services record   <- what the RULING was measured against
+> 7a8f3baf  AC-8(b): pin the eight declarations as a SET
+> 5b0c8b9f  AC-2: seven more absences, and the relation that ends them
+> ```
+>
+> ⭐⭐ **A SHA-valued hold is wrong in KIND, not merely stale.** This hold
+> explicitly *permits* independent `AC` work, ⇒ **every authorized commit
+> falsifies the SHA.** ⛔ A number that the permitted activity is guaranteed to
+> invalidate cannot be the statement of the boundary.
+> ⚠ **And the failure mode is concrete:** a QA route or candidate cut taken at
+> the quoted SHA silently **drops** `7a8f3baf` and `5b0c8b9f`.
+>
+> ⇒ ⭐ **The hold is the list below. It does not move when the tip does, and it
+> needs no maintenance.** For the current tip, ⛔ **read the branch object** —
+> ⛔ do not trust a SHA transcribed into prose, including this frame's.
+>
 >
 > The switch-over needs the root and every unit to take
 > `(frame_ptr, services_ptr)`. ⛔ **Nothing in production can supply the second
