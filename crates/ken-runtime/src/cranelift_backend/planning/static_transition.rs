@@ -28,9 +28,13 @@ use semantic_ir::{
 // `SemanticPlane`, `SemanticMaterialArena` and the `names` arena stay on the
 // `use` above, visible only inside this planner. Widening either of those to
 // serve a consumer is the move `§2d` forbids.
+pub(in crate::cranelift_backend) use abi::{
+    AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiSlot, AbiSlotKind,
+    AbiStorageOwner, AbiUnitDefinition,
+};
 pub(in crate::cranelift_backend) use semantic_ir::{
-    ConstructorIdentity, FieldIdentity, StaticOriginId, SynthesizedConstructorRole,
-    SynthesizedFixedConstructorRole, SynthesizedIoErrorRole,
+    ConstructorIdentity, FieldIdentity, PredeclaredFunctionId, StaticOriginId,
+    SynthesizedConstructorRole, SynthesizedFixedConstructorRole, SynthesizedIoErrorRole,
 };
 #[cfg(test)]
 pub(in crate::cranelift_backend) use semantic_ir::with_last_io_error_role_omitted;
@@ -1110,6 +1114,75 @@ impl<'src> Planner<'src> {
     }
 }
 
+/// **`RT-FNSPLIT-B2F` `D1` — the emitter's read-only view of ONE validated
+/// function unit.**
+///
+/// ⭐ **This is the `case_constructor_identity` precedent, not a widened
+/// field.** What crosses into `crate::cranelift_backend` is a *question about
+/// a unit* and an answer the asker cannot mint: `AbiPlane`, `AbiDescriptor`,
+/// `build_abi_plane` and `AbiPlane::validate` all stay `pub(super)`, so the
+/// emitter can neither construct a plane, mutate a descriptor, nor reach the
+/// pre-emission validator to bypass it.
+///
+/// ⛔ **The fields are private and there is no constructor**, so a unit
+/// cannot be forged in `lowering`. That is the load-bearing half: `B2F`
+/// drives emission from units, so an unmintable unit means emission cannot
+/// be driven from anything but the validated plane.
+///
+/// **MEASURED:** `lowering` can read a unit's declared identity, origin,
+/// definition, header and slot run, and can construct none of them.
+/// **CLAIMED:** emission is driven by `B2R`'s validated authority rather than
+/// by a second table `B2F` derives for itself.
+/// **THE GAP:** ⚠ `AbiSlot` and `AbiFrameHeader` are plain `Copy` data whose
+/// fields are now readable in `cranelift_backend`, so `lowering` **can**
+/// spell a *local* `AbiSlot` literal — Rust cannot forbid struct-literal
+/// construction inside one crate. ⛔ **This is not claimed to be detected.**
+/// What closes it is that a forged slot has no route into a unit: the only
+/// producer of an `EmittableUnit` is [`Self::emittable_units`], which reads
+/// `self.abi`. A control that emission consumes only unit-supplied slots is
+/// `AC-12`'s, and it is not discharged here.
+#[derive(Clone, Copy, Debug)]
+pub(in crate::cranelift_backend) struct EmittableUnit<'plan> {
+    function: PredeclaredFunctionId,
+    origin: StaticOriginId,
+    definition: AbiUnitDefinition,
+    header: AbiFrameHeader,
+    slots: &'plan [AbiSlot],
+}
+
+impl<'plan> EmittableUnit<'plan> {
+    /// This unit's static identity. ⛔ Unmintable in `lowering`: the newtype's
+    /// field stays `pub(super)`, so the emitter can key and compare an id but
+    /// cannot fabricate one or do arithmetic on it.
+    pub(in crate::cranelift_backend) fn function(self) -> PredeclaredFunctionId {
+        self.function
+    }
+
+    /// The occurrence origin of this unit's body, for
+    /// [`StaticTransitionPlan::source_occurrence`].
+    pub(in crate::cranelift_backend) fn origin(self) -> StaticOriginId {
+        self.origin
+    }
+
+    /// Whether this unit is a scheduling entry or a retained closure body,
+    /// with the closure body's defining origin and capture provenance.
+    pub(in crate::cranelift_backend) fn definition(self) -> AbiUnitDefinition {
+        self.definition
+    }
+
+    /// The declared activation-frame header. ⚠ `frame_bytes` is derived from
+    /// the slot run by `B2R`; do not recompute it from [`Self::slots`].
+    pub(in crate::cranelift_backend) fn header(self) -> AbiFrameHeader {
+        self.header
+    }
+
+    /// This unit's declared slots, in `B2R`'s layout order: parameters,
+    /// captures, result, control, trap, store.
+    pub(in crate::cranelift_backend) fn slots(self) -> &'plan [AbiSlot] {
+        self.slots
+    }
+}
+
 impl<'src> StaticTransitionPlan<'src> {
     /// Resolves a static origin to the source term the planner filed under it.
     ///
@@ -1263,6 +1336,48 @@ impl<'src> StaticTransitionPlan<'src> {
         symbol: &str,
     ) -> Option<StaticOriginId> {
         self.declaration_occurrences.get(symbol).copied()
+    }
+
+    /// **`RT-FNSPLIT-B2F` `D1` — every function unit this artifact must emit, in
+    /// unit order.**
+    ///
+    /// ⛔ **This does not derive the population and must never be made to.** The
+    /// set is `plan.entries` ∪ every `EdgeKind::StaticBody` **target**, already
+    /// seeded and validated by `B2O` (`semantic_ir.rs`
+    /// `validate_function_units`) and already given one descriptor apiece by
+    /// `B2R`. This walks `self.abi.descriptors` and projects; it re-seeds
+    /// nothing, and in particular it does **not** consult
+    /// `TransitionKind::ClosureBody`, which is a body's *return successor* and
+    /// not a unit head.
+    ///
+    /// ⚠ The two shared exits (`SemanticOwner::Terminal`, `TrapTerminal`) are not
+    /// units and are absent here by construction — they never receive a
+    /// descriptor.
+    pub(in crate::cranelift_backend) fn emittable_units(
+        &self,
+    ) -> Result<Vec<EmittableUnit<'_>>, CraneliftBackendError> {
+        self.abi
+            .descriptors
+            .iter()
+            .map(|descriptor| {
+                let start = descriptor.slots.start as usize;
+                let end = start
+                    .checked_add(descriptor.slots.len as usize)
+                    .ok_or_else(|| planner_error("abi slot range overflows"))?;
+                let slots = self
+                    .abi
+                    .slots
+                    .get(start..end)
+                    .ok_or_else(|| planner_error("abi slot range is outside the plane"))?;
+                Ok(EmittableUnit {
+                    function: descriptor.function,
+                    origin: descriptor.origin,
+                    definition: descriptor.definition,
+                    header: descriptor.header,
+                    slots,
+                })
+            })
+            .collect()
     }
 
     fn helper_key_for_activation(

@@ -239,7 +239,7 @@ pub(super) struct CaptureLayoutId(pub(super) u32);
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
-pub(super) struct PredeclaredFunctionId(pub(super) u32);
+pub(in crate::cranelift_backend) struct PredeclaredFunctionId(pub(super) u32);
 
 /// Which function unit a planned node belongs to.
 ///

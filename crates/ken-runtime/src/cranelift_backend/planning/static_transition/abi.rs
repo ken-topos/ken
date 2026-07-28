@@ -57,7 +57,7 @@ fn range_end(range: DenseRange) -> Result<usize, CraneliftBackendError> {
 /// convention, which is what this enum and `AbiFrameHeader` together are.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(u8)]
-pub(super) enum AbiCarrier {
+pub(in crate::cranelift_backend) enum AbiCarrier {
     /// One machine word holding a Ken value under this frame's ownership rules.
     /// Chosen for declared parameters and for **lexical** captures, whose static
     /// type is not derivable from this plane.
@@ -189,7 +189,7 @@ impl AbiCarrier {
 /// must outlive the activation.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(u8)]
-pub(super) enum AbiStorageOwner {
+pub(in crate::cranelift_backend) enum AbiStorageOwner {
     /// The activation frame itself; reclaimed when the activation ends.
     ActivationFrame,
     /// Material minted into the compiled artifact **before execution begins**,
@@ -205,7 +205,7 @@ pub(super) enum AbiStorageOwner {
 /// **`D4` — the stated lifetime/aliasing/transfer/reclamation modes.**
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(u8)]
-pub(super) enum AbiOwnership {
+pub(in crate::cranelift_backend) enum AbiOwnership {
     /// The frame owns the value and reclaims it when the activation ends. May
     /// not alias a caller-visible value after return.
     OwnedByFrame,
@@ -223,7 +223,7 @@ pub(super) enum AbiOwnership {
 /// one of these, so a slot whose role is not named here cannot be laid out.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(u8)]
-pub(super) enum AbiSlotKind {
+pub(in crate::cranelift_backend) enum AbiSlotKind {
     Parameter,
     Capture,
     Result,
@@ -241,7 +241,7 @@ pub(super) enum AbiSlotKind {
 /// data — and never from source text.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(u8)]
-pub(super) enum AbiCaptureProvenance {
+pub(in crate::cranelift_backend) enum AbiCaptureProvenance {
     /// `RuntimeExpr::LexicalClosure`. Each capture is an **arbitrary source
     /// expression**, planned as a syntax child of the closure occurrence.
     Lexical,
@@ -273,7 +273,7 @@ impl AbiCaptureProvenance {
 /// error rather than a defaulted arm.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
-pub(super) enum AbiUnitDefinition {
+pub(in crate::cranelift_backend) enum AbiUnitDefinition {
     /// A top-level scheduling entry — the root, or a transparent declaration.
     /// It has no defining closure occurrence, so no declared parameters and no
     /// captures.
@@ -291,18 +291,18 @@ pub(super) enum AbiUnitDefinition {
 /// One declared frame slot.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
-pub(super) struct AbiSlot {
-    pub(super) kind: AbiSlotKind,
-    pub(super) carrier: AbiCarrier,
-    pub(super) ownership: AbiOwnership,
+pub(in crate::cranelift_backend) struct AbiSlot {
+    pub(in crate::cranelift_backend) kind: AbiSlotKind,
+    pub(in crate::cranelift_backend) carrier: AbiCarrier,
+    pub(in crate::cranelift_backend) ownership: AbiOwnership,
     /// ⭐ Who owns the storage this slot borrows or holds. Recorded per slot so
     /// a borrow's counterparty is part of the ABI rather than prose.
-    pub(super) storage_owner: AbiStorageOwner,
-    pub(super) width_bytes: u16,
-    pub(super) align_bytes: u16,
+    pub(in crate::cranelift_backend) storage_owner: AbiStorageOwner,
+    pub(in crate::cranelift_backend) width_bytes: u16,
+    pub(in crate::cranelift_backend) align_bytes: u16,
     /// Position within this slot's own kind-run, so a slot is recoverable
     /// positionally rather than by search.
-    pub(super) ordinal: u32,
+    pub(in crate::cranelift_backend) ordinal: u32,
 }
 
 /// **`D1` — the common activation-frame header.**
@@ -316,11 +316,11 @@ pub(super) struct AbiSlot {
 /// checker, which is one more thing that can be green for the wrong reason.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
-pub(super) struct AbiFrameHeader {
-    pub(super) parameters: u32,
-    pub(super) captures: u32,
-    pub(super) frame_bytes: u32,
-    pub(super) align_bytes: u16,
+pub(in crate::cranelift_backend) struct AbiFrameHeader {
+    pub(in crate::cranelift_backend) parameters: u32,
+    pub(in crate::cranelift_backend) captures: u32,
+    pub(in crate::cranelift_backend) frame_bytes: u32,
+    pub(in crate::cranelift_backend) align_bytes: u16,
 }
 
 /// The **shape** of a descriptor: everything except its positional identity.
