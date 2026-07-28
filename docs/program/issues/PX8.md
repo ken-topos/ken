@@ -92,7 +92,7 @@ Two clauses, both load-bearing, both learned the hard way:
 > | gap | clause | item | shovel-readiness |
 > |---|---|---|---|
 > | A1 — closed-endpoint `start==capacity` host-rejects instead of deriving `ReadEof` | (a) behavior | [[PX8-F-CAP-41]] | bounded fix + RED conformance oracle; **operator queuing gate** |
-> | A2 — interp capped-short `Wrote` no absolute oracle; PR-C error identities unreached | (a) evidence | [[PX8-WROTE-ABS]] | `Wrote` oracle shovel-ready; error-row set needs a normative scoping call |
+> | A2 — interp capped-short `Wrote` no absolute oracle; PR-C error identities unreached | (a) evidence | [[PX8-WROTE-ABS]] | **A2a ✅ MERGED** PR #1142 (`d5a938c4`); A2b = [[PX8-ERRID-SCOPE]], blocked behind [[PX8-ERRID-ALLOC]] → [[RT-NATIVE-FNSPLIT]] |
 > | (b) — `BufferSpan` has no originating-buffer identity; `freeze` accepts a same-shape foreign span | (b) provenance | [[PX8-SPAN-PROV]] | ✅ **MERGED @ `cbf6a298` (PR #914), 2026-07-23 — clause-(b) DISCHARGED**; deferred native cells → [[RT-NATIVE-FNSPLIT]] |
 >
 > **UPDATE 2026-07-23:** clause-(b) [[PX8-SPAN-PROV]] MERGED (@ `cbf6a298`,
@@ -104,6 +104,32 @@ Two clauses, both load-bearing, both learned the hard way:
 >
 > PX8 stays `active`; **ABI-R3 and PX9 stay held.** This IS the artifact-backed
 > gate working — a list-green close would have shipped three real defects.
+
+> ## ⭐⭐⭐ RE-SEQUENCED 2026-07-28 — every remaining blocker is behind `RT-NATIVE-FNSPLIT`
+>
+> | blocker | state |
+> |---|---|
+> | [[PX8-WROTE-ABS]] (A2a) | ✅ **MERGED** PR #1142, `main = 45647b51`, `eval.rs` blob `57041e57` |
+> | [[PX8-F-CAP-41]] Ph2 → [[NATIVE-HANDLE-CARRIER]] | ⛔ blocked on [[RT-NATIVE-FNSPLIT]] |
+> | [[PX8-ERRID-ALLOC]] → [[PX8-ERRID-SCOPE]] (A2b) | ⛔ blocked on [[RT-NATIVE-FNSPLIT]] — **new edge** |
+>
+> ⇒ ⭐ **`RT-NATIVE-FNSPLIT` is now the ABI program's critical path on its own.**
+> `PX8` gates 15 of 19 nodes and all three of its blockers either landed or wait
+> on that one node. ⛔ No cycle — `RT-NATIVE-FNSPLIT` has `depends_on: []`.
+>
+> **The new edge, measured:** `PX8-ERRID-ALLOC` is built and twice-approved, but
+> PR #1141 died on `Cranelift backend failure: Code for function is too large`.
+> Both the original and wire-corrected candidates fail identically against an
+> **unchanged fixture blob** ⇒ allocation growth crossed the wall, not the
+> mapping correction. The only mapping-preserving reduction (`e65c81b5`) was
+> built, causally controlled, and still fails. ⛔ Further reduction would have to
+> come out of the ruled wire-identity mapping — banned.
+>
+> ⭐ **The ceiling is NOT general:** `PX8-WROTE-ABS` passed the *same*
+> `rt_parity_native` job, because it adds no native lowering alternatives.
+>
+> ⚠ `PX8` still does not close until A2b and `PX8-F-CAP-41` discharge **and** the
+> closure property is re-verified (absolute, co-indexed, both engines).
 
 > ## ⚖️ CLAUSE-(a) SCOPE RULED 2026-07-27 — Architect `evt_5h884g6xhtts3`
 >

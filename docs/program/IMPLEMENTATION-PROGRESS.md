@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-27 22:42:41Z — from 117 issue file(s) in `docs/program/issues/`.
+2026-07-28 00:26:53Z — from 117 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -95,11 +95,11 @@ the committed file matches the generator's output.
 | `PX10` | processes — declarative spawn plan, deny-by-default inheritance, pidfd identity, typed child-exit observation | draft | runtime | L | none | — |
 | `PX11` | sockets — typed addresses, bounded send/receive, explicit option families, injected resolver capability | draft | runtime | L | none | — |
 | `PX12` | readiness — nonblocking transitions, epoll/eventfd/timerfd/signalfd, cancellation and timeout IN THE OPERATION TYPE | draft | runtime | L | none | — |
-| `PX8-ERRID-ALLOC` | ResourceErrorV1 has no allocation-failure identity and buffer allocation is infallible, so PX8's allocation-distinct-from-BufferLimit row cannot be produced at all | ready | foundation | M | none | — |
+| `PX8-ERRID-ALLOC` | ResourceErrorV1 has no allocation-failure identity and buffer allocation is infallible, so PX8's allocation-distinct-from-BufferLimit row cannot be produced at all | draft | foundation | M | none | — |
 | `PX8-ERRID-SCOPE` | PX8 clause-(a) A2b — five PR-C error identities have no independent production-reaching evidence; Architect ruled all five inside the closure | draft | verify | L | none | — |
 | `PX8-F-CAP-41` | PX8 clause-(a) behavior blocker — closed buffer endpoint (start==capacity) must derive zero-effective ReadEof, not host-reject | draft | foundation | M | none | 41 |
 | `PX8-SPAN-PROV` | PX8 clause-(b) gap — BufferSpan carries no originating-buffer identity; freeze accepts a same-shape span from a different buffer | merged | spec-enclave | M | none | 914 |
-| `PX8-WROTE-ABS` | PX8 clause-(a) evidence gap — interpreter capped-short Wrote lacks an absolute oracle; PR-C error identities unreached | ready | verify | S | none | — |
+| `PX8-WROTE-ABS` | PX8 clause-(a) evidence gap — interpreter capped-short Wrote lacks an absolute oracle; PR-C error identities unreached | merged | verify | S | none | — |
 | `PX8` | partial/positioned IO — the completion program's root; closure condition | draft | runtime | L | none | — |
 | `PX9` | cross-domain System.Error — semantic identity, raw errno, operation, resource, safe context, and honest retry classification | draft | foundation | L | none | — |
 | `Q-CLAIM-CLOSURE` | Q-RESIDUE adversary findings — claim-loss in multi-claim test blocks, plus R1/R2/R3 | merged | runtime | S | none | — |
@@ -164,8 +164,6 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `DOC-ATTEST-LIVING` — attesting living tracker files makes every routine WP status flip redden the currency gate
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
-- `PX8-ERRID-ALLOC` — ResourceErrorV1 has no allocation-failure identity and buffer allocation is infallible, so PX8's allocation-distinct-from-BufferLimit row cannot be produced at all
-- `PX8-WROTE-ABS` — PX8 clause-(a) evidence gap — interpreter capped-short Wrote lacks an absolute oracle; PR-C error identities unreached
 - `SPEC-IDENT-BLESSED` — Settle the identifier character set: 31-lexical promises a bounded blessed-Unicode-letter table that does not exist, cites a security chapter that carries no such claim, and states a confusable gate the landed lexer does not implement
 
 ## Blockers
@@ -198,10 +196,10 @@ is itself not yet `merged`/`closed`:
 - `PX11` blocked by `ABI-M1` (status: draft)
 - `PX12` blocked by `PX10` (status: draft)
 - `PX12` blocked by `PX11` (status: draft)
-- `PX8-ERRID-SCOPE` blocked by `PX8-ERRID-ALLOC` (status: ready)
+- `PX8-ERRID-ALLOC` blocked by `RT-NATIVE-FNSPLIT` (status: active)
+- `PX8-ERRID-SCOPE` blocked by `PX8-ERRID-ALLOC` (status: draft)
 - `PX8-F-CAP-41` blocked by `NATIVE-HANDLE-CARRIER` (status: draft)
 - `PX8` blocked by `PX8-F-CAP-41` (status: draft)
-- `PX8` blocked by `PX8-WROTE-ABS` (status: ready)
 - `PX9` blocked by `PX8` (status: draft)
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
 - `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2F` (status: ready)

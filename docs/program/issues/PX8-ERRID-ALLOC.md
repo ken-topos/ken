@@ -1,15 +1,81 @@
 ---
 id: PX8-ERRID-ALLOC
 title: "ResourceErrorV1 has no allocation-failure identity and buffer allocation is infallible, so PX8's allocation-distinct-from-BufferLimit row cannot be produced at all"
-status: ready
+status: draft
 owner: foundation
 size: M
 gate: none
-depends_on: []
+depends_on: [RT-NATIVE-FNSPLIT]
 blocks: [PX8-ERRID-SCOPE]
 github: null
 origin: "Architect ruling evt_6tzss92ckj2by (2026-07-27) on the Steward's PX8-ERRID-SCOPE partition question. Split out because the Architect ruled this row 'inside, but currently not representable' and named it a prerequisite to the evidence work."
 ---
+
+> ## ⛔⛔ BLOCKED 2026-07-28 ON `RT-NATIVE-FNSPLIT` — Steward sequencing call
+>
+> **The work is BUILT, QA-approved, and Architect-approved. It cannot land: the
+> native lowering it needs does not fit under Cranelift's per-function code-size
+> limit.** `depends_on` is now `[RT-NATIVE-FNSPLIT]`; ⛔ no cycle (that node has
+> `depends_on: []`).
+>
+> ### What happened, in order
+>
+> | # | event | outcome |
+> |---|---|---|
+> | 1 | `b117039f` — QA approved, Decision `dec_2qnf5j09rs5xt` | ⛔ **Architect REJECTED**: `AllocationFailed` inserted at a dynamic positional tag shifted four detail codes, so native observed `InvalidOffset` as `AllocationFailed`, etc. Existing green evidence could not catch it — the R2 Ken fixture accepted any `Err` while its Rust assertion read the host trace *before* the misprojected constructor. |
+> | 2 | `763f0a44` — keyed on **generated wire identities**; QA + Architect approved (`dec_7jwry2zxze6qr`) | ⛔ **PR #1141 CI RED** — `crates/ken-cli/tests/rt_parity_native.rs:370`, `Cranelift backend failure: Code for function is too large` (ObjectEmission, `checked_process_object`). Not merged; `origin/main` unchanged. |
+> | 3 | `e65c81b5` — the only mapping-preserving reduction | ⛔ **Still fails**, identically, 117.05s. |
+>
+> ### ⭐⭐ The mapping correction is EXONERATED
+>
+> **Both `b117039f` and `763f0a44` reproduce the same failure against an
+> *unchanged fixture blob*.** ⇒ **allocation growth crossed the wall, not the
+> wire-identity correction.** ⚠ Two independent defects lived in one candidate:
+> the shifted-tag misprojection was real and step 1's rejection was right — it
+> simply was never the cause of the size failure.
+>
+> ### ✅ The reduction was measured, not guessed — and is insufficient
+>
+> `e65c81b559eebcb93c258f1d7cee39e66e832466` (tree
+> `102c54f888f8d661f4103a908e141e8d42614da9`, parent `763f0a44`) factors
+> `BufferLimit`/`InvalidOffset`/`InvalidBounds`/`NoProgress`/`AllocationFailed`
+> into one generated-tag `require_one_of_i64` plus one shared eight-zero payload
+> check, **preserving every payload-bearing arm and every generated identity**.
+> Projection 5/5 PASS; nonzero-payload negatives + unknown identity PASS; and a
+> compile-preserving causal flip swapping `AllocationFailed` for a duplicate
+> `NoProgress` went **RED specifically at `AllocationFailed`** (`left -1`,
+> `right 79`), restored to PASS.
+>
+> ⇒ ⭐ **The remaining headroom is not in this WP's delta.** Any further
+> reduction would have to come out of the mapping, and ⛔ that is banned — it
+> would reinstate the step-1 defect.
+>
+> ### ⛔ Standing constraints on the successor
+>
+> - ⛔ **Never buy bytes with positional tags.** Generated wire-identity
+>   selection is the ruled mechanism (`dec_2qnf5j09rs5xt`).
+> - ⛔ `dec_7jwry2zxze6qr` is **spent**; a successor needs a fresh Decision.
+> - ⚠ **Not a QA miss.** Local `-p ken-runtime` runs (468 green) never link
+>   `ken-cli`'s native parity programs. The CI gate worked as designed.
+>
+> ### ⚠ DURABILITY EXPOSURE
+>
+> `763f0a44` is off-box — the publisher pushed `wp/PX8-ERRID-ALLOC` for PR #1141.
+> ⛔ **`e65c81b5` is LOCAL-ONLY**, and this box holds the only copy of a measured,
+> controlled result needed the moment FNSPLIT lands. ⛔ Do not reset, delete, or
+> repoint that branch. ⚠ **A recorded SHA is not a copy.**
+>
+> ### Resume when FNSPLIT lands
+>
+> Re-derive against the new base, then re-run the decisive command
+>
+> ```
+> scripts/ken-cargo test -p ken-cli --test rt_parity_native \
+>   fs_write_at_malformed_offset_narrows_to_invalid_offset
+> ```
+>
+> then fresh QA → fresh Architect Decision → publish. ⭐ Start from `e65c81b5`
+> (the reduction is correct and independently controlled), not from scratch.
 
 **Frame:** `docs/program/wp/PX8-ERRID-ALLOC.md`, inputs pinned by blob at
 `origin/main = e754508b`.
