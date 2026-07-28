@@ -5,7 +5,7 @@ status: draft
 owner: runtime
 size: L
 gate: none
-depends_on: [PX8-F-CAP-41, PX8-WROTE-ABS]
+depends_on: [PX8-F-CAP-41, PX8-WROTE-ABS, PX8-ERRID-SCOPE]
 blocks: [ABI-R3, PX9]
 github: null
 origin: docs/program/09-posix-linux-abi-campaign.md (charter, PX-C phase); closure condition added 2026-07-22 (operator-approved)
@@ -13,7 +13,8 @@ origin: docs/program/09-posix-linux-abi-campaign.md (charter, PX-C phase); closu
 
 > ## ⚠ STATUS CORRECTED `active` → `draft` — 2026-07-25 (Steward, tracker honesty)
 >
-> **Nothing is building this, and its `depends_on` is unmet** (PX8-F-CAP-41 (draft), PX8-WROTE-ABS (draft)). The tracker's own
+> **Nothing is building this, and its `depends_on` is unmet** (`PX8-F-CAP-41`
+> draft, `PX8-ERRID-SCOPE` draft; `PX8-WROTE-ABS` merged 2026-07-28). The tracker's own
 > legend defines `draft` = *not framed / **deps unmet***, `ready` = *deps met,
 > unassigned*, `active` = ***a team is building***. So `active` was a false claim
 > that a seat held this node, and it polluted the releasable-frontier read that the
@@ -25,6 +26,19 @@ origin: docs/program/09-posix-linux-abi-campaign.md (charter, PX-C phase); closu
 > the generator say so.
 >
 > ⇒ **Flip to `ready` only when every `depends_on` entry is `merged`.**
+>
+> ### ⛔ EDGE REPAIRED 2026-07-28 — `PX8-ERRID-SCOPE` was a ONE-SIDED blocker
+>
+> `PX8-ERRID-SCOPE` has carried `blocks: [PX8]` since it was split out on
+> 2026-07-27, and **PX8's `depends_on` never named it back.** `gen-progress.sh`
+> reads `depends_on` **only** — it never consults `blocks` — so the rule directly
+> above would have cleared PX8 for release with an unstarted **L** prerequisite
+> outstanding, the moment `PX8-F-CAP-41` merged.
+>
+> ⚠ **Latent, not live:** PX8 is `draft`, so the generator was not yet emitting a
+> false frontier row. The failure mode is a *reader* — a Steward pass applying
+> the flip rule to this node's own `depends_on` list, which is the authoritative
+> one and was incomplete. ⇒ `PX8-ERRID-SCOPE` is now recorded on both sides.
 
 **This issue exists because PX8 had none.** `docs/program/10-linux-abi-completion.md`
 makes **15 of its 18 items** unblock on `PX8 --> ABI-R3` and `PX8 --> PX9`, and
