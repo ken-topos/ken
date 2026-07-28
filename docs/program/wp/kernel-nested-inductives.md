@@ -315,14 +315,52 @@ Node text is authoritative; this is the slicing view.
 | id | deliverable | notes |
 |---|---|---|
 | `D1a` | per-parameter polarity for an inductive family — derived at admission, **recorded** on the declaration, readable when checking a nested occurrence | ⚠ does not exist (§2b). ⛔ Read §2e before choosing where to record it |
-| `D1b` | structural positivity through those declared positions, replacing the blanket rejection at `check_pos_arg`'s non-`D`-head arm | ⛔ keyed on polarity, never on a name |
-| `D2` | fail-closed for unknown and non-positive parameter positions | |
+| `D1b` | structural positivity through those declared positions, replacing the blanket rejection at `check_pos_arg`'s non-`D`-head arm | ⛔ keyed on polarity, never on a name. ⛔⛔ **GATED — read the block below the table before any admission widening** |
+| `D2` | fail-closed for unknown and non-positive parameter positions | ⛔⛔ **over ALL FOUR positions** — constructor **arguments**, constructor **target indices**, **inductive indices**, **dependent parameter types**. The landed producer covers only the first. See the block below the table |
 | `D3a` | ⭐ **inert preparation**: the exhaustive recursive-shape descriptor, its producer, and API plumbing. Population **must** include direct, Pi/W-style, `D`-free, declared-positive-former nesting (test-only construction), and **primitive `Sigma`** | ⛔ Must leave admission, `method_type`, `iota_reduct`, and **every observable eliminator signature and reduct behaviour unchanged**. If it replaces `recursive_args`, legacy consumers **project only** the legacy direct/Π-bound class. ⚠ Does **not** discharge `D3` or `AC-K3` |
 | `D3b` | **semantic consumption**: a generated method binder actually carries the structured lift | ⛔⛔ **ATOMIC WITH `D4`** — see `AC-K14`. ⛔ Not separable by any commit |
 | `D4` | the matching iota reductions; the kernel **checks** the generated eliminator | ⛔⛔ **ATOMIC WITH `D3b`.** *"Generated method binders and the terms supplied by ι are one semantic unit."* Both land before `D1b` |
 | `D5` | surface consumability: matching, elaboration, structural-recursion/termination | ⚠ §2d — the elaborator delegates, `sct.rs` and the evaluator do not |
 | `D6` | the four conformance rows of contract point 4 | |
 | `D7` | `trusted_base()` delta as a **number**, with what grew and why | ⛔ not a zero — this node grows the TCB |
+
+### ⛔⛔ `D1b`/`D2` GATE — THE POLARITY PRODUCER ON `main` IS FAIL-OPEN
+
+**Recorded here 2026-07-28 on `kernel-leader`'s routed ask.** The node has
+carried this since the `D3b`+`D4` merge; the frame did not, and **the frame is
+the artifact a `D1b` implementer slices from.**
+
+**Authority:** Architect ruling `evt_3edf99cq5mrka` and merge Decision
+`dec_b1hj6th3363a` (resolved APPROVE), on adversary finding
+`evt_79m7a5y9d1b4g`.
+
+> ⛔ **`D1b` MUST NOT open production nested admission until polarity derivation
+> is FAIL-CLOSED over all four positions:** constructor **arguments**,
+> constructor **target indices**, **inductive indices**, and **dependent
+> parameter types**.
+
+**What is wrong on `main`:** `derive_parameter_polarities` scans only
+`constructor.args`, while `derive_recursive_shape` admits a nested recursive
+`Former` **only** on a recorded `StrictlyPositive`. ⇒ A negative occurrence in
+any of the other three positions is **recorded positive**, and the adversary
+demonstrated that **target-index placement flips the permissive gate from reject
+to accept**. ⭐ `D1a` shipped the *record*; it never shipped coverage of the
+positions the record claims to summarise.
+
+⚠ **`D3b`+`D4` was audited against this and cleared — narrowly.** The clearance
+rests on two facts **`D1b` destroys**: the nested-`Former` controls are reachable
+only through the test-only `install_test_only_nested_family` fixture, and the
+production-live primitive-`Sigma` path never consults another former's polarity
+record. ⛔ **Do not read "`D3b`+`D4` is staging-safe" as "the record is sound."**
+It is unsound now and merely unreachable — the semantic consumers already exist;
+only the admission route is missing. `D1b` **is** that route.
+
+⛔ **AC, not advice — a `D1b` candidate is incomplete without it.** Establish
+coverage over all four positions **and one control that discriminates each**,
+before any admission widening, and record the per-position result. ⚠ A control
+exercising only constructor arguments **passes on the landed producer** and says
+nothing about the other three — that is the exact shape this gate exists to
+reject.
 
 ## §4 Slicing guidance — ⭐ `D1a` FIRST, and the order is not arbitrary
 
