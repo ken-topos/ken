@@ -1886,17 +1886,15 @@ struct KenArena {
     size_t capacity;
 };
 
-struct KenNativeBigEntryV1 {
-    struct KenNativeBigEntryV1 *next;
-    uint64_t slot;
-    uint64_t sign;
-    size_t len;
-    uint64_t limbs[];
-};
+/* RT-FNSPLIT-C3-ACTIVATION D7: the native-Int big-entry and arena layouts, the
+   invocation record and the arena teardown used to be declared and owned HERE.
+   They are the Rust activation owner's now, and this stub holds only opaque
+   pointers.
 
-/* RT-FNSPLIT-C3-ACTIVATION D7: the native-Int arena layout, the invocation
-   record and the arena teardown used to be declared and owned HERE. They are
-   the Rust activation owner's now, and this stub holds only opaque pointers. */
+   The big-entry declaration outlived the first pass of this removal. It was
+   dead -- nothing referenced it -- but a dead private copy of native-Int layout
+   is still a private copy of native-Int layout, and neither the build nor the
+   link discriminates it. */
 struct KenBoundaryResourceProfileV1 {
     uint64_t version, size;
     uint64_t invocation_nodes, invocation_words, invocation_data_bytes, invocation_native_int_limbs;

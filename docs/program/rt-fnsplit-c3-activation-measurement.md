@@ -142,20 +142,54 @@ not a comment.
 | `M-AC4b` the persistent region metered against the invocation limits | red |
 | `M-AC4c` admit `(InvocationHostResult, Bytes)` — ⭐ the future event the guard exists for | red, naming the newly reachable cells |
 
-### ⚠ `AC-5`'s residual, as a partition with its discriminator
+### ⛔⛔ `AC-5` — MY LEDGER WAS FALSE, and the correction is kept in place
 
-⛔ **Not** *"C has no copies."* What is established is:
+**The Architect blocked `394c4afe` on this and was right.** This section
+previously listed *"the `KenNativeBigEntryV1` declaration"* among the things
+**removed from both generated starters**. ⛔ **It was still emitted by
+`process_starter_c_stub_for_authority`** — and it sat *immediately above* my own
+comment claiming the native-`Int` layout had been removed.
 
-- **removed, by name:** the two `KenNativeIntArenaV1` declarations, the
-  `KenNativeBigEntryV1` declaration, `KenNativeInvocationV1`,
-  `ken_int_arena_destroy`, `ken_print_exported_int`, and the stack construction
-  in both `main`s;
-- **enforced, by link:** the stub references nine `ken_activation_v1_*` /
+⚠ **It was dead: nothing referenced it.** ⭐ That is not a mitigation. A dead
+private copy of native-`Int` layout is still a private copy of native-`Int`
+layout, which is exactly `§4`'s banned shape, and ⛔ **neither the build nor the
+link discriminates it** — both were green over it.
+
+#### ⭐ How the verification missed it, which is the transferable part
+
+My check was `grep -c "KenNativeIntArenaV1\|KenNativeInvocationV1"` — **the two
+names I had removed**. ⇒ It was a census of *what I did*, ⛔ not of *what
+remained*, so it could only ever confirm my own edit. The third name in the same
+family was never in the needle set, and the count came back clean.
+
+✅ The census is now over the layout **vocabulary** rather than the type names I
+happened to touch — `KenNativeBigEntryV1` · `KenNativeIntArenaV1` ·
+`KenNativeInvocationV1` · `final_tag` · `final_payload` · `final_sign` ·
+`final_len` · `final_limbs` · `final_small` · `next_slot` · `limbs[]` — which
+catches a copy under a **different type name** as well as one under the same.
+⚠ Run against both generated starters, it now returns only two hits, both in
+this file's Rust doc comments and neither emitted into C.
+
+#### The residual, restated as a partition with its real discriminator
+
+⛔ **Not** *"C has no copies."* What is established:
+
+- **removed, by name, from BOTH starters:** `KenNativeBigEntryV1`,
+  `KenNativeIntArenaV1`, `KenNativeInvocationV1`, `ken_int_arena_destroy`,
+  `ken_print_exported_int`, and the arena construction in both `main`s;
+- **enforced by link:** the stub references nine `ken_activation_v1_*` /
   `ken_boundary_store_v1_*` symbols it cannot satisfy without the runtime
   archive — `AC-3`(a) demonstrates that.
 
-⇒ ⛔ **Removing two known copies does not prove a third was never added.** The
-discriminator that *would* catch one is the build/link fact above: a private C
-copy of a layout the stub also obtains from the owner would compile and link, so
-⚠ **it is review-enforced, not mechanically guarded**, and the only layout C is
-permitted to know is the resource profile.
+⇒ ⛔ **Removing known copies does not prove a new one is not added**, and this
+node has now produced the proof of that: a copy survived one removal pass and
+**built, linked and smoke-ran green**. ⚠ So the discriminator is *not* the build
+or the link — ⭐ **it is a reader looking for the layout vocabulary in the
+emitted C**, which is review-enforced.
+
+⛔ **And it stays review-enforced deliberately.** The frame's own words are that
+`AC-5`'s oracle is *"a build/link fact plus the removal … ⛔ not a grep asserted
+in prose — and per operator test policy, ⛔ not a source-line census test
+either."* ⇒ Converting this into a text oracle over the stub is the one repair
+that is **not** available, so the honest record is that a future private copy is
+caught by review or not at all.
