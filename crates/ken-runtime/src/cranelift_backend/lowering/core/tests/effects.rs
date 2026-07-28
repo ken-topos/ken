@@ -87,6 +87,7 @@ fn run_checked_bounded_nat_fixture(
             host_dispatch: None,
             invocation_pointer: None,
             native_int_arena: None,
+            boundary_arena: None,
             native_int_binop: None,
             native_int_compare: None,
             native_int_intern: None,

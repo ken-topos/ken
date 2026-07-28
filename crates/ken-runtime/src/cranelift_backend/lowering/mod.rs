@@ -461,6 +461,9 @@ impl ArtifactHelpers<'_> {
             // each function derives its own from its entry block.
             invocation_pointer: None,
             native_int_arena: None,
+            // ⛔ Sourced by the activation-services record, which the `S6`/`D6`
+            // reland introduces. Fail closed until then.
+            boundary_arena: None,
             native_int_binop: Some(module.declare_func_in_func(self.native_int.binop, func)),
             native_int_compare: Some(module.declare_func_in_func(self.native_int.compare, func)),
             native_int_intern: Some(module.declare_func_in_func(self.native_int.intern, func)),
@@ -526,6 +529,16 @@ struct FunctionLocalRefs {
     host_dispatch: Option<FuncRef>,
     invocation_pointer: Option<cranelift_codegen::ir::Value>,
     native_int_arena: Option<cranelift_codegen::ir::Value>,
+    /// ⭐ **The BOUNDARY arena, and it is a different pointer from
+    /// [`Self::native_int_arena`]** — Architect ruling via `evt_e300y2kjeb6k`.
+    /// The two answer different questions and were wrongly merged into one
+    /// field; see [`Lowering::carrier_arena`] for the retraction.
+    ///
+    /// ⚠ **`None` in production until the `S6`/`D6` reland lands the activation
+    /// -services record**, which is the only thing that can source it. ⇒ Every
+    /// boundary-carrier call fails closed until then — ⭐ which is strictly
+    /// better than the native arena it used to be handed silently.
+    boundary_arena: Option<cranelift_codegen::ir::Value>,
     native_int_binop: Option<FuncRef>,
     native_int_compare: Option<FuncRef>,
     native_int_intern: Option<FuncRef>,
@@ -1527,10 +1540,13 @@ impl<'a> Lowering<'a> {
     /// who met it and believed it needs to see that it was withdrawn, and the
     /// next person to ask *"why two arena fields?"* needs the reason here.
     fn carrier_arena(&self) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
-        self.function_local.native_int_arena.ok_or_else(|| {
+        self.function_local.boundary_arena.ok_or_else(|| {
             unsupported(
                 "BoundaryCarrier",
-                "this generated function has no invocation arena",
+                "this generated function has no boundary arena: the activation \
+                 -services record that sources it is `S6`/`D6` reland work, and \
+                 substituting the native-`Int` arena is the defect that ruling \
+                 exists to remove",
             )
         })
     }

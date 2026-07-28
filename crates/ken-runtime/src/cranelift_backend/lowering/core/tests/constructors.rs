@@ -213,6 +213,7 @@ fn run_dynamic_constructor_dispatch_fixture(
             host_dispatch: None,
             invocation_pointer: None,
             native_int_arena: None,
+            boundary_arena: None,
             native_int_binop: None,
             native_int_compare: None,
             native_int_intern: None,
@@ -1788,6 +1789,7 @@ fn bare_carrier_test_lowering<'src>(
             host_dispatch: None,
             invocation_pointer: None,
             native_int_arena: None,
+            boundary_arena: None,
             native_int_binop: None,
             native_int_compare: None,
             native_int_intern: None,
@@ -2158,7 +2160,12 @@ fn ac_c7_try_compile_edge_with_operands<'src>(
         builder.append_block_params_for_function_params(entry);
         builder.switch_to_block(entry);
         let parameters = builder.block_params(entry).to_vec();
-        compiler.function_local.native_int_arena = Some(parameters[0]);
+        // ⭐ In THIS rig parameter 0 is genuinely the boundary arena — the test
+        // passes `BoundaryArenaV1::publish()` — and the native arena is its
+        // `ARENA_NATIVE_INT` binding. ⛔ Setting both from one value would
+        // reinstate the equality the Architect's ruling deletes; the native
+        // field is left for the fixtures that bind one.
+        compiler.function_local.boundary_arena = Some(parameters[0]);
         // â  A refusal must still leave a WELL-FORMED function behind, or the
         // failure the caller wanted to observe is replaced by a Cranelift
         // assertion about an unfilled block. â­ Every carrier route refuses
@@ -4331,8 +4338,8 @@ fn b2f_d9_wide_int(
         |compiler, builder, operands| {
             let arena = compiler
                 .function_local
-                .native_int_arena
-                .expect("the rig binds an arena");
+                .boundary_arena
+                .expect("the rig binds a boundary arena");
             let pointer_type = builder.func.dfg.value_type(arena);
             let native_arena = builder.ins().load(
                 pointer_type,
