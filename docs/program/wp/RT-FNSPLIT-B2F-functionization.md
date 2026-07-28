@@ -124,7 +124,8 @@ previously stated at `0aa9e53f`, four merges back, and several had moved.
 > `evt_j39jgesq7mfz`) and `runtime-leader`'s routing (`evt_39mwgr1jrp5x7`,
 > `evt_xh7q436j6r4v`), all re-derived on `origin/main = 6534e4a6` against frame
 > blob `aa798ca9`. ⛔ **This block is the operative state where it disagrees with
-> anything below.** Nothing here splits the atomic boundary or changes scope.
+> anything below.** Nothing here changes scope or the selected-authority
+> invariant.
 >
 > ### ⭐ THE STANDING RULE THIS BLOCK INSTALLS — read it before the rows
 >
@@ -247,8 +248,8 @@ enumerated before the boundary is known.
 ⛔ **Both prerequisites are INERT.** Neither emits. `abi.rs` measures **0
 builders / 0 definitions / 0 declarations**, and `build_abi_plane` is called
 once during planning (`planning/static_transition.rs:1010`). **This node is
-where the contract first becomes executable**, which is exactly why it is the
-atomic boundary.
+where the contract first becomes executable**, which is exactly why it owns the
+selector and the switch-over.
 
 ### The two Steward rulings issued at the stop — both still binding
 
@@ -413,51 +414,90 @@ in `docs/program/issues/RT-FNSPLIT-B2F.md` and is binding:
 ⛔ **State it that way. Never as a blanket bound.** A claim that "the backend no
 longer grows" is false and will be blocked.
 
-## ⛔ ONE atomic boundary — the live split was REJECTED
+## ⛔ ONE SELECTED AUTHORITY PER PRODUCTION COMPILATION
 
-Functionization **+** live switch-over **+** differential equivalence **+**
-removal of the old authority are **ONE** review/merge boundary
-(`Q3`, ruled). The ring's proposed live `ii`/`iii` split is rejected: it would
-leave **two live production authorities**, which is the exact condition
-"carrier and removal land together" exists to prevent.
+> ### ⚖️ NARROWED 2026-07-28 — the one-merge encoding is RETRACTED
+>
+> **Architect ruling `evt_4nndyess0qaew`**, on the Steward's question
+> `evt_6v6576fd762s`, under the operator's *"no users"* ruling. This section
+> previously **fused two claims** and enforced both. They are now separated:
+>
+> | claim | status |
+> |---|---|
+> | within one production compilation, a semantic body/origin has exactly **one selected** emission/execution authority | ✅ **REAL** — correctness and predictability |
+> | the **repository** may hold only one production-capable implementation at every landed commit; one preparatory merge ever, then "spent" | ⛔ **RETRACTED** — commit topology, no `spec`/`PRINCIPLES` grounding |
+>
+> ⛔⛔ **"The escape has been used, and it is spent" is NOT a semantic law**, and
+> it must **not** manufacture another prerequisite node merely because an
+> otherwise coherent change wants its own merge. ⭐⭐ **The conversion "wants
+> staging ⇒ must be a prerequisite" is DEAD.**
 
-**At every landed point there is exactly one production authority.**
+**The invariant that stands:** within one production compilation/execution, a
+semantic body/origin has exactly **one selected** emission/execution authority.
+Old and new authorities must **not** both consume the same occurrence atoms,
+emit the same body, or race/duplicate effects. ⭐ **Differential evidence must
+name which authorities it compares.**
 
-The boundary includes the whole connected mechanism: target code-unit
-population · declarations/signatures · the fixed dynamic-frame ABI ·
-persistent-store transport · static dispatch/call edges · behaviour-equivalence
-evidence · switch-over of **every** live consumer · **removal** of the recursive
+The connected mechanism this node still owns: target code-unit population ·
+declarations/signatures · the fixed dynamic-frame ABI · persistent-store
+transport · static dispatch/call edges · behaviour-equivalence evidence ·
+switch-over of **every** live consumer · **removal** of the recursive
 whole-configuration body-emission authority.
 
-### The one permitted escape, as a checkable graph property
+### ✅ What staging MAY do — after `C3` and `C2` land
 
-A preparatory merge is acceptable **only** when unreachability is shown
-mechanically by **all four** conditions in
-`docs/program/issues/RT-FNSPLIT-B2F.md` (production still has exactly the
-pre-existing one `FunctionBuilder::new` and one root `define_function`;
-executable scaffold is `#[cfg(test)]`-only; no flag/branch/callback/pointer can
-activate it; and a **committed** structural pin holds the zero edge). ⛔ If
-preparation needs a production call edge, or emits even one callable target
-unit, **it is not scaffold** and travels in the atomic boundary.
+`B2F` may use **multiple review/merge stages**, and source may contain the old
+and functionized authorities **simultaneously — including production-capable
+code under distinct selector states** — provided **all** of these hold:
+
+1. **One closed, explicit selector**, chosen **once at compilation entry**.
+2. It selects **exactly one whole authority** for that compilation.
+3. Selection is **exhaustive and fail-closed** — ⛔ never a scattered heuristic,
+   a fallback, or a *"scalar on this walk"* re-derivation.
+4. ⛔ **No normal production compilation invokes both authorities.**
+5. Differential testing **may** deliberately invoke both in its measurement
+   harness, and **must label them**.
+6. **Every stage states its active/default selector and its residual.**
+7. The migration **ends** by selecting the functionized authority and **removing
+   the old authority and the transitional selector.**
+
+⭐ A temporary selector is **migration machinery, not a permanent second
+architecture** — removing it stays part of `B2F` closure.
+
+### The dormant-stage test — RETAINED, but no longer rationed
+
+A stage is **dormant/declarative** when unreachability is shown mechanically by
+**all four** conditions in `docs/program/issues/RT-FNSPLIT-B2F.md` (production
+still has exactly the pre-existing one `FunctionBuilder::new` and one root
+`define_function`; executable scaffold is `#[cfg(test)]`-only; no
+flag/branch/callback/pointer can activate it; and a **committed** structural pin
+holds the zero edge).
+
+⭐⭐ **A dormant stage no longer consumes a one-use escape** — `B2O` and `B2R`
+discharged these conditions, and that fact is now **precedent, not a spent
+budget**. ⛔ A deliverable that wants its own merge is **no longer a hard-stop**
+on that ground alone.
 
 ⚠ `cfg(test)` asymmetry cuts **both** ways — a `#[cfg(test)]`-only scaffold is
 invisible to a production build, and a production-only path is invisible to a
 test build. Whatever pins condition (4) must be verified in **both**
 configurations.
 
-> ### ⭐ THE ESCAPE HAS BEEN USED, AND IT IS SPENT
->
-> **`B2O` and `B2R` ARE the preparatory merges this clause permits** — both
-> landed under exactly these four conditions, and both discharged them: the
-> production census never moved, and `abi.rs` measures 0/0/0 on all three
-> needles at `bd24422b`.
->
-> ⇒ **There is nothing further to prepare, and no third inert node to reach
-> for.** `B2F` is the atomic live boundary. ⛔ If a deliverable here feels like
-> it wants its own preparatory merge, that is a **hard-stop to raise** (the
-> protocol below), **not** a fourth application of this clause — the clause
-> permits inert scaffold, and everything remaining in this node is by
-> construction the part that goes live.
+### ⛔ What this narrowing does NOT reopen
+
+- ✅ **The four prerequisite rulings STAND.** `B2V`, `C1`, `C2-SYNTH-ID` and
+  `C3-ACTIVATION` are untouched, and ⛔ **nothing changes for the live `C3`
+  turn.**
+- ⛔ **The rejected live `ii`/`iii` split is NOT revived.** Its heuristic partial
+  classification — *"scalar on this walk"*, observational rather than static —
+  remains rejected **on its own merits**; ⭐ condition **3** above is precisely
+  what it fails.
+- ✅ **`S6`/`D6` may still be ONE atomic semantic edit** where the measured
+  double-consumption requires it. ⭐ That coupling is **real dataflow**, ⛔ not
+  the retracted global merge rule.
+
+⛔ **No new node and no concrete split is ruled here.** The narrowing removes a
+false conversion; it does **not** hand anyone a staging plan.
 
 ## The landed surface you are building on — re-measured at `bd24422b`
 
@@ -750,8 +790,16 @@ production Cranelift function in `ken-runtime`."
 **Steward decision on the Architect's mechanism ruling `evt_17fgr8nk6859c`.**
 `RT-FNSPLIT-C1` built the carried induction hypothesis and proved it eliminates;
 **invoking** it cannot be done there. ⇒ ⭐ **The invocation lands inside this
-node's existing atomic target/switch boundary — ⛔ it does NOT get a preparatory
-merge of its own**, which this frame already classes as a hard-stop.
+node's target/switch scope**, because it is part of the same connected
+mechanism — ⛔ not because a separate merge was forbidden.
+
+> ⚠ **Rationale corrected 2026-07-28 (`evt_4nndyess0qaew`).** This previously
+> read *"it does NOT get a preparatory merge of its own, which this frame already
+> classes as a hard-stop"* — that appealed to the **retracted** one-use escape.
+> ⭐ The reason it stays here is **dataflow**: invoking the carried IH is the same
+> connected authority the switch-over replaces. ⛔ It is **not** a licence to
+> re-derive a separate node for it either — the mechanism is one, whatever the
+> merge topology.
 
 ⚠ **Why it could not stay in `C1`:** a *specialized* recursive elimination
 terminates because its residual is a compile-time value that strictly shrinks. A
@@ -1256,12 +1304,18 @@ Steward-scoped.** Extend `C1`'s producer over the arms below.
 > so must be *produced into a carrier*. ⇒ Producer completeness stops being a
 > `C1`-internal question and becomes this node's critical path.
 >
-> ⛔ **It does not touch the atomic boundary, and that is the test that decides
-> it.** The clause above forbids a **second production authority**; this makes
-> the **single existing** authority total. It declares **no target unit**, adds
-> **no production call edge**, and installs **no second decoder** — so it is
-> ⛔ **not** a fourth application of the spent preparatory-merge escape, and
-> raising it as one would be a hard-stop against a clause it does not touch.
+> ⛔ **It does not engage the selector, and that is the test that decides it.**
+> The clause above requires **one SELECTED authority per production
+> compilation**; this makes the **single existing** authority total. It declares
+> **no target unit**, adds **no production call edge**, and installs **no second
+> decoder** — so no selector state changes and no second authority becomes
+> reachable.
+>
+> ⚠ **Reasoning updated 2026-07-28 (`evt_4nndyess0qaew`).** This previously
+> concluded *"not a fourth application of the spent preparatory-merge escape."*
+> ⭐ **That escape is no longer rationed, so the "fourth application" question no
+> longer exists** — but the conclusion is unchanged and now rests on the
+> narrower invariant instead.
 >
 > ⇒ ✅ **Land it as a green increment on the pre-switch-over base**, the same way
 > `ArtifactHelpers` and `AC-4`'s route pin already landed. ⚠ Those 69 tests are
@@ -1274,10 +1328,28 @@ Steward-scoped.** Extend `C1`'s producer over the arms below.
 
 ## Acceptance criteria
 
-**AC-1 — one production authority at the landed point.** No feature flag,
-runtime branch, optional callback, function pointer, or alternate entry can
-reach a second body-emission path. Pinned structurally, verified in **both**
-`cfg(test)` configurations.
+**AC-1 — ONE SELECTED authority per production compilation.** ⚠ **Restated
+2026-07-28 (Architect `evt_4nndyess0qaew`); the previous repository-absence form
+is retracted.**
+
+Pin that **one closed, explicit selector chosen once at compilation entry picks
+exactly one whole authority**, and that **no normal production compilation
+invokes both**. Selection must be **exhaustive and fail-closed** — ⛔ no
+scattered heuristic, no fallback, no re-derivation per walk. Pinned
+structurally, verified in **both** `cfg(test)` configurations.
+
+⛔⛔ **What AC-1 must NOT assert:** *"no alternate production-capable body exists
+in the repository."* ⭐ That is the retracted commit-topology claim, and while a
+staged `B2F` is in progress it is **false by design** — a control that asserts it
+would redden on the very staging the Architect just authorized.
+
+⚠ **The discriminator is `selected`, not `present`.** A second body-emission path
+being **reachable through the selector** is the violation; the same path sitting
+in the tree under a selector state no production compilation chooses is **not**.
+⭐ At `B2F` **closure** the two coincide again — deliverable 7 removes the old
+authority and the transitional selector — ⛔ but they do **not** coincide at
+every intermediate landed point, and an `AC-1` control written against the final
+state will fire early on a legitimate stage.
 
 **AC-2 — the emitted-unit census is re-baselined to a PREDICTED number, AND
 its population is stated.**
@@ -1756,9 +1828,16 @@ verbatim — do not paraphrase it.)*
 >    writes exactly the fixed carrier declared by the ABI. Do not claim these
 >    are supplied by `result_carrier`; they are protocol-produced, not
 >    source-expression results.
-> 3. The check/proof executes before the atomic authority switch-over can emit
->    or call a unit. No path may treat `AbiPlane::validate`, `C4`, or descriptor
->    existence as a substitute for this per-transfer proof.
+> 3. The check/proof executes **before the SELECTED new unit authority emits or
+>    calls a unit.** ⚠ **Restated 2026-07-28 (Architect `evt_4nndyess0qaew`)** —
+>    the timing was previously derived from a **one-commit switch-over**, which a
+>    staged `B2F` no longer has. ⭐ The obligation is **per-compilation and
+>    selector-relative**: whenever the selector picks the functionized authority,
+>    the proof precedes that authority's **first** emit or call. ⛔ A stage in
+>    which the selector never picks it does **not discharge** this AC — it merely
+>    does not yet **engage** it, and reporting it green there is a vacuous pass.
+>    No path may treat `AbiPlane::validate`, `C4`, or descriptor existence as a
+>    substitute for this per-transfer proof.
 
 ⛔ **Front-end unreachability is NOT available to you as a premise.** Neither the
 Adversary nor the Steward established it. `B2F` may use such an invariant **only
@@ -1813,8 +1892,13 @@ reject those flows.**
 >    orphan check can never be `None`, so the "both directions are asserted"
 >    note at `:931-933` describes one direction and a restatement). **Both are
 >    the same advertised-vs-enforced defect that node already owns.**
->    ⛔ **`B2F` does not absorb it.** This is an `L` node on an atomic boundary;
->    adding a checking-layer repair to it is how an `L` becomes unlandable.
+>    ⛔ **`B2F` does not absorb it** — ⭐ because `RT-FNSPLIT-B2O-CHECK` **already
+>    owns that exact defect**, not because a merge boundary forbids it. ⚠
+>    Rationale corrected 2026-07-28 (`evt_4nndyess0qaew`): this previously read
+>    *"an `L` node on an atomic boundary"*, which appealed to the retracted
+>    one-merge rule. ⭐ The ownership argument is the load-bearing one and is
+>    unaffected — ⛔ duplicating a sibling node's deliverable is waste regardless
+>    of how `B2F` stages.
 > 3. ⚠ **Not claimed:** that either hole is reachable from a real Ken program.
 >    That depends on front-end constraints nobody has traced. **The claim is
 >    bounded to the layer measured** — at the plan layer these are buildable

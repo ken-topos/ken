@@ -258,6 +258,16 @@ origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answ
 > keep specialization for the rest — is **exactly** what `AC-1` and `D6` forbid.
 > That is a tension between two correct requirements, not a defect in either.
 >
+> ⚠⚠ **HALF OF THAT TENSION WAS DISSOLVED 2026-07-28 (`evt_4nndyess0qaew`).**
+> ⭐ **This paragraph is what the Architect found most probative** — it shows
+> bounded coexistence was rejected as the wrong *permanent* architecture with an
+> **observational** (*"scalar on this walk"*) classifier, ⛔ **not** as
+> intrinsically unsound. ⇒ `AC-1`'s repository-absence form is retracted and
+> restated per-compilation, so **atomicity no longer supplies the forbidding
+> half.** ⛔ **The `ii`/`iii` increment stays rejected regardless** — it fails the
+> *exhaustive, static, fail-closed selector* condition on its own merits, which
+> is exactly the defect named here.
+>
 > **`AC-1` and `D6` are NOT amended.** Bounded coexistence was rejected — not as
 > intrinsically unsound, but as the wrong *permanent* architecture for the ruled
 > all-origin/Θ(n) objective, because retaining whole-configuration specialization
@@ -286,8 +296,13 @@ origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answ
 > validated ABI descriptors; define one target per predeclared static function;
 > switch the synthesized root to the root target; switch every cross-owner edge
 > to a static direct call; transport frame/store state; prove the differential;
-> and remove all cross-body whole-configuration re-emission. **At every landed
-> point there is exactly one production authority.**
+> and remove all cross-body whole-configuration re-emission. ~~**At every landed
+> point there is exactly one production authority.**~~
+>
+> ⚠⚠ **THAT LAST SENTENCE IS RETRACTED (2026-07-28, `evt_4nndyess0qaew`)** — see
+> the `Q3` section below. The **deliverable list above is unchanged**; what is
+> retracted is only the claim that it must arrive as **one candidate**. ⭐ It may
+> now arrive in **stages** under one closed selector, ending in the same place.
 >
 > ### ⭐ `D6`'s structural exhibit — use this, not the census
 >
@@ -425,24 +440,56 @@ choice is not re-openable on taste:
    body/transition contract.** ★ That last clause is the precise scaling claim —
    the frame must state it this way and not as a blanket bound.
 
-## ✅ Q3 RULED — ONE atomic review/merge boundary
+## ✅ Q3 RULED — ⚖️ NARROWED 2026-07-28 to ONE SELECTED AUTHORITY PER COMPILATION
 
-**Functionization + live switch-over + differential equivalence + removal of the
-old authority are ONE boundary.** ⛔ The ring's proposed live `ii`/`iii` split is
-**rejected**: it would leave two live production authorities, which is what
-"carrier and removal land together" exists to prevent. **At every landed point
-there is exactly one production authority.**
+> ### ⛔⛔ THE ONE-MERGE ENCODING IS RETRACTED — Architect `evt_4nndyess0qaew`
+>
+> On the Steward's question `evt_6v6576fd762s`, under the operator's *"no users"*
+> ruling. `Q3` **fused two claims**; only the first survives:
+>
+> | claim | status |
+> |---|---|
+> | within one production compilation, a semantic body/origin has exactly **one selected** emission/execution authority | ✅ **REAL** |
+> | the **repository** may hold only one production-capable implementation at every landed commit; one preparatory merge ever, then "spent" | ⛔ **RETRACTED** — commit topology, no `spec`/`PRINCIPLES` grounding |
+>
+> ⭐⭐ **The conversion "wants staging ⇒ must be a prerequisite node" is DEAD.**
+> ⛔ *"The escape has been used, and it is spent"* is **not** a semantic law.
+>
+> ⚠ **This record was especially probative to the ruling:** bounded coexistence
+> was rejected below **not as intrinsically unsound**, but because the proposed
+> all-origin aggregate complement was the wrong permanent architecture and its
+> *"scalar on this walk"* classification was **observational rather than
+> static**. ⭐ That does **not** justify a universal ban on staged coexistence.
+>
+> ✅ **What still stands:** the four prerequisite rulings (`B2V`, `C1`,
+> `C2-SYNTH-ID`, `C3-ACTIVATION`); the rejection of the live `ii`/`iii` split
+> **on its own merits**; and `S6`/`D6` as one atomic **semantic** edit where the
+> measured double-consumption requires it (**real dataflow**, not a merge rule).
+>
+> **Staging conditions and the restated `AC-1` / `AC-11` clause 3:**
+> `docs/program/wp/RT-FNSPLIT-B2F-functionization.md`.
 
-The boundary must include the whole connected mechanism: target code-unit
+**The invariant that stands:** within one production compilation/execution, a
+semantic body/origin has exactly **one selected** emission/execution authority.
+Old and new authorities must not both consume the same occurrence atoms, emit
+the same body, or race/duplicate effects. ⭐ Differential evidence must **name
+which authorities it compares.**
+
+⚠ **Retracted literal text, kept visible so a reader who remembers it knows it
+is gone:** *"Functionization + live switch-over + differential equivalence +
+removal of the old authority are ONE boundary"* and *"At every landed point
+there is exactly one production authority."*
+
+The **connected mechanism** this node owns is unchanged: target code-unit
 population · declarations/signatures · the fixed dynamic-frame ABI · persistent-
 store transport · static dispatch/call edges · behaviour-equivalence evidence ·
 switch-over of **every** live consumer · **removal** of the recursive
 whole-configuration body-emission authority.
 
-### ⭐ The ONE permitted escape, as a checkable graph property
+### ⭐ The dormant-stage test — RETAINED as a checkable graph property
 
-A preparatory merge is acceptable **only** when unreachability is mechanically
-shown by **all four**:
+⭐⭐ **No longer rationed to one use.** A stage is **dormant/declarative** when
+unreachability is mechanically shown by **all four**:
 
 1. Production still has **exactly** the pre-existing one `FunctionBuilder::new`
    and one root `define_function` path; **no** new production
@@ -457,8 +504,11 @@ shown by **all four**:
    edge** plus the unchanged one-function census.
 
 ⛔ **If preparation needs a production call edge, or emits even one callable
-target unit, it is not scaffold** and must travel in the atomic live boundary.
-★ **This makes unreachability a checkable graph property, not prose** — and the
+target unit, it is not dormant** — it is a **live** stage, and it must then
+satisfy the selector conditions in the frame (one closed selector chosen once at
+compilation entry, exhaustive and fail-closed, no production compilation
+invoking both authorities). ⭐⭐ **It is no longer forbidden; it is governed.**
+★ **This keeps unreachability a checkable graph property, not prose** — and the
 committed pin in (4) is what stops it decaying into an assertion.
 
 ⚠ Note the cfg(test) asymmetry cuts both ways: a `#[cfg(test)]`-only scaffold is
@@ -482,7 +532,9 @@ ken-runtime`, no filter. ⛔ Workspace, `--locked`, and conformance are CI's.
 
 `RT-FNSPLIT-B2B` was framed as "the full emission census + finite differences +
 explicit growth verdict." With the scaling verdict now belonging to this node's
-atomic boundary, **B2B must be re-derived or subsumed** — do not release it
+**scope** (⚠ restated 2026-07-28 — it previously read *"atomic boundary"*, and
+the ownership claim is the load-bearing one),
+**B2B must be re-derived or subsumed** — do not release it
 against its current frame. ⚠ Its premise ("a census taken while the emitter is
 still moving measures a moving target") is still sound; what changed is *which*
 node the verdict attaches to.
