@@ -245,6 +245,93 @@ this wrapper."* That is a **positive scope requirement** — it says *where* the
 wrapper must appear, not merely what it may contain. ⛔ A census that enumerates
 only the three eliminators under-covers it.
 
+### 2h. ★★ The `D3` OBLIGATED-SURFACE ruling — Architect, transcribed verbatim
+
+⭐ **`§2g` fixed the carrier's *shape*; this fixes *how far it propagates*.**
+Decision **`dec_6fa4k28sp3y10`**, resolved by the Architect
+`2026-07-28T01:20:34Z`, against the question of how far `§2g`'s clause
+*"environments and result surfaces that can receive a transferred value"*
+obligates the wrapper. ⛔ Transcribed at resolution time, per the lesson `§2g`
+records. ⚠ **This text governs over any restatement**, including the summary
+below it. Resolution field, copied without edit:
+
+> Choose A at the semantic boundary: full compiler-enforced phase closure. The
+> phrase "can receive a transferred value" denotes the transitive lowering
+> dataflow reachable from the one-way producer — environment insertion, recursive
+> call, branch/join forwarding, and result propagation — not the set of paths that
+> happen to produce `Carried` in today's corpus. Once a projected `Carried` child
+> enters `case_env` and that environment enters the mutually recursive lowering
+> component, the shared environment spine and every result surface that can
+> forward or return that operand MUST carry the closed
+> `LoweringOperand::{Specialized(Lowered), Carried(CarriedBoundaryWord)}` sum.
+> There is no manually maintained reachability whitelist and therefore no option-B
+> boundary.
+>
+> This is full phase closure, not a blind replacement of all 622 `Lowered`
+> mentions or an unproved claim that the textual count of 64 signatures is itself
+> the closed population. A helper may retain raw `Lowered` parameters/results only
+> behind an explicit typed phase boundary where its contract makes it structurally
+> incapable of receiving, forwarding, or returning a `Carried` operand — for
+> example, a leaf that constructs a fresh specialized value. Every edge from
+> `LoweringOperand` into such a specialized-only helper must first exhaustively
+> classify both variants with no wildcard; `Carried` must take its ruled
+> emitted-helper route or fail closed. No conversion from `Carried` to `Lowered`
+> is permitted. Thus the implementation must classify the 64-signature census by
+> dataflow role, but all phase-bearing environment/result spine edges are
+> obligated and mechanically enforced by Rust's type/exhaustiveness checks.
+>
+> Implement env/spine first, then propagate the wrapper through the recursive
+> forwarding results and joins; let type errors enumerate the remaining
+> phase-bearing edges. Controls must show a projected `Carried` child remains
+> `Carried` through `case_env` and nested lowering, all
+> `Match`/`ComputationalMatch`/`Project` consumers have explicit two-phase arms,
+> and removing one required wrapper/exhaustive arm reddens compilation or a causal
+> targeted control. The source-file size precedent is a reviewability caution, not
+> authority to weaken closure; the `B2a` overlap is sequencing for the Steward and
+> must be re-enumerated by the compiler rather than hand-patched.
+>
+> The producer reading the consumed `Lowered` value's existing wildcard-free
+> `boundary_disposition()` to obtain its sole authoritative `(tag,class)` is
+> correct and required. The prohibition applies to metadata on the resulting
+> `Carried` phase: the `Carried` value contains only the SSA boundary word and
+> acquires no `LoweredVariant`, `BoundaryDisposition`, or parallel encoding
+> policy. `d9d4fb90` is measurement/WIP evidence only, not a reviewed candidate.
+
+⭐ **The population is a DATAFLOW ROLE, not a text count.** A site is obligated
+because the producer's output can reach it, ⛔ not because its signature spells
+`Lowered`. ⇒ The 64/48/23 census is an **input to classification**, never the
+answer; a `Lowered` mention on a specialized-only leaf stays `Lowered`, and the
+**typed boundary in front of that leaf** is what must classify both phases.
+
+⚠ **The escape hatch has a precondition that does the work:** a helper keeps raw
+`Lowered` only where its contract makes it *structurally incapable* of receiving,
+forwarding or returning a `Carried`. ⛔ "It does not today" is not that
+property — `§2g`'s clause was written precisely to reject present-corpus
+reasoning.
+
+### 2h-i. Steward sequencing — the `B2a` overlap (assigned by `§2h`)
+
+`C1-D3` and `RT-NATIVE-FNSPLIT-recut-B2a`'s `D0` (the origin carrier) both edit
+`lowering/core.rs` and `lowering/mod.rs`, and both frames record their site lists
+**by line number**.
+
+⭐ **Whichever lands second MUST re-derive its list with the compiler
+(`E0063`/`E0027`/exhaustiveness) and ⛔ MUST NOT hand-patch the recorded line
+numbers.** Both radii were obtained that way originally, so regeneration is free
+and hand-reconciliation is the only way the overlap becomes expensive.
+
+⚠ **The recorded numbers are already stale**: `B1R` measured `core.rs` at
+**6,201** lines; on `b62879b3` it is **6,899** (`mod.rs` is **7,471**). ⇒ Treat
+every line citation in the `FNSPLIT` frame family as a **landmark, not a
+boundary**.
+
+⛔ **`core.rs` is NOT slated to move or be split.** No frame says so; `FNSPLIT`
+splits the **emitted native function**, not the source file. ⚠ `B1R` named
+editing `core.rs` a stop condition **for `B1R` alone** — its scope was
+`planning/**` and nothing else — so that is a scope-boundary fact, ⛔ not a
+standing bar on diffs to the file, and `§2h` confirms the size precedent is a
+reviewability caution only.
+
 ## 3. Deliverables
 
 **`D1` — the artifact-static semantic-identity capability.**
@@ -274,7 +361,10 @@ positions preserve the existing static-origin ownership contract, ⛔ without
 caller specialization.
 
 ⭐ **The typed representation `D3` must use is ruled, not open: see `§2g`** —
-a closed phase sum beside `Lowered`, never an inhabitant inside it.
+a closed phase sum beside `Lowered`, never an inhabitant inside it. ⭐ **And how
+far it propagates is ruled too: `§2h`** — full compiler-enforced phase closure
+over the transitive dataflow reachable from the producer, ⛔ with no
+reachability whitelist.
 
 **`D4` — `Project` eliminates a carried value.**
 Emitted code selects a runtime record field by **artifact-static field
