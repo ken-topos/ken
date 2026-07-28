@@ -4938,24 +4938,96 @@ fn the_body_authority_selector_is_closed_static_and_chosen_from_source_shape() {
 #[test]
 fn a_trap_arm_and_its_trap_free_twin_both_functionize() {
     let declarations = BTreeMap::new();
-    let without_trap = RuntimeExpr::If {
-        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
-        then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
-        else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(false))),
+    let fixture = |trap_arm| RuntimeExpr::Match {
+        // Calling the lexical closure makes the scrutinee cross a declared-unit
+        // edge. The match must therefore emit both arms from the carried
+        // representation instead of selecting the known constructor while
+        // compiling.
+        scrutinee: Box::new(RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: Vec::new(),
+                    body: Box::new(RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::TrapTwin::Left".to_string(),
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+                    }),
+                }),
+                args: Vec::new(),
+            }),
+            body: Box::new(RuntimeExpr::Var(0)),
+        }),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: "ctor:fixture::TrapTwin::Left".to_string(),
+                binders: 1,
+                // This arm's result crosses its own declared-unit edge, so the
+                // pre-emission D8 plan fixes the Match join to CarrierWord.
+                body: RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::LexicalClosure {
+                        captures: Vec::new(),
+                        params: Vec::new(),
+                        body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                    }),
+                    args: Vec::new(),
+                },
+            },
+            crate::RuntimeMatchCase {
+                constructor: "ctor:fixture::TrapTwin::Right".to_string(),
+                binders: 0,
+                body: if trap_arm {
+                    RuntimeExpr::Trap(RuntimeTrap {
+                        code: RuntimeTrapCode::ExplicitTrap,
+                        message: "functionized trap arm".to_string(),
+                    })
+                } else {
+                    RuntimeExpr::Value(RuntimeValue::Bool(false))
+                },
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "trap-twin default".to_string(),
+        },
     };
-    let with_trap = RuntimeExpr::If {
-        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
-        then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
-        else_expr: Box::new(RuntimeExpr::Trap(RuntimeTrap {
-            code: RuntimeTrapCode::ExplicitTrap,
-            message: "functionized trap arm".to_string(),
-        })),
+    let without_trap = fixture(false);
+    let with_trap = fixture(true);
+    let mut all_trap = fixture(true);
+    let RuntimeExpr::Match { cases, .. } = &mut all_trap else {
+        unreachable!("trap twin fixture is a Match");
     };
+    cases[0].body = RuntimeExpr::Trap(RuntimeTrap {
+        code: RuntimeTrapCode::ExplicitTrap,
+        message: "functionized first trap arm".to_string(),
+    });
 
+    // Promise class: durable invariant. Any extension preserving the declared
+    // unit boundary and terminal trap semantics keeps this pair green.
+    //
+    // MEASURED: otherwise-identical carried matches both select functionized
+    // emission and compile into complete declared-unit bundles.
+    // CLAIMED: a source Trap arm is terminal CFG, not retained authority or a
+    // value predecessor of the carried join.
+    // THE GAP: successful compilation proves the trap did not enter the merge,
+    // because the carrier producer rejects Trap; the separate D8 topology
+    // controls prove the all-trap/no-merge boundary.
     for (name, expr) in [
         ("trap-free", &without_trap),
         ("trap-carrying", &with_trap),
     ] {
+        let plan = plan_static_transition_graph_with_symbols(
+            expr,
+            &BTreeMap::new(),
+            &crate::NativeProcessSymbols::legacy_prelude(),
+            AbiRootIngress::Value,
+            true,
+        )
+        .expect("trap twin plans");
+        let token = plan
+            .join_plan_token(plan.root_static_origin().expect("trap twin root"))
+            .expect("trap twin root is a join");
+        assert_eq!(token.representation, JoinResultRepresentation::CarrierWord);
+        assert!(token.has_continuing_predecessor);
         assert_eq!(
             select_body_emission_authority(expr, &declarations),
             BodyEmissionAuthority::FunctionizedUnits,
@@ -4965,6 +5037,29 @@ fn a_trap_arm_and_its_trap_free_twin_both_functionize() {
             panic!("{name} twin failed functionized emission: {error}")
         });
     }
+    let all_trap_plan = plan_static_transition_graph_with_symbols(
+        &all_trap,
+        &BTreeMap::new(),
+        &crate::NativeProcessSymbols::legacy_prelude(),
+        AbiRootIngress::Value,
+        true,
+    )
+    .expect("all-trap carried match plans");
+    let all_trap_token = all_trap_plan
+        .join_plan_token(
+            all_trap_plan
+                .root_static_origin()
+                .expect("all-trap root"),
+        )
+        .expect("all-trap root is a join");
+    assert!(!all_trap_token.has_continuing_predecessor);
+    assert_eq!(
+        select_body_emission_authority(&all_trap, &declarations),
+        BodyEmissionAuthority::FunctionizedUnits,
+        "all-trap twin did not select functionized emission"
+    );
+    ac11_compiles(&all_trap)
+        .unwrap_or_else(|error| panic!("all-trap carried match emitted a merge: {error}"));
 }
 
 #[test]
