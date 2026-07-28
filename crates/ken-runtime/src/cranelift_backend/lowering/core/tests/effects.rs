@@ -1021,7 +1021,20 @@ fn borrowed_ingress_bytes_at_preserves_safe_none_bounds() {
                         RuntimeMatchCase {
                             constructor: none.to_string(),
                             binders: 0,
-                            body: RuntimeExpr::Value(RuntimeValue::Int((7).into())),
+                            // D8: make this predecessor a declared-unit result.
+                            // The borrowed Option eliminator must consume the
+                            // precomputed CarrierWord plan rather than forcing
+                            // its historical two-native-word merge.
+                            body: RuntimeExpr::Call {
+                                callee: Box::new(RuntimeExpr::LexicalClosure {
+                                    captures: Vec::new(),
+                                    params: Vec::new(),
+                                    body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(
+                                        (7).into(),
+                                    ))),
+                                }),
+                                args: Vec::new(),
+                            },
                         },
                         RuntimeMatchCase {
                             constructor: some.to_string(),

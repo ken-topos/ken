@@ -1469,6 +1469,16 @@ impl SemanticPlane {
         Ok(descriptor.owner)
     }
 
+    pub(super) fn function_owner(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<Option<PredeclaredFunctionId>, CraneliftBackendError> {
+        Ok(match self.owner(origin)? {
+            SemanticOwner::Function(function) => Some(function),
+            SemanticOwner::Terminal | SemanticOwner::TrapTerminal => None,
+        })
+    }
+
     /// Whether a result edge crosses between two distinct function units.
     ///
     /// The closed owner vocabulary stays private to this module; consumers ask

@@ -780,7 +780,41 @@ fn define_unit_body<M: Module>(
                     base,
                     offset,
                 );
-                env.push(LoweringOperand::Carried(CarriedBoundaryWord { word }));
+                let carried = CarriedBoundaryWord { word };
+                // The process root's two ABI ordinals are closed semantic
+                // roles, not generic ValueWord inputs. Recovering them here
+                // prevents a borrowed process-input body from being emitted
+                // twice behind a runtime carried-representation split.
+                let operand = if is_root
+                    && compiler.process_object
+                    && slot.kind == AbiSlotKind::Parameter
+                {
+                    let value = compiler.emit_carrier_scalar(&mut builder, carried)?;
+                    match slot.ordinal {
+                        ordinal
+                            if ordinal == AbiProcessParameter::ProcessInput.ordinal() =>
+                        {
+                            LoweringOperand::Specialized(Lowered::BorrowedNativeValue {
+                                pointer: value,
+                            })
+                        }
+                        ordinal
+                            if ordinal == AbiProcessParameter::Capability.ordinal() =>
+                        {
+                            LoweringOperand::Specialized(Lowered::CapabilityToken {
+                                value,
+                            })
+                        }
+                        _ => {
+                            return Err(backend_module(
+                                "the process root has an unknown parameter role".to_string(),
+                            ));
+                        }
+                    }
+                } else {
+                    LoweringOperand::Carried(carried)
+                };
+                env.push(operand);
             }
         }
         // The in-process validation API historically stages one ground

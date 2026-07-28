@@ -502,6 +502,11 @@ enum ResultPhase {
     CarrierRequired,
 }
 
+#[cfg(test)]
+thread_local! {
+    static D8_FORCE_VARIABLE_SPECIALIZED: Cell<bool> = const { Cell::new(false) };
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ResultPhaseSummary {
     phase: ResultPhase,
@@ -559,11 +564,9 @@ fn summarize_result_phase(
     plan: &StaticTransitionPlan<'_>,
     origin: StaticOriginId,
     functionized_units: bool,
-    cache: &mut BTreeMap<StaticOriginId, ResultPhaseSummary>,
+    environment: &[ResultPhaseSummary],
+    joins: &mut [Option<PlannedJoinResult>],
 ) -> Result<ResultPhaseSummary, CraneliftBackendError> {
-    if let Some(summary) = cache.get(&origin) {
-        return Ok(*summary);
-    }
     let occurrence = plan
         .source_occurrences
         .get(origin.0 as usize)
@@ -576,43 +579,44 @@ fn summarize_result_phase(
     }
     let expr = occurrence.expr;
     let child = |position| plan.semantic.child_origin(origin, position);
-    let summarize_child =
-        |position: usize,
-         cache: &mut BTreeMap<StaticOriginId, ResultPhaseSummary>|
-         -> Result<ResultPhaseSummary, CraneliftBackendError> {
-            let child_origin = child(position)?;
-            let mut summary =
-                summarize_result_phase(plan, child_origin, functionized_units, cache)?;
-            if functionized_units
-                && summary.continues
-                && plan
-                    .semantic
-                    .crosses_function_owner(origin, child_origin)?
-            {
-                summary.phase = ResultPhase::CarrierRequired;
-            }
-            Ok(summary)
+    let summarize_child = |position: usize,
+                           environment: &[ResultPhaseSummary],
+                           joins: &mut [Option<PlannedJoinResult>]|
+     -> Result<ResultPhaseSummary, CraneliftBackendError> {
+        let child_origin = child(position)?;
+        let crosses_owner = plan
+            .semantic
+            .crosses_function_owner(origin, child_origin)?;
+        let child_environment = if crosses_owner {
+            result_phase_environment_for_owner(plan, child_origin)?
+        } else {
+            environment.to_vec()
         };
-    let summarize_range =
-        |mut range: std::ops::Range<usize>,
-         cache: &mut BTreeMap<StaticOriginId, ResultPhaseSummary>|
-         -> Result<ResultPhaseSummary, CraneliftBackendError> {
-            range.try_fold(ResultPhaseSummary::TRAP, |summary, position| {
-                Ok(summary.join(summarize_child(position, cache)?))
-            })
-        };
-
+        let mut summary = summarize_result_phase(
+            plan,
+            child_origin,
+            functionized_units,
+            &child_environment,
+            joins,
+        )?;
+        if functionized_units && summary.continues && crosses_owner {
+            summary.phase = ResultPhase::CarrierRequired;
+        }
+        Ok(summary)
+    };
     let summary = match expr {
         RuntimeExpr::Trap(_) => ResultPhaseSummary::TRAP,
         RuntimeExpr::CheckedJoinSite { .. }
         | RuntimeExpr::CheckedSubcontinuationFrame { .. }
-        | RuntimeExpr::CheckedComputationalIHSlots { .. } => summarize_child(0, cache)?,
+        | RuntimeExpr::CheckedComputationalIHSlots { .. } => {
+            summarize_child(0, environment, joins)?
+        }
         // These markers are the static call-template seeds consumed by the
         // functionized emitter. Their result is a declared-unit carrier even
         // when the wrapped source spelling itself is specialized.
         RuntimeExpr::CheckedRecursiveInvocation { .. }
         | RuntimeExpr::CheckedComputationalIHInvocation { .. } => {
-            let nested = summarize_child(0, cache)?;
+            let nested = summarize_child(0, environment, joins)?;
             if functionized_units && nested.continues {
                 ResultPhaseSummary::carrier()
             } else {
@@ -620,17 +624,74 @@ fn summarize_result_phase(
             }
         }
         RuntimeExpr::Let { .. } => {
-            // The value edge enters the environment and may be forwarded by a
-            // de Bruijn occurrence in the body; taking the monotone maximum is
-            // the closed, allocation-free environment propagation.
-            summarize_child(0, cache)?.sequence(summarize_child(1, cache)?)
+            let value = summarize_child(0, environment, joins)?;
+            let mut body_environment = Vec::with_capacity(1 + environment.len());
+            body_environment.push(ResultPhaseSummary {
+                phase: value.phase,
+                continues: true,
+            });
+            body_environment.extend_from_slice(environment);
+            value.sequence(summarize_child(1, &body_environment, joins)?)
         }
         RuntimeExpr::If { .. } => {
-            summarize_child(1, cache)?.join(summarize_child(2, cache)?)
+            summarize_child(1, environment, joins)?
+                .join(summarize_child(2, environment, joins)?)
         }
-        RuntimeExpr::Match { cases, .. } => summarize_range(1..1 + cases.len(), cache)?,
+        RuntimeExpr::Match { cases, .. } => {
+            let scrutinee = summarize_child(0, environment, joins)?;
+            let mut result = ResultPhaseSummary::TRAP;
+            for (index, case) in cases.iter().enumerate() {
+                // A case projection preserves the scrutinee's representation:
+                // fields of a carried constructor remain carried, while native
+                // and borrowed specialized scrutinees yield specialized fields.
+                let mut case_environment =
+                    Vec::with_capacity(case.binders + environment.len());
+                case_environment.extend((0..case.binders).map(|_| ResultPhaseSummary {
+                    phase: scrutinee.phase,
+                    continues: true,
+                }));
+                case_environment.extend_from_slice(environment);
+                result = result.join(summarize_child(
+                    1 + index,
+                    &case_environment,
+                    joins,
+                )?);
+            }
+            result
+        }
         RuntimeExpr::ComputationalMatch { scrutinee, cases, .. } => {
-            let mut result = summarize_range(1..1 + cases.len(), cache)?;
+            let scrutinee_summary = summarize_child(0, environment, joins)?;
+            let mut result = ResultPhaseSummary::TRAP;
+            for (index, case) in cases.iter().enumerate() {
+                let case_binders = case
+                    .argument_binders
+                    .checked_add(case.recursive_positions.len())
+                    .ok_or_else(|| planner_capacity_error("phase-plan case arity exhausted"))?;
+                let mut case_environment =
+                    Vec::with_capacity(case_binders + environment.len());
+                // Lowering installs `[IHs, argument binders, outer env]`.
+                // Functionized IHs are declared-unit results; argument binders
+                // preserve the scrutinee's representation.
+                case_environment.extend(case.recursive_positions.iter().map(|_| {
+                    if functionized_units {
+                        ResultPhaseSummary::carrier()
+                    } else {
+                        ResultPhaseSummary::SPECIALIZED
+                    }
+                }));
+                case_environment.extend((0..case.argument_binders).map(|_| {
+                    ResultPhaseSummary {
+                        phase: scrutinee_summary.phase,
+                        continues: true,
+                    }
+                }));
+                case_environment.extend_from_slice(environment);
+                result = result.join(summarize_child(
+                    1 + index,
+                    &case_environment,
+                    joins,
+                )?);
+            }
             let scrutinee_origin = child(0)?;
             if let RuntimeExpr::Construct { args, .. } = scrutinee.as_ref() {
                 let mut carries_recursive_unit = false;
@@ -665,17 +726,21 @@ fn summarize_result_phase(
         RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => (0
             ..args.len())
             .try_fold(ResultPhaseSummary::SPECIALIZED, |summary, position| {
-                Ok(summary.sequence(summarize_child(position, cache)?))
+                Ok(summary.sequence(summarize_child(position, environment, joins)?))
             })?,
         RuntimeExpr::Record { fields } => (0..fields.len()).try_fold(
             ResultPhaseSummary::SPECIALIZED,
-            |summary, position| Ok(summary.sequence(summarize_child(position, cache)?)),
+            |summary, position| {
+                Ok(summary.sequence(summarize_child(position, environment, joins)?))
+            },
         )?,
-        RuntimeExpr::Project { .. } => summarize_child(0, cache)?,
+        RuntimeExpr::Project { .. } => summarize_child(0, environment, joins)?,
         RuntimeExpr::Call { callee, args } => {
             let mut result = (0..1 + args.len()).try_fold(
                 ResultPhaseSummary::SPECIALIZED,
-                |summary, position| Ok(summary.sequence(summarize_child(position, cache)?)),
+                |summary, position| {
+                    Ok(summary.sequence(summarize_child(position, environment, joins)?))
+                },
             )?;
             let callee_origin = child(0)?;
             if let RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. } =
@@ -692,41 +757,135 @@ fn summarize_result_phase(
             }
             result
         }
+        RuntimeExpr::Var(index) => {
+            let phase = environment
+                .get(*index as usize)
+                .copied()
+                .unwrap_or(ResultPhaseSummary::SPECIALIZED);
+            #[cfg(test)]
+            if D8_FORCE_VARIABLE_SPECIALIZED.with(Cell::get) {
+                ResultPhaseSummary::SPECIALIZED
+            } else {
+                phase
+            }
+            #[cfg(not(test))]
+            phase
+        }
         RuntimeExpr::Value(_)
-        | RuntimeExpr::Var(_)
         | RuntimeExpr::Closure { .. }
         | RuntimeExpr::LexicalClosure { .. }
         | RuntimeExpr::DeclarationRef { .. }
         | RuntimeExpr::ImportedDeclarationRef { .. }
         | RuntimeExpr::Effect { .. } => ResultPhaseSummary::SPECIALIZED,
     };
-    cache.insert(origin, summary);
+    if is_source_join(expr) {
+        let result = PlannedJoinResult {
+            representation: match summary.phase {
+                ResultPhase::SpecializedOnly => JoinResultRepresentation::NativeScalarPair,
+                ResultPhase::CarrierRequired => JoinResultRepresentation::CarrierWord,
+            },
+            has_continuing_predecessor: summary.continues,
+        };
+        let entry = joins
+            .get_mut(origin.0 as usize)
+            .ok_or_else(|| planner_error("phase-plan join origin is outside the plan"))?;
+        *entry = Some(match *entry {
+            Some(previous) => PlannedJoinResult {
+                representation: if previous.representation
+                    == JoinResultRepresentation::CarrierWord
+                    || result.representation == JoinResultRepresentation::CarrierWord
+                {
+                    JoinResultRepresentation::CarrierWord
+                } else {
+                    JoinResultRepresentation::NativeScalarPair
+                },
+                has_continuing_predecessor: previous.has_continuing_predecessor
+                    || result.has_continuing_predecessor,
+            },
+            None => result,
+        });
+    }
     Ok(summary)
+}
+
+fn result_phase_environment_for_owner(
+    plan: &StaticTransitionPlan<'_>,
+    origin: StaticOriginId,
+) -> Result<Vec<ResultPhaseSummary>, CraneliftBackendError> {
+    let Some(function) = plan.semantic.function_owner(origin)? else {
+        return Ok(Vec::new());
+    };
+    let descriptor = plan
+        .abi
+        .descriptors
+        .iter()
+        .find(|descriptor| descriptor.function == function)
+        .ok_or_else(|| planner_error("phase plan owner has no ABI descriptor"))?;
+    let start = descriptor.slots.start as usize;
+    let end = start
+        .checked_add(descriptor.slots.len as usize)
+        .ok_or_else(|| planner_capacity_error("phase-plan ABI slot range exhausted"))?;
+    let slots = plan
+        .abi
+        .slots
+        .get(start..end)
+        .ok_or_else(|| planner_error("phase plan ABI slot range is outside the plane"))?;
+    Ok(slots
+        .iter()
+        .filter(|slot| matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture))
+        .map(|slot| {
+            // The process pair is the closed exception to generic ValueWord
+            // inputs: the root unit recovers these two role-keyed values as a
+            // borrowed process input and a capability token. Every other
+            // parameter/capture remains an opaque carried word.
+            if matches!(
+                descriptor.definition,
+                AbiUnitDefinition::SchedulingEntry {
+                    ingress: AbiSchedulingIngress::ProcessPair,
+                }
+            ) && slot.kind == AbiSlotKind::Parameter
+            {
+                ResultPhaseSummary::SPECIALIZED
+            } else {
+                ResultPhaseSummary::carrier()
+            }
+        })
+        .collect())
 }
 
 fn build_join_result_plan(
     plan: &StaticTransitionPlan<'_>,
     functionized_units: bool,
 ) -> Result<Vec<Option<PlannedJoinResult>>, CraneliftBackendError> {
-    let mut cache = BTreeMap::new();
     let mut joins = vec![None; plan.source_occurrences.len()];
-    for occurrence in plan.source_occurrences.iter().flatten() {
-        if !is_source_join(occurrence.expr) {
-            continue;
+    for descriptor in &plan.abi.descriptors {
+        let mut root = descriptor.origin;
+        if let Some(root_occurrence) = plan.root_occurrence {
+            if plan.semantic.function_owner(root_occurrence)? == Some(descriptor.function) {
+                root = root_occurrence;
+            }
         }
-        let summary = summarize_result_phase(
+        let environment = result_phase_environment_for_owner(plan, root)?;
+        summarize_result_phase(
             plan,
-            occurrence.static_origin,
+            root,
             functionized_units,
-            &mut cache,
+            &environment,
+            &mut joins,
         )?;
-        joins[occurrence.static_origin.0 as usize] = Some(PlannedJoinResult {
-            representation: match summary.phase {
-                ResultPhase::SpecializedOnly => JoinResultRepresentation::NativeScalarPair,
-                ResultPhase::CarrierRequired => JoinResultRepresentation::CarrierWord,
-            },
-            has_continuing_predecessor: summary.continues,
-        });
+    }
+    for occurrence in plan.source_occurrences.iter().flatten() {
+        if is_source_join(occurrence.expr) && joins[occurrence.static_origin.0 as usize].is_none() {
+            let environment =
+                result_phase_environment_for_owner(plan, occurrence.static_origin)?;
+            summarize_result_phase(
+                plan,
+                occurrence.static_origin,
+                functionized_units,
+                &environment,
+                &mut joins,
+            )?;
+        }
     }
     Ok(joins)
 }
@@ -7970,6 +8129,59 @@ mod tests {
         )
     }
 
+    fn d8_environment_join(swapped: bool) -> RuntimeExpr {
+        let carried = RuntimeMatchCase {
+            constructor: "ctor:fixture::D8::Carried".to_string(),
+            binders: 0,
+            body: RuntimeExpr::Var(0),
+        };
+        let specialized = RuntimeMatchCase {
+            constructor: "ctor:fixture::D8::Specialized".to_string(),
+            binders: 0,
+            body: RuntimeExpr::Value(RuntimeValue::Int(7.into())),
+        };
+        RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: Vec::new(),
+                    body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(11.into()))),
+                }),
+                args: Vec::new(),
+            }),
+            body: Box::new(RuntimeExpr::Match {
+                scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Constructor {
+                    constructor: "ctor:fixture::D8::Carried".to_string(),
+                    args: Vec::new(),
+                })),
+                cases: if swapped {
+                    vec![specialized, carried]
+                } else {
+                    vec![carried, specialized]
+                },
+                default: trap("D8 environment join default"),
+            }),
+        }
+    }
+
+    fn assert_d8_environment_join_is_carrier(swapped: bool) {
+        let expr = d8_environment_join(swapped);
+        let plan = d8_functionized_plan(&expr).expect("environment join plans");
+        let root = plan.root_static_origin().expect("root origin");
+        let join = plan
+            .semantic
+            .child_origin(root, 1)
+            .expect("let body origin");
+        let token = plan
+            .join_plan_token(join)
+            .expect("nested environment join has one plan entry");
+        assert_eq!(
+            token.representation,
+            JoinResultRepresentation::CarrierWord,
+            "the exact nested join lost its let-bound declared-unit result"
+        );
+    }
+
     #[test]
     fn d8_mixed_join_plan_is_carrier_and_arm_order_independent() {
         for swapped in [false, true] {
@@ -7988,6 +8200,98 @@ mod tests {
                 "mixed join lost both continuing predecessors"
             );
         }
+    }
+
+    /// MEASURED: the exact nested source join receives `CarrierWord` when one
+    /// arm forwards a declared-unit result through a de Bruijn environment
+    /// insertion, independently of arm order.
+    ///
+    /// CLAIMED: D8 phase propagation is monotone through `Let`; a join cannot
+    /// be planned as native merely because its carrier reaches it through a
+    /// variable.
+    ///
+    /// GAP: this fixture does not exercise ABI parameters; the adjacent control
+    /// pins that independent environment seed.
+    #[test]
+    fn d8_let_environment_provenance_reaches_the_exact_nested_join() {
+        for swapped in [false, true] {
+            assert_d8_environment_join_is_carrier(swapped);
+        }
+    }
+
+    /// MEASURED: a functionized unit parameter is seeded from the unit ABI and
+    /// reaches the exact join occurrence in the unit body.
+    ///
+    /// CLAIMED: phase planning uses the closed ABI slot inventory for
+    /// parameter/capture environment provenance, rather than classifying every
+    /// `Var` as specialized.
+    ///
+    /// GAP: captures share the same ABI-slot seed path and are not duplicated
+    /// in this control.
+    #[test]
+    fn d8_abi_parameter_provenance_reaches_the_exact_nested_join() {
+        for swapped in [false, true] {
+            let carried = RuntimeMatchCase {
+                constructor: "ctor:fixture::D8::Carried".to_string(),
+                binders: 0,
+                body: RuntimeExpr::Var(0),
+            };
+            let specialized = RuntimeMatchCase {
+                constructor: "ctor:fixture::D8::Specialized".to_string(),
+                binders: 0,
+                body: RuntimeExpr::Value(RuntimeValue::Int(7.into())),
+            };
+            let expr = RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: vec!["carried".to_string()],
+                    body: Box::new(RuntimeExpr::Match {
+                        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Constructor {
+                            constructor: "ctor:fixture::D8::Carried".to_string(),
+                            args: Vec::new(),
+                        })),
+                        cases: if swapped {
+                            vec![specialized, carried]
+                        } else {
+                            vec![carried, specialized]
+                        },
+                        default: trap("D8 ABI parameter join default"),
+                    }),
+                }),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int(11.into()))],
+            };
+            let plan = d8_functionized_plan(&expr).expect("ABI parameter join plans");
+            let root = plan.root_static_origin().expect("root origin");
+            let callee = plan.semantic.child_origin(root, 0).expect("callee origin");
+            let join = plan
+                .semantic
+                .child_origin(callee, 0)
+                .expect("closure body origin");
+            let token = plan
+                .join_plan_token(join)
+                .expect("nested parameter join has one plan entry");
+            assert_eq!(
+                token.representation,
+                JoinResultRepresentation::CarrierWord,
+                "the exact nested join lost its function-unit parameter"
+            );
+        }
+    }
+
+    /// Reversible mutation: forcing all variable seeds back to the rejected
+    /// `SpecializedOnly` behavior must red at the plan assertion, before any
+    /// lowering or emitted block can influence the result.
+    #[test]
+    fn d8_variable_seed_mutation_reds_at_the_plan_boundary() {
+        D8_FORCE_VARIABLE_SPECIALIZED.with(|forced| forced.set(true));
+        let result = std::panic::catch_unwind(|| {
+            assert_d8_environment_join_is_carrier(false);
+        });
+        D8_FORCE_VARIABLE_SPECIALIZED.with(|forced| forced.set(false));
+        assert!(
+            result.is_err(),
+            "forcing the rejected variable seed did not red the plan assertion"
+        );
     }
 
     #[test]

@@ -41,6 +41,15 @@ fn recursive_position_unit_calls() -> usize {
 enum RecursiveDescentResidual {
     /// An ordinary producer match whose scrutinee is directly a call.
     ProducerMatchCall,
+    /// An ordinary match consuming an active computational recursor.
+    MatchScrutineeRecursor,
+    /// A lexical unit call whose argument is an active computational recursor.
+    ///
+    /// The recursive result still carries invocation-local scope/return-hole
+    /// state. Passing it through a separately declared lexical unit is not one
+    /// of the completed functionized ports, so the established recursive
+    /// descent lane retains the whole call.
+    LexicalCallArgumentRecursor,
     /// A call whose callee is the retained non-lexical closure form.
     SeedClosureCall,
     /// A transparent declaration whose body is a closure seed.
@@ -82,6 +91,16 @@ fn recursive_descent_residual(expr: &RuntimeExpr) -> Option<RecursiveDescentResi
             scrutinee, cases, ..
         } => matches!(scrutinee.as_ref(), RuntimeExpr::Call { .. })
             .then_some(RecursiveDescentResidual::ProducerMatchCall)
+            .or_else(|| {
+                matches!(
+                    scrutinee.as_ref(),
+                    RuntimeExpr::ComputationalMatch { cases, .. }
+                        if cases
+                            .iter()
+                            .any(|case| !case.recursive_positions.is_empty())
+                )
+                .then_some(RecursiveDescentResidual::MatchScrutineeRecursor)
+            })
             .or_else(|| recursive_descent_residual(scrutinee))
             .or_else(|| {
                 cases
@@ -102,6 +121,19 @@ fn recursive_descent_residual(expr: &RuntimeExpr) -> Option<RecursiveDescentResi
         RuntimeExpr::Call { callee, args } => {
             matches!(callee.as_ref(), RuntimeExpr::Closure { .. })
                 .then_some(RecursiveDescentResidual::SeedClosureCall)
+                .or_else(|| {
+                    (matches!(callee.as_ref(), RuntimeExpr::LexicalClosure { .. })
+                        && args.iter().any(|argument| {
+                            matches!(
+                                argument,
+                                RuntimeExpr::ComputationalMatch { cases, .. }
+                                    if cases
+                                        .iter()
+                                        .any(|case| !case.recursive_positions.is_empty())
+                            )
+                        }))
+                    .then_some(RecursiveDescentResidual::LexicalCallArgumentRecursor)
+                })
                 .or_else(|| recursive_descent_residual(callee))
                 .or_else(|| args.iter().find_map(recursive_descent_residual))
         }
@@ -5012,9 +5044,9 @@ impl<'a> Lowering<'a> {
     /// `RT-FNSPLIT-B2A-C` shipped a pin (its N3) asserting that no such lookup
     /// existed, because at that point the origin was provenance and a lookup would
     /// have been an unaudited second authority. B2A-S **retires that pin on
-    /// purpose** and replaces it with the opposite one: exactly one lookup,
-    /// reachable from exactly one consumer. Zero to one, never zero to unbounded —
-    /// see `exactly_one_plan_origin_to_expression_lookup_exists`.
+    /// purpose** and replaces it with the opposite one: one resolution route,
+    /// observed behaviorally by
+    /// `every_origin_to_expression_resolution_goes_through_the_single_route`.
     ///
     /// ⛔ Do not call the plan's resolver anywhere else, and do not widen this to
     /// take anything but an origin. The moment a caller can pass a term, a
@@ -5600,9 +5632,27 @@ impl<'a> Lowering<'a> {
                     "a carried HostResult match requires both closed Result cases",
                 ));
             };
-            // Result case spellings identify the semantic type, not the carried
-            // representation. Read the representation fact from the emitted
-            // word before selecting either representation-specific consumer.
+            if ok_case.1.binders != 1 || err_case.1.binders != 1 {
+                return Err(unsupported(
+                    "HostResult",
+                    "carried Result cases must each bind exactly one selected payload",
+                ));
+            }
+            // Dispatch both carried representations into one pair of source
+            // case blocks. A nested source join is therefore emitted exactly
+            // once even though either representation can select its owner.
+            let ok_body = builder.create_block();
+            builder.append_block_param(ok_body, types::I64);
+            let err_body = builder.create_block();
+            builder.append_block_param(err_body, types::I64);
+            let merge = join_plan
+                .has_continuing_predecessor
+                .then(|| builder.create_block());
+            if let Some(merge) = merge {
+                Self::append_planned_join_params(builder, merge, join_plan);
+            }
+            let mut merge_kind = None;
+
             let class = self.emit_carrier_class(builder, scrutinee)?;
             let is_host_result = builder.ins().icmp_imm(
                 cranelift_codegen::ir::condcodes::IntCC::Equal,
@@ -5611,59 +5661,68 @@ impl<'a> Lowering<'a> {
             );
             let host_result = builder.create_block();
             let constructor = builder.create_block();
-            let merge = join_plan
-                .has_continuing_predecessor
-                .then(|| builder.create_block());
-            if let Some(merge) = merge {
-                Self::append_planned_join_params(builder, merge, join_plan);
-            }
-            let mut merge_kind = None;
             builder
                 .ins()
                 .brif(is_host_result, host_result, &[], constructor, &[]);
 
             builder.switch_to_block(host_result);
-            let host_result_word = self.lower_carried_host_result_match(
-                builder,
-                scrutinee,
-                ok_case,
-                err_case,
-                static_origin,
-                env,
-                join_plan,
-            )?;
-            if Self::seal_source_trap_branch(builder, &host_result_word) {
-                // The HostResult representation has no continuing predecessor.
-            } else {
-                let merge = merge.ok_or_else(|| {
-                    backend_module(
-                        "join plan omitted a merge despite a continuing predecessor".to_string(),
-                    )
-                })?;
-                self.jump_planned_join_arm(
-                    builder,
-                    merge,
-                    join_plan,
-                    static_origin,
-                    host_result_word,
-                    &mut merge_kind,
-                    "a carried HostResult representation",
-                )?;
-            }
+            let success = self.emit_carrier_host_success(builder, scrutinee)?;
+            let payload = self.emit_carrier_host_payload(builder, scrutinee)?;
+            builder.ins().brif(
+                success,
+                ok_body,
+                &[payload.word.into()],
+                err_body,
+                &[payload.word.into()],
+            );
 
             builder.switch_to_block(constructor);
-            let constructor_word = self.lower_carried_constructor_match(
-                builder,
-                scrutinee,
-                cases,
-                default,
-                static_origin,
-                env,
-                join_plan,
-            )?;
-            if Self::seal_source_trap_branch(builder, &constructor_word) {
-                // The constructor representation has no continuing predecessor.
-            } else {
+            let tag = self.emit_carrier_tag(builder, scrutinee)?;
+            let field_count = self.emit_carrier_field_count(builder, scrutinee)?;
+            for (body_block, (index, _case)) in
+                [(ok_body, ok_case), (err_body, err_case)]
+            {
+                let identity = self
+                    .static_transition_plan
+                    .case_constructor_identity(static_origin, index)?
+                    .tag_abi_word()?;
+                let identity = Self::carrier_identity_immediate(builder, identity);
+                let selected = builder.create_block();
+                let next = builder.create_block();
+                let matched = builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    tag,
+                    identity,
+                );
+                builder.ins().brif(matched, selected, &[], next, &[]);
+                builder.switch_to_block(selected);
+                Self::require_i64(builder, field_count, 1);
+                let payload = self.emit_carrier_field(builder, scrutinee, 0)?;
+                builder.ins().jump(body_block, &[payload.word.into()]);
+                builder.switch_to_block(next);
+            }
+            let defaulted = LoweringOperand::Specialized(Lowered::Trap(default.clone()));
+            if !Self::seal_source_trap_branch(builder, &defaulted) {
+                return Err(unsupported(
+                    "Match",
+                    "the carried Result match's closed default did not seal its branch",
+                ));
+            }
+
+            for (block, (index, case)) in
+                [(ok_body, ok_case), (err_body, err_case)]
+            {
+                builder.switch_to_block(block);
+                let payload = CarriedBoundaryWord {
+                    word: builder.block_params(block)[0],
+                };
+                let case_env = env_with_operands([LoweringOperand::Carried(payload)], env);
+                let body = self.case_body_occurrence(static_origin, index, &case.body)?;
+                let body_origin = body.static_origin;
+                let lowered = self.lower_expr(builder, body, &case_env)?;
+                if Self::seal_source_trap_branch(builder, &lowered) {
+                    continue;
+                }
                 let merge = merge.ok_or_else(|| {
                     backend_module(
                         "join plan omitted a merge despite a continuing predecessor".to_string(),
@@ -5673,10 +5732,10 @@ impl<'a> Lowering<'a> {
                     builder,
                     merge,
                     join_plan,
-                    static_origin,
-                    constructor_word,
+                    body_origin,
+                    lowered,
                     &mut merge_kind,
-                    "a carried constructor representation",
+                    "a carried Result arm",
                 )?;
             }
 
@@ -5690,7 +5749,7 @@ impl<'a> Lowering<'a> {
                 merge,
                 join_plan,
                 merge_kind,
-                "a carried representation split",
+                "a carried Result join",
             );
         }
 
@@ -5825,79 +5884,6 @@ impl<'a> Lowering<'a> {
             join_plan,
             merge_kind,
             "a carried `Match` join",
-        )
-    }
-
-    fn lower_carried_host_result_match(
-        &mut self,
-        builder: &mut FunctionBuilder<'_>,
-        scrutinee: CarriedBoundaryWord,
-        ok_case: (usize, &crate::RuntimeMatchCase),
-        err_case: (usize, &crate::RuntimeMatchCase),
-        static_origin: StaticOriginId,
-        env: &[LoweringOperand],
-        join_plan: &JoinPlanToken,
-    ) -> Result<LoweringOperand, CraneliftBackendError> {
-        if ok_case.1.binders != 1 || err_case.1.binders != 1 {
-            return Err(unsupported(
-                "HostResult",
-                "carried Result cases must each bind exactly one selected payload",
-            ));
-        }
-        let success = self.emit_carrier_host_success(builder, scrutinee)?;
-        let payload = self.emit_carrier_host_payload(builder, scrutinee)?;
-        let ok_block = builder.create_block();
-        let err_block = builder.create_block();
-        let merge = join_plan
-            .has_continuing_predecessor
-            .then(|| builder.create_block());
-        if let Some(merge) = merge {
-            Self::append_planned_join_params(builder, merge, join_plan);
-        }
-        let mut merge_kind = None;
-        builder
-            .ins()
-            .brif(success, ok_block, &[], err_block, &[]);
-
-        for (block, (index, case)) in [(ok_block, ok_case), (err_block, err_case)] {
-            builder.switch_to_block(block);
-            let case_env = env_with_operands([LoweringOperand::Carried(payload)], env);
-            let body = self.case_body_occurrence(static_origin, index, &case.body)?;
-            let body_origin = body.static_origin;
-            let lowered = self.lower_expr(builder, body, &case_env)?;
-            if Self::seal_source_trap_branch(builder, &lowered) {
-                continue;
-            }
-            let merge = merge.ok_or_else(|| {
-                backend_module(
-                    "join plan omitted a merge despite a continuing predecessor".to_string(),
-                )
-            })?;
-            self.jump_planned_join_arm(
-                builder,
-                merge,
-                join_plan,
-                body_origin,
-                lowered,
-                &mut merge_kind,
-                "a carried HostResult arm",
-            )?;
-        }
-
-        let Some(merge) = merge else {
-            let unreachable_continuation = builder.create_block();
-            builder.switch_to_block(unreachable_continuation);
-            return Ok(LoweringOperand::Specialized(Lowered::Trap(RuntimeTrap {
-                code: RuntimeTrapCode::PatternMatchFailure,
-                message: "all carried HostResult alternatives trap".to_string(),
-            })));
-        };
-        self.finish_planned_join(
-            builder,
-            merge,
-            join_plan,
-            merge_kind,
-            "a carried HostResult join",
         )
     }
 
@@ -8865,12 +8851,15 @@ impl<'a> Lowering<'a> {
         env: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let join_plan = self.consume_join_plan(static_origin)?;
-        let merge = builder.create_block();
-        builder.append_block_param(merge, types::I64);
-        builder.append_block_param(merge, types::I64);
+        let merge = join_plan
+            .has_continuing_predecessor
+            .then(|| builder.create_block());
+        if let Some(merge) = merge {
+            Self::append_planned_join_params(builder, merge, &join_plan);
+        }
         let some_block = builder.create_block();
         let none_block = builder.create_block();
-        let mut exit_merge = None;
+        let mut merge_kind = None;
         builder
             .ins()
             .brif(present, some_block, &[], none_block, &[]);
@@ -8894,25 +8883,34 @@ impl<'a> Lowering<'a> {
             let arm_env = env_with(fields, env);
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
             let lowered = self.lower_expr(builder, body, &arm_env)?;
-            let (value, is_exit) =
-                self.merge_branch_value(builder, &join_plan, lowered, "Match")?;
-            Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
-            builder
-                .ins()
-                .jump(merge, &[value.tag.into(), value.payload.into()]);
+            if Self::seal_source_trap_branch(builder, &lowered) {
+                continue;
+            }
+            let merge = merge.ok_or_else(|| {
+                backend_module(
+                    "borrowed Option join omitted a merge despite a continuing predecessor"
+                        .to_string(),
+                )
+            })?;
+            self.jump_planned_join_arm(
+                builder,
+                merge,
+                &join_plan,
+                body.static_origin,
+                lowered,
+                &mut merge_kind,
+                "Match",
+            )?;
         }
-        builder.switch_to_block(merge);
-        let pair = NativeScalarPairV1 {
-            tag: builder.block_params(merge)[0],
-            payload: builder.block_params(merge)[1],
+        let Some(merge) = merge else {
+            let unreachable_continuation = builder.create_block();
+            builder.switch_to_block(unreachable_continuation);
+            return Ok(LoweringOperand::Specialized(Lowered::Trap(RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "all borrowed Option alternatives trap".to_string(),
+            })));
         };
-        Ok(if exit_merge == Some(true) {
-            LoweringOperand::Specialized(Lowered::ProcessExitStatus {
-                value: pair.payload,
-            })
-        } else {
-            LoweringOperand::Specialized(self.lowered_from_scalar_pair(ScalarMergeKind::Int, pair))
-        })
+        self.finish_planned_join(builder, merge, &join_plan, merge_kind, "Match")
     }
 
     #[allow(clippy::too_many_arguments)]

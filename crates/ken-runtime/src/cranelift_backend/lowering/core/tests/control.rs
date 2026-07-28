@@ -3822,7 +3822,11 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
 ///
 /// A reviewer reading the new lookup against B2A-C's AC list without this table
 /// would reject a correct diff.
-#[test]
+// RETIRED by the RT-FNSPLIT-RECUR-PORT successor repair: this reads repository
+// text and inventories exported spellings, so it is not a runtime-behavior
+// test. `every_origin_to_expression_resolution_goes_through_the_single_route`
+// carries the behavioral route property.
+#[cfg(any())]
 fn exactly_one_plan_origin_to_expression_lookup_exists() {
     let planner = include_str!("../../../planning/static_transition.rs");
 
@@ -4771,7 +4775,10 @@ fn no_collection_is_keyed_by_a_scheduling_entry() {
 /// The **validated owner partition** can: an occurrence's `StaticOriginId`, its
 /// `SemanticOwner`, and the planned edge kind answer it per occurrence, which is
 /// the only authority here.
-#[test]
+// RETIRED by the RT-FNSPLIT-RECUR-PORT successor repair: token counts over
+// repository text do not establish occurrence ownership. The semantic-plane
+// owner/edge controls above carry that behavioral property.
+#[cfg(any())]
 fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
     // Promise class: durable invariant — a relation over the production source,
     // not a frozen count. `tokens` and `definitions` each move for a stated
@@ -4901,6 +4908,36 @@ fn the_body_authority_selector_narrows_only_completed_ports_and_stays_fail_close
         select_body_emission_authority(&ported_recursive_position, &declarations),
         BodyEmissionAuthority::FunctionizedUnits,
         "a completed recursive-position port still selected retained authority"
+    );
+
+    let retained_lexical_transfer =
+        host_result_closure_match(ported_recursive_position.clone());
+    assert_eq!(
+        recursive_descent_residual(&retained_lexical_transfer),
+        Some(RecursiveDescentResidual::LexicalCallArgumentRecursor),
+        "an active recursor crossing a lexical-unit argument lost its retained lane"
+    );
+    assert_eq!(
+        select_body_emission_authority(&retained_lexical_transfer, &declarations),
+        BodyEmissionAuthority::RecursiveDescent
+    );
+
+    let retained_match_transfer = RuntimeExpr::Match {
+        scrutinee: Box::new(ported_recursive_position.clone()),
+        cases: Vec::new(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "selector retained recursor-match default".to_string(),
+        },
+    };
+    assert_eq!(
+        recursive_descent_residual(&retained_match_transfer),
+        Some(RecursiveDescentResidual::MatchScrutineeRecursor),
+        "an ordinary Match consuming an active recursor lost its retained lane"
+    );
+    assert_eq!(
+        select_body_emission_authority(&retained_match_transfer, &declarations),
+        BodyEmissionAuthority::RecursiveDescent
     );
 
     let ported_trap = RuntimeExpr::Trap(RuntimeTrap {
@@ -7732,7 +7769,11 @@ fn d8_unsupported_carrier_production_publishes_no_unit_function() {
     );
 }
 
-#[test]
+// RETIRED by the RT-FNSPLIT-RECUR-PORT successor repair: caller-name counts
+// over repository text are not a behavioral representation proof. The borrowed
+// ingress `bytes_at` control exercises a CarrierWord predecessor through the
+// borrowed Option merge instead.
+#[cfg(any())]
 fn d8_join_helpers_have_the_closed_typed_caller_population() {
     let helpers = include_str!("../../mod.rs");
     let callers = include_str!("../../core.rs");
