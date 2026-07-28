@@ -1604,3 +1604,172 @@ fn emit_process_entrypoint_object_with_symbols(
         unsupported,
     })
 }
+
+// ─── RT-FNSPLIT-C1 `D3` — the one-way producer ─────────────────────────────
+
+/// A bare [`Lowering`] over `plan`, with ⛔ **no carrier refs**.
+///
+/// Same shape and same reason as `run_dynamic_constructor_dispatch_fixture`'s
+/// inline fixture: a `Lowering` that emits into no module has no callable
+/// carrier helpers, so the carrier routes must fail closed rather than take
+/// some other path. ⭐ Here that absence is not incidental — it is the
+/// **instrument**: `carrier_refs()`'s error is a marker that says *"control
+/// reached the first emitted call"*, which is what makes the ordering below
+/// measurable at all without a JIT module.
+#[cfg(test)]
+fn bare_carrier_test_lowering<'src>(
+    seed_env: &'src NativeSeedEnvironment,
+    plan: StaticTransitionPlan<'src>,
+) -> Lowering<'src> {
+    Lowering {
+        seed_env,
+        declarations: BTreeMap::new(),
+        static_transition_plan: plan,
+        declaration_stack: Vec::new(),
+        active_recursive_declarations: Vec::new(),
+        result_table: BTreeMap::new(),
+        next_token: 0,
+        next_recursor_frame_provenance: 0,
+        next_recursor_producer_origin: 0,
+        next_continuation_activation: 0,
+        next_continuation_cursor: 0,
+        next_source_join: 0,
+        next_source_predecessor: 0,
+        live_source_continuations: 0,
+        source_control_root: None,
+        active_oriented_semantic_regions: 0,
+        native_join_plan: None,
+        consumed_join_sites: BTreeSet::new(),
+        root_terminal_authority: None,
+        active_join_site: None,
+        oriented_subcontinuation_plan: None,
+        consumed_subcontinuation_frames: BTreeSet::new(),
+        active_subcontinuation_frame: None,
+        consumed_recursive_call_templates: BTreeSet::new(),
+        pending_recursive_call: None,
+        pending_computational_ih_call: None,
+        active_recursive_invocations: Vec::new(),
+        next_recursive_invocation_instance: 1,
+        dynamic_splice_edges: BTreeMap::new(),
+        next_dynamic_splice_edge: 1,
+        assumptions: BTreeSet::new(),
+        unsupported: Vec::new(),
+        process_object: false,
+        process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
+        host_dispatch: None,
+        invocation_pointer: None,
+        native_int_arena: None,
+        native_int_binop: None,
+        native_int_compare: None,
+        native_int_intern: None,
+        native_int_narrow: None,
+        native_int_export: None,
+        native_int_tags: BTreeMap::new(),
+        boundary_carrier: None,
+        native_int_mutation: NativeIntLoweringMutation::Exact,
+        bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+    }
+}
+
+/// `RT-FNSPLIT-C1` `D3` — the producer screens the **whole graph** for
+/// admissibility *before* it touches the carrier.
+///
+/// **MEASURED:** through one fixture with no carrier refs, a `Constructor`
+/// whose argument is a closure fails with the **closure** error, while the
+/// same `Constructor` shape whose argument is a `Bool` fails with the
+/// **carrier-refs** error.
+/// **CLAIMED:** [`Lowered::boundary_transfer_admissibility`] runs ahead of the
+/// first allocation, so an inadmissible graph is *rejected* rather than
+/// half-emitted — which is the ordering that walk's own contract calls
+/// load-bearing.
+/// **THE GAP:** the closure error alone is consistent with *"this fixture
+/// errors early for some unrelated reason."* ⭐ The `Bool` case is the positive
+/// control that closes it: it proves the very same fixture does reach the
+/// allocation step, so the closure case's earlier stop is attributable to the
+/// walk and to nothing else.
+///
+/// ⚠ Promise class: **durable invariant**. It asserts a relation between two
+/// outcomes of one fixture, not either error's spelling as a value — a
+/// reworded message keeps it green, and moving the walk after the allocation
+/// turns it red.
+#[test]
+fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut module = new_jit_module().expect("JIT module constructs");
+    let mut signature = module.make_signature();
+    signature.returns.push(AbiParam::new(types::I64));
+    let func_id = module
+        .declare_function("c1_d3_producer_probe", Linkage::Local, &signature)
+        .expect("probe declares");
+    let mut context = module.make_context();
+    context.func =
+        Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
+
+    // A real planned `Construct` occurrence: the producer derives its identity
+    // from the plan, and ⛔ a test cannot fabricate a `StaticOriginId` — the
+    // ordinal stays planner-private, so this must be a genuinely planned one.
+    let construct = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+    };
+    let (plan, construct_origin) = planned_root_occurrence(&construct);
+    let closure_body = inert_test_static_origin();
+    let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
+
+    let mut function_context = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+
+    // ── the inadmissible graph: the closure is one level DOWN ─────────────
+    //
+    // ⚠ Nested deliberately. A closure at the ROOT would be refused by the
+    // root variant's own disposition, so it could not distinguish the walk
+    // from the disposition table. The walk is the only thing that sees this.
+    let inadmissible = Lowered::Constructor {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        args: vec![Lowered::Closure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: closure_body,
+        }],
+    };
+    let refused = compiler
+        .transfer_into_carrier(&mut builder, construct_origin, &inadmissible)
+        .expect_err("a constructor holding a closure cannot cross the boundary");
+    assert!(
+        matches!(
+            refused,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "Closure",
+                ..
+            })
+        ),
+        "the nested closure must be reported as the CLOSURE refusal, not as \
+         whatever the carrier step would have said: got {refused:?}"
+    );
+
+    // ── POSITIVE CONTROL: the same shape, admissible ──────────────────────
+    let admissible = Lowered::Constructor {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        args: vec![Lowered::Bool {
+            value: builder.ins().iconst(types::I64, 1),
+            known: Some(true),
+        }],
+    };
+    let reached = compiler
+        .transfer_into_carrier(&mut builder, construct_origin, &admissible)
+        .expect_err("a fixture with no carrier refs cannot allocate");
+    assert!(
+        matches!(
+            reached,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "BoundaryCarrier",
+                ..
+            })
+        ),
+        "NON-VACUITY: the admissible graph must get PAST the walk and stop at \
+         the first emitted call, or the closure case above proves nothing about \
+         ordering: got {reached:?}"
+    );
+}
