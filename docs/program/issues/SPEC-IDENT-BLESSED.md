@@ -1,18 +1,53 @@
 ---
 id: SPEC-IDENT-BLESSED
 title: "Settle the identifier character set: 31-lexical promises a bounded blessed-Unicode-letter table that does not exist, cites a security chapter that carries no such claim, and states a confusable gate the landed lexer does not implement"
-status: ready
+status: merged
 owner: spec-enclave
 size: M
 gate: none
 depends_on: [SURF-IDENT-TR39]
 blocks: []
-github: null
+github: https://github.com/swe-toolkit/ken/pull/1147
 origin: "Routed by SURF-IDENT-TR39-R1 (merged PR #1121, origin/main 91b67c3e), which recorded the lexer's ASCII-only identifier boundary as an explicit decision and deliberately declined to invent a blessed-identifier table. Steward-framed 2026-07-27 at origin/main e23e5bc1."
 ---
 
 Frame: [`../wp/SPEC-IDENT-BLESSED.md`](../wp/SPEC-IDENT-BLESSED.md) — shovel-ready,
 inputs pinned by blob at `origin/main = e23e5bc1`.
+
+> ## ✅ MERGED 2026-07-28 — PR #1147, exact `2f057e64a1fb876bfb4793ac3d8f55d9388049c0`
+>
+> ⚠ **The defect statement below is written in the present tense and is now
+> HISTORICAL.** It describes `31-lexical.md` as it stood at `e23e5bc1`; it is not
+> a live claim about `main`.
+>
+> Landed at `origin/main = 1a75836ddda64ffde8d07586916be5b423c772e8`, blob-verified:
+> `spec/30-surface/31-lexical.md` = `bfcbce267733c3ae82a8172260118a2d43c1df85`,
+> `spec/90-open-decisions.md` = `bfed05e9580c7535e82c7cbe770d37f093d8dae7`
+> (independently confirmed by `spec-leader`).
+>
+> **How each numbered complaint was discharged — by `§1e`, `SPEC-IDENT-BLESSED`
+> DECIDED, Shape C:**
+>
+> 1. **No blessed-Unicode-letter table** → none was invented. *Blessed* now
+>    qualifies **notation**, bounded by the fixed `§1b` table; **identifiers** are
+>    the stored ASCII productions of `§2` after closed alias expansion.
+> 2. **`§1a` principle 5 / `§1c` BL3 demanded a fixed table** → both now bind
+>    blessed **notation** to `§1b` and stored **identifiers** to `§1e`/`§2`.
+>    Neither names an undefined identifier set or an unimplemented TR39 gate.
+> 3. **A confusable gate the lexer does not implement** → Shape B is explicitly
+>    rejected *because* the landed lexer implements no confusable policy. The
+>    homoglyph path closes instead through a total single-valued alias map plus an
+>    ASCII wall, so `ℓ`/`level` and `Ω`/`Omega` are each **one** binding.
+>
+> ⭐ Four candidates were required, and three died on **frame** defects, not on the
+> ring's work: an amendment whose banned scope forbade the only discharge of its
+> own authorization, then the `§1b` table-role scope gap the Architect caught, then
+> the row-and-footnote split (one claim in two positions). ⛔ The last surviving
+> stale carrier — the `FMT8` `l-identifier-is-not-a-level-token` row — was
+> deliberately left byte-unchanged and routed to filed `CONF-FMT8-LEVELTOK`.
+>
+> ⭐ The spec enclave is **PARKED** under the operator's wind-down. ⛔ No successor,
+> ⛔ no retro.
 
 ## Why this is a real defect and not tidying
 
