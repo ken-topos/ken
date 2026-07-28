@@ -1121,6 +1121,22 @@ Steward-scoped.** Extend `C1`'s producer over the arms below.
 > **`Control`** slot — both laid out by `B2R` and both ignored by the
 > experimental emission, ⭐ **exactly as it ignored the process/capability slots
 > `AC-14` now governs.** ⇒ Same defect, same repair, ⛔ not a dependency.
+> ⛔ **It must not call `transfer_into_carrier` as though the trap were a
+> `ResultWord`.**
+>
+> ⭐ **AND THEY HAVE AN OWNING AC: `AC-11` CLAUSE 2** (Architect
+> `evt_4qhw95bkfp18g`, which withdrew the `Trap` sentence from its own earlier
+> ruling). Clause 1 governs source-valued `Parameter`/`Capture`/`Result`
+> producers; **clause 2 governs the protocol-produced `Control`/`Trap`/`Store`
+> slots** — which is where these four live. ⇒ ⛔ **They are not an unowned repair,
+> and `D9` closing green is not their discharge.**
+>
+> ⛔ **The closing controls must ATTRIBUTE those four reds to the protocol
+> route.** ⚠ **A merely earlier generic rejection does not earn clause-2
+> coverage** — a trapping body refused before it reaches the slot leaves the
+> protocol route itself unexercised, and the red goes away for the wrong reason.
+> ⭐ Same shape as this frame's standing rule that a pin never exercising the
+> violating mechanism is not evidence about it.
 >
 > ### ⛔ THE GUARD IS REPLACED BY THE DISPATCH, NEVER DELETED
 >
