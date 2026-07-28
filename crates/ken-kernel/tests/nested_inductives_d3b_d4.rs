@@ -315,11 +315,16 @@ fn declared_positive_former_lift_builds_dependent_host_evidence() {
         Box::new(Term::lam(family_type.clone(), family_type.clone())),
         Box::new(Term::pi(family_type.clone(), ty0())),
     );
+    let wrap_method_type =
+        method_type(&env, declaration, 1, &motive, &[], &[])
+            .expect("Former method lift");
+    let (wrap_domains, _) = peel_pi(&wrap_method_type);
+    assert_eq!(wrap_domains.len(), 2);
     let methods = vec![
         constructor(leaf),
         Term::lam(
-            source_list_type.clone(),
-            Term::lam(ty0(), constructor(leaf)),
+            wrap_domains[0].clone(),
+            Term::lam(wrap_domains[1].clone(), constructor(leaf)),
         ),
     ];
     let leaf_value = constructor(leaf);
@@ -329,7 +334,7 @@ fn declared_positive_former_lift_builds_dependent_host_evidence() {
         &[family_type.clone(), leaf_value, nil_value],
     );
 
-    let method = method_type(&env, declaration, 1, &motive, &[], &[]).expect("Former method lift");
+    let method = wrap_method_type;
     let (domains, _) = peel_pi(&method);
     assert_eq!(domains.len(), 2, "field plus one structured Former lift");
     let instantiated_lift_type = ken_kernel::subst::subst0(&domains[1], &list_value);
