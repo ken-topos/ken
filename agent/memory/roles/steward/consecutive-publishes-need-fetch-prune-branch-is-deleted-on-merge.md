@@ -48,5 +48,5 @@ origin/main...steward/work` must show *only* the files of the new commits, and
 must **not** contain anything from the previous batch. Name both halves — the
 files that must appear and the ones that must not — before running it.
 
-Related: [[publisher-exit-code-is-the-launchers-not-the-scripts]],
+Related: [[publisher-flags-are-description-not-body-and-failure-is-silent]],
 [[committed-is-not-reachable-publish-then-verify-on-main]].

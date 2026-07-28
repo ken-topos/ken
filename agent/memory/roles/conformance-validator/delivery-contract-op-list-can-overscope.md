@@ -12,12 +12,15 @@ prose.** A delivery contract that lists an op in its totality/guarantee clause
 can silently **OVER-SCOPE past a settled OUT-boundary** (a sibling WP's
 deliverable). The check is mechanical: **grep whether each op the contract names
 is actually reduced/implemented today, and cross-check the frame's IN/OUT
-scope** — never "does the prose read consistent." Live: F1 `§5.2.1(1)` grouped
-`leq_int` with `eq_int` in the "compare over the true integers" **F1**
-guarantee, but `leq_int` is *registered-but-unreduced* (`eval.rs`, no reduce arm
-— the F5 WP's deliverable) while `eq_int` **is** reduced (`eval.rs:676`, F1).
-Caught by grepping `eval.rs` against the brief's OUT-scope, **not** by reading
-`§5.2.1` (whose clause lumped them). Scope-face of reconcile-don't-cite; sibling
+scope** — never "does the prose read consistent." Live (2026-07, at F1-review
+time — `leq_int` has since landed reduced under F5, so this is a historical
+snapshot of the miss, not a present claim about `leq_int`): F1 `§5.2.1(1)`
+grouped `leq_int` with `eq_int` in the "compare over the true integers" **F1**
+guarantee, but at that point `leq_int` was *registered-but-unreduced* in
+`eval.rs` (no reduce arm — F5's deliverable) while `eq_int` **was already**
+reduced. Caught by grepping `eval.rs` against the brief's OUT-scope, **not**
+by reading `§5.2.1` (whose clause lumped them). Scope-face of
+reconcile-don't-cite; sibling
 of laundered citation authority (an op-list gains false "in-scope" authority by
 sitting in a normative clause no one grepped against the registry row).
 

@@ -29,9 +29,16 @@ closes over) onto whatever sits one slot over — surfaces as a `TypeMismatch`
 that looks unrelated to indexing. **Never manifested under the OLD
 (nullary-only) gate** because a nullary scrutinee (`Bool`, etc.) essentially
 never had another closed-over variable declared before it in the tested corpus.
-Fix: a new `subst_var_generalize` (same traversal as `subst_var`, but the
-`i > j` arm leaves `Var(i)` UNCHANGED instead of decrementing) — used for the
-motive body, the per-ctor `expected_here`, and each IH's type.
+Fix (at the time): a new `subst_var_generalize` (same traversal as
+`subst_var`, but the `i > j` arm leaves `Var(i)` UNCHANGED instead of
+decrementing) — used for the motive body, the per-ctor `expected_here`, and
+each IH's type. ⚠ **Stale referent:** `subst_var_generalize` was replaced by
+`subst_term_generalize` (`crates/ken-elaborator/src/elab.rs`, KM-build
+`25e6c172`, 2026-07-06) — same generalize-the-goal role, but it now matches
+by **term equality against a `target`** (`term == target`, weakened under
+each binder) rather than by a de-Bruijn index threshold. The bug shape and
+fix *principle* (generalize, don't decrement-substitute) still hold; the
+function name and exact mechanism above are historical.
 
 **2. Unzonked universe metavariable reaching the raw kernel.**
 `kernel_infer(cx.env, &cx.ctx, expected)` (a direct call into
