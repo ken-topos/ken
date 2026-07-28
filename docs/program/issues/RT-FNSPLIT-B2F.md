@@ -1,13 +1,13 @@
 ---
 id: RT-FNSPLIT-B2F
 title: "functionization and authority switch — per-static-origin Cranelift target functions, atomic with switch-over, equivalence evidence, and old-path removal"
-status: ready
+status: merged
 owner: runtime
 size: L
 gate: none
 depends_on: [RT-FNSPLIT-B2A-S, RT-FNSPLIT-B2O, RT-FNSPLIT-B2R, RT-FNSPLIT-B2V, RT-FNSPLIT-C1, RT-FNSPLIT-C2-SYNTH-ID, RT-FNSPLIT-C3-ACTIVATION]
 blocks: [RT-SCALE-B, RT-FNSPLIT-B2O-CHECK]
-github: null
+github: 1192
 origin: Architect ruling evt_6h5gw5c503n5z plus amendment evt_25ynt8615r9sk answering Steward Q1-Q3 on merits (2026-07-25), gated behind research advisory evt_4w1rf45d4fkv3. Replaces the D1/D2 half of the retired RT-FNSPLIT-B2A frame. RE-SLICED 2026-07-25 by Architect ruling evt_842spc7t6js1 on hard-stop #9 (research advisory evt_531c4k52mshrn) plus addendum evt_t4fykh52ncb: this node is NOT buildable as one unit and now depends on two inert prerequisites. Steward-filed; Steward owns the replacement frame and AC/control placement.
 ---
 
