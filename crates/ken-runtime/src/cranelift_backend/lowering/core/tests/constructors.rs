@@ -4499,3 +4499,66 @@ fn b2f_d9_the_same_body_takes_the_small_arm_on_a_trimmed_pair() {
          read — if this had limbs, the readback is looking at the wrong node"
     );
 }
+
+/// ⭐⭐ **`D9` — the spillable immediates that carry NO pair, tested on their own
+/// tag.**
+///
+/// ⛔ **Why the `Int` rows do not cover these.** `ProcessExitStatus`,
+/// `BoundedNat` and `StructuralNat` reach the dispatch by a *different route*:
+/// they have no `NativeIntV1` pair, so they skip the marker partition entirely
+/// and are handed a `Small` marker by [`Lowering::carrier_small_marker`]. ⇒ A
+/// suite whose only spillable fixture is an `Int` measures the marker partition
+/// and leaves the three no-pair variants unexecuted — three of the four
+/// contributors to *"63 of 69"* silently untested.
+///
+/// ⭐ **And the tag is the discriminator.** Each of the three has its own
+/// `BoundaryTag`, and reading it back proves the disposition's tag reached
+/// `make_immediate` rather than a hardcoded `ImmediateInt`.
+///
+/// **MEASURED:** a `ProcessExitStatus` transferred through the producer returns
+/// a word tagged `ImmediateExitStatus` carrying its value.
+/// **CLAIMED:** the no-pair spillables reach the dispatch with their own tag.
+/// **THE GAP:** ⚠ this row covers **one** of the three. `BoundedNat` and
+/// `StructuralNat` share the same match arm and the same emitter, but their
+/// constructors are private to the lowering and this rig cannot mint one — ⛔ so
+/// they are argued-by-shared-arm, **not** measured, and that is a residual.
+///
+/// ⚠ Promise class: **durable invariant** — it relates the returned tag to the
+/// disposition's own declared tag, not to a frozen number.
+#[test]
+fn b2f_d9_a_no_pair_spillable_crosses_on_its_own_tag() {
+    let fixture = ac_c7_ctor("Alpha");
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let seed_env = NativeSeedEnvironment::empty();
+    let (_module, code) = ac_c7_try_compile_edge_with_operands(
+        &seed_env,
+        plan,
+        1,
+        |compiler, builder, operands| {
+            let status = Lowered::ProcessExitStatus { value: operands[0] };
+            Ok(compiler.transfer_into_carrier(builder, root, &status)?.word)
+        },
+    )
+    .expect("the no-pair spillable emits");
+    let run: extern "C" fn(*const u64, i64) -> i64 = unsafe { std::mem::transmute(code) };
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = ac_c7_bind_arena(&mut store);
+    let word = crate::boundary_value::BoundaryWord(run(base, 42) as u64);
+    assert_eq!(
+        word.tag(),
+        Some(BoundaryTag::ImmediateExitStatus),
+        "⛔ its OWN tag — an `ImmediateInt` here means the emitter took the \
+         disposition's tag from the wrong place"
+    );
+    assert_eq!(
+        word.signed_payload(),
+        42,
+        "and it carries the status it was handed at run time"
+    );
+    assert_ne!(
+        BoundaryTag::ImmediateExitStatus as u8,
+        BoundaryTag::ImmediateInt as u8,
+        "NON-VACUITY: the two tags must differ, or the assertion above cannot \
+         tell a per-variant tag from a hardcoded one"
+    );
+}
