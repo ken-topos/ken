@@ -226,7 +226,7 @@ fn run_px8j_malformed_recursor_consumer(
         ],
     };
     let recursor = Lowered::ComputationalRecursorClosure {
-        residual: Box::new(Lowered::Closure {
+        residual: Box::new(LoweringOperand::Specialized(Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
             // An inert residual body. This test drives the recursor-malformation
@@ -234,7 +234,7 @@ fn run_px8j_malformed_recursor_consumer(
             // the whole of it — and since B2A-S the carrier *is* the origin, the
             // fixture can no longer pair an arbitrary term with an unrelated tag.
             body: inert_test_static_origin(),
-        }),
+        })),
         activation: ContinuationActivationId(8),
         invocation: RecursorInvocationSegment::new(
             origin,
@@ -521,13 +521,13 @@ fn run_px8ds_edge_consumer(
     let cursor = segment.resume_cursor;
     let activation = ContinuationActivationId(90);
     let recursor = Lowered::ComputationalRecursorClosure {
-        residual: Box::new(Lowered::Closure {
+        residual: Box::new(LoweringOperand::Specialized(Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
             // An inert residual body, as in the PX8J fixture above: the carrier is
             // the origin, and this test never lowers the body.
             body: inert_test_static_origin(),
-        }),
+        })),
         activation,
         invocation: segment,
     };
@@ -4019,7 +4019,15 @@ fn retained_closures_carry_a_static_origin_and_no_body_term() {
     assert_eq!(
         declared_fields(source, "    ComputationalRecursorClosure {"),
         vec![
-            "residual: Box<Lowered>,",
+            // ⚠ `RT-FNSPLIT-C1 AC-C4` widened this field from `Box<Lowered>` on
+            // the Architect's SINGLE-FIELD license, and the pin's own property
+            // is UNCHANGED by that: a `LoweringOperand` residual is still not a
+            // body carrier — no `StaticOriginId`, no `RuntimeExpr`, nothing this
+            // variant could be re-lowered from. It stays out of the covered
+            // population for exactly the reason stated below. ⛔ What would move
+            // it in is a field naming a source body, and that is still what this
+            // inventory equality catches.
+            "residual: Box<LoweringOperand>,",
             "activation: ContinuationActivationId,",
             "invocation: RecursorInvocationSegment,",
         ],

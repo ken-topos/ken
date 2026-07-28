@@ -320,18 +320,66 @@ impl<'a> Lowering<'a> {
         self.lower_computational_match_value_composed(builder, value, &[*head, successor])
     }
 
+    /// ⛔⛔ **`AC-C4` clause 3 — a carried residual is a transferred VALUE, never
+    /// a transferred callable.** So an induction-hypothesis invocation against
+    /// one may not carry source arguments, and this refuses **before** any
+    /// invocation segment is installed or any semantic region entered.
+    ///
+    /// ⭐ **The zero-argument structural IH route is the admitted carried
+    /// route**, and it is the only one. A function-valued recursive field would
+    /// need the residual to *be* a closure over the carrier — the durable
+    /// closure lane the ruling explicitly withholds — so it stays excluded by
+    /// the existing closure-transfer prohibition rather than by a new check.
+    ///
+    /// ⚠ **Why this is a shared associated fn and not four inline `if`s.** Each
+    /// of the four residual consumers reaches its carried arm by a different
+    /// route, and a refusal that drifted at one of them would be a hole with
+    /// three green siblings — the shape `AC-C7` already caught once on this
+    /// node. One body, one message, one place to mutate.
+    ///
+    /// ⚠ Takes a **count**, not a slice: the four consumers hold their argument
+    /// lists in two different forms (source `RuntimeExpr`s on three routes, an
+    /// already-lowered operand vector on the source-machine route), and the
+    /// property is about arity in both. A slice parameter would have forced one
+    /// of them to spell its own refusal.
+    fn reject_carried_residual_arguments(
+        arguments: usize,
+    ) -> Result<(), CraneliftBackendError> {
+        if arguments == 0 {
+            return Ok(());
+        }
+        Err(unsupported(
+            "BoundaryCarrier",
+            format!(
+                "a carried recursive hypothesis is an eliminated value, not a callable, \
+                 so it takes no arguments, but the call provides {arguments}"
+            ),
+        ))
+    }
+
     /// `call_origin` is the origin of the `Call` occurrence `args` belong to.
     #[allow(clippy::too_many_arguments)]
     fn lower_recursor_residual_call(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        residual: &Lowered,
+        residual: &LoweringOperand,
         args: &[RuntimeExpr],
         call_origin: StaticOriginId,
         argument_env: &[LoweringOperand],
         saved_producer_env: &[LoweringOperand],
         outer_eliminators: &[EliminatorFrame<'_>],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        // ⭐⭐ `AC-C4` — the carried residual, taken BEFORE the specialized
+        // shapes so a carried word never reaches a template probe.
+        if let LoweringOperand::Carried(word) = residual {
+            Self::reject_carried_residual_arguments(args.len())?;
+            return self.lower_computational_match_value_composed(
+                builder,
+                LoweringOperand::Carried(*word),
+                outer_eliminators,
+            );
+        }
+        let residual = residual.specialized_ref_at("a pending-let recursor residual")?;
         if let Lowered::BoundedNat(predecessor) = residual {
             if !args.is_empty() {
                 return Err(unsupported(
@@ -561,8 +609,9 @@ impl<'a> Lowering<'a> {
                                     callee @ Lowered::ComputationalRecursorClosure { .. },
                                 )) = producer_env.get(index)
                                 {
-                                    let (residual, boundary) =
-                                        decompose_computational_recursor(callee.clone());
+                                    let (residual, boundary) = decompose_computational_recursor(
+                                        LoweringOperand::Specialized(callee.clone()),
+                                    );
                                     let (activation, invocation) = boundary.expect(
                                         "recursor closure carries a continuation delimiter",
                                     );
@@ -731,7 +780,9 @@ impl<'a> Lowering<'a> {
                     ) => {
                         let checked_ih_invocation =
                             self.mint_checked_computational_ih_instance(&mut callee)?;
-                        let (base, boundary) = decompose_computational_recursor(callee);
+                        let (base, boundary) = decompose_computational_recursor(
+                            LoweringOperand::Specialized(callee),
+                        );
                         let (activation, invocation) =
                             boundary.expect("recursor closure carries an invocation segment");
                         let current = active_recursor_frame(eliminators).ok_or_else(|| {
@@ -761,6 +812,29 @@ impl<'a> Lowering<'a> {
                         )?;
                         let mut composed = installed_oriented_eliminator_frames(&installed);
                         composed.push(EliminatorFrame::InvocationReturn);
+                        // ⭐⭐ `AC-C4` — the carried residual resumes the SAME
+                        // computational eliminator over the carried word, under
+                        // the same semantic-region bracket the specialized
+                        // `BoundedNat` arm below uses. ⛔ Not `specialized_at`,
+                        // ⛔ not a reconstructed `Lowered`, ⛔ not the producer.
+                        if let LoweringOperand::Carried(word) = base {
+                            Self::reject_carried_residual_arguments(args.len())?;
+                            self.enter_oriented_semantic_region(installed.checked);
+                            let returned = self.lower_computational_match_value_composed(
+                                builder,
+                                LoweringOperand::Carried(word),
+                                &composed,
+                            );
+                            self.leave_oriented_semantic_region(installed.checked);
+                            let returned = returned?;
+                            return self.lower_computational_match_value_composed(
+                                builder,
+                                returned,
+                                eliminators,
+                            );
+                        }
+                        let base =
+                            base.specialized_at("a recursor residual in a producer call")?;
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
                                 return Err(unsupported(
@@ -1571,7 +1645,10 @@ impl<'a> Lowering<'a> {
                         .position(|candidate| *candidate == position)
                         .and_then(|index| ih_slots[index]);
                     let induction_hypothesis = self.make_computational_recursor(
-                        args[position].clone(),
+                        // ⭐ `AC-C4` clause 1 — the SPECIALIZED caller wraps
+                        // explicitly, so the phase is stated at the call site
+                        // rather than inferred by the callee.
+                        LoweringOperand::Specialized(args[position].clone()),
                         eliminator.cases.to_vec(),
                         eliminator.default.clone(),
                         eliminator.env.to_vec(),
@@ -2065,7 +2142,7 @@ impl<'a> Lowering<'a> {
                         .position(|candidate| *candidate == position)
                         .and_then(|index| ih_slots[index]);
                     let induction_hypothesis = self.make_computational_recursor(
-                        constructor_args[position].clone(),
+                        LoweringOperand::Specialized(constructor_args[position].clone()),
                         frame.cases.to_vec(),
                         frame.default.clone(),
                         outer_tail.clone(),
@@ -3061,7 +3138,9 @@ impl<'a> Lowering<'a> {
                                         .position(|candidate| *candidate == position)
                                         .and_then(|index| ih_slots[index]);
                                     let induction_hypothesis = self.make_computational_recursor(
-                                        args[position].clone(),
+                                        LoweringOperand::Specialized(
+                                            args[position].clone(),
+                                        ),
                                         cases.clone(),
                                         default.clone(),
                                         env.clone(),
@@ -4061,7 +4140,9 @@ impl<'a> Lowering<'a> {
                         ));
                     }
                 }
-                let (base, boundary) = decompose_computational_recursor(recursor);
+                let (base, boundary) = decompose_computational_recursor(
+                    LoweringOperand::Specialized(recursor),
+                );
                 let (activation, invocation) =
                     boundary.expect("recursor closure carries an invocation segment");
                 if source_active_cursor(
@@ -4094,6 +4175,26 @@ impl<'a> Lowering<'a> {
                         "armed invocation endpoint changed selected cursor",
                     ));
                 }
+                // ⭐⭐ `AC-C4` — the carried residual on the source-machine
+                // route. ⚠ This is the site where "installs the ALREADY-CHECKED
+                // invocation segment" is literal: the refusal below runs
+                // **before** `install_recursor_invocation`, which is exactly the
+                // ordering control 5 measures.
+                if let LoweringOperand::Carried(word) = base {
+                    Self::reject_carried_residual_arguments(args.len())?;
+                    let mut suspended = armed.suspended;
+                    suspended.continuation = self.install_recursor_invocation(
+                        suspended.continuation,
+                        activation,
+                        invocation,
+                        checked_ih_invocation,
+                    )?;
+                    return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
+                        value: LoweringOperand::Carried(word),
+                        control: suspended,
+                    }));
+                }
+                let base = base.specialized_at("a recursor residual in a source call")?;
                 if let Lowered::BoundedNat(predecessor) = base {
                     if !args.is_empty() {
                         return Err(unsupported(
@@ -4612,32 +4713,29 @@ impl<'a> Lowering<'a> {
     /// the arity compared is `argument_binders`, the frame contributes its own
     /// environment, and a case may declare **recursive positions**.
     ///
-    /// ## ⛔ Recursive positions FAIL CLOSED here, and this is a deferral with a
-    /// ## named fork — ⛔ not a discharge of `AC-C4`
+    /// ## ⭐⭐ Recursive positions are BUILT here — `AC-C4`, on the Architect's
+    /// ## single-field license
     ///
-    /// ⚠ Say it plainly, because a deferral that reads as delivery is the
-    /// failure this frame warns about twice: **`AC-C4` asks for the recursive
-    /// positions and this does not deliver them.**
+    /// A recursive position builds an *induction hypothesis* over the child at
+    /// that position. Over a carried scrutinee that child is a **carried word**,
+    /// so the IH's residual must hold one — which
+    /// [`Lowered::ComputationalRecursorClosure::residual`] now does, as a
+    /// `Box<LoweringOperand>`.
     ///
-    /// **Why it is not a matter of effort.** A recursive position builds an
-    /// *induction hypothesis* over the child at that position, and the IH's
-    /// representation is `Lowered::ComputationalRecursorClosure`, whose
-    /// `residual` is a `Box<Lowered>` — a **compile-time template**. Over a
-    /// carried scrutinee the child is a carried word, so the IH would have to
-    /// hold one, and there are only two ways to arrange that:
+    /// ⚠ **This function previously refused recursive positions and named the
+    /// fork for the Architect. That refusal was SCAFFOLD, and the ruling
+    /// rejected the branch it was holding open** — *"the recursive-position
+    /// refusal is not an acceptable `C1` residual."* It is recorded here rather
+    /// than deleted silently, because the arm and a shipped boundary are
+    /// textually the same thing and only the prose says which one this is.
     ///
-    /// - **(A)** widen the recursor's `residual` to a [`LoweringOperand`], so a
-    ///   `Lowered` variant can transitively contain a `Carried`; or
-    /// - **(B)** keep recursive positions specialized-only in this node, with
-    ///   this fail-closed arm and a named residual.
-    ///
-    /// ⛔ **(A) is not mine to choose.** `§2g` rules that a carrier inhabitant
-    /// *inside* `Lowered` is the rejected `B2E` shape; whether a `Lowered`
-    /// variant may **hold** an operand is a different question with the same
-    /// smell, and the two answers lead to materially different futures. That is
-    /// an Architect fork under `COORDINATION §6`, ⛔ not an implementer's call —
-    /// so the arm below refuses, names the fork, and lets the rest of the route
-    /// land.
+    /// ⭐ **The metadata is MINTED exactly as the specialized composed path
+    /// mints it, and ⛔ none of it is derived from the carried word.** Static
+    /// origin, checked-frame id, IH slot templates, activation, cursor and
+    /// producer origin all come from `eliminator` and the compiler's own
+    /// counters — the carried word contributes the *value* and nothing else.
+    /// That separation is the ruling's clause 5, and it is what control 3
+    /// perturbs.
     fn lower_carried_computational_match(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -4668,19 +4766,23 @@ impl<'a> Lowering<'a> {
         builder.append_block_param(merge, types::I64);
 
         for (index, case) in eliminator.cases.iter().enumerate() {
-            // ⛔ THE DEFERRAL, checked before any code is emitted for this case
-            // so nothing is half-published. See this function's doc comment for
-            // the fork this refusal is holding open.
-            if !case.recursive_positions.is_empty() {
-                return Err(unsupported(
-                    "BoundaryCarrier",
-                    format!(
-                        "case {} declares recursive positions, and an induction hypothesis \
-                         over a carried child would require the recursor's residual to hold \
-                         a carried operand — a representation fork the Architect owns",
-                        case.constructor
-                    ),
-                ));
+            // ⛔ Malformed recursive positions are rejected before any code is
+            // emitted for this case, exactly as the specialized composed path
+            // rejects them. ⚠ The bound is `argument_binders` — the case's own
+            // declared arity — and ⛔ NOT anything read off the carried word:
+            // the word's `field_count` is checked against that same arity
+            // below, at runtime, which is where a disagreement belongs.
+            let mut seen = BTreeSet::new();
+            for position in case.recursive_positions.iter().copied() {
+                if !seen.insert(position) || position >= case.argument_binders {
+                    return Err(unsupported(
+                        "ComputationalMatch",
+                        format!(
+                            "case {} has malformed recursive position {position}",
+                            case.constructor
+                        ),
+                    ));
+                }
             }
             let identity = self
                 .static_transition_plan
@@ -4705,13 +4807,78 @@ impl<'a> Lowering<'a> {
             })?;
             Self::require_i64(builder, field_count, binders);
 
-            let mut case_env = Vec::with_capacity(case.argument_binders + eliminator.env.len() + 1);
+            let mut children = Vec::with_capacity(case.argument_binders);
             for position in 0..case.argument_binders {
                 // ⭐ `§2g` — the projected child stays `Carried` into `case_env`.
-                case_env.push(LoweringOperand::Carried(
+                children.push(LoweringOperand::Carried(
                     self.emit_carrier_field(builder, scrutinee, position)?,
                 ));
             }
+
+            // ── ⭐⭐ `AC-C4` — the induction hypotheses over carried children ──
+            //
+            // ⚠ **Order is load-bearing and matches the specialized composed
+            // path exactly:** `[IHs, reversed] ++ [children] ++ [frame env]`.
+            // De Bruijn indices in the case body are positional, so a different
+            // order here would silently rebind every recursive-position body.
+            let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
+            let mut active_scope = None;
+            if !case.recursive_positions.is_empty() {
+                let ih_slots =
+                    self.computational_ih_slots_for_case(case, eliminator.checked_frame_id)?;
+                let activation = self.mint_continuation_activation();
+                let cursor = self.mint_continuation_cursor();
+                let producer_origin = self.mint_recursor_producer_origin();
+                let splice_caller = active_recursor_frame(remaining_eliminators);
+                #[cfg(test)]
+                px8j_record_source_event(Px8jSourceTraceEvent::Mint {
+                    path: Px8jProducerPath::Composed,
+                    origin: producer_origin,
+                    cursor,
+                    siblings: case.recursive_positions.len(),
+                    parent_scope: splice_caller
+                        .and_then(|active| active.selected_scope)
+                        .map(|scope| scope.scope_origin),
+                });
+                for position in case.recursive_positions.iter().rev().copied() {
+                    let slot_template_id = case
+                        .recursive_positions
+                        .iter()
+                        .position(|candidate| *candidate == position)
+                        .and_then(|index| ih_slots[index]);
+                    // ⭐ Clause 1 — the CARRIED arm passes its projected operand
+                    // **directly**. ⛔ No wrap, no `specialized_at`, no template.
+                    let induction_hypothesis = self.make_computational_recursor(
+                        children[position].clone(),
+                        eliminator.cases.to_vec(),
+                        eliminator.default.clone(),
+                        eliminator.env.to_vec(),
+                        eliminator.static_origin,
+                        eliminator.provenance,
+                        eliminator.checked_frame_id,
+                        slot_template_id,
+                        producer_origin,
+                        position,
+                        RecursorLayerRole::SelectsOccurrence {
+                            origin: producer_origin,
+                        },
+                        activation,
+                        cursor,
+                        splice_caller,
+                        None,
+                    )?;
+                    #[cfg(test)]
+                    px8j_record_recursor_carrier(
+                        Px8jProducerPath::Composed,
+                        &induction_hypothesis,
+                    );
+                    induction_hypotheses.push(induction_hypothesis);
+                }
+                active_scope = Some((activation, cursor, producer_origin, splice_caller));
+            }
+
+            let mut case_env = induction_hypotheses;
+            case_env.extend(children);
             // The frame's own environment, with the retained scrutinee inserted
             // where the frame asked for it. ⭐ Retention is phase-preserving:
             // the retained value is the **same carried word**, ⛔ never a
@@ -4731,7 +4898,59 @@ impl<'a> Lowering<'a> {
             let body =
                 self.case_body_occurrence(eliminator.static_origin, index, &case.body)?;
             let body_origin = body.static_origin;
-            let lowered = if remaining_eliminators.is_empty() {
+            let lowered = if let Some((activation, cursor, producer_origin, splice_caller)) =
+                active_scope
+            {
+                // ⭐ A case with recursive positions descends through the SOURCE
+                // MACHINE, as the specialized composed path does — the body's IH
+                // call needs a live continuation to resume into, and that is the
+                // machinery that supplies one. ⛔ The only difference between
+                // this block and its specialized twin is the phase of the
+                // children; every identity below is the frame's.
+                let mut selected_ancestry = splice_caller
+                    .map(|active| active.selected_ancestry.to_vec())
+                    .unwrap_or_default();
+                selected_ancestry.push(eliminator.provenance);
+                let mut pending: Vec<_> = remaining_eliminators
+                    .iter()
+                    .copied()
+                    .filter(|frame| !matches!(frame, EliminatorFrame::Active(_)))
+                    .collect();
+                if let Some(active) = splice_caller {
+                    pending.extend_from_slice(active.pending);
+                }
+                let selected_scope = OwnedSelectedScope {
+                    scope_origin: producer_origin,
+                    parent_scope: splice_caller
+                        .and_then(|active| active.selected_scope)
+                        .map(|scope| scope.scope_origin),
+                    frame: ComputationalRecursorFramePayload {
+                        cases: eliminator.cases.to_vec(),
+                        default: eliminator.default.clone(),
+                        outer_env: eliminator.env.to_vec(),
+                        static_origin: eliminator.static_origin,
+                        provenance: eliminator.provenance,
+                        checked_frame_id: eliminator.checked_frame_id,
+                        checked_invocation_id: eliminator.checked_invocation_id,
+                        checked_invocation_source: eliminator.checked_invocation_source,
+                        checked_invocation_depth: eliminator.checked_invocation_depth,
+                    },
+                };
+                let active_state = ActiveContinuationFrame {
+                    activation,
+                    cursor,
+                    parent: splice_caller.and_then(|active| active.parent),
+                    pending: &pending,
+                    selected_ancestry: &selected_ancestry,
+                    source_lineage: splice_caller
+                        .map(|active| active.source_lineage)
+                        .unwrap_or(&[]),
+                    source_selected_cursor: splice_caller
+                        .and_then(|active| active.source_selected_cursor),
+                    selected_scope: Some(&selected_scope),
+                };
+                self.lower_source_machine(builder, body, &case_env, &active_state)?
+            } else if remaining_eliminators.is_empty() {
                 self.lower_expr(builder, body, &case_env)?
             } else {
                 self.lower_computational_producer_expr(
@@ -5431,7 +5650,9 @@ impl<'a> Lowering<'a> {
                     ) => {
                         let checked_ih_invocation =
                             self.mint_checked_computational_ih_instance(&mut callee)?;
-                        let (base, boundary) = decompose_computational_recursor(callee);
+                        let (base, boundary) = decompose_computational_recursor(
+                            LoweringOperand::Specialized(callee),
+                        );
                         let (activation, invocation) = boundary.expect(
                             "recursor closure carries an invocation segment",
                         );
@@ -5450,6 +5671,21 @@ impl<'a> Lowering<'a> {
                         )?;
                         let mut frames = installed_oriented_eliminator_frames(&installed);
                         frames.push(EliminatorFrame::InvocationReturn);
+                        // ⭐⭐ `AC-C4` — the carried residual on the direct
+                        // `lower_expr` call route.
+                        if let LoweringOperand::Carried(word) = base {
+                            Self::reject_carried_residual_arguments(args.len())?;
+                            self.enter_oriented_semantic_region(installed.checked);
+                            let result = self.lower_computational_match_value_composed(
+                                builder,
+                                LoweringOperand::Carried(word),
+                                &frames,
+                            );
+                            self.leave_oriented_semantic_region(installed.checked);
+                            return result;
+                        }
+                        let base =
+                            base.specialized_at("a recursor residual in a direct call")?;
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
                                 return Err(unsupported(

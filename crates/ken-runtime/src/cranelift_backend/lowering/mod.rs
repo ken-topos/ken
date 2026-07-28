@@ -514,8 +514,42 @@ enum Lowered {
         params: Vec<String>,
         body: StaticOriginId,
     },
+    /// ⭐⭐ **The one `Lowered` child position that is a [`LoweringOperand`], by
+    /// the Architect's `AC-C4` SINGLE-FIELD LICENSE — ⛔ not a precedent.**
+    ///
+    /// `residual` is the value the saved recursor **continues on**. `§2h`'s
+    /// phase closure therefore requires this edge to preserve `Carried`:
+    /// eliminating a carried scrutinee whose case declares a recursive position
+    /// builds an induction hypothesis over a **carried** child, and treating
+    /// that child as a compile-time template is precisely the defect that
+    /// closure exists to forbid.
+    ///
+    /// ⭐ **Why this is not the `§2g` violation it looks like.** The governing
+    /// line is **phase identity, not transitive Rust containment.** `§2g`
+    /// forbids a carried word from *becoming* a `Lowered` inhabitant or
+    /// acquiring a [`LoweredVariant`], a [`BoundaryDisposition`], an encoding
+    /// policy, or an inverse conversion. None of those happens here: the word
+    /// stays typed as a `LoweringOperand` end to end, and the outer object
+    /// remains a specialization-only, in-flight **control capsule**.
+    /// `Specialized` classifies how *that capsule* is consumed; it never
+    /// asserted that every operand edge the capsule owns is itself specialized.
+    ///
+    /// ⛔ **The license is this field and nothing else.** `Constructor`,
+    /// `Record`, `Closure`, `DeclarationClosure` and every other child position
+    /// stay `Lowered`. ⛔ No third `LoweringOperand` variant, ⛔ no
+    /// `Lowered::Boundary`, ⛔ no `Carried -> Lowered` conversion, ⛔ no durable
+    /// closure lane, ⛔ no encoder/decoder row, ⛔ no carrier tag.
+    ///
+    /// ⚠ **The capsule itself stays unconditionally non-transferable, and the
+    /// ORDERING is part of the ruling.** The admission walk must reject a
+    /// `ComputationalRecursorClosure` *before* inspecting or emitting its
+    /// residual — see [`Lowering::boundary_transfer_admissibility`] and the
+    /// [`LoweredVariant::ComputationalRecursorClosure`] `FailClosedForbidden`
+    /// row, both of which match `{ .. }` and refuse without descending. A
+    /// carried residual must not become a way to reach the carrier through a
+    /// capsule that is otherwise refused.
     ComputationalRecursorClosure {
-        residual: Box<Lowered>,
+        residual: Box<LoweringOperand>,
         activation: ContinuationActivationId,
         invocation: RecursorInvocationSegment,
     },
@@ -2734,7 +2768,12 @@ struct OrdinaryEliminatorFrame<'a> {
 }
 #[derive(Clone, Copy)]
 struct PendingLetContinuationFrame<'a> {
-    residual: &'a Lowered,
+    /// ⭐ The same phase-bearing edge as
+    /// [`Lowered::ComputationalRecursorClosure::residual`], borrowed: a pending
+    /// `Let` resumes on exactly the value the capsule it came from carries, so
+    /// narrowing it back to `&Lowered` here would reintroduce the boundary one
+    /// frame later.
+    residual: &'a LoweringOperand,
     args: &'a [RuntimeExpr],
     /// The origin of the `Call` occurrence `args` belong to; argument *i* is
     /// `child(call_origin, 1 + i)`.
@@ -2981,19 +3020,35 @@ impl RecursorInvocationSegment {
         Ok(())
     }
 }
+/// Splits a recursor capsule into the value it continues on and its control
+/// payload.
+///
+/// ⭐ **`AC-C4`: both halves of the signature are phase-bearing.** The input is
+/// an operand because a capsule may itself arrive carried-adjacent; the output
+/// is an operand because the residual may now be a carried word. ⛔ Every
+/// invocation site must classify the returned base **exhaustively, with no
+/// wildcard** — `Specialized(BoundedNat | Closure)` keep their existing
+/// meanings byte-for-byte, and `Carried` installs the already-checked
+/// invocation segment and resumes the same computational eliminator over that
+/// word. ⛔ Never `specialized_at`, never a reconstructed `Lowered`, never back
+/// through the producer.
 fn decompose_computational_recursor(
-    value: Lowered,
+    value: LoweringOperand,
 ) -> (
-    Lowered,
+    LoweringOperand,
     Option<(ContinuationActivationId, RecursorInvocationSegment)>,
 ) {
     match value {
-        Lowered::ComputationalRecursorClosure {
+        LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure {
             residual,
             activation,
             invocation,
-        } => (*residual, Some((activation, invocation))),
-        value => (value, None),
+        }) => (*residual, Some((activation, invocation))),
+        // ⛔ Spelled rather than collapsed into a wildcard: a non-capsule
+        // operand passes through in whichever phase it arrived, and the phase
+        // set stays visibly closed.
+        LoweringOperand::Specialized(value) => (LoweringOperand::Specialized(value), None),
+        LoweringOperand::Carried(word) => (LoweringOperand::Carried(word), None),
     }
 }
 fn checked_invocation_frame_templates(
@@ -5069,7 +5124,7 @@ impl<'a> Lowering<'a> {
     #[allow(clippy::too_many_arguments)]
     fn make_computational_recursor(
         &mut self,
-        recursive: Lowered,
+        recursive: LoweringOperand,
         cases: Vec<crate::RuntimeComputationalMatchCase>,
         default: RuntimeTrap,
         outer_env: Vec<LoweringOperand>,
