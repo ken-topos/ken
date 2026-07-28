@@ -815,6 +815,27 @@ were skipped. ⛔ An AC with no control is invisible to review: *"discharged"* a
 4. **The scaling verdict is not touched.** `RT-SCALE-B` and the operator's
    n=3..7 gate are downstream of `B2F`, not of this node. ⛔ Do not report any
    per-function growth or scaling claim from this work.
+5. ⛔ **`AC-C4`'s carried case-binder projection is pinned at ARITY 2 ONLY.**
+   Control 7 runs a single arity-2 fixture, so the partition is by **whether a
+   defect manifests at arity 2** — ⛔ not by which fields move:
+
+   | defect class | control 7 | why |
+   |---|---|---|
+   | uniform across arity — e.g. `position → 0` (M8) | ✅ caught | the arity-2 fixture exhibits it |
+   | manifests **only at arity ≥ 3** | ⛔ **entirely unseen** | ⚠ no fixture in this node runs an arity-≥3 case binder at all |
+
+   ⇒ ⭐ **Any projection defect conditional on arity ≥ 3 is UNPINNED.**
+   Permutation of fields ≥ 2 is **one instance, not the boundary** — so are
+   `min(position, 1)`, an off-by-one that only trips past index 1, and any
+   arity-conditional branch. ⛔ A reader checking this residual against the word
+   *"permutation"* would wrongly rule each of those covered.
+   ⚠ **The source comment is narrower than this paragraph and they do not
+   agree.** Control 7's `THE GAP` in `constructors.rs` names permutation alone;
+   it is true but incomplete, and it is non-authoritative test narrative. ⭐
+   **This `§5` entry is the governing statement** (Architect, `dec_35z7g494s9ba4`
+   publication condition; raised by runtime-implementer against its own wording
+   at `evt_767sn0c3m7r0b`). A later unit may widen the comment; ⛔ until it does,
+   do not read the two as saying the same thing.
 
 ## 6. Validation
 
