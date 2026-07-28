@@ -226,6 +226,22 @@ impl CallEdgeTargets {
 /// authority, and ⛔ the claim above is discharged for *resolution* only. The
 /// `direct call rather than call_indirect` half of it has no control yet and is
 /// **not** claimed.
+///
+/// ⛔⛔ **AND THE GAP IS WIDER THAN "no call instruction" — MEASURED, NOT
+/// ESTIMATED.** Replacing `bundle.function(edge.callee())` with
+/// `bundle.function(edge.caller())` — i.e. resolving every call edge to the
+/// **calling** unit instead of the called one, the identity-alias defect
+/// `UnitBundle`'s doc comment warns against — leaves the **entire suite green**:
+/// 498 + 26 + 14, zero failures.
+///
+/// ⇒ ⭐ **Which unit an edge resolves to is currently unpinned.** The `FuncRef`
+/// is declared in the caller's `Function` and never called, so a wrong target is
+/// a reference nobody follows. ⛔ **`S6` must not read this as covered.** The
+/// control that closes it is a *behavioural* one — a program whose answer
+/// depends on which unit ran — and it cannot exist until the call is emitted.
+/// ⚠ `the_resolved_call_edge_population_moves_with_the_program` pins the edge
+/// **count** and is blind to the edge's **destination**; those are different
+/// claims and only the first has a defender today.
 pub(in crate::cranelift_backend) fn resolve_call_edges(
     plan: &StaticTransitionPlan<'_>,
     bundle: &UnitBundle,
