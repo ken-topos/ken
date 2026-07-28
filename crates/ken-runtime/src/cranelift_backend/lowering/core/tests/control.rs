@@ -86,7 +86,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
 fn run_px8j_malformed_recursor_consumer(
     consumer: Px8jDirectRecursorConsumer,
     malformation: Px8jRecursorMalformation,
-) -> Result<Lowered, CraneliftBackendError> {
+) -> Result<LoweringOperand, CraneliftBackendError> {
     let mut module = new_jit_module()?;
     let mut signature = module.make_signature();
     signature.returns.push(AbiParam::new(types::I64));
@@ -259,7 +259,7 @@ fn run_px8j_malformed_recursor_consumer(
         selected_scope: None,
     };
     let active_frames = [EliminatorFrame::Active(active)];
-    let env = [recursor];
+    let env = [LoweringOperand::Specialized(recursor)];
     let mut function_context = FunctionBuilderContext::new();
     let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
     let entry = builder.create_block();
@@ -479,7 +479,7 @@ fn oriented_dynamic_edge_ledger_is_affine_and_sibling_isolated() {
 fn run_px8ds_edge_consumer(
     consumer: Px8jDirectRecursorConsumer,
     mutation: Px8dsEdgeMutation,
-) -> Result<Lowered, CraneliftBackendError> {
+) -> Result<LoweringOperand, CraneliftBackendError> {
     let seed_env = NativeSeedEnvironment::empty();
     let mut compiler = root_authority_test_lowering(&seed_env);
     compiler.native_join_plan = None;
@@ -542,7 +542,7 @@ fn run_px8ds_edge_consumer(
         selected_scope: None,
     };
     let active_frames = [EliminatorFrame::Active(active)];
-    let env = [recursor];
+    let env = [LoweringOperand::Specialized(recursor)];
     let call = RuntimeExpr::Call {
         callee: Box::new(RuntimeExpr::Var(0)),
         args: Vec::new(),

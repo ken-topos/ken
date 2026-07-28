@@ -150,6 +150,7 @@ fn run_dynamic_constructor_dispatch_fixture(
                 static_origin: match_origin,
             },
         )?;
+        let lowered = lowered.specialized_at("this fixture's result")?;
         let value = match lowered {
             Lowered::Trap(trap) => {
                 assert_eq!(trap, default);
@@ -336,11 +337,21 @@ fn dynamic_constructor_fields_precede_outer_environment_in_declaration_order() {
             Lowered::String("second".to_string()),
         ],
     };
-    let env =
-        materialize_dynamic_constructor_env(&alternative, &[Lowered::Bytes(b"outer".to_vec())]);
-    assert!(matches!(&env[0], Lowered::Bytes(value) if value == b"first"));
-    assert!(matches!(&env[1], Lowered::String(value) if value == "second"));
-    assert!(matches!(&env[2], Lowered::Bytes(value) if value == b"outer"));
+    let env = materialize_dynamic_constructor_env(
+        &alternative,
+        &[LoweringOperand::Specialized(Lowered::Bytes(
+            b"outer".to_vec(),
+        ))],
+    );
+    assert!(
+        matches!(&env[0], LoweringOperand::Specialized(Lowered::Bytes(value)) if value == b"first")
+    );
+    assert!(
+        matches!(&env[1], LoweringOperand::Specialized(Lowered::String(value)) if value == "second")
+    );
+    assert!(
+        matches!(&env[2], LoweringOperand::Specialized(Lowered::Bytes(value)) if value == b"outer")
+    );
 }
 
 #[test]

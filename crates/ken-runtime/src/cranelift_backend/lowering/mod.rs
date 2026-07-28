@@ -176,8 +176,13 @@ fn px8tr_deforested_answer_route_enabled() -> bool {
     true
 }
 #[cfg(test)]
-fn px8j_record_recursor_carrier(path: Px8jProducerPath, value: &Lowered) {
-    let Lowered::ComputationalRecursorClosure { invocation, .. } = value else {
+fn px8j_record_recursor_carrier(path: Px8jProducerPath, value: &LoweringOperand) {
+    // ⭐ A trace probe, so it is total over both phases and takes neither
+    // boundary: a carried operand is simply not a recursor carrier, which is the
+    // same "nothing to record" answer any other non-recursor value gets.
+    let LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure { invocation, .. }) =
+        value
+    else {
         return;
     };
     px8j_record_source_event(Px8jSourceTraceEvent::Carrier {
@@ -394,7 +399,7 @@ enum RecursorLayerRole {
 struct ComputationalRecursorFramePayload {
     cases: Vec<crate::RuntimeComputationalMatchCase>,
     default: RuntimeTrap,
-    outer_env: Vec<Lowered>,
+    outer_env: Vec<LoweringOperand>,
     /// The origin of the computational-match occurrence these cases came from,
     /// cloned into this payload **in the same constructor as the cases** so a
     /// later resumption can still derive a case body's origin positionally
@@ -623,6 +628,174 @@ enum LoweringOperand {
     Specialized(Lowered),
     /// A runtime boundary word, eliminated only by emitted helpers.
     Carried(CarriedBoundaryWord),
+}
+
+impl LoweringOperand {
+    /// ⭐ **THE RULED TYPED PHASE BOUNDARY** in front of a specialized-only
+    /// helper — `§2h` ¶2, verbatim: *"Every edge from `LoweringOperand` into
+    /// such a specialized-only helper must first exhaustively classify both
+    /// variants with no wildcard; `Carried` must take its ruled emitted-helper
+    /// route **or fail closed**."*
+    ///
+    /// ⛔ **This is NOT the forbidden `Carried -> Lowered` conversion, and the
+    /// difference is the whole point.** A conversion would *answer* a
+    /// compile-time question about a runtime value; this **refuses** to. The
+    /// `Carried` arm produces an error, never a `Lowered`, so no caller can
+    /// recover a template through it.
+    ///
+    /// ⚠⚠ **THE MISUSE THIS INVITES, NAMED SO A REVIEWER CAN HUNT IT.** Nothing
+    /// in production emits a `Carried` operand yet, so **every** call of this
+    /// method is currently unreachable in its failing arm — which means putting
+    /// it on a *phase-bearing* edge compiles, passes the whole suite, and still
+    /// destroys the closure `§2h` mandates. ⇒ It is legal **only** where the
+    /// callee inspects or destructures the **compile-time template** (a
+    /// primitive's operands, a shape comparison, a constructor-name probe). It
+    /// is ⛔ **illegal** on the three forwarding roles, which must stay
+    /// `LoweringOperand` end to end:
+    ///
+    /// | role | why it may not fail closed here |
+    /// |---|---|
+    /// | environment insertion | `§2h`: a projected `Carried` child must survive `case_env` |
+    /// | recursive lowering call | the callee is in the phase-bearing component, not a leaf |
+    /// | result / join forwarding | a refused join is a lost `Carried`, not a rejected one |
+    ///
+    /// `edge` names the call site in the diagnostic. ⚠ It is a **label, not a
+    /// mechanism** — it makes a misplaced boundary legible in a failure, and
+    /// nothing more.
+    fn specialized_at(self, edge: &'static str) -> Result<Lowered, CraneliftBackendError> {
+        match self {
+            LoweringOperand::Specialized(lowered) => Ok(lowered),
+            LoweringOperand::Carried(_) => Err(unsupported(
+                "BoundaryCarrier",
+                format!(
+                    "{edge} is a specialized-only surface and a carried boundary word has no \
+                     compile-time template for it to read; the carrier's ruled route is an \
+                     emitted helper call"
+                ),
+            )),
+        }
+    }
+
+    /// ⭐ **A BRANCH/JOIN ARM's typed phase boundary — deliberately a distinct
+    /// method from [`Self::specialized_at`], because it records a distinct
+    /// fact.**
+    ///
+    /// `§2h` names *"branch/join forwarding"* phase-bearing, so a join is ⛔
+    /// **not** a specialized-only leaf: the reason a `Carried` fails closed here
+    /// is not *"this surface reads a template"* but *"this join merges native
+    /// scalar lanes and `C1` has not built a carried lane for it."* ⇒ Every call
+    /// of this method is an **inventory entry** for the join work, and
+    /// `grep`ping the name is how that inventory is read back.
+    ///
+    /// ⚠ Collapsing the two into one helper would be the cheaper diff and the
+    /// worse artifact: it would erase, at exactly the sites that need it, the
+    /// difference between a boundary that is *final* and one that is *pending*.
+    fn specialized_join_arm(self, join: &'static str) -> Result<Lowered, CraneliftBackendError> {
+        match self {
+            LoweringOperand::Specialized(lowered) => Ok(lowered),
+            LoweringOperand::Carried(_) => Err(unsupported(
+                "BoundaryCarrier",
+                format!(
+                    "{join} merges native scalar lanes and has no carried lane; a boundary word \
+                     cannot cross it until that join carries the phase"
+                ),
+            )),
+        }
+    }
+
+    /// [`Self::specialized_at`] without consuming the operand — same ruling,
+    /// same prohibitions, for a callee that borrows its template.
+    fn specialized_ref_at(&self, edge: &'static str) -> Result<&Lowered, CraneliftBackendError> {
+        match self {
+            LoweringOperand::Specialized(lowered) => Ok(lowered),
+            LoweringOperand::Carried(_) => Err(unsupported(
+                "BoundaryCarrier",
+                format!(
+                    "{edge} is a specialized-only surface and a carried boundary word has no \
+                     compile-time template for it to read; the carrier's ruled route is an \
+                     emitted helper call"
+                ),
+            )),
+        }
+    }
+}
+
+/// ⭐ The spine's bulk phase boundary — an **environment** of operands rendered
+/// as the specialized templates a specialized-only helper reads.
+///
+/// ⚠ Same ruling and the same ⛔ prohibitions as
+/// [`LoweringOperand::specialized_at`]; this exists because several leaves take
+/// a whole `&[Lowered]` rather than one, and hand-writing the fold at each
+/// would multiply the classification instead of sharing it.
+fn specialized_env_at(
+    env: &[LoweringOperand],
+    edge: &'static str,
+) -> Result<Vec<Lowered>, CraneliftBackendError> {
+    env.iter()
+        .map(|operand| operand.specialized_ref_at(edge).cloned())
+        .collect()
+}
+
+/// ⭐ **THE ONE WAY A LOWERING ENVIRONMENT IS BUILT** — freshly bound
+/// specialized values in front of the enclosing spine.
+///
+/// ⭐ **The spine is forwarded UNCHANGED, and that is the `§2h` property, not
+/// an implementation detail.** The ruling's control clause asks that *"a
+/// projected `Carried` child remains `Carried` through `case_env` and nested
+/// lowering"*; that holds here **structurally** — `outer` is already
+/// `[LoweringOperand]` and every element is cloned, so there is no arm in which
+/// a carried operand could be re-specialized or dropped on the way in.
+///
+/// `bindings` are `Lowered` because a **binder introduces a compile-time
+/// value**: a case's constructor fields, a `Let`'s value, a closure's captures.
+/// ⚠ When a binder can be `Carried` — the projected child of an eliminated
+/// carrier — it does **not** come through this parameter; it is already an
+/// operand and is prepended as one.
+fn env_with(
+    bindings: impl IntoIterator<Item = Lowered>,
+    outer: &[LoweringOperand],
+) -> Vec<LoweringOperand> {
+    bindings
+        .into_iter()
+        .map(LoweringOperand::Specialized)
+        .chain(outer.iter().cloned())
+        .collect()
+}
+
+/// ⭐ **The phase-PRESERVING environment constructor** — for bindings that are
+/// already operands.
+///
+/// ⚠ This is the one that matters for `§2h`'s control clause. [`env_with`]'s
+/// bindings are templates a binder just introduced; **these** are values the
+/// lowering produced, and a projected `Carried` child arrives here. There is no
+/// arm that re-specializes or drops one — it is moved into the environment as
+/// it stands, which is what makes *"remains `Carried` through `case_env` and
+/// nested lowering"* a structural fact rather than a tested one.
+fn env_with_operands(
+    bindings: impl IntoIterator<Item = LoweringOperand>,
+    outer: &[LoweringOperand],
+) -> Vec<LoweringOperand> {
+    bindings.into_iter().chain(outer.iter().cloned()).collect()
+}
+
+/// Append specialized bindings **after** operands already in an environment —
+/// the same rule as [`env_with`], for the sites whose leading bindings are
+/// themselves lowered operands (a call's arguments) and whose trailing ones are
+/// a closure's captured templates.
+fn extend_specialized(env: &mut Vec<LoweringOperand>, bindings: impl IntoIterator<Item = Lowered>) {
+    env.extend(bindings.into_iter().map(LoweringOperand::Specialized));
+}
+
+/// ⭐ The inverse direction, which needs **no** boundary at all: a freshly
+/// constructed specialized value entering the spine.
+///
+/// ⛔ There is deliberately no `From<CarriedBoundaryWord>` counterpart taking a
+/// short cut around [`Lowering::transfer_into_carrier`] — the producer is the
+/// one way in, and it screens admissibility first.
+impl From<Lowered> for LoweringOperand {
+    fn from(lowered: Lowered) -> Self {
+        LoweringOperand::Specialized(lowered)
+    }
 }
 
 /// ⭐ **The ONE-WAY PRODUCER** — `Lowered -> CarriedBoundaryWord`
@@ -2318,11 +2491,9 @@ fn select_dynamic_constructor_case<'a>(
 }
 fn materialize_dynamic_constructor_env(
     alternative: &DynamicConstructorAlternativeV1,
-    env: &[Lowered],
-) -> Vec<Lowered> {
-    let mut arm_env = alternative.fields.clone();
-    arm_env.extend_from_slice(env);
-    arm_env
+    env: &[LoweringOperand],
+) -> Vec<LoweringOperand> {
+    env_with(alternative.fields.clone(), env)
 }
 fn console_stream_tag(value: &Lowered) -> Option<i64> {
     let Lowered::Constructor { constructor, args } = value else {
@@ -2419,7 +2590,7 @@ fn dynamic_host_result_producer_case<'a>(
 struct ComputationalEliminatorFrame<'a> {
     cases: &'a [crate::RuntimeComputationalMatchCase],
     default: &'a RuntimeTrap,
-    env: &'a [Lowered],
+    env: &'a [LoweringOperand],
     /// The origin of the computational-match occurrence these cases belong to.
     /// Case *i*'s body is `child(static_origin, 1 + i)`.
     static_origin: StaticOriginId,
@@ -2435,7 +2606,7 @@ struct ComputationalEliminatorFrame<'a> {
 struct OrdinaryEliminatorFrame<'a> {
     cases: &'a [crate::RuntimeMatchCase],
     default: &'a RuntimeTrap,
-    env: &'a [Lowered],
+    env: &'a [LoweringOperand],
     /// The origin of the **match occurrence these cases belong to**. Case *i*'s
     /// body is `child(static_origin, 1 + i)`; see `SourceContinuation::
     /// MatchScrutinee` for why one parent origin beats a per-case vector.
@@ -2450,7 +2621,7 @@ struct PendingLetContinuationFrame<'a> {
     /// The origin of the `Call` occurrence `args` belong to; argument *i* is
     /// `child(call_origin, 1 + i)`.
     call_origin: StaticOriginId,
-    env: &'a [Lowered],
+    env: &'a [LoweringOperand],
 }
 #[derive(Clone, Copy)]
 struct ActiveContinuationFrame<'a> {
@@ -2467,7 +2638,7 @@ struct ActiveContinuationFrame<'a> {
 struct ComputationalRecursorLayer {
     cases: Vec<crate::RuntimeComputationalMatchCase>,
     default: RuntimeTrap,
-    outer_env: Vec<Lowered>,
+    outer_env: Vec<LoweringOperand>,
     /// The origin of the computational-match occurrence these cases came from,
     /// carried with the clone so a resumed selection can still derive a case
     /// body's origin positionally.
@@ -3584,7 +3755,7 @@ enum SourceContinuation<'a> {
     },
     LetBody {
         body: OwnedSourceOccurrence,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourceContinuation<'a>>,
     },
     ApplyRecursorSelection {
@@ -3599,14 +3770,14 @@ enum SourceContinuation<'a> {
     IfScrutinee {
         then_expr: OwnedSourceOccurrence,
         else_expr: OwnedSourceOccurrence,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourceContinuation<'a>>,
     },
     ConstructArgument {
         constructor: RuntimeSymbol,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<Lowered>,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourceContinuation<'a>>,
     },
     /// ⭐ `static_origin` is the **match occurrence's own** origin, carried in
@@ -3619,14 +3790,14 @@ enum SourceContinuation<'a> {
     MatchScrutinee {
         cases: Vec<crate::RuntimeMatchCase>,
         default: RuntimeTrap,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         static_origin: StaticOriginId,
         next: Box<SourceContinuation<'a>>,
     },
     ComputationalMatchScrutinee {
         cases: Vec<crate::RuntimeComputationalMatchCase>,
         default: RuntimeTrap,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         static_origin: StaticOriginId,
         provenance: RecursorFrameProvenance,
         checked_frame_id: Option<u64>,
@@ -3639,14 +3810,14 @@ enum SourceContinuation<'a> {
     },
     CallCallee {
         args: Vec<OwnedSourceOccurrence>,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourceContinuation<'a>>,
     },
     CallArgument {
-        callee: Lowered,
+        callee: LoweringOperand,
         remaining: Vec<OwnedSourceOccurrence>,
-        lowered: Vec<Lowered>,
-        env: Vec<Lowered>,
+        lowered: Vec<LoweringOperand>,
+        env: Vec<LoweringOperand>,
         next: Box<SourceContinuation<'a>>,
     },
 }
@@ -3708,7 +3879,7 @@ enum SourcePrefixTemplate {
     },
     LetBody {
         body: OwnedSourceOccurrence,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourcePrefixTemplate>,
     },
     ApplyRecursorSelection {
@@ -3723,27 +3894,27 @@ enum SourcePrefixTemplate {
     IfScrutinee {
         then_expr: OwnedSourceOccurrence,
         else_expr: OwnedSourceOccurrence,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourcePrefixTemplate>,
     },
     ConstructArgument {
         constructor: RuntimeSymbol,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<Lowered>,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourcePrefixTemplate>,
     },
     MatchScrutinee {
         cases: Vec<crate::RuntimeMatchCase>,
         default: RuntimeTrap,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         static_origin: StaticOriginId,
         next: Box<SourcePrefixTemplate>,
     },
     ComputationalMatchScrutinee {
         cases: Vec<crate::RuntimeComputationalMatchCase>,
         default: RuntimeTrap,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         static_origin: StaticOriginId,
         provenance: RecursorFrameProvenance,
         checked_frame_id: Option<u64>,
@@ -3756,14 +3927,14 @@ enum SourcePrefixTemplate {
     },
     CallCallee {
         args: Vec<OwnedSourceOccurrence>,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         next: Box<SourcePrefixTemplate>,
     },
     CallArgument {
-        callee: Lowered,
+        callee: LoweringOperand,
         remaining: Vec<OwnedSourceOccurrence>,
-        lowered: Vec<Lowered>,
-        env: Vec<Lowered>,
+        lowered: Vec<LoweringOperand>,
+        env: Vec<LoweringOperand>,
         next: Box<SourcePrefixTemplate>,
     },
 }
@@ -3862,30 +4033,30 @@ enum SourceMachineState<'a> {
     /// same population reached two ways.
     Eval {
         expr: OwnedSourceOccurrence,
-        env: Vec<Lowered>,
+        env: Vec<LoweringOperand>,
         control: SourceControl<'a>,
     },
     Value {
-        value: Lowered,
+        value: LoweringOperand,
         control: SourceControl<'a>,
     },
 }
 enum SourceCallOutcome<'a> {
     Continue(SourceMachineState<'a>),
-    Complete(Lowered),
+    Complete(LoweringOperand),
 }
 #[derive(Clone, Copy)]
 enum DynamicConstructorContinuation<'a> {
     Ordinary {
         cases: &'a [crate::RuntimeMatchCase],
         default: &'a RuntimeTrap,
-        env: &'a [Lowered],
+        env: &'a [LoweringOperand],
         static_origin: StaticOriginId,
     },
     Producer {
         cases: &'a [crate::RuntimeMatchCase],
         default: &'a RuntimeTrap,
-        env: &'a [Lowered],
+        env: &'a [LoweringOperand],
         static_origin: StaticOriginId,
         eliminators: &'a [EliminatorFrame<'a>],
     },
@@ -3920,7 +4091,7 @@ struct DeferredConstructorCaseEnvironment<'a> {
     /// of that constructor is its child *i*, so `trailing_fields[j]` is
     /// `child(construct_origin, selected_field + 1 + j)`.
     construct_origin: StaticOriginId,
-    producer_env: &'a [Lowered],
+    producer_env: &'a [LoweringOperand],
     outer_eliminator: EliminatorFrame<'a>,
     splice_caller: Option<&'a ActiveContinuationFrame<'a>>,
     selected_active: ActiveContinuationFrame<'a>,
@@ -3995,14 +4166,14 @@ fn requires_heterogeneous_deforestation(expr: &RuntimeExpr) -> bool {
 }
 fn reaches_environment_computational_recursor(
     expr: &RuntimeExpr,
-    env: &[Lowered],
+    env: &[LoweringOperand],
     introduced_binders: usize,
 ) -> bool {
     let recursive_hypotheses = env
         .iter()
         .enumerate()
         .filter_map(|(index, value)| {
-            matches!(value, Lowered::ComputationalRecursorClosure { .. })
+            matches!(value, LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure { .. }))
                 .then_some(index + introduced_binders)
         })
         .collect();
@@ -4591,10 +4762,14 @@ impl<'a> Lowering<'a> {
 
     fn finish_checked_computational_ih_marker(
         &mut self,
-        mut value: Lowered,
-    ) -> Result<Lowered, CraneliftBackendError> {
+        value: LoweringOperand,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        // ⭐ The marker consumes a **recursor closure template**; a carried
+        // boundary word is not one and never becomes one, so this is a
+        // specialized-only surface with the ruled fail-closed arm.
+        let mut value = value.specialized_at("a checked computational-IH marker")?;
         let Some(instance) = self.mint_checked_computational_ih_instance(&mut value)? else {
-            return Ok(value);
+            return Ok(LoweringOperand::Specialized(value));
         };
         let Lowered::ComputationalRecursorClosure { invocation, .. } = &mut value else {
             unreachable!("IH instance mint validates one recursor closure")
@@ -4609,7 +4784,7 @@ impl<'a> Lowering<'a> {
         // Existing child-qualified layers remain untouched when later parent
         // wrappers are added to the same flattened carrier.
         instantiate_checked_invocation_segment(plan, instance, invocation)?;
-        Ok(value)
+        Ok(LoweringOperand::Specialized(value))
     }
 
     fn consume_checked_recursive_invocation_call(
@@ -4779,7 +4954,7 @@ impl<'a> Lowering<'a> {
         recursive: Lowered,
         cases: Vec<crate::RuntimeComputationalMatchCase>,
         default: RuntimeTrap,
-        outer_env: Vec<Lowered>,
+        outer_env: Vec<LoweringOperand>,
         static_origin: StaticOriginId,
         provenance: RecursorFrameProvenance,
         checked_frame_id: Option<u64>,
@@ -4794,7 +4969,7 @@ impl<'a> Lowering<'a> {
             &SourceSelectedContinuation<'_>,
             &[SourceSelectedContinuation<'_>],
         )>,
-    ) -> Result<Lowered, CraneliftBackendError> {
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
         let (residual, payload) = decompose_computational_recursor(recursive);
         let active_instance = self.active_recursive_invocations.last().copied();
         // ⛔ **The frame identity is TRANSPORTED, never inferred**
@@ -4960,19 +5135,28 @@ impl<'a> Lowering<'a> {
             computational_ih_slot_template_id,
         );
         invocation.dynamic_splice_edges = segment_dynamic_splice_edges;
-        Ok(Lowered::ComputationalRecursorClosure {
+        Ok(LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure {
             residual: Box::new(residual),
             activation,
             invocation,
-        })
+        }))
     }
 
+    /// ⭐ **A JOIN — `§2h` calls branch/join forwarding phase-bearing, so the
+    /// arm arrives as a [`LoweringOperand`] and the phase boundary is taken
+    /// HERE, once, rather than at each of the callers.**
+    ///
+    /// ⚠ the two-lane native scalar join merges `(tag, payload)` lanes of a native scalar. A carried
+    /// boundary word has no such pair, so it fails closed via
+    /// [`LoweringOperand::specialized_join_arm`] — ⛔ a *pending* boundary, not
+    /// a final one; see that method for why the distinction is kept.
     fn merge_branch_value(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        lowered: Lowered,
+        lowered: LoweringOperand,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, bool), CraneliftBackendError> {
+        let lowered = lowered.specialized_join_arm(construct)?;
         let checked_root_exit_representation = self.has_checked_root_exit_representation();
         let lowered = if checked_root_exit_representation {
             Self::unwrap_terminal_ret(lowered)
@@ -5009,12 +5193,21 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    /// ⭐ **A JOIN — `§2h` calls branch/join forwarding phase-bearing, so the
+    /// arm arrives as a [`LoweringOperand`] and the phase boundary is taken
+    /// HERE, once, rather than at each of the callers.**
+    ///
+    /// ⚠ the tagged native scalar join merges `(tag, payload)` lanes of a native scalar. A carried
+    /// boundary word has no such pair, so it fails closed via
+    /// [`LoweringOperand::specialized_join_arm`] — ⛔ a *pending* boundary, not
+    /// a final one; see that method for why the distinction is kept.
     fn merge_scalar_branch(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        lowered: Lowered,
+        lowered: LoweringOperand,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
+        let lowered = lowered.specialized_join_arm(construct)?;
         let checked_root_exit_representation = self.has_checked_root_exit_representation();
         let lowered = if checked_root_exit_representation {
             Self::unwrap_terminal_ret(lowered)
@@ -5199,13 +5392,17 @@ impl<'a> Lowering<'a> {
     /// checked join site. In particular, process-object mode is not evidence
     /// that an arbitrary constructor is terminal: only an `ExitCode` plan may
     /// invoke the terminal process decoder.
+    /// ⭐ A **planned** join — same phase-bearing role as
+    /// [`Self::merge_scalar_branch`], same pending boundary, and named the same
+    /// way so `grep specialized_join_arm` reaches all three.
     fn merge_planned_scalar_branch(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        lowered: Lowered,
+        lowered: LoweringOperand,
         required_kind: ScalarMergeKind,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
+        let lowered = lowered.specialized_join_arm(construct)?;
         if required_kind == ScalarMergeKind::ExitCode {
             let lowered = Self::unwrap_terminal_ret(lowered);
             let zero_tag = builder.ins().iconst(types::I64, 0);
@@ -5237,7 +5434,7 @@ impl<'a> Lowering<'a> {
                 )),
             };
         }
-        self.merge_scalar_branch(builder, lowered, construct)
+        self.merge_scalar_branch(builder, LoweringOperand::Specialized(lowered), construct)
     }
 
     fn record_merge_kind(
@@ -6255,8 +6452,17 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    fn seal_source_trap_branch(builder: &mut FunctionBuilder<'_>, lowered: &Lowered) -> bool {
-        if matches!(lowered, Lowered::Trap(_)) {
+    /// ⭐ Takes the **operand**, not a template, and needs no phase boundary:
+    /// *"is this branch a trap?"* has a total answer in both phases. A carried
+    /// boundary word is never a trap — `Lowered::Trap` is a compile-time
+    /// refusal, and the producer refuses to transfer one — so the `Carried`
+    /// case answers `false` and the branch is left unsealed, which is the same
+    /// answer any non-trap specialized value gets.
+    fn seal_source_trap_branch(builder: &mut FunctionBuilder<'_>, lowered: &LoweringOperand) -> bool {
+        if matches!(
+            lowered,
+            LoweringOperand::Specialized(Lowered::Trap(_))
+        ) {
             let failure = builder.ins().iconst(types::I64, -4);
             builder.ins().return_(&[failure]);
             true
