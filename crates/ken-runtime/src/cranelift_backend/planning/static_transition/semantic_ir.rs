@@ -1447,6 +1447,43 @@ impl SemanticPlane {
         .ok_or_else(|| planner_error("static origin has no child at that source position"))
     }
 
+    /// The validated function-unit owner of one source occurrence.
+    ///
+    /// Result-phase planning uses this capability rather than exposing the
+    /// descriptor arena: an owner transition is a declared-unit boundary, but
+    /// neither the lowering nor the phase planner may derive an owner from an
+    /// origin ordinal.
+    pub(super) fn owner(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<SemanticOwner, CraneliftBackendError> {
+        let descriptor = self
+            .descriptors
+            .get(origin.0 as usize)
+            .ok_or_else(|| planner_error("static origin is outside the semantic descriptors"))?;
+        if descriptor.origin != origin {
+            return Err(planner_error(
+                "descriptor origin is not its preallocated positional identity",
+            ));
+        }
+        Ok(descriptor.owner)
+    }
+
+    /// Whether a result edge crosses between two distinct function units.
+    ///
+    /// The closed owner vocabulary stays private to this module; consumers ask
+    /// the semantic plane the one question phase propagation needs.
+    pub(super) fn crosses_function_owner(
+        &self,
+        from: StaticOriginId,
+        to: StaticOriginId,
+    ) -> Result<bool, CraneliftBackendError> {
+        Ok(matches!(
+            (self.owner(from)?, self.owner(to)?),
+            (SemanticOwner::Function(left), SemanticOwner::Function(right)) if left != right
+        ))
+    }
+
     /// The function-unit population, the ownership partition, and the edge laws
     /// — each as its own named failure.
     ///

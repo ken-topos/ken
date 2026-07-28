@@ -33,6 +33,7 @@ fn c2_ac2_closed_roles_are_injective_by_spelling_and_canonical_for_duplicates() 
         &BTreeMap::new(),
         &symbols,
         AbiRootIngress::Value,
+        true,
     )
     .expect("the distinct-role fixture plans");
     let file_error = distinct
@@ -67,6 +68,7 @@ fn c2_ac2_closed_roles_are_injective_by_spelling_and_canonical_for_duplicates() 
         &BTreeMap::new(),
         &duplicate_symbols,
         AbiRootIngress::Value,
+        true,
     )
     .expect("the duplicate-spelling fixture plans");
     let duplicate_file_error = duplicate
@@ -230,6 +232,7 @@ fn run_dynamic_constructor_dispatch_fixture(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             terminal_result_origins: BTreeSet::new(),
+            consumed_join_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     };
@@ -1781,6 +1784,7 @@ fn bare_carrier_test_lowering<'src>(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             terminal_result_origins: BTreeSet::new(),
+            consumed_join_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     }
@@ -2344,6 +2348,7 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
         &BTreeMap::new(),
         &symbols,
         AbiRootIngress::Value,
+        true,
     )
     .expect("the C2 producer/consumer fixture plans");
     let root = plan.root_static_origin().expect("root occurrence exists");
@@ -2543,6 +2548,7 @@ fn c2_ac6_host_result_covers_resource_token_and_response_bytes_payloads() {
         &BTreeMap::new(),
         &symbols,
         AbiRootIngress::Value,
+        true,
     )
     .expect("the C2 covered-class fixture plans");
     let origin = plan.root_static_origin().expect("root occurrence exists");

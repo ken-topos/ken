@@ -87,6 +87,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             terminal_result_origins: BTreeSet::new(),
+            consumed_join_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     }
@@ -186,6 +187,7 @@ fn run_px8j_malformed_recursor_consumer(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             terminal_result_origins: BTreeSet::new(),
+            consumed_join_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     };
@@ -2064,6 +2066,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             terminal_result_origins: BTreeSet::new(),
+            consumed_join_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     };
@@ -3905,6 +3908,9 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
             "pub(in crate::cranelift_backend) fn ac4_route_counts() -> (usize, usize) {",
             "pub(in crate::cranelift_backend) fn source_occurrence(",
             "pub(in crate::cranelift_backend) fn child_static_origin(",
+            // `D8` exports one opaque, origin-keyed join-plan token. The token
+            // contains no term and has no public constructor.
+            "pub(in crate::cranelift_backend) fn join_plan_token(",
             // `RT-FNSPLIT-C1` `D1` — the artifact-static identity capability.
             //
             // ⭐ These four are the whole of `D1`, and they are the shape the
@@ -3955,6 +3961,7 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
             "pub(in crate::cranelift_backend) fn emittable_units(",
             "pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(",
             "pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols<'src>(",
+            "pub(in crate::cranelift_backend) fn governed_nested_resource_bracket(",
         ],
         "AC-4 -- the planner's exported surface changed; exactly one of these may \
          return a source term"
@@ -6973,10 +6980,14 @@ fn governed_nested_brackets_n3_through_n7_emit_complete_functionized_bundles() {
         let resolved =
             crate::cranelift_backend::lowering::units::b2f_last_call_edge_resolution();
         let recursive_calls = recursive_position_unit_calls();
+        let (carried_unchanged, specialized_productions) =
+            d8_join_conversion_counts();
         eprintln!(
             "RT_FNSPLIT_RECUR_PORT n={depth} authority=FunctionizedUnits \
              declared={declared} defined={defined} resolved_calls={resolved} \
-             recursive_position_calls={recursive_calls}"
+             recursive_position_calls={recursive_calls} \
+             carried_unchanged={carried_unchanged} \
+             specialized_productions={specialized_productions}"
         );
 
         assert!(declared > 1, "depth {depth} emitted no retained body units");
@@ -6993,7 +7004,146 @@ fn governed_nested_brackets_n3_through_n7_emit_complete_functionized_bundles() {
             "depth {depth} re-lowered every recursive position inline instead \
              of emitting a declared unit call"
         );
+        assert!(
+            carried_unchanged > 0,
+            "depth {depth} never forwarded a carried predecessor unchanged"
+        );
+        assert_eq!(
+            specialized_productions, 0,
+            "the governed bracket's sibling is a trap, not a specialized merge \
+             predecessor"
+        );
     }
+}
+
+fn d8_mixed_host_result_join_fixture(swapped: bool) -> RuntimeExpr {
+    let carried = crate::RuntimeMatchCase {
+        constructor: "ctor:prelude::Result::Ok".to_string(),
+        binders: 1,
+        body: RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(crate::RuntimeValue::Int(11.into()))),
+            }),
+            args: Vec::new(),
+        },
+    };
+    let specialized = crate::RuntimeMatchCase {
+        constructor: "ctor:prelude::Result::Err".to_string(),
+        binders: 1,
+        body: RuntimeExpr::Value(crate::RuntimeValue::Int(7.into())),
+    };
+    RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::BufferAllocate,
+            capability: None,
+            args: vec![RuntimeExpr::Value(crate::RuntimeValue::Int(1.into()))],
+        }),
+        cases: if swapped {
+            vec![specialized, carried]
+        } else {
+            vec![carried, specialized]
+        },
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D8 mixed HostResult default".to_string(),
+        },
+    }
+}
+
+#[test]
+fn d8_mixed_host_result_uses_one_uniform_carrier_conversion_per_predecessor() {
+    for swapped in [false, true] {
+        let expr = d8_mixed_host_result_join_fixture(swapped);
+        recursive_port_process_compiles(&expr).expect("D8 mixed HostResult compiles");
+        assert_eq!(
+            d8_join_conversion_counts(),
+            (1, 1),
+            "arm order changed carried pass-through or specialized production"
+        );
+        assert_eq!(d8_join_merge_count(), 1, "mixed join emitted no unique merge");
+    }
+}
+
+#[test]
+fn d8_all_trap_host_result_emits_no_merge_or_predecessor_conversion() {
+    let mut expr = d8_mixed_host_result_join_fixture(false);
+    let RuntimeExpr::Match { cases, .. } = &mut expr else {
+        unreachable!("D8 fixture is a Match");
+    };
+    for case in cases {
+        case.body = RuntimeExpr::Trap(RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D8 all-trap arm".to_string(),
+        });
+    }
+    recursive_port_process_compiles(&expr).expect("D8 all-trap HostResult compiles");
+    assert_eq!(d8_join_merge_count(), 0);
+    assert_eq!(d8_join_conversion_counts(), (0, 0));
+}
+
+#[test]
+fn d8_unsupported_carrier_production_publishes_no_unit_function() {
+    let mut expr = d8_mixed_host_result_join_fixture(false);
+    let RuntimeExpr::Match { cases, .. } = &mut expr else {
+        unreachable!("D8 fixture is a Match");
+    };
+    let specialized = cases
+        .iter_mut()
+        .find(|case| case.constructor == "ctor:prelude::Result::Err")
+        .expect("D8 fixture has an Err arm");
+    specialized.body = RuntimeExpr::Closure {
+        captures: Vec::new(),
+        params: Vec::new(),
+        body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+    };
+
+    let failure =
+        recursive_port_process_compiles(&expr).expect_err("closure carrier transfer must fail");
+    assert!(matches!(
+        failure,
+        CraneliftBackendError::Unsupported(UnsupportedLowering {
+            construct: "Closure",
+            ref reason,
+        }) if reason.contains("a closure cannot cross the boundary")
+    ));
+    let (declared, defined) =
+        crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
+    assert!(declared > 0, "fixture never reached the unit emission path");
+    assert_eq!(
+        defined, 0,
+        "unsupported carrier production defined a partial unit population"
+    );
+}
+
+#[test]
+fn d8_join_helpers_have_the_closed_typed_caller_population() {
+    let helpers = include_str!("../../mod.rs");
+    let callers = include_str!("../../core.rs");
+    for name in [
+        "merge_branch_value",
+        "merge_scalar_branch",
+        "merge_planned_scalar_branch",
+    ] {
+        assert_eq!(
+            helpers.matches(&format!("fn {name}(")).count(),
+            1,
+            "D8 join helper family changed: {name}"
+        );
+    }
+    assert_eq!(callers.matches(".merge_branch_value(").count(), 4);
+    assert_eq!(callers.matches(".merge_scalar_branch(").count(), 10);
+    assert_eq!(
+        callers.matches(".merge_planned_scalar_branch(").count(),
+        1
+    );
+    assert_eq!(
+        helpers.matches("plan: &JoinPlanToken").count(),
+        3,
+        "every D8 helper must require the unmintable typed plan token"
+    );
 }
 
 /// **`AC-11` clause 3 — an unrepresentable transfer is refused BEFORE any unit

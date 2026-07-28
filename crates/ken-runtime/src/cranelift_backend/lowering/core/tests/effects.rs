@@ -99,6 +99,7 @@ fn run_checked_bounded_nat_fixture(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             terminal_result_origins: BTreeSet::new(),
+            consumed_join_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     };

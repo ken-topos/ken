@@ -172,6 +172,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     {
         C2_UNIT_EMISSION_EPOCH.with(|epoch| epoch.set(Some(0)));
         RECURSIVE_POSITION_UNIT_CALLS.with(|calls| calls.set(0));
+        reset_d8_join_conversion_counts();
     }
     validate_oriented_subcontinuation_transport(
         expr,
@@ -201,6 +202,10 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         } else {
             AbiRootIngress::Value
         },
+        matches!(
+            body_emission_authority,
+            BodyEmissionAuthority::FunctionizedUnits
+        ),
     )?;
     let mut sig = module.make_signature();
     sig.params
@@ -1625,6 +1630,7 @@ impl<'a> Lowering<'a> {
                             eliminators,
                         );
                     }
+                    let join_plan = self.consume_join_plan(static_origin)?;
                     let true_block = builder.create_block();
                     let false_block = builder.create_block();
                     let merge = builder.create_block();
@@ -1645,7 +1651,12 @@ impl<'a> Lowering<'a> {
                             eliminators,
                         )?;
                         let (value, is_exit) =
-                            self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
+                            self.merge_branch_value(
+                                builder,
+                                &join_plan,
+                                lowered,
+                                "ComputationalMatch",
+                            )?;
                         Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
                         builder
                             .ins()
@@ -1672,6 +1683,7 @@ impl<'a> Lowering<'a> {
                     ok_constructor,
                 }) = selected
                 {
+                    let join_plan = self.consume_join_plan(static_origin)?;
                     let ok_block = builder.create_block();
                     let err_block = builder.create_block();
                     let merge = builder.create_block();
@@ -1703,7 +1715,12 @@ impl<'a> Lowering<'a> {
                             LoweringOperand::Specialized(Lowered::Trap(producer_default.clone()))
                         };
                         let (value, is_exit) =
-                            self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
+                            self.merge_branch_value(
+                                builder,
+                                &join_plan,
+                                lowered,
+                                "ComputationalMatch",
+                            )?;
                         Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
                         builder
                             .ins()
@@ -1867,6 +1884,7 @@ impl<'a> Lowering<'a> {
                         eliminators,
                     );
                 }
+                let join_plan = self.consume_join_plan(static_origin)?;
                 let then_block = builder.create_block();
                 let else_block = builder.create_block();
                 let merge = builder.create_block();
@@ -1883,7 +1901,12 @@ impl<'a> Lowering<'a> {
                         eliminators,
                     )?;
                     let (value, is_exit) =
-                        self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
+                        self.merge_branch_value(
+                            builder,
+                            &join_plan,
+                            lowered,
+                            "ComputationalMatch",
+                        )?;
                     Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
                     builder
                         .ins()
@@ -2282,6 +2305,16 @@ impl<'a> Lowering<'a> {
                 unreachable!("active continuation cursors do not consume Nat values")
             }
         };
+        let join_origin = match eliminator {
+            EliminatorFrame::Computational(frame) => frame.static_origin,
+            EliminatorFrame::Ordinary(frame) => frame.static_origin,
+            EliminatorFrame::PendingLet(_)
+            | EliminatorFrame::InvocationReturn
+            | EliminatorFrame::Active(_) => {
+                unreachable!("non-join eliminators returned before bounded-Nat emission")
+            }
+        };
+        let join_plan = self.consume_join_plan(join_origin)?;
 
         let zero_value = builder.ins().iconst(types::I64, 0);
         let zero_nat = if structural {
@@ -2300,7 +2333,7 @@ impl<'a> Lowering<'a> {
             self.lower_computational_producer_expr(builder, zero_body, &zero_frame_env, remaining)?
         };
         let (initial, result_kind) =
-            self.merge_scalar_branch(builder, zero_lowered, "BoundedNat")?;
+            self.merge_scalar_branch(builder, &join_plan, zero_lowered, "BoundedNat")?;
 
         let loop_block = builder.create_block();
         let step_block = builder.create_block();
@@ -2423,7 +2456,8 @@ impl<'a> Lowering<'a> {
         } else {
             self.lower_computational_producer_expr(builder, suc_body, &suc_env, remaining)?
         };
-        let (next, next_kind) = self.merge_scalar_branch(builder, suc_lowered, "BoundedNat")?;
+        let (next, next_kind) =
+            self.merge_scalar_branch(builder, &join_plan, suc_lowered, "BoundedNat")?;
         if next_kind != result_kind {
             return Err(unsupported(
                 "BoundedNat",
@@ -3035,6 +3069,7 @@ impl<'a> Lowering<'a> {
                             };
                             let (value, actual_kind) = self.merge_planned_scalar_branch(
                                 builder,
+                                edge.target.join_plan.as_ref(),
                                 value,
                                 edge.target.required_kind,
                                 "NativeJoinPlanV1",
@@ -3331,6 +3366,7 @@ impl<'a> Lowering<'a> {
                                             value,
                                             true_body,
                                             false_body,
+                                            static_origin,
                                             &env,
                                             control,
                                         );
@@ -3890,6 +3926,8 @@ impl<'a> Lowering<'a> {
                     .next_source_join
                     .checked_add(1)
                     .expect("compiler-private source join identity exhausted");
+                let join_plan =
+                    std::rc::Rc::new(self.consume_join_plan(static_origin)?);
                 let merge = builder.create_block();
                 builder.append_block_param(merge, types::I64);
                 builder.append_block_param(merge, types::I64);
@@ -3907,6 +3945,7 @@ impl<'a> Lowering<'a> {
                         block: merge,
                         expected_outer: suffix_control.terminal_outer,
                         required_kind,
+                        join_plan,
                         terminal_active_prefix: prefix,
                     },
                 )
@@ -4048,6 +4087,7 @@ impl<'a> Lowering<'a> {
         condition: cranelift_codegen::ir::Value,
         true_body: SourceOccurrence<'_>,
         false_body: SourceOccurrence<'_>,
+        static_origin: StaticOriginId,
         env: &[LoweringOperand],
         suffix_control: SourceControl<'b>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
@@ -4067,6 +4107,8 @@ impl<'a> Lowering<'a> {
                     .next_source_join
                     .checked_add(1)
                     .expect("compiler-private source join identity exhausted");
+                let join_plan =
+                    std::rc::Rc::new(self.consume_join_plan(static_origin)?);
                 let merge = builder.create_block();
                 builder.append_block_param(merge, types::I64);
                 builder.append_block_param(merge, types::I64);
@@ -4082,6 +4124,7 @@ impl<'a> Lowering<'a> {
                     block: merge,
                     expected_outer: suffix_control.terminal_outer,
                     required_kind,
+                    join_plan,
                     terminal_active_prefix: prefix,
                 }
             }
@@ -4184,6 +4227,8 @@ impl<'a> Lowering<'a> {
                     .next_source_join
                     .checked_add(1)
                     .expect("compiler-private source join identity exhausted");
+                let join_plan =
+                    std::rc::Rc::new(self.consume_join_plan(static_origin)?);
                 let merge = builder.create_block();
                 builder.append_block_param(merge, types::I64);
                 builder.append_block_param(merge, types::I64);
@@ -4199,6 +4244,7 @@ impl<'a> Lowering<'a> {
                     block: merge,
                     expected_outer: suffix_control.terminal_outer,
                     required_kind,
+                    join_plan,
                     terminal_active_prefix: prefix,
                 }
             }
@@ -4445,6 +4491,7 @@ impl<'a> Lowering<'a> {
             .next_source_join
             .checked_add(1)
             .expect("compiler-private source join identity exhausted");
+        let join_plan = std::rc::Rc::new(self.consume_join_plan(static_origin)?);
         let merge = builder.create_block();
         builder.append_block_param(merge, types::I64);
         builder.append_block_param(merge, types::I64);
@@ -4453,6 +4500,7 @@ impl<'a> Lowering<'a> {
             block: merge,
             expected_outer: suffix_control.terminal_outer,
             required_kind,
+            join_plan,
             terminal_active_prefix: prefix,
         };
         let (source_prefix_template, terminal) =
@@ -5101,7 +5149,11 @@ impl<'a> Lowering<'a> {
         join: &'static str,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
         match lowered {
-            LoweringOperand::Carried(word) => Ok(word),
+            LoweringOperand::Carried(word) => {
+                #[cfg(test)]
+                D8_CARRIED_JOIN_UNCHANGED.with(|count| count.set(count.get() + 1));
+                Ok(word)
+            }
             // ── ⛔ DEFERRED, said plainly ──────────────────────────────────
             //
             // ⚠ A deferral is honest; a deferral that reads as delivery is not.
@@ -5119,6 +5171,8 @@ impl<'a> Lowering<'a> {
                 ),
             )),
             LoweringOperand::Specialized(lowered) => {
+                #[cfg(test)]
+                D8_SPECIALIZED_JOIN_PRODUCTIONS.with(|count| count.set(count.get() + 1));
                 let terminal_exit = self.process_object
                     && self
                         .function_local
@@ -6468,6 +6522,7 @@ impl<'a> Lowering<'a> {
                         let body = self.case_body_occurrence(static_origin, index, &case.body)?;
                         return self.lower_expr(builder, body, env);
                     }
+                    let join_plan = self.consume_join_plan(static_origin)?;
                     let true_block = builder.create_block();
                     let false_block = builder.create_block();
                     let merge = builder.create_block();
@@ -6484,7 +6539,7 @@ impl<'a> Lowering<'a> {
                         let body = self.case_body_occurrence(static_origin, index, &case.body)?;
                         let lowered = self.lower_expr(builder, body, env)?;
                         let (value, branch_kind) =
-                            self.merge_scalar_branch(builder, lowered, "Match")?;
+                            self.merge_scalar_branch(builder, &join_plan, lowered, "Match")?;
                         Self::record_scalar_merge_kind(
                             "Match",
                             &mut merge_kind,
@@ -7978,6 +8033,7 @@ impl<'a> Lowering<'a> {
     fn lower_unary_recursive_nat_fold(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        join_origin: StaticOriginId,
         symbol: &RuntimeSymbol,
         captures: &[Lowered],
         argument: Lowered,
@@ -7985,6 +8041,7 @@ impl<'a> Lowering<'a> {
         suc_body: SourceOccurrence<'_>,
         producer_env: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let join_plan = self.consume_join_plan(join_origin)?;
         let (target, structural) = match argument {
             Lowered::StructuralNat(nat) => (nat.value, true),
             Lowered::BoundedNat(nat) => (nat.value, false),
@@ -8006,7 +8063,7 @@ impl<'a> Lowering<'a> {
         zero_env.extend_from_slice(producer_env);
         let zero_lowered = self.lower_expr(builder, zero_body, &zero_env)?;
         let (initial, result_kind) =
-            self.merge_scalar_branch(builder, zero_lowered, "DeclarationRef")?;
+            self.merge_scalar_branch(builder, &join_plan, zero_lowered, "DeclarationRef")?;
         if result_kind == ScalarMergeKind::RecursiveBackedge {
             return Err(unsupported(
                 "DeclarationRef",
@@ -8076,7 +8133,8 @@ impl<'a> Lowering<'a> {
         suc_env.extend_from_slice(producer_env);
         let next = self.lower_expr(builder, suc_body, &suc_env);
         self.active_recursive_declarations.pop();
-        let (next, next_kind) = self.merge_scalar_branch(builder, next?, "DeclarationRef")?;
+        let (next, next_kind) =
+            self.merge_scalar_branch(builder, &join_plan, next?, "DeclarationRef")?;
         if next_kind != result_kind {
             return Err(unsupported(
                 "DeclarationRef",
@@ -8231,6 +8289,7 @@ impl<'a> Lowering<'a> {
                             self.case_body_occurrence(body.static_origin, suc_index, &suc.body)?;
                         return self.lower_unary_recursive_nat_fold(
                             builder,
+                            body.static_origin,
                             symbol,
                             captures,
                             lowered_args
@@ -8246,6 +8305,7 @@ impl<'a> Lowering<'a> {
             }
         }
 
+        let join_plan = self.consume_join_plan(call_origin)?;
         let header = builder.create_block();
         let done = builder.create_block();
         let mut initial_values = Vec::new();
@@ -8309,7 +8369,8 @@ impl<'a> Lowering<'a> {
         };
         self.active_recursive_declarations.pop();
         let lowered = lowered?;
-        let (value, result_kind) = self.merge_scalar_branch(builder, lowered, "DeclarationRef")?;
+        let (value, result_kind) =
+            self.merge_scalar_branch(builder, &join_plan, lowered, "DeclarationRef")?;
         builder
             .ins()
             .jump(done, &[value.tag.into(), value.payload.into()]);
@@ -8405,6 +8466,7 @@ impl<'a> Lowering<'a> {
         static_origin: StaticOriginId,
         env: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let join_plan = self.consume_join_plan(static_origin)?;
         let kind = builder
             .ins()
             .load(types::I64, MemFlags::trusted(), pointer, 0);
@@ -8506,7 +8568,8 @@ impl<'a> Lowering<'a> {
             arm_env.extend_from_slice(env);
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
             let lowered = self.lower_expr(builder, body, &arm_env)?;
-            let (value, kind) = self.merge_scalar_branch(builder, lowered, "Match")?;
+            let (value, kind) =
+                self.merge_scalar_branch(builder, &join_plan, lowered, "Match")?;
             Self::record_scalar_merge_kind("Match", &mut merge_kind, kind)?;
             builder
                 .ins()
@@ -8540,6 +8603,7 @@ impl<'a> Lowering<'a> {
         static_origin: StaticOriginId,
         env: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let join_plan = self.consume_join_plan(static_origin)?;
         let merge = builder.create_block();
         builder.append_block_param(merge, types::I64);
         builder.append_block_param(merge, types::I64);
@@ -8569,7 +8633,8 @@ impl<'a> Lowering<'a> {
             let arm_env = env_with(fields, env);
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
             let lowered = self.lower_expr(builder, body, &arm_env)?;
-            let (value, is_exit) = self.merge_branch_value(builder, lowered, "Match")?;
+            let (value, is_exit) =
+                self.merge_branch_value(builder, &join_plan, lowered, "Match")?;
             Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
             builder
                 .ins()
@@ -8602,9 +8667,21 @@ impl<'a> Lowering<'a> {
         static_origin: StaticOriginId,
         env: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let merge = builder.create_block();
-        builder.append_block_param(merge, types::I64);
-        builder.append_block_param(merge, types::I64);
+        // D8: consume the origin-keyed contract before creating a block or
+        // lowering either arm.  The specialized HostResult scrutinee is not a
+        // selector for the result representation.
+        let join_plan = self.consume_join_plan(static_origin)?;
+        let merge = join_plan
+            .has_continuing_predecessor
+            .then(|| builder.create_block());
+        if let Some(merge) = merge {
+            #[cfg(test)]
+            D8_JOIN_MERGES_CREATED.with(|count| count.set(count.get() + 1));
+            builder.append_block_param(merge, types::I64);
+            if join_plan.representation == JoinResultRepresentation::NativeScalarPair {
+                builder.append_block_param(merge, types::I64);
+            }
+        }
         let ok_block = builder.create_block();
         let err_block = builder.create_block();
         let mut merge_kind = None;
@@ -8626,21 +8703,58 @@ impl<'a> Lowering<'a> {
             let arm_env = env_with([payload], env);
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
             let lowered = self.lower_expr(builder, body, &arm_env)?;
-            let (value, branch_kind) = self.merge_scalar_branch(builder, lowered, "Match")?;
-            Self::record_scalar_merge_kind("Match", &mut merge_kind, branch_kind)?;
-            builder
-                .ins()
-                .jump(merge, &[value.tag.into(), value.payload.into()]);
+            if Self::seal_source_trap_branch(builder, &lowered) {
+                continue;
+            }
+            let merge = merge.ok_or_else(|| {
+                backend_module(
+                    "join plan omitted a merge despite a continuing predecessor".to_string(),
+                )
+            })?;
+            match join_plan.representation {
+                JoinResultRepresentation::NativeScalarPair => {
+                    let (value, branch_kind) =
+                        self.merge_scalar_branch(builder, &join_plan, lowered, "Match")?;
+                    Self::record_scalar_merge_kind("Match", &mut merge_kind, branch_kind)?;
+                    builder
+                        .ins()
+                        .jump(merge, &[value.tag.into(), value.payload.into()]);
+                }
+                JoinResultRepresentation::CarrierWord => {
+                    let word =
+                        self.carried_join_arm(builder, body.static_origin, lowered, "Match")?;
+                    builder.ins().jump(merge, &[word.word.into()]);
+                }
+            }
         }
-        builder.switch_to_block(merge);
-        let pair = NativeScalarPairV1 {
-            tag: builder.block_params(merge)[0],
-            payload: builder.block_params(merge)[1],
+        let Some(merge) = merge else {
+            let unreachable_continuation = builder.create_block();
+            builder.switch_to_block(unreachable_continuation);
+            return Ok(LoweringOperand::Specialized(Lowered::Trap(
+                RuntimeTrap {
+                    code: RuntimeTrapCode::PatternMatchFailure,
+                    message: "all HostResult match alternatives trap".to_string(),
+                },
+            )));
         };
-        Ok(LoweringOperand::Specialized(self.lowered_from_scalar_pair(
-            merge_kind.expect("HostResult emits both closed alternatives"),
-            pair,
-        )))
+        builder.switch_to_block(merge);
+        match join_plan.representation {
+            JoinResultRepresentation::NativeScalarPair => {
+                let pair = NativeScalarPairV1 {
+                    tag: builder.block_params(merge)[0],
+                    payload: builder.block_params(merge)[1],
+                };
+                Ok(LoweringOperand::Specialized(self.lowered_from_scalar_pair(
+                    merge_kind.expect("HostResult emits a continuing closed alternative"),
+                    pair,
+                )))
+            }
+            JoinResultRepresentation::CarrierWord => {
+                Ok(LoweringOperand::Carried(CarriedBoundaryWord {
+                    word: builder.block_params(merge)[0],
+                }))
+            }
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -8654,6 +8768,7 @@ impl<'a> Lowering<'a> {
         static_origin: StaticOriginId,
         env: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let join_plan = self.consume_join_plan(static_origin)?;
         let zero = cases.iter().enumerate().find(|(_, case)| {
             case.constructor == self.process_symbols.nat_zero && case.binders == 0
         });
@@ -8698,7 +8813,8 @@ impl<'a> Lowering<'a> {
             arm_env.extend_from_slice(env);
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
             let lowered = self.lower_expr(builder, body, &arm_env)?;
-            let (value, kind) = self.merge_scalar_branch(builder, lowered, "BoundedNat")?;
+            let (value, kind) =
+                self.merge_scalar_branch(builder, &join_plan, lowered, "BoundedNat")?;
             Self::record_scalar_merge_kind("BoundedNat", &mut merge_kind, kind)?;
             builder
                 .ins()
@@ -8732,6 +8848,11 @@ impl<'a> Lowering<'a> {
             DynamicConstructorContinuation::Ordinary { cases, default, .. }
             | DynamicConstructorContinuation::Producer { cases, default, .. } => (cases, default),
         };
+        let static_origin = match continuation {
+            DynamicConstructorContinuation::Ordinary { static_origin, .. }
+            | DynamicConstructorContinuation::Producer { static_origin, .. } => static_origin,
+        };
+        let join_plan = self.consume_join_plan(static_origin)?;
         let has_selected_case = dynamic.alternatives.iter().any(|alternative| {
             source_cases
                 .iter()
@@ -8796,7 +8917,7 @@ impl<'a> Lowering<'a> {
                 }
             };
             let (value, branch_kind) =
-                self.merge_scalar_branch(builder, lowered, "DynamicConstructor")?;
+                self.merge_scalar_branch(builder, &join_plan, lowered, "DynamicConstructor")?;
             Self::record_scalar_merge_kind("DynamicConstructor", &mut merge_kind, branch_kind)?;
             builder.ins().jump(
                 merge.expect("a selected dynamic constructor case owns the merge"),

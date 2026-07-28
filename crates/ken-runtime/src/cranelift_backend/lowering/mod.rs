@@ -75,7 +75,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
     CheckedOrientedMarkerSets, ConstructorIdentity, EmittableUnit, PredeclaredFunctionId,
-    StaticOriginId, StaticTransitionPlan,
+    JoinPlanToken, JoinResultRepresentation, StaticOriginId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]
@@ -481,6 +481,7 @@ impl ArtifactHelpers<'_> {
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             terminal_result_origins: BTreeSet::new(),
+            consumed_join_origins: BTreeSet::new(),
             boundary_carrier: Some(BoundaryCarrierRefs {
                 class: module.declare_func_in_func(self.boundary_value_abi.class, func),
                 tag: module.declare_func_in_func(self.boundary_value_abi.tag, func),
@@ -568,6 +569,10 @@ struct FunctionLocalRefs {
     /// position. Process-exit constructors are normalized only at these
     /// occurrences, never merely because an exit-shaped value appears nested.
     terminal_result_origins: BTreeSet<StaticOriginId>,
+    /// Join-plan entries consumed while defining this function.  Each
+    /// `FunctionLocalRefs` is freshly declared for one generated function, so
+    /// this set cannot alias consumption across unit bodies.
+    consumed_join_origins: BTreeSet<StaticOriginId>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -592,6 +597,36 @@ thread_local! {
     static HOST_CONTEXT_PROPAGATION_MUTATION:
         std::cell::Cell<HostContextPropagationMutation> =
         const { std::cell::Cell::new(HostContextPropagationMutation::Exact) };
+}
+
+#[cfg(test)]
+thread_local! {
+    static D8_CARRIED_JOIN_UNCHANGED: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+    static D8_SPECIALIZED_JOIN_PRODUCTIONS: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+    static D8_JOIN_MERGES_CREATED: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn reset_d8_join_conversion_counts() {
+    D8_CARRIED_JOIN_UNCHANGED.with(|count| count.set(0));
+    D8_SPECIALIZED_JOIN_PRODUCTIONS.with(|count| count.set(0));
+    D8_JOIN_MERGES_CREATED.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+fn d8_join_conversion_counts() -> (usize, usize) {
+    (
+        D8_CARRIED_JOIN_UNCHANGED.with(std::cell::Cell::get),
+        D8_SPECIALIZED_JOIN_PRODUCTIONS.with(std::cell::Cell::get),
+    )
+}
+
+#[cfg(test)]
+fn d8_join_merge_count() -> usize {
+    D8_JOIN_MERGES_CREATED.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]
@@ -1365,6 +1400,29 @@ impl<'a> Lowering<'a> {
             expr,
             &mut self.function_local.terminal_result_origins,
         )
+    }
+
+    /// Take the pre-emission result contract for this exact source join.
+    ///
+    /// Consumption is recorded before a merge block can be created. Re-entering
+    /// the same occurrence in one generated function is therefore a planner /
+    /// lowering disagreement, not an opportunity to choose another signature.
+    fn consume_join_plan(
+        &mut self,
+        origin: StaticOriginId,
+    ) -> Result<JoinPlanToken, CraneliftBackendError> {
+        if !self.function_local.consumed_join_origins.insert(origin) {
+            return Err(backend_module(
+                "one source join consumed its static result plan more than once".to_string(),
+            ));
+        }
+        let token = self.static_transition_plan.join_plan_token(origin)?;
+        if token.origin != origin {
+            return Err(backend_module(
+                "source join consumed a result plan for a different origin".to_string(),
+            ));
+        }
+        Ok(token)
     }
 
     pub(super) fn call_declared_unit(
@@ -5434,6 +5492,7 @@ struct SourceJoinTarget<'a> {
     block: cranelift_codegen::ir::Block,
     expected_outer: ContinuationCursorId,
     required_kind: ScalarMergeKind,
+    join_plan: std::rc::Rc<JoinPlanToken>,
     terminal_active_prefix: Vec<EliminatorFrame<'a>>,
 }
 /// An affine capability for one mutually exclusive predecessor of a checked
@@ -6752,9 +6811,15 @@ impl<'a> Lowering<'a> {
     fn merge_branch_value(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        join_plan: &JoinPlanToken,
         lowered: LoweringOperand,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, bool), CraneliftBackendError> {
+        if join_plan.representation != JoinResultRepresentation::NativeScalarPair {
+            return Err(backend_module(
+                "carrier-result join reached a native-only branch merge consumer".to_string(),
+            ));
+        }
         let lowered = lowered.specialized_join_arm(construct)?;
         let checked_root_exit_representation = self.has_checked_root_exit_representation();
         let lowered = if checked_root_exit_representation {
@@ -6803,9 +6868,15 @@ impl<'a> Lowering<'a> {
     fn merge_scalar_branch(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        join_plan: &JoinPlanToken,
         lowered: LoweringOperand,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
+        if join_plan.representation != JoinResultRepresentation::NativeScalarPair {
+            return Err(backend_module(
+                "carrier-result join reached a native-only scalar merge consumer".to_string(),
+            ));
+        }
         let lowered = lowered.specialized_join_arm(construct)?;
         let checked_root_exit_representation = self.has_checked_root_exit_representation();
         let lowered = if checked_root_exit_representation {
@@ -7000,10 +7071,16 @@ impl<'a> Lowering<'a> {
     fn merge_planned_scalar_branch(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        join_plan: &JoinPlanToken,
         lowered: LoweringOperand,
         required_kind: ScalarMergeKind,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
+        if join_plan.representation != JoinResultRepresentation::NativeScalarPair {
+            return Err(backend_module(
+                "carrier-result join reached a native checked-plan merge consumer".to_string(),
+            ));
+        }
         let lowered = lowered.specialized_join_arm(construct)?;
         if required_kind == ScalarMergeKind::ExitCode {
             let lowered = Self::unwrap_terminal_ret(lowered);
@@ -7036,7 +7113,12 @@ impl<'a> Lowering<'a> {
                 )),
             };
         }
-        self.merge_scalar_branch(builder, LoweringOperand::Specialized(lowered), construct)
+        self.merge_scalar_branch(
+            builder,
+            join_plan,
+            LoweringOperand::Specialized(lowered),
+            construct,
+        )
     }
 
     fn record_merge_kind(
