@@ -2407,6 +2407,37 @@ fn runtime_expr_tag(expr: &RuntimeExpr) -> u32 {
 pub(in crate::cranelift_backend) fn governed_nested_resource_bracket(
     depth: usize,
 ) -> RuntimeExpr {
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum BinderRole {
+        AllocatedBuffer,
+        ScopeArgument,
+        InductionHypothesis,
+        RecursiveResult,
+    }
+
+    #[derive(Clone, Debug, Default)]
+    struct BinderScope(Vec<BinderRole>);
+
+    impl BinderScope {
+        fn bind(&self, role: BinderRole) -> Self {
+            let mut roles = self.0.clone();
+            roles.push(role);
+            Self(roles)
+        }
+
+        fn var(&self, role: BinderRole) -> RuntimeExpr {
+            let index = self
+                .0
+                .iter()
+                .rev()
+                .position(|candidate| *candidate == role)
+                .unwrap_or_else(|| panic!("governed bracket role {role:?} is not in scope"));
+            RuntimeExpr::Var(
+                u32::try_from(index).expect("governed bracket binder depth fits RuntimeExpr::Var"),
+            )
+        }
+    }
+
     fn trap(message: &str) -> crate::RuntimeTrap {
         crate::RuntimeTrap {
             code: crate::RuntimeTrapCode::PatternMatchFailure,
@@ -2424,13 +2455,20 @@ pub(in crate::cranelift_backend) fn governed_nested_resource_bracket(
     if depth == 0 {
         return unit();
     }
-    let body = governed_nested_resource_bracket(depth - 1);
+    let recursive_body = governed_nested_resource_bracket(depth - 1);
+    let closure_scope = BinderScope::default().bind(BinderRole::AllocatedBuffer);
+    let release_scope = closure_scope.bind(BinderRole::RecursiveResult);
     let release = RuntimeExpr::Match {
         scrutinee: Box::new(RuntimeExpr::Effect {
             family: "FS".to_string(),
             operation: ken_host::HostOpV1::BufferFreeze,
             capability: None,
-            args: vec![RuntimeExpr::Var(0)],
+            args: vec![
+                release_scope.var(BinderRole::AllocatedBuffer),
+                RuntimeExpr::Value(crate::RuntimeValue::Int(0.into())),
+                RuntimeExpr::Value(crate::RuntimeValue::Int(1.into())),
+                release_scope.var(BinderRole::AllocatedBuffer),
+            ],
         }),
         cases: vec![
             crate::RuntimeMatchCase {
@@ -2446,25 +2484,30 @@ pub(in crate::cranelift_backend) fn governed_nested_resource_bracket(
         ],
         default: trap("release result"),
     };
+    let closure_body = RuntimeExpr::Let {
+        value: Box::new(recursive_body),
+        body: Box::new(release),
+    };
+    let allocation_scope = BinderScope::default().bind(BinderRole::AllocatedBuffer);
+    let bracket_case_scope = allocation_scope
+        .bind(BinderRole::ScopeArgument)
+        .bind(BinderRole::InductionHypothesis);
     let bracket = RuntimeExpr::ComputationalMatch {
         scrutinee: Box::new(RuntimeExpr::Construct {
             constructor: "ctor:fixture::Bracket::Scope".to_string(),
             args: vec![RuntimeExpr::LexicalClosure {
                 captures: Vec::new(),
                 params: vec!["buffer".to_string()],
-                body: Box::new(body),
+                body: Box::new(closure_body),
             }],
         }),
         cases: vec![crate::RuntimeComputationalMatchCase {
             constructor: "ctor:fixture::Bracket::Scope".to_string(),
             argument_binders: 1,
             recursive_positions: vec![0],
-            body: RuntimeExpr::Let {
-                value: Box::new(RuntimeExpr::Call {
-                    callee: Box::new(RuntimeExpr::Var(0)),
-                    args: vec![unit()],
-                }),
-                body: Box::new(release),
+            body: RuntimeExpr::Call {
+                callee: Box::new(bracket_case_scope.var(BinderRole::InductionHypothesis)),
+                args: vec![bracket_case_scope.var(BinderRole::AllocatedBuffer)],
             },
         }],
         default: trap("bracket scope"),
@@ -2522,6 +2565,215 @@ mod tests {
 
     fn nested_resource_bracket(depth: usize) -> RuntimeExpr {
         governed_nested_resource_bracket(depth)
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum GovernedBracketRole {
+        AllocatedBuffer,
+        ScopeArgument,
+        InductionHypothesis,
+        RecursiveResult,
+    }
+
+    fn role_at(index: u32, outer_to_inner: &[GovernedBracketRole]) -> GovernedBracketRole {
+        outer_to_inner[outer_to_inner.len() - 1 - index as usize]
+    }
+
+    fn assert_governed_bracket_shape(expr: &RuntimeExpr, depth: usize) {
+        if depth == 0 {
+            assert!(matches!(
+                expr,
+                RuntimeExpr::Construct { constructor, args }
+                    if constructor == "ctor:prelude::Unit::MkUnit" && args.is_empty()
+            ));
+            return;
+        }
+
+        let RuntimeExpr::Match {
+            scrutinee,
+            cases,
+            default,
+        } = expr
+        else {
+            panic!("depth {depth} is not allocation-result match");
+        };
+        assert!(matches!(
+            scrutinee.as_ref(),
+            RuntimeExpr::Effect {
+                operation: ken_host::HostOpV1::BufferAllocate,
+                capability: None,
+                args,
+                ..
+            } if matches!(
+                args.as_slice(),
+                [RuntimeExpr::Value(RuntimeValue::Int(value))] if *value == 1.into()
+            )
+        ));
+        assert_eq!(cases.len(), 2, "allocation match lost a trap or success arm");
+        assert!(matches!(
+            &cases[0],
+            RuntimeMatchCase {
+                constructor,
+                binders: 1,
+                body: RuntimeExpr::Trap(_),
+            } if constructor == "ctor:prelude::Result::Err"
+        ));
+        assert_eq!(default.message, "allocate result");
+
+        let RuntimeMatchCase {
+            constructor,
+            binders: 1,
+            body:
+                RuntimeExpr::ComputationalMatch {
+                    scrutinee,
+                    cases,
+                    default,
+                },
+        } = &cases[1]
+        else {
+            panic!("allocation success arm lost its recursive computational match");
+        };
+        assert_eq!(constructor, "ctor:prelude::Result::Ok");
+        assert_eq!(default.message, "bracket scope");
+        assert_eq!(cases.len(), 1, "recursive computational match is not closed");
+
+        let RuntimeExpr::Construct {
+            constructor,
+            args,
+        } = scrutinee.as_ref()
+        else {
+            panic!("recursive scrutinee is not the governed Scope constructor");
+        };
+        assert_eq!(constructor, "ctor:fixture::Bracket::Scope");
+        let [RuntimeExpr::LexicalClosure {
+            captures,
+            params,
+            body,
+        }] = args.as_slice()
+        else {
+            panic!("Scope does not carry exactly one lexical closure");
+        };
+        assert!(captures.is_empty());
+        assert_eq!(params, &["buffer"]);
+
+        let RuntimeComputationalMatchCase {
+            constructor,
+            argument_binders: 1,
+            recursive_positions,
+            body: case_body,
+        } = &cases[0]
+        else {
+            panic!("recursive Scope arm changed binder arity");
+        };
+        assert_eq!(constructor, "ctor:fixture::Bracket::Scope");
+        assert_eq!(recursive_positions, &[0]);
+        let RuntimeExpr::Call { callee, args } = case_body else {
+            panic!("recursive Scope arm no longer invokes its induction hypothesis");
+        };
+        let (RuntimeExpr::Var(callee), [RuntimeExpr::Var(argument)]) =
+            (callee.as_ref(), args.as_slice())
+        else {
+            panic!("induction-hypothesis call lost its two semantic binder roles");
+        };
+        let case_roles = [
+            GovernedBracketRole::AllocatedBuffer,
+            GovernedBracketRole::ScopeArgument,
+            GovernedBracketRole::InductionHypothesis,
+        ];
+        assert_eq!(
+            role_at(*callee, &case_roles),
+            GovernedBracketRole::InductionHypothesis
+        );
+        assert_eq!(
+            role_at(*argument, &case_roles),
+            GovernedBracketRole::AllocatedBuffer,
+            "the induction-hypothesis argument is not the allocation result"
+        );
+
+        let RuntimeExpr::Let {
+            value: recursive_body,
+            body: release,
+        } = body.as_ref()
+        else {
+            panic!("lexical closure lost its recursive-before-release ordering");
+        };
+        assert_governed_bracket_shape(recursive_body, depth - 1);
+
+        let RuntimeExpr::Match {
+            scrutinee,
+            cases,
+            default,
+        } = release.as_ref()
+        else {
+            panic!("lexical closure release is not a result match");
+        };
+        assert_eq!(default.message, "release result");
+        assert_eq!(cases.len(), 2, "release match lost a trap or success arm");
+        assert!(matches!(
+            &cases[0],
+            RuntimeMatchCase {
+                constructor,
+                binders: 1,
+                body: RuntimeExpr::Trap(_),
+            } if constructor == "ctor:prelude::Result::Err"
+        ));
+        assert!(matches!(
+            &cases[1],
+            RuntimeMatchCase {
+                constructor,
+                binders: 1,
+                body: RuntimeExpr::Construct {
+                    constructor: unit,
+                    args,
+                },
+            } if constructor == "ctor:prelude::Result::Ok"
+                && unit == "ctor:prelude::Unit::MkUnit"
+                && args.is_empty()
+        ));
+
+        let RuntimeExpr::Effect {
+            operation: ken_host::HostOpV1::BufferFreeze,
+            capability: None,
+            args,
+            ..
+        } = scrutinee.as_ref()
+        else {
+            panic!("release scrutinee is not BufferFreeze");
+        };
+        let [
+            RuntimeExpr::Var(buffer),
+            RuntimeExpr::Value(RuntimeValue::Int(start)),
+            RuntimeExpr::Value(RuntimeValue::Int(length)),
+            RuntimeExpr::Var(span_origin),
+        ] = args.as_slice()
+        else {
+            panic!("BufferFreeze does not have its canonical four operands");
+        };
+        let release_roles = [
+            GovernedBracketRole::AllocatedBuffer,
+            GovernedBracketRole::RecursiveResult,
+        ];
+        assert_eq!(
+            role_at(*buffer, &release_roles),
+            GovernedBracketRole::AllocatedBuffer
+        );
+        assert_eq!(
+            role_at(*span_origin, &release_roles),
+            GovernedBracketRole::AllocatedBuffer
+        );
+        assert_eq!(
+            buffer, span_origin,
+            "resource seats do not name the same closure parameter"
+        );
+        assert_eq!(*start, 0.into());
+        assert_eq!(*length, 1.into());
+    }
+
+    #[test]
+    fn governed_nested_bracket_uses_canonical_four_seat_binder_roles() {
+        for depth in 3..=7 {
+            assert_governed_bracket_shape(&nested_resource_bracket(depth), depth);
+        }
     }
 
     fn assert_fixed_helper_identity_shape(key: PlannedHelperKey) {
