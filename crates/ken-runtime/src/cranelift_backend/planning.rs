@@ -13,8 +13,15 @@ use crate::{RuntimeDeclaration, RuntimeDeclarationKind, RuntimeExpr, RuntimeProg
 
 mod static_transition;
 
+pub(super) use static_transition::plan_static_transition_graph_with_symbols;
+#[cfg(test)]
 pub(super) use static_transition::plan_static_transition_graph;
-pub(super) use static_transition::{StaticOriginId, StaticTransitionPlan};
+pub(super) use static_transition::{
+    ConstructorIdentity, StaticOriginId, StaticTransitionPlan, SynthesizedConstructorRole,
+    SynthesizedFixedConstructorRole,
+};
+#[cfg(test)]
+pub(super) use static_transition::with_last_io_error_role_omitted;
 
 pub(super) fn native_join_plan_for_program(
     program: &RuntimeProgram,

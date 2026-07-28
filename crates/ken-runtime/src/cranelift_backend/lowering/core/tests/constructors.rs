@@ -16,6 +16,110 @@ use crate::nc5_seed_examples;
 use crate::cranelift_backend::artifact::native_platform_target_name_for_lowering_tests as native_platform_target_name;
 use crate::fnv1a_64;
 
+fn test_synthesized_constructor_identity() -> ConstructorIdentity {
+    inert_test_plan()
+        .synthesized_constructor_identity(SynthesizedConstructorRole::Fixed(
+            SynthesizedFixedConstructorRole::Unit,
+        ))
+        .expect("the inert plan inventories the fixed Unit role")
+}
+
+#[test]
+fn c2_ac2_closed_roles_are_injective_by_spelling_and_canonical_for_duplicates() {
+    let expr = RuntimeExpr::Value(RuntimeValue::Bool(true));
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let distinct =
+        plan_static_transition_graph_with_symbols(&expr, &BTreeMap::new(), &symbols)
+            .expect("the distinct-role fixture plans");
+    let file_error = distinct
+        .synthesized_constructor_identity(SynthesizedConstructorRole::Fixed(
+            SynthesizedFixedConstructorRole::FileError,
+        ))
+        .expect("FileError is inventoried");
+    let unit = distinct
+        .synthesized_constructor_identity(SynthesizedConstructorRole::Fixed(
+            SynthesizedFixedConstructorRole::Unit,
+        ))
+        .expect("Unit is inventoried");
+    assert_ne!(
+        file_error, unit,
+        "distinct synthesized-role spellings must not alias"
+    );
+    assert_eq!(
+        distinct.synthesized_io_error_roles().len(),
+        symbols.io_errors.len(),
+        "the dynamic inventory must be derived from every IOError alternative"
+    );
+    for role in distinct.synthesized_io_error_roles() {
+        distinct
+            .synthesized_constructor_identity(SynthesizedConstructorRole::IoError(*role))
+            .expect("every minted IOError role resolves");
+    }
+
+    let mut duplicate_symbols = symbols;
+    duplicate_symbols.unit = duplicate_symbols.file_error.clone();
+    let duplicate = plan_static_transition_graph_with_symbols(
+        &expr,
+        &BTreeMap::new(),
+        &duplicate_symbols,
+    )
+    .expect("the duplicate-spelling fixture plans");
+    let duplicate_file_error = duplicate
+        .synthesized_constructor_identity(SynthesizedConstructorRole::Fixed(
+            SynthesizedFixedConstructorRole::FileError,
+        ))
+        .expect("FileError is inventoried");
+    let duplicate_unit = duplicate
+        .synthesized_constructor_identity(SynthesizedConstructorRole::Fixed(
+            SynthesizedFixedConstructorRole::Unit,
+        ))
+        .expect("Unit is inventoried");
+    assert_eq!(
+        duplicate_file_error, duplicate_unit,
+        "duplicate role spellings must converge through the plane's one interner"
+    );
+}
+
+#[test]
+fn c2_ac3_missing_dynamic_role_refuses_at_some_zero_unit_epoch() {
+    let expr = RuntimeExpr::Value(RuntimeValue::Bool(true));
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let result = with_last_io_error_role_omitted(|| {
+        compile_expr_into_module(
+            new_jit_module().expect("JIT module constructs"),
+            "c2_missing_role",
+            Linkage::Local,
+            &expr,
+            &NativeSeedEnvironment::empty(),
+            BTreeMap::new(),
+            None,
+            false,
+            Some(&symbols),
+            None,
+            None,
+        )
+    });
+    let error = match result {
+        Ok(_) => panic!("an omitted dynamic role must refuse compilation"),
+        Err(error) => error,
+    };
+    assert!(
+        matches!(
+            error,
+            CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref reason))
+                if reason.contains("IoError")
+                    && reason.contains("absent from the closed inventory")
+        ),
+        "the exact omitted dynamic role must own the refusal: {error:?}"
+    );
+    assert_eq!(
+        c2_unit_emission_epoch(),
+        Some(0),
+        "Some(0) proves compilation reached the pre-emission seam and declared \
+         no unit; None would mean the seam was never observed"
+    );
+}
+
 #[cfg(test)]
 fn run_dynamic_constructor_dispatch_fixture(
     discriminator: i64,
@@ -127,11 +231,13 @@ fn run_dynamic_constructor_dispatch_fixture(
                 DynamicConstructorAlternativeV1 {
                     tag: 0,
                     constructor: "ctor:fixture::Dynamic::Zero".to_string(),
+                    identity: test_synthesized_constructor_identity(),
                     fields: Vec::new(),
                 },
                 DynamicConstructorAlternativeV1 {
                     tag: 1,
                     constructor: "ctor:fixture::Dynamic::One".to_string(),
+                    identity: test_synthesized_constructor_identity(),
                     fields: vec![Lowered::Int {
                         value: builder.ins().iconst(types::I64, 7),
                         known: Some(7),
@@ -282,6 +388,7 @@ fn dynamic_constructor_known_omission_owns_source_default() {
     let alternative = DynamicConstructorAlternativeV1 {
         tag: 0,
         constructor: "ctor:fixture::Dynamic::Missing".to_string(),
+        identity: test_synthesized_constructor_identity(),
         fields: Vec::new(),
     };
     let owned = RuntimeTrap {
@@ -333,6 +440,7 @@ fn dynamic_constructor_fields_precede_outer_environment_in_declaration_order() {
     let alternative = DynamicConstructorAlternativeV1 {
         tag: 7,
         constructor: "ctor:fixture::Dynamic::Pair".to_string(),
+        identity: test_synthesized_constructor_identity(),
         fields: vec![
             Lowered::Bytes(b"first".to_vec()),
             Lowered::String("second".to_string()),
@@ -1741,6 +1849,7 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
     // from the disposition table. The walk is the only thing that sees this.
     let inadmissible = Lowered::Constructor {
         constructor: "ctor:fixture::C1::Wrap".to_string(),
+        synthesized_identity: None,
         args: vec![Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
@@ -1765,6 +1874,7 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
     // ── POSITIVE CONTROL: the same shape, admissible ──────────────────────
     let admissible = Lowered::Constructor {
         constructor: "ctor:fixture::C1::Wrap".to_string(),
+        synthesized_identity: None,
         args: vec![Lowered::Bool {
             value: builder.ins().iconst(types::I64, 1),
             known: Some(true),
@@ -1972,12 +2082,17 @@ fn ac_c7_try_compile_edge<'src>(
         Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
 
     let carrier = BoundaryCarrierRefs {
+        class: module.declare_func_in_func(helpers.class, &mut context.func),
         tag: module.declare_func_in_func(helpers.tag, &mut context.func),
         field_count: module.declare_func_in_func(helpers.field_count, &mut context.func),
         field: module.declare_func_in_func(helpers.field, &mut context.func),
         record_field: module.declare_func_in_func(helpers.record_field, &mut context.func),
+        scalar: module.declare_func_in_func(helpers.scalar, &mut context.func),
+        host_success: module.declare_func_in_func(helpers.host_success, &mut context.func),
+        host_payload: module.declare_func_in_func(helpers.host_payload, &mut context.func),
         alloc: module.declare_func_in_func(helpers.alloc, &mut context.func),
         store_tag_id: module.declare_func_in_func(helpers.store_tag_id, &mut context.func),
+        store_scalar: module.declare_func_in_func(helpers.store_scalar, &mut context.func),
         store_field: module.declare_func_in_func(helpers.store_field, &mut context.func),
         store_name: module.declare_func_in_func(helpers.store_name, &mut context.func),
         make_immediate: module.declare_func_in_func(helpers.make_immediate, &mut context.func),
@@ -2045,6 +2160,416 @@ fn ac_c7_run(code: *const u8, arena: *const u64) -> i64 {
     f(arena)
 }
 
+fn c2_compile_edge_with_arg<'src>(
+    name: &str,
+    seed_env: &'src NativeSeedEnvironment,
+    plan: StaticTransitionPlan<'src>,
+    emit: impl FnOnce(
+        &mut Lowering<'src>,
+        &mut FunctionBuilder<'_>,
+        cranelift_codegen::ir::Value,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError>,
+) -> (cranelift_jit::JITModule, *const u8) {
+    let mut module = new_jit_module().expect("JIT module constructs");
+    let native = crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
+        .expect("native-int graph emits");
+    let boundary_plan = crate::boundary_value::BoundaryEmissionPlan::derive();
+    let helpers = crate::boundary_value_clif::emit_boundary_value_local_graph(
+        &mut module,
+        &native,
+        &boundary_plan,
+    )
+    .expect("boundary carrier graph emits");
+    let pointer = module.target_config().pointer_type();
+    let mut signature = module.make_signature();
+    signature.params.push(AbiParam::new(pointer));
+    signature.params.push(AbiParam::new(types::I64));
+    signature.returns.push(AbiParam::new(types::I64));
+    let func_id = module
+        .declare_function(name, Linkage::Local, &signature)
+        .expect("C2 edge declares");
+    let mut context = module.make_context();
+    context.func =
+        Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
+    let carrier = BoundaryCarrierRefs {
+        class: module.declare_func_in_func(helpers.class, &mut context.func),
+        tag: module.declare_func_in_func(helpers.tag, &mut context.func),
+        field_count: module.declare_func_in_func(helpers.field_count, &mut context.func),
+        field: module.declare_func_in_func(helpers.field, &mut context.func),
+        record_field: module.declare_func_in_func(helpers.record_field, &mut context.func),
+        scalar: module.declare_func_in_func(helpers.scalar, &mut context.func),
+        host_success: module.declare_func_in_func(helpers.host_success, &mut context.func),
+        host_payload: module.declare_func_in_func(helpers.host_payload, &mut context.func),
+        alloc: module.declare_func_in_func(helpers.alloc, &mut context.func),
+        store_tag_id: module.declare_func_in_func(helpers.store_tag_id, &mut context.func),
+        store_scalar: module.declare_func_in_func(helpers.store_scalar, &mut context.func),
+        store_field: module.declare_func_in_func(helpers.store_field, &mut context.func),
+        store_name: module.declare_func_in_func(helpers.store_name, &mut context.func),
+        make_immediate: module.declare_func_in_func(helpers.make_immediate, &mut context.func),
+    };
+    let mut compiler = bare_carrier_test_lowering(seed_env, plan);
+    compiler.boundary_carrier = Some(carrier);
+    let mut function_context = FunctionBuilderContext::new();
+    {
+        let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+        let entry = builder.create_block();
+        builder.append_block_params_for_function_params(entry);
+        builder.switch_to_block(entry);
+        let parameters = builder.block_params(entry).to_vec();
+        compiler.native_int_arena = Some(parameters[0]);
+        let result = emit(&mut compiler, &mut builder, parameters[1])
+            .expect("the C2 carrier edge emits");
+        builder.ins().return_(&[result]);
+        builder.seal_all_blocks();
+        builder.finalize();
+    }
+    module
+        .define_function(func_id, &mut context)
+        .expect("C2 edge defines");
+    module.finalize_definitions().expect("JIT finalizes");
+    let code = module.get_finalized_function(func_id);
+    (module, code)
+}
+
+fn c2_run_edge_with_arg(code: *const u8, arena: *const u64, argument: i64) -> i64 {
+    let function: extern "C" fn(*const u64, i64) -> i64 =
+        unsafe { std::mem::transmute(code) };
+    function(arena, argument)
+}
+
+#[test]
+fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let nested_default = || RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "C2 nested constructor default".to_string(),
+    };
+    let match_expr = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Var(0)),
+        cases: vec![
+            RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: vec![RuntimeMatchCase {
+                        constructor: symbols.wrote.clone(),
+                        binders: 1,
+                        body: RuntimeExpr::Var(0),
+                    }],
+                    default: nested_default(),
+                },
+            },
+            RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: vec![RuntimeMatchCase {
+                        constructor: symbols.read_some.clone(),
+                        binders: 1,
+                        body: RuntimeExpr::Var(0),
+                    }],
+                    default: nested_default(),
+                },
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "C2 HostResult default".to_string(),
+        },
+    };
+    let ordinary_producer_expr = RuntimeExpr::Construct {
+        constructor: symbols.result_ok.clone(),
+        args: vec![RuntimeExpr::Construct {
+            constructor: symbols.read_some.clone(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+        }],
+    };
+    let planned_fixture = RuntimeExpr::Let {
+        value: Box::new(ordinary_producer_expr),
+        body: Box::new(match_expr.clone()),
+    };
+    let plan = plan_static_transition_graph_with_symbols(
+        &planned_fixture,
+        &BTreeMap::new(),
+        &symbols,
+    )
+    .expect("the C2 producer/consumer fixture plans");
+    let root = plan.root_static_origin().expect("root occurrence exists");
+    let ordinary_producer_origin = plan
+        .child_static_origin(root, 0)
+        .expect("the ordinary Result producer occurrence exists");
+    let match_origin = plan
+        .child_static_origin(root, 1)
+        .expect("the shared Result consumer occurrence exists");
+    let read_some = plan
+        .synthesized_constructor_identity(SynthesizedConstructorRole::Fixed(
+            SynthesizedFixedConstructorRole::ReadSome,
+        ))
+        .expect("ReadSome is inventoried")
+        .tag_abi_word()
+        .expect("ReadSome identity projects");
+    let wrote = plan
+        .synthesized_constructor_identity(SynthesizedConstructorRole::Fixed(
+            SynthesizedFixedConstructorRole::Wrote,
+        ))
+        .expect("Wrote is inventoried")
+        .tag_abi_word()
+        .expect("Wrote identity projects");
+    assert_ne!(
+        read_some, wrote,
+        "the two runtime arms need distinct identities or selection is vacuous"
+    );
+
+    let seed_env = NativeSeedEnvironment::empty();
+    let producer_plan = plan.clone();
+    let producer_symbols = symbols.clone();
+    let (_producer_module, producer) = c2_compile_edge_with_arg(
+        "c2_host_result_producer",
+        &seed_env,
+        producer_plan,
+        move |compiler, builder, success| {
+            let true_word = builder.ins().iconst(types::I64, 1);
+            let false_word = builder.ins().iconst(types::I64, 0);
+            let discriminator = builder.ins().iconst(types::I64, 0);
+            let ok_identity = compiler
+                .synthesized_fixed_identity(SynthesizedFixedConstructorRole::ReadSome)?;
+            let ok = Lowered::DynamicConstructor(DynamicConstructorV1 {
+                discriminator,
+                alternatives: vec![DynamicConstructorAlternativeV1 {
+                    tag: 0,
+                    constructor: producer_symbols.read_some.clone(),
+                    identity: ok_identity,
+                    fields: vec![Lowered::Bool {
+                        value: true_word,
+                        known: Some(true),
+                    }],
+                }],
+            });
+            let error = compiler.synthesized_constructor(
+                SynthesizedFixedConstructorRole::Wrote,
+                producer_symbols.wrote.clone(),
+                vec![Lowered::Bool {
+                    value: false_word,
+                    known: Some(false),
+                }],
+            )?;
+            let host_result = Lowered::HostResult {
+                success,
+                error: Box::new(error),
+                ok: Box::new(ok),
+                err_constructor: producer_symbols.result_err.clone(),
+                ok_constructor: producer_symbols.result_ok.clone(),
+            };
+            Ok(compiler
+                .transfer_into_carrier(builder, match_origin, &host_result)?
+                .word)
+        },
+    );
+
+    let ordinary_producer_plan = plan.clone();
+    assert_eq!(
+        ordinary_producer_plan
+            .constructor_symbol_identity(ordinary_producer_origin)
+            .expect("the ordinary Result producer identity exists")
+            .tag_abi_word()
+            .expect("the ordinary Result producer identity projects"),
+        plan.case_constructor_identity(match_origin, 1)
+            .expect("the consumer Result::Ok identity exists")
+            .tag_abi_word()
+            .expect("the consumer Result::Ok identity projects"),
+        "separately generated producer and consumer occurrences in one plan \
+         must converge for Result::Ok"
+    );
+    let ordinary_symbols = symbols.clone();
+    let (_ordinary_producer_module, ordinary_producer) = c2_compile_edge_with_arg(
+        "c2_ordinary_result_producer",
+        &seed_env,
+        ordinary_producer_plan,
+        move |compiler, builder, _| {
+            let true_word = builder.ins().iconst(types::I64, 1);
+            let ordinary_result = Lowered::Constructor {
+                constructor: ordinary_symbols.result_ok.clone(),
+                synthesized_identity: None,
+                args: vec![Lowered::Constructor {
+                    constructor: ordinary_symbols.read_some.clone(),
+                    synthesized_identity: None,
+                    args: vec![Lowered::Bool {
+                        value: true_word,
+                        known: Some(true),
+                    }],
+                }],
+            };
+            Ok(compiler
+                .transfer_into_carrier(
+                    builder,
+                    ordinary_producer_origin,
+                    &ordinary_result,
+                )?
+                .word)
+        },
+    );
+
+    let consumer_plan = plan;
+    let (_consumer_module, consumer) = c2_compile_edge_with_arg(
+        "c2_host_result_consumer",
+        &seed_env,
+        consumer_plan,
+        |compiler, builder, word| {
+            let lowered = compiler.lower_carried_match(
+                builder,
+                CarriedBoundaryWord { word },
+                match match_expr {
+                    RuntimeExpr::Match { ref cases, .. } => cases,
+                    _ => unreachable!("fixture is a Match"),
+                },
+                &RuntimeTrap {
+                    code: RuntimeTrapCode::PatternMatchFailure,
+                    message: "C2 HostResult default".to_string(),
+                },
+                match_origin,
+                &[],
+            )?;
+            let LoweringOperand::Carried(observed) = lowered else {
+                return Err(unsupported(
+                    "HostResult",
+                    "the separately generated consumer recovered a compile-time template",
+                ));
+            };
+            Ok(observed.word)
+        },
+    );
+
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = ac_c7_bind_arena(&mut store);
+    let success_word = c2_run_edge_with_arg(producer, base, 1);
+    let success_observed = c2_run_edge_with_arg(consumer, base, success_word);
+    let true_boundary_word =
+        (1u64 << crate::boundary_value::BOUNDARY_TAG_BITS)
+            | BoundaryTag::ImmediateBool as u64;
+    assert_eq!(
+        success_observed as u64,
+        true_boundary_word,
+        "runtime success must select the DynamicConstructor payload, preserve \
+         its D2 identity, match it through the ordinary tag helper, and project \
+         its field"
+    );
+
+    let error_word = c2_run_edge_with_arg(producer, base, 0);
+    let error_observed = c2_run_edge_with_arg(consumer, base, error_word);
+    assert_eq!(
+        error_observed as u64,
+        BoundaryTag::ImmediateBool as u64,
+        "runtime error must select the synthesized Constructor payload, preserve \
+         its D2 identity, match it through the ordinary tag helper, and project \
+         its field"
+    );
+    assert_ne!(
+        success_observed, error_observed,
+        "the runtime success bit must change the separately generated consumer's answer"
+    );
+
+    let ordinary_word = c2_run_edge_with_arg(ordinary_producer, base, 0);
+    assert!(
+        ordinary_word >= 0,
+        "the separately generated ordinary Result producer must emit a carrier \
+         word, got {ordinary_word}"
+    );
+    let ordinary_observed = c2_run_edge_with_arg(consumer, base, ordinary_word);
+    assert_eq!(
+        ordinary_observed as u64, true_boundary_word,
+        "an ordinary source Result constructor must use the ordinary tag/field \
+         route through the same consumer and project its nested payload"
+    );
+}
+
+#[test]
+fn c2_ac6_host_result_covers_resource_token_and_response_bytes_payloads() {
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let expr = RuntimeExpr::Value(RuntimeValue::Bool(true));
+    let plan =
+        plan_static_transition_graph_with_symbols(&expr, &BTreeMap::new(), &symbols)
+            .expect("the C2 covered-class fixture plans");
+    let origin = plan.root_static_origin().expect("root occurrence exists");
+    let seed_env = NativeSeedEnvironment::empty();
+    let resource = 0x1020_3040_5060_7080_i64;
+    let response_pointer = 0x1122_3344_5566_7788_i64;
+    let response_len = 23_i64;
+
+    let producer_plan = plan.clone();
+    let (_producer_module, producer) = c2_compile_edge_with_arg(
+        "c2_borrowed_payload_producer",
+        &seed_env,
+        producer_plan,
+        move |compiler, builder, success| {
+            let resource = builder.ins().iconst(types::I64, resource);
+            let response_pointer =
+                builder.ins().iconst(types::I64, response_pointer);
+            let response_len = builder.ins().iconst(types::I64, response_len);
+            let result = Lowered::HostResult {
+                success,
+                error: Box::new(Lowered::ResponseBytes {
+                    pointer: response_pointer,
+                    len: response_len,
+                }),
+                ok: Box::new(Lowered::ResourceToken { value: resource }),
+                err_constructor: symbols.result_err.clone(),
+                ok_constructor: symbols.result_ok.clone(),
+            };
+            Ok(compiler
+                .transfer_into_carrier(builder, origin, &result)?
+                .word)
+        },
+    );
+
+    let resource_plan = plan.clone();
+    let (_resource_module, read_resource) = c2_compile_edge_with_arg(
+        "c2_resource_token_consumer",
+        &seed_env,
+        resource_plan,
+        |compiler, builder, word| {
+            let payload = compiler.emit_carrier_host_payload(
+                builder,
+                CarriedBoundaryWord { word },
+            )?;
+            compiler.emit_carrier_scalar(builder, payload)
+        },
+    );
+
+    let (_response_module, read_response) = c2_compile_edge_with_arg(
+        "c2_response_bytes_consumer",
+        &seed_env,
+        plan,
+        |compiler, builder, word| {
+            let payload = compiler.emit_carrier_host_payload(
+                builder,
+                CarriedBoundaryWord { word },
+            )?;
+            let pointer = compiler.emit_carrier_scalar(builder, payload)?;
+            let len = compiler.emit_carrier_field(builder, payload, 0)?;
+            let len = compiler.emit_carrier_scalar(builder, len)?;
+            Ok(builder.ins().bxor(pointer, len))
+        },
+    );
+
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = ac_c7_bind_arena(&mut store);
+    let ok_word = c2_run_edge_with_arg(producer, base, 1);
+    assert_eq!(
+        c2_run_edge_with_arg(read_resource, base, ok_word),
+        resource,
+        "the success arm must preserve and expose the full ResourceToken scalar"
+    );
+
+    let err_word = c2_run_edge_with_arg(producer, base, 0);
+    assert_eq!(
+        c2_run_edge_with_arg(read_response, base, err_word),
+        response_pointer ^ response_len,
+        "the error arm must preserve and expose ResponseBytes pointer and length"
+    );
+}
+
 /// A zero-argument constructor occurrence, so the producer's supported surface
 /// (`Constructor` with no children) carries the whole fixture.
 fn ac_c7_ctor(name: &str) -> RuntimeExpr {
@@ -2057,6 +2582,7 @@ fn ac_c7_ctor(name: &str) -> RuntimeExpr {
 fn ac_c7_lowered_ctor(name: &str) -> Lowered {
     Lowered::Constructor {
         constructor: format!("ctor:fixture::C1::{name}"),
+        synthesized_identity: None,
         args: Vec::new(),
     }
 }
@@ -2241,6 +2767,7 @@ fn ac_c7_wrap(outer: &str, inner: &str) -> RuntimeExpr {
 fn ac_c7_lowered_wrap(outer: &str, inner: &str) -> Lowered {
     Lowered::Constructor {
         constructor: format!("ctor:fixture::C1::{outer}"),
+        synthesized_identity: None,
         args: vec![ac_c7_lowered_ctor(inner)],
     }
 }
@@ -2801,6 +3328,7 @@ fn ac_c4_wrap2(outer: &str, first: &str, second: &str) -> RuntimeExpr {
 fn ac_c4_lowered_wrap2(outer: &str, first: &str, second: &str) -> Lowered {
     Lowered::Constructor {
         constructor: format!("ctor:fixture::C1::{outer}"),
+        synthesized_identity: None,
         args: vec![ac_c7_lowered_ctor(first), ac_c7_lowered_ctor(second)],
     }
 }
@@ -3266,6 +3794,7 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
     ] {
         let inadmissible = Lowered::Constructor {
             constructor: "ctor:fixture::C1::Wrap".to_string(),
+            synthesized_identity: None,
             args: vec![ac_c4_recursor_capsule(residual)],
         };
         let refused = compiler
@@ -3288,6 +3817,7 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
     // ── POSITIVE CONTROL ──────────────────────────────────────────────────
     let admissible = Lowered::Constructor {
         constructor: "ctor:fixture::C1::Wrap".to_string(),
+        synthesized_identity: None,
         args: vec![Lowered::Bool {
             value: builder.ins().iconst(types::I64, 1),
             known: Some(true),
