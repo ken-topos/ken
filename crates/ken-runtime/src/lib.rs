@@ -9,6 +9,9 @@
 //! - Arena page chaining beyond a single flat Vec (`44 §1b`)
 //! - `unknown` propagation (Kleene/Heyting logic, `41 §6`)
 
+/// `RT-FNSPLIT-B2F` `S6` — the fixed activation-services record generated code
+/// receives beside its frame. ⛔ Host runtime services, never a Ken value.
+pub mod activation_services;
 pub mod artifact_validation;
 /// `RT-FNSPLIT-B2V` — the executable boundary-value ABI: one closed 64-bit
 /// tagged word for every source-valued boundary transfer.
@@ -43,6 +46,7 @@ pub mod target_abi;
 pub mod unknown;
 pub mod values;
 
+pub use activation_services::*;
 pub use artifact_validation::*;
 pub use canonical::Canonical;
 pub use cranelift_backend::*;
