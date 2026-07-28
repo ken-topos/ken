@@ -118,7 +118,7 @@ fn declare_list(env: &mut GlobalEnv) -> GlobalId {
 }
 
 fn declare_poly_box(env: &mut GlobalEnv) -> GlobalId {
-    declare_inductive(env, |poly_box| InductiveSpec {
+    declare_inductive(env, |_| InductiveSpec {
         level_params: vec![U],
         params: vec![Term::Type(level_u())],
         indices: vec![],
@@ -185,10 +185,6 @@ fn polymorphic_former_transport_preserves_guest_levels() {
     let poly = env.inductive(poly_box).expect("PolyBox declaration");
     let box_ctor = poly.constructors[1].id;
     let d0 = Term::indformer(family, vec![Level::zero()]);
-    let box_d0 = Term::app(
-        Term::indformer(poly_box, vec![Level::zero()]),
-        d0.clone(),
-    );
     let boxed_leaf = Term::app(
         Term::constructor(box_ctor, vec![Level::zero()]),
         Term::constructor(leaf, vec![Level::zero()]),
@@ -218,7 +214,8 @@ fn polymorphic_former_transport_preserves_guest_levels() {
         params: vec![],
         motive: Box::new(motive.clone()),
         methods: methods.clone(),
-        scrutinee: Box::new(Term::app(
+        indices: vec![],
+        scrut: Box::new(Term::app(
             Term::constructor(wrap, vec![Level::zero()]),
             boxed_leaf.clone(),
         )),
@@ -239,8 +236,6 @@ fn polymorphic_former_transport_preserves_guest_levels() {
     } else {
         panic!("Former lift is not a host elimination");
     }
-    assert!(convert(&env, &Context::new(), &box_d0,
-                    &Term::app(Term::indformer(poly_box, vec![Level::zero()]), d0)));
 }
 
 fn install_test_only_nested_family(env: &mut GlobalEnv, list: GlobalId) -> GlobalId {
