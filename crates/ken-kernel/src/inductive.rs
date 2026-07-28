@@ -851,6 +851,7 @@ fn structured_former_lift_type(
                     &weaken(motive, binder_count as i64),
                     d,
                     parameter_count,
+                    guest_level_args,
                 )?);
             }
         }
@@ -899,6 +900,7 @@ fn structured_lift_type(
     motive: &Term,
     d: GlobalId,
     parameter_count: usize,
+    guest_level_args: &[Level],
 ) -> KernelResult<Term> {
     let field_type = normalize(env, &Context::new(), field_type);
     match shape {
@@ -933,6 +935,7 @@ fn structured_lift_type(
                 &weaken(motive, binder_count as i64),
                 d,
                 parameter_count,
+                guest_level_args,
             )?;
             for domain in actual_domains.into_iter().rev() {
                 lifted = Term::pi(domain, lifted);
@@ -958,6 +961,7 @@ fn structured_lift_type(
                         motive,
                         d,
                         parameter_count,
+                        guest_level_args,
                     )
                 })
                 .transpose()?;
@@ -973,6 +977,7 @@ fn structured_lift_type(
                         motive,
                         d,
                         parameter_count,
+                        guest_level_args,
                     )
                 })
                 .transpose()?;
@@ -1430,6 +1435,7 @@ pub fn method_type(
             &weaken(motive, (n + j) as i64),
             ind.id,
             m,
+            level_args,
         )?;
         ty = Term::pi(ih_ty, ty);
     }
