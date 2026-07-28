@@ -568,27 +568,23 @@ struct CarriedBoundaryWord {
 /// ⭐ **The closed PHASE sum — which phase a lowering operand is in, not what
 /// kind of value it is** (`RT-FNSPLIT-C1` `D3`).
 ///
-/// ⛔ **This is the ruling, recorded in source because it was previously only
-/// in a chat thread and became unretrievable** (the reachable event window is
-/// capped, `offset` is ignored, and it is not a Decision object). Binding text,
-/// from the Runtime leader on the Architect's `§2f` answer:
+/// ⛔ **THE RULING IS `§2g` OF THE C1 FRAME — cite it, do not restate it.**
+/// `docs/program/wp/RT-FNSPLIT-C1-operational-carrier.md §2g` carries Architect
+/// Decision `dec_4te25repm33ph`'s resolution verbatim. Where the frame and any
+/// restatement disagree, **the frame governs**.
 ///
-/// > one private closed phase wrapper
-/// > `LoweringOperand { Specialized(Lowered), Carried(CarriedBoundaryWord) }`;
-/// > `CarriedBoundaryWord` contains only the existing Cranelift SSA boundary
-/// > word — no constructor string, field list, body/template, tag/class, or
-/// > reverse-decoding data. Producer is one-way typed
-/// > `Lowered -> CarriedBoundaryWord`, consuming `BoundaryLocalFuncs`. There is
-/// > no `Carried→Lowered` conversion or compile-time rehydration. `Match`,
-/// > `ComputationalMatch`, and `Project` have explicit `Carried` emitted-helper
-/// > arms; projected children remain `Carried`; existing paths remain explicit
-/// > `Specialized`; every reachable consumer exhaustively classifies both
-/// > phases without wildcard. `Carried` acquires no `LoweredVariant`,
-/// > `BoundaryDisposition`, `AlreadyCarried` policy, or second producer pass.
-/// > Helper IDs are declared into each generated function as callable refs and
-/// > actually called by all three routes. The wrapper is necessary
-/// > infrastructure; executable eliminations plus independent
-/// > producer→validator→eliminator controls are the deliverable.
+/// ⚠ An earlier revision of this comment pasted the ruling text here. That was
+/// a **second authority** — the exact defect this chain keeps paying for — and
+/// it is deleted rather than kept "for convenience": two copies of a ruling
+/// drift silently, and the copy nearest the code is the one a reader trusts.
+///
+/// ⭐ The clause that shapes the surface census, and the one a
+/// three-eliminator reading misses: **environments and result surfaces that can
+/// receive a transferred value carry this wrapper.** Every other clause is
+/// prohibitive; this one *adds* obligated surface.
+///
+/// ⚠ The **name** `LoweringOperand` is this implementation's choice and is not
+/// ruled; the **shape** is.
 ///
 /// ⛔ **NOT a variant of [`Lowered`].** `Lowered` is a compile-time
 /// specialization lattice (`§2f`); a `Lowered::Boundary` inhabitant is the
