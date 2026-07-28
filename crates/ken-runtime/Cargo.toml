@@ -9,6 +9,14 @@ rust-version.workspace = true
 
 description = "Runtime crate — production content-addressed value store (K3)"
 
+# `RT-FNSPLIT-C3-ACTIVATION` `D1` — the linked starter needs ONE Rust runtime
+# authority as its support archive. Copies the landed `ken-host` pattern
+# (`ken-host/Cargo.toml`), which is why this is a copy rather than an invention.
+# ⛔ The starter links `libken_runtime.a` and NOT also `libken_host.a`: this
+# archive already owns the direction `ken-runtime -> ken-host`.
+[lib]
+crate-type = ["rlib", "staticlib"]
+
 [features]
 px8-ds-test-support = []
 

@@ -16,6 +16,9 @@ pub mod activation_services;
 /// authority for boundary storage. ⛔ Resource policy, never emitter-derived.
 /// `RT-FNSPLIT-C3-ACTIVATION` `D3` — the Rust-owned activation: the
 /// per-invocation arenas, the services record, and the ruled lifecycle.
+/// `RT-FNSPLIT-C3-ACTIVATION` `D2` — the small C ABI over an opaque
+/// activation handle. ⛔ C stores a pointer and a status, nothing else.
+pub mod activation_abi;
 pub mod boundary_activation;
 pub mod boundary_resource_profile;
 pub mod artifact_validation;
@@ -54,6 +57,7 @@ pub mod values;
 
 pub use activation_services::*;
 pub use artifact_validation::*;
+pub use activation_abi::*;
 pub use boundary_activation::*;
 pub use boundary_resource_profile::*;
 pub use canonical::Canonical;
