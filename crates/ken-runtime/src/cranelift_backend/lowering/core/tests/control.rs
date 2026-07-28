@@ -6939,17 +6939,25 @@ fn the_resolved_call_edge_population_moves_with_the_program() {
 ///
 /// | operand shape | `lower_expr` (ordinary) | `lower_computational_producer_expr` |
 /// |---|---|---|
-/// | `Lowered::Closure` | `:5754` ⭐ **RED — caught** | `:769` ⛔ green |
-/// | `Lowered::DeclarationClosure` | `:5742` ⭐ **RED — caught** | `:754` ⛔ green |
+/// | `Lowered::Closure` | `:5754` ⭐ **RED — caught** | `:769` ⭐ **RED — caught** |
+/// | `Lowered::DeclarationClosure` | `:5742` ⭐ **RED — caught** | `:754` ⭐ **RED — caught** |
 /// | recursor closure | `:5897` ⛔ green | `:939` ⛔ green |
 ///
 /// plus `:474` in `lower_recursor_residual_call` — ⛔ green.
 ///
-/// ⇒ **Coverage is 2 of 7, and the missing axis is the CONTEXT, not the shape.**
-/// Both covered cells are in `lower_expr`; the whole computational-producer
-/// column is unreached, and no fixture built from `RuntimeExpr::Call` alone will
-/// reach it — it needs a `ComputationalMatch` whose producer descends into a
-/// retained body.
+/// ⇒ **Coverage is 4 of 7, and the residual is exactly one ROW: the recursor
+/// closure, in both contexts, plus its residual call.** ⛔ Not a scatter of
+/// unrelated sites — every uncovered site is reached only by a
+/// `ComputationalMatch` carrying `recursive_positions`, which every fixture here
+/// deliberately lacks. ⚠ That is the shape of the remaining work, and it is
+/// stated so nobody re-derives it from line numbers.
+///
+/// ⭐ **Both contexts are entered from `lower_expr`'s `Match` arm**, which routes
+/// its scrutinee through the producer when the scrutinee
+/// `requires_heterogeneous_deforestation` — a `Call` whose callee is a closure
+/// returning a `Construct`, or a declaration call producing an aggregate. ⇒ The
+/// context is a property of the **enclosing form**, and varying it needed a
+/// `Match`, not another callee.
 ///
 /// ⚠ **A correction, kept rather than edited away.** An earlier revision of this
 /// comment said `:769`/`:5897` were *"the seed-provenance `Closure` arms"*
@@ -6965,10 +6973,12 @@ fn the_resolved_call_edge_population_moves_with_the_program() {
 /// run this test, and a green means that site is not on any fixture's path.
 /// ⚠ Adding *spellings* of one shape never moved it — a nested retention, a
 /// parameterised body and a `Let`-scheduled body all descend the same arm.
-/// Adding a **different operand shape** did, which is the lesson.
+/// What moved it was varying the two **axes**: a different operand shape
+/// (`DeclarationClosure`) and a different enclosing form (`Match`). ⇒ Read the
+/// grid before adding a fixture, or you add a fifth spelling of a covered cell.
 ///
-/// ⇒ ⛔ **NOT CLAIMED: that this test would catch a bypass at the other five
-/// sites.**
+/// ⇒ ⛔ **NOT CLAIMED: that this test would catch a bypass at the three
+/// recursor sites.**
 ///
 /// ⭐ **The mutation is the one `S6` is most likely to introduce by accident**,
 /// because a unit body already holds the plan and resolving its own origin
@@ -7061,6 +7071,29 @@ fn every_origin_to_expression_resolution_goes_through_the_single_route() {
             value: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
             body: Box::new(nullary_closure(RuntimeExpr::Var(0))),
         },
+        // ⭐⭐ **The PRODUCER-CONTEXT cell.** `lower_expr`'s `Match` arm routes
+        // its scrutinee through `lower_computational_producer_expr` when the
+        // scrutinee `requires_heterogeneous_deforestation` — which a `Call`
+        // whose callee is a closure returning a `Construct` satisfies. ⇒ The
+        // retained body is then resolved in the **producer** context rather
+        // than the ordinary one, which is the axis the four `Call`-only shapes
+        // above cannot vary. ⛔ Not another spelling: a different enclosing
+        // lowering function, reached by a different predicate.
+        RuntimeExpr::Match {
+            scrutinee: Box::new(nullary_closure(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::ac4::Wrap".to_string(),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+            })),
+            cases: vec![RuntimeMatchCase {
+                constructor: "ctor:fixture::ac4::Wrap".to_string(),
+                binders: 1,
+                body: RuntimeExpr::Var(0),
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "ac4 producer-context fixture is total".to_string(),
+            },
+        },
     ];
 
     let mut total_resolutions = 0usize;
@@ -7086,14 +7119,21 @@ fn every_origin_to_expression_resolution_goes_through_the_single_route() {
     // `RuntimeExpr::Closure` lowers to `Lowered::DeclarationClosure` and takes a
     // **different** arm of the same match. ⇒ This is what moves the coverage
     // partition, and it is why the shape list above could not.
-    let identity = "decl:fixture::ac4::identity".to_string();
+    // ⚠ The declaration's body returns a `Construct`, which is what makes the
+    // producer-context fixture below deforestable. ⛔ An identity body would
+    // reach the ordinary arm only, and the second cell would silently be a
+    // duplicate of the first.
+    let wrap = "decl:fixture::ac4::wrap".to_string();
     let declaration = RuntimeDeclaration {
-        symbol: identity.clone(),
+        symbol: wrap.clone(),
         kind: RuntimeDeclarationKind::Transparent {
             body: RuntimeExpr::Closure {
                 captures: Vec::new(),
                 params: vec!["x".to_string()],
-                body: Box::new(RuntimeExpr::Var(0)),
+                body: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::ac4::Wrap".to_string(),
+                    args: vec![RuntimeExpr::Var(0)],
+                }),
             },
         },
         metadata: RuntimeSymbolMetadata {
@@ -7101,29 +7141,51 @@ fn every_origin_to_expression_resolution_goes_through_the_single_route() {
             ..RuntimeSymbolMetadata::empty()
         },
     };
-    let applied = RuntimeExpr::Call {
+    let call_wrap = || RuntimeExpr::Call {
         callee: Box::new(RuntimeExpr::DeclarationRef {
-            symbol: identity.clone(),
+            symbol: wrap.clone(),
         }),
         args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
     };
-    let (declaration_resolutions, declaration_invocations) = route_counts_with_declarations(
-        &applied,
-        BTreeMap::from([(identity.as_str(), &declaration)]),
-    );
-    assert!(
-        declaration_resolutions > 0,
-        "NON-VACUITY: the declaration fixture must actually resolve a body \
-         through the route, or this cell adds no coverage and the partition \
-         below is overstated"
-    );
-    assert_eq!(
-        declaration_resolutions, declaration_invocations,
-        "AC-4 -- the DeclarationClosure arm: {declaration_resolutions} \
-         resolutions against {declaration_invocations} route invocations"
-    );
-    total_resolutions += declaration_resolutions;
-    total_invocations += declaration_invocations;
+    let declaration_shapes = [
+        // ORDINARY context — `lower_expr`'s `Call` arm.
+        call_wrap(),
+        // PRODUCER context — the same callee, but the `Match` arm routes its
+        // scrutinee through `lower_computational_producer_expr` because a
+        // declaration call producing an aggregate is deforestable.
+        RuntimeExpr::Match {
+            scrutinee: Box::new(call_wrap()),
+            cases: vec![RuntimeMatchCase {
+                constructor: "ctor:fixture::ac4::Wrap".to_string(),
+                binders: 1,
+                body: RuntimeExpr::Var(0),
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "ac4 declaration producer fixture is total".to_string(),
+            },
+        },
+    ];
+    for (index, shape) in declaration_shapes.iter().enumerate() {
+        let (declaration_resolutions, declaration_invocations) = route_counts_with_declarations(
+            shape,
+            BTreeMap::from([(wrap.as_str(), &declaration)]),
+        );
+        assert!(
+            declaration_resolutions > 0,
+            "NON-VACUITY: declaration shape {index} must actually resolve a body \
+             through the route, or this cell adds no coverage and the partition \
+             in the doc comment is overstated"
+        );
+        assert_eq!(
+            declaration_resolutions, declaration_invocations,
+            "AC-4 -- the DeclarationClosure arm, shape {index}: \
+             {declaration_resolutions} resolutions against \
+             {declaration_invocations} route invocations"
+        );
+        total_resolutions += declaration_resolutions;
+        total_invocations += declaration_invocations;
+    }
 
     let (resolutions, invocations) = (total_resolutions, total_invocations);
 
