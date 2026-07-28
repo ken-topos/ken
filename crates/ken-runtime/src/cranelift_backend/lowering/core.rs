@@ -156,6 +156,14 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     // `declare_unit_bundle` would satisfy everything the check asserts and prove
     // nothing about emission, and ⛔ no path may substitute `AbiPlane::validate`,
     // `C4`, or descriptor existence for it.
+    // ⭐ The attempt epoch is stamped HERE, on the last statement before the
+    // proof, so that "this compile reached emission and declared zero units" is
+    // observable as a distinct outcome from "this compile never got here".
+    // ⛔ Not inside `declare_unit_bundle`: stamping there would make the zero
+    // reading unreachable, because observing the epoch would require declaring
+    // the unit whose absence is the thing being measured.
+    #[cfg(test)]
+    super::units::b2f_reached_emission_seam();
     static_transition_plan.validate_emitted_transfers_are_representable()?;
     let unit_bundle = super::units::declare_unit_bundle(&mut module, &static_transition_plan)?;
     // ⭐ `RT-FNSPLIT-B2F` `D3` — mint the artifact-static seed material before

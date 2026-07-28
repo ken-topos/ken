@@ -44,9 +44,88 @@ thread_local! {
 }
 
 /// The `(declared, defined)` unit counts from the most recent compile.
+///
+/// ⚠ **"Most recent compile" is the whole limitation.** This reading carries no
+/// statement about *which* compile produced it, so a compile that fails before
+/// reaching the emission seam leaves the previous compile's numbers standing and
+/// reads exactly like one that reached the seam and declared that many. Use it
+/// only where a single compile is known to have run to emission; for a timing
+/// question about a *failing* compile, use the attempt epoch below.
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn b2f_last_unit_emission() -> (usize, usize) {
     B2F_UNIT_EMISSION.with(std::cell::Cell::get)
+}
+
+/// **`RT-FNSPLIT-B2F` `AC-11` clause 3 — the compile-attempt epoch.**
+///
+/// ⛔⛔ **This exists because the first timing instrument could not distinguish
+/// the two outcomes it was built to separate, and reported a confident number
+/// for the wrong one.** That version compiled a successful sentinel to force
+/// `B2F_UNIT_EMISSION` to a nonzero value, then compiled the failing fixture and
+/// read the cell back. But nothing on a pre-emission refusal path *writes* that
+/// cell — so the read returned the **sentinel's** `1`, and:
+///
+/// - "refused before `declare_unit_bundle` ran" (the wanted `0`), and
+/// - "declared one unit, then refused during lowering" (the feared `1`)
+///
+/// ⇒ produce the **identical reading**. ⭐ The in-source comment claimed the
+/// sentinel made those cases distinguishable; it made them indistinguishable.
+/// A measured `1` was therefore evidence of nothing, in **either** direction.
+///
+/// ⭐ **The repair is to stamp the reading with the attempt it belongs to**, so
+/// a stale value is *detectable as stale* rather than readable as a count.
+/// Three outcomes, all distinct:
+///
+/// | reading | meaning |
+/// |---|---|
+/// | `None` | ⚠ the compile never reached the emission seam at all — refused earlier still, or never ran. **Not** a zero |
+/// | `Some(0)` | ✅ reached the seam, refused **before** any unit was declared — what clause 3 asks for |
+/// | `Some(n > 0)` | ⛔ `n` units were already declared when the refusal came — a *later* guarantee, not clause 3's |
+///
+/// ⛔ **The stamp is written in `core.rs` immediately before
+/// `validate_emitted_transfers_are_representable`, NOT inside
+/// `declare_unit_bundle`.** Stamping inside the bundle would make `Some(0)`
+/// unreachable — the only way to observe the epoch would be to declare a unit,
+/// which is the very event the reading is supposed to detect the absence of.
+#[cfg(test)]
+thread_local! {
+    /// The epoch a test opened; bumped once per `b2f_open_compile_attempt`.
+    static B2F_ATTEMPT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// The epoch that was live when the emission seam was last reached.
+    static B2F_ATTEMPT_AT_SEAM: std::cell::Cell<Option<u64>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Open a fresh compile attempt; the returned epoch identifies it.
+///
+/// ⚠ Deliberately does **not** clear `B2F_UNIT_EMISSION`: clearing it here would
+/// hide a compile that never reached the seam behind a plausible `(0, 0)`, which
+/// is the exact confusion this epoch exists to remove.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn b2f_open_compile_attempt() -> u64 {
+    B2F_ATTEMPT.with(|cell| {
+        let next = cell.get() + 1;
+        cell.set(next);
+        next
+    })
+}
+
+/// Record that the emission seam was reached, and zero this attempt's counts.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn b2f_reached_emission_seam() {
+    B2F_ATTEMPT_AT_SEAM.with(|cell| cell.set(Some(B2F_ATTEMPT.with(std::cell::Cell::get))));
+    B2F_UNIT_EMISSION.with(|cell| cell.set((0, 0)));
+}
+
+/// How many units `epoch`'s compile had declared, or `None` if that compile
+/// never reached the emission seam.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn b2f_units_declared_in_attempt(epoch: u64) -> Option<usize> {
+    if B2F_ATTEMPT_AT_SEAM.with(std::cell::Cell::get) == Some(epoch) {
+        Some(B2F_UNIT_EMISSION.with(std::cell::Cell::get).0)
+    } else {
+        None
+    }
 }
 
 /// Every target function this artifact declares, keyed by its static identity.

@@ -6564,33 +6564,54 @@ fn ac11_compiles(expr: &RuntimeExpr) -> Result<(), CraneliftBackendError> {
     .map(|_| ())
 }
 
-/// **`AC-11` — what is ACTUALLY true today about the two holes, which is NOT
-/// what this node set out to establish.**
+/// **`AC-11` clause 3 — an unrepresentable transfer is refused BEFORE any unit
+/// is declared.**
 ///
-/// ⛔⛔ **The pre-emission producer walk catches NEITHER hole.** Measured:
-/// gating `validate_emitted_transfers_are_representable` off entirely leaves
-/// every rejection row below green, and both fixtures are refused only after a
-/// unit has been declared. ⇒ The refusals are **pre-existing lowering
-/// behaviour**, not this node's proof.
+/// ⭐ **Why the timing is the property and not a detail.** The late refusal that
+/// also rejects these fixtures lives in `lower_expr`'s `ImportedDeclarationRef`
+/// arm — which is the recursive-descent inliner that **`D6`/`S7` removes**. A
+/// refusal performed by the authority being retired is not a property of the
+/// surviving boundary, so "it is rejected either way" is true today and becomes
+/// false at `S7`, silently, with no test reddening at the moment the hole opens.
+/// ⇒ The check must be shown to refuse *on the pre-emission side*, and only a
+/// timing discriminator can show that.
 ///
-/// ⭐ **This test is named for what it measures.** An earlier name said "the
-/// producer walk refuses…", which would have read as discharging `AC-11` while
-/// its subject did nothing — the overclaim `pin-a-property` §9 exists to stop.
+/// ⛔⛔ **The first version of this control could not measure that, and reported
+/// a confident number for the wrong thing.** It compiled a successful sentinel
+/// to force the unit counter nonzero, then read the counter back after the
+/// failing compile — but no pre-emission refusal path *writes* that counter, so
+/// the reading was the sentinel's own `1`. "Refused before emission" and
+/// "declared a unit, then refused" produced the **identical** value. ⇒ The
+/// measured `holeA = 1` / `holeB = 1` was **stale recorder state, not late
+/// refusal**, and the conclusion drawn from it — that the walk is inert — was
+/// unsupported in both directions. See `units::b2f_open_compile_attempt`.
+///
+/// ⭐ **The repair is an attempt epoch stamped at the emission seam**, which
+/// makes three outcomes distinct: `None` (never reached emission), `Some(0)`
+/// (reached it, refused before declaring), `Some(n > 0)` (declared, then
+/// refused). ⛔ `None` is **not** a pass — it would mean the fixture died even
+/// earlier, for a reason unrelated to the walk.
 ///
 /// ⛔ **Without the accepted rows this test is worthless.** A walk that rejects
 /// every program satisfies both rejection rows and is a catastrophic
 /// over-rejection; the paired intra-module fixtures are what distinguish
 /// "rejects an unrepresentable transfer" from "rejects".
 ///
-/// **MEASURED:** four compiles — a wrapped import and a bare-body import are
-/// refused, and the same two shapes with an intra-module value are accepted.
+/// **MEASURED:** six compiles — a wrapped import and a bare-body import are
+/// refused with `Some(0)` units declared in their own attempt; the same two
+/// shapes with an intra-module value are accepted; and a successful compile
+/// reports `Some(n > 0)` in its own attempt, so `Some(0)` is a real reading and
+/// not a counter that never moves.
 /// **CLAIMED:** the producer walk decides on the value that reaches the slot,
-/// not on the occurrence's own top-level shape.
+/// not on the occurrence's own top-level shape, and it decides **before** the
+/// switch-over can emit or call a unit.
 /// **THE GAP:** ⛔ this exercises the `If` pass-through only. A `Match` arm is
 /// not traced (see `producers_of`), so an import reaching a slot through a match
-/// arm is **not** covered by this test or by the walk.
+/// arm is **not** covered by this test or by the walk. ⛔ And the `Parameter`
+/// transfer population is **empty** until `S5` supplies call sites, so clause 1
+/// is discharged here for `Capture` and `Result` only.
 #[test]
-fn an_imported_value_is_refused_but_only_after_units_are_declared() {
+fn an_unrepresentable_transfer_is_refused_before_any_unit_is_declared() {
     // ⭐ Hole A. Binder-free: no de Bruijn reading makes this `If`'s result
     // anything but the imported value, yet its top-level shape is `If`, so a
     // check on the capture child's own shape admits it.
@@ -6651,36 +6672,33 @@ fn an_imported_value_is_refused_but_only_after_units_are_declared() {
          value must still compile."
     );
 
-    // ⭐⭐ THE DISCRIMINATOR IS *WHEN*, NOT *WHETHER*, AND THIS TEST DID NOT HAVE
-    // IT UNTIL IT WAS MEASURED WRONG.
-    //
-    // ⛔ The first version of this test asserted only that the two fixtures are
-    // refused. **Gating `validate_emitted_transfers_are_representable` off
-    // entirely left it GREEN** — so it proved nothing about the walk it is named
-    // for. An `ImportedDeclarationRef` is refused anyway, further down, *during*
-    // lowering; both worlds end in `Err(Unsupported)` and the assertion could
-    // not tell them apart.
-    //
-    // ⭐ `AC-11` clause 3 is precisely about the difference: the proof must
-    // execute **before the switch-over can emit or call a unit.** So the
-    // discriminator is the emitted-unit count: a compile refused *before*
-    // emission declares **zero** units; one refused *during* lowering has
-    // already declared its bundle.
-    fn units_declared_on_refusal(expr: &RuntimeExpr) -> usize {
-        // Poison the recorder first, so a compile that never reaches
-        // `declare_unit_bundle` cannot be confused with one that declared none.
-        let sentinel = RuntimeExpr::Value(RuntimeValue::Bool(true));
-        ac11_compiles(&sentinel).expect("sentinel compiles");
-        let baseline = crate::cranelift_backend::lowering::units::b2f_last_unit_emission().0;
-        assert!(
-            baseline >= 1,
-            "AC-11 -- the sentinel must declare at least one unit, or the \
-             discriminator below cannot distinguish 'refused early' from \
-             'never ran'"
-        );
+    // ⭐⭐ THE DISCRIMINATOR IS *WHEN*, NOT *WHETHER* — and reading a shared
+    // counter cannot answer *when*, because a compile that refuses early does
+    // not write it. Every reading below is stamped with the attempt that
+    // produced it, so a stale value reads as `None` instead of as a count.
+    fn units_declared_when_refused(expr: &RuntimeExpr) -> Option<usize> {
+        let epoch = crate::cranelift_backend::lowering::units::b2f_open_compile_attempt();
         assert!(ac11_compiles(expr).is_err(), "fixture must be refused");
-        crate::cranelift_backend::lowering::units::b2f_last_unit_emission().0
+        crate::cranelift_backend::lowering::units::b2f_units_declared_in_attempt(epoch)
     }
+
+    // ⛔ POSITIVE CONTROL ON THE INSTRUMENT ITSELF, and it is not optional: the
+    // rejection rows below assert `Some(0)`, which is exactly what a stamp that
+    // fires alongside a counter that never increments would also report. This
+    // row proves the counter moves within a single stamped attempt, so `Some(0)`
+    // is a measurement rather than a reader that is stuck at zero.
+    let instrument_epoch = crate::cranelift_backend::lowering::units::b2f_open_compile_attempt();
+    ac11_compiles(&wrapped_intra_module).expect("instrument control compiles");
+    let declared_when_accepted =
+        crate::cranelift_backend::lowering::units::b2f_units_declared_in_attempt(instrument_epoch);
+    assert!(
+        matches!(declared_when_accepted, Some(n) if n > 0),
+        "AC-11 clause 3 -- INSTRUMENT CONTROL: a compile that runs to completion \
+         must report a NONZERO declaration count inside its own attempt. Got \
+         {declared_when_accepted:?}. If this is Some(0) the counter is dead and \
+         every `Some(0)` below is vacuous; if it is None the seam stamp never \
+         fired and the epoch reads nothing at all."
+    );
 
     let wrapped = ac11_compiles(&wrapped_import);
     assert!(
@@ -6697,37 +6715,32 @@ fn an_imported_value_is_refused_but_only_after_units_are_declared() {
          iterates capture children never sees it: {bare:?}"
     );
 
-    // ⛔ CLAUSE 3. Zero units declared means the refusal happened before the
-    // bundle was forward-declared -- i.e. before the switch-over could emit or
-    // call anything. A non-zero count means the program was refused *later*, by
-    // lowering, which is a different guarantee and not the one `AC-11` asks for.
-    // ⛔⛔ MEASURED, AND IT IS A FINDING AGAINST THIS NODE'S OWN WALK.
+    // ⛔ CLAUSE 3. `Some(0)` means the compile reached the emission seam and was
+    // refused there, before the bundle was forward-declared — i.e. before the
+    // switch-over could emit or call anything. `Some(n > 0)` means the program
+    // got past the walk and was refused *later*, by the recursive-descent
+    // inliner that `D6`/`S7` deletes, which is a guarantee that expires.
     //
-    // **Both fixtures are refused only AFTER a unit has been declared** —
-    // `holeA = 1`, `holeB = 1`. ⇒ The refusals above are pre-existing lowering
-    // behaviour (an `ImportedDeclarationRef` cannot be lowered), and
-    // `validate_emitted_transfers_are_representable` contributes **nothing** on
-    // either case. Gating that walk off entirely leaves every `is_err()` row
-    // above green, which is how this was found.
-    //
-    // ⚠ `AC-11` clause 3 wants the proof to execute **before the switch-over can
-    // emit or call a unit**, so `1` is the wrong answer and `0` is the target.
-    // ⛔ These are pinned at the MEASURED value, not the wanted one, and this is
-    // a **transition sentinel**: it goes red the moment the walk starts catching
-    // these, and that red is the signal to change the expectation to `0` and
-    // rename this test. It is named for what it measures — that the refusal is
-    // late — and NOT for the walk, because the walk is not what refuses.
+    // ⭐ This is a DURABLE INVARIANT, not a sentinel. It does not pin a count
+    // that today's code happens to produce; it pins the side of the emission
+    // boundary the refusal must come from, which every intended extension of
+    // this node must preserve. Removing `lower_expr`'s late arm at `S7` must
+    // leave it green — that is the whole point of asserting it now.
     assert_eq!(
-        units_declared_on_refusal(&wrapped_import),
-        1,
-        "AC-11 clause 3 -- SENTINEL: Hole A's refusal timing moved. If this is \
-         now 0 the pre-emission walk has started catching it; change the \
-         expectation and rename this test."
+        units_declared_when_refused(&wrapped_import),
+        Some(0),
+        "AC-11 clause 3 -- HOLE A: the refusal must come from the pre-emission \
+         walk, with zero units declared in this compile's own attempt. \
+         Some(n>0) means the walk let it through and the late `lower_expr` arm \
+         refused it instead -- a refusal performed by the authority S7 removes. \
+         None means the compile never reached the emission seam at all."
     );
     assert_eq!(
-        units_declared_on_refusal(&bare_body_import),
-        1,
-        "AC-11 clause 3 -- SENTINEL: Hole B's refusal timing moved."
+        units_declared_when_refused(&bare_body_import),
+        Some(0),
+        "AC-11 clause 3 -- HOLE B: an imported value reaching the unit's own \
+         Result slot must be refused pre-emission, with zero units declared in \
+         this compile's own attempt."
     );
 }
 
