@@ -5318,6 +5318,20 @@ fn reify_host_reply_v1(
             // Shape correlation + `effective_request <= raw length` are
             // enforced up front by `validate_transfer_request_bound`
             // (BUDGET-EXHAUST, dec_7kcbc14ybndbq).
+            //
+            // PX8-WROTE-ABS D3/D4: the regular-file interpreter fixture cannot
+            // force a short write. `effect_v1.rs:1784-1786` caps the request
+            // to buffer capacity; `:1798-1800` requires that whole range to be
+            // installed; the concrete `InterpreterHostBackend` inherits the
+            // direct POSIX write at `:1356-1364`; and `TransferCountV1::new`
+            // remains private to `ken-host` at `:2188`. This is only a fixture
+            // reachability limit: the public `HostEffectBackendV1` boundary
+            // admits a short backend result, and the real dispatcher validates
+            // it and mints the count. The component-boundary test below drives
+            // that admitted path through this reifier. It makes
+            // `effective := count` observably wrong for a short write, while
+            // the capped-full test rejects the historical
+            // `effective := raw request` shortcut.
             let count = transferred.get();
             let effective = transferred.effective_request();
             let predecessor = buffer_nat_value(count.checked_sub(1).ok_or(())?, fs, store)?;
@@ -6098,6 +6112,65 @@ mod px0_target_classification_tests {
 mod px5b_effect_observation_tests {
     use super::*;
 
+    #[derive(Default)]
+    struct ShortWriteBackend {
+        write_calls: usize,
+    }
+
+    impl ken_host::HostEffectBackendV1 for ShortWriteBackend {
+        fn console_write(
+            &mut self,
+            _stream: ken_host::ConsoleStreamV1,
+            _bytes: &[u8],
+        ) -> Result<(), ken_host::IoErrorIdentityV1> {
+            Err(ken_host::IoErrorIdentityV1::Unsupported)
+        }
+
+        fn console_flush(
+            &mut self,
+            _stream: ken_host::ConsoleStreamV1,
+        ) -> Result<(), ken_host::IoErrorIdentityV1> {
+            Err(ken_host::IoErrorIdentityV1::Unsupported)
+        }
+
+        fn console_is_terminal(&mut self, _stream: ken_host::ConsoleStreamV1) -> bool {
+            false
+        }
+
+        fn fs_read_file(
+            &mut self,
+            _grant: &ken_host::CapabilityGrantV1,
+            _path: &[u8],
+        ) -> Result<Vec<u8>, ken_host::FileErrorCauseV1> {
+            Err(ken_host::FileErrorCauseV1::Io(
+                ken_host::IoErrorIdentityV1::Unsupported,
+            ))
+        }
+
+        fn fs_write_file(
+            &mut self,
+            _grant: &ken_host::CapabilityGrantV1,
+            _path: &[u8],
+            _create_policy: ken_host::CreatePolicyV1,
+            _bytes: &[u8],
+        ) -> Result<(), ken_host::FileErrorCauseV1> {
+            Err(ken_host::FileErrorCauseV1::Io(
+                ken_host::IoErrorIdentityV1::Unsupported,
+            ))
+        }
+
+        fn fs_resource_write_at(
+            &mut self,
+            _handle: &ken_host::ResourceHandleV1,
+            _offset: u64,
+            bytes: &[u8],
+        ) -> Result<usize, ken_host::IoErrorIdentityV1> {
+            self.write_calls += 1;
+            assert_eq!(bytes.len(), 4, "dispatcher must apply buffer capacity");
+            Ok(2)
+        }
+    }
+
     fn console_ids() -> ConsoleIds {
         let mut next = 100u32;
         let mut id = || {
@@ -6733,6 +6806,121 @@ mod px5b_effect_observation_tests {
         assert_eq!(
             remaining, 0,
             "buffer is completely full; the spec-required remaining is 0, not requested(8) - count(4) = 4"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn px8_wrote_component_short_write_reifies_effective_remaining() {
+        let ids = console_ids();
+        let fs = fs_ids();
+        let mut store = EvalStore::new();
+        let root = rt_parity_root("px8-wrote-component-short");
+        std::fs::write(root.join("source"), b"abcdefgh").unwrap();
+        std::fs::write(root.join("target"), Vec::new()).unwrap();
+        let mut host = PosixHost::new_at(&root);
+        let capability = EvalVal::Cap(host.mint_fs_cap(capabilities::AUTH_FULL));
+        let mut resources = ken_host::ResourceTableV1::default();
+        let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
+        let source_file = open_file(
+            b"source",
+            read_mode,
+            capability.clone(),
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let create_keep = make_ctor(fs.create_or_keep_id, vec![], &mut store);
+        let write_mode = make_ctor(fs.resource_write_create_id, vec![create_keep], &mut store);
+        let file = open_file(
+            b"target",
+            write_mode,
+            capability,
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let buffer_result = allocate_buffer(4, &mut host, &mut resources, &fs, &ids, &mut store);
+        let buffer = expect_resource_token(&buffer_result, &ids);
+        let fill = run_fs(
+            fs.private_fs_read_at_id,
+            &[
+                EvalVal::Unknown,
+                EvalVal::ResourceToken(source_file),
+                EvalVal::Int(0),
+                EvalVal::ResourceToken(buffer),
+                EvalVal::Int(0),
+                EvalVal::Int(4),
+            ],
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let _ = result_payload(&fill, ids.ok_id);
+
+        let request = ken_host::CanonicalRequestV1::FsWriteAt {
+            file_offset: 0,
+            buffer_start: 0,
+            length: 8,
+        };
+        let mut backend = ShortWriteBackend::default();
+        let reply = ken_host::dispatch_host_op_v1(
+            &mut backend,
+            &ken_host::CapabilityTableV1::default(),
+            &mut resources,
+            ken_host::HostOpV1::FsWriteAt,
+            None,
+            ken_host::ResourceInputsV1::FileBufferSpan {
+                file,
+                target_buffer: buffer,
+                span_origin: buffer,
+            },
+            &request,
+        )
+        .expect("real dispatcher admits the component short write");
+        assert_eq!(backend.write_calls, 1);
+        let result = reify_host_reply_v1(
+            reply.outcome,
+            reply.resource_token,
+            None,
+            &request,
+            fs.op_write_file_id,
+            &fs,
+            &ids,
+            &mut store,
+        )
+        .expect("real interpreter reifier accepts the dispatched Wrote");
+        let payload = result_payload(&result, ids.ok_id);
+        let EvalVal::Ctor {
+            id: wrote_id,
+            args: wrote_args,
+            ..
+        } = payload
+        else {
+            panic!("expected Wrote, got {payload:?}")
+        };
+        assert_eq!(*wrote_id, fs.wrote_id);
+        let EvalVal::Ctor {
+            id: transfer_count_id,
+            args: count_args,
+            ..
+        } = wrote_args.first().expect("Wrote count")
+        else {
+            panic!("expected TransferCount")
+        };
+        assert_eq!(*transfer_count_id, fs.private_transfer_count_id);
+        let transferred = 1 + nat_value(&count_args[0], &fs);
+        let remaining = nat_value(&count_args[1], &fs);
+        assert_eq!(transferred, 2);
+        assert_eq!(
+            remaining, 2,
+            "§38.1.7.2 requires effective(4) - count(2) = 2"
         );
         std::fs::remove_dir_all(root).unwrap();
     }
