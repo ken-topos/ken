@@ -11,26 +11,86 @@ github: null
 origin: Architect ruling evt_55k9f9efvd8jk, Decision dec_13af1mercv2m0 resolved. Demand-pulled by DS-9, which blocked at its first deliverable on `JsonArray (List Json)`; fork raised by the Steward as evt_1ykvpj7yvtg18. The five-point prerequisite contract below is the Architect's, transcribed verbatim in substance. Steward-filed; Steward owns the frame and AC/control placement.
 ---
 
-> ## ⭐ `D1a` + `D3a` LANDED. Next is the ATOMIC `D3b`+`D4`.
+> ## ⛔⛔ `D1b`/`D2` GATE (2026-07-28) — THE POLARITY PRODUCER IS FAIL-OPEN
+>
+> ⛔ **Fail-open on three of the four positions the record claims to cover.**
+>
+> **Authority:** Architect ruling `evt_3edf99cq5mrka` and merge Decision
+> `dec_b1hj6th3363a` (resolved APPROVE), on the adversary finding
+> `evt_79m7a5y9d1b4g`. ⛔ **This is a gate on `D1b`, not a reminder.**
+>
+> > ⛔ **`D1b` MUST NOT open production nested admission until polarity
+> > derivation is FAIL-CLOSED over all four positions:** constructor
+> > **arguments**, constructor **target indices**, **inductive indices**, and
+> > **dependent parameter types.**
+>
+> **What is actually wrong on `main`.** `derive_parameter_polarities` scans only
+> `constructor.args`, while `derive_recursive_shape` admits a nested recursive
+> `Former` **only** on a recorded `StrictlyPositive`. ⇒ A negative occurrence in
+> any of the other three positions is **recorded positive**, and the adversary
+> demonstrated that target-index placement flips the permissive gate from
+> **reject** to **accept**. ⭐ `D1a` shipped the record; it did not ship coverage
+> of the positions the record claims to summarise.
+>
+> ### ⭐ WHY THIS IS NOT ALREADY A DEFECT — read this before re-deriving it
+>
+> ⚠ **The staged `D3b`+`D4` slice was audited against this finding and cleared**,
+> so a reader who sees only the gate above must not conclude the slice was never
+> examined. The clearance is narrow and rests on **two** facts, both of which
+> `D1b` destroys:
+>
+> 1. `D3b`+`D4` reaches the nested-`Former` controls **only** through the
+>    explicitly test-only `env.add_decl` fixture
+>    (`install_test_only_nested_family` and its polymorphic sibling), which is
+>    ⛔ **not a production admission route**; and
+> 2. the production-live primitive-`Sigma` path does **not** consult another
+>    former's parameter-polarity record.
+>
+> ⇒ **No declaration capable of connecting the malformed record to the new
+> semantic method/iota consumers is admissible.** ⭐ **`D1b` is precisely the
+> change that makes such a declaration admissible** — at that moment the same
+> false record becomes an **executable soundness boundary**, not a latent one.
+>
+> ⛔ **Do not read "`D3b`+`D4` is staging-safe" as "the polarity record is
+> sound."** The record is unsound now; it is merely unreachable. The semantic
+> consumers already exist — only the admission route is missing.
+>
+> ⚠ **A `D1b` implementer's first act is to establish coverage over all four
+> positions and a control that discriminates each**, before any admission
+> widening. A control that only exercises constructor arguments passes on the
+> landed producer and says nothing about the other three.
+
+> ## ⭐ `D1a` + `D3a` + the ATOMIC `D3b`+`D4` HAVE ALL LANDED.
 >
 > | slice | PR | landed | evidence |
 > |---|---|---|---|
 > | `D1a` — per-parameter polarity | #1077 | `88196527` | `inductive.rs` `e37e906f`, `nested_inductives_d1a.rs` `280025f1` |
 > | `D3a` — recursive-shape descriptor, inert | #1089 | `ac86b2d7` | `inductive.rs` `d6ab179c`, `nested_inductives_d3_shapes.rs` `33a3efbf`; +858/−1 |
+> | `D3b`+`D4` — atomic, descriptor consumed | #1162 | `433dd12b` | `check.rs` `a133f025`, `conv.rs` `d338988f`, `inductive.rs` `79a85c6e`, `k1p5_wstyle.rs` `4b9784a6`, `nested_inductives_d3b_d4.rs` `2cff84fc`, `compiler_driver.rs` `85d45d92`, `b2_acceptance.rs` `14c6e5c7` |
 >
-> Both CI-green; both verified by **blob identity** with discriminating pre-merge
+> All CI-green; all verified by **blob identity** with discriminating pre-merge
 > controls. `D3a` took **six** candidates — five rejected objects preserved as
 > ancestors on `wp/KERNEL-NESTED-IND-D3`, none rewritten.
 >
-> ⛔ **The node is NOT complete.** `D1a` and `D3a` are two of eight deliverables;
-> `D3b`, `D4`, `D1b`, `D2`, `D5`, `D6`, `D7` remain. **A nested inductive is still
-> rejected on `origin/main`** — ⭐ independently confirmed after `D3a` landed: the
-> non-`D`-head `args.iter().all(|x| !occurs(d, x))` guard is **still present**.
-> That is `D3a`'s inertness, verified rather than asserted.
+> ⛔ **The node is NOT complete.** Four of eight deliverables are in; **`D1b`,
+> `D2`, `D5`, `D6`, `D7` remain**, and ⛔ **a nested inductive is still rejected on
+> `origin/main`** — `D1b` is the slice that opens admittance and none of the
+> landed work widens it.
 >
-> ⇒ **Next is the atomic `D3b`+`D4`** (`dec_351mz4r239398`), ⛔ **before** `D1b`.
-> ⚠ `D1b`'s external gate lifted when `SPEC-NESTED-IND` merged; ⛔ that did **not**
-> reorder the work.
+> ⭐ **What `D3b`+`D4` actually bought** (Decision `dec_b1hj6th3363a`, resolved
+> APPROVE): the structured recursive-shape descriptor is consumed **atomically**
+> by `method_type` **and** `iota_reduct`, primitive dependent-`Sigma` topology is
+> preserved, `Former` evidence is built by the admitted host eliminator, and level
+> arguments are transported from the **normalized actual host head** plus the guest
+> instantiation. ⇒ `AC-K14` is satisfied in the strong form it demanded: **no
+> commit exists in which a generated method binder carries a lift that ι does not
+> construct.** ⛔ Admission is **not** widened — the nested-`Former` fixtures are
+> explicitly test-only and production declaration still fails closed.
+>
+> ⇒ **Next is `D1b`, and it is GATED** — see the polarity block at the top of this
+> file; that gate is a hard prerequisite, not a reminder. ⚠ `D1b`'s *external*
+> gate lifted when `SPEC-NESTED-IND` merged; ⛔ that did **not** reorder the work
+> and it does **not** discharge the polarity gate, which is newer.
 >
 > **`D1a` = per-parameter polarity, derived at admission and consumed by the
 > positivity gate.** Candidate `e685570c1b8403c38af7ed0f45c205a6bc2eeb90`, **CI
