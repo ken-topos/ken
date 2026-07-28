@@ -58,6 +58,7 @@ fn run_checked_bounded_nat_fixture(
         live_source_continuations: 0,
         source_control_root: None,
         active_oriented_semantic_regions: 0,
+        active_carried_computational_eliminations: Vec::new(),
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
         root_terminal_authority: None,

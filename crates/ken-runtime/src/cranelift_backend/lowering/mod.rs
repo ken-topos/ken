@@ -309,6 +309,24 @@ struct Lowering<'a> {
     live_source_continuations: usize,
     source_control_root: Option<ContinuationCursorId>,
     active_oriented_semantic_regions: usize,
+    /// ⛔⛔ **`AC-C4`'s TERMINATION GUARD — the carried computational
+    /// eliminations currently being emitted, by their frame's static origin.**
+    ///
+    /// ⚠ **Why a guard is needed at all, and it is not a scope choice.** A
+    /// *specialized* recursive elimination terminates because its residual is a
+    /// compile-time value that gets strictly smaller — `Suc(Suc(Zero))` reaches
+    /// `Zero`. A **carried** residual is a runtime word, so nothing shrinks at
+    /// compile time: emitting the recursive case emits its induction-hypothesis
+    /// invocation, which re-enters the same eliminator, which emits the
+    /// recursive case again. ⇒ Inlining a carried recursion **cannot
+    /// terminate**, for any recursive datatype, and without this the compiler
+    /// does not error — it **hangs and then overflows its stack**.
+    ///
+    /// ⭐ Keyed on the frame's own `static_origin` rather than a depth count, so
+    /// it refuses exactly self-resumption and ⛔ still permits a case body to
+    /// eliminate a *different* carried value. A bare depth bound would refuse
+    /// legitimate nesting — an over-strengthened guard manufacturing defects.
+    active_carried_computational_eliminations: Vec<StaticOriginId>,
     native_join_plan: Option<crate::NativeJoinPlanV1>,
     consumed_join_sites: BTreeSet<u64>,
     root_terminal_authority: Option<RootTerminalAnswerAuthority>,

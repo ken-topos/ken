@@ -155,6 +155,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         live_source_continuations: 0,
         source_control_root: None,
         active_oriented_semantic_regions: 0,
+        active_carried_computational_eliminations: Vec::new(),
         native_join_plan,
         consumed_join_sites: BTreeSet::new(),
         root_terminal_authority: None,
@@ -2954,7 +2955,54 @@ impl<'a> Lowering<'a> {
                             checked_frame_id,
                             answer_route,
                             next,
-                        } => {
+                        } => 'computational_scrutinee: {
+                            // ⭐⭐ `AC-C4` — THE RESUMPTION POINT. An induction
+                            // hypothesis over a carried child hands its word back
+                            // as the machine's value, and it lands **here**: this
+                            // continuation is what "resumes the same computational
+                            // eliminator over that carried word" means on the
+                            // source-machine route.
+                            //
+                            // ⛔ Taken before the specialized selection below,
+                            // which reads `Lowered::Constructor` — a compile-time
+                            // template the carried value does not have and must
+                            // not be asked for. Without this arm the resumed word
+                            // reaches `"source scrutinee is not a constructor
+                            // value"`, which is a **true sentence about the wrong
+                            // thing**: the value is fine, the question is.
+                            if let LoweringOperand::Carried(word) = &value {
+                                let word = *word;
+                                let frame = ComputationalEliminatorFrame {
+                                    cases: &cases,
+                                    default: &default,
+                                    env: &env,
+                                    static_origin,
+                                    retained_scrutinee_index: None,
+                                    deferred_constructor_case: None,
+                                    provenance,
+                                    checked_frame_id,
+                                    checked_invocation_id: checked_frame_id.map(|_| {
+                                        self.active_recursive_invocations
+                                            .last()
+                                            .map_or(0, |instance| instance.invocation_instance_id)
+                                    }),
+                                    checked_invocation_source: self
+                                        .active_recursive_invocations
+                                        .last()
+                                        .map(|instance| instance.source),
+                                    checked_invocation_depth: self
+                                        .active_recursive_invocations
+                                        .last()
+                                        .map_or(0, |instance| instance.semantic_depth),
+                                };
+                                let eliminated = self
+                                    .lower_carried_computational_match(builder, word, frame, &[])?;
+                                control.continuation = *next;
+                                break 'computational_scrutinee SourceMachineState::Value {
+                                    value: eliminated,
+                                    control,
+                                };
+                            }
                             let retained = value.clone();
                             #[cfg(test)]
                             let actual_constructor = match &value {
@@ -4737,6 +4785,54 @@ impl<'a> Lowering<'a> {
     /// That separation is the ruling's clause 5, and it is what control 3
     /// perturbs.
     fn lower_carried_computational_match(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        scrutinee: CarriedBoundaryWord,
+        eliminator: ComputationalEliminatorFrame<'_>,
+        remaining_eliminators: &[EliminatorFrame<'_>],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        // ⛔⛔ TERMINATION — refused BEFORE any block is created, so a hang can
+        // never be half-emitted. See
+        // `Lowering::active_carried_computational_eliminations` for why inlining
+        // a carried recursion cannot terminate.
+        //
+        // ⚠ **This bounds INVOKING an induction hypothesis, ⛔ not declaring a
+        // recursive position.** A case with `recursive_positions` still mints
+        // its IH over the carried child, still puts it in `case_env`, and still
+        // eliminates — everything below runs. Only re-entering *this same*
+        // eliminator refuses.
+        if self
+            .active_carried_computational_eliminations
+            .contains(&eliminator.static_origin)
+        {
+            return Err(unsupported(
+                "BoundaryCarrier",
+                "a carried induction hypothesis resumed the same computational \
+                 eliminator, and inlining that recursion cannot terminate: the \
+                 residual is a runtime word, so no operand shrinks at compile \
+                 time and the recursive case re-emits itself without bound. \
+                 Terminating this needs the elimination emitted as a runtime \
+                 backedge or call rather than unrolled",
+            ));
+        }
+        self.active_carried_computational_eliminations
+            .push(eliminator.static_origin);
+        let lowered = self.lower_carried_computational_match_inner(
+            builder,
+            scrutinee,
+            eliminator,
+            remaining_eliminators,
+        );
+        let popped = self.active_carried_computational_eliminations.pop();
+        debug_assert_eq!(
+            popped,
+            Some(eliminator.static_origin),
+            "the carried elimination stack must unwind in the order it was pushed"
+        );
+        lowered
+    }
+
+    fn lower_carried_computational_match_inner(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         scrutinee: CarriedBoundaryWord,

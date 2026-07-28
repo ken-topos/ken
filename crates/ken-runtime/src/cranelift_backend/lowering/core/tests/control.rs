@@ -43,6 +43,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         live_source_continuations: 0,
         source_control_root: None,
         active_oriented_semantic_regions: 0,
+        active_carried_computational_eliminations: Vec::new(),
         native_join_plan: Some(crate::NativeJoinPlanV1 {
             representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
             sites: vec![self_consistent_root_join_site(0)],
@@ -135,6 +136,7 @@ fn run_px8j_malformed_recursor_consumer(
         live_source_continuations: 0,
         source_control_root: None,
         active_oriented_semantic_regions: 0,
+        active_carried_computational_eliminations: Vec::new(),
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
         root_terminal_authority: None,
@@ -1979,6 +1981,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         live_source_continuations: 0,
         source_control_root: None,
         active_oriented_semantic_regions: 0,
+        active_carried_computational_eliminations: Vec::new(),
         native_join_plan: Some(crate::NativeJoinPlanV1 {
             representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
             sites: vec![self_consistent_root_join_site(0)],

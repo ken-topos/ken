@@ -80,6 +80,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         live_source_continuations: 0,
         source_control_root: None,
         active_oriented_semantic_regions: 0,
+        active_carried_computational_eliminations: Vec::new(),
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
         root_terminal_authority: None,
@@ -1649,6 +1650,7 @@ fn bare_carrier_test_lowering<'src>(
         live_source_continuations: 0,
         source_control_root: None,
         active_oriented_semantic_regions: 0,
+        active_carried_computational_eliminations: Vec::new(),
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
         root_terminal_authority: None,
@@ -1939,14 +1941,14 @@ fn ac_c7_bind_arena(
 /// ⭐ The probe's one parameter is the invocation arena, which is exactly what
 /// `Lowering::carrier_arena` reads — so the helpers this rig calls are the same
 /// helpers production would call, reached the same way.
-fn ac_c7_compile_edge<'src>(
+fn ac_c7_try_compile_edge<'src>(
     seed_env: &'src NativeSeedEnvironment,
     plan: StaticTransitionPlan<'src>,
     emit: impl FnOnce(
         &mut Lowering<'src>,
         &mut FunctionBuilder<'_>,
     ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError>,
-) -> (cranelift_jit::JITModule, *const u8) {
+) -> Result<(cranelift_jit::JITModule, *const u8), CraneliftBackendError> {
     let mut module = new_jit_module().expect("JIT module constructs");
     let native = crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
         .expect("native-int graph emits");
@@ -1985,23 +1987,57 @@ fn ac_c7_compile_edge<'src>(
     compiler.boundary_carrier = Some(carrier);
 
     let mut function_context = FunctionBuilderContext::new();
-    {
+    let refused = {
         let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
         let entry = builder.create_block();
         builder.append_block_params_for_function_params(entry);
         builder.switch_to_block(entry);
         compiler.native_int_arena = Some(builder.block_params(entry)[0]);
-        let result = emit(&mut compiler, &mut builder).expect("the carried edge emits");
-        builder.ins().return_(&[result]);
-        builder.seal_all_blocks();
-        builder.finalize();
+        // â  A refusal must still leave a WELL-FORMED function behind, or the
+        // failure the caller wanted to observe is replaced by a Cranelift
+        // assertion about an unfilled block. â­ Every carrier route refuses
+        // *before* it creates a block â the termination guard and the
+        // empty-case check both say so at their sites â so on the error path
+        // the entry block is still current and still empty, and returning a
+        // constant from it is sound.
+        match emit(&mut compiler, &mut builder) {
+            Ok(result) => {
+                builder.ins().return_(&[result]);
+                builder.seal_all_blocks();
+                builder.finalize();
+                None
+            }
+            Err(error) => {
+                let zero = builder.ins().iconst(types::I64, 0);
+                builder.ins().return_(&[zero]);
+                builder.seal_all_blocks();
+                builder.finalize();
+                Some(error)
+            }
+        }
+    };
+    if let Some(error) = refused {
+        return Err(error);
     }
     module
         .define_function(func_id, &mut context)
         .expect("edge probe defines");
     module.finalize_definitions().expect("jit finalizes");
     let code = module.get_finalized_function(func_id);
-    (module, code)
+    Ok((module, code))
+}
+
+/// The expecting wrapper â every `AC-C7` row uses this, because there a
+/// refusal is a test failure rather than the measurement.
+fn ac_c7_compile_edge<'src>(
+    seed_env: &'src NativeSeedEnvironment,
+    plan: StaticTransitionPlan<'src>,
+    emit: impl FnOnce(
+        &mut Lowering<'src>,
+        &mut FunctionBuilder<'_>,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError>,
+) -> (cranelift_jit::JITModule, *const u8) {
+    ac_c7_try_compile_edge(seed_env, plan, emit).expect("the carried edge emits")
 }
 
 fn ac_c7_run(code: *const u8, arena: *const u64) -> i64 {
@@ -2507,5 +2543,392 @@ fn c1_d3_ac_c7_computational_match_eliminates_a_carried_value_non_recursively() 
         second as u64, sentinel,
         "DISCRIMINATOR: `Right(Beta)` must select case 1 through the composed \
          route. An always-case-0 eliminator returns `Beta` ({beta}) instead"
+    );
+}
+
+/// The `AC-C4` fixture: a `ComputationalMatch` whose first case declares a
+/// **recursive position**, over a carried scrutinee, whose body **invokes the
+/// induction hypothesis** with zero arguments.
+///
+/// ⭐⭐ **The two cases disagree on every input, by construction.** `Wrap`'s body
+/// is the IH call; `Leaf`'s body is a fixed `Sentinel`. So on `Wrap(Leaf)` the
+/// only way to reach `Sentinel` is to *recurse* — an eliminator that returned
+/// the bound child, or that always took case 0, or that never installed the
+/// invocation, lands on `Leaf` instead. ⚠ This is the trap `AC-C7` caught on
+/// this node one commit ago: two arms whose bodies agree cannot discriminate
+/// between them, and the positive assertion is then green for a weaker reason
+/// than it claims.
+///
+/// Returns `(observed, leaf_identity, sentinel_identity)`. ⚠ The identities are
+/// artifact-local spans into *this* plan's name arena — compare within one
+/// call's results, ⛔ never across two.
+fn ac_c4_recursive_edge(
+    recursive_body: RuntimeExpr,
+) -> Result<(i64, u64, u64), CraneliftBackendError> {
+    let fixture = RuntimeExpr::Let {
+        value: Box::new(ac_c7_wrap("Wrap", "Leaf")),
+        body: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::C1::Wrap".to_string(),
+                    argument_binders: 1,
+                    recursive_positions: vec![0],
+                    // ⭐ The case environment for a recursive case is
+                    // `[IH, reversed] ++ [children] ++ frame env`, so `Var(0)` is
+                    // the induction hypothesis over child `0` and `Var(1)` is the
+                    // child itself. ⛔ Zero arguments: a carried residual is a
+                    // transferred VALUE, and the structural IH route is the only
+                    // admitted one.
+                    body: recursive_body,
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::C1::Leaf".to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: ac_c7_ctor("Sentinel"),
+                },
+            ],
+            default: ac_c7_trap(),
+        }),
+    };
+    let RuntimeExpr::Let {
+        body: match_expr, ..
+    } = &fixture
+    else {
+        unreachable!("the fixture is a `Let`")
+    };
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let scrutinee_origin = plan
+        .child_static_origin(root, 0)
+        .expect("a `Let`'s value is child 0");
+    let match_origin = plan
+        .child_static_origin(root, 1)
+        .expect("a `Let`'s body is child 1");
+    let identity_at = |origin| {
+        plan.constructor_symbol_identity(origin)
+            .expect("a planned `Construct` has a constructor identity")
+            .tag_abi_word()
+            .expect("an identity packs into the ABI word")
+    };
+    let leaf_identity = identity_at(
+        plan.child_static_origin(scrutinee_origin, 0)
+            .expect("the wrapper's only argument has a planned origin"),
+    );
+    let sentinel_identity = identity_at(
+        plan.child_static_origin(match_origin, 2)
+            .expect("case 1's body has a planned origin"),
+    );
+
+    let lowered = ac_c7_lowered_wrap("Wrap", "Leaf");
+    let seed_env = NativeSeedEnvironment::empty();
+    let (_module, code) = ac_c7_try_compile_edge(&seed_env, plan, move |compiler, builder| {
+        let word = compiler.transfer_into_carrier(builder, scrutinee_origin, &lowered)?;
+        let eliminated = compiler.lower_expr(
+            builder,
+            SourceOccurrence {
+                expr: match_expr.as_ref(),
+                static_origin: match_origin,
+            },
+            &[LoweringOperand::Carried(word)],
+        )?;
+        let LoweringOperand::Carried(selected) = eliminated else {
+            panic!(
+                "a carried `ComputationalMatch` merges in the carrier lane, so its \
+                 result is `Carried` even when a recursive position resumed it"
+            );
+        };
+        compiler.emit_carrier_tag(builder, selected)
+    })?;
+
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = ac_c7_bind_arena(&mut store);
+    let observed = ac_c7_run(code, base);
+    Ok((observed, leaf_identity, sentinel_identity))
+}
+
+/// ⭐⭐ **`AC-C4` — a carried recursive position BUILDS ITS INDUCTION
+/// HYPOTHESIS and eliminates. Executable, JIT-run, value-asserted.**
+///
+/// **MEASURED:** JIT-compiled code, run against a real bound arena, eliminates
+/// `Wrap(Leaf)` — a value with no compile-time template — through a case
+/// declaring `recursive_positions: [0]`. The case body reads **`Var(1)`**, and
+/// the observed identity is `Leaf`'s.
+/// **CLAIMED:** the single-field license is live end to end: an IH is minted
+/// over a **carried** child (so `ComputationalRecursorClosure.residual` really
+/// does hold a `LoweringOperand::Carried`), the case environment is laid out
+/// `[IH] ++ [children] ++ frame env`, and the whole recursive-position case
+/// eliminates in the carrier lane.
+/// **THE GAP — stated because this row does not close `AC-C4`:** ⛔ the body
+/// does not **invoke** the hypothesis. Invoking it is refused, for a mechanism
+/// reason that is not a matter of effort; see the sentinel below.
+///
+/// ⭐ **`Var(1)` is the discriminator, and it is why this is not a vacuous
+/// "it compiled" test.** Index `1` is the bound child *only if* the induction
+/// hypothesis occupies index `0`. An implementation that skipped minting the
+/// IH, or appended it after the children, shifts every de Bruijn index in the
+/// body — `Var(1)` would then read the frame environment or run off the end,
+/// and it could not return `Leaf`.
+///
+/// ⚠ Promise class: **durable invariant**. It relates the eliminated value to
+/// the case environment's layout, over plan-derived identities.
+#[test]
+fn c1_d3_ac_c4_a_carried_recursive_position_builds_its_hypothesis_and_eliminates() {
+    let (observed, leaf, sentinel) =
+        ac_c4_recursive_edge(RuntimeExpr::Var(1)).expect("the recursive-position case lowers");
+    assert_ne!(
+        leaf, sentinel,
+        "NON-VACUITY: the two identities this fixture can produce must differ"
+    );
+    assert_eq!(
+        observed as u64, leaf,
+        "`AC-C4`: with the induction hypothesis at index 0, `Var(1)` is the bound \
+         carried child, so eliminating `Wrap(Leaf)` must yield `Leaf`. Any other \
+         case-environment layout shifts this read; got {observed}"
+    );
+}
+
+/// ⛔⛔ **TRANSITION SENTINEL — invoking a carried induction hypothesis is
+/// REFUSED, and `AC-C4` is therefore NOT discharged.**
+///
+/// ⭐ **This is a boundary, not a bug, and the reason is structural.** A
+/// *specialized* recursive elimination terminates because its residual is a
+/// compile-time value that strictly shrinks. A **carried** residual is a runtime
+/// word: nothing shrinks at compile time, so emitting the recursive case emits
+/// its IH invocation, which re-enters the same eliminator, which emits the
+/// recursive case again — without bound. ⚠ Measured, not theorised: before the
+/// guard existed this fixture **overflowed the compiler's stack**.
+///
+/// ⛔ **The ruled mechanism is necessary but not sufficient.** Widening
+/// `residual` to a `LoweringOperand` is what lets the hypothesis *exist* over a
+/// carried child, and the test above proves it does. Making it *callable*
+/// additionally requires the elimination to be emitted as a runtime backedge or
+/// call rather than unrolled — a codegen capability the single-field license
+/// neither grants nor implies.
+///
+/// ⚠ Promise class: **transition sentinel**, named for the boundary rather than
+/// the current behaviour. ⭐ **It retires when the Architect rules on emitting a
+/// carried recursive elimination as a backedge/call**; the seat that lands that
+/// ruling deletes this test and makes the body above `Call { Var(0), [] }`,
+/// which must then return `Sentinel` rather than `Leaf`.
+#[test]
+fn c1_d3_ac_c4_invoking_a_carried_hypothesis_refuses_rather_than_unrolling_unbounded() {
+    let refused = ac_c4_recursive_edge(RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Var(0)),
+        args: Vec::new(),
+    })
+    .expect_err("inlining a carried recursion cannot terminate, so it must refuse");
+    let CraneliftBackendError::Unsupported(UnsupportedLowering {
+        construct: "BoundaryCarrier",
+        reason,
+        ..
+    }) = &refused
+    else {
+        panic!(
+            "the refusal must come from the carrier's termination guard, not from \
+             whatever the unroll would have hit first: got {refused:?}"
+        );
+    };
+    assert!(
+        reason.contains("cannot terminate"),
+        "the diagnostic must say WHY it refuses, so the next reader inherits the \
+         mechanism rather than rediscovering the stack overflow: got {reason}"
+    );
+}
+
+/// ⭐⭐ **`AC-C4` CONTROL 5 — a carried residual applied to SOURCE ARGUMENTS
+/// fails closed, and fails BEFORE the invocation is installed.**
+///
+/// **MEASURED:** the same recursive-position fixture, with the case body
+/// invoking its induction hypothesis on one argument (`Var(1)`, the bound
+/// carried child), is refused by the carrier with an arity diagnostic.
+/// **CLAIMED:** the ruling's clause 3 — a carried residual is a transferred
+/// **value**, never a transferred callable, so only the zero-argument
+/// structural route is admitted.
+/// **THE GAP:** *"it errored"* is satisfied by erroring for any reason at all,
+/// including the termination guard that would fire one step later. ⭐ Closed by
+/// asserting on the **arity** wording, which only
+/// `Lowering::reject_carried_residual_arguments` produces — and that refusal
+/// runs before any invocation segment is installed or semantic region entered.
+///
+/// ⚠ Promise class: **durable invariant**. A carried residual never becomes
+/// callable without a durable closure lane, which the ruling withholds
+/// explicitly; if one is ever granted, this is the test that must be argued.
+#[test]
+fn c1_d3_ac_c4_a_carried_hypothesis_applied_to_arguments_fails_closed() {
+    let refused = ac_c4_recursive_edge(RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Var(0)),
+        args: vec![RuntimeExpr::Var(1)],
+    })
+    .expect_err("a carried residual is a value, so applying it must refuse");
+    let CraneliftBackendError::Unsupported(UnsupportedLowering {
+        construct: "BoundaryCarrier",
+        reason,
+        ..
+    }) = &refused
+    else {
+        panic!("the arity refusal is the carrier's: got {refused:?}");
+    };
+    assert!(
+        reason.contains("not a callable"),
+        "DISCRIMINATOR: this must be the ARGUMENT refusal, not the termination \
+         guard that would fire a step later on the same fixture. Both are \
+         `BoundaryCarrier` errors, so the wording is what separates them: got \
+         {reason}"
+    );
+}
+
+/// A minimal, structurally valid recursor capsule wrapping `residual`.
+///
+/// ⭐ The invocation segment is inert on purpose: control 4 measures the
+/// **admission walk's ordering**, which must refuse the capsule before it ever
+/// reads what is inside — so the inside is deliberately uninteresting.
+fn ac_c4_recursor_capsule(residual: LoweringOperand) -> Lowered {
+    let origin = RecursorProducerOriginId(41);
+    let cursor = ContinuationCursorId(42);
+    Lowered::ComputationalRecursorClosure {
+        residual: Box::new(residual),
+        activation: ContinuationActivationId(43),
+        invocation: RecursorInvocationSegment::new(
+            origin,
+            0,
+            ComputationalRecursorLayer {
+                cases: Vec::new(),
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::ExplicitTrap,
+                    message: "ac-c4 capsule".to_string(),
+                },
+                outer_env: Vec::new(),
+                static_origin: inert_test_static_origin(),
+                provenance: RecursorFrameProvenance(44),
+                role: RecursorLayerRole::SelectsOccurrence { origin },
+                checked_frame_id: None,
+                checked_invocation_id: None,
+                checked_invocation_source: None,
+                checked_invocation_depth: 0,
+                semantic_pending: true,
+            },
+            RecursorUnwindStack {
+                later_wrappers_in_construction_order: Vec::new(),
+            },
+            cursor,
+            None,
+            None,
+        ),
+    }
+}
+
+/// ⭐⭐ **`AC-C4` CONTROL 4 — the outer recursor capsule stays UNCONDITIONALLY
+/// non-transferable, and the admission walk refuses it BEFORE it looks inside.**
+///
+/// **MEASURED:** `transfer_into_carrier` on a constructor holding a recursor
+/// capsule is refused as a `ComputationalRecursorClosure`, and it is refused
+/// identically whether the capsule's residual is `Specialized` or `Carried`.
+/// The positive control — the same shape with an admissible child — gets *past*
+/// the walk and stops at the first emitted carrier call.
+/// **CLAIMED:** the ruling's clause 4: widening `residual` did not open a
+/// transfer path. The capsule is rejected before allocation or helper
+/// invocation, and a carried residual is not a way to reach the carrier through
+/// a capsule that is otherwise refused.
+/// **THE GAP:** *"the transfer errored"* is satisfied by erroring anywhere,
+/// including **after** an `alloc`. ⭐ Two things close it: the fixture has no
+/// carrier refs installed, so *any* emitted helper call produces the distinct
+/// `BoundaryCarrier` error the positive control asserts; and the capsule case
+/// produces the `ComputationalRecursorClosure` error instead. ⇒ The two
+/// diagnostics are what prove the ordering, not the mere presence of an error.
+///
+/// ⚠ The capsule is nested one level down, ⛔ never at the root: a root refusal
+/// would be the root variant's own disposition and could not distinguish the
+/// walk from the disposition table.
+///
+/// ⚠ Promise class: **durable invariant**.
+#[test]
+fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut module = new_jit_module().expect("JIT module constructs");
+    let mut signature = module.make_signature();
+    signature.returns.push(AbiParam::new(types::I64));
+    let func_id = module
+        .declare_function("c1_ac_c4_capsule_probe", Linkage::Local, &signature)
+        .expect("probe declares");
+    let mut context = module.make_context();
+    context.func =
+        Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
+
+    let construct = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+    };
+    let (plan, construct_origin) = planned_root_occurrence(&construct);
+    let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
+
+    let mut function_context = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+
+    // A real SSA value, so the carried residual below is a genuine carried word
+    // rather than a stand-in.
+    let word = CarriedBoundaryWord {
+        word: builder.ins().iconst(types::I64, 7),
+    };
+
+    for (label, residual) in [
+        (
+            "a SPECIALIZED residual -- the behaviour that must not have changed",
+            LoweringOperand::Specialized(Lowered::Closure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: inert_test_static_origin(),
+            }),
+        ),
+        (
+            "a CARRIED residual -- the newly licensed shape",
+            LoweringOperand::Carried(word),
+        ),
+    ] {
+        let inadmissible = Lowered::Constructor {
+            constructor: "ctor:fixture::C1::Wrap".to_string(),
+            args: vec![ac_c4_recursor_capsule(residual)],
+        };
+        let refused = compiler
+            .transfer_into_carrier(&mut builder, construct_origin, &inadmissible)
+            .expect_err("a recursor capsule cannot cross the boundary");
+        let CraneliftBackendError::Unsupported(UnsupportedLowering { reason, .. }) = &refused
+        else {
+            panic!("the capsule refusal is an unsupported-lowering: got {refused:?}");
+        };
+        assert!(
+            reason.contains("in-flight activation"),
+            "the capsule must be refused AS AN IN-FLIGHT ACTIVATION -- the \
+             disposition that makes it unconditionally non-transferable -- and \
+             refused before anything reads its residual. ⛔ Not as a carrier \
+             failure, which would mean a helper had already been emitted. With \
+             {label}: got {refused:?}"
+        );
+    }
+
+    // ── POSITIVE CONTROL ──────────────────────────────────────────────────
+    let admissible = Lowered::Constructor {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        args: vec![Lowered::Bool {
+            value: builder.ins().iconst(types::I64, 1),
+            known: Some(true),
+        }],
+    };
+    let reached = compiler
+        .transfer_into_carrier(&mut builder, construct_origin, &admissible)
+        .expect_err("a fixture with no carrier refs cannot allocate");
+    assert!(
+        matches!(
+            reached,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "BoundaryCarrier",
+                ..
+            })
+        ),
+        "NON-VACUITY: the admissible graph must get PAST the walk and stop at the \
+         first emitted call, or the two refusals above prove nothing about \
+         ordering: got {reached:?}"
     );
 }
