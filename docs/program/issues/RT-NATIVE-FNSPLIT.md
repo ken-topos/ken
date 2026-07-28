@@ -479,8 +479,8 @@ this line wins.** Re-read this line on every hard-stop.
 >
 > ```text
 > SYMPTOM INVENTORY (append only; never rewritten)
-> NEXT PREDICATE CHECK = 6th entry   (3rd is CONSUMED — answered at entry 2)
-> ENTRIES = 5  ← ANSWERED AT ENTRY 2; entry 3 gives the CAUSE. See below.
+> NEXT PREDICATE CHECK = 9th entry   (6th is CONSUMED — answered below)
+> ENTRIES = 6  ← ENTRIES 4–6 share executable-boundary closure. See below.
 > 1. retained body selection — keyed on cloned RuntimeExpr pointer identity
 > 2. lower_expr re-lowers each retained closure body AT EVERY CALL SITE, in
 >    that call site's whole configuration (core.rs:4214/4229 clone the body
@@ -512,7 +512,33 @@ this line wins.** Re-read this line on every hard-stop.
 >    also exposed that the planning-only benchmark spelling cannot state
 >    BufferFreeze's four-seat buffer/start/length/span-origin contract: its one
 >    operand names the recursive result after Let, not a valid BufferSpan.
+> 6. executable-boundary closure recurs at an ordinary Match result join: after
+>    D6 admits the corrected family's Carried BufferFreeze resource seats, the
+>    closure body's recursive bracket result remains phase-bearing when it
+>    reaches specialized_join_arm("Match"). The static join exists, but its
+>    executable merge authority covers only specialized/native scalar lanes;
+>    it has no carried lane through which the boundary word can pass.
 > ```
+>
+> ### ✅ THE 6TH-ENTRY PREDICATE CHECK — YES, ONE DEFECT
+>
+> **Entries 4, 5, and 6 share `executable-boundary closure`.** All three arise
+> where semantics previously contained in monolithic/specialized lowering must
+> enter or continue through a separately emitted executable-unit context.
+> Entry 4 denies that population at the selector; entries 5 and 6 admit an
+> explicit carried boundary word, then meet a downstream consumer or join that
+> still assumes a compile-time `Specialized` template.
+>
+> ⇒ **Stop ruling seat-by-seat.** The next mechanism must be a structural
+> closure over every phase-bearing consumer and join surface reachable between
+> unit ingress and complete `UnitBundle` emission, not merely a carried
+> `Match` arm. Preserve the selector, direct-unit-call/static-origin-backedge,
+> B2R carrier, and the already-proved narrow BufferFreeze seat facts; replace
+> the incomplete executable phase boundary they collectively expose.
+>
+> ⚠ **This names the defect and the required closure shape, not the
+> representation mechanism.** The exact mechanism remains gated on the armed
+> hard-stop `#15` Research advisory.
 >
 > ### ⭐ CLOSURE LEDGER — which entries are DISCHARGED (Steward bookkeeping)
 >
