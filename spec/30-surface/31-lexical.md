@@ -85,9 +85,16 @@ digraph where one is unambiguous, else the spelled-out name.
 boolean `DecEq` (`33 §5`) must stay distinct (Lean/Agda convention); `=` is
 **binding only**. The exact ASCII for `≡` (`===` vs. a named form) is a team
 call. ‡ The lattice-op ASCII (`⊑`/`⊔`/`⊓`) remains a team call. The former
-`ℓ` overload is resolved by §1d: only a parsed level-or-label notation token
-prints as `ℓ`; an identifier token whose stored spelling is `l` or `level`
-remains that identifier.
+`ℓ` overload is resolved by §1d's semantic-name/source-lexeme distinction:
+source `ℓ`, `l`, and `level` all produce semantic `Ident("level")`, while the
+formatter losslessly re-emits whichever raw source lexeme was written. There
+is no distinct level-or-label token kind.
+
+**Known-stale conformance carrier.**
+`conformance/surface/formatting/seed-canonical-format.md` FMT8
+(`l-identifier-is-not-a-level-token`) still asserts the superseded,
+unproducible level-token model. It remains unedited here and is tracked
+separately as `CONF-FMT8-LEVELTOK`.
 
 ## 1c. BL3 — the canonical Unicode surface is lexer *and* formatter (SURF-1 D3)
 
