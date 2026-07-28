@@ -1,15 +1,69 @@
 ---
 id: RT-FNSPLIT-C1
 title: "operational carrier + three executable eliminators — a runtime-general carrier at the Lowered/lowering boundary with a real producer -> validator -> eliminator edge, grounded on artifact-static semantic identity"
-status: active
+status: merged
 owner: runtime
 size: L
 gate: none
 depends_on: [RT-FNSPLIT-B2O, RT-FNSPLIT-B2R, RT-FNSPLIT-B2V, RT-VALUE-TOTALITY]
 blocks: [RT-FNSPLIT-B2F]
-github: null
+github: https://github.com/swe-toolkit/ken/pull/1156
 origin: Architect ruling evt_7ay6s5s79awz8 on the Steward's re-put of hard-stop #11 against the relaxed store contract (evt_70jp2sk4by7t8), Decision dec_45aa2gngjc79z resolved — verified from the object. Required by SPEC-STORE-SPLIT §7 item 2. Replaces the retired RT-FNSPLIT-B2E, whose binding contract (a closed disposition LEDGER, inert) and name authority (store-local interning) were both superseded by that ruling. Steward-filed; Steward owns the frame and AC/control placement.
 ---
+
+> ## ✅ MERGED 2026-07-28 — PR #1156, blob-verified. ⛔ READ WHAT DID *NOT* CLOSE.
+>
+> **`origin/main = feab3cb56efc9fe7b31c7f8891fe1dc9a10ac98f`**, landed tree
+> `c3d54139`, candidate `2029f915adf5bbf880d13ebdb968c8d2f5400fdd` (tree
+> `d9549e15`). **All nine `crates/ken-runtime/` paths verified blob-identical.**
+> ⛔ Verified by blob, ⛔ **not** by ancestry — the publisher squashes, so
+> `merge-base --is-ancestor` reads false for merged work.
+>
+> Approved on Decision `dec_35z7g494s9ba4`, resolved by the Architect for this
+> SHA only; fresh exact-SHA QA approved the same object.
+>
+> ### ⭐ THE `B2F` RELEASE GATE IS NOW SATISFIED
+>
+> `B2F` gates on **the closed `C1` carrier artifact**, not on `C1` merely being
+> merged. That artifact is closed: a real producer → validator → eliminator edge
+> is executing on `main`, with the residuals recorded in the frame's `§5`.
+>
+> ### ⛔ WHAT IS STILL OPEN — do not read "`AC-C4` merged" as "`AC-C4` done"
+>
+> **`AC-C4` SPLIT, and only the REPRESENTATION half closed here.** A carried
+> recursive position **builds** its induction hypothesis and the case
+> eliminates. ⛔ **The runtime INVOCATION of that hypothesis is `B2F`'s** — it
+> needs one closed, recursively callable Cranelift target per static
+> computational-eliminator origin, which is target-function population, forbidden
+> here by `AC-C10`. Control 1 is **PARTIAL by design**; see frame `§5` residual 1.
+>
+> ### ⚠ THE LIVE RESIDUAL A READER MUST NOT LOSE
+>
+> ⛔ **The carried case-binder projection is pinned at ARITY 2 ONLY.** Any
+> projection defect **conditional on arity ≥ 3** is unpinned — `min(position, 1)`,
+> an off-by-one that only trips past index 1, and any arity-conditional branch are
+> all unseen. ⚠ **Field permutation is one instance, not the boundary**, and a
+> reader checking against the word *"permutation"* would wrongly rule the others
+> covered. Recorded as frame `§5` residual 5 (PR #1155), an Architect publication
+> condition on the Decision.
+>
+> ⚠ Control 7's `THE GAP` comment in `constructors.rs` is **narrower** than the
+> frame and the two do not agree; the comment is non-authoritative test narrative
+> and **`§5` governs**.
+>
+> ### ⭐ The mechanism worth carrying forward
+>
+> The blocking defect was a **compile-preserving evasion**
+> (`children[position]` → `children[0]`) that left a control green because every
+> existing control observed the residual's **metadata** edge and none read its
+> **content**. What closed it was not a stronger assertion but an expected value
+> sourced from **the fixture's own declaration** rather than from the production
+> variable the mutation perturbs. ⭐ **A control whose expectation moves with
+> production cannot detect production moving** — `sibling_position: 1` surviving
+> M7 is the proof.
+>
+> ⛔ The node is **not** the whole of `RT-NATIVE-FNSPLIT`. `B2F` remains, and it
+> is what `PX8-ERRID-ALLOC` is actually waiting on.
 
 > ## ▶ THE NODE THE `#11` RULING PRODUCED
 >
