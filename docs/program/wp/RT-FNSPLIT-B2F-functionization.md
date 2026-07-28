@@ -1788,10 +1788,31 @@ substitute for each other:**
    cannot be silently unhandled, and no test has to remember to exist. ⛔ Five
    hand-written cases discharge nothing — they are satisfied by exactly the five
    classes you thought of, which is the population that was already known.
-2. ⛔ **Behavioural, per ARM of `D9`'s partition** (spillable immediate ·
-   `HostResult` handle · byte-bodied handle) — a fixture whose **answer** depends
-   on the value surviving the transfer. ⚠ A test that produces a carrier and
-   asserts on its tag re-measures the constructor.
+2. ⛔ **Behavioural, per ROUTE — ⛔ NOT per arm.** ⭐ **Amended 2026-07-28 on
+   the measurement in `evt_2mzzdgva1731f`: the arm partition is too coarse to
+   discharge.** All 63 spillable rows executed `Lowered::Int` alone, so three of
+   that arm's four classes had **never run while the arm read as covered**.
+   ⛔ The cause is not thin fixtures — the spillable-immediate arm has **two
+   entry routes with different preconditions**, and a fixture on one says
+   nothing about the other:
+   - **pair-bearing** — a `NativeIntV1` pair is present, so **item 4's marker
+     partition governs** and the `Small`/`Big` discriminator is live.
+   - **no-pair** — no `NativeIntV1` pair, so item 4 never engages at all and
+     the `Small` marker comes from `carrier_small_marker` instead.
+
+   ⇒ **Required: one fixture per ROUTE, plus one per remaining arm**
+   (`HostResult` handle · byte-bodied handle) — a fixture whose **answer**
+   depends on the value surviving the transfer. ⚠ A test that produces a carrier
+   and asserts on its tag re-measures the constructor.
+   ⭐ **So the `ProcessExitStatus` fixture is the REQUIRED discharge of the
+   no-pair route, ⛔ not a bonus class.**
+   ⚠ **And a class the rig cannot mint is NOT an item-2 obligation.**
+   `BoundedNat`/`StructuralNat` have constructors private to the lowering, and
+   **item 1 is what covers them** — the closed sum with no `_` arm is a compiler
+   proof that no class is silently unhandled. ⇒ ⛔ Do not carry them as an
+   item-2 residual, and ⛔ do not discharge them by attributing coverage to a
+   neighbour class that did run: **a shared-arm claim about an unexecuted class
+   is a pin claim, not a measurement.**
 3. ⛔ **The magnitude dispatch READS THE PRODUCER'S STATUS; it does not re-derive
    the predicate.** `ken_boundary_make_immediate_local` already performs the
    magnitude test against the one `BOUNDARY_IMMEDIATE_DOMAIN` table and already
