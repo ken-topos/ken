@@ -149,6 +149,14 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     //
     // ⛔ The population is `B2O`'s validated owner partition as `B2R` described
     // it. This call does not derive it and must never be made to.
+    // ⭐ `RT-FNSPLIT-B2F` `AC-11` clause 3 — the per-transfer representability
+    // proof runs HERE, before a single unit is declared, defined or called.
+    //
+    // ⛔ Its position is the discharge. Moving this call below
+    // `declare_unit_bundle` would satisfy everything the check asserts and prove
+    // nothing about emission, and ⛔ no path may substitute `AbiPlane::validate`,
+    // `C4`, or descriptor existence for it.
+    static_transition_plan.validate_emitted_transfers_are_representable()?;
     let unit_bundle = super::units::declare_unit_bundle(&mut module, &static_transition_plan)?;
     // ⭐ `RT-FNSPLIT-B2F` `D3` — mint the artifact-static seed material before
     // any function context exists. `B2R` declared `GroundValueCarrier` as

@@ -914,6 +914,237 @@ fn frame_header(
     })
 }
 
+// ─── RT-FNSPLIT-B2F AC-11 — per-transfer representability, at the EMITTED slots ─
+
+/// The deepest value-flow chain the producer walk will follow before failing
+/// closed.
+///
+/// ⛔ The origin graph is a tree of positional children, so this cannot be hit
+/// by a cycle. It is a capacity guard: exceeding it **rejects**, because a walk
+/// that gave up and returned "representable" would be a fail-open default, and
+/// a fail-open default is the exact defect the amended `AC-2` was ruled on.
+const MAX_PRODUCER_DEPTH: usize = 64;
+
+/// **`AC-11` — every boundary transfer `B2F` emits is representable, established
+/// HERE and not inherited from `C4`.**
+///
+/// ⛔ **`C4` does not establish this and must not be cited as though it did.**
+/// `reject_imported_capture_edges` iterates a lexical closure's **direct capture
+/// children** and asks `result_carrier(seed.source)` — which answers *"is this
+/// capture expression's own top-level shape `ImportedDeclarationRef`?"*, not
+/// *"can an imported value reach this frame slot?"*. Two consequences, both
+/// buildable plans that plan green:
+///
+/// | | |
+/// |---|---|
+/// | **Hole A** | any wrapper defeats it — `If { Bool(true), imported, imported }` is **binder-free**, so no de Bruijn reading makes its result anything but the imported value, and it receives a full `Capture` slot |
+/// | **Hole B** | needs no wrapper — `LexicalClosure { captures: [], body: ImportedDeclarationRef }`; the function iterates capture children only, so the unit's own **result** slot is never carrier-checked |
+///
+/// ⛔ **This is a NEW, `B2F`-owned check. It does not touch `C4`**, whose repair
+/// rides `RT-FNSPLIT-B2O-CHECK` — an `L` node on an atomic boundary does not
+/// absorb a checking-layer repair.
+///
+/// ⛔ **And it runs BEFORE any unit is declared or defined** (clause 3): its call
+/// site in `compile_expr_into_module` precedes `declare_unit_bundle`, so no path
+/// can treat `AbiPlane::validate`, `C4`, or descriptor existence as a substitute
+/// for it.
+///
+/// **MEASURED:** for every emitted unit, the value-flow producers reaching its
+/// `Capture` slots and its `Result` slot all have an admitted carrier; and its
+/// `Control` / `Trap` / `Store` slots carry exactly the fixed protocol carrier.
+/// **CLAIMED:** every transfer this node emits is representable.
+/// **THE GAP:** ⛔ stated as a partition in `producers_of` below — the
+/// pass-through relation covers `If` and `Let`, and a `Match` arm is **not**
+/// traced.
+pub(super) fn validate_emitted_transfers(
+    plane: &SemanticPlane,
+    nodes: &[StaticNode],
+    sources_in: &[SemanticSourceSeed],
+    descriptors: &[AbiDescriptor],
+    slots: &[AbiSlot],
+) -> Result<(), CraneliftBackendError> {
+    // ⛔ The seeds must be POSITIONED before `source_for` can index them: it
+    // resolves an origin by position and rejects a seed whose recorded origin is
+    // not its own index. `build_abi_plane` does the same conversion at its own
+    // entry, and skipping it here produced a planner error on every plan with
+    // more than a trivial source order -- the failure was loud, but only because
+    // `source_for` refuses to guess.
+    let sources = &positioned_sources(nodes, sources_in)?;
+    for descriptor in descriptors {
+        let run = slot_slice(slots, descriptor.slots)?;
+        for slot in run {
+            match slot.kind {
+                // ⭐ Clause 2. Protocol slots are **protocol-produced**, not the
+                // result of any source expression, so `result_carrier` is the
+                // wrong instrument for them and the AC says so. The expected
+                // carrier is written out here rather than read back from
+                // `AbiSlotKind`, so this compares two independent statements
+                // instead of one statement with itself.
+                AbiSlotKind::Control => require_protocol_carrier(slot, AbiCarrier::ControlWord)?,
+                AbiSlotKind::Trap => require_protocol_carrier(slot, AbiCarrier::TrapWord)?,
+                AbiSlotKind::Store => require_protocol_carrier(slot, AbiCarrier::StoreHandle)?,
+                // ⚠ **The emitted population of parameter-argument transfers is
+                // EMPTY**, and that is stated rather than passed over: an
+                // argument is supplied by a **call site**, and `D4`'s call edges
+                // are not emitted yet. ⛔ A vacuous pass is recorded as vacuous —
+                // when `S5` emits call edges, each argument's producer joins this
+                // walk, and until then there is nothing to trace.
+                AbiSlotKind::Parameter => {}
+                // Source-valued. Both are traced below, per unit rather than per
+                // slot, because a capture's origin comes from the defining
+                // occurrence and the result's from the unit's own.
+                AbiSlotKind::Capture | AbiSlotKind::Result => {}
+            }
+        }
+
+        // ⭐ Hole B: the unit's OWN result. `C4` never carrier-checks this, and
+        // `LexicalClosure { captures: [], body: ImportedDeclarationRef }` needs
+        // no wrapper at all to exploit it.
+        require_representable_producers(plane, sources, descriptor.origin)?;
+
+        // ⭐ Hole A: each capture, traced through binder-free wrappers rather
+        // than read off the child's own top-level shape.
+        if let AbiUnitDefinition::ClosureBody {
+            defining_origin,
+            provenance,
+        } = descriptor.definition
+        {
+            // ⚠ The **seed** provenance cannot carry an imported value at all:
+            // its captures resolve to a `RuntimeGroundValue`, closed at six
+            // variants none of which is a declaration reference. The asymmetry
+            // is stated rather than left to look like coverage.
+            if provenance == AbiCaptureProvenance::Lexical {
+                for capture in lexical_capture_origins(plane, defining_origin)? {
+                    require_representable_producers(plane, sources, capture)?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A protocol slot must carry exactly the carrier the ABI fixes for its role.
+fn require_protocol_carrier(
+    slot: &AbiSlot,
+    expected: AbiCarrier,
+) -> Result<(), CraneliftBackendError> {
+    if slot.carrier != expected {
+        return Err(planner_error(
+            "a protocol slot does not carry the fixed carrier its role declares",
+        ));
+    }
+    Ok(())
+}
+
+/// Every value-flow producer reaching `origin` must have an admitted carrier.
+fn require_representable_producers(
+    plane: &SemanticPlane,
+    sources: &[SemanticSourceSeed],
+    origin: StaticOriginId,
+) -> Result<(), CraneliftBackendError> {
+    for producer in producers_of(plane, sources, origin, 0)? {
+        let seed = source_for(sources, producer)?;
+        result_carrier(seed.source)?;
+    }
+    Ok(())
+}
+
+/// The set of occurrences whose value can actually **reach** `origin`'s slot.
+///
+/// ⭐ **The whole content of `AC-11` clause 1 is that this is not the identity
+/// function.** Checking `origin`'s own top-level shape is what `C4` does, and a
+/// binder-free wrapper defeats it.
+///
+/// ⛔ **NOT CLAIMED, as a partition with its discriminator.** The pass-through
+/// relation below covers `If` and `Let`, whose positional child layout is
+/// measured (`If` = `[cond, then, else]`, `Let` = `[value, body]`). ⚠ **A
+/// `Match` or `ComputationalMatch` arm is NOT traced** — its case bodies are
+/// derived through `case_body_occurrence` rather than `child_occurrence`, and I
+/// have not established that they land in `plane.child_origins` at the positions
+/// this walk would read. ⇒ **The discriminator: does the value reach the slot
+/// through a match arm?** If yes, only the match occurrence's own carrier is
+/// checked and the arm is not. ⛔ That is a stated residual, not a covered case,
+/// and widening it needs the case-body origin layout established first — over-
+/// reading those positions would reject representable programs.
+fn producers_of(
+    plane: &SemanticPlane,
+    sources: &[SemanticSourceSeed],
+    origin: StaticOriginId,
+    depth: usize,
+) -> Result<Vec<StaticOriginId>, CraneliftBackendError> {
+    if depth > MAX_PRODUCER_DEPTH {
+        return Err(planner_error(
+            "value-flow producer chain is deeper than the walk admits",
+        ));
+    }
+    let seed = source_for(sources, origin)?;
+    let SemanticSourceKind::Expression(shape) = seed.source else {
+        // A transition-kind source is protocol-produced, not a source
+        // expression; it is its own producer.
+        return Ok(vec![origin]);
+    };
+    // ⛔ The pass-through set is an ALLOW-LIST of relations, not a deny-list of
+    // shapes: an unrecognised shape is treated as its own producer and still has
+    // its carrier checked, so a new `RuntimeExprShape` cannot acquire a
+    // pass-through it was never given.
+    let forwarded: &[usize] = match shape {
+        // `[cond, then, else]` -- the value is one of the two branches, and
+        // neither introduces a binder. This is the Architect's named
+        // discriminator, `If { Bool(true), imported, imported }`.
+        RuntimeExprShape::If => &[1, 2],
+        // `[value, body]` -- the value that flows out is the body's.
+        RuntimeExprShape::Let => &[1],
+        _ => &[],
+    };
+    if forwarded.is_empty() {
+        return Ok(vec![origin]);
+    }
+    let children = child_origins_of(plane, origin)?;
+    let mut producers = Vec::new();
+    for index in forwarded {
+        let Some(child) = children.get(*index) else {
+            // ⛔ Fails closed. A shape declared pass-through whose children are
+            // not where its layout says they are means the two disagree, and
+            // treating the occurrence as its own producer here would silently
+            // restore exactly the top-level-shape check this walk replaces.
+            return Err(planner_error(
+                "a pass-through occurrence lacks the child its layout declares",
+            ));
+        };
+        producers.extend(producers_of(plane, sources, *child, depth + 1)?);
+    }
+    Ok(producers)
+}
+
+/// One occurrence's positional syntax-child origins.
+fn child_origins_of(
+    plane: &SemanticPlane,
+    origin: StaticOriginId,
+) -> Result<Vec<StaticOriginId>, CraneliftBackendError> {
+    let descriptor = plane
+        .descriptors
+        .get(origin.0 as usize)
+        .ok_or_else(|| planner_error("occurrence has no semantic descriptor"))?;
+    let program = plane
+        .programs
+        .get(descriptor.program.0 as usize)
+        .ok_or_else(|| planner_error("occurrence names an unknown semantic program"))?;
+    let records = plane
+        .records
+        .get(program.records.start as usize..range_end(program.records)?)
+        .ok_or_else(|| planner_error("semantic program record range is outside the plane"))?;
+    let [record] = records else {
+        return Err(planner_error(
+            "occurrence's program does not hold exactly one record",
+        ));
+    };
+    Ok(plane
+        .child_origins
+        .get(record.child_origins.start as usize..range_end(record.child_origins)?)
+        .ok_or_else(|| planner_error("semantic child-origin range is outside the plane"))?
+        .to_vec())
+}
+
 fn source_for(
     sources: &[SemanticSourceSeed],
     origin: StaticOriginId,

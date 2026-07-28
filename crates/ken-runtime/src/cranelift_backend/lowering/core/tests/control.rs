@@ -3702,6 +3702,19 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
             "pub(in crate::cranelift_backend) fn record_field_identity(",
             "pub(in crate::cranelift_backend) fn root_static_origin(",
             "pub(in crate::cranelift_backend) fn declaration_occurrence_origin(",
+            // `RT-FNSPLIT-B2F` `AC-11` — the per-transfer representability
+            // verdict, added deliberately and argued rather than bumped.
+            //
+            // ⭐ It returns a **verdict**, never the plane: `semantic`,
+            // `semantic_sources` and `abi` all stay private, so an emitter can
+            // obtain the answer and cannot re-derive a different one. That is
+            // what keeps representability a single authority instead of a check
+            // the emitter could route around — and it is why widening this one
+            // name does not widen the surface it guards.
+            //
+            // ⚠ It returns `Result<(), _>`, so it cannot contribute to the
+            // `-> Result<&'src RuntimeExpr` count that carries `B2A-S`'s `AC-4`.
+            "pub(in crate::cranelift_backend) fn validate_emitted_transfers_are_representable(",
             // `RT-FNSPLIT-B2F` `D1` — the sole producer of an `EmittableUnit`,
             // and therefore the sole route by which emission can be driven.
             //

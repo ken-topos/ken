@@ -1372,6 +1372,30 @@ impl<'src> StaticTransitionPlan<'src> {
     /// ⚠ The two shared exits (`SemanticOwner::Terminal`, `TrapTerminal`) are not
     /// units and are absent here by construction — they never receive a
     /// descriptor.
+    /// **`RT-FNSPLIT-B2F` `AC-11` — prove every transfer this node will emit is
+    /// representable, BEFORE any unit is declared, defined or called.**
+    ///
+    /// ⛔ Exposed as a **verdict**, not as the plane: the semantic plane and its
+    /// source seeds stay private, so an emitter can obtain the answer and cannot
+    /// re-derive a different one. ⭐ That is what keeps this a single authority
+    /// rather than a check the emitter could route around.
+    ///
+    /// ⛔ Clause 3 is discharged by the CALL SITE's position, not by this
+    /// method's contents: it runs before `declare_unit_bundle` in
+    /// `compile_expr_into_module`. Moving the call after emission would satisfy
+    /// every assertion inside it and discharge nothing.
+    pub(in crate::cranelift_backend) fn validate_emitted_transfers_are_representable(
+        &self,
+    ) -> Result<(), CraneliftBackendError> {
+        abi::validate_emitted_transfers(
+            &self.semantic,
+            &self.nodes,
+            &self.semantic_sources,
+            &self.abi.descriptors,
+            &self.abi.slots,
+        )
+    }
+
     pub(in crate::cranelift_backend) fn emittable_units(
         &self,
     ) -> Result<Vec<EmittableUnit<'_>>, CraneliftBackendError> {
