@@ -22,3 +22,13 @@ typed, unforgeable role capability** owned by the same semantic plane, and
 delivers the `DynamicConstructor` producer that consumes it.
 
 Frame: `docs/program/wp/RT-FNSPLIT-C2-SYNTH-ID.md`.
+
+## Sequencing — second of Runtime's two prerequisites
+
+Runtime sequenced **`RT-FNSPLIT-C3-ACTIVATION` first, then this node**
+(runtime-leader `evt_35karwwpdas3g`, 2026-07-28).
+
+⛔ **That is a scheduling call, not a dependency** — the two nodes touch
+different files and share no deliverable, so no edge is recorded between them
+and both remain `ready`. ⇒ This node is **startable at any time**; it is second
+only because one ring is working them in order.
