@@ -1,7 +1,7 @@
 ---
 id: RT-SCALE-B
 title: "Boundary B — the full n=3..7 emission measurement, the research-grounded analytical model, and the operator scaling verdict that gates RT-NATIVE-FNSPLIT's merge"
-status: draft
+status: ready
 owner: runtime
 size: L
 gate: none
@@ -14,6 +14,25 @@ origin: Operator scaling-gate directive 2026-07-23 (evt_4btfhwqhah1ye), requirem
 > ## ▶ THE FRAME IS WRITTEN — read it, not this file
 >
 > `docs/program/wp/RT-SCALE-B-emission-scaling-verdict.md`
+
+> ## ⭐ `ready` 2026-07-28, AND IT SUBSUMES `RT-FNSPLIT-B2B`
+>
+> **`status: draft` → `ready`.** The frame is shovel-ready; the only thing this
+> node waits on is `RT-FNSPLIT-B2F` merging, which the `depends_on` edge already
+> expresses. ⇒ It now enters the releasable frontier **automatically** the moment
+> `B2F` lands, instead of needing a Steward pass first.
+>
+> **[[RT-FNSPLIT-B2B]] is `closed` as subsumed into this node.** It was the same
+> deliverable: its `AC1.1′`–`AC1.5′` map one-to-one onto `AC-B1`–`AC-B4`, its
+> metric list is `D2`, its differential suite is `D3`, and its closing action is
+> this node's `blocks` edge on `RT-NATIVE-FNSPLIT`.
+>
+> ⛔ **The origin line below contains a false premise, kept visible rather than
+> rewritten:** *"the gate had acceptance criteria and no tracked node"* — `B2B`
+> **was** the tracked node, filed by the Steward the day before. This node
+> survives the fold because it has a written frame and the **analytical half**
+> (`D4`, Architect) that `B2B` never carried; four things `B2B` carried and this
+> frame lacked are folded into the frame.
 
 ## ⛔ THIS IS THE NODE THAT DECIDES THE EFFORT
 
