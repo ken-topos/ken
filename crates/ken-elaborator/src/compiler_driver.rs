@@ -2496,6 +2496,11 @@ pub fn compile_native_program_sources(
             },
         },
         output_dir,
+            // `RT-FNSPLIT-C3-ACTIVATION` `D4` — the deployment caller names its
+        // resource policy; the emitter may not invent one. ⚠ The driver has no
+        // CLI surface for it yet, so it names the runtime's own starter policy
+        // explicitly rather than letting a default exist.
+        ken_runtime::boundary_resource_profile::starter_smoke_profile(),
     )
     .map_err(NativeProgramBuildError::Packaging)?;
     let mut report = build_target_selection_report(&package, selected);

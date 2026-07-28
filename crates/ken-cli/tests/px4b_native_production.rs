@@ -1536,8 +1536,14 @@ fn naked_process_ir_helpers_are_not_public_production_api() {
     // The remaining assertions are about generated C source text, which is
     // genuinely what they are checking; they are not visibility oracles.
     let packaging = include_str!("../../ken-runtime/src/object_linker_packaging.rs");
-    assert!(!packaging.contains(".capability = ((uint64_t)1 << 32)"));
-    assert!(packaging.contains(".capability = host_init.capability"));
+    assert!(!packaging.contains("((uint64_t)1 << 32)"));
+    // `RT-FNSPLIT-C3-ACTIVATION` `D7` re-spelled this without weakening it. The
+    // property is unchanged -- the capability the stub passes is the one
+    // host-init ISSUED, never a hard-coded constant -- but the stub no longer
+    // declares `struct KenNativeInvocationV1`, so `host_init.capability` is now
+    // an ARGUMENT to the activation owner rather than a struct-field
+    // initializer. The old needle pinned the spelling; this one pins the flow.
+    assert!(packaging.contains("host_init.capability, &frame"));
     assert!(packaging.contains("host_init.capability == 0"));
     assert!(packaging.contains("process_environment_count"));
 }

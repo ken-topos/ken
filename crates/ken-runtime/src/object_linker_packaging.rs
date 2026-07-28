@@ -315,6 +315,16 @@ pub struct ObjectLinkerExecutablePackage {
     pub smoke: ObjectLinkerSmokeReport,
     pub unavailable_lanes: BTreeSet<ObjectLinkerUnavailableLane>,
     pub unsupported_lanes: BTreeSet<ObjectLinkerUnsupportedLane>,
+    /// **`RT-FNSPLIT-C3-ACTIVATION` `D5` — the profile this package was
+    /// authorized with, recorded as provenance.**
+    ///
+    /// ⭐ And it is **included in the package identity** (see
+    /// `canonical_object_linker_package_bytes`), which is the half that matters:
+    /// recording it in metadata alone would let two packages with **different
+    /// authorized resource policy** share one identity, and a consumer checking
+    /// identity would not be able to tell them apart. ⇒ Two profiles, two
+    /// packages.
+    pub boundary_resource_profile: crate::boundary_resource_profile::BoundaryResourceProfileV1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -639,6 +649,7 @@ pub fn package_starter_executable_artifact_with_options(
         smoke,
         unavailable_lanes: required_unavailable_lanes(),
         unsupported_lanes: BTreeSet::new(),
+        boundary_resource_profile: profile,
     };
     package.header.package_hash = object_linker_executable_package_hash(&package);
     validate_package_hash(&package)?;
@@ -756,6 +767,7 @@ pub fn build_bound_process_starter_executable_artifact(
     program: &RuntimeProgram,
     entrypoint: &BoundProcessEntrypoint,
     output_dir: impl AsRef<Path>,
+    profile: crate::boundary_resource_profile::BoundaryResourceProfileV1,
 ) -> Result<BoundProcessExecutableArtifact, ObjectLinkerPackagingError> {
     if !entrypoint.root_execution_binding_is_valid() {
         return Err(packaging_error(
@@ -800,7 +812,7 @@ pub fn build_bound_process_starter_executable_artifact(
     // an effect-free root is not a residual ITree requiring a second match.
     let adapter = tree;
 
-    let options = ObjectLinkerPackagingOptions::starter_host();
+    let options = ObjectLinkerPackagingOptions::starter_host_with_profile(profile);
     let output_dir = output_dir.as_ref();
     fs::create_dir_all(output_dir).map_err(|err| {
         packaging_error(
@@ -1458,6 +1470,29 @@ fn validate_package_hash(
 fn canonical_object_linker_package_bytes(package: &ObjectLinkerExecutablePackage) -> Vec<u8> {
     let mut out = String::new();
     push_field(&mut out, "kind", &package.header.package_kind);
+    // ⭐ `C3` `D5` — the authorized profile is part of the package IDENTITY, not
+    // only its metadata. ⛔ Recording it beside the identity would let two
+    // packages with different authorized resource policy hash the same, and a
+    // consumer checking identity could not tell them apart.
+    //
+    // ⭐ Emitted by walking the profile's own closed inventory rather than by
+    // listing eight fields here: a resource added to `BoundaryResource::ALL`
+    // joins the identity automatically, and ⛔ cannot be forgotten in this
+    // function.
+    for scope in crate::boundary_resource_profile::BoundaryResourceScope::ALL {
+        for resource in crate::boundary_resource_profile::BoundaryResource::ALL {
+            push_field(
+                &mut out,
+                "boundary_resource_limit",
+                &format!(
+                    "{}/{}={}",
+                    scope.name(),
+                    resource.name(),
+                    package.boundary_resource_profile.limit(scope, resource)
+                ),
+            );
+        }
+    }
     push_field(&mut out, "version", &package.header.version.to_string());
     push_field(&mut out, "producer", &package.header.producer);
     push_field(&mut out, "spec_ref", &package.header.spec_ref);
@@ -3549,6 +3584,95 @@ mod tests {
     }
 
     #[test]
+    /// ⭐⭐ **`D5` — the authorized profile is IN the package identity, and each
+    /// of the eight limits is in it separately.**
+    ///
+    /// ⚠ **Recording it as metadata alone would not do**, and that is the whole
+    /// point: two packages built with **different authorized resource policy**
+    /// would then share one identity, and a consumer checking identity could not
+    /// tell them apart. ⇒ Two profiles, two packages.
+    ///
+    /// ⛔ Each limit is perturbed **separately**, so the test cannot pass on an
+    /// identity that happens to include only one of them — the failure mode a
+    /// single "change the profile" assertion would miss.
+    ///
+    /// **MEASURED:** perturbing any one of the eight limits changes
+    /// `object_linker_executable_package_hash`, and the eight perturbations give
+    /// eight distinct identities.
+    /// **CLAIMED:** the profile is part of the package identity.
+    /// **THE GAP:** ⛔ that a consumer *checks* identity before trusting a
+    /// package. That is the consumer's obligation and is not this node's.
+    #[test]
+    fn each_of_the_eight_authorized_limits_is_part_of_the_package_identity() {
+        use crate::boundary_resource_profile::{BoundaryResource, BoundaryResourceScope};
+
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Bool(true));
+        let program = starter_program(RuntimeExpr::Value(RuntimeValue::Bool(true)), observation);
+        let (_report, entrypoint) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        let support = platform_runtime_support_for_entrypoint(
+            &program,
+            &entrypoint,
+            &run_report,
+            crate::PlatformRuntimeTarget::starter(native_platform_target_name()),
+            "object linker unit test",
+        )
+        .expect("platform support materializes");
+        let package = package_starter_executable_artifact(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            temp_output_dir("c3-d5-identity"),
+            "object linker unit test",
+            crate::boundary_resource_profile::starter_smoke_profile(),
+        )
+        .expect("package materializes");
+
+        let baseline = object_linker_executable_package_hash(&package);
+        assert_eq!(
+            baseline, package.header.package_hash,
+            "non-vacuity: the recomputed identity must match the recorded one, \
+             or the perturbations below are compared against the wrong number"
+        );
+
+        let mut identities = BTreeSet::new();
+        identities.insert(baseline);
+        for scope in BoundaryResourceScope::ALL {
+            for resource in BoundaryResource::ALL {
+                let mut perturbed = package.clone();
+                let limits = match scope {
+                    BoundaryResourceScope::Invocation => {
+                        &mut perturbed.boundary_resource_profile.invocation
+                    }
+                    BoundaryResourceScope::Persistent => {
+                        &mut perturbed.boundary_resource_profile.persistent
+                    }
+                };
+                let slot = match resource {
+                    BoundaryResource::Nodes => &mut limits.nodes,
+                    BoundaryResource::Words => &mut limits.words,
+                    BoundaryResource::DataBytes => &mut limits.data_bytes,
+                    BoundaryResource::NativeIntLimbs => &mut limits.native_int_limbs,
+                };
+                *slot += 1;
+                let moved = object_linker_executable_package_hash(&perturbed);
+                assert_ne!(
+                    moved, baseline,
+                    "D5: raising the {scope} {resource} limit left the package \
+                     identity unchanged, so that limit is not in the identity"
+                );
+                assert!(
+                    identities.insert(moved),
+                    "D5: two different limits produce the same identity, so the \
+                     identity cannot distinguish which policy a package carries"
+                );
+            }
+        }
+        assert_eq!(identities.len(), 9, "one baseline plus eight perturbations");
+    }
+
     /// ⭐⭐ **`AC-7` — absence of a profile is a refusal BEFORE packaging, and
     /// the control distinguishes refusal-to-package from refusal-at-run.**
     ///
