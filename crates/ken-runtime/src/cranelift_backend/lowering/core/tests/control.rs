@@ -3592,7 +3592,146 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             data_declarations: 1,
             data_definitions: 1,
         },
+        // ⭐⭐ `RT-FNSPLIT-B2F` `AC-2`, SECOND CLAUSE — THE REMAINING SEVEN
+        // ROSTER FILES, as explicit zero rows.
+        //
+        // ⛔ **`abi.rs` was not the only absence.** The frame flagged it by
+        // name, it was added, and that read as the clause being discharged.
+        // Re-derived here against the roster rather than against the frame's
+        // sentence: `BACKEND_PRODUCTION_SOURCES` lists **fifteen** files (the
+        // frame says thirteen — it has grown since), the census carried eight,
+        // and **seven** were still absent with no recorded exclusion. All seven
+        // measure `0/0/0/0/0`, which is why they are rows and not judgements.
+        //
+        // ⭐ **A zero row and an absent row read identically and only one of
+        // them is a claim** — `AC-2`'s own words, and the reason a file that
+        // genuinely emits nothing still needs a line here. ⚠ It is also the
+        // reason these seven cost nothing to carry: the sibling-churn objection
+        // that keeps `native_int_clif.rs`'s `23` out of this table does not
+        // apply to a zero, which moves only when one of these files **starts**
+        // emitting.
+        //
+        // ⚠ What each zero is actually saying, because they are not all the
+        // same claim:
+        //
+        // - `cranelift_backend.rs`, `surface.rs` — a facade and an error
+        //   vocabulary. ⛔ `cranelift_backend.rs` is ATTESTED and is read here,
+        //   never edited; a row over it is a read, not a modification.
+        // - `artifact/api.rs`, `artifact/mod.rs` — module CONSTRUCTION. They
+        //   build `JITModule`/`ObjectModule` and hand them on; ⭐ a nonzero here
+        //   would mean artifact construction had started declaring or defining
+        //   functions on its own, which is a second emission authority in the
+        //   one place nobody looks for it.
+        // - `compiled.rs` — the ARTIFACT and its runner. ⭐ **The most
+        //   load-bearing zero of the seven**: `S6`'s activation-services
+        //   launcher lands here, and this row is what forces that landing to be
+        //   a deliberate re-baseline rather than a silent one. ⚠ Predicted to
+        //   stay `0` through that change — the launcher constructs a Rust
+        //   record and calls compiled code; it declares and defines nothing.
+        //   ⛔ If it moves, the launcher started emitting and that is the
+        //   finding, not the test being stale.
+        // - `test_objects.rs`, `test_support.rs` — ⚠ **named "test" and they
+        //   are PRODUCTION files**, which is exactly why they need rows: a
+        //   reader skipping them by name would leave two production files
+        //   unmeasured and believe the roster was covered.
+        //
+        // ⛔ Still not evidence. These rows inherit every limit stated above —
+        // the census is a source-TEXT tripwire that fails OPEN on any spelling
+        // nobody enumerated, and adding seven rows widens its coverage without
+        // changing what it can carry.
+        Census {
+            file: "cranelift_backend.rs",
+            source: include_str!("../../../../cranelift_backend.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        Census {
+            file: "artifact/api.rs",
+            source: include_str!("../../../artifact/api.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        Census {
+            file: "artifact/mod.rs",
+            source: include_str!("../../../artifact/mod.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        Census {
+            file: "compiled.rs",
+            source: include_str!("../../../compiled.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        Census {
+            file: "surface.rs",
+            source: include_str!("../../../surface.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        Census {
+            file: "test_objects.rs",
+            source: include_str!("../../../test_objects.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        Census {
+            file: "test_support.rs",
+            source: include_str!("../../../test_support.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
     ];
+    // ⭐⭐ `AC-2`, SECOND CLAUSE — THE CENSUS COVERS THE WHOLE ROSTER, and this
+    // is what keeps the coverage claim true after this commit rather than at it.
+    //
+    // ⛔ **Without this, "every roster file has a row" is a fact about today,
+    // not a property.** A file added to `BACKEND_PRODUCTION_SOURCES` by any
+    // future node would be invisible to this census while the census still read
+    // as complete — which is precisely how `abi.rs` and then these seven came to
+    // be missing in the first place. ⇒ The relation is asserted, so the next
+    // absence reddens instead of accumulating.
+    //
+    // ⚠ It is a relation between two rosters, ⛔ **not** a count: adding a file
+    // to either list is fine, and adding it to only one is the failure.
+    let censused = census.iter().map(|row| row.file).collect::<BTreeSet<_>>();
+    let roster = BACKEND_PRODUCTION_SOURCES
+        .iter()
+        .map(|(file, _)| *file)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        roster.difference(&censused).copied().collect::<Vec<_>>(),
+        Vec::<&str>::new(),
+        "AC-2: a production roster file has no census row, so the census reads \
+         as complete while that file is unmeasured"
+    );
+    assert_eq!(
+        censused.difference(&roster).copied().collect::<Vec<_>>(),
+        Vec::<&str>::new(),
+        "AC-2: a census row names a file outside the production roster, so one \
+         of the two lists is wrong about what production is"
+    );
     for row in census {
         assert_eq!(
             row.source.matches("FunctionBuilder::new(").count(),

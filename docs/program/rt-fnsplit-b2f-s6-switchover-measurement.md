@@ -668,3 +668,59 @@ constant cannot. ⚠ I had to run this experiment to find out; a control that
 merely re-asserted the same list would have passed under `M-A3` too.
 
 ⚠ Restored byte-identically, verified with `cmp` for the same reason as above.
+
+## ✅ `AC-2` SECOND CLAUSE — SEVEN MORE ABSENCES, AND THE RELATION THAT ENDS THEM
+
+⛔ **`abi.rs` was not the only absence, and adding it read as the clause being
+discharged.** The frame names `abi.rs` by name; it was added; the census then
+looked complete. Re-derived against the **roster** rather than against the
+frame's sentence:
+
+| | |
+|---|---|
+| `BACKEND_PRODUCTION_SOURCES` | **15** files — ⚠ the frame says 13; it has grown |
+| census rows before this change | 8 |
+| roster files with **no** row and **no** recorded exclusion | ⭐ **7** |
+
+The seven: `cranelift_backend.rs`, `artifact/api.rs`, `artifact/mod.rs`,
+`compiled.rs`, `surface.rs`, `test_objects.rs`, `test_support.rs`. **All seven
+measure `0/0/0/0/0`**, so all seven are rows rather than judgements — and a zero
+row carries none of the sibling-churn hazard that keeps `native_int_clif.rs`'s
+`23` out of the table, because a zero moves only when that file **starts**
+emitting.
+
+⭐ **The most load-bearing zero is `compiled.rs`** — `S6`'s activation-services
+launcher lands there, and this row forces that landing to be a deliberate
+re-baseline. ⚠ Predicted to stay `0` through it: the launcher constructs a Rust
+record and calls compiled code; it declares and defines nothing. ⛔ If it moves,
+the launcher started emitting, and that is the finding rather than the test
+being stale.
+
+⚠ And two of the seven are named `test_objects.rs` / `test_support.rs` **and are
+production files** — which is exactly why they need rows. A reader skipping them
+by name leaves two production files unmeasured while believing the roster was
+covered.
+
+### ⭐⭐ The fix is the RELATION, not the seven rows
+
+⛔ *"Every roster file has a row"* was, before this, **a fact about today rather
+than a property** — which is how `abi.rs` went missing, and then how these seven
+did. Both directions of the roster/census difference are now asserted, so the
+**next** absence reddens instead of accumulating. ⚠ It is a relation between two
+lists, ⛔ not a count: adding a file to either is fine, and adding it to only one
+is the failure.
+
+| mutation | outcome |
+|---|---|
+| `M-C1` remove one census row, roster untouched | ⭐ red — *"a production roster file has no census row"* |
+| `M-C2` register a real production emitter (`boundary_value_clif.rs`) in the roster with no row — **the future event the relation exists for** | ⭐ red, same assertion |
+| `M-C3'` make `compiled.rs` genuinely declare a function | ⭐ red — `compiled.rs: N2` |
+
+⚠ `M-C3` had to be re-cut: the first attempt did not compile (`Module` not in
+scope), and ⛔ **a mutation that does not build measures nothing.** The
+compile-preserving version adds the trait import and a real `declare_function`.
+
+⛔ **None of this makes the census evidence.** It stays a source-TEXT tripwire
+that fails OPEN on any spelling nobody enumerated; the seven rows widen its
+coverage without changing what it can carry. The population claim remains
+entirely with the behavioural counters.
