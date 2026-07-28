@@ -313,7 +313,7 @@ the admitted route.
 > | half | owner | state |
 > |---|---|---|
 > | **Representation + IH construction** — a carried recursive position mints its induction hypothesis over a carried child and eliminates | **`C1`** | ✅ **built**, JIT-run against a real bound arena, value-asserted, discriminated on `Var(1)` |
-> | Controls 2–5 (residual→specialized reds · origin/slot perturbation reds ownership · outer-capsule transfer fails before allocation · non-empty args fail before installation) | **`C1`** | 4 and 5 green; 2 and 3 designed |
+> | Controls 2–5 (residual→specialized reds · origin/slot perturbation reds ownership · outer-capsule transfer fails before allocation · non-empty args fail before installation) | **`C1`** | ✅ **all four green** — 2 and 3 ran as M4 and M5 (`evt_6p3gbyn1qkq8r`), each restored to a whole-tree `git diff --quiet` exit `0` |
 > | **Runtime INVOCATION of the hypothesis** — the recursive callable target | ⭐ **`B2F`**, inside its existing atomic target/switch boundary | ▶ assigned; see `B2F`'s frame |
 >
 > ⭐ **Why this is not the deferral the sentence above forbids.** That sentence
