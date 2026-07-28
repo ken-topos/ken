@@ -6930,6 +6930,24 @@ fn minted_seed_material_is_present_in_the_finalized_artifact() {
 /// the minted bytes. ⛔ That mutation is deliberately NOT committed as a test:
 /// it needs a perturbation hook inside production, and a hook that can fold the
 /// value instead is precisely the second authority `D3` removes.
+///
+/// ---
+///
+/// ⛔⛔ **THIS TEST IS `D3`'s SOLE MECHANICAL DEFENDER. MEASURED, NOT ESTIMATED.**
+///
+/// Replacing `self.artifact_static_payload(builder, symbol)?` with
+/// `builder.ins().iconst(types::I64, *small)` in `lower_seed_capture` — i.e.
+/// reverting `D3` wholesale and going back to compile-time folding — reddens
+/// **exactly this test and nothing else, out of 496 others.**
+///
+/// ⇒ ⭐ **Weakening, relaxing or renaming this control leaves `D3` unpinned in a
+/// single edit, and no other test in the crate would notice.** The seed material
+/// would still be minted, still be read-only, still be counted by
+/// `b2f_last_seed_material_emission`, and still be byte-compared by
+/// `minted_seed_material_is_present_in_the_finalized_artifact` — because all
+/// three of those observe the *material*, and none of them observes whether the
+/// emitted code **reads** it. That distinction is the whole of `AC-12`, and it
+/// lives here alone.
 #[test]
 fn a_seed_capture_borrows_from_artifact_static_storage_rather_than_folding() {
     fn loads_during(expr: &RuntimeExpr, env: &NativeSeedEnvironment) -> usize {
