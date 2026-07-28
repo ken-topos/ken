@@ -70,6 +70,7 @@ Fleet companion:
 (freshness is a third axis, beside "the harness works" and "the property
 holds").
 
-Related: [[markdown-80col-reflow-gotchas]] ·
-[[git-diff-stat-always-exits-0-use-quiet-for-an-emptiness-test]] ·
-[[a-green-test-can-be-green-by-3-percent-of-a-hidden-budget]]
+⚠ Two probe traps in the same family, worth knowing by shape: `git diff
+--stat` **always exits 0**, so it cannot be used as an emptiness test (use
+`--quiet`); and a test can be green while consuming a tiny fraction of a
+budget nobody stated, so "it passed" is not "it exercised the path."

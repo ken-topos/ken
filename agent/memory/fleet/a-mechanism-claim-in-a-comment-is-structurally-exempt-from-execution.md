@@ -64,5 +64,5 @@ the region where nothing runs.
   one — which made "only one place was wrong" a *checked* statement instead
   of an assumption.
 
-Related: [[a-rule-far-from-the-point-of-work-does-not-fire]] for the mirror
-case (prose that is true but positioned where nothing consults it).
+The mirror case is worth holding alongside it: prose that is true but sits
+so far from the point of work that nothing ever consults it.

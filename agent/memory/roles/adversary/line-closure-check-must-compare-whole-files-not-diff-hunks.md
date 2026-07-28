@@ -42,6 +42,8 @@ change. Note also that line-level comparison goes red on lawful `rustfmt`
 reflow — pair it with a **token-level** ordered check, which reformatting
 cannot move.
 
-Related: [[completeness-gate-must-be-bidirectional-exact-set-closure]],
-[[rustdoc-symbol-dump-cannot-see-trait-impls]],
-[[differential-oracle-is-blind-to-a-shared-premise]].
+Related: [[differential-oracle-is-blind-to-a-shared-premise]]. ⭐ Two
+neighbouring shapes: a completeness gate has to be **bidirectional** — exact
+set closure in both directions, not just "everything claimed is present" —
+and a rustdoc symbol dump **cannot see trait impls**, so it under-reports the
+surface it looks authoritative about.

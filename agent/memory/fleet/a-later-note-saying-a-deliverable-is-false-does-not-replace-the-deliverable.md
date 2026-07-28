@@ -57,8 +57,7 @@ re-read every deliverable, AC, and RETAIN list and confirm none still
 states the superseded contract, then grep the old wording to prove it; (4)
 leave the old phrasing only where it is explicitly marked superseded.
 Sibling of
-[[amending-a-frame-mid-flight-must-sweep-its-guardrails-section]] and
-[[a-status-flip-has-a-body-text-tail]] — same shape: the header changed,
-the body did not. See also
-[[a-frames-retain-list-can-describe-a-branch-that-never-landed]] and
-[[a-frame-can-pin-against-a-derivation-not-a-number]].
+[[amending-a-frame-mid-flight-must-sweep-its-guardrails-section]] — same
+shape: the header changed, the body did not. The pattern recurs wherever a
+frame's status, retain list, or pinned number is edited without sweeping the
+prose that restates it.
