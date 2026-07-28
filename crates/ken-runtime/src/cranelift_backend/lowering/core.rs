@@ -132,6 +132,9 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         alloc: module.declare_func_in_func(boundary_value_abi.alloc, &mut ctx.func),
         store_tag_id: module.declare_func_in_func(boundary_value_abi.store_tag_id, &mut ctx.func),
         store_field: module.declare_func_in_func(boundary_value_abi.store_field, &mut ctx.func),
+        store_name: module.declare_func_in_func(boundary_value_abi.store_name, &mut ctx.func),
+        make_immediate: module
+            .declare_func_in_func(boundary_value_abi.make_immediate, &mut ctx.func),
     };
 
     let mut func_ctx = FunctionBuilderContext::new();

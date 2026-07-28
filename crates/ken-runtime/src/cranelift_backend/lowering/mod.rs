@@ -23,7 +23,7 @@ pub(in crate::cranelift_backend) use std::collections::{BTreeMap, BTreeSet};
 // `RT-FNSPLIT-B2V` `D4`. Re-exported at facade scope like every other import in
 // this header so the `tests` subtree inherits the names.
 pub(in crate::cranelift_backend) use crate::boundary_value::{
-    BoundaryClass, BoundaryReferentOwner, BoundaryTag,
+    BoundaryClass, BoundaryReferentOwner, BoundaryTag, BOUNDARY_OK,
 };
 
 pub(in crate::cranelift_backend) use cranelift_codegen::ir::{
@@ -523,11 +523,19 @@ enum Lowered {
 
 /// The boundary-carrier helpers this generated function may call.
 ///
-/// ⛔ **Exactly the helpers the three eliminators use, and no more.** A ref
+/// ⛔ **Exactly the helpers the four carrier routes use, and no more.** A ref
 /// declared here that no route calls is inert threading — the defect this node
 /// exists to avoid — so the set is kept minimal and every member is reached by
-/// [`Lowering::carried_constructor_identity`], the `Match`/`ComputationalMatch`
-/// route, or the `Project` route.
+/// the one-way producer ([`Lowering::transfer_into_carrier`]), the
+/// `Match`/`ComputationalMatch` route, or the `Project` route.
+///
+/// ⚠ **The set grew by two when the producer landed, and the reason is worth
+/// recording rather than absorbing.** The original comment said *"exactly the
+/// helpers the three **eliminators** use"* — which under-counts by exactly the
+/// producer, because `§2g` names it as a fourth route (*"the boundary producer
+/// has a one-way typed seam ... it consumes the sole `BoundaryLocalFuncs`
+/// authority"*). `make_immediate` and `store_name` are producer-only: an
+/// eliminator never mints an immediate and never writes a field name.
 #[derive(Clone, Copy, Debug)]
 struct BoundaryCarrierRefs {
     /// `(arena, word, out) -> status` — the runtime constructor/record identity
@@ -549,6 +557,16 @@ struct BoundaryCarrierRefs {
     store_tag_id: FuncRef,
     /// `(arena, word, index, child) -> status` — the producer writes children.
     store_field: FuncRef,
+    /// `(arena, word, index, name_id) -> status` — the producer writes a
+    /// record's field names, so [`Self::record_field`] can find one by
+    /// artifact-static identity. ⛔ No `arena`-free shortcut: the name a
+    /// `Project` looks up and the name the producer wrote must be the same
+    /// word, which is `D2` at the field-identity namespace.
+    store_name: FuncRef,
+    /// `(tag, payload, out) -> status` — the producer's leaf step for a value
+    /// whose payload rides in the tagged word. ⚠ Note the **absent `arena`**:
+    /// an immediate names no referent, so there is nothing for an arena to own.
+    make_immediate: FuncRef,
 }
 
 /// A value that has crossed into the **operational carrier** — nothing but the
@@ -605,6 +623,410 @@ enum LoweringOperand {
     Specialized(Lowered),
     /// A runtime boundary word, eliminated only by emitted helpers.
     Carried(CarriedBoundaryWord),
+}
+
+/// ⭐ **The ONE-WAY PRODUCER** — `Lowered -> CarriedBoundaryWord`
+/// (`RT-FNSPLIT-C1` `D3`; the seam is ruled in frame `§2g`, its authority for
+/// `(tag, class)` in `§2h` ¶4).
+///
+/// ⛔ **There is deliberately no inverse in this block, and none may be added.**
+/// A `Carried -> Lowered` conversion would let a consumer recover a compile-time
+/// template from a runtime value, which is the wall this whole node exists to
+/// remove, wearing a different name.
+impl<'a> Lowering<'a> {
+    /// Transfer a compile-time [`Lowered`] into the operational carrier.
+    ///
+    /// ⚠⚠ **The admissibility walk runs HERE and exactly once, before the first
+    /// allocation.** [`Lowered::boundary_transfer_admissibility`]'s own contract
+    /// says the ordering is load-bearing: a walk performed after the first child
+    /// is published rejects a transfer it has already half-emitted, which is a
+    /// **partial publication**, not a rejection. That is why the recursion lives
+    /// in a separate private [`Self::emit_carrier_transfer`] — the entry point
+    /// screens the whole graph, and the recursion never re-screens a subgraph
+    /// whose parent is already allocated.
+    fn transfer_into_carrier(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        value: &Lowered,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        value.boundary_transfer_admissibility()?;
+        self.emit_carrier_transfer(builder, origin, value)
+    }
+
+    /// The recursive emission step. ⛔ Private, and ⛔ never the entry point —
+    /// see [`Self::transfer_into_carrier`] for why the split is not stylistic.
+    ///
+    /// ⭐ **The dispatch is an exhaustive `match` on the variant, and the
+    /// `(tag, class)` comes from [`Lowered::boundary_disposition`].** Both
+    /// halves are load-bearing and they answer different questions: the
+    /// disposition is the **sole authority** for how a value is represented
+    /// (`§2h` ¶4 makes reading it *required*), while the variant match is what
+    /// supplies the **payload and children**, which a disposition cannot carry
+    /// because it is a function of the variant tag alone.
+    ///
+    /// ⛔ **No wildcard arm.** A 22nd `Lowered` inhabitant is a compile error
+    /// here, exactly as it is in `variant()` and
+    /// `boundary_transfer_admissibility` — so a new carrier of children cannot
+    /// be added without someone deciding whether it can cross.
+    fn emit_carrier_transfer(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        value: &Lowered,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        match value {
+            // ── the supported transfer surface ───────────────────────────
+            Lowered::Bool { value: word, .. } => {
+                let tag = Self::carrier_immediate_tag(value)?;
+                self.emit_carrier_immediate(builder, tag, *word)
+            }
+            Lowered::Constructor { args, .. } => {
+                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                // ⭐ `D2` — the identity comes from the ONE artifact-static
+                // authority, via the typed newtype's own ABI-word method. ⛔ Not
+                // `intern_symbol`, which is dense insertion-order numbering over
+                // one store instance and therefore a *different* number in a
+                // different store (`§2e`).
+                let identity = self
+                    .static_transition_plan
+                    .constructor_symbol_identity(origin)?
+                    .tag_abi_word()?;
+                let word = self.emit_carrier_alloc(builder, tag, class, args.len())?;
+                self.emit_carrier_store_tag_id(builder, word, identity)?;
+                for (position, argument) in args.iter().enumerate() {
+                    let child_origin = self
+                        .static_transition_plan
+                        .child_static_origin(origin, position)?;
+                    let child = self.emit_carrier_transfer(builder, child_origin, argument)?;
+                    self.emit_carrier_store_field(builder, word, position, child)?;
+                }
+                Ok(word)
+            }
+            Lowered::Record { fields } => {
+                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                let word = self.emit_carrier_alloc(builder, tag, class, fields.len())?;
+                for (position, (_, field)) in fields.iter().enumerate() {
+                    // ⭐ `D2` at the field-identity namespace: the name written
+                    // here and the name `Project` looks up are the same word
+                    // from the same authority. ⚠ The `String` key in the tuple
+                    // is deliberately NOT the identity — it is the compile-time
+                    // spelling, and using it would be the second derivation
+                    // `D2` forbids.
+                    let name = self
+                        .static_transition_plan
+                        .record_field_identity(origin, position)?
+                        .name_abi_word()?;
+                    self.emit_carrier_store_name(builder, word, position, name)?;
+                    let child_origin = self
+                        .static_transition_plan
+                        .child_static_origin(origin, position)?;
+                    let child = self.emit_carrier_transfer(builder, child_origin, field)?;
+                    self.emit_carrier_store_field(builder, word, position, child)?;
+                }
+                Ok(word)
+            }
+
+            // ── ⛔ FAIL CLOSED — and these are DEFERRALS, said plainly ────
+            //
+            // ⚠ A deferral is honest; a deferral that reads as delivery is not.
+            // Each arm below is a form the carrier ABI *can* represent and this
+            // producer does not yet emit. ⛔ Do not read the fail-closed status
+            // as "the boundary refuses this" — `boundary_disposition` admits
+            // most of them. The refusal is **this producer's**, and it is
+            // conservative rather than silent precisely so the gap cannot be
+            // mistaken for coverage.
+            Lowered::Int { .. }
+            | Lowered::ProcessExitStatus { .. }
+            | Lowered::BoundedNat(_)
+            | Lowered::StructuralNat(_) => Err(unsupported(
+                lowered_value_kind(value),
+                "the carrier producer does not yet emit a spillable immediate: \
+                 its disposition carries `spill: Some(_)`, which needs a runtime \
+                 magnitude test and a two-way branch, not a single \
+                 `make_immediate`",
+            )),
+            Lowered::String(_) | Lowered::Bytes(_) => Err(unsupported(
+                lowered_value_kind(value),
+                "the carrier producer does not yet emit a byte-bodied handle: \
+                 the content needs the `store_bytes_len` / `store_byte` \
+                 sequence, which is a distinct claim-then-fill protocol",
+            )),
+            Lowered::HostResult { .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "the carrier producer does not yet emit a `HostResult` handle: \
+                 its two payload words are selected by a runtime discriminant",
+            )),
+            Lowered::DynamicConstructor(_) => Err(unsupported(
+                lowered_value_kind(value),
+                "the carrier producer does not yet emit a dynamic constructor: \
+                 its alternatives are selected at runtime, so one occurrence \
+                 origin does not name one constructor identity",
+            )),
+            Lowered::CapabilityToken { .. }
+            | Lowered::ResourceToken { .. }
+            | Lowered::ResponseBytes { .. }
+            | Lowered::BorrowedNativeValue { .. }
+            | Lowered::BorrowedOption { .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "the carrier producer does not yet emit borrowed ingress: an \
+                 `InvocationBorrowed` handle is arena-owned and must clear \
+                 `escape_check` before it may be written into a parent",
+            )),
+
+            // ── ⛔ REFUSED, not deferred — and structurally required here ──
+            //
+            // ⚠ Stated honestly: these arms are **unreachable in practice**,
+            // because `boundary_transfer_admissibility` rejects the three
+            // closure forms at the entry point and `boundary_disposition`
+            // classifies the last two as `ProtocolOnly`. They are spelled
+            // anyway because exhaustiveness is the mechanism that makes a 22nd
+            // variant a compile error — ⛔ collapsing them into a `_` arm would
+            // buy three lines and spend the whole closure property.
+            Lowered::Closure { .. }
+            | Lowered::DeclarationClosure { .. }
+            | Lowered::ComputationalRecursorClosure { .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "a closure has no durable lane and cannot cross the boundary; \
+                 this arm is unreachable because the admissibility walk already \
+                 refused the graph",
+            )),
+            Lowered::RecursiveBackedge | Lowered::Trap(_) => Err(unsupported(
+                lowered_value_kind(value),
+                "protocol machinery is never a source value at a boundary",
+            )),
+        }
+    }
+
+    /// The `(tag, class)` of a **handle**-represented value, read from the sole
+    /// disposition authority (`§2h` ¶4).
+    ///
+    /// ⭐ **This is the typed boundary in front of the emission step**, and it
+    /// is wildcard-free over [`BoundaryDisposition`] on purpose: a fifth
+    /// disposition would break compilation here rather than silently taking
+    /// whichever arm a `_` had swallowed.
+    fn carrier_handle_disposition(
+        value: &Lowered,
+    ) -> Result<(BoundaryTag, BoundaryClass), CraneliftBackendError> {
+        match value.boundary_disposition() {
+            BoundaryDisposition::RepresentedHandle { tag, class } => Ok((tag, class)),
+            // ⚠ Not dead defensive code: it fires if a variant's disposition is
+            // ever retuned from handle to immediate while this arm still
+            // allocates. The disposition is the authority, so the producer must
+            // fail rather than out-vote it.
+            BoundaryDisposition::RepresentedImmediate { .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "the producer would allocate a handle for a value the sole \
+                 disposition authority represents as an immediate",
+            )),
+            BoundaryDisposition::ProtocolOnly { why }
+            | BoundaryDisposition::FailClosedForbidden { why } => {
+                Err(unsupported(lowered_value_kind(value), why))
+            }
+        }
+    }
+
+    /// The tag of a **spill-free immediate**, read from the sole disposition
+    /// authority. ⛔ `spill: Some(_)` is refused here rather than encoded: a
+    /// spillable payload needs a runtime magnitude test, and emitting a bare
+    /// `make_immediate` for one would silently truncate exactly the values a
+    /// bignum language exists to carry.
+    fn carrier_immediate_tag(value: &Lowered) -> Result<BoundaryTag, CraneliftBackendError> {
+        match value.boundary_disposition() {
+            BoundaryDisposition::RepresentedImmediate { tag, spill: None } => Ok(tag),
+            BoundaryDisposition::RepresentedImmediate { spill: Some(_), .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "a spillable immediate needs the runtime magnitude dispatch, \
+                 not a single `make_immediate`",
+            )),
+            BoundaryDisposition::RepresentedHandle { .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "the producer would mint an immediate for a value the sole \
+                 disposition authority represents as a handle",
+            )),
+            BoundaryDisposition::ProtocolOnly { why }
+            | BoundaryDisposition::FailClosedForbidden { why } => {
+                Err(unsupported(lowered_value_kind(value), why))
+            }
+        }
+    }
+
+    /// The carrier helpers, as refs callable inside **this** generated function.
+    fn carrier_refs(&self) -> Result<BoundaryCarrierRefs, CraneliftBackendError> {
+        self.boundary_carrier.ok_or_else(|| {
+            unsupported(
+                "BoundaryCarrier",
+                "this generated function has no boundary-carrier helper refs",
+            )
+        })
+    }
+
+    /// The invocation arena the carrier helpers take as their first argument.
+    ///
+    /// ⚠ **It is the same SSA value as the native-`Int` arena, and that is a
+    /// fact about the ABI rather than a shortcut.** Both graphs take *"the
+    /// invocation arena"* — block param 0 of the generated function — so there
+    /// is one pointer, not two. ⛔ Reading it from a second field would create a
+    /// second answer to a question that has one.
+    fn carrier_arena(&self) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        self.native_int_arena.ok_or_else(|| {
+            unsupported(
+                "BoundaryCarrier",
+                "this generated function has no invocation arena",
+            )
+        })
+    }
+
+    /// ⭐ **THE ONE SIGNEDNESS VIEW over `pack_identity`'s `u64`.**
+    ///
+    /// The planner's `pack_identity` is *"the ONE injective encoding"* and it
+    /// yields a `u64`; Cranelift's `iconst` takes an `i64`. ⛔ This bit-preserving
+    /// reinterpretation is a **view over that one encoding, never a sibling
+    /// beside it** — a second packing spelled at a call site is precisely how
+    /// `D2`'s single authority would be undone at the bridge rather than at the
+    /// source.
+    ///
+    /// ⚠ It is deliberately spelled once, so there is exactly one `as i64` to
+    /// review and exactly one to get wrong.
+    fn carrier_identity_immediate(
+        builder: &mut FunctionBuilder<'_>,
+        identity: u64,
+    ) -> cranelift_codegen::ir::Value {
+        builder.ins().iconst(types::I64, identity as i64)
+    }
+
+    /// A one-word output slot plus its address, for a helper's `out` parameter.
+    fn carrier_out_slot(
+        builder: &mut FunctionBuilder<'_>,
+        pointer_type: types::Type,
+    ) -> (cranelift_codegen::ir::StackSlot, cranelift_codegen::ir::Value) {
+        let slot =
+            builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
+        let address = builder.ins().stack_addr(pointer_type, slot, 0);
+        (slot, address)
+    }
+
+    /// `alloc(arena, tag, class, field_count, out) -> status`.
+    fn emit_carrier_alloc(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        tag: BoundaryTag,
+        class: BoundaryClass,
+        field_count: usize,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let tag = builder.ins().iconst(types::I64, i64::from(tag as u8));
+        let class = builder.ins().iconst(types::I64, class as i64);
+        let count = builder.ins().iconst(
+            types::I64,
+            i64::try_from(field_count).map_err(|_| {
+                unsupported(
+                    "BoundaryCarrier",
+                    "a transferred aggregate has more fields than the ABI can name",
+                )
+            })?,
+        );
+        let call = builder
+            .ins()
+            .call(refs.alloc, &[arena, tag, class, count, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(CarriedBoundaryWord {
+            word: builder.ins().stack_load(types::I64, slot, 0),
+        })
+    }
+
+    /// `make_immediate(tag, payload, out) -> status`. ⚠ No arena: an immediate
+    /// names no referent.
+    fn emit_carrier_immediate(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        tag: BoundaryTag,
+        payload: cranelift_codegen::ir::Value,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let tag = builder.ins().iconst(types::I64, i64::from(tag as u8));
+        let call = builder
+            .ins()
+            .call(refs.make_immediate, &[tag, payload, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(CarriedBoundaryWord {
+            word: builder.ins().stack_load(types::I64, slot, 0),
+        })
+    }
+
+    /// `store_tag_id(arena, word, tag_id) -> status`.
+    fn emit_carrier_store_tag_id(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+        identity: u64,
+    ) -> Result<(), CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let identity = Self::carrier_identity_immediate(builder, identity);
+        let call = builder
+            .ins()
+            .call(refs.store_tag_id, &[arena, target.word, identity]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(())
+    }
+
+    /// `store_field(arena, word, index, child) -> status`.
+    fn emit_carrier_store_field(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+        position: usize,
+        child: CarriedBoundaryWord,
+    ) -> Result<(), CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let index = Self::carrier_position_immediate(builder, position)?;
+        let call = builder
+            .ins()
+            .call(refs.store_field, &[arena, target.word, index, child.word]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(())
+    }
+
+    /// `store_name(arena, word, index, name_id) -> status`.
+    fn emit_carrier_store_name(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+        position: usize,
+        identity: u64,
+    ) -> Result<(), CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let index = Self::carrier_position_immediate(builder, position)?;
+        let identity = Self::carrier_identity_immediate(builder, identity);
+        let call = builder
+            .ins()
+            .call(refs.store_name, &[arena, target.word, index, identity]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(())
+    }
+
+    /// A child ordinal as an ABI immediate.
+    fn carrier_position_immediate(
+        builder: &mut FunctionBuilder<'_>,
+        position: usize,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        let position = i64::try_from(position).map_err(|_| {
+            unsupported(
+                "BoundaryCarrier",
+                "a transferred aggregate's child ordinal is outside the ABI's range",
+            )
+        })?;
+        Ok(builder.ins().iconst(types::I64, position))
+    }
 }
 
 /// ⛔ **The `Lowered` variant TAG, without a value.**
