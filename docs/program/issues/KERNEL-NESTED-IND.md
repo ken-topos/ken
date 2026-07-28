@@ -60,26 +60,37 @@ origin: Architect ruling evt_55k9f9efvd8jk, Decision dec_13af1mercv2m0 resolved.
 > widening. A control that only exercises constructor arguments passes on the
 > landed producer and says nothing about the other three.
 
-> ## ⭐ `D1a` + `D3a` LANDED. Next is the ATOMIC `D3b`+`D4`.
+> ## ⭐ `D1a` + `D3a` + the ATOMIC `D3b`+`D4` HAVE ALL LANDED.
 >
 > | slice | PR | landed | evidence |
 > |---|---|---|---|
 > | `D1a` — per-parameter polarity | #1077 | `88196527` | `inductive.rs` `e37e906f`, `nested_inductives_d1a.rs` `280025f1` |
 > | `D3a` — recursive-shape descriptor, inert | #1089 | `ac86b2d7` | `inductive.rs` `d6ab179c`, `nested_inductives_d3_shapes.rs` `33a3efbf`; +858/−1 |
+> | `D3b`+`D4` — atomic, descriptor consumed | #1162 | `433dd12b` | `check.rs` `a133f025`, `conv.rs` `d338988f`, `inductive.rs` `79a85c6e`, `k1p5_wstyle.rs` `4b9784a6`, `nested_inductives_d3b_d4.rs` `2cff84fc`, `compiler_driver.rs` `85d45d92`, `b2_acceptance.rs` `14c6e5c7` |
 >
-> Both CI-green; both verified by **blob identity** with discriminating pre-merge
+> All CI-green; all verified by **blob identity** with discriminating pre-merge
 > controls. `D3a` took **six** candidates — five rejected objects preserved as
 > ancestors on `wp/KERNEL-NESTED-IND-D3`, none rewritten.
 >
-> ⛔ **The node is NOT complete.** `D1a` and `D3a` are two of eight deliverables;
-> `D3b`, `D4`, `D1b`, `D2`, `D5`, `D6`, `D7` remain. **A nested inductive is still
-> rejected on `origin/main`** — ⭐ independently confirmed after `D3a` landed: the
-> non-`D`-head `args.iter().all(|x| !occurs(d, x))` guard is **still present**.
-> That is `D3a`'s inertness, verified rather than asserted.
+> ⛔ **The node is NOT complete.** Four of eight deliverables are in; **`D1b`,
+> `D2`, `D5`, `D6`, `D7` remain**, and ⛔ **a nested inductive is still rejected on
+> `origin/main`** — `D1b` is the slice that opens admittance and none of the
+> landed work widens it.
 >
-> ⇒ **Next is the atomic `D3b`+`D4`** (`dec_351mz4r239398`), ⛔ **before** `D1b`.
-> ⚠ `D1b`'s external gate lifted when `SPEC-NESTED-IND` merged; ⛔ that did **not**
-> reorder the work.
+> ⭐ **What `D3b`+`D4` actually bought** (Decision `dec_b1hj6th3363a`, resolved
+> APPROVE): the structured recursive-shape descriptor is consumed **atomically**
+> by `method_type` **and** `iota_reduct`, primitive dependent-`Sigma` topology is
+> preserved, `Former` evidence is built by the admitted host eliminator, and level
+> arguments are transported from the **normalized actual host head** plus the guest
+> instantiation. ⇒ `AC-K14` is satisfied in the strong form it demanded: **no
+> commit exists in which a generated method binder carries a lift that ι does not
+> construct.** ⛔ Admission is **not** widened — the nested-`Former` fixtures are
+> explicitly test-only and production declaration still fails closed.
+>
+> ⇒ **Next is `D1b`, and it is GATED** — see the polarity block at the top of this
+> file; that gate is a hard prerequisite, not a reminder. ⚠ `D1b`'s *external*
+> gate lifted when `SPEC-NESTED-IND` merged; ⛔ that did **not** reorder the work
+> and it does **not** discharge the polarity gate, which is newer.
 >
 > **`D1a` = per-parameter polarity, derived at admission and consumed by the
 > positivity gate.** Candidate `e685570c1b8403c38af7ed0f45c205a6bc2eeb90`, **CI
