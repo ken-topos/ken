@@ -4311,7 +4311,16 @@ fn b2f_d9_bind_wide_arena(
 /// leading zero limbs, so `(x, 0)` comes back `Small` and `(x, 1)` comes back
 /// `Big` from the *same* call. ⇒ The marker partition is exercised as a run-time
 /// branch, ⛔ not as two compilations that could each have specialized.
-fn b2f_d9_wide_int(limbs: [u64; 2]) -> (crate::boundary_value::BoundaryWord, Vec<u64>, Option<u64>, Option<u64>) {
+#[allow(clippy::type_complexity)]
+fn b2f_d9_wide_int(
+    limbs: [u64; 2],
+) -> (
+    crate::boundary_value::BoundaryWord,
+    Vec<u64>,
+    Option<u64>,
+    Option<u64>,
+    Option<u64>,
+) {
     let fixture = ac_c7_ctor("Alpha");
     let (plan, root) = planned_root_occurrence(&fixture);
     let seed_env = NativeSeedEnvironment::empty();
@@ -4389,7 +4398,10 @@ fn b2f_d9_wide_int(limbs: [u64; 2]) -> (crate::boundary_value::BoundaryWord, Vec
     let extent = image
         .0
         .node_field(word.payload(), crate::boundary_value::NODE_EXTENT);
-    (word, copied.unwrap_or_default(), sign, extent)
+    let sealed = image
+        .0
+        .node_field(word.payload(), crate::boundary_value::NODE_INT_SEALED);
+    (word, copied.unwrap_or_default(), sign, extent, sealed)
 }
 
 /// ⭐⭐ **`D9` — a REAL native `Big` crosses as an owned deep copy, with its
@@ -4417,7 +4429,7 @@ fn b2f_d9_wide_int(limbs: [u64; 2]) -> (crate::boundary_value::BoundaryWord, Vec
 fn b2f_d9_a_real_native_big_crosses_as_an_owned_region_limbed_copy() {
     // ⚠ The top limb is non-zero, so `intern` cannot trim this to a `Small`.
     // The low limb is deliberately NOT the value a slot identity would be.
-    let (word, copied, sign, extent) = b2f_d9_wide_int([0xdead_beef_0000_0001, 3]);
+    let (word, copied, sign, extent, sealed) = b2f_d9_wide_int([0xdead_beef_0000_0001, 3]);
     assert_eq!(
         word.tag(),
         Some(BoundaryTag::PersistentGround),
@@ -4431,6 +4443,16 @@ fn b2f_d9_a_real_native_big_crosses_as_an_owned_region_limbed_copy() {
          native `Big` marker, which names storage that dies with the invocation"
     );
     assert_eq!(sign, Some(0), "the sign is copied, not assumed");
+    // ⭐ Asserted on its OWN field, before the limbs. `node_limbs` returns
+    // `None` for an unsealed node, so without this row an omitted `seal_int`
+    // reddens the *limb* assertion and reports a dropped limb — a true failure
+    // under a message that names the wrong cause.
+    assert_eq!(
+        sealed,
+        Some(1),
+        "⛔ the copy must END in `seal_int`: until it succeeds the node DENOTES \
+         NOTHING, so an unsealed node is not a value that crossed"
+    );
     assert_eq!(
         copied,
         vec![0xdead_beef_0000_0001u64, 3],
@@ -4458,7 +4480,7 @@ fn b2f_d9_a_real_native_big_crosses_as_an_owned_region_limbed_copy() {
 #[test]
 fn b2f_d9_the_same_body_takes_the_small_arm_on_a_trimmed_pair() {
     // Top limb zero ⇒ `intern` trims to one limb ⇒ a `Small` pair.
-    let (word, copied, _sign, _extent) = b2f_d9_wide_int([7, 0]);
+    let (word, copied, _sign, _extent, _sealed) = b2f_d9_wide_int([7, 0]);
     assert_eq!(
         word.tag(),
         Some(BoundaryTag::ImmediateInt),

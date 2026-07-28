@@ -465,3 +465,91 @@ emission site.
 ⇒ Escalated. It is **1 red of 69**, and it is the same lane as the region-limbed
 `Int` question already routed. ⛔ Do not read the other two mechanisms landing
 as `D9` complete.
+
+## ⛔⛔ FINDING 6 IS RETRACTED — it was a false residual over a real corruption
+
+⚠ **Read this instead of Finding 6 above.** Finding 6 claimed a region-limbed
+`Int` *"fails closed at `store_int_tag`'s own owner guard."* **It never reaches
+that guard.** The Architect found the reason (`evt_79xcj70p0qxjj`), and the
+truth is worse than the residual it replaced.
+
+`Lowered::Int`'s `value` is the **payload half of a `NativeIntV1` pair**, and
+what that word *means* depends on the marker:
+
+| marker | the payload word is |
+|---|---|
+| `NATIVE_INT_SMALL_TAG_V1` | the magnitude |
+| `NATIVE_INT_BIG_TAG_V1` | ⛔ a **slot identity** in the invocation's native arena |
+
+Slots begin at `1`. ⇒ Calling `make_immediate(ImmediateInt, payload)` on a `Big`
+asks a **magnitude question about a slot number**, and a low slot *satisfies*
+the immediate domain. The value crossed on the **apparent-success arm**, encoded
+as the integer `1`.
+
+⭐ **So the uncovered case was never a fail-closed residual.** It was a wrong
+answer wearing the shape of a right one, and my residual paragraph is what would
+have kept anyone from looking — ⚠ exactly the failure mode that paragraph exists
+to avoid. **I wrote a residual describing the guard I expected to fire, without
+tracing the path the value actually takes.**
+
+## ✅ THE MARKER PARTITION, and the owned deep copy
+
+The `Int` path now branches on the **canonical transport tag** before any
+magnitude question. ⛔ Not a sibling magnitude predicate — within the `Small` arm
+the ruled status-derived dispatch is untouched.
+
+| marker | path |
+|---|---|
+| `Small` | the payload **is** the magnitude → the status dispatch, unchanged |
+| `Big` | resolve, then an **owned deep copy** into `PersistentGround` |
+| anything else | ⛔ fail closed |
+
+The wide arm is: **allocate → region marker → claim → copy → seal**, writing
+`BOUNDARY_INT_REGION_LIMBS` and ⛔ never the native `Big` marker, which names
+storage that dies with the invocation. Because the copy is *owned*, no borrow
+escapes and `ERR_ESCAPE` is not a terminal result for a valid value.
+
+⭐ **The decode is `ken_native_int_resolve_local`'s.** It already yields
+canonical `sign`, `len` and `limbs`; deriving them here would be a second
+exact-integer decoder beside the first.
+
+### ⚠ FINDING 8 — the carrier's arena source is conflated in production
+
+The native arena for the decode is read from the **boundary** arena's own
+binding slot (`ARENA_NATIVE_INT`), because `int_sign` / `int_len` / `int_limb`
+decode with exactly that pointer — so producer and consumer agree **by
+construction**.
+
+⚠ **That choice also surfaced a pre-existing conflation, reported rather than
+encoded.** `Lowering::carrier_arena()` returns `function_local.native_int_arena`
+and its doc asserts the two are one pointer *"as a fact about the ABI"*. They are
+not: `compiled.rs` passes a **`NativeIntArenaV1`** as parameter 0, and in process
+mode the field is `invocation[24]` — the native arena either way. ⇒ Handing that
+to the boundary allocator is wrong, and it has never fired only because the
+carrier is inert. ⛔ Not fixed here: which pointer the carrier helpers take is an
+ABI question, not an emission-site choice.
+
+### The closing controls, and the five required mutations
+
+⛔ **A synthetic `(Big, large_payload)` pair would not do** — it takes the bounds
+edge and misses the low-slot path entirely. The pair here is minted by
+`ken_native_int_intern_local` from **run-time limbs**, exactly as production
+mints one. ⭐ And because `intern` trims leading zero limbs, `(x, 0)` returns
+`Small` and `(x, 1)` returns `Big` **from the same call** — so one compiled body
+answers both ways on a runtime operand, which is the marker partition as `AC-2`
+requires it.
+
+| required mutation | outcome |
+|---|---|
+| R1 pass the native `Big` slot to `make_immediate` | red — on the assertion naming the corruption |
+| R2 persist the `Big` marker instead of region limbs | red |
+| R3 substitute one copied limb | red |
+| R4 change the sign | red |
+| R5 omit `seal_int` | red |
+
+⚠ Every `Small` / immediate / spill row stayed green under all five.
+
+⭐ **R5 changed the test, not just confirmed it.** It first reddened the *limb*
+assertion — `node_limbs` returns `None` for an unsealed node — so an omitted
+seal was reported as a dropped limb: a true failure under a message naming the
+wrong cause. The seal now has its **own** assertion, ahead of the limbs.
