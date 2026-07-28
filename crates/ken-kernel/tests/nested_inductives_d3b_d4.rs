@@ -231,7 +231,8 @@ fn polymorphic_former_transport_preserves_guest_levels() {
     ).expect("PolyBox Former iota");
     let (_, args) = peel_app(&reduct);
     let supplied = args.last().expect("supplied Former lift");
-    check(&env, &Context::new(), supplied, &wrap_domains[1])
+    let supplied_type = ken_kernel::subst::subst0(&wrap_domains[1], &boxed_leaf);
+    check(&env, &Context::new(), supplied, &supplied_type)
         .expect("checked type-level Former lift");
     if let Term::Elim { fam, level_args, .. } = supplied {
         assert_eq!(*fam, poly_box);
