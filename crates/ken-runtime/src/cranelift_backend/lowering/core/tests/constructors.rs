@@ -2816,6 +2816,20 @@ fn ac_c4_lowered_wrap2(outer: &str, first: &str, second: &str) -> Lowered {
 /// control stayed green under its mutation precisely because its field sat at
 /// position 0.
 fn ac_c4_ownership_edge() -> (i64, u64, u64, Vec<Px8jSourceTraceEvent>) {
+    // `[IH] ++ [child0, child1] ++ frame env` -- so `Var(1)` is `Alpha`.
+    ac_c4_ownership_edge_with_case_body(RuntimeExpr::Var(1))
+}
+
+/// The same position-1 recursive edge, with the recursive case's body supplied
+/// by the caller so a control can read a **chosen** case binder.
+///
+/// ⭐ The parameter exists because `Var(1)` alone cannot see a defect in the
+/// projection loop's own field index: it reads `child0`, and a loop that
+/// projected field 0 for *every* binder would still answer `Alpha`. Reading
+/// `Var(2)` is what makes that class visible.
+fn ac_c4_ownership_edge_with_case_body(
+    case_body: RuntimeExpr,
+) -> (i64, u64, u64, Vec<Px8jSourceTraceEvent>) {
     let fixture = RuntimeExpr::Let {
         value: Box::new(ac_c4_wrap2("Wrap2", "Alpha", "Leaf")),
         body: Box::new(RuntimeExpr::ComputationalMatch {
@@ -2826,10 +2840,10 @@ fn ac_c4_ownership_edge() -> (i64, u64, u64, Vec<Px8jSourceTraceEvent>) {
                     argument_binders: 2,
                     // ⛔ The SECOND argument is the recursive one.
                     recursive_positions: vec![1],
-                    // `[IH] ++ [child0, child1] ++ frame env` -- so `Var(1)` is
-                    // `Alpha`. ⭐ Also a layout discriminator: without the IH at
-                    // index 0, `Var(1)` reads `Leaf` instead.
-                    body: RuntimeExpr::Var(1),
+                    // `[IH] ++ [child0, child1] ++ frame env`. ⭐ A layout
+                    // discriminator: without the IH at index 0, `Var(1)` reads
+                    // `Leaf` instead of `Alpha`.
+                    body: case_body,
                 },
                 crate::RuntimeComputationalMatchCase {
                     constructor: "ctor:fixture::C1::Leaf".to_string(),
@@ -2995,10 +3009,19 @@ fn c1_d3_ac_c4_the_recursive_positions_ownership_comes_from_the_frame() {
 /// **CLAIMED:** `§2g-i` clause 1 — the carried `ComputationalMatch` arm passes
 /// its projected `Carried(child)` **directly** into the licensed residual edge.
 /// **THE GAP:** identity of SSA words shows the residual holds *that
-/// projection*, not that the projection itself reads the right memory. ⛔ That
-/// second half is `emit_carrier_field`'s own contract and is measured by the
-/// `AC-C7` field-projection controls — ⚠ not restated here, because a control
-/// that asserts its neighbour's property is how an aggregate gets counted twice.
+/// projection*, not that the projection itself reads the right **memory**. ⛔
+/// This control's oracle is the projection loop's own record, so it is blind by
+/// construction to a defect in the loop's field index — a loop projecting field
+/// `0` for every binder still records two distinct words and still satisfies
+/// "the residual holds the word recorded at position 1."
+///
+/// ⚠⚠ **I first wrote here that the second half was "measured by the `AC-C7`
+/// field-projection controls." I then mutated the loop to check, and it was
+/// FALSE:** `emit_carrier_field(builder, scrutinee, position)` →
+/// `..., 0)` was green across the entire `ken-runtime` suite. ⇒ That half is
+/// closed by
+/// [`c1_d3_ac_c4_each_case_binder_reads_its_own_constructor_field`], written
+/// for this gap, ⛔ not by a neighbour that happened to exist.
 ///
 /// ## ⭐ Why this is NOT the positionally-derived assertion I flagged as the risk
 ///
@@ -3077,6 +3100,58 @@ fn c1_d3_ac_c4_the_residual_holds_the_declared_positions_projected_child() {
          `Specialized` here means the residual was wrapped or templated rather \
          than passed directly, which `§2g-i` forbids: {trace:#?}",
         projections[0].1
+    );
+}
+
+/// ⭐⭐ **`AC-C4` CONTROL 7 — each case binder reads ITS OWN constructor field.**
+///
+/// **MEASURED:** eliminating `Wrap2(Alpha, Leaf)` through the two-binder
+/// recursive case, a body of `Var(1)` evaluates to **`Alpha`** and a body of
+/// `Var(2)` evaluates to **`Leaf`** — the complete positional map of the case
+/// environment's child region, run end-to-end through emitted code.
+/// **CLAIMED:** `§2g` — the carried projection loop projects field `p` for
+/// binder `p`, so `[IH] ++ [child0, child1] ++ frame env` means what it says.
+/// **THE GAP:** two binders witness a two-field constructor exactly; a wider
+/// arity could permute fields `≥2` undetected. ⛔ Recorded, not claimed away.
+///
+/// ## ⚠ This control exists because I falsified my OWN coverage claim
+///
+/// `c1_d3_ac_c4_the_residual_holds_the_declared_positions_projected_child`
+/// closes *which child* the residual selects, but its oracle is the projection
+/// loop's own record — so it cannot see the loop projecting the **wrong field**
+/// for every binder. I asserted that case was covered elsewhere, then mutated
+/// `emit_carrier_field(builder, scrutinee, position)` → `..., 0)` and found it
+/// **green across all 485 + 26 + 14 tests**.
+///
+/// ⭐ **`Var(1)` alone is structurally incapable of catching it**: it reads
+/// `child0`, whose field index *is* `0`, so the mutation's answer and the
+/// correct answer coincide. ⇒ **`Var(2)` is the load-bearing half of this
+/// control** — it is the only assertion here that the mutation moves.
+///
+/// ⚠ Promise class: **durable invariant**.
+#[test]
+fn c1_d3_ac_c4_each_case_binder_reads_its_own_constructor_field() {
+    let (first, alpha, leaf, _trace) =
+        ac_c4_ownership_edge_with_case_body(RuntimeExpr::Var(1));
+    let (second, _alpha, _leaf, _trace) =
+        ac_c4_ownership_edge_with_case_body(RuntimeExpr::Var(2));
+    assert_ne!(
+        alpha, leaf,
+        "NON-VACUITY: the two children must be distinguishable identities"
+    );
+
+    assert_eq!(
+        first as u64, alpha,
+        "binder 0 (`Var(1)`, after the hypothesis at index 0) must read the \
+         constructor's FIRST field: expected Alpha ({alpha}), got {first}"
+    );
+    assert_eq!(
+        second as u64, leaf,
+        "DISCRIMINATOR: binder 1 (`Var(2)`) must read the constructor's SECOND \
+         field. ⛔ Reading Alpha ({alpha}) here means the projection loop \
+         projected field 0 for every binder — the positional default, invisible \
+         to `Var(1)` because field 0 is its right answer too. Got {second}, \
+         expected Leaf ({leaf})"
     );
 }
 
