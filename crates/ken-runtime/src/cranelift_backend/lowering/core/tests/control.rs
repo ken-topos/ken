@@ -6947,10 +6947,24 @@ fn the_resolved_call_edge_population_moves_with_the_program() {
 ///
 /// ⇒ **Coverage is 4 of 7, and the residual is exactly one ROW: the recursor
 /// closure, in both contexts, plus its residual call.** ⛔ Not a scatter of
-/// unrelated sites — every uncovered site is reached only by a
-/// `ComputationalMatch` carrying `recursive_positions`, which every fixture here
-/// deliberately lacks. ⚠ That is the shape of the remaining work, and it is
-/// stated so nobody re-derives it from line numbers.
+/// unrelated sites.
+///
+/// ⛔⛔ **AND THE OBVIOUS FIXTURE FOR THAT ROW DOES NOT REACH IT — measured.**
+/// The set below *includes* a `ComputationalMatch` whose case carries a
+/// `recursive_position` and whose body **applies the induction hypothesis**
+/// (`Call { callee: Var(0) }`) — the shape that binds a
+/// `Lowered::ComputationalRecursorClosure`. Re-running the bisect with it
+/// present left `:474`, `:939` and `:5897` **all green**. ⇒ ⚠ *"add a
+/// `ComputationalMatch` with `recursive_positions`"* is **not** the recipe, and
+/// this note exists so the next person does not spend the attempt I already
+/// spent. ⭐ The fixture is retained anyway — it is the only
+/// `ComputationalMatch` in the set and its relation still holds — but ⛔ it is
+/// **not** counted as coverage of anything, and the grid above is unchanged by
+/// it.
+///
+/// ⇒ What the three recursor sites actually need is **unknown**, and saying so
+/// is the honest state. ⛔ Do not infer from the fixture's presence that the row
+/// is attempted-and-covered; it is attempted-and-still-open.
 ///
 /// ⭐ **Both contexts are entered from `lower_expr`'s `Match` arm**, which routes
 /// its scrutinee through the producer when the scrutinee
@@ -7092,6 +7106,58 @@ fn every_origin_to_expression_resolution_goes_through_the_single_route() {
             default: RuntimeTrap {
                 code: RuntimeTrapCode::PatternMatchFailure,
                 message: "ac4 producer-context fixture is total".to_string(),
+            },
+        },
+        // ⛔⛔ **THE RECURSOR ATTEMPT THAT DID NOT WORK — kept as the record of
+        // a negative measurement.** A `ComputationalMatch` case carrying a
+        // `recursive_position`, whose body APPLIES the induction hypothesis
+        // (`Call { callee: Var(0) }`) against a unit, with the recursive child
+        // as a thunk. That is the shape that binds a
+        // `Lowered::ComputationalRecursorClosure`, and it is the obvious way to
+        // reach `:474` / `:939` / `:5897`.
+        //
+        // ⚠ **It reaches none of them.** Re-running the seven-site bypass
+        // bisect with this shape present left all three green. ⇒ It is retained
+        // because it is the only `ComputationalMatch` in the set and its
+        // relation holds, ⛔ NOT as coverage — see the doc comment.
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::ac4::Node".to_string(),
+                args: vec![RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: vec!["unit".to_string()],
+                    body: Box::new(RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::ac4::Leaf".to_string(),
+                        args: Vec::new(),
+                    }),
+                }],
+            }),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::ac4::Node".to_string(),
+                    argument_binders: 1,
+                    recursive_positions: vec![0],
+                    body: RuntimeExpr::Call {
+                        callee: Box::new(RuntimeExpr::Var(0)),
+                        args: vec![RuntimeExpr::Construct {
+                            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                            args: Vec::new(),
+                        }],
+                    },
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::ac4::Leaf".to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::ac4::Leaf".to_string(),
+                        args: Vec::new(),
+                    },
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "ac4 recursor fixture is total".to_string(),
             },
         },
     ];
