@@ -1,8 +1,14 @@
 use ken_kernel::inductive::{iota_reduct, method_type, peel_app, peel_pi};
 use ken_kernel::{
     check, convert, convert_type, declare_inductive, infer, ConstructorDecl, Context, CtorSpec,
-    Decl, GlobalEnv, GlobalId, InductiveDecl, InductiveSpec, Level, Term,
+    Decl, GlobalEnv, GlobalId, InductiveDecl, InductiveSpec, Level, LevelVar, Term,
 };
+
+const U: LevelVar = LevelVar(0);
+
+fn level_u() -> Level {
+    Level::Var(U)
+}
 
 fn ty0() -> Term {
     Term::Type(Level::zero())
@@ -109,6 +115,132 @@ fn declare_list(env: &mut GlobalEnv) -> GlobalId {
         ],
     })
     .expect("ordinary positive List")
+}
+
+fn declare_poly_box(env: &mut GlobalEnv) -> GlobalId {
+    declare_inductive(env, |poly_box| InductiveSpec {
+        level_params: vec![U],
+        params: vec![Term::Type(level_u())],
+        indices: vec![],
+        level: level_u(),
+        constructors: vec![
+            CtorSpec { args: vec![], target_indices: vec![] },
+            CtorSpec { args: vec![Term::var(0)], target_indices: vec![] },
+        ],
+    })
+    .expect("polymorphic unary PolyBox declaration")
+}
+
+fn install_test_only_polymorphic_nested_family(
+    env: &mut GlobalEnv,
+    poly_box: GlobalId,
+) -> GlobalId {
+    let family = env.fresh_id();
+    let leaf = env.fresh_id();
+    let wrap = env.fresh_id();
+    let mut declaration = InductiveDecl {
+        id: family,
+        level_params: vec![U],
+        params: vec![],
+        parameter_polarities: vec![],
+        indices: vec![],
+        level: level_u(),
+        constructors: vec![
+            ConstructorDecl {
+                id: leaf,
+                args: vec![],
+                target_indices: vec![],
+                type_: ty0(),
+                recursive_positions: vec![],
+            },
+            ConstructorDecl {
+                id: wrap,
+                args: vec![Term::app(
+                    Term::indformer(poly_box, vec![level_u()]),
+                    Term::indformer(family, vec![level_u()]),
+                )],
+                target_indices: vec![],
+                type_: ty0(),
+                recursive_positions: vec![],
+            },
+        ],
+        former_type: ty0(),
+    };
+    declaration.build_types();
+    env.add_decl(Decl::Inductive(declaration));
+    family
+}
+
+#[test]
+fn polymorphic_former_transport_preserves_guest_levels() {
+    // A general-host fixture: the guest family and its unary former both carry
+    // a universe parameter.  The motive and source levels are intentionally
+    // different so the transport path cannot silently reuse a retained head.
+    let mut env = GlobalEnv::new();
+    let poly_box = declare_poly_box(&mut env);
+    let family = install_test_only_polymorphic_nested_family(&mut env, poly_box);
+    let declaration = env.inductive(family).expect("polymorphic D declaration");
+    let leaf = declaration.constructors[0].id;
+    let wrap = declaration.constructors[1].id;
+    let poly = env.inductive(poly_box).expect("PolyBox declaration");
+    let box_ctor = poly.constructors[1].id;
+    let d0 = Term::indformer(family, vec![Level::zero()]);
+    let box_d0 = Term::app(
+        Term::indformer(poly_box, vec![Level::zero()]),
+        d0.clone(),
+    );
+    let boxed_leaf = Term::app(
+        Term::constructor(box_ctor, vec![Level::zero()]),
+        Term::constructor(leaf, vec![Level::zero()]),
+    );
+    let motive = Term::Ascript(
+        Box::new(Term::lam(d0.clone(), Term::Type(Level::zero().suc()))),
+        Box::new(Term::pi(d0.clone(), Term::Type(Level::zero().suc().suc()))),
+    );
+    let leaf_method = Term::Type(Level::zero());
+    let wrap_method_type = method_type(&env, declaration, 1, &motive, &[], &[Level::zero()])
+        .expect("PolyBox Former host method type");
+    let (wrap_domains, _) = peel_pi(&wrap_method_type);
+    assert_eq!(wrap_domains.len(), 2, "field and Former lift binders");
+    let wrap_method = Term::lam(
+        wrap_domains[0].clone(),
+        Term::lam(wrap_domains[1].clone(), Term::Type(Level::zero())),
+    );
+    check(&env, &Context::new(), &leaf_method,
+          &method_type(&env, declaration, 0, &motive, &[], &[Level::zero()]).unwrap())
+        .expect("PolyBox leaf method");
+    check(&env, &Context::new(), &wrap_method, &wrap_method_type)
+        .expect("PolyBox Former method");
+    let methods = vec![leaf_method, wrap_method];
+    let eliminator = Term::Elim {
+        fam: family,
+        level_args: vec![Level::zero()],
+        params: vec![],
+        motive: Box::new(motive.clone()),
+        methods: methods.clone(),
+        scrutinee: Box::new(Term::app(
+            Term::constructor(wrap, vec![Level::zero()]),
+            boxed_leaf.clone(),
+        )),
+    };
+    let elim_ty = infer(&env, &Context::new(), &eliminator).expect("guest eliminator");
+    check(&env, &Context::new(), &eliminator, &elim_ty).expect("checked guest eliminator");
+    let reduct = iota_reduct(
+        &env, declaration, 1, &[Level::zero()], &[], &motive, &methods,
+        std::slice::from_ref(&boxed_leaf),
+    ).expect("PolyBox Former iota");
+    let (_, args) = peel_app(&reduct);
+    let supplied = args.last().expect("supplied Former lift");
+    check(&env, &Context::new(), supplied, &wrap_domains[1])
+        .expect("checked type-level Former lift");
+    if let Term::Elim { fam, level_args, .. } = supplied {
+        assert_eq!(*fam, poly_box);
+        assert_eq!(level_args, &vec![Level::zero()]);
+    } else {
+        panic!("Former lift is not a host elimination");
+    }
+    assert!(convert(&env, &Context::new(), &box_d0,
+                    &Term::app(Term::indformer(poly_box, vec![Level::zero()]), d0)));
 }
 
 fn install_test_only_nested_family(env: &mut GlobalEnv, list: GlobalId) -> GlobalId {
