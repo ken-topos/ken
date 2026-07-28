@@ -1141,6 +1141,38 @@ impl<'src> Planner<'src> {
 /// producer of an `EmittableUnit` is [`Self::emittable_units`], which reads
 /// `self.abi`. A control that emission consumes only unit-supplied slots is
 /// `AC-12`'s, and it is not discharged here.
+/// **One cross-owner call edge, as the emitter is allowed to see it.**
+///
+/// ⭐ **Both ends are `PredeclaredFunctionId`s and nothing else.** There is no
+/// node id, no origin and no expression here, because a call edge's whole
+/// content at emission time is *which unit calls which unit* — and resolving a
+/// callee to a target function must go through the planner's identity, never
+/// through the ordinal some emission loop happened to assign.
+///
+/// ⛔ **Unmintable in `lowering`:** the fields are private and the sole producer
+/// is [`StaticTransitionPlan::emittable_call_edges`]. ⇒ The emitter cannot
+/// invent a call to a unit the planner did not connect, which is the property
+/// that makes "no indirect dispatch on a dynamic property" structural rather
+/// than a coding convention.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct EmittableCallEdge {
+    caller: PredeclaredFunctionId,
+    callee: PredeclaredFunctionId,
+}
+
+impl EmittableCallEdge {
+    /// The unit this call is emitted **into**.
+    pub(in crate::cranelift_backend) fn caller(self) -> PredeclaredFunctionId {
+        self.caller
+    }
+
+    /// The unit this call transfers **to**. ⛔ Resolve it through
+    /// `UnitBundle::function`, whose `None` is a real answer.
+    pub(in crate::cranelift_backend) fn callee(self) -> PredeclaredFunctionId {
+        self.callee
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(in crate::cranelift_backend) struct EmittableUnit<'plan> {
     function: PredeclaredFunctionId,
@@ -1394,6 +1426,48 @@ impl<'src> StaticTransitionPlan<'src> {
             &self.abi.descriptors,
             &self.abi.slots,
         )
+    }
+
+    /// **`RT-FNSPLIT-B2F` `D4` — the cross-owner call edges, DERIVED.**
+    ///
+    /// ⛔ **Nothing here decides what a call edge is.** The classification is
+    /// `B2O`'s and it is enforced as `return Err` arms inside
+    /// `SemanticPlane::validate_function_units`: a `StaticBody` edge crosses to
+    /// a **distinct** unit and lands on that unit's **seed**; every other edge
+    /// either stays inside one unit or exits to a shared exit; anything else is
+    /// refused during planning. ⇒ ⭐ **A plan that reaches this method cannot
+    /// carry a violating edge**, so this is a projection of facts already
+    /// validated, not a second classification.
+    ///
+    /// ⚠ **Which is exactly why `B2F` must not re-assert those four laws.** A
+    /// control here asserting "a `StaticBody` edge crosses owners" is green on
+    /// every input that can reach emission and tests nothing. ⭐ What `B2F` owes
+    /// instead is **one-for-one consumption** — that emission is driven by this
+    /// view and does not build a second table beside it — which is a property
+    /// the inert node could not check about itself.
+    ///
+    /// ⛔ **Fails closed on a missing descriptor** rather than skipping the
+    /// edge: a dropped call edge is a unit that is never called, which is
+    /// silent at emission and wrong at run time.
+    /// ⛔ **The owner classification is NOT named here**, and that is enforced:
+    /// `the_owner_classification_has_a_closed_production_naming_inventory` reds
+    /// if this file starts spelling `SemanticOwner`. ⇒ The `StaticBody` walk
+    /// lives in `semantic_ir.rs`, beside the validation that makes it sound, and
+    /// this method only wraps the resulting id pairs in the emitter's view type.
+    ///
+    /// ⭐ That pin caught a real defect in this deliverable's first draft, which
+    /// destructured `SemanticOwner::Function(..)` right here — a third file
+    /// naming the classification is how a second, divergent classification
+    /// authority starts.
+    pub(in crate::cranelift_backend) fn emittable_call_edges(
+        &self,
+    ) -> Result<Vec<EmittableCallEdge>, CraneliftBackendError> {
+        Ok(self
+            .semantic
+            .static_body_call_edges(&self.edges)?
+            .into_iter()
+            .map(|(caller, callee)| EmittableCallEdge { caller, callee })
+            .collect())
     }
 
     pub(in crate::cranelift_backend) fn emittable_units(

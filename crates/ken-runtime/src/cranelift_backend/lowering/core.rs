@@ -166,6 +166,14 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     super::units::b2f_reached_emission_seam();
     static_transition_plan.validate_emitted_transfers_are_representable()?;
     let unit_bundle = super::units::declare_unit_bundle(&mut module, &static_transition_plan)?;
+    // ⭐ `RT-FNSPLIT-B2F` `D4` — resolve every cross-owner call edge against the
+    // bundle before a single body is defined, so a callee the bundle never
+    // declared is refused while nothing has been emitted yet.
+    //
+    // ⛔ Derived from the planner's validated `StaticBody` edges. This node does
+    // not classify edges and must never be made to: the four classification laws
+    // are `B2O`'s, enforced as reject arms in `validate_function_units`.
+    let call_edges = super::units::resolve_call_edges(&static_transition_plan, &unit_bundle)?;
     // ⭐ `RT-FNSPLIT-B2F` `D3` — mint the artifact-static seed material before
     // any function context exists. `B2R` declared `GroundValueCarrier` as
     // `BorrowedForActivation` from `ArtifactStatic` and deliberately minted
@@ -366,6 +374,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         &mut module,
         &compiler.static_transition_plan,
         &unit_bundle,
+        &call_edges,
     )?;
     // The plan is no longer dropped unused here: `compiler` owns it and it dies
     // with this call. `CompiledModule::from_parts` below takes only owned data

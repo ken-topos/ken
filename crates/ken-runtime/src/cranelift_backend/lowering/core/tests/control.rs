@@ -3671,6 +3671,21 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
             // is untouched. A unit carries an ORIGIN; resolving that origin to a
             // term still goes through `source_occurrence`, which is why `B2F`
             // adds no second `origin -> expression` lookup.
+            // `RT-FNSPLIT-B2F` `D4` — the cross-owner call edge's two ends,
+            // added deliberately and argued rather than bumped.
+            //
+            // ⚠ Both return an **identity**, never a source term, so neither can
+            // contribute to the `-> Result<&'src RuntimeExpr` count that carries
+            // `B2A-S`'s `AC-4` — which stays at exactly one.
+            //
+            // ⭐ Their producer `emittable_call_edges` (below) is the sole route
+            // to an `EmittableCallEdge`, whose fields are private — so `lowering`
+            // can read which unit calls which and cannot invent an edge the
+            // planner did not validate. ⛔ It does not classify edges: the walk
+            // is `SemanticPlane::static_body_call_edges`, beside the validator,
+            // because `static_transition.rs` may not name `SemanticOwner` at all.
+            "pub(in crate::cranelift_backend) fn caller(self) -> PredeclaredFunctionId {",
+            "pub(in crate::cranelift_backend) fn callee(self) -> PredeclaredFunctionId {",
             "pub(in crate::cranelift_backend) fn function(self) -> PredeclaredFunctionId {",
             "pub(in crate::cranelift_backend) fn origin(self) -> StaticOriginId {",
             "pub(in crate::cranelift_backend) fn definition(self) -> AbiUnitDefinition {",
@@ -3724,6 +3739,7 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
             // enforced by `validate_function_units`. In particular it does not
             // consult `TransitionKind::ClosureBody`, which is a body's return
             // successor and not a unit head.
+            "pub(in crate::cranelift_backend) fn emittable_call_edges(",
             "pub(in crate::cranelift_backend) fn emittable_units(",
             "pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(",
             "pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols<'src>(",
@@ -6778,6 +6794,71 @@ fn b2f_seed_capture_program(symbol: &str, value: RuntimeGroundValue) -> NativeSe
 /// **THE GAP:** ⛔ this says nothing about the object's *contents*, nor about
 /// whether any emitted code reads it. Contents are pinned by the encoder tests
 /// in `seed_material`; the reading is
+/// **`RT-FNSPLIT-B2F` `D4` — the resolved call-edge population is DERIVED from
+/// the program, not a constant this node carries.**
+///
+/// ⛔ **This deliberately does NOT re-assert `B2O`'s four edge-classification
+/// laws.** `validate_function_units` enforces all four as `return Err` arms in
+/// landed production bytes, so planning **refuses to construct** a violating
+/// graph — ⇒ a `B2F` control asserting "a `StaticBody` edge crosses owners"
+/// would be green on every input that can reach emission and would test nothing
+/// while reading as coverage. The frame says so in terms.
+///
+/// ⭐ **What survives the re-home is one-for-one consumption**, and that is what
+/// this measures: the number of call edges emission resolves moves with the
+/// program's own structure. A closure body is a distinct owner and therefore a
+/// call edge; a bare ground value is one unit with nothing to call.
+///
+/// **MEASURED:** two compiles — a called closure resolves a nonzero call-edge
+/// count, and a bare ground value resolves exactly zero.
+/// **CLAIMED:** the call-edge population is projected from the planner's
+/// validated `StaticBody` edges rather than derived a second time here.
+/// **THE GAP:** ⛔ **this shows the count is not constant; it does not show the
+/// count is EXACTLY the `StaticBody` edge population.** `SemanticOwner` and the
+/// edge list are planner-private — deliberately, so the emitter cannot classify
+/// owners itself — so no control in `lowering` can count the planner's edges
+/// independently. ⇒ Exactness rests on `emittable_call_edges` filtering on
+/// `EdgeKind::StaticBody` and failing closed otherwise, which is **argument, not
+/// measurement**, and is recorded as such.
+#[test]
+fn the_resolved_call_edge_population_moves_with_the_program() {
+    fn call_edges_for(expr: &RuntimeExpr) -> usize {
+        ac11_compiles(expr).expect("fixture compiles");
+        crate::cranelift_backend::lowering::units::b2f_last_call_edge_resolution()
+    }
+
+    // A called closure: its body is a distinct owner, so the planner records a
+    // `StaticBody` edge into it and emission must resolve a call to that unit.
+    let with_closure_body = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+    // ⛔ THE POSITIVE CONTROL, and without it the row above is worthless: a
+    // resolver that returned some fixed nonzero number for every program would
+    // satisfy it. This is the same shape with nothing to call.
+    let without_closure_body = RuntimeExpr::Value(RuntimeValue::Bool(true));
+
+    let with = call_edges_for(&with_closure_body);
+    let without = call_edges_for(&without_closure_body);
+
+    assert!(
+        with > 0,
+        "D4 -- a program whose closure body is a distinct function unit must \
+         resolve at least one cross-owner call edge; got {with}. Zero means \
+         emission is not consuming the planner's StaticBody edges at all."
+    );
+    assert_eq!(
+        without, 0,
+        "D4 -- POSITIVE CONTROL: a bare ground value is a single unit with \
+         nothing to call, so it must resolve zero call edges. A nonzero count \
+         here means the population is not derived from the program."
+    );
+}
+
 /// `a_seed_capture_borrows_from_artifact_static_storage_rather_than_folding` below.
 #[test]
 fn b2f_mints_one_defined_artifact_static_object_per_seed_environment_entry() {

@@ -164,6 +164,100 @@ impl UnitBundle {
     }
 }
 
+/// **`RT-FNSPLIT-B2F` `D4` — every cross-owner call edge, resolved to the target
+/// function the bundle declared for it.**
+///
+/// ⭐ **Keyed by the planner's `PredeclaredFunctionId`, resolved to a `FuncId`,
+/// and derived from nothing else.** The ordinal `declare_unit_bundle` used to
+/// spell a symbol name never enters here; a call edge names its callee by static
+/// identity and the bundle answers with the declared target or with `None`.
+pub(in crate::cranelift_backend) struct CallEdgeTargets {
+    edges: Vec<(PredeclaredFunctionId, FuncId)>,
+}
+
+impl CallEdgeTargets {
+    /// The resolved targets of every call emitted **into** `caller`.
+    ///
+    /// ⚠ Returns an empty iterator for a unit with no outgoing call edges, which
+    /// is the common case: most units are leaves.
+    pub(in crate::cranelift_backend) fn targets_in(
+        &self,
+        caller: PredeclaredFunctionId,
+    ) -> impl Iterator<Item = FuncId> + '_ {
+        self.edges
+            .iter()
+            .filter(move |(from, _)| *from == caller)
+            .map(|(_, id)| *id)
+    }
+
+    /// How many call edges were resolved.
+    #[cfg(test)]
+    pub(in crate::cranelift_backend) fn len(&self) -> usize {
+        self.edges.len()
+    }
+}
+
+/// **`D4` — resolve the derived call edges against the declared bundle, BEFORE
+/// any body is defined.**
+///
+/// ⭐ **This runs between `D1`'s declaration pass and `D2`'s definition pass on
+/// purpose, and the position is the point.** A call edge whose callee was never
+/// forward-declared is a program that cannot be emitted; discovering that while
+/// half the bodies are already defined leaves a partially emitted artifact whose
+/// failure mode is a link error or worse. ⇒ Resolving the whole edge set first
+/// makes the bundle's completeness a **precondition** of definition rather than
+/// a discovery during it.
+///
+/// ⛔ **`None` from the bundle is a hard error and must never be replaced by a
+/// fabricated `FuncId`.** That substitution is the exact failure
+/// `UnitBundle::function`'s `Option` return type exists to make visible, and it
+/// would emit a call to whatever function happened to share the id.
+///
+/// **MEASURED:** every `StaticBody` edge the planner validated resolves to a
+/// target function the bundle declared, and the resolved population equals the
+/// derived population.
+/// **CLAIMED:** call sites reference target functions by their **static**
+/// identity, with no indirect dispatch on a dynamic property and no runtime
+/// lookup that re-derives which code to run from a value.
+/// **THE GAP:** ⛔ **this resolves the edges; it does not yet EMIT the call
+/// instructions.** A unit body today loads its result slot and returns, because
+/// body emission does not descend until `S6` switches `lower_expr`'s consumers
+/// over. ⇒ Until then this carries **rejection** authority, not emission
+/// authority, and ⛔ the claim above is discharged for *resolution* only. The
+/// `direct call rather than call_indirect` half of it has no control yet and is
+/// **not** claimed.
+pub(in crate::cranelift_backend) fn resolve_call_edges(
+    plan: &StaticTransitionPlan<'_>,
+    bundle: &UnitBundle,
+) -> Result<CallEdgeTargets, CraneliftBackendError> {
+    let derived = plan.emittable_call_edges()?;
+    let mut edges = Vec::with_capacity(derived.len());
+    for edge in derived {
+        let target = bundle.function(edge.callee()).ok_or_else(|| {
+            backend_module("a call edge names a unit that was never forward-declared".to_string())
+        })?;
+        edges.push((edge.caller(), target));
+    }
+    #[cfg(test)]
+    B2F_CALL_EDGE_RESOLUTION.with(|cell| cell.set(edges.len()));
+    Ok(CallEdgeTargets { edges })
+}
+
+#[cfg(test)]
+thread_local! {
+    /// How many call edges the most recent compile resolved.
+    ///
+    /// ⚠ Same limitation as [`b2f_last_unit_emission`]: it names no attempt, so
+    /// read it only where one compile is known to have run to this seam.
+    static B2F_CALL_EDGE_RESOLUTION: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// The resolved call-edge count from the most recent compile.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn b2f_last_call_edge_resolution() -> usize {
+    B2F_CALL_EDGE_RESOLUTION.with(std::cell::Cell::get)
+}
+
 /// The uniform call ABI for every target unit: one pointer to the activation
 /// frame, returning one `i64`.
 ///
@@ -245,12 +339,14 @@ pub(in crate::cranelift_backend) fn define_unit_bodies<M: Module>(
     module: &mut M,
     plan: &StaticTransitionPlan<'_>,
     bundle: &UnitBundle,
+    call_edges: &CallEdgeTargets,
 ) -> Result<(), CraneliftBackendError> {
     for unit in plan.emittable_units()? {
         let id = bundle.function(unit.function()).ok_or_else(|| {
             backend_module("a planned unit was never forward-declared".to_string())
         })?;
-        define_unit_body(module, unit, id)?;
+        let targets = call_edges.targets_in(unit.function()).collect::<Vec<_>>();
+        define_unit_body(module, unit, id, &targets)?;
     }
     Ok(())
 }
@@ -259,6 +355,7 @@ fn define_unit_body<M: Module>(
     module: &mut M,
     unit: EmittableUnit<'_>,
     id: FuncId,
+    call_targets: &[FuncId],
 ) -> Result<(), CraneliftBackendError> {
     let (offsets, frame_bytes) = unit.slot_offsets()?;
     // ⭐ The declared size and the walked size must agree. They are the same
@@ -284,6 +381,18 @@ fn define_unit_body<M: Module>(
 
     let sig = unit_signature(module);
     let mut func = Function::with_name_signature(UserFuncName::user(2, id.as_u32()), sig);
+    // ⭐ `D4` — this unit's callees are referenced HERE, by the static identity
+    // the planner assigned, before the body exists to call them.
+    //
+    // ⛔ **The call instructions themselves are `S6`'s**, because a unit body
+    // does not descend into its own expression until `lower_expr`'s consumers
+    // switch over. ⇒ What is live today is the **reference**: a `FuncRef`
+    // resolved from a validated call edge through the declared bundle, with no
+    // ordinal, no name parsing and no dynamic lookup anywhere on the path. ⚠ An
+    // emitted `call` is not claimed and no control here asserts one.
+    for target in call_targets {
+        module.declare_func_in_func(*target, &mut func);
+    }
     let mut func_ctx = FunctionBuilderContext::new();
     {
         let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
