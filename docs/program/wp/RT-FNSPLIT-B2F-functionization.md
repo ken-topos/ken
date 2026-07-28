@@ -1313,6 +1313,86 @@ it.
 > ⚠ And if **your** measurement disagrees with 47/31, yours wins and you say so —
 > the same standing rule that produced this correction.
 
+> ## ✅ `S4` DISCHARGED CLAUSE 3 FOR TWO SHAPES — ⛔ AND `AC-11` IS STILL OPEN
+>
+> ⛔ **Do not total the partial populations below into a discharge.**
+>
+> **Steward, frame owner, 2026-07-28.** Runtime's `S4` result
+> (`evt_7me5y92n8jhqv`, tip `1e905036`), under the Architect's ruling
+> (`evt_1y43t24pnv9hz`) and acceptance (`evt_5gd19nrew6hat`).
+>
+> ### Two records that are mine and are binding
+>
+> 1. ⛔ **Clause 3 is NOT amended.** The wording below stands exactly as
+>    transcribed. ⚠ A reader of the `S4` exchange must not infer an amendment was
+>    pending, proposed, or granted — **route (a) was taken instead**, because the
+>    late `Unsupported` lives in `lower_expr`'s `ImportedDeclarationRef` arm,
+>    which is the authority **`D6` retires**. It cannot discharge a property of
+>    the surviving boundary.
+> 2. ⛔ **`AC-11` is NOT discharged.** `S4` closed the *mechanism* question for
+>    the two **named** holes. Three partial results now exist and ⛔ **they must
+>    join the SAME proof; they do not sum.**
+>
+> ### ✅ What `S4` proved — the differential, not the enabled column
+>
+> | fixture | walk enabled | only the walk gated off |
+> |---|---|---|
+> | `Hole A` — `If { true, imported, imported }` capture | `Some(0)` | `Some(2)` — **reds** |
+> | `Hole B` — `LexicalClosure { captures: [], body: imported }` | `Some(0)` | `Some(2)` — **reds**, re-measured separately (rule 2 below) |
+> | both intra-module positive controls | accepted | accepted |
+>
+> The three-valued epoch — `None` = never reached the emission seam (⛔ **not** a
+> zero), `Some(0)` = reached it and refused **before** any unit was declared,
+> `Some(n>0)` = units already declared — is stamped in `core.rs` immediately
+> **before** the validator. ⛔ Stamping it inside `declare_unit_bundle` makes
+> `Some(0)` unreachable by construction: observing the epoch would require
+> declaring the very unit whose *absence* is the measurement.
+>
+> ⚠ **The superseded reading, so nobody re-derives it.** `holeA = 1, holeB = 1`
+> was **stale recorder state** left by a successful sentinel compiled first and
+> never reset by an early refusal — consistent with *both* outcomes. That
+> `1`-valued assertion is **retired**, not kept: it pinned recorder state, so the
+> event it claimed to announce could not have reddened it. Its replacement is a
+> durable invariant,
+> `an_unrepresentable_transfer_is_refused_before_any_unit_is_declared`,
+> which ⭐ **`D6`/`S7`'s removal of `lower_expr`'s late arm must leave GREEN** —
+> the reason to assert it *before* the deletion rather than after.
+>
+> ### ⛔ THE RESIDUAL, AS A PARTITION WITH A DISCRIMINATOR
+>
+> Clause 1's population is **every** source-valued transfer. To place one, ask
+> **which derivation reaches its producer** — mechanical, and it partitions the
+> whole population instead of listing the shapes anyone has thought of:
+>
+> | derivation reaching the producer | status |
+> |---|---|
+> | `child_occurrence` — positional child of the occurrence | ✅ within the walk's reach; proven for the two named shapes only |
+> | `case_body_occurrence` — `Match` / `ComputationalMatch` case bodies | ⛔ **not traced by the walk, and covered by no control.** Positional layout in `plane.child_origins` is unestablished |
+>
+> And by slot class:
+>
+> | slot class | status |
+> |---|---|
+> | `Capture`, `Result` | ✅ clause 1 discharged for the two named binder-free import shapes — ⛔ **not for the shape class** |
+> | `Parameter` | ⛔ **population is EMPTY until `S5`.** ⚠ Vacuous is not passing |
+>
+> ⇒ ⛔ **`AC-11` closes only when the `Parameter` population is nonempty and
+> non-vacuous, the `case_body_occurrence` path is either traced or rejected, and
+> both join the same proof as the two named holes.**
+>
+> ### ⭐ Two instrument rules `S5`–`S8` inherit
+>
+> 1. ⛔ **`Some(0)` is also what a stamp firing beside a dead counter reports.**
+>    The epoch therefore carries its own positive control: a **successful**
+>    compile in its own stamped attempt must report `Some(n>0)`. Without that row
+>    both rejection rows are satisfiable by a counter that never moves.
+> 2. ⛔ **A mutation that reddens the FIRST row of a multi-row control leaves the
+>    later rows UNMEASURED.** `S4`'s first gated run reddened on `Hole A` and
+>    panicked, so `Hole B` was never reached and had to be re-measured under the
+>    same mutation with `Hole A`'s row neutralized. ⇒ **Assertion order
+>    short-circuits exactly the evidence a differential collects.** Every
+>    remaining multi-fixture mutation in this node is measured **per row**.
+
 **AC-11 — every boundary transfer emitted by B2F is representable, established
 by B2F and not inherited from B2R `C4`.** *(Architect text, transcribed
 verbatim — do not paraphrase it.)*
