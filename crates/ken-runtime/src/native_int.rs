@@ -199,6 +199,19 @@ impl NativeIntArenaV1 {
     /// Decode only the canonical view written by the emitted local export
     /// helper. This is a representation decoder, not a second slot resolver
     /// or integer-normalization implementation.
+    /// Whether generated code wrote a final export at all.
+    ///
+    /// ⭐ **The discriminator the C stub used to own.** `Default` leaves
+    /// `final_tag` at `u64::MAX`, and the stub's `main` branched on exactly that
+    /// to decide between printing the raw entry result and rendering an exported
+    /// `Int`. ⛔ [`Self::decode_final_export`] cannot carry that distinction on
+    /// its own: it answers `None` for *"nothing was exported"* **and** for
+    /// *"something malformed was exported"*, and those are different outcomes —
+    /// one prints a value, the other is a non-zero exit status.
+    pub fn has_final_export(&self) -> bool {
+        self.final_tag != u64::MAX
+    }
+
     pub fn decode_final_export(&self) -> Option<RuntimeIntV1> {
         let sign = match self.final_sign {
             0 => Sign::NonNegative,

@@ -56,6 +56,13 @@ pub const KEN_ACTIVATION_ERR_FINISHED: i64 = -3;
 /// Adoption of the escaping result failed. ⚠ The boundary status is not
 /// squashed into this one: it is returned through the out-parameter.
 pub const KEN_ACTIVATION_ERR_ADOPT: i64 = -4;
+/// ⛔ Generated code wrote a MALFORMED final export. ⚠ Distinct from "nothing
+/// was exported", which succeeds and renders the raw entry result — collapsing
+/// the two would turn a corrupt export into a printed number.
+pub const KEN_ACTIVATION_ERR_EXPORT: i64 = -5;
+/// The rendering does not fit the caller's buffer. ⛔ Nothing partial is
+/// written: a truncated integer is a wrong answer, not a short one.
+pub const KEN_ACTIVATION_ERR_BUFFER: i64 = -6;
 
 /// **The deployment-authorized profile, as it crosses into C.**
 ///
@@ -259,6 +266,85 @@ pub unsafe extern "C" fn ken_activation_v1_bind_process_frame(
     }
 }
 
+/// **The `frame_ptr` for the non-process launch shape.**
+///
+/// ⭐ The generated root's single parameter is the native-`Int` arena there, so
+/// the adapter hands that back — ⛔ still as one opaque pointer, with no layout
+/// crossing into C.
+///
+/// # Safety
+///
+/// `activation` must be a live handle and `out_frame` a writable slot.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ken_activation_v1_native_frame(
+    activation: *const KenActivationV1,
+    out_frame: *mut *const c_void,
+) -> i64 {
+    if activation.is_null() || out_frame.is_null() {
+        return KEN_ACTIVATION_ERR_NULL;
+    }
+    let activation = unsafe { &*activation };
+    match activation.activation.native_frame_ptr() {
+        Some(frame) => {
+            unsafe { *out_frame = frame };
+            KEN_ACTIVATION_OK
+        }
+        None => KEN_ACTIVATION_ERR_FINISHED,
+    }
+}
+
+/// **Render the final exported `Int`, or the raw entry result when nothing was
+/// exported, into a caller-supplied buffer.**
+///
+/// ⭐⭐ **This is what lets the stub stop declaring the arena layout.** The C
+/// side used to read `final_tag`/`final_payload`/`final_sign`/`final_len`/
+/// `final_limbs` itself, re-derive the export's canonicality checks, and format
+/// the digits — a second implementation of both. Now it asks the owner and
+/// writes bytes.
+///
+/// `out_len` receives the number of bytes written. ⛔ `KEN_ACTIVATION_ERR_EXPORT`
+/// when generated code wrote an export that is **malformed** — ⚠ a different
+/// outcome from *"nothing was exported"*, which renders `fallback` and succeeds.
+/// Collapsing the two would turn a corrupt export into a printed number.
+///
+/// ⛔ `KEN_ACTIVATION_ERR_BUFFER` when the rendering does not fit; ⚠ nothing
+/// partial is written, because a truncated integer is a wrong answer rather than
+/// a short one.
+///
+/// # Safety
+///
+/// `activation` must be live, `buffer` must be writable for `capacity` bytes,
+/// and `out_len` must be a writable slot.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ken_activation_v1_write_final_export(
+    activation: *const KenActivationV1,
+    fallback: i64,
+    buffer: *mut u8,
+    capacity: usize,
+    out_len: *mut usize,
+) -> i64 {
+    if activation.is_null() || buffer.is_null() || out_len.is_null() {
+        return KEN_ACTIVATION_ERR_NULL;
+    }
+    let arena = unsafe { &*activation }.activation.native_int_arena();
+    let rendered = if arena.has_final_export() {
+        match arena.decode_final_export() {
+            Some(export) => format_final_export(Some(export), fallback),
+            None => return KEN_ACTIVATION_ERR_EXPORT,
+        }
+    } else {
+        format_final_export(None, fallback)
+    };
+    if rendered.len() > capacity {
+        return KEN_ACTIVATION_ERR_BUFFER;
+    }
+    unsafe {
+        std::ptr::copy_nonoverlapping(rendered.as_ptr(), buffer, rendered.len());
+        *out_len = rendered.len();
+    }
+    KEN_ACTIVATION_OK
+}
+
 /// Seal the persistent image and adopt an escaping result.
 ///
 /// `escaping_word` is `0` for *"nothing escapes"*; otherwise it is a boundary
@@ -310,12 +396,14 @@ pub unsafe extern "C" fn ken_activation_v1_destroy(activation: *mut KenActivatio
 /// ⭐ `D1`'s own warning is that a `crate-type` line is a **build-system**
 /// claim and not a **link** one. ⇒ The archive is checked against *this* list.
 /// ⛔ Pinned as the exact permitted set, so an addition reddens too.
-pub const KEN_ACTIVATION_ABI_SYMBOLS: [&str; 7] = [
+pub const KEN_ACTIVATION_ABI_SYMBOLS: [&str; 9] = [
     "ken_boundary_store_v1_open",
     "ken_boundary_store_v1_destroy",
     "ken_activation_v1_begin",
     "ken_activation_v1_services",
     "ken_activation_v1_bind_process_frame",
+    "ken_activation_v1_native_frame",
+    "ken_activation_v1_write_final_export",
     "ken_activation_v1_finish",
     "ken_activation_v1_destroy",
 ];
@@ -540,6 +628,8 @@ mod tests {
             KEN_ACTIVATION_ERR_PROFILE,
             KEN_ACTIVATION_ERR_FINISHED,
             KEN_ACTIVATION_ERR_ADOPT,
+            KEN_ACTIVATION_ERR_EXPORT,
+            KEN_ACTIVATION_ERR_BUFFER,
         ];
         let distinct = statuses.iter().collect::<std::collections::BTreeSet<_>>();
         assert_eq!(distinct.len(), statuses.len());

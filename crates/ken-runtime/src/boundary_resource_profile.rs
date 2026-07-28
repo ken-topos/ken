@@ -208,6 +208,36 @@ impl BoundaryResourceProfileV1 {
     }
 }
 
+/// **The profile this crate's own starter/differential callers choose.**
+///
+/// ⛔⛔ **NOT a default, and the distinction is the whole of `§3c`.** The ban is
+/// on the **emitter** inventing, widening or silently defaulting a profile. This
+/// is a *caller* naming its resource policy — the same act a deployment
+/// performs — collected in one place so the runtime's own packaging callers do
+/// not each invent a different one and call that agreement.
+///
+/// ⚠ Nothing consumes it implicitly: every packaging call still passes a profile
+/// explicitly, and omitting one is refused at
+/// [`crate::object_linker_packaging::ObjectLinkerPackagingStage::ResourceProfile`]
+/// before anything is emitted. ⛔ If this were reachable as a fallback it would
+/// be the banned default wearing a constructor's name.
+pub const fn starter_smoke_profile() -> BoundaryResourceProfileV1 {
+    BoundaryResourceProfileV1 {
+        invocation: BoundaryRegionLimitsV1 {
+            nodes: 64,
+            words: 256,
+            data_bytes: 512,
+            native_int_limbs: 64,
+        },
+        persistent: BoundaryRegionLimitsV1 {
+            nodes: 64,
+            words: 256,
+            data_bytes: 512,
+            native_int_limbs: 64,
+        },
+    }
+}
+
 /// **A capacity limit was reached, named by exactly which one.**
 ///
 /// ⭐ `AC-4` requires at-limit-plus-one to *"fail loudly naming that exact

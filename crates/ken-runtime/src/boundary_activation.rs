@@ -381,6 +381,32 @@ impl BoundaryActivationV1 {
         Some(pointer)
     }
 
+    /// **The `frame_ptr` for the NON-PROCESS launch shape — the bare native-`Int`
+    /// arena.**
+    ///
+    /// ⭐ Two launch shapes, two frame views, and **both obtained from the
+    /// owner** (`§3d`). In non-process mode the generated root's single
+    /// parameter *is* the native arena (`lowering/core.rs` binds
+    /// `native_int_arena` straight from block parameter 0); in process mode it
+    /// is the invocation record [`Self::bind_process_frame`] builds. ⛔ Neither
+    /// is a layout C is told about — each is one opaque pointer to pass through.
+    ///
+    /// ⛔ Withdrawn on the same condition as the services view.
+    pub fn native_frame_ptr(&self) -> Option<*const c_void> {
+        if self.finished || !self.is_published() {
+            return None;
+        }
+        Some(self.services.native_int_arena.cast::<c_void>())
+    }
+
+    /// This activation's native-`Int` arena, for reading back the final export.
+    ///
+    /// ⭐ The reason the C stub no longer needs the layout: it asks the owner
+    /// rather than reading fields it declared itself.
+    pub fn native_int_arena(&self) -> &NativeIntArenaV1 {
+        &self.native_int_arena
+    }
+
     /// The `frame_ptr` previously bound, if any.
     pub fn frame_ptr(&self) -> Option<*const c_void> {
         if self.finished || !self.is_published() {

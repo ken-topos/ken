@@ -3281,6 +3281,7 @@ mod tests {
             &NativeSeedEnvironment::empty(),
             output_dir,
             "native differential unit test",
+            crate::boundary_resource_profile::starter_smoke_profile(),
         )
         .expect("object/linker package materializes")
     }

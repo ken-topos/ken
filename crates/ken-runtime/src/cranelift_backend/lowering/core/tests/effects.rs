@@ -579,7 +579,7 @@ fn borrowed_ingress_malformed_metadata_fails_closed() {
         len: 2,
     };
     assert_eq!(run_borrowed_fixture(&expr, &wrong_arity), -1);
-    assert!(crate::object_linker_packaging::process_starter_c_stub()
+    assert!(crate::object_linker_packaging::process_starter_c_stub(&crate::boundary_resource_profile::starter_smoke_profile())
         .contains("ken native trap: malformed borrowed process input"));
 }
 
