@@ -289,6 +289,27 @@ prose.
 shared deliverable. ⭐ **Runtime holds both; the ordering between them is the
 leader's call.**
 
+> ### ⭐ THE SERVICES RECORD EXISTS ON BOTH BRANCHES BY EXACT BYTES — this is
+> ### intended, ⛔ not a conflict to resolve
+> **Recorded 2026-07-28 from runtime-implementer `evt_7nwn5ydxpezzv`, so it is
+> not discovered during a rebase.**
+>
+> `§1` says this node **consumes** `GeneratedActivationServicesV1`, which lives
+> on `B2F` and not on `main`, and `D3` cannot be built without it.
+> ⛔ **`git cherry-pick` of the commit carrying it CONFLICTS** — that commit also
+> carries the `lowering/mod.rs` half, which sits on the arena-field split. ⇒ ⭐⭐
+> **Resolving that conflict would pull `B2F`'s lowering lineage onto this branch
+> — exactly the `S6` groundwork `§8` bans, wearing a cherry-pick's clothes.**
+>
+> ✅ **The correct move, already taken:** copy the record's **exact bytes**
+> (`cmp`-verified against the `B2F` object) plus its registration, and ⛔ **leave
+> the lowering half on `B2F`.**
+>
+> ⇒ ⚠ **Consequence to expect, not to debug:** once this node lands on `main`,
+> `B2F`'s rebase will find its own copy of that file **already applied**. ⭐ That
+> is the intended shape. ⛔ Do not "fix" it by reverting either copy, and ⛔ do
+> not treat the duplication as evidence that one branch drifted.
+
 ---
 
 ## §8 — the hard stop
