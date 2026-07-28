@@ -311,7 +311,17 @@ fn declared_positive_former_lift_builds_dependent_host_evidence() {
     let cons = list_declaration.constructors[1].id;
     let family_type = former(family);
     let motive = Term::Ascript(
-        Box::new(Term::lam(family_type.clone(), family_type.clone())),
+        Box::new(Term::lam(
+            family_type.clone(),
+            Term::sigma(
+                Term::Eq(
+                    Box::new(family_type.clone()),
+                    Box::new(Term::var(0)),
+                    Box::new(Term::var(0)),
+                ),
+                family_type.clone(),
+            ),
+        )),
         Box::new(Term::pi(family_type.clone(), ty0())),
     );
     let wrap_method_type =
@@ -320,10 +330,16 @@ fn declared_positive_former_lift_builds_dependent_host_evidence() {
     let (wrap_domains, _) = peel_pi(&wrap_method_type);
     assert_eq!(wrap_domains.len(), 2);
     let methods = vec![
-        constructor(leaf),
+        Term::pair(ken_kernel::obs::tt_term(&env), constructor(leaf)),
         Term::lam(
             wrap_domains[0].clone(),
-            Term::lam(wrap_domains[1].clone(), constructor(leaf)),
+            Term::lam(
+                wrap_domains[1].clone(),
+                Term::pair(
+                    Term::Refl(Box::new(Term::var(1))),
+                    constructor(leaf),
+                ),
+            ),
         ),
     ];
     let leaf_value = constructor(leaf);
