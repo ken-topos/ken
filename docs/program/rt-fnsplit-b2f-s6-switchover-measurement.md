@@ -248,3 +248,63 @@ which `B2R` already lays out and which the experimental emission ignored.
 
 ⇒ ⭐ **The producer extension is FOUR classes, not five**, and one of the five
 was a defect in this node's own code wearing a dependency's clothing.
+
+## ⭐ THE SPILLABLE-IMMEDIATE DISPATCH — the predicate already exists, and the
+## emitter must not re-derive it
+
+Design for the 63-red arm, grounded rather than invented.
+
+`ken_boundary_make_immediate_local` **already performs the magnitude test**, and
+it already reports the answer distinguishably. Its own source says why the two
+refusals are separate:
+
+> *"A `Bool` that is not a bit is the wrong SHAPE; a magnitude past the field is
+> out of BOUNDS. Distinct errors, so a control can tell which rule refused
+> without reading the payload back."*
+
+⇒ `BOUNDARY_ERR_BOUNDS` (`-3`) is returned **exactly** when a payload does not
+fit the immediate field, computed from the one `BOUNDARY_IMMEDIATE_DOMAIN`
+table.
+
+⛔⛔ **So the producer must branch on that status, NOT on a magnitude test of its
+own.** A shift-and-compare written at the emission site would be a **second
+answer to a question that already has one**, and it would drift from the table
+silently — the same defect class as a second representation authority, one layer
+down. ⚠ The existing comment on `carrier_identity_immediate` makes the identical
+point about `pack_identity`: *"a view over that one encoding, never a sibling
+beside it."*
+
+**The dispatch, as three outcomes rather than two:**
+
+| status from `make_immediate` | emitted path |
+|---|---|
+| `BOUNDARY_OK` | use the returned word — today's behaviour, unchanged |
+| `BOUNDARY_ERR_BOUNDS` | ⭐ **the spill** — allocate a `BoundaryClass::Int` handle and fill it |
+| anything else | ⛔ trap — fail closed, exactly as today |
+
+⚠ **Note what this changes about the existing emitter.** `emit_carrier_immediate`
+currently ends in `require_i64(status, BOUNDARY_OK)`, which traps on *every*
+non-OK status. The spill path replaces that unconditional assertion with the
+three-way disposition above. ⛔ It must stay a **three**-way disposition:
+collapsing "anything else" into the spill path would turn a shape error, a tag
+error and a capacity error into a silent bignum allocation.
+
+⛔⛔ **And the guard being replaced is load-bearing.** `carrier_immediate_tag`
+refuses `spill: Some(_)` today, and that refusal is the only thing standing
+between a spillable value and a truncating `make_immediate`. ⇒ It must be
+**replaced by the dispatch, not deleted ahead of it**. A removed guard with a
+half-built dispatch behind it is an unsound *accept*, not a stuck fallback —
+and the values it would silently truncate are precisely the ones an
+arbitrary-precision `Int` exists to carry.
+
+**Controls this needs, none of which exist yet:**
+
+1. a value that **fits** and one that **does not**, both transferred, both read
+   back — ⛔ the second is the whole point and is the one a fits-only fixture
+   would miss;
+2. a **positive control** that the spill path is actually taken: the two
+   fixtures must produce *different* emitted shapes, not merely the same answer;
+3. a mutation replacing the status branch with a hand-written magnitude test,
+   which must **still pass** the round-trip and so is caught by review rather
+   than by the suite — ⚠ recorded here because that is the evasion this design
+   is chosen to prevent, and it is **not** claimed to be mechanically detected.
