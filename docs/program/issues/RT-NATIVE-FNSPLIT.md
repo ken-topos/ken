@@ -427,7 +427,7 @@ this line wins.** Re-read this line on every hard-stop.
 > ```text
 > SYMPTOM INVENTORY (append only; never rewritten)
 > NEXT PREDICATE CHECK = 6th entry   (3rd is CONSUMED — answered at entry 2)
-> ENTRIES = 3  ← ANSWERED AT ENTRY 2; entry 3 gives the CAUSE. See below.
+> ENTRIES = 4  ← ANSWERED AT ENTRY 2; entry 3 gives the CAUSE. See below.
 > 1. retained body selection — keyed on cloned RuntimeExpr pointer identity
 > 2. lower_expr re-lowers each retained closure body AT EVERY CALL SITE, in
 >    that call site's whole configuration (core.rs:4214/4229 clone the body
@@ -443,6 +443,13 @@ this line wins.** Re-read this line on every hard-stop.
 >    occurrence being lowered has no static name. Every prior attempt reached
 >    for a dynamic surrogate (pointer, then configuration) BECAUSE the static
 >    one is absent, not because it was mis-chosen.
+> 4. executable-boundary closure recurs at the emission-port selector: the
+>    governed recursive/trapping nested-resource-bracket source selects
+>    RecursiveDescent, while UnitBundle bodies are declared and defined only
+>    under FunctionizedUnits. The static selector decision exists, but no
+>    executable recursive-position/trap port produces the completed
+>    functionized population. The semantics named by the scaling discriminator
+>    therefore remain outside the completed emission authority.
 > ```
 >
 > ### ⭐ CLOSURE LEDGER — which entries are DISCHARGED (Steward bookkeeping)
