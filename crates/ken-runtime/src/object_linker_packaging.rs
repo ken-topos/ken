@@ -315,6 +315,16 @@ pub struct ObjectLinkerExecutablePackage {
     pub smoke: ObjectLinkerSmokeReport,
     pub unavailable_lanes: BTreeSet<ObjectLinkerUnavailableLane>,
     pub unsupported_lanes: BTreeSet<ObjectLinkerUnsupportedLane>,
+    /// **`RT-FNSPLIT-C3-ACTIVATION` `D5` — the profile this package was
+    /// authorized with, recorded as provenance.**
+    ///
+    /// ⭐ And it is **included in the package identity** (see
+    /// `canonical_object_linker_package_bytes`), which is the half that matters:
+    /// recording it in metadata alone would let two packages with **different
+    /// authorized resource policy** share one identity, and a consumer checking
+    /// identity would not be able to tell them apart. ⇒ Two profiles, two
+    /// packages.
+    pub boundary_resource_profile: crate::boundary_resource_profile::BoundaryResourceProfileV1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -419,6 +429,16 @@ pub struct ObjectLinkerPackagingOptions {
     pub object_relative_path: String,
     pub stub_relative_path: String,
     pub executable_relative_path: String,
+    /// **`RT-FNSPLIT-C3-ACTIVATION` `D4`/`D5` — the deployment-authorized
+    /// boundary resource profile for this package.**
+    ///
+    /// ⛔ `None` is a **packaging refusal**, not a default. `§3c`: the profile is
+    /// deployment resource policy; the emitter may validate and carry it and
+    /// ⛔ may not invent, widen or silently default it. ⇒ Absence is caught by
+    /// `validate_options`, ⭐ **before any object is emitted or anything is
+    /// linked** — which is `AC-7`'s whole point, and is a different observation
+    /// from a starter that links, runs, and then declines to execute.
+    pub boundary_resource_profile: Option<crate::boundary_resource_profile::BoundaryResourceProfileV1>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -430,6 +450,8 @@ pub struct ObjectLinkerPackagingError {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ObjectLinkerPackagingStage {
+    /// ⭐ `AC-7` — the deployment resource profile, refused before packaging.
+    ResourceProfile,
     PlatformTarget,
     EntrypointPackage,
     PlatformRuntimeSupport,
@@ -443,12 +465,27 @@ pub enum ObjectLinkerPackagingStage {
 }
 
 impl ObjectLinkerPackagingOptions {
+    /// ⛔ **Carries NO profile** — see
+    /// [`ObjectLinkerPackagingOptions::boundary_resource_profile`]. A caller
+    /// that packages with these options and never names a profile is refused,
+    /// which is exactly the intent: ⛔ there is no default resource policy.
     pub fn starter_host() -> Self {
         Self {
             linker_command: "cc".to_string(),
             object_relative_path: "ken-entrypoint.o".to_string(),
             stub_relative_path: "ken-entrypoint-main.c".to_string(),
             executable_relative_path: executable_name("ken-starter"),
+            boundary_resource_profile: None,
+        }
+    }
+
+    /// The same options, with a deployment-authorized profile named.
+    pub fn starter_host_with_profile(
+        profile: crate::boundary_resource_profile::BoundaryResourceProfileV1,
+    ) -> Self {
+        Self {
+            boundary_resource_profile: Some(profile),
+            ..Self::starter_host()
         }
     }
 }
@@ -469,6 +506,7 @@ pub fn package_starter_executable_artifact(
     env: &NativeSeedEnvironment,
     output_dir: impl AsRef<Path>,
     producer: impl Into<String>,
+    profile: crate::boundary_resource_profile::BoundaryResourceProfileV1,
 ) -> Result<ObjectLinkerExecutablePackage, ObjectLinkerPackagingError> {
     package_starter_executable_artifact_with_options(
         program,
@@ -478,7 +516,7 @@ pub fn package_starter_executable_artifact(
         env,
         output_dir,
         producer,
-        &ObjectLinkerPackagingOptions::starter_host(),
+        &ObjectLinkerPackagingOptions::starter_host_with_profile(profile),
     )
 }
 
@@ -540,7 +578,14 @@ pub fn package_starter_executable_artifact_with_options(
     })?;
 
     let stub_path = output_dir.join(&options.stub_relative_path);
-    fs::write(&stub_path, starter_c_stub()).map_err(|err| {
+    let profile = options.boundary_resource_profile.ok_or_else(|| {
+        packaging_error(
+            ObjectLinkerPackagingStage::ResourceProfile,
+            "boundary_resource_profile",
+            "no boundary resource profile reached stub emission".to_string(),
+        )
+    })?;
+    fs::write(&stub_path, starter_c_stub(&profile)).map_err(|err| {
         packaging_error(
             ObjectLinkerPackagingStage::LinkerOrFinalizer,
             "stub_path",
@@ -555,7 +600,13 @@ pub fn package_starter_executable_artifact_with_options(
         &object_path,
         &stub_path,
         &executable_path,
-        None,
+        // ⭐ `C3` `D7` — the non-process starter now links the runtime archive too.
+        // ⛔ It passed `None` before, and correctly so: the old stub declared the
+        // native-`Int` layout itself and needed no Rust symbol at all. That is
+        // exactly what `D7` removed, so the archive is no longer optional here —
+        // ⚠ and the pre-existing smoke positives are what said so, by failing to
+        // link rather than by failing to run.
+        Some(&ken_runtime_staticlib()?),
     )?;
 
     let executable_bytes = fs::read(&executable_path).map_err(|err| {
@@ -598,6 +649,7 @@ pub fn package_starter_executable_artifact_with_options(
         smoke,
         unavailable_lanes: required_unavailable_lanes(),
         unsupported_lanes: BTreeSet::new(),
+        boundary_resource_profile: profile,
     };
     package.header.package_hash = object_linker_executable_package_hash(&package);
     validate_package_hash(&package)?;
@@ -613,8 +665,9 @@ pub fn package_starter_executable_artifact_with_options(
 fn link_process_starter_object_artifact(
     object: crate::CraneliftObjectArtifact,
     output_dir: impl AsRef<Path>,
+    profile: crate::boundary_resource_profile::BoundaryResourceProfileV1,
 ) -> Result<PathBuf, ObjectLinkerPackagingError> {
-    let options = ObjectLinkerPackagingOptions::starter_host();
+    let options = ObjectLinkerPackagingOptions::starter_host_with_profile(profile);
     let output_dir = output_dir.as_ref();
     fs::create_dir_all(output_dir).map_err(|err| {
         packaging_error(
@@ -632,7 +685,14 @@ fn link_process_starter_object_artifact(
         )
     })?;
     let stub_path = output_dir.join(&options.stub_relative_path);
-    fs::write(&stub_path, process_starter_c_stub()).map_err(|err| {
+    let profile = options.boundary_resource_profile.ok_or_else(|| {
+        packaging_error(
+            ObjectLinkerPackagingStage::ResourceProfile,
+            "boundary_resource_profile",
+            "no boundary resource profile reached stub emission".to_string(),
+        )
+    })?;
+    fs::write(&stub_path, process_starter_c_stub(&profile)).map_err(|err| {
         packaging_error(
             ObjectLinkerPackagingStage::LinkerOrFinalizer,
             "stub_path",
@@ -645,7 +705,7 @@ fn link_process_starter_object_artifact(
         &object_path,
         &stub_path,
         &executable_path,
-        Some(&ken_host_staticlib()?),
+        Some(&ken_runtime_staticlib()?),
     )?;
     Ok(executable_path)
 }
@@ -664,7 +724,11 @@ fn build_process_starter_executable_artifact(
                     err.to_string(),
                 )
             })?;
-    link_process_starter_object_artifact(object, output_dir)
+    link_process_starter_object_artifact(
+        object,
+        output_dir,
+        crate::boundary_resource_profile::starter_smoke_profile(),
+    )
 }
 
 #[cfg(test)]
@@ -689,7 +753,11 @@ fn build_px8tr_nested_post_effect_artifact(
             err.to_string(),
         )
     })?;
-    let executable = link_process_starter_object_artifact(route.artifact, output_dir)?;
+    let executable = link_process_starter_object_artifact(
+        route.artifact,
+        output_dir,
+        crate::boundary_resource_profile::starter_smoke_profile(),
+    )?;
     Ok((executable, route.provenance))
 }
 
@@ -699,6 +767,7 @@ pub fn build_bound_process_starter_executable_artifact(
     program: &RuntimeProgram,
     entrypoint: &BoundProcessEntrypoint,
     output_dir: impl AsRef<Path>,
+    profile: crate::boundary_resource_profile::BoundaryResourceProfileV1,
 ) -> Result<BoundProcessExecutableArtifact, ObjectLinkerPackagingError> {
     if !entrypoint.root_execution_binding_is_valid() {
         return Err(packaging_error(
@@ -743,7 +812,7 @@ pub fn build_bound_process_starter_executable_artifact(
     // an effect-free root is not a residual ITree requiring a second match.
     let adapter = tree;
 
-    let options = ObjectLinkerPackagingOptions::starter_host();
+    let options = ObjectLinkerPackagingOptions::starter_host_with_profile(profile);
     let output_dir = output_dir.as_ref();
     fs::create_dir_all(output_dir).map_err(|err| {
         packaging_error(
@@ -774,6 +843,13 @@ pub fn build_bound_process_starter_executable_artifact(
         )
     })?;
     let stub_path = output_dir.join(&options.stub_relative_path);
+    let profile = options.boundary_resource_profile.ok_or_else(|| {
+        packaging_error(
+            ObjectLinkerPackagingStage::ResourceProfile,
+            "boundary_resource_profile",
+            "no boundary resource profile reached stub emission".to_string(),
+        )
+    })?;
     fs::write(
         &stub_path,
         process_starter_c_stub_for_authority(
@@ -782,6 +858,7 @@ pub fn build_bound_process_starter_executable_artifact(
             entrypoint.allow_root_execution,
             crate::process_exit_status(crate::ProcessExitCode::Failure(0)).status,
             &entrypoint.fs_root_spec,
+            &profile,
         ),
     )
     .map_err(|err| {
@@ -797,7 +874,7 @@ pub fn build_bound_process_starter_executable_artifact(
         &object_path,
         &stub_path,
         &executable_path,
-        Some(&ken_host_staticlib()?),
+        Some(&ken_runtime_staticlib()?),
     )?;
     let executable_bytes = fs::read(&executable_path).map_err(|err| {
         packaging_error(
@@ -848,6 +925,26 @@ fn validate_options(
                 "artifact layout records only relative paths, not host absolute paths",
             ));
         }
+    }
+    // ⭐ `AC-7` — absence of a profile is a refusal at CONFIGURATION time, before
+    // an object is emitted or anything is linked. ⛔ Not at activation, and ⛔
+    // never a linked executable that starts and then declines to run generated
+    // code: that is `§0`'s banned shape.
+    //
+    // ⚠ Ordered AFTER the toolchain-field checks deliberately. Putting it first
+    // reddened `missing_linker_is_explicit_toolchain_failure`, a pre-existing
+    // positive that names the stage it expects — and a config error is a config
+    // error either way, so there was no reason to renumber someone else's
+    // diagnosis to suit a new check. ⭐ `AC-7` asks that the refusal be before
+    // packaging, ⛔ not that it precede every other configuration error.
+    if options.boundary_resource_profile.is_none() {
+        return Err(packaging_error(
+            ObjectLinkerPackagingStage::ResourceProfile,
+            "boundary_resource_profile",
+            "no boundary resource profile was supplied; it is deployment \
+             resource policy and has no default"
+                .to_string(),
+        ));
     }
     Ok(())
 }
@@ -1100,11 +1197,22 @@ fn link_starter_executable(
     Ok(())
 }
 
-fn ken_host_staticlib() -> Result<std::path::PathBuf, ObjectLinkerPackagingError> {
+/// **`RT-FNSPLIT-C3-ACTIVATION` `D1`/`§3a` — the starter's ONE runtime-support
+/// archive.**
+///
+/// ⛔ **It links `libken_runtime.a` and NOT also `libken_host.a`.** The runtime
+/// archive already owns the direction `ken-runtime -> ken-host`, so linking both
+/// would be `§4`'s banned two-archive shape — and the reason it is banned is
+/// that a second copy of the host symbols is a second authority for the same
+/// contract.
+///
+/// ⚠ Renamed from `ken_host_staticlib` rather than pointed at a new file, so a
+/// reader who knew the old name sees which archive replaced it and why.
+fn ken_runtime_staticlib() -> Result<std::path::PathBuf, ObjectLinkerPackagingError> {
     let executable = std::env::current_exe().map_err(|error| {
         packaging_error(
             ObjectLinkerPackagingStage::Toolchain,
-            "ken_host_staticlib",
+            "ken_runtime_staticlib",
             format!("cannot locate current Cargo target directory: {error}"),
         )
     })?;
@@ -1117,8 +1225,8 @@ fn ken_host_staticlib() -> Result<std::path::PathBuf, ObjectLinkerPackagingError
                     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
                         continue;
                     };
-                    if (name == "libken_host.a"
-                        || (name.starts_with("libken_host-") && name.ends_with(".a")))
+                    if (name == "libken_runtime.a"
+                        || (name.starts_with("libken_runtime-") && name.ends_with(".a")))
                         && path.is_file()
                     {
                         candidates.push(path);
@@ -1133,7 +1241,7 @@ fn ken_host_staticlib() -> Result<std::path::PathBuf, ObjectLinkerPackagingError
     }
     Err(packaging_error(
         ObjectLinkerPackagingStage::Toolchain,
-        "ken_host_staticlib",
+        "ken_runtime_staticlib",
         "Cargo did not materialize the required ken-host static runtime",
     ))
 }
@@ -1362,6 +1470,29 @@ fn validate_package_hash(
 fn canonical_object_linker_package_bytes(package: &ObjectLinkerExecutablePackage) -> Vec<u8> {
     let mut out = String::new();
     push_field(&mut out, "kind", &package.header.package_kind);
+    // ⭐ `C3` `D5` — the authorized profile is part of the package IDENTITY, not
+    // only its metadata. ⛔ Recording it beside the identity would let two
+    // packages with different authorized resource policy hash the same, and a
+    // consumer checking identity could not tell them apart.
+    //
+    // ⭐ Emitted by walking the profile's own closed inventory rather than by
+    // listing eight fields here: a resource added to `BoundaryResource::ALL`
+    // joins the identity automatically, and ⛔ cannot be forgotten in this
+    // function.
+    for scope in crate::boundary_resource_profile::BoundaryResourceScope::ALL {
+        for resource in crate::boundary_resource_profile::BoundaryResource::ALL {
+            push_field(
+                &mut out,
+                "boundary_resource_limit",
+                &format!(
+                    "{}/{}={}",
+                    scope.name(),
+                    resource.name(),
+                    package.boundary_resource_profile.limit(scope, resource)
+                ),
+            );
+        }
+    }
     push_field(&mut out, "version", &package.header.version.to_string());
     push_field(&mut out, "producer", &package.header.producer);
     push_field(&mut out, "spec_ref", &package.header.spec_ref);
@@ -1627,92 +1758,102 @@ fn runtime_trap_code_tag(code: &crate::RuntimeTrapCode) -> &'static str {
     }
 }
 
-fn starter_c_stub() -> &'static str {
-    r#"#include <inttypes.h>
+/// **`RT-FNSPLIT-C3-ACTIVATION` `D7` — the non-process starter stub, with every
+/// duplicated layout removed.**
+///
+/// ⛔ **What is gone, and why each one had to go:**
+///
+/// | removed | why |
+/// |---|---|
+/// | `struct KenNativeBigEntryV1` · `struct KenNativeIntArenaV1` | ⛔ `§4`: a second copy of the native-`Int` layout in generated C |
+/// | `ken_int_arena_destroy` | ⛔ C owned the arena's teardown; the Rust activation owns it now |
+/// | `ken_print_exported_int` | ⛔⛔ a **second implementation** of `Int` rendering *and* of the export's canonicality checks |
+/// | `KenNativeIntArenaV1 arena = {...}` in `main` | ⛔ C **constructed** the arena |
+///
+/// ⭐ **What replaces them is one opaque pointer and a status.** The stub asks
+/// the owner for its frame, calls the entry, asks the owner to render the
+/// result, and hands both handles back.
+///
+/// ⚠ **The profile numbers are substituted at packaging time** from the
+/// deployment-authorized profile. ⭐ The stub *carries* already-authorized
+/// numbers; ⛔ it is not their authority, and a package with no profile is
+/// refused before this text is ever written.
+fn starter_c_stub(profile: &crate::boundary_resource_profile::BoundaryResourceProfileV1) -> String {
+    format!(
+        r#"#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-struct KenNativeBigEntryV1 {
-    struct KenNativeBigEntryV1 *next;
-    uint64_t slot, sign, len;
-    uint64_t limbs[];
-};
-struct KenNativeIntArenaV1 {
-    struct KenNativeBigEntryV1 *head;
-    uint64_t next_slot, final_tag, final_payload, final_sign, final_len;
-    const uint64_t *final_limbs;
-    uint64_t final_small;
-};
+struct KenBoundaryResourceProfileV1 {{
+    uint64_t version, size;
+    uint64_t invocation_nodes, invocation_words, invocation_data_bytes, invocation_native_int_limbs;
+    uint64_t persistent_nodes, persistent_words, persistent_data_bytes, persistent_native_int_limbs;
+}};
 
-static void ken_int_arena_destroy(struct KenNativeIntArenaV1 *arena) {
-    struct KenNativeBigEntryV1 *entry = arena->head;
-    while (entry != NULL) {
-        struct KenNativeBigEntryV1 *next = entry->next;
-        free(entry);
-        entry = next;
-    }
-}
+extern long long ken_boundary_store_v1_open(const struct KenBoundaryResourceProfileV1 *profile, void **out_store);
+extern long long ken_boundary_store_v1_destroy(void *store);
+extern long long ken_activation_v1_begin(void *store, void **out_activation);
+extern long long ken_activation_v1_native_frame(const void *activation, const void **out_frame);
+extern long long ken_activation_v1_write_final_export(const void *activation, long long fallback, unsigned char *buffer, size_t capacity, size_t *out_len);
+extern long long ken_activation_v1_finish(void *activation, void *store, uint64_t escaping, uint64_t *out_word);
+extern long long ken_activation_v1_destroy(void *activation);
+extern long long ken_nc23_entrypoint(const void *frame);
 
-static int ken_print_exported_int(const struct KenNativeIntArenaV1 *arena) {
-    if (arena->final_tag == 0) {
-        int64_t value = (int64_t)arena->final_payload;
-        uint64_t magnitude = value < 0 ? (~arena->final_payload) + 1 : arena->final_payload;
-        uint64_t sign = value < 0 ? 1 : 0;
-        if (arena->final_sign != sign || arena->final_len != 1 ||
-            arena->final_limbs != &arena->final_small ||
-            arena->final_small != magnitude) {
-            return 1;
-        }
-        printf("%" PRId64 "\n", value);
-        return 0;
-    }
-    if (arena->final_tag != 1 || arena->final_payload == 0 ||
-        arena->final_sign > 1 || arena->final_len == 0 ||
-        arena->final_limbs == NULL ||
-        arena->final_limbs[arena->final_len - 1] == 0) {
+int main(void) {{
+    struct KenBoundaryResourceProfileV1 profile = {{
+        .version = {version}, .size = sizeof(struct KenBoundaryResourceProfileV1),
+        .invocation_nodes = {inv_nodes}, .invocation_words = {inv_words},
+        .invocation_data_bytes = {inv_data}, .invocation_native_int_limbs = {inv_limbs},
+        .persistent_nodes = {per_nodes}, .persistent_words = {per_words},
+        .persistent_data_bytes = {per_data}, .persistent_native_int_limbs = {per_limbs}
+    }};
+    void *store = NULL;
+    void *activation = NULL;
+    const void *frame = NULL;
+    if (ken_boundary_store_v1_open(&profile, &store) != 0) return 1;
+    if (ken_activation_v1_begin(store, &activation) != 0) {{
+        ken_boundary_store_v1_destroy(store);
         return 1;
-    }
-    if (arena->final_len == 1) {
-        uint64_t limb = arena->final_limbs[0];
-        if ((arena->final_sign == 0 && limb <= INT64_MAX) ||
-            (arena->final_sign == 1 && limb <= (UINT64_C(1) << 63))) {
-            return 1;
-        }
-    }
-    if (arena->final_sign == 1) {
-        fputc('-', stdout);
-    }
-    fputs("0x", stdout);
-    printf("%" PRIx64, arena->final_limbs[arena->final_len - 1]);
-    for (uint64_t index = arena->final_len - 1; index > 0; --index) {
-        printf("%016" PRIx64, arena->final_limbs[index - 1]);
-    }
-    fputc('\n', stdout);
-    return 0;
-}
-
-extern long long ken_nc23_entrypoint(const void *input);
-
-int main(void) {
-    struct KenNativeIntArenaV1 arena = { .final_tag = UINT64_MAX };
-    long long value = ken_nc23_entrypoint(&arena);
-    int status;
-    if (arena.final_tag == UINT64_MAX) {
-        printf("%lld\n", value);
-        status = 0;
-    } else {
-        status = ken_print_exported_int(&arena);
-    }
-    ken_int_arena_destroy(&arena);
+    }}
+    if (ken_activation_v1_native_frame(activation, &frame) != 0) {{
+        ken_activation_v1_destroy(activation);
+        ken_boundary_store_v1_destroy(store);
+        return 1;
+    }}
+    long long value = ken_nc23_entrypoint(frame);
+    unsigned char rendered[512];
+    size_t rendered_len = 0;
+    int status = 0;
+    if (ken_activation_v1_write_final_export(activation, value, rendered, sizeof rendered, &rendered_len) != 0) {{
+        status = 1;
+    }} else {{
+        fwrite(rendered, 1, rendered_len, stdout);
+    }}
+    uint64_t adopted = 0;
+    ken_activation_v1_finish(activation, store, 0, &adopted);
+    ken_activation_v1_destroy(activation);
+    ken_boundary_store_v1_destroy(store);
     return status;
-}
-"#
+}}
+"#,
+        version = crate::boundary_resource_profile::BOUNDARY_RESOURCE_PROFILE_VERSION,
+        inv_nodes = profile.invocation.nodes,
+        inv_words = profile.invocation.words,
+        inv_data = profile.invocation.data_bytes,
+        inv_limbs = profile.invocation.native_int_limbs,
+        per_nodes = profile.persistent.nodes,
+        per_words = profile.persistent.words,
+        per_data = profile.persistent.data_bytes,
+        per_limbs = profile.persistent.native_int_limbs,
+    )
 }
 
 #[cfg(test)]
-pub(crate) fn process_starter_c_stub() -> String {
-    process_starter_c_stub_for_authority(1, 1, false, 1, &ken_host::FsRootSpec::default())
+pub(crate) fn process_starter_c_stub(
+    profile: &crate::boundary_resource_profile::BoundaryResourceProfileV1,
+) -> String {
+    process_starter_c_stub_for_authority(1, 1, false, 1, &ken_host::FsRootSpec::default(), profile)
 }
 
 fn process_starter_c_stub_for_authority(
@@ -1721,6 +1862,7 @@ fn process_starter_c_stub_for_authority(
     allow_root_execution: bool,
     root_denied_exit_status: i32,
     fs_root_spec: &ken_host::FsRootSpec,
+    profile: &crate::boundary_resource_profile::BoundaryResourceProfileV1,
 ) -> String {
     r#"#include <stdint.h>
 #include <stdio.h>
@@ -1744,43 +1886,20 @@ struct KenArena {
     size_t capacity;
 };
 
-struct KenNativeBigEntryV1 {
-    struct KenNativeBigEntryV1 *next;
-    uint64_t slot;
-    uint64_t sign;
-    size_t len;
-    uint64_t limbs[];
+/* RT-FNSPLIT-C3-ACTIVATION D7: the native-Int big-entry and arena layouts, the
+   invocation record and the arena teardown used to be declared and owned HERE.
+   They are the Rust activation owner's now, and this stub holds only opaque
+   pointers.
+
+   The big-entry declaration outlived the first pass of this removal. It was
+   dead -- nothing referenced it -- but a dead private copy of native-Int layout
+   is still a private copy of native-Int layout, and neither the build nor the
+   link discriminates it. */
+struct KenBoundaryResourceProfileV1 {
+    uint64_t version, size;
+    uint64_t invocation_nodes, invocation_words, invocation_data_bytes, invocation_native_int_limbs;
+    uint64_t persistent_nodes, persistent_words, persistent_data_bytes, persistent_native_int_limbs;
 };
-
-struct KenNativeIntArenaV1 {
-    struct KenNativeBigEntryV1 *head;
-    uint64_t next_slot;
-    uint64_t final_tag;
-    uint64_t final_payload;
-    uint64_t final_sign;
-    uint64_t final_len;
-    const uint64_t *final_limbs;
-    uint64_t final_small;
-};
-
-struct KenNativeInvocationV1 {
-    const struct KenBorrowedValue *process_input;
-    void *host_context;
-    uint64_t capability;
-    struct KenNativeIntArenaV1 *native_int_arena;
-};
-
-
-
-static void ken_int_arena_destroy(struct KenNativeIntArenaV1 *arena) {
-    struct KenNativeBigEntryV1 *entry = arena->head;
-    while (entry != NULL) {
-        struct KenNativeBigEntryV1 *next = entry->next;
-        free(entry);
-        entry = next;
-    }
-    arena->head = NULL;
-}
 
 struct KenHostInitResultV1 {
     void *context;
@@ -1788,7 +1907,13 @@ struct KenHostInitResultV1 {
     uint64_t plan_hash;
 };
 
-extern long long ken_nc23_entrypoint(const struct KenNativeInvocationV1 *invocation);
+extern long long ken_nc23_entrypoint(const void *frame);
+extern long long ken_boundary_store_v1_open(const struct KenBoundaryResourceProfileV1 *profile, void **out_store);
+extern long long ken_boundary_store_v1_destroy(void *store);
+extern long long ken_activation_v1_begin(void *store, void **out_activation);
+extern long long ken_activation_v1_bind_process_frame(void *activation, const void *process_input, void *host_context, uint64_t capability, const void **out_frame);
+extern long long ken_activation_v1_finish(void *activation, void *store, uint64_t escaping, uint64_t *out_word);
+extern long long ken_activation_v1_destroy(void *activation);
 extern long long ken_host_invocation_v1_init(
     const unsigned char *cwd,
     size_t len,
@@ -1940,16 +2065,30 @@ int main(int argc, char **argv, char **envp) {
         host_init.plan_hash != KEN_ENTRYPOINT_PLAN_HASH) {
         free(pool); free(cwd); return 1;
     }
-    struct KenNativeIntArenaV1 native_int_arena = {0};
-    struct KenNativeInvocationV1 invocation = {
-        .process_input = root,
-        .host_context = host_init.context,
-        .capability = host_init.capability,
-        .native_int_arena = &native_int_arena
+    struct KenBoundaryResourceProfileV1 profile = {
+        .version = __KEN_PROFILE_VERSION__, .size = sizeof(struct KenBoundaryResourceProfileV1),
+        .invocation_nodes = __KEN_PROFILE_INV_NODES__, .invocation_words = __KEN_PROFILE_INV_WORDS__,
+        .invocation_data_bytes = __KEN_PROFILE_INV_DATA__, .invocation_native_int_limbs = __KEN_PROFILE_INV_LIMBS__,
+        .persistent_nodes = __KEN_PROFILE_PER_NODES__, .persistent_words = __KEN_PROFILE_PER_WORDS__,
+        .persistent_data_bytes = __KEN_PROFILE_PER_DATA__, .persistent_native_int_limbs = __KEN_PROFILE_PER_LIMBS__
     };
-    long long value = ken_nc23_entrypoint(&invocation);
+    void *store = NULL;
+    void *activation = NULL;
+    const void *frame = NULL;
+    if (ken_boundary_store_v1_open(&profile, &store) != 0) { free(pool); free(cwd); return 1; }
+    if (ken_activation_v1_begin(store, &activation) != 0) {
+        ken_boundary_store_v1_destroy(store); free(pool); free(cwd); return 1;
+    }
+    if (ken_activation_v1_bind_process_frame(activation, root, host_init.context, host_init.capability, &frame) != 0) {
+        ken_activation_v1_destroy(activation); ken_boundary_store_v1_destroy(store);
+        free(pool); free(cwd); return 1;
+    }
+    long long value = ken_nc23_entrypoint(frame);
     long long finish_status = ken_host_invocation_v1_finish(host_init.context, value);
-    ken_int_arena_destroy(&native_int_arena);
+    uint64_t adopted = 0;
+    ken_activation_v1_finish(activation, store, 0, &adopted);
+    ken_activation_v1_destroy(activation);
+    ken_boundary_store_v1_destroy(store);
     free(cwd);
     free(pool);
     if (finish_status != 0) return 1;
@@ -1962,6 +2101,18 @@ int main(int argc, char **argv, char **envp) {
     return (int)value;
 }
 "#
+    .replace(
+        "__KEN_PROFILE_VERSION__",
+        &crate::boundary_resource_profile::BOUNDARY_RESOURCE_PROFILE_VERSION.to_string(),
+    )
+    .replace("__KEN_PROFILE_INV_NODES__", &profile.invocation.nodes.to_string())
+    .replace("__KEN_PROFILE_INV_WORDS__", &profile.invocation.words.to_string())
+    .replace("__KEN_PROFILE_INV_DATA__", &profile.invocation.data_bytes.to_string())
+    .replace("__KEN_PROFILE_INV_LIMBS__", &profile.invocation.native_int_limbs.to_string())
+    .replace("__KEN_PROFILE_PER_NODES__", &profile.persistent.nodes.to_string())
+    .replace("__KEN_PROFILE_PER_WORDS__", &profile.persistent.words.to_string())
+    .replace("__KEN_PROFILE_PER_DATA__", &profile.persistent.data_bytes.to_string())
+    .replace("__KEN_PROFILE_PER_LIMBS__", &profile.persistent.native_int_limbs.to_string())
     .replace("__KEN_AUTHORITY__", &authority.to_string())
     .replace("__KEN_PLAN_HASH__", &plan_hash.to_string())
     .replace("__KEN_FS_ROOT_TAG__", &fs_root_spec.tag_v1().to_string())
@@ -2231,6 +2382,7 @@ mod tests {
             &NativeSeedEnvironment::empty(),
             &output_dir,
             "object linker unit test",
+            crate::boundary_resource_profile::starter_smoke_profile(),
         )
         .expect("object/linker package materializes");
 
@@ -2300,6 +2452,7 @@ mod tests {
             &NativeSeedEnvironment::empty(),
             &output_dir,
             "PX8-I generic object Big discriminator",
+            crate::boundary_resource_profile::starter_smoke_profile(),
         )
         .expect("generic object executes the shared exact-Int graph");
         assert_eq!(package.smoke.stdout, "7\n");
@@ -2337,6 +2490,7 @@ mod tests {
             &NativeSeedEnvironment::empty(),
             &output_dir,
             "PX8-I generic terminal Big discriminator",
+            crate::boundary_resource_profile::starter_smoke_profile(),
         )
         .expect("generic object decodes terminal Big while its arena is live");
         assert_eq!(package.smoke.stdout, "-0x10000000000000007\n");
@@ -2361,6 +2515,7 @@ mod tests {
             &NativeSeedEnvironment::empty(),
             &output_dir,
             "PX8-I shared-helper mutation",
+            crate::boundary_resource_profile::starter_smoke_profile(),
         );
         crate::cranelift_backend::NATIVE_INT_LOWERING_MUTATION.with(|mutation| {
             mutation.set(crate::cranelift_backend::NativeIntLoweringMutation::Exact)
@@ -2581,8 +2736,8 @@ mod tests {
         };
         let executable = build_process_starter_executable_artifact(&entry, &output_dir)
             .expect("process starter links");
-        assert!(!process_starter_c_stub().contains("fnv"));
-        assert!(!process_starter_c_stub().contains("discriminator"));
+        assert!(!process_starter_c_stub(&crate::boundary_resource_profile::starter_smoke_profile()).contains("fnv"));
+        assert!(!process_starter_c_stub(&crate::boundary_resource_profile::starter_smoke_profile()).contains("discriminator"));
 
         let argument_one = OsString::from_vec(vec![0xff, b'a', b'1']);
         let key_one = OsString::from_vec(vec![b'K', 0xfd]);
@@ -3203,6 +3358,7 @@ mod tests {
             &NativeSeedEnvironment::empty(),
             temp_output_dir("nc23-stale-support"),
             "object linker unit test",
+            crate::boundary_resource_profile::starter_smoke_profile(),
         )
         .expect_err("stale support report rejects");
 
@@ -3227,6 +3383,7 @@ mod tests {
             &NativeSeedEnvironment::empty(),
             temp_output_dir("nc23-stale-payload"),
             "object linker unit test",
+            crate::boundary_resource_profile::starter_smoke_profile(),
         )
         .expect_err("stale mutated entrypoint payload rejects");
 
@@ -3258,6 +3415,7 @@ mod tests {
             &NativeSeedEnvironment::empty(),
             temp_output_dir("nc23-forged-support"),
             "object linker unit test",
+            crate::boundary_resource_profile::starter_smoke_profile(),
         )
         .expect_err("forged support around non-executable payload rejects");
 
@@ -3287,6 +3445,7 @@ mod tests {
             &NativeSeedEnvironment::empty(),
             temp_output_dir("nc23-forged-entrypoint-header"),
             "object linker unit test",
+            crate::boundary_resource_profile::starter_smoke_profile(),
         )
         .expect_err("forged NC20 package header rejects");
 
@@ -3315,6 +3474,7 @@ mod tests {
             &NativeSeedEnvironment::empty(),
             temp_output_dir("nc23-forged-entrypoint-version"),
             "object linker unit test",
+            crate::boundary_resource_profile::starter_smoke_profile(),
         )
         .expect_err("forged NC20 package version rejects");
 
@@ -3342,6 +3502,7 @@ mod tests {
             &NativeSeedEnvironment::empty(),
             temp_output_dir("nc23-forged-support-header"),
             "object linker unit test",
+            crate::boundary_resource_profile::starter_smoke_profile(),
         )
         .expect_err("forged NC21 support header rejects");
 
@@ -3371,6 +3532,7 @@ mod tests {
             &NativeSeedEnvironment::empty(),
             temp_output_dir("nc23-forged-support-version"),
             "object linker unit test",
+            crate::boundary_resource_profile::starter_smoke_profile(),
         )
         .expect_err("forged NC21 support version rejects");
 
@@ -3411,6 +3573,7 @@ mod tests {
             &NativeSeedEnvironment::empty(),
             temp_output_dir("nc23-platform"),
             "object linker unit test",
+            crate::boundary_resource_profile::starter_smoke_profile(),
         )
         .expect_err("non-host starter platform rejects");
 
@@ -3419,6 +3582,175 @@ mod tests {
     }
 
     #[test]
+    /// ⭐⭐ **`D5` — the authorized profile is IN the package identity, and each
+    /// of the eight limits is in it separately.**
+    ///
+    /// ⚠ **Recording it as metadata alone would not do**, and that is the whole
+    /// point: two packages built with **different authorized resource policy**
+    /// would then share one identity, and a consumer checking identity could not
+    /// tell them apart. ⇒ Two profiles, two packages.
+    ///
+    /// ⛔ Each limit is perturbed **separately**, so the test cannot pass on an
+    /// identity that happens to include only one of them — the failure mode a
+    /// single "change the profile" assertion would miss.
+    ///
+    /// **MEASURED:** perturbing any one of the eight limits changes
+    /// `object_linker_executable_package_hash`, and the eight perturbations give
+    /// eight distinct identities.
+    /// **CLAIMED:** the profile is part of the package identity.
+    /// **THE GAP:** ⛔ that a consumer *checks* identity before trusting a
+    /// package. That is the consumer's obligation and is not this node's.
+    #[test]
+    fn each_of_the_eight_authorized_limits_is_part_of_the_package_identity() {
+        use crate::boundary_resource_profile::{BoundaryResource, BoundaryResourceScope};
+
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Bool(true));
+        let program = starter_program(RuntimeExpr::Value(RuntimeValue::Bool(true)), observation);
+        let (_report, entrypoint) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        let support = platform_runtime_support_for_entrypoint(
+            &program,
+            &entrypoint,
+            &run_report,
+            crate::PlatformRuntimeTarget::starter(native_platform_target_name()),
+            "object linker unit test",
+        )
+        .expect("platform support materializes");
+        let package = package_starter_executable_artifact(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            temp_output_dir("c3-d5-identity"),
+            "object linker unit test",
+            crate::boundary_resource_profile::starter_smoke_profile(),
+        )
+        .expect("package materializes");
+
+        let baseline = object_linker_executable_package_hash(&package);
+        assert_eq!(
+            baseline, package.header.package_hash,
+            "non-vacuity: the recomputed identity must match the recorded one, \
+             or the perturbations below are compared against the wrong number"
+        );
+
+        let mut identities = BTreeSet::new();
+        identities.insert(baseline);
+        for scope in BoundaryResourceScope::ALL {
+            for resource in BoundaryResource::ALL {
+                let mut perturbed = package.clone();
+                let limits = match scope {
+                    BoundaryResourceScope::Invocation => {
+                        &mut perturbed.boundary_resource_profile.invocation
+                    }
+                    BoundaryResourceScope::Persistent => {
+                        &mut perturbed.boundary_resource_profile.persistent
+                    }
+                };
+                let slot = match resource {
+                    BoundaryResource::Nodes => &mut limits.nodes,
+                    BoundaryResource::Words => &mut limits.words,
+                    BoundaryResource::DataBytes => &mut limits.data_bytes,
+                    BoundaryResource::NativeIntLimbs => &mut limits.native_int_limbs,
+                };
+                *slot += 1;
+                let moved = object_linker_executable_package_hash(&perturbed);
+                assert_ne!(
+                    moved, baseline,
+                    "D5: raising the {scope} {resource} limit left the package \
+                     identity unchanged, so that limit is not in the identity"
+                );
+                assert!(
+                    identities.insert(moved),
+                    "D5: two different limits produce the same identity, so the \
+                     identity cannot distinguish which policy a package carries"
+                );
+            }
+        }
+        assert_eq!(identities.len(), 9, "one baseline plus eight perturbations");
+    }
+
+    /// ⭐⭐ **`AC-7` — absence of a profile is a refusal BEFORE packaging, and
+    /// the control distinguishes refusal-to-package from refusal-at-run.**
+    ///
+    /// ⚠ `§6` is explicit that those are *"different observations and only one
+    /// is permitted"*, so asserting merely that *"packaging failed"* would not
+    /// discharge it: a starter that links, runs, and then declines to execute
+    /// generated code also fails, later, and is the `§0` banned shape.
+    ///
+    /// **MEASURED:** with no profile the call returns `ResourceProfile` and
+    /// ⭐ **writes no executable at all** — so there is nothing that could have
+    /// run and declined. With a profile the same inputs package and the smoke
+    /// run passes.
+    /// **CLAIMED:** absence is caught at configuration time.
+    /// **THE GAP:** ⛔ this observes the *object-linked* path. The JIT caller
+    /// takes the same typed profile from its caller and refuses at activation,
+    /// which is `§3c`'s permitted second stage — ⚠ a different observation, and
+    /// not measured here.
+    #[test]
+    fn an_absent_profile_is_refused_before_packaging_not_at_run() {
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Bool(true));
+        let program = starter_program(RuntimeExpr::Value(RuntimeValue::Bool(true)), observation);
+        let (_report, entrypoint) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        let support = platform_runtime_support_for_entrypoint(
+            &program,
+            &entrypoint,
+            &run_report,
+            crate::PlatformRuntimeTarget::starter(native_platform_target_name()),
+            "object linker unit test",
+        )
+        .expect("platform support materializes");
+
+        let output_dir = temp_output_dir("c3-ac7-absent-profile");
+        let options = ObjectLinkerPackagingOptions::starter_host();
+        assert!(
+            options.boundary_resource_profile.is_none(),
+            "non-vacuity: `starter_host` must carry no profile, or this test \
+             measures nothing"
+        );
+        let err = package_starter_executable_artifact_with_options(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            &output_dir,
+            "object linker unit test",
+            &options,
+        )
+        .expect_err("packaging without a profile must be refused");
+        assert_eq!(err.stage, ObjectLinkerPackagingStage::ResourceProfile);
+        assert_eq!(err.field, "boundary_resource_profile");
+
+        // ⭐ The discriminator that separates the two observations: NOTHING was
+        // produced, so nothing could have run and then declined.
+        let executable = output_dir.join(&options.executable_relative_path);
+        assert!(
+            !executable.exists(),
+            "AC-7: an executable was produced despite the refusal, so the \
+             refusal is at run time and not before packaging"
+        );
+
+        // And the same inputs DO package once a profile is named — otherwise the
+        // refusal above could be about anything.
+        let package = package_starter_executable_artifact_with_options(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            temp_output_dir("c3-ac7-named-profile"),
+            "object linker unit test",
+            &ObjectLinkerPackagingOptions::starter_host_with_profile(
+                crate::boundary_resource_profile::starter_smoke_profile(),
+            ),
+        )
+        .expect("packaging with a named profile succeeds");
+        assert!(package.smoke.passed);
+    }
+
     fn missing_linker_is_explicit_toolchain_failure() {
         let observation = RuntimeObservation::Returned(RuntimeGroundValue::Bool(true));
         let program = starter_program(RuntimeExpr::Value(RuntimeValue::Bool(true)), observation);
@@ -3432,7 +3764,15 @@ mod tests {
             "object linker unit test",
         )
         .expect("platform support materializes");
-        let mut options = ObjectLinkerPackagingOptions::starter_host();
+        // ⭐ Otherwise-valid options: this test's subject is the MISSING LINKER,
+        // so every other configuration input must be present or the refusal it
+        // observes is a different one. ⚠ `starter_host()` deliberately carries
+        // no profile, and `C3` made absence a packaging refusal — so a fixture
+        // that omitted it would now be testing `AC-7` while claiming to test the
+        // toolchain.
+        let mut options = ObjectLinkerPackagingOptions::starter_host_with_profile(
+            crate::boundary_resource_profile::starter_smoke_profile(),
+        );
         options.linker_command = "definitely-missing-ken-linker".to_string();
 
         let err = package_starter_executable_artifact_with_options(
@@ -3484,6 +3824,7 @@ mod tests {
             &NativeSeedEnvironment::empty(),
             temp_output_dir("nc23-aggregate"),
             "object linker unit test",
+            crate::boundary_resource_profile::starter_smoke_profile(),
         )
         .expect_err("aggregate smoke is not packaged as an external ABI");
 
@@ -3518,6 +3859,7 @@ mod tests {
             &NativeSeedEnvironment::empty(),
             temp_output_dir("nc23-trap"),
             "object linker unit test",
+            crate::boundary_resource_profile::starter_smoke_profile(),
         )
         .expect_err("trap smoke is not reported as linker success");
 
