@@ -3,7 +3,7 @@ id: RT-FNSPLIT-RECUR-PORT
 title: "emission-port completion — the governed nested-bracket family (recursive ComputationalMatch + trap arms) must select FunctionizedUnits, so RT-SCALE-B can measure the completed population"
 status: active
 owner: runtime
-size: L
+size: XL
 gate: none
 depends_on: [RT-FNSPLIT-B2F]
 blocks: [RT-SCALE-B]
@@ -58,6 +58,13 @@ origin: RT-SCALE-B frame-unsatisfied hard stop #13, raised by runtime-implemente
 
 > ## ⛔ THE BENCHMARK IS NOT BEING AMENDED — this was a real fork, decided
 >
+> ⚠⚠ **AMENDED BY THE `#14` RULING — read the ruling block below with this
+> one.** The *semantics* are still not being amended and the fork below is still
+> decided the same way. ⛔ But the family's **spelling** is now corrected: the
+> one-operand `BufferFreeze(Var(0))` was malformed and `D7` replaces it. ⭐ The
+> line that follows — *"deleting recursion or traps would be a different
+> benchmark"* — is untouched and still binds.
+>
 > `runtime-leader` correctly surfaced two paths (`evt_3fmxnax486b52`): repair the
 > port, **or** obtain a scope amendment changing the benchmark. ⭐ **The port
 > side is taken.**
@@ -74,11 +81,13 @@ origin: RT-SCALE-B frame-unsatisfied hard stop #13, raised by runtime-implemente
 > those constructs — regardless of what we choose to measure.** Amending the
 > benchmark would move the *thermometer*, ⛔ not the *fever*.
 >
-> ⚠ **ONE INPUT IS UNMEASURED AND IS NOT BEING ASSERTED:** whether the
-> `PX8-ERRID-ALLOC` failing fixture **provably** routes through
-> `RecursiveDescent`. ⛔ It has not been measured. ⭐ It is the input that could
-> change this node's **size** — see the open question below. It does **not**
-> change whether the node is needed, because `RT-SCALE-B` is blocked either way.
+> ✅ **MEASURED AND AFFIRMATIVE — `S0`, 2026-07-28.** The `PX8-ERRID-ALLOC`
+> failing fixture **does** route through `RecursiveDescent`:
+> `authority=RecursiveDescent function=ken_nc23_entrypoint`, measured on clean
+> `b6bac1a8` with an environment-gated probe after
+> `select_body_emission_authority`, then reversed. ⇒ **The retained authority is
+> itself on the critical path to the Cranelift wall — `D1`/`D2` are load-bearing
+> for `PX8` itself, not only for the measurement. No re-scope.**
 
 > ## ✅ THIS IS THE FRAME'S OWN PRESCRIBED HANDLING, not a Steward invention
 >
@@ -132,10 +141,9 @@ origin: RT-SCALE-B frame-unsatisfied hard stop #13, raised by runtime-implemente
 > would put a hard prerequisite *in front of* an `active` node on the critical
 > path and lengthen it for nothing.
 >
-> ⚠ **The node is now larger than the `L` it was priced at.** ⛔ I am not
-> re-slicing or writing `D6` until the Architect rules the mechanism, because the
-> mechanism determines the size. Both are recorded here rather than in the
-> channel.
+> ⚠ **The node is now larger than the `L` it was priced at.** ⇒ **Ruled and
+> re-sized: see the ruling block below.** `D6` and `D7` are added, the size is
+> `XL`, and `S6`/`S7` are appended to the frame's slicing order.
 >
 > ### ⛔ THE OPERAND-SHAPE MISMATCH IS THE ARCHITECT'S, NOT THE RING'S
 >
@@ -152,9 +160,9 @@ origin: RT-SCALE-B frame-unsatisfied hard stop #13, raised by runtime-implemente
 > question"*), and it must be answered explicitly for this shape too.
 >
 > ⇒ ⛔ **Runtime does not reconcile the governed source's operand shape on its
-> own reading of `PROHIBITION 1`.** Architect ruling requested at
-> `evt_7pgwd2amvb41y`; the repair may have to land on the **encoder** side
-> instead.
+> own reading of `PROHIBITION 1`.** ✅ **RULED** at `evt_3629v1gy7fwqq` — and
+> the answer went the other way: the **encoder is right and stays strict at
+> four**; the one-operand *source* is malformed and is replaced. See `D7`.
 >
 > ### Bookkeeping
 >
@@ -166,6 +174,97 @@ origin: RT-SCALE-B frame-unsatisfied hard stop #13, raised by runtime-implemente
 > ⚠ **The `§5a` line on `main` read `11` when this stop was raised — two stops
 > stale.** The implementer read the authoritative line exactly as instructed and
 > was right to flag the disagreement. Repaired in the same publish as this block.
+
+> ## ⚖️⚖️ ARCHITECT RULING ON `#14` — `evt_3629v1gy7fwqq`, 2026-07-28
+>
+> **Outcome: the port is admitted, but NARROWLY — and the malformed side turned
+> out to be the governed SOURCE, not the encoder.**
+>
+> ⛔⛔ **READ THIS BEFORE `PROHIBITION 1`. IT AMENDS IT.** The ruling requires
+> changing the governed family, which `PROHIBITION 1` reads as forbidden. ⇒ ⭐
+> **From this ruling forward, "the unmodified governed family" means the
+> corrected canonical helper in `D7`. The malformed one-operand helper is
+> RETIRED.** Every other clause of `PROHIBITION 1` stands untouched: ⛔ deleting
+> recursion, dropping trap arms, and substituting a non-bracket synthetic remain
+> forbidden and still fail `AC-1`.
+>
+> ⚠ **Why this is a correction and not a substitution** (the Architect's
+> grounding, and the thing that keeps `PROHIBITION 1` coherent): the one-operand
+> spelling is a **planning-only raw `RuntimeExpr` that could not state its own
+> named contract.** After the recursive `Let`, `Var(0)` denotes the *recursive
+> call result*, not the allocated buffer — and one operand cannot state start,
+> length, or the span provenance `PX8-SPAN-PROV` requires. ⇒ It was never a
+> well-formed instance of the benchmark it claims to be.
+>
+> ### `D6` — the representation boundary
+>
+> `lower_process_host_effect` must **retain `LoweringOperand`s until the host
+> operation and operand seat are known.** ⛔ It must not bulk-call
+> `specialized_env_at` before reaching the `BufferFreeze` branch.
+>
+> **For `BufferFreeze` only** — seats 0 (buffer) and 3 (span-origin) are
+> phase-bearing:
+>
+> | seat | admitted |
+> |---|---|
+> | 0, 3 | `Specialized(Lowered::ResourceToken { value })` — the existing specialized value |
+> | 0, 3 | `Carried(word)` — **only** after validating the existing `InvocationBorrowed` / `BorrowedOpaque` carrier representation, then projecting through the **existing** emitted carrier-scalar helper |
+> | 0, 3 | ⛔ every other specialized shape and every other represented shape **fails closed** |
+> | 1, 2 | remain specialized `Int` operands, continuing through the existing narrowing path |
+>
+> ⭐ **The checked host operation plus operand position supplies the semantic
+> resource-token role; the carrier validation supplies the runtime
+> representation class.** ⛔ **Do not rederive a source type dynamically.**
+>
+> ### ⛔ WHAT THE LICENSE DOES NOT PERMIT — a closed list
+>
+> ⛔ Treating every `Carried` host operand as a scalar · reconstructing or
+> fabricating `Lowered::ResourceToken` · adding a `Lowered` variant that
+> contains a carrier · minting a new carrier tag, class, identity, ABI field,
+> service, envelope field, or ingress lane · synthesizing bounds or provenance
+> inside the wire encoder · widening **any other** host operation without an
+> independently demonstrated carried seat.
+>
+> ⭐ This **composes** the already-landed `B2R` carrier with the existing
+> capability / borrowed-opaque projection precedent. ✅ It changes **no** `B2F`
+> ABI / services / envelope / ingress surface — `AC-5` is unaffected.
+>
+> ### `D7` — the corrected canonical governed family
+>
+> The encoder stays strict at four operands:
+> `BufferFreeze(buffer, start, length, span_origin)`.
+>
+> ```text
+> bracket(0) = unit
+>
+> bracket(n) =
+>   BufferAllocate(1) match
+>     Err -> trap
+>     Ok(buffer) ->
+>       ComputationalMatch
+>         Scope(
+>           lexical closure λ buffer.
+>             let _ = bracket(n - 1) in
+>             BufferFreeze(buffer, 0, 1, buffer) match
+>               Err -> trap
+>               Ok(_) -> unit
+>         )
+>       case Scope(ih) -> ih(buffer)
+>       default -> trap
+> ```
+>
+> **The allocation result is the induction-hypothesis argument.** Inside the
+> closure both resource seats resolve to **that closure parameter**, not to the
+> `Let` result: seats 0 and 3 carry the **same acquisition token**, and seats 1
+> and 2 are exactly `Int(0)` and `Int(1)`.
+>
+> ⛔⛔ **IMPLEMENT BY SEMANTIC BINDER ROLES, THEN AUDIT THE GENERATED INDICES.**
+> ⛔ **Do not copy the raw `Var` indices out of the ruling** — they are
+> illustrative, and copying them is how the current defect got here.
+>
+> ⭐ **Still load-bearing and unchanged:** the recursive `ComputationalMatch`,
+> `recursive_positions = [0]`, **all** trap arms, the `n=3..7` family, and LIFO
+> bracket behavior.
 
 ## Objective
 
@@ -188,6 +287,8 @@ landed envelope, ABI, services record, or static ingress declaration.
 | `D3` | `requires_recursive_descent_authority` narrowed to what genuinely remains unportable, with each removed condition individually justified — ⛔ **the selector stays closed, exhaustive and fail-closed** |
 | `D4` | the governed `nested_resource_bracket` family selects `FunctionizedUnits` at every `n` in `3..7`, with the existing selector control updated to assert the new selection **positively** |
 | `D5` | the retained-authority residual re-stated: whatever still selects `RecursiveDescent` after this node, named explicitly and closed |
+| `D6` | **the narrow carried resource-token seat** — `lower_process_host_effect` retains `LoweringOperand`s until operation + seat are known, and admits a validated `Carried` carrier at `BufferFreeze` seats 0/3 only, failing closed on every other shape (ruling `evt_3629v1gy7fwqq`) |
+| `D7` | **the corrected canonical governed family** — the malformed one-operand `BufferFreeze(Var(0))` replaced by the four-seat operational bracket, built from semantic binder roles, with recursion / `recursive_positions = [0]` / trap arms / `n=3..7` / LIFO all retained |
 
 ## Acceptance criteria
 
@@ -213,33 +314,62 @@ landed envelope, ABI, services record, or static ingress declaration.
   the point is not that the selector flipped, but that the measurement is now
   collectable.
 
-## ⛔ Open question that sizes this node — measure it FIRST
+### Added by the `#14` ruling — `evt_3629v1gy7fwqq`
+
+⛔ **These are the Architect's required discriminators, and they bind exactly as
+`AC-1`–`AC-6` do.**
+
+- **`AC-7`** — a **structural fixture control** pins the corrected family: the
+  induction-hypothesis argument **is** the allocation result; `BufferFreeze`
+  has exactly **four** operands; seats 0 and 3 are the **same closure
+  parameter**; seats 1 and 2 are literals `0` and `1`; recursion and **every**
+  trap arm are retained. ⭐ This is what stops `D7` from drifting into the
+  substitution `PROHIBITION 1` still forbids.
+- **`AC-8`** — mutating **either** `BufferFreeze` resource seat back to
+  specialized-only **must red** on the governed carried route. ⛔ A control that
+  only proves the carried route works cannot distinguish a live port from a
+  path that never needed one.
+- **`AC-9`** — the new seat **fails closed**: a carried **wrong-class /
+  non-`BorrowedOpaque`** value must fail **before any host request is issued**,
+  and a **carried `start` or `length`** must fail closed. ⭐ Same discipline
+  `AC-4` imposes on the selector, now on the operand port.
+- **`AC-10`** — the existing **`PX8-SPAN-PROV` same-shape / two-buffer
+  discriminator stays green**, and substituting a **distinct span-origin token
+  must red**. ⛔ **The encoder must not derive seat 3 from seat 0** — if it
+  does, seat 3 is decoration and the provenance discriminator is vacuous.
+
+⭐ **Three of the ruling's seven discriminators are already ACs and are not
+restated:** `n=3..7` selecting `FunctionizedUnits` with complete `UnitBundle`s
+is **`AC-1`**; `S1`'s direct-unit-call / static-origin-backedge mutation
+remaining discriminating is **`AC-2`**; the `B2F` inventory controls remaining
+unchanged is **`AC-5`**. ⚠ `AC-2` is now a **preservation** obligation — `D7`
+rewrites the family `S1` proved it on, so the mutation must be re-run against
+the corrected source, not assumed to carry.
+
+## ✅ CLOSED — the open question that sized this node
 
 > **Does the `PX8-ERRID-ALLOC` failing fixture route through
-> `RecursiveDescent`?**
+> `RecursiveDescent`?** ✅ **YES.** Measured at `S0` on 2026-07-28 (above).
+> ⇒ The retained authority is on the critical path to the Cranelift wall and
+> `D1`/`D2` are load-bearing for `PX8` itself. **No re-scope; the node stands.**
 >
-> ⛔ **Unmeasured.** ⭐ It changes the shape of the work:
->
-> - **If yes** — the retained authority is itself on the critical path to the
->   Cranelift wall, and `D1`/`D2` are load-bearing for `PX8`, not only for the
->   measurement. Size holds at **`L`**.
-> - **If no** — the wall may already be cleared for the constructs `PX8` needs,
->   and this node may be reducible to the narrower slice `RT-SCALE-B` requires.
->
-> ⇒ ⛔ **Measure this before designing `D1`, and report it.** It is cheap — the
-> fixture and the selector are both on `main`. ⚠ **Do not defer it to the
-> retro**; it is a sizing input, not a lesson.
+> ⚠ **Size moved for a different reason.** `L` → **`XL`** comes from the `#14`
+> ruling adding `D6` and `D7`, not from this measurement. ⭐ `XL` is a new value
+> in this corpus and means exactly one thing: **beyond `L`, and it would have
+> been split had it not already been `active` on the critical path.**
 
 ## Bookkeeping
 
-- **Hard-stop count of record: 13** (this stop). ⛔ **No research pull fires** —
-  the armed multiples are `#15`, `#18`, `#21`. The authoritative counter is
-  `docs/program/issues/RT-NATIVE-FNSPLIT.md`'s **ARMED §5a RESEARCH-CONSULT
-  TRIGGER** line, which wins on any disagreement.
-- **Symptom inventory: `ENTRIES` 3 → 4**, appended by the **Architect**
-  (*"appends one line per hard-stop, before it rules"*) — it ruled without
-  appending. ⛔ **`NEXT PREDICATE CHECK` stays the 6th entry**; the 3rd was
-  consumed, answered at entry 2. ⇒ Entry 4 triggers no predicate answer.
+- **Hard-stop count of record: 14.** ⛔ **No research pull fires at `#14`** —
+  the armed multiples are `#15`, `#18`, `#21`. ⚠⚠ **`#15` IS ARMED: the next
+  hard stop pulls research, with no slack left.** The authoritative counter is
+  `docs/program/issues/RT-NATIVE-FNSPLIT.md`'s **`COUNT OF RECORD` block at the
+  head of `§5a`**, which wins on any disagreement — ⛔ read it at the point of a
+  stop, never a count transcribed into a frame (**including this line**).
+- **Symptom inventory: `ENTRIES` 4 → 5**, appended by the **Architect** at
+  commit `9db7991f` **before** it ruled, as the protocol requires. ⛔ **`NEXT
+  PREDICATE CHECK` stays the 6th entry.** ⚠ **Entry 5 is the last one before
+  it** — the 6th must answer the shared-predicate question.
 - ⛔ **§5a-ii: the shared predicate is the Architect's to name**, and it named it
   at `evt_55bzwnhjpwjrs`. The Steward does not restate it.
 
