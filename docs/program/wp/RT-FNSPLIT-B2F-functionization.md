@@ -1106,15 +1106,39 @@ Steward-scoped.** Extend `C1`'s producer over the arms below.
 > worst available progress signal here. ⭐ Same standing rule as `AC-11`: ⛔ **do
 > not total partial populations into a discharge.**
 >
-> ⚠ **`HostResult` is BLOCKED on a representation ruling** (implementer
-> `evt_26sy7sknha9e6`, routed by the leader): `Lowered::HostResult` is
+> ### ⛔⛔ `HostResult` IS RULED AND IT IS NOT `D9` WORK — IT HAS A PREREQUISITE NODE
+>
+> **Architect ruling `evt_xf4znbnb6vz9`.** `Lowered::HostResult` is
 > **synthesized** by effect lowering, so its `ok`/`err` children are constructed
-> rather than source subexpressions — **the identity is
-> occurrence-INDEPENDENT while the lookup is occurrence-KEYED**, and there is no
-> source occurrence to ask at. ⛔ Not a lookup bug, ⛔ not fixable by passing the
-> parent's origin, and ⛔ not by minting one — the planner surface does not widen.
+> rather than source subexpressions — **the identity is occurrence-INDEPENDENT
+> while the lookup is occurrence-KEYED**, and there is no source occurrence to ask
+> at. ⛔ Not a lookup bug, ⛔ not fixable by passing the parent's origin (it may
+> hold a **different atom**), ⛔ not by minting one.
+>
+> ⇒ ⭐ **Ruled a FRAME/PREREQUISITE defect, not a local `D9` repair**, because the
+> fix is a **planner capability** this frame's own no-widening boundary forbids
+> the implementer from creating. **New node:
+> `RT-FNSPLIT-C2-SYNTH-ID`** — a closed, typed, unforgeable synthesized-role
+> identity capability **plus the `DynamicConstructor` producer that consumes it**
+> (⛔ the two ship together; an identity nobody consumes is an inert half-node).
+> Frame: `docs/program/wp/RT-FNSPLIT-C2-SYNTH-ID.md`.
+>
+> ⛔ **`HostResult` producer work does NOT resume until that node lands**, and
+> ⛔ **`D9` is incomplete until it does.** ⚠ `fa1af614` is a valid green
+> checkpoint **for the byte-bodied work only**.
+> ⛔ **No `HostResult` representation change and no local planner shortcut is
+> authorized** — ⛔ not `FailClosedForbidden`, ⛔ not `ok_constructor` /
+> `err_constructor` fields on the node.
+>
+> ⚠ **The wrapper question was already answered and is NOT part of the block:** an
+> `InvocationHostResult` word is the nominal `Result` wrapper and its runtime
+> success bit selects field 0 or 1, so a carried consumer stays on the
+> emitted-helper route — compile-time comparison against
+> `NativeProcessSymbols.result_ok`/`result_err`, then `host_success`, then
+> `host_payload`. ⇒ ⭐ **What blocks is the PAYLOAD graph, not the wrapper**, since
+> each field independently follows its own `boundary_disposition`.
+>
 > ⚠ It is **1 red of 69**; ⛔ do not let the length of its analysis imply its size.
-> ⭐ **This frame will record the ruling when it lands — once, on the ruling.**
 >
 > ### ⛔⛔ `Trap` IS NOT A PRODUCER GAP — REMOVED FROM THIS DELIVERABLE
 >
