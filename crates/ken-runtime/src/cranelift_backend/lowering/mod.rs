@@ -534,10 +534,12 @@ struct FunctionLocalRefs {
     /// The two answer different questions and were wrongly merged into one
     /// field; see [`Lowering::carrier_arena`] for the retraction.
     ///
-    /// ⚠ **`None` in production until the `S6`/`D6` reland lands the activation
-    /// -services record**, which is the only thing that can source it. ⇒ Every
-    /// boundary-carrier call fails closed until then — ⭐ which is strictly
-    /// better than the native arena it used to be handed silently.
+    /// ⚠ **`None` in production, because NOTHING PUBLISHES A BOUNDARY ARENA
+    /// YET** — measured, not assumed: every `BoundaryRegion::reserve` /
+    /// `reserve_persistent` call site in the crate is a test, so the activation
+    /// owner the ruling assigns this to does not exist on either launcher path.
+    /// ⇒ Every boundary-carrier call fails closed until then — ⭐ which is
+    /// strictly better than the native arena it used to be handed silently.
     boundary_arena: Option<cranelift_codegen::ir::Value>,
     native_int_binop: Option<FuncRef>,
     native_int_compare: Option<FuncRef>,
@@ -1513,32 +1515,29 @@ impl<'a> Lowering<'a> {
         })
     }
 
-    /// The invocation arena the carrier helpers take as their first argument.
+    /// The **boundary** arena the carrier helpers take as their first argument.
     ///
-    /// ⛔⛔ **THIS RETURNS THE WRONG POINTER TODAY, and the claim that used to
-    /// stand here is FALSE.** The retracted text asserted that the boundary
-    /// arena and the native-`Int` arena *"are the same SSA value, and that is a
-    /// fact about the ABI rather than a shortcut."* They are not:
+    /// ⛔⛔ **A CLAIM THAT STOOD HERE WAS FALSE, and it is retracted rather than
+    /// deleted.** The retracted text asserted that the boundary arena and the
+    /// native-`Int` arena *"are the same SSA value, and that is a fact about the
+    /// ABI rather than a shortcut."* They are not — `CompiledModule::run` passed
+    /// a **`NativeIntArenaV1`** as parameter 0, and in process mode the field was
+    /// re-read from `invocation[24]`, which is the native arena again. ⇒ Every
+    /// boundary-carrier helper reached through here was handed a native arena.
+    /// ⚠ **It never fired only because the carrier was inert** — which is
+    /// exactly why it must not be discovered by `S6` making it live.
     ///
-    /// - `CompiledModule::run` passes a **`NativeIntArenaV1`** as parameter 0;
-    /// - in process mode the field is re-read from `invocation[24]`, which is
-    ///   the native arena again.
+    /// ⭐ **Repaired under the Architect's ruling (relayed `evt_e300y2kjeb6k`):**
+    /// one runtime-owned [`crate::activation_services::GeneratedActivationServicesV1`]
+    /// with **distinct typed fields**, a uniform `(frame_ptr, services_ptr) -> i64`
+    /// signature for the root and every unit, `FunctionLocalRefs` split to match,
+    /// and this accessor returning **only** `boundary_arena`. ⛔ Not a second
+    /// answer to one question — two different questions that were wrongly merged
+    /// into one.
     ///
-    /// ⇒ Every boundary-carrier helper reached through here is handed a native
-    /// arena. ⚠ **It has never fired only because the carrier is inert** — which
-    /// is exactly why it must not be discovered by `S6` making it live.
-    ///
-    /// ⭐ **The ruled repair belongs to the `S6`/`D6` atomic reland, not here**
-    /// (Architect, via `evt_e300y2kjeb6k`): one runtime-owned activation-services
-    /// record with **distinct typed fields** `native_int_arena` and
-    /// `boundary_arena`, a uniform `(frame_ptr, services_ptr) -> i64` signature
-    /// for the root and every unit, `FunctionLocalRefs` split to match, and this
-    /// accessor returning **only** `boundary_arena`. ⛔ Not a second answer to
-    /// one question — two different questions that were wrongly merged into one.
-    ///
-    /// ⚠ The false claim is retracted **in place** rather than deleted: a reader
-    /// who met it and believed it needs to see that it was withdrawn, and the
-    /// next person to ask *"why two arena fields?"* needs the reason here.
+    /// ⚠ A reader who met the false claim and believed it needs to see that it
+    /// was withdrawn, and the next person to ask *"why two arena fields?"* needs
+    /// the reason here.
     fn carrier_arena(&self) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
         self.function_local.boundary_arena.ok_or_else(|| {
             unsupported(
