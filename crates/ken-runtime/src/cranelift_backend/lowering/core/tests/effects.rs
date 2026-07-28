@@ -92,6 +92,7 @@ fn run_checked_bounded_nat_fixture(
             native_int_intern: None,
             native_int_narrow: None,
             native_int_export: None,
+            native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
             boundary_carrier: None,
         },

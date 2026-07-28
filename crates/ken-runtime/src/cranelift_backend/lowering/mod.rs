@@ -466,6 +466,10 @@ impl ArtifactHelpers<'_> {
             native_int_intern: Some(module.declare_func_in_func(self.native_int.intern, func)),
             native_int_narrow: Some(module.declare_func_in_func(self.native_int.narrow, func)),
             native_int_export: Some(module.declare_func_in_func(self.native_int.export, func)),
+            // ⭐ The **one** exact-`Int` decoder, resolved here so the
+            // region-limbed spill copies through the landed representation
+            // instead of growing a second one.
+            native_int_resolve: Some(module.declare_func_in_func(self.native_int.resolve, func)),
             // ⛔ Empty, never inherited. This is the map whose `ir::Value` keys
             // alias across functions; starting it empty per function is why the
             // two structs are separate types rather than one with a `reset()`.
@@ -497,6 +501,11 @@ impl ArtifactHelpers<'_> {
                 store_bytes_len: module
                     .declare_func_in_func(self.boundary_value_abi.store_bytes_len, func),
                 store_byte: module.declare_func_in_func(self.boundary_value_abi.store_byte, func),
+                store_int_limbs: module
+                    .declare_func_in_func(self.boundary_value_abi.store_int_limbs, func),
+                store_int_limb: module
+                    .declare_func_in_func(self.boundary_value_abi.store_int_limb, func),
+                seal_int: module.declare_func_in_func(self.boundary_value_abi.seal_int, func),
             }),
         }
     }
@@ -522,6 +531,9 @@ struct FunctionLocalRefs {
     native_int_intern: Option<FuncRef>,
     native_int_narrow: Option<FuncRef>,
     native_int_export: Option<FuncRef>,
+    /// `(arena, tag, payload, out_view) -> status` — the sole exact-`Int`
+    /// decoder, `ken_native_int_resolve_local`.
+    native_int_resolve: Option<FuncRef>,
     native_int_tags: BTreeMap<cranelift_codegen::ir::Value, cranelift_codegen::ir::Value>,
     /// The boundary-carrier helpers, made callable inside **this** generated
     /// function (`RT-FNSPLIT-C1` `D3`).
@@ -924,6 +936,15 @@ struct BoundaryCarrierRefs {
     store_bytes_len: FuncRef,
     /// `(arena, word, index, byte) -> status` — write one content byte.
     store_byte: FuncRef,
+    /// `(arena, word, sign, len, out) -> status` — claim `len` magnitude limbs
+    /// in the node's **own** region for a region-limbed `Int`.
+    store_int_limbs: FuncRef,
+    /// `(arena, word, index, limb) -> status` — write one magnitude limb.
+    store_int_limb: FuncRef,
+    /// `(arena, word) -> status` — check a region-limbed `Int`'s magnitude
+    /// canonical and seal it. ⛔ **Until this succeeds the node denotes
+    /// nothing**, so it is the last step of the copy and never optional.
+    seal_int: FuncRef,
 }
 
 /// A value that has crossed into the **operational carrier** — nothing but the
@@ -1219,7 +1240,7 @@ impl<'a> Lowering<'a> {
                 // ⛔ The marker travels with the payload; see
                 // `carrier_small_marker` for why this is not a constant.
                 let marker = self.native_int_tag(builder, *payload, *known)?;
-                self.emit_carrier_spillable_immediate(builder, tag, spill, *payload, marker)
+                self.emit_carrier_native_int(builder, tag, spill, *payload, marker)
             }
             Lowered::ProcessExitStatus { value: payload }
             | Lowered::BoundedNat(BoundedNatV1 { value: payload })
@@ -1611,21 +1632,25 @@ impl<'a> Lowering<'a> {
     /// either arm depending on the payload it is handed. That is why the
     /// partition is a property of the value rather than of the compilation.
     ///
+    /// ⛔⛔ **THIS ARM IS ONLY SOUND FOR A `Small`-MARKED PAYLOAD, and it is
+    /// [`Self::emit_carrier_native_int`]'s job to guarantee that.** The payload
+    /// of a `NativeIntV1` pair means different things under different markers —
+    /// a `Big` payload is a **slot identity**, and asking `make_immediate` a
+    /// magnitude question about a slot number is answered `OK` for a low slot.
+    /// ⇒ Calling this directly on an unpartitioned `Lowered::Int` payload is a
+    /// **silent corruption**, not a fail-closed gap.
+    ///
+    /// ⚠ An earlier revision of this comment claimed such a value would be
+    /// refused by `store_int_tag`'s owner guard. **It never reaches that guard**
+    /// — corrected under the Architect's ruling `evt_79xcj70p0qxjj`.
+    ///
     /// **MEASURED:** the emitted body branches on `make_immediate`'s status and
     /// builds a `BoundaryClass::Int` handle on the bounds edge.
-    /// **CLAIMED:** a spillable value crosses the boundary without truncation.
-    /// **THE GAP:** ⚠ **the spill arm covers a `Small`-marked magnitude only.**
-    /// `store_int_tag` admits a `NATIVE_INT_BIG_TAG_V1` marker only on a node
-    /// the invocation arena owns (`BOUNDARY_INT_MARKER_OWNER`), and the spill
-    /// target here is [`BoundaryTag::PersistentGround`] — the tag the ABI's own
-    /// `ImmediateInt` doc names as the overflow representation. ⇒ A **region-
-    /// limbed** magnitude would have to be *copied* into the node's own region
-    /// (`store_int_limbs` / `store_int_limb` / `seal_int`), which this arm does
-    /// not yet emit. Such a value therefore **fails closed at `store_int_tag`'s
-    /// own guard** rather than being mis-recorded — ⛔ but it is a residual, not
-    /// coverage, and it is `ERR_ESCAPE` rather than an unimplemented-feature
-    /// error, so a reader who meets it in the wild will be told the wrong thing
-    /// about why.
+    /// **CLAIMED:** a `Small`-marked spillable value crosses without truncation.
+    /// **THE GAP:** ⚠ **the marker partition is the caller's**, so this
+    /// function's soundness is conditional on it. The non-`Int` spillables reach
+    /// here directly because their payload *is* their magnitude with no pair and
+    /// no second reading — see [`Self::carrier_small_marker`].
     ///
     /// ⚠ **A second residual, review-caught rather than mechanically detected:**
     /// swapping the status branch below for a hand-written magnitude test still
@@ -1690,6 +1715,220 @@ impl<'a> Lowering<'a> {
         Ok(CarriedBoundaryWord {
             word: builder.block_params(join)[0],
         })
+    }
+
+    /// ⭐⭐ **THE `NativeIntV1` MARKER PARTITION** — the entry point for
+    /// `Lowered::Int`, and the thing that must happen **before** any magnitude
+    /// question is asked (Architect ruling, `evt_79xcj70p0qxjj`).
+    ///
+    /// ⛔⛔ **Why the marker comes first, and why the obvious order is a silent
+    /// corruption rather than a residual.** `Lowered::Int`'s `value` is the
+    /// **payload half of a `NativeIntV1` pair**, and what that word *means*
+    /// depends on the marker: for `Small` it is the magnitude; for `Big` it is a
+    /// **slot identity in the invocation's native arena**, and slots begin at
+    /// `1`. ⇒ Calling `make_immediate` on a `Big` payload asks a magnitude
+    /// question about a slot number — and a low slot **satisfies** the immediate
+    /// domain, so the value crosses on the apparent-success arm encoded as the
+    /// integer `1`. ⚠ Not a fail-closed gap: a wrong answer that looks like a
+    /// right one.
+    ///
+    /// ⚠ **This corrects a residual I previously stated as fail-closed.** The
+    /// earlier claim was that a `Big` would be refused by `store_int_tag`'s
+    /// owner guard. It never reaches that guard.
+    ///
+    /// ⭐ **The branch is a read of the canonical transport tag, ⛔ not a
+    /// sibling magnitude predicate**, so it does not weaken the ban on
+    /// re-deriving the immediate-domain test: within the `Small` arm the ruled
+    /// status-derived dispatch is unchanged.
+    ///
+    /// | marker | path |
+    /// |---|---|
+    /// | `NATIVE_INT_SMALL_TAG_V1` | the payload **is** the magnitude → [`Self::emit_carrier_spillable_immediate`] |
+    /// | `NATIVE_INT_BIG_TAG_V1` | the payload is a slot → resolve, then an **owned deep copy** into the persistent region |
+    /// | anything else | ⛔ fail closed |
+    fn emit_carrier_native_int(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        tag: BoundaryTag,
+        spill: BoundaryClass,
+        payload: cranelift_codegen::ir::Value,
+        marker: cranelift_codegen::ir::Value,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let small = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            marker,
+            i64::try_from(crate::NATIVE_INT_SMALL_TAG_V1).map_err(|_| {
+                unsupported("BoundaryCarrier", "the native `Small` marker is not an ABI word")
+            })?,
+        );
+        let small_block = builder.create_block();
+        let wide_block = builder.create_block();
+        let join = builder.create_block();
+        builder.append_block_param(join, types::I64);
+        builder.ins().brif(small, small_block, &[], wide_block, &[]);
+
+        builder.switch_to_block(small_block);
+        let immediate = self.emit_carrier_spillable_immediate(builder, tag, spill, payload, marker)?;
+        builder.ins().jump(join, &[immediate.word.into()]);
+
+        builder.switch_to_block(wide_block);
+        let wide = self.emit_carrier_region_limbed_int(builder, spill, payload, marker)?;
+        builder.ins().jump(join, &[wide.word.into()]);
+
+        builder.switch_to_block(join);
+        Ok(CarriedBoundaryWord {
+            word: builder.block_params(join)[0],
+        })
+    }
+
+    /// ⭐ **The owned deep copy** — a region-limbed `Int` crossing into the
+    /// persistent region (Architect ruling, `evt_79xcj70p0qxjj`).
+    ///
+    /// ⛔ **No represented-unavailable lane, and no new error identity.** A valid
+    /// wide `Int` crosses **successfully**; `ERR_ESCAPE` is not an admissible
+    /// terminal result for one. The copy is *owned*, so nothing borrows the
+    /// invocation arena past its extent and the escape question does not arise.
+    ///
+    /// ⭐ **The decode is `ken_native_int_resolve_local`'s, never ours.** It
+    /// already yields canonical `sign`, `len` and `limbs` from the one native
+    /// representation. ⛔ Deriving them here would be a second exact-integer
+    /// decoder beside the first — the proliferation `docs/PRINCIPLES.md` forbids
+    /// — and `boundary_value_clif`'s own int readers make the identical choice.
+    ///
+    /// ⛔ **The order is load-bearing and is the established wide-`Int`
+    /// producer's:** allocate → region marker → claim → copy → **seal**. The
+    /// marker written is [`BOUNDARY_INT_REGION_LIMBS`], ⛔ never the native
+    /// `Big` marker: that marker names a slot in storage that dies with the
+    /// invocation, which is exactly what `BOUNDARY_INT_MARKER_OWNER` refuses on
+    /// a persistent node. And until `seal_int` succeeds **the node denotes
+    /// nothing**, so the seal is the last step rather than an optional check.
+    ///
+    /// ⚠ The limb loop is over a **runtime** length: nothing about the magnitude
+    /// is known when this body is compiled, which is `AC-2` at the wide arm.
+    fn emit_carrier_region_limbed_int(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        spill: BoundaryClass,
+        payload: cranelift_codegen::ir::Value,
+        marker: cranelift_codegen::ir::Value,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        // ⛔ Any marker that is not `Big` fails closed HERE — the closed set is
+        // `{Small, Big}` and `Small` was taken by the caller's branch.
+        Self::require_i64(
+            builder,
+            marker,
+            i64::try_from(crate::NATIVE_INT_BIG_TAG_V1).map_err(|_| {
+                unsupported("BoundaryCarrier", "the native `Big` marker is not an ABI word")
+            })?,
+        );
+
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let decoder = self.function_local.native_int_resolve.ok_or_else(|| {
+            unsupported(
+                "BoundaryCarrier",
+                "this generated function has no exact-Int decoder",
+            )
+        })?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+
+        // ⭐⭐ **The native arena comes from the BOUNDARY arena's own binding
+        // slot, and that choice is intrinsic rather than convenient.** The node
+        // being built is read back by `int_sign` / `int_len` / `int_limb`, and
+        // each of those decodes with exactly `load(arena, ARENA_NATIVE_INT)`.
+        // ⇒ Reading the same slot makes producer and consumer agree **by
+        // construction**; taking the pointer from anywhere else would let the
+        // two decode a pair against different arenas, which is the drift the
+        // one-decoder rule exists to prevent.
+        //
+        // ⛔ Not native-arena layout: this is the boundary arena's binding
+        // field, read exactly as `boundary_value_clif` reads it, and the value
+        // is handed straight to the decoder rather than walked.
+        let native_arena = builder.ins().load(
+            pointer_type,
+            MemFlags::trusted(),
+            arena,
+            crate::boundary_value::ARENA_NATIVE_INT,
+        );
+        Self::require_nonzero(builder, native_arena);
+
+        // The decoder's `{sign, len, limbs, small}` view.
+        let view_slot =
+            builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 32, 3));
+        let view = builder.ins().stack_addr(pointer_type, view_slot, 0);
+        let decoded = builder
+            .ins()
+            .call(decoder, &[native_arena, marker, payload, view]);
+        Self::require_i64(builder, builder.inst_results(decoded)[0], 0);
+        let sign = builder
+            .ins()
+            .load(types::I64, MemFlags::trusted(), view, crate::native_int_clif::VIEW_SIGN);
+        let length = builder
+            .ins()
+            .load(types::I64, MemFlags::trusted(), view, crate::native_int_clif::VIEW_LEN);
+        let source = builder.ins().load(
+            pointer_type,
+            MemFlags::trusted(),
+            view,
+            crate::native_int_clif::VIEW_LIMBS,
+        );
+
+        // allocate → region marker → claim → copy → seal.
+        let word = self.emit_carrier_alloc(builder, BoundaryTag::PersistentGround, spill, 0)?;
+        let region = builder.ins().iconst(
+            types::I64,
+            i64::try_from(crate::boundary_value::BOUNDARY_INT_REGION_LIMBS).map_err(|_| {
+                unsupported(
+                    "BoundaryCarrier",
+                    "the region-limbs marker is not an ABI word",
+                )
+            })?,
+        );
+        let marked = builder
+            .ins()
+            .call(refs.store_int_tag, &[arena, word.word, region]);
+        Self::require_i64(builder, builder.inst_results(marked)[0], BOUNDARY_OK);
+        let (_span_slot, span) = Self::carrier_out_slot(builder, pointer_type);
+        let claim = builder
+            .ins()
+            .call(refs.store_int_limbs, &[arena, word.word, sign, length, span]);
+        Self::require_i64(builder, builder.inst_results(claim)[0], BOUNDARY_OK);
+
+        let head = builder.create_block();
+        builder.append_block_param(head, types::I64);
+        let body = builder.create_block();
+        let done = builder.create_block();
+        let zero = builder.ins().iconst(types::I64, 0);
+        builder.ins().jump(head, &[zero.into()]);
+
+        builder.switch_to_block(head);
+        let index = builder.block_params(head)[0];
+        let more = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThan,
+            index,
+            length,
+        );
+        builder.ins().brif(more, body, &[], done, &[]);
+
+        builder.switch_to_block(body);
+        let offset = builder.ins().imul_imm(index, 8);
+        let address = builder.ins().iadd(source, offset);
+        let limb = builder
+            .ins()
+            .load(types::I64, MemFlags::trusted(), address, 0);
+        let write = builder
+            .ins()
+            .call(refs.store_int_limb, &[arena, word.word, index, limb]);
+        Self::require_i64(builder, builder.inst_results(write)[0], BOUNDARY_OK);
+        // ⚠ `require_i64` split the block, so the back edge is emitted from the
+        // block the builder is in NOW, not from `body`.
+        let next = builder.ins().iadd_imm(index, 1);
+        builder.ins().jump(head, &[next.into()]);
+
+        builder.switch_to_block(done);
+        let sealed = builder.ins().call(refs.seal_int, &[arena, word.word]);
+        Self::require_i64(builder, builder.inst_results(sealed)[0], BOUNDARY_OK);
+        Ok(word)
     }
 
     /// ⭐ **The byte-bodied handle producer** — the `String` / `Bytes` arm of

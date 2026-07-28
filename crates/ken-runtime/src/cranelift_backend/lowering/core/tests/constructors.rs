@@ -218,6 +218,7 @@ fn run_dynamic_constructor_dispatch_fixture(
             native_int_intern: None,
             native_int_narrow: None,
             native_int_export: None,
+            native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
             boundary_carrier: None,
         },
@@ -1792,6 +1793,7 @@ fn bare_carrier_test_lowering<'src>(
             native_int_intern: None,
             native_int_narrow: None,
             native_int_export: None,
+            native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
             boundary_carrier: None,
         },
@@ -2134,10 +2136,20 @@ fn ac_c7_try_compile_edge_with_operands<'src>(
         store_int_tag: module.declare_func_in_func(helpers.store_int_tag, &mut context.func),
         store_bytes_len: module.declare_func_in_func(helpers.store_bytes_len, &mut context.func),
         store_byte: module.declare_func_in_func(helpers.store_byte, &mut context.func),
+        store_int_limbs: module.declare_func_in_func(helpers.store_int_limbs, &mut context.func),
+        store_int_limb: module.declare_func_in_func(helpers.store_int_limb, &mut context.func),
+        seal_int: module.declare_func_in_func(helpers.seal_int, &mut context.func),
     };
 
     let mut compiler = bare_carrier_test_lowering(seed_env, plan);
     compiler.function_local.boundary_carrier = Some(carrier);
+    // ⭐ The native-`Int` authority, resolved into THIS function. ⛔ Without
+    // these the wide-`Int` arm cannot decode a pair and the rig would measure a
+    // refusal rather than the copy.
+    compiler.function_local.native_int_intern =
+        Some(module.declare_func_in_func(native.intern, &mut context.func));
+    compiler.function_local.native_int_resolve =
+        Some(module.declare_func_in_func(native.resolve, &mut context.func));
 
     let mut function_context = FunctionBuilderContext::new();
     let refused = {
@@ -4259,5 +4271,209 @@ fn b2f_d9_the_same_emitter_builds_the_string_class() {
         text.chars().count(),
         "NON-VACUITY: the fixture must be multi-byte, or `bytes` and `chars` \
          agree and the length assertion above discriminates nothing"
+    );
+}
+
+// ─── `RT-FNSPLIT-B2F` `D9` — THE REGION-LIMBED (`Big`) `Int` PRODUCER ─────
+//
+// ⛔⛔ **Why a synthetic `(Big, payload)` pair would not do.** A `Big` payload is
+// a **slot identity** in the invocation's native arena, and slots are small
+// integers. ⇒ Handing `make_immediate` a low slot answers `BOUNDARY_OK` and
+// encodes the integer `1` — the silent-corruption path. A fixture that invented
+// a large payload would take the bounds edge and never exercise it. ⭐ So the
+// pair here is minted by **`ken_native_int_intern_local` itself**, from limbs
+// supplied at run time, exactly as production mints one.
+
+/// A bound invocation whose boundary arena also names a native-`Int` arena and
+/// reserves limb capacity in the persistent region.
+///
+/// ⚠ Both the `NativeIntArenaV1` and the store must outlive the call: the base
+/// pointer names their tables, and the binding is published before the pointer
+/// is taken because growing a table afterwards would move it.
+fn b2f_d9_bind_wide_arena(
+    store: &mut crate::boundary_value::BoundaryValueStore,
+    native: &crate::native_int::NativeIntArenaV1,
+) -> (crate::boundary_value::BoundaryArenaV1, *mut u64) {
+    store.reserve_persistent(64, 256, 512, 64);
+    let persistent = store.publish_persistent();
+    let mut arena = crate::boundary_value::BoundaryArenaBuilder::new().finish();
+    arena.reserve(64, 256, 512, 64);
+    arena.bind_persistent(Some(persistent as *const u64));
+    arena.bind_native_int(Some(native as *const _ as *const u64));
+    let base = arena.publish();
+    (arena, base)
+}
+
+/// `(arena, limb0, limb1) -> boundary word` — intern a native `Int` from
+/// **run-time** limbs, then transfer it across the producer.
+///
+/// ⭐⭐ **One compiled body, and the marker is a RUNTIME value.** `intern` trims
+/// leading zero limbs, so `(x, 0)` comes back `Small` and `(x, 1)` comes back
+/// `Big` from the *same* call. ⇒ The marker partition is exercised as a run-time
+/// branch, ⛔ not as two compilations that could each have specialized.
+fn b2f_d9_wide_int(limbs: [u64; 2]) -> (crate::boundary_value::BoundaryWord, Vec<u64>, Option<u64>, Option<u64>) {
+    let fixture = ac_c7_ctor("Alpha");
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let seed_env = NativeSeedEnvironment::empty();
+    let (_module, code) = ac_c7_try_compile_edge_with_operands(
+        &seed_env,
+        plan,
+        2,
+        |compiler, builder, operands| {
+            let arena = compiler
+                .function_local
+                .native_int_arena
+                .expect("the rig binds an arena");
+            let pointer_type = builder.func.dfg.value_type(arena);
+            let native_arena = builder.ins().load(
+                pointer_type,
+                MemFlags::trusted(),
+                arena,
+                crate::boundary_value::ARENA_NATIVE_INT,
+            );
+            // The limb array, filled from the function's own parameters.
+            let source = builder.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                16,
+                3,
+            ));
+            builder.ins().stack_store(operands[0], source, 0);
+            builder.ins().stack_store(operands[1], source, 8);
+            let source_address = builder.ins().stack_addr(pointer_type, source, 0);
+            let pair = builder.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                16,
+                3,
+            ));
+            let pair_address = builder.ins().stack_addr(pointer_type, pair, 0);
+            let sign = builder.ins().iconst(types::I64, 0);
+            let length = builder.ins().iconst(types::I64, 2);
+            let intern = compiler
+                .function_local
+                .native_int_intern
+                .expect("the rig declares intern");
+            let call = builder.ins().call(
+                intern,
+                &[native_arena, sign, source_address, length, pair_address],
+            );
+            Lowering::require_i64(builder, builder.inst_results(call)[0], 0);
+            let marker = builder.ins().stack_load(types::I64, pair, 0);
+            let payload = builder.ins().stack_load(types::I64, pair, 8);
+            // ⛔ Registered exactly as production registers one — the marker is
+            // the pair's own transport tag, not a constant chosen here.
+            compiler
+                .function_local
+                .native_int_tags
+                .insert(payload, marker);
+            let value = Lowered::Int {
+                value: payload,
+                known: None,
+            };
+            Ok(compiler.transfer_into_carrier(builder, root, &value)?.word)
+        },
+    )
+    .expect("the wide-Int producer emits");
+
+    let run: extern "C" fn(*const u64, i64, i64) -> i64 = unsafe { std::mem::transmute(code) };
+    let native = crate::native_int::NativeIntArenaV1::default();
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = b2f_d9_bind_wide_arena(&mut store, &native);
+    let word = crate::boundary_value::BoundaryWord(
+        run(base, limbs[0] as i64, limbs[1] as i64) as u64,
+    );
+    let image = store.image();
+    let copied = image.0.node_limbs(word.payload()).map(<[u64]>::to_vec);
+    let sign = image
+        .0
+        .node_field(word.payload(), crate::boundary_value::NODE_PAYLOAD);
+    let extent = image
+        .0
+        .node_field(word.payload(), crate::boundary_value::NODE_EXTENT);
+    (word, copied.unwrap_or_default(), sign, extent)
+}
+
+/// ⭐⭐ **`D9` — a REAL native `Big` crosses as an owned deep copy, with its
+/// exact sign and every limb.**
+///
+/// ⛔ **This is the row the `ERR_ESCAPE` residual was standing in for, and the
+/// residual was false.** The claim was that a wide `Int` would fail closed at
+/// `store_int_tag`'s owner guard. It never reaches that guard: a `Big` payload
+/// is a **slot identity**, `make_immediate` answers `OK` for a low slot, and the
+/// value crossed as the integer `1`. ⇒ The marker must partition the path
+/// *before* any magnitude question is asked.
+///
+/// **MEASURED:** one compiled body interns a native `Int` from run-time limbs
+/// through `ken_native_int_intern_local`, transfers it, and the persistent node
+/// carries the `BOUNDARY_INT_REGION_LIMBS` marker, sign `0`, and **both** limbs.
+/// **CLAIMED:** a valid region-limbed `Int` crosses a unit result boundary
+/// successfully, by owned deep copy, with no borrow escaping.
+/// **THE GAP:** ⚠ this fixture's magnitude is two limbs. The copy loop is over a
+/// **runtime** length, so nothing here is specialized to two — but a defect that
+/// only appears past some larger limb count is not measured by it.
+///
+/// ⚠ Promise class: **durable invariant** — it asserts the round trip of limbs
+/// it supplies at run time, not a frozen node index or encoding.
+#[test]
+fn b2f_d9_a_real_native_big_crosses_as_an_owned_region_limbed_copy() {
+    // ⚠ The top limb is non-zero, so `intern` cannot trim this to a `Small`.
+    // The low limb is deliberately NOT the value a slot identity would be.
+    let (word, copied, sign, extent) = b2f_d9_wide_int([0xdead_beef_0000_0001, 3]);
+    assert_eq!(
+        word.tag(),
+        Some(BoundaryTag::PersistentGround),
+        "⛔ a wide `Int` must cross as a persistent handle. An `ImmediateInt` \
+         here is the silent-corruption path: the SLOT was encoded as an integer"
+    );
+    assert_eq!(
+        extent,
+        Some(crate::boundary_value::BOUNDARY_INT_REGION_LIMBS),
+        "⛔ the persistent node carries the REGION-LIMBS marker — never the \
+         native `Big` marker, which names storage that dies with the invocation"
+    );
+    assert_eq!(sign, Some(0), "the sign is copied, not assumed");
+    assert_eq!(
+        copied,
+        vec![0xdead_beef_0000_0001u64, 3],
+        "⛔ EVERY limb, in order — a dropped, substituted or reordered limb is a \
+         different integer"
+    );
+}
+
+/// ⭐⭐ **`D9` POSITIVE CONTROL — the SAME compiled body takes the `Small` arm
+/// when the interned pair comes back `Small`.**
+///
+/// ⛔ **Why this is the discriminator and not a repeat.** `intern` trims leading
+/// zero limbs, so `(x, 0)` and `(x, 1)` differ only in a **run-time** operand and
+/// come back with different markers from the same call. ⇒ If the producer had
+/// specialized the marker at compile time, one compiled body could not answer
+/// both ways. A body that always took the wide arm passes the row above and
+/// fails here.
+///
+/// **MEASURED:** one body, two run-time limb pairs, two different outcomes —
+/// a region-limbed persistent copy and an immediate word.
+/// **CLAIMED:** the marker partition is emitted code reading a runtime tag.
+/// **THE GAP:** the `Small` value here also fits the immediate field, so this
+/// row does not separately re-establish the `Small` spill — the adjacent
+/// `MAX`/`MAX + 1` rows do that.
+#[test]
+fn b2f_d9_the_same_body_takes_the_small_arm_on_a_trimmed_pair() {
+    // Top limb zero ⇒ `intern` trims to one limb ⇒ a `Small` pair.
+    let (word, copied, _sign, _extent) = b2f_d9_wide_int([7, 0]);
+    assert_eq!(
+        word.tag(),
+        Some(BoundaryTag::ImmediateInt),
+        "POSITIVE CONTROL: a trimmed pair is `Small`, and 7 fits the immediate \
+         field — the SAME body that region-copied the wide value must take the \
+         immediate arm here"
+    );
+    assert_eq!(
+        word.signed_payload(),
+        7,
+        "and it must carry the value, not the slot and not a truncation"
+    );
+    assert!(
+        copied.is_empty(),
+        "NON-VACUITY: an immediate word names no node, so there are no limbs to \
+         read — if this had limbs, the readback is looking at the wrong node"
     );
 }
