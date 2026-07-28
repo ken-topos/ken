@@ -186,7 +186,10 @@ fn polymorphic_former_transport_preserves_guest_levels() {
     let box_ctor = poly.constructors[1].id;
     let d0 = Term::indformer(family, vec![Level::zero()]);
     let boxed_leaf = Term::app(
-        Term::constructor(box_ctor, vec![Level::zero()]),
+        Term::app(
+            Term::constructor(box_ctor, vec![Level::zero()]),
+            d0.clone(),
+        ),
         Term::constructor(leaf, vec![Level::zero()]),
     );
     let motive = Term::Ascript(
