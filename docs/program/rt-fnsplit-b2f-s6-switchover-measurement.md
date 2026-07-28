@@ -553,3 +553,118 @@ requires it.
 assertion — `node_limbs` returns `None` for an unsealed node — so an omitted
 seal was reported as a dropped limb: a true failure under a message naming the
 wrong cause. The seal now has its **own** assertion, ahead of the limbs.
+
+## ⛔⛔ FINDING 9 — THE RULING'S ACTIVATION OWNER DOES NOT EXIST, ON EITHER LAUNCHER
+
+The Architect's arena ruling (relayed `evt_e300y2kjeb6k`) assigns the boundary
+arena's construction to *"the runtime/store activation owner"* and states that
+*"the existing store/plan capacity authority grants storage."* ⭐ **Both halves
+were measured against the landed code, and neither holds.**
+
+### 9a — nothing in production reserves or publishes a boundary arena
+
+Every `BoundaryRegion::reserve` / `reserve_persistent` **call** site in
+`ken-runtime` is under `#[cfg(test)]`: `boundary_value_clif.rs:3046/3054/4597`
+all sit inside the `#[cfg(test)]` at `:2853`, and the remaining ones are this
+node's own rig. ⚠ The three sites in `boundary_value.rs` are the *definitions*,
+not consumers. ⇒ `CompiledModule::run` builds a `NativeIntArenaV1` and nothing
+else, so the owner the ruling names is not a thing that exists yet.
+
+### 9b — the object-linked launcher cannot construct one at all
+
+A starter executable links **the emitted object + the generated C stub +
+`libken_host.a`** (`object_linker_packaging.rs:648/800`, `ken_host_staticlib` at
+`:1103`). ⚠ **`ken-runtime` is not among them** — it declares no `crate-type`,
+so it is an rlib only, and the dependency runs `ken-runtime -> ken-host` and
+never back. ⇒ `BoundaryArenaV1::publish` is unreachable from C.
+
+⛔ **And the fail-closed clause bites rather than degrades.** *"A launcher
+missing a non-null, fully published boundary arena does not call generated
+code"*, applied literally, stops **every linked process executable** from
+running. ⭐ The Steward has ruled that outcome out in any fork: `B2F` may not
+make a currently-working path stop working.
+
+### 9c — the capacity authority has no referent
+
+`reserve(nodes, words, data, limbs)` takes four **caller-supplied** numbers, and
+no landed function derives them from a plan, a store, or a program — the test
+rig threads them down as `arena_room` / `limb_room` tuples
+(`boundary_value_clif.rs:2859/2870/2871/2881`). ⭐ Independently searched by the
+Steward and resolved the same way. ⇒ **Whichever fork is taken, that authority
+is a deliverable to be created, not a lookup**, and it needs an owner named in
+the ruling.
+
+⚠ **Stated as measured, not as inferred:** this began as *"I could not find
+it"*, which is the honest form when a negative is about one's own search. It
+became a finding only when a second party searched independently.
+
+### What was landed against it, and what was deliberately not
+
+✅ `GeneratedActivationServicesV1` — `#[repr(C)]`, two distinct typed fields,
+offsets derived from a closed field inventory the way `RegionHeaderField`
+derives the boundary header's. Every fork needs this record, so it is not a bet
+on one.
+
+⛔ **The per-function binder was NOT landed.** It has no production consumer
+until a launcher supplies the pointer, and the dead-code warning would be
+**telling the truth** — suppressing it to land the half would convert a real
+signal into noise. It is held at scratchpad
+`s6-bind-activation-services.rs`.
+
+⛔ **There is no "do the JIT half now" option.** `object_linker_packaging.rs:303`
+compiles `STARTER_ENTRY_SYMBOL` through the same `sig` as the JIT root, so
+`(frame_ptr, services_ptr)` cannot land for one launcher without breaking the
+other in the same edit. ⭐ **That coupling is what makes this a stop rather than
+a note.**
+
+| mutation | outcome |
+|---|---|
+| `M-S1` swap the field inventory's declaration order, leaving `ALL`'s array literal alone | red — `left: 0, right: 8` |
+
+⚠ Restored byte-identically and verified with `cmp`, ⛔ **not** with `git diff
+--quiet`: the tree was not clean at `HEAD` when the mutation went in, so
+`--quiet` would have been comparing against the wrong baseline.
+
+## ✅ `AC-8`(b) — THE EIGHT DECLARATIONS ARE PINNED, AS A SET
+
+`AC-8` records *"6 definitions / 8 declarations, Θ(1) per native module"*, notes
+that the definitions are already pinned behaviourally (`LOCAL_HELPER_COUNT = 6`,
+`artifact/tests.rs`) and that ⛔ **the declarations are genuinely unpinned.**
+
+The eight, measured from `ModuleDeclarations::get_functions` on a module that
+has had `emit_native_int_local_graph` run into it and nothing else:
+
+| linkage | names |
+|---|---|
+| `Import` | `malloc`, `free` |
+| `Local` | `ken_native_int_resolve_local`, `..._intern_local`, `..._binop_local`, `..._compare_local`, `..._narrow_local`, `..._export_local` |
+
+⭐ **Pinned as the exact permitted inventory, not as the number 8.** A count is
+satisfied by any eight names, so swapping a helper for an import keeps it green;
+a set makes *any* addition red, including one nobody imagined. ⚠ The linkage is
+part of each entry on purpose — a helper silently demoted to an import is
+indistinguishable from a correct module under a name-only census.
+
+**MEASURED:** the `(name, linkage)` pairs the module itself reports.
+**CLAIMED:** `emit_native_int_local_graph` declares exactly this inventory.
+**THE GAP:** ⛔ program-independence is **not** measured here. It is `AC-8`(c)'s
+structural guarantee — the emitter takes no program-derived parameter, so the
+compiler forbids that growth mode — and `AC-8` says to add no test for it.
+
+### The mutations, and the one that mattered
+
+| mutation | inventory pin | positive control |
+|---|---|---|
+| `M-A1` declare a ninth function at the production site | ⭐ red | green |
+| `M-A2` change the helpers' linkage `Local` -> `Export` | ⭐ red | green |
+| `M-A3` make the enumerator hard-code the **correct** answer and ignore the module | ⚠ **green** | ⭐ **red** |
+
+⭐⭐ **`M-A3` is why the positive control is not decoration.** An enumerator that
+returns the right list without looking at the module leaves the inventory pin
+green for an unknown reason, and no mutation of the *production* emitter can
+expose that — the pin and the defect agree. The control catches it because a
+module with a **second** emitter's graph in it must report strictly more, and a
+constant cannot. ⚠ I had to run this experiment to find out; a control that
+merely re-asserted the same list would have passed under `M-A3` too.
+
+⚠ Restored byte-identically, verified with `cmp` for the same reason as above.
