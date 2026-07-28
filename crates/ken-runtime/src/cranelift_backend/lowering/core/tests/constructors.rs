@@ -2065,6 +2065,31 @@ fn ac_c7_try_compile_edge<'src>(
         &mut FunctionBuilder<'_>,
     ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError>,
 ) -> Result<(cranelift_jit::JITModule, *const u8), CraneliftBackendError> {
+    ac_c7_try_compile_edge_with_operands(seed_env, plan, 0, |compiler, builder, _| {
+        emit(compiler, builder)
+    })
+}
+
+/// The same rig, with `operands` extra `i64` parameters after the arena.
+///
+/// ⭐⭐ **Why a rig with RUNTIME operands exists at all.** Every row above
+/// compiles one body per fixture, so a body that specialized on a JIT-time
+/// constant would be indistinguishable from one that decided at run time — the
+/// two compilations differ, and either could be what produced the two answers.
+/// ⇒ For any claim of the form *"emitted code makes this choice from the
+/// **value**"* the discriminator has to be **one compiled body driven with two
+/// payloads**, which is what these parameters are for. ⛔ Nothing else in this
+/// file can establish `AC-2`.
+fn ac_c7_try_compile_edge_with_operands<'src>(
+    seed_env: &'src NativeSeedEnvironment,
+    plan: StaticTransitionPlan<'src>,
+    operands: usize,
+    emit: impl FnOnce(
+        &mut Lowering<'src>,
+        &mut FunctionBuilder<'_>,
+        &[cranelift_codegen::ir::Value],
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError>,
+) -> Result<(cranelift_jit::JITModule, *const u8), CraneliftBackendError> {
     let mut module = new_jit_module().expect("JIT module constructs");
     let native = crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
         .expect("native-int graph emits");
@@ -2079,6 +2104,9 @@ fn ac_c7_try_compile_edge<'src>(
 
     let mut signature = module.make_signature();
     signature.params.push(AbiParam::new(pointer));
+    for _ in 0..operands {
+        signature.params.push(AbiParam::new(types::I64));
+    }
     signature.returns.push(AbiParam::new(types::I64));
     let func_id = module
         .declare_function("c1_ac_c7_edge", Linkage::Local, &signature)
@@ -2102,6 +2130,8 @@ fn ac_c7_try_compile_edge<'src>(
         store_field: module.declare_func_in_func(helpers.store_field, &mut context.func),
         store_name: module.declare_func_in_func(helpers.store_name, &mut context.func),
         make_immediate: module.declare_func_in_func(helpers.make_immediate, &mut context.func),
+        store_scalar: module.declare_func_in_func(helpers.store_scalar, &mut context.func),
+        store_int_tag: module.declare_func_in_func(helpers.store_int_tag, &mut context.func),
     };
 
     let mut compiler = bare_carrier_test_lowering(seed_env, plan);
@@ -2113,7 +2143,8 @@ fn ac_c7_try_compile_edge<'src>(
         let entry = builder.create_block();
         builder.append_block_params_for_function_params(entry);
         builder.switch_to_block(entry);
-        compiler.function_local.native_int_arena = Some(builder.block_params(entry)[0]);
+        let parameters = builder.block_params(entry).to_vec();
+        compiler.function_local.native_int_arena = Some(parameters[0]);
         // â  A refusal must still leave a WELL-FORMED function behind, or the
         // failure the caller wanted to observe is replaced by a Cranelift
         // assertion about an unfilled block. â­ Every carrier route refuses
@@ -2121,7 +2152,7 @@ fn ac_c7_try_compile_edge<'src>(
         // empty-case check both say so at their sites â so on the error path
         // the entry block is still current and still empty, and returning a
         // constant from it is sound.
-        match emit(&mut compiler, &mut builder) {
+        match emit(&mut compiler, &mut builder, &parameters[1..]) {
             Ok(result) => {
                 builder.ins().return_(&[result]);
                 builder.seal_all_blocks();
@@ -3843,5 +3874,201 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
         "NON-VACUITY: the admissible graph must get PAST the walk and stop at the \
          first emitted call, or the two refusals above prove nothing about \
          ordering: got {reached:?}"
+    );
+}
+
+// ─── `RT-FNSPLIT-B2F` `D9` — THE MAGNITUDE DISPATCH ───────────────────────
+//
+// ⭐⭐ **One compiled body, two runtime payloads, both arms.** The claim under
+// test is `AC-2`: the choice between the immediate field and the spilled handle
+// is made by *emitted code from the value*, ⛔ never by a JIT-time inspection
+// picking a layout. ⇒ Two separate compilations, each with its own constant,
+// cannot establish that — a body that specialized on the constant would produce
+// the same two answers. Every row below therefore drives **one** compiled
+// function with the payload as a **parameter**.
+
+/// `(arena, payload) -> boundary word` — the dispatch, compiled once.
+///
+/// ⚠ The `Lowered::Int` is built over the function's own **block parameter**,
+/// and its `NativeIntV1` marker is registered the way `lower_dynamic_small_int`
+/// registers one in production. ⛔ `known` is `None`: a `Some` here would hand
+/// the producer a compile-time magnitude and is exactly the input this rig
+/// exists to withhold.
+fn b2f_d9_dispatch(payloads: &[i64]) -> Vec<crate::boundary_value::BoundaryWord> {
+    let fixture = ac_c7_ctor("Alpha");
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let seed_env = NativeSeedEnvironment::empty();
+    let (_module, code) = ac_c7_try_compile_edge_with_operands(
+        &seed_env,
+        plan,
+        1,
+        |compiler, builder, operands| {
+            let payload = operands[0];
+            let marker = builder
+                .ins()
+                .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64);
+            compiler
+                .function_local
+                .native_int_tags
+                .insert(payload, marker);
+            let value = Lowered::Int {
+                value: payload,
+                known: None,
+            };
+            Ok(compiler.transfer_into_carrier(builder, root, &value)?.word)
+        },
+    )
+    .expect("the magnitude dispatch emits");
+
+    let run: extern "C" fn(*const u64, i64) -> i64 = unsafe { std::mem::transmute(code) };
+    payloads
+        .iter()
+        .map(|payload| {
+            // ⚠ A fresh store and arena per payload: the spill ALLOCATES, and
+            // sharing one arena would let the second row's answer depend on the
+            // first row's residency.
+            let mut store = crate::boundary_value::BoundaryValueStore::new();
+            let (_arena, base) = ac_c7_bind_arena(&mut store);
+            let word = crate::boundary_value::BoundaryWord(run(base, *payload) as u64);
+            // The node's own recorded content, read from the persistent image
+            // the emitted code wrote into.
+            if word.tag() == Some(BoundaryTag::PersistentGround) {
+                let image = store.image();
+                assert_eq!(
+                    image.0.node_field(word.payload(), crate::boundary_value::NODE_CLASS),
+                    Some(BoundaryClass::Int as u64),
+                    "the spill arm must allocate the class the disposition \
+                     declares in `spill: Some(_)`"
+                );
+                assert_eq!(
+                    image
+                        .0
+                        .node_field(word.payload(), crate::boundary_value::NODE_PAYLOAD),
+                    Some(*payload as u64),
+                    "⛔ the spill must carry the magnitude WORD UNTRUNCATED — \
+                     that is the entire reason the arm exists"
+                );
+                assert_eq!(
+                    image
+                        .0
+                        .node_field(word.payload(), crate::boundary_value::NODE_EXTENT),
+                    Some(crate::NATIVE_INT_SMALL_TAG_V1),
+                    "the spill must record HOW the word is to be read"
+                );
+            }
+            word
+        })
+        .collect()
+}
+
+/// ⭐ **`D9` ROW 1 — a value inside the immediate field takes the immediate
+/// arm.**
+///
+/// **MEASURED:** JIT-compiled emitted code, handed `BOUNDARY_IMMEDIATE_INT_MAX`
+/// at run time, returns a word tagged [`BoundaryTag::ImmediateInt`] whose signed
+/// payload is that value.
+/// **CLAIMED:** the dispatch's `BOUNDARY_OK` arm uses the word `make_immediate`
+/// wrote, rather than allocating.
+/// **THE GAP:** ⚠ *"it is an immediate"* alone is satisfiable by a body that is
+/// **always** an immediate — which is the pre-dispatch defect, truncation and
+/// all. ⇒ Closed only by row 2, on the same compiled body.
+///
+/// ⚠ Promise class: **durable invariant.** The literal is the ABI's own field
+/// limit rather than a captured number, so widening the payload field moves the
+/// fixture with the contract instead of reddening it.
+#[test]
+fn b2f_d9_a_value_inside_the_field_takes_the_immediate_arm() {
+    let max = crate::boundary_value::BOUNDARY_IMMEDIATE_INT_MAX;
+    assert!(
+        crate::boundary_value::BoundaryWord::int_fits_immediate(max),
+        "NON-VACUITY: the fixture must actually be inside the field, or this row \
+         is testing the other arm"
+    );
+    let [word]: [_; 1] = b2f_d9_dispatch(&[max]).try_into().expect("one payload");
+    assert_eq!(
+        word.tag(),
+        Some(BoundaryTag::ImmediateInt),
+        "`D9`: a value the field can hold crosses as an immediate word"
+    );
+    assert_eq!(
+        word.signed_payload(),
+        max,
+        "`D9`: and it carries the value, not a truncation of it"
+    );
+}
+
+/// ⭐ **`D9` ROW 2 — a value past the immediate field takes the SPILL arm, and
+/// the spill is a handle that carries the magnitude.**
+///
+/// **MEASURED:** the same emitted body, handed `BOUNDARY_IMMEDIATE_INT_MAX + 1`,
+/// returns a [`BoundaryTag::PersistentGround`] handle whose node records class
+/// `Int`, the exact magnitude word, and the `Small` marker (asserted inside
+/// [`b2f_d9_dispatch`]).
+/// **CLAIMED:** `make_immediate`'s `BOUNDARY_ERR_BOUNDS` status is what selects
+/// the spill, and the spill preserves the value.
+/// **THE GAP:** ⛔ this row does not show the producer READS the status rather
+/// than re-deriving the predicate — a hand-written shift-and-compare would
+/// answer identically on every value. That residual is **review-caught, not
+/// mechanically detected**, and it is recorded as such on
+/// `Lowering::emit_carrier_spillable_immediate`; ⚠ this test passing is not
+/// evidence about it.
+///
+/// ⚠ Promise class: **durable invariant** — `MAX + 1` is derived from the ABI's
+/// own limit, so it tracks the field rather than freezing a magnitude.
+#[test]
+fn b2f_d9_a_value_past_the_field_takes_the_spill_arm() {
+    let over = crate::boundary_value::BOUNDARY_IMMEDIATE_INT_MAX + 1;
+    assert!(
+        !crate::boundary_value::BoundaryWord::int_fits_immediate(over),
+        "NON-VACUITY: the fixture must actually overflow the field"
+    );
+    let [word]: [_; 1] = b2f_d9_dispatch(&[over]).try_into().expect("one payload");
+    assert_eq!(
+        word.tag(),
+        Some(BoundaryTag::PersistentGround),
+        "`D9`: a value the field cannot hold crosses as a HANDLE — the tag the \
+         ABI's own `ImmediateInt` doc names as the overflow representation"
+    );
+}
+
+/// ⭐⭐ **`D9` POSITIVE CONTROL — the spill arm is genuinely TAKEN, by one
+/// compiled body, at run time.**
+///
+/// ⛔ **This is the row the other two cannot replace, and the reason is the
+/// defect it is designed to catch.** Rows 1 and 2 each compile their own
+/// function, so both would still pass if the producer inspected a JIT-time
+/// magnitude and emitted a *different body* for each — which is precisely the
+/// compile-time specialization `AC-2` forbids. Here **one** compiled function is
+/// driven with both payloads, so the only thing that can differ between the two
+/// answers is the run-time value.
+///
+/// ⚠ The pair is **adjacent** — `MAX` against `MAX + 1` — so nothing but the
+/// partition itself can separate them. A body that always took one arm returns
+/// two words with the same tag.
+///
+/// **MEASURED:** one function, two payloads one apart, two different tags.
+/// **CLAIMED:** the arm is selected from the payload at run time.
+/// **THE GAP:** that the selecting quantity is `make_immediate`'s status — see
+/// row 2's residual.
+#[test]
+fn b2f_d9_one_compiled_body_takes_both_arms_at_runtime() {
+    let max = crate::boundary_value::BOUNDARY_IMMEDIATE_INT_MAX;
+    let words = b2f_d9_dispatch(&[max, max + 1]);
+    assert_ne!(
+        words[0].tag(),
+        words[1].tag(),
+        "POSITIVE CONTROL: one compiled body handed two ADJACENT payloads must \
+         take DIFFERENT arms. Equal tags mean the dispatch is not reading the \
+         value at all"
+    );
+    assert_eq!(
+        words[0].tag(),
+        Some(BoundaryTag::ImmediateInt),
+        "and the direction must be the one the field dictates"
+    );
+    assert_eq!(
+        words[1].tag(),
+        Some(BoundaryTag::PersistentGround),
+        "⛔ the larger value is the one that spills"
     );
 }

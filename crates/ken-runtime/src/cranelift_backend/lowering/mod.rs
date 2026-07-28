@@ -38,7 +38,7 @@ pub(in crate::cranelift_backend) use std::collections::{BTreeMap, BTreeSet};
 // `RT-FNSPLIT-B2V` `D4`. Re-exported at facade scope like every other import in
 // this header so the `tests` subtree inherits the names.
 pub(in crate::cranelift_backend) use crate::boundary_value::{
-    BoundaryClass, BoundaryReferentOwner, BoundaryTag, BOUNDARY_OK,
+    BoundaryClass, BoundaryReferentOwner, BoundaryTag, BOUNDARY_ERR_BOUNDS, BOUNDARY_OK,
 };
 
 pub(in crate::cranelift_backend) use cranelift_codegen::ir::{
@@ -492,6 +492,8 @@ impl ArtifactHelpers<'_> {
                 store_name: module.declare_func_in_func(self.boundary_value_abi.store_name, func),
                 make_immediate: module
                     .declare_func_in_func(self.boundary_value_abi.make_immediate, func),
+                store_int_tag: module
+                    .declare_func_in_func(self.boundary_value_abi.store_int_tag, func),
             }),
         }
     }
@@ -896,6 +898,22 @@ struct BoundaryCarrierRefs {
     /// whose payload rides in the tagged word. ⚠ Note the **absent `arena`**:
     /// an immediate names no referent, so there is nothing for an arena to own.
     make_immediate: FuncRef,
+    /// `(arena, word, payload) -> status` — the spill arm records the magnitude
+    /// word of a spilled `Int`. ⚠ Shared with `HostResult`, where the same slot
+    /// holds the success discriminant; the class the node was allocated with is
+    /// what decides which reading applies, and the helper guards on it.
+    store_scalar: FuncRef,
+    /// `(arena, word, native_tag) -> status` — the spill arm records **how** the
+    /// magnitude word is to be read, as a `NativeIntV1` marker.
+    ///
+    /// ⛔ **This is also the spill arm's region guard, and it is deliberately
+    /// not re-derived here.** `BOUNDARY_INT_MARKER_OWNER` says a
+    /// `NATIVE_INT_BIG_TAG_V1` payload is a slot in the *invocation's* native
+    /// arena and therefore inadmissible on a persistent node. The helper
+    /// enforces that from the one table; the producer neither restates the rule
+    /// nor pre-empts it — see [`Lowering::emit_carrier_spillable_immediate`] for
+    /// the residual that leaves.
+    store_int_tag: FuncRef,
 }
 
 /// A value that has crossed into the **operational carrier** — nothing but the
@@ -1178,6 +1196,28 @@ impl<'a> Lowering<'a> {
                 let tag = Self::carrier_immediate_tag(value)?;
                 self.emit_carrier_immediate(builder, tag, *word)
             }
+            // ── the magnitude dispatch: `spill: Some(_)` immediates ───────
+            //
+            // ⭐ Four variants, ONE mechanism — which is the corrected `D9`
+            // partition. ⛔ They are not four pieces of work and must not be
+            // spelled as four arms with four bodies: the disposition supplies
+            // the tag and the spill class, so the only thing that differs
+            // between them is where the payload word and its `NativeIntV1`
+            // marker come from.
+            Lowered::Int { value: payload, known } => {
+                let (tag, spill) = Self::carrier_spillable_disposition(value)?;
+                // ⛔ The marker travels with the payload; see
+                // `carrier_small_marker` for why this is not a constant.
+                let marker = self.native_int_tag(builder, *payload, *known)?;
+                self.emit_carrier_spillable_immediate(builder, tag, spill, *payload, marker)
+            }
+            Lowered::ProcessExitStatus { value: payload }
+            | Lowered::BoundedNat(BoundedNatV1 { value: payload })
+            | Lowered::StructuralNat(StructuralNatV1 { value: payload }) => {
+                let (tag, spill) = Self::carrier_spillable_disposition(value)?;
+                let marker = Self::carrier_small_marker(builder);
+                self.emit_carrier_spillable_immediate(builder, tag, spill, *payload, marker)
+            }
             Lowered::Constructor {
                 synthesized_identity,
                 args,
@@ -1243,16 +1283,6 @@ impl<'a> Lowering<'a> {
             // most of them. The refusal is **this producer's**, and it is
             // conservative rather than silent precisely so the gap cannot be
             // mistaken for coverage.
-            Lowered::Int { .. }
-            | Lowered::ProcessExitStatus { .. }
-            | Lowered::BoundedNat(_)
-            | Lowered::StructuralNat(_) => Err(unsupported(
-                lowered_value_kind(value),
-                "the carrier producer does not yet emit a spillable immediate: \
-                 its disposition carries `spill: Some(_)`, which needs a runtime \
-                 magnitude test and a two-way branch, not a single \
-                 `make_immediate`",
-            )),
             Lowered::String(_) | Lowered::Bytes(_) => Err(unsupported(
                 lowered_value_kind(value),
                 "the carrier producer does not yet emit a byte-bodied handle: \
@@ -1354,10 +1384,18 @@ impl<'a> Lowering<'a> {
     }
 
     /// The tag of a **spill-free immediate**, read from the sole disposition
-    /// authority. ⛔ `spill: Some(_)` is refused here rather than encoded: a
-    /// spillable payload needs a runtime magnitude test, and emitting a bare
-    /// `make_immediate` for one would silently truncate exactly the values a
-    /// bignum language exists to carry.
+    /// authority.
+    ///
+    /// ⛔ **`spill: Some(_)` is still refused HERE, and that is not a leftover.**
+    /// The refusal did not become unnecessary when the dispatch landed — it
+    /// moved. A spillable payload has two possible representations, so a caller
+    /// asking this question about one is asking a question with two answers;
+    /// [`Self::carrier_spillable_disposition`] is the one that returns both, and
+    /// this arm is what stops a spillable value reaching a bare `make_immediate`
+    /// through an arm that forgot. ⚠ Deleting it would not reintroduce a
+    /// truncation *today* — every spillable arm routes to the dispatch — which
+    /// is exactly why it must stay: the next `RepresentedImmediate` variant is
+    /// added by someone who copies the `Bool` arm.
     fn carrier_immediate_tag(value: &Lowered) -> Result<BoundaryTag, CraneliftBackendError> {
         match value.boundary_disposition() {
             BoundaryDisposition::RepresentedImmediate { tag, spill: None } => Ok(tag),
@@ -1365,6 +1403,41 @@ impl<'a> Lowering<'a> {
                 lowered_value_kind(value),
                 "a spillable immediate needs the runtime magnitude dispatch, \
                  not a single `make_immediate`",
+            )),
+            BoundaryDisposition::RepresentedHandle { .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "the producer would mint an immediate for a value the sole \
+                 disposition authority represents as a handle",
+            )),
+            BoundaryDisposition::ProtocolOnly { why }
+            | BoundaryDisposition::FailClosedForbidden { why } => {
+                Err(unsupported(lowered_value_kind(value), why))
+            }
+        }
+    }
+
+    /// The `(immediate tag, spill class)` of a **spillable** immediate, read
+    /// from the sole disposition authority (`§2h` ¶4).
+    ///
+    /// ⛔ **`spill: None` is refused, and the refusal is the mirror of the one
+    /// on [`Self::carrier_immediate_tag`].** Between them the two readers
+    /// partition `RepresentedImmediate` on the `spill` field, so neither the
+    /// dispatch nor the single-`make_immediate` path can be reached for a value
+    /// the authority classified the other way — and a value with **no** reader
+    /// is a compile error at the `match` in `emit_carrier_transfer`, not a
+    /// silent default.
+    fn carrier_spillable_disposition(
+        value: &Lowered,
+    ) -> Result<(BoundaryTag, BoundaryClass), CraneliftBackendError> {
+        match value.boundary_disposition() {
+            BoundaryDisposition::RepresentedImmediate {
+                tag,
+                spill: Some(class),
+            } => Ok((tag, class)),
+            BoundaryDisposition::RepresentedImmediate { spill: None, .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "the producer would emit a magnitude dispatch for a value the \
+                 sole disposition authority declares cannot overflow its field",
             )),
             BoundaryDisposition::RepresentedHandle { .. } => Err(unsupported(
                 lowered_value_kind(value),
@@ -1485,6 +1558,135 @@ impl<'a> Lowering<'a> {
         Ok(CarriedBoundaryWord {
             word: builder.ins().stack_load(types::I64, slot, 0),
         })
+    }
+
+    /// ⭐⭐ **THE MAGNITUDE DISPATCH** — the producer arm for a value whose
+    /// disposition carries `spill: Some(_)` (`RT-FNSPLIT-B2F` `D9`; Architect
+    /// ruling on the corrected producer partition).
+    ///
+    /// ⛔⛔ **The predicate is READ, never re-derived.**
+    /// `ken_boundary_make_immediate_local` already tests the payload against the
+    /// one `BOUNDARY_IMMEDIATE_DOMAIN` table and already reports the answer
+    /// distinguishably — its own source says the errors are kept distinct *"so a
+    /// control can tell which rule refused without reading the payload back"*.
+    /// ⇒ A shift-and-compare here would be a **second answer to a question that
+    /// already has one**, free to drift from the table silently. That is the
+    /// second-representation-authority defect one layer down, and it is the same
+    /// objection [`Self::carrier_identity_immediate`] raises about `pack_identity`.
+    ///
+    /// ⭐ **Three outcomes, ⛔ not two:**
+    ///
+    /// | status | outcome |
+    /// |---|---|
+    /// | `BOUNDARY_OK` | the immediate word `make_immediate` wrote |
+    /// | `BOUNDARY_ERR_BOUNDS` | **the spill** — a handle of the declared class |
+    /// | anything else | fail closed, via the same `require_i64` every other helper status takes |
+    ///
+    /// ⛔ Collapsing *"anything else"* into the spill would turn a shape, tag or
+    /// capacity error into a **silent allocation** of a value nobody asked for.
+    /// The third outcome is spelled as `require_i64(status, BOUNDARY_ERR_BOUNDS)`
+    /// on the not-OK edge precisely so it cannot be written as a two-way branch
+    /// by accident.
+    ///
+    /// ⭐ **`AC-2` — this is emitted code reading a RUNTIME value.** Nothing here
+    /// inspects a JIT-time constant to choose a layout: one compiled body takes
+    /// either arm depending on the payload it is handed. That is why the
+    /// partition is a property of the value rather than of the compilation.
+    ///
+    /// **MEASURED:** the emitted body branches on `make_immediate`'s status and
+    /// builds a `BoundaryClass::Int` handle on the bounds edge.
+    /// **CLAIMED:** a spillable value crosses the boundary without truncation.
+    /// **THE GAP:** ⚠ **the spill arm covers a `Small`-marked magnitude only.**
+    /// `store_int_tag` admits a `NATIVE_INT_BIG_TAG_V1` marker only on a node
+    /// the invocation arena owns (`BOUNDARY_INT_MARKER_OWNER`), and the spill
+    /// target here is [`BoundaryTag::PersistentGround`] — the tag the ABI's own
+    /// `ImmediateInt` doc names as the overflow representation. ⇒ A **region-
+    /// limbed** magnitude would have to be *copied* into the node's own region
+    /// (`store_int_limbs` / `store_int_limb` / `seal_int`), which this arm does
+    /// not yet emit. Such a value therefore **fails closed at `store_int_tag`'s
+    /// own guard** rather than being mis-recorded — ⛔ but it is a residual, not
+    /// coverage, and it is `ERR_ESCAPE` rather than an unimplemented-feature
+    /// error, so a reader who meets it in the wild will be told the wrong thing
+    /// about why.
+    ///
+    /// ⚠ **A second residual, review-caught rather than mechanically detected:**
+    /// swapping the status branch below for a hand-written magnitude test still
+    /// round-trips every value, so no test in this suite would redden. ⛔ Its
+    /// absence from a green run is not evidence about it.
+    fn emit_carrier_spillable_immediate(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        tag: BoundaryTag,
+        spill: BoundaryClass,
+        payload: cranelift_codegen::ir::Value,
+        native_marker: cranelift_codegen::ir::Value,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let immediate_tag = builder.ins().iconst(types::I64, i64::from(tag as u8));
+        let call = builder
+            .ins()
+            .call(refs.make_immediate, &[immediate_tag, payload, out]);
+        let status = builder.inst_results(call)[0];
+
+        // ⛔ The ONE comparison this function makes, and it is against a status,
+        // not against a magnitude.
+        let fits = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            status,
+            BOUNDARY_OK,
+        );
+        let immediate_block = builder.create_block();
+        let spill_block = builder.create_block();
+        let join = builder.create_block();
+        builder.append_block_param(join, types::I64);
+        builder
+            .ins()
+            .brif(fits, immediate_block, &[], spill_block, &[]);
+
+        builder.switch_to_block(immediate_block);
+        let word = builder.ins().stack_load(types::I64, slot, 0);
+        builder.ins().jump(join, &[word.into()]);
+
+        builder.switch_to_block(spill_block);
+        // ⭐ The third outcome, spelled as a requirement rather than an `else`:
+        // reaching here means the status was not `OK`, and anything that is also
+        // not `ERR_BOUNDS` leaves the function fail-closed right here.
+        Self::require_i64(builder, status, BOUNDARY_ERR_BOUNDS);
+        // ⚠ `require_i64` splits the block; from here the builder is in its
+        // `valid` successor, which is where the allocation belongs.
+        let spilled = self.emit_carrier_alloc(builder, BoundaryTag::PersistentGround, spill, 0)?;
+        let store = builder
+            .ins()
+            .call(refs.store_scalar, &[arena, spilled.word, payload]);
+        Self::require_i64(builder, builder.inst_results(store)[0], BOUNDARY_OK);
+        let mark = builder
+            .ins()
+            .call(refs.store_int_tag, &[arena, spilled.word, native_marker]);
+        Self::require_i64(builder, builder.inst_results(mark)[0], BOUNDARY_OK);
+        builder.ins().jump(join, &[spilled.word.into()]);
+
+        builder.switch_to_block(join);
+        Ok(CarriedBoundaryWord {
+            word: builder.block_params(join)[0],
+        })
+    }
+
+    /// The `NativeIntV1` marker for a spillable immediate whose magnitude **is**
+    /// its payload word.
+    ///
+    /// ⭐ `ProcessExitStatus`, `BoundedNat` and `StructuralNat` are one native
+    /// scalar each — there is no second word and no arena slot — so `Small` is
+    /// not a default for them, it is the only true answer.
+    /// ⛔ `Lowered::Int` does **not** come here: its marker is carried alongside
+    /// the payload by [`Self::native_int_tag`], and substituting a constant would
+    /// be the producer out-voting the native-`Int` representation.
+    fn carrier_small_marker(builder: &mut FunctionBuilder<'_>) -> cranelift_codegen::ir::Value {
+        builder
+            .ins()
+            .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64)
     }
 
     /// `store_tag_id(arena, word, tag_id) -> status`.
