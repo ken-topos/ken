@@ -12,6 +12,9 @@
 /// `RT-FNSPLIT-B2F` `S6` — the fixed activation-services record generated code
 /// receives beside its frame. ⛔ Host runtime services, never a Ken value.
 pub mod activation_services;
+/// `RT-FNSPLIT-C3-ACTIVATION` `D4` — the deployment-supplied capacity
+/// authority for boundary storage. ⛔ Resource policy, never emitter-derived.
+pub mod boundary_resource_profile;
 pub mod artifact_validation;
 /// `RT-FNSPLIT-B2V` — the executable boundary-value ABI: one closed 64-bit
 /// tagged word for every source-valued boundary transfer.
@@ -48,6 +51,7 @@ pub mod values;
 
 pub use activation_services::*;
 pub use artifact_validation::*;
+pub use boundary_resource_profile::*;
 pub use canonical::Canonical;
 pub use cranelift_backend::*;
 pub use executable_artifact_contract::*;
