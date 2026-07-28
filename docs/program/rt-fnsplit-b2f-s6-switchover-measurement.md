@@ -200,3 +200,51 @@ scripts/ken-cargo test -p ken-runtime --lib
 ⚠ The experimental patch is **not** in the tree. Re-deriving it means rebuilding
 the four pieces listed under *What was built*; the counts above are only
 comparable against a base whose own run is 498 + 26 + 14 green.
+
+## ⭐ ADDENDUM — the 69 split by producer arm, and one class is not a producer gap
+
+Re-derived from the same measurement-2 run, keyed on the producer's own refusal
+text rather than on the test name:
+
+| n | producer arm | disposition |
+|---|---|---|
+| **63** | **spillable immediate** — `Int`, `ProcessExitStatus`, `BoundedNat`, `StructuralNat` | `RepresentedImmediate { spill: Some(Int) }` |
+| 4 | `Trap` | ⛔ **`ProtocolOnly` — see below** |
+| 1 | `HostResult` handle | `RepresentedHandle` |
+| 1 | byte-bodied handle — `String`, `Bytes` | `RepresentedHandle` |
+
+⭐ **One arm is worth 63 of the 69.** The spillable immediate is not one of five
+comparable pieces of work; it is the work. Its shape is already stated by the
+refusal it raises: a runtime magnitude test and a two-way branch — the immediate
+field when the payload fits, a `BoundaryClass::Int` handle when it does not —
+never a bare `make_immediate`, which would silently truncate exactly the values
+a bignum language exists to carry.
+
+## ⛔⛔ `Trap` cannot be added to the producer, and those four reds are MY defect
+
+The extension list names `Trap`. ⛔ **It is not extendable there**, and the
+reason is structural rather than an ordering preference:
+
+- `LoweredVariant::Trap`'s disposition is **`ProtocolOnly`** — *"a trap is
+  written to the activation's trap word, which is a protocol carrier and not a
+  source-expression result"* — and `boundary_disposition` is the **sole**
+  representation authority (`§2h` ¶4).
+- The producer's `Trap` arm sits in its **"REFUSED, not deferred"** section, not
+  among the deferrals. ⚠ Those two sections mean different things and the arm
+  says which it is.
+- `B2R` gives a trap its own carrier and its own slot — `AbiSlotKind::Trap` /
+  `AbiCarrier::TrapWord` — so a trap already has a declared lane that is not the
+  result lane. ⭐ This is the same statement as `B2F`'s own `AC-11` correction
+  that `result_carrier` is **not** the trap's producer.
+
+⇒ Extending the producer for `Trap` would mean **re-deciding that a trap is a
+source-expression result**, which contradicts three landed contracts at once.
+
+✅ **The correct repair is in the switch-over, not in the producer.** Those four
+reds come from `carry_unit_result` routing a trapping body through
+`transfer_into_carrier`. A trapping unit body must instead write the declared
+**`Trap`** slot and report through the declared **`Control`** slot — both of
+which `B2R` already lays out and which the experimental emission ignored.
+
+⇒ ⭐ **The producer extension is FOUR classes, not five**, and one of the five
+was a defect in this node's own code wearing a dependency's clothing.
