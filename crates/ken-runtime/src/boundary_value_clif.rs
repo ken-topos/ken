@@ -3089,6 +3089,138 @@ pub(crate) mod tests {
     }
 
     /// A `Cons(7, Nil)` whose payload is chosen at run time, not baked in.
+    /// ⭐⭐ **`D2`'s test-side authority.** Every symbol these fixtures
+    /// materialize, with the artifact-static identity "the plan issued" for it.
+    ///
+    /// ⚠ **The identities start at [`C1_D2_IDENTITY_BASE`] deliberately.** In
+    /// production they are packed spans into the plan's name arena; here the
+    /// only property that matters is that they are **nothing `intern_symbol`
+    /// would mint**. Interning numbers densely from `1` in insertion order, so a
+    /// base far above the fixture population means ⭐ **any re-mint produces a
+    /// visibly wrong tag rather than an accidentally right one** — which is the
+    /// difference between these tests noticing the property and merely passing.
+    const C1_D2_IDENTITY_BASE: u64 = 0x5000_0000;
+
+    const C1_D2_ISSUED_SYMBOLS: &[&str] = &[
+        "ctor:fixture::Box::Wrap",
+        "ctor:fixture::Cycle::Leaf",
+        "ctor:fixture::Cycle::Root",
+        "ctor:fixture::Dag::Parent",
+        "ctor:fixture::Dag::Shared",
+        "ctor:fixture::Deep::Link",
+        "ctor:fixture::Ground::Leaf",
+        "ctor:fixture::List::Cons",
+        "ctor:fixture::List::Nil",
+        "ctor:fixture::Partial::Node",
+        "ctor:fixture::Ring::Link",
+        "ctor:fixture::Seal::Node",
+        "ctor:fixture::Unsealed::Node",
+        "depth",
+        "flag",
+        "payload",
+    ];
+
+    /// The identity this fixture authority issues for `symbol`.
+    fn c1_d2_issued_identity(symbol: &str) -> u64 {
+        let position = C1_D2_ISSUED_SYMBOLS
+            .iter()
+            .position(|candidate| *candidate == symbol)
+            .expect("every fixture symbol is issued an identity");
+        C1_D2_IDENTITY_BASE + position as u64
+    }
+
+    /// A store whose carrier identities have been issued by the authority above.
+    ///
+    /// ⛔ `c1_d2_store()` alone can no longer materialize a
+    /// constructor or a record: `D2`'s minting ban means an unissued symbol
+    /// **fails closed**. ⇒ Reaching for this helper is the test-side shape of
+    /// *"the identity comes from somewhere else."*
+    fn c1_d2_store() -> BoundaryValueStore {
+        let mut store = BoundaryValueStore::new();
+        for symbol in C1_D2_ISSUED_SYMBOLS {
+            assert!(
+                store.issue_carrier_identity(symbol, c1_d2_issued_identity(symbol)),
+                "the fixture authority issues each symbol exactly one identity"
+            );
+        }
+        store
+    }
+
+    /// ⭐⭐ **`D2`'s own control — THE MINTING BAN, asserted directly.**
+    ///
+    /// **MEASURED:** an unissued constructor and an unissued record field name
+    /// each make `materialize_ground` return `None`; the same values materialize
+    /// once the authority has issued identities for them; and the tag the
+    /// carrier then carries is the **issued word**, which is not the id
+    /// `intern_symbol` would have minted.
+    /// **CLAIMED:** `D2` — one identity authority, shared by producer and
+    /// consumer. The store is a consumer of identities, ⛔ never a source.
+    /// **THE GAP:** every *other* test now routes through `c1_d2_store`, so they
+    /// exercise the issued path but would stay green if the store quietly
+    /// re-minted on a miss — they never present a miss. ⭐ This is the one that
+    /// presents one.
+    ///
+    /// ⚠ Promise class: **durable invariant**. Adding constructors, fields or
+    /// carrier helpers keeps it green; restoring a mint-on-miss fallback — in
+    /// any spelling — turns it red.
+    #[test]
+    fn c1_d2_the_store_consumes_identities_and_refuses_to_mint_them() {
+        let unissued = RuntimeGroundValue::Constructor {
+            constructor: "ctor:fixture::Unissued::Ctor".to_string(),
+            args: Vec::new(),
+        };
+        let mut store = c1_d2_store();
+        assert!(
+            materialize_ground(&mut store, &unissued).is_none(),
+            "⛔ THE BAN: a constructor no authority has issued an identity for \
+             must FAIL CLOSED. Minting one here is the second authority `D2` \
+             forbids, wearing the clothes of a convenience"
+        );
+
+        let unissued_field = RuntimeGroundValue::Record {
+            fields: vec![(
+                "unissued_field".to_string(),
+                RuntimeGroundValue::Bool(true),
+            )],
+        };
+        assert!(
+            materialize_ground(&mut store, &unissued_field).is_none(),
+            "record field names take the same authority as constructor tags"
+        );
+
+        // ── POSITIVE CONTROL ────────────────────────────────────────────────
+        //
+        // ⚠ Without this the refusals above are satisfied by a `materialize`
+        // that fails for ANY reason — a negative check passes for any reason at
+        // all, so it needs a positive half on the same fixture.
+        assert!(store.issue_carrier_identity("ctor:fixture::Unissued::Ctor", 0x7700_1234));
+        assert!(store.issue_carrier_identity("unissued_field", 0x7700_5678));
+        assert!(
+            materialize_ground(&mut store, &unissued).is_some(),
+            "NON-VACUITY: the SAME value must materialize once its identity is \
+             issued, or the refusal above says nothing about identity"
+        );
+        assert!(materialize_ground(&mut store, &unissued_field).is_some());
+
+        // ⭐ And the issued word is what the carrier actually carries -- chosen
+        // far above anything `intern_symbol` numbers to, so a re-mint could not
+        // land on it by coincidence.
+        assert_eq!(store.carrier_identity("ctor:fixture::Unissued::Ctor"), Some(0x7700_1234));
+        assert_eq!(store.carrier_symbol(0x7700_1234), Some("ctor:fixture::Unissued::Ctor"));
+
+        // ⛔ Two authorities for one symbol is a caller bug, refused rather than
+        // silently overwritten -- an overwrite would let a later issuer win and
+        // leave earlier-materialized nodes keyed on a dead identity.
+        assert!(
+            !store.issue_carrier_identity("ctor:fixture::Unissued::Ctor", 0x7700_9999),
+            "re-issuing a DIFFERENT identity for one symbol must be refused"
+        );
+        assert!(
+            store.issue_carrier_identity("ctor:fixture::Unissued::Ctor", 0x7700_1234),
+            "re-issuing the SAME identity is idempotent, not an error"
+        );
+    }
+
     fn cons(head: i64) -> RuntimeGroundValue {
         RuntimeGroundValue::Constructor {
             constructor: "ctor:fixture::List::Cons".to_string(),
@@ -3118,7 +3250,7 @@ pub(crate) mod tests {
         let (_m3, scalar_code) = compile_probe(Probe::Unary(|h| h.scalar));
 
         for head in [7i64, -3, 1_000_000] {
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             let mut builder = BoundaryArenaBuilder::new();
             let word =
                 materialize_ground(&mut store, &cons(head)).expect("a constructor materializes");
@@ -3141,11 +3273,31 @@ pub(crate) mod tests {
             );
 
             // And the constructor identity is projectable too.
-            let tag_id = run2(tag_code, base, word);
+            //
+            // ⭐⭐ **`D2` STRENGTHENING.** This assertion used to read
+            // `store.symbol(tag_id)` — *"the tag must be a REAL interned
+            // symbol."* ⛔ That property is the store-instance-dependent
+            // substrate `§2e` removes: interning numbers densely per store
+            // instance, so it was satisfied by an id no compiled body could ever
+            // have compared against.
+            //
+            // ⇒ The property now asserted is **agreement with the one
+            // authority**: emitted code read back exactly the identity the
+            // authority issued for this constructor, and the reverse view
+            // resolves it. ⚠ The first assertion is the load-bearing one — it
+            // pins the *value*; the second only pins that the view is wired to
+            // the same map.
+            let tag_id = run2(tag_code, base, word) as u64;
             assert_eq!(
-                store.symbol(tag_id as u64),
+                tag_id,
+                c1_d2_issued_identity("ctor:fixture::List::Cons"),
+                "emitted code must read back the identity the AUTHORITY issued, \
+                 not one this store minted for itself"
+            );
+            assert_eq!(
+                store.carrier_symbol(tag_id),
                 Some("ctor:fixture::List::Cons"),
-                "the tag id names the runtime constructor"
+                "and the reverse lookup is a view over that same authority"
             );
         }
     }
@@ -3163,7 +3315,7 @@ pub(crate) mod tests {
         let (_m3, scalar_code) = compile_probe(Probe::Unary(|h| h.scalar));
 
         for (success, expected) in [(1u64, 11i64), (0, 22)] {
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             let mut builder = BoundaryArenaBuilder::new();
             let ok = materialize_ground(
                 &mut store,
@@ -3220,11 +3372,14 @@ pub(crate) mod tests {
             fields: vec![("payload".to_string(), nested)],
         };
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let mut builder = BoundaryArenaBuilder::new();
         let word = materialize_ground(&mut store, &outer).expect("materializes");
-        let payload_name = store.intern_symbol("payload");
-        let depth_name = store.intern_symbol("depth");
+        // ⭐ `D2`: the field names emitted code selects on come from the
+        // **authority**, ⛔ not from `intern_symbol` — which would mint a second
+        // id for a name the materialized record already keyed on the issued one.
+        let payload_name = c1_d2_issued_identity("payload");
+        let depth_name = c1_d2_issued_identity("depth");
         let f = bind(&mut store, builder);
         let base = f.base;
 
@@ -3251,7 +3406,7 @@ pub(crate) mod tests {
         let (_m, owner_code) = compile_probe(Probe::Unary(|h| h.owner));
         let (_m2, slot_code) = compile_probe(Probe::Unary(|h| h.slot));
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let mut builder = BoundaryArenaBuilder::new();
         let persistent = materialize_ground(&mut store, &cons(5)).expect("materializes");
         let borrowed = materialize_borrowed(&mut builder, 0xDEAD_BEEF);
@@ -3290,7 +3445,7 @@ pub(crate) mod tests {
     fn b2v_borrowed_ingress_fails_closed_on_escape_with_an_exact_error() {
         let (_m, escape_code) = compile_probe(Probe::Status(|h| h.escape_check));
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let mut builder = BoundaryArenaBuilder::new();
         let persistent = materialize_ground(&mut store, &cons(1)).expect("materializes");
         let borrowed = materialize_borrowed(&mut builder, 1);
@@ -3336,7 +3491,7 @@ pub(crate) mod tests {
         let (_m, class_code) = compile_probe(Probe::Unary(|h| h.class));
         let (_m2, field_code) = compile_probe(Probe::Binary(|h| h.field));
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let mut builder = BoundaryArenaBuilder::new();
         let word = materialize_ground(&mut store, &cons(1)).expect("materializes");
         let f = bind(&mut store, builder);
@@ -3456,7 +3611,7 @@ pub(crate) mod tests {
         // construction — the helpers live in the module, the values in the
         // arena — and this measures that independence rather than restating it.
         for count in [1usize, 64, 1024] {
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             for i in 0..count {
                 materialize_ground(&mut store, &cons(i as i64)).expect("materializes");
             }
@@ -3482,7 +3637,7 @@ pub(crate) mod tests {
     /// twice, which corroborates nothing.
     #[test]
     fn b2v_a_persistent_slot_resolves_back_through_the_store() {
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let value = cons(31);
         let word = materialize_ground(&mut store, &value).expect("materializes");
 
@@ -3520,7 +3675,7 @@ pub(crate) mod tests {
     /// and not this layer's.
     #[test]
     fn b2v_equal_values_share_one_persistent_referent() {
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let a = materialize_ground(&mut store, &cons(9)).expect("materializes");
         let b = materialize_ground(&mut store, &cons(9)).expect("materializes");
         let c = materialize_ground(&mut store, &cons(10)).expect("materializes");
@@ -3597,7 +3752,7 @@ pub(crate) mod tests {
             (i64::MIN, false),
         ];
         for (value, immediate) in cases {
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             let word = materialize_ground(
                 &mut store,
                 &RuntimeGroundValue::Int(RuntimeIntV1::Small(value)),
@@ -3649,7 +3804,7 @@ pub(crate) mod tests {
         let (_m, class_code) = compile_probe(Probe::Unary(|h| h.class));
         let (_m2, escape_code) = compile_probe(Probe::Status(|h| h.escape_check));
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let mut builder = BoundaryArenaBuilder::new();
         materialize_ground(&mut store, &cons(1)).expect("materializes");
         let f = bind(&mut store, builder);
@@ -4084,7 +4239,7 @@ pub(crate) mod tests {
         let (_c4, class_code) = compile_probe(Probe::Unary(|h| h.class));
 
         for head in [7i64, -3, 1_000_000] {
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             // The only Rust-materialized ingredient is the tail; the parent —
             // its class, identity, arity and both children — is built by
             // emitted code.
@@ -4142,7 +4297,7 @@ pub(crate) mod tests {
         let (_c3, scalar_code) = compile_probe(Probe::Unary(|h| h.scalar));
 
         for (success, expected) in [(1u64, 11i64), (0, 22)] {
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             let f = bind_with(
                 &mut store,
                 BoundaryArenaBuilder::new(),
@@ -4184,7 +4339,7 @@ pub(crate) mod tests {
         let (_c1, named) = compile_probe(Probe::Binary(|h| h.record_field));
         let (_c2, scalar_code) = compile_probe(Probe::Unary(|h| h.scalar));
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let name = store.intern_symbol("field:amount");
         let f = bind_with(
             &mut store,
@@ -4232,7 +4387,7 @@ pub(crate) mod tests {
         let (_c2, scalar_code) = compile_probe(Probe::Unary(|h| h.scalar));
         let (_c3, slot_code) = compile_probe(Probe::Unary(|h| h.slot));
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let nil = materialize_ground(
             &mut store,
             &RuntimeGroundValue::Constructor {
@@ -4310,7 +4465,7 @@ pub(crate) mod tests {
         let (_pm, alloc_code) = compile_producer(4, emit_alloc_probe);
         let (_sm, store_code) = compile_producer(4, emit_store_field_probe);
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let mut builder = BoundaryArenaBuilder::new();
         let borrowed = materialize_borrowed(&mut builder, 0xBEEF);
         let f = bind_with(&mut store, builder, (2, 4, 0), (2, 4, 0));
@@ -4366,7 +4521,7 @@ pub(crate) mod tests {
 
         // Node ceiling: room for exactly one.
         {
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             let f = bind_with(
                 &mut store,
                 BoundaryArenaBuilder::new(),
@@ -4385,7 +4540,7 @@ pub(crate) mod tests {
         }
         // Word ceiling: room for two nodes but only one child word.
         {
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             let f = bind_with(
                 &mut store,
                 BoundaryArenaBuilder::new(),
@@ -4407,7 +4562,7 @@ pub(crate) mod tests {
         }
         // The closed sets bound construction too.
         {
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             let f = bind_with(
                 &mut store,
                 BoundaryArenaBuilder::new(),
@@ -4460,7 +4615,7 @@ pub(crate) mod tests {
         let (_sm, scalar_store) = compile_producer(3, emit_store_scalar_probe);
         let (_am, alloc_code) = compile_producer(4, emit_alloc_probe);
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let materialized = materialize_ground(&mut store, &cons(5)).expect("materializes");
         let f = bind_with(
             &mut store,
@@ -4623,7 +4778,7 @@ pub(crate) mod tests {
                 !BoundaryWord::int_fits_immediate(value),
                 "the case must actually spill, or this control tests the wrong arm"
             );
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             let native = crate::native_int::NativeIntArenaV1::default();
             let mut f = bind_with(
                 &mut store,
@@ -4675,7 +4830,7 @@ pub(crate) mod tests {
         len: u64,
         seed: u64,
     ) -> Vec<i64> {
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -4794,7 +4949,7 @@ pub(crate) mod tests {
         let text = "defghi";
         let seed = u64::from(text.as_bytes()[0]);
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let word = materialize_ground(&mut store, &RuntimeGroundValue::String(text.to_string()))
             .expect("a String materializes");
         let f = bind(&mut store, BoundaryArenaBuilder::new());
@@ -4955,7 +5110,7 @@ pub(crate) mod tests {
         let (_sm, scalar_store) = compile_producer(3, emit_store_scalar_probe);
         let (_c1, slot_code) = compile_probe(Probe::Unary(|h| h.slot));
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -5004,7 +5159,7 @@ pub(crate) mod tests {
     #[test]
     fn b2v_the_tag_class_relation_is_closed_over_the_whole_product() {
         let (_pm, alloc_code) = compile_producer(4, emit_alloc_probe);
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -5198,7 +5353,7 @@ pub(crate) mod tests {
         let (_am, alloc_code) = compile_producer(4, emit_alloc_probe);
         let (_tm, tag_probe) = compile_producer(3, emit_store_int_tag_probe);
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -5309,7 +5464,7 @@ pub(crate) mod tests {
                 "the case must actually be wide, or this control tests the Small arm"
             );
 
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             let word = materialize_ground(&mut store, &RuntimeGroundValue::Int(value.clone()))
                 .expect("D1: a wide Int must materialize — the disposition promises the spill");
             assert_eq!(
@@ -5374,7 +5529,7 @@ pub(crate) mod tests {
 
         let len = 3u64;
         let seed = 0x0123_4567_89ab_cdefu64;
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let (word, persistent) = {
             let f = bind_limbs(
                 &mut store,
@@ -5615,7 +5770,7 @@ pub(crate) mod tests {
         //
         // ⭐ The one quantity that is not derivable by inspection: what
         // `publish` actually wrote. Measured on a real region, not restated.
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         materialize_ground(&mut store, &RuntimeGroundValue::Bool(true));
         let f = bind(&mut store, BoundaryArenaBuilder::new());
         for (what, words) in [
@@ -5721,7 +5876,7 @@ pub(crate) mod tests {
         let mut admitted = 0;
         let mut refused = 0;
         for (sign, len, seed, top, expected) in cases {
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             let f = bind_limbs(
                 &mut store,
                 BoundaryArenaBuilder::new(),
@@ -5760,7 +5915,7 @@ pub(crate) mod tests {
         let (_um, unsealed) = compile_producer(4, emit_wide_int_producer_no_seal);
         let (_c2, sign_code) = compile_probe(Probe::Unary(|h| h.int_sign));
         let (_c3, limb_code) = compile_probe(Probe::Binary(|h| h.int_limb));
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let f = bind_limbs(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -5838,7 +5993,7 @@ pub(crate) mod tests {
         let (_c2, limb_code) = compile_probe(Probe::Binary(|h| h.int_limb));
 
         let value = wide_int(0);
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let word = materialize_ground(&mut store, &RuntimeGroundValue::Int(value))
             .expect("a wide Int materializes");
         let index = word.payload();
@@ -5962,7 +6117,7 @@ pub(crate) mod tests {
                 "the fixture disagrees with the partition it is testing"
             );
 
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             let native = crate::native_int::NativeIntArenaV1::default();
             let mut f = bind_with(
                 &mut store,
@@ -6054,7 +6209,7 @@ pub(crate) mod tests {
 
         let len = 3u64;
         let seed = 0x00ff_0000_0000_0001u64;
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let (pending, persistent) = {
             let f = bind_limbs(
                 &mut store,
@@ -6152,7 +6307,7 @@ pub(crate) mod tests {
     fn b2v_ac10_adoption_converges_equal_values_and_never_aliases_unequal() {
         let (_pm, produce) = compile_producer(4, emit_wide_int_producer);
         let len = 2u64;
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let f = bind_limbs(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -6199,7 +6354,7 @@ pub(crate) mod tests {
     /// and adoption fails closed with an exact status.**
     #[test]
     fn b2v_ac10_adoption_fails_closed_before_publication() {
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         // A word whose tag is not persistent has no adoption boundary.
         let immediate = BoundaryWord::immediate(BoundaryTag::ImmediateInt, 7);
         assert_eq!(
@@ -6271,7 +6426,7 @@ pub(crate) mod tests {
         let (_pm, alloc_pair) = compile_producer(2, emit_cyclic_pair_node);
         let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -6312,7 +6467,7 @@ pub(crate) mod tests {
 
         // ⚠ POSITIVE CONTROL — an acyclic graph of the same shape adopts, so
         // the refusal is about the cycle and not about aggregates.
-        let mut clean = BoundaryValueStore::new();
+        let mut clean = c1_d2_store();
         // ⚠ The constructor ids must be REAL interned symbols: a node naming an
         // id the store never interned has no canonical image, and adoption
         // correctly refuses it. Interning first keeps this control about the
@@ -6494,7 +6649,7 @@ pub(crate) mod tests {
         );
 
         let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let tag_id = store.intern_symbol("ctor:fixture::Seal::Node");
         let f = bind_with(
             &mut store,
@@ -6591,7 +6746,7 @@ pub(crate) mod tests {
         let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
         let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let tag_id = store.intern_symbol("ctor:fixture::Unsealed::Node");
         let f = bind_with(
             &mut store,
@@ -6641,7 +6796,7 @@ pub(crate) mod tests {
                 .collect()
         };
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let tag_id = store.intern_symbol("ctor:fixture::Partial::Node");
         let f = bind_with(
             &mut store,
@@ -6677,7 +6832,7 @@ pub(crate) mod tests {
         );
 
         // ⚠ POSITIVE CONTROL — the acyclic twin mints every node.
-        let mut clean = BoundaryValueStore::new();
+        let mut clean = c1_d2_store();
         let clean_id = clean.intern_symbol("ctor:fixture::Partial::Node");
         let g = bind_with(
             &mut clean,
@@ -6853,7 +7008,7 @@ pub(crate) mod tests {
     #[test]
     fn b2v_d5_the_durable_closure_lane_is_refused_at_allocation_by_name() {
         let (_pm, alloc_code) = compile_producer(4, emit_alloc_probe);
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -6900,7 +7055,7 @@ pub(crate) mod tests {
     #[test]
     fn b2v_ac6_a_ground_node_still_adopts_through_the_same_harness() {
         let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         store.bind_artifact(fixture_artifact("refused", 3));
         let tag_id = store.intern_symbol("ctor:fixture::Ground::Leaf");
         let f = bind_with(
@@ -6930,7 +7085,7 @@ pub(crate) mod tests {
     fn b2v_acv5_an_already_owned_ground_root_still_takes_the_fast_path() {
         let (_cm, alloc_ctor) = compile_producer(5, emit_ctor_node);
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         store.bind_artifact(fixture_artifact("refused", 3));
         let tag_id = store.intern_symbol("ctor:fixture::Ground::Leaf");
         let f = bind_with(
@@ -6968,7 +7123,7 @@ pub(crate) mod tests {
     fn b2v_acv5_the_same_compound_child_alone_does_mint_a_slot() {
         let (_cm, alloc_ctor) = compile_producer(5, emit_ctor_node);
 
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         store.bind_artifact(fixture_artifact("refused", 3));
         let tag_id = store.intern_symbol("ctor:fixture::Ground::Leaf");
         let f = bind_with(
@@ -7004,7 +7159,7 @@ pub(crate) mod tests {
     /// invocation-owned represented arms. What is refused is *persistence*.
     #[test]
     fn b2v_ac6_invocation_owned_classes_are_never_persisted() {
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         store.bind_artifact(fixture_artifact("invocation", 8));
         let mut builder = BoundaryArenaBuilder::new();
         let borrowed = materialize_borrowed(&mut builder, 1);
@@ -7097,7 +7252,7 @@ pub(crate) mod tests {
 
         let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
         let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let tag_id = store.intern_symbol("ctor:fixture::Deep::Link");
         let f = bind_with(
             &mut store,
@@ -7152,7 +7307,7 @@ pub(crate) mod tests {
 
         let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
         let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let tag_id = store.intern_symbol("ctor:fixture::Deep::Link");
         let f = bind_with(
             &mut store,
@@ -7191,7 +7346,7 @@ pub(crate) mod tests {
         let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
 
         // ── a three-node cycle: a -> b -> c -> a ────────────────────────────
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let tag_id = store.intern_symbol("ctor:fixture::Ring::Link");
         let f = bind_with(
             &mut store,
@@ -7223,7 +7378,7 @@ pub(crate) mod tests {
         }
 
         // ── the DAG: one child reached by TWO parents ───────────────────────
-        let mut dag = BoundaryValueStore::new();
+        let mut dag = c1_d2_store();
         let parent_id = dag.intern_symbol("ctor:fixture::Dag::Parent");
         let shared_id = dag.intern_symbol("ctor:fixture::Dag::Shared");
         let g = bind_with(&mut dag, BoundaryArenaBuilder::new(), (8, 16, 0), (0, 0, 0));
@@ -7289,7 +7444,7 @@ pub(crate) mod tests {
         };
 
         let plan = BoundaryEmissionPlan::derive();
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let builder = BoundaryArenaBuilder::new();
         materialize_ground(&mut store, &cons(1)).expect("materializes");
         let f = bind(&mut store, builder);
@@ -7374,7 +7529,7 @@ pub(crate) mod tests {
         };
 
         let plan = BoundaryEmissionPlan::derive();
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let builder = BoundaryArenaBuilder::new();
         materialize_ground(&mut store, &cons(1)).expect("materializes");
         let f = bind(&mut store, builder);
@@ -7627,7 +7782,7 @@ pub(crate) mod tests {
             let (_dm, drop_alloc) =
                 compile_producer_with_plan(4, emit_alloc_probe, &with_relation(dropped));
 
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             let f = bind_with(
                 &mut store,
                 BoundaryArenaBuilder::new(),
@@ -7641,7 +7796,7 @@ pub(crate) mod tests {
                  the cell cannot change anything (got {real})"
             );
 
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             let f = bind_with(
                 &mut store,
                 BoundaryArenaBuilder::new(),
@@ -7704,7 +7859,7 @@ pub(crate) mod tests {
         let (_xm, remap_alloc) =
             compile_producer_with_plan(4, emit_alloc_probe, &with_relation(remapped));
         for (tag, expected_ok) in [(donor, false), (recipient, true)] {
-            let mut store = BoundaryValueStore::new();
+            let mut store = c1_d2_store();
             let f = bind_with(
                 &mut store,
                 BoundaryArenaBuilder::new(),
@@ -7746,7 +7901,7 @@ pub(crate) mod tests {
             let (_nm, no_row_alloc) =
                 compile_producer_with_plan(4, emit_alloc_probe, &with_relation(rowless));
             for class in BoundaryClass::ALL {
-                let mut store = BoundaryValueStore::new();
+                let mut store = c1_d2_store();
                 let f = bind_with(
                     &mut store,
                     BoundaryArenaBuilder::new(),
@@ -7792,7 +7947,7 @@ pub(crate) mod tests {
         };
 
         let plan = BoundaryEmissionPlan::derive();
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let builder = BoundaryArenaBuilder::new();
         materialize_ground(&mut store, &cons(1)).expect("materializes");
         let f = bind(&mut store, builder);
@@ -8027,7 +8182,7 @@ pub(crate) mod tests {
             !BoundaryWord::int_fits_immediate(value),
             "the fixture must spill, or no Int-classed node exists to guard"
         );
-        let mut store = BoundaryValueStore::new();
+        let mut store = c1_d2_store();
         let native = crate::native_int::NativeIntArenaV1::default();
         let mut f = bind_with(
             &mut store,

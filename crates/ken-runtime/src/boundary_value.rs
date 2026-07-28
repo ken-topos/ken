@@ -1951,6 +1951,27 @@ pub struct BoundaryValueStore {
     resident: BTreeMap<SlotId, RuntimeGroundValue>,
     symbols: Vec<RuntimeSymbol>,
     symbol_ids: BTreeMap<RuntimeSymbol, u64>,
+    /// ⭐⭐ **`D2` — the ONE identity authority, as this store sees it.**
+    ///
+    /// A carrier `TagId` / record-field name id is an **artifact-static
+    /// identity**: a packed span into the plan's own name arena, issued by
+    /// `constructor_symbol_identity` / `record_field_identity`. ⛔ It is **not
+    /// computable from the symbol string** — no formula here could reproduce
+    /// it — so this store does not derive one. It is **told**, and it refuses
+    /// symbols it was never told about.
+    ///
+    /// ⚠ **Why this is not `symbol_ids` under another name.** `intern_symbol`
+    /// *mints*: dense insertion-order numbering, per store instance, minting on
+    /// miss. ⇒ The same constructor gets a different id in a different store or
+    /// a different insertion order, and a compiled-once body cannot compare
+    /// against that (`§2e`). These two maps are a **view over an authority that
+    /// lives elsewhere**, ⛔ never a source.
+    carrier_identities: BTreeMap<RuntimeSymbol, u64>,
+    /// The reverse view — `D2` rules that the reverse lookup survives *as a
+    /// view over the one authority*, ⛔ never as a second source. Written only
+    /// by [`BoundaryValueStore::issue_carrier_identity`], so it cannot disagree
+    /// with the forward map.
+    carrier_symbols: BTreeMap<u64, RuntimeSymbol>,
     /// The persistent region every persistent word indexes.
     image: BoundaryPersistentImage,
     /// `SlotId -> persistent node index`. ⭐ **This is what makes the word an
@@ -1994,6 +2015,8 @@ impl BoundaryValueStore {
             resident: BTreeMap::new(),
             symbols: Vec::new(),
             symbol_ids: BTreeMap::new(),
+            carrier_identities: BTreeMap::new(),
+            carrier_symbols: BTreeMap::new(),
             image: BoundaryPersistentImage::default(),
             placement: BTreeMap::new(),
             artifact: None,
@@ -2716,6 +2739,41 @@ impl BoundaryValueStore {
         id
     }
 
+    /// ⭐ **`D2` — record the artifact-static identity the plan issued for
+    /// `symbol`.** The caller holds the authority (`StaticTransitionPlan`); this
+    /// store only remembers what it was handed.
+    ///
+    /// ⚠ Re-issuing the same pair is idempotent. Re-issuing a **different**
+    /// identity for one symbol is a caller bug — two authorities by definition —
+    /// so it is refused rather than silently overwritten.
+    pub fn issue_carrier_identity(&mut self, symbol: &str, identity: u64) -> bool {
+        match self.carrier_identities.get(symbol) {
+            Some(existing) => *existing == identity,
+            None => {
+                self.carrier_identities
+                    .insert(symbol.to_string(), identity);
+                self.carrier_symbols.insert(identity, symbol.to_string());
+                true
+            }
+        }
+    }
+
+    /// The artifact-static identity issued for `symbol`, if any.
+    ///
+    /// ⛔⛔ **THE MINTING BAN.** `None` means *"no authority has issued an
+    /// identity for this symbol"*, and every carrier caller must **fail closed**
+    /// on it. ⚠ Minting here on a miss would discharge `D2`'s sentence while
+    /// preserving the exact defect it forbids: the mint *is* the second
+    /// authority.
+    pub fn carrier_identity(&self, symbol: &str) -> Option<u64> {
+        self.carrier_identities.get(symbol).copied()
+    }
+
+    /// The symbol an artifact-static identity names — the reverse **view**.
+    pub fn carrier_symbol(&self, identity: u64) -> Option<&str> {
+        self.carrier_symbols.get(&identity).map(String::as_str)
+    }
+
     /// The symbol an id names, if any.
     pub fn symbol(&self, id: u64) -> Option<&str> {
         if id == 0 {
@@ -2964,7 +3022,9 @@ impl BoundaryValueStore {
                 )
             }
             RuntimeGroundValue::Constructor { constructor, args } => {
-                let tag_id = self.intern_symbol(constructor);
+                // ⭐⭐ `D2`: the carrier tag is the identity the PLAN issued, and
+                // ⛔ an unissued constructor fails closed rather than minting one.
+                let tag_id = self.carrier_identity(constructor)?;
                 let mut children = Vec::with_capacity(args.len());
                 for arg in args {
                     children.push(self.materialize(arg)?);
@@ -2983,7 +3043,8 @@ impl BoundaryValueStore {
                 let mut children = Vec::with_capacity(fields.len());
                 let mut names = Vec::with_capacity(fields.len());
                 for (name, field) in fields {
-                    names.push(self.intern_symbol(name));
+                    // ⭐⭐ `D2`: record field identity, same one authority.
+                    names.push(self.carrier_identity(name)?);
                     children.push(self.materialize(field)?);
                 }
                 (BoundaryClass::Record, 0, 0, 0, children, names, Vec::new())
