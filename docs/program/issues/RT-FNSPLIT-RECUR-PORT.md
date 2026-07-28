@@ -323,6 +323,159 @@ origin: RT-SCALE-B frame-unsatisfied hard stop #13, raised by runtime-implemente
 > ⭐ The named §5a-ii predicate is `executable-boundary closure`, and **entry 6
 > is the mandated predicate check** — it falls on exactly the right entry.
 > ⛔ §5a-ii: the Architect names it, not the Steward.
+>
+> ### ✅✅ RESOLVED — it folds as `D8`. ⚠ The Steward's fork ruling was REVERSED
+>
+> ⚠ **Steward `evt_5bbpc6wyj31zb` ruled this a fork and filed a node
+> `RT-FNSPLIT-JOIN-CLOSURE`. That ruling is withdrawn** and the node is not
+> filed. **The Architect's `#15` ruling (`evt_4a34wkyk6bmm5`) sequences the join
+> closure *inside* this node — after `D6`, before the remaining selector/trap
+> slices — and that is correct on the merits.**
+>
+> ⛔ **The reason, stated so it is not re-derived:** the join work happens on
+> **this node's branch, between this node's slices, in one merge.** A separate
+> node would sit in `depends_on` — which encodes *"merged before"* — while never
+> merging independently. ⇒ ⭐ **A node boundary that does not correspond to a
+> merge boundary is a label, not a node.**
+>
+> ⚠ **The concern that drove the fork is real and is answered differently:** an
+> `XL` node carrying four mechanisms has an unreviewable acceptance surface.
+> ⇒ **The answer is deliverable and AC numbering** — `D8` and `AC-11`–`AC-16`
+> below — ⛔ not a graph split.
+>
+> **Three independent lines converged on the mechanism**, which is why the
+> ruling was fast:
+>
+> | source | finding |
+> |---|---|
+> | research advisory (`evt_3ywrfbxn9gm6t`) | the general boundary is **already ruled** at `C1 §2h`, which names *branch/join forwarding* explicitly and forbids a reachability whitelist |
+> | Architect entry 6 (`cbd5848b`) | entries 4/5/6 share `executable-boundary closure`; *"stop ruling seat-by-seat"* |
+> | Steward scope review | a lowering-wide join convention is not a seat, and a fourth mechanism makes this node's ACs unreviewable |
+>
+> ⭐⭐ **`D6` WAS RIGHT AND STAYS RIGHT.** The advisory separates two **roles**:
+> a **semantic consumer** seat (this node's `D6`) — where per-seat admission
+> **converges**, because the consumer assigns meaning to the word — and a
+> **forwarding join** — where it **diverges**, because each newly reachable join
+> re-reveals the same missing result convention. ⇒ ⛔ The error would have been
+> applying `D6`'s technique to joins.
+>
+> ⚠ **`AC-2` remains a preservation obligation across this too** — the corrected
+> family and the eventual join convention both sit under the mutation that
+> proves recursive positions lower as declared unit calls.
+
+> ## ⚖️⚖️ ARCHITECT RULING ON `#15` — `evt_4a34wkyk6bmm5`, 2026-07-28. THIS IS `D8`.
+>
+> **Adopt result-directed join signature conversion across the COMPLETE pending
+> join family.** ⛔ **Do not add a one-off carried `Match` arm, and do not widen
+> host consumers generically.**
+>
+> ⭐ **One general `executable-boundary closure`, but its ROLES are not
+> interchangeable.** `BufferFreeze` is a **semantic consumer** and keeps `D6`'s
+> narrow operation+seat admission. An ordinary `Match` is a **forwarding join**
+> and must use one statically selected result representation shared by every
+> continuing predecessor.
+>
+> ### 1. A pre-emission phase plan — one entry per join occurrence
+>
+> Before lowering emits **any** arm, semantic planning assigns each source join
+> occurrence, **keyed by its `StaticOriginId`**, exactly one closed contract:
+>
+> ```text
+> JoinResultRepresentation =
+>   NativeScalarPair
+>   | CarrierWord
+> ```
+>
+> ⚠ **The names are not ruled; the two-way shape is.**
+>
+> ⛔ **This is a COMPILE-TIME plan, never a runtime `{phase, tag, payload}`
+> sum.** It is derived from the semantic occurrence/owner graph that already
+> owns unit boundaries and static-body calls, using a **monotone phase
+> summary**:
+>
+> ```text
+> SpecializedOnly < CarrierRequired
+> ```
+>
+> **Seed `CarrierRequired`** from declared-unit call results, carried ABI
+> inputs/captures, carrier projections, and existing one-way carrier producers.
+> **Propagate** through environment insertion, recursive calls, forwarding
+> results, and joins.
+>
+> - A join is **`CarrierWord`** when **any** non-trapping predecessor may carry,
+>   **or** its result flows through a carrier-required forwarding edge.
+> - It is **`NativeScalarPair`** only when **every** continuing predecessor and
+>   result edge is **structurally proven** specialized-only **inside the same
+>   unit**.
+> - **Trap predecessors contribute no result edge.** ⭐ A join with no continuing
+>   predecessor **emits no merge**.
+>
+> **The analysis is total over the semantic source variants, exhaustive with no
+> wildcard, and validated before lowering.** ⇒ A bijection: every source join
+> occurrence has **exactly one** plan entry, every plan entry names an
+> **existing** occurrence, and lowering consumes the entry for that origin
+> **exactly once**. ⛔ **`construct: &'static str` stays a diagnostic label and
+> is NEVER an identity key.**
+>
+> ⛔⛔ **`select_terminal_result_origins` may supply a result-position SEED, but
+> it is NOT the closure.** ⚠ **Using that set alone would be exactly the
+> manually maintained reachability boundary `C1 §2h` rejects.** The
+> authoritative result is the transitive phase plan produced beside the semantic
+> owner/occurrence graph.
+>
+> ### 2. Lowering consumes a typed token BEFORE creating the merge
+>
+> | planned | emission |
+> |---|---|
+> | `NativeScalarPair` | retain the existing two-`i64` `(tag, payload)` merge and the existing scalar-kind agreement checks. ⛔ A `Carried` predecessor here is an internal plan/implementation disagreement and **fails the function definition** |
+> | `CarrierWord` | create **exactly one** `i64` block parameter. `Carried(word)` passes **unchanged**; a supported `Specialized(lowered)` crosses **exactly once** through the existing `transfer_into_carrier` / `carried_join_arm` one-way producer. ⭐ The merged result is `LoweringOperand::Carried` |
+> | `Specialized(Trap)` | call the existing `seal_source_trap_branch`; **emit no jump to the merge.** ⭐ Trap is a **control-flow edge property**, not a carrier materialization case |
+>
+> ⭐⭐ **The held `lower_dynamic_host_result_match` must select `CarrierWord`
+> EVEN THOUGH ITS SCRUTINEE IS SPECIALIZED.**
+>
+> ⛔ **Forbidden selectors, all four:** scrutinee phase · first-arm phase · case
+> order · a runtime *"if any arm is carried"* test. ⚠ **None of them declares
+> the merge signature before arm emission**, which is the whole property.
+>
+> ⛔ An unsupported specialized→carrier materialization **aborts the function
+> before `define_function` / `UnitBundle` publication** and must not leave a
+> published partial CFG. ⛔ **No `Carried → Lowered` conversion.**
+>
+> ### 3. ⛔ CLOSE THE FAMILY, NOT THIS CALL SITE
+>
+> The held `a5f35d8d` census is the **review population**:
+>
+> | helper | direct lowering callers |
+> |---|---|
+> | `merge_branch_value` | 4 |
+> | `merge_scalar_branch` | 10 |
+> | `merge_planned_scalar_branch` | 1 |
+> | **total** | **15** |
+>
+> ⛔⛔ **This is a STATIC REVIEW POPULATION, NOT a claim that the governed input
+> reaches 15 more stops.** ⭐ Only `lower_dynamic_host_result_match` is presently
+> **proven reachable**.
+>
+> ⛔ **No helper may retain an unplanned "choose after lowering the arms"
+> route.** ⭐ **A new join caller must be UNABLE TO COMPILE without supplying and
+> consuming the typed plan token** — ⛔ do not preserve a catch-all legacy helper
+> that bypasses it.
+>
+> ### 4. ⛔ What stays narrow and what stays frozen
+>
+> **`D6` is unchanged, exactly as ruled:** only `BufferFreeze` seats 0 and 3
+> admit the validated carried `InvocationBorrowed` / `BorrowedOpaque` resource
+> representation; seats 1 and 2 stay specialized `Int`; every other host
+> operation/seat stays exhaustively classified and **fails closed** unless it
+> has its own emitted semantic-consumer route.
+>
+> ⛔ **This ruling adds NONE of:** a carrier tag, class, identity, metadata
+> field, runtime phase discriminant, reverse decode, ABI field, service,
+> envelope field, ingress lane, or parallel ownership lane. ⭐
+> **`CarriedBoundaryWord` stays one SSA word**, and the external two-pointer
+> generated-function ABI, two-field services record, and two-field call-frame
+> envelope are **byte-for-byte unchanged**.
 
 ## Objective
 
@@ -347,6 +500,7 @@ landed envelope, ABI, services record, or static ingress declaration.
 | `D5` | the retained-authority residual re-stated: whatever still selects `RecursiveDescent` after this node, named explicitly and closed |
 | `D6` | **the narrow carried resource-token seat** — `lower_process_host_effect` retains `LoweringOperand`s until operation + seat are known, and admits a validated `Carried` carrier at `BufferFreeze` seats 0/3 only, failing closed on every other shape (ruling `evt_3629v1gy7fwqq`) |
 | `D7` | **the corrected canonical governed family** — the malformed one-operand `BufferFreeze(Var(0))` replaced by the four-seat operational bracket, built from semantic binder roles, with recursion / `recursive_positions = [0]` / trap arms / `n=3..7` / LIFO all retained |
+| `D8` | **result-directed join signature conversion, across the WHOLE pending join family** — a pre-emission per-join phase plan keyed by `StaticOriginId` selecting one closed result contract, and a typed plan token that lowering consumes before creating the merge (ruling `evt_4a34wkyk6bmm5`). ⛔ **Not** a one-off carried `Match` arm |
 
 ## Acceptance criteria
 
@@ -404,6 +558,36 @@ unchanged is **`AC-5`**. ⚠ `AC-2` is now a **preservation** obligation — `D7
 rewrites the family `S1` proved it on, so the mutation must be re-run against
 the corrected source, not assumed to carry.
 
+### Added by the `#15` ruling — `evt_4a34wkyk6bmm5`, the `D8` discriminators
+
+⛔ **Six required discriminators, and they bind exactly as `AC-1`–`AC-10` do.**
+
+- **`AC-11` — static contract, ORDER-INDEPENDENT.** On the **same specialized
+  scrutinee**: one arm returns a declared-unit **carried** result, one returns a
+  supported **specialized** result. ⭐ The plan must read `CarrierWord`
+  **before arm emission**. **Swapping arm order leaves the plan and the emitted
+  signature unchanged.** ⛔ Mutating the selector to scrutinee-based or
+  first-arm-based **must red at the plan assertion**.
+- **`AC-12` — uniform predecessor conversion.** The carried arm reaches the
+  merge **unchanged**; the specialized sibling invokes the existing producer
+  **exactly once**. ⛔ **Both mutations must red independently** — re-producing
+  the carried word, and bypassing production for the specialized value.
+- **`AC-13` — trap topology.** A trapping sibling seals/returns and contributes
+  **no merge predecessor**. ⛔ Mutating it to jump to the merge must red on the
+  predecessor/CFG assertion. ⭐ An **all-trap join creates no merge block**.
+- **`AC-14` — closed population.** A structural census pins the **three helper
+  families and the 4 / 10 / 1 direct-caller population** at the held checkpoint.
+  ⛔ Removing a required typed-plan consumption, **or adding a caller through an
+  unplanned helper**, must fail compilation or a structural control.
+- **`AC-15` — fail before publication.** An unsupported specialized→carrier
+  materialization returns the producer's own failure and publishes **no
+  function and no partial `UnitBundle`**.
+- **`AC-16` — governed causal route.** The corrected `n=3..7` family **reaches
+  this carrier-result join** and produces complete `UnitBundle`s, ⭐ **while
+  preserving every existing `AC-1`–`AC-10` discriminator** — the `D6` seat
+  mutations, `PX8-SPAN-PROV`, the direct-unit-call / static-origin backedge, the
+  selector's fail-closed default, and the unchanged `B2F` ABI inventories.
+
 ## ✅ CLOSED — the open question that sized this node
 
 > **Does the `PX8-ERRID-ALLOC` failing fixture route through
@@ -415,6 +599,15 @@ the corrected source, not assumed to carry.
 > ruling adding `D6` and `D7`, not from this measurement. ⭐ `XL` is a new value
 > in this corpus and means exactly one thing: **beyond `L`, and it would have
 > been split had it not already been `active` on the critical path.**
+>
+> ⭐ **Size reconciliation after `#15` (owed by the Architect's ruling): it stays
+> `XL`.** `D8` adds a pre-emission analysis pass and a lowering-wide join
+> refactor across 3 helper families — ⚠ genuinely large, and the reason the
+> Steward first ruled a fork. ⛔ **But `XL` already means "beyond `L`, unsplit
+> only because it is `active` on the critical path", and that statement is
+> unchanged.** ⇒ Inventing a further tier would encode nothing a reader can act
+> on. **The reviewability answer is `D6`/`D7`/`D8` and `AC-11`–`AC-16` being
+> separately numbered and separately mutable, not a bigger label.**
 
 ## Bookkeeping
 

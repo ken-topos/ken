@@ -1,6 +1,6 @@
 # `RT-FNSPLIT-RECUR-PORT` — emission-port completion for the governed bracket family
 
-**Owner:** Runtime ring · **Size:** XL (was `L`; `D6`+`D7` added by ruling `#14`)
+**Owner:** Runtime ring · **Size:** XL (`L` → `XL` at `#14`; `D8` added at `#15`)
 **Depends on:** `RT-FNSPLIT-B2F` (merged) · **Blocks:** `RT-SCALE-B`
 
 > ## ⛔⛔ READ BEFORE SLICING — node carries the contract, this the recipe
@@ -99,7 +99,8 @@ family they correct is the input to every remaining slice.
 | ✅ `S0` | the measurement above | it could re-scope everything after it |
 | ✅ `S1` | `D1` — recursive positions as declared unit calls | the growth axis; everything else is smaller |
 | ▶ `S6` | `D7` — replace the malformed helper with the corrected four-seat canonical family | ⛔ **first of the remainder.** `D6`'s admission rule is stated per *seat 0 / seat 3*, and those seats do not exist until this lands |
-| ▶ `S7` | `D6` — the narrow carried resource-token seat in `lower_process_host_effect` | unblocks compilation past `BoundaryCarrier`; without it `AC-1` has no complete bundle and `AC-6` has nothing to collect |
+| ✅ `S7` | `D6` — the narrow carried resource-token seat in `lower_process_host_effect` | unblocks compilation past the host-effect operand; committed as WIP at `a5f35d8d` |
+| ▶ `S8` | `D8` — result-directed join signature conversion across the whole pending join family | ⛔ **after `D6`, before the remaining selector/trap slices** (ruling `evt_4a34wkyk6bmm5`). The `Match` join is the next refusal on the governed route |
 | `S2` | `D2` — trap arms | independent condition in `requires_recursive_descent_authority`; can red separately |
 | `S3` | `D3` — narrow the selector, with the fail-closed default proven intact | ⛔ **after** the ports exist, so each removed condition has a working port behind it |
 | `S4` | `D4` — the governed family selects `FunctionizedUnits` at every `n` in `3..7` | the node's stated exit |
@@ -159,6 +160,45 @@ involved, `S7` is a lowering admission rule. Landing them as one commit makes
   **distinct span-origin token must red**. ⛔ **The encoder must not derive seat
   3 from seat 0** — if it does, seat 3 is decoration and this discriminator is
   vacuous no matter what colour it reports.
+### Added by ruling `#15` — the recipes for `S8`/`D8`
+
+⛔⛔ **The one-line trap: `lower_dynamic_host_result_match` must select
+`CarrierWord` EVEN THOUGH ITS SCRUTINEE IS SPECIALIZED.** ⚠ Four selectors are
+forbidden and each looks reasonable — scrutinee phase · first-arm phase · case
+order · a runtime *"if any arm is carried"* test. ⇒ ⭐ **None declares the merge
+signature before arm emission, which is the entire property.**
+
+- **`AC-11` — the fixture is a MIXED join on a specialized scrutinee.** One arm
+  returns a declared-unit **carried** result, the sibling a supported
+  **specialized** one. ⭐ **Assert the plan reads `CarrierWord` before any arm is
+  emitted**, and ⭐ **swap the arm order and assert the plan and emitted
+  signature are unchanged.** ⛔ Order-independence is the discriminator; a
+  single-order test cannot see a first-arm selector.
+- **`AC-12` — two independent mutations, not one.** Re-produce the carried word
+  (it must pass **unchanged**) and bypass production for the specialized value
+  (it must cross **exactly once**). ⛔ Each must red **on its own**.
+- **`AC-13` — trap is a CFG property.** The trapping sibling seals and
+  contributes **no** merge predecessor; mutating it to jump to the merge reds on
+  the predecessor assertion. ⭐ Also pin the **all-trap** join: **no merge block
+  at all**.
+- **`AC-14` — the census is a compile-time obligation, not a doc.** Pin the
+  three families and the **4 / 10 / 1** direct-caller population. ⭐ **A new join
+  caller must be UNABLE TO COMPILE without supplying and consuming the typed
+  plan token** — ⛔ no catch-all legacy helper, no *"choose after lowering the
+  arms"* route left anywhere.
+- **`AC-15`** — an unsupported specialized→carrier materialization publishes
+  **no function and no partial `UnitBundle`**; it returns the producer's own
+  failure.
+- **`AC-16` — the governed causal route, end to end**, ⭐ **while every existing
+  `AC-1`–`AC-10` discriminator still reds when mutated.** ⚠ This is the one that
+  catches a `D8` that quietly weakens `D6` or `D7`.
+
+⚠ **`select_terminal_result_origins` may SEED the plan; it is not the closure.**
+⛔ Using that set alone rebuilds precisely the manually maintained reachability
+boundary `C1 §2h` rejects. ⭐ The plan is transitive, total, wildcard-free, and
+validated **before** lowering — and `construct: &'static str` stays a diagnostic
+label, ⛔ never an identity key.
+
 - ⛔ **The license is a closed list.** ⛔ Do not treat every `Carried` host
   operand as a scalar · do not reconstruct or fabricate `Lowered::ResourceToken`
   · do not add a `Lowered` variant containing a carrier · do not mint a new
