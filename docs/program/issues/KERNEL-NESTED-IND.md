@@ -11,6 +11,55 @@ github: null
 origin: Architect ruling evt_55k9f9efvd8jk, Decision dec_13af1mercv2m0 resolved. Demand-pulled by DS-9, which blocked at its first deliverable on `JsonArray (List Json)`; fork raised by the Steward as evt_1ykvpj7yvtg18. The five-point prerequisite contract below is the Architect's, transcribed verbatim in substance. Steward-filed; Steward owns the frame and AC/control placement.
 ---
 
+> ## ⛔⛔ `D1b`/`D2` GATE (2026-07-28) — THE POLARITY PRODUCER IS FAIL-OPEN
+>
+> ⛔ **Fail-open on three of the four positions the record claims to cover.**
+>
+> **Authority:** Architect ruling `evt_3edf99cq5mrka` and merge Decision
+> `dec_b1hj6th3363a` (resolved APPROVE), on the adversary finding
+> `evt_79m7a5y9d1b4g`. ⛔ **This is a gate on `D1b`, not a reminder.**
+>
+> > ⛔ **`D1b` MUST NOT open production nested admission until polarity
+> > derivation is FAIL-CLOSED over all four positions:** constructor
+> > **arguments**, constructor **target indices**, **inductive indices**, and
+> > **dependent parameter types.**
+>
+> **What is actually wrong on `main`.** `derive_parameter_polarities` scans only
+> `constructor.args`, while `derive_recursive_shape` admits a nested recursive
+> `Former` **only** on a recorded `StrictlyPositive`. ⇒ A negative occurrence in
+> any of the other three positions is **recorded positive**, and the adversary
+> demonstrated that target-index placement flips the permissive gate from
+> **reject** to **accept**. ⭐ `D1a` shipped the record; it did not ship coverage
+> of the positions the record claims to summarise.
+>
+> ### ⭐ WHY THIS IS NOT ALREADY A DEFECT — read this before re-deriving it
+>
+> ⚠ **The staged `D3b`+`D4` slice was audited against this finding and cleared**,
+> so a reader who sees only the gate above must not conclude the slice was never
+> examined. The clearance is narrow and rests on **two** facts, both of which
+> `D1b` destroys:
+>
+> 1. `D3b`+`D4` reaches the nested-`Former` controls **only** through the
+>    explicitly test-only `env.add_decl` fixture
+>    (`install_test_only_nested_family` and its polymorphic sibling), which is
+>    ⛔ **not a production admission route**; and
+> 2. the production-live primitive-`Sigma` path does **not** consult another
+>    former's parameter-polarity record.
+>
+> ⇒ **No declaration capable of connecting the malformed record to the new
+> semantic method/iota consumers is admissible.** ⭐ **`D1b` is precisely the
+> change that makes such a declaration admissible** — at that moment the same
+> false record becomes an **executable soundness boundary**, not a latent one.
+>
+> ⛔ **Do not read "`D3b`+`D4` is staging-safe" as "the polarity record is
+> sound."** The record is unsound now; it is merely unreachable. The semantic
+> consumers already exist — only the admission route is missing.
+>
+> ⚠ **A `D1b` implementer's first act is to establish coverage over all four
+> positions and a control that discriminates each**, before any admission
+> widening. A control that only exercises constructor arguments passes on the
+> landed producer and says nothing about the other three.
+
 > ## ⭐ `D1a` + `D3a` LANDED. Next is the ATOMIC `D3b`+`D4`.
 >
 > | slice | PR | landed | evidence |
