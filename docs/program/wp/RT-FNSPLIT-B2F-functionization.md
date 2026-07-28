@@ -48,12 +48,94 @@ previously stated at `0aa9e53f`, four merges back, and several had moved.
 >
 > ### ⚠ ONE GENUINELY OPEN QUESTION — and it does NOT block the build
 >
-> `#10`'s ledger entry left a live item: **whether `#9` and `#10` are one
-> predicate or two instances.** ⛔ That is the **Architect's** call to name —
-> `steward §5a-ii` forbids the Steward naming it, so it is not named here and it
-> is not named in the kickoff. ⭐ **It is a naming obligation on a closed stop,
-> not a precondition on this node.** ⇒ Build; if a stop is raised, it is
-> answered then.
+> ~~`#10`'s ledger entry left a live item: **whether `#9` and `#10` are one
+> predicate or two instances.**~~ ✅ **ANSWERED — the Architect named it**
+> (`evt_55bzwnhjpwjrs`): the predicate is **`executable-boundary closure`**, and
+> `#9`/`#10` are **two observations of it**, `#10` being `#9` recurring one
+> representation layer down. ⛔ **The ruling names the ALREADY-EXECUTED recut and
+> explicitly does not reopen `#9` or `#10`, add a prerequisite, reset the count,
+> or hold this build.** ⇒ No recut frame is owed; the count stays **11**. Durable
+> record: `docs/program/issues/RT-NATIVE-FNSPLIT.md`.
+
+---
+
+> ## ⛔⛔ FRAME CORRECTED 2026-07-28 AT THE RING'S BOUND BASE — FIVE CORRECTIONS
+> ## AND ONE NON-CORRECTION. Read this before you trust any anchor below.
+>
+> **Source:** `runtime-implementer`'s grounding (`evt_6q69zjx5fnr6j`,
+> `evt_j39jgesq7mfz`) and `runtime-leader`'s routing (`evt_39mwgr1jrp5x7`,
+> `evt_xh7q436j6r4v`), all re-derived on `origin/main = 6534e4a6` against frame
+> blob `aa798ca9`. ⛔ **This block is the operative state where it disagrees with
+> anything below.** Nothing here splits the atomic boundary or changes scope.
+>
+> ### ⭐ THE STANDING RULE THIS BLOCK INSTALLS — read it before the rows
+>
+> ⛔ **Every line number and count in this frame is a MEASUREMENT AT A NAMED SHA,
+> never an authority. Re-derive on your own base and yours wins.** This file's
+> anchors have now gone stale **four times** (`0aa9e53f` → `3891b7aa` →
+> `bd24422b` → `6534e4a6`), and ⭐ **each fix produced a fresher copy that then
+> rotted on the next merge.** ⇒ The numbers below are dated evidence that the
+> stale ones moved — ⛔ **they are not a new pin, and a future reader must not
+> treat them as one.** Where a deliverable needs a population, the **derivation
+> mechanism** is the pin and the number is its output.
+>
+> | # | the frame says | measured at `6534e4a6` | what actually changes |
+> |---|---|---|---|
+> | 1 | the seam `B2F` must close is `let _boundary_value_abi = …` at `core.rs:87`, result **discarded** | ⛔ **that line does not exist.** `core.rs:92` binds it **without** the underscore, consumed 9× at `:128–137` into `BoundaryCarrierRefs`, wired to `Lowering.boundary_carrier` at `:188` | ✅ `C1` **already made the handle live.** `B2F` inherits a live carrier instead of making one live. ⛔ **This subtracts the REACHABILITY seam ONLY — it does NOT discharge `AC-11`**, whose clause 1 wants a producer-tracing walk per `Parameter`/`Capture`/`Result`. ⛔ Do not cite the live handle as that proof |
+> | 2 | `lower_expr`: **59** calls, definition `core.rs:4333`, span `:188`–`:6743`, root `:188` | **61** calls, definition **`:5149`**, span **`:237`–`:7655`**, root **`:237`**; tokenizer `identifier_occurrences` now `control.rs:3698` | ⛔ **`D5`/`AC-5`'s ENUMERATED SITE LISTS ARE ALL DEAD** — the 8 caller-dependent, the 6 untraced, the 3 synthesized, `:4878`, `:4454`. ⭐ Re-derive the five-class taxonomy from scratch; ⛔ **do not port line numbers.** ⚠ The naive `self.lower_expr(` grep still returns **60** and still misses the root — the spelling-scoped defect is live at the new numbers |
+> | 3 | `D1`/`D2` **consume** `B2O`/`B2R` | ⛔ **the types are not reachable.** Every ABI type is `pub(super)` in `abi.rs` (`AbiCarrier:60 · AbiSlot:294 · AbiFrameHeader:319 · AbiDescriptor:354 · AbiPlane:368 · build_abi_plane:431`), as are `SemanticOwner` (`semantic_ir.rs:154`) and `PredeclaredFunction` (`:634`). The emitter is in a **different subtree** and none of `static_transition.rs`'s 11 `pub(in crate::cranelift_backend)` items is an ABI accessor | ⭐ **`D1`'s "consume, don't construct" subtraction is SMALLER than this frame claims:** the structure exists but is **unreachable**, and making it reachable is this node's work. ✅ Ruled **mechanical** (leader, `evt_2g2pyhz7jesg5`): **one narrow lowering-reachable projection**, ⛔ not wholesale type promotion, ⛔ no second derivation. ⚠ **`AC-1` is re-argued against the WIDENED surface**, not the current one — see the closure note below |
+> | 4 | `AC-2`'s five census rows are a subset of the 13-file `BACKEND_PRODUCTION_SOURCES` (`control.rs:3686`); add `abi.rs` | population is at **`control.rs:3749`**, and ⛔ **`boundary_value_clif.rs` — 8304 lines, live, emitting a Θ(1) helper population — is in NEITHER list** | ⛔ **`abi.rs` was not the only omission.** `AC-2` states the population and gives **every** excluded emitter an explicit row or a reasoned exclusion. ⭐ Still binding: an absent row and a `0/0/0` row read identically and **only one is a claim** |
+> | 5 | `D2`: *"`AbiPlane::shape` / `shapes` is the accessor"* | ⛔ **both are `#[cfg(test)]`** (`abi.rs:342`, `:388` — the file's only two `cfg(test)` items). **Production emission cannot call either** | ⛔ **`D2` cannot be built as written.** Production consumes `AbiDescriptor` + its declared slot run via the **`EmittableUnit`** projection (private fields, no constructor, sole producer `emittable_units()`) |
+> | 6 | `AC-3`: the four `D3` width invariants, each independently falsifiable | ⚠ every `AbiCarrier` variant is 8/8 bytes ⇒ a pairwise-carrier width check is non-discriminating | ✅ **NO AMENDMENT — `AC-3` ALREADY SAYS THIS**, in its own words: *"every `AbiCarrier` variant is currently 8/8, so a width assertion that compares carriers to each other passes on a mechanism that carries no layout information at all"*, and its subject is already **the emitted code's agreement with the declarations**. ⇒ ⭐ **The ring re-derived a hazard the frame had already pinned. Nothing changed here; read `AC-3` as written.** ⛔ A pairwise-carrier control still does not count |
+>
+> ### ⛔ WHY ROW 5 IS THE MOST EXPENSIVE ONE, AND IT IS NOT THE BIGGEST
+>
+> Rows 1, 2 and 4 are **stale anchors** — they misdirect, and the ring's own
+> re-derivation corrects them, which is exactly what happened. **Row 5 is a
+> different class: the frame named a `#[cfg(test)]` item as a production
+> accessor.** ⇒ ⭐ **A deliverable pinned to a test-only symbol is unbuildable,
+> not merely mis-anchored**, and no amount of careful re-measurement of *line
+> numbers* surfaces it — you find it only by asking whether the named item is
+> reachable from production at all. ⚠ Same family as this frame's own
+> reachability/visibility failure class, one layer in: row 3 is *"the type is not
+> visible here"*, row 5 is *"the accessor does not exist in a production build."*
+>
+> ### ✅ `AC-9`'s BASELINE — the RECIPE is the binding, not the run
+>
+> The implementer stated it would capture the `AC-9` baseline before any
+> production edit, then reasoned it through and did not (`evt_j39jgesq7mfz`).
+> ✅ **That is correct and it is recorded here so no reviewer demands a
+> timestamped capture.** `AC-9` asserts equality against **committed constants**,
+> and the recipe names `git worktree add --detach 6534e4a6` — a **pristine
+> detached tree**. ⇒ A capture's *timing is unobservable*, so timing cannot be
+> the evidence; the **SHA-anchored recipe** is what distinguishes a genuine
+> baseline from a re-recording.
+>
+> ⛔ **The pristine-detached-SHA clause is LOAD-BEARING — do not "simplify" the
+> recipe to run in the current worktree.** The moment the baseline is regenerated
+> in an edited tree, timing becomes observable again and `AC-9` becomes
+> unprovable. ⭐ The clause is the whole reason a post-edit capture is honest.
+>
+> ### ⚠ WHAT THE `S1` WIDENING DOES AND DOES NOT CLOSE — for `AC-1`'s re-argument
+>
+> The measured split (`evt_j39jgesq7mfz`): the **authority** stays `pub(super)`
+> (`AbiPlane`, `AbiDescriptor`, `AbiDescriptorShape`, `build_abi_plane`,
+> `AbiPlane::validate`, `AbiBoundarySignature`); the **inert layout data** and the
+> 5 closed vocabulary enums are promoted to `pub(in crate::cranelift_backend)`.
+> ⇒ The emitter can **read** a unit's declared layout; it cannot construct a
+> plane, mutate a descriptor, or reach the pre-emission validator to bypass it.
+> ⭐ `PredeclaredFunctionId`'s inner field stayed `pub(super)` — the emitter can
+> key and compare an id but ⛔ cannot mint one or do arithmetic on it.
+>
+> ⚠ **The stated residual, which is NOT discharged by `S1`:** `AbiSlot` /
+> `AbiFrameHeader` fields are now readable in `cranelift_backend`, so `lowering`
+> **can** spell a *local* `AbiSlot` literal — ⛔ Rust cannot forbid struct-literal
+> construction within a crate. What closes it is that a forged slot has **no route
+> into a unit** (`EmittableUnit` has private fields, no constructor, and a single
+> producer). ⇒ ⛔ **That closure is `AC-12`'s to control, and `S1` does not
+> establish it.** ⭐ Recorded as a residual rather than a pin because it is an
+> unenforced-by-the-compiler property; ⛔ do not read the `EmittableUnit`
+> argument as a discharged control.
 
 ## ✅ THE #9 HOLD IS DISCHARGED — the re-slice landed. ⛔ ~~BUT #10 IS NOW OPEN~~
 
@@ -193,9 +275,13 @@ or how often* a body is emitted, and it says so in-source at
 > re-lowers the resolved term in its own whole configuration — that is
 > symptom-inventory entry 2, and it stays open for `RT-FNSPLIT-B2F`.
 
-**Measured on `0aa9e53f`:** `core.rs` holds **59** production calls into
+⚠ **STALE ANCHORS — re-measured at `6534e4a6`: 61 calls, definition `:5149`,
+root `:237`, span `:237`–`:7655`. Correction **2** at the top governs; re-derive
+on your own base.**
+
+~~**Measured on `0aa9e53f`:** `core.rs` holds **59** production calls into
 `lower_expr`, spanning **`:188`** to `:6743`. There is **one** definition, at
-`:4333`.
+`:4333`.~~
 
 > ⛔ **CORRECTED 2026-07-25 — THE FRAME'S OWN COUNT WAS SPELLING-SCOPED
 > (Steward defect, `runtime-implementer` at `evt_79xg7hvfktp3a`).** This read
@@ -736,7 +822,11 @@ already a planner error at `semantic_ir.rs:1006`. ⛔ **The two shared exits
 **D2 — emit against `B2R`'s activation frame; do not redesign it.** Every
 dynamic environment/control/store value crosses into a target function through
 the **declared** `AbiFrameHeader` + `AbiSlot` layout for that unit, never
-through capture-by-construction. `AbiPlane::shape` / `shapes` is the accessor.
+through capture-by-construction. ~~`AbiPlane::shape` / `shapes` is the
+accessor.~~ ⛔ **FALSE — both are `#[cfg(test)]` (`abi.rs:342`, `:388`); production
+cannot call either.** Consume `AbiDescriptor` + its declared slot run via the
+**`EmittableUnit`** projection — correction **5** in the frame-corrected block at
+the top of this file.
 
 ⚠ **"Fixed frame" does not mean equal byte size across origins** — `B2R` states
 this explicitly, and reading it as one universal layout is the error that would
@@ -797,14 +887,19 @@ same-owner ordinary edge is **local traversal**; a function edge to a
 > and never could.** When a claim moves between nodes, the part that survives is
 > the part the source node was structurally unable to verify.
 
-**D5 — switch-over of EVERY live consumer.** All **59** production calls into
-`lower_expr` (`core.rs`, **`:188`**–`:6743`) are accounted for, **including the
-root call at `:188`.** ⛔ A count that does not reach 59 is an incomplete
-switch-over, not a partial success — enumerate, do not sample. ⛔ **Derive the
-population with a TOKENIZED census (`identifier_occurrences`,
-`control.rs:3635`), never `grep 'self.lower_expr('`** — that spelling misses the
-root, which is the one site that must become the call into the root target
-function.
+**D5 — switch-over of EVERY live consumer.** ⛔ **DERIVE THE POPULATION ON YOUR
+OWN BASE; the numbers here are dated.** At `6534e4a6` it is **61** calls into
+`lower_expr` (`core.rs:237`–`:7655`, definition `:5149`), root at **`:237`** —
+⛔ ~~59, `:188`–`:6743`, root `:188`~~ (correction **2** at the top). **Every
+call is accounted for, including the root**, which is the one site that must
+become the call into the root target function. ⛔ A census short of the
+**re-derived** count is an incomplete switch-over, not a partial success —
+enumerate, do not sample, and ⛔ **do not port the enumerated site lists below;
+they were taken at `bd24422b` and every line number in them has moved.**
+⛔ **Derive the population with a TOKENIZED census (`identifier_occurrences`,
+⛔ now `control.rs:3698`), never `grep 'self.lower_expr('`** — that spelling
+misses the root. ⚠ At `6534e4a6` the naive grep still returns **60** and still
+misses the root, so the spelling-scoped defect is live at the new numbers too.
 
 > ⚠ **Re-measured at `bd24422b`, and every number in this deliverable held:**
 > one definition at `core.rs:4333`, **59** calls spanning `:188`–`:6743`, the
@@ -929,10 +1024,13 @@ pin still reddens on an unplanned declaration or definition.
 
 ⛔ **AND it must say which files it covers and why.** Its five rows are a
 hand-listed subset of the **13**-file `BACKEND_PRODUCTION_SOURCES`
-(`control.rs:3686`); `B2R`'s `abi.rs` is in the second and not the first. Add
-the missing production file(s) as explicit `0/0/0` rows **or** record the
-exclusion with its reason in-source. ⛔ **Silence is not an answer here** — an
-absent row and a zero row read identically and only one of them is a claim.
+(⛔ now `control.rs:3749`); `B2R`'s `abi.rs` is in the second and not the first.
+⛔ **AND `abi.rs` IS NOT THE ONLY OMISSION** — live `boundary_value_clif.rs`
+(8304 lines, emitting a Θ(1) helper population) is in **neither** list
+(correction **4**). Add every missing production file as an explicit `0/0/0` row
+**or** record the exclusion with its reason in-source. ⛔ **Silence is not an
+answer here** — an absent row and a zero row read identically and only one of
+them is a claim.
 
 **AC-3 — the four D3 width invariants**, each independently falsifiable (old
 `AC-3`). Each gets its own assertion and its own positive control; a single
@@ -1063,10 +1161,16 @@ it.
 > ⇒ *"There is no executable word representation"* is now **false**. The
 > representation exists and is emitted.
 >
-> ### ⭐ THE EXACT SEAM `B2F` MUST CLOSE — one line, and it is deliberate
+> ### ⛔ ~~THE EXACT SEAM `B2F` MUST CLOSE~~ — CLOSED BY `C1`. See correction **1**.
+>
+> ⛔ **The line below does not exist at `6534e4a6`.** `core.rs:92` binds the
+> handle **without** the underscore and it is consumed 9× at `:128–137` into
+> `BoundaryCarrierRefs`, wired to `Lowering.boundary_carrier` at `:188`. ⇒ `C1`
+> already made it live; `B2F` inherits a live carrier. ⚠ **This subtracts the
+> reachability seam ONLY — `AC-11`'s producer-tracing walk is untouched.**
 >
 > ```rust
-> // crates/ken-runtime/src/cranelift_backend/lowering/core.rs:87
+> // ⛔ STALE — as it read at bd24422b, core.rs:87
 > let _boundary_value_abi = crate::boundary_value_clif::emit_boundary_value_local_graph(
 > ```
 >
