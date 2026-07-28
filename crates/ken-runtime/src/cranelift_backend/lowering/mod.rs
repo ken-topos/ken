@@ -49,7 +49,7 @@ pub(in crate::cranelift_backend) use cranelift_codegen::verify_function;
 pub(in crate::cranelift_backend) use cranelift_frontend::{
     FunctionBuilder, FunctionBuilderContext,
 };
-pub(in crate::cranelift_backend) use cranelift_module::{Linkage, Module};
+pub(in crate::cranelift_backend) use cranelift_module::{FuncId, Linkage, Module};
 
 // --- crate root ------------------------------------------------------------
 pub(in crate::cranelift_backend) use crate::{
@@ -406,6 +406,97 @@ impl OwnedSourceOccurrence {
 /// entity scoping, not a measurement. ⚠ What *is* structural is that a second
 /// function cannot silently inherit this state without a visible second
 /// construction of this struct.
+/// **`RT-FNSPLIT-B2F` `S6`** — the module-level identities every generated
+/// function must resolve for itself, and the sole producer of a
+/// [`FunctionLocalRefs`].
+///
+/// ⭐ **This is the OTHER side of the construction boundary, and naming it is
+/// what makes the boundary checkable.** [`FunctionLocalRefs`] says what is *not*
+/// portable; this says what *is*. A `FuncId` and a `DataId` are module-scoped:
+/// they mean the same thing in every function of the artifact, and
+/// [`Self::declare_in_func`] is the one operation that turns them into the
+/// function-scoped handles a body can actually reference.
+///
+/// ⛔ **There is deliberately no way to build a `FunctionLocalRefs` in
+/// production except through [`Self::declare_in_func`].** The root and every
+/// future unit body therefore cannot drift: a helper added here is resolved into
+/// *every* generated function or into none, and *"the root has a carrier ref and
+/// the unit does not"* stops being expressible by forgetting to copy a line.
+/// ⚠ The `#[cfg(test)]` fixtures build the struct directly and are the stated
+/// exception; they emit into no module and hold `None` throughout.
+///
+/// **MEASURED:** every resolved-handle field of `FunctionLocalRefs` is produced
+/// by one function, from module-scoped identities held here.
+/// **CLAIMED:** any second generated function emits against the same helper
+/// surface the root does.
+/// **THE GAP:** ⛔ **there is no second generated function yet** — `S6`'s
+/// switch-over is not landed, so today this has exactly one caller and the claim
+/// is about a population of one. ⚠ It is *not* claimed that this suffices for a
+/// unit body: the two `ir::Value` fields are **not** resolvable from here,
+/// because they are results of a function's own dataflow rather than identities,
+/// and `declare_in_func` leaves them `None` for each caller to derive. ⭐ That
+/// gap is measured, not assumed — see
+/// `docs/program/rt-fnsplit-b2f-s6-switchover-measurement.md`.
+#[derive(Clone, Copy)]
+struct ArtifactHelpers<'h> {
+    seed_material: &'h seed_material::SeedMaterial,
+    host_dispatch: Option<FuncId>,
+    native_int: &'h crate::native_int_clif::NativeIntLocalFuncs,
+    boundary_value_abi: &'h crate::boundary_value_clif::BoundaryLocalFuncs,
+}
+
+impl ArtifactHelpers<'_> {
+    /// Resolve every module-level identity into `func`.
+    ///
+    /// ⛔ **Call this once per `Function`, and never reuse the result.** The
+    /// returned handles are function-scoped; see [`FunctionLocalRefs`] for what
+    /// each of the three kinds does when it crosses a function boundary.
+    fn declare_in_func<M: Module>(self, module: &mut M, func: &mut Function) -> FunctionLocalRefs {
+        FunctionLocalRefs {
+            seed_material: self.seed_material.declare_in_func(module, func),
+            host_dispatch: self
+                .host_dispatch
+                .map(|id| module.declare_func_in_func(id, func)),
+            // ⛔ Dataflow results, not identities: `None` here is correct, and
+            // each function derives its own from its entry block.
+            invocation_pointer: None,
+            native_int_arena: None,
+            native_int_binop: Some(module.declare_func_in_func(self.native_int.binop, func)),
+            native_int_compare: Some(module.declare_func_in_func(self.native_int.compare, func)),
+            native_int_intern: Some(module.declare_func_in_func(self.native_int.intern, func)),
+            native_int_narrow: Some(module.declare_func_in_func(self.native_int.narrow, func)),
+            native_int_export: Some(module.declare_func_in_func(self.native_int.export, func)),
+            // ⛔ Empty, never inherited. This is the map whose `ir::Value` keys
+            // alias across functions; starting it empty per function is why the
+            // two structs are separate types rather than one with a `reset()`.
+            native_int_tags: BTreeMap::new(),
+            boundary_carrier: Some(BoundaryCarrierRefs {
+                class: module.declare_func_in_func(self.boundary_value_abi.class, func),
+                tag: module.declare_func_in_func(self.boundary_value_abi.tag, func),
+                field_count: module.declare_func_in_func(self.boundary_value_abi.field_count, func),
+                field: module.declare_func_in_func(self.boundary_value_abi.field, func),
+                record_field: module
+                    .declare_func_in_func(self.boundary_value_abi.record_field, func),
+                #[cfg(test)]
+                scalar: module.declare_func_in_func(self.boundary_value_abi.scalar, func),
+                host_success: module
+                    .declare_func_in_func(self.boundary_value_abi.host_success, func),
+                host_payload: module
+                    .declare_func_in_func(self.boundary_value_abi.host_payload, func),
+                alloc: module.declare_func_in_func(self.boundary_value_abi.alloc, func),
+                store_tag_id: module
+                    .declare_func_in_func(self.boundary_value_abi.store_tag_id, func),
+                store_scalar: module
+                    .declare_func_in_func(self.boundary_value_abi.store_scalar, func),
+                store_field: module.declare_func_in_func(self.boundary_value_abi.store_field, func),
+                store_name: module.declare_func_in_func(self.boundary_value_abi.store_name, func),
+                make_immediate: module
+                    .declare_func_in_func(self.boundary_value_abi.make_immediate, func),
+            }),
+        }
+    }
+}
+
 struct FunctionLocalRefs {
     /// **`RT-FNSPLIT-B2F` `D3`** — the artifact-static seed material, resolved
     /// into this generated function.

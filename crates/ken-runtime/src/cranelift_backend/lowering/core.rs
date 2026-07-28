@@ -186,41 +186,23 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     let seed_material = super::seed_material::mint_seed_material(&mut module, seed_env)?;
     let mut ctx = module.make_context();
     ctx.func = Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), sig);
-    let host_dispatch = host_dispatch.map(|id| module.declare_func_in_func(id, &mut ctx.func));
-    let int_binop = module.declare_func_in_func(native_int.binop, &mut ctx.func);
-    let int_compare = module.declare_func_in_func(native_int.compare, &mut ctx.func);
-    let int_intern = module.declare_func_in_func(native_int.intern, &mut ctx.func);
-    let int_narrow = module.declare_func_in_func(native_int.narrow, &mut ctx.func);
-    let int_export = module.declare_func_in_func(native_int.export, &mut ctx.func);
-    // `RT-FNSPLIT-C1` `D3` — the carrier helpers become **callable refs inside
-    // this generated function**, exactly as the native-int helpers above do.
-    let boundary_carrier = BoundaryCarrierRefs {
-        class: module.declare_func_in_func(boundary_value_abi.class, &mut ctx.func),
-        tag: module.declare_func_in_func(boundary_value_abi.tag, &mut ctx.func),
-        field_count: module.declare_func_in_func(boundary_value_abi.field_count, &mut ctx.func),
-        field: module.declare_func_in_func(boundary_value_abi.field, &mut ctx.func),
-        record_field: module.declare_func_in_func(boundary_value_abi.record_field, &mut ctx.func),
-        #[cfg(test)]
-        scalar: module.declare_func_in_func(boundary_value_abi.scalar, &mut ctx.func),
-        host_success: module
-            .declare_func_in_func(boundary_value_abi.host_success, &mut ctx.func),
-        host_payload: module
-            .declare_func_in_func(boundary_value_abi.host_payload, &mut ctx.func),
-        alloc: module.declare_func_in_func(boundary_value_abi.alloc, &mut ctx.func),
-        store_tag_id: module.declare_func_in_func(boundary_value_abi.store_tag_id, &mut ctx.func),
-        store_scalar: module
-            .declare_func_in_func(boundary_value_abi.store_scalar, &mut ctx.func),
-        store_field: module.declare_func_in_func(boundary_value_abi.store_field, &mut ctx.func),
-        store_name: module.declare_func_in_func(boundary_value_abi.store_name, &mut ctx.func),
-        make_immediate: module
-            .declare_func_in_func(boundary_value_abi.make_immediate, &mut ctx.func),
+    // ⭐ `RT-FNSPLIT-B2F` `S6` — the module-level identities, gathered under one
+    // name so the root and every future unit body resolve them through **one**
+    // operation. What stood here was twenty inline `declare_*_in_func` calls;
+    // the point of the move is that a helper cannot be present in the root's
+    // function and absent from a unit's by someone forgetting to copy a line.
+    //
+    // ⚠ `seed_material` is `D3`'s minted artifact-static material: a `DataId` is
+    // a module-level identity and cannot be addressed from inside a body, so it
+    // is resolved into this `Function` exactly as the native-int and
+    // boundary-carrier helpers are.
+    let helpers = ArtifactHelpers {
+        seed_material: &seed_material,
+        host_dispatch,
+        native_int: &native_int,
+        boundary_value_abi: &boundary_value_abi,
     };
-
-    // `D3` — resolve every minted object into THIS generated function. A
-    // `DataId` is a module-level identity and cannot be addressed from inside a
-    // body; this is that identity resolved into one `Function`, exactly as the
-    // native-int and boundary-carrier helpers above are.
-    let seed_material_refs = seed_material.declare_in_func(&mut module, &mut ctx.func);
+    let root_function_local = helpers.declare_in_func(&mut module, &mut ctx.func);
     let mut func_ctx = FunctionBuilderContext::new();
     let mut compiler = Lowering {
         seed_env,
@@ -262,19 +244,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         native_int_mutation: NATIVE_INT_LOWERING_MUTATION.with(std::cell::Cell::get),
         #[cfg(test)]
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
-        function_local: FunctionLocalRefs {
-            seed_material: seed_material_refs,
-            host_dispatch,
-            invocation_pointer: None,
-            native_int_arena: None,
-            native_int_binop: Some(int_binop),
-            native_int_compare: Some(int_compare),
-            native_int_intern: Some(int_intern),
-            native_int_narrow: Some(int_narrow),
-            native_int_export: Some(int_export),
-            native_int_tags: BTreeMap::new(),
-            boundary_carrier: Some(boundary_carrier),
-        },
+        function_local: root_function_local,
     };
     let (maybe_trap, decoder) = {
         let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);

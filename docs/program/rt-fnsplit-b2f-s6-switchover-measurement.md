@@ -1,0 +1,201 @@
+# `RT-FNSPLIT-B2F` `S6` — the switch-over, built and measured
+
+**Author:** `runtime-implementer` · **Base:** `wp/RT-FNSPLIT-B2F-functionization-live`
+at `fc32e15d` · **Suite at that base:** `ken-runtime` 498 + 26 + 14, zero failures.
+
+⛔ **This records an experiment that is NOT on the branch.** The switch-over was
+built, run, classified, and then removed; what landed is only the part that is
+sound and consumed today (`ArtifactHelpers`). ⭐ **The reason to write this down
+is that the experiment's result is the deliverable** — it converts *"S6 is next"*
+into a measured statement about what S6 is blocked on, and by how much.
+
+## What was built
+
+`define_unit_body` constructing its **own** `Lowering` state over its **own**
+`Function`, exactly as scoped:
+
+- `plan_unit_emissions` projects `emittable_units()` into owned per-unit
+  requests, which releases the plan's borrow of `Lowering` so the emission loop
+  can take `&mut compiler`. ⚠ A projection, not a second table: every field is
+  read off one `EmittableUnit`, and the `AbiSlot` run itself is not copied.
+- `ArtifactHelpers::declare_in_func` re-resolves every module-level identity into
+  the unit's `Function`; the result is swapped into `compiler.function_local` for
+  the duration of the body and swapped back after.
+- The body's de Bruijn environment is built **solely** from the unit's declared
+  `Parameter` and `Capture` slots, loaded at `B2R`'s offsets as `Carried`
+  boundary words, in the slot run's own order. ⛔ The caller's environment is
+  **not** appended — that omission *is* the switch-over.
+- The body is resolved through `retained_body_occurrence(unit.origin())`, the
+  backend's sole `origin -> expression` route, so `AC-4`'s route count stays 1.
+- The result crosses through `transfer_into_carrier` and is written to the
+  declared `Result` slot and returned.
+
+Nothing called the units: the root still lowered the whole tree inline. So this
+measured **whether a unit body can be emitted standalone at all**, which is the
+first question S6 has to answer and the cheapest one to get wrong by argument.
+
+## Measurement 1 — one call parameter
+
+`ken-runtime --lib`: **397 passed, 101 failed.**
+
+| n | class |
+|---|---|
+| 50 | `"…has no invocation arena"` — `PrimitiveCall`, `BoundaryCarrier`, `RuntimeValue::Int` |
+| 23 | `"process effect lowering owns an invocation pointer"` |
+| 5 | `Var: no runtime binding for index N` |
+| 7 | `PlannerInvariant("static origin has no atom of that kind at that occurrence")` |
+| 4 | `Trap: protocol machinery is never a source value at a boundary` |
+| 2 | pre-existing source-text pins reacting to a visibility widening |
+| 11 | unclassified at this pass |
+
+⭐ **78 of 101 were one cause.** `unit_signature` declared `fn(frame_ptr) -> i64`.
+The int arena and the process invocation pointer are **dataflow results, not
+identities** — `FunctionLocalRefs`' two `ir::Value` fields — so a unit handed no
+invocation pointer cannot derive them, and every exact-`Int` operation, every
+boundary-carrier allocation and every process effect fails closed.
+
+## The fix that was in scope, and why it was not an escalation
+
+A **second fixed parameter** carrying the invocation context.
+
+⛔ **This does not widen `B2R`'s frame contract**, which is why it did not need a
+ruling: `AbiSlotKind`, `AbiCarrier`, `CONVENTION_SLOTS` and every declared width
+are untouched. The invocation pointer is **host activation context, not a Ken
+value crossing a boundary** — routing it through a frame slot would subject it to
+the transfer-admissibility rules (`AC-11`) that it must *not* be subject to.
+
+⚠ And the guarantee `unit_signature`'s own doc protects is intact: the signature
+still takes **no program-derived parameter**. Both parameters are fixed for every
+unit in every artifact, so making a unit's signature vary with the program still
+requires a visible change at that one site.
+
+## Measurement 2 — two call parameters
+
+`ken-runtime --lib`: **404 passed, 94 failed.** Both invocation classes are gone.
+The residue re-classifies onto a single dominant cause:
+
+| n | class | owner |
+|---|---|---|
+| **69** | **the boundary-carrier producer is incomplete** | ⛔ `RT-FNSPLIT-C1` |
+| 9 | `Var: no runtime binding` — free variable / ambient env | `B2R` + `S7` |
+| 7 | double consumption of per-occurrence records | ⭐ `S7` |
+| 2 | source-text pins vs the visibility widening | maintenance |
+| 7 | unclassified | — |
+
+## ⛔⛔ Finding 1 — `S6` is blocked on `C1`, and the blocker says so itself
+
+**73% of the residue is one gap, and it is named in its own error text:**
+
+> `the carrier producer does not yet emit a spillable immediate: its disposition
+> carries `spill: Some(_)`, which needs a runtime magnitude test and a two-way
+> branch, not a single `make_immediate``
+
+> `the carrier producer does not yet emit a byte-bodied handle: the content needs
+> the `store_bytes_len` / `store_byte` sequence, which is a distinct claim-then-fill
+> protocol`
+
+Classes with no producer today: `Int`-with-spill, `Bytes`, `ProcessExitStatus`,
+`HostResult`, `Trap`.
+
+⭐ **Why functionization is what exposes this, when the inliner never did.** Under
+the inliner a closure body's result never crosses anything — it stays a
+compile-time `Lowered` in the caller's own dataflow. A **unit's** result crosses a
+function boundary, so it must be produced into a carrier. ⇒ `S6` converts every
+result of every unit into a boundary transfer, and the producer's coverage stops
+being a `C1`-internal completeness question and becomes `B2F`'s critical path.
+
+⛔ **This is not a `B2F` implementation choice to route around.** `§2h` ¶4 makes
+`boundary_disposition` the **sole** authority for how a value is represented. A
+short cut — *"a single-word `Lowered` may return its own word without a
+carrier"* — would be a second representation authority deciding the same
+question, which is exactly the defect this program has spent nodes removing.
+
+### ⚠ The one fork worth naming before anyone budgets `C1` work
+
+`AbiCarrier::ResultWord` is documented only as *"the activation's single result
+word."* It is **not** stated to be a boundary carrier. So there are two readings,
+and they differ by ~69 tests:
+
+- **(i) a unit result is a boundary transfer** — what was built. Blocks on `C1`'s
+  producer for five value classes.
+- **(ii) a unit result is a `ResultWord`** whose interpretation is static, because
+  caller and callee are generated from the same static plan and the caller
+  already knows statically what the callee returns.
+
+⛔ **I did not choose (ii)**, because choosing it *is* deciding a representation
+question, and that authority is `§2h` ¶4's. ⇒ Routed as a fork, not resolved.
+
+## ⭐ Finding 2 — `S6` and `S7` are ONE edit. Measured, not forecast
+
+The 7 `PlannerInvariant("static origin has no atom of that kind at that
+occurrence")` failures are the decisive ones. The plan's per-occurrence atom
+records are **single-consumption**. Emitting a body as a unit *while the root
+still inlines that same body* consumes each record twice, and the second consumer
+finds it gone.
+
+⇒ **The root's recursive descent cannot survive alongside real unit bodies**, so
+`D6`'s removal is not a follow-on to the switch-over — it is the same edit. The
+forecast in the last handoff (*"`D6`'s removal may fall out of `S6`'s prerequisite
+rather than follow it"*) is now measured, and it fell that way.
+
+⛔ **Which triggers the work order's carry-over 4 unconditionally:** `AC-6`'s
+removal pin and `AC-11` clause 3's invariant must both be in place **before** the
+combined edit lands. ⚠ A pin authored after a removal cannot witness it, and the
+tests a ban reddens on introduction never contain its witness — they exercise the
+success path.
+
+## Finding 3 — the ambient process environment has no declared carrier
+
+9 `Var: no runtime binding for index N`. In process mode the root seeds its
+environment with two entries before any body binding — the borrowed process input
+and the capability token — and `B2R` declares **no slot for either**. A body that
+reaches them resolves them today through the caller's appended environment, which
+a unit does not have.
+
+⚠ Stated as a partition, not an example: this class also contains genuinely free
+variables reaching past a unit's declared slots for reasons unrelated to process
+mode. ⛔ **It is not claimed that the process-ambient pair is the whole class** —
+it is the part that was traced.
+
+## Finding 4 — the `EmittableUnit::origin` dead-code oracle is now spent
+
+Consuming `origin()` cleared its `dead_code` warning, exactly as the work order
+predicted. ⭐ That warning could witness *"nobody consumes this"*; it can never
+witness *"exactly one route consumes it."* ⇒ When the switch-over is re-applied,
+`AC-4`'s route-count-stays-1 needs a real pin **in that same commit**.
+
+⚠ The existing `exactly_one_plan_origin_to_expression_lookup_exists` does not
+cover it: it constrains the identifier `source_occurrence` in one file and says
+nothing about who may call `retained_body_occurrence` — whose visibility the
+switch-over widened from private-to-`core` to all of `lowering`.
+
+**The replacement designed but not yet built** (behavioural, not source-text): a
+`#[cfg(test)]` differential between resolutions performed by
+`StaticTransitionPlan::source_occurrence` and invocations of
+`retained_body_occurrence` across one compile. Equal and non-zero ⇒ every
+resolution went through the single route. Its positive control is that the
+counters must both move on the fixture, and its compile-preserving evasion is the
+mutation *"route the unit body through `plan.source_occurrence` directly"*, which
+must make them diverge.
+
+## What landed on the branch, and what did not
+
+**Landed:** `ArtifactHelpers` + `declare_in_func`, replacing twenty inline
+`declare_*_in_func` calls at the root with one operation. It has exactly one
+caller today, and the doc comment says so rather than implying a population.
+
+**Not landed:** everything else above. ⛔ The suite is green at 498 + 26 + 14 on
+purpose — a red baseline makes every subsequent mutation experiment
+uninterpretable in both directions, and the remaining `S6` work is mutation-heavy.
+
+## Reproduction
+
+From the seat's own worktree, against this document's base:
+
+```
+scripts/ken-cargo test -p ken-runtime --lib
+```
+
+⚠ The experimental patch is **not** in the tree. Re-deriving it means rebuilding
+the four pieces listed under *What was built*; the counts above are only
+comparable against a base whose own run is 498 + 26 + 14 green.
