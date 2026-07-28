@@ -89,6 +89,9 @@ pub struct BoundaryActivationV1 {
     published_boundary_base: *mut u64,
     /// The base [`BoundaryValueStore::publish_persistent`] returned.
     published_persistent_base: *mut u64,
+    /// The Rust-owned generated-root frame, once bound. ⛔ Boxed: generated
+    /// code receives its address.
+    frame: Option<Box<KenNativeInvocationV1>>,
     finished: bool,
 }
 
@@ -178,6 +181,7 @@ impl BoundaryActivationV1 {
             services,
             published_boundary_base,
             published_persistent_base,
+            frame: None,
             finished: false,
         }
     }
@@ -339,6 +343,72 @@ impl BoundaryActivationV1 {
     pub fn is_finished(&self) -> bool {
         self.finished
     }
+
+    /// **Bind this activation's process ingress and hand back the `frame_ptr`
+    /// generated code receives as its FIRST parameter.**
+    ///
+    /// ⭐⭐ **`D7`: `KenNativeInvocationV1` is the seam that has to stop
+    /// carrying an arena pointer C owns.** Today the generated C stub declares
+    /// that struct itself, constructs a `KenNativeIntArenaV1` on its own stack,
+    /// and stores its address in the fourth field. ⇒ The arena is C-owned, the
+    /// layout is duplicated, and `§4` bans both. Here the record is **Rust
+    /// owned**, its arena field is **this activation's** native arena, and C
+    /// never learns the layout — it receives an opaque pointer to pass through.
+    ///
+    /// ⛔ Boxed, for the same address-stability reason as the other owned
+    /// objects: generated code receives this pointer.
+    ///
+    /// ⛔ `None` once finished or before publication, exactly as
+    /// [`Self::services_ptr`] — a caller must not be able to obtain half of a
+    /// withdrawn pair.
+    pub fn bind_process_frame(
+        &mut self,
+        process_input: *const c_void,
+        host_context: *mut c_void,
+        capability: u64,
+    ) -> Option<*const c_void> {
+        if self.finished || !self.is_published() {
+            return None;
+        }
+        let frame = Box::new(KenNativeInvocationV1 {
+            process_input,
+            host_context,
+            capability,
+            native_int_arena: self.services.native_int_arena,
+        });
+        let pointer = (&*frame as *const KenNativeInvocationV1).cast::<c_void>();
+        self.frame = Some(frame);
+        Some(pointer)
+    }
+
+    /// The `frame_ptr` previously bound, if any.
+    pub fn frame_ptr(&self) -> Option<*const c_void> {
+        if self.finished || !self.is_published() {
+            return None;
+        }
+        self.frame
+            .as_ref()
+            .map(|frame| (&**frame as *const KenNativeInvocationV1).cast::<c_void>())
+    }
+}
+
+/// **The generated root's first parameter, owned by Rust.**
+///
+/// ⛔ Layout-identical to the `struct KenNativeInvocationV1` the generated C
+/// stub declares today — and that duplicate is what `D7` removes. ⭐ Keeping the
+/// declaration here, beside the activation that owns every field it points at,
+/// is the "subsume, do not repeat" the ruling asks for: there is one declaration
+/// and it lives with the owner.
+#[repr(C)]
+pub struct KenNativeInvocationV1 {
+    /// The borrowed process-input value the launcher built.
+    pub process_input: *const c_void,
+    /// The host effect context from `ken_host_invocation_v1_init`.
+    pub host_context: *mut c_void,
+    /// The capability token that init issued.
+    pub capability: u64,
+    /// ⭐ **This activation's** native-`Int` arena — ⛔ never one C constructed.
+    pub native_int_arena: *mut u64,
 }
 
 /// One word of a published region header.
@@ -575,6 +645,57 @@ mod tests {
             }
         }
         assert_eq!(seen.len(), 8);
+    }
+
+    /// ⭐⭐ **`D7` — the generated root's frame carries THIS activation's
+    /// native arena, and no C-constructed one.**
+    ///
+    /// **MEASURED:** the fourth field of the Rust-owned invocation record is the
+    /// same pointer the services record carries and the same allocation the
+    /// activation owns; two activations get two frames pointing at two arenas;
+    /// and the frame is withdrawn together with the services pointer.
+    /// **CLAIMED:** removing the C stub's own `KenNativeIntArenaV1` and its
+    /// stack construction loses nothing generated code needs.
+    /// **THE GAP:** ⛔ that the stub actually stops declaring them. That is a
+    /// build/link fact and it is `S4b`'s, together with `AC-5`.
+    #[test]
+    fn the_generated_frame_carries_this_activations_arena_not_a_c_constructed_one() {
+        let mut store = BoundaryValueStore::new();
+        let binding = BoundaryStoreBindingV1::open(&mut store, distinct_profile());
+        let mut first = BoundaryActivationV1::begin(&binding);
+        let mut second = BoundaryActivationV1::begin(&binding);
+
+        let a = first
+            .bind_process_frame(std::ptr::null(), std::ptr::null_mut(), 7)
+            .expect("a published, unfinished activation binds a frame");
+        let b = second
+            .bind_process_frame(std::ptr::null(), std::ptr::null_mut(), 9)
+            .expect("and so does the second");
+        assert_ne!(a, b, "two activations share one generated-root frame");
+
+        // The frame's arena field is this activation's arena — checked against
+        // the OWNED allocation, not only against the services record.
+        let frame = unsafe { &*(a as *const KenNativeInvocationV1) };
+        assert_eq!(frame.native_int_arena, first.native_int_arena_ptr());
+        assert_eq!(
+            frame.native_int_arena as usize,
+            first.owned_native_arena_address()
+        );
+        assert_eq!(frame.capability, 7);
+        let other = unsafe { &*(b as *const KenNativeInvocationV1) };
+        assert_ne!(
+            frame.native_int_arena, other.native_int_arena,
+            "two frames point at ONE arena, so the activations alias storage"
+        );
+
+        // Withdrawn together with the services pointer: a caller must not be
+        // able to obtain half of a withdrawn pair.
+        assert!(first.frame_ptr().is_some());
+        first
+            .finish(&mut store, None)
+            .expect("finishing with nothing escaping cannot fail");
+        assert!(first.frame_ptr().is_none());
+        assert!(first.services_ptr().is_none());
     }
 
     /// ⛔ **`AC-3`(b) — the services pointer is withdrawn once the activation is

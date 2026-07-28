@@ -217,6 +217,48 @@ pub unsafe extern "C" fn ken_activation_v1_services(
     }
 }
 
+/// **Bind process ingress and hand back the `frame_ptr` generated code takes as
+/// its FIRST parameter.**
+///
+/// ⭐ `§3d`: the adapter obtains the root frame view **from the Rust owner**. ⇒
+/// The generated C stub stops declaring `struct KenNativeInvocationV1`, stops
+/// declaring `struct KenNativeIntArenaV1`, and stops constructing an arena on
+/// its own stack — it passes `process_input`, `host_context` and `capability`
+/// in and receives one opaque pointer back.
+///
+/// ⛔ `KEN_ACTIVATION_ERR_FINISHED` when the activation is finished or was never
+/// published — the frame and the services pointer are withdrawn **together**, so
+/// a caller cannot obtain half of a withdrawn pair.
+///
+/// # Safety
+///
+/// `activation` must be a live handle and `out_frame` a writable slot.
+/// `process_input` and `host_context` are passed through unmodified and are the
+/// caller's to keep alive across generated execution.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ken_activation_v1_bind_process_frame(
+    activation: *mut KenActivationV1,
+    process_input: *const c_void,
+    host_context: *mut c_void,
+    capability: u64,
+    out_frame: *mut *const c_void,
+) -> i64 {
+    if activation.is_null() || out_frame.is_null() {
+        return KEN_ACTIVATION_ERR_NULL;
+    }
+    let activation = unsafe { &mut *activation };
+    match activation
+        .activation
+        .bind_process_frame(process_input, host_context, capability)
+    {
+        Some(frame) => {
+            unsafe { *out_frame = frame };
+            KEN_ACTIVATION_OK
+        }
+        None => KEN_ACTIVATION_ERR_FINISHED,
+    }
+}
+
 /// Seal the persistent image and adopt an escaping result.
 ///
 /// `escaping_word` is `0` for *"nothing escapes"*; otherwise it is a boundary
@@ -268,11 +310,12 @@ pub unsafe extern "C" fn ken_activation_v1_destroy(activation: *mut KenActivatio
 /// ⭐ `D1`'s own warning is that a `crate-type` line is a **build-system**
 /// claim and not a **link** one. ⇒ The archive is checked against *this* list.
 /// ⛔ Pinned as the exact permitted set, so an addition reddens too.
-pub const KEN_ACTIVATION_ABI_SYMBOLS: [&str; 6] = [
+pub const KEN_ACTIVATION_ABI_SYMBOLS: [&str; 7] = [
     "ken_boundary_store_v1_open",
     "ken_boundary_store_v1_destroy",
     "ken_activation_v1_begin",
     "ken_activation_v1_services",
+    "ken_activation_v1_bind_process_frame",
     "ken_activation_v1_finish",
     "ken_activation_v1_destroy",
 ];
@@ -321,6 +364,28 @@ mod tests {
         );
         assert!(!services.is_null());
 
+        // ⭐ `D7` — the generated root's frame comes from the OWNER, so the C
+        // stub needs no `KenNativeInvocationV1` and no arena of its own.
+        let mut frame = std::ptr::null();
+        assert_eq!(
+            unsafe {
+                ken_activation_v1_bind_process_frame(
+                    activation,
+                    std::ptr::null(),
+                    std::ptr::null_mut(),
+                    3,
+                    &mut frame,
+                )
+            },
+            KEN_ACTIVATION_OK
+        );
+        assert!(!frame.is_null());
+        assert_ne!(
+            frame, services,
+            "the frame and the services view are the two distinct parameters of \
+             the internal convention; one pointer for both would collapse them"
+        );
+
         let mut word = u64::MAX;
         assert_eq!(
             unsafe { ken_activation_v1_finish(activation, store, 0, &mut word) },
@@ -333,6 +398,19 @@ mod tests {
         assert_eq!(
             unsafe { ken_activation_v1_services(activation, &mut services) },
             KEN_ACTIVATION_ERR_FINISHED
+        );
+        assert_eq!(
+            unsafe {
+                ken_activation_v1_bind_process_frame(
+                    activation,
+                    std::ptr::null(),
+                    std::ptr::null_mut(),
+                    3,
+                    &mut frame,
+                )
+            },
+            KEN_ACTIVATION_ERR_FINISHED,
+            "the frame must be withdrawn with the services view, not after it"
         );
 
         assert_eq!(
