@@ -169,6 +169,7 @@ fn run_dynamic_constructor_dispatch_fixture(
     };
     let mut compiler = Lowering {
         seed_env: &seed_env,
+        seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
         declarations: BTreeMap::new(),
         static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),
@@ -1743,6 +1744,7 @@ fn bare_carrier_test_lowering<'src>(
 ) -> Lowering<'src> {
     Lowering {
         seed_env,
+        seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
         declarations: BTreeMap::new(),
         static_transition_plan: plan,
         declaration_stack: Vec::new(),

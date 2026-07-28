@@ -150,6 +150,16 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     // ⛔ The population is `B2O`'s validated owner partition as `B2R` described
     // it. This call does not derive it and must never be made to.
     let unit_bundle = super::units::declare_unit_bundle(&mut module, &static_transition_plan)?;
+    // ⭐ `RT-FNSPLIT-B2F` `D3` — mint the artifact-static seed material before
+    // any function context exists. `B2R` declared `GroundValueCarrier` as
+    // `BorrowedForActivation` from `ArtifactStatic` and deliberately minted
+    // nothing; this is the counterpart that gives the borrow an owner which
+    // outlives every activation.
+    //
+    // ⛔ Minted from the environment, never from the plan: resolving which
+    // symbols a unit captures would add an `origin -> expression` lookup, and
+    // `AC-4` holds that count at exactly one.
+    let seed_material = super::seed_material::mint_seed_material(&mut module, seed_env)?;
     let mut ctx = module.make_context();
     ctx.func = Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), sig);
     let host_dispatch = host_dispatch.map(|id| module.declare_func_in_func(id, &mut ctx.func));
@@ -182,9 +192,15 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
             .declare_func_in_func(boundary_value_abi.make_immediate, &mut ctx.func),
     };
 
+    // `D3` — resolve every minted object into THIS generated function. A
+    // `DataId` is a module-level identity and cannot be addressed from inside a
+    // body; this is that identity resolved into one `Function`, exactly as the
+    // native-int and boundary-carrier helpers above are.
+    let seed_material_refs = seed_material.declare_in_func(&mut module, &mut ctx.func);
     let mut func_ctx = FunctionBuilderContext::new();
     let mut compiler = Lowering {
         seed_env,
+        seed_material: seed_material_refs,
         declarations,
         static_transition_plan,
         declaration_stack: Vec::new(),

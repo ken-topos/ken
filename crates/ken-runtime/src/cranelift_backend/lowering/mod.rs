@@ -24,6 +24,14 @@ pub(in crate::cranelift_backend) mod core;
 // unable to distinguish the two.
 pub(in crate::cranelift_backend) mod units;
 
+// `RT-FNSPLIT-B2F` `D3` — the artifact-static seed material. A sibling of
+// `units` rather than a region inside it, because the two mint **different
+// populations**: `units` mints code (`Theta(n)` in the program) and this mints
+// data (`Theta(|seed environment|)`, independent of the program). ⛔ Folding
+// them into one file would put two growth axes behind one census row, which is
+// the population conflation this node has already had to repair three times.
+pub(in crate::cranelift_backend) mod seed_material;
+
 // --- external dependencies -------------------------------------------------
 pub(in crate::cranelift_backend) use std::collections::{BTreeMap, BTreeSet};
 
@@ -365,6 +373,17 @@ impl OwnedSourceOccurrence {
 
 struct Lowering<'a> {
     seed_env: &'a NativeSeedEnvironment,
+    /// **`RT-FNSPLIT-B2F` `D3`** — the artifact-static seed material, resolved
+    /// into this generated function.
+    ///
+    /// ⭐ Held **alongside** `seed_env`, not instead of it, and the division is
+    /// the point: `seed_env` answers *which* `RuntimeGroundValue` a symbol
+    /// denotes — a compile-time question — while this answers *where the
+    /// running artifact reads it from*. ⛔ Collapsing the two would either put a
+    /// compilation-only borrow in the artifact (which does not typecheck) or
+    /// re-fold the value into the instruction stream (which is the authority
+    /// `D3` removes).
+    seed_material: seed_material::SeedMaterialRefs,
     declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
     /// The closed static plan for this compilation.
     ///
@@ -7636,7 +7655,70 @@ impl<'a> Lowering<'a> {
                 format!("capture {symbol} has no runtime value in the seed environment"),
             )
         })?;
-        self.lower_ground_value(builder, value)
+        // ⛔ Wildcard-free, because this match **is** the boundary between the
+        // represented path and the compiler-only one. A `_` arm here would let
+        // a future ground-value variant fall silently onto whichever side
+        // happened to be last.
+        match value {
+            RuntimeGroundValue::Bool(flag) => Ok(Lowered::Bool {
+                value: self.artifact_static_payload(builder, symbol)?,
+                // ⚠ `known` is retained deliberately and it is NOT a second
+                // authority: it is the *compile-time* answer used for
+                // specialization decisions, while `value` is the word the
+                // running artifact actually reads. ⛔ If a specialization ever
+                // substitutes `known` for `value` in emitted code, the borrow
+                // becomes unobservable — which is why the control for this is a
+                // mutation of the minted bytes, not a count of loads.
+                known: Some(*flag),
+            }),
+            RuntimeGroundValue::Int(crate::RuntimeIntV1::Small(small)) => Ok(Lowered::Int {
+                value: self.artifact_static_payload(builder, symbol)?,
+                known: Some(*small),
+            }),
+            // ⚠ **The stated boundary of `D3`'s represented path.** These five
+            // still lower through the compiler-side specialization lattice:
+            // `lower_ground_value` returns `Lowered::Bytes`/`String`/
+            // `Constructor`/`Record`, which hold the compiler's own Rust values
+            // and carry no `ir::Value` at all, and a big integer goes through
+            // the interning helper rather than a frame word.
+            //
+            // ⛔ **This is a boundary, not a second authority.** No value has two
+            // paths: a scalar has exactly the artifact-static one, and these
+            // have exactly the specialization one. ⚠ Giving them an
+            // artifact-static representation needs a *reader* for the encoded
+            // aggregate — the encoding exists (`seed_material`), the consumer
+            // does not — and the runtime-`alloc` carrier is not a substitute,
+            // because it produces activation-time storage for a slot declared
+            // `AbiStorageOwner::ArtifactStatic`.
+            RuntimeGroundValue::Int(big @ crate::RuntimeIntV1::Big { .. }) => {
+                self.lower_big_int_constant(builder, big)
+            }
+            RuntimeGroundValue::Bytes(_)
+            | RuntimeGroundValue::String(_)
+            | RuntimeGroundValue::Constructor { .. }
+            | RuntimeGroundValue::Record { .. } => self.lower_ground_value(builder, value),
+        }
+    }
+
+    /// Load a seed symbol's scalar payload out of artifact-static material.
+    ///
+    /// ⛔ Fails closed. A symbol present in the environment but absent from the
+    /// minted material means the two populations disagree, and folding the
+    /// compile-time value in as a fallback would silently restore exactly the
+    /// authority `D3` removes — with nothing to observe that it had.
+    fn artifact_static_payload(
+        &self,
+        builder: &mut FunctionBuilder<'_>,
+        symbol: &str,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        self.seed_material
+            .payload_word(builder, symbol)
+            .ok_or_else(|| {
+                unsupported(
+                    "Closure",
+                    format!("seed capture {symbol} has no artifact-static material minted for it"),
+                )
+            })
     }
 
     fn lower_ground_value(

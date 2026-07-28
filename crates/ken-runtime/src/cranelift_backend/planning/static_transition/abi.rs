@@ -100,7 +100,19 @@ impl AbiCarrier {
     }
 
     /// Declared alignment, in bytes.
-    const fn align_bytes(self) -> u16 {
+    ///
+    /// ⭐ **Widened to the backend by `RT-FNSPLIT-B2F` `D3`, and the reason is
+    /// the same one that makes this a declaration rather than a constant:** the
+    /// artifact-static seed material an emitter mints must be aligned for the
+    /// carrier that addresses it, and an emitter that hard-codes `8` instead of
+    /// reading this would keep working right up until a carrier's declared
+    /// alignment changed — at which point the material and the slot addressing
+    /// it would disagree with nothing going red.
+    ///
+    /// ⛔ Widened as a **reader**, not as a setter: it is a `const fn` over a
+    /// closed enum with no parameter, so a caller can learn a carrier's
+    /// alignment and cannot choose one.
+    pub(in crate::cranelift_backend) const fn align_bytes(self) -> u16 {
         match self {
             Self::ValueWord
             | Self::GroundValueCarrier

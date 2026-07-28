@@ -28,6 +28,7 @@ enum Px8dsEdgeMutation {
 fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowering<'a> {
     Lowering {
         seed_env,
+        seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
         declarations: BTreeMap::new(),
         static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),
@@ -121,6 +122,7 @@ fn run_px8j_malformed_recursor_consumer(
     let (static_transition_plan, fixture_origin) = planned_root_occurrence(lowered_fixture);
     let mut compiler = Lowering {
         seed_env: &seed_env,
+        seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
         declarations: BTreeMap::new(),
         static_transition_plan,
         declaration_stack: Vec::new(),
@@ -1966,6 +1968,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
     let seed_env = NativeSeedEnvironment::empty();
     let mut lowering = Lowering {
         seed_env: &seed_env,
+        seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
         declarations: BTreeMap::new(),
         static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),
@@ -3406,14 +3409,33 @@ fn an_out_of_range_child_position_is_a_loud_planner_invariant() {
 /// obligation and is discharged there **behaviourally**, against emitted counts,
 /// not against source spellings.
 ///
-/// ⚠ **MEASURED:** how many times three spellings occur in seven files.
+/// ⚠ **MEASURED:** how many times five spellings occur in eight files.
 /// **CLAIMED:** exactly that. **THE GAP:** ⛔ this is a source-TEXT oracle and
 /// it is retained as a **tripwire, not as the evidence**. A call split across
-/// lines evades all three needles; a mention inside a string or a block comment
+/// lines evades every needle; a mention inside a string or a block comment
 /// inflates them; and nothing here observes what a compiled module actually
-/// contains. `AC-2`'s real property — that `B2F` adds exactly the emitted units
-/// its design predicts — is defended by the behavioural control over
-/// `UnitBundle::len`, which a comment or a line break cannot move.
+/// contains.
+///
+/// # ⛔⛔ WHICH INSTRUMENT CARRIES THE CLAIM — and they are NOT corroboration
+///
+/// **`AC-2` requires this division of labour to be stated in-source, because two
+/// counts sitting side by side read as corroboration and these two are not: one
+/// of them is fail-open by construction.**
+///
+/// | instrument | what it does | what it carries |
+/// |---|---|---|
+/// | ⭐ the behavioural counters — `units::b2f_last_unit_emission`, `seed_material::b2f_last_seed_material_emission` | count what the compiled module **actually contains**, at the point of emission | ⭐ **the population claim, entirely** |
+/// | ⚠ this census | searches source text for spellings someone enumerated | ⛔ **nothing.** A tripwire only |
+///
+/// ⛔ **This census's default branch is *"needle not found ⇒ nothing
+/// emitted"*, so it fails OPEN for every emission spelling nobody thought of.**
+/// It was repaired three times on this node — missing rows, then missing
+/// sibling emitters, then a missing needle class — and each repair found the
+/// next thing it was not looking for, because a needle-list census can only
+/// ever be one discovery behind the code. ⛔ **Adding `.declare_data(` /
+/// `.define_data(` did not make it sound and nothing here claims it did.** It
+/// is retained, unweakened, because a defeat count never licenses removing a
+/// gate — not because it is evidence.
 #[test]
 fn correspondence_adds_no_emitted_unit_to_the_production_census() {
     struct Census {
@@ -3422,6 +3444,16 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
         builders: usize,
         definitions: usize,
         declarations: usize,
+        /// ⭐ **`RT-FNSPLIT-B2F` `AC-2`, third population defect.** Data objects
+        /// are declared and defined by `.declare_data(` / `.define_data(`, and
+        /// the three needles above cannot see either. That is a strictly worse
+        /// shape than a missing row: a missing *row* leaves one file unmeasured
+        /// and the gap is visible, while a missing *needle class* leaves the
+        /// census reading **complete across every row** while `n` data objects
+        /// sit in the artifact — `D3`'s entire deliverable, invisible, with
+        /// nothing looking wrong.
+        data_declarations: usize,
+        data_definitions: usize,
     }
     let census = [
         Census {
@@ -3433,6 +3465,8 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             builders: 1,
             definitions: 1,
             declarations: 2,
+            data_declarations: 0,
+            data_definitions: 0,
         },
         Census {
             file: "lowering/mod.rs",
@@ -3440,6 +3474,8 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             builders: 0,
             definitions: 0,
             declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
         },
         Census {
             file: "planning.rs",
@@ -3447,6 +3483,8 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             builders: 0,
             definitions: 0,
             declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
         },
         Census {
             file: "planning/static_transition.rs",
@@ -3454,6 +3492,8 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             builders: 0,
             definitions: 0,
             declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
         },
         Census {
             file: "planning/static_transition/semantic_ir.rs",
@@ -3461,6 +3501,8 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             builders: 0,
             definitions: 0,
             declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
         },
         // ⭐ `RT-FNSPLIT-B2F` `AC-2` — THE PREDICTED ROW, and it is predicted
         // rather than fitted.
@@ -3485,6 +3527,8 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             builders: 1,
             definitions: 1,
             declarations: 1,
+            data_declarations: 0,
+            data_definitions: 0,
         },
         // `RT-FNSPLIT-B2R`'s ABI plane, added as an explicit ZERO row because
         // the frame flagged its absence: it is in `BACKEND_PRODUCTION_SOURCES`
@@ -3501,6 +3545,40 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             builders: 0,
             definitions: 0,
             declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        // ⭐ `RT-FNSPLIT-B2F` `D3`/`AC-2` — THE SECOND PREDICTED ROW, and the
+        // prediction was recorded before the module existed for the same reason
+        // the first one was.
+        //
+        // Recorded in `docs/program/rt-fnsplit-b2f-predictions.md` (`P6`) at
+        // base `6534e4a6`: **1 `declare_data` / 1 `define_data`, every other row
+        // 0/0.** Measured: exactly that.
+        //
+        // ⚠ **AND `P6` WAS WRONG ABOUT WHERE, WHICH IS RECORDED RATHER THAN
+        // QUIETLY CORRECTED.** It named `lowering/units.rs` as the file carrying
+        // the two needles; the material is minted in `lowering/seed_material.rs`
+        // instead, because units and seed material are two populations on two
+        // growth axes (Θ(n) in the program vs Θ(|seed environment|), which the
+        // program does not affect) and one census row cannot carry both. ⇒ The
+        // *counts* held; the *row* moved. A prediction file that only ever
+        // agrees with the outcome is a transcription, and `P4` said in advance
+        // that the row placement was the likeliest thing to move.
+        //
+        // ⛔ ONE of each spelling for a population of Θ(|seed environment|)
+        // objects: `mint_seed_material` holds one `declare_data` and one
+        // `define_data` inside a loop over every entry. Same spellings-not-units
+        // gap as the row above, and the same consequence — ⛔ **this row is not
+        // an object count and must never be read as one.**
+        Census {
+            file: "lowering/seed_material.rs",
+            source: include_str!("../../seed_material.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 1,
+            data_definitions: 1,
         },
     ];
     for row in census {
@@ -3520,6 +3598,18 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             row.source.matches(".declare_function(").count(),
             row.declarations,
             "{}: N2 -- a function declaration was added or removed",
+            row.file
+        );
+        assert_eq!(
+            row.source.matches(".declare_data(").count(),
+            row.data_declarations,
+            "{}: N3 -- an artifact-static data declaration was added or removed",
+            row.file
+        );
+        assert_eq!(
+            row.source.matches(".define_data(").count(),
+            row.data_definitions,
+            "{}: N3 -- an artifact-static data definition was added or removed",
             row.file
         );
     }
@@ -3877,6 +3967,17 @@ const BACKEND_PRODUCTION_SOURCES: &[(&str, &str)] = &[
     // `boundary_value_clif.rs` and `native_int_clif.rs` came to sit outside
     // both this roster and the emitted-unit census.
     ("lowering/units.rs", include_str!("../../units.rs")),
+    // `RT-FNSPLIT-B2F` `D3` — the artifact-static seed material. Registered for
+    // the same reason as `units.rs` above, and ⭐ **it is the file that made the
+    // reason concrete**: this module mints DATA objects, and until `AC-2` was
+    // amended no needle in the census could see a data object at all. A file
+    // outside this roster is invisible to every pin that iterates it; a file
+    // inside it whose emission spelling nobody enumerated is invisible to the
+    // census while looking fully measured.
+    (
+        "lowering/seed_material.rs",
+        include_str!("../../seed_material.rs"),
+    ),
     ("planning.rs", include_str!("../../../planning.rs")),
     (
         "planning/static_transition.rs",
@@ -3940,6 +4041,13 @@ fn the_backend_production_surface_inventory_is_closed() {
             // replacement population in the same file would leave the census
             // that measures the removal unable to tell the two apart.
             ("lowering/mod.rs", "units"),
+            // `RT-FNSPLIT-B2F` `D3`. A sibling of `units` rather than a region
+            // inside it, because the two mint DIFFERENT POPULATIONS on
+            // different growth axes: `units` mints code, Θ(n) in the program;
+            // this mints data, Θ(|seed environment|) and independent of the
+            // program. Folding them into one file would put two growth axes
+            // behind one census row.
+            ("lowering/mod.rs", "seed_material"),
             ("planning.rs", "static_transition"),
             ("planning/static_transition.rs", "abi"),
             ("planning/static_transition.rs", "semantic_ir"),
