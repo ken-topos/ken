@@ -198,6 +198,53 @@ carry compile-time structure by construction.
 That is the `B2E` shape, and it is exactly what the inertness rule rejects: the
 inhabitant is the easy half, the three executable eliminations are the node.
 
+### 2g. ★ The `D3` carrier-representation ruling — Architect, transcribed verbatim
+
+⭐ **This is the required interpretation of `§2f`.** Transcribed here 2026-07-28
+because the ruling lived only in a channel thread: Decision
+**`dec_4te25repm33ph`** (proposed and resolved by the Architect,
+`2026-07-27T20:00:01Z`), against the question *"choose the typed representation
+for an already-carried `BoundaryWord` without violating `§2f` or creating a
+second decoder/value taxonomy."* ⛔ Do not re-derive it from a thread; bind it
+from here. ⚠ If this text and any channel restatement disagree, **this text
+governs** — it is the resolution field of the Decision object, copied without
+edit:
+
+> `D3` must use a closed phase sum, not `Lowered::Boundary`. Keep `Lowered` as
+> the pre-boundary specialization lattice. Introduce one private lowering-flow
+> wrapper (name may vary, shape may not), with exactly `Specialized(Lowered)`
+> and `Carried(CarriedBoundaryWord)`; `CarriedBoundaryWord` contains the existing
+> Cranelift SSA `BoundaryWord` only (plus no static constructor/field/body/
+> template data and no parallel tag/class identity). Environments and result
+> surfaces that can receive a transferred value carry this wrapper. The boundary
+> producer has a one-way typed seam `Lowered -> CarriedBoundaryWord`; it consumes
+> the sole `BoundaryLocalFuncs` authority. There is no inverse conversion and no
+> compile-time rehydration. `Match`, `ComputationalMatch`, and `Project` have
+> explicit `Carried` arms that call the emitted helpers; projected children
+> remain `Carried`. Existing specialization paths remain explicit `Specialized`
+> arms. Every other reachable consumer exhaustively classifies both phases with
+> no wildcard, so a new flow inhabitant or consumer breaks compilation until
+> classified. An already-carried word MUST NOT acquire a `LoweredVariant`,
+> `BoundaryDisposition`, `AlreadyCarried` encoding policy, or pass through the
+> producer again: those tables classify pre-boundary `Lowered`, while `Carried`
+> records phase state, not a second value taxonomy. The helper `FuncId`s must be
+> declared into each generated function, stored as callable refs, and actually
+> called by the three elimination routes; discarded/underscore-only threading
+> does not satisfy `D3`. This is the required interpretation of `§2f`: a real
+> consumed carrier intermediate is required, but placing it inside `Lowered` is
+> not permitted and the inhabitant alone never discharges the node.
+
+**Name adopted by the ring:** `LoweringOperand { Specialized(Lowered),
+Carried(CarriedBoundaryWord) }`. ⭐ The ruling fixes the *shape* and leaves the
+*name* free, so this spelling is the leader's choice and binds the
+implementation, not the ruling.
+
+⚠ **One clause is easy to lose, and it is the one a surface census needs:**
+*"Environments and result surfaces that can receive a transferred value carry
+this wrapper."* That is a **positive scope requirement** — it says *where* the
+wrapper must appear, not merely what it may contain. ⛔ A census that enumerates
+only the three eliminators under-covers it.
+
 ## 3. Deliverables
 
 **`D1` — the artifact-static semantic-identity capability.**
@@ -225,6 +272,9 @@ children back **into the same carrier**. ⛔ Projection must not materialize a
 `Lowered` template — that is the wall itself. ⭐ `ComputationalMatch`'s recursive
 positions preserve the existing static-origin ownership contract, ⛔ without
 caller specialization.
+
+⭐ **The typed representation `D3` must use is ruled, not open: see `§2g`** —
+a closed phase sum beside `Lowered`, never an inhabitant inside it.
 
 **`D4` — `Project` eliminates a carried value.**
 Emitted code selects a runtime record field by **artifact-static field
