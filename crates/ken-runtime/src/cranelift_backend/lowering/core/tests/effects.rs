@@ -796,6 +796,9 @@ fn compile_b2f_process_pair_fixture() -> Result<CompiledModule<JITModule>, Crane
 
 #[test]
 fn the_process_pair_reaches_a_retained_body_only_through_declared_slots() {
+    const RECOVERY_ASSERTION: &str =
+        "reintroduced launch ingress recovered the capability-using process answer";
+
     struct Reset;
     impl Drop for Reset {
         fn drop(&mut self) {
@@ -846,20 +849,15 @@ fn the_process_pair_reaches_a_retained_body_only_through_declared_slots() {
         data: fields.as_ptr().cast(),
         len: fields.len(),
     };
-    let malformed = BorrowedFixtureValue {
-        kind: 99,
-        tag: 0,
-        data: std::ptr::null(),
-        len: 0,
-    };
-    let fake_context = RootIngressFixture {
-        process_input: &malformed,
-        host_context: std::ptr::null_mut(),
-        capability: 7,
+    // The retained direct context is deliberately opaque. It has enough
+    // addressable storage to make an accidental fixed-offset load harmless,
+    // but it is not launch-ingress-shaped and contains no source-pair value.
+    let mut direct_context = DirectHostContextFixture {
+        opaque: [std::ptr::null_mut(); 3],
     };
     let ingress = RootIngressFixture {
         process_input: &process_input,
-        host_context: (&fake_context as *const RootIngressFixture).cast_mut().cast(),
+        host_context: (&mut direct_context as *mut DirectHostContextFixture).cast(),
         capability: 1_u64 << 32,
     };
 
@@ -874,19 +872,55 @@ fn the_process_pair_reaches_a_retained_body_only_through_declared_slots() {
     let exact_observation = B2F_PROCESS_PAIR_OBSERVATION.with(std::cell::Cell::get);
     assert_eq!(exact_observation, (1, ingress.capability));
 
+    set_process_slot_mutation(ProcessSlotMutation::AttemptFixedContextOffsets);
+    let fixed_context_error = match compile_b2f_process_pair_fixture() {
+        Ok(_) => panic!("the old fixed-context offset evasion was accepted"),
+        Err(error) => error,
+    };
+    assert_eq!(
+        fixed_context_error.to_string(),
+        "Cranelift backend failure: module operation failed: fixed \
+         host-dispatch context is not semantic process-pair storage"
+    );
+
     B2F_PROCESS_PAIR_OBSERVATION.with(|cell| cell.set((0, 0)));
-    set_process_slot_mutation(ProcessSlotMutation::RecoverFromHostContext);
-    let _recovered = compile_b2f_process_pair_fixture()
-        .expect("the forbidden-recovery mutation still emits")
-        .run(Some((&ingress as *const RootIngressFixture).cast()))
-        .expect("the forbidden-recovery mutation runs")
-        .1
-        .expect("the forbidden-recovery mutation returns a status");
+    set_process_slot_mutation(ProcessSlotMutation::ReintroduceLaunchIngress);
+
+    // MEASURED: the positive control changes both ends of the route: the root
+    // caller explicitly injects its launch-ingress pointer, and the callee
+    // reloads the pair from that reintroduced pointer.
+    // CLAIMED: process input and capability reach a unit only through declared
+    // slots.
+    // THE GAP: the retained host context is independently exercised above as
+    // opaque storage; merely substituting offsets against it is not this
+    // mutation and has no source-pair value to recover.
+    let recovery_red = std::panic::catch_unwind(|| {
+        let recovered = compile_b2f_process_pair_fixture()
+            .expect("the explicit launch-ingress recovery mutation still emits")
+            .run(Some((&ingress as *const RootIngressFixture).cast()))
+            .expect("the explicit launch-ingress recovery mutation runs")
+            .1
+            .expect("the explicit launch-ingress recovery mutation returns a status");
+        assert_eq!(
+            recovered,
+            0,
+            "{RECOVERY_ASSERTION}"
+        );
+    })
+    .expect_err("the reintroduced launch-ingress mutation must red");
+    let recovery_message = recovery_red
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| recovery_red.downcast_ref::<&str>().copied())
+        .unwrap_or("");
+    assert!(
+        recovery_message.contains(RECOVERY_ASSERTION),
+        "the mutation failed at the wrong assertion: {recovery_message}"
+    );
     assert_eq!(
         B2F_PROCESS_PAIR_OBSERVATION.with(std::cell::Cell::get),
         (0, 0),
-        "recovering the process input from direct context still reached the \
-         capability-using answer"
+        "the invalid raw launch-ingress pair reached the host"
     );
 }
 
@@ -1582,6 +1616,12 @@ struct RootIngressFixture {
     process_input: *const BorrowedFixtureValue,
     host_context: *mut std::ffi::c_void,
     capability: u64,
+}
+
+#[cfg(test)]
+#[repr(C)]
+struct DirectHostContextFixture {
+    opaque: [*mut std::ffi::c_void; 3],
 }
 
 // RT-SPLIT slice 5: shared test helpers whose final users span the

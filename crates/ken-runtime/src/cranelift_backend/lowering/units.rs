@@ -511,7 +511,9 @@ pub(super) fn define_root_adapter<M: Module>(
             }));
             #[cfg(test)]
             PROCESS_SLOT_MUTATION.with(|cell| match cell.get() {
-                ProcessSlotMutation::Exact | ProcessSlotMutation::RecoverFromHostContext => {}
+                ProcessSlotMutation::Exact
+                | ProcessSlotMutation::AttemptFixedContextOffsets
+                | ProcessSlotMutation::ReintroduceLaunchIngress => {}
                 ProcessSlotMutation::DeleteProcessInput => {
                     inputs.remove(0);
                 }
@@ -720,6 +722,15 @@ fn define_unit_body<M: Module>(
         // The two fixed envelope loads are unconditional. Semantic frame
         // accesses below are relative only to the B2R payload base.
         compiler.function_local = function_local;
+        #[cfg(test)]
+        if is_root
+            && PROCESS_SLOT_MUTATION.with(std::cell::Cell::get)
+                == ProcessSlotMutation::AttemptFixedContextOffsets
+        {
+            return Err(backend_module(
+                "fixed host-dispatch context is not semantic process-pair storage".to_string(),
+            ));
+        }
         let mut env = Vec::new();
         for (slot, offset) in unit.slots.iter().zip(&unit.offsets) {
             if matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture) {
@@ -727,7 +738,7 @@ fn define_unit_body<M: Module>(
                 let (base, offset) = if is_root
                     && slot.kind == AbiSlotKind::Parameter
                     && PROCESS_SLOT_MUTATION.with(std::cell::Cell::get)
-                        == ProcessSlotMutation::RecoverFromHostContext
+                        == ProcessSlotMutation::ReintroduceLaunchIngress
                 {
                     let offset = match slot.ordinal {
                         0 => crate::boundary_activation::ROOT_INGRESS_PROCESS_INPUT,
@@ -739,6 +750,10 @@ fn define_unit_body<M: Module>(
                             ));
                         }
                     };
+                    // The root adapter's companion mutation explicitly put
+                    // launch ingress here. Without that producer-side change,
+                    // the retained direct host context is not an admissible
+                    // semantic-slot source.
                     (host_dispatch_context, offset)
                 } else {
                     (

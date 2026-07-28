@@ -605,7 +605,8 @@ enum ProcessSlotMutation {
     Exact,
     DeleteProcessInput,
     DeleteCapability,
-    RecoverFromHostContext,
+    AttemptFixedContextOffsets,
+    ReintroduceLaunchIngress,
 }
 
 #[cfg(test)]
@@ -1445,7 +1446,15 @@ impl<'a> Lowering<'a> {
                 backend_module("unit call has no direct host-dispatch context".to_string())
             })?;
         #[cfg(test)]
-        let host_dispatch_context =
+        let host_dispatch_context = if launch_ingress.is_some()
+            && PROCESS_SLOT_MUTATION.with(std::cell::Cell::get)
+                == ProcessSlotMutation::ReintroduceLaunchIngress
+        {
+            // This is the deliberately forbidden half of the AC-14 control:
+            // unlike the retained direct context, this value is explicitly
+            // sourced from the root adapter's launch-ingress parameter.
+            launch_ingress.expect("the root adapter supplied launch ingress")
+        } else {
             HOST_CONTEXT_PROPAGATION_MUTATION.with(|cell| match cell.get() {
                 HostContextPropagationMutation::Exact => exact_host_dispatch_context,
                 HostContextPropagationMutation::ServicesPointer
@@ -1477,7 +1486,8 @@ impl<'a> Lowering<'a> {
                 | HostContextPropagationMutation::NativeIntArena
                 | HostContextPropagationMutation::BoundaryArena
                 | HostContextPropagationMutation::Null => exact_host_dispatch_context,
-            });
+            })
+        };
         #[cfg(not(test))]
         let host_dispatch_context = exact_host_dispatch_context;
         builder.ins().stack_store(
