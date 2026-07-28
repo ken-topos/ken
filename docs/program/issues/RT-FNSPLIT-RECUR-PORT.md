@@ -91,6 +91,82 @@ origin: RT-SCALE-B frame-unsatisfied hard stop #13, raised by runtime-implemente
 >
 > ⇒ ⭐ **The armed symptom fired and the frame's prescribed route is this node.**
 
+> ## ⛔⛔ HARD STOP `#14` — 2026-07-28, after `S1`. SCOPE RULED: **THIS FOLDS IN.
+> ## IT IS NOT A NEW NODE.**
+>
+> **Reported by `runtime-implementer` (`evt_1qfevzbf089rj`), escalated by
+> `runtime-leader` (`evt_3ncs7m7syn7ds`).** Branch clean, no commit, no
+> prohibited substitution, no `B2F` surface touched. ✅ **Stopping there was
+> right.**
+>
+> ### What `S1` proved before it stopped — ⭐ this part is a WIN, keep it
+>
+> At depth 3 the governed source selects `FunctionizedUnits`, the recursive
+> lexical-closure position resolves to its planner-declared body unit and emits
+> a **direct unit call**, and re-entry closes as a **static-origin-keyed CFG
+> backedge** rather than an inline re-lowering. ⇒ **`AC-2`'s growth property is
+> demonstrated.** The stop is downstream of it.
+>
+> ### The stop
+>
+> ```text
+> BoundaryCarrier: a host-effect operand is a specialized-only surface and a
+> carried boundary word has no compile-time template for it to read; the
+> carrier's ruled route is an emitted helper call
+> ```
+>
+> `lower_process_host_effect` lowers its operands and then calls
+> `specialized_env_at(&lowered, "a host-effect operand")`. A functionized
+> closure-body unit necessarily receives `buffer` through the `B2R` frame as
+> **`Carried`**, so the governed `BufferFreeze(Var(0))` cannot cross that
+> boundary. ⚠ **Independent of `D1` recursive positions and `D2` trap arms** —
+> it is a third, unframed port.
+>
+> ### ⭐ WHY IT FOLDS RATHER THAN FORKING
+>
+> **`AC-1` requires the family to select `FunctionizedUnits` *and produce a
+> complete `UnitBundle`*; `AC-6` requires `RT-SCALE-B` to actually collect every
+> metric.** Compilation halting at `BoundaryCarrier` means no complete bundle
+> and no collectable measurement. ⇒ ⛔ **This node's own acceptance criteria are
+> undischargeable without the carried host-effect operand port.** A new node
+> would put a hard prerequisite *in front of* an `active` node on the critical
+> path and lengthen it for nothing.
+>
+> ⚠ **The node is now larger than the `L` it was priced at.** ⛔ I am not
+> re-slicing or writing `D6` until the Architect rules the mechanism, because the
+> mechanism determines the size. Both are recorded here rather than in the
+> channel.
+>
+> ### ⛔ THE OPERAND-SHAPE MISMATCH IS THE ARCHITECT'S, NOT THE RING'S
+>
+> The governed constructor spells `BufferFreeze` with **one** operand (`Var(0)`)
+> while the production wire encoder requires **four** — buffer, start, length,
+> span-origin.
+>
+> ⚠ **`PROHIBITION 1` does not literally forbid reconciling that spelling** — it
+> forbids deleting recursion, dropping trap arms, and substituting a non-bracket
+> synthetic, none of which is this. ⛔ **But do not infer permission from that.**
+> Whether changing the governed constructor's operand shape preserves the
+> benchmark's meaning is *precisely* the question the Architect answered for
+> recursion and traps (*"a different benchmark could not answer this frame's
+> question"*), and it must be answered explicitly for this shape too.
+>
+> ⇒ ⛔ **Runtime does not reconcile the governed source's operand shape on its
+> own reading of `PROHIBITION 1`.** Architect ruling requested at
+> `evt_7pgwd2amvb41y`; the repair may have to land on the **encoder** side
+> instead.
+>
+> ### Bookkeeping
+>
+> **Count of record 13 → 14.** ⛔ No research pull fires at `#14`; ⚠ **`#15` is
+> armed, so the next stop pulls research.** Symptom inventory `ENTRIES` 4 → 5 is
+> owed by the **Architect**, and entry 5 is the last before the 6th, which must
+> answer the shared-predicate question.
+>
+> ⚠ **The `§5a` line on `main` read `11` when this stop was raised — two stops
+> stale.** The implementer read the authoritative line exactly as instructed and
+> was right to flag the disagreement. Repaired in the same publish as this block.
+
 ## Objective
 
 Make the **same governed** `nested_resource_bracket` family — recursive

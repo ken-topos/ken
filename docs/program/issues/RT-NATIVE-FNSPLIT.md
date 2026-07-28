@@ -367,6 +367,30 @@ Gates the [[NATIVE-HANDLE-CARRIER]] fast-follow + [[PX8-F-CAP-41]] too.
 Architect re-derives its own count across compactions; **on any disagreement
 this line wins.** Re-read this line on every hard-stop.
 
+> ## ⭐⭐ COUNT OF RECORD = **14** (2026-07-28)
+> ## ⛔ READ THIS — NOT A NUMBER FURTHER DOWN THIS SECTION.
+>
+> ⚠ **This block exists because the only number in this section used to be
+> `Count unchanged: 11`, buried in the dated `#10` sub-block below.** It was
+> **two stops stale** and `runtime-implementer` caught it while reading this
+> section exactly as instructed. ⛔ **That number is historical — it states the
+> count as of the `#10` ruling and is not the current count.**
+>
+> | # | hard stop | ruled |
+> |---|---|---|
+> | `#12` | `B2F` — process host-dispatch context has no declared lane under the fixed two-parameter ABI | `evt_27wg681jcke4v` |
+> | `#13` | `RT-SCALE-B` — the governed bracket family selects `RecursiveDescent`, so the functionized population is never produced | `evt_14eq3v2g0v1hm` · Steward `evt_37fwa49tk6dhj` |
+> | `#14` | `RT-FNSPLIT-RECUR-PORT` — a **carried** host-effect operand cannot cross the functionized closure-body boundary; `lower_process_host_effect` is specialized-only | Architect routed `evt_7pgwd2amvb41y` |
+>
+> ⛔⛔ **THE NEXT HARD STOP IS `#15` AND IT FIRES THE ARMED RESEARCH CONSULT.**
+> The armed multiples are `#15`, `#18`, `#21`. ⇒ ⭐ **`#14` fires nothing, but
+> there is no longer any slack — the following stop pulls research.**
+>
+> ⚠ **Symptom inventory: `ENTRIES` 4 → 5 is owed by the Architect** for `#14`
+> (*"appends one line per hard-stop, before it rules"*). ⭐ **Entry 5 is the last
+> one before `NEXT PREDICATE CHECK = 6th`** — so the entry after it must answer
+> whether the entries share a predicate.
+
 > ### ✅✅ THE §5a-ii PREDICATE IS NAMED — Architect, 2026-07-28 (`evt_55bzwnhjpwjrs`)
 >
 > ⭐ **The predicate is `executable-boundary closure`.** `#9` and `#10` are **two
@@ -407,8 +431,10 @@ this line wins.** Re-read this line on every hard-stop.
 > the recut having already happened**, not by authoring a second one. ⛔ Do not
 > read the naming as a trigger to re-cut work that is merged.
 >
-> ⚠ **Count unchanged: 11.** ⛔ `#10` is still **not** a fourth symptom-inventory
-> entry; `ENTRIES` stays **3** and the next predicate check stays the **6th**.
+> ⚠ **Count unchanged: 11** — ⛔ **as of this `#10` ruling only. It is NOT the
+> current count; see the COUNT OF RECORD block at the top of this section.**
+> `#10` is still **not** a fourth symptom-inventory entry; at that date `ENTRIES`
+> stayed **3** and the next predicate check stayed the **6th**.
 
 > ### ⭐ SYMPTOM INVENTORY — armed 2026-07-24 (operator-directed)
 >
