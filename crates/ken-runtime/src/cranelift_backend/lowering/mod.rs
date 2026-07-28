@@ -18022,10 +18022,30 @@ impl<'a> Lowering<'a> {
         );
         builder.ins().brif(is_resource, resource, &[], done, &[]);
         builder.switch_to_block(resource);
-        let arms = resource_error_tags_in_payload_shape_order
-            .into_iter()
-            .map(|tag| (tag, builder.create_block()))
-            .collect::<Vec<_>>();
+        let mut resource_error_tags = resource_error_tags_in_payload_shape_order.into_iter();
+        let mut next_resource_error_tag = || {
+            resource_error_tags
+                .next()
+                .expect("resource error payload shape is complete")
+        };
+        let closed_tag = next_resource_error_tag();
+        let malformed_reply_tag = next_resource_error_tag();
+        let right_not_held_tag = next_resource_error_tag();
+        let release_failed_tag = next_resource_error_tag();
+        let kind_mismatch_tag = next_resource_error_tag();
+        let buffer_limit_tag = next_resource_error_tag();
+        let invalid_offset_tag = next_resource_error_tag();
+        let invalid_bounds_tag = next_resource_error_tag();
+        let no_progress_tag = next_resource_error_tag();
+        let allocation_failed_tag = next_resource_error_tag();
+        let arms = [
+            closed_tag,
+            malformed_reply_tag,
+            right_not_held_tag,
+            release_failed_tag,
+            kind_mismatch_tag,
+        ]
+        .map(|tag| (tag, builder.create_block()));
         let mut test = builder
             .current_block()
             .expect("resource reply validation block");
@@ -18100,28 +18120,37 @@ impl<'a> Lowering<'a> {
                     );
                     Self::require_true(builder, distinct);
                 }
-                5..=9 => {
-                    for field in [
-                        schema,
-                        kind,
-                        identity,
-                        io,
-                        required,
-                        held,
-                        actual_expected_kind,
-                        actual_actual_kind,
-                    ] {
-                        Self::require_i64(builder, field, 0);
-                    }
-                }
                 _ => unreachable!(),
             }
             builder.ins().jump(done, &[]);
             test = next;
         }
         builder.switch_to_block(test);
-        let failure = builder.ins().iconst(types::I64, -1);
-        builder.ins().return_(&[failure]);
+        Self::require_one_of_i64(
+            builder,
+            discriminator,
+            &[
+                buffer_limit_tag,
+                invalid_offset_tag,
+                invalid_bounds_tag,
+                no_progress_tag,
+                allocation_failed_tag,
+            ]
+            .map(|tag| i64::try_from(tag).expect("resource error tag fits i64")),
+        );
+        for field in [
+            schema,
+            kind,
+            identity,
+            io,
+            required,
+            held,
+            actual_expected_kind,
+            actual_actual_kind,
+        ] {
+            Self::require_i64(builder, field, 0);
+        }
+        builder.ins().jump(done, &[]);
         builder.switch_to_block(done);
     }
 
