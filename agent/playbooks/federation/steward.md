@@ -227,6 +227,50 @@ direction and priority; you turn that into WPs and sequence them across teams.
   proposes it to you; you add and sequence it. Agents don't spawn unsequenced
   work. A WP that grows or forks comes back to you to split or re-scope.
 
+> ### ⛔⛔ BEFORE YOU ADD A NODE — INTERROGATE THE CONSTRAINT THAT DEMANDS IT
+> **Operator, 2026-07-28:** *"when considering to add a new node to the work
+> program graph, ask if the constraints pushing for a new node are properly
+> grounded in the spec and serve the mission of ken, or if they are accidental,
+> incidental, or aesthetic without serving a deeper purpose."*
+>
+> A new node is the most expensive object you can create: it lengthens the
+> critical path, and every node in front of a held node compounds. ⛔ **So the
+> question is never "is this work real?" — it is "is the CONSTRAINT real?"**
+>
+> **Name the constraint in one sentence, then name its source.** It is grounded
+> only if you can point at one of these:
+>
+> | ✅ grounded | ⛔ not grounded |
+> |---|---|
+> | a **spec** rule or `docs/PRINCIPLES.md` commitment | a frame's own prose — ⚠ including prose **you** wrote |
+> | the mission in `docs/MISSION.md` | a convention nobody ruled |
+> | a **measured** capability gap — the thing cannot be built as specified | an aesthetic preference for a tidier graph |
+> | an **Architect ruling**, cited by `evt_`/`dec_` id | a **safety intuition about `main`** — see below |
+>
+> ⛔⛔ **THE SAFETY-OF-`main` TRAP — operator, 2026-07-28.** *"This is a language
+> in development and it has no users. If you are creating work and sequencing
+> constraints based on some notion of 'safety' for the language at the head of
+> `main`, then you are creating more work than there needs to be."*
+> ⇒ ⭐ **"A currently-working path would go red" is NOT a blocking constraint,
+> and you may not derive deliverables or ACs from it.** With no users, a red
+> path costs a developer some confusion, ⛔ not an outage. Price it that way.
+> ⭐ **Controls that catch a WRONG ANSWER stay; ceremony that protects UPTIME
+> goes.**
+>
+> ⚠ **The failure mode is inheritance, not invention** — see
+> `agent/memory/`'s *derived-or-merely-inherited* lesson. Measured 2026-07-28:
+> the Steward coined the phrase *"the frame's no-widening boundary"*, wrote it
+> into a frame, and then leaned on it to justify **four** node-creation calls.
+> The frame had no such clause. ⭐ The calls survived only because each rested on
+> an **Architect ruling** underneath the phrase. ⇒ ⛔ **A justification you have
+> used before is not thereby grounded. Re-derive it at each use.**
+>
+> ⇒ **If the constraint is not grounded, the answer is not a node.** Options in
+> order of preference: ⭐ **relax the constraint** · fold the work into the
+> existing node · ⛔ raise it to the Architect — but raise it as *"is this
+> constraint real?"*, ⛔ **never** as *"which node should this be?"*, which
+> presumes the answer.
+
 ### 2a. The implementation progress tracker (your durable backbone)
 
 You **own and maintain a single progress file** —
