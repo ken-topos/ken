@@ -34,9 +34,10 @@ fn recursive_position_unit_calls() -> usize {
 ///
 /// The residual is a producer `Match` over a call, a seed `Closure` call, or a
 /// transparent declaration whose body is a closure or contains either retained
-/// shape. Computational recursive positions and traps are portable through
-/// declared units. The match is exhaustive over `RuntimeExpr`; adding a form
-/// cannot silently default it into either authority.
+/// shape. Only the two conditions backed by the completed ports are narrowed:
+/// computational recursive positions use declared units, and traps use terminal
+/// control flow. The match stays exhaustive over `RuntimeExpr`; adding a form
+/// cannot silently admit it to functionized emission.
 fn requires_recursive_descent_authority(expr: &RuntimeExpr) -> bool {
     match expr {
         RuntimeExpr::CheckedJoinSite { body, .. }
@@ -120,11 +121,11 @@ fn requires_recursive_descent_authority(expr: &RuntimeExpr) -> bool {
 /// The one temporary B2F migration selector, evaluated once at compilation
 /// entry from source syntax and declaration kinds only.
 ///
-/// The active/default stage is `FunctionizedUnits`. `RecursiveDescent` retains
-/// the closed residual that still needs specialized computational recursion,
-/// a producer `Match` over a call, a seed/declaration closure body, or a root
-/// No runtime value, carrier class, walk result, or emission failure can change
-/// this answer after it is chosen.
+/// `FunctionizedUnits` is selected only after the exhaustive source classifier
+/// finds no retained form. `RecursiveDescent` therefore remains the fail-closed
+/// authority for a producer `Match` over a call and a seed/declaration closure
+/// body. No runtime value, carrier class, walk result, or emission failure can
+/// change this answer after it is chosen.
 fn select_body_emission_authority(
     expr: &RuntimeExpr,
     declarations: &BTreeMap<&str, &RuntimeDeclaration>,

@@ -4858,8 +4858,21 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
 }
 
 #[test]
-fn the_body_authority_selector_is_closed_static_and_chosen_from_source_shape() {
+fn the_body_authority_selector_narrows_only_completed_ports_and_stays_fail_closed() {
     let declarations = BTreeMap::new();
+
+    // Promise class: durable invariant. Any new RuntimeExpr form must be
+    // classified explicitly, while these two completed ports and the retained
+    // producer-Match residual remain part of the migration boundary.
+    //
+    // MEASURED: recursive computational positions and a source Trap select
+    // functionized emission, while an otherwise ordinary Match whose producer
+    // is a Call selects recursive descent.
+    // CLAIMED: D3 removed only the two predicates backed by D1 and D2 and did
+    // not turn absence from a functionized allow-list into admission.
+    // THE GAP: this pin measures the source-only selector. S1 and S2 separately
+    // prove the declared-unit and terminal-CFG mechanisms behind the two green
+    // selections; D4 will exercise the complete governed n=3..7 family.
     assert_eq!(
         select_body_emission_authority(
             &RuntimeExpr::Value(RuntimeValue::Bool(true)),
@@ -4868,7 +4881,7 @@ fn the_body_authority_selector_is_closed_static_and_chosen_from_source_shape() {
         BodyEmissionAuthority::FunctionizedUnits
     );
 
-    let recursive = RuntimeExpr::ComputationalMatch {
+    let ported_recursive_position = RuntimeExpr::ComputationalMatch {
         scrutinee: Box::new(RuntimeExpr::Construct {
             constructor: "ctor:fixture::selector::Node".to_string(),
             args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
@@ -4885,11 +4898,22 @@ fn the_body_authority_selector_is_closed_static_and_chosen_from_source_shape() {
         },
     };
     assert_eq!(
-        select_body_emission_authority(&recursive, &declarations),
-        BodyEmissionAuthority::FunctionizedUnits
+        select_body_emission_authority(&ported_recursive_position, &declarations),
+        BodyEmissionAuthority::FunctionizedUnits,
+        "a completed recursive-position port still selected retained authority"
     );
 
-    let producer_match = RuntimeExpr::Match {
+    let ported_trap = RuntimeExpr::Trap(RuntimeTrap {
+        code: RuntimeTrapCode::ExplicitTrap,
+        message: "selector trap fixture".to_string(),
+    });
+    assert_eq!(
+        select_body_emission_authority(&ported_trap, &declarations),
+        BodyEmissionAuthority::FunctionizedUnits,
+        "a completed terminal-trap port still selected retained authority"
+    );
+
+    let unported_producer_match = RuntimeExpr::Match {
         scrutinee: Box::new(RuntimeExpr::Call {
             callee: Box::new(RuntimeExpr::LexicalClosure {
                 captures: Vec::new(),
@@ -4908,19 +4932,11 @@ fn the_body_authority_selector_is_closed_static_and_chosen_from_source_shape() {
         },
     };
     assert_eq!(
-        select_body_emission_authority(&producer_match, &declarations),
-        BodyEmissionAuthority::RecursiveDescent
+        select_body_emission_authority(&unported_producer_match, &declarations),
+        BodyEmissionAuthority::RecursiveDescent,
+        "an unported producer Match was admitted by default"
     );
-    assert_eq!(
-        select_body_emission_authority(
-            &RuntimeExpr::Trap(RuntimeTrap {
-                code: RuntimeTrapCode::ExplicitTrap,
-                message: "selector trap fixture".to_string(),
-            }),
-            &declarations,
-        ),
-        BodyEmissionAuthority::FunctionizedUnits
-    );
+
     let seed_closure_call = RuntimeExpr::Call {
         callee: Box::new(RuntimeExpr::Closure {
             captures: Vec::new(),
@@ -4931,7 +4947,8 @@ fn the_body_authority_selector_is_closed_static_and_chosen_from_source_shape() {
     };
     assert_eq!(
         select_body_emission_authority(&seed_closure_call, &declarations),
-        BodyEmissionAuthority::RecursiveDescent
+        BodyEmissionAuthority::RecursiveDescent,
+        "a retained seed-Closure call was admitted by default"
     );
 }
 
