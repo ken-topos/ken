@@ -117,3 +117,87 @@ transcription with extra steps.
    module actually contains, so `AC-2`'s property is defended by an oracle that
    a comment or a line-break cannot move. **The text census is retained as a
    tripwire, not as the evidence.**
+
+---
+
+## P5 — `S3`'s seed material: measured before designing it
+
+⭐ **Three facts measured on `6534e4a6`, before writing any `D3` code, because
+each one falsifies a natural reading of the frame.**
+
+### 1. `ken-runtime` has NEVER minted a Cranelift data object
+
+```
+grep -rn "declare_data|define_data|DataDescription" crates/ken-runtime/src → 0
+```
+
+⇒ The frame's *"the one piece of `B2R`'s contract with no landed counterpart at
+all"* is **literally true at the toolchain level**, not merely at the design
+level. ⛔ This is new emission machinery, not a new call into existing
+machinery.
+
+### 2. Seed captures are CONSTANT-FOLDED today — nothing borrows anything
+
+`lower_seed_capture` (`lowering/mod.rs`) resolves the symbol against
+`seed_env` **at compile time** and hands the result to `lower_ground_value`,
+which for `Bool` and small `Int` emits `builder.ins().iconst(…)`. ⇒ **The value
+is baked into the instruction stream.**
+
+⚠ **So today's mechanism is neither a borrow nor an `ArtifactStatic` one** — an
+`iconst` is owned by the frame the moment it exists. `B2R` declares
+`GroundValueCarrier` as `BorrowedForActivation` / `ArtifactStatic`, and **no
+landed code produces that.** ⛔ Reading `B2R`'s declaration as describing
+current behaviour is wrong in both halves.
+
+### 3. The non-scalar ground values have NO runtime representation at all
+
+```rust
+RuntimeGroundValue::Bytes(v)        => Lowered::Bytes(v.clone()),
+RuntimeGroundValue::String(v)       => Lowered::String(v.clone()),
+RuntimeGroundValue::Constructor{..} => Lowered::Constructor{ args: Vec<Lowered>, .. },
+RuntimeGroundValue::Record{..}      => Lowered::Record{ fields, .. },
+```
+
+⭐ **These hold the compiler's own Rust values.** `Lowered` is a compile-time
+specialization lattice — the frame says so — and only its scalar variants hold
+an `ir::Value`. ⇒ A seed capture of a `Bytes`/`String`/`Constructor`/`Record`
+value **exists only compiler-side and is specialized away.**
+
+⛔ **This is hard-stop `#10`'s exact shape, and it is NOT a new hard-stop.**
+`#10` was discharged because `B2V`/`C1` landed an executable carrier
+(`boundary_value_clif`, live at `lowering/core.rs:92`), and the frame assigns
+minting the durable material to **this node** in those words. ⇒ **Resolved from
+the frame, not escalated.**
+
+**PREDICTION:** `D3` mints one artifact-static data object per distinct seed
+ground value, and the `Capture` slot carries a pointer to it. The runtime-`alloc`
+path in `boundary_value_clif` is ⛔ **not** usable for these, because it produces
+activation-time storage whose owner is not `ArtifactStatic`, and emitting that
+for a slot declared `ArtifactStatic` would violate `AC-12` **by construction**.
+
+---
+
+## P6 — ⛔ `AC-2`'s census is blind to an entire needle class
+
+The census counts three needles: `FunctionBuilder::new(`, `.define_function(`,
+`.declare_function(`. **Data objects are declared and defined by
+`.declare_data(` and `.define_data(`.**
+
+⇒ ⭐ **Every byte of artifact-static seed material `B2F` mints is invisible to
+the census.** ⚠ This is worse than the missing-row defect the frame already
+flagged: a missing *row* means one file is unmeasured, while a missing *needle
+class* means **no file is measured for that kind of emission** — the census
+would read as complete across all seven rows while `n` data objects appear in
+the artifact.
+
+**PREDICTION, recorded before the code exists:**
+
+| needle | `lowering/units.rs` | every other row |
+|---|---|---|
+| `.declare_data(` | **1** | **0** |
+| `.define_data(` | **1** | **0** |
+
+⚠ **NOT CLAIMED:** that two more needles make the census sound. It remains a
+source-TEXT tripwire with the same evasions; extending it closes a *blind spot*,
+not the class of defect. The behavioural control over emitted counts stays the
+evidence, and it must be extended to count minted data objects alongside units.
