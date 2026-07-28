@@ -345,11 +345,67 @@ is `B2A-C`'s, already merged — ⛔ do not rebuild it.
 
 **`D2` — one identity authority, shared by producer and consumer.**
 Re-ground the carrier's `TagId` (and record field identity) on `D1`'s
-artifact-static identity, so the producer at `boundary_value.rs:2642` and the
+artifact-static identity, so the producer and the
 three eliminators derive the **same** identity from the **same** authority.
 ⛔ No second derivation, no parallel table, no hash substitute. ⚠ If `symbol(id)`
 reverse lookup must survive for diagnostics, it survives as a **view over the
 one authority**, never as a second source.
+
+> #### ⭐⭐ AS-BUILT, measured 2026-07-28 — `D1` and `D2` ARE LARGELY BUILT ALREADY
+>
+> ⛔ **Do not build these from scratch. Verified on the branch, not reported.**
+> In `planning/static_transition/semantic_ir.rs` at `790d69e4`:
+>
+> | what | where | visibility |
+> |---|---|---|
+> | `case_constructor_identity` (`D1`, `Match`/`ComputationalMatch`) | `:1145` | `pub(super)` |
+> | `constructor_symbol_identity` (`D2` producer side) | `:1159` | `pub(super)` |
+> | `project_field_identity` (`D1`, `Project`) | `:1172` | `pub(super)` |
+> | `record_field_identity` (`D2` producer side) | `:1185` | `pub(super)` |
+> | `ConstructorIdentity(DenseRange)` / `FieldIdentity(DenseRange)` | `:45` / `:53` | ✅ already `pub(in crate::cranelift_backend)` |
+> | `pack_identity` / `unpack_identity` — `DenseRange` ⟷ `u64` | `:72` / `:89` | the encoding, **already present** |
+>
+> ⭐ **`D2`'s hard property is therefore already STRUCTURAL, not something to
+> establish.** Exactly **one** `identity_span` routes both sides over one closed
+> name arena. ⛔ There is no second derivation, no parallel table and no hash
+> substitute *to remove* — the thing `D2` forbids was never created. ⇒ **The
+> `D2` risk is no longer "build one authority", it is "do not add a second while
+> finishing."**
+>
+> ⚠ **`pack_identity` already documents itself as "the **one** injective
+> `DenseRange -> u64` encoding."** ⇒ If the ABI's opaque `tag_id`/`name_id`
+> slots need `i64`, that is a **signedness bridge over the existing encoding**,
+> ⛔ **never a second `DenseRange -> i64` beside it.** A sibling encoding is
+> precisely the second authority `D2` exists to forbid, and it would be
+> introduced *by the work that discharges `D2`.*
+>
+> **⇒ The actual residual of `D1`/`D2`:** widen those four accessors to
+> `pub(in crate::cranelift_backend)` (which is what `AC-C1` asks for), settle the
+> `u64`/`i64` slot question as a view over the one encoding, and **write the
+> consumers.** ⛔ Not a new capability.
+>
+> ### ⛔⛔ TWO CORRECTIONS — read these before acting on the above
+>
+> 1. ⛔ **These accessors are NOT on `main`, and they are NOT `B1`'s.** They were
+>    introduced by **`6d1dd77b` — "RT-FNSPLIT-C1 S1+S2 (WIP, pre-compile):
+>    artifact-static identity capability"** — a **`C1`** commit on `C1`'s own
+>    branch, ⛔ not reachable from `origin/main`. `B1` never touched this file;
+>    the last three commits to reach it on `main` are `B2R`, the static-body
+>    ownership change, and `B2A-C`.
+>    ⇒ ⛔ **`C1` has NO dependency on `B1` for this**, and ⛔ nobody should wait
+>    on `B1` to supply it. ⚠ An earlier report attributed them to `B1`; that
+>    attribution is withdrawn here so it cannot become a phantom blocker.
+> 2. ⚠ **A `grep` of `main` finds nothing, and that absence is NOT evidence to
+>    rebuild.** This is `C1`'s own earlier phase, unconsumed on `C1`'s branch —
+>    which is also why rustc's dead-code warnings surfaced it. ⭐ The
+>    production-consumer oracle fired on **this WP's own** unfinished work, not a
+>    sibling's.
+>
+> ⚠ **Stale citation retired:** this deliverable previously named *"the producer
+> at `boundary_value.rs:2642`."* That file is
+> `crates/ken-runtime/src/boundary_value.rs` (2,983 lines) and `:2642` is a **doc
+> comment**, not a producer. Locate the producer by name, ⛔ not by line — see
+> `§2h-i` on landmarks versus boundaries.
 
 **`D3` — `Match` and `ComputationalMatch` eliminate a carried value.**
 A second, executable route in which the scrutinee is a boundary word: emitted
