@@ -591,7 +591,7 @@ fn apply_motive(motive: &Term, indices: &[Term], value: Term) -> Term {
 fn evidence_sigma(mut components: Vec<Term>, terminal: Term) -> Term {
     let mut result = terminal;
     while let Some(component) = components.pop() {
-        result = Term::sigma(component, weaken(&result, 1));
+        result = Term::sigma(component, result);
     }
     result
 }
