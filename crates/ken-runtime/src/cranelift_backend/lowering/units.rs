@@ -172,11 +172,6 @@ pub(in crate::cranelift_backend) fn define_unit_bodies<M: Module>(
             backend_module("a planned unit was never forward-declared".to_string())
         })?;
         define_unit_body(module, unit, id)?;
-        #[cfg(test)]
-        B2F_UNIT_EMISSION.with(|cell| {
-            let (declared, defined) = cell.get();
-            cell.set((declared, defined + 1));
-        });
     }
     Ok(())
 }
@@ -234,5 +229,20 @@ fn define_unit_body<M: Module>(
     std::mem::swap(&mut ctx.func, &mut func);
     module
         .define_function(id, &mut ctx)
-        .map_err(|err| backend_module(err.to_string()))
+        .map_err(|err| backend_module(err.to_string()))?;
+    // ⛔ Counted HERE, adjacent to `define_function`, and NOT at the call site
+    // in the loop above -- where it was first written and where it was
+    // worthless.
+    //
+    // ⭐ A mutation gating the `define_unit_body` call left this test GREEN,
+    // because a counter incremented once per loop iteration compares the
+    // bundle's length to the length of the collection the loop walks, which are
+    // equal by construction. It proved the loop ran and CLAIMED bodies were
+    // defined. Only an increment on the emitting path can tell those apart.
+    #[cfg(test)]
+    B2F_UNIT_EMISSION.with(|cell| {
+        let (declared, defined) = cell.get();
+        cell.set((declared, defined + 1));
+    });
+    Ok(())
 }
