@@ -13,6 +13,29 @@
 > provably could not reach the gate. **Every individual ruling was right; the
 > thing they were accumulating into was not.**
 
+> ## ⭐ SUBSUMES `RT-FNSPLIT-B2B` — 2026-07-28. One node, not two.
+>
+> `RT-FNSPLIT-B2B` ("full emission census, finite differences, and the explicit
+> growth verdict") was **the same deliverable** and is now `closed` as subsumed.
+> Its `AC1.1′`–`AC1.5′` map one-to-one onto `AC-B1`–`AC-B4` here, its metric list
+> is this node's `D2`, its differential suite is `D3`, and its closing action —
+> flip `RT-NATIVE-FNSPLIT` to `merged`, unblocking `NATIVE-HANDLE-CARRIER` →
+> `PX8-F-CAP-41` — is this node's `blocks` edge.
+>
+> ⛔ **The duplication was the Steward's**, filed 2026-07-25 (`B2B`) and again
+> 2026-07-26 (this node) on the stated premise that *"the gate had acceptance
+> criteria and no tracked node."* ⚠ **That premise was false — `B2B` was the
+> tracked node.** The fold keeps this node because it has a written frame and the
+> **analytical half** (`D4`, Architect) that `B2B` never carried.
+>
+> ⭐ **Four things `B2B` carried that this frame did not.** They are folded in
+> below and are the reason this is a fold rather than a deletion: the **four
+> structural invariants** (`AC-B4` named a discriminator it never defined), the
+> **Θ(n)-chain-depth non-requirement** (an anti-false-negative guard — without it
+> a *correct* design is rejected), the **Boundary-A absolute-numbers trap**
+> (distinct from the metric-list trap already stated), and the **symptom-inventory
+> arming**.
+
 ## Objective
 
 Measure the **completed emission path** at n = 3..7 nested resource brackets,
@@ -53,6 +76,15 @@ reports** rather than wedging the box.
 
 ⛔ **Every metric, every n. A missing metric is a failed AC, not a footnote.**
 ⛔ **Do not borrow Boundary A's metric list as a substitute for this one.**
+
+> ### ⛔ AND DO NOT BORROW BOUNDARY A'S *NUMBERS* AS A BASELINE
+>
+> ⚠ **A distinct trap from the line above** — that one forbids substituting A's
+> *metric list*; this one forbids substituting A's *values*. A's landed census
+> (`647a2e5b`: `87/115/143/171/199`, `K=8`, widths `12/32/16`) is true **only for
+> the outer planner** and is **PROVISIONAL** for the completed representation.
+> ⇒ Reporting it as this node's baseline is the fabricated-baseline failure
+> `AC-B8` exists to prevent, wearing a different label.
 
 ### `D3` — the differential suite
 
@@ -116,6 +148,41 @@ switching on at n=5 **all pass through the historic n=4 datum**. The
 **structural invariants discriminate**; the table corroborates. State that
 sentence in the verdict.
 
+> ### ⭐ THE FOUR STRUCTURAL INVARIANTS — folded in from `B2B` 2026-07-28
+>
+> ⛔ **`AC-B4` previously named its discriminator and never defined it.** These
+> are the four, and the verdict states each one's status explicitly:
+>
+> 1. **No flattened env / pending / path member in helper identity.**
+> 2. **Constant ID / node payload width.**
+> 3. **Affine total persistent nodes.**
+> 4. **At most affine logical chain depth.**
+>
+> ### ⛔⛔ DO NOT REQUIRE THE LOGICAL CHAIN LENGTH ITSELF TO BE CONSTANT
+>
+> Logical persistent-chain depth **may grow Θ(n), and that is SOUND** — the
+> helper/frame carries **one constant-width ID** into the persistent store rather
+> than the chain itself. ⇒ Invariant 4 is *affine*, not *constant*.
+>
+> ⚠ **This guard is anti-false-negative, and it has already fired once:** the
+> original Boundary-B metric demanded constant maxima here, and **would have
+> rejected a correct design.** Every other guard on this node protects against
+> passing something broken; this one protects against **failing something that
+> works.**
+
+**`AC-B4a` — name the denominator, this node's own.** State which production
+Cranelift emitters the empirical table covers, and for each excluded one, state
+*why* the exclusion is sound.
+
+> ⚠ **`B2F`'s `AC-G0` does not do this for you.** `B2F` answered its own
+> denominator (6 definitions / 8 declarations per native module, Θ(1), for
+> `native_int_clif.rs`) — ⛔ that is a **different population** measured for a
+> **different claim**. ★ A measured property can be **true** and still not entail
+> what this mechanism needs: *"one production function in the lowering path"* is
+> true and is **not** *"one production Cranelift function in `ken-runtime`."*
+> ⇒ A verdict whose denominator silently excludes a sibling production emitter
+> is measuring the wrong population.
+
 **`AC-B5` — the differential suite is green on the completed representation**,
 with its baseline recipe **in the tree**: base SHA, probe function names, and the
 `git worktree add --detach <sha>` + test invocation.
@@ -161,6 +228,14 @@ control and the evidence; an `AC` with no control is recorded
 4. ⛔ **Interning is necessary, not sufficient.** It shares equal subterms; it
    **cannot** merge two distinct tuples merely because their components overlap.
    **Calling the vectors "interned" does not reduce the product-state count.**
+
+## ⭐ Symptom inventory — armed at release
+
+Armed at release (architect §1b / steward §5a-ii), seeded with the held chain's
+four entries and their shared predicate. A new entry that reduces to that same
+predicate means the **port** is incomplete — it routes back to the emission-port
+work rather than being ruled here, and ⛔ it does **not** become a verdict of
+super-linearity.
 
 ## Standing
 

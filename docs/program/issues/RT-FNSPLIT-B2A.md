@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2A
 title: "RT-NATIVE-FNSPLIT Boundary B2a — make the semantic plane load-bearing for emission (behaviour-preserving port)"
-status: draft
+status: closed
 owner: runtime
 size: L
 gate: none
@@ -33,8 +33,12 @@ origin: recut frame docs/program/wp/RT-NATIVE-FNSPLIT-recut.md; Boundary B split
 > ## ⛔ HARD-STOPPED PRE-CODE (#6) — 2026-07-25 (the stop that retired this frame)
 >
 > **Kicked, audited, and stopped before a single edit** (`evt_3xzv4xn77na0d`;
-> leader confirmed `evt_34y9pnbs8r330`). ⇒ **`status: draft`, not `ready`** — the
-> frame below is *known wrong*, and `ready` would invite releasing it again.
+> leader confirmed `evt_34y9pnbs8r330`). The frame below is *known wrong*, and
+> `ready` would invite releasing it again.
+>
+> ⇒ **`status: closed`** — flipped from `draft` 2026-07-28. A **retired** node is
+> resolved-without-landing, which is what `closed` means; leaving it `draft` kept
+> a known-wrong frame sitting in the graph looking like unstarted work.
 >
 > ### The defect is MINE, and it is a class of framing error worth naming
 >

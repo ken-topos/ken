@@ -322,6 +322,44 @@ the current progress file durably and the Steward worktree can stay close to
 tracker already matches `steward/work`, skip the empty commit and publish the
 existing head.
 
+### ⭐⭐ 2a-bis. STAY ONE RELEASE AHEAD OF THE FRONTIER (operator, 2026-07-28)
+
+**Operator, verbatim:** *"ensure that there is at least one WP ahead of the
+frontier. That is, while B2F is with the implementation team, ensure that all
+immediate successors are fully framed. This is probably a good standing policy
+for you to have."*
+
+> **While a node is with a team, every node whose `depends_on` names it must
+> already be `ready` with a written, shovel-ready frame.** Not `draft`. Not a
+> node with a stale or owed frame. ⇒ The instant the in-flight node merges, its
+> successors enter the frontier **automatically** — no Steward pass stands
+> between a merge and the next kickoff.
+
+**This is §00's hard gate made anticipatory.** §00 says an idle build team is
+always your backlog; this says *do not wait for the idleness to appear.* The
+framing debt that produced the nine-hour stall was visible **one merge before**
+it bit.
+
+**Run it as the last step of every release**, when you have just kicked a team:
+
+1. Read the in-flight node's `blocks` edge, and grep the other nodes' `depends_on`
+   for its id — ⚠ **the two disagree**, and `depends_on` is the one
+   `gen-progress.sh` reads.
+2. For each successor: is `status: ready`, and does a frame file exist that is
+   **shovel-ready** — not "re-frame owed before release"?
+3. Frame whatever fails, flip it `ready`, publish doc-only.
+
+⚠ **Two things that look like framing work and are not:**
+
+- ⛔ **A duplicate is a fold, not a frame.** Before writing a frame, check whether
+  a sibling node already carries the deliverable. *Measured 2026-07-28:
+  `RT-FNSPLIT-B2B` and `RT-SCALE-B` were the same node, filed by the Steward a
+  day apart, the second on the explicit premise that the work had "no tracked
+  node."* ⇒ The fix was `closed` + a four-item carry, **not** a new frame.
+- ⛔ **A retired node left at `draft` reads as unstarted work.** `closed` means
+  resolved-without-landing, which is exactly what a superseded node is. Flip it,
+  or it sits in the graph forever looking like backlog you owe a frame for.
+
 ### 2b. Run until complete, blocked, or told to stop
 
 The build is a **long-running effort across many sessions and compactions.**

@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-B2B
 title: "RT-NATIVE-FNSPLIT Boundary B2b — full emission census, finite differences, and the explicit growth verdict"
-status: draft
+status: closed
 owner: runtime
 size: M
 gate: none
@@ -10,6 +10,38 @@ blocks: []
 github: null
 origin: recut frame docs/program/wp/RT-NATIVE-FNSPLIT-recut.md (Boundary B's metric list, unchanged); operator scaling gate evt_4btfhwqhah1ye. Split from B2 by the Steward 2026-07-25.
 ---
+
+> ## ⛔ CLOSED 2026-07-28 — SUBSUMED INTO [[RT-SCALE-B]]. Do not build from this.
+>
+> **This node and `RT-SCALE-B` were the same deliverable, filed twice by the
+> Steward** — this one 2026-07-25, `RT-SCALE-B` 2026-07-26 on the stated premise
+> that the operator's scaling gate *"had acceptance criteria and no tracked
+> node."* ⚠ **That premise was false: this file was the tracked node.**
+>
+> | this node | `RT-SCALE-B` |
+> |---|---|
+> | `AC1.1′` fail-closed `could_not_determine` | `AC-B1`, same |
+> | `AC1.2′` every metric reported | `AC-B2`, same |
+> | `AC1.3′` first **and** second finite differences | `AC-B3`, same |
+> | `AC1.5′` no exponent from few points | `AC-B4`, same sentence |
+> | Boundary B's metric list | `D2` |
+> | the normal/abrupt/trap/join/affine differential suite | `D3` |
+> | "on closing, flip `RT-NATIVE-FNSPLIT` → `merged`" | the `blocks` edge |
+> | — | `D4` **the analytical model** (Architect, research-grounded) |
+>
+> ⇒ `RT-SCALE-B` is strictly the larger node: it carries everything here **plus**
+> the analytical half and a **written frame**. This one never had a frame — its
+> own release note said *"⚠ Re-frame owed before release."*
+>
+> ⭐ **Four things this node carried that the `RT-SCALE-B` frame lacked have been
+> folded in**, and they are why this is a fold and not a deletion: the **four
+> structural invariants** (`AC-B4` named a discriminator it never defined), the
+> **⛔ do-NOT-require-constant-chain-depth** guard (anti-false-negative — it would
+> otherwise **reject a correct design**), the **Boundary-A absolute-numbers**
+> trap, and the **symptom-inventory arming**.
+>
+> ⛔ **Nothing below is live.** It is kept for lineage and for the two
+> re-derivations recorded in it, which the fold does not disturb.
 
 > ## ⚠ RE-DERIVED 2026-07-25 — NOT the slice that closes `RT-NATIVE-FNSPLIT`
 >
