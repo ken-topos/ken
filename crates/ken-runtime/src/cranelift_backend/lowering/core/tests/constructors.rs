@@ -1784,3 +1784,115 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
          ordering: got {reached:?}"
     );
 }
+
+/// `RT-FNSPLIT-C1` `D3` — a **carried** operand survives `case_env` and nested
+/// lowering, which is `§2h`'s own control clause for the env/spine conversion.
+///
+/// **MEASURED:** with a `Carried` operand seeded at de Bruijn index `0`,
+/// lowering `Let { value: Var(0), body: Var(0) }` — a form that necessarily
+/// pushes the lowered value into a **new** environment and re-enters
+/// `lower_expr` — returns `LoweringOperand::Carried` holding the **same SSA
+/// value** that went in. With a `Specialized` operand in the identical fixture,
+/// the identical expression returns `Specialized`.
+/// **CLAIMED:** the shared environment spine forwards an operand's *phase*
+/// unchanged through scope entry and recursive lowering, so a projected
+/// `Carried` child reaching an inner scope is still carried when it is read
+/// back.
+/// **THE GAP:** *"the result is `Carried`"* alone is satisfied by a spine that
+/// blindly returns its input, and *"a `Carried` went in and came out"* is
+/// satisfied by one that **re-mints** a word. ⭐ Two things close it: the
+/// `Specialized` arm proves the fixture's answer actually tracks what was
+/// seeded, and the **SSA-value equality** proves the operand was forwarded
+/// rather than reconstructed.
+///
+/// ⚠ **Why this control exists at all, stated plainly:** the whole 292-error
+/// env/spine conversion is behaviour-preserving, and the 472-test suite stayed
+/// green through it **without ever constructing a `Carried`**. A green suite is
+/// therefore *no evidence* about phase closure — it is evidence about
+/// regression. `rustc` says the same thing in its own words (`variant Carried
+/// is never constructed`), and this test is what answers it.
+///
+/// ⚠ Promise class: **durable invariant**. It asserts a relation between what
+/// is seeded and what is read back, over a `Lowered`-free property; adding
+/// `Lowered` variants, carrier helpers, or eliminator arms all keep it green,
+/// while re-specializing or re-minting an operand on the spine turns it red.
+#[test]
+fn c1_d3_a_carried_operand_survives_case_env_and_nested_lowering() {
+    // `Let { value: Var(0), body: Var(0) }` — ⭐ `Var` in *both* positions on
+    // purpose. The `value` read exercises the lookup, and the `body` read
+    // exercises the lookup **through a freshly built inner environment**, which
+    // is the `case_env` half of the clause. A single `Var(0)` would only test
+    // the lookup.
+    let nested_read = RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::Var(0)),
+        body: Box::new(RuntimeExpr::Var(0)),
+    };
+    let (plan, root_origin) = planned_root_occurrence(&nested_read);
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
+
+    let mut func = Function::new();
+    let mut function_context = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut func, &mut function_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+
+    let seeded_word = builder.ins().iconst(types::I64, 0x0c1_d3);
+
+    // ── the carried phase ─────────────────────────────────────────────────
+    let carried_env = [LoweringOperand::Carried(CarriedBoundaryWord {
+        word: seeded_word,
+    })];
+    let carried_out = compiler
+        .lower_expr(
+            &mut builder,
+            SourceOccurrence {
+                expr: &nested_read,
+                static_origin: root_origin,
+            },
+            &carried_env,
+        )
+        .expect("reading a bound operand emits nothing and cannot fail");
+    let LoweringOperand::Carried(returned) = carried_out else {
+        panic!(
+            "a carried operand must still be carried after entering an inner \
+             environment and being read back through nested lowering"
+        );
+    };
+    assert_eq!(
+        returned.word, seeded_word,
+        "the spine must FORWARD the operand, not re-mint one: a different SSA \
+         value here means some edge rebuilt the word instead of moving it"
+    );
+
+    // ── POSITIVE CONTROL: the identical fixture, specialized ──────────────
+    //
+    // ⛔ Without this the test is consistent with a spine that answers
+    // `Carried` for everything.
+    let specialized_env = [LoweringOperand::Specialized(Lowered::Bool {
+        value: seeded_word,
+        known: Some(true),
+    })];
+    let specialized_out = compiler
+        .lower_expr(
+            &mut builder,
+            SourceOccurrence {
+                expr: &nested_read,
+                static_origin: root_origin,
+            },
+            &specialized_env,
+        )
+        .expect("reading a bound operand emits nothing and cannot fail");
+    assert!(
+        matches!(
+            specialized_out,
+            LoweringOperand::Specialized(Lowered::Bool {
+                known: Some(true),
+                ..
+            })
+        ),
+        "NON-VACUITY: the same fixture must answer `Specialized` when a \
+         specialized operand is seeded, or the carried assertion above is not \
+         measuring the phase at all"
+    );
+}
