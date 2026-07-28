@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-28 10:25:49Z — from 119 issue file(s) in `docs/program/issues/`.
+2026-07-28 13:40:58Z — from 119 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -120,7 +120,7 @@ the committed file matches the generator's output.
 | `RT-FNSPLIT-B2V` | executable boundary-value ABI — one closed 64-bit tagged word for ValueWord/ResultWord plus the emitted-code interface to construct, discriminate and project it | merged | runtime | L | none | — |
 | `RT-FNSPLIT-C1` | operational carrier + three executable eliminators — a runtime-general carrier at the Lowered/lowering boundary with a real producer -> validator -> eliminator edge, grounded on artifact-static semantic identity | merged | runtime | L | none | https://github.com/swe-toolkit/ken/pull/1156 |
 | `RT-FNSPLIT-C2-SYNTH-ID` | closed synthesized-constructor-role identity capability, with the DynamicConstructor producer that consumes it — the identity source compiler-synthesized effect payloads have no occurrence to ask for | ready | runtime | M | none | — |
-| `RT-FNSPLIT-C3-ACTIVATION` | the opaque activation owner — one Rust representation authority in ken-runtime that constructs, publishes and tears down per-invocation boundary storage, with the deployment-supplied capacity profile and the one-argument public adapter seam | ready | runtime | L | none | — |
+| `RT-FNSPLIT-C3-ACTIVATION` | the opaque activation owner — one Rust representation authority in ken-runtime that constructs, publishes and tears down per-invocation boundary storage, with the deployment-supplied capacity profile and the one-argument public adapter seam | merged | runtime | L | none | 1181 |
 | `RT-MATCH-FRAME-FP` | match-frame fingerprints must hash a dedicated closure-free header carrier, not a Debug rendering of closure-capable cases | merged | runtime | M | none | https://github.com/swe-toolkit/ken/pull/1108 |
 | `RT-NATIVE-FNSPLIT` | Native backend: bound per-function lowering growth to O(n) — helper identity is a variable-width whole-configuration key (orig. single-Function VReg::MAX, since fixed) | active | runtime | TBD | none | — |
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
@@ -167,7 +167,6 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `RT-FNSPLIT-C2-SYNTH-ID` — closed synthesized-constructor-role identity capability, with the DynamicConstructor producer that consumes it — the identity source compiler-synthesized effect payloads have no occurrence to ask for
-- `RT-FNSPLIT-C3-ACTIVATION` — the opaque activation owner — one Rust representation authority in ken-runtime that constructs, publishes and tears down per-invocation boundary storage, with the deployment-supplied capacity profile and the one-argument public adapter seam
 
 ## Blockers
 
@@ -205,7 +204,6 @@ is itself not yet `merged`/`closed`:
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
 - `RT-FNSPLIT-B2B` blocked by `RT-FNSPLIT-B2F` (status: ready)
 - `RT-FNSPLIT-B2F` blocked by `RT-FNSPLIT-C2-SYNTH-ID` (status: ready)
-- `RT-FNSPLIT-B2F` blocked by `RT-FNSPLIT-C3-ACTIVATION` (status: ready)
 - `RT-FNSPLIT-B2O-CHECK` blocked by `RT-FNSPLIT-B2F` (status: ready)
 - `RT-SCALE-B` blocked by `RT-FNSPLIT-B2F` (status: ready)
 
