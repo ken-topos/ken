@@ -245,6 +245,101 @@ this wrapper."* That is a **positive scope requirement** — it says *where* the
 wrapper must appear, not merely what it may contain. ⛔ A census that enumerates
 only the three eliminators under-covers it.
 
+### 2g-i. ★★ `AC-C4`'s SINGLE-FIELD LICENSE — Architect, 2026-07-28
+
+⛔ **Read this before you read `§2g`'s last sentence as a prohibition on
+containment.** `§2g` closes with *"placing it inside `Lowered` is not
+permitted."* Read literally, that forbids the one edit `AC-C4` now **requires**,
+and a reviewer who stops there will reject correct work. The Architect resolved
+the conflict on a fork filed by the implementer (`evt_1ygwnyk0afvxr`, answered at
+`evt_mscgq56j6jta`) and ⛔ this section governs that reading.
+
+> **The governing distinction is phase identity, not transitive Rust object
+> containment.** *"Placing `Carried` inside `Lowered`"* means giving the carried
+> value a `Lowered` **identity** — making it a `Lowered` inhabitant, or letting
+> it acquire `LoweredVariant`, `BoundaryDisposition`, an encoding policy, or an
+> inverse conversion. ⛔ None of those may happen. ✅ An operand **edge owned
+> by** a `Lowered` variant is a different thing, and one such edge is licensed.
+
+**The license, exactly:** `ComputationalRecursorClosure.residual` widens
+`Box<Lowered>` → **`Box<LoweringOperand>`**. Nothing else.
+
+```rust
+LoweringOperand::Specialized(
+    Lowered::ComputationalRecursorClosure {
+        residual: Box<LoweringOperand>,   // <- the one licensed edge
+        activation,
+        invocation,
+    },
+)
+```
+
+⭐ **The reasoning, because it is what makes the license safe rather than an
+exception:** `Specialized` classifies how the **outer callable control capsule**
+is consumed; it does **not** assert that every operand edge that capsule owns is
+recursively specialized. The residual is the value on which the saved recursor
+*continues*, so `§2h`'s full phase closure **requires** that edge to preserve
+`Carried`. ⇒ Treating the residual as a compile-time template is the **defect**
+the fork exposed, not a conservative choice.
+
+⛔ **`AC-C4` is therefore NOT an available residual of `C1`.** The
+recursive-position fail-closed refusal built at `678c27cc` must be replaced by
+the admitted route.
+
+#### ⛔ What the license does NOT extend to
+
+⛔ **Any other `Lowered` child position** — `Constructor`, `Record`, ordinary
+`Closure`, `DeclarationClosure` and every other child stay unchanged. ⛔ No
+third operand variant · ⛔ no `Lowered::Boundary` · ⛔ no inverse conversion ·
+⛔ no `PersistentClosure` or other durable-closure lane · ⛔ no encoder/decoder
+row · ⛔ no new carrier tag.
+
+#### Required mechanism
+
+1. `make_computational_recursor` receives a `LoweringOperand`. Existing
+   specialized callers **wrap their current `Lowered` child explicitly**; the
+   carried `ComputationalMatch` arm passes its projected
+   `LoweringOperand::Carried(child)` directly.
+2. `decompose_computational_recursor` returns a `LoweringOperand`, and **every**
+   invocation site classifies it exhaustively — ⛔ no wildcard.
+   `Specialized(BoundedNat | Closure)` follows the existing paths **byte-for-byte
+   in meaning**; `Carried(word)` installs the already-checked invocation segment
+   and resumes the same computational eliminator over that carried word. ⛔ Never
+   `specialized_at`, ⛔ never a reconstructed `Lowered`, ⛔ never back through the
+   producer.
+3. ⭐ **A carried residual is a transferred VALUE, never a transferred
+   callable.** So a carried-residual IH invocation **with source arguments fails
+   closed before control installation**, and function-valued recursive fields
+   remain excluded by the existing closure-transfer prohibition. ✅ The
+   **zero-argument structural IH route** is the admitted carried route.
+4. The outer `ComputationalRecursorClosure` remains **unconditionally
+   non-transferable**: retain its early `boundary_transfer_admissibility`
+   rejection, `FailClosedForbidden` disposition, ground-value refusal, and
+   in-flight activation checks. ⚠ **The admission walk must reject the outer
+   capsule BEFORE examining or emitting its residual** — the ordering is part of
+   the ruling, ⛔ not an implementation detail.
+5. All static-origin, checked-frame, slot-template, activation and invocation
+   ownership stays on the existing recursor metadata. ⛔ Derive none of it from
+   the carried word.
+
+#### Five causal controls, required before review
+
+1. Executable **zero-arg carried recursive IH** — result **and** discriminator.
+2. Replacing only the residual with the specialized path **reds** it.
+3. Static-origin / slot perturbation **reds ownership** while the value route
+   otherwise holds.
+4. Outer-capsule transfer **fails before allocation / helper invocation**.
+5. Non-empty source args on a carried residual **fail before invocation
+   installation**.
+
+⚠ **Two hazards carried over from `AC-C7`, because both bite on exactly this
+shape.** ⭐ Control 2 is a same-shape trap: **two branches that agree on every
+input do not discriminate between them**, so if the specialized and carried
+routes return the same value for the fixture, the mutation cannot red — make them
+differ by construction. ⭐ Control 3 has the positional hazard that left `AC-C5`
+green under `AC-C7`'s first mutation: perturb a slot whose correct answer is
+**not** the positional default.
+
 ### 2h. ★★ The `D3` OBLIGATED-SURFACE ruling — Architect, transcribed verbatim
 
 ⭐ **`§2g` fixed the carrier's *shape*; this fixes *how far it propagates*.**
@@ -383,7 +478,10 @@ one authority**, never as a second source.
 > ⛔ **Not a new capability, and ⛔ not a visibility edit either — see the third
 > correction below, which retires an instruction this block used to give.**
 >
-> ### ⛔⛔ TWO CORRECTIONS — read these before acting on the above
+> ### ⛔⛔ THREE CORRECTIONS — read these before acting on the above
+>
+> ⚠ The third is the longest and sits below the stale-citation note; ⛔ do not
+> stop reading at the numbered pair.
 >
 > 1. ⛔ **These accessors are NOT on `main`, and they are NOT `B1`'s.** They were
 >    introduced by **`6d1dd77b` — "RT-FNSPLIT-C1 S1+S2 (WIP, pre-compile):
@@ -585,6 +683,10 @@ were skipped. ⛔ An AC with no control is invisible to review: *"discharged"* a
 - **`AC-C4`** — `ComputationalMatch` likewise, with recursive positions.
   **Control:** as `AC-C3`, plus evidence the static-origin ownership contract is
   unchanged for the recursive positions.
+  ⭐ **See `§2g-i`, which is binding on this criterion** — it licenses the single
+  `ComputationalRecursorClosure.residual` widening that makes a carried recursive
+  position expressible, ⛔ rules out a fail-closed refusal as a `C1` residual, and
+  ⭐ **replaces this line's control with the five named there.**
 - **`AC-C5`** — `Project` selects the correct field by artifact-static identity
   and returns the carrier.
   **Control:** a record whose fields are **reordered** relative to declaration
