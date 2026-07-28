@@ -4908,9 +4908,17 @@ impl<'a> Lowering<'a> {
             let mut children = Vec::with_capacity(case.argument_binders);
             for position in 0..case.argument_binders {
                 // ⭐ `§2g` — the projected child stays `Carried` into `case_env`.
-                children.push(LoweringOperand::Carried(
-                    self.emit_carrier_field(builder, scrutinee, position)?,
-                ));
+                let child = self.emit_carrier_field(builder, scrutinee, position)?;
+                // ⭐ The residual edge's oracle, written here and keyed on THIS
+                // loop's own counter — before any selection among the children
+                // happens. ⛔ Not derived from `recursive_positions`.
+                #[cfg(test)]
+                px8j_record_carrier_field_projection(
+                    Px8jProducerPath::Composed,
+                    position,
+                    child,
+                );
+                children.push(LoweringOperand::Carried(child));
             }
 
             // ── ⭐⭐ `AC-C4` — the induction hypotheses over carried children ──

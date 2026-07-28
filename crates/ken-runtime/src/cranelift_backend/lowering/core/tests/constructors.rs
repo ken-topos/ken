@@ -2916,9 +2916,22 @@ fn ac_c4_ownership_edge() -> (i64, u64, u64, Vec<Px8jSourceTraceEvent>) {
 /// and invocation ownership all stay on the existing recursor metadata, and ⛔
 /// none of it is derived from the carried word.
 /// **THE GAP:** a trace assertion says an IH was *recorded*, not that the right
-/// one was built. ⭐ Closed by pairing it with the value: the trace fixes *which
-/// position owns the hypothesis* and `Var(1)` fixes *where the children sit*,
-/// and no single wrong answer satisfies both.
+/// one was built.
+///
+/// ⛔⛔ **AN EARLIER REVISION OF THIS COMMENT CLAIMED THAT GAP WAS CLOSED HERE,
+/// AND IT WAS NOT.** It read: *"closed by pairing it with the value — the trace
+/// fixes which position owns the hypothesis and `Var(1)` fixes where the
+/// children sit, and no single wrong answer satisfies both."* ⚠ Both halves of
+/// that pairing observe the **metadata** edge. `runtime-qa` defeated it on
+/// `b8d2922f` with a compile-preserving substitution of the residual's operand
+/// — `children[position]` → `children[0]` — which leaves `sibling_position`,
+/// the producer origin and the `Var(1)` route all intact, and this control
+/// stayed **green**.
+///
+/// ⇒ ⭐ **This control measures OWNERSHIP and nothing else.** The residual's
+/// *content* — `§2g-i`'s "passes its projected `Carried(child)` directly" — is
+/// a different edge, and it is measured by
+/// [`c1_d3_ac_c4_the_residual_holds_the_declared_positions_projected_child`].
 ///
 /// ⚠ Promise class: **durable invariant**.
 #[test]
@@ -2969,6 +2982,101 @@ fn c1_d3_ac_c4_the_recursive_positions_ownership_comes_from_the_frame() {
         "the value route must stay intact while ownership is measured: with the \
          hypothesis at index 0, `Var(1)` is the FIRST child. Reading `Leaf` \
          ({leaf}) means the case environment lost its hypothesis; got {observed}"
+    );
+}
+
+/// ⭐⭐ **`AC-C4` CONTROL 6 — the induction hypothesis's residual holds the
+/// child projected at the case's DECLARED recursive position.**
+///
+/// **MEASURED:** eliminating `Wrap2(Alpha, Leaf)` through a case declaring
+/// `recursive_positions: [1]`, the boundary word recorded inside the minted
+/// hypothesis's residual is **identical to the word the projection loop
+/// produced for field 1**, and the two fields produced different words.
+/// **CLAIMED:** `§2g-i` clause 1 — the carried `ComputationalMatch` arm passes
+/// its projected `Carried(child)` **directly** into the licensed residual edge.
+/// **THE GAP:** identity of SSA words shows the residual holds *that
+/// projection*, not that the projection itself reads the right memory. ⛔ That
+/// second half is `emit_carrier_field`'s own contract and is measured by the
+/// `AC-C7` field-projection controls — ⚠ not restated here, because a control
+/// that asserts its neighbour's property is how an aggregate gets counted twice.
+///
+/// ## ⭐ Why this is NOT the positionally-derived assertion I flagged as the risk
+///
+/// The expected index is the literal `DECLARED_RECURSIVE_POSITION`, ⛔ **not**
+/// read from the production path's `position` variable. The distinction is
+/// where the number comes from, and it is the whole difference between a
+/// control and a tautology:
+///
+/// - ⛔ **circular:** expected index sourced from the same production variable
+///   the mutation perturbs ⇒ expected moves *with* production, stays green.
+/// - ✅ **sound (this control):** expected index is the fixture's own
+///   declaration, chosen by the fixture author ⇒ under
+///   `children[position]` → `children[0]` the expectation stays at field 1
+///   while production moves to field 0, and this **reds**.
+///
+/// The oracle it compares against — `CarrierFieldProjection` — is written by
+/// the projection loop keyed on that loop's counter, *before* any selection
+/// among the children occurs. ⇒ It records ground truth about which field
+/// yielded which word and cannot move with a selection defect.
+///
+/// ⚠ Promise class: **durable invariant**. Any future case shape keeps it green
+/// so long as the residual holds the declared position's child; it reddens
+/// exactly when that stops being true.
+#[test]
+fn c1_d3_ac_c4_the_residual_holds_the_declared_positions_projected_child() {
+    // ⭐ THE FIXTURE'S OWN DECLARATION, restated on this test's authority.
+    // `ac_c4_ownership_edge` builds `recursive_positions: vec![1]` over two
+    // binders; these literals are the independent half of the comparison.
+    const DECLARED_RECURSIVE_POSITION: usize = 1;
+    const ARGUMENT_BINDERS: usize = 2;
+
+    let (_observed, _alpha, _leaf, trace) = ac_c4_ownership_edge();
+
+    let projections: Vec<(usize, cranelift_codegen::ir::Value)> = trace
+        .iter()
+        .filter_map(|event| match event {
+            Px8jSourceTraceEvent::CarrierFieldProjection { position, word, .. } => {
+                Some((*position, *word))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        projections.iter().map(|(position, _)| *position).collect::<Vec<_>>(),
+        (0..ARGUMENT_BINDERS).collect::<Vec<_>>(),
+        "the recursive case projects exactly its {ARGUMENT_BINDERS} binders, in \
+         order, and the `Leaf` case projects none: {trace:#?}"
+    );
+    assert_ne!(
+        projections[0].1, projections[1].1,
+        "NON-VACUITY: the two projected fields must be DISTINGUISHABLE words, \
+         or 'the residual holds field 1' is satisfied by field 0 as well and \
+         this control proves nothing: {trace:#?}"
+    );
+
+    let expected = projections
+        .iter()
+        .find(|(position, _)| *position == DECLARED_RECURSIVE_POSITION)
+        .map(|(_, word)| *word)
+        .expect("the declared recursive position is among the projected binders");
+
+    let residuals: Vec<_> = trace
+        .iter()
+        .filter_map(|event| match event {
+            Px8jSourceTraceEvent::Carrier { residual, .. } => Some(*residual),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        residuals,
+        vec![Px8jResidualPhase::Carried(expected)],
+        "DISCRIMINATOR: the one minted hypothesis must hold, IN THE CARRIED \
+         PHASE, the exact word field {DECLARED_RECURSIVE_POSITION} projected. ⛔ \
+         `Carried({:?})` here is field 0 — the positional default, and the \
+         compile-preserving evasion this control exists to redden. ⛔ \
+         `Specialized` here means the residual was wrapped or templated rather \
+         than passed directly, which `§2g-i` forbids: {trace:#?}",
+        projections[0].1
     );
 }
 

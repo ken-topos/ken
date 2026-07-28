@@ -98,6 +98,28 @@ enum Px8jProducerPath {
     DeferredConstructor,
     SourceMachine,
 }
+/// ⭐ **The phase of an induction hypothesis's residual, with the carried word
+/// when there is one** (`RT-FNSPLIT-C1` `AC-C4`, `§2g-i`).
+///
+/// ⚠ **The raw `ir::Value` is recorded rather than a `CarriedBoundaryWord`, and
+/// that is deliberate.** Recording the struct would require giving it
+/// `PartialEq` — which would hand *production* a compile-time way to ask
+/// whether two carried values are the same word. ⛔ That is exactly the
+/// capability `CarriedBoundaryWord`'s emptiness exists to deny (see its doc
+/// comment: every question about a carried value is answered by an emitted
+/// helper at runtime). ⇒ The observation stays test-only in its **capability**,
+/// not merely in its `#[cfg]`.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Px8jResidualPhase {
+    /// The carried phase, together with the exact boundary word held.
+    Carried(cranelift_codegen::ir::Value),
+    /// The specialized phase. ⛔ Recorded as a phase only: `§2g-i`'s clause
+    /// constrains the **carried** arm, and a specialized residual is a
+    /// different route entirely.
+    Specialized,
+}
+
 #[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Px8jSourceTraceEvent {
@@ -113,6 +135,32 @@ enum Px8jSourceTraceEvent {
         origin: RecursorProducerOriginId,
         cursor: ContinuationCursorId,
         sibling_position: usize,
+        /// ⭐⭐ **The RESIDUAL edge — `§2g-i`'s actual sentence.**
+        ///
+        /// ⛔ Every other field of this event observes the **metadata** edge:
+        /// `origin`, `cursor` and `sibling_position` all say *who owns* the
+        /// hypothesis. ⛔ **None of them says what is INSIDE it.** Substituting
+        /// one projected child for another leaves all three byte-identical —
+        /// which is precisely the compile-preserving evasion that defeated this
+        /// control (`children[position]` → `children[0]`, `runtime-qa` on
+        /// `b8d2922f`).
+        residual: Px8jResidualPhase,
+    },
+    /// ⭐ **A child projected out of a carried scrutinee, as
+    /// `(position, word)`.**
+    ///
+    /// ⭐⭐ **This is the INDEPENDENT ORACLE for the residual edge, and the
+    /// independence is structural, not a matter of care.** It is written by the
+    /// projection loop itself, keyed on **that loop's own counter** — so it
+    /// records which field each word actually came from, and it is written
+    /// *before* any selection among the children happens. ⇒ A test may name a
+    /// position on its **fixture's** authority and ask this record which word
+    /// that field produced, without ever reading the index the production path
+    /// selected with.
+    CarrierFieldProjection {
+        path: Px8jProducerPath,
+        position: usize,
+        word: cranelift_codegen::ir::Value,
     },
     Install {
         origin: RecursorProducerOriginId,
@@ -175,21 +223,48 @@ fn px8tr_deforested_answer_route_enabled() -> bool {
 fn px8tr_deforested_answer_route_enabled() -> bool {
     true
 }
+/// Record which child a carried scrutinee's projection loop produced at each
+/// position. ⭐ See `Px8jSourceTraceEvent::CarrierFieldProjection` — this is the
+/// residual edge's independent oracle.
+#[cfg(test)]
+fn px8j_record_carrier_field_projection(
+    path: Px8jProducerPath,
+    position: usize,
+    word: CarriedBoundaryWord,
+) {
+    px8j_record_source_event(Px8jSourceTraceEvent::CarrierFieldProjection {
+        path,
+        position,
+        word: word.word,
+    });
+}
+
 #[cfg(test)]
 fn px8j_record_recursor_carrier(path: Px8jProducerPath, value: &LoweringOperand) {
     // ⭐ A trace probe, so it is total over both phases and takes neither
     // boundary: a carried operand is simply not a recursor carrier, which is the
     // same "nothing to record" answer any other non-recursor value gets.
-    let LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure { invocation, .. }) =
-        value
+    let LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure {
+        residual,
+        invocation,
+        ..
+    }) = value
     else {
         return;
+    };
+    // ⭐ Total over both phases here too, and wildcard-free: the residual's
+    // phase is part of what is observed, so an unclassifiable arm would be a
+    // silent hole in exactly the edge this field exists to expose.
+    let residual = match residual.as_ref() {
+        LoweringOperand::Carried(word) => Px8jResidualPhase::Carried(word.word),
+        LoweringOperand::Specialized(_) => Px8jResidualPhase::Specialized,
     };
     px8j_record_source_event(Px8jSourceTraceEvent::Carrier {
         path,
         origin: invocation.origin,
         cursor: invocation.resume_cursor,
         sibling_position: invocation.sibling_position,
+        residual,
     });
 }
 fn verify_cranelift_function(
