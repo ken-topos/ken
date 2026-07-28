@@ -6513,3 +6513,183 @@ fn b2f_emits_one_defined_target_unit_per_planned_function_unit() {
          closure={closure_declared}"
     );
 }
+
+// ─── RT-FNSPLIT-B2F D3 — artifact-static seed material, measured BEHAVIOURALLY ─
+
+/// A program that captures one seed symbol and returns it, compiled against an
+/// environment that binds that symbol to `value`.
+///
+/// ⚠ The closure is **called**, not returned, for the same reason the unit
+/// fixture above calls its closure: a closure is not an observable ground value
+/// at the root, so a fixture that merely mentions one never reaches emission and
+/// would measure nothing while looking like a discriminator.
+#[cfg(test)]
+fn b2f_seed_capture_program(symbol: &str, value: RuntimeGroundValue) -> NativeSeedEnvironment {
+    let mut env = NativeSeedEnvironment::empty();
+    env.insert(symbol, value);
+    env
+}
+
+/// **`AC-2`, data half — the minted artifact-static population, counted at the
+/// point of emission.**
+///
+/// ⭐ **This is the instrument the amended `AC-2` names as PRIMARY**, and the
+/// reason is the failure direction rather than the needle list: the source-text
+/// census's default branch is *"needle not found ⇒ nothing emitted"*, so it
+/// fails **open** for every emission spelling nobody enumerated. `D3`'s data
+/// objects were exactly such a spelling — the census read complete across every
+/// row while it could not see a single one. This counter observes what the
+/// module **contains**, so an unanticipated spelling cannot hide in it.
+///
+/// **MEASURED:** the `(declared, defined)` artifact-static object counts for two
+/// compiles that differ only in whether the seed environment is empty.
+/// **CLAIMED:** one read-only artifact-static object is minted and defined per
+/// seed-environment entry.
+/// **THE GAP:** ⛔ this says nothing about the object's *contents*, nor about
+/// whether any emitted code reads it. Contents are pinned by the encoder tests
+/// in `seed_material`; the reading is
+/// `a_seed_capture_borrows_from_artifact_static_storage_rather_than_folding` below.
+#[test]
+fn b2f_mints_one_defined_artifact_static_object_per_seed_environment_entry() {
+    fn objects_emitted(env: &NativeSeedEnvironment) -> (usize, usize) {
+        let module = new_jit_module().expect("jit module");
+        compile_expr_into_module(
+            module,
+            "b2f_seed_material_population_probe",
+            Linkage::Local,
+            &RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            env,
+            BTreeMap::new(),
+            None,
+            false,
+            None,
+            None,
+            None,
+        )
+        .expect("compile");
+        crate::cranelift_backend::lowering::seed_material::b2f_last_seed_material_emission()
+    }
+
+    let (empty_declared, empty_defined) = objects_emitted(&NativeSeedEnvironment::empty());
+    let seeded = b2f_seed_capture_program("s", RuntimeGroundValue::Int(7i64.into()));
+    let (seeded_declared, seeded_defined) = objects_emitted(&seeded);
+
+    // ⛔ Every declared object is defined. A declaration without a definition
+    // leaves an undefined symbol the borrow would resolve to, which is why the
+    // recorder carries two numbers rather than one.
+    assert_eq!(
+        empty_declared, empty_defined,
+        "D3 -- a declared artifact-static object was never defined (empty environment)"
+    );
+    assert_eq!(
+        seeded_declared, seeded_defined,
+        "D3 -- a declared artifact-static object was never defined (seeded environment)"
+    );
+
+    // ⭐ POSITIVE CONTROL / NON-VACUITY, in both directions. Without the first,
+    // every assertion above is satisfied by minting nothing at all for any
+    // input, forever. Without the second, they are satisfied by minting a fixed
+    // object regardless of the environment.
+    assert_eq!(
+        empty_declared, 0,
+        "D3 -- an empty seed environment has nothing to mint; measured {empty_declared}"
+    );
+    assert_eq!(
+        seeded_declared, 1,
+        "D3 -- NON-VACUITY: one environment entry must mint exactly one \
+         artifact-static object. If this is 0 the population is not tracking the \
+         environment and every count above is satisfied by minting nothing."
+    );
+}
+
+/// **`AC-12` — the emitted code OBEYS `BorrowedForActivation` +
+/// `ArtifactStatic`, with a positive control.**
+///
+/// ⛔ **An assertion that reads the mode back out of `AbiCarrier::ownership` or
+/// `storage_owner` discharges nothing** — both are `const fn`s over a closed
+/// enum, so re-reading them measures the declaration with the declaration. The
+/// observable difference between obeying those two modes and ignoring them is
+/// whether the capture's value arrives by a **load from durable storage** or by
+/// a constant folded into the instruction stream, and that is what this counts.
+///
+/// **MEASURED:** how many loads from artifact-static storage the emitter issued
+/// while compiling a program with a seed capture, versus one without.
+/// **CLAIMED:** a seed capture's scalar value is read out of artifact-static
+/// material rather than folded in at compile time.
+/// **THE GAP:** ⛔ a load that is emitted and then discarded downstream — if a
+/// specialization ever substituted `Lowered`'s `known` field for the loaded
+/// value in emitted code — would still be counted here. ⭐ **That residual is
+/// closed by measurement, not by argument:** corrupting the minted payload byte
+/// image (`push_word(out, (*small ^ 1) as u64)` in `seed_material::encode_into`)
+/// reddens
+/// `values::cranelift_runs_closure_seed_with_explicit_runtime_capture_environment`
+/// and `artifact::api::tests::program_runner_preflights_metadata_before_backend_lowering`,
+/// which are **runtime** observations. ⇒ The program's answer is a function of
+/// the minted bytes. ⛔ That mutation is deliberately NOT committed as a test:
+/// it needs a perturbation hook inside production, and a hook that can fold the
+/// value instead is precisely the second authority `D3` removes.
+#[test]
+fn a_seed_capture_borrows_from_artifact_static_storage_rather_than_folding() {
+    fn loads_during(expr: &RuntimeExpr, env: &NativeSeedEnvironment) -> usize {
+        let before = crate::cranelift_backend::lowering::seed_material::b2f_artifact_static_loads();
+        let module = new_jit_module().expect("jit module");
+        compile_expr_into_module(
+            module,
+            "b2f_artifact_static_borrow_probe",
+            Linkage::Local,
+            expr,
+            env,
+            BTreeMap::new(),
+            None,
+            false,
+            None,
+            None,
+            None,
+        )
+        .expect("compile");
+        // ⚠ A difference of two readings, because the counter is monotone across
+        // the process and other tests on this thread contribute to it.
+        crate::cranelift_backend::lowering::seed_material::b2f_artifact_static_loads() - before
+    }
+
+    // The two fixtures differ in exactly one thing: whether the program performs
+    // a seed capture. Both compile the same shape and both reach emission.
+    let no_capture = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Closure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+    let with_capture = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Closure {
+            captures: vec!["s".to_string()],
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+    let env = b2f_seed_capture_program("s", RuntimeGroundValue::Int(7i64.into()));
+
+    let without = loads_during(&no_capture, &env);
+    let with = loads_during(&with_capture, &env);
+
+    // ⭐ POSITIVE CONTROL first, because the interesting assertion is the
+    // negative one and a negative check passes for any reason -- including a
+    // counter that is never incremented at all.
+    assert!(
+        with >= 1,
+        "AC-12 -- a seed capture must READ its value out of artifact-static \
+         storage. Zero loads means the value was folded into the instruction \
+         stream, which is `OwnedByFrame` behaviour on a slot the ABI declares \
+         `BorrowedForActivation` from `ArtifactStatic`."
+    );
+    assert_eq!(
+        without, 0,
+        "AC-12 -- NON-VACUITY: a program with no seed capture must issue no \
+         artifact-static load. If this is non-zero the counter is measuring \
+         something other than the capture path and the assertion above is \
+         satisfied for the wrong reason; measured {without}"
+    );
+}

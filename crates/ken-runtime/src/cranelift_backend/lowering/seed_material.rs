@@ -119,6 +119,30 @@ pub(in crate::cranelift_backend) fn b2f_last_seed_material_emission() -> (usize,
     B2F_SEED_MATERIAL_EMISSION.with(std::cell::Cell::get)
 }
 
+/// **`AC-12` — how many reads from artifact-static storage the emitter issued.**
+///
+/// ⭐ **This is the ownership-mode control, and it is a count of EMITTED LOADS
+/// rather than a re-reading of a declaration.** `AbiCarrier::ownership` and
+/// `storage_owner` are `const fn`s over a closed enum; an assertion that reads a
+/// mode back out of them re-measures the declaration and discharges nothing.
+/// What `AC-12` wants is whether the *emitted code* obeys it, and the observable
+/// difference between obeying and ignoring `BorrowedForActivation` +
+/// `ArtifactStatic` is whether the value arrives by a load from durable storage
+/// or by a constant folded into the instruction stream.
+///
+/// ⚠ Monotone across a process, never reset by production. A reader compares two
+/// readings around one compile; ⛔ it must not be read as a per-compile total.
+#[cfg(test)]
+thread_local! {
+    static B2F_ARTIFACT_STATIC_LOADS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Reads issued from artifact-static storage so far on this thread.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn b2f_artifact_static_loads() -> usize {
+    B2F_ARTIFACT_STATIC_LOADS.with(std::cell::Cell::get)
+}
+
 /// Every artifact-static seed object this module minted, keyed by the symbol
 /// whose value it holds.
 ///
@@ -188,11 +212,19 @@ impl SeedMaterialRefs {
     ) -> Option<cranelift_codegen::ir::Value> {
         let base = *self.bases.get(symbol)?;
         let address = builder.ins().global_value(self.pointer_type, base);
-        Some(
-            builder
-                .ins()
-                .load(types::I64, MemFlags::trusted(), address, SEED_PAYLOAD_OFFSET),
-        )
+        let word = builder
+            .ins()
+            .load(types::I64, MemFlags::trusted(), address, SEED_PAYLOAD_OFFSET);
+        // ⛔ Counted HERE, adjacent to the `load` that IS the borrow — not at
+        // the call site in `lower_seed_capture`, and not on entry to this
+        // method. ⭐ A counter one frame out measures that the capture path was
+        // *entered*; this measures that a read from artifact-static storage was
+        // *emitted*. An early return, a guard, or a folded fallback all change
+        // this number precisely because the number is produced by the thing
+        // under test.
+        #[cfg(test)]
+        B2F_ARTIFACT_STATIC_LOADS.with(|cell| cell.set(cell.get() + 1));
+        Some(word)
     }
 
     /// How many minted objects are addressable from this function.
