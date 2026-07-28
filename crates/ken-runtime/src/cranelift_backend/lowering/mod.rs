@@ -326,6 +326,22 @@ struct Lowering<'a> {
     /// it refuses exactly self-resumption and ⛔ still permits a case body to
     /// eliminate a *different* carried value. A bare depth bound would refuse
     /// legitimate nesting — an over-strengthened guard manufacturing defects.
+    ///
+    /// ⛔⛔ **This is a TRANSITION SENTINEL, ⛔ not closure — and the successor
+    /// that retires it is named.** Steward decision 2026-07-28 (`C1 §2g-i`'s
+    /// amendment block): `AC-C4` splits, `C1` keeps the representation half, and
+    /// **`RT-FNSPLIT-B2F` owns the runtime invocation** inside its existing
+    /// atomic target/switch boundary. ⇒ `B2F` emits one closed, recursively
+    /// callable target per static computational-eliminator origin and turns a
+    /// zero-argument structural IH into a **direct call to that same target**;
+    /// at that point this stack, and the refusal it guards, come out.
+    ///
+    /// ⚠ **`B2F`'s termination premise is a DIFFERENT argument from this
+    /// guard's, and that is the point.** This refuses because nothing shrinks at
+    /// **compile** time. `B2F` may call because the producer→validator boundary
+    /// has already established a **finite acyclic carrier graph** and the call
+    /// rides a **declared recursive child edge** — so its measure is strict
+    /// descent in that validated graph, ⛔ never compile-time shrinkage.
     active_carried_computational_eliminations: Vec<StaticOriginId>,
     native_join_plan: Option<crate::NativeJoinPlanV1>,
     consumed_join_sites: BTreeSet<u64>,

@@ -2689,7 +2689,7 @@ fn c1_d3_ac_c4_a_carried_recursive_position_builds_its_hypothesis_and_eliminates
 }
 
 /// ⛔⛔ **TRANSITION SENTINEL — invoking a carried induction hypothesis is
-/// REFUSED, and `AC-C4` is therefore NOT discharged.**
+/// REFUSED here because ⭐ `RT-FNSPLIT-B2F` OWNS THAT HALF.**
 ///
 /// ⭐ **This is a boundary, not a bug, and the reason is structural.** A
 /// *specialized* recursive elimination terminates because its residual is a
@@ -2699,18 +2699,29 @@ fn c1_d3_ac_c4_a_carried_recursive_position_builds_its_hypothesis_and_eliminates
 /// recursive case again — without bound. ⚠ Measured, not theorised: before the
 /// guard existed this fixture **overflowed the compiler's stack**.
 ///
-/// ⛔ **The ruled mechanism is necessary but not sufficient.** Widening
-/// `residual` to a `LoweringOperand` is what lets the hypothesis *exist* over a
-/// carried child, and the test above proves it does. Making it *callable*
-/// additionally requires the elimination to be emitted as a runtime backedge or
-/// call rather than unrolled — a codegen capability the single-field license
-/// neither grants nor implies.
+/// ⛔ **`AC-C4` SPLIT — Steward decision, 2026-07-28 (`C1 §2g-i`'s amendment
+/// block).** Widening `residual` to a `LoweringOperand` is what lets the
+/// hypothesis *exist* over a carried child, and the test above proves it does.
+/// Making it **callable** needs the only general execution vehicle there is — a
+/// per-static-origin callable target — and ⛔ `C1`'s own `AC-C10` forbids
+/// target-function population. ⇒ **`C1` keeps the representation half; the
+/// runtime invocation is `RT-FNSPLIT-B2F`'s**, inside its existing atomic
+/// target/switch boundary.
 ///
 /// ⚠ Promise class: **transition sentinel**, named for the boundary rather than
-/// the current behaviour. ⭐ **It retires when the Architect rules on emitting a
-/// carried recursive elimination as a backedge/call**; the seat that lands that
-/// ruling deletes this test and makes the body above `Call { Var(0), [] }`,
-/// which must then return `Sentinel` rather than `Leaf`.
+/// the current behaviour. ⭐ **The obligation that retires it is `B2F`'s
+/// `INHERITED 2026-07-28` section** — *"one closed, recursively callable
+/// Cranelift target per static computational-eliminator origin,"* with a
+/// zero-argument structural IH emitting a **direct call to that same target**
+/// on the projected child word.
+///
+/// ⛔ **`B2F`'s implementer: this test is yours to delete, and its replacement
+/// must be NON-TAIL.** Make the case body something like `Suc(IH(x))` rather
+/// than the bare `Call { Var(0), [] }` below — ⚠ a tail-only fixture passes a
+/// strict subset, which is exactly why `B2F` rejects the CFG-backedge
+/// alternative on merits. ⛔ Also rejected there, do not re-open:
+/// `Lowered::RecursiveBackedge` as a carried value (it reopens the phase
+/// identity `§2g-i` closed) and an explicit heap continuation / work stack.
 #[test]
 fn c1_d3_ac_c4_invoking_a_carried_hypothesis_refuses_rather_than_unrolling_unbounded() {
     let refused = ac_c4_recursive_edge(RuntimeExpr::Call {

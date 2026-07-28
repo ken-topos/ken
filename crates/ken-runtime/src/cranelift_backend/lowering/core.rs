@@ -4811,8 +4811,10 @@ impl<'a> Lowering<'a> {
                  eliminator, and inlining that recursion cannot terminate: the \
                  residual is a runtime word, so no operand shrinks at compile \
                  time and the recursive case re-emits itself without bound. \
-                 Terminating this needs the elimination emitted as a runtime \
-                 backedge or call rather than unrolled",
+                 The invocation half is RT-FNSPLIT-B2F's, which emits one \
+                 closed recursively callable target per static \
+                 computational-eliminator origin; until it lands, a carried \
+                 induction hypothesis is built and eliminated but never called",
             ));
         }
         self.active_carried_computational_eliminations
