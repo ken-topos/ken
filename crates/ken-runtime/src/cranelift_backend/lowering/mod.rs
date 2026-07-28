@@ -7268,6 +7268,33 @@ impl<'a> Lowering<'a> {
         builder.ins().select(is_zero, one, nonzero)
     }
 
+    /// ⛔ **A typed boundary: raw [`Lowered`] only, and STRUCTURALLY so**
+    /// (`RT-FNSPLIT-C1` frame `§2h` ¶2).
+    ///
+    /// `§2h` admits a raw-`Lowered` helper only where it is **structurally
+    /// incapable** of receiving, forwarding or returning a
+    /// [`LoweringOperand::Carried`]. ⛔ *"Nothing passes it one today"* is
+    /// explicitly **not** that property — present-corpus reachability is the
+    /// argument the ruling was written to reject. This helper is closed on all
+    /// three counts **by signature**, not by census:
+    ///
+    /// - **cannot receive** — the parameter is `Lowered`, so handing it a
+    ///   [`LoweringOperand`] is `E0308` at every call site, present or future;
+    /// - **cannot return** — [`RuntimeGroundValue`] is a closed **compile-time
+    ///   constant** domain (bool / int / bytes / string, and aggregates of
+    ///   itself). Transitively it has no arm able to hold a Cranelift SSA word;
+    /// - **cannot mint or forward** — ⚠ `&mut self` *does* reach
+    ///   [`Lowering::boundary_carrier`], so the refs are in scope. What closes
+    ///   the mint is that this takes **no `FunctionBuilder`**: it cannot emit
+    ///   CLIF, so it cannot run the one-way producer, and a `FuncRef` with
+    ///   nowhere to emit is inert. Its recursion descends into `Vec<Lowered>`
+    ///   child positions only.
+    ///
+    /// ⭐ **The edge's fail-closed disposition is FORCED, not chosen.** This
+    /// materializes a *compile-time constant*; a `Carried` is by construction a
+    /// runtime word with **no** compile-time value. So when the caller's
+    /// scrutinee becomes a `LoweringOperand`, the `Carried` arm has no sound
+    /// answer but `Err` — the return type's domain settles it, not a preference.
     fn ground_value(
         &mut self,
         value: Lowered,
@@ -7392,6 +7419,18 @@ fn same_recursive_argument_shapes(left: &[Lowered], right: &[Lowered]) -> bool {
                 _ => false,
             })
 }
+/// ⛔ **A typed boundary: raw [`Lowered`] only, and STRUCTURALLY so**
+/// (`RT-FNSPLIT-C1` frame `§2h` ¶2).
+///
+/// Closed **more tightly** than [`Lowering::ground_value`], and worth stating
+/// because the two were priced as one class and are not: this is a **free
+/// function with no `self`**, so it cannot reach
+/// [`Lowering::boundary_carrier`] at all — there is no `FunctionBuilder`
+/// argument *and* no receiver through which one could be found. Its parameter
+/// is `&Lowered` (⇒ `E0308` on a [`LoweringOperand`]) and it returns
+/// `&'static str` (⇒ no arm can hold a Cranelift SSA word). It is a
+/// one-per-variant dispatch table over the specialization lattice and nothing
+/// else, so there is no reachable surface on which to attempt an evasion.
 fn lowered_value_kind(value: &Lowered) -> &'static str {
     match value {
         Lowered::Int { .. } => "Int",
