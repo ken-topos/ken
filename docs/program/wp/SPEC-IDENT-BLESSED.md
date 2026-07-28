@@ -255,6 +255,10 @@ it does not make is not an acceptable outcome of this WP.**
   ⛔ **You MAY NOT change it**: no adding to or removing from the alias table,
   no altering `§1d`'s protection of identifiers spelled `l`, `level`, `in`,
   `not`, no formatter change. The table is operator decision SURF-1 D3.
+  ⚠ **Narrow exception, 2026-07-28 (see `§4`): the `ℓ` row's ROLE cell may be
+  reworded.** That is *describing* the mechanism, which the paragraph above
+  already permits — ⛔ it is **not** a change to the `ℓ ↔ level`/`l` map, and
+  the map, the protections, and the formatter stay exactly as they are.
   ⛔ Reserving these glyphs from identifier positions is a **breaking change**
   and is a separate Ergo WP the Steward would frame — ⛔ **not** something this
   WP may do as a consequence.
@@ -300,6 +304,50 @@ it does not make is not an acceptable outcome of this WP.**
   merely has not been built yet.** It sits red forever and reads as pending.
   Same class as Sec1's synthetic `Disproved`. ⚠ A sweep of the formatting seed
   for other unproducible fixtures is a **separate node**, ⛔ not this WP.
+
+- ⚠ **AMENDED AGAIN 2026-07-28 (Architect `evt_13tgs0c6e1cqz`) — the `§1b`
+  TABLE ROW's role cell is IN SCOPE. The row and its footnote are ONE CLAIM.**
+
+  ⛔ **The prior amendment was unsatisfiable as written.** It authorized
+  repairing the `‡` footnote at `:80-82` while `§7` still banned **the notation
+  table `§1b`** — and that footnote is *attached to the very row it
+  contradicts*:
+
+  ```
+  line 74  | `ℓ` | `level` / `l` | universe level / label (token-kind-disambiguated) ‡ |
+  line 80  ‡ … only a parsed level-or-label notation token prints as `ℓ` …
+  ```
+
+  ⇒ **One claim in two positions.** Repairing only the footnote leaves the row
+  asserting the retired mechanism, so `31` stays self-contradictory and **no
+  truthful successor exists inside the old scope.** Both carriers verified on
+  `origin/main = 282bfbfd`; `:130`/`:132`/`:350` speak of token-kind
+  canonicalization *generally* and are ⭐ **correct and orthogonal** — they are
+  not carriers and are ⛔ not in scope.
+
+  ✅ **AUTHORIZED — the `ℓ` row's ROLE CELL (third column) only.** Remove or
+  reword just the `(token-kind-disambiguated)` parenthetical so the stated role
+  agrees with the landed mechanism: every spelling lexes to ordinary
+  `Token::Ident("level")`, and any use-site role comes from **parser context**,
+  not from a token-kind split. ⭐ **Atomic with the `:80-82` footnote repair** —
+  ship both or neither.
+
+  ⛔ **Preserved, each a hard stop:** the `ℓ ↔ level`/`l` **alias mapping**
+  (columns 1–2 of that row), the formatter's raw-source-lexeme preservation,
+  every alias protection (`l`/`level`/`in`/`not`), the `‡` marker's lattice-op
+  sentence, and **every other row of the table.**
+
+  ⛔ **Still out:** the remainder of `§1b`'s table, `conformance/**`,
+  `crates/**`, the formatter, `catalog/**`. ⛔ Not authority for a table-wide
+  pass.
+
+  ⭐⭐ **The generalizable failure, worth more than the edit:** a frame's
+  **banned scope forbade the only discharge of its own authorized repair**, and
+  nothing caught it until a reviewer read the atom whole. A **path**-shaped ban
+  sitting beside a **mechanism**-shaped authorization is unsatisfiable and
+  **invisible until a successor tries to be truthful.** ⇒ When authorizing a
+  consistency repair, enumerate **every position** the false claim occupies —
+  including the ones your own scope section excludes.
 
 ---
 
@@ -400,7 +448,8 @@ it does not make is not an acceptable outcome of this WP.**
 
 **Out:** ⛔ `crates/**`, ⛔ `conformance/**` (there is nothing to retract; a
 *new* row may be **proposed** in `D5` but is not authored here), ⛔ the
-formatter, ⛔ the notation table `§1b`, ⛔ `catalog/**`.
+formatter, ⛔ the notation table `§1b` — ⚠ **except the `ℓ` row's role cell,
+authorized 2026-07-28; see `§4`** — ⛔ `catalog/**`.
 
 **Contention:** measured **zero**. Language holds `crates/ken-elaborator/**`
 (`SURF-SPACE-CELLS-P1`, 13 paths, all under `crates/`); Runtime holds
