@@ -4550,6 +4550,13 @@ impl<'a> Lowering<'a> {
         &self,
         static_origin: StaticOriginId,
     ) -> Result<SourceOccurrence<'a>, CraneliftBackendError> {
+        // ⭐ `AC-4`'s behavioural half. This route and
+        // `StaticTransitionPlan::source_occurrence` are counted separately, and
+        // the claim is that they move **together**: a resolution performed
+        // without passing through here is the second route `AC-4` forbids, and
+        // it shows up as `resolutions > invocations`.
+        #[cfg(test)]
+        crate::cranelift_backend::planning::ac4_note_route_invocation();
         Ok(SourceOccurrence {
             expr: self
                 .static_transition_plan

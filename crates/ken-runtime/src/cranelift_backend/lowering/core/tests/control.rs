@@ -3698,6 +3698,28 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
             "pub(in crate::cranelift_backend) fn header(self) -> AbiFrameHeader {",
             "pub(in crate::cranelift_backend) fn slots(self) -> &'plan [AbiSlot] {",
             "pub(in crate::cranelift_backend) fn slot_offsets(",
+            // ⭐ `RT-FNSPLIT-B2A-S` `AC-4`'s own **behavioural** instrument,
+            // added deliberately and argued rather than bumped. These three are
+            // the counters behind
+            // `every_origin_to_expression_resolution_goes_through_the_single_route`,
+            // which is the pin that carries `AC-4` once `B2F` `S6` widens
+            // `retained_body_occurrence`'s visibility — an enlargement of the
+            // reachable surface that THIS test cannot see, because it constrains
+            // the identifier `source_occurrence` and never asks who calls the
+            // route.
+            //
+            // ⚠ None of the three returns a source term — two return `()` and
+            // one returns `(usize, usize)` — so the `-> Result<&'src RuntimeExpr`
+            // count below is still exactly one and `AC-4` is untouched.
+            //
+            // ⛔ They are `#[cfg(test)]` probe infrastructure, and this list
+            // cannot tell that apart from production surface: it reads source
+            // text, so a `cfg`-gated item appears exactly like a live one. ⇒ A
+            // reader auditing this list for *production* exports must check the
+            // attribute at the declaration, not infer it from membership here.
+            "pub(in crate::cranelift_backend) fn ac4_open_route_window() {",
+            "pub(in crate::cranelift_backend) fn ac4_note_route_invocation() {",
+            "pub(in crate::cranelift_backend) fn ac4_route_counts() -> (usize, usize) {",
             "pub(in crate::cranelift_backend) fn source_occurrence(",
             "pub(in crate::cranelift_backend) fn child_static_origin(",
             // `RT-FNSPLIT-C1` `D1` — the artifact-static identity capability.
@@ -6862,6 +6884,113 @@ fn the_resolved_call_edge_population_moves_with_the_program() {
         "D4 -- POSITIVE CONTROL: a bare ground value is a single unit with \
          nothing to call, so it must resolve zero call edges. A nonzero count \
          here means the population is not derived from the program."
+    );
+}
+
+/// **`RT-FNSPLIT-B2A-S` `AC-4` — every `origin -> expression` resolution goes
+/// through the single route.**
+///
+/// ⛔⛔ **This exists because the instrument that used to carry `AC-4` is about
+/// to stop being able to.** `exactly_one_plan_origin_to_expression_lookup_exists`
+/// reads `static_transition.rs`'s **source text** and pins its exported
+/// signature list. Two things break that as `B2F` `S6` lands:
+///
+/// 1. ⛔ It constrains the **identifier** `source_occurrence` and says nothing
+///    about **who may call the route**. `S6` widens
+///    `Lowering::retained_body_occurrence` from private-to-`core` to all of
+///    `lowering`, so a unit body can resolve its own origin — an enlargement of
+///    the reachable surface that the text pin cannot see.
+/// 2. ⚠ It reddens on an edit that changes nothing about how any program
+///    behaves. Reflowing a doc comment in that file is enough.
+///
+/// ⭐ **And the dead-code warning on `EmittableUnit::origin` cannot stand in for
+/// it either.** That warning can witness *"nobody consumes this"*; it can never
+/// witness *"exactly one route consumes it"* — and it is **spent** by the very
+/// commit that consumes `origin()`, which is precisely the commit that makes the
+/// property non-trivial for the first time.
+///
+/// **MEASURED:** across one compile, the number of resolutions performed by
+/// `StaticTransitionPlan::source_occurrence` equals the number of invocations of
+/// `Lowering::retained_body_occurrence`, and both are non-zero.
+/// **CLAIMED:** there is exactly one `origin -> expression` route in the
+/// backend, so a retained body is selected by its static name and by nothing
+/// else.
+/// **THE GAP:** ⛔ a route that obtained a term **without** calling
+/// `source_occurrence` would be invisible here. What closes that is not this
+/// test but **item visibility**: `StaticTransitionPlan::source_occurrences` is a
+/// **private field**, so no module outside `planning::static_transition` can
+/// reach the table at all, and the only other readers inside that file are
+/// validators that return no term. ⇒ `source_occurrence` is the table's sole
+/// exit, and this test is what pins that exit to a single caller.
+///
+/// **Compile-preserving evasion attempted:** resolve a body by calling
+/// `plan.source_occurrence(origin)` directly from an emission site instead of
+/// through `retained_body_occurrence`. It compiles, it produces the identical
+/// term, and it reddens this test — `resolutions` exceeds `invocations` by
+/// exactly the number of times the shortcut runs. ⭐ That mutation is the one
+/// `S6` is most likely to introduce by accident, because a unit body already
+/// holds the plan.
+///
+/// **Promise class: durable invariant.** ⭐ It pins a **ratio**, never a count.
+/// Seven consumption sites call the route today and `S6` adds more; every one of
+/// them keeps this green. ⛔ A pin that froze the call count would go red on
+/// legitimate work and would be a snapshot wearing an invariant's name.
+#[test]
+fn every_origin_to_expression_resolution_goes_through_the_single_route() {
+    fn route_counts_for(expr: &RuntimeExpr) -> (usize, usize) {
+        // ⛔ Per-attempt reset. Without it a reading cannot distinguish this
+        // compile's resolutions from an earlier one's, and a stale equal pair
+        // reads exactly like the outcome this test wants.
+        crate::cranelift_backend::planning::ac4_open_route_window();
+        ac11_compiles(expr).expect("fixture compiles");
+        crate::cranelift_backend::planning::ac4_route_counts()
+    }
+
+    // A retained closure body: resolving it is the whole reason the route
+    // exists, so this fixture is what makes the measurement non-vacuous.
+    let with_retained_body = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+    let (resolutions, invocations) = route_counts_for(&with_retained_body);
+
+    // ⛔ THE NON-VACUITY CONTROL, and the equality below is worthless without
+    // it: `0 == 0` is what a harness that never ran the compile also reports,
+    // and it is what a build that resolved no body at all reports. Both
+    // counters must actually move.
+    assert!(
+        resolutions > 0 && invocations > 0,
+        "AC-4 -- NON-VACUITY: a program with a retained closure body must \
+         resolve at least one origin through the route; got {resolutions} \
+         resolutions and {invocations} route invocations. A zero pair means \
+         this test is measuring nothing, whatever the equality below says."
+    );
+    assert_eq!(
+        resolutions, invocations,
+        "AC-4 -- {resolutions} origin->expression resolutions were performed \
+         but the single route was invoked only {invocations} times, so \
+         {} resolution(s) reached the plan's occurrence table by some other \
+         path. That is a SECOND origin->expression route, which is exactly \
+         what AC-4 holds at one: a retained body must be selected by its \
+         static name and by nothing else.",
+        resolutions.saturating_sub(invocations)
+    );
+
+    // ⭐ The relation must hold on a program with NO retained body too, and for
+    // a different reason than above: here it says the route is not invoked
+    // speculatively. A counter that incremented on some unrelated event would
+    // satisfy the equality above and fail here.
+    let (bare_resolutions, bare_invocations) =
+        route_counts_for(&RuntimeExpr::Value(RuntimeValue::Bool(true)));
+    assert_eq!(
+        bare_resolutions, bare_invocations,
+        "AC-4 -- the relation must hold for a program with nothing retained: \
+         {bare_resolutions} resolutions against {bare_invocations} route \
+         invocations."
     );
 }
 

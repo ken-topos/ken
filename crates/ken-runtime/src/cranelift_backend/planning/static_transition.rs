@@ -1234,6 +1234,67 @@ impl<'plan> EmittableUnit<'plan> {
     }
 }
 
+// **`RT-FNSPLIT-B2A-S` `AC-4` — the route counters.**
+//
+// ⛔⛔ **These exist because the instrument that used to carry `AC-4` cannot
+// carry it through `B2F`.** That instrument reads this file's source text and
+// asserts a list of exported signatures; it constrains the *identifier*
+// `source_occurrence` and says nothing about **who calls the route** — and
+// `B2F` `S6` widens `Lowering::retained_body_occurrence` from private-to-`core`
+// to all of `lowering` so a unit body can resolve its own origin. ⚠ A
+// source-text oracle also reddens on a reflow that changes nothing about how
+// any program behaves, which is why the replacement is a behavioural one.
+//
+// ⭐ **The property is a RATIO, not a count, and that is what makes it durable.**
+// `retained_body_occurrence` calls [`StaticTransitionPlan::source_occurrence`]
+// exactly once, so the two counters move together **for as long as that route
+// is the only caller**. Any second call site — a convenience resolver, a
+// "just this once" direct call from an emission site — makes resolutions
+// exceed route invocations, and nothing else can.
+//
+// ⚠ **Deliberately NOT a bound on how many times the route is used.** Seven
+// consumption sites call it today and more may; `AC-4` holds the number of
+// **routes** at one, never the number of resolutions. ⛔ A pin that froze the
+// call count would go red on legitimate work and would be a snapshot wearing an
+// invariant's name.
+#[cfg(test)]
+thread_local! {
+    /// Resolutions performed by `source_occurrence`, since the last window open.
+    static AC4_RESOLUTIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Invocations of the single route, since the last window open.
+    static AC4_ROUTE_INVOCATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Zero both counters. ⛔ Call this immediately before the compile under
+/// measurement: without a per-window reset a reading cannot distinguish this
+/// compile's resolutions from an earlier one's, and a stale equal pair reads
+/// exactly like the outcome the pin wants.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn ac4_open_route_window() {
+    AC4_RESOLUTIONS.with(|cell| cell.set(0));
+    AC4_ROUTE_INVOCATIONS.with(|cell| cell.set(0));
+}
+
+/// Record one invocation of the single `origin -> expression` route.
+///
+/// ⚠ Called by `Lowering::retained_body_occurrence` and by nothing else — that
+/// is the whole point. A second route that recorded itself here would be
+/// *claiming* to be the single route, which is a visible lie rather than a
+/// silent one.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn ac4_note_route_invocation() {
+    AC4_ROUTE_INVOCATIONS.with(|cell| cell.set(cell.get() + 1));
+}
+
+/// `(resolutions, route invocations)` since the window opened.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn ac4_route_counts() -> (usize, usize) {
+    (
+        AC4_RESOLUTIONS.with(std::cell::Cell::get),
+        AC4_ROUTE_INVOCATIONS.with(std::cell::Cell::get),
+    )
+}
+
 impl<'src> StaticTransitionPlan<'src> {
     /// Resolves a static origin to the source term the planner filed under it.
     ///
@@ -1261,6 +1322,12 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
         static_origin: StaticOriginId,
     ) -> Result<&'src RuntimeExpr, CraneliftBackendError> {
+        // ⭐ Counted at ENTRY, not on the success path. A resolution that fails
+        // is still a resolution *attempted through this route*, and `AC-4` is a
+        // claim about routes, not about outcomes — counting only successes would
+        // let a second caller hide behind a bad origin.
+        #[cfg(test)]
+        AC4_RESOLUTIONS.with(|cell| cell.set(cell.get() + 1));
         let index = static_origin.0 as usize;
         let slot = self.source_occurrences.get(index).ok_or_else(|| {
             planner_error("static origin is outside the planned occurrence table")

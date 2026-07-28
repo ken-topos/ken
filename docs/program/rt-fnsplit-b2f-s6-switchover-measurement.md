@@ -1,7 +1,8 @@
 # `RT-FNSPLIT-B2F` `S6` — the switch-over, built and measured
 
-**Author:** `runtime-implementer` · **Base:** `wp/RT-FNSPLIT-B2F-functionization-live`
-at `fc32e15d` · **Suite at that base:** `ken-runtime` 498 + 26 + 14, zero failures.
+**Author:** `runtime-implementer` · **Base:**
+`wp/RT-FNSPLIT-B2F-functionization-live` at `fc32e15d` ·
+**Suite at that base:** `ken-runtime` 498 + 26 + 14, zero failures.
 
 ⛔ **This records an experiment that is NOT on the branch.** The switch-over was
 built, run, classified, and then removed; what landed is only the part that is
