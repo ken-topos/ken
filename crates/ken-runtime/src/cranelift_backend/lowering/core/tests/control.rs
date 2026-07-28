@@ -4297,11 +4297,26 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
          count to be `tokens - definitions`"
     );
     let calls = tokens - definitions;
+    // ⭐ **59 -> 61 on `RT-FNSPLIT-C1` `D3`, and the arithmetic is the whole
+    // report the pin asks for.** The two added calls are the case-body descents
+    // of the two *carried* elimination routes — `lower_carried_match` and
+    // `lower_carried_computational_match` — each lowering a case body under a
+    // `case_env` whose binders are runtime projections rather than compile-time
+    // constructor arguments.
+    //
+    // ⭐ **Neither is a new owner boundary**, which is the disposition this pin
+    // actually reports. A carried case body is reached by ordinary descent from
+    // the eliminator's own occurrence — `case_body_occurrence(static_origin,
+    // index, ..)`, the identical accessor the specialized routes use — so its
+    // occurrence's `SemanticOwner` and planned edge kind are unchanged. ⛔ No
+    // `StaticBody` edge is introduced, and no retained body is reached by a new
+    // path.
     assert_eq!(
-        calls, 59,
+        calls, 61,
         "D6: the tokenized production call population into `lower_expr` moved. \
          ⚠ If you reached this by counting `self.lower_expr(` you will have got \
-         58 -- the root call at `core.rs:188` is spelled `compiler.lower_expr(`"
+         one fewer -- the root call at `core.rs:188` is spelled \
+         `compiler.lower_expr(`"
     );
 
     // Non-vacuity: the tokenizer must actually see the root call's receiver

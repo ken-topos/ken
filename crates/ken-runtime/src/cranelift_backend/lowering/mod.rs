@@ -1187,6 +1187,124 @@ impl<'a> Lowering<'a> {
         Ok(())
     }
 
+    // ── the CONSUMER half of the carrier ABI (`D3` / `D4`) ──────────────
+    //
+    // ⭐ **Every question these answer is answered AT RUNTIME, by a call.**
+    // That is the whole content of the node: a carried value has no
+    // compile-time template, so *"which constructor"*, *"how many children"*
+    // and *"which child"* cannot be read off a struct field — there is no
+    // struct field to read. ⛔ Adding one is how the wall grows back
+    // (see [`CarriedBoundaryWord`]).
+    //
+    // ⚠ Each of these emits a `require_i64(status, BOUNDARY_OK)`, which
+    // **splits the current block**. A caller assembling its own control flow
+    // must therefore take `builder`'s *current* block after the call, never
+    // the block it switched to before it.
+
+    /// `tag(arena, word, out) -> status` — the runtime constructor identity.
+    ///
+    /// ⭐ The returned word is comparable **only** against a
+    /// `ConstructorIdentity::tag_abi_word()` from the same artifact's plane —
+    /// it is the very word the producer wrote with `store_tag_id`, and that
+    /// shared authority is `D2`. ⛔ It is not an ordinal, not a `LoweredVariant`
+    /// discriminant, and not portable across artifacts.
+    fn emit_carrier_tag(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let call = builder.ins().call(refs.tag, &[arena, target.word, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(builder.ins().stack_load(types::I64, slot, 0))
+    }
+
+    /// `field_count(arena, word, out) -> status` — the child count a case's
+    /// binder arity is checked against **at runtime**.
+    ///
+    /// ⚠ **Why this is a runtime check and not a compile-time one.** For a
+    /// specialized scrutinee the arity check compares `case.binders` against
+    /// `args.len()`, both known while compiling. A carried word knows neither,
+    /// so the same guard has to be emitted — and it must still *be* a guard:
+    /// binding *n* binders over a value with fewer children would read past the
+    /// node.
+    fn emit_carrier_field_count(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let call = builder
+            .ins()
+            .call(refs.field_count, &[arena, target.word, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(builder.ins().stack_load(types::I64, slot, 0))
+    }
+
+    /// `field(arena, word, index, out) -> status` — positional child projection.
+    ///
+    /// ⭐⭐ **The result is a [`CarriedBoundaryWord`], and that return type is
+    /// the `§2g` property, not a convenience.** *"Projected children remain
+    /// `Carried`."* A signature returning [`Lowered`] here would be the
+    /// forbidden inverse conversion wearing the name of a projection — so the
+    /// prohibition is carried by the **type**, where it cannot be forgotten at a
+    /// call site.
+    fn emit_carrier_field(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+        position: usize,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let index = Self::carrier_position_immediate(builder, position)?;
+        let call = builder
+            .ins()
+            .call(refs.field, &[arena, target.word, index, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(CarriedBoundaryWord {
+            word: builder.ins().stack_load(types::I64, slot, 0),
+        })
+    }
+
+    /// `record_field(arena, word, name_id, out) -> status` — `Project` by
+    /// **artifact-static field identity**.
+    ///
+    /// ⭐ The `name_id` is the same word the producer wrote with `store_name`,
+    /// from the same `D1` authority — which is exactly why `AC-C5`'s reordered
+    /// record still projects correctly: the lookup is keyed on the interned
+    /// name, ⛔ never on declaration position.
+    ///
+    /// ⭐ Result stays carried, for the reason spelled out on
+    /// [`Self::emit_carrier_field`].
+    fn emit_carrier_record_field(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+        identity: u64,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let identity = Self::carrier_identity_immediate(builder, identity);
+        let call = builder
+            .ins()
+            .call(refs.record_field, &[arena, target.word, identity, out]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok(CarriedBoundaryWord {
+            word: builder.ins().stack_load(types::I64, slot, 0),
+        })
+    }
+
     /// A child ordinal as an ABI immediate.
     fn carrier_position_immediate(
         builder: &mut FunctionBuilder<'_>,

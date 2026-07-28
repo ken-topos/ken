@@ -1412,6 +1412,41 @@ impl<'a> Lowering<'a> {
         if matches!(eliminator, EliminatorFrame::InvocationReturn) {
             return Ok(scrutinee);
         }
+        // ⭐⭐ `D3`'s CARRIED arm for the composed route, ahead of the boundary
+        // below — otherwise a carried scrutinee reaching a real eliminator
+        // would fail closed at `specialized_at` even though `§2g` gives it a
+        // route. ⛔ The phase is classified with no wildcard.
+        if let LoweringOperand::Carried(word) = scrutinee {
+            return match eliminator {
+                EliminatorFrame::Computational(frame) => self
+                    .lower_carried_computational_match(builder, word, frame, &eliminators[1..]),
+                // ── ⛔ DEFERRED, and named rather than absorbed ────────────
+                //
+                // ⚠ A composed **ordinary** frame is reached only through
+                // heterogeneous deforestation of a producer, and a deforestable
+                // producer is by construction one whose shape was read at
+                // compile time. So a carried scrutinee cannot arrive here from
+                // today's corpus — ⛔ which is exactly why this is written as a
+                // fail-closed arm and not omitted: `§2g` requires the phase to
+                // be classified, and *"cannot occur"* is a disposition, never a
+                // missing cell. The direct `RuntimeExpr::Match` route already
+                // carries the real elimination (`Self::lower_carried_match`).
+                EliminatorFrame::Ordinary(_) => Err(unsupported(
+                    "BoundaryCarrier",
+                    "a carried scrutinee reached an ordinary eliminator through the \
+                     deforestation producer, which selects its case from a compile-time \
+                     constructor shape the carrier does not have",
+                )),
+                EliminatorFrame::PendingLet(_) | EliminatorFrame::Active(_) => Err(unsupported(
+                    "BoundaryCarrier",
+                    "a carried scrutinee reached a continuation frame that resumes a \
+                     compile-time value rather than eliminating one",
+                )),
+                // Answered above, before this match; spelled so the frame set
+                // stays wildcard-free.
+                EliminatorFrame::InvocationReturn => Ok(LoweringOperand::Carried(word)),
+            };
+        }
         let scrutinee = scrutinee.specialized_at("a composed computational-match scrutinee")?;
         if let Lowered::BoundedNat(nat) = scrutinee {
             return self.lower_bounded_nat_computational(builder, nat, false, eliminators);
@@ -4381,6 +4416,357 @@ impl<'a> Lowering<'a> {
         self.child_occurrence(parent, 1 + index, body)
     }
 
+    /// ⭐ **The dual of [`LoweringOperand::specialized_join_arm`]** — a join
+    /// whose single lane is the **carrier word**, not a native scalar pair.
+    ///
+    /// ⚠⚠ **Read the two together: they refuse in OPPOSITE directions, and the
+    /// asymmetry is the point.** `specialized_join_arm` guards a join that has
+    /// no carried lane, so its `Carried` arm fails closed. This guards a join
+    /// that has *only* a carried lane, so a **specialized** arm must cross into
+    /// it. ⛔ Neither is a `Carried -> Lowered` conversion; this one moves
+    /// `Lowered -> CarriedBoundaryWord`, which is precisely the direction `§2g`
+    /// rules as the producer's one-way seam.
+    ///
+    /// ⭐ **Why a carried match's join has one lane and it is this one.** An arm
+    /// of a carried `Match` may return a **projected child**, which `§2g`
+    /// requires to stay `Carried` and which has no compile-time template to
+    /// re-specialize. So the merge cannot be a `Lowered` join, and every arm
+    /// must arrive as a carrier word.
+    ///
+    /// ⚠ **The producer's coverage is partial and this inherits that
+    /// deliberately.** An arm whose value is a form `transfer_into_carrier`
+    /// defers — a spillable `Int`, a `String`, borrowed ingress — fails closed
+    /// with **the producer's own message**, ⛔ never a second refusal invented
+    /// here. ⇒ The carried match's arm coverage widens exactly when the
+    /// producer's does, with no list to keep in sync and no second authority to
+    /// let drift.
+    fn carried_join_arm(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        lowered: LoweringOperand,
+        join: &'static str,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        match lowered {
+            LoweringOperand::Carried(word) => Ok(word),
+            // ── ⛔ DEFERRED, said plainly ──────────────────────────────────
+            //
+            // ⚠ A deferral is honest; a deferral that reads as delivery is not.
+            // A compile-time trap arm must **not** reach the merge at all — it
+            // returns instead (`seal_source_trap_branch`) — so the merge block
+            // would have fewer predecessors than the case chain has arms. That
+            // is a control-flow shape this route does not build yet, and
+            // refusing is strictly better than emitting a half-formed merge.
+            LoweringOperand::Specialized(Lowered::Trap(trap)) => Err(unsupported(
+                "BoundaryCarrier",
+                format!(
+                    "{join} resolves at compile time to a trap ({}), and the carried join \
+                     does not yet build a merge with a trapping predecessor",
+                    trap.message
+                ),
+            )),
+            LoweringOperand::Specialized(lowered) => {
+                self.transfer_into_carrier(builder, origin, &lowered)
+            }
+        }
+    }
+
+    /// ⭐⭐ **`D3` — `Match` eliminating a value that has NO compile-time
+    /// template.** This is the second, *executable* route the whole node exists
+    /// to build.
+    ///
+    /// The specialized route answers *"which constructor?"* by reading a
+    /// `Lowered::Constructor`'s own `constructor` field while compiling. Here
+    /// there is no such value and no such field — only a boundary word — so
+    /// **every** question becomes a call into the emitted carrier ABI:
+    ///
+    /// | question | specialized route | this route |
+    /// |---|---|---|
+    /// | which constructor? | `case.constructor == constructor` | `tag(word)` vs `case_constructor_identity` |
+    /// | how many children? | `args.len()` | `field_count(word)` |
+    /// | child *i*? | `args[i]` | `field(word, i)` — ⭐ **stays `Carried`** |
+    /// | nothing matched? | a compile-time `Lowered::Trap` | a **runtime** closed default |
+    ///
+    /// ⭐ **Both columns read ONE identity authority** (`D2`). The producer
+    /// wrote `constructor_symbol_identity(..).tag_abi_word()`; this compares
+    /// against `case_constructor_identity(..).tag_abi_word()`, and equal
+    /// spellings intern to one canonical span, so the two agree **because they
+    /// are the same number**, not because two derivations happen to coincide.
+    /// ⛔ There is no decode step and no reverse table: the comparison is word
+    /// against word, ⛔ never word against a reconstructed name.
+    ///
+    /// ⚠ **This changes no production behaviour today.** Nothing in production
+    /// emits a `Carried` scrutinee (`AC-C10` — zero `B2F` activation), so this
+    /// route is reached only by a test that seeds one. Stated here so the
+    /// reachability is not overclaimed by a later reader.
+    fn lower_carried_match(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        scrutinee: CarriedBoundaryWord,
+        cases: &[crate::RuntimeMatchCase],
+        default: &RuntimeTrap,
+        static_origin: StaticOriginId,
+        env: &[LoweringOperand],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        // ⭐ Handled before any block is created, and that ordering matters: a
+        // case-free match reaches the default unconditionally, so building a
+        // merge block for it would leave one with no predecessor.
+        if cases.is_empty() {
+            return Ok(LoweringOperand::Specialized(Lowered::Trap(default.clone())));
+        }
+
+        // Read identity and arity ONCE, ahead of the chain: both are properties
+        // of the scrutinee, not of any case, and re-reading per case would be a
+        // second answer to a question that has one.
+        let tag = self.emit_carrier_tag(builder, scrutinee)?;
+        let field_count = self.emit_carrier_field_count(builder, scrutinee)?;
+
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+
+        for (index, case) in cases.iter().enumerate() {
+            // ⭐ `D1` — the case's identity, keyed on this `Match` occurrence's
+            // origin and the case's ordinal. ⚠ `case.constructor`, the
+            // **string**, is deliberately not the key: keying on the spelling
+            // would be the second derivation `D2` forbids.
+            let identity = self
+                .static_transition_plan
+                .case_constructor_identity(static_origin, index)?
+                .tag_abi_word()?;
+            let identity = Self::carrier_identity_immediate(builder, identity);
+            let selected = builder.create_block();
+            let next = builder.create_block();
+            let matched = builder.ins().icmp(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                tag,
+                identity,
+            );
+            builder.ins().brif(matched, selected, &[], next, &[]);
+
+            builder.switch_to_block(selected);
+            // ⚠ **The arity check the specialized route performs while
+            // compiling has to be EMITTED here**, because neither operand is
+            // known until the value exists. It is a real guard, not ceremony:
+            // binding *n* binders over a node with fewer children would read
+            // past the node. A mismatch means the producer's `field_count` and
+            // the elaborator's binder count disagree — corruption, not an input
+            // condition — so it takes the same failure status as every other
+            // carrier ABI violation.
+            let binders = i64::try_from(case.binders).map_err(|_| {
+                unsupported(
+                    "BoundaryCarrier",
+                    "a case binds more binders than the carrier ABI can count",
+                )
+            })?;
+            Self::require_i64(builder, field_count, binders);
+
+            // ⭐ `§2g`: *"projected children remain `Carried`."* Each binder is
+            // a runtime projection, and it enters `case_env` **in the carried
+            // phase** — which is the exact clause `§2h`'s control demands.
+            let mut bindings = Vec::with_capacity(case.binders);
+            for position in 0..case.binders {
+                bindings.push(LoweringOperand::Carried(
+                    self.emit_carrier_field(builder, scrutinee, position)?,
+                ));
+            }
+            let case_env = env_with_operands(bindings, env);
+            let body = self.case_body_occurrence(static_origin, index, &case.body)?;
+            let body_origin = body.static_origin;
+            let lowered = self.lower_expr(builder, body, &case_env)?;
+            let word = self.carried_join_arm(
+                builder,
+                body_origin,
+                lowered,
+                "a carried `Match` arm",
+            )?;
+            builder.ins().jump(merge, &[word.word.into()]);
+
+            builder.switch_to_block(next);
+        }
+
+        // ── ⛔ THE CLOSED DEFAULT — `AC-C3`'s negative arm ─────────────────
+        //
+        // ⭐ Routed through the existing [`Self::seal_source_trap_branch`]
+        // rather than spelling the trap encoding a second time: if the encoding
+        // ever changes, both move together. A constructor outside the
+        // artifact-static case set lands here, at runtime, and returns.
+        let defaulted = LoweringOperand::Specialized(Lowered::Trap(default.clone()));
+        if !Self::seal_source_trap_branch(builder, &defaulted) {
+            return Err(unsupported(
+                "Match",
+                "the carried match's closed default did not seal its branch",
+            ));
+        }
+
+        builder.switch_to_block(merge);
+        Ok(LoweringOperand::Carried(CarriedBoundaryWord {
+            word: builder.block_params(merge)[0],
+        }))
+    }
+
+    /// ⭐⭐ **`D3` — `ComputationalMatch` eliminating a carried value.**
+    ///
+    /// Structurally the same three runtime questions as
+    /// [`Self::lower_carried_match`] — identity, arity, positional child — over
+    /// the same one authority. The differences are the computational frame's:
+    /// the arity compared is `argument_binders`, the frame contributes its own
+    /// environment, and a case may declare **recursive positions**.
+    ///
+    /// ## ⛔ Recursive positions FAIL CLOSED here, and this is a deferral with a
+    /// ## named fork — ⛔ not a discharge of `AC-C4`
+    ///
+    /// ⚠ Say it plainly, because a deferral that reads as delivery is the
+    /// failure this frame warns about twice: **`AC-C4` asks for the recursive
+    /// positions and this does not deliver them.**
+    ///
+    /// **Why it is not a matter of effort.** A recursive position builds an
+    /// *induction hypothesis* over the child at that position, and the IH's
+    /// representation is `Lowered::ComputationalRecursorClosure`, whose
+    /// `residual` is a `Box<Lowered>` — a **compile-time template**. Over a
+    /// carried scrutinee the child is a carried word, so the IH would have to
+    /// hold one, and there are only two ways to arrange that:
+    ///
+    /// - **(A)** widen the recursor's `residual` to a [`LoweringOperand`], so a
+    ///   `Lowered` variant can transitively contain a `Carried`; or
+    /// - **(B)** keep recursive positions specialized-only in this node, with
+    ///   this fail-closed arm and a named residual.
+    ///
+    /// ⛔ **(A) is not mine to choose.** `§2g` rules that a carrier inhabitant
+    /// *inside* `Lowered` is the rejected `B2E` shape; whether a `Lowered`
+    /// variant may **hold** an operand is a different question with the same
+    /// smell, and the two answers lead to materially different futures. That is
+    /// an Architect fork under `COORDINATION §6`, ⛔ not an implementer's call —
+    /// so the arm below refuses, names the fork, and lets the rest of the route
+    /// land.
+    fn lower_carried_computational_match(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        scrutinee: CarriedBoundaryWord,
+        eliminator: ComputationalEliminatorFrame<'_>,
+        remaining_eliminators: &[EliminatorFrame<'_>],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        if eliminator.cases.is_empty() {
+            return Ok(LoweringOperand::Specialized(Lowered::Trap(
+                eliminator.default.clone(),
+            )));
+        }
+        // ⛔ A deferred constructor case rebuilds a `Lowered::Constructor`
+        // *around* the scrutinee, which needs a compile-time template for the
+        // parent. Refused rather than approximated.
+        if eliminator.deferred_constructor_case.is_some() {
+            return Err(unsupported(
+                "BoundaryCarrier",
+                "a carried scrutinee reached a deferred constructor case, which \
+                 reconstructs a compile-time constructor around the eliminated value",
+            ));
+        }
+
+        let tag = self.emit_carrier_tag(builder, scrutinee)?;
+        let field_count = self.emit_carrier_field_count(builder, scrutinee)?;
+
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+
+        for (index, case) in eliminator.cases.iter().enumerate() {
+            // ⛔ THE DEFERRAL, checked before any code is emitted for this case
+            // so nothing is half-published. See this function's doc comment for
+            // the fork this refusal is holding open.
+            if !case.recursive_positions.is_empty() {
+                return Err(unsupported(
+                    "BoundaryCarrier",
+                    format!(
+                        "case {} declares recursive positions, and an induction hypothesis \
+                         over a carried child would require the recursor's residual to hold \
+                         a carried operand — a representation fork the Architect owns",
+                        case.constructor
+                    ),
+                ));
+            }
+            let identity = self
+                .static_transition_plan
+                .case_constructor_identity(eliminator.static_origin, index)?
+                .tag_abi_word()?;
+            let identity = Self::carrier_identity_immediate(builder, identity);
+            let selected = builder.create_block();
+            let next = builder.create_block();
+            let matched = builder.ins().icmp(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                tag,
+                identity,
+            );
+            builder.ins().brif(matched, selected, &[], next, &[]);
+
+            builder.switch_to_block(selected);
+            let binders = i64::try_from(case.argument_binders).map_err(|_| {
+                unsupported(
+                    "BoundaryCarrier",
+                    "a case binds more constructor arguments than the carrier ABI can count",
+                )
+            })?;
+            Self::require_i64(builder, field_count, binders);
+
+            let mut case_env = Vec::with_capacity(case.argument_binders + eliminator.env.len() + 1);
+            for position in 0..case.argument_binders {
+                // ⭐ `§2g` — the projected child stays `Carried` into `case_env`.
+                case_env.push(LoweringOperand::Carried(
+                    self.emit_carrier_field(builder, scrutinee, position)?,
+                ));
+            }
+            // The frame's own environment, with the retained scrutinee inserted
+            // where the frame asked for it. ⭐ Retention is phase-preserving:
+            // the retained value is the **same carried word**, ⛔ never a
+            // materialized template of it.
+            let mut frame_env = eliminator.env.to_vec();
+            if let Some(retained) = eliminator.retained_scrutinee_index {
+                if retained > frame_env.len() {
+                    return Err(unsupported(
+                        "ComputationalMatch",
+                        "retained scrutinee index exceeds the frame environment",
+                    ));
+                }
+                frame_env.insert(retained, LoweringOperand::Carried(scrutinee));
+            }
+            case_env.extend(frame_env);
+
+            let body =
+                self.case_body_occurrence(eliminator.static_origin, index, &case.body)?;
+            let body_origin = body.static_origin;
+            let lowered = if remaining_eliminators.is_empty() {
+                self.lower_expr(builder, body, &case_env)?
+            } else {
+                self.lower_computational_producer_expr(
+                    builder,
+                    body,
+                    &case_env,
+                    remaining_eliminators,
+                )?
+            };
+            let word = self.carried_join_arm(
+                builder,
+                body_origin,
+                lowered,
+                "a carried `ComputationalMatch` arm",
+            )?;
+            builder.ins().jump(merge, &[word.word.into()]);
+
+            builder.switch_to_block(next);
+        }
+
+        let defaulted =
+            LoweringOperand::Specialized(Lowered::Trap(eliminator.default.clone()));
+        if !Self::seal_source_trap_branch(builder, &defaulted) {
+            return Err(unsupported(
+                "ComputationalMatch",
+                "the carried computational match's closed default did not seal its branch",
+            ));
+        }
+
+        builder.switch_to_block(merge);
+        Ok(LoweringOperand::Carried(CarriedBoundaryWord {
+            word: builder.block_params(merge)[0],
+        }))
+    }
+
     /// Lowers one source occurrence.
     ///
     /// ## The per-variant child-position table
@@ -4643,6 +5029,25 @@ impl<'a> Lowering<'a> {
                     );
                 }
                 let lowered_scrutinee = self.lower_expr(builder, scrutinee_occurrence, env)?;
+                // ⭐⭐ `D3`'s CARRIED arm, and it MUST come first.
+                //
+                // ⚠ Every test below asks for a specific `Lowered` shape, and
+                // the chain ends in *"scrutinee is not a constructor value"*. A
+                // carried scrutinee would fall past all of them and land on
+                // that refusal — a **true sentence about the wrong thing**,
+                // which is worse than an error, because it names a cause that
+                // is not the cause. Classifying the phase first is what makes
+                // the rest of the chain a statement about `Lowered` only.
+                if let LoweringOperand::Carried(word) = lowered_scrutinee {
+                    return self.lower_carried_match(
+                        builder,
+                        word,
+                        cases,
+                        default,
+                        static_origin,
+                        env,
+                    );
+                }
                 if let LoweringOperand::Specialized(Lowered::BorrowedNativeValue { pointer }) = lowered_scrutinee {
                     return self
                         .lower_borrowed_match(builder, pointer, cases, default, static_origin, env);
@@ -4841,17 +5246,49 @@ impl<'a> Lowering<'a> {
             RuntimeExpr::Project { record, field } => {
                 let record = self.child_occurrence(static_origin, 0, record)?;
                 let lowered_record = self.lower_expr(builder, record, env)?;
-                let LoweringOperand::Specialized(Lowered::Record { fields }) = lowered_record else {
-                    return Err(unsupported(
-                        "Project",
-                        "record projection needs a record value",
-                    ));
-                };
-                fields
-                    .into_iter()
-                    .find_map(|(name, value)| (name == *field).then_some(value))
-                    .map(LoweringOperand::Specialized)
-                    .ok_or_else(|| unsupported("Project", format!("missing field {field}")))
+                // ⭐ `D4`'s two-phase arm. ⛔ No wildcard over the phase: a
+                // third `LoweringOperand` inhabitant must break compilation
+                // here rather than silently taking whichever arm a `_` had
+                // swallowed (`§2g`, `D5`).
+                match lowered_record {
+                    // ── the CARRIED route — `record_field` at runtime ──────
+                    LoweringOperand::Carried(word) => {
+                        // ⭐ `D1`/`D2`: the key is the artifact-static field
+                        // identity of **this `Project` occurrence**, from the
+                        // one authority the producer's `store_name` also used.
+                        //
+                        // ⚠ The `field` **string** is deliberately NOT the key.
+                        // It is the compile-time spelling; keying on it would be
+                        // the second derivation `D2` forbids — and it is also
+                        // what makes `AC-C5` work, because a record whose fields
+                        // are reordered relative to declaration still projects
+                        // correctly when the lookup is by interned name rather
+                        // than by position.
+                        let identity = self
+                            .static_transition_plan
+                            .project_field_identity(static_origin)?
+                            .name_abi_word()?;
+                        let selected = self.emit_carrier_record_field(builder, word, identity)?;
+                        // ⭐ `§2g`, verbatim: *"projected children remain
+                        // `Carried`."* ⛔ Not materialized into a `Lowered`
+                        // template — that is the wall itself.
+                        Ok(LoweringOperand::Carried(selected))
+                    }
+                    // ── the pre-existing SPECIALIZED route, unchanged ──────
+                    LoweringOperand::Specialized(lowered) => {
+                        let Lowered::Record { fields } = lowered else {
+                            return Err(unsupported(
+                                "Project",
+                                "record projection needs a record value",
+                            ));
+                        };
+                        fields
+                            .into_iter()
+                            .find_map(|(name, value)| (name == *field).then_some(value))
+                            .map(LoweringOperand::Specialized)
+                            .ok_or_else(|| unsupported("Project", format!("missing field {field}")))
+                    }
+                }
             }
             // Site 1 of 3. The occurrence's own origin is in scope here, so the
             // body's origin is `child(_, 0)` — determined, not searched for.
