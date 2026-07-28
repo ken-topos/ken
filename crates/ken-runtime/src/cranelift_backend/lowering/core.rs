@@ -7004,6 +7004,36 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    fn lower_buffer_freeze_resource_seat(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        operand: &LoweringOperand,
+        seat: &'static str,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        match operand {
+            LoweringOperand::Specialized(Lowered::ResourceToken { value }) => Ok(*value),
+            LoweringOperand::Specialized(_) => Err(unsupported(
+                "Effect",
+                format!("BufferFreeze {seat} is not a resource"),
+            )),
+            LoweringOperand::Carried(word) => {
+                let tag = self.emit_carrier_tag(builder, *word)?;
+                Self::require_i64(
+                    builder,
+                    tag,
+                    crate::boundary_value::BoundaryTag::InvocationBorrowed as i64,
+                );
+                let class = self.emit_carrier_class(builder, *word)?;
+                Self::require_i64(
+                    builder,
+                    class,
+                    BoundaryClass::BorrowedOpaque as i64,
+                );
+                self.emit_carrier_scalar(builder, *word)
+            }
+        }
+    }
+
     /// `static_origin` is the `Effect` occurrence's own origin.
     ///
     /// ⚠ HAZARD 2 (D3): the planner plans `capability.value` **first when it is
@@ -7041,12 +7071,14 @@ impl<'a> Lowering<'a> {
                 self.lower_expr(builder, argument, env)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        // ⭐ `§2h` ¶2's typed phase boundary in front of the host-effect wire.
-        // The wire encoder reads templates to fill a request slot — a `Stream`
-        // constructor's tag, a `Bytes` body's pointer and length, an `Int`'s
-        // narrowed u64. ⛔ A carried operand fails closed rather than being
-        // written into a host request under a guessed encoding.
-        let lowered = specialized_env_at(&lowered, "a host-effect operand")?;
+        // BufferFreeze has two ruled phase-bearing resource seats. Every other
+        // host operation remains specialized-only and crosses the typed phase
+        // boundary only after the checked operation is known.
+        let specialized_lowered = if operation == ken_host::HostOpV1::BufferFreeze {
+            None
+        } else {
+            Some(specialized_env_at(&lowered, "a host-effect operand")?)
+        };
         let pointer_type = builder.func.dfg.value_type(
             self.function_local
                 .host_dispatch_context
@@ -7090,6 +7122,9 @@ impl<'a> Lowering<'a> {
             ken_host::HostOpV1::ConsoleWrite
             | ken_host::HostOpV1::ConsoleFlush
             | ken_host::HostOpV1::ConsoleIsTerminal => {
+                let lowered = specialized_lowered
+                    .as_deref()
+                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
@@ -7121,6 +7156,9 @@ impl<'a> Lowering<'a> {
             | ken_host::HostOpV1::FsWriteFile
             | ken_host::HostOpV1::FsChangeMode
             | ken_host::HostOpV1::FsOpen => {
+                let lowered = specialized_lowered
+                    .as_deref()
+                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 let capability = capability
                     .ok_or_else(|| unsupported("Effect", "FS operation has no live capability"))?;
                 // Present ⇒ the capability value is child 0 of this occurrence.
@@ -7195,6 +7233,9 @@ impl<'a> Lowering<'a> {
                 }
             }
             ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease => {
+                let lowered = specialized_lowered
+                    .as_deref()
+                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
@@ -7215,6 +7256,9 @@ impl<'a> Lowering<'a> {
                     .stack_store(*token, request, request_offset(0));
             }
             ken_host::HostOpV1::BufferAllocate => {
+                let lowered = specialized_lowered
+                    .as_deref()
+                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
@@ -7239,21 +7283,27 @@ impl<'a> Lowering<'a> {
                 if capability.is_some() {
                     return Err(unsupported("Effect", "BufferFreeze carried a capability"));
                 }
-                let Lowered::ResourceToken { value: token } = lowered
+                let token = self.lower_buffer_freeze_resource_seat(
+                    builder,
+                    lowered
                     .first()
-                    .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its buffer"))?
-                else {
-                    return Err(unsupported(
-                        "Effect",
-                        "BufferFreeze buffer is not a resource",
-                    ));
-                };
+                        .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its buffer"))?,
+                    "buffer",
+                )?;
                 let start = lowered
                     .get(1)
                     .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its start"))?;
                 let length = lowered
                     .get(2)
                     .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its length"))?;
+                let (LoweringOperand::Specialized(start), LoweringOperand::Specialized(length)) =
+                    (start, length)
+                else {
+                    return Err(unsupported(
+                        "Effect",
+                        "BufferFreeze start and length must remain specialized Int operands",
+                    ));
+                };
                 let (start, start_valid) = self.narrow_native_int_u64(builder, start)?;
                 let (length, length_valid) = self.narrow_native_int_u64(builder, length)?;
                 let valid = builder.ins().band(start_valid, length_valid);
@@ -7264,22 +7314,23 @@ impl<'a> Lowering<'a> {
                 );
                 record_narrow_failure(builder, invalid, 7);
                 // PX8-SPAN-PROV: trailing `span_origin` acquisition token.
-                let Lowered::ResourceToken { value: span_origin } = lowered.get(3).ok_or_else(
-                    || unsupported("Effect", "BufferFreeze is missing its span origin"),
-                )?
-                else {
-                    return Err(unsupported(
-                        "Effect",
-                        "BufferFreeze span origin is not a resource",
-                    ));
-                };
-                for (index, value) in [*token, start, length, *span_origin].into_iter().enumerate() {
+                let span_origin = self.lower_buffer_freeze_resource_seat(
+                    builder,
+                    lowered.get(3).ok_or_else(|| {
+                        unsupported("Effect", "BufferFreeze is missing its span origin")
+                    })?,
+                    "span origin",
+                )?;
+                for (index, value) in [token, start, length, span_origin].into_iter().enumerate() {
                     builder
                         .ins()
                         .stack_store(value, request, request_offset(index));
                 }
             }
             ken_host::HostOpV1::FsReadAt | ken_host::HostOpV1::FsWriteAt => {
+                let lowered = specialized_lowered
+                    .as_deref()
+                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
@@ -7566,7 +7617,9 @@ impl<'a> Lowering<'a> {
                     | ken_host::HostOpV1::FsChangeMode
                     | ken_host::HostOpV1::FsOpen
             ) {
-                let path = lowered
+                let path = specialized_lowered
+                    .as_ref()
+                    .expect("file-result synthesis follows a specialized-only operation")
                     .first()
                     .cloned()
                     .expect("validated FS operation has a path");
@@ -7824,7 +7877,9 @@ impl<'a> Lowering<'a> {
                 let reply_start_int = self.lower_unsigned_u64_int(builder, reply_start)?;
                 // PX8-SPAN-PROV: bind the minted span to this `readAt`'s buffer
                 // operand acquisition (lowered arg 2, the request seat).
-                let Lowered::ResourceToken { value: span_origin } = lowered
+                let Lowered::ResourceToken { value: span_origin } = specialized_lowered
+                    .as_ref()
+                    .expect("FsReadAt result synthesis follows a specialized-only operation")
                     .get(2)
                     .ok_or_else(|| unsupported("Effect", "FsReadAt is missing its buffer operand"))?
                 else {
