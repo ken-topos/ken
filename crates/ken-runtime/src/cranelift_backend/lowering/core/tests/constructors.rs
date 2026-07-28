@@ -4500,10 +4500,16 @@ fn b2f_d9_the_same_body_takes_the_small_arm_on_a_trimmed_pair() {
     );
 }
 
-/// ⭐⭐ **`D9` — the spillable immediates that carry NO pair, tested on their own
-/// tag.**
+/// ⭐⭐ **`D9` / `AC-13` item 2 — THE NO-PAIR ROUTE into the spillable dispatch.**
 ///
-/// ⛔ **Why the `Int` rows do not cover these.** `ProcessExitStatus`,
+/// ⛔ **The spillable arm has TWO ENTRY ROUTES with different preconditions, and
+/// a fixture on one says nothing about the other.** On the **pair-bearing**
+/// route the `NativeIntV1` marker partition governs and both `Small` and `Big`
+/// are live; on the **no-pair** route that partition **never engages** and the
+/// `Small` marker comes from [`Lowering::carrier_small_marker`]. ⇒ This row is
+/// the required discharge of the second route, ⛔ not an extra class.
+///
+/// ⛔ **Why the `Int` rows do not cover it.** `ProcessExitStatus`,
 /// `BoundedNat` and `StructuralNat` reach the dispatch by a *different route*:
 /// they have no `NativeIntV1` pair, so they skip the marker partition entirely
 /// and are handed a `Small` marker by [`Lowering::carrier_small_marker`]. ⇒ A
@@ -4517,11 +4523,23 @@ fn b2f_d9_the_same_body_takes_the_small_arm_on_a_trimmed_pair() {
 ///
 /// **MEASURED:** a `ProcessExitStatus` transferred through the producer returns
 /// a word tagged `ImmediateExitStatus` carrying its value.
-/// **CLAIMED:** the no-pair spillables reach the dispatch with their own tag.
-/// **THE GAP:** ⚠ this row covers **one** of the three. `BoundedNat` and
-/// `StructuralNat` share the same match arm and the same emitter, but their
-/// constructors are private to the lowering and this rig cannot mint one — ⛔ so
-/// they are argued-by-shared-arm, **not** measured, and that is a residual.
+/// **CLAIMED:** the **no-pair route** into the dispatch is exercised, and it
+/// carries the disposition's own tag.
+/// **THE GAP:** ⚠ this row executes **one** of the three no-pair classes.
+///
+/// ⛔⛔ **And the other two are NOT discharged by that.** `BoundedNat` and
+/// `StructuralNat` share this arm and this emitter, but *"covered by the
+/// neighbour that went green"* is a **pin claim, not a measurement** — a class
+/// that never executed is not evidence about itself, whatever its arm-mate did.
+/// Their constructors are private to the lowering, so **no behavioural fixture
+/// can reach them at all.**
+///
+/// ✅ **What discharges them is a different mechanism, not this test:** the
+/// producer's `match` over `Lowered` is **exhaustive and wildcard-free**, so a
+/// class that is silently unhandled is a **compile error**. That is a *compiler*
+/// proof, and it is strictly stronger here than a fixture would be — ⛔ it is
+/// not this row reaching further than it does. (`AC-13` item 1; Steward
+/// `evt_3k37x62bj040x`.)
 ///
 /// ⚠ Promise class: **durable invariant** — it relates the returned tag to the
 /// disposition's own declared tag, not to a frozen number.
