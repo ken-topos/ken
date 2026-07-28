@@ -1,7 +1,7 @@
 ---
 id: NATIVE-HANDLE-CARRIER
 title: "Native build-pipeline completeness — a constructor-private resource-carrying handle fails checked-core body-view lowering (MissingClosureMetadata) when it crosses the higher-order withBuffer normalization boundary"
-status: draft
+status: ready
 owner: runtime
 size: M
 gate: none
@@ -10,6 +10,21 @@ blocks: [PX8-F-CAP-41]
 github: null
 origin: discovered under [[PX8-F-CAP-41]] Phase 2 impl (foundation-implementer hard-stop evt_563ss8821n7f); Architect means/representation ruling evt_2zkjr68y1sdgf (thr_570t9qzcthjv9, 2026-07-23). Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
+
+> ## ⛔ `draft` → `ready` 2026-07-28 — the banner promised what the status withheld
+>
+> This node said **"✅ FRAMED — shovel-ready"** while its frontmatter said
+> `status: draft`. ⛔ **`gen-progress.sh` computes the frontier as `status:
+> ready` AND every `depends_on` merged/closed** — so at `draft` this node would
+> **not** have entered the frontier when `RT-NATIVE-FNSPLIT` merged, no matter
+> what the banner claimed. ⇒ A Steward pass would have had to stand between the
+> umbrella's merge and this kickoff, which is exactly what `§2a-bis` exists to
+> remove.
+>
+> ⭐ **`ready` is correct despite the unmerged dependency.** `RT-SCALE-B` is the
+> in-repo precedent: `ready` with an `active` dep. **Blocking is expressed by
+> `depends_on`, not by `draft`** — the frontier ANDs the two. `draft` is a claim
+> about *framing*, and this node's framing is done.
 
 > ## ✅ FRAMED 2026-07-27 — shovel-ready; blocked ONLY on `RT-NATIVE-FNSPLIT`
 >

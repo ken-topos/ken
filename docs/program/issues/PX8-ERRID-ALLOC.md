@@ -1,7 +1,7 @@
 ---
 id: PX8-ERRID-ALLOC
 title: "ResourceErrorV1 has no allocation-failure identity and buffer allocation is infallible, so PX8's allocation-distinct-from-BufferLimit row cannot be produced at all"
-status: draft
+status: ready
 owner: foundation
 size: M
 gate: none
@@ -10,6 +10,23 @@ blocks: [PX8-ERRID-SCOPE]
 github: null
 origin: "Architect ruling evt_6tzss92ckj2by (2026-07-27) on the Steward's PX8-ERRID-SCOPE partition question. Split out because the Architect ruled this row 'inside, but currently not representable' and named it a prerequisite to the evidence work."
 ---
+
+> ## ⛔ `draft` → `ready` 2026-07-28 — a re-cut is IMPLEMENTATION work, not framing
+>
+> This node sat at `status: draft` while its frame
+> (`docs/program/wp/PX8-ERRID-ALLOC.md`) self-describes as **"Steward frame,
+> shovel-ready, released"** and carries a **re-verified-current** fixed-input
+> stamp. It was released far enough to open PR #1141. ⛔ **`draft` is a claim
+> that framing is owed, and no framing is owed here.**
+>
+> ⚠ **What the block below describes is a candidate re-cut — Foundation's work,
+> not the Steward's.** A closed PR does not un-frame a node.
+>
+> ⭐ **`ready` is correct despite the unmerged dependency.** `gen-progress.sh`
+> ANDs `status: ready` with every `depends_on` merged/closed, so this stays out
+> of the frontier until `RT-NATIVE-FNSPLIT` lands — and then enters it
+> **automatically**, with no Steward pass in between. `RT-SCALE-B` is the
+> precedent.
 
 > ## ⛔ PR #1141 CLOSED 2026-07-28 — the candidate must be RE-CUT, not re-polled
 >
