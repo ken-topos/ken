@@ -642,8 +642,8 @@ hard-stop here is *the same wall* the FNSPLIT chain kept hitting, it counts on
   frontier candidates, before release. A `store.rs`/reifier change needs the
   **full** `-p ken-runtime` **and** `-p ken-interp` suites.
 - ⛔ Targeted builds only — never `--workspace`; the full gate runs in CI.
-- Report an unpushed ref and keep going; the Steward pushes. Wrap markdown at 80
-  columns.
+- Commit, report the exact SHA, and keep going; the Steward publishes. Wrap
+  markdown at 80 columns.
 
 ## 7. ⛔ POST-MERGE ADVERSARY FINDINGS ON P1 — two, both open
 

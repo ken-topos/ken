@@ -112,8 +112,8 @@ saying it is the failure mode that cost six blocks.
 - ⛔ **Until this lands, the OLD SPEC TEXT IS THE REPOSITORY'S CURRENT
   STATEMENT.** A WP frame amendment **cannot** outrank these files — which is
   why this is a spec node and not a frame fold.
-- Wrap markdown at 80 columns. Report an unpushed ref and keep going; the
-  Steward pushes.
+- Wrap markdown at 80 columns. Commit, report the exact SHA, and keep going;
+  the Steward publishes.
 
 ## ✅ MERGED 2026-07-26 — PR #982, exact `0ccca4c5`
 

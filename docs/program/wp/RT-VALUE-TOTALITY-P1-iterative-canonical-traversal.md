@@ -486,8 +486,8 @@ a WP whose subject is representation, not depth.
 - ⛔ **Contention:** this WP rewrites `crates/ken-runtime/src/canonical.rs` and
   `values.rs` and adds `crates/ken-runtime/tests/`. Intersect that set against
   every WP **in flight**, not just the frontier, before release.
-- **Report an unpushed ref and KEEP GOING** — you have no GitHub credential by
-  design, the Steward pushes, and raising it is not gating on it.
+- **Commit, report the exact SHA, and KEEP GOING** — you have no GitHub
+  credential by design; the Steward publishes through the publisher path.
 - Wrap markdown at 80 columns. Treat every §2 current-state claim as perishable.
 - Hard-stop count for this node stands at **0**; next research pull at the
   **3rd**. ⚠ The `RT-NATIVE-FNSPLIT` chain stands at **10** with catch-up armed

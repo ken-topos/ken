@@ -777,27 +777,12 @@ brief** — the implementer should execute mostly mechanically, not design
 >    Same lesson as the ctx%-scan and the stranded-paste sweep: **where a
 >    backstop depends on you remembering to look, convert it into a step.**
 >
-> 8b. **⛔ THERE IS NO OFF-BOX PUSH PROTOCOL. DELETED — operator, 2026-07-26.**
->
->    > *"You do not need off-box pushes. In decades of software development, I
->    > have never lost a commit to a drive failure."* — and, on the ~80 lines of
->    > sweep-and-push recipe that used to sit here: *"keep it simple. the off box
->    > push protocol needlessly complicates and wastes time and tokens."*
->
->    ⇒ **A branch existing on one local ref is NORMAL, not an exposure.** Do not
->    sweep for it, do not push a WP or seat branch to origin, do not mint a token
->    for durability, and do not raise an unpushed ref to a ring as a finding.
->    **`origin` carries `main` only** — every other branch was deleted on the
->    same ruling. A publish still pushes its own candidate branch, because that
->    is how `scripted-pr-automerge.sh` opens a PR; that is the *only* push.
->
->    ⚠ **What this replaces, so the old reasoning does not creep back:** this step
->    used to treat a single-ref branch as a durability incident, with a
->    per-worktree `ls-remote` sweep, a token-minting push recipe, and a "tell
->    rings to report unpushed refs" instruction. **All of it is gone.** Preserving
->    a ref is still occasionally right for a *hard-reset hazard* — the
->    handoff-gate script's `preserved/<branch>` net (§2c step 4) — but that is a
->    **local** ref, and it does not want a remote copy either.
+> 8b. **`origin` carries `main` only.** `scripted-pr-automerge.sh` pushes its own
+>    candidate branch to open the PR; that is the only push. ⛔ Do not push a WP
+>    or seat branch to origin, and ⛔ do not treat a branch living on one local
+>    ref as a finding — that is the normal state of every seat's work. Where a
+>    ref is genuinely at risk of a **hard reset**, the handoff-gate script's
+>    local `preserved/<branch>` net (§2c step 4) covers it.
 >
 > 9. **★ ON PUBLISH — ack "PR #N is open at `<SHA>` — the branch is FROZEN" into
 >    the WP thread, immediately.** A `git_request` becoming a live PR is

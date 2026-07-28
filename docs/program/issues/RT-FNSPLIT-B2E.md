@@ -148,7 +148,7 @@ numbering does not reset. ⛔ **No research pull is due until #12.**
 
 **Decision `dec_6r447gawdp6hy`** — `resolved`. Ruling `evt_5p1w8vq3b6q5s` in
 thread `thr_7ya91w7k5keyd`. Architect durable record **`1d9a6f86`** on
-`architect/work`, preserved off-box by the Steward. Transcribed here **and** into
+`architect/work`, preserved by the Steward. Transcribed here **and** into
 the frame's operative text because **an in-thread ruling is not a durable
 deliverable.**
 

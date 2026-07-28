@@ -155,5 +155,5 @@ content.
   files.** If it does, that is a **finding to route**, not a reason to narrow the
   population back. Report it and hold.
 - ⛔ You have **no** GitHub credential. Commit, report the **exact SHA**, and keep
-  going — the Steward pushes. Report an unpushed ref rather than stalling.
+  going — the Steward publishes.
 - Wrap markdown at 80 columns. ⛔ Never `git stash` (≈70 shared worktrees).

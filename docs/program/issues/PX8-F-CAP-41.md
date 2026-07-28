@@ -28,9 +28,8 @@ origin: charter backlog (#41); RE-GROUNDED as a live PX8 clause-(a) blocker by a
 > already carries the handle/admission impl. The text below says to "fold with
 > `f0eb65ce`" — that is a measured premise error; there is nothing to fold.
 >
-> ⚠ Both refs are durable on origin as `preserved/*`. They were **local-ref
-> only** until 2026-07-27; a handoff-gate "preserved at …" line is **not**
-> off-box durability.
+> ⚠ Both refs are recorded as `preserved/*`. A handoff-gate "preserved at …"
+> line is a claim, ⛔ not a resolved ref — resolve every name you write down.
 
 > ## ⚠ STATUS CORRECTED `active` → `draft` — 2026-07-25 (Steward, tracker honesty)
 >

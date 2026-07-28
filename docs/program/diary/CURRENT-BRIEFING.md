@@ -199,10 +199,10 @@ the claim.**
 > ### ⛔ THIS SECTION WAS FALSE AS WRITTEN. Both halves.
 >
 > It said *"Origin holds 26"* and gave `git ls-remote origin
-> 'refs/heads/preserved/*'` as the query. **Operator ruling, 2026-07-26:** *"you do
-> not need off-box pushes … Also clean up all of the non-main branches at origin."*
-> ⇒ **All 63 non-`main` origin branches are deleted.** That `ls-remote` now returns
-> **nothing**, and a reader running it would conclude the work was lost.
+> 'refs/heads/preserved/*'` as the query. **Operator ruling, 2026-07-26:** *"clean
+> up all of the non-main branches at origin."* ⇒ **All 63 non-`main` origin
+> branches are deleted.** That `ls-remote` now returns **nothing**, and a reader
+> running it would conclude the work was lost.
 
 **Measured 2026-07-27 — the query is local, and the population is larger, not
 smaller:**
@@ -213,8 +213,7 @@ git ls-remote --heads origin                 # refs/heads/main — and nothing e
 ```
 
 ⭐ **A branch on one local ref is the NORMAL state of preserved work, not an
-exposure.** ⛔ Do not raise an unpushed ref as a finding, and do not mint a token
-to push one.
+exposure.** ⛔ Do not raise an unpushed ref as a finding.
 
 ⛔ **AND THE "EXISTS NOWHERE ELSE" CLAIM WAS WRONG ON EVERY ITEM IT NAMED.** Each
 was checked at `origin/main = a1e29284`:
@@ -263,15 +262,11 @@ that changes nothing about how any program behaves make this test fail?"**
 **Standing gate policy (operator, 2026-07-26):** the library currency ledger is
 generated **at version release points**, ⛔ **not enforced per merge.**
 
-**⛔ NO OFF-BOX PUSHES (operator, 2026-07-26).** *"You do not need off-box pushes.
-In decades of software development, I have never lost a commit to a drive failure.
-Also clean up all of the non-main branches at origin."* And on the protocol:
-*"keep it simple. the off box push protocol needlessly complicates and wastes time
-and tokens."* ⇒ **`origin` carries `main` only.** A branch on one local ref is
-**normal**. ⛔ No durability sweeps, no token-minting pushes, no ring reporting an
+**⛔ `origin` CARRIES `main` ONLY (operator, 2026-07-26; restated 2026-07-28).**
+A branch living on one local ref is **normal** and is never a finding. ⛔ No
+durability sweeps, no pushes of WP or seat branches, no ring reporting an
 unpushed ref. The publisher's own candidate-branch push stays — that is how it
-opens a PR. `steward.md` §2c step 8b (~80 lines of `ls-remote` sweep + push
-recipe) is **deleted**, not amended.
+opens a PR.
 
 **⛔ THE `integrator` SEAT IS RETIRED (operator, 2026-07-26).** *"remove any
 references to the integrator. that seat was retired weeks ago."* ⇒ Every operative

@@ -325,8 +325,8 @@ ledger axis — **and a ledger collision merges clean and wrong.**
 - ⛔ **Do not touch `crates/ken-runtime`** — `RT-FNSPLIT-B2V` is live there. If
   this WP appears to need a change in it, that is a frame-boundary fact:
   **hard-stop and route it**, do not reach across.
-- **Report an unpushed ref and KEEP GOING.** Build seats have no GitHub
-  credential by design; the Steward pushes. Raising it is not gating on it.
+- **Commit, report the exact SHA, and KEEP GOING.** Build seats have no GitHub
+  credential by design; the Steward publishes through the publisher path.
 - Read `agent/playbooks/tools/pin-a-property.md` before writing any assertion.
 - **Every anchor above is perishable.** Escalate a false fixed input; do not
   build around it.
