@@ -734,6 +734,7 @@ fn structured_former_lift_type(
     motive: &Term,
     d: GlobalId,
     parameter_count: usize,
+    guest_level_args: &[Level],
 ) -> KernelResult<Term> {
     let former_decl = env.inductive(former).ok_or_else(|| {
         unsupported_recursive_shape("declared-former lift lost its admitted declaration")
@@ -776,7 +777,7 @@ fn structured_former_lift_type(
             .collect::<Vec<_>>()
     };
     let motive_sort =
-        infer_motive_level(env, &Context::new(), guest_decl, &[], &guest_params, motive)?;
+        infer_motive_level(env, &Context::new(), guest_decl, guest_level_args, &guest_params, motive)?;
     let host_level = subst_levels(
         &Term::Type(former_decl.level.clone()),
         &former_decl.level_params,
@@ -855,7 +856,7 @@ fn structured_former_lift_type(
         }
         let terminal = terminal_type(
             guest_decl,
-            &[],
+            guest_level_args,
             &guest_params
                 .iter()
                 .map(|parameter| weaken(parameter, binder_count as i64))
@@ -1013,6 +1014,7 @@ fn structured_lift_type(
                 motive,
                 d,
                 parameter_count,
+                &[],
             )
         }
     }
@@ -1246,6 +1248,7 @@ fn structured_former_lift_term(
         &weaken(motive, 1),
         d,
         parameter_count,
+        d_level_args,
     )?;
     let host_motive = Term::Ascript(
         Box::new(Term::lam(source_type.clone(), body_type)),
