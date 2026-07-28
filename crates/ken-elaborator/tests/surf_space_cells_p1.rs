@@ -299,6 +299,46 @@ fn ac_s5_space_label_is_emitted_and_required() {
 }
 
 #[test]
+// Promise class: durable invariant. Every space operation's inferred body
+// effects remain a subset of its full retained declaration row.
+fn ac_s5_space_body_effects_use_the_existing_escape_judgment() {
+    let mut env = ElabEnv::new().expect("prelude");
+    env.elaborate_decl("proc fs_source (x : Int) : Int visits [FS] = x")
+        .expect("FS source");
+    let error = env
+        .elaborate_file(
+            "space Escaping { \
+               mut n : Int = 0 \
+               proc read () : Int visits [Escaping] = fs_source n \
+             }",
+        )
+        .expect_err("an undeclared body effect must escape");
+    assert!(matches!(error, ElabError::TypeMismatch { ref reason, .. }
+        if reason.contains("effect escape") && reason.contains("FS")));
+
+    let mut env = ElabEnv::new().expect("prelude");
+    env.elaborate_decl("proc fs_source (x : Int) : Int visits [FS] = x")
+        .expect("FS source");
+    env.elaborate_file(
+        "space Covered { \
+           mut n : Int = 0 \
+           proc read () : Int visits [Covered, FS] = fs_source n \
+         }",
+    )
+    .expect("the full declared row must cover both inferred effects");
+    assert_eq!(
+        env.effect_rows.get("Covered.read"),
+        Some(&RowType::concrete(
+            ken_elaborator::effects::EffectRow::from_effects([
+                "Covered".to_string(),
+                "FS".to_string(),
+            ])
+        )),
+        "the accepted operation must retain its full declared row"
+    );
+}
+
+#[test]
 fn generated_initial_state_does_not_claim_the_initial_member() {
     let mut env = ElabEnv::new().expect("prelude");
     let emitted = env
@@ -337,6 +377,52 @@ fn generated_initial_state_does_not_claim_the_initial_member() {
         (7, 7),
         "the operation remains callable and uses the separate private initial state"
     );
+}
+
+#[test]
+// Promise class: transition sentinel. Retire only when an authorized
+// public-space export and effect-label contract replaces P1's refusal.
+fn public_block_space_is_a_specific_surface_refusal() {
+    let mut env = ElabEnv::new().expect("prelude");
+    let error = env
+        .elaborate_file(
+            "pub space Public { \
+               mut n : Int = 0 \
+               proc read () : Int visits [Public] = n \
+             }",
+        )
+        .expect_err("P1 does not define public block spaces");
+    assert!(matches!(
+        error,
+        ElabError::UnsupportedSpacePlacement {
+            ref placement,
+            ref span
+        } if placement == "public" && span.end > span.start
+    ));
+}
+
+#[test]
+// Promise class: transition sentinel. Retire only when an authorized nested
+// qualification and effect-label contract replaces P1's refusal.
+fn nested_block_space_is_a_specific_surface_refusal() {
+    let mut env = ElabEnv::new().expect("prelude");
+    let error = env
+        .elaborate_file(
+            "module Outer { \
+               space Nested { \
+                 mut n : Int = 0 \
+                 proc read () : Int visits [Nested] = n \
+               } \
+             }",
+        )
+        .expect_err("P1 does not define nested block spaces");
+    assert!(matches!(
+        error,
+        ElabError::UnsupportedSpacePlacement {
+            ref placement,
+            ref span
+        } if placement == "nested" && span.end > span.start
+    ));
 }
 
 #[test]

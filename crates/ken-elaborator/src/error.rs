@@ -58,6 +58,9 @@ pub enum ElabError {
     /// `mut` or `becomes` appeared outside a block-scoped mutable cell
     /// (`36 §7.3`, class 4).
     MutationOutsideSpace { construct: String, span: Span },
+    /// A block-form `space` appeared in a placement whose qualification and
+    /// export contract is not part of the top-level P1 subset.
+    UnsupportedSpacePlacement { placement: String, span: Span },
     /// A `ConId` with no global declaration.
     UnresolvedCon { name: String, span: Span },
     /// A second top-level definition of a name already defined in the same
@@ -216,6 +219,12 @@ impl fmt::Display for ElabError {
             ElabError::MutationOutsideSpace { construct, span } => write!(
                 f,
                 "`{construct}` is only valid for a mutable cell inside a space at {}-{}",
+                span.start, span.end,
+            ),
+            ElabError::UnsupportedSpacePlacement { placement, span } => write!(
+                f,
+                "{placement} space block at {}-{} is unsupported; \
+                 P1 admits top-level private spaces only",
                 span.start, span.end,
             ),
             ElabError::UnresolvedCon { name, span } => {

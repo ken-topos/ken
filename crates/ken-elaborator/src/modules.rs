@@ -1293,6 +1293,28 @@ fn expand_scope(
     unit_definitions: &mut HashSet<String>,
     allow_boundary: bool,
 ) -> Result<(Vec<crate::elab::ElabResult>, HashMap<String, String>), ElabError> {
+    // P1 defines only private block spaces at the true file root. Reject the
+    // syntactically accepted wider placements before qualification/resolution
+    // can turn the unsupported surface into an internal error.
+    for decl in decls {
+        if !matches!(decl.unwrap_pub(), Decl::SpaceDecl { .. }) {
+            continue;
+        }
+        let placement = if decl.is_pub() {
+            Some("public")
+        } else if !prefix.is_empty() {
+            Some("nested")
+        } else {
+            None
+        };
+        if let Some(placement) = placement {
+            return Err(ElabError::UnsupportedSpacePlacement {
+                placement: placement.to_string(),
+                span: decl.span().clone(),
+            });
+        }
+    }
+
     // Pre-pass: collect this scope's own local declared names FIRST. Imports
     // below therefore detect a local/import clash independently of textual
     // order, even when the clashing name is never referenced.

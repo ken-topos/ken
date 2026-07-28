@@ -5101,6 +5101,19 @@ pub(crate) fn elaborate_space_decl(
         }
 
         let qualified_name = format!("{}.{}", space.name, operation.name);
+        let inferred_row = infer_expr_row_type(&operation.body, &elab.effect_rows, None)
+            .join(crate::effects::RowType::singleton(space.name.clone()));
+        let effect_decl = crate::effects::EffectDecl::new(&qualified_name)
+            .with_declared_row_type(declared_row.clone());
+        crate::effects::check_decl_poly(
+            &effect_decl,
+            &inferred_row,
+            &crate::effects::EffectRow::empty(),
+        )
+        .map_err(|err| ElabError::TypeMismatch {
+            span: operation.span.clone(),
+            reason: format!("false purity or effect escape in `{qualified_name}`: {err}"),
+        })?;
         let mut cx = ElabCtx::new(
             &mut elab.env,
             &elab.globals,
