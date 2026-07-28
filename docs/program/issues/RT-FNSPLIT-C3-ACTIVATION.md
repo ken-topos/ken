@@ -28,3 +28,13 @@ internal convention without touching the public C representation.
 ⛔ `B2F` is **held at `7ce4198f`** until this node is durable.
 
 Frame: `docs/program/wp/RT-FNSPLIT-C3-ACTIVATION.md`.
+
+## Sequencing — first of Runtime's two prerequisites
+
+Runtime sequenced **this node first, then `RT-FNSPLIT-C2-SYNTH-ID`**
+(runtime-leader `evt_35karwwpdas3g`, 2026-07-28); the branch
+`wp/RT-FNSPLIT-C3-ACTIVATION` was cut from exact `6187d147`.
+
+⛔ **Scheduling, not dependency** — the two nodes are independent and both
+remain `ready`. ⚠ `B2F` waits on **both**, so neither ordering shortens its
+hold; this one is first because it is the larger unknown.
