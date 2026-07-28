@@ -1126,12 +1126,14 @@ fn qa_wstyle_double_pi_branching_telescope() {
     // Verify the IH type is Π(Nat, Π(Nat, Nat)).
     let ind = env.inductive(dbl).unwrap();
     let meth_ty = ken_kernel::inductive::method_type(
+        &env,
         ind,
         0, // k=0 (only constructor)
         &motive,
         &[],
         &[],
-    );
+    )
+    .expect("double-Pi method type");
     // method_type returns: Π(Nat→Nat→Dbl). Π(Π(Nat, Π(Nat, Nat))). M [] c₀ [k] [ih]
     // The IH's type should be Π(Nat, Π(Nat, Nat)).
     // peel the first Pi (k's type) and check the second binder is the IH with 2 Pis.
@@ -1154,6 +1156,7 @@ fn qa_wstyle_double_pi_branching_telescope() {
     );
     let ctor_all_args = vec![f.clone()]; // constructor takes 1 arg (m=0, n=1)
     let reduct = ken_kernel::inductive::iota_reduct(
+        &env,
         ind,
         0, // k=0
         &[],

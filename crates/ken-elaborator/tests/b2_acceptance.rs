@@ -205,7 +205,8 @@ fn ordinary_inductive_admitted_by_k1() {
         var_ty.clone(),
     );
     let motive = Term::lam(temporal_ty, Term::ty(Level::zero()));
-    let m0 = method_type(&ind, 0, &motive, &[pred_ty, var_ty], &[]);
+    let m0 =
+        method_type(&env, &ind, 0, &motive, &[pred_ty, var_ty], &[]).expect("ordinary method type");
     assert!(
         matches!(m0, Term::Pi(..)),
         "the ordinary eliminator generates a method type for `atom` (got {:?})",

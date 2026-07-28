@@ -116,7 +116,7 @@ pub fn whnf(env: &GlobalEnv, ctx: &Context, t: &Term) -> Term {
                     if let Some((ind, k)) = env.constructor(id) {
                         if ind.id == *fam {
                             if let Ok(reduct) =
-                                iota_reduct(ind, k, level_args, params, motive, methods, &all_args)
+                                iota_reduct(env, ind, k, level_args, params, motive, methods, &all_args)
                             {
                                 cur = reduct;
                                 continue;
