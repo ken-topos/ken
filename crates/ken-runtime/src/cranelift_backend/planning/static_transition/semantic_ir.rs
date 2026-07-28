@@ -239,7 +239,7 @@ pub(super) struct CaptureLayoutId(pub(super) u32);
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
-pub(super) struct PredeclaredFunctionId(pub(super) u32);
+pub(in crate::cranelift_backend) struct PredeclaredFunctionId(pub(super) u32);
 
 /// Which function unit a planned node belongs to.
 ///
@@ -1327,7 +1327,9 @@ impl SemanticPlane {
             .filter(|atom| atom.kind == kind)
             .nth(occurrence)
             .ok_or_else(|| {
-                planner_error("static origin has no atom of that kind at that occurrence")
+                planner_error(format!(
+                    "static origin {origin:?} has no {kind:?} atom at occurrence {occurrence}"
+                ))
             })
     }
 
@@ -1470,6 +1472,82 @@ impl SemanticPlane {
     /// catches it." That was wrong, and wrong in the direction that matters: it
     /// credited this law with work the overlap check is doing, and a reader who
     /// believed it might weaken overlap thinking the edge law still covered them.
+    /// **`RT-FNSPLIT-B2F` `D4` — the cross-owner call edges, as caller/callee id
+    /// pairs.**
+    ///
+    /// ⭐ **Derived here because this is where the classification already
+    /// lives.** [`Self::validate_function_units`] enforces all four edge laws as
+    /// `return Err` arms, so a plane that exists cannot carry a `StaticBody`
+    /// edge that fails to cross into a distinct unit's seed. ⇒ This walk re-reads
+    /// validated facts; it does not re-decide them, and ⛔ it must never grow an
+    /// arm that classifies an edge the validator would have rejected.
+    ///
+    /// ⛔ **Deliberately kept out of `static_transition.rs`.** Spelling
+    /// `SemanticOwner` in a third production file is how a second classification
+    /// authority begins, and
+    /// `the_owner_classification_has_a_closed_production_naming_inventory`
+    /// reddens on exactly that.
+    ///
+    /// ⛔ Fails closed on an endpoint with no descriptor, and on a `StaticBody`
+    /// edge that does not join two function units. ⚠ The latter is unreachable
+    /// through the validator — it is here so that a future caller which reaches
+    /// this method on an unvalidated plane is refused rather than silently given
+    /// a short edge list.
+    pub(super) fn static_body_call_edges(
+        &self,
+        edges: &[StaticEdge],
+    ) -> Result<
+        Vec<(
+            PredeclaredFunctionId,
+            PredeclaredFunctionId,
+            StaticOriginId,
+        )>,
+        CraneliftBackendError,
+    > {
+        let owner_of = |node: StaticNodeId| -> Result<SemanticOwner, CraneliftBackendError> {
+            self.descriptors
+                .get(node.0 as usize)
+                .map(|descriptor| descriptor.owner)
+                .ok_or_else(|| planner_error("call edge endpoint has no semantic descriptor"))
+        };
+        let mut call_edges = Vec::new();
+        for edge in edges {
+            if edge.kind != EdgeKind::StaticBody {
+                continue;
+            }
+            let (SemanticOwner::Function(caller), SemanticOwner::Function(callee)) =
+                (owner_of(edge.from)?, owner_of(edge.to)?)
+            else {
+                return Err(planner_error(
+                    "static body call edge does not join two function units",
+                ));
+            };
+            let callee_origin = self
+                .functions
+                .get(callee.0 as usize)
+                .ok_or_else(|| planner_error("call edge callee has no function descriptor"))?
+                .origin;
+            call_edges.push((caller, callee, callee_origin));
+        }
+        Ok(call_edges)
+    }
+
+    pub(super) fn function_for_node(
+        &self,
+        node: StaticNodeId,
+    ) -> Result<PredeclaredFunctionId, CraneliftBackendError> {
+        let descriptor = self
+            .descriptors
+            .get(node.0 as usize)
+            .ok_or_else(|| planner_error("root entry has no semantic descriptor"))?;
+        match descriptor.owner {
+            SemanticOwner::Function(function) => Ok(function),
+            SemanticOwner::Terminal | SemanticOwner::TrapTerminal => {
+                Err(planner_error("root entry is owned by a shared exit"))
+            }
+        }
+    }
+
     fn validate_function_units(
         &self,
         nodes: &[StaticNode],

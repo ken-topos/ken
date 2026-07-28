@@ -22,6 +22,25 @@ pub(super) use static_transition::{
 };
 #[cfg(test)]
 pub(super) use static_transition::with_last_io_error_role_omitted;
+// `RT-FNSPLIT-B2A-S` `AC-4` — the route counters behind
+// `every_origin_to_expression_resolution_goes_through_the_single_route`.
+// ⛔ `#[cfg(test)]`: these are probe infrastructure and must not be reachable
+// from production, where a caller could reset the window mid-compile and make
+// the differential read whatever it liked.
+#[cfg(test)]
+pub(super) use static_transition::{
+    ac4_note_route_invocation, ac4_open_route_window, ac4_route_counts,
+};
+// `RT-FNSPLIT-B2F` `D1`/`D2` — the emitter's read-only view of the validated
+// function-unit population, plus the closed vocabulary its slots are described
+// in. ⛔ `AbiPlane`, `AbiDescriptor`, `build_abi_plane` and `AbiPlane::validate`
+// are deliberately NOT re-exported: the emitter reads a unit, and can neither
+// construct the plane nor reach the pre-emission validator to bypass it.
+pub(super) use static_transition::{
+    AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
+    AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition, EmittableUnit,
+    PredeclaredFunctionId,
+};
 
 pub(super) fn native_join_plan_for_program(
     program: &RuntimeProgram,

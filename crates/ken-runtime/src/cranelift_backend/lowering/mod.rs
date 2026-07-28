@@ -17,13 +17,28 @@
 
 pub(in crate::cranelift_backend) mod core;
 
+// `RT-FNSPLIT-B2F` `D1`/`D2` — the target code-unit population. A sibling of
+// `core` rather than a region inside it: `core.rs` is the module whose recursive
+// whole-configuration authority `D6` removes, and putting the replacement
+// population in the same file would make the census that measures the removal
+// unable to distinguish the two.
+pub(in crate::cranelift_backend) mod units;
+
+// `RT-FNSPLIT-B2F` `D3` — the artifact-static seed material. A sibling of
+// `units` rather than a region inside it, because the two mint **different
+// populations**: `units` mints code (`Theta(n)` in the program) and this mints
+// data (`Theta(|seed environment|)`, independent of the program). ⛔ Folding
+// them into one file would put two growth axes behind one census row, which is
+// the population conflation this node has already had to repair three times.
+pub(in crate::cranelift_backend) mod seed_material;
+
 // --- external dependencies -------------------------------------------------
 pub(in crate::cranelift_backend) use std::collections::{BTreeMap, BTreeSet};
 
 // `RT-FNSPLIT-B2V` `D4`. Re-exported at facade scope like every other import in
 // this header so the `tests` subtree inherits the names.
 pub(in crate::cranelift_backend) use crate::boundary_value::{
-    BoundaryClass, BoundaryReferentOwner, BoundaryTag, BOUNDARY_OK,
+    BoundaryClass, BoundaryReferentOwner, BoundaryTag, BOUNDARY_ERR_BOUNDS, BOUNDARY_OK,
 };
 
 pub(in crate::cranelift_backend) use cranelift_codegen::ir::{
@@ -34,7 +49,7 @@ pub(in crate::cranelift_backend) use cranelift_codegen::verify_function;
 pub(in crate::cranelift_backend) use cranelift_frontend::{
     FunctionBuilder, FunctionBuilderContext,
 };
-pub(in crate::cranelift_backend) use cranelift_module::{Linkage, Module};
+pub(in crate::cranelift_backend) use cranelift_module::{FuncId, Linkage, Module};
 
 // --- crate root ------------------------------------------------------------
 pub(in crate::cranelift_backend) use crate::{
@@ -57,7 +72,10 @@ pub(in crate::cranelift_backend) use super::compiled::{CompiledModule, ResultDec
 pub(in crate::cranelift_backend) use super::planning::{
     collect_checked_oriented_markers, collect_checked_subcontinuation_frames,
     plan_static_transition_graph_with_symbols, validate_oriented_subcontinuation_transport,
-    CheckedOrientedMarkerSets, ConstructorIdentity, StaticOriginId, StaticTransitionPlan,
+    AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
+    AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
+    CheckedOrientedMarkerSets, ConstructorIdentity, EmittableUnit, PredeclaredFunctionId,
+    StaticOriginId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]
@@ -354,8 +372,259 @@ impl OwnedSourceOccurrence {
     }
 }
 
+/// **Everything that is resolved into ONE generated `Function` and is
+/// meaningless in any other.**
+///
+/// ⛔⛔ **Nothing in here is portable across functions, and the three kinds fail
+/// differently.** `FuncRef`, `GlobalValue` and `ir::Value` are all
+/// function-scoped entity references in Cranelift:
+///
+/// | field kind | what it is | moving it to another function |
+/// |---|---|---|
+/// | `FuncRef`s, `SeedMaterialRefs`' `GlobalValue`s, `BoundaryCarrierRefs` | an identity **resolved into** a function | ⚠ must be **re-resolved** — the identity survives, the handle does not |
+/// | `host_dispatch_context`, `native_int_arena` | a **result of this function's own dataflow** | ⛔ must be **re-derived** — there is no identity to re-resolve |
+/// | `native_int_tags` | a map **keyed on `ir::Value`** | ⛔⛔ **silently aliases** |
+///
+/// ⭐ **The `native_int_tags` row is the dangerous one, and it is why this
+/// struct exists.** Entity references restart per `Function` — `v0`, `v1`, …
+/// are reused — so a tag map carried from one function into another answers a
+/// lookup for an unrelated value **that happens to share the numeric handle**.
+/// ⛔ No type error, no panic, no verifier complaint: a wrong tag on a path that
+/// still compiles.
+///
+/// ⇒ ⭐ **`RT-FNSPLIT-B2F` `S6` gives each unit body its own function, so this
+/// state must be partitioned by construction.** ⛔ A `reset()` someone has to
+/// remember to call is the same defect with an extra step. Gathering the fields
+/// under one name is what makes *"is this per-function state?"* answerable by
+/// reading one struct instead of auditing a hundred-field one.
+///
+/// ⚠ **This is the identity-alias class in a third substrate** — after `B2O`
+/// removed it from `SemanticDescriptor` and `D1` kept it out of `UnitBundle`,
+/// here it is again in Cranelift's own entity references.
+///
+/// ⛔ **NOT CLAIMED: no control demonstrates the alias.** Producing one requires
+/// the `S6` switch-over that does not exist yet, so this is a read of Cranelift's
+/// entity scoping, not a measurement. ⚠ What *is* structural is that a second
+/// function cannot silently inherit this state without a visible second
+/// construction of this struct.
+/// **`RT-FNSPLIT-B2F` `S6`** — the module-level identities every generated
+/// function must resolve for itself, and the sole producer of a
+/// [`FunctionLocalRefs`].
+///
+/// ⭐ **This is the OTHER side of the construction boundary, and naming it is
+/// what makes the boundary checkable.** [`FunctionLocalRefs`] says what is *not*
+/// portable; this says what *is*. A `FuncId` and a `DataId` are module-scoped:
+/// they mean the same thing in every function of the artifact, and
+/// [`Self::declare_in_func`] is the one operation that turns them into the
+/// function-scoped handles a body can actually reference.
+///
+/// ⛔ **There is deliberately no way to build a `FunctionLocalRefs` in
+/// production except through [`Self::declare_in_func`].** The root and every
+/// future unit body therefore cannot drift: a helper added here is resolved into
+/// *every* generated function or into none, and *"the root has a carrier ref and
+/// the unit does not"* stops being expressible by forgetting to copy a line.
+/// ⚠ The `#[cfg(test)]` fixtures build the struct directly and are the stated
+/// exception; they emit into no module and hold `None` throughout.
+///
+/// **MEASURED:** every resolved-handle field of `FunctionLocalRefs` is produced
+/// by one function, from module-scoped identities held here.
+/// **CLAIMED:** any second generated function emits against the same helper
+/// surface the root does.
+/// **THE GAP:** ⛔ **there is no second generated function yet** — `S6`'s
+/// switch-over is not landed, so today this has exactly one caller and the claim
+/// is about a population of one. ⚠ It is *not* claimed that this suffices for a
+/// unit body: the two `ir::Value` fields are **not** resolvable from here,
+/// because they are results of a function's own dataflow rather than identities,
+/// and `declare_in_func` leaves them `None` for each caller to derive. ⭐ That
+/// gap is measured, not assumed — see
+/// `docs/program/rt-fnsplit-b2f-s6-switchover-measurement.md`.
+#[derive(Clone, Copy)]
+struct ArtifactHelpers<'h> {
+    seed_material: &'h seed_material::SeedMaterial,
+    host_dispatch: Option<FuncId>,
+    native_int: &'h crate::native_int_clif::NativeIntLocalFuncs,
+    boundary_value_abi: &'h crate::boundary_value_clif::BoundaryLocalFuncs,
+}
+
+impl ArtifactHelpers<'_> {
+    /// Resolve every module-level identity into `func`.
+    ///
+    /// ⛔ **Call this once per `Function`, and never reuse the result.** The
+    /// returned handles are function-scoped; see [`FunctionLocalRefs`] for what
+    /// each of the three kinds does when it crosses a function boundary.
+    fn declare_in_func<M: Module>(self, module: &mut M, func: &mut Function) -> FunctionLocalRefs {
+        FunctionLocalRefs {
+            seed_material: self.seed_material.declare_in_func(module, func),
+            host_dispatch: self
+                .host_dispatch
+                .map(|id| module.declare_func_in_func(id, func)),
+            // ⛔ Dataflow results, not identities: `None` here is correct, and
+            // each function derives its own from its entry block.
+            host_dispatch_context: None,
+            services_pointer: None,
+            native_int_arena: None,
+            // ⛔ Sourced by the activation-services record, which the `S6`/`D6`
+            // reland introduces. Fail closed until then.
+            boundary_arena: None,
+            native_int_binop: Some(module.declare_func_in_func(self.native_int.binop, func)),
+            native_int_compare: Some(module.declare_func_in_func(self.native_int.compare, func)),
+            native_int_intern: Some(module.declare_func_in_func(self.native_int.intern, func)),
+            native_int_narrow: Some(module.declare_func_in_func(self.native_int.narrow, func)),
+            native_int_export: Some(module.declare_func_in_func(self.native_int.export, func)),
+            // ⭐ The **one** exact-`Int` decoder, resolved here so the
+            // region-limbed spill copies through the landed representation
+            // instead of growing a second one.
+            native_int_resolve: Some(module.declare_func_in_func(self.native_int.resolve, func)),
+            // ⛔ Empty, never inherited. This is the map whose `ir::Value` keys
+            // alias across functions; starting it empty per function is why the
+            // two structs are separate types rather than one with a `reset()`.
+            native_int_tags: BTreeMap::new(),
+            unit_calls: BTreeMap::new(),
+            terminal_result_origins: BTreeSet::new(),
+            boundary_carrier: Some(BoundaryCarrierRefs {
+                class: module.declare_func_in_func(self.boundary_value_abi.class, func),
+                tag: module.declare_func_in_func(self.boundary_value_abi.tag, func),
+                field_count: module.declare_func_in_func(self.boundary_value_abi.field_count, func),
+                field: module.declare_func_in_func(self.boundary_value_abi.field, func),
+                record_field: module
+                    .declare_func_in_func(self.boundary_value_abi.record_field, func),
+                scalar: module.declare_func_in_func(self.boundary_value_abi.scalar, func),
+                host_success: module
+                    .declare_func_in_func(self.boundary_value_abi.host_success, func),
+                host_payload: module
+                    .declare_func_in_func(self.boundary_value_abi.host_payload, func),
+                alloc: module.declare_func_in_func(self.boundary_value_abi.alloc, func),
+                store_tag_id: module
+                    .declare_func_in_func(self.boundary_value_abi.store_tag_id, func),
+                store_scalar: module
+                    .declare_func_in_func(self.boundary_value_abi.store_scalar, func),
+                store_field: module.declare_func_in_func(self.boundary_value_abi.store_field, func),
+                store_name: module.declare_func_in_func(self.boundary_value_abi.store_name, func),
+                make_immediate: module
+                    .declare_func_in_func(self.boundary_value_abi.make_immediate, func),
+                store_int_tag: module
+                    .declare_func_in_func(self.boundary_value_abi.store_int_tag, func),
+                store_bytes_len: module
+                    .declare_func_in_func(self.boundary_value_abi.store_bytes_len, func),
+                store_byte: module.declare_func_in_func(self.boundary_value_abi.store_byte, func),
+                store_int_limbs: module
+                    .declare_func_in_func(self.boundary_value_abi.store_int_limbs, func),
+                store_int_limb: module
+                    .declare_func_in_func(self.boundary_value_abi.store_int_limb, func),
+                seal_int: module.declare_func_in_func(self.boundary_value_abi.seal_int, func),
+            }),
+        }
+    }
+}
+
+struct FunctionLocalRefs {
+    /// **`RT-FNSPLIT-B2F` `D3`** — the artifact-static seed material, resolved
+    /// into this generated function.
+    ///
+    /// ⭐ Held **alongside** `Lowering::seed_env`, not instead of it, and the
+    /// division is the point: `seed_env` answers *which* `RuntimeGroundValue` a
+    /// symbol denotes — a compile-time question — while this answers *where the
+    /// running artifact reads it from*. ⛔ Collapsing the two would either put a
+    /// compilation-only borrow in the artifact (which does not typecheck) or
+    /// re-fold the value into the instruction stream (which is the authority
+    /// `D3` removes).
+    seed_material: seed_material::SeedMaterialRefs,
+    host_dispatch: Option<FuncRef>,
+    host_dispatch_context: Option<cranelift_codegen::ir::Value>,
+    services_pointer: Option<cranelift_codegen::ir::Value>,
+    native_int_arena: Option<cranelift_codegen::ir::Value>,
+    /// ⭐ **The BOUNDARY arena, and it is a different pointer from
+    /// [`Self::native_int_arena`]** — Architect ruling via `evt_e300y2kjeb6k`.
+    /// The two answer different questions and were wrongly merged into one
+    /// field; see [`Lowering::carrier_arena`] for the retraction.
+    ///
+    /// ⚠ **`None` in production, because NOTHING PUBLISHES A BOUNDARY ARENA
+    /// YET** — measured, not assumed: every `BoundaryRegion::reserve` /
+    /// `reserve_persistent` call site in the crate is a test, so the activation
+    /// owner the ruling assigns this to does not exist on either launcher path.
+    /// ⇒ Every boundary-carrier call fails closed until then — ⭐ which is
+    /// strictly better than the native arena it used to be handed silently.
+    boundary_arena: Option<cranelift_codegen::ir::Value>,
+    native_int_binop: Option<FuncRef>,
+    native_int_compare: Option<FuncRef>,
+    native_int_intern: Option<FuncRef>,
+    native_int_narrow: Option<FuncRef>,
+    native_int_export: Option<FuncRef>,
+    /// `(arena, tag, payload, out_view) -> status` — the sole exact-`Int`
+    /// decoder, `ken_native_int_resolve_local`.
+    native_int_resolve: Option<FuncRef>,
+    native_int_tags: BTreeMap<cranelift_codegen::ir::Value, cranelift_codegen::ir::Value>,
+    /// The boundary-carrier helpers, made callable inside **this** generated
+    /// function (`RT-FNSPLIT-C1` `D3`).
+    ///
+    /// ⛔ `FuncRef`s, not `FuncId`s — the ruling requires the helper IDs to be
+    /// *"declared into each generated function as callable refs and actually
+    /// called by all three routes"*, and a `FuncId` held here would be exactly
+    /// the inert threading the node forbids: present, plausible, and never
+    /// reaching an emitted call.
+    boundary_carrier: Option<BoundaryCarrierRefs>,
+    unit_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
+    /// Source occurrences reached only through the current unit's result
+    /// position. Process-exit constructors are normalized only at these
+    /// occurrences, never merely because an exit-shaped value appears nested.
+    terminal_result_origins: BTreeSet<StaticOriginId>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BodyEmissionAuthority {
+    RecursiveDescent,
+    FunctionizedUnits,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HostContextPropagationMutation {
+    Exact,
+    ServicesPointer,
+    NativeIntArena,
+    BoundaryArena,
+    Null,
+    LaunchIngress,
+}
+
+#[cfg(test)]
+thread_local! {
+    static HOST_CONTEXT_PROPAGATION_MUTATION:
+        std::cell::Cell<HostContextPropagationMutation> =
+        const { std::cell::Cell::new(HostContextPropagationMutation::Exact) };
+}
+
+#[cfg(test)]
+fn set_host_context_propagation_mutation(mutation: HostContextPropagationMutation) {
+    HOST_CONTEXT_PROPAGATION_MUTATION.with(|cell| cell.set(mutation));
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProcessSlotMutation {
+    Exact,
+    DeleteProcessInput,
+    DeleteCapability,
+    AttemptFixedContextOffsets,
+    ReintroduceLaunchIngress,
+}
+
+#[cfg(test)]
+thread_local! {
+    static PROCESS_SLOT_MUTATION: std::cell::Cell<ProcessSlotMutation> =
+        const { std::cell::Cell::new(ProcessSlotMutation::Exact) };
+}
+
+#[cfg(test)]
+fn set_process_slot_mutation(mutation: ProcessSlotMutation) {
+    PROCESS_SLOT_MUTATION.with(|cell| cell.set(mutation));
+}
+
 struct Lowering<'a> {
     seed_env: &'a NativeSeedEnvironment,
+    /// Everything resolved into the ONE generated function this `Lowering`
+    /// emits into. ⛔ See [`FunctionLocalRefs`] — none of it is portable.
+    function_local: FunctionLocalRefs,
     declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
     /// The closed static plan for this compilation.
     ///
@@ -439,26 +708,9 @@ struct Lowering<'a> {
     next_dynamic_splice_edge: u64,
     assumptions: BTreeSet<String>,
     unsupported: Vec<String>,
+    body_emission_authority: BodyEmissionAuthority,
     process_object: bool,
     process_symbols: crate::NativeProcessSymbols,
-    host_dispatch: Option<FuncRef>,
-    invocation_pointer: Option<cranelift_codegen::ir::Value>,
-    native_int_arena: Option<cranelift_codegen::ir::Value>,
-    native_int_binop: Option<FuncRef>,
-    native_int_compare: Option<FuncRef>,
-    native_int_intern: Option<FuncRef>,
-    native_int_narrow: Option<FuncRef>,
-    native_int_export: Option<FuncRef>,
-    native_int_tags: BTreeMap<cranelift_codegen::ir::Value, cranelift_codegen::ir::Value>,
-    /// The boundary-carrier helpers, made callable inside **this** generated
-    /// function (`RT-FNSPLIT-C1` `D3`).
-    ///
-    /// ⛔ `FuncRef`s, not `FuncId`s — the ruling requires the helper IDs to be
-    /// *"declared into each generated function as callable refs and actually
-    /// called by all three routes"*, and a `FuncId` held here would be exactly
-    /// the inert threading the node forbids: present, plausible, and never
-    /// reaching an emitted call.
-    boundary_carrier: Option<BoundaryCarrierRefs>,
     #[cfg(test)]
     native_int_mutation: NativeIntLoweringMutation,
     #[cfg(test)]
@@ -710,9 +962,7 @@ struct BoundaryCarrierRefs {
     /// `(arena, word, name_id, out) -> status` — `Project` by artifact-static
     /// field identity.
     record_field: FuncRef,
-    /// Test observation seam for the inline payload of a represented token or
-    /// borrowed response. Production carries these values opaquely.
-    #[cfg(test)]
+    /// Runtime scalar extraction for statically scalar consumer positions.
     scalar: FuncRef,
     /// HostResult runtime discriminant and selected payload.
     host_success: FuncRef,
@@ -736,6 +986,33 @@ struct BoundaryCarrierRefs {
     /// whose payload rides in the tagged word. ⚠ Note the **absent `arena`**:
     /// an immediate names no referent, so there is nothing for an arena to own.
     make_immediate: FuncRef,
+    /// `(arena, word, native_tag) -> status` — the spill arm records **how** the
+    /// magnitude word is to be read, as a `NativeIntV1` marker.
+    ///
+    /// ⛔ **This is also the spill arm's region guard, and it is deliberately
+    /// not re-derived here.** `BOUNDARY_INT_MARKER_OWNER` says a
+    /// `NATIVE_INT_BIG_TAG_V1` payload is a slot in the *invocation's* native
+    /// arena and therefore inadmissible on a persistent node. The helper
+    /// enforces that from the one table; the producer neither restates the rule
+    /// nor pre-empts it — see [`Lowering::emit_carrier_spillable_immediate`] for
+    /// the residual that leaves.
+    store_int_tag: FuncRef,
+    /// `(arena, word, len, out) -> status` — claim `len` content bytes in the
+    /// node's own region. ⭐ A **claim-then-fill** protocol: the span exists
+    /// before a byte of it is written, so a length the region cannot satisfy
+    /// fails before any address is formed.
+    store_bytes_len: FuncRef,
+    /// `(arena, word, index, byte) -> status` — write one content byte.
+    store_byte: FuncRef,
+    /// `(arena, word, sign, len, out) -> status` — claim `len` magnitude limbs
+    /// in the node's **own** region for a region-limbed `Int`.
+    store_int_limbs: FuncRef,
+    /// `(arena, word, index, limb) -> status` — write one magnitude limb.
+    store_int_limb: FuncRef,
+    /// `(arena, word) -> status` — check a region-limbed `Int`'s magnitude
+    /// canonical and seal it. ⛔ **Until this succeeds the node denotes
+    /// nothing**, so it is the last step of the copy and never optional.
+    seal_int: FuncRef,
 }
 
 /// A value that has crossed into the **operational carrier** — nothing but the
@@ -991,6 +1268,245 @@ impl<'a> Lowering<'a> {
         self.emit_carrier_transfer(builder, origin, value)
     }
 
+    /// Transfer the terminal value returned by one declared generated unit.
+    ///
+    /// Process exit constructors are the one result-edge representation that
+    /// differs from their nested carrier form: the root consumes a closed
+    /// `ImmediateExitStatus`, not a constructor node. Keeping the conversion at
+    /// this result surface prevents an ordinary nested exit-shaped constructor
+    /// from being mistaken for the process answer.
+    pub(super) fn transfer_unit_result_into_carrier(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        value: &Lowered,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let process_exit = self.process_object
+            && matches!(
+                value,
+                Lowered::Constructor { constructor, .. }
+                    if constructor == &self.process_symbols.exit_success
+                        || constructor == &self.process_symbols.exit_failure
+            );
+        if process_exit {
+            let status = self.emit_process_exit_status(builder, value.clone());
+            self.emit_carrier_immediate(builder, BoundaryTag::ImmediateExitStatus, status)
+        } else {
+            self.transfer_into_carrier(builder, origin, value)
+        }
+    }
+
+    /// Select the exact source occurrences evaluated in result position for
+    /// the generated unit currently being defined.
+    pub(super) fn select_terminal_result_origins(
+        &mut self,
+        origin: StaticOriginId,
+        expr: &RuntimeExpr,
+    ) -> Result<(), CraneliftBackendError> {
+        fn collect(
+            plan: &StaticTransitionPlan<'_>,
+            origin: StaticOriginId,
+            expr: &RuntimeExpr,
+            selected: &mut BTreeSet<StaticOriginId>,
+        ) -> Result<(), CraneliftBackendError> {
+            selected.insert(origin);
+            let result_child = |position| plan.child_static_origin(origin, position);
+            match expr {
+                RuntimeExpr::CheckedJoinSite { body, .. }
+                | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+                | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+                | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+                | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
+                    collect(plan, result_child(0)?, body, selected)?;
+                }
+                RuntimeExpr::Let { body, .. } => {
+                    collect(plan, result_child(1)?, body, selected)?;
+                }
+                RuntimeExpr::If {
+                    then_expr,
+                    else_expr,
+                    ..
+                } => {
+                    collect(plan, result_child(1)?, then_expr, selected)?;
+                    collect(plan, result_child(2)?, else_expr, selected)?;
+                }
+                RuntimeExpr::Match { cases, .. } => {
+                    for (index, case) in cases.iter().enumerate() {
+                        collect(plan, result_child(1 + index)?, &case.body, selected)?;
+                    }
+                }
+                RuntimeExpr::ComputationalMatch { cases, .. } => {
+                    for (index, case) in cases.iter().enumerate() {
+                        collect(plan, result_child(1 + index)?, &case.body, selected)?;
+                    }
+                }
+                RuntimeExpr::Value(_)
+                | RuntimeExpr::Var(_)
+                | RuntimeExpr::PrimitiveCall { .. }
+                | RuntimeExpr::Construct { .. }
+                | RuntimeExpr::Record { .. }
+                | RuntimeExpr::Project { .. }
+                | RuntimeExpr::Closure { .. }
+                | RuntimeExpr::LexicalClosure { .. }
+                | RuntimeExpr::DeclarationRef { .. }
+                | RuntimeExpr::ImportedDeclarationRef { .. }
+                | RuntimeExpr::Call { .. }
+                | RuntimeExpr::Effect { .. }
+                | RuntimeExpr::Trap(_) => {}
+            }
+            Ok(())
+        }
+
+        self.function_local.terminal_result_origins.clear();
+        collect(
+            &self.static_transition_plan,
+            origin,
+            expr,
+            &mut self.function_local.terminal_result_origins,
+        )
+    }
+
+    pub(super) fn call_declared_unit(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        body_origin: StaticOriginId,
+        inputs: &[LoweringOperand],
+        #[cfg(test)]
+        launch_ingress: Option<cranelift_codegen::ir::Value>,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let target = self
+            .function_local
+            .unit_calls
+            .get(&body_origin)
+            .cloned()
+            .ok_or_else(|| {
+                backend_module(
+                    "retained body has no graph-derived call target in this unit".to_string(),
+                )
+            })?;
+        let payload = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            target.header.frame_bytes,
+            3,
+        ));
+        let mut input = 0usize;
+        for (slot, offset) in target.slots.iter().zip(&target.offsets) {
+            let offset = i32::try_from(*offset).map_err(|_| {
+                backend_module("callee slot offset exceeds addressable range".to_string())
+            })?;
+            match slot.kind {
+                AbiSlotKind::Parameter | AbiSlotKind::Capture => {
+                    let value = inputs.get(input).ok_or_else(|| {
+                        backend_module("callee frame is missing a declared input".to_string())
+                    })?;
+                    let word = match value {
+                        LoweringOperand::Carried(word) => word.word,
+                        LoweringOperand::Specialized(value) => {
+                            self.transfer_into_carrier(builder, body_origin, value)?.word
+                        }
+                    };
+                    builder.ins().stack_store(word, payload, offset);
+                    input += 1;
+                }
+                AbiSlotKind::Control | AbiSlotKind::Trap | AbiSlotKind::Store => {
+                    let zero = builder.ins().iconst(types::I64, 0);
+                    builder.ins().stack_store(zero, payload, offset);
+                }
+                AbiSlotKind::Result => {}
+            }
+        }
+        if input != inputs.len() {
+            return Err(backend_module(
+                "caller supplied inputs absent from the callee descriptor".to_string(),
+            ));
+        }
+        let pointer_type = builder.func.dfg.value_type(
+            self.function_local
+                .services_pointer
+                .ok_or_else(|| backend_module("unit call has no services pointer".to_string()))?,
+        );
+        let slots = builder.ins().stack_addr(pointer_type, payload, 0);
+        let envelope = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            u32::try_from(crate::activation_services::UNIT_CALL_FRAME_BYTES)
+                .expect("unit call frame byte count fits u32"),
+            3,
+        ));
+        builder.ins().stack_store(
+            slots,
+            envelope,
+            crate::activation_services::UNIT_CALL_FRAME_SLOTS,
+        );
+        let services = self
+            .function_local
+            .services_pointer
+            .expect("services pointer checked above");
+        let exact_host_dispatch_context =
+            self.function_local.host_dispatch_context.ok_or_else(|| {
+                backend_module("unit call has no direct host-dispatch context".to_string())
+            })?;
+        #[cfg(test)]
+        let host_dispatch_context = if launch_ingress.is_some()
+            && PROCESS_SLOT_MUTATION.with(std::cell::Cell::get)
+                == ProcessSlotMutation::ReintroduceLaunchIngress
+        {
+            // This is the deliberately forbidden half of the AC-14 control:
+            // unlike the retained direct context, this value is explicitly
+            // sourced from the root adapter's launch-ingress parameter.
+            launch_ingress.expect("the root adapter supplied launch ingress")
+        } else {
+            HOST_CONTEXT_PROPAGATION_MUTATION.with(|cell| match cell.get() {
+                HostContextPropagationMutation::Exact => exact_host_dispatch_context,
+                HostContextPropagationMutation::ServicesPointer
+                    if launch_ingress.is_none() =>
+                {
+                    services
+                }
+                HostContextPropagationMutation::NativeIntArena
+                    if launch_ingress.is_none() =>
+                {
+                    self.function_local
+                        .native_int_arena
+                        .expect("unit native-int arena is bound")
+                }
+                HostContextPropagationMutation::BoundaryArena
+                    if launch_ingress.is_none() =>
+                {
+                    self.function_local
+                        .boundary_arena
+                        .expect("unit boundary arena is bound")
+                }
+                HostContextPropagationMutation::Null if launch_ingress.is_none() => {
+                    builder.ins().iconst(pointer_type, 0)
+                }
+                HostContextPropagationMutation::LaunchIngress => {
+                    launch_ingress.unwrap_or(exact_host_dispatch_context)
+                }
+                HostContextPropagationMutation::ServicesPointer
+                | HostContextPropagationMutation::NativeIntArena
+                | HostContextPropagationMutation::BoundaryArena
+                | HostContextPropagationMutation::Null => exact_host_dispatch_context,
+            })
+        };
+        #[cfg(not(test))]
+        let host_dispatch_context = exact_host_dispatch_context;
+        builder.ins().stack_store(
+            host_dispatch_context,
+            envelope,
+            crate::activation_services::UNIT_CALL_FRAME_HOST_DISPATCH_CONTEXT,
+        );
+        let envelope = builder.ins().stack_addr(pointer_type, envelope, 0);
+        let call = builder
+            .ins()
+            .call(target.function, &[envelope, services]);
+        let [word] = builder.inst_results(call) else {
+            return Err(backend_module(
+                "internal unit call did not return exactly one word".to_string(),
+            ));
+        };
+        Ok(LoweringOperand::Carried(CarriedBoundaryWord { word: *word }))
+    }
+
     /// The recursive emission step. ⛔ Private, and ⛔ never the entry point —
     /// see [`Self::transfer_into_carrier`] for why the split is not stylistic.
     ///
@@ -1018,10 +1534,46 @@ impl<'a> Lowering<'a> {
                 let tag = Self::carrier_immediate_tag(value)?;
                 self.emit_carrier_immediate(builder, tag, *word)
             }
+            // ── the magnitude dispatch: `spill: Some(_)` immediates ───────
+            //
+            // ⭐ Four variants, ONE mechanism — which is the corrected `D9`
+            // partition. ⛔ They are not four pieces of work and must not be
+            // spelled as four arms with four bodies: the disposition supplies
+            // the tag and the spill class, so the only thing that differs
+            // between them is where the payload word and its `NativeIntV1`
+            // marker come from.
+            Lowered::Int { value: payload, known } => {
+                let (tag, spill) = Self::carrier_spillable_disposition(value)?;
+                // ⛔ The marker travels with the payload; see
+                // `carrier_small_marker` for why this is not a constant.
+                let marker = self.native_int_tag(builder, *payload, *known)?;
+                self.emit_carrier_native_int(builder, tag, spill, *payload, marker)
+            }
+            Lowered::ProcessExitStatus { value: payload }
+            | Lowered::BoundedNat(BoundedNatV1 { value: payload })
+            | Lowered::StructuralNat(StructuralNatV1 { value: payload }) => {
+                let (tag, spill) = Self::carrier_spillable_disposition(value)?;
+                let marker = Self::carrier_small_marker(builder);
+                self.emit_carrier_spillable_immediate(builder, tag, spill, *payload, marker)
+            }
+            // ── byte-bodied handles ───────────────────────────────────────
+            //
+            // ⛔ Two arms, ONE emitter, and the class comes from the
+            // disposition rather than from which arm we are in — see
+            // `emit_carrier_bytes` for why a shared body driven by the class is
+            // the thing that makes `String`'s guard reachable at all.
+            Lowered::String(text) => {
+                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                self.emit_carrier_bytes(builder, tag, class, text.as_bytes())
+            }
+            Lowered::Bytes(content) => {
+                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                self.emit_carrier_bytes(builder, tag, class, content)
+            }
             Lowered::Constructor {
+                constructor,
                 synthesized_identity,
                 args,
-                ..
             } => {
                 let (tag, class) = Self::carrier_handle_disposition(value)?;
                 // ⭐ `D2` — the identity comes from the ONE artifact-static
@@ -1033,7 +1585,13 @@ impl<'a> Lowering<'a> {
                     Some(identity) => *identity,
                     None => self
                         .static_transition_plan
-                        .constructor_symbol_identity(origin)?,
+                        .constructor_symbol_identity(origin)
+                        .map_err(|error| {
+                            backend_module(format!(
+                                "constructor transfer for {constructor} at {origin:?} has no \
+                                 resolved identity: {error}"
+                            ))
+                        })?,
                 }
                 .tag_abi_word()?;
                 let word = self.emit_carrier_alloc(builder, tag, class, args.len())?;
@@ -1083,22 +1641,6 @@ impl<'a> Lowering<'a> {
             // most of them. The refusal is **this producer's**, and it is
             // conservative rather than silent precisely so the gap cannot be
             // mistaken for coverage.
-            Lowered::Int { .. }
-            | Lowered::ProcessExitStatus { .. }
-            | Lowered::BoundedNat(_)
-            | Lowered::StructuralNat(_) => Err(unsupported(
-                lowered_value_kind(value),
-                "the carrier producer does not yet emit a spillable immediate: \
-                 its disposition carries `spill: Some(_)`, which needs a runtime \
-                 magnitude test and a two-way branch, not a single \
-                 `make_immediate`",
-            )),
-            Lowered::String(_) | Lowered::Bytes(_) => Err(unsupported(
-                lowered_value_kind(value),
-                "the carrier producer does not yet emit a byte-bodied handle: \
-                 the content needs the `store_bytes_len` / `store_byte` \
-                 sequence, which is a distinct claim-then-fill protocol",
-            )),
             Lowered::HostResult {
                 success, error, ok, ..
             } => {
@@ -1106,7 +1648,12 @@ impl<'a> Lowering<'a> {
                 let ok = self.emit_carrier_transfer(builder, origin, ok)?;
                 let error = self.emit_carrier_transfer(builder, origin, error)?;
                 let word = self.emit_carrier_alloc(builder, tag, class, 2)?;
-                self.emit_carrier_store_scalar(builder, word, *success)?;
+                let success = if builder.func.dfg.value_type(*success) == types::I64 {
+                    *success
+                } else {
+                    builder.ins().uextend(types::I64, *success)
+                };
+                self.emit_carrier_store_scalar(builder, word, success)?;
                 self.emit_carrier_store_field(builder, word, 0, ok)?;
                 self.emit_carrier_store_field(builder, word, 1, error)?;
                 Ok(word)
@@ -1118,6 +1665,18 @@ impl<'a> Lowering<'a> {
                 let (tag, class) = Self::carrier_handle_disposition(value)?;
                 let word = self.emit_carrier_alloc(builder, tag, class, 0)?;
                 self.emit_carrier_store_scalar(builder, word, *payload)?;
+                Ok(word)
+            }
+            Lowered::CapabilityToken { value: payload } => {
+                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                let word = self.emit_carrier_alloc(builder, tag, class, 0)?;
+                self.emit_carrier_store_scalar(builder, word, *payload)?;
+                Ok(word)
+            }
+            Lowered::BorrowedNativeValue { pointer } => {
+                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                let word = self.emit_carrier_alloc(builder, tag, class, 0)?;
+                self.emit_carrier_store_scalar(builder, word, *pointer)?;
                 Ok(word)
             }
             Lowered::ResponseBytes { pointer, len } => {
@@ -1132,9 +1691,7 @@ impl<'a> Lowering<'a> {
                 self.emit_carrier_store_field(builder, word, 0, len)?;
                 Ok(word)
             }
-            Lowered::CapabilityToken { .. }
-            | Lowered::BorrowedNativeValue { .. }
-            | Lowered::BorrowedOption { .. } => Err(unsupported(
+            Lowered::BorrowedOption { .. } => Err(unsupported(
                 lowered_value_kind(value),
                 "the carrier producer does not yet emit borrowed ingress: an \
                  `InvocationBorrowed` handle is arena-owned and must clear \
@@ -1194,10 +1751,18 @@ impl<'a> Lowering<'a> {
     }
 
     /// The tag of a **spill-free immediate**, read from the sole disposition
-    /// authority. ⛔ `spill: Some(_)` is refused here rather than encoded: a
-    /// spillable payload needs a runtime magnitude test, and emitting a bare
-    /// `make_immediate` for one would silently truncate exactly the values a
-    /// bignum language exists to carry.
+    /// authority.
+    ///
+    /// ⛔ **`spill: Some(_)` is still refused HERE, and that is not a leftover.**
+    /// The refusal did not become unnecessary when the dispatch landed — it
+    /// moved. A spillable payload has two possible representations, so a caller
+    /// asking this question about one is asking a question with two answers;
+    /// [`Self::carrier_spillable_disposition`] is the one that returns both, and
+    /// this arm is what stops a spillable value reaching a bare `make_immediate`
+    /// through an arm that forgot. ⚠ Deleting it would not reintroduce a
+    /// truncation *today* — every spillable arm routes to the dispatch — which
+    /// is exactly why it must stay: the next `RepresentedImmediate` variant is
+    /// added by someone who copies the `Bool` arm.
     fn carrier_immediate_tag(value: &Lowered) -> Result<BoundaryTag, CraneliftBackendError> {
         match value.boundary_disposition() {
             BoundaryDisposition::RepresentedImmediate { tag, spill: None } => Ok(tag),
@@ -1218,9 +1783,44 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    /// The `(immediate tag, spill class)` of a **spillable** immediate, read
+    /// from the sole disposition authority (`§2h` ¶4).
+    ///
+    /// ⛔ **`spill: None` is refused, and the refusal is the mirror of the one
+    /// on [`Self::carrier_immediate_tag`].** Between them the two readers
+    /// partition `RepresentedImmediate` on the `spill` field, so neither the
+    /// dispatch nor the single-`make_immediate` path can be reached for a value
+    /// the authority classified the other way — and a value with **no** reader
+    /// is a compile error at the `match` in `emit_carrier_transfer`, not a
+    /// silent default.
+    fn carrier_spillable_disposition(
+        value: &Lowered,
+    ) -> Result<(BoundaryTag, BoundaryClass), CraneliftBackendError> {
+        match value.boundary_disposition() {
+            BoundaryDisposition::RepresentedImmediate {
+                tag,
+                spill: Some(class),
+            } => Ok((tag, class)),
+            BoundaryDisposition::RepresentedImmediate { spill: None, .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "the producer would emit a magnitude dispatch for a value the \
+                 sole disposition authority declares cannot overflow its field",
+            )),
+            BoundaryDisposition::RepresentedHandle { .. } => Err(unsupported(
+                lowered_value_kind(value),
+                "the producer would mint an immediate for a value the sole \
+                 disposition authority represents as a handle",
+            )),
+            BoundaryDisposition::ProtocolOnly { why }
+            | BoundaryDisposition::FailClosedForbidden { why } => {
+                Err(unsupported(lowered_value_kind(value), why))
+            }
+        }
+    }
+
     /// The carrier helpers, as refs callable inside **this** generated function.
     fn carrier_refs(&self) -> Result<BoundaryCarrierRefs, CraneliftBackendError> {
-        self.boundary_carrier.ok_or_else(|| {
+        self.function_local.boundary_carrier.ok_or_else(|| {
             unsupported(
                 "BoundaryCarrier",
                 "this generated function has no boundary-carrier helper refs",
@@ -1228,18 +1828,37 @@ impl<'a> Lowering<'a> {
         })
     }
 
-    /// The invocation arena the carrier helpers take as their first argument.
+    /// The **boundary** arena the carrier helpers take as their first argument.
     ///
-    /// ⚠ **It is the same SSA value as the native-`Int` arena, and that is a
-    /// fact about the ABI rather than a shortcut.** Both graphs take *"the
-    /// invocation arena"* — block param 0 of the generated function — so there
-    /// is one pointer, not two. ⛔ Reading it from a second field would create a
-    /// second answer to a question that has one.
+    /// ⛔⛔ **A CLAIM THAT STOOD HERE WAS FALSE, and it is retracted rather than
+    /// deleted.** The retracted text asserted that the boundary arena and the
+    /// native-`Int` arena *"are the same SSA value, and that is a fact about the
+    /// ABI rather than a shortcut."* They are not — `CompiledModule::run` passed
+    /// a **`NativeIntArenaV1`** as parameter 0, and in process mode the field was
+    /// re-read from `invocation[24]`, which is the native arena again. ⇒ Every
+    /// boundary-carrier helper reached through here was handed a native arena.
+    /// ⚠ **It never fired only because the carrier was inert** — which is
+    /// exactly why it must not be discovered by `S6` making it live.
+    ///
+    /// ⭐ **Repaired under the Architect's ruling (relayed `evt_e300y2kjeb6k`):**
+    /// one runtime-owned [`crate::activation_services::GeneratedActivationServicesV1`]
+    /// with **distinct typed fields**, a uniform `(frame_ptr, services_ptr) -> i64`
+    /// signature for the root and every unit, `FunctionLocalRefs` split to match,
+    /// and this accessor returning **only** `boundary_arena`. ⛔ Not a second
+    /// answer to one question — two different questions that were wrongly merged
+    /// into one.
+    ///
+    /// ⚠ A reader who met the false claim and believed it needs to see that it
+    /// was withdrawn, and the next person to ask *"why two arena fields?"* needs
+    /// the reason here.
     fn carrier_arena(&self) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
-        self.native_int_arena.ok_or_else(|| {
+        self.function_local.boundary_arena.ok_or_else(|| {
             unsupported(
                 "BoundaryCarrier",
-                "this generated function has no invocation arena",
+                "this generated function has no boundary arena: the activation \
+                 -services record that sources it is `S6`/`D6` reland work, and \
+                 substituting the native-`Int` arena is the defect that ruling \
+                 exists to remove",
             )
         })
     }
@@ -1325,6 +1944,411 @@ impl<'a> Lowering<'a> {
         Ok(CarriedBoundaryWord {
             word: builder.ins().stack_load(types::I64, slot, 0),
         })
+    }
+
+    /// ⭐⭐ **THE MAGNITUDE DISPATCH** — the producer arm for a value whose
+    /// disposition carries `spill: Some(_)` (`RT-FNSPLIT-B2F` `D9`; Architect
+    /// ruling on the corrected producer partition).
+    ///
+    /// ⛔⛔ **The predicate is READ, never re-derived.**
+    /// `ken_boundary_make_immediate_local` already tests the payload against the
+    /// one `BOUNDARY_IMMEDIATE_DOMAIN` table and already reports the answer
+    /// distinguishably — its own source says the errors are kept distinct *"so a
+    /// control can tell which rule refused without reading the payload back"*.
+    /// ⇒ A shift-and-compare here would be a **second answer to a question that
+    /// already has one**, free to drift from the table silently. That is the
+    /// second-representation-authority defect one layer down, and it is the same
+    /// objection [`Self::carrier_identity_immediate`] raises about `pack_identity`.
+    ///
+    /// ⭐ **Three outcomes, ⛔ not two:**
+    ///
+    /// | status | outcome |
+    /// |---|---|
+    /// | `BOUNDARY_OK` | the immediate word `make_immediate` wrote |
+    /// | `BOUNDARY_ERR_BOUNDS` | **the spill** — a handle of the declared class |
+    /// | anything else | fail closed, via the same `require_i64` every other helper status takes |
+    ///
+    /// ⛔ Collapsing *"anything else"* into the spill would turn a shape, tag or
+    /// capacity error into a **silent allocation** of a value nobody asked for.
+    /// The third outcome is spelled as `require_i64(status, BOUNDARY_ERR_BOUNDS)`
+    /// on the not-OK edge precisely so it cannot be written as a two-way branch
+    /// by accident.
+    ///
+    /// ⭐ **`AC-2` — this is emitted code reading a RUNTIME value.** Nothing here
+    /// inspects a JIT-time constant to choose a layout: one compiled body takes
+    /// either arm depending on the payload it is handed. That is why the
+    /// partition is a property of the value rather than of the compilation.
+    ///
+    /// ⛔⛔ **THIS ARM IS ONLY SOUND FOR A `Small`-MARKED PAYLOAD, and it is
+    /// [`Self::emit_carrier_native_int`]'s job to guarantee that.** The payload
+    /// of a `NativeIntV1` pair means different things under different markers —
+    /// a `Big` payload is a **slot identity**, and asking `make_immediate` a
+    /// magnitude question about a slot number is answered `OK` for a low slot.
+    /// ⇒ Calling this directly on an unpartitioned `Lowered::Int` payload is a
+    /// **silent corruption**, not a fail-closed gap.
+    ///
+    /// ⚠ An earlier revision of this comment claimed such a value would be
+    /// refused by `store_int_tag`'s owner guard. **It never reaches that guard**
+    /// — corrected under the Architect's ruling `evt_79xcj70p0qxjj`.
+    ///
+    /// **MEASURED:** the emitted body branches on `make_immediate`'s status and
+    /// builds a `BoundaryClass::Int` handle on the bounds edge.
+    /// **CLAIMED:** a `Small`-marked spillable value crosses without truncation.
+    /// **THE GAP:** ⚠ **the marker partition is the caller's**, so this
+    /// function's soundness is conditional on it. The non-`Int` spillables reach
+    /// here directly because their payload *is* their magnitude with no pair and
+    /// no second reading — see [`Self::carrier_small_marker`].
+    ///
+    /// ⚠ **A second residual, review-caught rather than mechanically detected:**
+    /// swapping the status branch below for a hand-written magnitude test still
+    /// round-trips every value, so no test in this suite would redden. ⛔ Its
+    /// absence from a green run is not evidence about it.
+    fn emit_carrier_spillable_immediate(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        tag: BoundaryTag,
+        spill: BoundaryClass,
+        payload: cranelift_codegen::ir::Value,
+        native_marker: cranelift_codegen::ir::Value,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
+        let immediate_tag = builder.ins().iconst(types::I64, i64::from(tag as u8));
+        let call = builder
+            .ins()
+            .call(refs.make_immediate, &[immediate_tag, payload, out]);
+        let status = builder.inst_results(call)[0];
+
+        // ⛔ The ONE comparison this function makes, and it is against a status,
+        // not against a magnitude.
+        let fits = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            status,
+            BOUNDARY_OK,
+        );
+        let immediate_block = builder.create_block();
+        let spill_block = builder.create_block();
+        let join = builder.create_block();
+        builder.append_block_param(join, types::I64);
+        builder
+            .ins()
+            .brif(fits, immediate_block, &[], spill_block, &[]);
+
+        builder.switch_to_block(immediate_block);
+        let word = builder.ins().stack_load(types::I64, slot, 0);
+        builder.ins().jump(join, &[word.into()]);
+
+        builder.switch_to_block(spill_block);
+        // ⭐ The third outcome, spelled as a requirement rather than an `else`:
+        // reaching here means the status was not `OK`, and anything that is also
+        // not `ERR_BOUNDS` leaves the function fail-closed right here.
+        Self::require_i64(builder, status, BOUNDARY_ERR_BOUNDS);
+        // ⚠ `require_i64` splits the block; from here the builder is in its
+        // `valid` successor, which is where the allocation belongs.
+        let spilled = self.emit_carrier_alloc(builder, BoundaryTag::PersistentGround, spill, 0)?;
+        let store = builder
+            .ins()
+            .call(refs.store_scalar, &[arena, spilled.word, payload]);
+        Self::require_i64(builder, builder.inst_results(store)[0], BOUNDARY_OK);
+        let mark = builder
+            .ins()
+            .call(refs.store_int_tag, &[arena, spilled.word, native_marker]);
+        Self::require_i64(builder, builder.inst_results(mark)[0], BOUNDARY_OK);
+        builder.ins().jump(join, &[spilled.word.into()]);
+
+        builder.switch_to_block(join);
+        Ok(CarriedBoundaryWord {
+            word: builder.block_params(join)[0],
+        })
+    }
+
+    /// ⭐⭐ **THE `NativeIntV1` MARKER PARTITION** — the entry point for
+    /// `Lowered::Int`, and the thing that must happen **before** any magnitude
+    /// question is asked (Architect ruling, `evt_79xcj70p0qxjj`).
+    ///
+    /// ⛔⛔ **Why the marker comes first, and why the obvious order is a silent
+    /// corruption rather than a residual.** `Lowered::Int`'s `value` is the
+    /// **payload half of a `NativeIntV1` pair**, and what that word *means*
+    /// depends on the marker: for `Small` it is the magnitude; for `Big` it is a
+    /// **slot identity in the invocation's native arena**, and slots begin at
+    /// `1`. ⇒ Calling `make_immediate` on a `Big` payload asks a magnitude
+    /// question about a slot number — and a low slot **satisfies** the immediate
+    /// domain, so the value crosses on the apparent-success arm encoded as the
+    /// integer `1`. ⚠ Not a fail-closed gap: a wrong answer that looks like a
+    /// right one.
+    ///
+    /// ⚠ **This corrects a residual I previously stated as fail-closed.** The
+    /// earlier claim was that a `Big` would be refused by `store_int_tag`'s
+    /// owner guard. It never reaches that guard.
+    ///
+    /// ⭐ **The branch is a read of the canonical transport tag, ⛔ not a
+    /// sibling magnitude predicate**, so it does not weaken the ban on
+    /// re-deriving the immediate-domain test: within the `Small` arm the ruled
+    /// status-derived dispatch is unchanged.
+    ///
+    /// | marker | path |
+    /// |---|---|
+    /// | `NATIVE_INT_SMALL_TAG_V1` | the payload **is** the magnitude → [`Self::emit_carrier_spillable_immediate`] |
+    /// | `NATIVE_INT_BIG_TAG_V1` | the payload is a slot → resolve, then an **owned deep copy** into the persistent region |
+    /// | anything else | ⛔ fail closed |
+    fn emit_carrier_native_int(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        tag: BoundaryTag,
+        spill: BoundaryClass,
+        payload: cranelift_codegen::ir::Value,
+        marker: cranelift_codegen::ir::Value,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let small = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            marker,
+            i64::try_from(crate::NATIVE_INT_SMALL_TAG_V1).map_err(|_| {
+                unsupported("BoundaryCarrier", "the native `Small` marker is not an ABI word")
+            })?,
+        );
+        let small_block = builder.create_block();
+        let wide_block = builder.create_block();
+        let join = builder.create_block();
+        builder.append_block_param(join, types::I64);
+        builder.ins().brif(small, small_block, &[], wide_block, &[]);
+
+        builder.switch_to_block(small_block);
+        let immediate = self.emit_carrier_spillable_immediate(builder, tag, spill, payload, marker)?;
+        builder.ins().jump(join, &[immediate.word.into()]);
+
+        builder.switch_to_block(wide_block);
+        let wide = self.emit_carrier_region_limbed_int(builder, spill, payload, marker)?;
+        builder.ins().jump(join, &[wide.word.into()]);
+
+        builder.switch_to_block(join);
+        Ok(CarriedBoundaryWord {
+            word: builder.block_params(join)[0],
+        })
+    }
+
+    /// ⭐ **The owned deep copy** — a region-limbed `Int` crossing into the
+    /// persistent region (Architect ruling, `evt_79xcj70p0qxjj`).
+    ///
+    /// ⛔ **No represented-unavailable lane, and no new error identity.** A valid
+    /// wide `Int` crosses **successfully**; `ERR_ESCAPE` is not an admissible
+    /// terminal result for one. The copy is *owned*, so nothing borrows the
+    /// invocation arena past its extent and the escape question does not arise.
+    ///
+    /// ⭐ **The decode is `ken_native_int_resolve_local`'s, never ours.** It
+    /// already yields canonical `sign`, `len` and `limbs` from the one native
+    /// representation. ⛔ Deriving them here would be a second exact-integer
+    /// decoder beside the first — the proliferation `docs/PRINCIPLES.md` forbids
+    /// — and `boundary_value_clif`'s own int readers make the identical choice.
+    ///
+    /// ⛔ **The order is load-bearing and is the established wide-`Int`
+    /// producer's:** allocate → region marker → claim → copy → **seal**. The
+    /// marker written is [`BOUNDARY_INT_REGION_LIMBS`], ⛔ never the native
+    /// `Big` marker: that marker names a slot in storage that dies with the
+    /// invocation, which is exactly what `BOUNDARY_INT_MARKER_OWNER` refuses on
+    /// a persistent node. And until `seal_int` succeeds **the node denotes
+    /// nothing**, so the seal is the last step rather than an optional check.
+    ///
+    /// ⚠ The limb loop is over a **runtime** length: nothing about the magnitude
+    /// is known when this body is compiled, which is `AC-2` at the wide arm.
+    fn emit_carrier_region_limbed_int(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        spill: BoundaryClass,
+        payload: cranelift_codegen::ir::Value,
+        marker: cranelift_codegen::ir::Value,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        // ⛔ Any marker that is not `Big` fails closed HERE — the closed set is
+        // `{Small, Big}` and `Small` was taken by the caller's branch.
+        Self::require_i64(
+            builder,
+            marker,
+            i64::try_from(crate::NATIVE_INT_BIG_TAG_V1).map_err(|_| {
+                unsupported("BoundaryCarrier", "the native `Big` marker is not an ABI word")
+            })?,
+        );
+
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let decoder = self.function_local.native_int_resolve.ok_or_else(|| {
+            unsupported(
+                "BoundaryCarrier",
+                "this generated function has no exact-Int decoder",
+            )
+        })?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+
+        // ⭐⭐ **The native arena comes from the BOUNDARY arena's own binding
+        // slot, and that choice is intrinsic rather than convenient.** The node
+        // being built is read back by `int_sign` / `int_len` / `int_limb`, and
+        // each of those decodes with exactly `load(arena, ARENA_NATIVE_INT)`.
+        // ⇒ Reading the same slot makes producer and consumer agree **by
+        // construction**; taking the pointer from anywhere else would let the
+        // two decode a pair against different arenas, which is the drift the
+        // one-decoder rule exists to prevent.
+        //
+        // ⛔ Not native-arena layout: this is the boundary arena's binding
+        // field, read exactly as `boundary_value_clif` reads it, and the value
+        // is handed straight to the decoder rather than walked.
+        let native_arena = builder.ins().load(
+            pointer_type,
+            MemFlags::trusted(),
+            arena,
+            crate::boundary_value::ARENA_NATIVE_INT,
+        );
+        Self::require_nonzero(builder, native_arena);
+
+        // The decoder's `{sign, len, limbs, small}` view.
+        let view_slot =
+            builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 32, 3));
+        let view = builder.ins().stack_addr(pointer_type, view_slot, 0);
+        let decoded = builder
+            .ins()
+            .call(decoder, &[native_arena, marker, payload, view]);
+        Self::require_i64(builder, builder.inst_results(decoded)[0], 0);
+        let sign = builder
+            .ins()
+            .load(types::I64, MemFlags::trusted(), view, crate::native_int_clif::VIEW_SIGN);
+        let length = builder
+            .ins()
+            .load(types::I64, MemFlags::trusted(), view, crate::native_int_clif::VIEW_LEN);
+        let source = builder.ins().load(
+            pointer_type,
+            MemFlags::trusted(),
+            view,
+            crate::native_int_clif::VIEW_LIMBS,
+        );
+
+        // allocate → region marker → claim → copy → seal.
+        let word = self.emit_carrier_alloc(builder, BoundaryTag::PersistentGround, spill, 0)?;
+        let region = builder.ins().iconst(
+            types::I64,
+            i64::try_from(crate::boundary_value::BOUNDARY_INT_REGION_LIMBS).map_err(|_| {
+                unsupported(
+                    "BoundaryCarrier",
+                    "the region-limbs marker is not an ABI word",
+                )
+            })?,
+        );
+        let marked = builder
+            .ins()
+            .call(refs.store_int_tag, &[arena, word.word, region]);
+        Self::require_i64(builder, builder.inst_results(marked)[0], BOUNDARY_OK);
+        let (_span_slot, span) = Self::carrier_out_slot(builder, pointer_type);
+        let claim = builder
+            .ins()
+            .call(refs.store_int_limbs, &[arena, word.word, sign, length, span]);
+        Self::require_i64(builder, builder.inst_results(claim)[0], BOUNDARY_OK);
+
+        let head = builder.create_block();
+        builder.append_block_param(head, types::I64);
+        let body = builder.create_block();
+        let done = builder.create_block();
+        let zero = builder.ins().iconst(types::I64, 0);
+        builder.ins().jump(head, &[zero.into()]);
+
+        builder.switch_to_block(head);
+        let index = builder.block_params(head)[0];
+        let more = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThan,
+            index,
+            length,
+        );
+        builder.ins().brif(more, body, &[], done, &[]);
+
+        builder.switch_to_block(body);
+        let offset = builder.ins().imul_imm(index, 8);
+        let address = builder.ins().iadd(source, offset);
+        let limb = builder
+            .ins()
+            .load(types::I64, MemFlags::trusted(), address, 0);
+        let write = builder
+            .ins()
+            .call(refs.store_int_limb, &[arena, word.word, index, limb]);
+        Self::require_i64(builder, builder.inst_results(write)[0], BOUNDARY_OK);
+        // ⚠ `require_i64` split the block, so the back edge is emitted from the
+        // block the builder is in NOW, not from `body`.
+        let next = builder.ins().iadd_imm(index, 1);
+        builder.ins().jump(head, &[next.into()]);
+
+        builder.switch_to_block(done);
+        let sealed = builder.ins().call(refs.seal_int, &[arena, word.word]);
+        Self::require_i64(builder, builder.inst_results(sealed)[0], BOUNDARY_OK);
+        Ok(word)
+    }
+
+    /// ⭐ **The byte-bodied handle producer** — the `String` / `Bytes` arm of
+    /// `RT-FNSPLIT-B2F` `D9`.
+    ///
+    /// ⭐ **ONE body, driven with the class the disposition supplies.** ⛔ Not
+    /// two emitters and ⛔ not a `Bytes` emitter a `String` "shares every code
+    /// path but the class" with — the class is exactly the axis `store_bytes_len`
+    /// and `store_byte` guard on, so it is the one path the two do **not** share.
+    /// `boundary_value_clif`'s own history records a `class_guard` narrowed to
+    /// `Bytes` alone staying green because no test had ever asked emitted code to
+    /// *build* a `String`.
+    ///
+    /// ⭐ **Claim-then-fill.** `store_bytes_len` reserves the whole span before a
+    /// byte is written, so a length the region cannot satisfy fails **before any
+    /// address is formed** rather than part-way through the content.
+    ///
+    /// **MEASURED:** the emitted body allocates a node of the declared class,
+    /// claims a span of the literal's length, and writes every byte of it.
+    /// **CLAIMED:** a byte-bodied literal crosses the boundary with its content.
+    /// **THE GAP:** ⚠ the content is a **compile-time literal**, so this arm says
+    /// nothing about a runtime-computed string — there is no `Lowered` variant
+    /// that carries one, and when one exists it needs its own control. ⛔ Do not
+    /// read this as coverage of the byte-bodied class in general.
+    fn emit_carrier_bytes(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        tag: BoundaryTag,
+        class: BoundaryClass,
+        content: &[u8],
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let word = self.emit_carrier_alloc(builder, tag, class, 0)?;
+        let (_span_slot, span) = Self::carrier_out_slot(builder, pointer_type);
+        let length = builder.ins().iconst(
+            types::I64,
+            i64::try_from(content.len()).map_err(|_| {
+                unsupported(
+                    "BoundaryCarrier",
+                    "a transferred literal is longer than the ABI can name",
+                )
+            })?,
+        );
+        let claim = builder
+            .ins()
+            .call(refs.store_bytes_len, &[arena, word.word, length, span]);
+        Self::require_i64(builder, builder.inst_results(claim)[0], BOUNDARY_OK);
+        for (index, byte) in content.iter().enumerate() {
+            let position = Self::carrier_position_immediate(builder, index)?;
+            let byte = builder.ins().iconst(types::I64, i64::from(*byte));
+            let write = builder
+                .ins()
+                .call(refs.store_byte, &[arena, word.word, position, byte]);
+            Self::require_i64(builder, builder.inst_results(write)[0], BOUNDARY_OK);
+        }
+        Ok(word)
+    }
+
+    /// The `NativeIntV1` marker for a spillable immediate whose magnitude **is**
+    /// its payload word.
+    ///
+    /// ⭐ `ProcessExitStatus`, `BoundedNat` and `StructuralNat` are one native
+    /// scalar each — there is no second word and no arena slot — so `Small` is
+    /// not a default for them, it is the only true answer.
+    /// ⛔ `Lowered::Int` does **not** come here: its marker is carried alongside
+    /// the payload by [`Self::native_int_tag`], and substituting a constant would
+    /// be the producer out-voting the native-`Int` representation.
+    fn carrier_small_marker(builder: &mut FunctionBuilder<'_>) -> cranelift_codegen::ir::Value {
+        builder
+            .ins()
+            .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64)
     }
 
     /// `store_tag_id(arena, word, tag_id) -> status`.
@@ -1537,9 +2561,7 @@ impl<'a> Lowering<'a> {
         })
     }
 
-    /// Test observation seam for an opaque token or borrowed response scalar.
-    #[cfg(test)]
-    fn emit_carrier_scalar(
+    pub(super) fn emit_carrier_scalar(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         target: CarriedBoundaryWord,
@@ -4332,6 +5354,7 @@ enum SourceContinuation<'a> {
     },
     ConstructArgument {
         constructor: RuntimeSymbol,
+        static_origin: StaticOriginId,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<Lowered>,
         env: Vec<LoweringOperand>,
@@ -4456,6 +5479,7 @@ enum SourcePrefixTemplate {
     },
     ConstructArgument {
         constructor: RuntimeSymbol,
+        static_origin: StaticOriginId,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<Lowered>,
         env: Vec<LoweringOperand>,
@@ -6022,7 +7046,7 @@ impl<'a> Lowering<'a> {
     ) -> Lowered {
         match kind {
             ScalarMergeKind::Int => {
-                self.native_int_tags.insert(pair.payload, pair.tag);
+                self.function_local.native_int_tags.insert(pair.payload, pair.tag);
                 Lowered::Int {
                     value: pair.payload,
                     known: None,
@@ -6435,12 +7459,14 @@ impl<'a> Lowering<'a> {
             },
             SourceContinuation::ConstructArgument {
                 constructor,
+                static_origin,
                 remaining: arguments,
                 lowered,
                 env,
                 next,
             } => SourceContinuation::ConstructArgument {
                 constructor,
+                static_origin,
                 remaining: arguments,
                 lowered,
                 env,
@@ -6752,6 +7778,7 @@ impl<'a> Lowering<'a> {
             }
             SourceContinuation::ConstructArgument {
                 constructor,
+                static_origin,
                 remaining,
                 lowered,
                 env,
@@ -6761,6 +7788,7 @@ impl<'a> Lowering<'a> {
                 (
                     SourcePrefixTemplate::ConstructArgument {
                         constructor,
+                        static_origin,
                         remaining,
                         lowered,
                         env,
@@ -6922,12 +7950,14 @@ impl<'a> Lowering<'a> {
             },
             SourcePrefixTemplate::ConstructArgument {
                 constructor,
+                static_origin,
                 remaining,
                 lowered,
                 env,
                 next,
             } => SourceContinuation::ConstructArgument {
                 constructor: constructor.clone(),
+                static_origin: *static_origin,
                 remaining: remaining.clone(),
                 lowered: lowered.clone(),
                 env: env.clone(),
@@ -7080,6 +8110,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         constructor: RuntimeSymbol,
+        static_origin: StaticOriginId,
         lowered_args: Vec<Lowered>,
     ) -> Result<Lowered, CraneliftBackendError> {
         if lowered_args
@@ -7112,7 +8143,10 @@ impl<'a> Lowering<'a> {
         }
         Ok(Lowered::Constructor {
             constructor,
-            synthesized_identity: None,
+            synthesized_identity: Some(
+                self.static_transition_plan
+                    .constructor_symbol_identity(static_origin)?,
+            ),
             args: lowered_args,
         })
     }
@@ -7124,8 +8158,9 @@ impl<'a> Lowering<'a> {
     ) -> Result<(cranelift_codegen::ir::Value, cranelift_codegen::ir::Value), CraneliftBackendError>
     {
         let pointer_type = builder.func.dfg.value_type(
-            self.invocation_pointer
-                .expect("process byte lowering owns an invocation pointer"),
+            self.function_local
+                .host_dispatch_context
+                .expect("process byte lowering owns a direct host context"),
         );
         match value {
             Lowered::BorrowedNativeValue { pointer } => {
@@ -7179,10 +8214,10 @@ impl<'a> Lowering<'a> {
         let Lowered::Int { value, known } = value else {
             return Err(unsupported("Effect", "host-width operand is not Int"));
         };
-        let arena = self
+        let arena = self.function_local
             .native_int_arena
             .ok_or_else(|| unsupported("Effect", "host-width Int has no invocation arena"))?;
-        let helper = self.native_int_narrow.ok_or_else(|| {
+        let helper = self.function_local.native_int_narrow.ok_or_else(|| {
             unsupported("Effect", "host-width Int has no checked narrowing helper")
         })?;
         let tag = self.native_int_tag(builder, *value, *known)?;
@@ -7211,7 +8246,7 @@ impl<'a> Lowering<'a> {
         let tag = builder
             .ins()
             .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64);
-        self.native_int_tags.insert(value, tag);
+        self.function_local.native_int_tags.insert(value, tag);
         Lowered::Int { value, known: None }
     }
 
@@ -7627,7 +8662,70 @@ impl<'a> Lowering<'a> {
                 format!("capture {symbol} has no runtime value in the seed environment"),
             )
         })?;
-        self.lower_ground_value(builder, value)
+        // ⛔ Wildcard-free, because this match **is** the boundary between the
+        // represented path and the compiler-only one. A `_` arm here would let
+        // a future ground-value variant fall silently onto whichever side
+        // happened to be last.
+        match value {
+            RuntimeGroundValue::Bool(flag) => Ok(Lowered::Bool {
+                value: self.artifact_static_payload(builder, symbol)?,
+                // ⚠ `known` is retained deliberately and it is NOT a second
+                // authority: it is the *compile-time* answer used for
+                // specialization decisions, while `value` is the word the
+                // running artifact actually reads. ⛔ If a specialization ever
+                // substitutes `known` for `value` in emitted code, the borrow
+                // becomes unobservable — which is why the control for this is a
+                // mutation of the minted bytes, not a count of loads.
+                known: Some(*flag),
+            }),
+            RuntimeGroundValue::Int(crate::RuntimeIntV1::Small(small)) => Ok(Lowered::Int {
+                value: self.artifact_static_payload(builder, symbol)?,
+                known: Some(*small),
+            }),
+            // ⚠ **The stated boundary of `D3`'s represented path.** These five
+            // still lower through the compiler-side specialization lattice:
+            // `lower_ground_value` returns `Lowered::Bytes`/`String`/
+            // `Constructor`/`Record`, which hold the compiler's own Rust values
+            // and carry no `ir::Value` at all, and a big integer goes through
+            // the interning helper rather than a frame word.
+            //
+            // ⛔ **This is a boundary, not a second authority.** No value has two
+            // paths: a scalar has exactly the artifact-static one, and these
+            // have exactly the specialization one. ⚠ Giving them an
+            // artifact-static representation needs a *reader* for the encoded
+            // aggregate — the encoding exists (`seed_material`), the consumer
+            // does not — and the runtime-`alloc` carrier is not a substitute,
+            // because it produces activation-time storage for a slot declared
+            // `AbiStorageOwner::ArtifactStatic`.
+            RuntimeGroundValue::Int(big @ crate::RuntimeIntV1::Big { .. }) => {
+                self.lower_big_int_constant(builder, big)
+            }
+            RuntimeGroundValue::Bytes(_)
+            | RuntimeGroundValue::String(_)
+            | RuntimeGroundValue::Constructor { .. }
+            | RuntimeGroundValue::Record { .. } => self.lower_ground_value(builder, value),
+        }
+    }
+
+    /// Load a seed symbol's scalar payload out of artifact-static material.
+    ///
+    /// ⛔ Fails closed. A symbol present in the environment but absent from the
+    /// minted material means the two populations disagree, and folding the
+    /// compile-time value in as a fallback would silently restore exactly the
+    /// authority `D3` removes — with nothing to observe that it had.
+    fn artifact_static_payload(
+        &self,
+        builder: &mut FunctionBuilder<'_>,
+        symbol: &str,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        self.function_local.seed_material
+            .payload_word(builder, symbol)
+            .ok_or_else(|| {
+                unsupported(
+                    "Closure",
+                    format!("seed capture {symbol} has no artifact-static material minted for it"),
+                )
+            })
     }
 
     fn lower_ground_value(
@@ -7695,11 +8793,11 @@ impl<'a> Lowering<'a> {
         let output =
             builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 16, 3));
         let pointer_type = builder.func.dfg.value_type(
-            self.native_int_arena
+            self.function_local.native_int_arena
                 .ok_or_else(|| unsupported("RuntimeValue::Int", "Big Int has no arena"))?,
         );
-        let arena = self.native_int_arena.expect("Big Int arena was checked");
-        let helper = self.native_int_intern.ok_or_else(|| {
+        let arena = self.function_local.native_int_arena.expect("Big Int arena was checked");
+        let helper = self.function_local.native_int_intern.ok_or_else(|| {
             unsupported("RuntimeValue::Int", "Big Int has no local intern helper")
         })?;
         let sign = builder
@@ -7730,10 +8828,10 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         value: cranelift_codegen::ir::Value,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let arena = self.native_int_arena.ok_or_else(|| {
+        let arena = self.function_local.native_int_arena.ok_or_else(|| {
             unsupported("NativeInt", "unsigned Int producer has no invocation arena")
         })?;
-        let helper = self.native_int_intern.ok_or_else(|| {
+        let helper = self.function_local.native_int_intern.ok_or_else(|| {
             unsupported(
                 "NativeInt",
                 "unsigned Int producer has no local intern helper",
@@ -7807,13 +8905,13 @@ impl<'a> Lowering<'a> {
         }
         let lhs_tag = self.native_int_tag(builder, lhs, lhs_known)?;
         let rhs_tag = self.native_int_tag(builder, rhs, rhs_known)?;
-        let arena = self.native_int_arena.ok_or_else(|| {
+        let arena = self.function_local.native_int_arena.ok_or_else(|| {
             unsupported(
                 "PrimitiveCall",
                 "exact Int operation has no invocation arena",
             )
         })?;
-        let helper = self.native_int_binop.ok_or_else(|| {
+        let helper = self.function_local.native_int_binop.ok_or_else(|| {
             unsupported(
                 "PrimitiveCall",
                 "exact Int operation has no local support function",
@@ -7848,7 +8946,7 @@ impl<'a> Lowering<'a> {
                 crate::NATIVE_INT_BIG_TAG_V1 as i64,
             ],
         );
-        self.native_int_tags.insert(value, tag);
+        self.function_local.native_int_tags.insert(value, tag);
         let known = lhs_known.and_then(|lhs| rhs_known.and_then(|rhs| eval(lhs, rhs)));
         Ok(Lowered::Int { value, known })
     }
@@ -7880,13 +8978,13 @@ impl<'a> Lowering<'a> {
         };
         let lhs_tag = self.native_int_tag(builder, lhs, lhs_known)?;
         let rhs_tag = self.native_int_tag(builder, rhs, rhs_known)?;
-        let arena = self.native_int_arena.ok_or_else(|| {
+        let arena = self.function_local.native_int_arena.ok_or_else(|| {
             unsupported(
                 "PrimitiveCall",
                 "exact Int comparison has no invocation arena",
             )
         })?;
-        let helper = self.native_int_compare.ok_or_else(|| {
+        let helper = self.function_local.native_int_compare.ok_or_else(|| {
             unsupported(
                 "PrimitiveCall",
                 "exact Int comparison has no local support function",
@@ -7917,7 +9015,7 @@ impl<'a> Lowering<'a> {
         payload: cranelift_codegen::ir::Value,
         known: Option<i64>,
     ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
-        if let Some(tag) = self.native_int_tags.get(&payload).copied() {
+        if let Some(tag) = self.function_local.native_int_tags.get(&payload).copied() {
             return Ok(tag);
         }
         if known.is_some() {
@@ -8086,7 +9184,7 @@ impl<'a> Lowering<'a> {
             let tag = builder
                 .ins()
                 .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64);
-            self.native_int_tags.insert(value, tag);
+            self.function_local.native_int_tags.insert(value, tag);
             return Ok(Lowered::BorrowedOption {
                 present: builder.block_params(merge)[0],
                 value,
@@ -8135,7 +9233,7 @@ impl<'a> Lowering<'a> {
             let tag = builder
                 .ins()
                 .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64);
-            self.native_int_tags.insert(value, tag);
+            self.function_local.native_int_tags.insert(value, tag);
             return Ok(Lowered::BorrowedOption {
                 present,
                 value,
@@ -8351,7 +9449,7 @@ impl<'a> Lowering<'a> {
         })
     }
 
-    fn emit_result(
+    pub(super) fn emit_result(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         value: Lowered,
@@ -8368,10 +9466,10 @@ impl<'a> Lowering<'a> {
         match value {
             Lowered::Int { value, known } => {
                 let tag = self.native_int_tag(builder, value, known)?;
-                let arena = self.native_int_arena.ok_or_else(|| {
+                let arena = self.function_local.native_int_arena.ok_or_else(|| {
                     unsupported("NativeResult", "Int result has no invocation arena")
                 })?;
-                let export = self.native_int_export.ok_or_else(|| {
+                let export = self.function_local.native_int_export.ok_or_else(|| {
                     unsupported("NativeResult", "Int result has no export support function")
                 })?;
                 #[cfg(test)]

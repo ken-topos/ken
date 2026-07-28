@@ -28,9 +28,14 @@ use semantic_ir::{
 // `SemanticPlane`, `SemanticMaterialArena` and the `names` arena stay on the
 // `use` above, visible only inside this planner. Widening either of those to
 // serve a consumer is the move `§2d` forbids.
+pub(in crate::cranelift_backend) use abi::{
+    AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
+    AbiRootIngress, AbiSchedulingIngress, AbiSlot, AbiSlotKind, AbiStorageOwner,
+    AbiUnitDefinition,
+};
 pub(in crate::cranelift_backend) use semantic_ir::{
-    ConstructorIdentity, FieldIdentity, StaticOriginId, SynthesizedConstructorRole,
-    SynthesizedFixedConstructorRole, SynthesizedIoErrorRole,
+    ConstructorIdentity, FieldIdentity, PredeclaredFunctionId, StaticOriginId,
+    SynthesizedConstructorRole, SynthesizedFixedConstructorRole, SynthesizedIoErrorRole,
 };
 #[cfg(test)]
 pub(in crate::cranelift_backend) use semantic_ir::with_last_io_error_role_omitted;
@@ -301,6 +306,10 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// encoder; `RT-FNSPLIT-B2F` performs the atomic switch-over that makes it
     /// live.
     abi: AbiPlane,
+    /// The scheduling entry returned by the root visit. Kept separately from
+    /// the root occurrence because computational matches make them differ.
+    root_entry: Option<StaticNodeId>,
+    root_ingress: AbiRootIngress,
     /// The **occurrence** origin of the whole program's root, stored at planning
     /// time.
     ///
@@ -440,6 +449,8 @@ impl<'src> Planner<'src> {
                 semantic_sources: Vec::new(),
                 semantic_material: SemanticMaterialArena::default(),
                 abi: AbiPlane::default(),
+                root_entry: None,
+                root_ingress: AbiRootIngress::Value,
                 semantic: SemanticPlane::default(),
                 root_occurrence: None,
                 declaration_occurrences: BTreeMap::new(),
@@ -1074,6 +1085,7 @@ impl<'src> Planner<'src> {
     fn finish(
         mut self,
         symbols: &crate::NativeProcessSymbols,
+        root_ingress: AbiRootIngress,
     ) -> Result<StaticTransitionPlan<'src>, CraneliftBackendError> {
         let (synthesized_identities, synthesized_io_roles) =
             build_synthesized_constructor_inventory(
@@ -1098,16 +1110,248 @@ impl<'src> Planner<'src> {
         // the line above just validated, and it fails **before** anything is
         // emitted. It is deliberately not deferred to lowering: a contract that
         // is only checked at emission time cannot be a *pre*-emission gate.
+        let root_entry = self
+            .plan
+            .root_entry
+            .ok_or_else(|| planner_error("plan has no root scheduling entry"))?;
+        self.plan.root_ingress = root_ingress;
         self.plan.abi = build_abi_plane(
             &self.plan.semantic,
             &self.plan.nodes,
             &self.plan.semantic_sources,
             &self.plan.edges,
             &self.plan.entries,
+            root_entry,
+            root_ingress,
         )?;
         self.plan.validate()?;
         Ok(self.plan)
     }
+}
+
+/// **`RT-FNSPLIT-B2F` `D1` — the emitter's read-only view of ONE validated
+/// function unit.**
+///
+/// ⭐ **This is the `case_constructor_identity` precedent, not a widened
+/// field.** What crosses into `crate::cranelift_backend` is a *question about
+/// a unit* and an answer the asker cannot mint: `AbiPlane`, `AbiDescriptor`,
+/// `build_abi_plane` and `AbiPlane::validate` all stay `pub(super)`, so the
+/// emitter can neither construct a plane, mutate a descriptor, nor reach the
+/// pre-emission validator to bypass it.
+///
+/// ⛔ **The fields are private and there is no constructor**, so a unit
+/// cannot be forged in `lowering`. That is the load-bearing half: `B2F`
+/// drives emission from units, so an unmintable unit means emission cannot
+/// be driven from anything but the validated plane.
+///
+/// **MEASURED:** `lowering` can read a unit's declared identity, origin,
+/// definition, header and slot run, and can construct none of them.
+/// **CLAIMED:** emission is driven by `B2R`'s validated authority rather than
+/// by a second table `B2F` derives for itself.
+/// **THE GAP:** ⚠ `AbiSlot` and `AbiFrameHeader` are plain `Copy` data whose
+/// fields are now readable in `cranelift_backend`, so `lowering` **can**
+/// spell a *local* `AbiSlot` literal — Rust cannot forbid struct-literal
+/// construction inside one crate. ⛔ **This is not claimed to be detected.**
+/// What closes it is that a forged slot has no route into a unit: the only
+/// producer of an `EmittableUnit` is [`Self::emittable_units`], which reads
+/// `self.abi`. A control that emission consumes only unit-supplied slots is
+/// `AC-12`'s, and it is not discharged here.
+/// **One cross-owner call edge, as the emitter is allowed to see it.**
+///
+/// ⭐ **Both ends are `PredeclaredFunctionId`s and nothing else.** There is no
+/// node id, no origin and no expression here, because a call edge's whole
+/// content at emission time is *which unit calls which unit* — and resolving a
+/// callee to a target function must go through the planner's identity, never
+/// through the ordinal some emission loop happened to assign.
+///
+/// ⛔ **Unmintable in `lowering`:** the fields are private and the sole producer
+/// is [`StaticTransitionPlan::emittable_call_edges`]. ⇒ The emitter cannot
+/// invent a call to a unit the planner did not connect, which is the property
+/// that makes "no indirect dispatch on a dynamic property" structural rather
+/// than a coding convention.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct EmittableCallEdge {
+    caller: PredeclaredFunctionId,
+    callee: PredeclaredFunctionId,
+    callee_origin: StaticOriginId,
+}
+
+impl EmittableCallEdge {
+    /// The unit this call is emitted **into**.
+    pub(in crate::cranelift_backend) fn caller(self) -> PredeclaredFunctionId {
+        self.caller
+    }
+
+    /// The unit this call transfers **to**. ⛔ Resolve it through
+    /// `UnitBundle::function`, whose `None` is a real answer.
+    pub(in crate::cranelift_backend) fn callee(self) -> PredeclaredFunctionId {
+        self.callee
+    }
+
+    pub(in crate::cranelift_backend) fn callee_origin(self) -> StaticOriginId {
+        self.callee_origin
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(in crate::cranelift_backend) struct EmittableUnit<'plan> {
+    function: PredeclaredFunctionId,
+    origin: StaticOriginId,
+    definition: AbiUnitDefinition,
+    header: AbiFrameHeader,
+    slots: &'plan [AbiSlot],
+}
+
+impl<'plan> EmittableUnit<'plan> {
+    /// This unit's static identity. ⛔ Unmintable in `lowering`: the newtype's
+    /// field stays `pub(super)`, so the emitter can key and compare an id but
+    /// cannot fabricate one or do arithmetic on it.
+    pub(in crate::cranelift_backend) fn function(self) -> PredeclaredFunctionId {
+        self.function
+    }
+
+    /// The occurrence origin of this unit's body, for
+    /// [`StaticTransitionPlan::source_occurrence`].
+    pub(in crate::cranelift_backend) fn origin(self) -> StaticOriginId {
+        self.origin
+    }
+
+    /// Whether this unit is a scheduling entry or a retained closure body,
+    /// with the closure body's defining origin and capture provenance.
+    pub(in crate::cranelift_backend) fn definition(self) -> AbiUnitDefinition {
+        self.definition
+    }
+
+    /// The declared activation-frame header. ⚠ `frame_bytes` is derived from
+    /// the slot run by `B2R`; do not recompute it from [`Self::slots`].
+    pub(in crate::cranelift_backend) fn header(self) -> AbiFrameHeader {
+        self.header
+    }
+
+    /// This unit's declared slots, in `B2R`'s layout order: parameters,
+    /// captures, result, control, trap, store.
+    pub(in crate::cranelift_backend) fn slots(self) -> &'plan [AbiSlot] {
+        self.slots
+    }
+
+    /// Each slot's byte offset in this unit's activation frame, paired with the
+    /// frame's total size.
+    ///
+    /// ⛔ **Delegated to `abi::slot_offsets`, never re-derived here.** The
+    /// emitter needs offsets to load and store slots, and prefix-summing the
+    /// widths at the emission site would put the same arithmetic in a second
+    /// file where the two can silently disagree. `AbiFrameHeader::frame_bytes`
+    /// is totalled *through* the same walk, so the offsets the emitter uses and
+    /// the size the ABI declares cannot diverge.
+    ///
+    /// ⚠ The returned total is checked against [`Self::header`]'s `frame_bytes`
+    /// by `AC-3`, not here — this accessor's job is to have one walk, not to
+    /// assert about it.
+    pub(in crate::cranelift_backend) fn slot_offsets(
+        self,
+    ) -> Result<(Vec<u32>, u32), CraneliftBackendError> {
+        abi::slot_offsets(self.slots)
+    }
+}
+
+impl StaticTransitionPlan<'_> {
+    /// Resolve one process-root parameter by its closed semantic role.
+    ///
+    /// The caller cannot restate ordinals: only the scheduling entry whose
+    /// validated definition carries `ProcessPair` can answer, and the slot
+    /// offset comes from B2R's sole offset walk.
+    pub(in crate::cranelift_backend) fn process_parameter_slot(
+        &self,
+        role: AbiProcessParameter,
+    ) -> Result<Option<(AbiSlot, u32)>, CraneliftBackendError> {
+        let mut answer = None;
+        for unit in self.emittable_units()? {
+            if unit.definition()
+                != (AbiUnitDefinition::SchedulingEntry {
+                    ingress: AbiSchedulingIngress::ProcessPair,
+                })
+            {
+                continue;
+            }
+            let (offsets, _) = unit.slot_offsets()?;
+            let found = unit
+                .slots()
+                .iter()
+                .copied()
+                .zip(offsets)
+                .find(|(slot, _)| {
+                    slot.kind == AbiSlotKind::Parameter && slot.ordinal == role.ordinal()
+                })
+                .ok_or_else(|| planner_error("process ingress role has no declared root slot"))?;
+            if answer.replace(found).is_some() {
+                return Err(planner_error(
+                    "more than one scheduling entry declares process ingress",
+                ));
+            }
+        }
+        Ok(answer)
+    }
+}
+
+// **`RT-FNSPLIT-B2A-S` `AC-4` — the route counters.**
+//
+// ⛔⛔ **These exist because the instrument that used to carry `AC-4` cannot
+// carry it through `B2F`.** That instrument reads this file's source text and
+// asserts a list of exported signatures; it constrains the *identifier*
+// `source_occurrence` and says nothing about **who calls the route** — and
+// `B2F` `S6` widens `Lowering::retained_body_occurrence` from private-to-`core`
+// to all of `lowering` so a unit body can resolve its own origin. ⚠ A
+// source-text oracle also reddens on a reflow that changes nothing about how
+// any program behaves, which is why the replacement is a behavioural one.
+//
+// ⭐ **The property is a RATIO, not a count, and that is what makes it durable.**
+// `retained_body_occurrence` calls [`StaticTransitionPlan::source_occurrence`]
+// exactly once, so the two counters move together **for as long as that route
+// is the only caller**. Any second call site — a convenience resolver, a
+// "just this once" direct call from an emission site — makes resolutions
+// exceed route invocations, and nothing else can.
+//
+// ⚠ **Deliberately NOT a bound on how many times the route is used.** Seven
+// consumption sites call it today and more may; `AC-4` holds the number of
+// **routes** at one, never the number of resolutions. ⛔ A pin that froze the
+// call count would go red on legitimate work and would be a snapshot wearing an
+// invariant's name.
+#[cfg(test)]
+thread_local! {
+    /// Resolutions performed by `source_occurrence`, since the last window open.
+    static AC4_RESOLUTIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Invocations of the single route, since the last window open.
+    static AC4_ROUTE_INVOCATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Zero both counters. ⛔ Call this immediately before the compile under
+/// measurement: without a per-window reset a reading cannot distinguish this
+/// compile's resolutions from an earlier one's, and a stale equal pair reads
+/// exactly like the outcome the pin wants.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn ac4_open_route_window() {
+    AC4_RESOLUTIONS.with(|cell| cell.set(0));
+    AC4_ROUTE_INVOCATIONS.with(|cell| cell.set(0));
+}
+
+/// Record one invocation of the single `origin -> expression` route.
+///
+/// ⚠ Called by `Lowering::retained_body_occurrence` and by nothing else — that
+/// is the whole point. A second route that recorded itself here would be
+/// *claiming* to be the single route, which is a visible lie rather than a
+/// silent one.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn ac4_note_route_invocation() {
+    AC4_ROUTE_INVOCATIONS.with(|cell| cell.set(cell.get() + 1));
+}
+
+/// `(resolutions, route invocations)` since the window opened.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn ac4_route_counts() -> (usize, usize) {
+    (
+        AC4_RESOLUTIONS.with(std::cell::Cell::get),
+        AC4_ROUTE_INVOCATIONS.with(std::cell::Cell::get),
+    )
 }
 
 impl<'src> StaticTransitionPlan<'src> {
@@ -1137,6 +1381,12 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
         static_origin: StaticOriginId,
     ) -> Result<&'src RuntimeExpr, CraneliftBackendError> {
+        // ⭐ Counted at ENTRY, not on the success path. A resolution that fails
+        // is still a resolution *attempted through this route*, and `AC-4` is a
+        // claim about routes, not about outcomes — counting only successes would
+        // let a second caller hide behind a bad origin.
+        #[cfg(test)]
+        AC4_RESOLUTIONS.with(|cell| cell.set(cell.get() + 1));
         let index = static_origin.0 as usize;
         let slot = self.source_occurrences.get(index).ok_or_else(|| {
             planner_error("static origin is outside the planned occurrence table")
@@ -1263,6 +1513,131 @@ impl<'src> StaticTransitionPlan<'src> {
         symbol: &str,
     ) -> Option<StaticOriginId> {
         self.declaration_occurrences.get(symbol).copied()
+    }
+
+    /// **`RT-FNSPLIT-B2F` `D1` — every function unit this artifact must emit, in
+    /// unit order.**
+    ///
+    /// ⛔ **This does not derive the population and must never be made to.** The
+    /// set is `plan.entries` ∪ every `EdgeKind::StaticBody` **target**, already
+    /// seeded and validated by `B2O` (`semantic_ir.rs`
+    /// `validate_function_units`) and already given one descriptor apiece by
+    /// `B2R`. This walks `self.abi.descriptors` and projects; it re-seeds
+    /// nothing, and in particular it does **not** consult
+    /// `TransitionKind::ClosureBody`, which is a body's *return successor* and
+    /// not a unit head.
+    ///
+    /// ⚠ The two shared exits (`SemanticOwner::Terminal`, `TrapTerminal`) are not
+    /// units and are absent here by construction — they never receive a
+    /// descriptor.
+    /// **`RT-FNSPLIT-B2F` `AC-11` — prove every transfer this node will emit is
+    /// representable, BEFORE any unit is declared, defined or called.**
+    ///
+    /// ⛔ Exposed as a **verdict**, not as the plane: the semantic plane and its
+    /// source seeds stay private, so an emitter can obtain the answer and cannot
+    /// re-derive a different one. ⭐ That is what keeps this a single authority
+    /// rather than a check the emitter could route around.
+    ///
+    /// ⛔ Clause 3 is discharged by the CALL SITE's position, not by this
+    /// method's contents: it runs before `declare_unit_bundle` in
+    /// `compile_expr_into_module`. Moving the call after emission would satisfy
+    /// every assertion inside it and discharge nothing.
+    pub(in crate::cranelift_backend) fn validate_emitted_transfers_are_representable(
+        &self,
+    ) -> Result<(), CraneliftBackendError> {
+        abi::validate_emitted_transfers(
+            &self.semantic,
+            &self.nodes,
+            &self.semantic_sources,
+            &self.abi.descriptors,
+            &self.abi.slots,
+        )
+    }
+
+    /// **`RT-FNSPLIT-B2F` `D4` — the cross-owner call edges, DERIVED.**
+    ///
+    /// ⛔ **Nothing here decides what a call edge is.** The classification is
+    /// `B2O`'s and it is enforced as `return Err` arms inside
+    /// `SemanticPlane::validate_function_units`: a `StaticBody` edge crosses to
+    /// a **distinct** unit and lands on that unit's **seed**; every other edge
+    /// either stays inside one unit or exits to a shared exit; anything else is
+    /// refused during planning. ⇒ ⭐ **A plan that reaches this method cannot
+    /// carry a violating edge**, so this is a projection of facts already
+    /// validated, not a second classification.
+    ///
+    /// ⚠ **Which is exactly why `B2F` must not re-assert those four laws.** A
+    /// control here asserting "a `StaticBody` edge crosses owners" is green on
+    /// every input that can reach emission and tests nothing. ⭐ What `B2F` owes
+    /// instead is **one-for-one consumption** — that emission is driven by this
+    /// view and does not build a second table beside it — which is a property
+    /// the inert node could not check about itself.
+    ///
+    /// ⛔ **Fails closed on a missing descriptor** rather than skipping the
+    /// edge: a dropped call edge is a unit that is never called, which is
+    /// silent at emission and wrong at run time.
+    /// ⛔ **The owner classification is NOT named here**, and that is enforced:
+    /// `the_owner_classification_has_a_closed_production_naming_inventory` reds
+    /// if this file starts spelling `SemanticOwner`. ⇒ The `StaticBody` walk
+    /// lives in `semantic_ir.rs`, beside the validation that makes it sound, and
+    /// this method only wraps the resulting id pairs in the emitter's view type.
+    ///
+    /// ⭐ That pin caught a real defect in this deliverable's first draft, which
+    /// destructured `SemanticOwner::Function(..)` right here — a third file
+    /// naming the classification is how a second, divergent classification
+    /// authority starts.
+    pub(in crate::cranelift_backend) fn emittable_call_edges(
+        &self,
+    ) -> Result<Vec<EmittableCallEdge>, CraneliftBackendError> {
+        Ok(self
+            .semantic
+            .static_body_call_edges(&self.edges)?
+            .into_iter()
+            .map(|(caller, callee, callee_origin)| EmittableCallEdge {
+                caller,
+                callee,
+                callee_origin,
+            })
+            .collect())
+    }
+
+    pub(in crate::cranelift_backend) fn root_emittable_unit(
+        &self,
+    ) -> Result<EmittableUnit<'_>, CraneliftBackendError> {
+        let root_entry = self
+            .root_entry
+            .ok_or_else(|| planner_error("plan has no recorded root entry"))?;
+        let root_function = self.semantic.function_for_node(root_entry)?;
+        self.emittable_units()?
+            .into_iter()
+            .find(|unit| unit.function() == root_function)
+            .ok_or_else(|| planner_error("recorded root has no abi descriptor"))
+    }
+
+    pub(in crate::cranelift_backend) fn emittable_units(
+        &self,
+    ) -> Result<Vec<EmittableUnit<'_>>, CraneliftBackendError> {
+        self.abi
+            .descriptors
+            .iter()
+            .map(|descriptor| {
+                let start = descriptor.slots.start as usize;
+                let end = start
+                    .checked_add(descriptor.slots.len as usize)
+                    .ok_or_else(|| planner_error("abi slot range overflows"))?;
+                let slots = self
+                    .abi
+                    .slots
+                    .get(start..end)
+                    .ok_or_else(|| planner_error("abi slot range is outside the plane"))?;
+                Ok(EmittableUnit {
+                    function: descriptor.function,
+                    origin: descriptor.origin,
+                    definition: descriptor.definition,
+                    header: descriptor.header,
+                    slots,
+                })
+            })
+            .collect()
     }
 
     fn helper_key_for_activation(
@@ -1502,6 +1877,9 @@ impl<'src> StaticTransitionPlan<'src> {
             &self.semantic_sources,
             &self.edges,
             &self.entries,
+            self.root_entry
+                .ok_or_else(|| planner_error("plan has no root scheduling entry"))?,
+            self.root_ingress,
         )?;
         self.validate_source_occurrence_table()?;
         Ok(())
@@ -1941,6 +2319,7 @@ pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(
         entry,
         declarations,
         &crate::NativeProcessSymbols::legacy_prelude(),
+        AbiRootIngress::Value,
     )
 }
 
@@ -1948,6 +2327,7 @@ pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols<'s
     entry: &'src RuntimeExpr,
     declarations: &BTreeMap<&str, &'src RuntimeDeclaration>,
     symbols: &crate::NativeProcessSymbols,
+    root_ingress: AbiRootIngress,
 ) -> Result<StaticTransitionPlan<'src>, CraneliftBackendError> {
     #[cfg(test)]
     reset_recursive_lowering_frame_count();
@@ -1967,6 +2347,7 @@ pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols<'s
     // required discriminator.
     let root = planner.plan_expr(entry, context, planner.terminal, EdgeKind::Continue, 0)?;
     planner.plan.entries.push(root.entry);
+    planner.plan.root_entry = Some(root.entry);
     planner.plan.root_occurrence = Some(root.occurrence);
     for (symbol, declaration) in declarations {
         if let RuntimeDeclarationKind::Transparent { body } = &declaration.kind {
@@ -1989,7 +2370,7 @@ pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols<'s
             }
         }
     }
-    planner.finish(symbols)
+    planner.finish(symbols, root_ingress)
 }
 
 fn runtime_expr_tag(expr: &RuntimeExpr) -> u32 {
@@ -5908,6 +6289,8 @@ mod tests {
                 &plan.semantic_sources,
                 &plan.edges,
                 &plan.entries,
+                plan.root_entry.expect("root entry"),
+                plan.root_ingress,
             )
             .expect_err("AC-1: dropping a descriptor must be refused");
         // ⛔ The EXACT failure, not `is_err()`. A control that reddens does not
@@ -6089,6 +6472,8 @@ mod tests {
                 &shallow.semantic_sources,
                 &shallow.edges,
                 &shallow.entries,
+                shallow.root_entry.expect("root entry"),
+                shallow.root_ingress,
             )
             .expect_err("AC-4/C3: an implicit caller-environment tail must be REFUSED");
         assert!(
@@ -6415,6 +6800,8 @@ mod tests {
                 &plan.semantic_sources,
                 &plan.edges,
                 &plan.entries,
+                plan.root_entry.expect("root entry"),
+                plan.root_ingress,
             ) {
                 Ok(()) => "NO WITNESS -- the mutation was accepted".to_string(),
                 Err(err) => format!("{err:?}"),
@@ -6483,6 +6870,8 @@ mod tests {
             &lexical_plan.semantic_sources,
             &lexical_plan.edges,
             &lexical_plan.entries,
+            lexical_plan.root_entry.expect("root entry"),
+            lexical_plan.root_ingress,
         ) {
             Ok(()) => "NO WITNESS -- the layout skew was accepted".to_string(),
             Err(err) => format!("{err:?}"),
@@ -6692,6 +7081,138 @@ mod tests {
             AbiCarrier::GroundValueCarrier,
             "AC-3: the fixture declares no seed capture slot, so the invariance \
              rows above compare descriptors that never exercised the carrier"
+        );
+    }
+
+    /// Promise class: durable invariant — process mode changes only the
+    /// explicitly recorded root scheduling entry's declared source ingress.
+    #[test]
+    fn process_ingress_is_role_keyed_and_absent_from_value_roots() {
+        let expr = RuntimeExpr::Value(RuntimeValue::Bool(true));
+        let symbols = crate::NativeProcessSymbols::legacy_prelude();
+        let transparent = RuntimeDeclaration {
+            symbol: "decl:fixture::process_ingress::transparent".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::Value(RuntimeValue::Bool(false)),
+            },
+            metadata: crate::RuntimeSymbolMetadata {
+                lowerability: Some(crate::RuntimeLowerabilityStatus::Supported),
+                ..crate::RuntimeSymbolMetadata::empty()
+            },
+        };
+        let declarations = BTreeMap::from([(transparent.symbol.as_str(), &transparent)]);
+        let process = plan_static_transition_graph_with_symbols(
+            &expr,
+            &declarations,
+            &symbols,
+            AbiRootIngress::Process,
+        )
+        .expect("process root plans");
+        let input = process
+            .process_parameter_slot(AbiProcessParameter::ProcessInput)
+            .expect("lookup validates")
+            .expect("process input slot exists");
+        let capability = process
+            .process_parameter_slot(AbiProcessParameter::Capability)
+            .expect("lookup validates")
+            .expect("capability slot exists");
+        assert_eq!(input.0.kind, AbiSlotKind::Parameter);
+        assert_eq!(input.0.ordinal, 0);
+        assert_eq!(capability.0.kind, AbiSlotKind::Parameter);
+        assert_eq!(capability.0.ordinal, 1);
+        assert_ne!(input.1, capability.1);
+        let scheduling = process
+            .emittable_units()
+            .expect("validated units")
+            .into_iter()
+            .filter_map(|unit| match unit.definition() {
+                AbiUnitDefinition::SchedulingEntry { ingress } => {
+                    Some((ingress, unit.header().parameters))
+                }
+                AbiUnitDefinition::ClosureBody { .. } => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            scheduling,
+            vec![
+                (AbiSchedulingIngress::ProcessPair, 2),
+                (AbiSchedulingIngress::Empty, 0),
+            ],
+            "only the explicitly recorded process root acquires parameters"
+        );
+
+        let value = plan_static_transition_graph_with_symbols(
+            &expr,
+            &BTreeMap::new(),
+            &symbols,
+            AbiRootIngress::Value,
+        )
+        .expect("value root plans");
+        assert_eq!(
+            value
+                .process_parameter_slot(AbiProcessParameter::ProcessInput)
+                .expect("lookup validates"),
+            None
+        );
+        assert_eq!(
+            value
+                .process_parameter_slot(AbiProcessParameter::Capability)
+                .expect("lookup validates"),
+            None
+        );
+
+        let closure = |captures| RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures,
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            }),
+            args: Vec::new(),
+        };
+        let captured_expr = closure(vec![RuntimeExpr::Var(0), RuntimeExpr::Var(1)]);
+        let captured = plan_static_transition_graph_with_symbols(
+            &captured_expr,
+            &BTreeMap::new(),
+            &symbols,
+            AbiRootIngress::Process,
+        )
+        .expect("capturing process closure plans");
+        let capture_counts = captured
+            .emittable_units()
+            .expect("validated units")
+            .into_iter()
+            .filter_map(|unit| match unit.definition() {
+                AbiUnitDefinition::ClosureBody { .. } => {
+                    Some(unit.header().captures)
+                }
+                AbiUnitDefinition::SchedulingEntry { .. } => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(capture_counts, vec![2]);
+
+        let uncaptured_expr = closure(Vec::new());
+        let uncaptured = plan_static_transition_graph_with_symbols(
+            &uncaptured_expr,
+            &BTreeMap::new(),
+            &symbols,
+            AbiRootIngress::Process,
+        )
+        .expect("non-capturing process closure plans");
+        let capture_counts = uncaptured
+            .emittable_units()
+            .expect("validated units")
+            .into_iter()
+            .filter_map(|unit| match unit.definition() {
+                AbiUnitDefinition::ClosureBody { .. } => {
+                    Some(unit.header().captures)
+                }
+                AbiUnitDefinition::SchedulingEntry { .. } => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            capture_counts,
+            vec![0],
+            "an otherwise identical body without a free binding acquired a slot"
         );
     }
 }

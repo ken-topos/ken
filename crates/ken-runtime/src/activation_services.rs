@@ -80,6 +80,38 @@ pub const SERVICES_BOUNDARY_ARENA: i32 = ActivationServiceField::BoundaryArena.o
 /// Byte size of the record, **derived** from the field inventory.
 pub const ACTIVATION_SERVICES_BYTES: i32 = (ActivationServiceField::ALL.len() * 8) as i32;
 
+/// Every field of the internal generated-unit call envelope.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UnitCallFrameField {
+    Slots,
+    HostDispatchContext,
+}
+
+impl UnitCallFrameField {
+    pub const ALL: [Self; 2] = [Self::Slots, Self::HostDispatchContext];
+
+    pub const fn offset(self) -> i32 {
+        (self as i32) * 8
+    }
+}
+
+pub const UNIT_CALL_FRAME_SLOTS: i32 = UnitCallFrameField::Slots.offset();
+pub const UNIT_CALL_FRAME_HOST_DISPATCH_CONTEXT: i32 =
+    UnitCallFrameField::HostDispatchContext.offset();
+pub const UNIT_CALL_FRAME_BYTES: i32 = (UnitCallFrameField::ALL.len() * 8) as i32;
+
+/// Fixed runtime-only envelope passed as `frame_ptr` to every internal unit.
+///
+/// `slots` addresses exactly the B2R payload. The host context is deliberately
+/// outside that payload: it is not an `AbiSlot` and cannot reconstruct a Ken
+/// environment.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct GeneratedUnitCallFrameV1 {
+    pub slots: *mut u8,
+    pub host_dispatch_context: *mut std::ffi::c_void,
+}
+
 /// The fixed, runtime-owned services record generated code receives as its
 /// second parameter.
 ///
@@ -204,6 +236,31 @@ mod tests {
                 .len(),
             "every field must occupy its own word"
         );
+    }
+
+    /// Promise class: normative compatibility vector — the internal generated
+    /// call ABI consumes these two fixed pointer fields.
+    #[test]
+    fn the_unit_call_envelope_matches_its_closed_field_inventory() {
+        let envelope = GeneratedUnitCallFrameV1 {
+            slots: std::ptr::null_mut(),
+            host_dispatch_context: std::ptr::null_mut(),
+        };
+        let base = std::ptr::addr_of!(envelope) as usize;
+        assert_eq!(
+            std::ptr::addr_of!(envelope.slots) as usize - base,
+            UNIT_CALL_FRAME_SLOTS as usize
+        );
+        assert_eq!(
+            std::ptr::addr_of!(envelope.host_dispatch_context) as usize - base,
+            UNIT_CALL_FRAME_HOST_DISPATCH_CONTEXT as usize
+        );
+        assert_eq!(
+            std::mem::size_of::<GeneratedUnitCallFrameV1>(),
+            UNIT_CALL_FRAME_BYTES as usize
+        );
+        assert_eq!(UnitCallFrameField::ALL.len(), 2);
+        assert_eq!(ActivationServiceField::ALL.len(), 2);
     }
 
     /// ⛔ **A partially bound record is not publishable**, and the launcher's

@@ -63,23 +63,32 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
+        body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: true,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
-        host_dispatch: None,
-        invocation_pointer: None,
-        native_int_arena: None,
-        native_int_binop: None,
-        native_int_compare: None,
-        native_int_intern: None,
-        native_int_narrow: None,
-        native_int_export: None,
-        native_int_tags: BTreeMap::new(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
         // rather than silently taking the `Specialized` path.
-        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+        function_local: FunctionLocalRefs {
+            seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
+            host_dispatch: None,
+            host_dispatch_context: None,
+            services_pointer: None,
+            native_int_arena: None,
+            boundary_arena: None,
+            native_int_binop: None,
+            native_int_compare: None,
+            native_int_intern: None,
+            native_int_narrow: None,
+            native_int_export: None,
+            native_int_resolve: None,
+            native_int_tags: BTreeMap::new(),
+            unit_calls: BTreeMap::new(),
+            terminal_result_origins: BTreeSet::new(),
+            boundary_carrier: None,
+        },
     }
 }
 
@@ -153,23 +162,32 @@ fn run_px8j_malformed_recursor_consumer(
         next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
+        body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
-        host_dispatch: None,
-        invocation_pointer: None,
-        native_int_arena: None,
-        native_int_binop: None,
-        native_int_compare: None,
-        native_int_intern: None,
-        native_int_narrow: None,
-        native_int_export: None,
-        native_int_tags: BTreeMap::new(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
         // rather than silently taking the `Specialized` path.
-        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+        function_local: FunctionLocalRefs {
+            seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
+            host_dispatch: None,
+            host_dispatch_context: None,
+            services_pointer: None,
+            native_int_arena: None,
+            boundary_arena: None,
+            native_int_binop: None,
+            native_int_compare: None,
+            native_int_intern: None,
+            native_int_narrow: None,
+            native_int_export: None,
+            native_int_resolve: None,
+            native_int_tags: BTreeMap::new(),
+            unit_calls: BTreeMap::new(),
+            terminal_result_origins: BTreeSet::new(),
+            boundary_carrier: None,
+        },
     };
     let origin = RecursorProducerOriginId(7);
     let cursor = ContinuationCursorId(9);
@@ -1201,6 +1219,7 @@ fn oriented_five_control_invocation() -> RecursorInvocationSegment {
     }
     invocation
 }
+
 #[test]
 fn px8j_owned_scope_deletion_fails_closed_before_another_frame_is_emitted() {
     let expression = host_result_closure_match(px8j_layered_recursive_result(1, 1));
@@ -1324,7 +1343,27 @@ fn px8j_all_three_producer_paths_reach_real_consumers() {
         )));
     }
 
-    let deferred = host_result_closure_match(px8j_deferred_recursive_field_fixture());
+    let deferred = RuntimeExpr::Match {
+        scrutinee: Box::new(px8j_deferred_recursive_field_fixture()),
+        cases: [
+            "ctor:prelude::Result::Err",
+            "ctor:prelude::Result::Ok",
+        ]
+        .into_iter()
+        .map(|constructor| RuntimeMatchCase {
+            constructor: constructor.to_string(),
+            binders: 1,
+            body: RuntimeExpr::Construct {
+                constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                args: Vec::new(),
+            },
+        })
+        .collect(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "direct deferred HostResult default".to_string(),
+        },
+    };
     let (result, trace) =
         px8j_capture_source_trace(&deferred, false, "ken_px8j_live_deferred_path");
     result.expect("the deferred-constructor producer path lowers");
@@ -2001,23 +2040,32 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
+        body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
-        host_dispatch: None,
-        invocation_pointer: None,
-        native_int_arena: None,
-        native_int_binop: None,
-        native_int_compare: None,
-        native_int_intern: None,
-        native_int_narrow: None,
-        native_int_export: None,
-        native_int_tags: BTreeMap::new(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
         // rather than silently taking the `Specialized` path.
-        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+        function_local: FunctionLocalRefs {
+            seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
+            host_dispatch: None,
+            host_dispatch_context: None,
+            services_pointer: None,
+            native_int_arena: None,
+            boundary_arena: None,
+            native_int_binop: None,
+            native_int_compare: None,
+            native_int_intern: None,
+            native_int_narrow: None,
+            native_int_export: None,
+            native_int_resolve: None,
+            native_int_tags: BTreeMap::new(),
+            unit_calls: BTreeMap::new(),
+            terminal_result_origins: BTreeSet::new(),
+            boundary_carrier: None,
+        },
     };
     let error = lowering
         .planned_join_site_for_frame(EliminatorFrame::InvocationReturn)
@@ -3383,6 +3431,56 @@ fn an_out_of_range_child_position_is_a_loud_planner_invariant() {
 // directory, so no `#[cfg(test)]` region has to be parsed out: the partition is
 // at file level.
 
+/// **`RT-FNSPLIT-B2F` `AC-2` — WHICH POPULATION THIS CENSUS COVERS, and why the
+/// rest is excluded.**
+///
+/// ⛔ **The population is the production LOWERING AND PLANNING sources** — the
+/// seven rows below. It is deliberately **not** "every Cranelift emitter in
+/// `ken-runtime`", and stating that boundary is `AC-2`'s second clause: a census
+/// whose scope is implicit reads as covering everything.
+///
+/// **Excluded, measured at base `6534e4a6`, each with its reason:**
+///
+/// | emitter | measured | why it is out of scope here |
+/// |---|---|---|
+/// | `native_int_clif.rs` | 5 / 1 / 3 | Θ(1) per native module. Its emitted population is already pinned behaviourally as `LOCAL_HELPER_COUNT = 6` (`artifact/tests.rs:56`) — ⛔ cite that, do not duplicate it |
+/// | `boundary_value_clif.rs` | 23 / 3 / 3 | ⭐ a live production emitter that was in **neither** this census nor `BACKEND_PRODUCTION_SOURCES`; same Θ(1)-per-module shape |
+///
+/// ⭐ **Why they are recorded as reasoned exclusions rather than pinned rows,
+/// which is a judgement and is stated as one:** freezing `23` and `5` here would
+/// redden this file whenever a *sibling* node legitimately changes an emitter it
+/// owns — landing the failure on whoever is unlucky, in a test they have never
+/// read, rather than on whoever changed the thing. Their growth is `AC-G0`/`D8`'s
+/// obligation and is discharged there **behaviourally**, against emitted counts,
+/// not against source spellings.
+///
+/// ⚠ **MEASURED:** how many times five spellings occur in eight files.
+/// **CLAIMED:** exactly that. **THE GAP:** ⛔ this is a source-TEXT oracle and
+/// it is retained as a **tripwire, not as the evidence**. A call split across
+/// lines evades every needle; a mention inside a string or a block comment
+/// inflates them; and nothing here observes what a compiled module actually
+/// contains.
+///
+/// # ⛔⛔ WHICH INSTRUMENT CARRIES THE CLAIM — and they are NOT corroboration
+///
+/// **`AC-2` requires this division of labour to be stated in-source, because two
+/// counts sitting side by side read as corroboration and these two are not: one
+/// of them is fail-open by construction.**
+///
+/// | instrument | what it does | what it carries |
+/// |---|---|---|
+/// | ⭐ the behavioural counters — `units::b2f_last_unit_emission`, `seed_material::b2f_last_seed_material_emission` | count what the compiled module **actually contains**, at the point of emission | ⭐ **the population claim, entirely** |
+/// | ⚠ this census | searches source text for spellings someone enumerated | ⛔ **nothing.** A tripwire only |
+///
+/// ⛔ **This census's default branch is *"needle not found ⇒ nothing
+/// emitted"*, so it fails OPEN for every emission spelling nobody thought of.**
+/// It was repaired three times on this node — missing rows, then missing
+/// sibling emitters, then a missing needle class — and each repair found the
+/// next thing it was not looking for, because a needle-list census can only
+/// ever be one discovery behind the code. ⛔ **Adding `.declare_data(` /
+/// `.define_data(` did not make it sound and nothing here claims it did.** It
+/// is retained, unweakened, because a defeat count never licenses removing a
+/// gate — not because it is evidence.
 #[test]
 fn correspondence_adds_no_emitted_unit_to_the_production_census() {
     struct Census {
@@ -3391,17 +3489,30 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
         builders: usize,
         definitions: usize,
         declarations: usize,
+        /// ⭐ **`RT-FNSPLIT-B2F` `AC-2`, third population defect.** Data objects
+        /// are declared and defined by `.declare_data(` / `.define_data(`, and
+        /// the three needles above cannot see either. That is a strictly worse
+        /// shape than a missing row: a missing *row* leaves one file unmeasured
+        /// and the gap is visible, while a missing *needle class* leaves the
+        /// census reading **complete across every row** while `n` data objects
+        /// sit in the artifact — `D3`'s entire deliverable, invisible, with
+        /// nothing looking wrong.
+        data_declarations: usize,
+        data_definitions: usize,
     }
     let census = [
         Census {
             file: "lowering/core.rs",
             source: include_str!("../../core.rs"),
-            // N1: exactly one root `FunctionBuilder::new` and one root
-            // `define_function`. The two declarations are the entry point and
-            // the IMPORTED host-dispatch symbol -- an import, not a definition.
+            // The selected recursive-descent root still lives here, but its
+            // builder and definition are now part of the closed selector arm
+            // in this file. The textual census sees that one arm; the
+            // functionized root adapter and unit body are in `units.rs`.
             builders: 1,
             definitions: 1,
             declarations: 2,
+            data_declarations: 0,
+            data_definitions: 0,
         },
         Census {
             file: "lowering/mod.rs",
@@ -3409,6 +3520,8 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             builders: 0,
             definitions: 0,
             declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
         },
         Census {
             file: "planning.rs",
@@ -3416,6 +3529,8 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             builders: 0,
             definitions: 0,
             declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
         },
         Census {
             file: "planning/static_transition.rs",
@@ -3423,6 +3538,8 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             builders: 0,
             definitions: 0,
             declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
         },
         Census {
             file: "planning/static_transition/semantic_ir.rs",
@@ -3430,8 +3547,227 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             builders: 0,
             definitions: 0,
             declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        // ⭐ `RT-FNSPLIT-B2F` `AC-2` — THE PREDICTED ROW, and it is predicted
+        // rather than fitted.
+        //
+        // Recorded in `docs/program/rt-fnsplit-b2f-predictions.md` (`P1`) at
+        // base `6534e4a6`, committed BEFORE the module was written, and then
+        // measured: 1 / 1 / 1, exactly as predicted. A census re-fitted to
+        // whatever the output happened to be measures nothing, so the order is
+        // the evidence.
+        //
+        // ⛔ ONE of each spelling, for a population of Θ(n) emitted units. The
+        // needles count SPELLINGS, never units: `declare_unit_bundle` holds one
+        // `declare_function` inside a loop over every unit, and
+        // `define_unit_body` is called once per unit from one site. That gap is
+        // the whole content of `AC-G0`'s narrative — `native_int_clif` emits 6
+        // definitions from 5 builder source sites — and it is why this row
+        // cannot be read as an emitted-unit count. `D8`'s growth verdict is
+        // about `UnitBundle::len`, which this pin cannot see.
+        Census {
+            file: "lowering/units.rs",
+            source: include_str!("../../units.rs"),
+            // One builder/definition for the public root adapter and one
+            // builder/definition site for the loop-defined internal units.
+            builders: 2,
+            definitions: 2,
+            declarations: 1,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        // `RT-FNSPLIT-B2R`'s ABI plane, added as an explicit ZERO row because
+        // the frame flagged its absence: it is in `BACKEND_PRODUCTION_SOURCES`
+        // and was not in this census, and an absent row and a zero row read
+        // identically to a reader while only one of them is a claim.
+        //
+        // ⭐ The zero is the load-bearing part: `abi.rs` DECLARES the
+        // representation contract and must never emit against it. If this row
+        // ever moves, the planner has started emitting, which is the one thing
+        // the ownership/representation split exists to prevent.
+        Census {
+            file: "planning/static_transition/abi.rs",
+            source: include_str!("../../../planning/static_transition/abi.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        // ⭐ `RT-FNSPLIT-B2F` `D3`/`AC-2` — THE SECOND PREDICTED ROW, and the
+        // prediction was recorded before the module existed for the same reason
+        // the first one was.
+        //
+        // Recorded in `docs/program/rt-fnsplit-b2f-predictions.md` (`P6`) at
+        // base `6534e4a6`: **1 `declare_data` / 1 `define_data`, every other row
+        // 0/0.** Measured: exactly that.
+        //
+        // ⚠ **AND `P6` WAS WRONG ABOUT WHERE, WHICH IS RECORDED RATHER THAN
+        // QUIETLY CORRECTED.** It named `lowering/units.rs` as the file carrying
+        // the two needles; the material is minted in `lowering/seed_material.rs`
+        // instead, because units and seed material are two populations on two
+        // growth axes (Θ(n) in the program vs Θ(|seed environment|), which the
+        // program does not affect) and one census row cannot carry both. ⇒ The
+        // *counts* held; the *row* moved. A prediction file that only ever
+        // agrees with the outcome is a transcription, and `P4` said in advance
+        // that the row placement was the likeliest thing to move.
+        //
+        // ⛔ ONE of each spelling for a population of Θ(|seed environment|)
+        // objects: `mint_seed_material` holds one `declare_data` and one
+        // `define_data` inside a loop over every entry. Same spellings-not-units
+        // gap as the row above, and the same consequence — ⛔ **this row is not
+        // an object count and must never be read as one.**
+        Census {
+            file: "lowering/seed_material.rs",
+            source: include_str!("../../seed_material.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 1,
+            data_definitions: 1,
+        },
+        // ⭐⭐ `RT-FNSPLIT-B2F` `AC-2`, SECOND CLAUSE — THE REMAINING SEVEN
+        // ROSTER FILES, as explicit zero rows.
+        //
+        // ⛔ **`abi.rs` was not the only absence.** The frame flagged it by
+        // name, it was added, and that read as the clause being discharged.
+        // Re-derived here against the roster rather than against the frame's
+        // sentence: `BACKEND_PRODUCTION_SOURCES` lists **fifteen** files (the
+        // frame says thirteen — it has grown since), the census carried eight,
+        // and **seven** were still absent with no recorded exclusion. All seven
+        // measure `0/0/0/0/0`, which is why they are rows and not judgements.
+        //
+        // ⭐ **A zero row and an absent row read identically and only one of
+        // them is a claim** — `AC-2`'s own words, and the reason a file that
+        // genuinely emits nothing still needs a line here. ⚠ It is also the
+        // reason these seven cost nothing to carry: the sibling-churn objection
+        // that keeps `native_int_clif.rs`'s `23` out of this table does not
+        // apply to a zero, which moves only when one of these files **starts**
+        // emitting.
+        //
+        // ⚠ What each zero is actually saying, because they are not all the
+        // same claim:
+        //
+        // - `cranelift_backend.rs`, `surface.rs` — a facade and an error
+        //   vocabulary. ⛔ `cranelift_backend.rs` is ATTESTED and is read here,
+        //   never edited; a row over it is a read, not a modification.
+        // - `artifact/api.rs`, `artifact/mod.rs` — module CONSTRUCTION. They
+        //   build `JITModule`/`ObjectModule` and hand them on; ⭐ a nonzero here
+        //   would mean artifact construction had started declaring or defining
+        //   functions on its own, which is a second emission authority in the
+        //   one place nobody looks for it.
+        // - `compiled.rs` — the ARTIFACT and its runner. ⭐ **The most
+        //   load-bearing zero of the seven**: `S6`'s activation-services
+        //   launcher lands here, and this row is what forces that landing to be
+        //   a deliberate re-baseline rather than a silent one. ⚠ Predicted to
+        //   stay `0` through that change — the launcher constructs a Rust
+        //   record and calls compiled code; it declares and defines nothing.
+        //   ⛔ If it moves, the launcher started emitting and that is the
+        //   finding, not the test being stale.
+        // - `test_objects.rs`, `test_support.rs` — ⚠ **named "test" and they
+        //   are PRODUCTION files**, which is exactly why they need rows: a
+        //   reader skipping them by name would leave two production files
+        //   unmeasured and believe the roster was covered.
+        //
+        // ⛔ Still not evidence. These rows inherit every limit stated above —
+        // the census is a source-TEXT tripwire that fails OPEN on any spelling
+        // nobody enumerated, and adding seven rows widens its coverage without
+        // changing what it can carry.
+        Census {
+            file: "cranelift_backend.rs",
+            source: include_str!("../../../../cranelift_backend.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        Census {
+            file: "artifact/api.rs",
+            source: include_str!("../../../artifact/api.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        Census {
+            file: "artifact/mod.rs",
+            source: include_str!("../../../artifact/mod.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        Census {
+            file: "compiled.rs",
+            source: include_str!("../../../compiled.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        Census {
+            file: "surface.rs",
+            source: include_str!("../../../surface.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        Census {
+            file: "test_objects.rs",
+            source: include_str!("../../../test_objects.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
+        },
+        Census {
+            file: "test_support.rs",
+            source: include_str!("../../../test_support.rs"),
+            builders: 0,
+            definitions: 0,
+            declarations: 0,
+            data_declarations: 0,
+            data_definitions: 0,
         },
     ];
+    // ⭐⭐ `AC-2`, SECOND CLAUSE — THE CENSUS COVERS THE WHOLE ROSTER, and this
+    // is what keeps the coverage claim true after this commit rather than at it.
+    //
+    // ⛔ **Without this, "every roster file has a row" is a fact about today,
+    // not a property.** A file added to `BACKEND_PRODUCTION_SOURCES` by any
+    // future node would be invisible to this census while the census still read
+    // as complete — which is precisely how `abi.rs` and then these seven came to
+    // be missing in the first place. ⇒ The relation is asserted, so the next
+    // absence reddens instead of accumulating.
+    //
+    // ⚠ It is a relation between two rosters, ⛔ **not** a count: adding a file
+    // to either list is fine, and adding it to only one is the failure.
+    let censused = census.iter().map(|row| row.file).collect::<BTreeSet<_>>();
+    let roster = BACKEND_PRODUCTION_SOURCES
+        .iter()
+        .map(|(file, _)| *file)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        roster.difference(&censused).copied().collect::<Vec<_>>(),
+        Vec::<&str>::new(),
+        "AC-2: a production roster file has no census row, so the census reads \
+         as complete while that file is unmeasured"
+    );
+    assert_eq!(
+        censused.difference(&roster).copied().collect::<Vec<_>>(),
+        Vec::<&str>::new(),
+        "AC-2: a census row names a file outside the production roster, so one \
+         of the two lists is wrong about what production is"
+    );
     for row in census {
         assert_eq!(
             row.source.matches("FunctionBuilder::new(").count(),
@@ -3449,6 +3785,18 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             row.source.matches(".declare_function(").count(),
             row.declarations,
             "{}: N2 -- a function declaration was added or removed",
+            row.file
+        );
+        assert_eq!(
+            row.source.matches(".declare_data(").count(),
+            row.data_declarations,
+            "{}: N3 -- an artifact-static data declaration was added or removed",
+            row.file
+        );
+        assert_eq!(
+            row.source.matches(".define_data(").count(),
+            row.data_definitions,
+            "{}: N3 -- an artifact-static data definition was added or removed",
             row.file
         );
     }
@@ -3489,6 +3837,72 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
     assert_eq!(
         exported,
         vec![
+            // `RT-FNSPLIT-B2F` `D1` — the emitter's read-only view of ONE
+            // validated function unit. Six accessors, one type, no constructor.
+            //
+            // ⭐ Same shape as `C1`'s four below: a *question* about a planned
+            // object with an answer the asker cannot mint. `EmittableUnit`'s
+            // fields are private and its sole producer is `emittable_units`, so
+            // a unit cannot be forged in `lowering` — and since `B2F` drives
+            // emission from units, emission cannot be driven from anything but
+            // the validated plane.
+            //
+            // ⛔ `AbiPlane`, `AbiDescriptor`, `build_abi_plane` and
+            // `AbiPlane::validate` stay `pub(super)` and are NOT here. The
+            // emitter reads a unit; it cannot construct the plane, mutate a
+            // descriptor, or reach the pre-emission validator to bypass it. One
+            // of those names appearing in this list is the violation.
+            //
+            // ⚠ None of the six returns a source term, so the `-> Result<&'src
+            // RuntimeExpr` count below is still exactly one and `B2A-S`'s `AC-4`
+            // is untouched. A unit carries an ORIGIN; resolving that origin to a
+            // term still goes through `source_occurrence`, which is why `B2F`
+            // adds no second `origin -> expression` lookup.
+            // `RT-FNSPLIT-B2F` `D4` — the cross-owner call edge's two ends,
+            // added deliberately and argued rather than bumped.
+            //
+            // ⚠ Both return an **identity**, never a source term, so neither can
+            // contribute to the `-> Result<&'src RuntimeExpr` count that carries
+            // `B2A-S`'s `AC-4` — which stays at exactly one.
+            //
+            // ⭐ Their producer `emittable_call_edges` (below) is the sole route
+            // to an `EmittableCallEdge`, whose fields are private — so `lowering`
+            // can read which unit calls which and cannot invent an edge the
+            // planner did not validate. ⛔ It does not classify edges: the walk
+            // is `SemanticPlane::static_body_call_edges`, beside the validator,
+            // because `static_transition.rs` may not name `SemanticOwner` at all.
+            "pub(in crate::cranelift_backend) fn caller(self) -> PredeclaredFunctionId {",
+            "pub(in crate::cranelift_backend) fn callee(self) -> PredeclaredFunctionId {",
+            "pub(in crate::cranelift_backend) fn callee_origin(self) -> StaticOriginId {",
+            "pub(in crate::cranelift_backend) fn function(self) -> PredeclaredFunctionId {",
+            "pub(in crate::cranelift_backend) fn origin(self) -> StaticOriginId {",
+            "pub(in crate::cranelift_backend) fn definition(self) -> AbiUnitDefinition {",
+            "pub(in crate::cranelift_backend) fn header(self) -> AbiFrameHeader {",
+            "pub(in crate::cranelift_backend) fn slots(self) -> &'plan [AbiSlot] {",
+            "pub(in crate::cranelift_backend) fn slot_offsets(",
+            "pub(in crate::cranelift_backend) fn process_parameter_slot(",
+            // ⭐ `RT-FNSPLIT-B2A-S` `AC-4`'s own **behavioural** instrument,
+            // added deliberately and argued rather than bumped. These three are
+            // the counters behind
+            // `every_origin_to_expression_resolution_goes_through_the_single_route`,
+            // which is the pin that carries `AC-4` once `B2F` `S6` widens
+            // `retained_body_occurrence`'s visibility — an enlargement of the
+            // reachable surface that THIS test cannot see, because it constrains
+            // the identifier `source_occurrence` and never asks who calls the
+            // route.
+            //
+            // ⚠ None of the three returns a source term — two return `()` and
+            // one returns `(usize, usize)` — so the `-> Result<&'src RuntimeExpr`
+            // count below is still exactly one and `AC-4` is untouched.
+            //
+            // ⛔ They are `#[cfg(test)]` probe infrastructure, and this list
+            // cannot tell that apart from production surface: it reads source
+            // text, so a `cfg`-gated item appears exactly like a live one. ⇒ A
+            // reader auditing this list for *production* exports must check the
+            // attribute at the declaration, not infer it from membership here.
+            "pub(in crate::cranelift_backend) fn ac4_open_route_window() {",
+            "pub(in crate::cranelift_backend) fn ac4_note_route_invocation() {",
+            "pub(in crate::cranelift_backend) fn ac4_route_counts() -> (usize, usize) {",
             "pub(in crate::cranelift_backend) fn source_occurrence(",
             "pub(in crate::cranelift_backend) fn child_static_origin(",
             // `RT-FNSPLIT-C1` `D1` — the artifact-static identity capability.
@@ -3514,6 +3928,31 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
             "pub(in crate::cranelift_backend) fn record_field_identity(",
             "pub(in crate::cranelift_backend) fn root_static_origin(",
             "pub(in crate::cranelift_backend) fn declaration_occurrence_origin(",
+            // `RT-FNSPLIT-B2F` `AC-11` — the per-transfer representability
+            // verdict, added deliberately and argued rather than bumped.
+            //
+            // ⭐ It returns a **verdict**, never the plane: `semantic`,
+            // `semantic_sources` and `abi` all stay private, so an emitter can
+            // obtain the answer and cannot re-derive a different one. That is
+            // what keeps representability a single authority instead of a check
+            // the emitter could route around — and it is why widening this one
+            // name does not widen the surface it guards.
+            //
+            // ⚠ It returns `Result<(), _>`, so it cannot contribute to the
+            // `-> Result<&'src RuntimeExpr` count that carries `B2A-S`'s `AC-4`.
+            "pub(in crate::cranelift_backend) fn validate_emitted_transfers_are_representable(",
+            // `RT-FNSPLIT-B2F` `D1` — the sole producer of an `EmittableUnit`,
+            // and therefore the sole route by which emission can be driven.
+            //
+            // ⛔ It projects `self.abi.descriptors`; it does not re-seed the
+            // population and must never be made to. The unit set is
+            // `plan.entries` ∪ every `EdgeKind::StaticBody` TARGET, already
+            // enforced by `validate_function_units`. In particular it does not
+            // consult `TransitionKind::ClosureBody`, which is a body's return
+            // successor and not a unit head.
+            "pub(in crate::cranelift_backend) fn emittable_call_edges(",
+            "pub(in crate::cranelift_backend) fn root_emittable_unit(",
+            "pub(in crate::cranelift_backend) fn emittable_units(",
             "pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(",
             "pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols<'src>(",
         ],
@@ -3621,14 +4060,15 @@ const LOWERING_IMPL_SOURCES: &[(&str, &str)] = &[
     ("lowering/mod.rs", include_str!("../../mod.rs")),
 ];
 
-/// Is the retained-body helper still declared private to module `core`?
+/// Is the retained-body helper exposed only to the `lowering` parent and its
+/// children?
 ///
-/// Matched as the exact unqualified form, so **any** visibility qualifier is a
-/// miss. That is intentional and is not a spelling list: the property is "no
-/// qualifier at all", which has exactly one spelling.
-fn retained_body_helper_is_private(core: &str) -> bool {
+/// `B2F` deliberately moved unit emission into sibling `units.rs`, so the
+/// narrow `pub(super)` qualifier is now required. Any wider qualifier remains
+/// a review-visible change.
+fn retained_body_helper_has_lowering_only_visibility(core: &str) -> bool {
     core.lines()
-        .any(|line| line.trim() == "fn retained_body_occurrence(")
+        .any(|line| line.trim() == "pub(super) fn retained_body_occurrence(")
 }
 
 /// **`RT-FNSPLIT-B2O` `AC-12` split row — the DECLARATION survives, the
@@ -3638,8 +4078,7 @@ fn retained_body_helper_is_private(core: &str) -> bool {
 /// the point of it:
 ///
 /// - **MEASURED:** `retained_body_occurrence` is declared in `lowering/core.rs`
-///   with **no visibility qualifier**. Source text is authoritative for its own
-///   declarations, so this is a fact the scan can settle.
+///   with the narrow `pub(super)` visibility needed by sibling `units.rs`.
 /// - **CLAIMED:** exactly that, and nothing further.
 /// - **THE GAP:** ⛔ this does **not** establish which functions can *reach* the
 ///   helper. The withdrawn oracle made that inference — *"`mod.rs` therefore
@@ -3654,23 +4093,20 @@ fn retained_body_helper_is_private(core: &str) -> bool {
 /// when one is added; see `b2o_ac10c_repointing_a_static_body_edge_changes_the_
 /// disposition` for the axis that *is* authority.
 ///
-/// Promise class: **normative compatibility vector** — the unqualified spelling
-/// is the contract, and widening it is a deliberate review event.
+/// Promise class: **normative compatibility vector** — `pub(super)` is the
+/// contract, and widening it further is a deliberate review event.
 #[test]
-fn the_retained_body_helper_carries_no_visibility_qualifier() {
+fn the_retained_body_helper_is_visible_only_inside_lowering() {
     let core = LOWERING_IMPL_SOURCES
         .iter()
         .find(|(file, _)| *file == "lowering/core.rs")
         .map(|(_, source)| *source)
         .expect("the impl-source list must carry core.rs");
     assert!(
-        retained_body_helper_is_private(core),
-        "`retained_body_occurrence` no longer declares as the exact unqualified \
-         form in `lowering/core.rs`.\n\
-         ⛔ DO NOT 'fix' this by accepting the new spelling -- that is the \
-         evasion this WP paid five review folds to learn. A visibility \
-         qualifier here is a DELIBERATE widening and belongs in review, with \
-         the frozen evidence in the D6 report updated to match.\n\
+        retained_body_helper_has_lowering_only_visibility(core),
+        "`retained_body_occurrence` no longer declares with the exact narrow \
+         `pub(super)` visibility in `lowering/core.rs`.\n\
+         A wider qualifier is a DELIBERATE widening and belongs in review.\n\
          ⚠ This pin makes NO claim about who can reach the helper; that is the \
          plan graph's to answer, not this file's."
     );
@@ -3680,7 +4116,7 @@ fn the_retained_body_helper_carries_no_visibility_qualifier() {
     // written, never who can call it.
     let declaring = LOWERING_IMPL_SOURCES
         .iter()
-        .filter(|(_, source)| retained_body_helper_is_private(source))
+        .filter(|(_, source)| retained_body_helper_has_lowering_only_visibility(source))
         .map(|(file, _)| *file)
         .collect::<Vec<_>>();
     assert_eq!(
@@ -3762,6 +4198,24 @@ const BACKEND_PRODUCTION_SOURCES: &[(&str, &str)] = &[
     ("compiled.rs", include_str!("../../../compiled.rs")),
     ("lowering/core.rs", include_str!("../../core.rs")),
     ("lowering/mod.rs", include_str!("../../mod.rs")),
+    // `RT-FNSPLIT-B2F` `D1`/`D2` — the target code-unit population. Registered
+    // here the moment the module exists, because every pin that iterates this
+    // roster is closed only over the files it lists: a production emitter absent
+    // from it is invisible to all of them at once, which is precisely how
+    // `boundary_value_clif.rs` and `native_int_clif.rs` came to sit outside
+    // both this roster and the emitted-unit census.
+    ("lowering/units.rs", include_str!("../../units.rs")),
+    // `RT-FNSPLIT-B2F` `D3` — the artifact-static seed material. Registered for
+    // the same reason as `units.rs` above, and ⭐ **it is the file that made the
+    // reason concrete**: this module mints DATA objects, and until `AC-2` was
+    // amended no needle in the census could see a data object at all. A file
+    // outside this roster is invisible to every pin that iterates it; a file
+    // inside it whose emission spelling nobody enumerated is invisible to the
+    // census while looking fully measured.
+    (
+        "lowering/seed_material.rs",
+        include_str!("../../seed_material.rs"),
+    ),
     ("planning.rs", include_str!("../../../planning.rs")),
     (
         "planning/static_transition.rs",
@@ -3819,6 +4273,19 @@ fn the_backend_production_surface_inventory_is_closed() {
             ("cranelift_backend.rs", "test_support"),
             ("artifact/mod.rs", "api"),
             ("lowering/mod.rs", "core"),
+            // `RT-FNSPLIT-B2F` `D1`/`D2`. A sibling of `core` rather than a
+            // region inside it: `core.rs` is the module whose recursive
+            // whole-configuration authority `D6` removes, and putting the
+            // replacement population in the same file would leave the census
+            // that measures the removal unable to tell the two apart.
+            ("lowering/mod.rs", "units"),
+            // `RT-FNSPLIT-B2F` `D3`. A sibling of `units` rather than a region
+            // inside it, because the two mint DIFFERENT POPULATIONS on
+            // different growth axes: `units` mints code, Θ(n) in the program;
+            // this mints data, Θ(|seed environment|) and independent of the
+            // program. Folding them into one file would put two growth axes
+            // behind one census row.
+            ("lowering/mod.rs", "seed_material"),
             ("planning.rs", "static_transition"),
             ("planning/static_transition.rs", "abi"),
             ("planning/static_transition.rs", "semantic_ir"),
@@ -4303,10 +4770,13 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
     // not a frozen count. `tokens` and `definitions` each move for a stated
     // reason; `calls` is their difference.
     let core = include_str!("../../core.rs");
-    let tokens = identifier_occurrences(core, "lower_expr");
+    let units = include_str!("../../units.rs");
+    let tokens = identifier_occurrences(core, "lower_expr")
+        + identifier_occurrences(units, "lower_expr");
     let definitions = core
         .lines()
-        .filter(|line| line.trim() == "fn lower_expr(")
+        .chain(units.lines())
+        .filter(|line| line.trim_end().ends_with("fn lower_expr("))
         .count();
     assert_eq!(
         definitions, 1,
@@ -4332,7 +4802,7 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
     // `StaticBody` edge is introduced, and no retained body is reached by a new
     // path.
     assert_eq!(
-        calls, 62,
+        calls, 65,
         "D6: the tokenized production call population into `lower_expr` moved. \
          ⚠ If you reached this by counting `self.lower_expr(` you will have got \
          one fewer -- the root call at `core.rs:188` is spelled \
@@ -4343,8 +4813,8 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
     // spelling, or the paragraph above is describing something the pin cannot
     // measure.
     assert!(
-        core.contains("compiler.lower_expr("),
-        "D6: the root call's spelling is gone, so this census no longer \
+        units.contains("compiler.lower_expr("),
+        "D6: the functionized root call's spelling is gone, so this census no longer \
          distinguishes the entry point from traversal"
     );
 
@@ -4377,6 +4847,110 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
         core.contains("#[cfg(test)]"),
         "the caveat above describes inline cfg(test) regions that are no longer \
          present, so it has gone stale and must be re-derived"
+    );
+}
+
+#[test]
+fn the_body_authority_selector_is_closed_static_and_chosen_from_source_shape() {
+    let declarations = BTreeMap::new();
+    assert_eq!(
+        select_body_emission_authority(
+            &RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            &declarations,
+        ),
+        BodyEmissionAuthority::FunctionizedUnits
+    );
+
+    let recursive = RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:fixture::selector::Node".to_string(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+        }),
+        cases: vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::selector::Node".to_string(),
+            argument_binders: 1,
+            recursive_positions: vec![0],
+            body: RuntimeExpr::Var(0),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "selector fixture default".to_string(),
+        },
+    };
+    assert_eq!(
+        select_body_emission_authority(&recursive, &declarations),
+        BodyEmissionAuthority::RecursiveDescent
+    );
+
+    let producer_match = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::selector::Wrap".to_string(),
+                    args: Vec::new(),
+                }),
+            }),
+            args: Vec::new(),
+        }),
+        cases: Vec::new(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "selector producer default".to_string(),
+        },
+    };
+    assert_eq!(
+        select_body_emission_authority(&producer_match, &declarations),
+        BodyEmissionAuthority::RecursiveDescent
+    );
+    assert_eq!(
+        select_body_emission_authority(
+            &RuntimeExpr::Trap(RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "selector trap fixture".to_string(),
+            }),
+            &declarations,
+        ),
+        BodyEmissionAuthority::RecursiveDescent
+    );
+    let seed_closure_call = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Closure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+    assert_eq!(
+        select_body_emission_authority(&seed_closure_call, &declarations),
+        BodyEmissionAuthority::RecursiveDescent
+    );
+}
+
+#[test]
+fn every_generated_root_and_unit_signature_is_two_pointers_to_one_word() {
+    let module = new_jit_module().expect("JIT module");
+    let signature = crate::cranelift_backend::lowering::units::unit_signature(&module);
+    let pointer = module.target_config().pointer_type();
+    assert_eq!(signature.params.len(), 2);
+    assert!(
+        signature
+            .params
+            .iter()
+            .all(|parameter| parameter.value_type == pointer)
+    );
+    assert_eq!(signature.returns.len(), 1);
+    assert_eq!(signature.returns[0].value_type, types::I64);
+
+    let units = include_str!("../../units.rs");
+    assert!(
+        units.contains("let sig = unit_signature(module);"),
+        "the adapter or unit definitions stopped sharing the closed signature"
+    );
+    assert!(
+        !units.contains("GeneratedRootIngressV1"),
+        "a launch-ingress type entered the internal unit implementation"
     );
 }
 
@@ -4512,6 +5086,31 @@ fn the_owner_classification_has_a_closed_production_naming_inventory() {
             "pub(in crate::cranelift_backend) struct FieldIdentity(pub(super) DenseRange);",
             "pub(in crate::cranelift_backend) fn tag_abi_word(self) -> Result<u64, CraneliftBackendError> {",
             "pub(in crate::cranelift_backend) fn name_abi_word(self) -> Result<u64, CraneliftBackendError> {",
+            // ⭐ `RT-FNSPLIT-B2F` `D1` adds ONE member, and it is argued here
+            // rather than absorbed, because this pin exists to make a widening a
+            // review event.
+            //
+            // `B2F` emits one closed target function per `PredeclaredFunction`
+            // in the validated owner partition. To do that the emitter must be
+            // able to NAME a unit — to key its declared `FuncId` and to resolve
+            // `D4`'s call edges against the planner's identity rather than
+            // against an iteration ordinal. It must NOT be able to mint one.
+            //
+            // ⭐ The `pub(super)` field is what makes that a fact about the type
+            // system: the newtype is widened, its `u32` is not, so `lowering`
+            // can hold, compare, order and pass a unit identity and cannot
+            // fabricate one or do arithmetic on it. That is the identical
+            // argument `StaticOriginId` was widened on, and it transfers because
+            // it is the same shape, not because it is nearby.
+            //
+            // ⛔ What is deliberately NOT widened, and is the thing this row
+            // must not be read as licensing: `AbiPlane`, `AbiDescriptor`,
+            // `build_abi_plane` and `AbiPlane::validate` all stay `pub(super)`.
+            // The emitter reads one unit's projection; it cannot construct the
+            // plane, mutate a descriptor, or reach the pre-emission validator to
+            // bypass it. A future `AbiPlane` or `build_abi_plane` line appearing
+            // in this list is the violation, not a further capability.
+            "pub(in crate::cranelift_backend) struct PredeclaredFunctionId(pub(super) u32);",
             "pub(in crate::cranelift_backend) fn with_last_io_error_role_omitted<T>(",
         ],
         "D7: the plane's widened-visibility inventory changed. `StaticOriginId` \
@@ -6159,5 +6758,1184 @@ fn rtfp_header_drift_after_identity_selection_rejects_by_fingerprint() {
     assert!(
         reason.contains("does not match its checked frame template"),
         "post-selection header drift must still reject by fingerprint: {reason}"
+    );
+}
+
+// ─── RT-FNSPLIT-B2F AC-2 — the emitted-unit population, measured BEHAVIOURALLY ─
+
+/// **`AC-2`'s real property, defended by an oracle that source text cannot
+/// move.**
+///
+/// ⭐ **Why this test exists next to a census that already "covers" `AC-2`.**
+/// `correspondence_adds_no_emitted_unit_to_the_production_census` counts how
+/// many times three spellings occur in seven files. That is a claim about
+/// *repository text*: splitting a call across lines evades every needle, a
+/// mention inside a comment inflates them, and in no configuration does it
+/// observe a single emitted function. ⇒ It is a **tripwire**. This test is the
+/// evidence: it counts units at the point of emission, so the number it asserts
+/// is a property of the compiled module.
+///
+/// **MEASURED:** for two programs that differ *only* in whether they contain a
+/// retained closure body, the `(declared, defined)` unit counts `B2F` actually
+/// emitted.
+/// **CLAIMED:** every declared target unit is defined, and the population tracks
+/// the program's static structure rather than being a constant.
+/// **THE GAP:** ⛔ this says nothing about whether a unit's *body* is correct,
+/// nor that the population equals `entries ∪ StaticBody targets` — the latter is
+/// `B2O`'s enforced equality (`validate_function_units`), consumed here rather
+/// than re-asserted, because planning refuses to build a graph that violates it
+/// and a re-assertion would be green on every input that can reach `B2F`.
+#[test]
+fn b2f_emits_one_defined_target_unit_per_planned_function_unit() {
+    fn units_emitted(expr: &RuntimeExpr) -> (usize, usize) {
+        let module = new_jit_module().expect("jit module");
+        compile_expr_into_module(
+            module,
+            "b2f_unit_population_probe",
+            Linkage::Local,
+            expr,
+            &NativeSeedEnvironment::empty(),
+            BTreeMap::new(),
+            None,
+            false,
+            None,
+            None,
+            None,
+        )
+        .expect("compile");
+        crate::cranelift_backend::lowering::units::b2f_last_unit_emission()
+    }
+
+    // The two fixtures differ in exactly one thing: the second reaches the same
+    // leaf value through a *called* lexical closure, which is what mints a
+    // `StaticBody` edge and therefore a second function unit.
+    //
+    // ⚠ The closure is CALLED rather than returned, and that is required rather
+    // than stylistic: a closure at the root is rejected outright
+    // ("closures are callable but not observable ground values in native
+    // lowering"), so a fixture that merely mentions one never reaches emission
+    // and would have measured nothing while looking like a discriminator.
+    let leaf = RuntimeExpr::Value(RuntimeValue::Bool(true));
+    let with_closure = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+
+    let (leaf_declared, leaf_defined) = units_emitted(&leaf);
+    let (closure_declared, closure_defined) = units_emitted(&with_closure);
+
+    // ⛔ Every declared unit is defined. A bundle that declares `n` and defines
+    // `n-1` leaves an undefined symbol, which is why the recorder carries two
+    // numbers instead of one.
+    assert_eq!(
+        leaf_declared, leaf_defined,
+        "AC-2 -- a declared target unit was never defined (leaf program)"
+    );
+    assert_eq!(
+        closure_declared, closure_defined,
+        "AC-2 -- a declared target unit was never defined (closure program)"
+    );
+
+    // ⭐ POSITIVE CONTROL / NON-VACUITY. Without this the assertions above are
+    // satisfied by emitting nothing at all, for any program, forever -- a
+    // negative check passes for any reason. The discriminator is that the count
+    // MOVES with the program's static structure.
+    assert!(
+        leaf_declared >= 1,
+        "AC-2 -- even a leaf program has a root scheduling entry, so the \
+         population is never empty; measured {leaf_declared}"
+    );
+    assert!(
+        closure_declared > leaf_declared,
+        "AC-2 -- NON-VACUITY: a retained closure body mints a `StaticBody` edge \
+         and therefore an additional function unit. If these are equal the \
+         population is not tracking the program and every count above is \
+         satisfied by a constant. measured leaf={leaf_declared} \
+         closure={closure_declared}"
+    );
+}
+
+// ─── RT-FNSPLIT-B2F AC-11 — the producer walk can REJECT, and does not over-reject ─
+
+/// An imported reference — the one shape with no admitted carrier.
+#[cfg(test)]
+fn ac11_imported() -> RuntimeExpr {
+    RuntimeExpr::ImportedDeclarationRef {
+        symbol: "other::v".to_string(),
+        dependency: "other".to_string(),
+        dependency_semantic_hash: "hash".to_string(),
+    }
+}
+
+/// Compile `expr` and report only whether it was accepted.
+///
+/// ⚠ The closure is **called** in every fixture below, not returned: a closure
+/// is not an observable ground value at the root, so a fixture that merely
+/// mentions one is rejected for an unrelated reason and would look like a
+/// working discriminator while measuring nothing.
+#[cfg(test)]
+fn ac11_compiles(expr: &RuntimeExpr) -> Result<(), CraneliftBackendError> {
+    let module = new_jit_module().expect("jit module");
+    compile_expr_into_module(
+        module,
+        "b2f_ac11_probe",
+        Linkage::Local,
+        expr,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        false,
+        None,
+        None,
+        None,
+    )
+    .map(|_| ())
+}
+
+/// **`AC-11` clause 3 — an unrepresentable transfer is refused BEFORE any unit
+/// is declared.**
+///
+/// ⭐ **Why the timing is the property and not a detail.** The late refusal that
+/// also rejects these fixtures lives in `lower_expr`'s `ImportedDeclarationRef`
+/// arm — which is the recursive-descent inliner that **`D6`/`S7` removes**. A
+/// refusal performed by the authority being retired is not a property of the
+/// surviving boundary, so "it is rejected either way" is true today and becomes
+/// false at `S7`, silently, with no test reddening at the moment the hole opens.
+/// ⇒ The check must be shown to refuse *on the pre-emission side*, and only a
+/// timing discriminator can show that.
+///
+/// ⛔⛔ **The first version of this control could not measure that, and reported
+/// a confident number for the wrong thing.** It compiled a successful sentinel
+/// to force the unit counter nonzero, then read the counter back after the
+/// failing compile — but no pre-emission refusal path *writes* that counter, so
+/// the reading was the sentinel's own `1`. "Refused before emission" and
+/// "declared a unit, then refused" produced the **identical** value. ⇒ The
+/// measured `holeA = 1` / `holeB = 1` was **stale recorder state, not late
+/// refusal**, and the conclusion drawn from it — that the walk is inert — was
+/// unsupported in both directions. See `units::b2f_open_compile_attempt`.
+///
+/// ⭐ **The repair is an attempt epoch stamped at the emission seam**, which
+/// makes three outcomes distinct: `None` (never reached emission), `Some(0)`
+/// (reached it, refused before declaring), `Some(n > 0)` (declared, then
+/// refused). ⛔ `None` is **not** a pass — it would mean the fixture died even
+/// earlier, for a reason unrelated to the walk.
+///
+/// ⛔ **Without the accepted rows this test is worthless.** A walk that rejects
+/// every program satisfies both rejection rows and is a catastrophic
+/// over-rejection; the paired intra-module fixtures are what distinguish
+/// "rejects an unrepresentable transfer" from "rejects".
+///
+/// **MEASURED:** six compiles — a wrapped import and a bare-body import are
+/// refused with `Some(0)` units declared in their own attempt; the same two
+/// shapes with an intra-module value are accepted; and a successful compile
+/// reports `Some(n > 0)` in its own attempt, so `Some(0)` is a real reading and
+/// not a counter that never moves.
+/// **CLAIMED:** the producer walk decides on the value that reaches the slot,
+/// not on the occurrence's own top-level shape, and it decides **before** the
+/// switch-over can emit or call a unit.
+/// **THE GAP:** ⛔ this exercises the `If` pass-through only. A `Match` arm is
+/// not traced (see `producers_of`), so an import reaching a slot through a match
+/// arm is **not** covered by this test or by the walk. ⛔ And the `Parameter`
+/// transfer population is **empty** until `S5` supplies call sites, so clause 1
+/// is discharged here for `Capture` and `Result` only.
+#[test]
+fn an_unrepresentable_transfer_is_refused_before_any_unit_is_declared() {
+    // ⭐ Hole A. Binder-free: no de Bruijn reading makes this `If`'s result
+    // anything but the imported value, yet its top-level shape is `If`, so a
+    // check on the capture child's own shape admits it.
+    let wrapped_import = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: vec![RuntimeExpr::If {
+                scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                then_expr: Box::new(ac11_imported()),
+                else_expr: Box::new(ac11_imported()),
+            }],
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+    // ⭐ Hole B. No wrapper at all: `C4` iterates capture children, and there
+    // are none, so the unit's own result slot is never carrier-checked.
+    let bare_body_import = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(ac11_imported()),
+        }),
+        args: Vec::new(),
+    };
+    // ⭐ The two POSITIVE CONTROLS: identical shapes, intra-module values.
+    let wrapped_intra_module = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: vec![RuntimeExpr::If {
+                scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(false))),
+            }],
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+    let bare_body_intra_module = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+
+    assert!(
+        ac11_compiles(&wrapped_intra_module).is_ok(),
+        "AC-11 -- POSITIVE CONTROL: a binder-free wrapper over intra-module \
+         values must still compile. If this fails the walk is rejecting on the \
+         wrapper rather than on what flows through it, and both rejection rows \
+         below are satisfied for the wrong reason."
+    );
+    assert!(
+        ac11_compiles(&bare_body_intra_module).is_ok(),
+        "AC-11 -- POSITIVE CONTROL: a closure body producing an intra-module \
+         value must still compile."
+    );
+
+    // ⭐⭐ THE DISCRIMINATOR IS *WHEN*, NOT *WHETHER* — and reading a shared
+    // counter cannot answer *when*, because a compile that refuses early does
+    // not write it. Every reading below is stamped with the attempt that
+    // produced it, so a stale value reads as `None` instead of as a count.
+    fn units_declared_when_refused(expr: &RuntimeExpr) -> Option<usize> {
+        let epoch = crate::cranelift_backend::lowering::units::b2f_open_compile_attempt();
+        assert!(ac11_compiles(expr).is_err(), "fixture must be refused");
+        crate::cranelift_backend::lowering::units::b2f_units_declared_in_attempt(epoch)
+    }
+
+    // ⛔ POSITIVE CONTROL ON THE INSTRUMENT ITSELF, and it is not optional: the
+    // rejection rows below assert `Some(0)`, which is exactly what a stamp that
+    // fires alongside a counter that never increments would also report. This
+    // row proves the counter moves within a single stamped attempt, so `Some(0)`
+    // is a measurement rather than a reader that is stuck at zero.
+    let instrument_epoch = crate::cranelift_backend::lowering::units::b2f_open_compile_attempt();
+    ac11_compiles(&wrapped_intra_module).expect("instrument control compiles");
+    let declared_when_accepted =
+        crate::cranelift_backend::lowering::units::b2f_units_declared_in_attempt(instrument_epoch);
+    assert!(
+        matches!(declared_when_accepted, Some(n) if n > 0),
+        "AC-11 clause 3 -- INSTRUMENT CONTROL: a compile that runs to completion \
+         must report a NONZERO declaration count inside its own attempt. Got \
+         {declared_when_accepted:?}. If this is Some(0) the counter is dead and \
+         every `Some(0)` below is vacuous; if it is None the seam stamp never \
+         fired and the epoch reads nothing at all."
+    );
+
+    let wrapped = ac11_compiles(&wrapped_import);
+    assert!(
+        matches!(wrapped, Err(CraneliftBackendError::Unsupported(_))),
+        "AC-11 -- HOLE A: an imported value reaching a Capture slot through a \
+         binder-free `If` must be refused before emission. Checking the capture \
+         child's own top-level shape admits this: {wrapped:?}"
+    );
+    let bare = ac11_compiles(&bare_body_import);
+    assert!(
+        matches!(bare, Err(CraneliftBackendError::Unsupported(_))),
+        "AC-11 -- HOLE B: an imported value reaching the unit's own Result slot \
+         must be refused before emission. It needs no wrapper, and a check that \
+         iterates capture children never sees it: {bare:?}"
+    );
+
+    // ⛔ CLAUSE 3. `Some(0)` means the compile reached the emission seam and was
+    // refused there, before the bundle was forward-declared — i.e. before the
+    // switch-over could emit or call anything. `Some(n > 0)` means the program
+    // got past the walk and was refused *later*, by the recursive-descent
+    // inliner that `D6`/`S7` deletes, which is a guarantee that expires.
+    //
+    // ⭐ This is a DURABLE INVARIANT, not a sentinel. It does not pin a count
+    // that today's code happens to produce; it pins the side of the emission
+    // boundary the refusal must come from, which every intended extension of
+    // this node must preserve. Removing `lower_expr`'s late arm at `S7` must
+    // leave it green — that is the whole point of asserting it now.
+    assert_eq!(
+        units_declared_when_refused(&wrapped_import),
+        Some(0),
+        "AC-11 clause 3 -- HOLE A: the refusal must come from the pre-emission \
+         walk, with zero units declared in this compile's own attempt. \
+         Some(n>0) means the walk let it through and the late `lower_expr` arm \
+         refused it instead -- a refusal performed by the authority S7 removes. \
+         None means the compile never reached the emission seam at all."
+    );
+    assert_eq!(
+        units_declared_when_refused(&bare_body_import),
+        Some(0),
+        "AC-11 clause 3 -- HOLE B: an imported value reaching the unit's own \
+         Result slot must be refused pre-emission, with zero units declared in \
+         this compile's own attempt."
+    );
+}
+
+// ─── RT-FNSPLIT-B2F D3 — artifact-static seed material, measured BEHAVIOURALLY ─
+
+/// A program that captures one seed symbol and returns it, compiled against an
+/// environment that binds that symbol to `value`.
+///
+/// ⚠ The closure is **called**, not returned, for the same reason the unit
+/// fixture above calls its closure: a closure is not an observable ground value
+/// at the root, so a fixture that merely mentions one never reaches emission and
+/// would measure nothing while looking like a discriminator.
+#[cfg(test)]
+fn b2f_seed_capture_program(symbol: &str, value: RuntimeGroundValue) -> NativeSeedEnvironment {
+    let mut env = NativeSeedEnvironment::empty();
+    env.insert(symbol, value);
+    env
+}
+
+/// **`AC-2`, data half — the minted artifact-static population, counted at the
+/// point of emission.**
+///
+/// ⭐ **This is the instrument the amended `AC-2` names as PRIMARY**, and the
+/// reason is the failure direction rather than the needle list: the source-text
+/// census's default branch is *"needle not found ⇒ nothing emitted"*, so it
+/// fails **open** for every emission spelling nobody enumerated. `D3`'s data
+/// objects were exactly such a spelling — the census read complete across every
+/// row while it could not see a single one. This counter observes what the
+/// module **contains**, so an unanticipated spelling cannot hide in it.
+///
+/// **MEASURED:** the `(declared, defined)` artifact-static object counts for two
+/// compiles that differ only in whether the seed environment is empty.
+/// **CLAIMED:** one read-only artifact-static object is minted and defined per
+/// seed-environment entry.
+/// **THE GAP:** ⛔ this says nothing about the object's *contents*, nor about
+/// whether any emitted code reads it. Contents are pinned by the encoder tests
+/// in `seed_material`; the reading is
+/// **`RT-FNSPLIT-B2F` `D4` — the resolved call-edge population is DERIVED from
+/// the program, not a constant this node carries.**
+///
+/// ⛔ **This deliberately does NOT re-assert `B2O`'s four edge-classification
+/// laws.** `validate_function_units` enforces all four as `return Err` arms in
+/// landed production bytes, so planning **refuses to construct** a violating
+/// graph — ⇒ a `B2F` control asserting "a `StaticBody` edge crosses owners"
+/// would be green on every input that can reach emission and would test nothing
+/// while reading as coverage. The frame says so in terms.
+///
+/// ⭐ **What survives the re-home is one-for-one consumption**, and that is what
+/// this measures: the number of call edges emission resolves moves with the
+/// program's own structure. A closure body is a distinct owner and therefore a
+/// call edge; a bare ground value is one unit with nothing to call.
+///
+/// **MEASURED:** two compiles — a called closure resolves a nonzero call-edge
+/// count, and a bare ground value resolves exactly zero.
+/// **CLAIMED:** the call-edge population is projected from the planner's
+/// validated `StaticBody` edges rather than derived a second time here.
+/// **THE GAP:** ⛔ **this shows the count is not constant; it does not show the
+/// count is EXACTLY the `StaticBody` edge population.** `SemanticOwner` and the
+/// edge list are planner-private — deliberately, so the emitter cannot classify
+/// owners itself — so no control in `lowering` can count the planner's edges
+/// independently. ⇒ Exactness rests on `emittable_call_edges` filtering on
+/// `EdgeKind::StaticBody` and failing closed otherwise, which is **argument, not
+/// measurement**, and is recorded as such.
+#[test]
+fn the_resolved_call_edge_population_moves_with_the_program() {
+    fn call_edges_for(expr: &RuntimeExpr) -> usize {
+        ac11_compiles(expr).expect("fixture compiles");
+        crate::cranelift_backend::lowering::units::b2f_last_call_edge_resolution()
+    }
+
+    // A called closure: its body is a distinct owner, so the planner records a
+    // `StaticBody` edge into it and emission must resolve a call to that unit.
+    let with_closure_body = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+    // ⛔ THE POSITIVE CONTROL, and without it the row above is worthless: a
+    // resolver that returned some fixed nonzero number for every program would
+    // satisfy it. This is the same shape with nothing to call.
+    let without_closure_body = RuntimeExpr::Value(RuntimeValue::Bool(true));
+
+    let with = call_edges_for(&with_closure_body);
+    let without = call_edges_for(&without_closure_body);
+
+    assert!(
+        with > 0,
+        "D4 -- a program whose closure body is a distinct function unit must \
+         resolve at least one cross-owner call edge; got {with}. Zero means \
+         emission is not consuming the planner's StaticBody edges at all."
+    );
+    assert_eq!(
+        without, 0,
+        "D4 -- POSITIVE CONTROL: a bare ground value is a single unit with \
+         nothing to call, so it must resolve zero call edges. A nonzero count \
+         here means the population is not derived from the program."
+    );
+}
+
+/// **`RT-FNSPLIT-B2A-S` `AC-4` — every `origin -> expression` resolution goes
+/// through the single route.**
+///
+/// ⛔⛔ **This exists because the instrument that used to carry `AC-4` is about
+/// to stop being able to.** `exactly_one_plan_origin_to_expression_lookup_exists`
+/// reads `static_transition.rs`'s **source text** and pins its exported
+/// signature list. Two things break that as `B2F` `S6` lands:
+///
+/// 1. ⛔ It constrains the **identifier** `source_occurrence` and says nothing
+///    about **who may call the route**. `S6` widens
+///    `Lowering::retained_body_occurrence` from private-to-`core` to all of
+///    `lowering`, so a unit body can resolve its own origin — an enlargement of
+///    the reachable surface that the text pin cannot see.
+/// 2. ⚠ It reddens on an edit that changes nothing about how any program
+///    behaves. Reflowing a doc comment in that file is enough.
+///
+/// ⭐ **And the dead-code warning on `EmittableUnit::origin` cannot stand in for
+/// it either.** That warning can witness *"nobody consumes this"*; it can never
+/// witness *"exactly one route consumes it"* — and it is **spent** by the very
+/// commit that consumes `origin()`, which is precisely the commit that makes the
+/// property non-trivial for the first time.
+///
+/// **MEASURED:** across one compile, the number of resolutions performed by
+/// `StaticTransitionPlan::source_occurrence` equals the number of invocations of
+/// `Lowering::retained_body_occurrence`, and both are non-zero.
+/// **CLAIMED:** there is exactly one `origin -> expression` route in the
+/// backend, so a retained body is selected by its static name and by nothing
+/// else.
+/// **THE GAP:** ⛔ a route that obtained a term **without** calling
+/// `source_occurrence` would be invisible here. What closes that is not this
+/// test but **item visibility**: `StaticTransitionPlan::source_occurrences` is a
+/// **private field**, so no module outside `planning::static_transition` can
+/// reach the table at all, and the only other readers inside that file are
+/// validators that return no term. ⇒ `source_occurrence` is the table's sole
+/// exit, and this test is what pins that exit to a single caller.
+///
+/// **Compile-preserving evasion attempted, and the result is a COVERAGE LIMIT
+/// that must not be read off the fixture count.** The evasion is to resolve a
+/// body by calling `plan.source_occurrence(origin)` directly instead of through
+/// `retained_body_occurrence`; it compiles and produces the identical term.
+/// Applied at **each of the seven route call sites in turn**, with four fixture
+/// shapes:
+///
+/// ⭐⭐ **The seven sites are not a list — they are `3 operand shapes × 2
+/// lowering contexts + 1 residual`**, and stating them that way is what makes
+/// the gap diagnosable instead of merely counted:
+///
+/// | operand shape | `lower_expr` (ordinary) | `lower_computational_producer_expr` |
+/// |---|---|---|
+/// | `Lowered::Closure` | `:5754` ⭐ **RED — caught** | `:769` ⭐ **RED — caught** |
+/// | `Lowered::DeclarationClosure` | `:5742` ⭐ **RED — caught** | `:754` ⭐ **RED — caught** |
+/// | recursor closure | `:5897` ⛔ green | `:939` ⛔ green |
+///
+/// plus `:474` in `lower_recursor_residual_call` — ⛔ green.
+///
+/// ⇒ **Coverage is 4 of 7, and the residual is exactly one ROW: the recursor
+/// closure, in both contexts, plus its residual call.** ⛔ Not a scatter of
+/// unrelated sites.
+///
+/// ⛔⛔ **AND THE OBVIOUS FIXTURE FOR THAT ROW DOES NOT REACH IT — measured.**
+/// The set below *includes* a `ComputationalMatch` whose case carries a
+/// `recursive_position` and whose body **applies the induction hypothesis**
+/// (`Call { callee: Var(0) }`) — the shape that binds a
+/// `Lowered::ComputationalRecursorClosure`. Re-running the bisect with it
+/// present left `:474`, `:939` and `:5897` **all green**. ⇒ ⚠ *"add a
+/// `ComputationalMatch` with `recursive_positions`"* is **not** the recipe, and
+/// this note exists so the next person does not spend the attempt I already
+/// spent. ⭐ The fixture is retained anyway — it is the only
+/// `ComputationalMatch` in the set and its relation still holds — but ⛔ it is
+/// **not** counted as coverage of anything, and the grid above is unchanged by
+/// it.
+///
+/// ⇒ What the three recursor sites actually need is **unknown**, and saying so
+/// is the honest state. ⛔ Do not infer from the fixture's presence that the row
+/// is attempted-and-covered; it is attempted-and-still-open.
+///
+/// ⭐ **Both contexts are entered from `lower_expr`'s `Match` arm**, which routes
+/// its scrutinee through the producer when the scrutinee
+/// `requires_heterogeneous_deforestation` — a `Call` whose callee is a closure
+/// returning a `Construct`, or a declaration call producing an aggregate. ⇒ The
+/// context is a property of the **enclosing form**, and varying it needed a
+/// `Match`, not another callee.
+///
+/// ⚠ **A correction, kept rather than edited away.** An earlier revision of this
+/// comment said `:769`/`:5897` were *"the seed-provenance `Closure` arms"*
+/// needing a non-empty `NativeSeedEnvironment`. **That was wrong** — re-derived
+/// from the enclosing functions, `:769` is the producer context's `Closure` arm
+/// and `:5897` is the ordinary context's *recursor* arm, and neither has
+/// anything to do with seed provenance. ⛔ The line numbers were right and the
+/// explanation was invented; that is why the table above is keyed on the
+/// enclosing function, which a reader can check.
+///
+/// ⛔ **This is a partition, not an example, and the discriminator is stated so
+/// the next reader can re-derive it rather than trust it:** bypass one site,
+/// run this test, and a green means that site is not on any fixture's path.
+/// ⚠ Adding *spellings* of one shape never moved it — a nested retention, a
+/// parameterised body and a `Let`-scheduled body all descend the same arm.
+/// What moved it was varying the two **axes**: a different operand shape
+/// (`DeclarationClosure`) and a different enclosing form (`Match`). ⇒ Read the
+/// grid before adding a fixture, or you add a fifth spelling of a covered cell.
+///
+/// ⇒ ⛔ **NOT CLAIMED: that this test would catch a bypass at the three
+/// recursor sites.**
+///
+/// ⭐ **The mutation is the one `S6` is most likely to introduce by accident**,
+/// because a unit body already holds the plan and resolving its own origin
+/// directly is one line shorter than going through the route.
+///
+/// **Instrument positive control (run, not reasoned):** adding a single extra
+/// `source_occurrence` call on a path every compile takes reddens this with
+/// `2 resolutions against 1 route invocation`. ⇒ The counters move
+/// independently and the equality is not satisfied by construction.
+/// ⚠ Bypassing **all seven** sites at once reddens the **non-vacuity** assert
+/// first (`1 resolution, 0 route invocations`) rather than the equality — which
+/// is the more informative diagnosis of the two, and why that control is not
+/// redundant with the equality below.
+///
+/// **Promise class: durable invariant.** ⭐ It pins a **ratio**, never a count.
+/// Seven consumption sites call the route today and `S6` adds more; every one of
+/// them keeps this green. ⛔ A pin that froze the call count would go red on
+/// legitimate work and would be a snapshot wearing an invariant's name.
+#[test]
+fn every_origin_to_expression_resolution_goes_through_the_single_route() {
+    fn route_counts_for(expr: &RuntimeExpr) -> (usize, usize) {
+        // ⛔ Per-attempt reset. Without it a reading cannot distinguish this
+        // compile's resolutions from an earlier one's, and a stale equal pair
+        // reads exactly like the outcome this test wants.
+        crate::cranelift_backend::planning::ac4_open_route_window();
+        ac11_compiles(expr).expect("fixture compiles");
+        crate::cranelift_backend::planning::ac4_route_counts()
+    }
+
+    // ⭐ The same measurement with a populated `declarations` map — the one
+    // input `ac11_compiles` cannot supply, and the only way to reach the
+    // `DeclarationClosure` operand shape.
+    fn route_counts_with_declarations(
+        expr: &RuntimeExpr,
+        declarations: BTreeMap<&str, &RuntimeDeclaration>,
+    ) -> (usize, usize) {
+        crate::cranelift_backend::planning::ac4_open_route_window();
+        compile_expr_into_module(
+            new_jit_module().expect("jit module"),
+            "b2f_ac4_declaration_probe",
+            Linkage::Local,
+            expr,
+            &NativeSeedEnvironment::empty(),
+            declarations,
+            None,
+            false,
+            None,
+            None,
+            None,
+        )
+        .expect("the declaration fixture compiles");
+        crate::cranelift_backend::planning::ac4_route_counts()
+    }
+
+    fn nullary_closure(body: RuntimeExpr) -> RuntimeExpr {
+        RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(body),
+            }),
+            args: Vec::new(),
+        }
+    }
+
+    // ⭐ **A SET of retained-body shapes, not one.** The relation is a universal
+    // over the resolutions a compile performs, so the pin's reach is the union
+    // of route call sites the fixtures actually take — see the coverage note on
+    // the test's doc comment. Each shape below was chosen to drive the descent
+    // down a different arm.
+    let shapes = [
+        // The plain application of a retained lexical body.
+        nullary_closure(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        // Nested retention: the inner body is resolved while the outer one is
+        // already being emitted, so a bypass that only fires at depth 1 shows up.
+        nullary_closure(nullary_closure(RuntimeExpr::Value(RuntimeValue::Bool(true)))),
+        // A retained body under a parameter, so the environment is non-empty
+        // where the resolution happens.
+        RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["x".to_string()],
+                body: Box::new(RuntimeExpr::Var(0)),
+            }),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+        },
+        // A retained body reached through a `Let`, which schedules differently
+        // from a direct application.
+        RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            body: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: vec![RuntimeExpr::Var(0)],
+                    params: Vec::new(),
+                    body: Box::new(RuntimeExpr::Var(0)),
+                }),
+                args: Vec::new(),
+            }),
+        },
+        // ⭐⭐ **The PRODUCER-CONTEXT cell.** `lower_expr`'s `Match` arm routes
+        // its scrutinee through `lower_computational_producer_expr` when the
+        // scrutinee `requires_heterogeneous_deforestation` — which a `Call`
+        // whose callee is a closure returning a `Construct` satisfies. ⇒ The
+        // retained body is then resolved in the **producer** context rather
+        // than the ordinary one, which is the axis the four `Call`-only shapes
+        // above cannot vary. ⛔ Not another spelling: a different enclosing
+        // lowering function, reached by a different predicate.
+        RuntimeExpr::Match {
+            scrutinee: Box::new(nullary_closure(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::ac4::Wrap".to_string(),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+            })),
+            cases: vec![RuntimeMatchCase {
+                constructor: "ctor:fixture::ac4::Wrap".to_string(),
+                binders: 1,
+                body: RuntimeExpr::Var(0),
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "ac4 producer-context fixture is total".to_string(),
+            },
+        },
+        // ⛔⛔ **THE RECURSOR ATTEMPT THAT DID NOT WORK — kept as the record of
+        // a negative measurement.** A `ComputationalMatch` case carrying a
+        // `recursive_position`, whose body APPLIES the induction hypothesis
+        // (`Call { callee: Var(0) }`) against a unit, with the recursive child
+        // as a thunk. That is the shape that binds a
+        // `Lowered::ComputationalRecursorClosure`, and it is the obvious way to
+        // reach `:474` / `:939` / `:5897`.
+        //
+        // ⚠ **It reaches none of them.** Re-running the seven-site bypass
+        // bisect with this shape present left all three green. ⇒ It is retained
+        // because it is the only `ComputationalMatch` in the set and its
+        // relation holds, ⛔ NOT as coverage — see the doc comment.
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::ac4::Node".to_string(),
+                args: vec![RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: vec!["unit".to_string()],
+                    body: Box::new(RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::ac4::Leaf".to_string(),
+                        args: Vec::new(),
+                    }),
+                }],
+            }),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::ac4::Node".to_string(),
+                    argument_binders: 1,
+                    recursive_positions: vec![0],
+                    body: RuntimeExpr::Call {
+                        callee: Box::new(RuntimeExpr::Var(0)),
+                        args: vec![RuntimeExpr::Construct {
+                            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                            args: Vec::new(),
+                        }],
+                    },
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::ac4::Leaf".to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::ac4::Leaf".to_string(),
+                        args: Vec::new(),
+                    },
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "ac4 recursor fixture is total".to_string(),
+            },
+        },
+    ];
+
+    let mut total_resolutions = 0usize;
+    let mut total_invocations = 0usize;
+    for (index, shape) in shapes.iter().enumerate() {
+        let (resolutions, invocations) = route_counts_for(shape);
+        assert_eq!(
+            resolutions, invocations,
+            "AC-4 -- shape {index}: {resolutions} origin->expression resolutions \
+             were performed but the single route was invoked only {invocations} \
+             times, so {} resolution(s) reached the plan's occurrence table by \
+             some other path.",
+            resolutions.saturating_sub(invocations)
+        );
+        total_resolutions += resolutions;
+        total_invocations += invocations;
+    }
+
+    // ⭐⭐ **THE `DeclarationClosure` CELL — a different OPERAND SHAPE, not
+    // another spelling of the one above.** Every `LexicalClosure` fixture,
+    // however nested or parameterised, lowers its callee to `Lowered::Closure`
+    // and descends the same arm; a transparent declaration whose body is a
+    // `RuntimeExpr::Closure` lowers to `Lowered::DeclarationClosure` and takes a
+    // **different** arm of the same match. ⇒ This is what moves the coverage
+    // partition, and it is why the shape list above could not.
+    // ⚠ The declaration's body returns a `Construct`, which is what makes the
+    // producer-context fixture below deforestable. ⛔ An identity body would
+    // reach the ordinary arm only, and the second cell would silently be a
+    // duplicate of the first.
+    let wrap = "decl:fixture::ac4::wrap".to_string();
+    let declaration = RuntimeDeclaration {
+        symbol: wrap.clone(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Closure {
+                captures: Vec::new(),
+                params: vec!["x".to_string()],
+                body: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::ac4::Wrap".to_string(),
+                    args: vec![RuntimeExpr::Var(0)],
+                }),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+    let call_wrap = || RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: wrap.clone(),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+    };
+    let declaration_shapes = [
+        // ORDINARY context — `lower_expr`'s `Call` arm.
+        call_wrap(),
+        // PRODUCER context — the same callee, but the `Match` arm routes its
+        // scrutinee through `lower_computational_producer_expr` because a
+        // declaration call producing an aggregate is deforestable.
+        RuntimeExpr::Match {
+            scrutinee: Box::new(call_wrap()),
+            cases: vec![RuntimeMatchCase {
+                constructor: "ctor:fixture::ac4::Wrap".to_string(),
+                binders: 1,
+                body: RuntimeExpr::Var(0),
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "ac4 declaration producer fixture is total".to_string(),
+            },
+        },
+    ];
+    for (index, shape) in declaration_shapes.iter().enumerate() {
+        let (declaration_resolutions, declaration_invocations) = route_counts_with_declarations(
+            shape,
+            BTreeMap::from([(wrap.as_str(), &declaration)]),
+        );
+        assert!(
+            declaration_resolutions > 0,
+            "NON-VACUITY: declaration shape {index} must actually resolve a body \
+             through the route, or this cell adds no coverage and the partition \
+             in the doc comment is overstated"
+        );
+        assert_eq!(
+            declaration_resolutions, declaration_invocations,
+            "AC-4 -- the DeclarationClosure arm, shape {index}: \
+             {declaration_resolutions} resolutions against \
+             {declaration_invocations} route invocations"
+        );
+        total_resolutions += declaration_resolutions;
+        total_invocations += declaration_invocations;
+    }
+
+    let (resolutions, invocations) = (total_resolutions, total_invocations);
+
+    // ⛔ THE NON-VACUITY CONTROL, and the equality below is worthless without
+    // it: `0 == 0` is what a harness that never ran the compile also reports,
+    // and it is what a build that resolved no body at all reports. Both
+    // counters must actually move.
+    assert!(
+        resolutions > 0 && invocations > 0,
+        "AC-4 -- NON-VACUITY: a program with a retained closure body must \
+         resolve at least one origin through the route; got {resolutions} \
+         resolutions and {invocations} route invocations. A zero pair means \
+         this test is measuring nothing, whatever the equality below says."
+    );
+    assert_eq!(
+        resolutions, invocations,
+        "AC-4 -- {resolutions} origin->expression resolutions were performed \
+         but the single route was invoked only {invocations} times, so \
+         {} resolution(s) reached the plan's occurrence table by some other \
+         path. That is a SECOND origin->expression route, which is exactly \
+         what AC-4 holds at one: a retained body must be selected by its \
+         static name and by nothing else.",
+        resolutions.saturating_sub(invocations)
+    );
+
+    // ⭐ The relation must hold on a program with NO retained body too, and for
+    // a different reason than above: here it says the route is not invoked
+    // speculatively. A counter that incremented on some unrelated event would
+    // satisfy the equality above and fail here.
+    let (bare_resolutions, bare_invocations) =
+        route_counts_for(&RuntimeExpr::Value(RuntimeValue::Bool(true)));
+    assert_eq!(
+        bare_resolutions, bare_invocations,
+        "AC-4 -- the relation must hold for a program with nothing retained: \
+         {bare_resolutions} resolutions against {bare_invocations} route \
+         invocations."
+    );
+}
+
+/// `a_seed_capture_borrows_from_artifact_static_storage_rather_than_folding` below.
+#[test]
+fn b2f_mints_one_defined_artifact_static_object_per_seed_environment_entry() {
+    fn objects_emitted(env: &NativeSeedEnvironment) -> (usize, usize) {
+        let module = new_jit_module().expect("jit module");
+        compile_expr_into_module(
+            module,
+            "b2f_seed_material_population_probe",
+            Linkage::Local,
+            &RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            env,
+            BTreeMap::new(),
+            None,
+            false,
+            None,
+            None,
+            None,
+        )
+        .expect("compile");
+        crate::cranelift_backend::lowering::seed_material::b2f_last_seed_material_emission()
+    }
+
+    let (empty_declared, empty_defined) = objects_emitted(&NativeSeedEnvironment::empty());
+    let seeded = b2f_seed_capture_program("s", RuntimeGroundValue::Int(7i64.into()));
+    let (seeded_declared, seeded_defined) = objects_emitted(&seeded);
+
+    // ⛔ Every declared object is defined. A declaration without a definition
+    // leaves an undefined symbol the borrow would resolve to, which is why the
+    // recorder carries two numbers rather than one.
+    assert_eq!(
+        empty_declared, empty_defined,
+        "D3 -- a declared artifact-static object was never defined (empty environment)"
+    );
+    assert_eq!(
+        seeded_declared, seeded_defined,
+        "D3 -- a declared artifact-static object was never defined (seeded environment)"
+    );
+
+    // ⭐ POSITIVE CONTROL / NON-VACUITY, in both directions. Without the first,
+    // every assertion above is satisfied by minting nothing at all for any
+    // input, forever. Without the second, they are satisfied by minting a fixed
+    // object regardless of the environment.
+    assert_eq!(
+        empty_declared, 0,
+        "D3 -- an empty seed environment has nothing to mint; measured {empty_declared}"
+    );
+    assert_eq!(
+        seeded_declared, 1,
+        "D3 -- NON-VACUITY: one environment entry must mint exactly one \
+         artifact-static object. If this is 0 the population is not tracking the \
+         environment and every count above is satisfied by minting nothing."
+    );
+}
+
+/// **`D3` — the minted material is IN the artifact, verified against the module
+/// rather than against our own bookkeeping.**
+///
+/// ⛔⛔ **This test exists because a counter cannot detect the deletion of the
+/// call it counts, and that is measured rather than argued.** Removing the
+/// `define_data` call while leaving the adjacent `defined += 1` reachable left
+/// `b2f_last_seed_material_emission` reporting `(1, 1)` — both the counter and
+/// the call are `seed_material`'s own code, so a mutation can remove one and
+/// leave the other. ⚠ What caught that mutation instead was a **SIGSEGV** in the
+/// test binary when the artifact ran against the undefined symbol: an undefined
+/// data symbol is caught by neither the module nor the counter, only by the
+/// hardware. ⭐ Loud, but undiagnostic — and a crash is not a control.
+///
+/// ⇒ **The fix is to ask a different party what it holds.**
+/// `JITModule::get_finalized_data` reads the module's own finalized memory, so
+/// the definition either happened or the comparison fails.
+///
+/// **MEASURED:** for every object this compile minted, the bytes the finalized
+/// module holds at that `DataId` equal the byte image handed to `define_data`.
+/// **CLAIMED:** the encoded seed material is really present in the artifact.
+/// **THE GAP:** ⛔ the *expected* side is still this crate's encoder output, so
+/// this cannot catch an encoding that is wrong in the same way on both sides.
+/// That residual is covered by the encoder's own tag/offset/nesting tests, whose
+/// expectations are written out independently of the encoder.
+#[test]
+fn minted_seed_material_is_present_in_the_finalized_artifact() {
+    let env = b2f_seed_capture_program("s", RuntimeGroundValue::Int(0x0123_4567_89ab_cdefi64.into()));
+    let module = new_jit_module().expect("jit module");
+    let compiled = compile_expr_into_module(
+        module,
+        "b2f_seed_material_readback_probe",
+        Linkage::Local,
+        &RuntimeExpr::Value(RuntimeValue::Bool(true)),
+        &env,
+        BTreeMap::new(),
+        None,
+        false,
+        None,
+        None,
+        None,
+    )
+    .expect("compile");
+
+    let images = crate::cranelift_backend::lowering::seed_material::b2f_last_seed_material_images();
+    // ⭐ POSITIVE CONTROL, first: without it every assertion below is vacuously
+    // satisfied by an empty image list, for any mutation, forever.
+    assert_eq!(
+        images.len(),
+        1,
+        "D3 -- one environment entry must mint one image to read back"
+    );
+
+    let mut compiled = compiled;
+    compiled
+        .module
+        .finalize_definitions()
+        .expect("jit finalizes");
+    for (id, expected) in images {
+        let (pointer, length) = compiled.module.get_finalized_data(id);
+        // SAFETY: `finalize_definitions` has run, so the module guarantees this
+        // pointer/length names its own finalized data for `id`.
+        let actual = unsafe { std::slice::from_raw_parts(pointer, length) };
+        assert_eq!(
+            actual, expected,
+            "D3 -- the artifact does not hold the bytes that were defined for \
+             this seed object. Either the definition never happened or something \
+             overwrote it; in both cases a capture would borrow from storage \
+             whose contents are not the seed value."
+        );
+    }
+}
+
+/// **`AC-12` — the emitted code OBEYS `BorrowedForActivation` +
+/// `ArtifactStatic`, with a positive control.**
+///
+/// ⛔ **An assertion that reads the mode back out of `AbiCarrier::ownership` or
+/// `storage_owner` discharges nothing** — both are `const fn`s over a closed
+/// enum, so re-reading them measures the declaration with the declaration. The
+/// observable difference between obeying those two modes and ignoring them is
+/// whether the capture's value arrives by a **load from durable storage** or by
+/// a constant folded into the instruction stream, and that is what this counts.
+///
+/// **MEASURED:** how many loads from artifact-static storage the emitter issued
+/// while compiling a program with a seed capture, versus one without.
+/// **CLAIMED:** a seed capture's scalar value is read out of artifact-static
+/// material rather than folded in at compile time.
+/// **THE GAP:** ⛔ a load that is emitted and then discarded downstream — if a
+/// specialization ever substituted `Lowered`'s `known` field for the loaded
+/// value in emitted code — would still be counted here. ⭐ **That residual is
+/// closed by measurement, not by argument:** corrupting the minted payload byte
+/// image (`push_word(out, (*small ^ 1) as u64)` in `seed_material::encode_into`)
+/// reddens
+/// `values::cranelift_runs_closure_seed_with_explicit_runtime_capture_environment`
+/// and `artifact::api::tests::program_runner_preflights_metadata_before_backend_lowering`,
+/// which are **runtime** observations. ⇒ The program's answer is a function of
+/// the minted bytes. ⛔ That mutation is deliberately NOT committed as a test:
+/// it needs a perturbation hook inside production, and a hook that can fold the
+/// value instead is precisely the second authority `D3` removes.
+///
+/// ---
+///
+/// ⛔⛔ **THIS TEST IS `D3`'s SOLE MECHANICAL DEFENDER. MEASURED, NOT ESTIMATED.**
+///
+/// Replacing `self.artifact_static_payload(builder, symbol)?` with
+/// `builder.ins().iconst(types::I64, *small)` in `lower_seed_capture` — i.e.
+/// reverting `D3` wholesale and going back to compile-time folding — reddens
+/// **exactly this test and nothing else, out of 496 others.**
+///
+/// ⇒ ⭐ **Weakening, relaxing or renaming this control leaves `D3` unpinned in a
+/// single edit, and no other test in the crate would notice.** The seed material
+/// would still be minted, still be read-only, still be counted by
+/// `b2f_last_seed_material_emission`, and still be byte-compared by
+/// `minted_seed_material_is_present_in_the_finalized_artifact` — because all
+/// three of those observe the *material*, and none of them observes whether the
+/// emitted code **reads** it. That distinction is the whole of `AC-12`, and it
+/// lives here alone.
+#[test]
+fn a_seed_capture_borrows_from_artifact_static_storage_rather_than_folding() {
+    fn loads_during(expr: &RuntimeExpr, env: &NativeSeedEnvironment) -> usize {
+        let before = crate::cranelift_backend::lowering::seed_material::b2f_artifact_static_loads();
+        let module = new_jit_module().expect("jit module");
+        compile_expr_into_module(
+            module,
+            "b2f_artifact_static_borrow_probe",
+            Linkage::Local,
+            expr,
+            env,
+            BTreeMap::new(),
+            None,
+            false,
+            None,
+            None,
+            None,
+        )
+        .expect("compile");
+        // ⚠ A difference of two readings, because the counter is monotone across
+        // the process and other tests on this thread contribute to it.
+        crate::cranelift_backend::lowering::seed_material::b2f_artifact_static_loads() - before
+    }
+
+    // The two fixtures differ in exactly one thing: whether the program performs
+    // a seed capture. Both compile the same shape and both reach emission.
+    let no_capture = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Closure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+    let with_capture = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Closure {
+            captures: vec!["s".to_string()],
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+    let env = b2f_seed_capture_program("s", RuntimeGroundValue::Int(7i64.into()));
+
+    let without = loads_during(&no_capture, &env);
+    let with = loads_during(&with_capture, &env);
+
+    // ⭐ POSITIVE CONTROL first, because the interesting assertion is the
+    // negative one and a negative check passes for any reason -- including a
+    // counter that is never incremented at all.
+    assert!(
+        with >= 1,
+        "AC-12 -- a seed capture must READ its value out of artifact-static \
+         storage. Zero loads means the value was folded into the instruction \
+         stream, which is `OwnedByFrame` behaviour on a slot the ABI declares \
+         `BorrowedForActivation` from `ArtifactStatic`."
+    );
+    assert_eq!(
+        without, 0,
+        "AC-12 -- NON-VACUITY: a program with no seed capture must issue no \
+         artifact-static load. If this is non-zero the counter is measuring \
+         something other than the capture path and the assertion above is \
+         satisfied for the wrong reason; measured {without}"
+    );
+}
+
+/// **`RT-FNSPLIT-B2F` `AC-6` — the removal pin, authored BEFORE the removal so
+/// that it can witness it.**
+///
+/// ⛔⛔ **A pin authored after a removal cannot witness it, and the tests a ban
+/// reddens on introduction never contain its witness — they exercise the success
+/// path.** So this lands on the green pre-`D6` base, asserting what is true
+/// *now*, shaped so that `D6` turns it red and forces the flip to be reviewed.
+///
+/// ⭐ **The property is symptom-inventory entry 2 itself, measured rather than
+/// described:** today a retained body is re-lowered **once per call site**, not
+/// once per body. One `LexicalClosure` occurrence, bound once and applied twice,
+/// resolves its origin **twice** — the same source term is walked and emitted
+/// again for the second application.
+///
+/// ⛔ **Stated as a RELATION between two programs, never as the literals.** The
+/// absolute counts move for reasons that have nothing to do with `D6` — a
+/// scheduling change, an extra planned occurrence, a different `Let` shape. What
+/// cannot move without `D6` is whether the count **follows the number of call
+/// sites**:
+///
+/// | | today (inliner) | after `D6` (unit + call) |
+/// |---|---|---|
+/// | applied once | `n` | `n` |
+/// | applied twice | `n + 1` | `n` |
+///
+/// **MEASURED:** the number of `origin -> expression` resolutions a compile
+/// performs grows by one when a single retained closure occurrence gains a
+/// second application site.
+/// **CLAIMED:** `lower_expr`'s recursive descent still emits a retained body per
+/// call site — i.e. the inliner `D6` removes is **present**.
+/// **THE GAP:** ⚠ a resolution is not an emission. This counts how many times
+/// the body's *term* was fetched, which is one-for-one with re-lowering under
+/// the current descent but ⛔ is **not** claimed to remain one-for-one under any
+/// other. ⇒ When `D6` lands, whoever flips this must re-check that the
+/// replacement reading means what they think — the flip is not mechanical.
+///
+/// **Promise class: TRANSITION SENTINEL — deliberately, and labelled for the
+/// boundary rather than the count.** ⭐ **The event that retires it is `D6`:**
+/// removal of the recursive-descent emission authority in `lower_expr`, at which
+/// point a retained body is emitted **once, into its own unit**, and both rows
+/// of the table above read `n`. ⇒ On that day this assertion becomes
+/// `assert_eq!(twice, once)` — a **durable invariant**, since no intended
+/// extension may reintroduce per-call-site emission.
+///
+/// ⛔ **Do not "fix" a red here by deleting the test or by widening it to accept
+/// both readings.** A sentinel that accepts its own retirement silently is not a
+/// sentinel; the red IS the deliverable.
+///
+/// **The retirement was SIMULATED and the sentinel does redden — run, not
+/// reasoned.** Counting one resolution per **distinct** origin instead of per
+/// call (which is exactly the post-`D6` reading, since a unit's body is fetched
+/// once however often it is called) produces `left: 1, right: 2` and the
+/// "D6 HAS LANDED" message above.
+///
+/// ⚠ **Labelled precisely: that is a simulation of the retirement event, NOT a
+/// compile-preserving evasion of this pin.** It mutates the instrument, not the
+/// descent. ⛔ What it demonstrates is only that the assertion **discriminates
+/// the two worlds** — it is not evidence that `D6` will produce that reading by
+/// this mechanism, and the `THE GAP` paragraph above is what governs that.
+#[test]
+fn a_retained_body_is_defined_once_even_when_called_twice() {
+    fn resolutions(expr: &RuntimeExpr) -> usize {
+        crate::cranelift_backend::planning::ac4_open_route_window();
+        ac11_compiles(expr).expect("fixture compiles");
+        crate::cranelift_backend::planning::ac4_route_counts().0
+    }
+
+    let closure = || RuntimeExpr::LexicalClosure {
+        captures: Vec::new(),
+        params: Vec::new(),
+        body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+    };
+
+    // ONE closure occurrence, bound once, applied once.
+    let applied_once = RuntimeExpr::Let {
+        value: Box::new(closure()),
+        body: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::Var(0)),
+            args: Vec::new(),
+        }),
+    };
+    // ⭐ The SAME single closure occurrence, applied twice. ⛔ Not two closure
+    // literals: two literals are two distinct origins and would legitimately
+    // resolve twice even after `D6`, which would make this green for the wrong
+    // reason forever.
+    let applied_twice = RuntimeExpr::Let {
+        value: Box::new(closure()),
+        body: Box::new(RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Var(0)),
+                args: Vec::new(),
+            }),
+            body: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Var(1)),
+                args: Vec::new(),
+            }),
+        }),
+    };
+
+    let once = resolutions(&applied_once);
+    let twice = resolutions(&applied_twice);
+
+    // ⛔ NON-VACUITY: a harness that never compiled anything reports `0 == 0`
+    // and would satisfy the relation below by doing nothing at all.
+    assert!(
+        once > 0,
+        "AC-6 -- NON-VACUITY: a program with a retained closure body must \
+         resolve its origin at least once; got {once}. A zero here means this \
+         test measures nothing, whatever the relation below reports."
+    );
+    assert_eq!(
+        twice,
+        once,
+        "AC-6 -- one retained closure occurrence applied twice performed \
+         {twice} origin->expression resolutions against {once} when applied \
+         once. The selected functionized authority must define that retained \
+         body once; a second call may add a call edge, never a second body \
+         resolution."
     );
 }

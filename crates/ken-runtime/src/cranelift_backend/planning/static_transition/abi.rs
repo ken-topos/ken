@@ -57,7 +57,7 @@ fn range_end(range: DenseRange) -> Result<usize, CraneliftBackendError> {
 /// convention, which is what this enum and `AbiFrameHeader` together are.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(u8)]
-pub(super) enum AbiCarrier {
+pub(in crate::cranelift_backend) enum AbiCarrier {
     /// One machine word holding a Ken value under this frame's ownership rules.
     /// Chosen for declared parameters and for **lexical** captures, whose static
     /// type is not derivable from this plane.
@@ -100,7 +100,19 @@ impl AbiCarrier {
     }
 
     /// Declared alignment, in bytes.
-    const fn align_bytes(self) -> u16 {
+    ///
+    /// ⭐ **Widened to the backend by `RT-FNSPLIT-B2F` `D3`, and the reason is
+    /// the same one that makes this a declaration rather than a constant:** the
+    /// artifact-static seed material an emitter mints must be aligned for the
+    /// carrier that addresses it, and an emitter that hard-codes `8` instead of
+    /// reading this would keep working right up until a carrier's declared
+    /// alignment changed — at which point the material and the slot addressing
+    /// it would disagree with nothing going red.
+    ///
+    /// ⛔ Widened as a **reader**, not as a setter: it is a `const fn` over a
+    /// closed enum with no parameter, so a caller can learn a carrier's
+    /// alignment and cannot choose one.
+    pub(in crate::cranelift_backend) const fn align_bytes(self) -> u16 {
         match self {
             Self::ValueWord
             | Self::GroundValueCarrier
@@ -189,7 +201,7 @@ impl AbiCarrier {
 /// must outlive the activation.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(u8)]
-pub(super) enum AbiStorageOwner {
+pub(in crate::cranelift_backend) enum AbiStorageOwner {
     /// The activation frame itself; reclaimed when the activation ends.
     ActivationFrame,
     /// Material minted into the compiled artifact **before execution begins**,
@@ -205,7 +217,7 @@ pub(super) enum AbiStorageOwner {
 /// **`D4` — the stated lifetime/aliasing/transfer/reclamation modes.**
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(u8)]
-pub(super) enum AbiOwnership {
+pub(in crate::cranelift_backend) enum AbiOwnership {
     /// The frame owns the value and reclaims it when the activation ends. May
     /// not alias a caller-visible value after return.
     OwnedByFrame,
@@ -223,7 +235,7 @@ pub(super) enum AbiOwnership {
 /// one of these, so a slot whose role is not named here cannot be laid out.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(u8)]
-pub(super) enum AbiSlotKind {
+pub(in crate::cranelift_backend) enum AbiSlotKind {
     Parameter,
     Capture,
     Result,
@@ -241,7 +253,7 @@ pub(super) enum AbiSlotKind {
 /// data — and never from source text.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(u8)]
-pub(super) enum AbiCaptureProvenance {
+pub(in crate::cranelift_backend) enum AbiCaptureProvenance {
     /// `RuntimeExpr::LexicalClosure`. Each capture is an **arbitrary source
     /// expression**, planned as a syntax child of the closure occurrence.
     Lexical,
@@ -273,11 +285,13 @@ impl AbiCaptureProvenance {
 /// error rather than a defaulted arm.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
-pub(super) enum AbiUnitDefinition {
+pub(in crate::cranelift_backend) enum AbiUnitDefinition {
     /// A top-level scheduling entry — the root, or a transparent declaration.
-    /// It has no defining closure occurrence, so no declared parameters and no
-    /// captures.
-    SchedulingEntry,
+    /// It has no defining closure occurrence and no captures. Only the
+    /// explicitly recorded process root receives the closed ingress pair.
+    SchedulingEntry {
+        ingress: AbiSchedulingIngress,
+    },
     /// A retained closure body. Its **defining occurrence** is the source of the
     /// unique `StaticBody` edge whose target is this unit's seed
     /// (`static_transition.rs:858`, `:884` build that edge as
@@ -288,21 +302,53 @@ pub(super) enum AbiUnitDefinition {
     },
 }
 
+/// Static compilation mode for the explicitly recorded root scheduling entry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum AbiRootIngress {
+    Value,
+    Process,
+}
+
+/// The closed source-valued ingress admitted by one scheduling entry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum AbiSchedulingIngress {
+    Empty,
+    ProcessPair,
+}
+
+/// Role identity for the two process-root parameters.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum AbiProcessParameter {
+    ProcessInput,
+    Capability,
+}
+
+impl AbiProcessParameter {
+    const ALL: [Self; 2] = [Self::ProcessInput, Self::Capability];
+
+    pub(in crate::cranelift_backend) const fn ordinal(self) -> u32 {
+        match self {
+            Self::ProcessInput => 0,
+            Self::Capability => 1,
+        }
+    }
+}
+
 /// One declared frame slot.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
-pub(super) struct AbiSlot {
-    pub(super) kind: AbiSlotKind,
-    pub(super) carrier: AbiCarrier,
-    pub(super) ownership: AbiOwnership,
+pub(in crate::cranelift_backend) struct AbiSlot {
+    pub(in crate::cranelift_backend) kind: AbiSlotKind,
+    pub(in crate::cranelift_backend) carrier: AbiCarrier,
+    pub(in crate::cranelift_backend) ownership: AbiOwnership,
     /// ⭐ Who owns the storage this slot borrows or holds. Recorded per slot so
     /// a borrow's counterparty is part of the ABI rather than prose.
-    pub(super) storage_owner: AbiStorageOwner,
-    pub(super) width_bytes: u16,
-    pub(super) align_bytes: u16,
+    pub(in crate::cranelift_backend) storage_owner: AbiStorageOwner,
+    pub(in crate::cranelift_backend) width_bytes: u16,
+    pub(in crate::cranelift_backend) align_bytes: u16,
     /// Position within this slot's own kind-run, so a slot is recoverable
     /// positionally rather than by search.
-    pub(super) ordinal: u32,
+    pub(in crate::cranelift_backend) ordinal: u32,
 }
 
 /// **`D1` — the common activation-frame header.**
@@ -316,11 +362,11 @@ pub(super) struct AbiSlot {
 /// checker, which is one more thing that can be green for the wrong reason.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
-pub(super) struct AbiFrameHeader {
-    pub(super) parameters: u32,
-    pub(super) captures: u32,
-    pub(super) frame_bytes: u32,
-    pub(super) align_bytes: u16,
+pub(in crate::cranelift_backend) struct AbiFrameHeader {
+    pub(in crate::cranelift_backend) parameters: u32,
+    pub(in crate::cranelift_backend) captures: u32,
+    pub(in crate::cranelift_backend) frame_bytes: u32,
+    pub(in crate::cranelift_backend) align_bytes: u16,
 }
 
 /// The **shape** of a descriptor: everything except its positional identity.
@@ -394,7 +440,7 @@ impl AbiPlane {
     ) -> Result<AbiDescriptorShape, CraneliftBackendError> {
         let slots = slot_slice(&self.slots, descriptor.slots)?;
         let (definition_is_closure_body, provenance) = match descriptor.definition {
-            AbiUnitDefinition::SchedulingEntry => (false, None),
+            AbiUnitDefinition::SchedulingEntry { .. } => (false, None),
             AbiUnitDefinition::ClosureBody { provenance, .. } => (true, Some(provenance)),
         };
         Ok(AbiDescriptorShape {
@@ -434,6 +480,8 @@ pub(super) fn build_abi_plane(
     sources_in: &[SemanticSourceSeed],
     edges: &[StaticEdge],
     entries: &[StaticNodeId],
+    root_entry: StaticNodeId,
+    root_ingress: AbiRootIngress,
 ) -> Result<AbiPlane, CraneliftBackendError> {
     // ⛔ The planner's `semantic_sources` are in **walk order**, not positional
     // by origin. Reading `sources[origin]` directly returns a plausible seed for
@@ -442,7 +490,8 @@ pub(super) fn build_abi_plane(
     let sources = positioned_sources(nodes, sources_in)?;
     let sources = sources.as_slice();
 
-    let definitions = unit_definitions(plane, sources, edges, entries)?;
+    let definitions =
+        unit_definitions(plane, sources, edges, entries, root_entry, root_ingress)?;
 
     // `C4`, and deliberately before any descriptor is minted: an imported edge
     // must receive **no** callable descriptor at all, so the exclusion runs
@@ -481,7 +530,15 @@ pub(super) fn build_abi_plane(
         });
     }
 
-    abi.validate(plane, nodes, sources_in, edges, entries)?;
+    abi.validate(
+        plane,
+        nodes,
+        sources_in,
+        edges,
+        entries,
+        root_entry,
+        root_ingress,
+    )?;
     Ok(abi)
 }
 
@@ -642,6 +699,8 @@ fn unit_definitions(
     sources: &[SemanticSourceSeed],
     edges: &[StaticEdge],
     entries: &[StaticNodeId],
+    root_entry: StaticNodeId,
+    root_ingress: AbiRootIngress,
 ) -> Result<Vec<AbiUnitDefinition>, CraneliftBackendError> {
     // One pass over the edges rather than one per unit: the classification is
     // O(nodes + edges), not O(units × edges).
@@ -678,7 +737,16 @@ fn unit_definitions(
             .copied()
             .ok_or_else(|| planner_error("function unit seed is outside the planned nodes"))?;
         let definition = match (is_entry, body_edge) {
-            (true, None) => AbiUnitDefinition::SchedulingEntry,
+            (true, None) => AbiUnitDefinition::SchedulingEntry {
+                ingress: if function.planned_node == root_entry {
+                    match root_ingress {
+                        AbiRootIngress::Value => AbiSchedulingIngress::Empty,
+                        AbiRootIngress::Process => AbiSchedulingIngress::ProcessPair,
+                    }
+                } else {
+                    AbiSchedulingIngress::Empty
+                },
+            },
             (false, Some(from)) => {
                 let defining_origin = StaticOriginId(from.0);
                 let seed = source_for(sources, defining_origin)?;
@@ -740,7 +808,17 @@ fn declared_arity(
         defining_origin, ..
     } = definition
     else {
-        return Ok((0, 0));
+        let AbiUnitDefinition::SchedulingEntry { ingress } = definition else {
+            unreachable!()
+        };
+        return Ok(match ingress {
+            AbiSchedulingIngress::Empty => (0, 0),
+            AbiSchedulingIngress::ProcessPair => (
+                u32::try_from(AbiProcessParameter::ALL.len())
+                    .map_err(|_| planner_capacity_error("process ingress arity exhausted"))?,
+                0,
+            ),
+        });
     };
 
     let seed = source_for(sources, defining_origin)?;
@@ -814,7 +892,7 @@ fn push_slots(
     // A `SchedulingEntry` has no captures at all, so its carrier question does
     // not arise rather than being answered with a default.
     let capture_carrier = match definition {
-        AbiUnitDefinition::SchedulingEntry => {
+        AbiUnitDefinition::SchedulingEntry { .. } => {
             if captures != 0 {
                 return Err(planner_error(
                     "scheduling entry unit declares captures, which it cannot have",
@@ -848,18 +926,50 @@ const fn slot(kind: AbiSlotKind, carrier: AbiCarrier, ordinal: u32) -> AbiSlot {
     }
 }
 
+/// **`RT-FNSPLIT-B2F` `D2` — each slot's byte offset in its unit's frame, and
+/// the frame's total size, from ONE walk.**
+///
+/// ⭐ **This exists so the emitter cannot own a second layout derivation.**
+/// `B2F` has to know where a slot sits in order to load or store it, and
+/// `AbiSlot` records a width but no offset. The obvious repair — let the
+/// emitter prefix-sum the widths itself — would put the same arithmetic in two
+/// files, where the two can disagree and only a test would notice. ⛔ Instead
+/// the walk lives here once, [`frame_header`] totals *through* it, and the
+/// emitter reads it. **A divergence is then unrepresentable rather than
+/// merely untested.**
+///
+/// ⚠ There is no inter-slot padding, and that is a *consequence*, not an
+/// assumption: `AbiCarrier::width_bytes` and `align_bytes` are `8` for every
+/// variant, so each offset is already a multiple of every slot's alignment.
+/// ⛔ Do not read this as a licence to assume 8 — if a future carrier is
+/// narrower, this walk is the one place that has to learn about padding, which
+/// is exactly why it is one place.
+pub(in crate::cranelift_backend) fn slot_offsets(
+    slots: &[AbiSlot],
+) -> Result<(Vec<u32>, u32), CraneliftBackendError> {
+    let mut offsets = Vec::with_capacity(slots.len());
+    let mut frame_bytes = 0u32;
+    for slot in slots {
+        offsets.push(frame_bytes);
+        frame_bytes = frame_bytes
+            .checked_add(u32::from(slot.width_bytes))
+            .ok_or_else(|| planner_capacity_error("abi frame size exhausted"))?;
+    }
+    Ok((offsets, frame_bytes))
+}
+
 /// Derives the frame header from the laid slot run.
 fn frame_header(
     slots: &[AbiSlot],
     parameters: u32,
     captures: u32,
 ) -> Result<AbiFrameHeader, CraneliftBackendError> {
-    let mut frame_bytes = 0u32;
+    // ⛔ The total comes from `slot_offsets`, not from a second sum here: the
+    // emitter's offsets and this header's size are then the same walk by
+    // construction.
+    let (_, frame_bytes) = slot_offsets(slots)?;
     let mut align_bytes = 1u16;
     for slot in slots {
-        frame_bytes = frame_bytes
-            .checked_add(u32::from(slot.width_bytes))
-            .ok_or_else(|| planner_capacity_error("abi frame size exhausted"))?;
         align_bytes = align_bytes.max(slot.align_bytes);
     }
     Ok(AbiFrameHeader {
@@ -868,6 +978,237 @@ fn frame_header(
         frame_bytes,
         align_bytes,
     })
+}
+
+// ─── RT-FNSPLIT-B2F AC-11 — per-transfer representability, at the EMITTED slots ─
+
+/// The deepest value-flow chain the producer walk will follow before failing
+/// closed.
+///
+/// ⛔ The origin graph is a tree of positional children, so this cannot be hit
+/// by a cycle. It is a capacity guard: exceeding it **rejects**, because a walk
+/// that gave up and returned "representable" would be a fail-open default, and
+/// a fail-open default is the exact defect the amended `AC-2` was ruled on.
+const MAX_PRODUCER_DEPTH: usize = 64;
+
+/// **`AC-11` — every boundary transfer `B2F` emits is representable, established
+/// HERE and not inherited from `C4`.**
+///
+/// ⛔ **`C4` does not establish this and must not be cited as though it did.**
+/// `reject_imported_capture_edges` iterates a lexical closure's **direct capture
+/// children** and asks `result_carrier(seed.source)` — which answers *"is this
+/// capture expression's own top-level shape `ImportedDeclarationRef`?"*, not
+/// *"can an imported value reach this frame slot?"*. Two consequences, both
+/// buildable plans that plan green:
+///
+/// | | |
+/// |---|---|
+/// | **Hole A** | any wrapper defeats it — `If { Bool(true), imported, imported }` is **binder-free**, so no de Bruijn reading makes its result anything but the imported value, and it receives a full `Capture` slot |
+/// | **Hole B** | needs no wrapper — `LexicalClosure { captures: [], body: ImportedDeclarationRef }`; the function iterates capture children only, so the unit's own **result** slot is never carrier-checked |
+///
+/// ⛔ **This is a NEW, `B2F`-owned check. It does not touch `C4`**, whose repair
+/// rides `RT-FNSPLIT-B2O-CHECK` — an `L` node on an atomic boundary does not
+/// absorb a checking-layer repair.
+///
+/// ⛔ **And it runs BEFORE any unit is declared or defined** (clause 3): its call
+/// site in `compile_expr_into_module` precedes `declare_unit_bundle`, so no path
+/// can treat `AbiPlane::validate`, `C4`, or descriptor existence as a substitute
+/// for it.
+///
+/// **MEASURED:** for every emitted unit, the value-flow producers reaching its
+/// `Capture` slots and its `Result` slot all have an admitted carrier; and its
+/// `Control` / `Trap` / `Store` slots carry exactly the fixed protocol carrier.
+/// **CLAIMED:** every transfer this node emits is representable.
+/// **THE GAP:** ⛔ stated as a partition in `producers_of` below — the
+/// pass-through relation covers `If` and `Let`, and a `Match` arm is **not**
+/// traced.
+pub(super) fn validate_emitted_transfers(
+    plane: &SemanticPlane,
+    nodes: &[StaticNode],
+    sources_in: &[SemanticSourceSeed],
+    descriptors: &[AbiDescriptor],
+    slots: &[AbiSlot],
+) -> Result<(), CraneliftBackendError> {
+    // ⛔ The seeds must be POSITIONED before `source_for` can index them: it
+    // resolves an origin by position and rejects a seed whose recorded origin is
+    // not its own index. `build_abi_plane` does the same conversion at its own
+    // entry, and skipping it here produced a planner error on every plan with
+    // more than a trivial source order -- the failure was loud, but only because
+    // `source_for` refuses to guess.
+    let sources = &positioned_sources(nodes, sources_in)?;
+    for descriptor in descriptors {
+        let run = slot_slice(slots, descriptor.slots)?;
+        for slot in run {
+            match slot.kind {
+                // ⭐ Clause 2. Protocol slots are **protocol-produced**, not the
+                // result of any source expression, so `result_carrier` is the
+                // wrong instrument for them and the AC says so. The expected
+                // carrier is written out here rather than read back from
+                // `AbiSlotKind`, so this compares two independent statements
+                // instead of one statement with itself.
+                AbiSlotKind::Control => require_protocol_carrier(slot, AbiCarrier::ControlWord)?,
+                AbiSlotKind::Trap => require_protocol_carrier(slot, AbiCarrier::TrapWord)?,
+                AbiSlotKind::Store => require_protocol_carrier(slot, AbiCarrier::StoreHandle)?,
+                // ⚠ **The emitted population of parameter-argument transfers is
+                // EMPTY**, and that is stated rather than passed over: an
+                // argument is supplied by a **call site**, and `D4`'s call edges
+                // are not emitted yet. ⛔ A vacuous pass is recorded as vacuous —
+                // when `S5` emits call edges, each argument's producer joins this
+                // walk, and until then there is nothing to trace.
+                AbiSlotKind::Parameter => {}
+                // Source-valued. Both are traced below, per unit rather than per
+                // slot, because a capture's origin comes from the defining
+                // occurrence and the result's from the unit's own.
+                AbiSlotKind::Capture | AbiSlotKind::Result => {}
+            }
+        }
+
+        // ⭐ Hole B: the unit's OWN result. `C4` never carrier-checks this, and
+        // `LexicalClosure { captures: [], body: ImportedDeclarationRef }` needs
+        // no wrapper at all to exploit it.
+        require_representable_producers(plane, sources, descriptor.origin)?;
+
+        // ⭐ Hole A: each capture, traced through binder-free wrappers rather
+        // than read off the child's own top-level shape.
+        if let AbiUnitDefinition::ClosureBody {
+            defining_origin,
+            provenance,
+        } = descriptor.definition
+        {
+            // ⚠ The **seed** provenance cannot carry an imported value at all:
+            // its captures resolve to a `RuntimeGroundValue`, closed at six
+            // variants none of which is a declaration reference. The asymmetry
+            // is stated rather than left to look like coverage.
+            if provenance == AbiCaptureProvenance::Lexical {
+                for capture in lexical_capture_origins(plane, defining_origin)? {
+                    require_representable_producers(plane, sources, capture)?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A protocol slot must carry exactly the carrier the ABI fixes for its role.
+fn require_protocol_carrier(
+    slot: &AbiSlot,
+    expected: AbiCarrier,
+) -> Result<(), CraneliftBackendError> {
+    if slot.carrier != expected {
+        return Err(planner_error(
+            "a protocol slot does not carry the fixed carrier its role declares",
+        ));
+    }
+    Ok(())
+}
+
+/// Every value-flow producer reaching `origin` must have an admitted carrier.
+fn require_representable_producers(
+    plane: &SemanticPlane,
+    sources: &[SemanticSourceSeed],
+    origin: StaticOriginId,
+) -> Result<(), CraneliftBackendError> {
+    for producer in producers_of(plane, sources, origin, 0)? {
+        let seed = source_for(sources, producer)?;
+        result_carrier(seed.source)?;
+    }
+    Ok(())
+}
+
+/// The set of occurrences whose value can actually **reach** `origin`'s slot.
+///
+/// ⭐ **The whole content of `AC-11` clause 1 is that this is not the identity
+/// function.** Checking `origin`'s own top-level shape is what `C4` does, and a
+/// binder-free wrapper defeats it.
+///
+/// ⛔ **NOT CLAIMED, as a partition with its discriminator.** The pass-through
+/// relation below covers `If` and `Let`, whose positional child layout is
+/// measured (`If` = `[cond, then, else]`, `Let` = `[value, body]`). ⚠ **A
+/// `Match` or `ComputationalMatch` arm is NOT traced** — its case bodies are
+/// derived through `case_body_occurrence` rather than `child_occurrence`, and I
+/// have not established that they land in `plane.child_origins` at the positions
+/// this walk would read. ⇒ **The discriminator: does the value reach the slot
+/// through a match arm?** If yes, only the match occurrence's own carrier is
+/// checked and the arm is not. ⛔ That is a stated residual, not a covered case,
+/// and widening it needs the case-body origin layout established first — over-
+/// reading those positions would reject representable programs.
+fn producers_of(
+    plane: &SemanticPlane,
+    sources: &[SemanticSourceSeed],
+    origin: StaticOriginId,
+    depth: usize,
+) -> Result<Vec<StaticOriginId>, CraneliftBackendError> {
+    if depth > MAX_PRODUCER_DEPTH {
+        return Err(planner_error(
+            "value-flow producer chain is deeper than the walk admits",
+        ));
+    }
+    let seed = source_for(sources, origin)?;
+    let SemanticSourceKind::Expression(shape) = seed.source else {
+        // A transition-kind source is protocol-produced, not a source
+        // expression; it is its own producer.
+        return Ok(vec![origin]);
+    };
+    // ⛔ The pass-through set is an ALLOW-LIST of relations, not a deny-list of
+    // shapes: an unrecognised shape is treated as its own producer and still has
+    // its carrier checked, so a new `RuntimeExprShape` cannot acquire a
+    // pass-through it was never given.
+    let forwarded: &[usize] = match shape {
+        // `[cond, then, else]` -- the value is one of the two branches, and
+        // neither introduces a binder. This is the Architect's named
+        // discriminator, `If { Bool(true), imported, imported }`.
+        RuntimeExprShape::If => &[1, 2],
+        // `[value, body]` -- the value that flows out is the body's.
+        RuntimeExprShape::Let => &[1],
+        _ => &[],
+    };
+    if forwarded.is_empty() {
+        return Ok(vec![origin]);
+    }
+    let children = child_origins_of(plane, origin)?;
+    let mut producers = Vec::new();
+    for index in forwarded {
+        let Some(child) = children.get(*index) else {
+            // ⛔ Fails closed. A shape declared pass-through whose children are
+            // not where its layout says they are means the two disagree, and
+            // treating the occurrence as its own producer here would silently
+            // restore exactly the top-level-shape check this walk replaces.
+            return Err(planner_error(
+                "a pass-through occurrence lacks the child its layout declares",
+            ));
+        };
+        producers.extend(producers_of(plane, sources, *child, depth + 1)?);
+    }
+    Ok(producers)
+}
+
+/// One occurrence's positional syntax-child origins.
+fn child_origins_of(
+    plane: &SemanticPlane,
+    origin: StaticOriginId,
+) -> Result<Vec<StaticOriginId>, CraneliftBackendError> {
+    let descriptor = plane
+        .descriptors
+        .get(origin.0 as usize)
+        .ok_or_else(|| planner_error("occurrence has no semantic descriptor"))?;
+    let program = plane
+        .programs
+        .get(descriptor.program.0 as usize)
+        .ok_or_else(|| planner_error("occurrence names an unknown semantic program"))?;
+    let records = plane
+        .records
+        .get(program.records.start as usize..range_end(program.records)?)
+        .ok_or_else(|| planner_error("semantic program record range is outside the plane"))?;
+    let [record] = records else {
+        return Err(planner_error(
+            "occurrence's program does not hold exactly one record",
+        ));
+    };
+    Ok(plane
+        .child_origins
+        .get(record.child_origins.start as usize..range_end(record.child_origins)?)
+        .ok_or_else(|| planner_error("semantic child-origin range is outside the plane"))?
+        .to_vec())
 }
 
 fn source_for(
@@ -914,6 +1255,8 @@ impl AbiPlane {
         sources: &[SemanticSourceSeed],
         edges: &[StaticEdge],
         entries: &[StaticNodeId],
+        root_entry: StaticNodeId,
+        root_ingress: AbiRootIngress,
     ) -> Result<(), CraneliftBackendError> {
         let sources = positioned_sources(nodes, sources)?;
         let sources = sources.as_slice();
@@ -925,7 +1268,8 @@ impl AbiPlane {
             ));
         }
 
-        let definitions = unit_definitions(plane, sources, edges, entries)?;
+        let definitions =
+            unit_definitions(plane, sources, edges, entries, root_entry, root_ingress)?;
 
         for (ordinal, descriptor) in self.descriptors.iter().enumerate() {
             // `AC-1`, direction 2 — every descriptor names a member of the
@@ -1206,7 +1550,7 @@ fn validate_slot_run(
     definition: AbiUnitDefinition,
 ) -> Result<(), CraneliftBackendError> {
     let capture_carrier = match definition {
-        AbiUnitDefinition::SchedulingEntry => None,
+        AbiUnitDefinition::SchedulingEntry { .. } => None,
         AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
     };
 

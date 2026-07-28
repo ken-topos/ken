@@ -61,6 +61,130 @@ fn px8i_jit_and_object_construct_identical_local_helper_clif() {
     );
 }
 
+/// **`RT-FNSPLIT-B2F` `AC-8`(b) — the native-`Int` module's DECLARED inventory
+/// is exactly eight functions, pinned as a SET rather than as a count.**
+///
+/// ⭐ **`AC-8` records the measurement as *"6 definitions / 8 declarations,
+/// Θ(1) per native module"* and says the definitions are already pinned
+/// (`LOCAL_HELPER_COUNT`, above) while ⛔ **the declarations are genuinely
+/// unpinned.** This is that pin.
+///
+/// ## Why a set and not the number 8
+///
+/// ⛔ A count is satisfied by any eight names, so swapping a helper for a
+/// different import keeps it green. `pin-a-property` §5: assert the **exact
+/// permitted inventory**, so that *any* addition reddens — including one nobody
+/// imagined — and so that a removal reddens as the same failure rather than as a
+/// different one.
+///
+/// ⚠ **And the two linkages are asserted separately on purpose.** `malloc` and
+/// `free` are `Import`s the host supplies; the six helpers are `Local`
+/// definitions this module owns. Collapsing them into one name set would accept
+/// a helper silently demoted to an import — which is precisely how a body that
+/// stopped being emitted would look from a name census.
+///
+/// **MEASURED:** the `(name, linkage)` pairs `ModuleDeclarations::get_functions`
+/// reports for a module that has had the native-`Int` local graph emitted into
+/// it, and nothing else.
+/// **CLAIMED:** `emit_native_int_local_graph` declares exactly this inventory.
+/// **THE GAP:** ⚠ that the population is **program-independent** is *not*
+/// measured here — it is the structural guarantee `AC-8`(c) records, namely that
+/// `emit_native_int_local_graph` takes no program-derived parameter, so the
+/// compiler forbids that growth mode. ⛔ `AC-8` explicitly says to add no test
+/// for it, and this is not one.
+///
+/// Promise class: **normative compatibility vector** — these are the symbols the
+/// native-`Int` ABI publishes into every module, and changing one is a contract
+/// decision, not a refactor.
+#[test]
+fn b2f_ac8_the_native_int_module_declares_exactly_its_eight_functions() {
+    let mut module = new_jit_module().expect("JIT module constructs");
+    crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
+        .expect("local helper graph emits");
+
+    let declared = native_int_declared_inventory(&module);
+
+    assert_eq!(
+        declared,
+        vec![
+            ("free".to_string(), Linkage::Import),
+            ("ken_native_int_binop_local".to_string(), Linkage::Local),
+            ("ken_native_int_compare_local".to_string(), Linkage::Local),
+            ("ken_native_int_export_local".to_string(), Linkage::Local),
+            ("ken_native_int_intern_local".to_string(), Linkage::Local),
+            ("ken_native_int_narrow_local".to_string(), Linkage::Local),
+            ("ken_native_int_resolve_local".to_string(), Linkage::Local),
+            ("malloc".to_string(), Linkage::Import),
+        ],
+        "the native-Int module's declared inventory moved; AC-8's `8 declarations` \
+         is a claim about THIS set, not about the number"
+    );
+}
+
+/// ⭐ **The positive control for the inventory pin — it proves the enumeration
+/// OBSERVES declarations rather than returning a constant.**
+///
+/// ⚠ **A negative check passes for any reason** (`pin-a-property` §6), and an
+/// inventory assertion is a negative check: "nothing else is declared" is green
+/// on a harness that reports nothing at all. So feed the same enumerator a
+/// module that genuinely has more in it — the boundary-value graph emitted
+/// beside the native-`Int` one — and require it to **see the difference**.
+///
+/// ⛔ This is deliberately not a second copy of the expected list: it asserts a
+/// **relation** (strict superset, and strictly larger) so it stays true when
+/// either emitter legitimately changes its own population. ⚠ It therefore says
+/// nothing about *which* extra symbols appeared, which is the sibling emitter's
+/// obligation and not this file's.
+#[test]
+fn b2f_ac8_the_inventory_enumerator_sees_a_second_emitters_declarations() {
+    let mut native_only = new_jit_module().expect("JIT module constructs");
+    crate::native_int_clif::emit_native_int_local_graph(&mut native_only, false)
+        .expect("local helper graph emits");
+    let native_inventory = native_int_declared_inventory(&native_only);
+
+    let mut both = new_jit_module().expect("JIT module constructs");
+    let graph = crate::native_int_clif::emit_native_int_local_graph(&mut both, false)
+        .expect("local helper graph emits");
+    let plan = crate::boundary_value::BoundaryEmissionPlan::derive();
+    crate::boundary_value_clif::emit_boundary_value_local_graph(&mut both, &graph, &plan)
+        .expect("boundary-value graph emits");
+    let both_inventory = native_int_declared_inventory(&both);
+
+    // Non-vacuity, stated before the comparison: the instrument reported
+    // something at all, and the two runs are not the same run.
+    assert!(!native_inventory.is_empty());
+    assert!(
+        both_inventory.len() > native_inventory.len(),
+        "the enumerator did not see the second emitter's declarations, so the \
+         inventory pin above is green for an unknown reason"
+    );
+    for entry in &native_inventory {
+        assert!(
+            both_inventory.contains(entry),
+            "emitting a second graph dropped `{}` from the declared inventory",
+            entry.0
+        );
+    }
+}
+
+/// Every function a module declares, as sorted `(name, linkage)` pairs.
+///
+/// ⛔ Read from `ModuleDeclarations`, which is what the module actually holds —
+/// ⛔ **not** from the source text of the emitter, and not from the `FuncId`s
+/// the emitter happened to return. An emitter that declared a ninth function and
+/// forgot to mention it in its return type is exactly the case this must catch.
+fn native_int_declared_inventory<M: Module>(module: &M) -> Vec<(String, Linkage)> {
+    let mut declared = module
+        .declarations()
+        .get_functions()
+        .map(|(id, decl)| (decl.linkage_name(id).into_owned(), decl.linkage))
+        .collect::<Vec<_>>();
+    // ⚠ Sorted by NAME only — `Linkage` is not `Ord`, and sorting on it would
+    // make the expected order depend on a foreign enum's declaration order.
+    declared.sort_by(|left, right| left.0.cmp(&right.0));
+    declared
+}
+
 #[test]
 fn px8i_local_helpers_reject_invalid_zero_stale_and_wrong_arena_slots() {
     let mut module = new_jit_module().expect("JIT module constructs");

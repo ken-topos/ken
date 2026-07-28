@@ -28,9 +28,13 @@ fn test_synthesized_constructor_identity() -> ConstructorIdentity {
 fn c2_ac2_closed_roles_are_injective_by_spelling_and_canonical_for_duplicates() {
     let expr = RuntimeExpr::Value(RuntimeValue::Bool(true));
     let symbols = crate::NativeProcessSymbols::legacy_prelude();
-    let distinct =
-        plan_static_transition_graph_with_symbols(&expr, &BTreeMap::new(), &symbols)
-            .expect("the distinct-role fixture plans");
+    let distinct = plan_static_transition_graph_with_symbols(
+        &expr,
+        &BTreeMap::new(),
+        &symbols,
+        AbiRootIngress::Value,
+    )
+    .expect("the distinct-role fixture plans");
     let file_error = distinct
         .synthesized_constructor_identity(SynthesizedConstructorRole::Fixed(
             SynthesizedFixedConstructorRole::FileError,
@@ -62,6 +66,7 @@ fn c2_ac2_closed_roles_are_injective_by_spelling_and_canonical_for_duplicates() 
         &expr,
         &BTreeMap::new(),
         &duplicate_symbols,
+        AbiRootIngress::Value,
     )
     .expect("the duplicate-spelling fixture plans");
     let duplicate_file_error = duplicate
@@ -201,23 +206,32 @@ fn run_dynamic_constructor_dispatch_fixture(
         next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
+        body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
-        host_dispatch: None,
-        invocation_pointer: None,
-        native_int_arena: None,
-        native_int_binop: None,
-        native_int_compare: None,
-        native_int_intern: None,
-        native_int_narrow: None,
-        native_int_export: None,
-        native_int_tags: BTreeMap::new(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
         // rather than silently taking the `Specialized` path.
-        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+        function_local: FunctionLocalRefs {
+            seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
+            host_dispatch: None,
+            host_dispatch_context: None,
+            services_pointer: None,
+            native_int_arena: None,
+            boundary_arena: None,
+            native_int_binop: None,
+            native_int_compare: None,
+            native_int_intern: None,
+            native_int_narrow: None,
+            native_int_export: None,
+            native_int_resolve: None,
+            native_int_tags: BTreeMap::new(),
+            unit_calls: BTreeMap::new(),
+            terminal_result_origins: BTreeSet::new(),
+            boundary_carrier: None,
+        },
     };
     let mut function_context = FunctionBuilderContext::new();
     {
@@ -1003,7 +1017,7 @@ fn recursive_computational_aggregate_traverses_ordinary_frame() {
     .expect("recursive aggregate traverses the active ordinary frame");
 }
 #[test]
-fn heterogeneous_bridge_removal_recovers_exact_ordinary_match_refusal() {
+fn heterogeneous_bridge_removal_uses_the_runtime_constructor_route() {
     let fixture = heterogeneous_eliminator_fixture(
         "ctor:fixture::Inner::Hit",
         "ctor:fixture::Inner::Hit",
@@ -1024,16 +1038,8 @@ fn heterogeneous_bridge_removal_recovers_exact_ordinary_match_refusal() {
         value: Box::new(args.remove(0)),
         body,
     };
-    let err =
-        emit_process_entrypoint_object_with_cranelift(&bridge_removed, "ken_px7o_bridge_removed")
-            .expect_err("eagerly materializing the intermediate must recover the original defect");
-    assert!(matches!(
-        err,
-        CraneliftBackendError::Unsupported(UnsupportedLowering {
-            construct: "Match",
-            reason,
-        }) if reason == "scrutinee is not a constructor value"
-    ));
+    emit_process_entrypoint_object_with_cranelift(&bridge_removed, "ken_px7o_bridge_removed")
+        .expect("the functionized carrier retains the runtime constructor discriminator");
 }
 #[test]
 fn heterogeneous_frame_environment_and_binder_order_are_preserved() {
@@ -1093,7 +1099,7 @@ fn heterogeneous_frame_environment_and_binder_order_are_preserved() {
     );
 }
 #[test]
-fn heterogeneous_final_merge_kind_rejects_specifically() {
+fn heterogeneous_final_merge_kind_is_deferred_to_the_runtime_discriminator() {
     let producer = RuntimeExpr::Match {
         scrutinee: Box::new(RuntimeExpr::Effect {
             family: "Console".to_string(),
@@ -1178,19 +1184,12 @@ fn heterogeneous_final_merge_kind_rejects_specifically() {
         )),
         args: vec![inner_call],
     };
-    let err = emit_process_entrypoint_object_with_cranelift(&expr, "ken_px7o_final_kind_mismatch")
-        .expect_err("final scalar and ExitCode arms must not merge");
-    assert!(matches!(
-        err,
-        CraneliftBackendError::Unsupported(UnsupportedLowering {
-            construct: "ComputationalMatch",
-            reason,
-        }) if reason == "dynamic native arms disagree on scalar versus ExitCode result"
-    ));
+    emit_process_entrypoint_object_with_cranelift(&expr, "ken_px7o_final_kind_mismatch")
+        .expect("the functionized route emits the dynamic final-kind discriminator");
 }
 #[test]
-fn heterogeneous_ordinary_arity_rejects_specifically() {
-    let err = emit_process_entrypoint_object_with_cranelift(
+fn heterogeneous_ordinary_arity_is_guarded_in_the_emitted_consumer() {
+    emit_process_entrypoint_object_with_cranelift(
         &heterogeneous_eliminator_fixture(
             "ctor:fixture::Inner::Hit",
             "ctor:fixture::Inner::Hit",
@@ -1203,18 +1202,11 @@ fn heterogeneous_ordinary_arity_rejects_specifically() {
         ),
         "ken_px7o_wrong_arity",
     )
-    .expect_err("ordinary frame binder arity must match the constructor");
-    assert!(matches!(
-        err,
-        CraneliftBackendError::Unsupported(UnsupportedLowering {
-            construct: "Match",
-            reason,
-        }) if reason == "case ctor:fixture::Inner::Hit expects 0 binders but constructor has 1 args"
-    ));
+    .expect("the functionized consumer emits its runtime binder-arity guard");
 }
 #[test]
-fn heterogeneous_nested_payload_kind_rejects_specifically() {
-    let err = emit_process_entrypoint_object_with_cranelift(
+fn heterogeneous_nested_payload_kind_is_guarded_in_the_emitted_consumer() {
+    emit_process_entrypoint_object_with_cranelift(
         &heterogeneous_eliminator_fixture(
             "ctor:fixture::Inner::Hit",
             "ctor:fixture::Inner::Hit",
@@ -1227,14 +1219,7 @@ fn heterogeneous_nested_payload_kind_rejects_specifically() {
         ),
         "ken_px7o_payload_kind",
     )
-    .expect_err("the nested aggregate payload must retain its scalar kind");
-    assert!(matches!(
-        err,
-        CraneliftBackendError::Unsupported(UnsupportedLowering {
-            construct: "PrimitiveCall",
-            reason,
-        }) if reason == "sub_int only supports Int arguments in native lowering"
-    ));
+    .expect("the functionized consumer preserves the runtime payload-kind guard");
 }
 #[test]
 fn pattern_default_trap_is_observation_not_backend_error() {
@@ -1775,20 +1760,29 @@ fn bare_carrier_test_lowering<'src>(
         next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
+        body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
-        host_dispatch: None,
-        invocation_pointer: None,
-        native_int_arena: None,
-        native_int_binop: None,
-        native_int_compare: None,
-        native_int_intern: None,
-        native_int_narrow: None,
-        native_int_export: None,
-        native_int_tags: BTreeMap::new(),
-        boundary_carrier: None,
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+        function_local: FunctionLocalRefs {
+            seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
+            host_dispatch: None,
+            host_dispatch_context: None,
+            services_pointer: None,
+            native_int_arena: None,
+            boundary_arena: None,
+            native_int_binop: None,
+            native_int_compare: None,
+            native_int_intern: None,
+            native_int_narrow: None,
+            native_int_export: None,
+            native_int_resolve: None,
+            native_int_tags: BTreeMap::new(),
+            unit_calls: BTreeMap::new(),
+            terminal_result_origins: BTreeSet::new(),
+            boundary_carrier: None,
+        },
     }
 }
 
@@ -2059,6 +2053,31 @@ fn ac_c7_try_compile_edge<'src>(
         &mut FunctionBuilder<'_>,
     ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError>,
 ) -> Result<(cranelift_jit::JITModule, *const u8), CraneliftBackendError> {
+    ac_c7_try_compile_edge_with_operands(seed_env, plan, 0, |compiler, builder, _| {
+        emit(compiler, builder)
+    })
+}
+
+/// The same rig, with `operands` extra `i64` parameters after the arena.
+///
+/// ⭐⭐ **Why a rig with RUNTIME operands exists at all.** Every row above
+/// compiles one body per fixture, so a body that specialized on a JIT-time
+/// constant would be indistinguishable from one that decided at run time — the
+/// two compilations differ, and either could be what produced the two answers.
+/// ⇒ For any claim of the form *"emitted code makes this choice from the
+/// **value**"* the discriminator has to be **one compiled body driven with two
+/// payloads**, which is what these parameters are for. ⛔ Nothing else in this
+/// file can establish `AC-2`.
+fn ac_c7_try_compile_edge_with_operands<'src>(
+    seed_env: &'src NativeSeedEnvironment,
+    plan: StaticTransitionPlan<'src>,
+    operands: usize,
+    emit: impl FnOnce(
+        &mut Lowering<'src>,
+        &mut FunctionBuilder<'_>,
+        &[cranelift_codegen::ir::Value],
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError>,
+) -> Result<(cranelift_jit::JITModule, *const u8), CraneliftBackendError> {
     let mut module = new_jit_module().expect("JIT module constructs");
     let native = crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
         .expect("native-int graph emits");
@@ -2073,6 +2092,9 @@ fn ac_c7_try_compile_edge<'src>(
 
     let mut signature = module.make_signature();
     signature.params.push(AbiParam::new(pointer));
+    for _ in 0..operands {
+        signature.params.push(AbiParam::new(types::I64));
+    }
     signature.returns.push(AbiParam::new(types::I64));
     let func_id = module
         .declare_function("c1_ac_c7_edge", Linkage::Local, &signature)
@@ -2096,10 +2118,23 @@ fn ac_c7_try_compile_edge<'src>(
         store_field: module.declare_func_in_func(helpers.store_field, &mut context.func),
         store_name: module.declare_func_in_func(helpers.store_name, &mut context.func),
         make_immediate: module.declare_func_in_func(helpers.make_immediate, &mut context.func),
+        store_int_tag: module.declare_func_in_func(helpers.store_int_tag, &mut context.func),
+        store_bytes_len: module.declare_func_in_func(helpers.store_bytes_len, &mut context.func),
+        store_byte: module.declare_func_in_func(helpers.store_byte, &mut context.func),
+        store_int_limbs: module.declare_func_in_func(helpers.store_int_limbs, &mut context.func),
+        store_int_limb: module.declare_func_in_func(helpers.store_int_limb, &mut context.func),
+        seal_int: module.declare_func_in_func(helpers.seal_int, &mut context.func),
     };
 
     let mut compiler = bare_carrier_test_lowering(seed_env, plan);
-    compiler.boundary_carrier = Some(carrier);
+    compiler.function_local.boundary_carrier = Some(carrier);
+    // ⭐ The native-`Int` authority, resolved into THIS function. ⛔ Without
+    // these the wide-`Int` arm cannot decode a pair and the rig would measure a
+    // refusal rather than the copy.
+    compiler.function_local.native_int_intern =
+        Some(module.declare_func_in_func(native.intern, &mut context.func));
+    compiler.function_local.native_int_resolve =
+        Some(module.declare_func_in_func(native.resolve, &mut context.func));
 
     let mut function_context = FunctionBuilderContext::new();
     let refused = {
@@ -2107,7 +2142,13 @@ fn ac_c7_try_compile_edge<'src>(
         let entry = builder.create_block();
         builder.append_block_params_for_function_params(entry);
         builder.switch_to_block(entry);
-        compiler.native_int_arena = Some(builder.block_params(entry)[0]);
+        let parameters = builder.block_params(entry).to_vec();
+        // ⭐ In THIS rig parameter 0 is genuinely the boundary arena — the test
+        // passes `BoundaryArenaV1::publish()` — and the native arena is its
+        // `ARENA_NATIVE_INT` binding. ⛔ Setting both from one value would
+        // reinstate the equality the Architect's ruling deletes; the native
+        // field is left for the fixtures that bind one.
+        compiler.function_local.boundary_arena = Some(parameters[0]);
         // â  A refusal must still leave a WELL-FORMED function behind, or the
         // failure the caller wanted to observe is replaced by a Cranelift
         // assertion about an unfilled block. â­ Every carrier route refuses
@@ -2115,7 +2156,7 @@ fn ac_c7_try_compile_edge<'src>(
         // empty-case check both say so at their sites â so on the error path
         // the entry block is still current and still empty, and returning a
         // constant from it is sound.
-        match emit(&mut compiler, &mut builder) {
+        match emit(&mut compiler, &mut builder, &parameters[1..]) {
             Ok(result) => {
                 builder.ins().return_(&[result]);
                 builder.seal_all_blocks();
@@ -2206,9 +2247,15 @@ fn c2_compile_edge_with_arg<'src>(
         store_field: module.declare_func_in_func(helpers.store_field, &mut context.func),
         store_name: module.declare_func_in_func(helpers.store_name, &mut context.func),
         make_immediate: module.declare_func_in_func(helpers.make_immediate, &mut context.func),
+        store_int_tag: module.declare_func_in_func(helpers.store_int_tag, &mut context.func),
+        store_bytes_len: module.declare_func_in_func(helpers.store_bytes_len, &mut context.func),
+        store_byte: module.declare_func_in_func(helpers.store_byte, &mut context.func),
+        store_int_limbs: module.declare_func_in_func(helpers.store_int_limbs, &mut context.func),
+        store_int_limb: module.declare_func_in_func(helpers.store_int_limb, &mut context.func),
+        seal_int: module.declare_func_in_func(helpers.seal_int, &mut context.func),
     };
     let mut compiler = bare_carrier_test_lowering(seed_env, plan);
-    compiler.boundary_carrier = Some(carrier);
+    compiler.function_local.boundary_carrier = Some(carrier);
     let mut function_context = FunctionBuilderContext::new();
     {
         let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
@@ -2216,7 +2263,9 @@ fn c2_compile_edge_with_arg<'src>(
         builder.append_block_params_for_function_params(entry);
         builder.switch_to_block(entry);
         let parameters = builder.block_params(entry).to_vec();
-        compiler.native_int_arena = Some(parameters[0]);
+        // This rig receives the published boundary arena directly.  Its
+        // carrier producer/consumer paths do not use native-Int services.
+        compiler.function_local.boundary_arena = Some(parameters[0]);
         let result = emit(&mut compiler, &mut builder, parameters[1])
             .expect("the C2 carrier edge emits");
         builder.ins().return_(&[result]);
@@ -2294,6 +2343,7 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
         &planned_fixture,
         &BTreeMap::new(),
         &symbols,
+        AbiRootIngress::Value,
     )
     .expect("the C2 producer/consumer fixture plans");
     let root = plan.root_static_origin().expect("root occurrence exists");
@@ -2488,9 +2538,13 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
 fn c2_ac6_host_result_covers_resource_token_and_response_bytes_payloads() {
     let symbols = crate::NativeProcessSymbols::legacy_prelude();
     let expr = RuntimeExpr::Value(RuntimeValue::Bool(true));
-    let plan =
-        plan_static_transition_graph_with_symbols(&expr, &BTreeMap::new(), &symbols)
-            .expect("the C2 covered-class fixture plans");
+    let plan = plan_static_transition_graph_with_symbols(
+        &expr,
+        &BTreeMap::new(),
+        &symbols,
+        AbiRootIngress::Value,
+    )
+    .expect("the C2 covered-class fixture plans");
     let origin = plan.root_static_origin().expect("root occurrence exists");
     let seed_env = NativeSeedEnvironment::empty();
     let resource = 0x1020_3040_5060_7080_i64;
@@ -3837,5 +3891,695 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
         "NON-VACUITY: the admissible graph must get PAST the walk and stop at the \
          first emitted call, or the two refusals above prove nothing about \
          ordering: got {reached:?}"
+    );
+}
+
+// ─── `RT-FNSPLIT-B2F` `D9` — THE MAGNITUDE DISPATCH ───────────────────────
+//
+// ⭐⭐ **One compiled body, two runtime payloads, both arms.** The claim under
+// test is `AC-2`: the choice between the immediate field and the spilled handle
+// is made by *emitted code from the value*, ⛔ never by a JIT-time inspection
+// picking a layout. ⇒ Two separate compilations, each with its own constant,
+// cannot establish that — a body that specialized on the constant would produce
+// the same two answers. Every row below therefore drives **one** compiled
+// function with the payload as a **parameter**.
+
+/// `(arena, payload) -> boundary word` — the dispatch, compiled once.
+///
+/// ⚠ The `Lowered::Int` is built over the function's own **block parameter**,
+/// and its `NativeIntV1` marker is registered the way `lower_dynamic_small_int`
+/// registers one in production. ⛔ `known` is `None`: a `Some` here would hand
+/// the producer a compile-time magnitude and is exactly the input this rig
+/// exists to withhold.
+fn b2f_d9_dispatch(payloads: &[i64]) -> Vec<crate::boundary_value::BoundaryWord> {
+    let fixture = ac_c7_ctor("Alpha");
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let seed_env = NativeSeedEnvironment::empty();
+    let (_module, code) = ac_c7_try_compile_edge_with_operands(
+        &seed_env,
+        plan,
+        1,
+        |compiler, builder, operands| {
+            let payload = operands[0];
+            let marker = builder
+                .ins()
+                .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64);
+            compiler
+                .function_local
+                .native_int_tags
+                .insert(payload, marker);
+            let value = Lowered::Int {
+                value: payload,
+                known: None,
+            };
+            Ok(compiler.transfer_into_carrier(builder, root, &value)?.word)
+        },
+    )
+    .expect("the magnitude dispatch emits");
+
+    let run: extern "C" fn(*const u64, i64) -> i64 = unsafe { std::mem::transmute(code) };
+    payloads
+        .iter()
+        .map(|payload| {
+            // ⚠ A fresh store and arena per payload: the spill ALLOCATES, and
+            // sharing one arena would let the second row's answer depend on the
+            // first row's residency.
+            let mut store = crate::boundary_value::BoundaryValueStore::new();
+            let (_arena, base) = ac_c7_bind_arena(&mut store);
+            let word = crate::boundary_value::BoundaryWord(run(base, *payload) as u64);
+            // The node's own recorded content, read from the persistent image
+            // the emitted code wrote into.
+            if word.tag() == Some(BoundaryTag::PersistentGround) {
+                let image = store.image();
+                assert_eq!(
+                    image.0.node_field(word.payload(), crate::boundary_value::NODE_CLASS),
+                    Some(BoundaryClass::Int as u64),
+                    "the spill arm must allocate the class the disposition \
+                     declares in `spill: Some(_)`"
+                );
+                assert_eq!(
+                    image
+                        .0
+                        .node_field(word.payload(), crate::boundary_value::NODE_PAYLOAD),
+                    Some(*payload as u64),
+                    "⛔ the spill must carry the magnitude WORD UNTRUNCATED — \
+                     that is the entire reason the arm exists"
+                );
+                assert_eq!(
+                    image
+                        .0
+                        .node_field(word.payload(), crate::boundary_value::NODE_EXTENT),
+                    Some(crate::NATIVE_INT_SMALL_TAG_V1),
+                    "the spill must record HOW the word is to be read"
+                );
+            }
+            word
+        })
+        .collect()
+}
+
+/// ⭐ **`D9` ROW 1 — a value inside the immediate field takes the immediate
+/// arm.**
+///
+/// **MEASURED:** JIT-compiled emitted code, handed `BOUNDARY_IMMEDIATE_INT_MAX`
+/// at run time, returns a word tagged [`BoundaryTag::ImmediateInt`] whose signed
+/// payload is that value.
+/// **CLAIMED:** the dispatch's `BOUNDARY_OK` arm uses the word `make_immediate`
+/// wrote, rather than allocating.
+/// **THE GAP:** ⚠ *"it is an immediate"* alone is satisfiable by a body that is
+/// **always** an immediate — which is the pre-dispatch defect, truncation and
+/// all. ⇒ Closed only by row 2, on the same compiled body.
+///
+/// ⚠ Promise class: **durable invariant.** The literal is the ABI's own field
+/// limit rather than a captured number, so widening the payload field moves the
+/// fixture with the contract instead of reddening it.
+#[test]
+fn b2f_d9_a_value_inside_the_field_takes_the_immediate_arm() {
+    let max = crate::boundary_value::BOUNDARY_IMMEDIATE_INT_MAX;
+    assert!(
+        crate::boundary_value::BoundaryWord::int_fits_immediate(max),
+        "NON-VACUITY: the fixture must actually be inside the field, or this row \
+         is testing the other arm"
+    );
+    let [word]: [_; 1] = b2f_d9_dispatch(&[max]).try_into().expect("one payload");
+    assert_eq!(
+        word.tag(),
+        Some(BoundaryTag::ImmediateInt),
+        "`D9`: a value the field can hold crosses as an immediate word"
+    );
+    assert_eq!(
+        word.signed_payload(),
+        max,
+        "`D9`: and it carries the value, not a truncation of it"
+    );
+}
+
+/// ⭐ **`D9` ROW 2 — a value past the immediate field takes the SPILL arm, and
+/// the spill is a handle that carries the magnitude.**
+///
+/// **MEASURED:** the same emitted body, handed `BOUNDARY_IMMEDIATE_INT_MAX + 1`,
+/// returns a [`BoundaryTag::PersistentGround`] handle whose node records class
+/// `Int`, the exact magnitude word, and the `Small` marker (asserted inside
+/// [`b2f_d9_dispatch`]).
+/// **CLAIMED:** `make_immediate`'s `BOUNDARY_ERR_BOUNDS` status is what selects
+/// the spill, and the spill preserves the value.
+/// **THE GAP:** ⛔ this row does not show the producer READS the status rather
+/// than re-deriving the predicate — a hand-written shift-and-compare would
+/// answer identically on every value. That residual is **review-caught, not
+/// mechanically detected**, and it is recorded as such on
+/// `Lowering::emit_carrier_spillable_immediate`; ⚠ this test passing is not
+/// evidence about it.
+///
+/// ⚠ Promise class: **durable invariant** — `MAX + 1` is derived from the ABI's
+/// own limit, so it tracks the field rather than freezing a magnitude.
+#[test]
+fn b2f_d9_a_value_past_the_field_takes_the_spill_arm() {
+    let over = crate::boundary_value::BOUNDARY_IMMEDIATE_INT_MAX + 1;
+    assert!(
+        !crate::boundary_value::BoundaryWord::int_fits_immediate(over),
+        "NON-VACUITY: the fixture must actually overflow the field"
+    );
+    let [word]: [_; 1] = b2f_d9_dispatch(&[over]).try_into().expect("one payload");
+    assert_eq!(
+        word.tag(),
+        Some(BoundaryTag::PersistentGround),
+        "`D9`: a value the field cannot hold crosses as a HANDLE — the tag the \
+         ABI's own `ImmediateInt` doc names as the overflow representation"
+    );
+}
+
+/// ⭐⭐ **`D9` POSITIVE CONTROL — the spill arm is genuinely TAKEN, by one
+/// compiled body, at run time.**
+///
+/// ⛔ **This is the row the other two cannot replace, and the reason is the
+/// defect it is designed to catch.** Rows 1 and 2 each compile their own
+/// function, so both would still pass if the producer inspected a JIT-time
+/// magnitude and emitted a *different body* for each — which is precisely the
+/// compile-time specialization `AC-2` forbids. Here **one** compiled function is
+/// driven with both payloads, so the only thing that can differ between the two
+/// answers is the run-time value.
+///
+/// ⚠ The pair is **adjacent** — `MAX` against `MAX + 1` — so nothing but the
+/// partition itself can separate them. A body that always took one arm returns
+/// two words with the same tag.
+///
+/// **MEASURED:** one function, two payloads one apart, two different tags.
+/// **CLAIMED:** the arm is selected from the payload at run time.
+/// **THE GAP:** that the selecting quantity is `make_immediate`'s status — see
+/// row 2's residual.
+#[test]
+fn b2f_d9_one_compiled_body_takes_both_arms_at_runtime() {
+    let max = crate::boundary_value::BOUNDARY_IMMEDIATE_INT_MAX;
+    let words = b2f_d9_dispatch(&[max, max + 1]);
+    assert_ne!(
+        words[0].tag(),
+        words[1].tag(),
+        "POSITIVE CONTROL: one compiled body handed two ADJACENT payloads must \
+         take DIFFERENT arms. Equal tags mean the dispatch is not reading the \
+         value at all"
+    );
+    assert_eq!(
+        words[0].tag(),
+        Some(BoundaryTag::ImmediateInt),
+        "and the direction must be the one the field dictates"
+    );
+    assert_eq!(
+        words[1].tag(),
+        Some(BoundaryTag::PersistentGround),
+        "⛔ the larger value is the one that spills"
+    );
+}
+
+/// ⭐⭐ **`D9` — WHY THE THIRD OUTCOME IS NOT PINNED BY A FIXTURE, checked
+/// rather than asserted.**
+///
+/// ⛔ **A mutation deleting `require_i64(status, BOUNDARY_ERR_BOUNDS)` from the
+/// dispatch leaves all three rows above GREEN, and that is measured.** The
+/// honest reading is not *"the controls are weak"* — it is that the arm is
+/// **structurally unreachable through this producer**, and the reason is a
+/// relation between two authority tables that nothing else states:
+///
+/// - `ken_boundary_make_immediate_local` refuses with `BOUNDARY_ERR_SHAPE`
+///   in exactly two situations: a **handle** tag, and a payload outside a
+///   **`Bit`** domain. Every other refusal is `BOUNDARY_ERR_BOUNDS`.
+/// - The dispatch is only ever reached with a tag from a
+///   `RepresentedImmediate { spill: Some(_) }` disposition.
+///
+/// ⇒ If no spillable variant's tag carries the `Bit` domain, `make_immediate`
+/// on this path can answer only `OK` or `ERR_BOUNDS`, and no fixture can drive
+/// the third arm without first changing one of those tables.
+///
+/// **MEASURED:** every `LoweredVariant` whose disposition declares a spill has
+/// an immediate tag present in `BOUNDARY_IMMEDIATE_DOMAIN` with a domain other
+/// than `Bit`.
+/// **CLAIMED:** the dispatch's *"anything else → fail closed"* arm is a backstop
+/// against a future table change, ⛔ not dead code and ⛔ not a live branch some
+/// test forgot to cover.
+/// **THE GAP:** ⚠ this pins the **premise**, not the backstop. If the premise
+/// is ever broken — a spillable tag given the `Bit` domain, or a handle tag
+/// reaching the call — this test reddens and the branch becomes reachable, at
+/// which point it needs a fixture. ⇒ That is the intended coupling: ⛔ the
+/// backstop must never be removed on the grounds that "no test covers it."
+///
+/// ⚠ Promise class: **durable invariant.** It quantifies over
+/// `LoweredVariant::ALL` and reads both tables, so a new spillable variant is
+/// covered without editing this test — and a new one with a `Bit` domain is
+/// exactly the change that should stop the world.
+#[test]
+fn b2f_d9_no_spillable_tag_can_make_the_immediate_producer_answer_shape() {
+    let mut spillable = 0usize;
+    for variant in LoweredVariant::ALL {
+        let BoundaryDisposition::RepresentedImmediate {
+            tag,
+            spill: Some(_),
+        } = variant.boundary_disposition()
+        else {
+            continue;
+        };
+        spillable += 1;
+        let domain = crate::boundary_value::BOUNDARY_IMMEDIATE_DOMAIN
+            .iter()
+            .find(|(candidate, _)| *candidate == tag)
+            .map(|(_, domain)| *domain);
+        // ⛔ Two ways the premise can break, and they are different failures.
+        assert!(
+            domain.is_some(),
+            "⛔ {variant:?}'s immediate tag {tag:?} is absent from \
+             `BOUNDARY_IMMEDIATE_DOMAIN`, so `make_immediate` refuses it as a \
+             HANDLE tag with ERR_SHAPE — the third outcome, reachable"
+        );
+        assert_ne!(
+            domain,
+            Some(crate::boundary_value::BoundaryImmediateDomain::Bit),
+            "⛔ {variant:?} declares a spill and carries the `Bit` domain, so \
+             `make_immediate` can now answer ERR_SHAPE on the dispatch path. \
+             The fail-closed arm is REACHABLE and needs a fixture"
+        );
+    }
+    assert!(
+        spillable > 0,
+        "NON-VACUITY: a loop over zero spillable variants asserts nothing, and \
+         would stay green if the disposition table lost its `spill` arm entirely"
+    );
+}
+
+// ─── `RT-FNSPLIT-B2F` `D9` — THE BYTE-BODIED HANDLE PRODUCER ──────────────
+
+/// Transfer one byte-bodied literal through the real emitted carrier graph and
+/// report `(word, node class, node content)`.
+///
+/// ⚠ The `Lowered` is handed in by the caller so that **one** helper drives both
+/// classes: `String` and `Bytes` differ by the class the disposition supplies,
+/// and that class is the axis `store_bytes_len` and `store_byte` guard on. ⛔ A
+/// `Bytes`-only fixture leaves `String`'s guard arm unreached — the defect
+/// `boundary_value_clif`'s own history records.
+fn b2f_d9_bytes_edge(literal: Lowered) -> (crate::boundary_value::BoundaryWord, Option<u64>, Vec<u8>) {
+    let fixture = ac_c7_ctor("Alpha");
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let seed_env = NativeSeedEnvironment::empty();
+    let (_module, code) = ac_c7_compile_edge(&seed_env, plan, move |compiler, builder| {
+        Ok(compiler.transfer_into_carrier(builder, root, &literal)?.word)
+    });
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = ac_c7_bind_arena(&mut store);
+    let word = crate::boundary_value::BoundaryWord(ac_c7_run(code, base) as u64);
+    let class = store
+        .image()
+        .0
+        .node_field(word.payload(), crate::boundary_value::NODE_CLASS);
+    let content = store
+        .image()
+        .0
+        .node_data(word.payload())
+        .map(<[u8]>::to_vec)
+        .unwrap_or_default();
+    (word, class, content)
+}
+
+/// ⭐ **`D9` — a `Bytes` literal crosses as a handle carrying its content.**
+///
+/// **MEASURED:** JIT-compiled emitted code claims a span of the literal's length
+/// in the node's own region and writes every byte; the persistent image reads
+/// back the exact content.
+/// **CLAIMED:** the byte-bodied producer arm emits the claim-then-fill protocol.
+/// **THE GAP:** ⚠ the content is a **compile-time literal**. ⛔ This says nothing
+/// about a runtime-computed byte body — no `Lowered` variant carries one today,
+/// and the arm must not be read as covering the class in general.
+///
+/// ⚠ Promise class: **durable invariant** — it asserts the round trip of a
+/// fixture it owns, not a frozen node index or length.
+#[test]
+fn b2f_d9_a_bytes_literal_crosses_with_its_content() {
+    // ⚠ Deliberately NOT ASCII-only and not a palindrome: a producer that wrote
+    // the length as content, or filled the span in reverse, must be visible.
+    let literal: Vec<u8> = vec![0x00, 0x7f, 0x80, 0xff, 0x01];
+    let (word, class, content) = b2f_d9_bytes_edge(Lowered::Bytes(literal.clone()));
+    assert_eq!(
+        word.tag(),
+        Some(BoundaryTag::PersistentGround),
+        "`D9`: a byte-bodied literal crosses as the handle its disposition declares"
+    );
+    assert_eq!(
+        class,
+        Some(BoundaryClass::Bytes as u64),
+        "`D9`: the class comes from the sole disposition authority"
+    );
+    assert_eq!(
+        content, literal,
+        "`D9`: ⛔ the whole content, in order — a claim-then-fill that stopped \
+         early, reversed, or wrote the length would differ here"
+    );
+}
+
+/// ⭐⭐ **`D9` — the SAME emitter drives the `String` class, and that is the
+/// discriminating row.**
+///
+/// ⛔ **Why this is not a duplicate of the `Bytes` row.** The two arms share
+/// every line of the producer except the class the disposition hands it — and
+/// the class is precisely what `store_bytes_len` and `store_byte` guard on. ⇒ A
+/// guard narrowed to `Bytes` alone would leave the `Bytes` row green and this
+/// one red, which is the whole reason both exist.
+///
+/// **MEASURED:** the identical emitter, given a `String`, produces a node whose
+/// class is `String` and whose content is the literal's UTF-8 bytes.
+/// **CLAIMED:** the byte-bodied arm is reached for both classes, not one.
+/// **THE GAP:** ⚠ same literal-content caveat as the row above.
+///
+/// ⚠ Promise class: **durable invariant.**
+#[test]
+fn b2f_d9_the_same_emitter_builds_the_string_class() {
+    // ⚠ Multi-byte on purpose: a producer writing `char`s rather than bytes, or
+    // truncating to ASCII, differs here and agrees on a plain-ASCII fixture.
+    let text = "kΩ→";
+    let (word, class, content) = b2f_d9_bytes_edge(Lowered::String(text.to_string()));
+    assert_eq!(
+        word.tag(),
+        Some(BoundaryTag::PersistentGround),
+        "`D9`: a `String` crosses as the handle its disposition declares"
+    );
+    assert_eq!(
+        class,
+        Some(BoundaryClass::String as u64),
+        "⛔ the `String` CLASS — not `Bytes`. This is the axis the two arms do \
+         NOT share, and the only thing this row adds over the `Bytes` row"
+    );
+    assert_eq!(
+        content,
+        text.as_bytes(),
+        "`D9`: the content is the literal's UTF-8 bytes, all {} of them",
+        text.len()
+    );
+    assert_ne!(
+        content.len(),
+        text.chars().count(),
+        "NON-VACUITY: the fixture must be multi-byte, or `bytes` and `chars` \
+         agree and the length assertion above discriminates nothing"
+    );
+}
+
+// ─── `RT-FNSPLIT-B2F` `D9` — THE REGION-LIMBED (`Big`) `Int` PRODUCER ─────
+//
+// ⛔⛔ **Why a synthetic `(Big, payload)` pair would not do.** A `Big` payload is
+// a **slot identity** in the invocation's native arena, and slots are small
+// integers. ⇒ Handing `make_immediate` a low slot answers `BOUNDARY_OK` and
+// encodes the integer `1` — the silent-corruption path. A fixture that invented
+// a large payload would take the bounds edge and never exercise it. ⭐ So the
+// pair here is minted by **`ken_native_int_intern_local` itself**, from limbs
+// supplied at run time, exactly as production mints one.
+
+/// A bound invocation whose boundary arena also names a native-`Int` arena and
+/// reserves limb capacity in the persistent region.
+///
+/// ⚠ Both the `NativeIntArenaV1` and the store must outlive the call: the base
+/// pointer names their tables, and the binding is published before the pointer
+/// is taken because growing a table afterwards would move it.
+fn b2f_d9_bind_wide_arena(
+    store: &mut crate::boundary_value::BoundaryValueStore,
+    native: &crate::native_int::NativeIntArenaV1,
+) -> (crate::boundary_value::BoundaryArenaV1, *mut u64) {
+    store.reserve_persistent(64, 256, 512, 64);
+    let persistent = store.publish_persistent();
+    let mut arena = crate::boundary_value::BoundaryArenaBuilder::new().finish();
+    arena.reserve(64, 256, 512, 64);
+    arena.bind_persistent(Some(persistent as *const u64));
+    arena.bind_native_int(Some(native as *const _ as *const u64));
+    let base = arena.publish();
+    (arena, base)
+}
+
+/// `(arena, limb0, limb1) -> boundary word` — intern a native `Int` from
+/// **run-time** limbs, then transfer it across the producer.
+///
+/// ⭐⭐ **One compiled body, and the marker is a RUNTIME value.** `intern` trims
+/// leading zero limbs, so `(x, 0)` comes back `Small` and `(x, 1)` comes back
+/// `Big` from the *same* call. ⇒ The marker partition is exercised as a run-time
+/// branch, ⛔ not as two compilations that could each have specialized.
+#[allow(clippy::type_complexity)]
+fn b2f_d9_wide_int(
+    limbs: [u64; 2],
+) -> (
+    crate::boundary_value::BoundaryWord,
+    Vec<u64>,
+    Option<u64>,
+    Option<u64>,
+    Option<u64>,
+) {
+    let fixture = ac_c7_ctor("Alpha");
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let seed_env = NativeSeedEnvironment::empty();
+    let (_module, code) = ac_c7_try_compile_edge_with_operands(
+        &seed_env,
+        plan,
+        2,
+        |compiler, builder, operands| {
+            let arena = compiler
+                .function_local
+                .boundary_arena
+                .expect("the rig binds a boundary arena");
+            let pointer_type = builder.func.dfg.value_type(arena);
+            let native_arena = builder.ins().load(
+                pointer_type,
+                MemFlags::trusted(),
+                arena,
+                crate::boundary_value::ARENA_NATIVE_INT,
+            );
+            // The limb array, filled from the function's own parameters.
+            let source = builder.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                16,
+                3,
+            ));
+            builder.ins().stack_store(operands[0], source, 0);
+            builder.ins().stack_store(operands[1], source, 8);
+            let source_address = builder.ins().stack_addr(pointer_type, source, 0);
+            let pair = builder.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                16,
+                3,
+            ));
+            let pair_address = builder.ins().stack_addr(pointer_type, pair, 0);
+            let sign = builder.ins().iconst(types::I64, 0);
+            let length = builder.ins().iconst(types::I64, 2);
+            let intern = compiler
+                .function_local
+                .native_int_intern
+                .expect("the rig declares intern");
+            let call = builder.ins().call(
+                intern,
+                &[native_arena, sign, source_address, length, pair_address],
+            );
+            Lowering::require_i64(builder, builder.inst_results(call)[0], 0);
+            let marker = builder.ins().stack_load(types::I64, pair, 0);
+            let payload = builder.ins().stack_load(types::I64, pair, 8);
+            // ⛔ Registered exactly as production registers one — the marker is
+            // the pair's own transport tag, not a constant chosen here.
+            compiler
+                .function_local
+                .native_int_tags
+                .insert(payload, marker);
+            let value = Lowered::Int {
+                value: payload,
+                known: None,
+            };
+            Ok(compiler.transfer_into_carrier(builder, root, &value)?.word)
+        },
+    )
+    .expect("the wide-Int producer emits");
+
+    let run: extern "C" fn(*const u64, i64, i64) -> i64 = unsafe { std::mem::transmute(code) };
+    let native = crate::native_int::NativeIntArenaV1::default();
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = b2f_d9_bind_wide_arena(&mut store, &native);
+    let word = crate::boundary_value::BoundaryWord(
+        run(base, limbs[0] as i64, limbs[1] as i64) as u64,
+    );
+    let image = store.image();
+    let copied = image.0.node_limbs(word.payload()).map(<[u64]>::to_vec);
+    let sign = image
+        .0
+        .node_field(word.payload(), crate::boundary_value::NODE_PAYLOAD);
+    let extent = image
+        .0
+        .node_field(word.payload(), crate::boundary_value::NODE_EXTENT);
+    let sealed = image
+        .0
+        .node_field(word.payload(), crate::boundary_value::NODE_INT_SEALED);
+    (word, copied.unwrap_or_default(), sign, extent, sealed)
+}
+
+/// ⭐⭐ **`D9` — a REAL native `Big` crosses as an owned deep copy, with its
+/// exact sign and every limb.**
+///
+/// ⛔ **This is the row the `ERR_ESCAPE` residual was standing in for, and the
+/// residual was false.** The claim was that a wide `Int` would fail closed at
+/// `store_int_tag`'s owner guard. It never reaches that guard: a `Big` payload
+/// is a **slot identity**, `make_immediate` answers `OK` for a low slot, and the
+/// value crossed as the integer `1`. ⇒ The marker must partition the path
+/// *before* any magnitude question is asked.
+///
+/// **MEASURED:** one compiled body interns a native `Int` from run-time limbs
+/// through `ken_native_int_intern_local`, transfers it, and the persistent node
+/// carries the `BOUNDARY_INT_REGION_LIMBS` marker, sign `0`, and **both** limbs.
+/// **CLAIMED:** a valid region-limbed `Int` crosses a unit result boundary
+/// successfully, by owned deep copy, with no borrow escaping.
+/// **THE GAP:** ⚠ this fixture's magnitude is two limbs. The copy loop is over a
+/// **runtime** length, so nothing here is specialized to two — but a defect that
+/// only appears past some larger limb count is not measured by it.
+///
+/// ⚠ Promise class: **durable invariant** — it asserts the round trip of limbs
+/// it supplies at run time, not a frozen node index or encoding.
+#[test]
+fn b2f_d9_a_real_native_big_crosses_as_an_owned_region_limbed_copy() {
+    // ⚠ The top limb is non-zero, so `intern` cannot trim this to a `Small`.
+    // The low limb is deliberately NOT the value a slot identity would be.
+    let (word, copied, sign, extent, sealed) = b2f_d9_wide_int([0xdead_beef_0000_0001, 3]);
+    assert_eq!(
+        word.tag(),
+        Some(BoundaryTag::PersistentGround),
+        "⛔ a wide `Int` must cross as a persistent handle. An `ImmediateInt` \
+         here is the silent-corruption path: the SLOT was encoded as an integer"
+    );
+    assert_eq!(
+        extent,
+        Some(crate::boundary_value::BOUNDARY_INT_REGION_LIMBS),
+        "⛔ the persistent node carries the REGION-LIMBS marker — never the \
+         native `Big` marker, which names storage that dies with the invocation"
+    );
+    assert_eq!(sign, Some(0), "the sign is copied, not assumed");
+    // ⭐ Asserted on its OWN field, before the limbs. `node_limbs` returns
+    // `None` for an unsealed node, so without this row an omitted `seal_int`
+    // reddens the *limb* assertion and reports a dropped limb — a true failure
+    // under a message that names the wrong cause.
+    assert_eq!(
+        sealed,
+        Some(1),
+        "⛔ the copy must END in `seal_int`: until it succeeds the node DENOTES \
+         NOTHING, so an unsealed node is not a value that crossed"
+    );
+    assert_eq!(
+        copied,
+        vec![0xdead_beef_0000_0001u64, 3],
+        "⛔ EVERY limb, in order — a dropped, substituted or reordered limb is a \
+         different integer"
+    );
+}
+
+/// ⭐⭐ **`D9` POSITIVE CONTROL — the SAME compiled body takes the `Small` arm
+/// when the interned pair comes back `Small`.**
+///
+/// ⛔ **Why this is the discriminator and not a repeat.** `intern` trims leading
+/// zero limbs, so `(x, 0)` and `(x, 1)` differ only in a **run-time** operand and
+/// come back with different markers from the same call. ⇒ If the producer had
+/// specialized the marker at compile time, one compiled body could not answer
+/// both ways. A body that always took the wide arm passes the row above and
+/// fails here.
+///
+/// **MEASURED:** one body, two run-time limb pairs, two different outcomes —
+/// a region-limbed persistent copy and an immediate word.
+/// **CLAIMED:** the marker partition is emitted code reading a runtime tag.
+/// **THE GAP:** the `Small` value here also fits the immediate field, so this
+/// row does not separately re-establish the `Small` spill — the adjacent
+/// `MAX`/`MAX + 1` rows do that.
+#[test]
+fn b2f_d9_the_same_body_takes_the_small_arm_on_a_trimmed_pair() {
+    // Top limb zero ⇒ `intern` trims to one limb ⇒ a `Small` pair.
+    let (word, copied, _sign, _extent, _sealed) = b2f_d9_wide_int([7, 0]);
+    assert_eq!(
+        word.tag(),
+        Some(BoundaryTag::ImmediateInt),
+        "POSITIVE CONTROL: a trimmed pair is `Small`, and 7 fits the immediate \
+         field — the SAME body that region-copied the wide value must take the \
+         immediate arm here"
+    );
+    assert_eq!(
+        word.signed_payload(),
+        7,
+        "and it must carry the value, not the slot and not a truncation"
+    );
+    assert!(
+        copied.is_empty(),
+        "NON-VACUITY: an immediate word names no node, so there are no limbs to \
+         read — if this had limbs, the readback is looking at the wrong node"
+    );
+}
+
+/// ⭐⭐ **`D9` / `AC-13` item 2 — THE NO-PAIR ROUTE into the spillable dispatch.**
+///
+/// ⛔ **The spillable arm has TWO ENTRY ROUTES with different preconditions, and
+/// a fixture on one says nothing about the other.** On the **pair-bearing**
+/// route the `NativeIntV1` marker partition governs and both `Small` and `Big`
+/// are live; on the **no-pair** route that partition **never engages** and the
+/// `Small` marker comes from [`Lowering::carrier_small_marker`]. ⇒ This row is
+/// the required discharge of the second route, ⛔ not an extra class.
+///
+/// ⛔ **Why the `Int` rows do not cover it.** `ProcessExitStatus`,
+/// `BoundedNat` and `StructuralNat` reach the dispatch by a *different route*:
+/// they have no `NativeIntV1` pair, so they skip the marker partition entirely
+/// and are handed a `Small` marker by [`Lowering::carrier_small_marker`]. ⇒ A
+/// suite whose only spillable fixture is an `Int` measures the marker partition
+/// and leaves the three no-pair variants unexecuted — three of the four
+/// contributors to *"63 of 69"* silently untested.
+///
+/// ⭐ **And the tag is the discriminator.** Each of the three has its own
+/// `BoundaryTag`, and reading it back proves the disposition's tag reached
+/// `make_immediate` rather than a hardcoded `ImmediateInt`.
+///
+/// **MEASURED:** a `ProcessExitStatus` transferred through the producer returns
+/// a word tagged `ImmediateExitStatus` carrying its value.
+/// **CLAIMED:** the **no-pair route** into the dispatch is exercised, and it
+/// carries the disposition's own tag.
+/// **THE GAP:** ⚠ this row executes **one** of the three no-pair classes.
+///
+/// ⛔⛔ **And the other two are NOT discharged by that.** `BoundedNat` and
+/// `StructuralNat` share this arm and this emitter, but *"covered by the
+/// neighbour that went green"* is a **pin claim, not a measurement** — a class
+/// that never executed is not evidence about itself, whatever its arm-mate did.
+/// Their constructors are private to the lowering, so **no behavioural fixture
+/// can reach them at all.**
+///
+/// ✅ **What discharges them is a different mechanism, not this test:** the
+/// producer's `match` over `Lowered` is **exhaustive and wildcard-free**, so a
+/// class that is silently unhandled is a **compile error**. That is a *compiler*
+/// proof, and it is strictly stronger here than a fixture would be — ⛔ it is
+/// not this row reaching further than it does. (`AC-13` item 1; Steward
+/// `evt_3k37x62bj040x`.)
+///
+/// ⚠ Promise class: **durable invariant** — it relates the returned tag to the
+/// disposition's own declared tag, not to a frozen number.
+#[test]
+fn b2f_d9_a_no_pair_spillable_crosses_on_its_own_tag() {
+    let fixture = ac_c7_ctor("Alpha");
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let seed_env = NativeSeedEnvironment::empty();
+    let (_module, code) = ac_c7_try_compile_edge_with_operands(
+        &seed_env,
+        plan,
+        1,
+        |compiler, builder, operands| {
+            let status = Lowered::ProcessExitStatus { value: operands[0] };
+            Ok(compiler.transfer_into_carrier(builder, root, &status)?.word)
+        },
+    )
+    .expect("the no-pair spillable emits");
+    let run: extern "C" fn(*const u64, i64) -> i64 = unsafe { std::mem::transmute(code) };
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = ac_c7_bind_arena(&mut store);
+    let word = crate::boundary_value::BoundaryWord(run(base, 42) as u64);
+    assert_eq!(
+        word.tag(),
+        Some(BoundaryTag::ImmediateExitStatus),
+        "⛔ its OWN tag — an `ImmediateInt` here means the emitter took the \
+         disposition's tag from the wrong place"
+    );
+    assert_eq!(
+        word.signed_payload(),
+        42,
+        "and it carries the status it was handed at run time"
+    );
+    assert_ne!(
+        BoundaryTag::ImmediateExitStatus as u8,
+        BoundaryTag::ImmediateInt as u8,
+        "NON-VACUITY: the two tags must differ, or the assertion above cannot \
+         tell a per-variant tag from a hardcoded one"
     );
 }

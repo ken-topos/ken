@@ -94,7 +94,7 @@ pub struct BoundaryActivationV1 {
     published_persistent_base: *mut u64,
     /// The Rust-owned generated-root frame, once bound. ⛔ Boxed: generated
     /// code receives its address.
-    frame: Option<Box<KenNativeInvocationV1>>,
+    frame: Option<Box<GeneratedRootIngressV1>>,
     finished: bool,
 }
 
@@ -417,13 +417,9 @@ impl BoundaryActivationV1 {
     /// **Bind this activation's process ingress and hand back the `frame_ptr`
     /// generated code receives as its FIRST parameter.**
     ///
-    /// ⭐⭐ **`D7`: `KenNativeInvocationV1` is the seam that has to stop
-    /// carrying an arena pointer C owns.** Today the generated C stub declares
-    /// that struct itself, constructs a `KenNativeIntArenaV1` on its own stack,
-    /// and stores its address in the fourth field. ⇒ The arena is C-owned, the
-    /// layout is duplicated, and `§4` bans both. Here the record is **Rust
-    /// owned**, its arena field is **this activation's** native arena, and C
-    /// never learns the layout — it receives an opaque pointer to pass through.
+    /// The launch ingress is Rust-owned and C-opaque. It carries only the
+    /// process source pair and the direct host-dispatch context; runtime
+    /// services travel through the separate services pointer.
     ///
     /// ⛔ Boxed, for the same address-stability reason as the other owned
     /// objects: generated code receives this pointer.
@@ -440,26 +436,21 @@ impl BoundaryActivationV1 {
         if self.finished || !self.is_published() {
             return None;
         }
-        let frame = Box::new(KenNativeInvocationV1 {
+        let frame = Box::new(GeneratedRootIngressV1 {
             process_input,
-            host_context,
+            host_dispatch_context: host_context,
             capability,
-            native_int_arena: self.services.native_int_arena,
         });
-        let pointer = (&*frame as *const KenNativeInvocationV1).cast::<c_void>();
+        let pointer = (&*frame as *const GeneratedRootIngressV1).cast::<c_void>();
         self.frame = Some(frame);
         Some(pointer)
     }
 
-    /// **The `frame_ptr` for the NON-PROCESS launch shape — the bare native-`Int`
-    /// arena.**
+    /// The opaque launch pointer for a non-process root.
     ///
-    /// ⭐ Two launch shapes, two frame views, and **both obtained from the
-    /// owner** (`§3d`). In non-process mode the generated root's single
-    /// parameter *is* the native arena (`lowering/core.rs` binds
-    /// `native_int_arena` straight from block parameter 0); in process mode it
-    /// is the invocation record [`Self::bind_process_frame`] builds. ⛔ Neither
-    /// is a layout C is told about — each is one opaque pointer to pass through.
+    /// The root adapter ignores this pointer in value mode; the native arena is
+    /// obtained from the services record. Keeping the owner-provided pointer
+    /// preserves one launch surface for C without exposing a layout.
     ///
     /// ⛔ Withdrawn on the same condition as the services view.
     pub fn native_frame_ptr(&self) -> Option<*const c_void> {
@@ -484,27 +475,45 @@ impl BoundaryActivationV1 {
         }
         self.frame
             .as_ref()
-            .map(|frame| (&**frame as *const KenNativeInvocationV1).cast::<c_void>())
+            .map(|frame| (&**frame as *const GeneratedRootIngressV1).cast::<c_void>())
     }
 }
 
-/// **The generated root's first parameter, owned by Rust.**
-///
-/// ⛔ Layout-identical to the `struct KenNativeInvocationV1` the generated C
-/// stub declares today — and that duplicate is what `D7` removes. ⭐ Keeping the
-/// declaration here, beside the activation that owns every field it points at,
-/// is the "subsume, do not repeat" the ruling asks for: there is one declaration
-/// and it lives with the owner.
+/// Every field of the process-root launch ingress, in layout order.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RootIngressField {
+    ProcessInput,
+    HostDispatchContext,
+    Capability,
+}
+
+impl RootIngressField {
+    pub const ALL: [Self; 3] = [
+        Self::ProcessInput,
+        Self::HostDispatchContext,
+        Self::Capability,
+    ];
+
+    pub const fn offset(self) -> i32 {
+        (self as i32) * 8
+    }
+}
+
+pub const ROOT_INGRESS_PROCESS_INPUT: i32 = RootIngressField::ProcessInput.offset();
+pub const ROOT_INGRESS_HOST_DISPATCH_CONTEXT: i32 =
+    RootIngressField::HostDispatchContext.offset();
+pub const ROOT_INGRESS_CAPABILITY: i32 = RootIngressField::Capability.offset();
+pub const ROOT_INGRESS_BYTES: i32 = (RootIngressField::ALL.len() * 8) as i32;
+
+/// The generated public adapter's process launch ingress, owned by Rust.
 #[repr(C)]
-pub struct KenNativeInvocationV1 {
+pub struct GeneratedRootIngressV1 {
     /// The borrowed process-input value the launcher built.
     pub process_input: *const c_void,
     /// The host effect context from `ken_host_invocation_v1_init`.
-    pub host_context: *mut c_void,
+    pub host_dispatch_context: *mut c_void,
     /// The capability token that init issued.
     pub capability: u64,
-    /// ⭐ **This activation's** native-`Int` arena — ⛔ never one C constructed.
-    pub native_int_arena: *mut u64,
 }
 
 /// One word of a published region header.
@@ -743,8 +752,8 @@ mod tests {
         assert_eq!(seen.len(), 8);
     }
 
-    /// ⭐⭐ **`D7` — the generated root's frame carries THIS activation's
-    /// native arena, and no C-constructed one.**
+    /// ⭐⭐ The launch ingress carries only the ruled source pair and direct
+    /// host context; the native arena remains exclusively in services.
     ///
     /// **MEASURED:** the fourth field of the Rust-owned invocation record is the
     /// same pointer the services record carries and the same allocation the
@@ -755,7 +764,7 @@ mod tests {
     /// **THE GAP:** ⛔ that the stub actually stops declaring them. That is a
     /// build/link fact and it is `S4b`'s, together with `AC-5`.
     #[test]
-    fn the_generated_frame_carries_this_activations_arena_not_a_c_constructed_one() {
+    fn the_generated_root_ingress_excludes_the_native_arena() {
         let mut store = BoundaryValueStore::new();
         let binding = BoundaryStoreBindingV1::open(&mut store, distinct_profile());
         let mut first = BoundaryActivationV1::begin(&binding);
@@ -769,19 +778,15 @@ mod tests {
             .expect("and so does the second");
         assert_ne!(a, b, "two activations share one generated-root frame");
 
-        // The frame's arena field is this activation's arena — checked against
-        // the OWNED allocation, not only against the services record.
-        let frame = unsafe { &*(a as *const KenNativeInvocationV1) };
-        assert_eq!(frame.native_int_arena, first.native_int_arena_ptr());
-        assert_eq!(
-            frame.native_int_arena as usize,
-            first.owned_native_arena_address()
-        );
+        let frame = unsafe { &*(a as *const GeneratedRootIngressV1) };
         assert_eq!(frame.capability, 7);
-        let other = unsafe { &*(b as *const KenNativeInvocationV1) };
-        assert_ne!(
-            frame.native_int_arena, other.native_int_arena,
-            "two frames point at ONE arena, so the activations alias storage"
+        assert!(frame.process_input.is_null());
+        assert!(frame.host_dispatch_context.is_null());
+        let other = unsafe { &*(b as *const GeneratedRootIngressV1) };
+        assert_eq!(other.capability, 9);
+        assert_eq!(
+            std::mem::size_of::<GeneratedRootIngressV1>(),
+            3 * std::mem::size_of::<usize>()
         );
 
         // Withdrawn together with the services pointer: a caller must not be
