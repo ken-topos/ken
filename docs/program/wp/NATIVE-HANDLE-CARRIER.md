@@ -61,6 +61,19 @@ int_to_uint64_raw is not in the supported native set
 `grep -rn 'int_to_uint64_raw' crates/ken-runtime/src/` returns **nothing**. The
 primitive is absent from the native lowering entirely.
 
+> ✅ **RESIDUAL RE-MEASURED AND STILL TRUE at `origin/main = dca1b793`**
+> (Steward, 2026-07-28). `int_to_uint64_raw` is **still absent** from
+> `crates/ken-runtime/src/`; on `main` it occurs only in
+> `crates/ken-interp/src/eval.rs` — the interp half this frame already records as
+> **GREEN**. ⇒ ⭐ **No sibling merge has quietly built this deliverable**, so the
+> node still has its subject and no re-framing pass is owed before you start.
+>
+> ⚠ **The one number that rotted:** `§3` says `main` is **215** commits ahead of
+> `8ebe370a`; it is now **246**. ⛔ Do not re-pin that figure — the **derivation**
+> is the pin (`git rev-list --count 8ebe370a..origin/main`) and it grows with
+> every merge. It moved in the direction that makes `§3`'s argument *stronger*,
+> not weaker: the rebase is more of a deliverable now, not less.
+
 ---
 
 ## 3. ⛔ The rebase is a deliverable, not a preliminary
