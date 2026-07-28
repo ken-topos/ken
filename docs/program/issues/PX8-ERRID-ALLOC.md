@@ -11,6 +11,32 @@ github: null
 origin: "Architect ruling evt_6tzss92ckj2by (2026-07-27) on the Steward's PX8-ERRID-SCOPE partition question. Split out because the Architect ruled this row 'inside, but currently not representable' and named it a prerequisite to the evidence work."
 ---
 
+> ## ⛔ PR #1141 CLOSED 2026-07-28 — the candidate must be RE-CUT, not re-polled
+>
+> **The work is not rejected and nothing is lost.** `wp/PX8-ERRID-ALLOC` remains
+> on origin at `763f0a4424a02ccc66179cbf94f7ad9dc244af82`.
+>
+> PR #1141 had been open ~6h and could not merge. Three independent blockers,
+> measured against `origin/main = 2de20719`:
+>
+> | # | blocker | measured |
+> |---|---|---|
+> | 1 | **CI red** | `native-slow (rt_parity_native)` FAILURE · `build + test` FAILURE |
+> | 2 | **`COORDINATION §14` intersection NON-EMPTY** | `crates/ken-interp/src/eval.rs` (merge-base `5404108a`) ⇒ a rebase **is** required |
+> | 3 | **enabler incomplete** | `C1` merged 2026-07-28 (PR #1156); ⛔ **`B2F` is what this node actually waits on** |
+>
+> ⚠ **The intersection has since GROWN.** This candidate touches
+> `cranelift_backend/lowering/core.rs`, `lowering/mod.rs`, and
+> `lowering/core/tests/effects.rs` — all three landed in `C1`. ⇒ A re-cut is
+> required **regardless** of the CI result; ⛔ do not spend a cycle chasing
+> `rt_parity_native` against this base.
+>
+> ⛔ **`dec_7jwry2zxze6qr` reads `resolved` / APPROVE for exact `763f0a44`, and
+> that is NOT sufficient to merge.** It predates both the red CI and the
+> divergence. A fresh candidate needs a **fresh exact-SHA Decision**.
+> ⭐ An approved-but-unmergeable PR left open is a standing merge hazard — that
+> is why it was closed rather than left to age.
+
 > ## ⛔⛔ BLOCKED 2026-07-28 ON `RT-NATIVE-FNSPLIT` — Steward sequencing call
 >
 > **The work is BUILT, QA-approved, and Architect-approved. It cannot land: the
